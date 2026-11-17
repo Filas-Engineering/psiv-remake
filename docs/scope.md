@@ -92,33 +92,66 @@ What follows for the rest of production:
 
 ## What the fan community has already told us
 
-Thirty years of fan patches are a record of what players wanted fixed. Each one below has a proposed verdict for the remake.
+Thirty years of fan patches are a record of what players wanted fixed. All ten patches listed for the game on the main patch site were read, plus the public page on the English prototype builds. Each has a proposed verdict.
 
-Read and summarized from published coverage:
+### Text and names
 
-| Patch | What it changes | Proposed verdict |
+| Finding | Source patches | Proposed verdict |
 |---|---|---|
-| Menu text cleanup | Mixed-case menu text in place of all capitals, hyphens removed from shortened names, an unclear battle menu label renamed, one mistranslated technique name corrected | Adopt. This is the system text decision, already made |
-| Level cap and technique bug fix | Character stats are applied wrongly at the maximum level, and one late-game technique misbehaves | Adopt. Neither defect ships |
-| Harder rebalances (three separate patches) | Enemy and boss numbers raised across the game | Adopt as difficulty settings. Original balance stays the default |
-| Double experience and money variants | Rewards doubled, to offset the grinding the harder patches cause | Adopt as an option, off by default |
-| Retranslation and relocalization | Restores links to the earlier games that the 1990s localization lost, and rewrites dialogue to read naturally, drawing on the more literal prototype translation | Names: adopt through the glossary. Dialogue: not adopted, dialogue is locked. Proposed instead: an in-game encyclopedia that carries the lost links and lore without touching a line of dialogue |
-| A cheat-device route that keeps a character who dies in the story | Shows how strongly players want that character to stay | Not adopted in the story. Evidence for spending more time with her before that point |
+| Names of techniques, skills, items and enemies were cut to a few letters. Every text patch expands them | Three text patches | Adopt. Already decided under system text |
+| The Western release dropped in-battle status messages, such as the line telling you a character fell asleep | Retranslation | Adopt. These are system text, restore them |
+| Feedback messages are unclear, for example when a character has no usable field skill, or the label for discarding an item | Retranslation | Adopt. System text, rewrite for clarity |
+| Some late-game equipment has no description at all | Relocalization | Adopt. Write the missing descriptions from the Japanese source |
+| Terms drifted from the first two games, so links between the games are lost | Three text patches | Names: adopt through the glossary. Dialogue is locked, so the rest goes in the in-game encyclopedia |
+| Location labels, menu choices and soundtrack titles are abbreviated or awkward | Text cleanup | Adopt |
+| Dialogue retranslated from the Japanese, with jokes that did not survive the 1990s translation | Retranslation, relocalization | Not adopted. Dialogue is locked |
+| A villain's motivation, cut for deadline and known from developer interviews, written back into the story | Relocalization | Not adopted in dialogue. Material for the encyclopedia or the follow-up, if the rights holder's own archives confirm it |
+| Players disagree on names so strongly that one author offers custom builds per preference | Relocalization | Supports the option to show the shipped names |
 
-Listed on the patch site but not yet read, because the site blocks automated visitors:
+### Defects
 
-| Patch | Likely subject, from its title | To find out |
+| Finding | Source patches | Proposed verdict |
 |---|---|---|
-| Text cleanup and bug fix (2026) | Typos and defects in the shipped text | Its typo list, which decides the typo rule for locked dialogue |
-| Enemy restoration (2023) | Enemies cut or altered for the Western release | What was changed, and whether the remake uses the original versions |
-| General improvement (2023) | Quality-of-life changes | Which of them the remake does not already cover |
-| Rebalance (2022) | Character and technique balance | Which characters or techniques players consider weak |
-| Standalone bug fix (2019) | Further defects | The full defect list |
-| Speedrun practice (2020) | Practice tools | Whether a speedrun mode is worth an afternoon of design |
+| Stats applied wrongly at the level cap, and one late-game technique misbehaving | Level cap fix | Fix |
+| An enemy's technique leaves a window stuck on screen, and its sprite partly vanishes under one status effect | Retranslation | Fix |
+| A character portrait missing in one rebuilt town, in the Western release only | Retranslation | Fix |
+| Slowdown in busy battles, traced to the party display redrawing every frame | Retranslation | Not a carry-over risk in a new engine. Keep battle frame rate as a tested target |
+| A community bug fix patch that four other patches build on | Standalone bug fix | Its change list was not on the page. Get the full list in phase 0 |
 
-The English prototype builds that have been documented publicly matter for one reason: they show a more literal English translation from before the final edit, so they are evidence of what the localization changed.
+### Content removed or cut
 
-Rules for using this material:
+| Finding | Source patches | Proposed verdict |
+|---|---|---|
+| Two enemies were removed from every release outside Japan | Enemy restoration, and three others that include it | Use the Japanese enemy roster, subject to ratings review |
+| Two unused enemies and one unused technique remain in the game data | General improvement | List all cut content in phase 0, then decide. Not restored by default |
+| One ring has no practical use, and one character's weapon choices are narrow. Patches repurpose the ring and widen the weapon list | Text cleanup | Not adopted by default. List dead items in phase 0 |
+
+### Balance and difficulty
+
+| Finding | Source patches | Proposed verdict |
+|---|---|---|
+| The game is easy for returning players. Five patches make it harder | Rebalance, arranged version, three hard-mode variants | Difficulty settings, with the original balance as the default |
+| The best-regarded rebalance changes behavior, not only numbers: enemies react to the player's tactics, grow more aggressive when hurt, resist instant-defeat techniques, and bosses gain abilities. Party members get clearer roles, and healing techniques are weakened so items matter | Rebalance | Use as the model for the hard setting. Raising numbers alone only adds grinding |
+| The same patch raises experience by half and money by a third, so harder does not mean slower | Rebalance, double-reward variants | Hard setting keeps leveling pace. A reward multiplier is an option, off by default |
+| One patch slows rewards so players use items and weapon effects they normally ignore | Arranged version | Evidence that much of the item system goes unused at original balance. Surface item and weapon effects better in menus |
+| A patch that was not harder got a bad review from a player who assumed it was | General improvement | Label each difficulty setting plainly, in the menu, with what it changes |
+
+### Accessibility and play modes
+
+| Finding | Source patches | Proposed verdict |
+|---|---|---|
+| Critical hits flash the whole screen white. One patch softens the flash | Retranslation | Adopt as a requirement. Full-screen flashes are a photosensitivity risk and a certification matter |
+| A patch strips story text so speedrunners can practice battles and menus | Speedrun practice | Every scene skippable. A dedicated practice mode is not in scope |
+
+### Languages
+
+Fans have translated the game into German, French, Polish, Korean and Portuguese (twice). That is direct evidence of demand, and it feeds the open question on which languages ship.
+
+### Prototype builds
+
+Five English builds are documented publicly, all from after the Japanese release. They show the translation in progress and nothing from the game's development. With dialogue locked to the shipped text, their only use is as background for the name glossary.
+
+### Rules for using this material
 
 - Fan patches are their authors' own work. Use them as a list of problems, not as a source of text. Every fix is sourced from the rights holder's Japanese script and data.
 - Prototype builds and public disassemblies are not project inputs unless the rights holder's legal team clears them.
@@ -148,7 +181,9 @@ Counts come from the source audit in phase 0. The categories are:
 - **Encounters:** the original uses random battles. Proposed: visible enemies in the field, with the encounter rate tuned to match original pacing. This is the largest feel change in the project and needs a prototype before it is committed.
 - **Live panel cutscene tool:** an editor for laying out panels, each bound to a camera in a live scene. This is the main custom technology and the main reusable asset for a follow-up.
 - **Field:** town and dungeon traversal, party talk, vehicles.
-- **Quality of life:** autosave, quest log, fast travel where the original already has it.
+- **Quality of life:** autosave, quest log, fast travel where the original already has it, every scene skippable.
+- **Difficulty:** original balance by default, a hard setting built on smarter enemies, and an optional reward multiplier.
+- **Accessibility:** no full-screen flashes, with a reduced-flash setting for effects.
 
 ## Source material
 
@@ -195,3 +230,5 @@ Total: roughly four to five years. Peak team in the low hundreds, counting exter
 4. Who owns art direction day to day, and how much time the original designer has for it.
 5. Is the follow-up assumed in the business case, or decided after launch? This changes how much is spent on reusable tooling.
 6. Budget range and internal versus external team split.
+7. Does the remake use the Japanese enemy roster, restoring the two enemies removed elsewhere?
+8. Is cut content (unused enemies, an unused technique) restored, and are dead items fixed?
