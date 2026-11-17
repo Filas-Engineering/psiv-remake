@@ -13,7 +13,7 @@ Remake Phantasy Star IV as a modern, AAA-quality game, faithful to the original 
 | Topic | Choice | Status |
 |---|---|---|
 | Remake or sequel | Remake first, expand after | Decided |
-| Script | Keep the original copy: the English text as shipped, shortened names included | Decided |
+| Script | Dialogue and story text: the English text as shipped. Menu labels and the names of items, techniques and skills may be changed now that the length limits are gone | Decided |
 | Visuals | Full 3D, AAA quality | Decided |
 | Static art | None. Story scenes, characters and environments are rendered in real time: no illustrated stills | Decided |
 | Pre-rendered video | None at the start. Revisit after the vertical slice if a scene cannot be done in real time | Decided |
@@ -67,14 +67,26 @@ These would make the remake a failure even if it ships:
 
 ## Script
 
-The source of truth is the English text as shipped in the 1990s release. That text was written under tight length limits, so some item, technique and character names are shortened. They stay as shipped.
+The text splits into two kinds, with different rules.
 
-What follows from that:
+**Dialogue and story text** is the English text as shipped in the 1990s release. It is locked.
 
-- **Voice.** Shortened names will be spoken aloud. Agree a pronunciation for each one in phase 0 and record it in a glossary, so casting and recording do not improvise.
-- **Other languages.** Decide whether new translations work from the shipped English or from the Japanese script. Translating from the English carries its shortened names into every language.
+**System text** is menu labels and the names of items, techniques, skills and enemies. The shipped names were cut to fit tight length limits, which no longer apply, so these may change.
+
+Proposed rules for system text:
+
+- A name changes only to restore what the length limit cut, or to make a menu clearer. It is not a chance to rebrand.
+- The Japanese original is the reference for what the full name should be.
+- Every change goes in a glossary: shipped name, new name, reason. Fans will look for this list, so plan to publish it.
+- Where locked dialogue mentions a renamed item or technique, the dialogue uses the new name. This is the one permitted change to dialogue, and each instance is listed.
+- An option to show the shipped names is cheap to add and worth considering.
+
+What follows for the rest of production:
+
+- **Voice.** Restored names are easier to say than shortened ones. The glossary also records pronunciation.
+- **Other languages.** Decide whether new translations work from the shipped English or from the Japanese script.
 - **Delivery, not wording.** Text boxes that read well can sound stiff when spoken. Budget for a pass that sets delivery notes and timing and changes no words.
-- **Errors.** Decide in phase 0 whether plain typos in the shipped text are fixed or kept. Proposed: fix typos only, and list every fix.
+- **Errors.** Proposed: fix plain typos in dialogue, and list every fix.
 
 ## Content to rebuild
 
@@ -120,7 +132,7 @@ Durations are planning assumptions for a AAA production, not estimates from a co
 
 | Phase | Length | Output |
 |---|---|---|
-| 0. Source audit | 2 to 3 months | Full content counts, name pronunciation glossary, art direction brief, go or no-go |
+| 0. Source audit | 2 to 3 months | Full content counts, name glossary (shipped name, new name, pronunciation), art direction brief, go or no-go |
 | 1. Pre-production | 9 to 12 months | Art bible, engine and pipeline, live panel tool prototype, combat prototype, encounter prototype |
 | 2. Vertical slice | Inside phase 1 | One town, one dungeon, one boss, one panel sequence, at shipping quality. Proves cost per town and cost per scene |
 | 3. Production | 24 to 30 months | All content |
@@ -136,7 +148,7 @@ Total: roughly four to five years. Peak team in the low hundreds, counting exter
 | "Nothing static" is expensive | Every panel is a staged, lit, animated scene | Build the panel tool first. Reuse sets and rigs across panels |
 | Pacing drifts | Voice, animation and camera work all slow a game down | A pacing budget per scene, measured against the original |
 | Enemy count | Palette swaps do not survive at this quality | Decide the unique-model budget in phase 0 |
-| Script handling | Fans notice any changed line | The shipped English text is locked. Any typo fix is listed and signed off |
+| Script handling | Fans notice any changed line or name | Dialogue is locked. Every renamed menu, item, technique or skill is in the glossary and signed off |
 | Encounter change | Visible enemies change difficulty and leveling curves | Prototype in pre-production, keep random battles as a fallback |
 
 ## Open questions
