@@ -13,7 +13,8 @@ Remake Phantasy Star IV as a modern, AAA-quality game, faithful to the original 
 | Topic | Choice | Status |
 |---|---|---|
 | Remake or sequel | Remake first, expand after | Decided |
-| Script | Dialogue and story text: the English text as shipped. Menu labels and the names of items, techniques and skills may be changed now that the length limits are gone | Decided |
+| System text | Menu labels and the names of items, techniques, skills and enemies are restored to full names now that the length limits are gone. Restore and clarify only | Decided |
+| Dialogue | The English text as shipped, or an English text restored from the Japanese script | Open, see Script |
 | Visuals | Full 3D, AAA quality | Decided |
 | Static art | None. Story scenes, characters and environments are rendered in real time: no illustrated stills | Decided |
 | Pre-rendered video | None at the start. Revisit after the vertical slice if a scene cannot be done in real time | Decided |
@@ -69,16 +70,16 @@ These would make the remake a failure even if it ships:
 
 The text splits into two kinds, with different rules.
 
-**Dialogue and story text** is the English text as shipped in the 1990s release. It is locked.
+**Dialogue and story text.** Not settled. The two options are the English text as shipped in the 1990s release, locked, or an English text restored from the Japanese script that stays as close to the shipped wording as it can. An earlier answer of "English as shipped" was given to a question read as "which languages", so it does not count as a decision.
 
 **System text** is menu labels and the names of items, techniques, skills and enemies. The shipped names were cut to fit tight length limits, which no longer apply, so these may change.
 
-Proposed rules for system text:
+Rules for system text. The first is decided, the rest are proposed:
 
 - A name changes only to restore what the length limit cut, or to make a menu clearer. It is not a chance to rebrand.
 - The Japanese original is the reference for what the full name should be.
 - Every change goes in a glossary: shipped name, new name, reason. Fans will look for this list, so plan to publish it.
-- Where locked dialogue mentions a renamed item or technique, the dialogue uses the new name. This is the one permitted change to dialogue, and each instance is listed.
+- Where dialogue mentions a renamed item or technique, the dialogue uses the new name. This is the one permitted change to dialogue, and each instance is listed.
 - An option to show the shipped names is cheap to add and worth considering.
 
 What follows for the rest of production:
@@ -87,6 +88,27 @@ What follows for the rest of production:
 - **Other languages.** Decide whether new translations work from the shipped English or from the Japanese script.
 - **Delivery, not wording.** Text boxes that read well can sound stiff when spoken. Budget for a pass that sets delivery notes and timing and changes no words.
 - **Errors.** Proposed: fix plain typos in dialogue, and list every fix.
+- **Languages shipped.** Not decided. Japanese and English at minimum is the assumption.
+
+## What the fan community has already told us
+
+Thirty years of fan patches are a record of what players wanted fixed. They sort into five kinds:
+
+| Kind of patch | What it shows players want | What the remake does with it |
+|---|---|---|
+| Retranslation and relocalization | Full names, restored links to the earlier games that the 1990s localization lost, and dialogue that reads naturally | Feeds the dialogue decision and the name glossary |
+| Bug fixes | Known defects, including a stat error at the level cap and a broken late-game technique | A ready-made defect list for the audit. None of these ship in the remake |
+| Rebalance and hard modes | The original is easy, and experienced players want more | Difficulty settings, with the original balance as the default |
+| Faster leveling | Less grinding | Covered by battle speed, auto-battle and encounter tuning |
+| Text cleanup and enemy restoration | Readable menus, and content that was cut or altered | Menu clarity is already in scope. Cut or altered content is a phase 0 question |
+
+The English prototype builds that have been documented publicly matter for one reason: they show a more literal English translation from before the final edit, so they are evidence of what the localization changed.
+
+Rules for using this material:
+
+- Fan patches are their authors' own work. Use them as a list of problems, not as a source of text. Every fix is sourced from the rights holder's Japanese script and data.
+- Prototype builds and public disassemblies are not project inputs unless the rights holder's legal team clears them.
+- The authors know this game's text and data better than almost anyone. Consider paying them as consultants.
 
 ## Content to rebuild
 
@@ -148,13 +170,15 @@ Total: roughly four to five years. Peak team in the low hundreds, counting exter
 | "Nothing static" is expensive | Every panel is a staged, lit, animated scene | Build the panel tool first. Reuse sets and rigs across panels |
 | Pacing drifts | Voice, animation and camera work all slow a game down | A pacing budget per scene, measured against the original |
 | Enemy count | Palette swaps do not survive at this quality | Decide the unique-model budget in phase 0 |
-| Script handling | Fans notice any changed line or name | Dialogue is locked. Every renamed menu, item, technique or skill is in the glossary and signed off |
+| Script handling | Fans notice any changed line or name | Settle the dialogue rule in phase 0. Every renamed menu, item, technique or skill is in the glossary and signed off |
 | Encounter change | Visible enemies change difficulty and leveling curves | Prototype in pre-production, keep random battles as a fallback |
 
 ## Open questions
+1. Dialogue: the English text as shipped, or restored from the Japanese script?
+2. Which languages ship?
 
-1. Do new translations work from the shipped English or from the Japanese script?
-2. Frame rate target: is 60 in play, with 30 allowed in the heaviest story panels, acceptable?
-3. Who owns art direction day to day, and how much time the original designer has for it.
-4. Is the follow-up assumed in the business case, or decided after launch? This changes how much is spent on reusable tooling.
-5. Budget range and internal versus external team split.
+3. Do new translations work from the shipped English or from the Japanese script?
+4. Frame rate target: is 60 in play, with 30 allowed in the heaviest story panels, acceptable?
+5. Who owns art direction day to day, and how much time the original designer has for it.
+6. Is the follow-up assumed in the business case, or decided after launch? This changes how much is spent on reusable tooling.
+7. Budget range and internal versus external team split.
