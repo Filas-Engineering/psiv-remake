@@ -82,6 +82,13 @@ Rules for system text. The first is decided, the rest are proposed:
 - Where dialogue mentions a renamed item or technique, the dialogue uses the new name. This is the one permitted change to dialogue, and each instance is listed.
 - An option to show the shipped names is cheap to add and worth considering.
 
+Size of the text, from a fan project's published tooling. Treat as an estimate until the audit counts it:
+
+- About 2,170 dialogue messages. This is the voice recording and localization workload.
+- About 865 names, descriptions, banners and menu entries. This is the system text that the glossary covers.
+- Dialogue carries inline codes for line breaks, page pauses and which portrait to show. The portrait codes are a ready-made map of who speaks each line, which casting and the panel tool can both use.
+- The original fonts have no accented characters, which is why fan translations into other languages had to replace the text engine.
+
 What follows for the rest of production:
 
 - **Voice.** Restored names are easier to say than shortened ones. The glossary also records pronunciation.
@@ -196,6 +203,15 @@ Needed from the rights holder before pre-production can start:
 - Written confirmation of what may be stored where, and who may access it
 
 Large assets belong in a dedicated asset store (Perforce or equivalent), not in git. This repo stays documents and tooling only.
+
+### Working with a cartridge dump
+
+A dump of the retail cartridge is enough to start comparing names and text before the rights holder's script arrives.
+
+- Put the dump in `source-material/`. That folder is ignored by git, and nothing in it or extracted from it is ever committed.
+- Check it is a clean dump of the Western retail release before trusting anything read from it. The published checksum for that release is CRC32 `FE236442`, for a file of 3,145,728 bytes.
+- The text is stored compressed, so reading it needs a small extraction tool. That tool belongs in this repo. Its output does not.
+- First output wanted: every shipped name next to its Japanese original and a proposed restored name. That is the first draft of the glossary.
 
 ## Phases
 

@@ -1,0 +1,7 @@
+# Cartridge dumps, scripts and anything extracted from them stay local.
+# Mega Drive dumps sometimes use the .md extension, so they must live in
+# source-material/ rather than rely on an extension rule.
+source-material/
+*.bin
+*.gen
+*.smd
