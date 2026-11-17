@@ -213,6 +213,18 @@ A dump of the retail cartridge is enough to start comparing names and text befor
 - The text is stored compressed, so reading it needs a small extraction tool. That tool belongs in this repo. Its output does not.
 - First output wanted: every shipped name next to its Japanese original and a proposed restored name. That is the first draft of the glossary.
 
+Measured from the dumps with `tools/extract_names.py`:
+
+- The Western dump matches the published checksum, so it is a clean copy of the retail release.
+- The European cartridge is a later build (August 1995 against November 1994) and differs in many bytes, but its name tables are identical. One English glossary covers both regions.
+- Names are stored uncompressed, one byte per character, with a hard cap of 10 characters in the main tables.
+- About 610 distinct names across items, techniques, skills, enemies and places. The tool also picks up a few short runs that are not names, so the audit should confirm the count.
+- 266 of them, more than four in ten, are exactly 10 characters long, which is the cap. Those are the ones most likely to have been cut to fit.
+- 107 use a hyphen to join shortened words.
+- Dialogue is stored compressed and is not extracted. It is locked to the shipped text, so the glossary does not need it.
+
+What the dump is and is not for: it is a reference for measuring and comparing. It is not a source of assets. Art, music and script for the remake come from the rights holder's own masters under the project's contract.
+
 ## Phases
 
 Durations are planning assumptions for a AAA production, not estimates from a costed plan.
