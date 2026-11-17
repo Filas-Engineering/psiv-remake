@@ -17,7 +17,7 @@ Remake Phantasy Star IV as a modern, AAA-quality game, faithful to the original 
 | Visuals | Full 3D, AAA quality | Decided |
 | Static art | None. Story scenes, characters and environments are rendered in real time: no illustrated stills | Decided |
 | Pre-rendered video | None at the start. Revisit after the vertical slice if a scene cannot be done in real time | Decided |
-| Menu art | Character portraits are rendered live. Icons, frames and fonts are ordinary 2D interface art | Proposed |
+| Menu art | Character portraits are rendered live. Icons, frames and fonts are ordinary 2D interface art | Decided |
 | Combat | Turn-based, with macros and combination techniques | Proposed |
 | Camera | Pulled-back, mostly fixed camera in the field. Closer, directed cameras in battle and cutscenes | Proposed |
 | Story changes | None to plot or outcomes. No route that changes who lives or dies | Proposed |
@@ -140,8 +140,7 @@ Total: roughly four to five years. Peak team in the low hundreds, counting exter
 ## Open questions
 
 1. Do new translations work from the shipped English or from the Japanese script?
-2. Is ordinary 2D interface art (icons, frames, fonts) acceptable, with portraits rendered live?
-3. Target platforms and target frame rate.
-4. Who owns art direction day to day, and how much time the original designer has for it.
-5. Is the follow-up assumed in the business case, or decided after launch? This changes how much is spent on reusable tooling.
-6. Budget range and internal versus external team split.
+2. Target platforms and target frame rate.
+3. Who owns art direction day to day, and how much time the original designer has for it.
+4. Is the follow-up assumed in the business case, or decided after launch? This changes how much is spent on reusable tooling.
+5. Budget range and internal versus external team split.
