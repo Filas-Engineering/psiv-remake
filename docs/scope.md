@@ -13,7 +13,7 @@ Remake Phantasy Star IV as a modern, AAA-quality game, faithful to the original 
 | Topic | Choice | Status |
 |---|---|---|
 | Remake or sequel | Remake first, expand after | Decided |
-| Script | Keep the original copy | Decided |
+| Script | Keep the original copy: the English text as shipped, shortened names included | Decided |
 | Visuals | Full 3D, AAA quality | Decided |
 | Static art | None. Everything on screen is rendered in real time: no illustrated stills, no pre-rendered video | Decided (the "no pre-rendered video" reading is an interpretation, confirm) |
 | Combat | Turn-based, with macros and combination techniques | Proposed |
@@ -61,16 +61,16 @@ These would make the remake a failure even if it ships:
 
 **First-person.** Belongs to the first game's dungeons, not this one.
 
-## What "keep the copy" needs decided
+## Script
 
-The 1990s English release was written under tight length limits. Names of items, techniques and some characters were shortened to fit. Keeping the copy can mean two different things:
+The source of truth is the English text as shipped in the 1990s release. That text was written under tight length limits, so some item, technique and character names are shortened. They stay as shipped.
 
-- **A. English text as shipped**, shortened names included.
-- **B. The Japanese script as the source of truth**, with an English text that restores what the length limits cut and is otherwise as close to the shipped wording as possible.
+What follows from that:
 
-Proposed: B. Full voice acting makes shortened names awkward, and B is still "the original script". This is the project lead's and the rights holder's call.
-
-Either way, voice acting adds work the original never had: every line needs a performance, and silent text boxes that read well can sound stiff when spoken. Budget for a script pass that changes delivery notes and timing, not words.
+- **Voice.** Shortened names will be spoken aloud. Agree a pronunciation for each one in phase 0 and record it in a glossary, so casting and recording do not improvise.
+- **Other languages.** Decide whether new translations work from the shipped English or from the Japanese script. Translating from the English carries its shortened names into every language.
+- **Delivery, not wording.** Text boxes that read well can sound stiff when spoken. Budget for a pass that sets delivery notes and timing and changes no words.
+- **Errors.** Decide in phase 0 whether plain typos in the shipped text are fixed or kept. Proposed: fix typos only, and list every fix.
 
 ## Content to rebuild
 
@@ -102,7 +102,7 @@ Counts come from the source audit in phase 0. The categories are:
 
 Needed from the rights holder before pre-production can start:
 
-- The original script, Japanese and English
+- The original script: the shipped English text, and the Japanese for reference
 - Original character and world design sheets
 - Game data: stats, formulas, encounter tables, item and technique lists, maps
 - Music masters or scores
@@ -116,7 +116,7 @@ Durations are planning assumptions for a AAA production, not estimates from a co
 
 | Phase | Length | Output |
 |---|---|---|
-| 0. Source audit | 2 to 3 months | Full content counts, script decision (A or B), art direction brief, go or no-go |
+| 0. Source audit | 2 to 3 months | Full content counts, name pronunciation glossary, art direction brief, go or no-go |
 | 1. Pre-production | 9 to 12 months | Art bible, engine and pipeline, live panel tool prototype, combat prototype, encounter prototype |
 | 2. Vertical slice | Inside phase 1 | One town, one dungeon, one boss, one panel sequence, at shipping quality. Proves cost per town and cost per scene |
 | 3. Production | 24 to 30 months | All content |
@@ -132,12 +132,12 @@ Total: roughly four to five years. Peak team in the low hundreds, counting exter
 | "Nothing static" is expensive | Every panel is a staged, lit, animated scene | Build the panel tool first. Reuse sets and rigs across panels |
 | Pacing drifts | Voice, animation and camera work all slow a game down | A pacing budget per scene, measured against the original |
 | Enemy count | Palette swaps do not survive at this quality | Decide the unique-model budget in phase 0 |
-| Script handling | Fans notice any changed line | Decide A or B early and publish the rule internally |
+| Script handling | Fans notice any changed line | The shipped English text is locked. Any typo fix is listed and signed off |
 | Encounter change | Visible enemies change difficulty and leveling curves | Prototype in pre-production, keep random battles as a fallback |
 
 ## Open questions
 
-1. Script: A or B?
+1. Do new translations work from the shipped English or from the Japanese script?
 2. Does "nothing static" also rule out pre-rendered video and 2D user interface art such as menu portraits?
 3. Target platforms and target frame rate.
 4. Who owns art direction day to day, and how much time the original designer has for it.
