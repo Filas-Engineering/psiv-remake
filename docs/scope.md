@@ -174,9 +174,9 @@ Total: roughly four to five years. Peak team in the low hundreds, counting exter
 | Encounter change | Visible enemies change difficulty and leveling curves | Prototype in pre-production, keep random battles as a fallback |
 
 ## Open questions
+
 1. Dialogue: the English text as shipped, or restored from the Japanese script?
 2. Which languages ship?
-
 3. Do new translations work from the shipped English or from the Japanese script?
 4. Frame rate target: is 60 in play, with 30 allowed in the heaviest story panels, acceptable?
 5. Who owns art direction day to day, and how much time the original designer has for it.
