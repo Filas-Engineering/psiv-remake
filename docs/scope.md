@@ -14,7 +14,7 @@ Remake Phantasy Star IV as a modern, AAA-quality game, faithful to the original 
 |---|---|---|
 | Remake or sequel | Remake first, expand after | Decided |
 | System text | Menu labels and the names of items, techniques, skills and enemies are restored to full names now that the length limits are gone. Restore and clarify only | Decided |
-| Dialogue | The English text as shipped, or an English text restored from the Japanese script | Open, see Script |
+| Dialogue | The English text as shipped in the 1990s release | Decided |
 | Visuals | Full 3D, AAA quality | Decided |
 | Static art | None. Story scenes, characters and environments are rendered in real time: no illustrated stills | Decided |
 | Pre-rendered video | None at the start. Revisit after the vertical slice if a scene cannot be done in real time | Decided |
@@ -70,7 +70,7 @@ These would make the remake a failure even if it ships:
 
 The text splits into two kinds, with different rules.
 
-**Dialogue and story text.** Not settled. The two options are the English text as shipped in the 1990s release, locked, or an English text restored from the Japanese script that stays as close to the shipped wording as it can. An earlier answer of "English as shipped" was given to a question read as "which languages", so it does not count as a decision.
+**Dialogue and story text** is the English text as shipped in the 1990s release. It is locked.
 
 **System text** is menu labels and the names of items, techniques, skills and enemies. The shipped names were cut to fit tight length limits, which no longer apply, so these may change.
 
@@ -92,15 +92,29 @@ What follows for the rest of production:
 
 ## What the fan community has already told us
 
-Thirty years of fan patches are a record of what players wanted fixed. They sort into five kinds:
+Thirty years of fan patches are a record of what players wanted fixed. Each one below has a proposed verdict for the remake.
 
-| Kind of patch | What it shows players want | What the remake does with it |
+Read and summarized from published coverage:
+
+| Patch | What it changes | Proposed verdict |
 |---|---|---|
-| Retranslation and relocalization | Full names, restored links to the earlier games that the 1990s localization lost, and dialogue that reads naturally | Feeds the dialogue decision and the name glossary |
-| Bug fixes | Known defects, including a stat error at the level cap and a broken late-game technique | A ready-made defect list for the audit. None of these ship in the remake |
-| Rebalance and hard modes | The original is easy, and experienced players want more | Difficulty settings, with the original balance as the default |
-| Faster leveling | Less grinding | Covered by battle speed, auto-battle and encounter tuning |
-| Text cleanup and enemy restoration | Readable menus, and content that was cut or altered | Menu clarity is already in scope. Cut or altered content is a phase 0 question |
+| Menu text cleanup | Mixed-case menu text in place of all capitals, hyphens removed from shortened names, an unclear battle menu label renamed, one mistranslated technique name corrected | Adopt. This is the system text decision, already made |
+| Level cap and technique bug fix | Character stats are applied wrongly at the maximum level, and one late-game technique misbehaves | Adopt. Neither defect ships |
+| Harder rebalances (three separate patches) | Enemy and boss numbers raised across the game | Adopt as difficulty settings. Original balance stays the default |
+| Double experience and money variants | Rewards doubled, to offset the grinding the harder patches cause | Adopt as an option, off by default |
+| Retranslation and relocalization | Restores links to the earlier games that the 1990s localization lost, and rewrites dialogue to read naturally, drawing on the more literal prototype translation | Names: adopt through the glossary. Dialogue: not adopted, dialogue is locked. Proposed instead: an in-game encyclopedia that carries the lost links and lore without touching a line of dialogue |
+| A cheat-device route that keeps a character who dies in the story | Shows how strongly players want that character to stay | Not adopted in the story. Evidence for spending more time with her before that point |
+
+Listed on the patch site but not yet read, because the site blocks automated visitors:
+
+| Patch | Likely subject, from its title | To find out |
+|---|---|---|
+| Text cleanup and bug fix (2026) | Typos and defects in the shipped text | Its typo list, which decides the typo rule for locked dialogue |
+| Enemy restoration (2023) | Enemies cut or altered for the Western release | What was changed, and whether the remake uses the original versions |
+| General improvement (2023) | Quality-of-life changes | Which of them the remake does not already cover |
+| Rebalance (2022) | Character and technique balance | Which characters or techniques players consider weak |
+| Standalone bug fix (2019) | Further defects | The full defect list |
+| Speedrun practice (2020) | Practice tools | Whether a speedrun mode is worth an afternoon of design |
 
 The English prototype builds that have been documented publicly matter for one reason: they show a more literal English translation from before the final edit, so they are evidence of what the localization changed.
 
@@ -170,15 +184,14 @@ Total: roughly four to five years. Peak team in the low hundreds, counting exter
 | "Nothing static" is expensive | Every panel is a staged, lit, animated scene | Build the panel tool first. Reuse sets and rigs across panels |
 | Pacing drifts | Voice, animation and camera work all slow a game down | A pacing budget per scene, measured against the original |
 | Enemy count | Palette swaps do not survive at this quality | Decide the unique-model budget in phase 0 |
-| Script handling | Fans notice any changed line or name | Settle the dialogue rule in phase 0. Every renamed menu, item, technique or skill is in the glossary and signed off |
+| Script handling | Fans notice any changed line or name | Dialogue is locked. Every renamed menu, item, technique or skill is in the glossary and signed off |
 | Encounter change | Visible enemies change difficulty and leveling curves | Prototype in pre-production, keep random battles as a fallback |
 
 ## Open questions
 
-1. Dialogue: the English text as shipped, or restored from the Japanese script?
-2. Which languages ship?
-3. Do new translations work from the shipped English or from the Japanese script?
-4. Frame rate target: is 60 in play, with 30 allowed in the heaviest story panels, acceptable?
-5. Who owns art direction day to day, and how much time the original designer has for it.
-6. Is the follow-up assumed in the business case, or decided after launch? This changes how much is spent on reusable tooling.
-7. Budget range and internal versus external team split.
+1. Which languages ship?
+2. Do new translations work from the shipped English or from the Japanese script?
+3. Frame rate target: is 60 in play, with 30 allowed in the heaviest story panels, acceptable?
+4. Who owns art direction day to day, and how much time the original designer has for it.
+5. Is the follow-up assumed in the business case, or decided after launch? This changes how much is spent on reusable tooling.
+6. Budget range and internal versus external team split.
