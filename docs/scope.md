@@ -194,7 +194,7 @@ Counts come from the source audit in phase 0. The categories are:
 
 ## Source material
 
-Needed from the rights holder before pre-production can start:
+Needed from the rights holder before pre-production can start. The project lead reports that some or all of the original masters may be lost, so the first item is to confirm what survives:
 
 - The original script: the shipped English text, and the Japanese for reference
 - Original character and world design sheets
@@ -248,6 +248,7 @@ Total: roughly four to five years. Peak team in the low hundreds, counting exter
 | Pacing drifts | Voice, animation and camera work all slow a game down | A pacing budget per scene, measured against the original |
 | Enemy count | Palette swaps do not survive at this quality | Decide the unique-model budget in phase 0 |
 | Script handling | Fans notice any changed line or name | Dialogue is locked. Every renamed menu, item, technique or skill is in the glossary and signed off |
+| Original masters may not exist | The project lead reports that the rights holder no longer holds the original art, music data or scripts. If so, the retail cartridge is the only surviving copy | Confirm in writing in phase 0 what the rights holder does hold. If recovery from the cartridge is needed, it is done under written authorization from the rights holder, and it recovers reference material, not shipping assets |
 | Encounter change | Visible enemies change difficulty and leveling curves | Prototype in pre-production, keep random battles as a fallback |
 
 ## Open questions
