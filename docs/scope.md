@@ -18,6 +18,7 @@ Remake Phantasy Star IV as a modern, AAA-quality game, faithful to the original 
 | Visuals | Full 3D, AAA quality | Decided |
 | Static art | None. Story scenes, characters and environments are rendered in real time: no illustrated stills | Decided |
 | Pre-rendered video | None at the start. Revisit after the vertical slice if a scene cannot be done in real time | Decided |
+| Voice acting | None. All dialogue is text, as in the original | Decided |
 | Menu art | Character portraits are rendered live. Icons, frames and fonts are ordinary 2D interface art | Decided |
 | Platforms | Current consoles and PC. No handheld-class target | Decided |
 | Frame rate | 60 frames per second in the field and in battle. Story panels may run at 30 if the heaviest scenes need it | Proposed |
@@ -84,14 +85,13 @@ Rules for system text. The first is decided, the rest are proposed:
 
 Size of the text, from a fan project's published tooling. Treat as an estimate until the audit counts it:
 
-- About 2,170 dialogue messages. This is the voice recording and localization workload.
+- About 2,170 dialogue messages. This is the localization workload.
 - About 865 names, descriptions, banners and menu entries. This is the system text that the glossary covers.
 - Dialogue carries inline codes for line breaks, page pauses and which portrait to show. The portrait codes are a ready-made map of who speaks each line, which casting and the panel tool can both use.
 - The original fonts have no accented characters, which is why fan translations into other languages had to replace the text engine.
 
 What follows for the rest of production:
 
-- **Voice.** Restored names are easier to say than shortened ones. The glossary also records pronunciation.
 - **Other languages.** Decide whether new translations work from the shipped English or from the Japanese script.
 - **Delivery, not wording.** Text boxes that read well can sound stiff when spoken. Budget for a pass that sets delivery notes and timing and changes no words.
 - **Errors.** Proposed: fix plain typos in dialogue, and list every fix.
@@ -193,7 +193,7 @@ Counts come from the source audit in phase 0. The categories are:
 | Techniques, skills, combination attacks | All need animation and effects. Combination attacks need a discoverability feature |
 | Side quests | The hunter's guild jobs, kept as they are |
 | Music | Full re-recording or rearrangement of the soundtrack |
-| Text | Every line, in every shipped language, plus voice |
+| Text | Every line, in every shipped language. No voice |
 
 First counts, measured from the USA cartridge. Phase 0 confirms them against the rights holder's own data:
 
@@ -265,7 +265,7 @@ Durations are planning assumptions for a AAA production, not estimates from a co
 | 1. Pre-production | 9 to 12 months | Art bible, engine and pipeline, live panel tool prototype, combat prototype, encounter prototype |
 | 2. Vertical slice | Inside phase 1 | One town, one dungeon, one boss, one panel sequence, at shipping quality. Proves cost per town and cost per scene |
 | 3. Production | 24 to 30 months | All content |
-| 4. Finish | 9 to 12 months | Localization, voice, certification, performance, polish |
+| 4. Finish | 9 to 12 months | Localization, certification, performance, polish |
 
 Total: roughly four to five years. Peak team in the low hundreds, counting external art partners. The vertical slice is what turns these into real numbers.
 
@@ -275,7 +275,7 @@ Total: roughly four to five years. Peak team in the low hundreds, counting exter
 |---|---|---|
 | Fidelity multiplies scope | A screen of tiles becomes a hand-built 3D town. A 20-hour game can cost like a 60-hour one | Fixed camera, a strict environment kit, cost per town measured in the slice |
 | "Nothing static" is expensive | Every panel is a staged, lit, animated scene | Build the panel tool first. Reuse sets and rigs across panels |
-| Pacing drifts | Voice, animation and camera work all slow a game down | A pacing budget per scene, measured against the original |
+| Pacing drifts | Animation and camera work slow a game down | A pacing budget per scene, measured against the original |
 | Enemy count | Palette swaps do not survive at this quality | Decide the unique-model budget in phase 0 |
 | Script handling | Fans notice any changed line or name | Dialogue is locked. Every renamed menu, item, technique or skill is in the glossary and signed off |
 | Original masters may not exist | The project lead reports that the rights holder no longer holds the original art, music data or scripts. If so, the retail cartridge is the only surviving copy | Confirm in writing in phase 0 what the rights holder does hold. If recovery from the cartridge is needed, it is done under written authorization from the rights holder, and it recovers reference material, not shipping assets |
