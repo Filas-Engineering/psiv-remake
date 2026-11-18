@@ -158,6 +158,19 @@ Fans have translated the game into German, French, Polish, Korean and Portuguese
 
 Five English builds are documented publicly, all from after the Japanese release. They show the translation in progress and nothing from the game's development. With dialogue locked to the shipped text, their only use is as background for the name glossary.
 
+### How the original engine works
+
+A fan analysis of the original engine ([Grand Cross, engine internals part 1](https://ps4grandcross.net/posts/ps4-game-engine-1/)) describes how the cartridge runs. What it means for the remake:
+
+| Finding | Consequence |
+|---|---|
+| Events and cutscenes are hand-written code, one routine each. There is no scripting language | Nothing can be converted. Every event is authored again by hand in the new engine |
+| Battle is about 30% of the game logic, spread over several state machines, with over 40 fighter states | Matching the battle feel is the largest systems task. Budget it first |
+| The game is two modes, field and battle, each with a load step. The field has ten sub-states (controls, menu, interaction, event, shop and others) | The "Systems" section below follows the same split |
+| The Europe version runs its logic slower than the USA version | The USA version is the reference for speed and pacing |
+| The random number generator starts from a fixed seed and mixes in player input | Matters only if encounter and drop rates must match the original exactly |
+| A world map screen exists in the code but is never used | One more candidate for the cut-content question |
+
 ### Rules for using this material
 
 - Fan patches are their authors' own work. Use them as a list of problems, not as a source of text. Every fix is sourced from the rights holder's Japanese script and data.
@@ -181,6 +194,23 @@ Counts come from the source audit in phase 0. The categories are:
 | Side quests | The hunter's guild jobs, kept as they are |
 | Music | Full re-recording or rearrangement of the soundtrack |
 | Text | Every line, in every shipped language, plus voice |
+
+First counts, measured from the USA cartridge. Phase 0 confirms them against the rights holder's own data:
+
+| Content | Count |
+|---|---|
+| Map entries (fields and interiors) | 417 |
+| Enemies | 153 |
+| Items | 151 |
+| Techniques | 31 |
+| Enemy skills | 103 |
+| Combination attacks | 15 |
+| Shops | 50 |
+| Chests | 211 |
+| Field event hooks | 128 |
+| Music tracks | 52 |
+
+Events are hand-written code in the original, so 128 event hooks is the minimum number of events to author again, not the full count.
 
 ## Systems
 
@@ -260,4 +290,4 @@ Total: roughly four to five years. Peak team in the low hundreds, counting exter
 5. Is the follow-up assumed in the business case, or decided after launch? This changes how much is spent on reusable tooling.
 6. Budget range and internal versus external team split.
 7. Does the remake use the Japanese enemy roster, restoring the two enemies removed elsewhere?
-8. Is cut content (unused enemies, an unused technique) restored, and are dead items fixed?
+8. Is cut content (unused enemies, an unused technique, an unused world map screen) restored, and are dead items fixed?
