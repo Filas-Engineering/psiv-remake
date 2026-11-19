@@ -89,6 +89,7 @@ def main():
 	registered = {}
 	registered.update(native_checks(build / "core_acceptance"))
 	registered.update(native_checks(build / "events_acceptance"))
+	registered.update(native_checks(build / "game_acceptance"))
 	registered.update(tool_checks(Path(__file__).resolve().parent.parent / "tools"))
 
 	results = []

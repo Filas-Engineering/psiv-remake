@@ -68,7 +68,7 @@ struct TalkSet {
 	std::vector<TalkLine> lines;
 };
 
-// journal.json. Every text is a key of the game's text table.
+// journal.json. Every text is a string ID of the dialogue tables.
 struct Journal {
 	std::vector<Objective> objectives;
 	std::vector<Job> jobs;
@@ -85,6 +85,14 @@ struct PresentationNames {
 	std::vector<std::string> portraits;
 };
 
+// The two tables of one language: the dialogue string table (events format) and the game's own text table
+// (core format).
+struct LanguageFiles {
+	std::string code;
+	std::string strings;
+	std::string text;
+};
+
 // game.json: everything about the adventure that is not an area, a script or battle data.
 struct GameConfig {
 	std::string title;
@@ -92,11 +100,10 @@ struct GameConfig {
 	std::vector<std::string> areaFiles;
 	std::vector<std::string> eventFiles;
 	std::string glossaryFile;
-	// The dialogue string table (events format) and the game's own text table (core format).
-	std::string stringsFile;
-	std::string textFile;
+	// The first language is the one every other language must match key for key.
+	std::vector<LanguageFiles> languages;
 	std::string journalFile;
-	// Script actors that are not characters; each needs a `speaker.<id>` text.
+	// Script actors that are not characters; each needs a `speaker.<id>` string.
 	std::vector<std::string> actors;
 	PresentationNames presentation;
 	// Every flag and variable a script, hook or journal entry uses, except chest flags, which the areas declare.
@@ -104,8 +111,6 @@ struct GameConfig {
 	std::map<std::string, int> vars;
 	// The flag the last story event sets; control returning after it writes the clear-data record (SAV-024).
 	std::string clearFlag;
-	// Scripted ends (BAT-013) for event battles, by encounter. The script format has no way to say one.
-	std::map<std::string, rules::ScriptedEnd> scriptedEnds;
 
 	std::string startArea;
 	std::string startMarker;
@@ -132,12 +137,20 @@ struct GameConfig {
 	std::vector<Boss> bosses;
 };
 
+struct LanguageTables {
+	std::string code;
+	// Core's text table merged with the game's own keys. Core ships English only, so every language uses it.
+	rules::TextTable text;
+	events::StringTable strings;
+};
+
 struct GameData {
 	GameConfig config;
 	rules::Database db;
-	// Core's English table merged with the game's own keys.
-	rules::TextTable text;
-	events::StringTable strings;
+	// In the order of game.json; the first is the fallback for an unknown language.
+	std::vector<LanguageTables> languages;
+	// String IDs the game shows itself (speaker names, journal text), so the string check counts them as used.
+	events::GameStrings gameStrings;
 	events::Program program;
 	// Built from the data; the scripts were compiled against it.
 	events::Registry registry;
@@ -147,6 +160,7 @@ struct GameData {
 	// Battle data hash mixed with the script fingerprint and the area texts.
 	std::uint64_t contentHash = 0;
 
+	const LanguageTables& language(const std::string& code) const;
 	const Area* area(const std::string& id) const;
 	const Boss* boss(const std::string& encounter) const;
 	int price(const std::string& id) const;
@@ -162,6 +176,8 @@ rules::Result<GameData> loadGameData(const std::string& directory);
 
 // The registry in the events registry file format, for `event_cli check --registry`.
 std::string registryText(const events::Registry& registry);
+// The game's own string IDs in the events format, for `event_cli check --used`.
+std::string gameStringsText(const events::GameStrings& strings);
 
 // Every key of the game's own text table the session can emit.
 const std::vector<std::string>& sessionTextKeys();

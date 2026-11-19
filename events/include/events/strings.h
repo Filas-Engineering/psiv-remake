@@ -5,6 +5,7 @@
 #include "events/program.h"
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -53,12 +54,29 @@ std::vector<TextUse> collect_texts(const Program& program);
 // page pause; FORMAT.md ("Control tags") lists the known ones.
 std::vector<std::string> find_control_tags(const std::string& text);
 
-// Errors: an ID a script uses that a table lacks; an ID whose name token
+// String IDs the game shows itself rather than through a script: speaker
+// names, journal text, menu text. The file format is in FORMAT.md
+// ("String tables").
+struct GameStrings {
+	std::string file;
+	// ID to the line that lists it.
+	std::map<std::string, int> ids;
+	// Every ID that starts with one of these is used by the game.
+	std::vector<std::string> prefixes;
+
+	bool covers(const std::string& id) const;
+};
+
+// Returns false and reports every problem when the text is not a valid list.
+bool load_game_strings(const std::string& file, const std::string& text, GameStrings& out, std::vector<Diagnostic>& diagnostics);
+
+// Errors: an ID a script or `game` lists that a table lacks (a `game`
+// prefix only marks IDs as used); an ID whose name token
 // IDs (in any order and case form) or control tags (in order) differ
 // between languages, as when a translation drops or changes one (TXT-034).
 // Warnings: an ID no script uses (only when the program has events), and an
 // ID one language has and another lacks.
-std::vector<Diagnostic> check_strings(const Program& program, const std::vector<StringTable>& tables);
+std::vector<Diagnostic> check_strings(const Program& program, const std::vector<StringTable>& tables, const GameStrings& game = GameStrings());
 
 // An error for every quoted text in the program: player-facing text must
 // come from string tables (TXT-030).

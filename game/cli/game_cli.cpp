@@ -17,6 +17,7 @@ void usage() {
 				 "  game_cli --script FILE ...      run the commands in FILE, print the transcript, then exit\n"
 				 "  game_cli --bot [--route FILE]   walk the route in both encounter modes and print pacing tables\n"
 				 "  game_cli --registry             print the registry built from the data, for event_cli check --registry\n"
+				 "  game_cli --used                 print the string IDs the game shows itself, for event_cli check --used\n"
 				 "\n"
 				 "Defaults: --data data, --seed 1, --saves saves, --route DATA/routes/main.route.\n"
 				 "Type 'help' at the prompt for the command list.\n"
@@ -49,6 +50,7 @@ int main(int argc, char** argv) {
 	std::uint64_t seed = 1;
 	bool bot = false;
 	bool registry = false;
+	bool used = false;
 	bool autoBattle = false;
 	std::optional<game::EncounterMode> mode;
 	for (int i = 1; i < argc; ++i) {
@@ -82,6 +84,8 @@ int main(int argc, char** argv) {
 			bot = true;
 		} else if (arg == "--registry") {
 			registry = true;
+		} else if (arg == "--used") {
+			used = true;
 		} else {
 			std::cerr << "bad argument '" << arg << "' (try --help)\n";
 			return 2;
@@ -96,6 +100,10 @@ int main(int argc, char** argv) {
 
 	if (registry) {
 		std::cout << game::registryText(data.value->registry);
+		return 0;
+	}
+	if (used) {
+		std::cout << game::gameStringsText(data.value->gameStrings);
 		return 0;
 	}
 

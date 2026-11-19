@@ -455,6 +455,10 @@ int printResult(const Database& db, const Battle& battle, const ComboLog& comboL
 	const Rewards rewards = battle.rewards();
 	if (battle.outcome() == Outcome::Victory) {
 		std::cout << "Rewards: " << rewards.experience << " experience, " << rewards.currency << " currency\n";
+		for (const auto& [id, count] : rewards.items) {
+			const ItemDef* item = db.item(id);
+			std::cout << "  Drop: " << (item ? item->name : id) << " x" << count << "\n";
+		}
 		std::vector<PartyMember> party = battle.partyState();
 		for (std::size_t i = 0; i < party.size(); ++i) {
 			const LevelUp levelUp = grantExperience(party[i], db, rewards.memberExperience[i]);

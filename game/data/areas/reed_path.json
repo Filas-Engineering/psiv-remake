@@ -1,6 +1,5 @@
 {
 	"id": "reed_path",
-	"name": "Reed Path",
 	"kind": "field",
 	"encounter_mode": "visible",
 	"step_ms": 250,

@@ -1,5 +1,7 @@
 """ACC-TXT-03: portrait codes resolve, and translations keep portrait codes and name tokens in order."""
 
+import json
+
 from common import imported, read_csv, samples, write_csv
 
 ID = "ACC-TXT-03"
@@ -68,9 +70,25 @@ def run(ctx):
 	code, _ = ctx.event_cli("check", "--registry", "sample_text/registry.txt", probe)
 	ctx.expect(code == 1, f"event_cli check with the registry accepted an unknown portrait code (exit {code}) (TXT-021)")
 
-	# tools/text: does anything resolve a delivery's portrait codes to assets?
-	options = " ".join(ctx.text(command, "--help")[1] for command in ("import", "verify", "stats"))
-	codes = (ctx.examples / "codes.json").read_text(encoding="utf-8")
-	if "portrait" not in options.lower():
-		ctx.gap("tools/text has no portrait asset list: import, verify and stats take no portrait registry and the code registry types the portrait argument only as an id, so a delivery's {portrait:...} codes are never resolved to assets (TXT-021)" if '"portrait"' in codes else "tools/text does not know the portrait code (TXT-021)")
-	ctx.note("tools/text rejects translations that move, drop or add a portrait code and accepts one that keeps every code; event_cli check --strict with both tables passes the samples and rejects a translation that drops or breaks a name token; the event registry rejects an unknown portrait code")
+	# tools/text: every portrait code of the delivery, the reference and the current text resolves to an asset.
+	portraits = ctx.examples / "portraits.txt"
+	delivery = ctx.examples / "delivery"
+	reference = ["--reference", ctx.examples / "delivery_ja", "--reference-lang", "ja"]
+	code, output = ctx.text("import", "--delivery", delivery, *reference, "--portraits", portraits, "--db", ctx.temp / "assets.db")
+	ctx.expect(code == 0, f"import with the placeholder portrait list failed: {output.strip()[:300]}")
+	assets = [line.strip() for line in portraits.read_text(encoding="utf-8").splitlines() if line.strip() and not line.startswith("#")]
+	used = sorted({c.split(":", 1)[1] for path in delivery.rglob("*.json") for record in json.loads(path.read_text(encoding="utf-8")) for c in record["codes"] if c.startswith("portrait:")})
+	ctx.expect(bool(used), "setup: the placeholder delivery has no portrait codes")
+	missing = used[-1]
+	short = ctx.temp / "portraits_short.txt"
+	short.write_text("\n".join(a for a in assets if a != missing) + "\n", encoding="utf-8")
+	code, output = ctx.text("import", "--delivery", delivery, *reference, "--portraits", short, "--check")
+	ctx.expect(code == 1 and f"{{portrait:{missing}}} names no portrait asset" in output, f"import accepted portrait codes that name no asset (exit {code}) (TXT-021)")
+	ctx.expect("ja " in output, "import did not check the reference language's portrait codes (TXT-021)")
+	glossary = ctx.temp / "empty.csv"
+	ctx.text("glossary", "init", "--glossary", glossary)
+	code, output = ctx.text("verify", "--db", ctx.temp / "assets.db", "--glossary", glossary, "--portraits", portraits)
+	ctx.expect(code == 0, f"verify with the full portrait list failed: {output.strip()[:300]}")
+	code, output = ctx.text("verify", "--db", ctx.temp / "assets.db", "--glossary", glossary, "--portraits", short)
+	ctx.expect(code == 1 and f"{{portrait:{missing}}} names no portrait asset" in output, f"verify passed text whose portrait codes name no asset (exit {code}) (TXT-021)")
+	ctx.note(f"import and verify resolve every portrait code of the placeholder delivery and its ja reference to tools/text/examples/placeholder/portraits.txt ({len(assets)} assets) and fail, naming the code, when {missing} is left out; tools/text rejects translations that move, drop or add a portrait code and accepts one that keeps every code; event_cli check --strict with both tables passes the samples and rejects a translation that drops or breaks a name token; the event registry rejects an unknown portrait code")

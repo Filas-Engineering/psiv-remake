@@ -171,6 +171,7 @@ Combo: Storm Spark.
   Rust Hound falls.
 Outcome: victory
 Victory. 22 experience, 15 money.
+The enemies dropped 1 Tonic.
 You arrive at Bell Cove.
 [Autosaved to auto_0 (area entry).]
 field> status
@@ -179,7 +180,7 @@ Mode field, Bell Cove (1,4) facing east, play time 0:00:37.
   Test Mystic Lv3 HP 22/46 TP 15/30 EXP 44
   Test Medic Lv3 HP 52/52 TP 30/32 EXP 44
   Test Scout Lv4 HP 47/60 TP 9/18 EXP 22
-  Money 82. Items: clear_gel x1, second_wind x1, tonic x6.
+  Money 82. Items: clear_gel x1, second_wind x1, tonic x7.
 field> walk camp_front
 field> face north
 field> talk
@@ -195,7 +196,7 @@ Mode field, Bell Cove (2,2) facing north, play time 0:00:38.
   Test Mystic Lv3 HP 46/46 TP 30/30 EXP 44
   Test Medic Lv3 HP 52/52 TP 32/32 EXP 44
   Test Scout Lv4 HP 60/60 TP 18/18 EXP 22
-  Money 77. Items: clear_gel x1, second_wind x1, tonic x6.
+  Money 77. Items: clear_gel x1, second_wind x1, tonic x7.
 field> walk box_front
 field> face south
 field> talk
@@ -266,6 +267,8 @@ Test Fighter uses Strike on Bog Wisp.
   Bog Wisp falls.
 Outcome: victory
 Victory. 72 experience, 59 money.
+The enemies dropped 1 Loosen Oil.
+The enemies dropped 1 Wake Chime.
 Test Mystic: It is only gears now. The bell can rest.
   (music stop)
 For the first time in a week, the tide is the only sound in the cove.
@@ -277,7 +280,7 @@ Mode field, Bell Cove (8,4) facing east, play time 0:00:57.
   Test Mystic Lv3 HP 20/46 TP 18/30 EXP 116
   Test Medic Lv3 HP 19/52 TP 32/32 EXP 116
   Test Scout Lv4 HP 35/60 TP 6/18 EXP 94
-  Money 136. Items: clear_gel x1, second_wind x1, spark_flask x1, tonic x7, padded_coat x1.
+  Money 136. Items: clear_gel x1, loosen_oil x1, second_wind x1, spark_flask x1, tonic x8, wake_chime x1, padded_coat x1.
 field> codex
   Tidewater Landing: A ferry town built on pilings. Its noticeboard is the only post office for three bays.
   BelWrdn: A clockwork keeper wound to guard the cove bell. Nobody remembers who wound it.
@@ -406,6 +409,7 @@ Test Fighter uses Cleave on Rust Hound.
   Rust Hound falls.
 Outcome: victory
 Victory. 22 experience, 15 money.
+The enemies dropped 1 Tonic.
 You arrive at Tidewater Landing.
 [Autosaved to auto_2 (area entry).]
 field> walk dock_front

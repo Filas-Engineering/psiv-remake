@@ -255,6 +255,18 @@ end
 
 `opening` is optional: `normal` (the default), `party_first` or `enemy_first`.
 
+`until` is optional and gives the battle a scripted end, after `opening` if both are written:
+
+```
+battle tide_wyrm until survive 3
+battle tide_wyrm opening enemy_first until defeat wyrm_head
+```
+
+- `until survive <rounds>`: the battle also ends once the party has lasted that many rounds (1 to 999).
+- `until defeat <enemy>`: the battle also ends when that enemy of the group falls. With a registry, the enemy must be listed on an `enemy` line.
+
+A scripted end runs the `win` section. A victory or a defeat that happens at the same moment takes precedence.
+
 The sections decide how the battle is set up:
 
 - `win` is required. It may be empty.
@@ -285,7 +297,17 @@ Check the tables against the scripts:
 build/event_cli strings check --table sample_text/en.strings --table sample_text/ja.strings samples/*.ev
 ```
 
-It reports, as errors, an ID a script uses that a table lacks, and a translation that drops, adds or changes a name token or a control tag. Name tokens may come in any order, since word order differs between languages, and may change their case form (`{name_upper:moth_swarm}` in English, `{name:moth_swarm}` in Japanese), since capitalization differs too; the IDs must match. Control tags must come in the same order, each written the same: `{wait:30}` and `{wait:15}` are different tags. As warnings it reports an ID no script uses and an ID one language has and another lacks. Without script files it only compares the tables with each other. The command fails when there are errors.
+It reports, as errors, an ID a script uses that a table lacks, and a translation that drops, adds or changes a name token or a control tag. Name tokens may come in any order, since word order differs between languages, and may change their case form (`{name_upper:moth_swarm}` in English, `{name:moth_swarm}` in Japanese), since capitalization differs too; the IDs must match. Control tags must come in the same order, each written the same: `{wait:30}` and `{wait:15}` are different tags. As warnings it reports an ID no script uses and an ID one language has and another lacks. Without script files it only compares the tables with each other. The command fails when there are errors, and with `--strict` on warnings too.
+
+Some IDs are shown by the game itself, not by a script: speaker names, quest log and menu text. List them in a file and pass it with `--used`, so they are not reported as unused:
+
+```
+# One string ID per line, or a prefix ending in '*'.
+speaker.guide
+codex.*
+```
+
+An ID listed in full must be in every table, as if a script used it; an ID missing from one is an error at its line in the list. A prefix only marks the IDs that start with it as used. `check` takes `--used` too.
 
 To move a scene from quoted text to IDs, print a proposed table:
 
@@ -388,6 +410,10 @@ item brass_key harbor_map
 member guide traveler
 encounter lamp_room_moths
 map harbor lighthouse_base
+map_markers harbor pier_end stall_counter
+map_markers lighthouse_base door_inside
+event_map harbor harbor_arrival
+enemy lamp_moth
 shop vendor_stall
 rest harbor_inn
 
@@ -397,7 +423,11 @@ var harbor.first_stop
 var market.offer local default 30
 ```
 
-- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `face` and `anim` subject), `marker` (`move`, `face` and `warp` targets), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation`, `portrait` (the `as` of `say`), `item`, `member` (`party` and `name entry`), `encounter`, `map`, `shop` and `rest`. Panel IDs are not listed; each scene names its own.
+- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `face` and `anim` subject), `marker` (`move`, `face` and `warp` targets), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation`, `portrait` (the `as` of `say`), `item`, `member` (`party` and `name entry`), `encounter`, `enemy` (`until defeat`), `map`, `shop` and `rest`. Panel IDs are not listed; each scene names its own.
+- `map_markers <map> <marker>...` lists the markers on one map; they count as listed markers. A marker on several maps is listed for each. `warp <map> <marker>` to a marker that is not on that map is an error. The checker also follows the map the party is on through each event, from its last `warp` (and from the start, see `event_map`), so a `move` to a marker on another map is an error too. Where the map cannot be known (after a branch that warps on one side only, a `call`, a `label`, or in a loop that warps), nothing more is checked until the next `warp`.
+- `event_map <map> <event>...` says the game starts those events on that map, for example from a hook in that area. An event listed for one map starts the move check on it; one listed for several, or none, starts with the map unknown.
+- `enemy <name>...` lists the enemies a `battle ... until defeat` may name.
+- Every map named on a `map_markers` or `event_map` line must be on a `map` line.
 - `flag <name>` and `var <name>` declare one flag or variable each, with `global` (the default) or `local`, and `default <value>` (`true` or `false` for a flag, an integer for a variable). Using a flag as a variable, or the other way round, is an error.
 - A `local` flag or variable belongs to one run of an event: it starts at its default each time the game starts an event, is shared with the events that event calls, is kept in mid-event saves, and is never part of the game's own state.
 - A global default is for the game to apply when it starts a new game; the scripts do not apply it.
@@ -409,7 +439,7 @@ var market.offer local default 30
 - quoted text anywhere a player sees it (`say`, `narrate`, prompts and options): every such text must be a string ID, so it can be translated;
 - any warning, including an ignored `on skip` block.
 
-Give `--glossary` to fail on glossary names typed out instead of written as name tokens, and on broken or unknown tokens in any of the three forms, in the scripts and in every table given. Give `--table` to run the string table checks; their errors fail the check, and with `--strict` their warnings do too.
+Give `--glossary` to fail on glossary names typed out instead of written as name tokens, and on broken or unknown tokens in any of the three forms, in the scripts and in every table given. Give `--table` to run the string table checks; their errors fail the check, and with `--strict` their warnings do too. Give `--used` with the IDs the game shows itself (see [String tables](#string-tables)).
 
 ## Error messages
 

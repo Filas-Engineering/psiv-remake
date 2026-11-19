@@ -37,6 +37,8 @@ struct Combatant {
 	bool defending = false;
 	// The foe that last damaged this combatant, for the last_attacker AI target rule.
 	int lastAttacker = -1;
+	// A party member riding a vehicle in a vehicle battle: it takes no command and cannot be targeted.
+	bool aboard = false;
 
 	bool alive() const { return hp > 0; }
 	bool knows(const std::string& abilityId) const;

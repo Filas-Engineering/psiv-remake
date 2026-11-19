@@ -1,0 +1,4 @@
+# Portrait assets of the placeholder script, by portrait code ID.
+FINCH
+OSK
+GULL

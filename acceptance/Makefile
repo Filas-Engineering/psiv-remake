@@ -6,28 +6,33 @@ PYTHON = python3
 ROOT = ..
 CORE = $(ROOT)/core
 EVENTS = $(ROOT)/events
+GAME = $(ROOT)/game
 BUILD = build
 
 CORE_LIB = $(CORE)/build/librules.a
 EVENTS_LIB = $(EVENTS)/build/libevents.a
+GAME_LIB = $(GAME)/build/libgame.a
 
 CORE_CHECK = $(BUILD)/core_acceptance
 EVENTS_CHECK = $(BUILD)/events_acceptance
-DUMPS = $(BUILD)/record_dump_core $(BUILD)/record_dump_O0 $(BUILD)/record_dump_O3 $(BUILD)/save_probe
+GAME_CHECK = $(BUILD)/game_acceptance
+DUMPS = $(BUILD)/record_dump_core $(BUILD)/record_dump_O0 $(BUILD)/record_dump_O3
 
 HARNESS_OBJ = $(BUILD)/harness/acc_main.o
 CORE_OBJS = $(patsubst core/%.cpp,$(BUILD)/core/%.o,$(wildcard core/*.cpp))
 EVENTS_OBJS = $(patsubst events/%.cpp,$(BUILD)/events/%.o,$(wildcard events/*.cpp))
+GAME_OBJS = $(patsubst game/%.cpp,$(BUILD)/game/%.o,$(wildcard game/*.cpp))
 CORE_SOURCES = $(wildcard $(CORE)/src/*.cpp)
 
 .PHONY: all libs test report clean
 
-all: libs $(CORE_CHECK) $(EVENTS_CHECK) $(DUMPS)
+all: libs $(CORE_CHECK) $(EVENTS_CHECK) $(GAME_CHECK) $(DUMPS)
 
 # Each library builds through its own Makefile; the sub-make decides what is out of date.
 libs:
 	$(MAKE) -C $(CORE) all
 	$(MAKE) -C $(EVENTS) all
+	$(MAKE) -C $(GAME) build/libgame.a
 
 test: all
 	$(PYTHON) scripts/run.py --root $(ROOT) --build $(BUILD)
@@ -45,7 +50,10 @@ $(CORE_CHECK): $(CORE_OBJS) $(HARNESS_OBJ) $(CORE_LIB)
 $(EVENTS_CHECK): $(EVENTS_OBJS) $(HARNESS_OBJ) $(EVENTS_LIB)
 	$(CXX) $(CXXFLAGS) $^ -o $@
 
-$(CORE_LIB) $(EVENTS_LIB): libs
+$(GAME_CHECK): $(GAME_OBJS) $(HARNESS_OBJ) $(GAME_LIB) $(CORE_LIB) $(EVENTS_LIB)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+$(CORE_LIB) $(EVENTS_LIB) $(GAME_LIB): libs
 
 $(BUILD)/core/%.o: core/%.cpp
 	@mkdir -p $(dir $@)
@@ -54,6 +62,10 @@ $(BUILD)/core/%.o: core/%.cpp
 $(BUILD)/events/%.o: events/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -Iharness -I$(EVENTS)/include -c $< -o $@
+
+$(BUILD)/game/%.o: game/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -Iharness -I$(GAME)/include -I$(CORE)/include -I$(EVENTS)/include -c $< -o $@
 
 $(BUILD)/harness/%.o: harness/%.cpp
 	@mkdir -p $(dir $@)
@@ -76,20 +88,13 @@ $(BUILD)/record_dump_O0: $(DUMP_OBJS) $(patsubst $(CORE)/src/%.cpp,$(BUILD)/rule
 $(BUILD)/record_dump_O3: $(DUMP_OBJS) $(patsubst $(CORE)/src/%.cpp,$(BUILD)/rules_O3/%.o,$(CORE_SOURCES))
 	$(CXX) $(WARNINGS) $^ -o $@
 
-# The ACC-SAV tools checks probe the save payloads both libraries offer.
-$(BUILD)/dump/save_probe.o: dump/save_probe.cpp
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -Iharness -Icore -I$(CORE)/include -I$(EVENTS)/include -c $< -o $@
-
-$(BUILD)/save_probe: $(BUILD)/dump/save_probe.o $(BUILD)/core/support.o $(CORE_LIB) $(EVENTS_LIB)
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
 $(BUILD)/rules_O0/%.o: $(CORE)/src/%.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(WARNINGS) -O0 -I$(CORE)/include -I$(CORE)/src -c $< -o $@
+	$(CXX) $(WARNINGS) -O0 -MMD -MP -I$(CORE)/include -I$(CORE)/src -c $< -o $@
 
 $(BUILD)/rules_O3/%.o: $(CORE)/src/%.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(WARNINGS) -O3 -I$(CORE)/include -I$(CORE)/src -c $< -o $@
+	$(CXX) $(WARNINGS) -O3 -MMD -MP -I$(CORE)/include -I$(CORE)/src -c $< -o $@
 
--include $(CORE_OBJS:.o=.d) $(EVENTS_OBJS:.o=.d) $(HARNESS_OBJ:.o=.d) $(BUILD)/dump/record_dump.d $(BUILD)/dump/save_probe.d
+-include $(CORE_OBJS:.o=.d) $(EVENTS_OBJS:.o=.d) $(GAME_OBJS:.o=.d) $(HARNESS_OBJ:.o=.d) $(BUILD)/dump/record_dump.d
+-include $(wildcard $(BUILD)/rules_O0/*.d $(BUILD)/rules_O3/*.d)

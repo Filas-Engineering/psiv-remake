@@ -121,6 +121,7 @@ const AbilityDef* Database::ability(const std::string& id) const { return findIn
 const ItemDef* Database::item(const std::string& id) const { return findIn(items, id); }
 const EquipmentDef* Database::equipmentPiece(const std::string& id) const { return findIn(equipment, id); }
 const CharacterDef* Database::character(const std::string& id) const { return findIn(characters, id); }
+const VehicleDef* Database::vehicle(const std::string& id) const { return findIn(vehicles, id); }
 const EnemyDef* Database::enemy(const std::string& id) const { return findIn(enemies, id); }
 const Encounter* Database::encounter(const std::string& id) const { return findIn(encounters, id); }
 const DifficultyDef* Database::difficulty(const std::string& id) const { return findIn(difficulties, id); }

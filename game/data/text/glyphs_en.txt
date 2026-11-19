@@ -1,0 +1,6 @@
+# Glyphs of the placeholder Latin font (TXT-033): printable ASCII and a few typographic marks.
+# Check with tools/text glyphs.
+U+0020-U+007E
+U+2014
+U+2019
+U+2026

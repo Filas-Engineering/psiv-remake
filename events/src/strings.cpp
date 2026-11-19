@@ -207,9 +207,60 @@ std::vector<Diagnostic> check_inline_text(const Program& program) {
 	return out;
 }
 
-std::vector<Diagnostic> check_strings(const Program& program, const std::vector<StringTable>& tables) {
+bool GameStrings::covers(const std::string& id) const {
+	if (ids.count(id)) {
+		return true;
+	}
+	for (const std::string& prefix : prefixes) {
+		if (id.compare(0, prefix.size(), prefix) == 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool load_game_strings(const std::string& file, const std::string& text, GameStrings& out, std::vector<Diagnostic>& diagnostics) {
+	GameStrings result;
+	result.file = file;
+	bool ok = true;
+	const std::vector<std::string> lines = split_lines(text);
+	for (std::size_t i = 0; i < lines.size(); ++i) {
+		const int number = static_cast<int>(i) + 1;
+		const std::string entry = trim(lines[i].substr(0, lines[i].find('#')));
+		if (entry.empty()) {
+			continue;
+		}
+		const bool prefix = entry.back() == '*';
+		const std::string name = prefix ? entry.substr(0, entry.size() - 1) : entry;
+		// A prefix may end in '.' ("area.*"), which is not a valid name on its own.
+		const std::string checked = prefix && !name.empty() && name.back() == '.' ? name.substr(0, name.size() - 1) : name;
+		if (!is_name(checked)) {
+			diagnostics.push_back({Severity::error, file, number, "'" + entry + "' is not a string ID or a prefix ending in '*'"});
+			ok = false;
+		} else if (prefix) {
+			result.prefixes.push_back(name);
+		} else if (!result.ids.emplace(name, number).second) {
+			diagnostics.push_back({Severity::error, file, number, "'" + name + "' is already listed at line " + std::to_string(result.ids[name])});
+			ok = false;
+		}
+	}
+	if (ok) {
+		out = result;
+	}
+	return ok;
+}
+
+std::vector<Diagnostic> check_strings(const Program& program, const std::vector<StringTable>& tables, const GameStrings& game) {
 	std::vector<Diagnostic> out;
 	std::set<std::string> referenced;
+	for (const auto& [id, line] : game.ids) {
+		referenced.insert(id);
+		for (const StringTable& table : tables) {
+			if (!table.find(id)) {
+				out.push_back({Severity::error, game.file, line, "string ID '" + id + "' is missing from the '" + table.language + "' table (" + table.file + ")"});
+			}
+		}
+	}
 	for (const TextUse& use : collect_texts(program)) {
 		if (!use.text.is_id) {
 			continue;
@@ -225,8 +276,8 @@ std::vector<Diagnostic> check_strings(const Program& program, const std::vector<
 	if (!program.events.empty()) {
 		for (const StringTable& table : tables) {
 			for (const auto& entry : table.entries) {
-				if (!referenced.count(entry.first)) {
-					out.push_back({Severity::warning, table.file, entry.second.line, "string ID '" + entry.first + "' is not used by any script"});
+				if (!referenced.count(entry.first) && !game.covers(entry.first)) {
+					out.push_back({Severity::warning, table.file, entry.second.line, "string ID '" + entry.first + "' is not used by any script or by the game"});
 				}
 			}
 		}

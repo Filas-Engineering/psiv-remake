@@ -1,0 +1,8 @@
+# Glyphs of the placeholder Japanese font: ASCII, Japanese punctuation, kana, fullwidth forms
+# and the kanji the placeholder reference uses.
+U+0020-U+007E
+U+3000-U+303F
+U+3041-U+3096
+U+30A1-U+30FF
+U+FF01-U+FF5E
+一丸体何使係僕内出初力効北呼回塩夕少巣市店当復扉捨旅暮来枚案桟橋気水渡港潮目眠羽聞船見赤速運酔

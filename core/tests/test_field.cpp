@@ -39,7 +39,7 @@ TEST(itemsWorkOutsideBattleThroughTheBattleEffects) {
 	members[kScout].hp = 0;
 	use = useItemOutsideBattle(data(), members, inventory, "second_wind", kScout);
 	CHECK_EQ(members[kScout].hp, formulas::reviveHp(memberStats(data(), members[kScout]).maxHp, 30));
-	CHECK_EQ(inventory.at("second_wind"), 0);
+	CHECK_EQ(inventory.count("second_wind"), std::size_t(0));
 	CHECK_EQ(useItemOutsideBattle(data(), members, inventory, "second_wind", kScout).rejection.key, std::string("field.no_stock"));
 
 	members[kMedic].statuses = {{"poison", 3}, {"gear_lock", 0}};

@@ -228,7 +228,7 @@ void Battle::attemptEscape(int actor, std::vector<Event>& out) {
 	int enemyAgility = 0;
 	int enemyCount = 0;
 	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
-		if (!combatants_[i].alive()) {
+		if (!combatants_[i].alive() || combatants_[i].aboard) {
 			continue;
 		}
 		const int agility = combatants_[i].effective(Stat::Agility);
@@ -423,19 +423,31 @@ int Battle::dealDamage(int user, int target, int amount, Element element, Effect
 	e.effectiveness = effectiveness;
 	if (!t.alive()) {
 		defeat(target, out);
-		return dealt;
-	}
-	if (dealt == 0) {
-		return dealt;
-	}
-	const std::vector<ActiveStatus> statuses = t.statuses;
-	for (const ActiveStatus& active : statuses) {
-		const StatusDef* def = db_->status(active.id);
-		if (def && def->wakesOnDamage) {
-			emitStatusRemoved(-1, target, active.id, StatusEnd::WokeOnDamage, out);
+	} else if (dealt > 0) {
+		const std::vector<ActiveStatus> statuses = t.statuses;
+		for (const ActiveStatus& active : statuses) {
+			const StatusDef* def = db_->status(active.id);
+			if (def && def->wakesOnDamage) {
+				emitStatusRemoved(-1, target, active.id, StatusEnd::WokeOnDamage, out);
+			}
 		}
 	}
+	if (target == vehicleIndex_) {
+		passDamageToCrew(user, dealt, out);
+	}
 	return dealt;
+}
+
+void Battle::passDamageToCrew(int user, int dealt, std::vector<Event>& out) {
+	const int amount = dealt * crewDamagePercent_ / 100;
+	if (amount <= 0) {
+		return;
+	}
+	for (int i = 0; i < vehicleIndex_; ++i) {
+		if (combatants_[i].alive()) {
+			dealDamage(user, i, amount, Element::None, Effectiveness::Normal, out);
+		}
+	}
 }
 
 // Every status the fall clears gets its own removal event first, so the stream shows each change once.
@@ -451,7 +463,7 @@ void Battle::defeat(int target, std::vector<Event>& out) {
 	t.statuses = {{kDefeatedStatus, 0}};
 	t.modifiers.clear();
 	t.defending = false;
-	if (isParty(target) && autoActive_) {
+	if (isParty(target) && !combatants_[target].aboard && autoActive_) {
 		autoMemberFell_ = true;
 	}
 	Event& e = emit(out, EventType::CombatantDefeated);

@@ -39,7 +39,7 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro) {
 
 	auto partyIndexOf = [this](const std::string& characterId) {
 		for (int i = 0; i < partyCount_; ++i) {
-			if (combatants_[i].defId == characterId) {
+			if (combatants_[i].defId == characterId && !combatants_[i].aboard) {
 				return i;
 			}
 		}

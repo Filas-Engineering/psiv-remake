@@ -81,11 +81,13 @@ ACC_CHECK(acc_bat_16, "ACC-BAT-16", "BAT-122, BAT-124, BAT-125, SAV-023") {
 		const Rewards scaled = winWith(db, "original", multiplier);
 		t.expect(scaled.experience == experience * percent / 100 && scaled.currency == currency * percent / 100,
 			std::to_string(percent) + "% multiplier gave " + std::to_string(scaled.experience) + " xp and " + std::to_string(scaled.currency) + " money");
+		// Same seed, same draws: item drops are not battle experience or money, so the multiplier leaves them.
+		t.expect(scaled.items == base.items, std::to_string(percent) + "% multiplier changed the item drops");
 	}
 	const int hardPercent = db.difficulty("hard")->rewardPercent;
 	const Rewards hardScaled = winWith(db, "hard", RewardMultiplier::X1_5);
 	t.expect(hardScaled.experience == experience * hardPercent * 150 / 10000, "Hard with 1.5x did not scale experience once and round down");
 
 	t.note("chests, shops and guild job rewards live outside core, so SAV-023's exclusion of them is not exercised here");
-	t.note("every enemy's Hard hit points, attack and defense are within 20% of Original and the loader rejects a 30% overlay; a data-only difficulty applies through the same binary; 1x, 1.5x and 2x scale battle rewards and round down");
+	t.note("every enemy's Hard hit points, attack and defense are within 20% of Original and the loader rejects a 30% overlay; a data-only difficulty applies through the same binary; 1x, 1.5x and 2x scale battle experience and money and round down, and leave item drops as drawn");
 }

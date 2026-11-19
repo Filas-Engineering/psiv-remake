@@ -203,9 +203,8 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		reader.fail(json, "an area is an object");
 		return rules::Result<Area>::failure(reader.errors());
 	}
-	reader.only(json, {"id", "name", "kind", "encounter_mode", "step_ms", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "zones"});
+	reader.only(json, {"id", "kind", "encounter_mode", "step_ms", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "zones"});
 	reader.text(json, "id", area.id, true);
-	reader.text(json, "name", area.name, true);
 	std::string kind = "field";
 	reader.text(json, "kind", kind, false);
 	if (kind == "town") {

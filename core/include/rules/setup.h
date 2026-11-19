@@ -32,6 +32,8 @@ struct BattleSetup {
 	Opening opening = Opening::Normal;
 	BattleFlags flags;
 	ScriptedEnd scriptedEnd;
+	// With flags.vehicleBattle: the vehicle that fights for the party. The party rides aboard it.
+	std::string vehicle;
 	// Difficulty id; empty applies no overlay.
 	std::string difficulty;
 	RewardMultiplier rewardMultiplier = RewardMultiplier::X1;

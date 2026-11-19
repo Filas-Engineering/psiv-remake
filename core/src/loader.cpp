@@ -531,6 +531,29 @@ void parseCharacters(Reader& reader, const JsonValue& root, Database& db) {
 	}
 }
 
+void parseVehicles(Reader& reader, const JsonValue& root, Database& db) {
+	for (const JsonValue* entry : reader.objects(root, "vehicles", false)) {
+		VehicleDef vehicle;
+		if (!reader.string(*entry, "id", vehicle.id)) {
+			continue;
+		}
+		reader.setContext("vehicle '" + vehicle.id + "'");
+		reader.rejectUnknownKeys(*entry, {"id", "name", "stats", "basic_attack", "abilities", "affinities", "status_resist", "crew_damage_percent"});
+		reader.string(*entry, "name", vehicle.name);
+		parseStats(reader, *entry, "stats", vehicle.stats, false);
+		readBasicAttack(reader, db, *entry, vehicle.basicAttack);
+		readAbilityList(reader, db, *entry, vehicle.abilities, false);
+		parseAffinities(reader, *entry, vehicle.affinities);
+		parseStatusResist(reader, db, *entry, vehicle.statusResist);
+		reader.integer(*entry, "crew_damage_percent", vehicle.crewDamagePercent, false, 0, 100);
+		if (db.character(vehicle.id)) {
+			reader.fail(*entry, "vehicle id '" + vehicle.id + "' is also a character id");
+		}
+		insertUnique(db.vehicles, vehicle.id, vehicle, reader, *entry);
+		reader.setContext("");
+	}
+}
+
 bool targetFits(MacroTargetKind target, CommandKind command, Targeting targeting) {
 	if (target == MacroTargetKind::Default) {
 		return true;
@@ -640,8 +663,9 @@ void parseMacroStep(Reader& reader, const Database& db, const JsonValue& entry, 
 }
 
 void parseParty(Reader& reader, const JsonValue& root, Database& db) {
-	reader.rejectUnknownKeys(root, {"characters", "lineup", "inventory", "equipment_bag", "macros"});
+	reader.rejectUnknownKeys(root, {"characters", "vehicles", "lineup", "inventory", "equipment_bag", "macros"});
 	parseCharacters(reader, root, db);
+	parseVehicles(reader, root, db);
 
 	db.lineup = reader.strings(root, "lineup", true);
 	const JsonValue* lineup = root.find("lineup");
@@ -791,7 +815,7 @@ void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("enemy '" + enemy.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "stats", "basic_attack", "abilities", "affinities", "status_resist", "ai", "experience", "currency"});
+		reader.rejectUnknownKeys(*entry, {"id", "name", "stats", "basic_attack", "abilities", "affinities", "status_resist", "ai", "experience", "currency", "drops"});
 		reader.string(*entry, "name", enemy.name);
 		parseStats(reader, *entry, "stats", enemy.stats, false);
 		readBasicAttack(reader, db, *entry, enemy.basicAttack);
@@ -805,6 +829,16 @@ void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
 		}
 		reader.integer(*entry, "experience", enemy.experience, true, 0, 999999);
 		reader.integer(*entry, "currency", enemy.currency, true, 0, 999999);
+		for (const JsonValue* dropEntry : reader.objects(*entry, "drops", false)) {
+			ItemDrop drop;
+			reader.rejectUnknownKeys(*dropEntry, {"item", "chance", "count"});
+			if (reader.string(*dropEntry, "item", drop.item) && !db.item(drop.item)) {
+				reader.fail(*dropEntry->find("item"), "drops missing item '" + drop.item + "'");
+			}
+			reader.integer(*dropEntry, "chance", drop.chance, true, 1, 100);
+			reader.integer(*dropEntry, "count", drop.count, false, 1, 99);
+			enemy.drops.push_back(drop);
+		}
 		insertUnique(db.enemies, enemy.id, enemy, reader, *entry);
 		reader.setContext("");
 	}

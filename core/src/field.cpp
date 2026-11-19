@@ -86,7 +86,9 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 		kept.ability = item->id;
 		return use;
 	}
-	--stock->second;
+	if (--stock->second == 0) {
+		inventory.erase(stock);
+	}
 	Event& spent = battle.emit(use.events, EventType::ResourceSpent);
 	spent.ability = item->id;
 	spent.resource = ResourceKind::Item;

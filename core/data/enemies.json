@@ -11,7 +11,8 @@
 				{"ability": "bite", "weight": 1}
 			],
 			"experience": 6,
-			"currency": 4
+			"currency": 4,
+			"drops": [{"item": "tonic", "chance": 20}]
 		},
 		{
 			"id": "rust_hound",
@@ -26,7 +27,8 @@
 				{"ability": "venom_spit", "weight": 4, "when": {"type": "self_hp_below", "value": 50}}
 			],
 			"experience": 10,
-			"currency": 7
+			"currency": 7,
+			"drops": [{"item": "clear_gel", "chance": 15}]
 		},
 		{
 			"id": "bog_wisp",
@@ -43,7 +45,8 @@
 				{"ability": "bite", "weight": 2}
 			],
 			"experience": 12,
-			"currency": 9
+			"currency": 9,
+			"drops": [{"item": "wake_chime", "chance": 10}]
 		},
 		{
 			"id": "brass_warden",
@@ -61,7 +64,8 @@
 				{"ability": "bite", "weight": 3}
 			],
 			"experience": 60,
-			"currency": 50
+			"currency": 50,
+			"drops": [{"item": "loosen_oil", "chance": 100}, {"item": "jolt_pod", "chance": 50, "count": 2}]
 		}
 	],
 	"encounters": [

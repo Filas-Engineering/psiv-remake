@@ -54,7 +54,7 @@ TEST(loaderReadsShippedData) {
 TEST(loaderRejectsEnemyWithMissingAbility) {
 	auto files = fixtures::dataTexts();
 	replaceOnce(files["enemies.json"], "\"abilities\": [\"venom_spit\"]", "\"abilities\": [\"venom_spat\"]");
-	expectError(files, "enemies.json:21: enemy 'rust_hound': names missing ability 'venom_spat'");
+	expectError(files, "enemies.json:22: enemy 'rust_hound': names missing ability 'venom_spat'");
 }
 
 TEST(loaderRejectsAiAbilityTheEnemyDoesNotHave) {

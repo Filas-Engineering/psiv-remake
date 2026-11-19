@@ -24,13 +24,13 @@ const int max_steps = 100000;
 int usage() {
 	std::fprintf(stderr,
 		"usage:\n"
-		"  event_cli check [--strict] [--registry FILE] [--glossary FILE] [--table FILE]... <file>...\n"
+		"  event_cli check [--strict] [--registry FILE] [--glossary FILE] [--table FILE]... [--used FILE] <file>...\n"
 		"  event_cli run <file>... <event> [--choose 1,0] [--battle win,lose,flee] [--skip-at STEP] [--dt SECONDS]\n"
 		"  event_cli lint [--entry EVENT,...] [--entries FILE] [--strict] <file>...\n"
 		"  event_cli time <file>... <event> [--config FILE] [--text-speed CPS] [--table FILE] [--set FLAG,...] [--var NAME=N]...\n"
 		"                [--dt SECONDS] [--max-paths N]\n"
 		"  event_cli strings extract [--language CODE] <file>...\n"
-		"  event_cli strings check --table FILE [--table FILE]... [<file>...]\n"
+		"  event_cli strings check [--strict] --table FILE [--table FILE]... [--used FILE] [<file>...]\n"
 		"  event_cli names <glossary> [--table FILE]... [--show-shipped] [--language CODE] <file>...\n");
 	return 2;
 }
@@ -114,6 +114,14 @@ bool load_glossary_file(const std::string& path, Glossary& glossary) {
 	return ok;
 }
 
+bool load_game_strings_file(const std::string& path, GameStrings& game) {
+	std::string text;
+	std::vector<Diagnostic> diagnostics;
+	bool ok = read_text(path, text) && load_game_strings(path, text, game, diagnostics);
+	print_diagnostics(diagnostics);
+	return ok;
+}
+
 // Splits arguments into positionals and `--name value` options. Names in
 // `flags` take no value.
 struct Args {
@@ -175,7 +183,7 @@ struct Args {
 
 int check(int argc, char** argv) {
 	Args args(argc, argv, 2, {"--strict"});
-	if (!args.ok || !args.only({"--strict", "--registry", "--glossary", "--table"}) || args.positional.empty()) {
+	if (!args.ok || !args.only({"--strict", "--registry", "--glossary", "--table", "--used"}) || args.positional.empty()) {
 		return usage();
 	}
 	const bool strict = args.has("--strict");
@@ -191,7 +199,9 @@ int check(int argc, char** argv) {
 	}
 	std::vector<StringTable> tables;
 	Glossary glossary;
-	if (!load_tables(args.all("--table"), tables) || (args.has("--glossary") && !load_glossary_file(args.get("--glossary"), glossary))) {
+	GameStrings game;
+	if (!load_tables(args.all("--table"), tables) || (args.has("--glossary") && !load_glossary_file(args.get("--glossary"), glossary))
+		|| (args.has("--used") && !load_game_strings_file(args.get("--used"), game))) {
 		return 1;
 	}
 	CompileResult result;
@@ -205,7 +215,7 @@ int check(int argc, char** argv) {
 		findings.insert(findings.end(), more.begin(), more.end());
 	}
 	if (!tables.empty()) {
-		more = check_strings(result.program, tables);
+		more = check_strings(result.program, tables, game);
 		findings.insert(findings.end(), more.begin(), more.end());
 	}
 	if (args.has("--glossary")) {
@@ -449,7 +459,7 @@ int strings_command(int argc, char** argv) {
 		return usage();
 	}
 	std::string sub = argv[2];
-	Args args(argc, argv, 3, {});
+	Args args(argc, argv, 3, {"--strict"});
 	if (!args.ok) {
 		return usage();
 	}
@@ -465,23 +475,24 @@ int strings_command(int argc, char** argv) {
 		return 0;
 	}
 	if (sub == "check") {
-		if (!args.only({"--table"}) || !args.has("--table")) {
+		if (!args.only({"--strict", "--table", "--used"}) || !args.has("--table")) {
 			return usage();
 		}
 		std::vector<StringTable> tables;
-		if (!load_tables(args.all("--table"), tables)) {
+		GameStrings game;
+		if (!load_tables(args.all("--table"), tables) || (args.has("--used") && !load_game_strings_file(args.get("--used"), game))) {
 			return 1;
 		}
 		CompileResult result;
 		if (!args.positional.empty() && !compile_files(args.positional, result)) {
 			return 1;
 		}
-		std::vector<Diagnostic> findings = check_strings(result.program, tables);
+		std::vector<Diagnostic> findings = check_strings(result.program, tables, game);
 		for (const Diagnostic& d : findings) {
 			std::printf("%s\n", format_diagnostic(d).c_str());
 		}
 		std::printf("%zu table(s), %zu finding(s)\n", tables.size(), findings.size());
-		return has_errors(findings) ? 1 : 0;
+		return has_errors(findings) || (args.has("--strict") && !findings.empty()) ? 1 : 0;
 	}
 	return usage();
 }

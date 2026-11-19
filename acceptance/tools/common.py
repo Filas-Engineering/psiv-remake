@@ -88,35 +88,5 @@ def imported(ctx, name="script.db"):
 	return db
 
 
-# Words a game save API would use: the SAV-001 field groups' container, its writer and its loader.
-GAME_SAVE_WORDS = ("SaveGame", "GameSave", "save_game", "load_game", "write_save", "read_save", "SaveFile", "save_file", "SAV-001", "SAV-010")
-
-
-def game_save_api(ctx):
-	"""Probes the libraries' public headers and the text tool's commands for a game save format.
-
-	Returns (hits, probed): where a game save writer or reader was found, and what was looked at."""
-	hits, probed = [], 0
-	for folder in ("core/include", "events/include"):
-		for path in sorted((ctx.root / folder).rglob("*.h")):
-			probed += 1
-			text = path.read_text(encoding="utf-8")
-			hits += [f"{path.relative_to(ctx.root)}: {word}" for word in GAME_SAVE_WORDS if word in text]
-	code, output = ctx.text("--help")
-	probed += 1
-	if code == 0 and any(word in output for word in ("save", "load-save")):
-		hits.append("tools/text/cli.py has a save command")
-	return hits, probed
-
-
-def probe(ctx, mode):
-	"""Runs build/save_probe; returns its "key value..." lines as a dict of integer lists, or None if it crashed."""
-	result = subprocess.run([str(ctx.root / "acceptance" / "build" / "save_probe"), mode, str(ctx.root)], capture_output=True, text=True)
-	if result.returncode != 0:
-		ctx.expect(False, f"save_probe {mode} exited with {result.returncode}: {result.stderr.strip()[:200]}")
-		return None
-	return {parts[0]: [int(p) for p in parts[1:]] for parts in (line.split() for line in result.stdout.splitlines()) if parts}
-
-
 def samples(ctx):
 	return sorted(str(p) for p in (ctx.root / "events" / "samples").glob("*.ev"))

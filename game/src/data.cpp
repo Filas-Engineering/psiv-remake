@@ -8,11 +8,21 @@
 
 #include "json_read.h"
 
+#include <algorithm>
 #include <set>
 
 namespace game {
 
 using rules::JsonValue;
+
+const LanguageTables& GameData::language(const std::string& code) const {
+	for (const LanguageTables& l : languages) {
+		if (l.code == code) {
+			return l;
+		}
+	}
+	return languages.front();
+}
 
 const Area* GameData::area(const std::string& id) const {
 	auto it = areas.find(id);
@@ -66,16 +76,32 @@ std::string join(const std::string& directory, const std::string& file) {
 }
 
 void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
-	reader.only(json, {"title", "core_data", "areas", "events", "glossary", "strings", "text", "journal", "actors", "presentation", "flags",
-		"vars", "clear_flag", "scripted_ends", "start", "join_levels", "prices", "item_cap", "money_cap", "tick_ms", "grace_ms", "round_ms",
+	reader.only(json, {"title", "core_data", "areas", "events", "glossary", "languages", "journal", "actors", "presentation", "flags",
+		"vars", "clear_flag", "start", "join_levels", "prices", "item_cap", "money_cap", "tick_ms", "grace_ms", "round_ms",
 		"autosave_slots", "manual_slots", "bosses"});
 	reader.text(json, "title", c.title, true);
 	reader.text(json, "core_data", c.coreData, true);
 	reader.texts(json, "areas", c.areaFiles, true);
 	reader.texts(json, "events", c.eventFiles, true);
 	reader.text(json, "glossary", c.glossaryFile, true);
-	reader.text(json, "strings", c.stringsFile, true);
-	reader.text(json, "text", c.textFile, true);
+	if (const JsonValue* list = reader.field(json, "languages", JsonValue::Type::Array, true)) {
+		for (const JsonValue& l : list->items) {
+			reader.only(l, {"code", "strings", "text"});
+			LanguageFiles files;
+			reader.text(l, "code", files.code, true);
+			reader.text(l, "strings", files.strings, true);
+			reader.text(l, "text", files.text, true);
+			for (const LanguageFiles& other : c.languages) {
+				if (other.code == files.code) {
+					reader.fail(l, "language '" + files.code + "' is listed twice");
+				}
+			}
+			c.languages.push_back(files);
+		}
+		if (list->items.empty()) {
+			reader.fail(*list, "list at least one language");
+		}
+	}
 	reader.text(json, "journal", c.journalFile, true);
 	reader.texts(json, "actors", c.actors, false);
 	if (const JsonValue* p = reader.field(json, "presentation", JsonValue::Type::Object, false)) {
@@ -89,32 +115,6 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.texts(json, "flags", c.flags, false);
 	reader.counts(json, "vars", c.vars, false, -999999, 999999);
 	reader.text(json, "clear_flag", c.clearFlag, false);
-	if (const JsonValue* ends = reader.field(json, "scripted_ends", JsonValue::Type::Object, false)) {
-		for (std::size_t i = 0; i < ends->keys.size(); ++i) {
-			const JsonValue& e = ends->values[i];
-			if (!e.is(JsonValue::Type::Object)) {
-				reader.fail(e, "a scripted end is an object");
-				continue;
-			}
-			reader.only(e, {"survive_rounds", "enemy_defeated"});
-			rules::ScriptedEnd end;
-			if (e.find("survive_rounds")) {
-				end.kind = rules::ScriptedEndKind::SurviveRounds;
-				reader.integer(e, "survive_rounds", end.rounds, true, 1, 99);
-			}
-			if (e.find("enemy_defeated")) {
-				if (end.kind != rules::ScriptedEndKind::None) {
-					reader.fail(e, "a scripted end has survive_rounds or enemy_defeated, not both");
-				}
-				end.kind = rules::ScriptedEndKind::EnemyDefeated;
-				reader.integer(e, "enemy_defeated", end.enemySlot, true, 0, 7);
-			}
-			if (end.kind == rules::ScriptedEndKind::None) {
-				reader.fail(e, "a scripted end needs survive_rounds or enemy_defeated");
-			}
-			c.scriptedEnds[ends->keys[i]] = end;
-		}
-	}
 	if (const JsonValue* start = reader.field(json, "start", JsonValue::Type::Object, true)) {
 		reader.only(*start, {"area", "marker", "facing", "lineup", "level", "money", "items"});
 		reader.text(*start, "area", c.startArea, true);
@@ -240,6 +240,9 @@ events::Registry buildRegistry(const GameData& data, std::vector<std::string>& e
 	for (const auto& [id, encounter] : data.db.encounters) {
 		r.add(events::NameKind::encounter, id);
 	}
+	for (const auto& [id, enemy] : data.db.enemies) {
+		r.add(events::NameKind::enemy, id);
+	}
 	for (const std::string& n : c.presentation.audio) r.add(events::NameKind::audio, n);
 	for (const std::string& n : c.presentation.cameras) r.add(events::NameKind::camera, n);
 	for (const std::string& n : c.presentation.layouts) r.add(events::NameKind::layout, n);
@@ -268,7 +271,10 @@ events::Registry buildRegistry(const GameData& data, std::vector<std::string>& e
 	for (const auto& [areaId, a] : data.areas) {
 		r.add(events::NameKind::map, areaId);
 		for (const auto& [marker, cell] : a.markers) {
-			r.add(events::NameKind::marker, marker);
+			r.add_marker(areaId, marker);
+		}
+		for (const Hook& h : a.hooks) {
+			r.add_event_map(areaId, h.event);
 		}
 		for (const Shop& s : a.shops) {
 			if (!shops.insert(s.id).second) {
@@ -289,6 +295,31 @@ events::Registry buildRegistry(const GameData& data, std::vector<std::string>& e
 	return r;
 }
 
+events::GameStrings buildGameStrings(const GameData& data) {
+	events::GameStrings strings;
+	strings.file = "the game data";
+	for (const std::string& actor : data.config.actors) {
+		strings.ids.emplace("speaker." + actor, 0);
+	}
+	const Journal& j = data.journal;
+	for (const Objective& o : j.objectives) {
+		strings.ids.emplace(o.text, 0);
+	}
+	for (const Job& job : j.jobs) {
+		strings.ids.emplace(job.title, 0);
+	}
+	for (const EncyclopediaEntry& e : j.encyclopedia) {
+		strings.ids.emplace(e.title, 0);
+		strings.ids.emplace(e.text, 0);
+	}
+	for (const TalkSet& t : j.partyTalk) {
+		for (const TalkLine& line : t.lines) {
+			strings.ids.emplace(line.text, 0);
+		}
+	}
+	return strings;
+}
+
 void checkReferences(const GameData& data, std::vector<std::string>& errors) {
 	const rules::Database& db = data.db;
 	const GameConfig& c = data.config;
@@ -302,9 +333,15 @@ void checkReferences(const GameData& data, std::vector<std::string>& errors) {
 			errors.push_back(where + ": flag '" + flag + "' is not declared");
 		}
 	};
+	const LanguageTables& source = data.languages.front();
 	auto textExists = [&](const std::string& where, const std::string& key) {
-		if (!data.text.count(key)) {
+		if (!source.text.count(key)) {
 			errors.push_back(where + ": text '" + key + "' is not in the text table");
+		}
+	};
+	auto stringExists = [&](const std::string& where, const std::string& id) {
+		if (!source.strings.find(id)) {
+			errors.push_back(where + ": string '" + id + "' is not in the dialogue table");
 		}
 	};
 	if (!markerExists(c.startArea, c.startMarker)) {
@@ -336,23 +373,16 @@ void checkReferences(const GameData& data, std::vector<std::string>& errors) {
 		}
 		flagDeclared("game.json boss", b.flag);
 	}
-	for (const auto& [encounter, end] : c.scriptedEnds) {
-		const rules::Encounter* e = db.encounter(encounter);
-		if (!e) {
-			errors.push_back("game.json: scripted end for unknown encounter '" + encounter + "'");
-		} else if (end.kind == rules::ScriptedEndKind::EnemyDefeated && end.enemySlot >= static_cast<int>(e->enemies.size())) {
-			errors.push_back("game.json: scripted end for '" + encounter + "' names an empty formation position");
-		}
-	}
 	flagDeclared("game.json clear_flag", c.clearFlag);
 	for (const std::string& actor : c.actors) {
 		if (db.character(actor)) {
 			errors.push_back("game.json: actor '" + actor + "' is a character; characters are actors already");
 		}
-		textExists("game.json actor", "speaker." + actor);
+		stringExists("game.json actor", "speaker." + actor);
 	}
 	for (const auto& [areaId, area] : data.areas) {
 		const std::string where = "area " + areaId;
+		textExists(where, "area." + areaId);
 		for (const Exit& e : area.exits) {
 			if (!markerExists(e.toArea, e.toMarker)) {
 				errors.push_back(where + ": exit leads to missing marker '" + e.toArea + " " + e.toMarker + "'");
@@ -394,19 +424,19 @@ void checkReferences(const GameData& data, std::vector<std::string>& errors) {
 	}
 	const Journal& j = data.journal;
 	for (const Objective& o : j.objectives) {
-		textExists("journal objective '" + o.id + "'", o.text);
+		stringExists("journal objective '" + o.id + "'", o.text);
 		flagDeclared("journal objective '" + o.id + "'", o.range.after);
 		flagDeclared("journal objective '" + o.id + "'", o.range.until);
 	}
 	for (const Job& job : j.jobs) {
-		textExists("journal job '" + job.id + "'", job.title);
+		stringExists("journal job '" + job.id + "'", job.title);
 		flagDeclared("journal job '" + job.id + "'", job.availableFlag);
 		flagDeclared("journal job '" + job.id + "'", job.acceptedFlag);
 		flagDeclared("journal job '" + job.id + "'", job.completedFlag);
 	}
 	for (const EncyclopediaEntry& e : j.encyclopedia) {
-		textExists("journal entry '" + e.id + "'", e.title);
-		textExists("journal entry '" + e.id + "'", e.text);
+		stringExists("journal entry '" + e.id + "'", e.title);
+		stringExists("journal entry '" + e.id + "'", e.text);
 		flagDeclared("journal entry '" + e.id + "'", e.flag);
 	}
 	for (const TalkSet& t : j.partyTalk) {
@@ -420,17 +450,22 @@ void checkReferences(const GameData& data, std::vector<std::string>& errors) {
 			if (!db.character(line.speaker)) {
 				errors.push_back(where + ": speaker '" + line.speaker + "' is not a character");
 			}
-			textExists(where, line.text);
+			stringExists(where, line.text);
 		}
 	}
 	for (const std::string& key : sessionTextKeys()) {
 		textExists("the session", key);
 	}
-	// The registry knows markers but not which map holds them.
 	for (const events::Instruction& in : data.program.code) {
-		if (in.op == events::Op::action && in.action.type == events::ActionType::warp && !markerExists(in.action.subject, in.action.target)) {
-			errors.push_back(data.program.files[in.file] + ":" + std::to_string(in.source_line) + ": warp to missing marker '" + in.action.subject + " " +
-				in.action.target + "'");
+		const events::BattleRequest& b = in.battle;
+		if (in.op != events::Op::battle || b.end != events::BattleEndKind::enemy_defeated) {
+			continue;
+		}
+		const rules::Encounter* e = db.encounter(b.encounter);
+		const bool inGroup = e && std::any_of(e->enemies.begin(), e->enemies.end(), [&](const rules::FormationSlot& s) { return s.enemy == b.end_enemy; });
+		if (!inGroup) {
+			errors.push_back(data.program.files[in.file] + ":" + std::to_string(in.source_line) + ": the scripted end names enemy '" + b.end_enemy +
+				"', which is not in encounter '" + b.encounter + "'");
 		}
 	}
 }
@@ -470,30 +505,61 @@ rules::Result<GameData> loadGameData(const std::string& directory) {
 	data.db = std::move(*db.value);
 
 	std::vector<std::string> errors;
+	rules::TextTable coreTable;
 	rules::Result<rules::TextTable> coreText = rules::loadTextTable(join(coreDirectory, "text_en.json"));
 	if (!coreText.ok()) {
 		errors.push_back(coreText.error);
 	} else {
-		data.text = std::move(*coreText.value);
+		coreTable = std::move(*coreText.value);
 		for (const std::string& key : rules::messageKeys(data.db)) {
-			if (!data.text.count(key)) {
+			if (!coreTable.count(key)) {
 				errors.push_back(data.config.coreData + "/text_en.json: missing message key '" + key + "'");
 			}
 		}
 	}
-	const std::string textPath = join(directory, data.config.textFile);
-	if (!readFile(textPath, text)) {
-		errors.push_back("cannot read " + textPath);
-	} else {
-		hash = fnv(hash, text);
-		rules::Result<rules::TextTable> own = rules::parseTextTable(text);
-		if (!own.ok()) {
-			errors.push_back(data.config.textFile + ": " + own.error);
+	std::vector<events::Diagnostic> diagnostics;
+	for (const LanguageFiles& files : data.config.languages) {
+		LanguageTables tables;
+		tables.code = files.code;
+		tables.text = coreTable;
+		const std::string textPath = join(directory, files.text);
+		if (!readFile(textPath, text)) {
+			errors.push_back("cannot read " + textPath);
 		} else {
-			for (const auto& [key, value] : *own.value) {
-				if (!data.text.emplace(key, value).second) {
-					errors.push_back(data.config.textFile + ": key '" + key + "' is already in core's text table");
+			hash = fnv(hash, text);
+			rules::Result<rules::TextTable> own = rules::parseTextTable(text);
+			if (!own.ok()) {
+				errors.push_back(files.text + ": " + own.error);
+			} else {
+				for (const auto& [key, value] : *own.value) {
+					if (!tables.text.emplace(key, value).second) {
+						errors.push_back(files.text + ": key '" + key + "' is already in core's text table");
+					}
 				}
+			}
+		}
+		const std::string stringsPath = join(directory, files.strings);
+		if (!readFile(stringsPath, text)) {
+			errors.push_back("cannot read " + stringsPath);
+		} else {
+			hash = fnv(hash, text);
+			if (events::load_string_table(files.strings, text, tables.strings, diagnostics) && tables.strings.language != files.code) {
+				errors.push_back(files.strings + ": the table is '" + tables.strings.language + "', but game.json lists it for '" + files.code + "'");
+			}
+		}
+		data.languages.push_back(std::move(tables));
+	}
+	for (std::size_t i = 1; i < data.languages.size(); ++i) {
+		const rules::TextTable& first = data.languages.front().text;
+		const rules::TextTable& other = data.languages[i].text;
+		for (const auto& [key, value] : first) {
+			if (!other.count(key)) {
+				errors.push_back(data.config.languages[i].text + ": key '" + key + "' of the '" + data.languages.front().code + "' table is missing");
+			}
+		}
+		for (const auto& [key, value] : other) {
+			if (!first.count(key)) {
+				errors.push_back(data.config.languages[i].text + ": key '" + key + "' is not in the '" + data.languages.front().code + "' table");
 			}
 		}
 	}
@@ -534,21 +600,11 @@ rules::Result<GameData> loadGameData(const std::string& directory) {
 		}
 	}
 
-	std::vector<events::Diagnostic> diagnostics;
 	const std::string glossaryPath = join(directory, data.config.glossaryFile);
 	if (!readFile(glossaryPath, text)) {
 		errors.push_back("cannot read " + glossaryPath);
 	} else {
 		events::load_glossary(data.config.glossaryFile, text, data.glossary, diagnostics);
-	}
-	const std::string stringsPath = join(directory, data.config.stringsFile);
-	if (!readFile(stringsPath, text)) {
-		errors.push_back("cannot read " + stringsPath);
-	} else {
-		hash = fnv(hash, text);
-		if (events::load_string_table(data.config.stringsFile, text, data.strings, diagnostics) && data.strings.language != "en") {
-			errors.push_back(data.config.stringsFile + ": the game shows English, but the table is '" + data.strings.language + "'");
-		}
 	}
 	addDiagnostics(diagnostics, errors);
 	if (!errors.empty()) {
@@ -560,6 +616,7 @@ rules::Result<GameData> loadGameData(const std::string& directory) {
 	}
 
 	data.registry = buildRegistry(data, errors);
+	data.gameStrings = buildGameStrings(data);
 	std::vector<events::Source> sources;
 	for (const std::string& file : data.config.eventFiles) {
 		const std::string path = join(directory, file);
@@ -577,8 +634,12 @@ rules::Result<GameData> loadGameData(const std::string& directory) {
 	if (compiled.ok()) {
 		data.program = std::move(compiled.program);
 		addDiagnostics(events::check_inline_text(data.program), errors);
-		addDiagnostics(events::check_strings(data.program, {data.strings}), errors);
-		addDiagnostics(events::check_names(data.program, data.glossary, {data.strings}), errors);
+		std::vector<events::StringTable> tables;
+		for (const LanguageTables& l : data.languages) {
+			tables.push_back(l.strings);
+		}
+		addDiagnostics(events::check_strings(data.program, tables, data.gameStrings), errors);
+		addDiagnostics(events::check_names(data.program, data.glossary, tables), errors);
 	}
 
 	if (errors.empty()) {
@@ -604,16 +665,47 @@ std::string registryText(const events::Registry& registry) {
 		{events::NameKind::layout, "layout"}, {events::NameKind::audio, "audio"}, {events::NameKind::animation, "animation"},
 		{events::NameKind::portrait, "portrait"}, {events::NameKind::item, "item"}, {events::NameKind::member, "member"},
 		{events::NameKind::encounter, "encounter"}, {events::NameKind::map, "map"}, {events::NameKind::shop, "shop"},
-		{events::NameKind::rest_point, "rest"},
+		{events::NameKind::rest_point, "rest"}, {events::NameKind::enemy, "enemy"},
 	};
 	for (const auto& [kind, word] : kinds) {
 		auto it = registry.names.find(kind);
 		if (it == registry.names.end() || it->second.empty()) {
 			continue;
 		}
-		out += word;
+		std::string names;
 		for (const std::string& name : it->second) {
-			out += " " + name;
+			// Markers with a map are written on map_markers lines below.
+			if (kind != events::NameKind::marker || !registry.marker_maps.count(name)) {
+				names += " " + name;
+			}
+		}
+		if (!names.empty()) {
+			out += word + names + "\n";
+		}
+	}
+	std::map<std::string, std::vector<std::string>> byMap;
+	for (const auto& [marker, maps] : registry.marker_maps) {
+		for (const std::string& map : maps) {
+			byMap[map].push_back(marker);
+		}
+	}
+	for (const auto& [map, markers] : byMap) {
+		out += "map_markers " + map;
+		for (const std::string& marker : markers) {
+			out += " " + marker;
+		}
+		out += "\n";
+	}
+	byMap.clear();
+	for (const auto& [event, maps] : registry.event_maps) {
+		for (const std::string& map : maps) {
+			byMap[map].push_back(event);
+		}
+	}
+	for (const auto& [map, list] : byMap) {
+		out += "event_map " + map;
+		for (const std::string& event : list) {
+			out += " " + event;
 		}
 		out += "\n";
 	}
@@ -623,6 +715,14 @@ std::string registryText(const events::Registry& registry) {
 			out += d.is_flag ? " default true" : " default " + std::to_string(d.initial);
 		}
 		out += "\n";
+	}
+	return out;
+}
+
+std::string gameStringsText(const events::GameStrings& strings) {
+	std::string out = "# String IDs the game shows itself, built from the game data by game_cli --used.\n";
+	for (const auto& [id, line] : strings.ids) {
+		out += id + "\n";
 	}
 	return out;
 }

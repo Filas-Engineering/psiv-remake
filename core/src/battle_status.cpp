@@ -19,7 +19,7 @@ const StatusDef* Battle::statusWith(int actor, StatusAction action) const {
 void Battle::endOfRound(std::vector<Event>& out) {
 	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
 		Combatant& c = combatants_[i];
-		if (!c.alive()) {
+		if (!c.alive() || c.aboard) {
 			continue;
 		}
 		const std::vector<ActiveStatus> before = c.statuses;
@@ -37,6 +37,11 @@ void Battle::endOfRound(std::vector<Event>& out) {
 			e.hp = c.hp;
 			if (!c.alive()) {
 				defeat(i, out);
+			}
+			if (i == vehicleIndex_) {
+				passDamageToCrew(-1, damage, out);
+			}
+			if (!c.alive()) {
 				break;
 			}
 		}

@@ -12,7 +12,8 @@ ACC_CHECK(acc_bat_13, "ACC-BAT-13", "BAT-110, BAT-111, BAT-115") {
 	std::set<EventType> seen;
 	int events = 0;
 	int ended = 0;
-	bool itemRewards = false;
+	int withDrops = 0;
+	int dropsChecked = 0;
 	for (std::uint64_t seed = 1; seed <= 1000; ++seed) {
 		const support::PlayedBattle played = support::playRandomBattle(db, seed, log);
 		support::BattleState state = played.start;
@@ -53,8 +54,29 @@ ACC_CHECK(acc_bat_13, "ACC-BAT-13", "BAT-110, BAT-111, BAT-115") {
 				t.expect(e.experience == played.rewards.experience && e.currency == played.rewards.currency && e.gameOver == played.gameOver,
 					"battle " + std::to_string(seed) + ": BattleEnded carries rewards " + std::to_string(e.experience) + "/" + std::to_string(e.currency) + ", the battle pays " +
 					std::to_string(played.rewards.experience) + "/" + std::to_string(played.rewards.currency));
-				const std::string text = serializeEvent(e);
-				itemRewards = itemRewards || text.find("item") != std::string::npos || text.find("drop") != std::string::npos;
+				t.expect(e.items == played.rewards.items, "battle " + std::to_string(seed) + ": BattleEnded carries other item drops than rewards() pays");
+				withDrops += e.items.empty() ? 0 : 1;
+				// Every drop comes from the drop table of an enemy that paid out, and a 100% entry always drops.
+				Inventory possible;
+				Inventory certain;
+				const bool paid = e.outcome == Outcome::Victory || e.outcome == Outcome::ScriptedEnd;
+				for (std::size_t i = 0; paid && i < played.setup.enemies.size(); ++i) {
+					const bool fell = played.end.combatants[played.setup.party.size() + i].hp <= 0;
+					if (e.outcome == Outcome::ScriptedEnd && !fell) {
+						continue;
+					}
+					for (const ItemDrop& drop : db.enemy(played.setup.enemies[i].enemy)->drops) {
+						possible[drop.item] += drop.count;
+						certain[drop.item] += drop.chance >= 100 ? drop.count : 0;
+					}
+				}
+				for (const auto& [id, count] : e.items) {
+					++dropsChecked;
+					t.expect(possible.count(id) && count <= possible[id], "battle " + std::to_string(seed) + ": dropped " + std::to_string(count) + " " + id + ", more than the paying enemies' drop tables hold");
+				}
+				for (const auto& [id, count] : certain) {
+					t.expect(count == 0 || (e.items.count(id) && e.items.at(id) >= count), "battle " + std::to_string(seed) + ": a drop with chance 100 did not drop: " + id);
+				}
 			}
 		}
 	}
@@ -86,10 +108,19 @@ ACC_CHECK(acc_bat_13, "ACC-BAT-13", "BAT-110, BAT-111, BAT-115") {
 			unseen += std::string(unseen.empty() ? "" : ", ") + toString(type);
 		}
 	}
-	if (!itemRewards) {
-		t.gap("BattleEnded carries experience and currency but no item rewards, which BAT-115 lists in its payload; core has no item drops, whose data is still to measure in SAV-031 (BAT-115)");
+	// Drops are drawn from the battle's own generator, so a replayed record drops the same items.
+	{
+		const support::PlayedBattle played = support::playRandomBattle(db, 4242, log);
+		ComboLog replayLog;
+		std::vector<Event> replayed;
+		Result<Battle> again = replayBattle(db, played.record, replayLog, replayed);
+		const std::vector<Event> a = support::ofType(played.events, EventType::BattleEnded);
+		const std::vector<Event> b = support::ofType(replayed, EventType::BattleEnded);
+		t.expect(again.ok() && a.size() == 1 && b.size() == 1 && a[0].items == b[0].items, "a replayed battle record does not drop the same items");
 	}
+	t.expect(withDrops > 0, "no random battle dropped an item, so BattleEnded's item rewards were never seen");
 	t.note("1000 random battles (" + std::to_string(events) + " events, " + std::to_string(seen.size()) + " event types, " + std::to_string(ended) +
-		" ended): the start snapshot plus the stream reproduces hit points (each Damaged, Healed, tick and revive carries the resulting hit points), technique points, skill uses, statuses, modifiers, inventory and outcome exactly; BattleStarted carries the combatants, formation, opening and flags; BattleEnded the rewards paid; CommandsLocked the macro" +
+		" ended): the start snapshot plus the stream reproduces hit points (each Damaged, Healed, tick and revive carries the resulting hit points), technique points, skill uses, statuses, modifiers, inventory and outcome exactly; BattleStarted carries the combatants, formation, opening and flags; BattleEnded the rewards paid, item drops included (" + std::to_string(withDrops) + " battles dropped " + std::to_string(dropsChecked) +
+		" kinds of item, each within the paying enemies' drop tables, every 100% entry present, the same on replay); CommandsLocked the macro" +
 		(unseen.empty() ? "; every BAT-115 event type occurred" : "; BAT-115 types never produced by the random battles: " + unseen));
 }

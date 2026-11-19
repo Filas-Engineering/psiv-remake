@@ -35,6 +35,13 @@ struct AiRule {
 	AiTarget target = {};
 };
 
+// One entry of an enemy's drop table (SAV-031). Chance is percent; 100 always drops and draws nothing.
+struct ItemDrop {
+	std::string item;
+	int chance = 100;
+	int count = 1;
+};
+
 struct EnemyDef {
 	std::string id;
 	std::string name;
@@ -46,6 +53,7 @@ struct EnemyDef {
 	std::vector<AiRule> ai;
 	int experience = 0;
 	int currency = 0;
+	std::vector<ItemDrop> drops;
 };
 
 // One position in an enemy group's formation. Group targeting hits every living enemy with the same group.

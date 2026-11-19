@@ -6,6 +6,9 @@
 		{"id": "bite", "name": "Bite", "kind": "attack", "target": "one_enemy", "effects": [
 			{"type": "physical_damage", "power": 100}
 		]},
+		{"id": "ram", "name": "Ram", "kind": "attack", "target": "one_enemy", "effects": [
+			{"type": "physical_damage", "power": 120}
+		]},
 		{"id": "scatter_shot", "name": "Scatter Shot", "kind": "attack", "target": "enemy_group", "effects": [
 			{"type": "physical_damage", "power": 60}
 		]},

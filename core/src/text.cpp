@@ -15,6 +15,7 @@ namespace {
 const char* const kFixedKeys[] = {
 	"battle.opening.enemy_first",
 	"battle.opening.party_first",
+	"command.aboard",
 	"command.actor_defeated",
 	"command.caught_off_guard",
 	"command.combo_not_selectable",

@@ -68,6 +68,7 @@ std::string serializeRecord(const BattleRecord& record) {
 	s << "opening " << toString(setup.opening) << '\n';
 	s << "flags escape=" << setup.flags.escapeAllowed << " defeat_branch=" << setup.flags.defeatHasBranch
 		<< " vehicle=" << setup.flags.vehicleBattle << '\n';
+	s << "vehicle " << text::encode(setup.vehicle) << '\n';
 	s << "scripted_end " << toString(setup.scriptedEnd.kind) << ' ' << setup.scriptedEnd.rounds << ' ' << setup.scriptedEnd.enemySlot << '\n';
 	s << "enemy_group " << text::encode(setup.enemyGroup) << '\n';
 	for (const FormationSlot& slot : setup.enemies) {
@@ -172,6 +173,8 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 			std::string c;
 			ok = keyed(t[1], "escape", a) && keyed(t[2], "defeat_branch", b) && keyed(t[3], "vehicle", c)
 				&& parseBool(a, setup.flags.escapeAllowed) && parseBool(b, setup.flags.defeatHasBranch) && parseBool(c, setup.flags.vehicleBattle);
+		} else if (key == "vehicle" && n == 2) {
+			ok = text::decode(t[1], setup.vehicle);
 		} else if (key == "scripted_end" && n == 4) {
 			ok = parseScriptedEndKind(t[1], setup.scriptedEnd.kind) && parseInt(t[2], setup.scriptedEnd.rounds) && parseInt(t[3], setup.scriptedEnd.enemySlot);
 		} else if (key == "enemy_group" && n == 2) {

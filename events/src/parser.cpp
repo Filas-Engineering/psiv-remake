@@ -534,6 +534,24 @@ private:
 				}
 			}
 		}
+		if (a.keyword("until")) {
+			std::int64_t rounds = 0;
+			if (a.keyword("survive")) {
+				if (a.integer(rounds, "a number of rounds after 'survive'")) {
+					if (rounds < 1 || rounds > 999) {
+						a.error("the rounds to survive must be 1 to 999, found " + std::to_string(rounds));
+					}
+					s.ins.battle.end = BattleEndKind::survive_rounds;
+					s.ins.battle.end_rounds = static_cast<int>(rounds);
+				}
+			} else if (a.keyword("defeat")) {
+				if (a.name(s.ins.battle.end_enemy, "an enemy name after 'defeat'")) {
+					s.ins.battle.end = BattleEndKind::enemy_defeated;
+				}
+			} else {
+				a.expected("'survive <rounds>' or 'defeat <enemy>' after 'until'");
+			}
+		}
 		a.finish();
 		++pos_;
 		parse_sections(ctx, s, {"win", "lose", "flee"}, "battle");

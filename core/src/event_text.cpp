@@ -101,6 +101,14 @@ std::string serializeEvent(const Event& e) {
 	if (e.currency != d.currency) {
 		s << " currency=" << e.currency;
 	}
+	if (!e.items.empty()) {
+		s << " items=";
+		bool first = true;
+		for (const auto& [id, count] : e.items) {
+			s << (first ? "" : ",") << text::encode(id) << ':' << count;
+			first = false;
+		}
+	}
 	if (e.macro != d.macro) {
 		s << " macro=" << text::encode(e.macro);
 	}

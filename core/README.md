@@ -10,7 +10,7 @@ A headless battle rules library for a turn-based party RPG. It is plain C++17 an
 | `src/` | Library sources, built into `build/librules.a` |
 | `cli/battle_cli.cpp` | Terminal front end |
 | `tests/` | One test executable with a minimal assert helper (`tests/test.h`) |
-| `data/` | Placeholder JSON data: rules, statuses, abilities, items, equipment, party, enemies, combos, difficulties, and the English text table `text_en.json` |
+| `data/` | Placeholder JSON data: rules, statuses, abilities, items, equipment, party (with vehicles), enemies (with drop tables), combos, difficulties, and the English text table `text_en.json` |
 
 ## Build and test
 
@@ -42,8 +42,8 @@ Other options: `--data DIR`, `--level N` (party level, default 1) and `--max-rou
 ## How a host drives a battle
 
 1. Load data once: `Result<Database> db = loadDatabaseFromDirectory("data")`, or `loadDatabaseFromTexts` with file contents the engine already read (`dataFileNames()` lists them). On failure, `error` lists every problem, one per line, as `file:line: entry: message`. Load the string table with `loadTextTable("data/text_en.json")` (or `parseTextTable`); it is not part of the `Database` or its content hash.
-2. Keep the party as `std::vector<PartyMember>` between battles, with an `EquipmentBag` of unworn pieces (`db.startingEquipmentBag` to begin). `makePartyMember(db, character, level)` creates one in its starting equipment. `rest(member, db)` restores hit points, technique points and skill uses and cures statuses per data. Change equipment with `equip(member, db, bag, equipmentId)` and `unequip(member, db, bag, slot)`, which move pieces between the bag and the member; `canEquip` checks the category first. `memberStats` and `knownAbilities` give what the member has now. `useItemOutsideBattle` and `useAbilityOutsideBattle` apply field-usable items and techniques to the party through the battle's own effect code.
-3. Fill a `BattleSetup`: `party`, `inventory`, the enemy group (`useEncounter(setup, db, encounterId)` fills `enemyGroup`, `enemies` and `flags.escapeAllowed`), `opening` (`openingFromContact` turns a visible-mode contact into one), `flags`, `scriptedEnd`, `difficulty`, `rewardMultiplier` and `seed`.
+2. Keep the party as `std::vector<PartyMember>` between battles, with an `EquipmentBag` of unworn pieces (`db.startingEquipmentBag` to begin). `makePartyMember(db, character, level)` creates one in its starting equipment. `rest(member, db)` restores hit points, technique points and skill uses and cures statuses per data. Change equipment with `equip(member, db, bag, equipmentId)` and `unequip(member, db, bag, slot)`, which move pieces between the bag and the member; `canEquip` checks the category first. `memberStats` and `knownAbilities` give what the member has now. `useItemOutsideBattle` and `useAbilityOutsideBattle` apply field-usable items and techniques to the party through the battle's own effect code. An item used up to its last one leaves the inventory, so no entry with a count of 0 is left behind.
+3. Fill a `BattleSetup`: `party`, `inventory`, the enemy group (`useEncounter(setup, db, encounterId)` fills `enemyGroup`, `enemies` and `flags.escapeAllowed`), `opening` (`openingFromContact` turns a visible-mode contact into one), `flags`, `scriptedEnd`, `difficulty`, `rewardMultiplier` and `seed`. For a vehicle battle set `flags.vehicleBattle` and `vehicle` (see [Vehicle battles](#vehicle-battles)).
 4. Start: `Result<Battle> battle = Battle::create(db, setup, &comboLog)`. Combatant indexes are stable: party members first, in lineup order, then enemies in formation order. The battle keeps its own copy of the data with the difficulty overlay applied. The `ComboLog` must outlive the battle.
 5. Each round:
    * Optionally `setPlayTime(ms)`: the combo log stores it when a combination is first discovered.
@@ -51,7 +51,7 @@ Other options: `--data DIR`, `--level N` (party level, default 1) and `--max-rou
    * Or run auto-battle: `startAuto(macro)` once, then call `fillFromAuto()` at each command phase. It fills the round from the macro and returns true, or turns auto-battle off and returns false, with `autoStop()` saying why. `cancelAuto()` is the player's cancel.
    * Call `resolveRound()`. Party members without a command use their basic attack. Enemies without a command ask their AI. The call returns the round as a list of typed `Event`s for the renderer to play back. The host can also set enemy commands for scripted fights.
    * After a round, `lastRoundAsMacro(name)` turns that round's party commands into a macro.
-6. Stop when `outcome()` is no longer `Ongoing`. `gameOver()` is true for a Defeat without a defeat branch. Then read `rewards()` (`experience` and `currency` after scaling, and `memberExperience` per party index after the split), `partyState()` (hit points, technique points, skill uses, equipment and the statuses that persist outside battle) and `inventory()`, and apply `grantExperience(member, db, rewards.memberExperience[i])` to each member. It returns a `LevelUp` with the levels gained and the abilities learned.
+6. Stop when `outcome()` is no longer `Ongoing`. `gameOver()` is true for a Defeat without a defeat branch. Then read `rewards()` (`experience` and `currency` after scaling, `memberExperience` per party member after the split, and `items`, the item drops), `partyState()` (hit points, technique points, skill uses, equipment and the statuses that persist outside battle) and `inventory()`, and apply `grantExperience(member, db, rewards.memberExperience[i])` to each member. It returns a `LevelUp` with the levels gained and the abilities learned.
 7. Save `serializeRecord(battle.record())` for bug reports. `parseRecord` reads it back and `replayBattle(db, record, comboLog, events)` rebuilds the battle and its full event stream. `serializeEvents(events)` gives a stable text form of an event stream. Macros and the combo log go into saves with `serializeMacros`/`parseMacros` and `serializeComboLog`/`parseComboLog`.
 
 `autoCommand(battle, actor)` is a simple deterministic per-member policy. The CLI and the tests use it.
@@ -76,7 +76,7 @@ Player-facing results are `Message` values: a stable key and parameters (ids or 
 8. The battle ends as soon as one side has nobody standing, the party escapes, or the scripted end condition holds. A combatant counts as down when it has fallen or has a status that `counts_toward_defeat`, on either side. Victory and Defeat take precedence over a scripted end that happens at the same time.
 9. At the end of the round each living combatant takes status damage ticks (which can defeat). Then status and stat modifier durations count down and expire. A `survive_rounds` scripted end is checked last.
 
-The RNG (`Rng`, SplitMix64) belongs to the battle and is seeded from the setup. `state()` and `restore()` save and continue a generator. The same setup, data and commands always give the same event stream. The order of random draws is part of the rules version: forced-command targets and enemy AI choices, in combatant index order; initiative rolls, in combatant index order; then per action: recovery rolls, a `random_enemy` target, and per physical hit: hit, critical (only when the chance is between 1 and 99), variance.
+The RNG (`Rng`, SplitMix64) belongs to the battle and is seeded from the setup. `state()` and `restore()` save and continue a generator. The same setup, data and commands always give the same event stream. The order of random draws is part of the rules version: forced-command targets and enemy AI choices, in combatant index order; initiative rolls, in combatant index order; then per action: recovery rolls, a `random_enemy` target, and per physical hit: hit, critical (only when the chance is between 1 and 99), variance. When the battle ends in Victory or a scripted end, the drop rolls come last: enemies in formation order (for a scripted end only the fallen ones), each enemy's drop entries in data order, one roll per entry whose chance is below 100.
 
 ## Data formats
 
@@ -190,6 +190,7 @@ Items use the same effects and targets, but their power is flat: user stats do n
   * `status_resist` (optional): status id to the percent taken off its success chance; 100 is immunity.
   * `equip` (optional): the equipment categories the character can wear. Each must be used by some piece.
   * `equipment` (optional): starting equipment, which `makePartyMember` puts on.
+* `vehicles` (optional): see [Vehicle battles](#vehicle-battles).
 * `lineup`: 1 to 5 character ids.
 * `inventory`: item id to count.
 * `equipment_bag` (optional): equipment id to the number of spare pieces, which `db.startingEquipmentBag` holds.
@@ -221,7 +222,8 @@ When a macro step cannot run as written (BAT-053):
 		{"ability": "bite", "weight": 3},
 		{"ability": "venom_spit", "weight": 4, "when": {"type": "self_hp_below", "value": 50}}
 	],
-	"experience": 10, "currency": 7
+	"experience": 10, "currency": 7,
+	"drops": [{"item": "clear_gel", "chance": 15}, {"item": "jolt_pod", "chance": 50, "count": 2}]
 }],
 "encounters": [
 	{"id": "training", "enemies": ["gel_mite", "gel_mite", "rust_hound"]},
@@ -230,6 +232,7 @@ When a macro step cannot run as written (BAT-053):
 ]}
 ```
 
+* `drops` (optional): the enemy's drop table (SAV-031 is to measure, so this is data). Each entry has an `item`, a `chance` in percent (1 to 100; 100 always drops and draws nothing) and an optional `count` (1 to 99, default 1).
 * `affinities` is the percent of elemental damage taken. Elements left out take 100. Above 100 is a weakness, below 100 a resistance, and 0 is immunity.
 * `status_resist`: as for characters.
 * An encounter is an enemy group: 1 to 8 enemies in formation order. An entry is an enemy id, or `{"enemy", "group"}` to set the group label group targeting uses (default: the enemy id). `escape: false` forbids escape, for bosses.
@@ -282,9 +285,24 @@ A difficulty is a data overlay. `applyDifficulty(db, difficulty)` returns the ov
 * `abilities`: `power_percent` scales damage and heal powers; `cost` (techniques) and `uses` (skills) replace the base values.
 * `enemies`: AI entries in an overlay may use target rules. `stats_percent` scales stats. Hit points, strength and defense must stay within 80 to 120 percent (the spec's 20% limit for Hard); the others within 50 to 200. `add_abilities` adds techniques or skills. `ai`, when present, replaces the whole AI profile and may use added abilities. `status_resist` replaces the listed resistances.
 
+## Vehicle battles
+
+BAT-140 puts the vehicle in data; BAT-141, which says who commands it, which commands exist and how its damage and defeat work, is still to measure. So a vehicle is a combatant defined in `party.json`, and the measured rules go in its data:
+
+```json
+"vehicles": [{"id": "reed_skimmer", "name": "Reed Skimmer", "stats": {"hp": 220, "tp": 20, "strength": 20, "mental": 8, "agility": 6, "dexterity": 10, "defense": 14},
+	"basic_attack": "ram", "abilities": ["steam_vent", "patch"], "affinities": {"shock": 150}, "crew_damage_percent": 25}]
+```
+
+* `stats`, `basic_attack`, `abilities`, `affinities` and `status_resist` work as for enemies. The abilities are the commands the vehicle has.
+* `crew_damage_percent` (0 to 100, default 0): how damage to the vehicle affects the party. Each living member aboard takes that percent of every hit point the vehicle loses (hits and status ticks), rounded down, as its own `DamageDealt`; a member can fall from it.
+* A vehicle id may not also be a character id.
+
+With `flags.vehicleBattle` set, `BattleSetup::vehicle` names the vehicle, and `Battle::create` refuses an unknown one, or a vehicle without the flag. The party side is then the members of `setup.party`, in lineup order and marked `Combatant::aboard`, followed by the vehicle; enemies follow as usual, so `partyCount()` is one more than the party. Members aboard take no command (`setCommand` refuses with `command.aboard`), are skipped by macros, cannot be targeted by either side, take no status ticks, and do not count for Victory or Defeat: the battle is lost when the vehicle falls. `rewards().memberExperience` has one entry per member aboard, split among the living ones; the vehicle gets none. `partyState()` returns the members aboard with the damage they took. The vehicle starts each battle at full hit points; nothing about it is carried out of the battle.
+
 ## Battle records
 
-`serializeRecord` writes a line-based text record (format 2): format version, rules version, event schema version, content hash of the loaded data, the full setup (seed, difficulty, reward multiplier, opening, flags, scripted end, enemy group and formation, inventory, each member's level, experience, hit points, technique points, skill uses, equipment and carried statuses), the combo log entries already known, and per round the play time, the macro name, the commands the host set and the macro block order. Commands the battle filled in itself are not recorded, because it fills them the same way on replay. Auto-battle commands are set before `resolveRound`, so they are recorded like the host's. Ids are written with letters, digits and `_` kept and every other byte as `%XX`; an empty value is `-`.
+`serializeRecord` writes a line-based text record (format 3): format version, rules version, event schema version, content hash of the loaded data, the full setup (seed, difficulty, reward multiplier, opening, flags, vehicle, scripted end, enemy group and formation, inventory, each member's level, experience, hit points, technique points, skill uses, equipment and carried statuses), the combo log entries already known, and per round the play time, the macro name, the commands the host set and the macro block order. Commands the battle filled in itself are not recorded, because it fills them the same way on replay. Auto-battle commands are set before `resolveRound`, so they are recorded like the host's. Ids are written with letters, digits and `_` kept and every other byte as `%XX`; an empty value is `-`.
 
 The last line is `checksum <FNV-1a 64 of everything before it>`. `parseRecord` refuses a record whose checksum is missing or does not match (SAV-014), so a damaged record is never replayed. It is a guard against accidental damage, not tampering.
 
@@ -316,7 +334,7 @@ The last line is `checksum <FNV-1a 64 of everything before it>`. `parseRecord` r
 * `CombatantDefeated` (Fell): hit points 0, the `defeated` status, modifiers cleared. Each other status it clears gets a `StatusRemoved` first.
 * `EscapeAttempted`: `succeeded`.
 * `Message`: `message`, `params`.
-* `BattleEnded`: `outcome`, `experience`, `currency`, `gameOver`.
+* `BattleEnded`: `outcome`, `experience`, `currency`, `items` (the drops, item id to count), `gameOver`.
 
 ## Formulas
 
@@ -343,13 +361,14 @@ Every formula is a **placeholder to be tuned**. The math is in `src/formulas.cpp
 | Experience to next level | `15 * level^2 + 10`. Carried-over experience counts toward the next level. Maximum level 50 |
 | Stats at a level | `base + growth * (level - 1)`, plus equipment bonuses |
 | Rewards | Victory: every enemy's experience and currency; scripted end: the fallen enemies' only. Times `reward_percent * multiplier / 10000` (multiplier 100, 150 or 200), rounded down once. Then split per `experience_split` |
+| Drops | Victory: every enemy's drop table; scripted end: the fallen enemies' only. Each entry drops its `count` with its `chance`. Neither the reward multiplier nor `reward_percent` scales them |
 
 ## Not built yet
 
-* Vehicle battles (BAT-140): `flags.vehicleBattle` is carried in the setup, the record and `BattleStarted`, but no rule reads it, because the spec defines no rule effect yet (BAT-141 is to measure).
+* Vehicle battle rules beyond the data above (BAT-141 is to measure): who issues commands is fixed as "the vehicle alone", and a vehicle's state is not carried between battles. Vehicle encounter tables (ENC-007) are the host's business.
 * AI conditions on round number, living ally count and the party's earlier actions (BAT-091); the target rules are built.
 * Presentation keys and type tags on abilities and combinations (BAT-040, BAT-060).
-* Item drops in rewards (SAV-031 is to measure); `BattleEnded` carries experience and currency only.
+* Equipment drops: drop tables hold items only.
 * The random-mode opening draw (ENC-022): the host passes the opening in the setup.
 * Per-character ability tuning in difficulty overlays; ability overlays apply to every user of the ability.
 * Elemental affinities from equipment (armor only adds stats and status resistances).
@@ -357,7 +376,18 @@ Every formula is a **placeholder to be tuned**. The math is in `src/formulas.cpp
 
 ## Changes a host must make
 
-Every public API change in this round, grouped by header. Rules version 3, event schema 3, record format 2: older records are refused.
+This round: rules version 4, event schema 4, record format 3; older records are refused, and the data's content hash changed.
+
+* `battle.h`: `Rewards` adds `items` (`Inventory`, the drops). `rewards().memberExperience` now has one entry per member of `setup.party` (the same as `partyCount()` except in a vehicle battle). Add `rewards().items` to the party's inventory.
+* `event.h`: `Event` adds `items` (`Inventory`), set on `BattleEnded`; the text form writes it as `items=id:count,...`.
+* `enemy.h`: new `struct ItemDrop { item, chance, count }` and `EnemyDef::drops`.
+* New `vehicle.h`: `struct VehicleDef { id, name, stats, basicAttack, abilities, affinities, statusResist, crewDamagePercent }`. `database.h`: `Database::vehicles` and `Database::vehicle(id)`.
+* `setup.h`: `BattleSetup::vehicle`. `combatant.h`: `Combatant::aboard`.
+* `field.h`: `useItemOutsideBattle` erases an item whose count reaches 0 instead of leaving it at 0.
+* `text.h`: `messageKeys` adds `command.aboard`; `text_en.json` has it.
+* Data: `enemies.json` accepts `drops`; `party.json` accepts `vehicles`; `abilities.json` adds `ram`.
+
+The previous round's changes, grouped by header. Rules version 3, event schema 3, record format 2.
 
 * `event.h`
   * `FailReason` is now `CancelReason` (`none`, `actor_unable`, `silenced`, `not_enough_tp`, `no_uses_left`, `no_item`, `no_target`); `Event::fail` is now `Event::cancel`.

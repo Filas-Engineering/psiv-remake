@@ -1,6 +1,5 @@
 {
 	"id": "bell_cove",
-	"name": "Bell Cove",
 	"kind": "dungeon",
 	"encounter_mode": "visible",
 	"step_ms": 250,

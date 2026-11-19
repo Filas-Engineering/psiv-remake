@@ -84,6 +84,8 @@ struct Event {
 	bool gameOver = false;
 	int experience = 0;
 	int currency = 0;
+	// BattleEnded: the items the enemies dropped.
+	Inventory items;
 	// CommandsLocked: the macro that set the party's commands this round.
 	std::string macro;
 	std::vector<int> participants;

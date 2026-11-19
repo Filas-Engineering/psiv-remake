@@ -56,6 +56,17 @@
 			"equipment": ["rivet_plate", "grip_bands"]
 		}
 	],
+	"vehicles": [
+		{
+			"id": "reed_skimmer",
+			"name": "Reed Skimmer",
+			"stats": {"hp": 220, "tp": 20, "strength": 20, "mental": 8, "agility": 6, "dexterity": 10, "defense": 14},
+			"basic_attack": "ram",
+			"abilities": ["steam_vent", "patch"],
+			"affinities": {"shock": 150},
+			"crew_damage_percent": 25
+		}
+	],
 	"lineup": ["fighter", "mystic", "scout", "medic", "engineer"],
 	"inventory": {"tonic": 3, "clear_gel": 2, "wake_chime": 1, "second_wind": 1, "spark_flask": 2, "loosen_oil": 1, "jolt_pod": 1},
 	"equipment_bag": {"copper_blade": 1, "tin_cap": 1, "calm_charm": 1},

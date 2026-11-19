@@ -10,6 +10,7 @@
 #include "rules/macro.h"
 #include "rules/status.h"
 #include "rules/types.h"
+#include "rules/vehicle.h"
 
 #include <cstdint>
 #include <map>
@@ -25,6 +26,7 @@ struct Database {
 	std::map<std::string, ItemDef> items;
 	std::map<std::string, EquipmentDef> equipment;
 	std::map<std::string, CharacterDef> characters;
+	std::map<std::string, VehicleDef> vehicles;
 	std::map<std::string, EnemyDef> enemies;
 	std::map<std::string, Encounter> encounters;
 	std::vector<ComboRecipe> combos;
@@ -41,6 +43,7 @@ struct Database {
 	const ItemDef* item(const std::string& id) const;
 	const EquipmentDef* equipmentPiece(const std::string& id) const;
 	const CharacterDef* character(const std::string& id) const;
+	const VehicleDef* vehicle(const std::string& id) const;
 	const EnemyDef* enemy(const std::string& id) const;
 	const Encounter* encounter(const std::string& id) const;
 	const DifficultyDef* difficulty(const std::string& id) const;

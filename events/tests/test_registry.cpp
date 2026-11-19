@@ -217,3 +217,85 @@ end
 	CHECK(events::compile({{"test.ev", "event a unskippable\nend\n"}}, other).program.fingerprint !=
 		events::compile({{"test.ev", "event a unskippable\nend\n"}}, options).program.fingerprint);
 }
+
+TEST(registry_knows_which_map_holds_each_marker_and_where_events_start) {
+	Registry r;
+	std::vector<Diagnostic> d;
+	CHECK(events::load_registry("maps.registry", R"(actor guide
+map shore cliff
+map_markers shore landing pier
+map_markers cliff ledge pier
+marker loose_end
+event_map shore beach_walk
+)", r, d));
+	CHECK(d.empty());
+	CHECK(r.has(NameKind::marker, "landing") && r.has(NameKind::marker, "loose_end"));
+	CHECK(r.marker_on("landing", "shore") && !r.marker_on("landing", "cliff"));
+	CHECK(r.marker_on("pier", "shore") && r.marker_on("pier", "cliff"));
+	CHECK(r.marker_on("loose_end", "cliff"));
+	CHECK(r.event_maps.at("beach_walk") == std::set<std::string>{"shore"});
+
+	Registry bad;
+	d.clear();
+	CHECK(!events::load_registry("bad.registry", "map shore\nmap_markers shore\nmap_markers sea rock\nmap_markers shore a a\nevent_map nowhere walk\n", bad, d));
+	CHECK(test::has_diagnostic(d, 2, "map_markers: expected a map and one or more markers"));
+	CHECK(test::has_diagnostic(d, 3, "map 'sea' is not listed on a 'map' line"));
+	CHECK(test::has_diagnostic(d, 4, "'a' is already listed for map 'shore'"));
+	CHECK(test::has_diagnostic(d, 5, "map 'nowhere' is not listed on a 'map' line"));
+}
+
+TEST(a_warp_or_move_to_a_marker_on_another_map_does_not_compile) {
+	Registry r;
+	std::vector<Diagnostic> load;
+	CHECK(events::load_registry("maps.registry", R"(actor guide
+map shore cliff
+map_markers shore landing pier
+map_markers cliff ledge pier
+marker anywhere
+event_map shore beach_walk
+flag seen
+)", r, load));
+	std::vector<Diagnostic> d = compile_with(r, R"(event beach_walk unskippable
+	move guide to landing
+	move guide to ledge
+	warp cliff landing
+	warp cliff ledge
+	move guide to landing
+	move guide to pier
+	move guide to anywhere
+	if seen
+		warp shore pier
+	end
+	move guide to ledge
+	move guide to landing
+end
+event elsewhere unskippable
+	move guide to ledge
+	warp shore landing
+	call beach_walk
+	move guide to ledge
+end
+)");
+	CHECK(test::has_diagnostic(d, 3, "marker 'ledge' is not on map 'shore', where the party is at this point; it is on cliff"));
+	CHECK(test::has_diagnostic(d, 4, "marker 'landing' is not on map 'cliff'; it is on shore"));
+	CHECK(test::has_diagnostic(d, 6, "marker 'landing' is not on map 'cliff', where the party is at this point; it is on shore"));
+	// After a branch that may warp, and after a call, the map is not known, so nothing more is reported.
+	CHECK_EQ(d.size(), 3u);
+}
+
+TEST(battle_scripted_ends_name_an_enemy_the_registry_knows) {
+	Registry r;
+	std::vector<Diagnostic> load;
+	CHECK(events::load_registry("battle.registry", "encounter reef_crabs\nenemy crab_king\n", r, load));
+	std::vector<Diagnostic> d = compile_with(r, R"(event a unskippable
+	battle reef_crabs until defeat crab_king
+	win
+	end
+	battle reef_crabs until defeat crab_queen
+	win
+	end
+end
+)");
+	CHECK(test::has_diagnostic(d, 5, "unknown enemy 'crab_queen'"));
+	CHECK_EQ(d.size(), 1u);
+}

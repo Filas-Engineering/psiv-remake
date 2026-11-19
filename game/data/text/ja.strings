@@ -1,0 +1,60 @@
+# Japanese for the placeholder adventure. Placeholder translations. See ../../../events/FORMAT.md, "String tables".
+language ja
+
+tidewater.arrival.ferry = フェリーが潮見の船着き場の杭にぶつかって止まる。
+tidewater.arrival.ropes = ロープに気をつけて。案内人は掲示板のそばで待っている。
+
+tidewater.guide.bell = 鐘のことで来たのかい？毎晩、葦の向こう東の鐘の入り江で鳴るんだ。
+tidewater.guide.ask = 調べてくれるかい？
+tidewater.guide.apprentices = なら弟子たちを連れていきな。一人は火花を少し、もう一人は包帯を知っている。
+tidewater.guide.later = 気が変わったらまた来てくれ。
+tidewater.guide.quiet = また静かな夜だ。港じゅうが夕飯をおごりたがってるよ。
+tidewater.guide.topics = 何について聞く？
+tidewater.guide.topic_bell = 鐘
+tidewater.guide.topic_reeds = 葦原
+tidewater.guide.about_bell = 真鍮でできた何かが守っている。行く前に宿で休みな。
+tidewater.guide.about_reeds = たいていは小さな害虫さ。できるなら避けて歩きな。
+
+tidewater.dockhand.request = この前の嵐で荷箱が葦原に流された。誰も取りに行ってくれないんだ。
+tidewater.dockhand.ask = 見かけたら拾ってくれないか？
+tidewater.dockhand.accepted = ありがたい。道の北側の乾いた所にあるはずだ。
+tidewater.dockhand.declined = まあ、そうだよな。葦原は噛みつくから。
+tidewater.dockhand.reminder = 道の北側、乾いた所だ。見落とすはずがない。
+tidewater.dockhand.found = 見つけたのか？お金は取っておいてくれ。靴を濡らした時点で君のものさ。これも持っていきな。
+tidewater.dockhand.thanks_again = フェリーが着くたびに、君の話をしているよ。
+
+reed.scout.joins = 入り江へ行くのかい？この葦原は二度も地図にした。ついて行くよ。
+reed.peddler.greeting = おい。沼のこっち側で一番安い店だよ。というか、ここしかない。
+reed.peddler.farewell = ウィスプに気をつけな。噛む前に羽音がするから。
+
+cove.bell.frame = 流木の枠にひびの入った鐘が下がっている。その下で何かが動いた。
+cove.bell.warden = あれは鐘の番人なんかじゃない。{name:bell_warden}だ！
+cove.bell.won = もうただの歯車だ。鐘も休める。
+cove.bell.lost = 一行は宿で目を覚ます。体が痛み、少し恥ずかしい。
+cove.quiet.tide = 一週間ぶりに、入り江に聞こえるのは潮の音だけになった。
+cove.campfire.embers = 崖の下に誰かが火を埋めていった。まだ燃えさしが光っている。
+cove.campfire.ask = 火のそばで休む？流木が少し要る。
+cove.campfire.rested = 暖かさがみんなの痛みを引き出していく。
+cove.campfire.declined = 燃えさしは灰の中に沈んでいった。
+
+# Text the game shows itself, not a script: speaker names, the quest log, the encyclopedia and party talk.
+speaker.dockhand = 港の荷役
+speaker.guide = 港の案内人
+speaker.peddler = 葦の行商人
+
+objective.meet_guide = 掲示板のそばにいる港の案内人を探す。
+objective.reach_cove = 葦の小道を東へ進み、鐘の入り江で鐘を鳴らすものを見つける。
+objective.report_back = 鐘が静かになったと港の案内人に伝える。
+objective.done = 潮見の船着き場で静かな夜を楽しむ。
+
+job.lost_cache = 荷役のなくした荷箱
+
+codex.tidewater.title = 潮見の船着き場
+codex.tidewater.text = 杭の上に建てられたフェリーの町。三つの湾でただ一つの郵便は、ここの掲示板だ。
+codex.bell_warden.title = {name:bell_warden}
+codex.bell_warden.text = 入り江の鐘を守るために巻かれたぜんまい仕掛けの番人。誰が巻いたのか覚えている者はいない。
+
+talk.reeds.1 = ここでは一歩ごとにぐちゃっと鳴る。数えてるんだ。
+talk.reeds.2 = 噛まれた数を数えなさい。手当てするのは私なんだから。
+talk.chapter_one.1 = ひとりでに鳴る鐘か。綱を引いている誰かに会ってみたいな。
+talk.after_bell.1 = じゃあ港で夕飯だね。案内人が約束したって聞いたよ。

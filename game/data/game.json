@@ -4,8 +4,10 @@
 	"areas": ["areas/tidewater.json", "areas/reed_path.json", "areas/bell_cove.json"],
 	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev"],
 	"glossary": "text/glossary.txt",
-	"strings": "text/en.strings",
-	"text": "text/en.json",
+	"languages": [
+		{"code": "en", "strings": "text/en.strings", "text": "text/en.json"},
+		{"code": "ja", "strings": "text/ja.strings", "text": "text/ja.json"}
+	],
 	"journal": "journal.json",
 	"actors": ["dockhand", "guide", "peddler"],
 	"presentation": {"audio": ["brass_alarm"]},

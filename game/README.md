@@ -8,7 +8,7 @@ A headless game session library that joins the battle rules (`../core`, namespac
 | --- | --- |
 | `include/game/world.h` | `World`: flags, variables, roster and lineup, chosen names, items, equipment bag, money, macros, combo log, area and position, visible enemies, encounter stream, job states, encyclopedia unlocks, play time, per-save settings |
 | `include/game/area.h` | `Area` data (grid, markers, exits, hooks, shops, rest points, chests, encounter zones) and its JSON reader |
-| `include/game/data.h` | `GameConfig` (`game.json`), `Journal` (`journal.json`) and `loadGameData`, which loads everything, builds the script registry, compiles the scripts against it and checks every cross-reference |
+| `include/game/data.h` | `GameConfig` (`game.json`), `Journal` (`journal.json`), `LanguageTables` and `loadGameData`, which loads everything, builds the script registry and the list of string IDs the game shows itself, compiles the scripts against them and checks every cross-reference |
 | `include/game/modes.h` | `Mode` and `ModeMachine`: the transition table of `docs/spec/game-flow.md` |
 | `include/game/encounters.h` | Visible enemies (spawn, detection, chase, leash, contact openings) and the random-battle counter |
 | `include/game/save.h` | The chunked save format, migrations, the clear-data record, atomic writes and `SaveStore` (manual and rotating autosave slots) |
@@ -19,7 +19,7 @@ A headless game session library that joins the battle rules (`../core`, namespac
 | `src/` | Library sources, built into `build/libgame.a` |
 | `cli/game_cli.cpp` | Terminal front end, scripted runs and the pacing bot |
 | `tests/` | One test executable with a minimal assert helper (`tests/test.h`); `tests/expected/playthrough.txt` is the golden transcript |
-| `data/` | The placeholder adventure: `game.json`, `journal.json`, `areas/`, `events/`, `text/en.strings` (dialogue), `text/en.json` (the game's own text), `text/glossary.txt`, `scripts/playthrough.txt`, `routes/main.route` |
+| `data/` | The placeholder adventure: `game.json`, `journal.json`, `areas/`, `events/`, per language `text/<code>.strings` (dialogue, speaker names, journal text) and `text/<code>.json` (the game's own text) for `en` and the placeholder `ja`, `text/glossary.txt`, `text/glyphs_<code>.txt` (placeholder font glyph lists for `tools/text glyphs`), `scripts/playthrough.txt`, `routes/main.route` |
 
 Battle data (characters, enemies, encounters, items, equipment) and core's English text table are read from `../core/data` through `core_data` in `game.json`; the adventure adds no battle content of its own.
 
@@ -27,7 +27,7 @@ Battle data (characters, enemies, encounters, items, equipment) and core's Engli
 
 ```
 make          # builds ../core and ../events libraries if needed, then build/libgame.a, build/game_cli, build/game_tests
-make test     # unit tests, event_cli check --strict on the scripts with the registry from the data, the scripted
+make test     # unit tests, event_cli check --strict on the scripts with the registry, the game's string IDs and both languages, the scripted
               # playthrough compared byte for byte with tests/expected/playthrough.txt, then the bot
 make clean
 ```
@@ -40,6 +40,7 @@ Run tests from `game/`, because they load `data/`. One test by name: `./build/ga
 ./build/game_cli --bot --seed 7                     # pacing tables for visible and random encounters
 ./build/game_cli --bot --seed 7 --encounters random --route data/routes/main.route
 ./build/game_cli --registry                         # the registry built from the data, in the events registry format
+./build/game_cli --used                             # the string IDs the game shows itself, for event_cli --used
 ```
 
 A scripted run writes autosaves, the profile and the clear-data record, so start it with an empty `--saves` directory to get the same transcript (`make test` does). Exit codes: 0 done, 1 data error, 2 bad arguments, 3 a scripted command failed or the bot did not finish.
@@ -54,7 +55,7 @@ Commands (one per line; `#` starts a comment):
 | Battle | `attack M [eN]`, `use M ABILITY [eN\|pN]`, `item M ITEM [eN\|pN]`, `defend M`, `escape M`, `macro NAME`, `round`, `auto` (auto-battle with the auto macro, then core's policy), `cancel` (members by index or character id) |
 | Menu | `item ITEM [MEMBER]`, `tech USER ABILITY [MEMBER]`, `equip MEMBER PIECE`, `unequip MEMBER SLOT`, `save manual_N` (field menu or save prompt), `saves`, `close`; name entry: `name TEXT` |
 | Shop, inn | `buy ID [N]`, `sell ID [N]`, `leave`; `rest`, `close` |
-| Any | `set difficulty\|reward\|auto VALUE` (per save), `set text\|battle\|shipped VALUE` or `set PROFILE_KEY VALUE` (profile), `quests`, `codex`, `log`, `pacing`, `title` |
+| Any | `set difficulty\|reward\|auto VALUE` (per save), `set text\|battle\|shipped VALUE` or `set PROFILE_KEY VALUE` (profile; `set text_language ja` switches the language), `quests`, `codex`, `log`, `pacing`, `title` |
 
 ## How an engine drives a frame
 
@@ -64,11 +65,13 @@ The engine owns one `GameData` (loaded once) and one `Session`. Every frame:
 2. Read `session.mode()` and present that mode:
    * Field: `world()` (position, facing, `enemies`) and `area()`. Interact with `interact()`, open the menu with `openMenu()`, party talk with `partyTalk()`.
    * Event: when `linePending()`, show `lineText()` (string IDs resolved, names rendered for the profile's "show shipped names") and call `confirmLine()` on the button. When `choice()` is not null, show it through `scriptText()` and call `choose(index)`. `canSkip()` and `skip()` drive skipping; skipped lines go to `textLog()`.
-   * Battle: `battle()` is the live `rules::Battle`. Set commands with `setCommand` (its refusal comes back as text from core's message keys) or `applyMacro`. For auto-battle call `startAuto()` once, then `fillFromAuto()` at each command phase until it returns false (the stop reason is in the output). `fillFromPolicy()` is core's simple policy. Then `resolveRound()`, which returns the round's core events for playback. The battle ends inside `resolveRound()`: rewards, level-ups, grace period, and the return to Field, Event or (game over) Title happen there.
+   * Battle: `battle()` is the live `rules::Battle`. Set commands with `setCommand` (its refusal is core's message) or `applyMacro`. For auto-battle call `startAuto()` once, then `fillFromAuto()` at each command phase until it returns false (the stop reason is in the output). `fillFromPolicy()` is core's simple policy. Then `resolveRound()`, which returns the round's core events for playback. The battle ends inside `resolveRound()`: rewards, level-ups, grace period, and the return to Field, Event or (game over) Title happen there.
    * Menu and Shop: `menuKind()` says field menu, inn, save prompt or name entry. `shop()`, `inn()`, `buy`, `sell`, `rest`, `useItem`, `useAbility`, `equip`, `unequip`, `saveManual`, `enterName`, `closeMenu`. A shop, save prompt or name entry an event opened closes back to the event.
    * Title: `newGame`, `continueGame`, `load`, `retryBattle`.
    * Any time: `questLog()`, `encyclopedia()`, `textLog()`, `profile()` and `setProfile()`.
-3. Drain `drainOutput()`. Each `Output` has a text key with parameters (`message`) and its English rendering (`text`); warnings about broken data have no key.
+3. Drain `drainOutput()`. Each `Output` has a text key with parameters (`message`) and its rendering in the profile's language (`text`); warnings about broken data have no key.
+
+Every operation that can refuse (`newGame`, `walk`, `interact`, `buy`, `saveManual`, `setProfile` and the rest) returns a `rules::Message`: empty when it ran, otherwise a text key (`game.refuse.*`, or core's key for a battle command, field use or equipment refusal) and its parameters. `render(message)` shows it in the profile's language.
 
 Presentation-only script actions (moves, cameras, panels, audio, fades) go to the optional `Presenter` in `SessionOptions`. The default treats each as instant; an engine returns false from `begin` and true from `finished` once its animation ends, and the interpreter waits on it. An action with `instant` set (the rebuild after a skip or a restore) is done when `begin` returns: the presenter puts its end state up at once. Warps change the world before the presenter sees them. The terminal front end is only `Runner` plus `game_cli.cpp`; an engine replaces both and keeps everything else.
 
@@ -76,7 +79,7 @@ Presentation-only script actions (moves, cameras, panels, audio, fades) go to th
 
 ### game.json
 
-`title`, `core_data` (battle data directory, relative to `data/`), `areas`, `events`, `glossary`, `strings` (the dialogue string table, events format), `text` (the game's own text table, core's `{"text": {...}}` format; merged with core's `text_en.json`, and a key in both is an error), `journal`, `actors` (script actors that are not characters; each needs a `speaker.<id>` text), `presentation` (`audio`, `cameras`, `layouts`, `animations`, `portraits` the scripts may name), `flags` (every flag a script, hook or journal entry uses; chest flags are declared by their chests), `vars` (name to starting value), `clear_flag`, `scripted_ends` (encounter to `{"survive_rounds": N}` or `{"enemy_defeated": slot}`, for event battles), `start` (`area`, `marker`, `facing`, `lineup`, `level`, `money`, `items`), `join_levels` (level a character has when an event first adds it), `prices` (buy price per item or equipment id; sell price is the shop's `sell_percent` of it), `item_cap`, `money_cap`, `tick_ms`, `grace_ms`, `round_ms`, `autosave_slots`, `manual_slots`, `bosses` (`encounter` and the `flag` its event sets; pacing keys M5 and M6 by it). Unknown fields are errors.
+`title`, `core_data` (battle data directory, relative to `data/`), `areas`, `events`, `glossary`, `languages` (see [Languages](#languages)), `journal`, `actors` (script actors that are not characters; each needs a `speaker.<id>` string), `presentation` (`audio`, `cameras`, `layouts`, `animations`, `portraits` the scripts may name), `flags` (every flag a script, hook or journal entry uses; chest flags are declared by their chests), `vars` (name to starting value), `clear_flag`, `start` (`area`, `marker`, `facing`, `lineup`, `level`, `money`, `items`), `join_levels` (level a character has when an event first adds it), `prices` (buy price per item or equipment id; sell price is the shop's `sell_percent` of it), `item_cap`, `money_cap`, `tick_ms`, `grace_ms`, `round_ms`, `autosave_slots`, `manual_slots`, `bosses` (`encounter` and the `flag` its event sets; pacing keys M5 and M6 by it). Unknown fields are errors.
 
 ### journal.json
 
@@ -89,17 +92,31 @@ Presentation-only script actions (moves, cameras, panels, audio, fades) go to th
 }
 ```
 
-* Texts are keys of the game's text table. A flag range holds while `after` is set (or left out) and `until` is not set (or left out).
+* Texts are string IDs of the dialogue tables, so writers translate them with the scripts and the glossary check covers them. A flag range holds while `after` is set (or left out) and `until` is not set (or left out).
 * Objectives (UI-012): the last listed one whose range holds is the quest log's line.
 * Jobs: available once `available` is set (or from the start), accepted when `accepted` is set, completed when `completed` is set. Scripts set the flags; the state never moves back.
 * Encyclopedia entries (TXT-041) unlock when their flag is first set and stay unlocked.
 * Party talk sets (FLD-072): a set with an `area` is for that area, one without is a chapter set. Among the sets whose area and range hold, an area set beats a chapter set, then the set with more range bounds wins, then the first listed. Speakers are characters.
 
+### Languages
+
+```json
+"languages": [
+	{"code": "en", "strings": "text/en.strings", "text": "text/en.json"},
+	{"code": "ja", "strings": "text/ja.strings", "text": "text/ja.json"}
+]
+```
+
+* Each language has a dialogue string table (events format; its `language` line must match `code`) and a text table in core's `{"text": {...}}` format. Core's `text_en.json` is merged into every language's text table, since core ships English only; a game key that core also has is an error.
+* The first language is the source: every other text table must have exactly its keys, and the string check (errors for missing script and game IDs, warnings, which fail the strict check, for anything else one table lacks) runs over every dialogue table.
+* The profile's `text_language` picks the tables. `setProfile` refuses a language that is not listed; an unknown language in a profile file falls back to the first.
+* Text keys the game itself uses: `area.<id>` for each area's display name, `game.*` for notices, `game.refuse.*` for refusals. String IDs the game shows itself, outside scripts: `speaker.<actor>` and every journal text. `GameData::gameStrings` lists them; the loader passes it to the string check so they are not reported unused, and `game_cli --used` prints it for `event_cli --used`.
+
 ### Areas
 
 ```json
 {
-	"id": "reed_path", "name": "Reed Path", "kind": "field", "encounter_mode": "visible", "step_ms": 250,
+	"id": "reed_path", "kind": "field", "encounter_mode": "visible", "step_ms": 250,
 	"map": ["#####", "#...#", "....."],
 	"markers": {"west_gate": [1, 2]},
 	"exits": [{"at": [0, 2], "to": "tidewater", "marker": "east_gate"}],
@@ -113,6 +130,7 @@ Presentation-only script actions (moves, cameras, panels, audio, fades) go to th
 }
 ```
 
+* The display name is the text key `area.<id>`, in every language.
 * Map rows: `.` floor, `#` wall (blocks sight), `~` water. Cells are `[x, y]` from the top left.
 * `kind`: `town` (no random battles), `field` or `dungeon` (M6 runs from entry to the boss's end).
 * `encounter_mode` (ENC-002): `visible` or `random`; `SessionOptions::encounterMode` overrides it for every area, which is how the bot compares the two.
@@ -122,7 +140,7 @@ Presentation-only script actions (moves, cameras, panels, audio, fades) go to th
 
 ### Event scripts and text
 
-The `events/` format (`../events/FORMAT.md`). The loader builds an `events::Registry` from the data (actors, characters, markers, presentation names, items and equipment, encounters, areas, shops, rest points, flags and variables) and compiles against it, so an unknown name or an undeclared flag is a load error. It then applies the strict check: compiler warnings are errors, every player-facing text is a string ID in `text/en.strings`, the table matches the scripts, and glossary names are written as name tokens. Only warp targets are still checked by the game itself, because the registry knows markers but not which area holds them. `game_cli --registry` prints the registry so `event_cli check --strict --registry` can run on the same scripts; `make test` does.
+The `events/` format (`../events/FORMAT.md`). The loader builds an `events::Registry` from the data (actors, characters, the markers of each area with their area, the area each hook's event starts in, presentation names, items and equipment, encounters, enemies, areas, shops, rest points, flags and variables) and compiles against it, so an unknown name, an undeclared flag, a warp to a marker in another area, or a move to a marker outside the area the party is in is a load error. It then applies the strict check: compiler warnings are errors, every player-facing text is a string ID in every language's table, the tables match the scripts and each other, and glossary names are written as name tokens. A `battle ... until defeat <enemy>` must name an enemy of that encounter. `game_cli --registry` and `game_cli --used` print the registry and the game's own string IDs, so `event_cli check --strict --registry --used` can run on the same scripts; `make test` does.
 
 Shop and rest point ids are unique across areas, so a script names them without an area. A shop or rest point without `at` is reached only from a script.
 
@@ -158,7 +176,8 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Random mode: the counter freezes in towns, during grace and outside zones (ENC-042); openings are drawn from the zone's percents (ENC-022/024 proposed defaults 8 and 8).
 * Battle seeds come from the encounter stream; a retry XORs in a retry counter (BAT-134). Retry (FLOW-042) exists only where an autosave before the lost battle exists, which is event battles.
 * Defeat without a defeat branch is a game over (FLOW-041 to measure): back to Title, where Continue loads the newest save. A defeat with a `lose` branch stands fallen members up with 1 hit point before the branch runs.
-* Event battles: escape needs both the script's `flee` section and the encounter's escape flag. The opening comes from the script. A scripted end comes from `scripted_ends` in `game.json`, because the script format cannot say one; it pays the fallen enemies' rewards and returns to the `win` branch.
+* Event battles: escape needs both the script's `flee` section and the encounter's escape flag. The opening comes from the script. The scripted end comes from the script (`until survive N`, `until defeat ENEMY`, using the enemy's first formation position); it pays the fallen enemies' rewards and returns to the `win` branch.
+* Battle drops (core's `rewards().items`) go to the inventory after experience and money, up to `item_cap`, each with a `game.dropped` notice. The reward multiplier does not scale them (SAV-023).
 * Autosaves (FLOW-050): area entry when the area was not visited since the last autosave, event end when the script changed any flag, before every event battle (written from inside `start_battle`, with interpreter state), after rest (inn or script). The pre-battle autosave holds the encounter stream from before the battle seed was drawn, so loading it sets up the same battle; setting that battle up again from its own autosave writes no second one.
 * Rest (FLD-034/035): `rules::rest` for the whole roster, active or not, which cures the statuses with `rest_cures`. A script's `rest` with no rest point is free; with one it charges the point's cost, and without the money the party does not rest and the script carries on.
 * Statuses that persist outside battle stay on the members between battles, show in `status`, are saved, and are cured by rest or by field items and techniques.
@@ -174,9 +193,25 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Party talk: lines of characters not in the active party are left out; a set with no line left says nothing. Party talk is not added to the text log.
 * Text log (TXT-027 to TXT-029): event lines shown and lines a skip passed over (marked), the last 500 since the game was loaded or started, rendered with the current names setting, not saved.
 * The clear-data record is written when control returns after `clear_flag` is first set, and replaces any earlier one.
-* Speaker names are text keys (`speaker.<id>`), or the character's chosen or data name.
+* Speaker names are string IDs (`speaker.<id>`) in the dialogue tables, or the character's chosen or data name. Character data names come from core's data, which has one language.
 
 ## Changes in this round
+
+* Builds against core rules version 4 (item drops, vehicles in data) and the events marker maps, scripted ends and game strings.
+* Battle drops are added to the inventory and shown. Scripted ends come from the script's `until`; `game.json` no longer takes `scripted_ends`. The registry knows each marker's area and each hook event's starting area, so the game's own warp check is gone.
+* Several languages: `game.json` takes `languages` instead of `strings` and `text`; a placeholder Japanese pair (`text/ja.strings`, `text/ja.json`) is added; the profile's text language picks the tables.
+* Speaker names and journal text moved from the text table to the dialogue tables. Area display names moved from the area files to `area.<id>` text keys (areas no longer take `name`). `Session` refusals are text keys.
+
+### Changes a host must make
+
+* `Session`: `setProfile`, `newGame`, `continueGame`, `load`, `retryBattle`, `walk`, `interact`, `partyTalk`, `choose`, `setCommand`, `applyMacro`, `startAuto`, `openMenu`, `closeMenu`, `buy`, `sell`, `rest`, `useItem`, `useAbility`, `equip`, `unequip`, `saveManual`, `enterName` and `setSettings` return `rules::Message` instead of `std::string`; `.empty()` still means it ran. Show a refusal with `render()`. New `language()` (the profile's tables) and `stringText(id)`.
+* `data.h`: `GameConfig::stringsFile` and `textFile` are replaced by `languages` (`LanguageFiles { code, strings, text }`); `GameConfig::scriptedEnds` is removed. `GameData::text` and `strings` are replaced by `languages` (`LanguageTables { code, text, strings }`) and `language(code)`. New `GameData::gameStrings` and `gameStringsText()`. `Journal` texts are string IDs.
+* `area.h`: `Area::name` is removed; the name is the text key `area.<id>`.
+* `runner.h`: `Runner::report` takes a `rules::Message` too.
+* Data: `game.json` `languages`; no `scripted_ends`; areas without `name`; `speaker.*`, `objective.*`, `job.*`, `codex.*` and `talk.*` move to `text/<code>.strings`; new keys `area.*`, `game.dropped`, `game.refuse.*`.
+* Saves are unchanged (schema 2); the content hash changed with the data, which only the header records.
+
+## Changes in the previous round
 
 * Builds against core rules version 3 and events `events-save 3`: core's event types, `CancelReason`, `Message` returns, `equip`/`unequip` with the bag, the new `ComboLog`; the new Host methods.
 * Dropped the game's own workarounds: the equipment bag bookkeeping (core moves pieces), field item formulas (core's field use, now also techniques), the macro and combo log save lines (core's forms), the encounter stream type (`rules::Rng`), English battle text (core's keys and table), the hand-written auto policy loop (core's auto-battle and stop rules), and the post-compile walk over scripts (the registry, except warps).
@@ -187,9 +222,9 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 
 ## Not built
 
-* Vehicles, vehicle battles and vehicle encounter tables; camera volumes (the location chunk writes them empty).
+* Vehicles in the field, vehicle encounter tables and vehicle battles (core can fight one; the adventure has no vehicle); camera volumes (the location chunk writes them empty).
 * Ambient party talk (FLD-073); the profile has its switch, nothing reads it.
-* Localization beyond English: the profile's text language only picks the name set; one dialogue table and one text table are loaded. Area names stay in the area files, and the reasons `Session` operations return when they refuse are English strings in code.
+* Battle text and names from core in other languages: core ships one English text table and English names in its data, so battle messages and character, item and enemy names show in English whatever the language. The terminal front end's own prompts and errors (`Runner`, `game_cli`) are English; an engine replaces them.
 * Text speed, auto-advance, text size, battle speed, reduced flash and volumes are stored in the profile, but nothing reads them headless.
 * The pause overlay; macro editor and combo log screens (the combo log's play times and participants are kept).
 * Analog movement and capsule collision: the field is a grid.

@@ -29,7 +29,7 @@ namespace game {
 enum class OutputKind { Line, Choice, Action, Notice, Warning, Autosave };
 
 // Something the front end shows. Battle rounds are returned as core events instead. `message` is the text key
-// and its parameters; `text` is it rendered from the English tables. Warnings about broken data have no key.
+// and its parameters; `text` is it rendered in the profile's language. Warnings about broken data have no key.
 struct Output {
 	OutputKind kind = OutputKind::Notice;
 	rules::Message message;
@@ -117,22 +117,28 @@ public:
 	int autosaveCount() const { return autosaveCount_; }
 	const SaveStore* store() const { return store_ ? &*store_ : nullptr; }
 	const Profile& profile() const { return profile_; }
-	// Applies at once and writes the profile file (SAV-005).
-	std::string setProfile(const Profile& profile);
+	// Applies at once and writes the profile file (SAV-005). Refuses a text language the game has no tables for.
+	rules::Message setProfile(const Profile& profile);
+	// The tables of the profile's text language.
+	const LanguageTables& language() const;
 
 	// Text from the game's tables: a key with its parameters, ids shown as display names.
 	std::string render(const rules::Message& message) const;
 	// A script text: string IDs looked up, name tokens rendered for the current profile.
 	std::string scriptText(const events::Text& text) const;
-	// A character's chosen name, its own name, or an actor's speaker name.
+	std::string stringText(const std::string& id) const;
+	// A character's chosen name, its own name, an actor's speaker name or an area's name.
 	std::string displayName(const std::string& id) const;
 
-	// Title (FLOW-020). Each returns an empty string or why it could not run.
-	std::string newGame();
-	std::string continueGame();
-	std::string load(const std::string& slot);
+	// Every operation below that returns a Message returns an empty one when it ran, otherwise the text key and
+	// parameters of why it did not; render() shows it.
+
+	// Title (FLOW-020).
+	rules::Message newGame();
+	rules::Message continueGame();
+	rules::Message load(const std::string& slot);
 	// After a game over, reloads the autosave taken before the lost event battle (FLOW-042).
-	std::string retryBattle();
+	rules::Message retryBattle();
 	bool gameOver() const { return gameOver_; }
 	bool canRetry() const { return gameOver_ && !retrySlot_.empty(); }
 	// The pause overlay's Quit to Title (FLOW-022). Not a transition: it resets the machine.
@@ -141,11 +147,11 @@ public:
 	// Advances the active mode by `ms`. In Field, `input` is the held direction.
 	void update(int ms, const FieldInput& input = FieldInput());
 	// Holds `direction` until the leader enters the next cell or something stops the field.
-	std::string walk(Facing direction);
+	rules::Message walk(Facing direction);
 	// Interacts with whatever stands in the cell the leader faces (FLD-030).
-	std::string interact();
+	rules::Message interact();
 	// Party talk (FLD-070): the lines of the best matching set for this area and the flags, as Line output.
-	std::string partyTalk();
+	rules::Message partyTalk();
 
 	// Event
 	bool linePending() const;
@@ -153,7 +159,7 @@ public:
 	std::string lineText() const;
 	void confirmLine();
 	const events::ChoiceRequest* choice() const;
-	std::string choose(int index);
+	rules::Message choose(int index);
 	bool canSkip() const;
 	bool skip();
 	// The last 500 pages since the game was loaded, rendered for the current profile, skipped ones marked.
@@ -161,11 +167,11 @@ public:
 
 	// Battle
 	const rules::Battle* battle() const { return battle_ ? &*battle_ : nullptr; }
-	std::string setCommand(int actor, const rules::Command& command);
-	std::string applyMacro(const std::string& name, std::vector<rules::MacroStepResult>* results = nullptr);
+	rules::Message setCommand(int actor, const rules::Command& command);
+	rules::Message applyMacro(const std::string& name, std::vector<rules::MacroStepResult>* results = nullptr);
 	// Auto-battle (BAT-103, BAT-104) with the save's auto macro. fillFromAuto fills the round and returns true
 	// while it runs; once a stop rule fires it returns false and reports why.
-	std::string startAuto();
+	rules::Message startAuto();
 	void cancelAuto();
 	bool autoActive() const;
 	bool fillFromAuto();
@@ -178,27 +184,27 @@ public:
 	const std::string& battleEncounter() const { return battleEncounter_; }
 
 	// Menus and shops. A shop, save prompt or name entry an event opened closes back to the event.
-	std::string openMenu();
-	std::string closeMenu();
+	rules::Message openMenu();
+	rules::Message closeMenu();
 	MenuKind menuKind() const { return mode() == Mode::Menu ? menuKind_ : MenuKind::None; }
 	const Shop* shop() const;
 	const RestPoint* inn() const;
-	std::string buy(const std::string& id, int count);
-	std::string sell(const std::string& id, int count);
-	std::string rest();
+	rules::Message buy(const std::string& id, int count);
+	rules::Message sell(const std::string& id, int count);
+	rules::Message rest();
 	// Field use through core (BAT-044). `member` is a character id of the active party, or empty for items and
 	// techniques that work on everyone. An item that would change nothing is not used up.
-	std::string useItem(const std::string& item, const std::string& member);
-	std::string useAbility(const std::string& user, const std::string& ability, const std::string& member);
-	std::string equip(const std::string& member, const std::string& equipment);
-	std::string unequip(const std::string& member, rules::EquipSlot slot);
+	rules::Message useItem(const std::string& item, const std::string& member);
+	rules::Message useAbility(const std::string& user, const std::string& ability, const std::string& member);
+	rules::Message equip(const std::string& member, const std::string& equipment);
+	rules::Message unequip(const std::string& member, rules::EquipSlot slot);
 	// From the field menu, or from a save prompt an event opened.
-	std::string saveManual(const std::string& slot);
+	rules::Message saveManual(const std::string& slot);
 	// Name entry: the member being named, and the name to confirm, which closes the entry.
 	const std::string& nameEntryMember() const { return nameMember_; }
-	std::string enterName(const std::string& name);
+	rules::Message enterName(const std::string& name);
 	// Difficulty and reward multiplier apply from the next battle (BAT-126).
-	std::string setSettings(const Settings& settings);
+	rules::Message setSettings(const Settings& settings);
 
 	QuestLog questLog() const;
 	std::vector<EncyclopediaView> encyclopedia() const;
@@ -235,18 +241,18 @@ private:
 	void openChest(const Chest& chest);
 	void giveThing(const std::string& id, int count);
 	void reportFieldUse(const std::vector<rules::Event>& events, const std::vector<rules::PartyMember>& party);
-	std::string payRest(const RestPoint* point);
+	rules::Message payRest(const RestPoint* point);
 	void openScriptMenu(Mode mode, MenuKind kind, events::Handle handle);
 	void finishScriptMenu();
 	void addLog(const events::Line& line, bool skipped);
 	void refreshJournal(bool announce);
 	void writeClearRecord();
-	std::string startBattle(const std::string& encounter, rules::Opening opening, bool escapeAllowed, bool defeatHasBranch);
+	std::string startBattle(const std::string& encounter, rules::Opening opening, bool escapeAllowed, bool defeatHasBranch, const rules::ScriptedEnd& end);
 	void startFieldBattle(const EncounterStart& start);
 	void finishBattle();
 	void enterGameOver();
 	void autosave(std::string reason);
-	std::string loadText(const std::string& text, const std::string& slot);
+	rules::Message loadText(const std::string& text, const std::string& slot);
 	events::Handle newHandle(HandleState state);
 	std::vector<rules::PartyMember> activeParty() const;
 

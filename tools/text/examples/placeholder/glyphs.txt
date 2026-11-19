@@ -1,0 +1,5 @@
+# Glyphs of the placeholder dialogue font: printable ASCII and a few typographic marks.
+U+0020-U+007E
+U+2014
+U+2019
+U+2026

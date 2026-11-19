@@ -1,6 +1,7 @@
 #include "validator.h"
 
 #include <map>
+#include <set>
 
 namespace events {
 
@@ -38,16 +39,36 @@ public:
 	RegistryCheck(const Registry& registry, const std::string& file, std::vector<Diagnostic>& diagnostics)
 		: registry_(registry), file_(file), diagnostics_(diagnostics) {}
 
-	void block(const std::vector<Stmt>& body) {
+	// The party's map is followed through the event so a move or warp to a
+	// marker on another map is an error. Returns the map after the body, or
+	// "" where it cannot be known.
+	std::string block(const std::vector<Stmt>& body, std::string map) {
 		for (const Stmt& s : body) {
-			statement(s);
+			if (s.kind == StmtKind::label) {
+				map.clear();
+			}
+			map = statement(s, map);
+			if (s.branches.empty()) {
+				continue;
+			}
+			const std::string start = s.kind == StmtKind::while_loop && changes_map(s.branches[0].body) ? std::string() : map;
+			std::set<std::string> ends;
 			for (const Branch& b : s.branches) {
 				if (b.has_condition) {
 					condition(b.condition, b.line);
 				}
-				block(b.body);
+				if (s.kind == StmtKind::battle && !b.present) {
+					continue;
+				}
+				ends.insert(block(b.body, start));
 			}
+			const bool may_skip = s.kind == StmtKind::while_loop || (s.kind == StmtKind::if_chain && s.branches.back().has_condition);
+			if (may_skip) {
+				ends.insert(map);
+			}
+			map = ends.size() == 1 ? *ends.begin() : std::string();
 		}
+		return map;
 	}
 
 private:
@@ -80,12 +101,39 @@ private:
 		}
 	}
 
-	void action(const Action& a, int line) {
+	static bool changes_map(const std::vector<Stmt>& body) {
+		for (const Stmt& s : body) {
+			const bool warp = s.kind == StmtKind::simple && s.ins.op == Op::action && s.ins.action.type == ActionType::warp;
+			if (warp || s.kind == StmtKind::label || (s.kind == StmtKind::simple && s.ins.op == Op::call)) {
+				return true;
+			}
+			for (const Branch& b : s.branches) {
+				if (changes_map(b.body)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	void on_map(const std::string& marker, const std::string& map, int line, const char* why) {
+		if (map.empty() || !registry_.has(NameKind::marker, marker) || registry_.marker_on(marker, map)) {
+			return;
+		}
+		std::string maps;
+		for (const std::string& m : registry_.marker_maps.at(marker)) {
+			maps += (maps.empty() ? "" : ", ") + m;
+		}
+		error(line, "marker '" + marker + "' is not on map '" + map + "'" + why + "; it is on " + maps);
+	}
+
+	void action(const Action& a, int line, std::string& map) {
 		switch (a.type) {
 		case ActionType::move:
 			name(NameKind::actor, a.subject, line);
 			if (!a.has_position) {
 				name(NameKind::marker, a.target, line);
+				on_map(a.target, map, line, ", where the party is at this point");
 			}
 			break;
 		case ActionType::face:
@@ -118,6 +166,8 @@ private:
 		case ActionType::warp:
 			name(NameKind::map, a.subject, line);
 			name(NameKind::marker, a.target, line);
+			on_map(a.target, a.subject, line, "");
+			map = a.subject;
 			break;
 		case ActionType::panel_hide:
 		case ActionType::panel_clear:
@@ -131,14 +181,14 @@ private:
 		}
 	}
 
-	void statement(const Stmt& s) {
+	std::string statement(const Stmt& s, std::string map) {
 		const Instruction& ins = s.ins;
 		if (s.kind == StmtKind::while_loop) {
 			condition(ins.condition, s.line);
-			return;
+			return map;
 		}
 		if (s.kind != StmtKind::simple && s.kind != StmtKind::choice && s.kind != StmtKind::battle) {
-			return;
+			return map;
 		}
 		switch (ins.op) {
 		case Op::say:
@@ -175,13 +225,20 @@ private:
 			break;
 		case Op::battle:
 			name(NameKind::encounter, ins.battle.encounter, s.line);
+			if (ins.battle.end == BattleEndKind::enemy_defeated) {
+				name(NameKind::enemy, ins.battle.end_enemy, s.line);
+			}
 			break;
 		case Op::action:
-			action(ins.action, s.line);
+			action(ins.action, s.line, map);
+			break;
+		case Op::call:
+			map.clear();
 			break;
 		default:
 			break;
 		}
+		return map;
 	}
 
 	const Registry& registry_;
@@ -223,7 +280,9 @@ void validate(const std::vector<EventDecl>& events, const std::vector<std::strin
 			}
 		}
 		if (registry) {
-			RegistryCheck(*registry, file, diagnostics).block(ev.body);
+			auto starts = registry->event_maps.find(ev.name);
+			const bool one_start = starts != registry->event_maps.end() && starts->second.size() == 1;
+			RegistryCheck(*registry, file, diagnostics).block(ev.body, one_start ? *starts->second.begin() : std::string());
 		}
 	}
 }

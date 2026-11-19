@@ -3,6 +3,7 @@
 		"battle.opening.enemy_first": "The enemies catch the party off guard!",
 		"battle.opening.party_first": "The party catches the enemies off guard!",
 
+		"command.aboard": "{0} is aboard and cannot act.",
 		"command.actor_defeated": "{0} is down and cannot act.",
 		"command.caught_off_guard": "{0} is caught off guard this round.",
 		"command.combo_not_selectable": "{0} only happens as a combination.",

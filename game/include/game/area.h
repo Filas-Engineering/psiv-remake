@@ -101,8 +101,8 @@ struct Zone {
 };
 
 struct Area {
+	// The display name is the text key area.<id>.
 	std::string id;
-	std::string name;
 	AreaKind kind = AreaKind::Field;
 	EncounterMode mode = EncounterMode::Visible;
 	// Time to walk one cell.

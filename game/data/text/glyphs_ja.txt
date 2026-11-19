@@ -1,0 +1,8 @@
+# Glyphs of the placeholder Japanese font (TXT-033): ASCII, Japanese punctuation, kana, fullwidth forms
+# and the kanji the placeholder tables use. Check with tools/text glyphs.
+U+0020-U+007E
+U+3000-U+303F
+U+3041-U+3096
+U+30A1-U+30FF
+U+FF01-U+FF5E
+一三上下中乾事二人今仕以仲休会伝体何使依便保個倒値側備元光入具典内再出切利前力加効動勝包北原取受名向君商噛回図地埋場壊売変夕外夜失始子字存守安完定害宿小少崖嵐巻帯店度建引弟当役待復恥息成戦所手拾持掛探掲敗数敵文新易時晩暖書木束来杭東板果枠案楽次止歩歯毎気江決沈沼泊流港湾潮濡火灰点無燃物町画番痛目直真着知示私空箱約終経結続綱羽者聞船花荷落葦虫行装要見覚言記設試話語読誰調買起足車込返逃連週進道達選避邪郵金録鍮鐘開間闘離難静面靴音項頼飯験魔鳴

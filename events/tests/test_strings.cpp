@@ -201,3 +201,25 @@ TEST(string_tables_keep_the_text_tool_control_codes_in_order) {
 	CHECK(any_contains(d, Severity::error, "ja.strings:5:", "control tags in 'a.four' ({portrait:keeper_tired}, {var:leader}, {wait:15}, {page})"));
 	CHECK_EQ(d.size(), 3u);
 }
+
+TEST(ids_the_game_shows_itself_are_used_and_must_exist) {
+	events::GameStrings game;
+	std::vector<Diagnostic> load;
+	CHECK(events::load_game_strings("game.used", "# shown by the game\nspeaker.guide\narea.*\nspeaker.keeper\n", game, load));
+	CHECK(load.empty());
+	CHECK(game.covers("speaker.guide") && game.covers("area.reef") && !game.covers("speaker.other"));
+
+	events::Program p = test::compile_ok(script);
+	StringTable en = table_ok("en.strings", "language en\ndock.hello = Hello.\ndock.where = Where?\ndock.north = North it is.\ndock.south = South\n"
+		"speaker.guide = Guide\narea.reef = The Reef\nspeaker.other = Nobody\n");
+	std::vector<Diagnostic> d = events::check_strings(p, {en}, game);
+	CHECK(any_contains(d, Severity::error, "game.used:4:", "'speaker.keeper' is missing from the 'en' table (en.strings)"));
+	CHECK(any_contains(d, Severity::warning, "en.strings:8:", "'speaker.other' is not used by any script or by the game"));
+	CHECK_EQ(d.size(), 2u);
+
+	events::GameStrings bad;
+	load.clear();
+	CHECK(!events::load_game_strings("bad.used", "9lives\nspeaker.guide\nspeaker.guide\n", bad, load));
+	CHECK(test::has_diagnostic(load, 1, "'9lives' is not a string ID or a prefix ending in '*'"));
+	CHECK(test::has_diagnostic(load, 3, "'speaker.guide' is already listed at line 2"));
+}

@@ -152,6 +152,11 @@ std::string describe(const BattleRequest& request) {
 	if (request.opening != BattleOpening::normal) {
 		out += std::string(" opening ") + battle_opening_name(request.opening);
 	}
+	if (request.end == BattleEndKind::survive_rounds) {
+		out += " until survive " + std::to_string(request.end_rounds);
+	} else if (request.end == BattleEndKind::enemy_defeated) {
+		out += " until defeat " + request.end_enemy;
+	}
 	return out;
 }
 

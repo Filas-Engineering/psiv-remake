@@ -28,6 +28,7 @@ const Keyword keywords[] = {
 	{"map", NameKind::map},
 	{"shop", NameKind::shop},
 	{"rest", NameKind::rest_point},
+	{"enemy", NameKind::enemy},
 };
 
 bool parse_integer(const std::string& word, std::int64_t& out) {
@@ -45,6 +46,20 @@ void Registry::add(NameKind kind, const std::string& name) {
 bool Registry::has(NameKind kind, const std::string& name) const {
 	auto found = names.find(kind);
 	return found != names.end() && found->second.count(name) > 0;
+}
+
+void Registry::add_marker(const std::string& map, const std::string& marker) {
+	add(NameKind::marker, marker);
+	marker_maps[marker].insert(map);
+}
+
+void Registry::add_event_map(const std::string& map, const std::string& event) {
+	event_maps[event].insert(map);
+}
+
+bool Registry::marker_on(const std::string& marker, const std::string& map) const {
+	auto found = marker_maps.find(marker);
+	return found == marker_maps.end() || found->second.count(map) > 0;
 }
 
 void Registry::declare_flag(const std::string& name, bool local, bool initial) {
@@ -69,6 +84,8 @@ bool load_registry(const std::string& file, const std::string& text, Registry& r
 	result.file = file;
 	bool ok = true;
 	std::map<std::pair<NameKind, std::string>, int> seen;
+	// Maps named by map_markers and event_map lines, checked against the map list at the end.
+	std::vector<std::pair<std::string, int>> maps_named;
 	std::vector<std::string> lines = split_lines(text);
 	for (std::size_t i = 0; i < lines.size(); ++i) {
 		const int number = static_cast<int>(i) + 1;
@@ -124,6 +141,33 @@ bool load_registry(const std::string& file, const std::string& text, Registry& r
 			result.declarations.push_back(d);
 			continue;
 		}
+		if (key == "map_markers" || key == "event_map") {
+			const bool markers = key == "map_markers";
+			if (words.size() < 3) {
+				error(key + ": expected a map and one or more " + (markers ? "markers" : "events"));
+				continue;
+			}
+			for (std::size_t j = 1; j < words.size(); ++j) {
+				if (!is_name(words[j])) {
+					error(key + ": '" + words[j] + "' is not a valid name");
+				}
+			}
+			maps_named.push_back({words[1], number});
+			for (std::size_t j = 2; j < words.size(); ++j) {
+				if (!is_name(words[j])) {
+					continue;
+				}
+				const std::set<std::string>& listed = markers ? result.marker_maps[words[j]] : result.event_maps[words[j]];
+				if (listed.count(words[1])) {
+					error(key + ": '" + words[j] + "' is already listed for map '" + words[1] + "'");
+				} else if (markers) {
+					result.add_marker(words[1], words[j]);
+				} else {
+					result.add_event_map(words[1], words[j]);
+				}
+			}
+			continue;
+		}
 		const Keyword* keyword = nullptr;
 		for (const Keyword& k : keywords) {
 			keyword = key == k.word ? &k : keyword;
@@ -148,6 +192,12 @@ bool load_registry(const std::string& file, const std::string& text, Registry& r
 			}
 			seen[{keyword->kind, words[j]}] = number;
 			result.add(keyword->kind, words[j]);
+		}
+	}
+	for (const auto& [map, line] : maps_named) {
+		if (!result.has(NameKind::map, map)) {
+			diagnostics.push_back({Severity::error, file, line, "map '" + map + "' is not listed on a 'map' line"});
+			ok = false;
 		}
 	}
 	if (ok) {
@@ -184,6 +234,8 @@ const char* name_kind_name(NameKind kind) {
 		return "shop";
 	case NameKind::rest_point:
 		return "rest point";
+	case NameKind::enemy:
+		return "enemy";
 	}
 	return "name";
 }

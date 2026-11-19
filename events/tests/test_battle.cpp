@@ -168,3 +168,32 @@ end
 	CHECK_EQ(resumed_host.items["rope"], 1);
 	CHECK(resumed_host.errors.empty());
 }
+
+TEST(battle_until_sets_a_scripted_end_in_the_request) {
+	Program p = test::compile_ok(R"(event rounds unskippable
+	battle reef_crabs opening party_first until survive 3
+	win
+	end
+end
+event boss unskippable
+	battle tide_wyrm until defeat wyrm_head
+	win
+	end
+end
+)");
+	BattleHost host;
+	Interpreter it(p, host);
+	it.start("rounds");
+	test::run(it, host);
+	it.start("boss");
+	test::run(it, host);
+	CHECK_EQ(host.requests.size(), 2u);
+	CHECK(host.requests[0].end == events::BattleEndKind::survive_rounds && host.requests[0].end_rounds == 3);
+	CHECK(host.requests[1].end == events::BattleEndKind::enemy_defeated && host.requests[1].end_enemy == "wyrm_head");
+	CHECK_EQ(events::describe(host.requests[0]), std::string("battle reef_crabs no-escape defeat-game-over opening party_first until survive 3"));
+	CHECK_EQ(events::describe(host.requests[1]), std::string("battle tide_wyrm no-escape defeat-game-over until defeat wyrm_head"));
+
+	std::vector<events::Diagnostic> d = test::compile_errors("event a unskippable\n\tbattle x until survive 0\n\twin\n\tend\n\tbattle x until flee\n\twin\n\tend\nend\n");
+	CHECK(test::has_diagnostic(d, 2, "the rounds to survive must be 1 to 999, found 0"));
+	CHECK(test::has_diagnostic(d, 5, "expected 'survive <rounds>' or 'defeat <enemy>' after 'until'"));
+}

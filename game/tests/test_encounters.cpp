@@ -11,7 +11,7 @@ namespace {
 
 // A walled room with one zone: walls split the room so line of sight can be blocked.
 const char* kRoom = R"({
-	"id": "room", "name": "Room",
+	"id": "room",
 	"map": [
 		"##########",
 		"#........#",

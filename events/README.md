@@ -47,7 +47,7 @@ build/event_cli run samples/market.ev samples/harbor.ev market_haggle
 build/event_cli run samples/lighthouse.ev lighthouse_ambush --battle lose --skip-at 3
 build/event_cli lint --entries sample_text/entries.txt samples/*.ev
 build/event_cli time --config sample_text/timing.cfg --table sample_text/en.strings samples/harbor.ev harbor_arrival
-build/event_cli strings check --table sample_text/en.strings --table sample_text/ja.strings samples/*.ev
+build/event_cli strings check [--strict] [--used FILE] --table sample_text/en.strings --table sample_text/ja.strings samples/*.ev
 build/event_cli strings extract samples/*.ev
 build/event_cli names sample_text/glossary.txt --table sample_text/en.strings samples/*.ev
 ```
@@ -134,8 +134,9 @@ A `battle` block calls `start_battle` with a `BattleRequest`:
 - `escape_allowed`: true when the script has a `flee` section. When false, the battle must not offer escape.
 - `defeat_handled`: true when the script has a `lose` section. When false, a defeat must go to the game's game-over flow, and the host never reports it to the interpreter. Typically the game-over flow loads a save, which throws this interpreter away.
 - `opening`: `normal`, `party_first` or `enemy_first`, from the script's `opening` option.
+- `end`, `end_rounds`, `end_enemy`: the scripted end from the script's `until` option. `BattleEndKind::survive_rounds` ends the battle after `end_rounds` rounds; `enemy_defeated` ends it when the enemy `end_enemy` (its game ID) falls. Report a scripted end as `BattleResult::win`.
 
-The host forwards the request to whatever battle rules it uses: look up the encounter, set up the fight with escape on or off, run it, and when it ends map the outcome to `BattleResult::win`, `lose` or `flee`. The handle is done at that point. The interpreter has no other dependency on the rules. If the host reports `lose` when `defeat_handled` is false, or `flee` when `escape_allowed` is false, the interpreter stops with a runtime error, because the script has no branch for it. Rewards (experience, money, drops) are the rules' business and happen outside the script.
+The host forwards the request to whatever battle rules it uses: look up the encounter, set up the fight with escape on or off and with the scripted end, run it, and when it ends map the outcome to `BattleResult::win`, `lose` or `flee`. The handle is done at that point. The interpreter has no other dependency on the rules. If the host reports `lose` when `defeat_handled` is false, or `flee` when `escape_allowed` is false, the interpreter stops with a runtime error, because the script has no branch for it. Rewards (experience, money, drops) are the rules' business and happen outside the script.
 
 ## Save-state contract
 
@@ -161,19 +162,27 @@ The text form starts with `events-save 3` and ends with ` sum ` and a 64-bit FNV
 
 Every CLI command is a library call, so a build pipeline can run them without the CLI:
 
-- `registry.h`: `load_registry`, `Registry`, passed to `compile` through `CompileOptions`.
-- `strings.h`: `load_string_table`, `resolve_text`, `collect_texts`, `find_control_tags`, `check_strings`, `check_inline_text`, `extract_strings`.
+- `registry.h`: `load_registry`, `Registry` (with `add_marker`, `add_event_map` and `marker_on` for marker maps), passed to `compile` through `CompileOptions`.
+- `strings.h`: `load_string_table`, `resolve_text`, `collect_texts`, `find_control_tags`, `load_game_strings`, `GameStrings`, `check_strings`, `check_inline_text`, `extract_strings`.
 - `glossary.h`: `load_glossary`, `find_name_tokens`, `name_set_for`, `name_case_word`, `shown_name`, `render_names`, `find_name_mentions`, `check_names`.
 - `timing.h`: `TimingConfig`, `load_timing_config`, `TimingHost`, `time_event`. Feed `TimedPath::time.total` to the CI comparison with the measured baseline (EVT-062).
 - `lint.h`: `lint(sources, LintOptions)`.
 
 ## Tests
 
-`make test` runs `build/event_tests`, then every CLI command on the samples, including the strict check with the registry, glossary and both string tables. The tests cover parse errors and their line numbers, each validation rule, the registry (loading, every kind of unknown name, flag and variable types, local values), branching, loops and goto, choices and the answer they record before their branch, waits spanning several steps, `together` branches finishing in either order, `race` stopping the slower branches, `nowait`/`sync`, nested calls, menus and rests, battle requests and results (including results the script did not allow, and the opening), runtime errors, and handle discipline (no leaks, no use after release). The skip tests check that skipping at every step of every choice and battle path, and again after each stop, leaves the same world and the same presentation as watching; that a skip stops at choices, battles and menus and is offered again after them; that it fast-forwards running branches to their end state, passes through warps and rests, and keeps the unskippable caller's own actions. The save/restore tests cover an identical remaining trace after restoring mid-wait, a replayed line after restoring mid-dialogue, a restore at every step, the presentation rebuild and its order, a save written from inside `start_battle`, a save while skipping, the fingerprint ignoring comments, blank lines and indentation, a restart from the event-start world after a script change, and corrupt saves: every single-byte flip and every truncation is rejected. The tool tests cover string table loading and checks (including dropped tokens, reordered control tags, the `tools/text` control codes, and name tokens that change case form between languages), control tags and name tokens reaching the host as written, inline text, extraction with option lines, glossary loading, name rendering in all three case forms, the mention report and the name check, scene timing across branches, and each lint rule.
+`make test` runs `build/event_tests`, then every CLI command on the samples, including the strict check with the registry, glossary and both string tables. The tests cover parse errors and their line numbers, each validation rule, the registry (loading, every kind of unknown name, flag and variable types, local values, marker maps with warps and moves to another map's marker, event start maps, enemies named by a scripted end), branching, loops and goto, choices and the answer they record before their branch, waits spanning several steps, `together` branches finishing in either order, `race` stopping the slower branches, `nowait`/`sync`, nested calls, menus and rests, battle requests and results (including results the script did not allow, the opening and the scripted end), runtime errors, and handle discipline (no leaks, no use after release). The skip tests check that skipping at every step of every choice and battle path, and again after each stop, leaves the same world and the same presentation as watching; that a skip stops at choices, battles and menus and is offered again after them; that it fast-forwards running branches to their end state, passes through warps and rests, and keeps the unskippable caller's own actions. The save/restore tests cover an identical remaining trace after restoring mid-wait, a replayed line after restoring mid-dialogue, a restore at every step, the presentation rebuild and its order, a save written from inside `start_battle`, a save while skipping, the fingerprint ignoring comments, blank lines and indentation, a restart from the event-start world after a script change, and corrupt saves: every single-byte flip and every truncation is rejected. The tool tests cover string table loading and checks (including IDs the game shows itself, including dropped tokens, reordered control tags, the `tools/text` control codes, and name tokens that change case form between languages), control tags and name tokens reaching the host as written, inline text, extraction with option lines, glossary loading, name rendering in all three case forms, the mention report and the name check, scene timing across branches, and each lint rule.
 
 ## Changes a host must make
 
-This round changed the public API as follows. Old saves of interpreter state (`events-save 2`) no longer load, and every program's fingerprint changed.
+This round's changes. No save or fingerprint changes: `events-save 3` saves still load, and scripts that do not use the new syntax keep their fingerprint.
+
+- `host.h`: new `enum class BattleEndKind { none, survive_rounds, enemy_defeated }` and `BattleRequest::end`, `end_rounds` and `end_enemy`, from the script's `until`. Set the battle's scripted end from them and report it as `win`. `describe(BattleRequest)` appends ` until survive <n>` or ` until defeat <enemy>`.
+- `registry.h`: `NameKind::enemy` (appended, keyword `enemy`); `Registry::marker_maps`, `Registry::event_maps`, `add_marker(map, marker)`, `add_event_map(map, event)` and `marker_on(marker, map)`; registry files take `map_markers`, `event_map` and `enemy` lines. A host that builds its registry in code should call `add_marker` for every marker (and `add_event_map` for every event it starts on a known map) so a warp or move to another map's marker fails to compile. A warp to a marker on another map, and a move to one on the map the party is known to be on, are now compile errors.
+- `strings.h`: new `struct GameStrings { file, ids, prefixes, covers() }` and `load_game_strings(file, text, out, diagnostics)`. `check_strings` takes an optional third argument, `const GameStrings&`: its IDs must be in every table and, with its prefixes, are not reported as unused. The unused warning now reads "not used by any script or by the game".
+- CLI: `check` and `strings check` take `--used FILE`; `strings check` takes `--strict`.
+- Format: `until survive <rounds>` and `until defeat <enemy>` on `battle`; the game strings file.
+
+The previous round changed the public API as follows. Old saves of interpreter state (`events-save 2`) no longer load, and every program's fingerprint changed.
 
 Host (`host.h`):
 
@@ -222,5 +231,7 @@ Format (`FORMAT.md`): new `race`, `into` on `choice` and `ask`, `opening` on `ba
 - Presentation with no end state (shakes, one-shot sounds) is dropped while skipping.
 - EVT-008 says stopped branches stop "at their next yield point". When the first branch of a race ends, every other branch is already waiting at a yield point, so they stop there and their command in flight is cancelled. When several finish in one step, the first listed wins. While skipping, every branch finishes at once, so the first branch wins; branches cannot change game state, so only the presentation can differ from watching.
 - EVT-004 does not define "event-local". Local values last for one run of an event started by the game, including the events it calls.
+- EVT-003 names marker errors but not maps. A marker's map is known from `map_markers`; the party's map is followed from `warp`s and from `event_map`, and where the flow makes it unknown nothing is checked rather than guessing.
+- BAT-013 lets an event set a scripted end; the format had no syntax. `until defeat` names an enemy by ID, not a formation position, and the host uses the first position that enemy holds. A scripted end runs the `win` section, as the game already did.
 - EVT-022 lists "panel page" and "actor poses". The format has no page, so the panels on screen are the page. A pose is the last looping animation; a move clears the facing; a warp clears actors and camera.
 - The presentation state is what the event last commanded. A move cut short by a skip or a race is recorded at its target.

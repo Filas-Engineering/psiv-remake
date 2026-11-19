@@ -1,13 +1,13 @@
 # Acceptance
 
-Automated acceptance checks from [`docs/spec/acceptance.md`](../docs/spec/acceptance.md), run against the `core/` battle library, the `events/` script library and the `tools/text/` command line. Every check in the spec gets one line of output; the ones tagged `core`, `events` or `tools` run here.
+Automated acceptance checks from [`docs/spec/acceptance.md`](../docs/spec/acceptance.md), run against the `core/` battle library, the `events/` script library, the `game/` session library and the `tools/text/` command line. Every check in the spec gets one line of output; the ones tagged `core`, `events` or `tools` run here. The `tools` checks of the game's save files and field data (ACC-SAV-01 to ACC-SAV-04, ACC-FLD-04) are C++ checks against `game/`, since the game is what writes and reads them.
 
 ## Run
 
 Needs `clang++`, GNU Make 3.81 or later and Python 3.
 
 ```
-make clean && make test   # builds both libraries through their own Makefiles, then checks the spec and runs every check
+make clean && make test   # builds the libraries through their own Makefiles, then checks the spec and runs every check
 make report               # writes report.md from docs/spec and the last run (runs the checks first if there is no run)
 ```
 
@@ -18,6 +18,7 @@ Run one check by hand:
 ```
 build/core_acceptance --run ACC-BAT-03 --root ..
 build/events_acceptance --run ACC-EVT-04 --root ..
+build/game_acceptance --run ACC-SAV-03 --root ..
 python3 scripts/check_spec.py --root ..
 ```
 
@@ -38,10 +39,11 @@ A check that is automatable but has no test FAILs, and so does a test whose cite
 |---|---|
 | `core/acc_*.cpp` | One file per `core` check, linked with `../core/build/librules.a` |
 | `events/acc_*.cpp` | One file per `events` check, linked with `../events/build/libevents.a` |
-| `tools/acc_*.py` | One module per `tools` check; they drive `tools/text/cli.py` and `events/build/event_cli` and write only to a temporary folder outside the checkout |
-| `core/support.*`, `events/support.*`, `tools/common.py` | Shared helpers |
+| `game/acc_*.cpp` | One file per check of the game's saves and field data, linked with `../game/build/libgame.a` and both libraries; they load `game/data` and write saves only to a temporary folder outside the checkout |
+| `tools/acc_*.py` | One module per other `tools` check; they drive `tools/text/cli.py` and `events/build/event_cli` and write only to a temporary folder outside the checkout |
+| `core/support.*`, `events/support.*`, `game/support.*`, `tools/common.py` | Shared helpers |
 | `harness/` | The check registry and the `--list` / `--run` entry point both C++ binaries share |
-| `dump/` | `record_dump` (built three ways for ACC-BAT-15) and `save_probe` (the save payloads for ACC-SAV-01 to ACC-SAV-04: every truncation and every byte flipped with each bit mask) |
+| `dump/` | `record_dump`, built three ways for ACC-BAT-15 |
 | `scripts/` | `spec.py` (spec parser), `check_spec.py`, `run.py` (the runner) and `report.py` |
 
 ## Add a check
@@ -49,7 +51,7 @@ A check that is automatable but has no test FAILs, and so does a test whose cite
 1. Find the check's row in `docs/spec/acceptance.md`: its ID, its Verifies column and where it runs.
 2. Add one file named after the ID:
 	* `core`: `core/acc_bat_21.cpp` with `ACC_CHECK(acc_bat_21, "ACC-BAT-21", "BAT-xxx, BAT-yyy") { ... }`.
-	* `events`: the same under `events/`.
+	* `events`: the same under `events/`; a check that needs the game: the same under `game/`.
 	* `tools`: `tools/acc_txt_07.py` with `ID`, `VERIFIES` and `run(ctx)`.
 3. Cite exactly the requirement IDs the Verifies column expands to, in the same order; the runner compares them.
 4. Exercise the behavior through the library's public API or the tool's command line. Report with:

@@ -237,8 +237,12 @@ TEST(autoBattleStopsOnItsRules) {
 }
 
 TEST(scriptedEndReturnsToTheWinBranch) {
-	GameData d = test::data();
-	d.config.scriptedEnds["warden"] = {rules::ScriptedEndKind::SurviveRounds, 1, -1};
+	std::string script;
+	CHECK(readFile("data/events/bell_cove.ev", script));
+	const std::string plain = "\tbattle warden\n";
+	CHECK(script.find(plain) != std::string::npos);
+	script.replace(script.find(plain), plain.size(), "\tbattle warden until survive 1\n");
+	GameData d = test::withScript("events/bell_cove.ev", script);
 	Session s(d, SessionOptions());
 	test::placeParty(s, "bell_cove", "bell_front", Facing::East);
 	s.interact();
@@ -270,6 +274,6 @@ TEST(fieldTechniquesAndItemsGoThroughCore) {
 	CHECK(!s.useAbility("medic", "spark", "fighter").empty());
 	CHECK(!s.useAbility("mystic", "mend", "fighter").empty());
 	s.world().items["clear_gel"] = 1;
-	CHECK_EQ(s.useItem("clear_gel", "fighter"), std::string("Clear Gel would have no effect."));
+	CHECK_EQ(s.render(s.useItem("clear_gel", "fighter")), std::string("Clear Gel would have no effect."));
 	CHECK_EQ(s.world().items["clear_gel"], 1);
 }

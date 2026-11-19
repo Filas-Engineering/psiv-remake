@@ -1,6 +1,5 @@
 {
 	"id": "tidewater",
-	"name": "Tidewater Landing",
 	"kind": "town",
 	"encounter_mode": "visible",
 	"step_ms": 250,

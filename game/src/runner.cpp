@@ -62,6 +62,12 @@ void Runner::report(const std::string& problem) {
 	}
 }
 
+void Runner::report(const rules::Message& refusal) {
+	if (!refusal.empty()) {
+		error(session_.render(refusal));
+	}
+}
+
 std::string Runner::prompt() const {
 	return std::string(toString(session_.mode())) + "> ";
 }
@@ -90,7 +96,7 @@ std::string Runner::battleName(int index) const {
 }
 
 void Runner::printEvents(const std::vector<rules::Event>& events) {
-	const rules::TextTable& text = session_.data().text;
+	const rules::TextTable& text = session_.language().text;
 	auto name = [&](const std::string& id) { return session_.displayName(id); };
 	for (const rules::Event& e : events) {
 		switch (e.type) {
@@ -249,7 +255,7 @@ void Runner::finishBattleAuto() {
 void Runner::status() {
 	const World& w = session_.world();
 	const Area* a = session_.area();
-	print("Mode " + std::string(toString(session_.mode())) + ", " + (a ? a->name : std::string("-")) + " (" + std::to_string(w.position.x) + "," +
+	print("Mode " + std::string(toString(session_.mode())) + ", " + (a ? session_.displayName(a->id) : std::string("-")) + " (" + std::to_string(w.position.x) + "," +
 		std::to_string(w.position.y) + ") facing " + toString(w.facing) + ", play time " + clock(w.playTimeMs) + ".");
 	for (const std::string& id : w.lineup) {
 		const rules::PartyMember* m = w.member(id);
@@ -312,8 +318,7 @@ bool Runner::walkTo(Cell goal) {
 			}
 		}
 		const std::string startArea = w.area;
-		const std::string problem = session_.walk(dir);
-		if (!problem.empty()) {
+		if (!session_.walk(dir).empty()) {
 			// A visible enemy in the way during the grace period: let the moment pass.
 			session_.update(session_.data().config.tickMs);
 		}
@@ -390,7 +395,7 @@ bool Runner::execute(const std::string& rawLine) {
 		session_.quitToTitle();
 	} else if (parseFacing(cmd, facing) && (w.size() == 1 || (w.size() == 2 && toInt(w[1], count)))) {
 		for (int i = 0; i < count; ++i) {
-			const std::string problem = session_.walk(facing);
+			const rules::Message problem = session_.walk(facing);
 			if (!problem.empty()) {
 				report(problem);
 				break;
@@ -536,7 +541,11 @@ bool Runner::execute(const std::string& rawLine) {
 			auto shortName = shortNames.find(w[1]);
 			Profile profile = session_.profile();
 			const std::string problem = setProfileValue(profile, shortName == shortNames.end() ? w[1] : shortName->second, w[2]);
-			report(problem.empty() ? session_.setProfile(profile) : problem);
+			if (problem.empty()) {
+				report(session_.setProfile(profile));
+			} else {
+				report(problem);
+			}
 		}
 	} else if (cmd == "status") {
 		status();

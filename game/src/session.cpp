@@ -34,6 +34,29 @@ bool rangeHolds(const FlagRange& range, const World& world) {
 	return (range.after.empty() || world.flag(range.after)) && (range.until.empty() || !world.flag(range.until));
 }
 
+rules::Message refusal(const char* key, std::vector<std::string> params = {}) {
+	return {std::string("game.refuse.") + key, std::move(params)};
+}
+
+// The data check makes sure an enemy_defeated end names an enemy of the encounter; its first position counts.
+rules::ScriptedEnd scriptedEnd(const events::BattleRequest& request, const rules::Database& db) {
+	rules::ScriptedEnd end;
+	if (request.end == events::BattleEndKind::survive_rounds) {
+		end.kind = rules::ScriptedEndKind::SurviveRounds;
+		end.rounds = request.end_rounds;
+	} else if (request.end == events::BattleEndKind::enemy_defeated) {
+		const rules::Encounter* encounter = db.encounter(request.encounter);
+		for (std::size_t i = 0; encounter && i < encounter->enemies.size(); ++i) {
+			if (encounter->enemies[i].enemy == request.end_enemy) {
+				end.kind = rules::ScriptedEndKind::EnemyDefeated;
+				end.enemySlot = static_cast<int>(i);
+				break;
+			}
+		}
+	}
+	return end;
+}
+
 rules::Opening toOpening(events::BattleOpening opening) {
 	switch (opening) {
 	case events::BattleOpening::party_first: return rules::Opening::PartyFirst;
@@ -56,6 +79,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.bought",
 		"game.chest_empty",
 		"game.clear_recorded",
+		"game.dropped",
 		"game.equipped",
 		"game.event_cannot_resume",
 		"game.event_damaged",
@@ -80,6 +104,55 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.reason.area_entry",
 		"game.reason.before_battle",
 		"game.reason.event_end",
+		"game.refuse.blocked",
+		"game.refuse.buy_one",
+		"game.refuse.carry_cap",
+		"game.refuse.equip_menu_only",
+		"game.refuse.in_the_way",
+		"game.refuse.interact_field_only",
+		"game.refuse.items_menu_only",
+		"game.refuse.load_title",
+		"game.refuse.menu_cannot_open",
+		"game.refuse.menu_field_only",
+		"game.refuse.name_length",
+		"game.refuse.new_game_title",
+		"game.refuse.no_answer",
+		"game.refuse.no_auto_macro",
+		"game.refuse.no_battle",
+		"game.refuse.no_choice",
+		"game.refuse.no_control_act",
+		"game.refuse.no_control_move",
+		"game.refuse.no_macro",
+		"game.refuse.no_menu",
+		"game.refuse.no_money",
+		"game.refuse.no_name_entry",
+		"game.refuse.no_retry",
+		"game.refuse.no_save",
+		"game.refuse.no_shop",
+		"game.refuse.no_slot",
+		"game.refuse.nobody_talks",
+		"game.refuse.not_bought",
+		"game.refuse.not_enough_held",
+		"game.refuse.not_sold",
+		"game.refuse.nothing_there",
+		"game.refuse.nothing_worn",
+		"game.refuse.nowhere_rest",
+		"game.refuse.pick_option",
+		"game.refuse.profile_not_written",
+		"game.refuse.save_damaged",
+		"game.refuse.save_failed",
+		"game.refuse.save_in_event",
+		"game.refuse.save_unknown_area",
+		"game.refuse.save_where",
+		"game.refuse.saving_disabled",
+		"game.refuse.sell_one",
+		"game.refuse.settings_in_battle",
+		"game.refuse.slot_unreadable",
+		"game.refuse.talk_field_only",
+		"game.refuse.tech_menu_only",
+		"game.refuse.unknown_difficulty",
+		"game.refuse.unknown_language",
+		"game.refuse.walk_field_only",
 		"game.rest_no_money",
 		"game.rested",
 		"game.revived",
@@ -141,7 +214,7 @@ public:
 		s_.battleSource_ = BattleSource::Event;
 		s_.battleHandle_ = handle;
 		s_.battleEnemyId_ = 0;
-		const std::string error = s_.startBattle(request.encounter, toOpening(request.opening), request.escape_allowed, request.defeat_handled);
+		const std::string error = s_.startBattle(request.encounter, toOpening(request.opening), request.escape_allowed, request.defeat_handled, scriptedEnd(request, s_.data_.db));
 		if (!error.empty()) {
 			// Encounters are checked when the data loads, so this only happens if the party is empty.
 			s_.warn("battle '" + request.encounter + "' could not start: " + error);
@@ -177,7 +250,7 @@ public:
 		state.kind = HandleKind::Menu;
 		state.done = true;
 		const events::Handle handle = s_.newHandle(state);
-		const std::string problem = s_.payRest(point);
+		const rules::Message problem = s_.payRest(point);
 		if (!problem.empty()) {
 			s_.emit(OutputKind::Notice, "game.rest_no_money");
 		}
@@ -377,19 +450,27 @@ std::string Session::text(const std::string& key, std::vector<std::string> param
 	return render({key, std::move(params)});
 }
 
+const LanguageTables& Session::language() const {
+	return data_.language(profile_.textLanguage);
+}
+
 std::string Session::render(const rules::Message& message) const {
 	std::vector<std::string> params;
 	for (const std::string& p : message.params) {
 		params.push_back(displayName(p));
 	}
-	return events::render_names(rules::formatText(data_.text, message.key, params), data_.glossary,
-		events::name_set_for(profile_.showShippedNames, profile_.textLanguage));
+	return events::render_names(rules::formatText(language().text, message.key, params), data_.glossary,
+		events::name_set_for(profile_.showShippedNames, language().code));
 }
 
 std::string Session::scriptText(const events::Text& text) const {
 	std::string out;
-	events::resolve_text(text, data_.strings, out);
-	return events::render_names(out, data_.glossary, events::name_set_for(profile_.showShippedNames, profile_.textLanguage));
+	events::resolve_text(text, language().strings, out);
+	return events::render_names(out, data_.glossary, events::name_set_for(profile_.showShippedNames, language().code));
+}
+
+std::string Session::stringText(const std::string& id) const {
+	return scriptText({true, id});
 }
 
 std::string Session::displayName(const std::string& id) const {
@@ -401,9 +482,8 @@ std::string Session::displayName(const std::string& id) const {
 	if (const rules::CharacterDef* c = db.character(id)) {
 		return c->name;
 	}
-	auto speaker = data_.text.find("speaker." + id);
-	if (speaker != data_.text.end()) {
-		return speaker->second;
+	if (language().strings.find("speaker." + id)) {
+		return stringText("speaker." + id);
 	}
 	if (const rules::AbilityDef* a = db.ability(id)) {
 		return a->name;
@@ -420,22 +500,25 @@ std::string Session::displayName(const std::string& id) const {
 	if (const rules::EquipmentDef* e = db.equipmentPiece(id)) {
 		return e->name;
 	}
-	if (const Area* a = data_.area(id)) {
-		return a->name;
+	if (data_.area(id)) {
+		return text("area." + id);
 	}
 	return id;
 }
 
-std::string Session::setProfile(const Profile& profile) {
+rules::Message Session::setProfile(const Profile& profile) {
+	if (std::none_of(data_.languages.begin(), data_.languages.end(), [&](const LanguageTables& l) { return l.code == profile.textLanguage; })) {
+		return refusal("unknown_language", {profile.textLanguage});
+	}
 	profile_ = profile;
 	if (!store_) {
-		return "";
+		return {};
 	}
 	std::string error;
 	if (!writeFileAtomic(store_->profilePath(), serializeProfile(profile_), error)) {
-		return "the profile was not written: " + error;
+		return refusal("profile_not_written", {error});
 	}
-	return "";
+	return {};
 }
 
 events::Handle Session::newHandle(HandleState state) {
@@ -498,12 +581,12 @@ void Session::refreshJournal(bool announce) {
 		}
 		world_.jobs[job.id] = *next;
 		if (announce) {
-			emit(OutputKind::Notice, std::string("game.job.") + toString(*next), {text(job.title)});
+			emit(OutputKind::Notice, std::string("game.job.") + toString(*next), {stringText(job.title)});
 		}
 	}
 	for (const EncyclopediaEntry& entry : data_.journal.encyclopedia) {
 		if (world_.flag(entry.flag) && world_.unlocked.insert(entry.id).second && announce) {
-			emit(OutputKind::Notice, "game.unlocked", {text(entry.title)});
+			emit(OutputKind::Notice, "game.unlocked", {stringText(entry.title)});
 		}
 	}
 }
@@ -512,13 +595,13 @@ QuestLog Session::questLog() const {
 	QuestLog log;
 	for (const Objective& o : data_.journal.objectives) {
 		if (rangeHolds(o.range, world_)) {
-			log.objective = text(o.text);
+			log.objective = stringText(o.text);
 		}
 	}
 	for (const Job& job : data_.journal.jobs) {
 		auto state = world_.jobs.find(job.id);
 		if (state != world_.jobs.end()) {
-			log.jobs.push_back({job.id, text(job.title), state->second});
+			log.jobs.push_back({job.id, stringText(job.title), state->second});
 		}
 	}
 	return log;
@@ -528,7 +611,7 @@ std::vector<EncyclopediaView> Session::encyclopedia() const {
 	std::vector<EncyclopediaView> out;
 	for (const EncyclopediaEntry& entry : data_.journal.encyclopedia) {
 		if (world_.unlocked.count(entry.id)) {
-			out.push_back({entry.id, text(entry.title), text(entry.text)});
+			out.push_back({entry.id, stringText(entry.title), stringText(entry.text)});
 		}
 	}
 	return out;
@@ -536,9 +619,9 @@ std::vector<EncyclopediaView> Session::encyclopedia() const {
 
 // Title
 
-std::string Session::newGame() {
+rules::Message Session::newGame() {
 	if (mode() != Mode::Title) {
-		return "a new game starts from the title screen";
+		return refusal("new_game_title");
 	}
 	const GameConfig& c = data_.config;
 	world_ = World();
@@ -576,53 +659,53 @@ std::string Session::newGame() {
 	enterArea(c.startArea, c.startMarker);
 	world_.facing = c.startFacing;
 	settleField();
-	return "";
+	return {};
 }
 
-std::string Session::continueGame() {
+rules::Message Session::continueGame() {
 	if (!store_) {
-		return "saving is disabled";
+		return refusal("saving_disabled");
 	}
 	const std::string slot = store_->latest();
 	if (slot.empty()) {
-		return "there is no save to continue";
+		return refusal("no_save");
 	}
 	return load(slot);
 }
 
-std::string Session::load(const std::string& slot) {
+rules::Message Session::load(const std::string& slot) {
 	retryCount_ = 0;
 	retrySlot_.clear();
 	std::string text;
 	if (!store_ || !store_->read(slot, text)) {
-		return "cannot read save slot '" + slot + "'";
+		return refusal("slot_unreadable", {slot});
 	}
 	return loadText(text, slot);
 }
 
-std::string Session::retryBattle() {
+rules::Message Session::retryBattle() {
 	if (!canRetry()) {
-		return "there is no battle to retry";
+		return refusal("no_retry");
 	}
 	const std::string slot = retrySlot_;
 	std::string text;
 	if (!store_->read(slot, text)) {
-		return "cannot read save slot '" + slot + "'";
+		return refusal("slot_unreadable", {slot});
 	}
 	++retryCount_;
 	return loadText(text, slot);
 }
 
-std::string Session::loadText(const std::string& text, const std::string& slot) {
+rules::Message Session::loadText(const std::string& text, const std::string& slot) {
 	if (mode() != Mode::Title) {
-		return "saves load from the title screen";
+		return refusal("load_title");
 	}
 	rules::Result<SaveFile> save = parseSave(text);
 	if (!save.ok()) {
-		return "save slot '" + slot + "' cannot be loaded: " + save.error;
+		return refusal("save_damaged", {slot, save.error});
 	}
 	if (!data_.area(save.value->world.area)) {
-		return "save slot '" + slot + "' is in unknown area '" + save.value->world.area + "'";
+		return refusal("save_unknown_area", {slot, save.value->world.area});
 	}
 	dropEvent();
 	battle_.reset();
@@ -643,13 +726,13 @@ std::string Session::loadText(const std::string& text, const std::string& slot) 
 	pacing_.enterArea(a->id, a->kind == AreaKind::Dungeon);
 	emit(OutputKind::Notice, "game.loaded", {slot});
 	if (save.value->midEvent.empty()) {
-		return "";
+		return {};
 	}
 	events::SaveState state;
 	std::string error;
 	if (!events::save_state_from_text(save.value->midEvent, state)) {
 		emit(OutputKind::Warning, "game.event_damaged");
-		return "";
+		return {};
 	}
 	modes_.transition(Mode::Event);
 	interpreter_ = std::make_unique<events::Interpreter>(data_.program, *host_);
@@ -659,12 +742,12 @@ std::string Session::loadText(const std::string& text, const std::string& slot) 
 		warn(error);
 		dropEvent();
 		modes_.transition(Mode::Field);
-		return "";
+		return {};
 	}
 	resumedSlot_ = slot;
 	pumpEvent(0);
 	resumedSlot_.clear();
-	return "";
+	return {};
 }
 
 void Session::quitToTitle() {
@@ -819,12 +902,12 @@ void Session::settleField() {
 	}
 }
 
-std::string Session::walk(Facing direction) {
+rules::Message Session::walk(Facing direction) {
 	if (mode() != Mode::Field) {
-		return "you can only walk in the field";
+		return refusal("walk_field_only");
 	}
 	if (!world_.playerControl) {
-		return "you cannot move right now";
+		return refusal("no_control_move");
 	}
 	const Area& a = *area();
 	const Cell start = world_.position;
@@ -832,60 +915,60 @@ std::string Session::walk(Facing direction) {
 	const bool enemyThere = std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; });
 	if (!a.walkable(target) && !enemyThere) {
 		world_.facing = direction;
-		return "the way is blocked";
+		return refusal("blocked");
 	}
 	const std::string startArea = world_.area;
 	for (int guard = 0; guard < 1000; ++guard) {
 		update(data_.config.tickMs, {true, direction});
 		if (mode() != Mode::Field || world_.position != start || world_.area != startArea) {
-			return "";
+			return {};
 		}
 		if (world_.graceMs == 0 && std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; }) && !leaderBump(world_, target)) {
-			return "something is in the way";
+			return refusal("in_the_way");
 		}
 	}
-	return "the way is blocked";
+	return refusal("blocked");
 }
 
-std::string Session::interact() {
+rules::Message Session::interact() {
 	if (mode() != Mode::Field) {
-		return "there is nothing to interact with here";
+		return refusal("interact_field_only");
 	}
 	if (!world_.playerControl) {
-		return "you cannot act right now";
+		return refusal("no_control_act");
 	}
 	const Area& a = *area();
 	const Cell target = stepFrom(world_.position, world_.facing);
 	if (const Hook* hook = a.hookAt(target, HookTrigger::Interact)) {
 		if (!hookHolds(*hook, world_)) {
-			return "there is no answer";
+			return refusal("no_answer");
 		}
 		startEvent(hook->event);
-		return "";
+		return {};
 	}
 	if (const Chest* chest = a.chestAt(target)) {
 		openChest(*chest);
-		return "";
+		return {};
 	}
 	if (const Shop* shop = a.shopAt(target)) {
 		modes_.transition(Mode::Shop);
 		shopId_ = shop->id;
 		emit(OutputKind::Notice, "game.shop_open");
-		return "";
+		return {};
 	}
 	if (const RestPoint* rest = a.restAt(target)) {
 		modes_.transition(Mode::Menu);
 		menuKind_ = MenuKind::Inn;
 		innId_ = rest->id;
 		emit(OutputKind::Notice, "game.inn_offer", {std::to_string(rest->cost)});
-		return "";
+		return {};
 	}
-	return "there is nothing there";
+	return refusal("nothing_there");
 }
 
-std::string Session::partyTalk() {
+rules::Message Session::partyTalk() {
 	if (mode() != Mode::Field || interpreter_) {
-		return "party talk is only available in the field";
+		return refusal("talk_field_only");
 	}
 	const TalkSet* best = nullptr;
 	int bestScore = -1;
@@ -905,10 +988,10 @@ std::string Session::partyTalk() {
 		if (std::find(world_.lineup.begin(), world_.lineup.end(), line.speaker) == world_.lineup.end()) {
 			continue;
 		}
-		output_.push_back({OutputKind::Line, {line.text, {}}, displayName(line.speaker) + ": " + text(line.text)});
+		output_.push_back({OutputKind::Line, {line.text, {}}, displayName(line.speaker) + ": " + stringText(line.text)});
 		spoke = true;
 	}
-	return spoke ? "" : "nobody has anything to say";
+	return spoke ? rules::Message() : refusal("nobody_talks");
 }
 
 void Session::openChest(const Chest& chest) {
@@ -1019,20 +1102,20 @@ const events::ChoiceRequest* Session::choice() const {
 	return &it->second.choice;
 }
 
-std::string Session::choose(int index) {
+rules::Message Session::choose(int index) {
 	const events::ChoiceRequest* request = choice();
 	if (!request) {
-		return "there is no choice to make";
+		return refusal("no_choice");
 	}
 	const int count = request->yes_no ? 2 : static_cast<int>(request->options.size());
 	if (index < 0 || index >= count) {
-		return "pick an option from 0 to " + std::to_string(count - 1);
+		return refusal("pick_option", {std::to_string(count - 1)});
 	}
 	HandleState& state = handles_[choiceHandle_];
 	state.done = true;
 	state.result = index;
 	pumpEvent(0);
-	return "";
+	return {};
 }
 
 bool Session::canSkip() const {
@@ -1072,13 +1155,13 @@ void Session::startFieldBattle(const EncounterStart& start) {
 	battleSource_ = start.enemyId ? BattleSource::Visible : BattleSource::Random;
 	battleEnemyId_ = start.enemyId;
 	battleHandle_ = 0;
-	const std::string error = startBattle(start.encounter, start.opening, true, false);
+	const std::string error = startBattle(start.encounter, start.opening, true, false, rules::ScriptedEnd());
 	if (!error.empty()) {
 		warn("battle '" + start.encounter + "' could not start: " + error);
 	}
 }
 
-std::string Session::startBattle(const std::string& encounter, rules::Opening opening, bool escapeAllowed, bool defeatHasBranch) {
+std::string Session::startBattle(const std::string& encounter, rules::Opening opening, bool escapeAllowed, bool defeatHasBranch, const rules::ScriptedEnd& end) {
 	rules::BattleSetup setup;
 	setup.party = activeParty();
 	setup.inventory = world_.items;
@@ -1089,12 +1172,7 @@ std::string Session::startBattle(const std::string& encounter, rules::Opening op
 	setup.flags.escapeAllowed = setup.flags.escapeAllowed && escapeAllowed;
 	setup.flags.defeatHasBranch = defeatHasBranch;
 	setup.opening = opening;
-	if (battleSource_ == BattleSource::Event) {
-		auto end = data_.config.scriptedEnds.find(encounter);
-		if (end != data_.config.scriptedEnds.end()) {
-			setup.scriptedEnd = end->second;
-		}
-	}
+	setup.scriptedEnd = end;
 	setup.difficulty = world_.settings.difficulty;
 	setup.rewardMultiplier = world_.settings.rewardMultiplier;
 	streamBeforeBattle_ = world_.encounterStream.state();
@@ -1121,16 +1199,16 @@ std::string Session::startBattle(const std::string& encounter, rules::Opening op
 	return "";
 }
 
-std::string Session::setCommand(int actor, const rules::Command& command) {
+rules::Message Session::setCommand(int actor, const rules::Command& command) {
 	if (!battle_) {
-		return "there is no battle";
+		return refusal("no_battle");
 	}
-	return render(battle_->setCommand(actor, command));
+	return battle_->setCommand(actor, command);
 }
 
-std::string Session::applyMacro(const std::string& name, std::vector<rules::MacroStepResult>* results) {
+rules::Message Session::applyMacro(const std::string& name, std::vector<rules::MacroStepResult>* results) {
 	if (!battle_) {
-		return "there is no battle";
+		return refusal("no_battle");
 	}
 	for (const rules::Macro& m : world_.macros) {
 		if (m.name == name) {
@@ -1138,27 +1216,27 @@ std::string Session::applyMacro(const std::string& name, std::vector<rules::Macr
 			if (results) {
 				*results = std::move(r);
 			}
-			return "";
+			return {};
 		}
 	}
-	return "no macro named '" + name + "'";
+	return refusal("no_macro", {name});
 }
 
-std::string Session::startAuto() {
+rules::Message Session::startAuto() {
 	if (!battle_) {
-		return "there is no battle";
+		return refusal("no_battle");
 	}
 	if (world_.autoMacro.empty()) {
-		return "no auto-battle macro is set";
+		return refusal("no_auto_macro");
 	}
 	for (const rules::Macro& m : world_.macros) {
 		if (m.name == world_.autoMacro) {
 			battle_->startAuto(m);
 			emit(OutputKind::Notice, "game.auto_on", {m.name});
-			return "";
+			return {};
 		}
 	}
-	return "no macro named '" + world_.autoMacro + "'";
+	return refusal("no_macro", {world_.autoMacro});
 }
 
 void Session::cancelAuto() {
@@ -1230,6 +1308,10 @@ void Session::finishBattle() {
 		money = rewards.currency;
 		world_.money = std::min(data_.config.moneyCap, world_.money + money);
 		emit(OutputKind::Notice, outcome == rules::Outcome::Victory ? "game.victory" : "game.scripted_end", {std::to_string(experience), std::to_string(money)});
+		for (const auto& [id, n] : rewards.items) {
+			giveThing(id, n);
+			emit(OutputKind::Notice, "game.dropped", {std::to_string(n), id});
+		}
 		for (std::size_t i = 0; i < state.size() && i < rewards.memberExperience.size(); ++i) {
 			rules::PartyMember* member = world_.member(state[i].characterId);
 			const rules::LevelUp up = rules::grantExperience(*member, data_.db, rewards.memberExperience[i]);
@@ -1360,20 +1442,20 @@ void Session::writeClearRecord() {
 	emit(OutputKind::Notice, "game.clear_recorded");
 }
 
-std::string Session::saveManual(const std::string& slot) {
+rules::Message Session::saveManual(const std::string& slot) {
 	const bool fieldMenu = mode() == Mode::Menu && menuKind_ == MenuKind::Field && modes_.returnMode() == Mode::Field;
 	const bool prompt = mode() == Mode::Menu && menuKind_ == MenuKind::SavePrompt;
 	if (!fieldMenu && !prompt) {
-		return "saving is only allowed from the field menu or a save prompt";
+		return refusal("save_where");
 	}
 	if (fieldMenu && interpreter_) {
-		return "you cannot save while an event runs";
+		return refusal("save_in_event");
 	}
 	if (!store_) {
-		return "saving is disabled";
+		return refusal("saving_disabled");
 	}
 	if (slot.compare(0, 7, "manual_") != 0 || !store_->validSlot(slot)) {
-		return "no manual save slot '" + slot + "'";
+		return refusal("no_slot", {slot});
 	}
 	SaveFile save = makeSave(false);
 	if (!options_.clock) {
@@ -1383,30 +1465,30 @@ std::string Session::saveManual(const std::string& slot) {
 	save.world.playerControl = true;
 	std::string error;
 	if (!store_->write(slot, serializeSave(save), error)) {
-		return error;
+		return refusal("save_failed", {error});
 	}
 	emit(OutputKind::Notice, "game.saved", {slot});
-	return "";
+	return {};
 }
 
 // Menus
 
-std::string Session::openMenu() {
+rules::Message Session::openMenu() {
 	if (mode() != Mode::Field) {
-		return "the menu opens from the field";
+		return refusal("menu_field_only");
 	}
 	if (!modes_.transition(Mode::Menu)) {
-		return "the menu cannot open now";
+		return refusal("menu_cannot_open");
 	}
 	menuKind_ = MenuKind::Field;
 	innId_.clear();
 	shopId_.clear();
-	return "";
+	return {};
 }
 
-std::string Session::closeMenu() {
+rules::Message Session::closeMenu() {
 	if (mode() != Mode::Menu && mode() != Mode::Shop) {
-		return "no menu is open";
+		return refusal("no_menu");
 	}
 	modes_.transition(modes_.returnMode());
 	finishScriptMenu();
@@ -1418,7 +1500,7 @@ std::string Session::closeMenu() {
 	if (mode() == Mode::Event) {
 		pumpEvent(0);
 	}
-	return "";
+	return {};
 }
 
 const Shop* Session::shop() const {
@@ -1429,47 +1511,47 @@ const RestPoint* Session::inn() const {
 	return menuKind() == MenuKind::Inn ? data_.rest(innId_) : nullptr;
 }
 
-std::string Session::buy(const std::string& id, int count) {
+rules::Message Session::buy(const std::string& id, int count) {
 	const Shop* s = shop();
 	if (!s) {
-		return "no shop is open";
+		return refusal("no_shop");
 	}
 	if (std::find(s->stock.begin(), s->stock.end(), id) == s->stock.end()) {
-		return "this shop does not sell '" + id + "'";
+		return refusal("not_sold", {id});
 	}
 	if (count < 1) {
-		return "buy at least one";
+		return refusal("buy_one");
 	}
 	const std::int64_t total = static_cast<std::int64_t>(data_.price(id)) * count;
 	if (total > world_.money) {
-		return "not enough money";
+		return refusal("no_money");
 	}
 	const std::map<std::string, int>& bag = data_.db.item(id) ? world_.items : world_.equipmentBag;
 	auto held = bag.find(id);
 	if ((held == bag.end() ? 0 : held->second) + count > data_.config.itemCap) {
-		return "you can carry at most " + std::to_string(data_.config.itemCap);
+		return refusal("carry_cap", {std::to_string(data_.config.itemCap)});
 	}
 	world_.money -= static_cast<int>(total);
 	giveThing(id, count);
 	emit(OutputKind::Notice, "game.bought", {std::to_string(count), id, std::to_string(total)});
-	return "";
+	return {};
 }
 
-std::string Session::sell(const std::string& id, int count) {
+rules::Message Session::sell(const std::string& id, int count) {
 	const Shop* s = shop();
 	if (!s) {
-		return "no shop is open";
+		return refusal("no_shop");
 	}
 	if (data_.price(id) < 0) {
-		return "the shop will not buy '" + id + "'";
+		return refusal("not_bought", {id});
 	}
 	if (count < 1) {
-		return "sell at least one";
+		return refusal("sell_one");
 	}
 	std::map<std::string, int>& bag = data_.db.item(id) ? world_.items : world_.equipmentBag;
 	auto held = bag.find(id);
 	if (held == bag.end() || held->second < count) {
-		return "you do not have that many (worn equipment cannot be sold)";
+		return refusal("not_enough_held");
 	}
 	const std::int64_t value = static_cast<std::int64_t>(data_.price(id)) * s->sellPercent / 100 * count;
 	held->second -= count;
@@ -1478,14 +1560,14 @@ std::string Session::sell(const std::string& id, int count) {
 	}
 	world_.money = static_cast<int>(std::min<std::int64_t>(data_.config.moneyCap, world_.money + value));
 	emit(OutputKind::Notice, "game.sold", {std::to_string(count), id, std::to_string(value)});
-	return "";
+	return {};
 }
 
 // Rest for the whole roster, active or not (FLD-034). A null point is a free rest.
-std::string Session::payRest(const RestPoint* point) {
+rules::Message Session::payRest(const RestPoint* point) {
 	const int cost = point ? point->cost : 0;
 	if (world_.money < cost) {
-		return "not enough money";
+		return refusal("no_money");
 	}
 	world_.money -= cost;
 	for (rules::PartyMember& m : world_.roster) {
@@ -1495,20 +1577,20 @@ std::string Session::payRest(const RestPoint* point) {
 	if (autosaveReason_.empty()) {
 		autosaveReason_ = kAfterRest;
 	}
-	return "";
+	return {};
 }
 
-std::string Session::rest() {
+rules::Message Session::rest() {
 	const RestPoint* r = inn();
 	if (!r) {
-		return "there is nowhere to rest";
+		return refusal("nowhere_rest");
 	}
-	const std::string problem = payRest(r);
+	const rules::Message problem = payRest(r);
 	if (!problem.empty()) {
 		return problem;
 	}
 	closeMenu();
-	return "";
+	return {};
 }
 
 void Session::reportFieldUse(const std::vector<rules::Event>& events, const std::vector<rules::PartyMember>& party) {
@@ -1524,41 +1606,41 @@ void Session::reportFieldUse(const std::vector<rules::Event>& events, const std:
 	}
 }
 
-std::string Session::useItem(const std::string& item, const std::string& member) {
+rules::Message Session::useItem(const std::string& item, const std::string& member) {
 	if (menuKind() != MenuKind::Field) {
-		return "items are used from the field menu";
+		return refusal("items_menu_only");
 	}
 	std::vector<rules::PartyMember> party = activeParty();
 	int target = -1;
 	if (!member.empty()) {
 		auto it = std::find(world_.lineup.begin(), world_.lineup.end(), member);
 		if (it == world_.lineup.end()) {
-			return render({"field.unknown_member", {member}});
+			return {"field.unknown_member", {member}};
 		}
 		target = static_cast<int>(it - world_.lineup.begin());
 	}
 	const rules::FieldUse use = rules::useItemOutsideBattle(data_.db, party, world_.items, item, target);
 	if (!use.rejection.empty()) {
-		return render(use.rejection);
+		return use.rejection;
 	}
 	auto held = world_.items.find(item);
 	if (held != world_.items.end() && held->second <= 0) {
 		world_.items.erase(held);
 	}
 	if (std::any_of(use.events.begin(), use.events.end(), [](const rules::Event& e) { return e.type == rules::EventType::ItemHadNoEffect; })) {
-		return text("game.no_effect", {item});
+		return {"game.no_effect", {item}};
 	}
 	for (std::size_t i = 0; i < party.size(); ++i) {
 		*world_.member(world_.lineup[i]) = party[i];
 	}
 	emit(OutputKind::Notice, "game.used", {item});
 	reportFieldUse(use.events, party);
-	return "";
+	return {};
 }
 
-std::string Session::useAbility(const std::string& user, const std::string& ability, const std::string& member) {
+rules::Message Session::useAbility(const std::string& user, const std::string& ability, const std::string& member) {
 	if (menuKind() != MenuKind::Field) {
-		return "techniques are used from the field menu";
+		return refusal("tech_menu_only");
 	}
 	auto index = [&](const std::string& id) {
 		auto it = std::find(world_.lineup.begin(), world_.lineup.end(), id);
@@ -1567,80 +1649,80 @@ std::string Session::useAbility(const std::string& user, const std::string& abil
 	const int userIndex = index(user);
 	const int target = member.empty() ? -1 : index(member);
 	if (userIndex < 0 || (!member.empty() && target < 0)) {
-		return render({"field.unknown_member", {userIndex < 0 ? user : member}});
+		return {"field.unknown_member", {userIndex < 0 ? user : member}};
 	}
 	std::vector<rules::PartyMember> party = activeParty();
 	const rules::FieldUse use = rules::useAbilityOutsideBattle(data_.db, party, userIndex, ability, target);
 	if (!use.rejection.empty()) {
-		return render(use.rejection);
+		return use.rejection;
 	}
 	for (std::size_t i = 0; i < party.size(); ++i) {
 		*world_.member(world_.lineup[i]) = party[i];
 	}
 	emit(OutputKind::Notice, "game.used_ability", {user, ability});
 	reportFieldUse(use.events, party);
-	return "";
+	return {};
 }
 
-std::string Session::equip(const std::string& member, const std::string& equipment) {
+rules::Message Session::equip(const std::string& member, const std::string& equipment) {
 	if (menuKind() != MenuKind::Field) {
-		return "equipment is changed from the field menu";
+		return refusal("equip_menu_only");
 	}
 	rules::PartyMember* m = world_.member(member);
 	if (!m) {
-		return render({"equip.unknown_character", {member}});
+		return {"equip.unknown_character", {member}};
 	}
 	const rules::Message refused = rules::equip(*m, data_.db, world_.equipmentBag, equipment);
 	if (!refused.empty()) {
-		return render(refused);
+		return refused;
 	}
 	emit(OutputKind::Notice, "game.equipped", {member, equipment});
-	return "";
+	return {};
 }
 
-std::string Session::unequip(const std::string& member, rules::EquipSlot slot) {
+rules::Message Session::unequip(const std::string& member, rules::EquipSlot slot) {
 	if (menuKind() != MenuKind::Field) {
-		return "equipment is changed from the field menu";
+		return refusal("equip_menu_only");
 	}
 	rules::PartyMember* m = world_.member(member);
 	if (!m) {
-		return render({"equip.unknown_character", {member}});
+		return {"equip.unknown_character", {member}};
 	}
 	auto worn = m->equipment.find(slot);
 	if (worn == m->equipment.end()) {
-		return "nothing is worn there";
+		return refusal("nothing_worn");
 	}
 	const std::string piece = worn->second;
 	rules::unequip(*m, data_.db, world_.equipmentBag, slot);
 	emit(OutputKind::Notice, "game.unequipped", {member, piece});
-	return "";
+	return {};
 }
 
-std::string Session::enterName(const std::string& name) {
+rules::Message Session::enterName(const std::string& name) {
 	if (menuKind() != MenuKind::NameEntry) {
-		return "no name entry is open";
+		return refusal("no_name_entry");
 	}
 	const std::size_t first = name.find_first_not_of(' ');
 	const std::size_t last = name.find_last_not_of(' ');
 	const std::string trimmed = first == std::string::npos ? "" : name.substr(first, last - first + 1);
 	if (trimmed.empty() || trimmed.size() > kMaxNameLength ||
 		std::any_of(trimmed.begin(), trimmed.end(), [](unsigned char c) { return c < 0x20 || c == 0x7F; })) {
-		return "a name has 1 to " + std::to_string(kMaxNameLength) + " characters";
+		return refusal("name_length", {std::to_string(kMaxNameLength)});
 	}
 	emit(OutputKind::Notice, "game.named", {displayName(nameMember_), trimmed});
 	world_.memberNames[nameMember_] = trimmed;
 	return closeMenu();
 }
 
-std::string Session::setSettings(const Settings& settings) {
+rules::Message Session::setSettings(const Settings& settings) {
 	if (mode() == Mode::Battle) {
-		return "settings change outside battle";
+		return refusal("settings_in_battle");
 	}
 	if (!data_.db.difficulty(settings.difficulty)) {
-		return "unknown difficulty '" + settings.difficulty + "'";
+		return refusal("unknown_difficulty", {settings.difficulty});
 	}
 	world_.settings = settings;
-	return "";
+	return {};
 }
 
 }

@@ -3,7 +3,7 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-from . import codes, db, delivery, diff, eventfmt, glossary, l10n, names, outputs, rename, review, sheet, stats, typos, workload
+from . import assets, codes, db, delivery, diff, eventfmt, glossary, l10n, names, outputs, rename, review, sheet, stats, typos, workload
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -53,6 +53,13 @@ def load_glossary(path, strict=True):
 	return entries
 
 
+def load_portraits(path):
+	try:
+		return assets.load_portraits(path)
+	except assets.AssetError as e:
+		raise Failure(str(e), e.problems)
+
+
 def open_db(path):
 	try:
 		return db.connect(path)
@@ -72,6 +79,15 @@ def cmd_import(args):
 		print(f"  in the delivery, not in {args.reference_lang}: {len(missing)}{': ' + ', '.join(missing) if missing else ''}")
 		print(f"  in {args.reference_lang}, not in the delivery: {len(extra)}{': ' + ', '.join(extra) if extra else ''}")
 		reference = (args.reference_lang, ref_messages, Path(args.reference).name)
+	if args.portraits:
+		portraits = load_portraits(args.portraits)
+		texts = [(m.id, m.text) for m in messages]
+		if reference:
+			texts += [(f"{args.reference_lang} {m.id}", m.text) for m in reference[1]]
+		problems = assets.portrait_problems(texts, portraits)
+		if problems:
+			raise Failure(f"{len(problems)} portrait code(s) name no asset in {args.portraits} (TXT-021)", problems)
+		print(f"{args.portraits}: every portrait code names one of {len(portraits)} assets")
 	if args.check:
 		return EXIT_OK
 	path = outputs.check(args.db, args.force)
@@ -221,8 +237,11 @@ def cmd_apply(args):
 
 def cmd_verify(args):
 	entries = load_glossary(args.glossary)
+	portraits = load_portraits(args.portraits) if args.portraits else None
 	with closing(open_db(args.db)) as conn:
 		verdict = review.verify(conn, args.sheet, entries, args.delivery)
+		if portraits is not None:
+			verdict.problems.extend(assets.portrait_problems(assets.db_texts(conn), portraits))
 		lines = [
 			f"verify {args.db}: {'PASS' if verdict.ok else 'FAIL'}",
 			f"  messages {verdict.messages}  changed {verdict.changed}  approved changes {len(verdict.changes)}"
@@ -231,6 +250,8 @@ def cmd_verify(args):
 		]
 		if args.delivery:
 			lines.append(f"  locked original checked against {args.delivery}")
+		if portraits is not None:
+			lines.append(f"  portrait codes checked against {args.portraits} ({len(portraits)} assets)")
 		lines += [f"problem: {p}" for p in verdict.problems]
 		emit("\n".join(lines) + "\n", args.out, args.force, [args.db, args.glossary, *args.sheet])
 		if args.change_list:
@@ -282,6 +303,32 @@ def cmd_workload(args):
 		report = workload.collect(conn, entries, args.target or [])
 	emit(workload.render(report, args.format), args.out, args.force, [args.db, args.glossary])
 	return EXIT_FAIL if report["unknown_name_ids"] else EXIT_OK
+
+
+def cmd_glyphs(args):
+	if not (args.db or args.strings or args.text):
+		raise Failure("glyphs needs --db, --strings or --text")
+	try:
+		glyphs = assets.load_glyphs(args.glyphs)
+		by_id = {e.id: e for e in load_glossary(args.glossary)} if args.glossary else None
+		langs = set(args.lang or [])
+		texts = []
+		registry = codes.Registry.default()
+		inputs = [args.glyphs, *(args.strings or []), *(args.text or [])]
+		if args.db:
+			inputs.append(args.db)
+			with closing(open_db(args.db)) as conn:
+				registry = db.registry(conn)
+				texts += assets.db_texts(conn, langs)
+		for path in args.strings or []:
+			texts += assets.strings_texts(path, langs)
+		for path in args.text or []:
+			texts += assets.text_table_texts(path)
+	except assets.AssetError as e:
+		raise Failure(str(e), e.problems)
+	report = assets.check_glyphs(glyphs, texts, registry, by_id)
+	emit(assets.render_glyph_report(report), args.out, args.force, inputs)
+	return EXIT_FAIL if report.missing else EXIT_OK
 
 
 def cmd_export_strings(args):
@@ -365,6 +412,7 @@ def parser():
 	c.add_argument("--check", action="store_true", help="validate only, write nothing")
 	c.add_argument("--reference", help="second-language delivery keyed by the same message IDs (TXT-032)")
 	c.add_argument("--reference-lang", help="language code of --reference, for example ja")
+	c.add_argument("--portraits", help="portrait asset list; a portrait code naming no asset fails the import (TXT-021)")
 
 	c = command("stats", cmd_stats, "Counts per kind, speaker, tree, map and control code.")
 	c.add_argument("--db", required=True)
@@ -429,6 +477,16 @@ def parser():
 	c.add_argument("--delivery", help="also check the locked original against this delivery")
 	c.add_argument("--out", help="report path (default: stdout)")
 	c.add_argument("--change-list", help="write the dialogue change list CSV here")
+	c.add_argument("--portraits", help="also check every portrait code in every language against this asset list (TXT-021)")
+
+	c = command("glyphs", cmd_glyphs, "Report characters the text uses that the font's glyph list lacks (TXT-033).")
+	c.add_argument("--glyphs", required=True, help="the font's glyph list")
+	c.add_argument("--db", help="line database: English, the reference language and stored translations")
+	c.add_argument("--strings", action="append", help="event script string table; repeat for several")
+	c.add_argument("--text", action="append", help='{"text": {...}} table as core and game use; repeat for several')
+	c.add_argument("--lang", action="append", help="only this language; repeat for several (default: all)")
+	c.add_argument("--glossary", help="also check shipped and restored names behind name tokens")
+	c.add_argument("--out", help="report path (default: stdout)")
 
 	c = command("render", cmd_render, "Print the text with name tokens shown as shipped or restored names.")
 	c.add_argument("--db", required=True)

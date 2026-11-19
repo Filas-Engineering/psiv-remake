@@ -43,6 +43,6 @@ ACC_CHECK(acc_evt_02, "ACC-EVT-02", "EVT-001, EVT-009") {
 		t.expect(interpreter.status() == Status::error, "a flee result in a battle with no flee branch did not stop the event");
 	}
 
-	t.note(std::to_string(sources.size()) + " scripts under events/samples compile against the registry with no warning (no game scripts exist yet); " + std::to_string(battles) +
+	t.note(std::to_string(sources.size()) + " scripts under events/samples compile against the registry with no warning (game/data/events is not covered by this check; the game compiles it strictly against its own registry when it loads); " + std::to_string(battles) +
 		" battle(s) all have a Victory branch, escape only with a flee branch, game-over unless a lose branch exists");
 }

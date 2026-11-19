@@ -36,3 +36,25 @@ cove.campfire.embers = Someone left a fire banked under the cliff. The embers st
 cove.campfire.ask = Rest by the fire? It costs a little driftwood.
 cove.campfire.rested = The warmth draws the ache out of everyone.
 cove.campfire.declined = The embers settle back into the ash.
+
+# Text the game shows itself, not a script: speaker names, the quest log, the encyclopedia and party talk.
+speaker.dockhand = Dockhand
+speaker.guide = Harbor Guide
+speaker.peddler = Reed Peddler
+
+objective.meet_guide = Find the harbor guide by the noticeboard.
+objective.reach_cove = Follow the reed path east to Bell Cove and find what rings the bell.
+objective.report_back = Tell the harbor guide the bell is quiet.
+objective.done = Enjoy the quiet nights at Tidewater Landing.
+
+job.lost_cache = The dockhand's lost crate
+
+codex.tidewater.title = Tidewater Landing
+codex.tidewater.text = A ferry town built on pilings. Its noticeboard is the only post office for three bays.
+codex.bell_warden.title = {name:bell_warden}
+codex.bell_warden.text = A clockwork keeper wound to guard the cove bell. Nobody remembers who wound it.
+
+talk.reeds.1 = Every step out here squelches. I am counting them.
+talk.reeds.2 = Count the bites instead. I am the one who has to dress them.
+talk.chapter_one.1 = A bell that rings by itself. I would like to meet whoever pulls the rope.
+talk.after_bell.1 = Supper at the harbor, then. I hear the guide promised.

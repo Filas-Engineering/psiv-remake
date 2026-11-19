@@ -1,6 +1,6 @@
 # Text tools
 
-Command-line tools for the script: import and validate a delivery with an optional Japanese reference, count the localization workload, manage the name glossary and share it with the event scripts, propose and review the rename and typo passes, prove the locked text was changed only as approved, show the text with shipped or restored names, export localization tables and event string tables, check translations, and compare two deliveries.
+Command-line tools for the script: import and validate a delivery with an optional Japanese reference and portrait asset list, count the localization workload, check font coverage, manage the name glossary and share it with the event scripts, propose and review the rename and typo passes, prove the locked text was changed only as approved, show the text with shipped or restored names, export localization tables and event string tables, check translations, and compare two deliveries.
 
 The rules come from the scope ("Script") and [dialogue-and-text.md](../../docs/spec/dialogue-and-text.md): dialogue is locked as shipped (TXT-002). It changes only where it mentions a renamed name, or to fix a plain typo, and every such change is listed (TXT-003, TXT-004).
 
@@ -15,7 +15,7 @@ python3 -I -m unittest discover -s tools/text/tests
 
 The tools read the delivery and write every database, sheet and report to paths you give. Nothing has a default output path. Script text must never be committed, so the tools refuse any output path inside this checkout that git does not ignore, and refuse to overwrite a file unless you pass `--force`. Keep real deliveries and everything made from them in `source-material/` or another ignored folder.
 
-`examples/placeholder/` holds a small invented script (a harbor town, a guide, a traveler, made-up item names) for trying the commands. It is not from any game. `delivery_ja/` is an invented Japanese reference for it; it lacks one English message and has one extra, to show the report.
+`examples/placeholder/` holds a small invented script (a harbor town, a guide, a traveler, made-up item names) for trying the commands. It is not from any game. `delivery_ja/` is an invented Japanese reference for it; it lacks one English message and has one extra, to show the report. `portraits.txt` is a placeholder portrait asset list, and `glyphs.txt` and `glyphs_ja.txt` are placeholder glyph lists for a Latin and a Japanese font.
 
 ## Input format
 
@@ -84,12 +84,14 @@ The rename pass writes a renamed name as a name token, so the game shows the res
 ### import
 
 ```bash
-cli.py import --delivery DIR --db script.db [--codes codes.json] [--reference DIR_JA --reference-lang ja] [--check] [--force]
+cli.py import --delivery DIR --db script.db [--codes codes.json] [--reference DIR_JA --reference-lang ja] [--portraits portraits.txt] [--check] [--force]
 ```
 
 Validates the delivery and builds an SQLite line database. Each message keeps `original`, the locked shipped text, and `current`, the working text. A trigger rejects any update to `original`. `--check` validates without writing.
 
 `--reference` reads a second delivery in another language, in the same format and keyed by the same message IDs, and stores its text beside the English (TXT-032). It is validated the same way and locked the same way. The command lists the IDs that only one of the two deliveries has; that does not fail the import. The language code must not be `en`.
+
+`--portraits` names the portrait asset list (TXT-021): one portrait ID per line, `#` starting a comment line, as in `examples/placeholder/portraits.txt`. Every `{portrait:ID}` code in the delivery and the reference must name an asset in it, or the import fails and lists each code that names none. The list is not stored; pass it to `verify` too.
 
 A database made before the reference table existed has schema version 1 and is refused; import the delivery again.
 
@@ -161,10 +163,22 @@ The new database records each sheet's SHA-256 and the changes it made.
 ### verify
 
 ```bash
-cli.py verify --db final.db --glossary glossary.csv --sheet renames.csv --sheet typos.csv [--delivery DIR] [--out report.txt] [--change-list changes.csv]
+cli.py verify --db final.db --glossary glossary.csv --sheet renames.csv --sheet typos.csv [--delivery DIR] [--portraits portraits.txt] [--out report.txt] [--change-list changes.csv]
 ```
 
-Proves that the current text is the locked original plus the approved rows of the given sheets and nothing else. It replays the sheets in order from `original`, with the same checks as apply, and compares the result with `current`. It fails (exit 1) on any unapproved edit, a sheet whose contents changed since it was applied, a missing or extra sheet, or a glossary change that no longer matches an applied rename: a changed ID or shipped name, a removed entry or a removed sign-off. A changed restored name needs no new pass, because the token resolves it at display time; it does change a menu label written as literal text, so that fails. `--delivery` also checks `original` against the delivered text. `--change-list` writes the dialogue change list (TXT-003): message ID, change ID, kind, old, new, reason, and the full original and current line.
+Proves that the current text is the locked original plus the approved rows of the given sheets and nothing else. It replays the sheets in order from `original`, with the same checks as apply, and compares the result with `current`. It fails (exit 1) on any unapproved edit, a sheet whose contents changed since it was applied, a missing or extra sheet, or a glossary change that no longer matches an applied rename: a changed ID or shipped name, a removed entry or a removed sign-off. A changed restored name needs no new pass, because the token resolves it at display time; it does change a menu label written as literal text, so that fails. `--delivery` also checks `original` against the delivered text. `--portraits` also fails on any portrait code that names no asset in the current English, the reference language or a stored translation. `--change-list` writes the dialogue change list (TXT-003): message ID, change ID, kind, old, new, reason, and the full original and current line.
+
+### glyphs
+
+```bash
+cli.py glyphs --glyphs glyphs.txt [--db final.db] [--strings en.strings]... [--text en.json]... [--lang en]... [--glossary glossary.csv] [--out report.txt]
+```
+
+Font coverage (TXT-033): reports every character the text uses that the font's glyph list lacks, with its code point, how many texts use it and the first one, and fails (exit 1) when any is missing. A glyph list has one entry per line: `U+XXXX`, a range `U+XXXX-U+YYYY`, or a run of characters that are each a glyph; `#` starts a comment line. Spaces are listed as `U+0020`.
+
+- `--db` checks the current English, the reference language and every stored translation; `--strings` an event script string table (`events/FORMAT.md`); `--text` a `{"text": {...}}` table as core and the game use, whose `{0}` parameters count as runtime values. Give at least one; repeat `--strings` and `--text`.
+- `--lang` keeps only those languages from the database and the string tables (a `--text` table has no language and is always checked), so each font is checked against the languages it serves.
+- Characters are counted as the player reads them: control codes, line breaks, page pauses and runtime values are not glyphs. With `--glossary`, every name token is checked with both its shipped and its restored name; without it, a name token counts as a runtime value.
 
 ### render
 
@@ -230,7 +244,8 @@ Compares two deliveries by message ID and reports added, removed and changed mes
 4. `apply` the approved sheet to a new database.
 5. `typos` on the new database. The reviewer fills `new` where it is blank, edits the `reason` if needed, and approves.
 6. `apply` the typo sheet to another new database.
-7. `verify` with every applied sheet in the order applied, the glossary and the delivery. Publish the change list it writes.
-8. `render` to read the result both ways, `workload` to plan, and `export` or `export-strings` for translators and event scripts.
+7. `verify` with every applied sheet in the order applied, the glossary, the delivery and the portrait list. Publish the change list it writes.
+8. `glyphs` against each font's glyph list, per language.
+9. `render` to read the result both ways, `workload` to plan, and `export` or `export-strings` for translators and event scripts.
 
 Each pass is proposed from the database the previous pass produced, because a sheet is tied to the exact text it was proposed from. To redo a pass, edit the sheet and apply it again to the earlier database.

@@ -28,6 +28,8 @@ struct Rewards {
 	int currency = 0;
 	// Experience each party member gets, by party index, after the experience split.
 	std::vector<int> memberExperience;
+	// Item drops. The reward multiplier and the difficulty reward scale do not apply to them (SAV-023).
+	Inventory items;
 };
 
 // Why auto-battle turned itself off (BAT-104).
@@ -90,6 +92,7 @@ public:
 	Macro lastRoundAsMacro(const std::string& name) const;
 
 	// Victory: every enemy's rewards. Scripted end: the rewards of the enemies that fell. Otherwise none.
+	// Drops are drawn once, from the battle's generator, when the battle ends.
 	Rewards rewards() const;
 	// Hit points, technique points, skill uses, equipment and the statuses that persist outside battle.
 	std::vector<PartyMember> partyState() const;
@@ -118,6 +121,8 @@ private:
 	Attacker attackerOf(int actor) const;
 	const StatusDef* statusWith(int actor, StatusAction action) const;
 	bool countsAsDown(int index) const;
+	void drawDrops();
+	void passDamageToCrew(int user, int dealt, std::vector<Event>& out);
 	void fillMissingCommands();
 	Command forcedCommand(int actor, const StatusDef& status);
 	Command chooseEnemyCommand(int actor);
@@ -163,6 +168,10 @@ private:
 	std::vector<int> lastTurnOrder_;
 	std::vector<const ComboRecipe*> combosLongestFirst_;
 	Inventory inventory_;
+	Inventory drops_;
+	// Vehicle battles: the vehicle's combatant index, or -1.
+	int vehicleIndex_ = -1;
+	int crewDamagePercent_ = 0;
 	Outcome outcome_ = Outcome::Ongoing;
 	int round_ = 0;
 	int partyCount_ = 0;

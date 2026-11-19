@@ -87,6 +87,10 @@ enum class BattleResult : int { win = 0, lose = 1, flee = 2 };
 
 enum class BattleOpening : int { normal = 0, party_first = 1, enemy_first = 2 };
 
+// A scripted end (`until` on `battle`): the battle also ends after a number of
+// rounds, or when a named enemy falls. The host reports it as a win.
+enum class BattleEndKind : int { none = 0, survive_rounds = 1, enemy_defeated = 2 };
+
 // What a `battle` block asks of the host's battle rules. Both options follow
 // from which sections the script wrote (see README.md, "Battles").
 struct BattleRequest {
@@ -98,6 +102,11 @@ struct BattleRequest {
 	// game-over flow and the host must never report BattleResult::lose.
 	bool defeat_handled = false;
 	BattleOpening opening = BattleOpening::normal;
+	BattleEndKind end = BattleEndKind::none;
+	// survive_rounds: the rounds the party must last.
+	int end_rounds = 0;
+	// enemy_defeated: the enemy (by its game ID) whose fall ends the battle.
+	std::string end_enemy;
 };
 
 struct RestRequest {

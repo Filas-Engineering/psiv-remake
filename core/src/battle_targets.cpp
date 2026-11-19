@@ -7,7 +7,7 @@ namespace rules {
 std::vector<int> Battle::livingFoes(int actor) const {
 	std::vector<int> result;
 	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
-		if (combatants_[i].side != combatants_[actor].side && combatants_[i].alive()) {
+		if (combatants_[i].side != combatants_[actor].side && combatants_[i].alive() && !combatants_[i].aboard) {
 			result.push_back(i);
 		}
 	}
@@ -17,7 +17,7 @@ std::vector<int> Battle::livingFoes(int actor) const {
 std::vector<int> Battle::allies(int actor) const {
 	std::vector<int> result;
 	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
-		if (combatants_[i].side == combatants_[actor].side) {
+		if (combatants_[i].side == combatants_[actor].side && !combatants_[i].aboard) {
 			result.push_back(i);
 		}
 	}
@@ -40,7 +40,7 @@ int Battle::primaryFoe(int user, int requested) const {
 // A single ally target that is gone moves to the user. A fallen-ally target that is back up cancels.
 std::vector<int> Battle::resolveTargets(int user, Targeting targeting, int requested, bool revives) const {
 	const bool validIndex = requested >= 0 && requested < static_cast<int>(combatants_.size());
-	const bool requestedAlly = validIndex && combatants_[requested].side == combatants_[user].side;
+	const bool requestedAlly = validIndex && combatants_[requested].side == combatants_[user].side && !combatants_[requested].aboard;
 	std::vector<int> result;
 	switch (targeting) {
 	case Targeting::Self:
