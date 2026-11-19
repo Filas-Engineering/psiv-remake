@@ -69,18 +69,20 @@ ACC_CHECK(acc_bat_10, "ACC-BAT-10", "BAT-051, BAT-052, BAT-053, BAT-054") {
 			without.resolveRound();
 			const std::vector<int>& order = with.lastTurnOrder();
 
-			// Party turns run in macro order, in the slots the party's initiative rolls earned.
+			// Party turns run in macro order.
 			const std::vector<int> acted = support::actingOrder(events);
 			t.expect(subsequence(order, true, with) == macroOrder, macro.name + " seed " + std::to_string(seed) + ": party turns are not in macro order");
 			t.expect(subsequence(acted, true, with) == macroOrder, macro.name + ": party actions did not execute in macro order");
 
-			// Every enemy keeps the exact turn it has without the macro, so it can act between two macro steps.
+			// Enemies keep their order among themselves, and none acts later than it does without the macro.
 			const std::vector<int>& plain = without.lastTurnOrder();
-			bool sameSlots = plain.size() == order.size();
-			for (std::size_t i = 0; sameSlots && i < order.size(); ++i) {
-				sameSlots = with.isParty(order[i]) ? without.isParty(plain[i]) : order[i] == plain[i];
+			t.expect(subsequence(order, false, with) == subsequence(plain, false, without), macro.name + " seed " + std::to_string(seed) + ": enemy order differs from the run without the macro");
+			for (std::size_t i = 0; i < order.size(); ++i) {
+				if (!with.isParty(order[i])) {
+					const std::size_t was = static_cast<std::size_t>(std::find(plain.begin(), plain.end(), order[i]) - plain.begin());
+					t.expect(i <= was, macro.name + " seed " + std::to_string(seed) + ": the macro made an enemy act later");
+				}
 			}
-			t.expect(sameSlots, macro.name + " seed " + std::to_string(seed) + ": an enemy's turn moved because of the macro");
 			const auto first = std::find(order.begin(), order.end(), macroOrder.front());
 			const auto last = std::find(order.begin(), order.end(), macroOrder.back());
 			if (first != order.end() && last != order.end() && static_cast<std::size_t>(last - first) >= macroOrder.size()) {
@@ -137,5 +139,5 @@ ACC_CHECK(acc_bat_10, "ACC-BAT-10", "BAT-051, BAT-052, BAT-053, BAT-054") {
 		}
 	}
 
-	t.note(std::to_string(rounds) + " rounds with the data macros: every member's command comes from the macro, party turns run in macro order, every enemy keeps the turn it has without the macro (an enemy acted between macro steps in " + std::to_string(interrupted) + " rounds); absent, fallen and disabled entries are skipped; an unaffordable entry is kept, marked with a cost issue and cancelled at execution with not_enough_tp; targets are rules");
+	t.note(std::to_string(rounds) + " rounds with the data macros: every member's command comes from the macro, party turns run in macro order, enemies keep their order and never act later than without the macro (an enemy acted between macro steps in " + std::to_string(interrupted) + " rounds); absent, fallen and disabled entries are skipped; an unaffordable entry is kept, marked with a cost issue and cancelled at execution with not_enough_tp; targets are rules");
 }

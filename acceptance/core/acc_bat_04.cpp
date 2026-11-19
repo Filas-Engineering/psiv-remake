@@ -6,16 +6,14 @@ using namespace rules;
 
 namespace {
 
-// Sets every combatant's agility so the given actors act first, in this order, and everyone else after.
+// Sets every combatant's agility so the two given actors act first, in this order, and everyone else after.
+// The largest roll is under half the highest agility, so 400 always beats 200 and 200 always beats 0.
 void actInOrder(Battle& battle, const std::vector<int>& actors) {
 	for (int i = 0; i < static_cast<int>(battle.combatants().size()); ++i) {
-		battle.combatant(i).stats.agility = 1;
+		battle.combatant(i).stats.agility = 0;
 	}
-	int agility = 1000;
-	for (int actor : actors) {
-		battle.combatant(actor).stats.agility = agility;
-		agility -= 200;
-	}
+	battle.combatant(actors[0]).stats.agility = 400;
+	battle.combatant(actors[1]).stats.agility = 200;
 }
 
 const Event* find(const std::vector<Event>& events, EventType type, int actor) {

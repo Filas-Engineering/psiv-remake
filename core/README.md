@@ -63,7 +63,7 @@ Player-facing results are `Message` values: a stable key and parameters (ids or 
 1. The first round's events open with `BattleStarted`, then a `Message` for a Party first or Enemy first opening.
 2. The side that lost the opening (Party first: enemies; Enemy first: the party) gets no commands for the first `surprise_rounds` rounds.
 3. Every other living combatant gets a command. A status whose action is `forced` replaces it with a basic attack on a random target from its pool (BAT-012), drawn in combatant index order. Defenders take half damage for the whole round. `CommandsLocked` lists every command and the macro used.
-4. Turn order: each combatant rolls an initiative of agility plus a random number from 0 to the spread. Ties go to the party, then to the lower index. Members set by a macro take the party's turns in step order: the turns stay where the initiative rolls put them, and enemies keep theirs. So an enemy can act between two macro steps and break a combination. `OrderResolved` lists the order.
+4. Turn order: each combatant rolls an initiative of agility plus a random number from 0 to just under half the highest agility among those acting; a combatant with 0 agility gets no roll. Ties go to the party, then to the lower index. A macro then takes its members in pairs, in step order: a member who would act before the member listed ahead of it is moved to act right after that member, and one already acting later stays put. So an enemy can stay between two macro steps and break a combination, and listing the slowest member first keeps the others directly behind it. `OrderResolved` lists the order.
 5. At each queue position the battle first checks the combo recipes, longest first. If the next N queued actions are abilities from N different living party members, every one can be used, nobody's turn is blocked by a status, and they match a recipe (in any order, or in the listed order for an `ordered` recipe, with each tied component used by its character), then all N turns are replaced by the combo. Every participant pays its own cost. The combo's formulas use the average of the participants' strength, mental, dexterity and critical chance. Any other action between them, from an enemy or an ally, breaks the chain. The first time a recipe fires the log records it and the battle emits `ComboDiscovered`.
 6. Otherwise the actor takes a normal turn. Every action is validated when it runs (BAT-015); a failed check is one `ActionCancelled` with a `cancel` reason:
    * An actor that fell earlier in the round: `actor_unable` with status `defeated`. A `cannot_act` status rolls for recovery, then cancels with `actor_unable` and that status.
@@ -342,7 +342,7 @@ Every formula is a **placeholder to be tuned**. The math is in `src/formulas.cpp
 
 | What | Formula (placeholder) |
 | --- | --- |
-| Initiative | `agility + roll`, where roll is 0 to `8 + agility / 4` |
+| Initiative | `agility + roll`, where roll is 0 to `highest agility / 2 - 1`; 0 when agility is 0 |
 | Hit chance (physical) | `clamp(85 + attacker dexterity - target agility, 40, 100) * (100 - target evasion) / 100` percent. Evasion (data) comes from stats and equipment |
 | Critical chance | `clamp(attacker critical + effect critical, 0, 100)` percent. Both inputs are data; items never land a critical |
 | Critical damage | `max(1, damage * critical_damage_percent / 100)` (data, rules.json) |
@@ -376,7 +376,7 @@ Every formula is a **placeholder to be tuned**. The math is in `src/formulas.cpp
 
 ## Changes a host must make
 
-Latest: rules version 5. A macro no longer acts as one block: its members take the party's turns in step order and enemies keep theirs, so `replayBattle` refuses records of rules version 4.
+Latest: rules version 6. Turn order follows the original as read from the community disassembly: the roll is 0 to just under half the highest agility, and a macro only delays a member who would act before the member listed ahead of it. `replayBattle` refuses records of rules versions 4 and 5.
 
 The round before: rules version 4, event schema 5, record format 4. `parseRecord` still reads format 3, but `replayBattle` refuses records of event schema 4, since event type names changed. The data's content hash is unchanged.
 

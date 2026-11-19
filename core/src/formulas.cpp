@@ -4,12 +4,12 @@
 
 namespace rules::formulas {
 
-int initiativeSpread(int agility) {
-	return 8 + agility / 4;
+int initiativeSpread(int highestAgility) {
+	return highestAgility / 2 > 0 ? highestAgility / 2 - 1 : 0;
 }
 
 int initiative(int agility, int roll) {
-	return agility + roll;
+	return agility > 0 ? agility + roll : 0;
 }
 
 int hitChance(int attackerDexterity, int defenderAgility, int defenderEvasion) {

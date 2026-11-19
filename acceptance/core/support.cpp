@@ -121,8 +121,14 @@ std::vector<int> expectedOrder(const Battle& battle, Rng& rng, int* ties) {
 		if (!c.alive() || battle.command(i).kind == CommandKind::None) {
 			continue;
 		}
-		const int agility = c.effective(Stat::Agility);
-		slots.push_back({i, formulas::initiative(agility, rng.range(0, formulas::initiativeSpread(agility)))});
+		slots.push_back({i, c.effective(Stat::Agility)});
+	}
+	int highest = 0;
+	for (const Slot& slot : slots) {
+		highest = std::max(highest, slot.initiative);
+	}
+	for (Slot& slot : slots) {
+		slot.initiative = formulas::initiative(slot.initiative, rng.range(0, formulas::initiativeSpread(highest)));
 	}
 	std::sort(slots.begin(), slots.end(), [&battle](const Slot& a, const Slot& b) {
 		if (a.initiative != b.initiative) {

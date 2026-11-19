@@ -14,16 +14,16 @@ TEST(seededBattleHasAFixedOutcome) {
 	Battle battle = makeBattle(data(), setup, &log);
 	const std::vector<Event> events = playToEnd(battle, 40);
 	CHECK(battle.outcome() == Outcome::Victory);
-	CHECK_EQ(battle.round(), 4);
+	CHECK_EQ(battle.round(), 6);
 	std::vector<int> hp;
 	for (int i = 0; i < battle.partyCount(); ++i) {
 		hp.push_back(battle.combatant(i).hp);
 	}
-	CHECK_EQ(hp, (std::vector<int>{70, 38, 45, 16, 56}));
+	CHECK_EQ(hp, (std::vector<int>{37, 38, 22, 15, 40}));
 	CHECK_EQ(battle.rewards().experience, 72);
 	CHECK_EQ(battle.rewards().currency, 59);
 	CHECK(log.isDiscovered("storm_spark"));
-	CHECK_EQ(ofType(events, EventType::Revived).size(), std::size_t(1));
+	CHECK_EQ(ofType(events, EventType::Revived).size(), std::size_t(2));
 	CHECK(events.back().type == EventType::BattleEnded && events.back().outcome == Outcome::Victory);
 	CHECK(battle.resolveRound().empty());
 }
@@ -290,8 +290,8 @@ TEST(hardSeededBattleHasAFixedOutcome) {
 	setup.rewardMultiplier = RewardMultiplier::X1_5;
 	Battle battle = makeBattle(data(), setup, &log);
 	playToEnd(battle, 50);
-	CHECK(battle.outcome() == Outcome::Defeat);
-	CHECK_EQ(battle.round(), 13);
-	CHECK(battle.gameOver());
+	CHECK(battle.outcome() == Outcome::Victory);
+	CHECK_EQ(battle.round(), 5);
+	CHECK(!battle.gameOver());
 	CHECK(log.isDiscovered("storm_spark"));
 }

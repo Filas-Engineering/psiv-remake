@@ -21,9 +21,14 @@ std::vector<int> Battle::computeTurnOrder() {
 		if (!combatants_[i].alive() || commands_[i].kind == CommandKind::None) {
 			continue;
 		}
-		const int agility = combatants_[i].effective(Stat::Agility);
-		const int roll = rng_.range(0, formulas::initiativeSpread(agility));
-		slots.push_back({i, formulas::initiative(agility, roll)});
+		slots.push_back({i, combatants_[i].effective(Stat::Agility)});
+	}
+	int highest = 0;
+	for (const Slot& slot : slots) {
+		highest = std::max(highest, slot.initiative);
+	}
+	for (Slot& slot : slots) {
+		slot.initiative = formulas::initiative(slot.initiative, rng_.range(0, formulas::initiativeSpread(highest)));
 	}
 	std::sort(slots.begin(), slots.end(), [this](const Slot& a, const Slot& b) {
 		if (a.initiative != b.initiative) {
@@ -45,21 +50,16 @@ std::vector<int> Battle::computeTurnOrder() {
 	}
 
 	std::vector<int> order;
-	if (block.empty()) {
-		for (const Slot& slot : slots) {
-			order.push_back(slot.actor);
-		}
-		return order;
-	}
-
-	// A macro fixes its members' order among themselves. Each turn stays where its
-	// initiative put it, so an enemy can act between two macro steps.
-	std::size_t next = 0;
 	for (const Slot& slot : slots) {
-		if (std::find(block.begin(), block.end(), slot.actor) != block.end()) {
-			order.push_back(block[next++]);
-		} else {
-			order.push_back(slot.actor);
+		order.push_back(slot.actor);
+	}
+	// A macro member who would act before the member listed ahead of it waits and acts right
+	// after that member. One already acting later stays put, with whoever is between them.
+	for (std::size_t k = 1; k < block.size(); ++k) {
+		const auto earlier = std::find(order.begin(), order.end(), block[k - 1]);
+		const auto later = std::find(order.begin(), order.end(), block[k]);
+		if (later < earlier) {
+			std::rotate(later, later + 1, earlier + 1);
 		}
 	}
 	return order;

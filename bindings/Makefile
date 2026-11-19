@@ -97,8 +97,8 @@ endif
 native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI)
 	./$(TESTS) --data $(GAME)/data --scratch $(BUILD)/scratch
 	rm -rf $(BUILD)/saves_cpp $(BUILD)/saves_c
-	$(GAME_CLI) --data $(GAME)/data --seed 7 --auto-battle --script $(SCRIPT) --saves $(BUILD)/saves_cpp > $(BUILD)/playthrough_cpp.txt
-	./$(PLAYTHROUGH) --data $(GAME)/data --seed 7 --auto-battle --script $(SCRIPT) --saves $(BUILD)/saves_c > $(BUILD)/playthrough_c.txt
+	$(GAME_CLI) --data $(GAME)/data --seed 3 --auto-battle --script $(SCRIPT) --saves $(BUILD)/saves_cpp > $(BUILD)/playthrough_cpp.txt
+	./$(PLAYTHROUGH) --data $(GAME)/data --seed 3 --auto-battle --script $(SCRIPT) --saves $(BUILD)/saves_c > $(BUILD)/playthrough_c.txt
 	cmp $(BUILD)/playthrough_c.txt $(BUILD)/playthrough_cpp.txt
 	cmp $(BUILD)/playthrough_c.txt $(GAME)/tests/expected/playthrough.txt
 	diff -r $(BUILD)/saves_c $(BUILD)/saves_cpp

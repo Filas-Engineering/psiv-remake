@@ -9,7 +9,8 @@ constexpr int kVarianceMin = 90;
 constexpr int kVarianceMax = 110;
 constexpr int kMaxLevel = 50;
 
-int initiativeSpread(int agility);
+// The largest roll in a round: just under half the highest agility among those acting.
+int initiativeSpread(int highestAgility);
 int initiative(int agility, int roll);
 int hitChance(int attackerDexterity, int defenderAgility, int defenderEvasion);
 int criticalChance(int attackerCritical, int effectBonus);

@@ -14,19 +14,23 @@ int position(const std::vector<int>& order, int actor) {
 	return static_cast<int>(std::find(order.begin(), order.end(), actor) - order.begin());
 }
 
-// Mystic always acts first and scout third-fastest; `between` (agility 60) lands between them.
+// The largest roll is under half the highest agility, so 400 always beats 200 and 200 always beats 0.
+// Mystic acts first. With nothing between, scout is next; otherwise `between` is, and scout waits with the rest.
 Database orderedData(const char* between) {
 	Database db = data();
 	for (auto& [id, character] : db.characters) {
-		character.base.agility = 1;
+		character.base.agility = 0;
 	}
-	db.enemies["gel_mite"].stats.agility = 1;
-	db.characters["mystic"].base.agility = 100;
-	db.characters["scout"].base.agility = 20;
+	for (auto& [id, enemy] : db.enemies) {
+		enemy.stats.agility = 0;
+	}
+	db.characters["mystic"].base.agility = 400;
 	if (std::string(between) == "gel_mite") {
-		db.enemies["gel_mite"].stats.agility = 60;
+		db.enemies["gel_mite"].stats.agility = 200;
 	} else if (*between) {
-		db.characters[between].base.agility = 60;
+		db.characters[between].base.agility = 200;
+	} else {
+		db.characters["scout"].base.agility = 200;
 	}
 	return db;
 }
@@ -124,7 +128,7 @@ TEST(longestRecipeWinsInsideAMacro) {
 
 TEST(macroComboFiresWhenNoEnemyActsBetweenItsSteps) {
 	Database db = data();
-	db.enemies["brass_warden"].stats.agility = 1;
+	db.enemies["brass_warden"].stats.agility = 0;
 	for (std::uint64_t seed = 1; seed <= 10; ++seed) {
 		Battle battle = makeBattle(db, {"brass_warden"}, seed);
 		battle.combatant(kFighter).hp = 20;
@@ -197,7 +201,7 @@ int knower(const Battle& battle, const std::string& ability, const std::vector<i
 
 TEST(everyShippedRecipeFiresFromAMacro) {
 	Database db = data();
-	db.enemies["brass_warden"].stats.agility = 1;
+	db.enemies["brass_warden"].stats.agility = 0;
 	CHECK_EQ(db.combos.size(), std::size_t(15));
 	for (const ComboRecipe& recipe : db.combos) {
 		ComboLog log;
@@ -262,8 +266,8 @@ TEST(aTiedComponentNeedsItsCharacter) {
 TEST(anOrderedRecipeNeedsItsOrder) {
 	for (bool gustFirst : {true, false}) {
 		Database db = orderedData("");
-		db.characters["mystic"].base.agility = gustFirst ? 20 : 100;
-		db.characters["scout"].base.agility = gustFirst ? 100 : 20;
+		db.characters["mystic"].base.agility = gustFirst ? 200 : 400;
+		db.characters["scout"].base.agility = gustFirst ? 400 : 200;
 		Battle battle = makeBattle(db, {"brass_warden"}, 6);
 		battle.combatant(kFirstEnemy).hp = 5000;
 		battle.setCommand(kMystic, Command::ability("ember", kFirstEnemy));

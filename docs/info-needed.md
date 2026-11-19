@@ -16,15 +16,15 @@ Deliver answers to `source-material/`, which git ignores. Nothing extracted from
 
 | Confidence | Items |
 |---|---|
-| High (5) | SAV-004, SAV-032, SAV-038, FLD-052, FLOW-012 |
-| Medium (12) | BAT-023, BAT-033, BAT-043, BAT-046, BAT-057, BAT-063, BAT-082, ENC-005, FLD-035, FLD-062, TXT-026, UI-016 |
+| High (7) | BAT-033, BAT-057, SAV-004, SAV-032, SAV-038, FLD-052, FLOW-012 |
+| Medium (10) | BAT-023, BAT-043, BAT-046, BAT-063, BAT-082, ENC-005, FLD-035, FLD-062, TXT-026, UI-016 |
 | Low (12) | BAT-014, BAT-016, BAT-072, BAT-093, BAT-105, BAT-141, ENC-024, ENC-035, SAV-035, SAV-036, FLD-074, FLOW-041 |
 | Nothing published (12) | BAT-005, BAT-102, ENC-036, ENC-041, FLD-022, FLD-041, FLD-043, FLOW-006, FLOW-033, EVT-007, EVT-061, TXT-006 |
 | Split (1) | SAV-031: the level cap is published, the curves and rewards are not |
 
 Many of the pages could only be read through search excerpts, so even the High rows need a check against the full page and the reference build.
 
-Where the published rule differs from what the spec proposes, the spec row now says so: BAT-013, BAT-020, BAT-052, BAT-103, ENC-030, SAV-002, SAV-003 and UI-003.
+Turn order and macro order (BAT-030, BAT-052) were read from the community disassembly and `core/` now follows them. Where the published rule differs from what the spec still proposes, the spec row says so: BAT-013, BAT-020, BAT-103, ENC-030, SAV-002, SAV-003 and UI-003.
 
 ## Data tables
 

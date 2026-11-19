@@ -73,7 +73,7 @@ Battle comboBattle(const Database& db, std::uint64_t seed) {
 	Battle battle = support::create(db, support::setup(db, {"brass_warden"}, seed, 6));
 	support::sturdy(battle, kFirst);
 	// Too slow to take a turn between two party members; the last part of the check covers that case.
-	battle.combatant(kFirst).stats.agility = 1;
+	battle.combatant(kFirst).stats.agility = 0;
 	for (int i = 0; i < battle.partyCount(); ++i) {
 		battle.combatant(i).hp = battle.combatant(i).stats.maxHp / 2;
 	}

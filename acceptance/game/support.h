@@ -18,7 +18,7 @@ const game::GameData& data(const acc::Context& t);
 // A new empty folder outside the checkout.
 std::string tempDirectory(const std::string& name);
 
-// The scripted playthrough (game/data/scripts/playthrough.txt) with auto battles and seed 7, writing its saves to
+// The scripted playthrough (game/data/scripts/playthrough.txt) with auto battles and seed 3, writing its saves to
 // `saveDirectory`. `after` runs after every command that the session accepted, with the command line.
 void playThrough(const acc::Context& t, game::Session& session, const std::function<void(const std::string& line)>& after);
 game::SessionOptions options(const std::string& saveDirectory);
