@@ -7,11 +7,18 @@ using namespace rules;
 
 namespace {
 
-// What each enemy chose this round: its ability (or basic attack) and target, as the stream shows it.
+// What each enemy chose in phase 2 (CommandsLocked) and how it ran, as the stream shows it.
 std::string enemyChoices(const std::vector<Event>& events, int partyCount) {
 	std::string out;
 	for (const Event& e : events) {
-		if ((e.type == EventType::ActionStarted || e.type == EventType::ActionFailed) && e.actor >= partyCount) {
+		if (e.type == EventType::CommandsLocked) {
+			for (const RecordedCommand& c : e.commands) {
+				if (c.actor >= partyCount) {
+					out += "locked " + std::to_string(c.actor) + ":" + toString(c.command.kind) + ":" + c.command.id + ">" + std::to_string(c.command.target) + " ";
+				}
+			}
+		}
+		if ((e.type == EventType::ActionStarted || e.type == EventType::ActionCancelled) && e.actor >= partyCount) {
 			out += std::to_string(e.actor) + ":" + toString(e.command) + ":" + e.ability + ">" + std::to_string(e.target) + " ";
 		}
 	}
@@ -52,5 +59,5 @@ ACC_CHECK(acc_bat_03, "ACC-BAT-03", "BAT-011") {
 			++compared;
 		}
 	}
-	t.note(std::to_string(compared) + " rounds across 3 enemy groups: enemy commands identical under two different party command sets");
+	t.note(std::to_string(compared) + " rounds across 3 enemy groups: enemy commands, as locked in phase 2 and as executed, identical under two different party command sets");
 }

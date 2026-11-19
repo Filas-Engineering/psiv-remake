@@ -13,10 +13,6 @@ const char* const kVersion1 = R"(event acc_cove skippable
 	say keeper "Take this, the path is steep."
 	var acc.cove_visits += 1
 	say keeper "Off you go."
-on skip
-	set acc.cove_entered
-	give acc_rope_coil
-	var acc.cove_visits += 1
 end
 )";
 
@@ -28,10 +24,6 @@ const char* const kVersion2 = R"(event acc_cove skippable
 	say keeper "Take this, the path is steep."
 	var acc.cove_visits += 1
 	say keeper "Off you go."
-on skip
-	set acc.cove_entered
-	give acc_rope_coil
-	var acc.cove_visits += 1
 end
 )";
 
@@ -45,10 +37,6 @@ say keeper "Mind the rocks."
 	say keeper "Take this, the path is steep."
 	var acc.cove_visits += 1   # counted once per visit
 	say keeper "Off you go."
-on skip
-	set acc.cove_entered
-	give acc_rope_coil
-	var acc.cove_visits += 1
 end
 )";
 

@@ -91,8 +91,7 @@ std::vector<int> actingOrder(const std::vector<Event>& events) {
 	for (const Event& e : events) {
 		switch (e.type) {
 		case EventType::ActionStarted:
-		case EventType::ActionFailed:
-		case EventType::ActionPrevented:
+		case EventType::ActionCancelled:
 		case EventType::EscapeAttempted:
 			order.push_back(e.actor);
 			break;
@@ -180,16 +179,29 @@ std::string apply(BattleState& state, const Event& e, int partyCount) {
 	CombatantState* target = at(e.target);
 	CombatantState* actor = at(e.actor);
 	const std::string type = toString(e.type);
+	// BAT-115: Damaged, Healed, ticks and revives carry the resulting hit points.
+	auto resulting = [&](const CombatantState& c) -> std::string {
+		if (e.hp != c.hp) {
+			return type + " says the target has " + std::to_string(e.hp) + " hp, applying the stream gives " + std::to_string(c.hp);
+		}
+		return "";
+	};
 	switch (e.type) {
+	case EventType::BattleStarted:
 	case EventType::RoundStarted:
+	case EventType::CommandsLocked:
+	case EventType::OrderResolved:
+	case EventType::Retargeted:
 	case EventType::ActionStarted:
-	case EventType::ActionFailed:
-	case EventType::ActionPrevented:
+	case EventType::ActionCancelled:
 	case EventType::ComboTriggered:
+	case EventType::ComboDiscovered:
 	case EventType::ItemHadNoEffect:
+	case EventType::Hit:
 	case EventType::Missed:
 	case EventType::Critical:
 	case EventType::StatusResisted:
+	case EventType::Message:
 	case EventType::RoundEnded:
 		return "";
 	case EventType::ResourceSpent:
@@ -215,28 +227,27 @@ std::string apply(BattleState& state, const Event& e, int partyCount) {
 			return type + " without a target";
 		}
 		target->hp -= e.amount;
-		return "";
+		return resulting(*target);
 	case EventType::Healed:
 		if (!target) {
 			return type + " without a target";
 		}
 		target->hp += e.amount;
-		return "";
+		return resulting(*target);
 	case EventType::Revived:
 		if (!target) {
 			return type + " without a target";
 		}
 		target->hp = e.amount;
 		target->statuses.erase(kDefeatedStatus);
-		return "";
+		return resulting(*target);
 	case EventType::StatusApplied:
 		if (!target) {
 			return type + " without a target";
 		}
 		target->statuses.insert(e.status);
 		return "";
-	case EventType::StatusCured:
-	case EventType::StatusExpired:
+	case EventType::StatusRemoved:
 		if (!target || !target->statuses.erase(e.status)) {
 			return type + " removes a status the target does not have";
 		}
@@ -257,7 +268,10 @@ std::string apply(BattleState& state, const Event& e, int partyCount) {
 			return type + " without a target";
 		}
 		target->hp = 0;
-		target->statuses = {kDefeatedStatus};
+		target->statuses.insert(kDefeatedStatus);
+		if (target->statuses.size() != 1) {
+			return type + " clears a status that got no StatusRemoved event";
+		}
 		target->modifiers.clear();
 		return "";
 	case EventType::EscapeAttempted:
@@ -311,6 +325,12 @@ PlayedBattle playRandomBattle(const Database& db, std::uint64_t seed, ComboLog& 
 		encounters.push_back(id);
 	}
 	const std::vector<std::string> difficulties = {"", "original", "hard"};
+	std::vector<std::string> carried;
+	for (const auto& [id, status] : db.statuses) {
+		if (status.persistsOutsideBattle) {
+			carried.push_back(id);
+		}
+	}
 
 	PlayedBattle played;
 	played.setup = setup(db, {}, seed, pick.range(1, 12));
@@ -318,6 +338,19 @@ PlayedBattle playRandomBattle(const Database& db, std::uint64_t seed, ComboLog& 
 	played.setup.difficulty = difficulties[pick.range(0, 2)];
 	played.setup.opening = static_cast<Opening>(pick.range(0, 2));
 	played.setup.rewardMultiplier = static_cast<RewardMultiplier>(pick.range(0, 2));
+	played.setup.flags.defeatHasBranch = pick.chance(50);
+	if (pick.chance(20)) {
+		played.setup.scriptedEnd.kind = ScriptedEndKind::SurviveRounds;
+		played.setup.scriptedEnd.rounds = pick.range(1, 4);
+	} else if (pick.chance(15)) {
+		played.setup.scriptedEnd.kind = ScriptedEndKind::EnemyDefeated;
+		played.setup.scriptedEnd.enemySlot = pick.range(0, static_cast<int>(played.setup.enemies.size()) - 1);
+	}
+	for (PartyMember& member : played.setup.party) {
+		if (!carried.empty() && pick.chance(10)) {
+			member.statuses.push_back({carried[pick.range(0, static_cast<int>(carried.size()) - 1)], pick.range(0, 3)});
+		}
+	}
 
 	Battle battle = create(db, played.setup, &log);
 	played.start = capture(battle);
@@ -325,9 +358,17 @@ PlayedBattle playRandomBattle(const Database& db, std::uint64_t seed, ComboLog& 
 	for (const auto& [id, item] : db.items) {
 		items.push_back(id);
 	}
+	if (!db.macros.empty() && pick.chance(15)) {
+		battle.startAuto(db.macros[pick.range(0, static_cast<int>(db.macros.size()) - 1)]);
+	}
 	const int total = static_cast<int>(battle.combatants().size());
 	while (battle.outcome() == Outcome::Ongoing && battle.round() < maxRounds) {
-		if (battle.sideActsNextRound(Side::Party)) {
+		battle.setPlayTime(static_cast<std::int64_t>(battle.round()) * 4000 + 1000);
+		if (battle.autoActive() && battle.fillFromAuto()) {
+			if (pick.chance(5)) {
+				battle.cancelAuto();
+			}
+		} else if (battle.sideActsNextRound(Side::Party)) {
 			if (!db.macros.empty() && pick.chance(15)) {
 				battle.applyMacro(db.macros[pick.range(0, static_cast<int>(db.macros.size()) - 1)]);
 			} else {
@@ -355,6 +396,8 @@ PlayedBattle playRandomBattle(const Database& db, std::uint64_t seed, ComboLog& 
 	}
 	played.record = battle.record();
 	played.end = capture(battle);
+	played.rewards = battle.rewards();
+	played.gameOver = battle.gameOver();
 	return played;
 }
 

@@ -31,9 +31,15 @@ ACC_CHECK(acc_bat_15, "ACC-BAT-15", "BAT-130, BAT-131, BAT-132") {
 	// Records round-trip through text and replay to byte-identical streams.
 	ComboLog log;
 	int replayed = 0;
+	int repeated = 0;
 	for (std::uint64_t seed = 1; seed <= 1000; ++seed) {
+		ComboLog before = log;
 		const support::PlayedBattle played = support::playRandomBattle(db, seed, log);
 		const std::string recordText = serializeRecord(played.record);
+		// The same setup, seed and commands, played again from the same combo log, give the same bytes.
+		const support::PlayedBattle again = support::playRandomBattle(db, seed, before);
+		repeated += t.expect(serializeEvents(again.events) == serializeEvents(played.events) && serializeRecord(again.record) == recordText,
+			"battle " + std::to_string(seed) + ": playing the same setup, seed and commands twice gave different streams") ? 1 : 0;
 		Result<BattleRecord> parsed = parseRecord(recordText);
 		if (!t.expect(parsed.ok(), "battle " + std::to_string(seed) + ": its record does not parse: " + parsed.error)) {
 			continue;
@@ -91,6 +97,7 @@ ACC_CHECK(acc_bat_15, "ACC-BAT-15", "BAT-130, BAT-131, BAT-132") {
 		}
 	}
 
+	t.note(std::to_string(repeated) + " random setups (encounter, level, difficulty, opening, multiplier, flags, scripted end, carried statuses, macros and auto-battle) played twice give byte-identical streams and records");
 	t.note(std::to_string(replayed) + " records round-trip and replay byte-identically; records from other data or rules versions are refused; 300 battles are byte-identical across -O0, -O1 and -O3 builds");
 	t.note("no floating-point type in rules code (the JSON number reader in " + loaderUse + " uses double only while loading data)");
 	t.note("platforms covered: this host only (Apple clang, one architecture)");

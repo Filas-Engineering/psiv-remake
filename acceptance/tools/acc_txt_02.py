@@ -3,7 +3,7 @@
 import re
 import sqlite3
 
-from common import imported, read_csv, reviewed_renames, write_csv
+from common import imported, read_csv, reviewed_renames, samples, write_csv
 
 ID = "ACC-TXT-02"
 VERIFIES = "TXT-005, TXT-011, TXT-014"
@@ -47,15 +47,28 @@ def run(ctx):
 			literal += [f"{message_id}: {name}" for name in restored if re.search(rf"\b{re.escape(name)}\b", plain, re.IGNORECASE)]
 	ctx.expect(not literal, f"tools/text rename writes renamed names into dialogue as literal text, not name tokens, so 'Show shipped names' cannot switch them ({len(literal)} mentions, first {literal[:1]}) (TXT-005)")
 
-	# The event pipeline: sample dialogue uses tokens, and broken or unknown tokens fail the names check.
-	code, output = ctx.event_cli("names", "sample_text/glossary.txt", "--table", "sample_text/en.strings", "--table", "sample_text/ja.strings", *sorted(str(p) for p in (ctx.root / "events" / "samples").glob("*.ev")))
-	ctx.expect(code == 0, f"event_cli names fails on the sample scripts: {output.strip()[:300]}")
-	probe = ctx.temp / "probe.ev"
-	probe.write_text('event probe unskippable\n\tsay guide "Bring a {name:acc_unknown}."\nend\n', encoding="utf-8")
-	code, output = ctx.event_cli("names", "sample_text/glossary.txt", probe)
-	ctx.expect(code != 0, "event_cli names accepted an unknown name token")
+	# The rename pass writes name tokens, which render as either name set.
+	tokens = 0
+	with sqlite3.connect(applied) as conn:
+		for (text,) in conn.execute("SELECT current FROM messages WHERE kind = 'dialogue'"):
+			tokens += len(re.findall(r"\{name(?:_upper|_lower)?:[\w.]+\}", text))
+	ctx.expect(tokens > 0, "the approved rename pass wrote no name tokens into dialogue (TXT-005)")
+	code, shipped = ctx.text("render", "--db", applied, "--glossary", glossary, "--names", "shipped")
+	code2, restored = ctx.text("render", "--db", applied, "--glossary", glossary, "--names", "restored")
+	ctx.expect(code == 0 and code2 == 0 and shipped != restored, "render does not switch the renamed names between the shipped and the restored set")
+
+	# The event build gate: check --strict with the glossary rejects a typed-out renamed name and a broken token.
+	gate = ["check", "--strict", "--registry", "sample_text/registry.txt", "--glossary", "sample_text/glossary.txt", "--table", "sample_text/en.strings", "--table", "sample_text/ja.strings"]
+	code, output = ctx.event_cli(*gate, *samples(ctx))
+	ctx.expect(code == 0, f"event_cli check --strict with the glossary rejects the sample scripts: {output.strip()[:300]}")
 	typed = ctx.temp / "typed.ev"
-	typed.write_text('event probe unskippable\n\tsay guide "Bring a Tide Lantern."\nend\n', encoding="utf-8")
-	code, output = ctx.event_cli("names", "sample_text/glossary.txt", typed)
-	ctx.expect(code != 0, "event_cli names reports a renamed name typed out in dialogue but still exits 0, so no build check enforces name tokens (TXT-005)")
-	ctx.note("renames need a signed-off entry; a system text name changed without one fails verify; event scripts' name tokens are checked")
+	typed.write_text("event probe unskippable\n\tsay guide @acc.typed\nend\n", encoding="utf-8")
+	table = ctx.temp / "typed.strings"
+	table.write_text("language en\n\nacc.typed = Bring a Tide Lantern to the keeper.\n", encoding="utf-8")
+	code, output = ctx.event_cli("check", "--strict", "--registry", "sample_text/registry.txt", "--glossary", "sample_text/glossary.txt", "--table", table, typed)
+	ctx.expect(code == 1, f"event_cli check --strict accepted a renamed name typed out in dialogue instead of a name token (exit {code}) (TXT-005)")
+	unknown = ctx.temp / "unknown.strings"
+	unknown.write_text("language en\n\nacc.typed = Bring a {name:acc_unknown} to the keeper.\n", encoding="utf-8")
+	code, output = ctx.event_cli("check", "--strict", "--registry", "sample_text/registry.txt", "--glossary", "sample_text/glossary.txt", "--table", unknown, typed)
+	ctx.expect(code == 1, f"event_cli check --strict accepted a name token that is not in the glossary (exit {code}) (TXT-005)")
+	ctx.note(f"renames need a signed-off entry; a system text name changed without one fails verify; the rename pass writes {tokens} name tokens that render as shipped or restored names; event_cli check --strict with the glossary passes the samples and rejects a typed-out renamed name and an unknown token")

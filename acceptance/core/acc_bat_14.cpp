@@ -1,6 +1,7 @@
 #include "support.h"
 
 #include "rules/names.h"
+#include "rules/text.h"
 
 #include <set>
 
@@ -30,6 +31,29 @@ ACC_CHECK(acc_bat_14, "ACC-BAT-14", "BAT-112") {
 		names.insert(c.name);
 	}
 
+	std::set<std::string> definitions;
+	for (const auto& [id, c] : db.characters) {
+		definitions.insert(id);
+	}
+	for (const auto& [id, e] : db.enemies) {
+		definitions.insert(id);
+	}
+	std::set<std::string> combos;
+	for (const ComboRecipe& recipe : db.combos) {
+		combos.insert(recipe.id);
+	}
+	std::set<std::string> macros;
+	for (const Macro& macro : db.macros) {
+		macros.insert(macro.name);
+	}
+	Result<TextTable> table = loadTextTable(t.path("core/data/text_en.json"));
+	if (!t.expect(table.ok(), "core/data/text_en.json does not load: " + table.error)) {
+		return;
+	}
+	auto isNumber = [](const std::string& value) {
+		return !value.empty() && value.find_first_not_of("-0123456789") == std::string::npos;
+	};
+
 	ComboLog log;
 	int strings = 0;
 	for (std::uint64_t seed = 1; seed <= 500; ++seed) {
@@ -43,6 +67,26 @@ ACC_CHECK(acc_bat_14, "ACC-BAT-14", "BAT-112") {
 				++strings;
 				t.expect(statusIds.count(e.status) == 1, std::string(toString(e.type)) + " status field holds '" + e.status + "', which is not a status id");
 			}
+			if (!e.combo.empty()) {
+				++strings;
+				t.expect(combos.count(e.combo) == 1, std::string(toString(e.type)) + " combo field holds '" + e.combo + "', which is not a combination id");
+			}
+			if (!e.message.empty()) {
+				++strings;
+				t.expect(table.value->count(e.message) == 1, std::string(toString(e.type)) + " message field holds '" + e.message + "', which is not a key in the string table");
+			}
+			for (const std::string& param : e.params) {
+				++strings;
+				t.expect(isNumber(param) || ids.count(param) == 1 || statusIds.count(param) == 1 || definitions.count(param) == 1, std::string(toString(e.type)) + " parameter '" + param + "' is neither a number nor a content id");
+			}
+			if (!e.macro.empty()) {
+				++strings;
+				t.expect(macros.count(e.macro) == 1, std::string(toString(e.type)) + " macro field holds '" + e.macro + "', which is not a macro name from the data");
+			}
+			for (const std::string& id : e.ids) {
+				++strings;
+				t.expect(definitions.count(id) == 1, std::string(toString(e.type)) + " ids field holds '" + id + "', which is not a character or enemy id");
+			}
 		}
 		// The stable text form is what crosses to the renderer and into bug reports: no field value is a display name.
 		const std::string text = serializeEvents(played.events);
@@ -54,5 +98,5 @@ ACC_CHECK(acc_bat_14, "ACC-BAT-14", "BAT-112") {
 			at = end;
 		}
 	}
-	t.note(std::to_string(strings) + " string fields across 500 battles are all ability, item or status ids; no display name appears in any serialized stream; every other field is a number or enum");
+	t.note(std::to_string(strings) + " string fields across 500 battles are all content ids (ability, item, status, combination, character, enemy, macro), string table keys or numeric parameters; no display name appears in any serialized stream; every other field is a number or enum");
 }

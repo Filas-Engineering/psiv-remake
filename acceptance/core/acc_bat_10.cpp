@@ -102,7 +102,7 @@ ACC_CHECK(acc_bat_10, "ACC-BAT-10", "BAT-051, BAT-052, BAT-053, BAT-054") {
 		}
 	}
 
-	// Absent, fallen and unaffordable entries.
+	// Absent, fallen, disabled and unaffordable entries.
 	{
 		Macro macro;
 		macro.name = "acc_gaps";
@@ -111,24 +111,29 @@ ACC_CHECK(acc_bat_10, "ACC-BAT-10", "BAT-051, BAT-052, BAT-053, BAT-054") {
 			{"acc_stranger", CommandKind::Attack, "", {}},
 			{"fighter", CommandKind::Attack, "", {MacroTargetKind::Enemy, "", 0}},
 			{"medic", CommandKind::Ability, "wide_mend", {MacroTargetKind::All, "", -1}},
+			{"engineer", CommandKind::Attack, "", {MacroTargetKind::Enemy, "", 0}},
 		};
 		Battle battle = support::create(db, support::setup(db, {"rust_hound"}, 4));
 		support::sturdy(battle, kFirst);
 		battle.combatant(partyIndex(battle, "fighter")).hp = 0;
 		battle.combatant(partyIndex(battle, "fighter")).statuses = {{kDefeatedStatus, 0}};
 		battle.combatant(partyIndex(battle, "medic")).tp = 1;
+		battle.combatant(partyIndex(battle, "engineer")).statuses.push_back({"sleep", 0});
 		const std::vector<MacroStepResult> steps = battle.applyMacro(macro);
 		t.expect(steps[1].status == MacroStepStatus::Skipped && steps[1].issue == MacroIssue::NotInParty, "an entry for a member not in the party was not skipped");
 		t.expect(steps[2].status == MacroStepStatus::Skipped && steps[2].issue == MacroIssue::ActorDefeated, "an entry for a fallen member was not skipped");
-		const bool cancelledAtExecution = steps[3].status == MacroStepStatus::Applied && battle.command(partyIndex(battle, "medic")).kind == CommandKind::Ability;
+		t.expect(steps[4].status == MacroStepStatus::Skipped && steps[4].issue == MacroIssue::CannotAct, std::string("an entry for a member who cannot act was not skipped: ") + toString(steps[4].status) + " " + toString(steps[4].issue));
+		t.expect(steps[3].status == MacroStepStatus::Applied && steps[3].issue == MacroIssue::NotEnoughTp && isCostIssue(steps[3].issue),
+			std::string("an unaffordable entry was not kept as written and marked with a cost issue for the menu (BAT-053): ") + toString(steps[3].status) + " " + toString(steps[3].issue));
+		const int medic = partyIndex(battle, "medic");
+		const bool kept = battle.command(medic).kind == CommandKind::Ability && battle.command(medic).id == "wide_mend";
 		support::othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
 		bool costEvent = false;
 		for (const Event& e : events) {
-			costEvent = costEvent || (e.type == EventType::ActionFailed && e.actor == partyIndex(battle, "medic") && e.fail == FailReason::NotEnoughTp);
+			costEvent = costEvent || (e.type == EventType::ActionCancelled && e.actor == medic && e.cancel == CancelReason::NotEnoughTp);
 		}
-		t.expect(cancelledAtExecution && costEvent, std::string("an unaffordable entry was not cancelled at execution per BAT-015: applyMacro reported ") +
-			(steps[3].status == MacroStepStatus::FellBack ? "FellBack" : "another status") + " and replaced it with a basic attack (BAT-053)");
+		t.expect(kept && costEvent, "an unaffordable entry was not cancelled at execution with a cost reason per BAT-015 (BAT-053)");
 	}
 
 	// Targets are rules: an enemy-position rule follows the formation, not a stored combatant.
@@ -144,5 +149,5 @@ ACC_CHECK(acc_bat_10, "ACC-BAT-10", "BAT-051, BAT-052, BAT-053, BAT-054") {
 		}
 	}
 
-	t.note(std::to_string(rounds) + " rounds with the data macros: every member's command comes from the macro, the block runs contiguously in macro order, enemy order matches the run without it; absent and fallen entries are skipped; targets are rules");
+	t.note(std::to_string(rounds) + " rounds with the data macros: every member's command comes from the macro, the block runs contiguously in macro order, enemy order matches the run without it; absent, fallen and disabled entries are skipped; an unaffordable entry is kept, marked with a cost issue and cancelled at execution with not_enough_tp; targets are rules");
 }

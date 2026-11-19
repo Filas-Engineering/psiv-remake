@@ -52,7 +52,7 @@ ACC_CHECK(acc_enc_04, "ACC-ENC-04", "ENC-030, ENC-031") {
 			bool escaped = false;
 			bool afterEscape = false;
 			for (const Event& e : events) {
-				if (escaped && (e.type == EventType::ActionStarted || e.type == EventType::ActionFailed || e.type == EventType::ActionPrevented)) {
+				if (escaped && (e.type == EventType::ActionStarted || e.type == EventType::ActionCancelled)) {
 					afterEscape = true;
 				}
 				escaped = escaped || (e.type == EventType::EscapeAttempted && e.succeeded);

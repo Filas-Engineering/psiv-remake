@@ -26,7 +26,7 @@ Testable checks for each system. Each check names the requirements it verifies a
 |---|---|---|---|
 | ACC-FLOW-01 | Drive every transition in the transition table and three not in it. Listed ones succeed; others are refused and logged | FLOW-010, FLOW-013 | engine |
 | ACC-FLOW-02 | Performance capture on every FLOW-001 target: field and battle hold 60 fps over a scripted route and 20 scripted battles (99th-percentile frame time at most 16.7 ms) | FLOW-001, FLOW-004 | engine |
-| ACC-FLOW-03 | Time battle start, battle end and area transitions over 50 samples each; all within budget, and battle start no slower than the measured baseline | FLOW-030 to FLOW-034 | engine (baseline FLOW-033) |
+| ACC-FLOW-03 | Time battle start, battle end and area transitions over 50 samples each; all within budget, and battle start no slower than the measured baseline | FLOW-030 to FLOW-032, FLOW-034 | engine (baseline FLOW-033) |
 | ACC-FLOW-04 | Trigger each autosave point and confirm a write; confirm no write happens during battle, choice or text; confirm input stall under 100 ms; inject a write failure and confirm play continues | FLOW-050 to FLOW-054 | engine |
 | ACC-FLOW-05 | Median critical-path completion time in playtests compared with the baseline | FLOW-005 | playtest (baseline FLOW-006) |
 
@@ -36,41 +36,41 @@ Testable checks for each system. Each check names the requirements it verifies a
 |---|---|---|---|
 | ACC-FLD-01 | For every area, sample the navmesh on a 0.5 m grid: each point lies in a camera volume, and with the leader there, the leader is inside the central 80% of the screen and not fully occluded | FLD-011, FLD-013, FLD-015 | engine |
 | ACC-FLD-02 | Bot walks random routes for 30 minutes per area: no stuck state longer than 2 seconds, no fall out of the world, no direction reversal at volume edges | FLD-016, FLD-024, FLD-025 | engine |
-| ACC-FLD-03 | Bot walks each area's critical path; time within 15% of the baseline | FLD-021, FLD-042 | engine (baseline FLD-022) |
+| ACC-FLD-03 | Bot walks each area's critical path; time within 15% of the baseline | FLD-021, FLD-042 | engine (baseline FLD-022, FLD-043) |
 | ACC-FLD-04 | Data check: chest, shop and hook counts match the audited counts; every chest, shop and hook has a unique stable ID; every hook points at a compiled script; every party talk line ID exists in the locked dialogue table | FLD-023, FLD-032, FLD-033, FLD-071 | tools |
-| ACC-FLD-05 | Reviewer compares each town and dungeon with its inventory and landmark list | FLD-040, FLD-042, FLD-044 | playtest (baseline FLD-041, FLD-043) |
+| ACC-FLD-05 | Reviewer compares each town and dungeon with its inventory and landmark list | FLD-040, FLD-042, FLD-044 | playtest (baseline FLD-022, FLD-041, FLD-043) |
 | ACC-FLD-06 | Reviewer checks each vehicle's traversal and each fast-travel mechanism against the measured rules | FLD-051, FLD-061 | playtest (baseline FLD-052, FLD-062) |
 
 ## Encounters
 
 | ID | Check | Verifies | Runs on |
 |---|---|---|---|
-| ACC-ENC-01 | Scripted contacts from front, side and rear, chasing and not: each produces the opening ENC-020 and ENC-021 require, and the battle uses the group drawn at spawn | ENC-011, ENC-020, ENC-021 | engine |
+| ACC-ENC-01 | Scripted contacts from front, side and rear, chasing and not: each produces the opening ENC-020 and ENC-021 require, and the battle uses the group drawn at spawn | ENC-011, ENC-020, ENC-021 | engine (baseline ENC-024) |
 | ACC-ENC-02 | After a battle or escape, no battle starts for 3 seconds; defeated groups stay gone until area re-entry; switching an area to random mode needs only the mode flag | ENC-002, ENC-014, ENC-015, ENC-042 | engine |
 | ACC-ENC-03 | Playtest telemetry per area: M1, M2, M5, M6 within ENC-033 tolerances for natural players; avoider cohort within ENC-034 | ENC-003, ENC-033, ENC-034, ENC-037 | playtest (baseline ENC-036) |
-| ACC-ENC-04 | 10,000 seeded escape attempts per tested configuration: success rate matches the measured rule within 1 percentage point; disabled escape never succeeds; a successful escape drops remaining actions and grants no rewards | ENC-030, ENC-031 | core (baseline ENC-035) |
+| ACC-ENC-04 | 10,000 seeded escape attempts per tested configuration: success rate matches the measured rule within 1 percentage point; disabled escape never succeeds; a successful escape drops remaining actions and grants no rewards | ENC-030, ENC-031 | core (baseline ENC-005, ENC-035) |
 
 ## Battle
 
 | ID | Check | Verifies | Runs on |
 |---|---|---|---|
 | ACC-BAT-01 | Build `core/` with no engine headers on the include path and run its suite on every target compiler | BAT-002 | core |
-| ACC-BAT-02 | Round phase order: a test ability set logs each phase; events appear in the BAT-010 order, and end conditions are checked after each action | BAT-010, BAT-013 | core |
+| ACC-BAT-02 | Round phase order: a test ability set logs each phase; events appear in the BAT-010 order, and end conditions are checked after each action | BAT-010, BAT-013 | core (baseline BAT-014, BAT-016) |
 | ACC-BAT-03 | AI isolation: run the same round with two different party command sets; enemy commands are identical | BAT-011 | core |
-| ACC-BAT-04 | Execution-time validation: target falls before the action, cost drained before the action, actor disabled before the action; each produces the specified retarget or cancel event | BAT-015, BAT-071 | core |
+| ACC-BAT-04 | Execution-time validation: target falls before the action, cost drained before the action, actor disabled before the action; each produces the specified retarget or cancel event | BAT-015, BAT-071 | core (baseline BAT-016, BAT-072) |
 | ACC-BAT-05 | Order: over 100,000 seeded rounds, the order distribution matches the measured formula; ties resolve per BAT-030; an agility change mid-round does not reorder | BAT-030, BAT-031 | core (baseline BAT-033) |
 | ACC-BAT-06 | Formula samples: each measured sample from BAT-043 reproduces exactly at Original difficulty | BAT-042 | core (baseline BAT-043) |
 | ACC-BAT-07 | Status table tests: each status applies, ticks, blocks or forces commands, and cures per its data | BAT-081 | core (baseline BAT-082) |
 | ACC-BAT-08 | Every status application, resistance and removal emits an event with a message key that exists in the string table | BAT-083 | core |
 | ACC-BAT-09 | AI: for each sampled enemy, 10,000 seeded rounds give action frequencies within 2 percentage points of the measured ones | BAT-090, BAT-092 | core (baseline BAT-093) |
-| ACC-BAT-10 | Macro fill and order: a macro fills the round; party actions run in macro order; enemy positions match a run without the macro; absent and unaffordable entries skip or cancel as specified | BAT-051 to BAT-054 | core |
+| ACC-BAT-10 | Macro fill and order: a macro fills the round; party actions run in macro order; enemy positions match a run without the macro; absent and unaffordable entries skip or cancel as specified | BAT-051 to BAT-054 | core (baseline BAT-057) |
 | ACC-BAT-11 | Combination: each of the 15 definitions triggers when components run back to back; inserting an enemy action or a cancelled action between them prevents it; component effects are replaced; costs are paid | BAT-060 to BAT-062 | core (baseline BAT-063) |
 | ACC-BAT-12 | Combo log: first trigger adds an entry and emits ComboDiscovered; a second trigger does not; auto-battle triggers count | BAT-064 | core |
 | ACC-BAT-13 | Event sourcing: for 1,000 seeded random battles, applying the event stream to the start snapshot equals the end state | BAT-110, BAT-111, BAT-115 | core |
 | ACC-BAT-14 | Event payload audit: no event field holds text other than a message key | BAT-112 | core |
 | ACC-BAT-15 | Determinism: replay 1,000 battle records on every target platform and compiler; serialized streams are byte-identical; static check finds no floating-point type in rules code | BAT-130, BAT-131, BAT-132 | core |
 | ACC-BAT-16 | Difficulty overlay: Original and Hard runs use the same `core/` binary; Hard enemy stats within 20% of Original; reward multiplier scales battle rewards only | BAT-122, BAT-124, BAT-125, SAV-023 | core |
-| ACC-BAT-17 | Auto-battle: the auto macro runs each round and stops on cancel, a fallen member, an unaffordable entry, and battle end | BAT-103, BAT-104 | core |
+| ACC-BAT-17 | Auto-battle: the auto macro runs each round and stops on cancel, a fallen member, an unaffordable entry, and battle end | BAT-103, BAT-104 | core (baseline BAT-105) |
 | ACC-BAT-18 | Battle speed: the same battle record played at each speed gives the same final state; presentation time scales with speed | BAT-100 | engine |
 | ACC-BAT-19 | Presentation timing per action kind at 1x is no longer than baseline; no interface element remains after its action; no status visual hides the model | BAT-084, BAT-101 | engine (baseline BAT-102) |
 | ACC-BAT-20 | Hard playtest: players on Hard meet ENC-033 M5 tolerance for Hard's target level without extra battles; reviewers confirm Hard's changes are behavioral | BAT-121, BAT-123 | playtest |
@@ -82,7 +82,7 @@ Testable checks for each system. Each check names the requirements it verifies a
 | ACC-TXT-01 | Locked dialogue diff: every English dialogue string equals the shipped text or matches a change list entry | TXT-002, TXT-003, TXT-004 | tools |
 | ACC-TXT-02 | Glossary check: every system text name that differs from its shipped name has a signed-off glossary entry; every renamed name used in dialogue appears through a name token | TXT-005, TXT-011, TXT-014 | tools |
 | ACC-TXT-03 | Portrait codes: every code resolves to a portrait asset; every translation keeps the same portrait codes and name tokens in the same order | TXT-021, TXT-034 | tools |
-| ACC-TXT-04 | No player-facing literal text in code, scripts or art manifests | TXT-030 | tools |
+| ACC-TXT-04 | No player-facing literal text in code, scripts or art manifests | TXT-030 | tools (baseline TXT-006) |
 | ACC-TXT-05 | Font coverage: every character in every shipped string table renders with a glyph | TXT-033 | tools |
 | ACC-TXT-06 | Pseudo-localization and 150% text size on every screen: no truncation or overlap; "Show shipped names" switches every glossaried name in menus, battle and dialogue at once | TXT-016, TXT-018, TXT-035, UI-019 | engine |
 

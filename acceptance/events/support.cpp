@@ -41,8 +41,149 @@ std::vector<Source> sampleSources(const acc::Context& t) {
 	return sources;
 }
 
+const Registry& sampleRegistry(const acc::Context& t) {
+	static const Registry registry = [&t] {
+		Registry loaded;
+		std::vector<Diagnostic> diagnostics;
+		if (!load_registry("registry.txt", readFile(t.path("events/sample_text/registry.txt")), loaded, diagnostics)) {
+			std::string all;
+			for (const Diagnostic& d : diagnostics) {
+				all += format_diagnostic(d) + " ";
+			}
+			std::printf("FAIL\tevents/sample_text/registry.txt does not load: %s\n", all.c_str());
+			std::exit(0);
+		}
+		return loaded;
+	}();
+	return registry;
+}
+
+std::vector<std::string> stateChanges(const std::vector<std::string>& trace) {
+	std::vector<std::string> out;
+	for (const std::string& line : trace) {
+		for (const char* prefix : {"set_flag ", "set_var ", "give ", "take ", "party add ", "party remove ", "player_control ", "action warp ", "rest"}) {
+			if (line.rfind(prefix, 0) == 0) {
+				out.push_back(line);
+				break;
+			}
+		}
+	}
+	return out;
+}
+
+namespace {
+
+std::vector<std::string> words(const std::string& text) {
+	std::vector<std::string> out;
+	std::istringstream in(text);
+	std::string word;
+	while (in >> word) {
+		out.push_back(word);
+	}
+	return out;
+}
+
+}
+
+void Screen::apply(const std::string& line) {
+	if (line.rfind("action ", 0) != 0) {
+		return;
+	}
+	const std::vector<std::string> w = words(line.substr(7));
+	if (w.empty()) {
+		return;
+	}
+	auto actor = [this](const std::string& name) -> std::vector<std::string>& {
+		std::vector<std::string>& state = actors[name];
+		state.resize(4);
+		return state;
+	};
+	const std::string& kind = w[0];
+	const std::string second = w.size() > 1 ? w[1] : "";
+	if (kind == "music") {
+		music = second == "play" && w.size() > 2 ? w[2] : "";
+	} else if (kind == "ambient") {
+		ambient = second == "play" && w.size() > 2 ? w[2] : "";
+	} else if (kind == "camera" && w.size() > 2) {
+		camera = w[2];
+	} else if (kind == "fade") {
+		fadedOut = second == "out";
+	} else if (kind == "panel") {
+		if (second == "show" && w.size() >= 7) {
+			bool found = false;
+			for (std::vector<std::string>& panel : panels) {
+				if (panel[0] == w[2]) {
+					panel = {w[2], w[4], w[6]};
+					found = true;
+				}
+			}
+			if (!found) {
+				panels.push_back({w[2], w[4], w[6]});
+			}
+		} else if (second == "hide" && w.size() > 2) {
+			panels.erase(std::remove_if(panels.begin(), panels.end(), [&](const std::vector<std::string>& panel) { return panel[0] == w[2]; }), panels.end());
+		} else if (second == "clear") {
+			panels.clear();
+		}
+	} else if (kind == "show" || kind == "hide") {
+		actor(second)[0] = kind == "show" ? "shown" : "hidden";
+	} else if (kind == "move" && w.size() > 3) {
+		std::string where = w[3];
+		for (std::size_t i = 4; i < w.size() && w[i] != "speed"; ++i) {
+			where += " " + w[i];
+		}
+		actor(second)[1] = where;
+		actor(second)[2].clear();
+	} else if (kind == "face" && w.size() > 2) {
+		actor(second)[2] = w[2];
+	} else if (kind == "anim" && w.size() > 2) {
+		actor(second)[3] = w.size() > 3 && w[3] == "loop" ? w[2] : "";
+	} else if (kind == "warp") {
+		actors.clear();
+		camera.clear();
+	}
+	// A one-shot animation on an actor the event never placed leaves nothing on screen to rebuild.
+	for (auto it = actors.begin(); it != actors.end();) {
+		const bool empty = std::all_of(it->second.begin(), it->second.end(), [](const std::string& field) { return field.empty(); });
+		it = empty ? actors.erase(it) : std::next(it);
+	}
+}
+
+bool Screen::operator==(const Screen& o) const {
+	return music == o.music && ambient == o.ambient && camera == o.camera && fadedOut == o.fadedOut && panels == o.panels && actors == o.actors;
+}
+
+std::string Screen::describe() const {
+	std::string out = "music=" + music + " ambient=" + ambient + " camera=" + camera + (fadedOut ? " faded" : "") + " panels=";
+	for (const std::vector<std::string>& panel : panels) {
+		out += panel[0] + ":" + panel[1] + ":" + panel[2] + ",";
+	}
+	for (const auto& [name, state] : actors) {
+		out += " " + name + "[" + state[0] + "|" + state[1] + "|" + state[2] + "|" + state[3] + "]";
+	}
+	return out;
+}
+
+Screen screenOf(const std::vector<std::string>& trace) {
+	Screen screen;
+	for (const std::string& line : trace) {
+		screen.apply(line);
+	}
+	return screen;
+}
+
+std::vector<std::string> instantLines(const RecordingHost& host) {
+	std::vector<std::string> out;
+	for (const std::string& call : host.instant_calls) {
+		out.push_back("action " + call);
+	}
+	return out;
+}
+
 Program compileSamples(acc::Context& t) {
-	CompileResult result = compile(sampleSources(t));
+	CompileOptions options;
+	options.registry = &sampleRegistry(t);
+	CompileResult result = compile(sampleSources(t), options);
 	if (!result.ok()) {
 		std::string all;
 		for (const Diagnostic& d : result.diagnostics) {

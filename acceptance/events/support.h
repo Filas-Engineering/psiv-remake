@@ -19,7 +19,35 @@ std::vector<std::string> listFiles(const std::string& directory, const std::stri
 
 // Every script the repository ships today: events/samples/*.ev.
 std::vector<events::Source> sampleSources(const acc::Context& t);
+// events/sample_text/registry.txt, the game content the samples may name. Exits with a FAIL line when it does not load.
+const events::Registry& sampleRegistry(const acc::Context& t);
+// The samples compiled against the registry, as a game build compiles them (EVT-003, EVT-004).
 events::Program compileSamples(acc::Context& t);
+
+// The host calls that change game state (EVT-023), in order: flags, variables, items, party, player control,
+// warps and rests. Reads such as get_flag are left out.
+std::vector<std::string> stateChanges(const std::vector<std::string>& trace);
+
+// What a player would see and hear, rebuilt from host calls alone, independently of the interpreter's own
+// PresentationState: each action counts at its end state, as an instant call would leave it.
+struct Screen {
+	std::string music;
+	std::string ambient;
+	std::string camera;
+	bool fadedOut = false;
+	// Panel id, camera and layout, in the order first shown.
+	std::vector<std::vector<std::string>> panels;
+	// Per actor: visibility ("" unset, "shown", "hidden"), position, facing, looping pose.
+	std::map<std::string, std::vector<std::string>> actors;
+
+	// Applies one trace line; lines that are not actions are ignored.
+	void apply(const std::string& line);
+	bool operator==(const Screen& other) const;
+	std::string describe() const;
+};
+Screen screenOf(const std::vector<std::string>& trace);
+// The instant calls a host received, as trace lines.
+std::vector<std::string> instantLines(const events::RecordingHost& host);
 
 // A recording host that answers choices and battles from a list and remembers how many options each
 // decision offered, so tests can walk every path.

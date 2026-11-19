@@ -29,7 +29,7 @@ void sturdy(rules::Battle& battle, int index, int hp = 9999);
 
 std::vector<rules::Event> ofType(const std::vector<rules::Event>& events, rules::EventType type);
 int countType(const std::vector<rules::Event>& events, rules::EventType type);
-// Actors of ActionStarted, ActionFailed, ActionPrevented, EscapeAttempted and ComboTriggered events, in stream order.
+// Actors of ActionStarted, ActionCancelled, EscapeAttempted and ComboTriggered events, in stream order.
 std::vector<int> actingOrder(const std::vector<rules::Event>& events);
 
 // The round's execution order recomputed from the seed with core's placeholder initiative (agility plus a roll
@@ -63,14 +63,17 @@ BattleState capture(const rules::Battle& battle);
 std::string apply(BattleState& state, const rules::Event& event, int partyCount);
 std::string difference(const BattleState& a, const BattleState& b);
 
-// A random but reproducible battle: encounter, difficulty, opening and multiplier picked from `seed`, played
-// to the end with a mix of auto commands, macros, items, defends and escapes.
+// A random but reproducible battle: encounter, difficulty, opening, multiplier, flags, scripted end and carried
+// statuses picked from `seed`, played to the end with a mix of auto commands, macros, auto-battle, items,
+// defends and escapes.
 struct PlayedBattle {
 	rules::BattleSetup setup;
 	BattleState start;
 	std::vector<rules::Event> events;
 	rules::BattleRecord record;
 	BattleState end;
+	rules::Rewards rewards;
+	bool gameOver = false;
 };
 
 PlayedBattle playRandomBattle(const rules::Database& db, std::uint64_t seed, rules::ComboLog& log, int maxRounds = 40);

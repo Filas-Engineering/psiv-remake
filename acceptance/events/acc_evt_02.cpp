@@ -5,14 +5,21 @@ using namespace events;
 ACC_CHECK(acc_evt_02, "ACC-EVT-02", "EVT-001, EVT-009") {
 	const std::vector<Source> sources = support::sampleSources(t);
 	t.expect(!sources.empty(), "no scripts found under events/samples");
-	const CompileResult result = compile(sources);
+	CompileOptions options;
+	options.registry = &support::sampleRegistry(t);
+	const CompileResult result = compile(sources, options);
 	std::string errors;
 	for (const Diagnostic& d : result.diagnostics) {
 		if (d.severity == Severity::error) {
 			errors += format_diagnostic(d) + " ";
 		}
 	}
-	t.expect(result.ok(), "shipped scripts do not compile: " + errors);
+	t.expect(result.ok(), "shipped scripts do not compile against the registry: " + errors);
+	int warnings = 0;
+	for (const Diagnostic& d : result.diagnostics) {
+		warnings += d.severity == Severity::error ? 0 : 1;
+	}
+	t.expect(warnings == 0, "shipped scripts compile with " + std::to_string(warnings) + " warning(s), which the strict gate rejects");
 
 	int battles = 0;
 	for (const Instruction& ins : result.program.code) {
@@ -36,6 +43,6 @@ ACC_CHECK(acc_evt_02, "ACC-EVT-02", "EVT-001, EVT-009") {
 		t.expect(interpreter.status() == Status::error, "a flee result in a battle with no flee branch did not stop the event");
 	}
 
-	t.note(std::to_string(sources.size()) + " scripts under events/samples compile (no game scripts exist yet); " + std::to_string(battles) +
+	t.note(std::to_string(sources.size()) + " scripts under events/samples compile against the registry with no warning (no game scripts exist yet); " + std::to_string(battles) +
 		" battle(s) all have a Victory branch, escape only with a flee branch, game-over unless a lose branch exists");
 }

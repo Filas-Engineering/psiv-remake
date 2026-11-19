@@ -49,6 +49,36 @@ std::map<std::string, double> expectedShares(const Database& db, const EnemyDef&
 	return shares;
 }
 
+int pickedTarget(const std::vector<Event>& events) {
+	for (const Event& e : events) {
+		if (e.type == EventType::ActionStarted && e.actor == kFirst) {
+			return e.target;
+		}
+	}
+	return -1;
+}
+
+// The party defends, so the enemy's own AI chooses its command.
+void partyDefends(Battle& battle) {
+	for (int i = 0; i < battle.partyCount(); ++i) {
+		if (battle.combatant(i).alive() && battle.command(i).kind == CommandKind::None) {
+			battle.setCommand(i, Command::defend());
+		}
+	}
+}
+
+Battle targetBattle(const Database& db, std::uint64_t seed) {
+	Battle battle = support::create(db, support::setup(db, {"rust_hound"}, seed));
+	support::sturdy(battle, kFirst);
+	const int hp[] = {300, 120, 700, 500, 200};
+	for (int i = 0; i < battle.partyCount(); ++i) {
+		support::sturdy(battle, i);
+		battle.combatant(i).hp = hp[i];
+		battle.combatant(i).stats.evasion = 0;
+	}
+	return battle;
+}
+
 }
 
 ACC_CHECK(acc_bat_09, "ACC-BAT-09", "BAT-090, BAT-092") {
@@ -67,7 +97,7 @@ ACC_CHECK(acc_bat_09, "ACC-BAT-09", "BAT-090, BAT-092") {
 			}
 			battle.combatant(kFirst).hp = enemy.stats.maxHp * c.hpPercent / 100;
 			for (const Event& e : battle.resolveRound()) {
-				if ((e.type == EventType::ActionStarted || e.type == EventType::ActionFailed) && e.actor == kFirst) {
+				if ((e.type == EventType::ActionStarted || e.type == EventType::ActionCancelled) && e.actor == kFirst) {
 					++seen[e.ability];
 				}
 			}
@@ -82,6 +112,64 @@ ACC_CHECK(acc_bat_09, "ACC-BAT-09", "BAT-090, BAT-092") {
 		summary += (summary.empty() ? "" : ", ") + c.enemy + "@" + std::to_string(c.hpPercent) + "%";
 	}
 
-	t.gap("AI profile entries have no target rule field (BAT-090 lists one per entry); targets follow fixed rules per ability kind");
-	t.note(std::to_string(kRounds) + " seeded rounds each for " + summary + ": action frequencies within 2 points of the profile weights");
+	// Each entry's target rule, on a lone enemy whose profile is one bite.
+	{
+		Database ruled = db;
+		auto onlyRule = [&](AiTargetRule rule, const std::string& status) {
+			AiRule entry;
+			entry.ability = "bite";
+			entry.target.rule = rule;
+			entry.target.status = status;
+			ruled.enemies["rust_hound"].ai = {entry};
+		};
+		auto oneRound = [&](std::uint64_t seed, void (*prepare)(Battle&)) {
+			Battle battle = targetBattle(ruled, seed);
+			prepare(battle);
+			partyDefends(battle);
+			return pickedTarget(battle.resolveRound());
+		};
+		onlyRule(AiTargetRule::LowestHp, "");
+		t.expect(oneRound(1, [](Battle&) {}) == 1, "the lowest_hp target rule did not pick the party member with the fewest hit points");
+		onlyRule(AiTargetRule::HighestHp, "");
+		t.expect(oneRound(2, [](Battle&) {}) == 2, "the highest_hp target rule did not pick the party member with the most hit points");
+		onlyRule(AiTargetRule::HasStatus, "poison");
+		t.expect(oneRound(3, [](Battle& b) { b.combatant(3).statuses.push_back({"poison", 0}); }) == 3, "the has_status target rule did not pick the one member with the status");
+		onlyRule(AiTargetRule::LacksStatus, "poison");
+		t.expect(oneRound(4, [](Battle& b) {
+			for (int i : {0, 1, 3, 4}) {
+				b.combatant(i).statuses.push_back({"poison", 0});
+			}
+		}) == 2, "the lacks_status target rule did not pick the one member without the status");
+
+		onlyRule(AiTargetRule::LastAttacker, "");
+		{
+			Battle battle = targetBattle(ruled, 5);
+			battle.setCommand(4, Command::attack(kFirst));
+			battle.combatant(4).stats.dexterity = 400;
+			partyDefends(battle);
+			battle.resolveRound();
+			partyDefends(battle);
+			t.expect(pickedTarget(battle.resolveRound()) == 4, "the last_attacker target rule did not pick the foe that last damaged the enemy");
+		}
+
+		onlyRule(AiTargetRule::Random, "");
+		std::map<int, int> seen;
+		for (std::uint64_t seed = 1; seed <= 1000; ++seed) {
+			++seen[oneRound(seed, [](Battle& b) {
+				b.combatant(0).hp = 0;
+				b.combatant(0).statuses = {{kDefeatedStatus, 0}};
+			})];
+		}
+		bool spread = seen.count(0) == 0 && seen.count(-1) == 0;
+		for (int i = 1; i < 5; ++i) {
+			spread = spread && std::abs(seen[i] - 250) <= 60;
+		}
+		t.expect(spread, "the random target rule did not pick evenly among the living foes");
+
+		// A rule that finds no target does not qualify that round: the enemy falls back to its basic attack on a random foe.
+		onlyRule(AiTargetRule::HasStatus, "sleep");
+		t.expect(oneRound(6, [](Battle&) {}) >= 0, "an enemy whose only entry found no target did not act at all");
+	}
+
+	t.note(std::to_string(kRounds) + " seeded rounds each for " + summary + ": action frequencies within 2 points of the profile weights; lowest_hp, highest_hp, has_status, lacks_status, last_attacker and random target rules each pick the specified target");
 }

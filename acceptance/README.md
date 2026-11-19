@@ -41,7 +41,7 @@ A check that is automatable but has no test FAILs, and so does a test whose cite
 | `tools/acc_*.py` | One module per `tools` check; they drive `tools/text/cli.py` and `events/build/event_cli` and write only to a temporary folder outside the checkout |
 | `core/support.*`, `events/support.*`, `tools/common.py` | Shared helpers |
 | `harness/` | The check registry and the `--list` / `--run` entry point both C++ binaries share |
-| `dump/` | `record_dump` (built three ways for ACC-BAT-15) and `save_probe` (the save payloads for ACC-SAV-01 to 03) |
+| `dump/` | `record_dump` (built three ways for ACC-BAT-15) and `save_probe` (the save payloads for ACC-SAV-01 to ACC-SAV-04: every truncation and every byte flipped with each bit mask) |
 | `scripts/` | `spec.py` (spec parser), `check_spec.py`, `run.py` (the runner) and `report.py` |
 
 ## Add a check

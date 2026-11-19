@@ -27,6 +27,40 @@ const Event* find(const std::vector<Event>& events, EventType type, int actor) {
 	return nullptr;
 }
 
+std::ptrdiff_t position(const std::vector<Event>& events, const Event* e) {
+	return e ? e - events.data() : -1;
+}
+
+// Empty when the stream has a Retargeted event for `actor` from `from` to `to`, right before its ActionStarted.
+std::string retargetProblem(const std::vector<Event>& events, int actor, int from, int to) {
+	const Event* moved = find(events, EventType::Retargeted, actor);
+	const Event* started = find(events, EventType::ActionStarted, actor);
+	if (!moved) {
+		return "no Retargeted event";
+	}
+	if (moved->previousTarget != from || moved->target != to) {
+		return "Retargeted says " + std::to_string(moved->previousTarget) + " to " + std::to_string(moved->target) + ", expected " + std::to_string(from) + " to " + std::to_string(to);
+	}
+	if (!started || started->target != to || position(events, started) < position(events, moved)) {
+		return "the action did not start on the new target after the Retargeted event";
+	}
+	return "";
+}
+
+std::string cancelProblem(const std::vector<Event>& events, int actor, CancelReason reason, const std::string& status = "") {
+	const Event* cancelled = find(events, EventType::ActionCancelled, actor);
+	if (!cancelled) {
+		return "no ActionCancelled event";
+	}
+	if (cancelled->cancel != reason || (!status.empty() && cancelled->status != status)) {
+		return std::string("ActionCancelled gives ") + toString(cancelled->cancel) + " " + cancelled->status + ", expected " + toString(reason) + " " + status;
+	}
+	if (find(events, EventType::ActionStarted, actor)) {
+		return "the action also started";
+	}
+	return "";
+}
+
 }
 
 ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
@@ -43,8 +77,8 @@ ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
 		battle.setCommand(2, Command::ability("weaken", first + 1));
 		support::othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
-		const Event* moved = find(events, EventType::ActionStarted, 2);
-		t.expect(moved && moved->target == first + 2, "a single-enemy action whose target fell did not move to the next living enemy by formation position");
+		const std::string problem = retargetProblem(events, 2, first + 1, first + 2);
+		t.expect(problem.empty(), "a single-enemy action whose target fell did not move to the next living enemy by formation position: " + problem);
 	}
 
 	// Wrap-around: the fallen target was the last in formation, so the action moves to the first living enemy.
@@ -57,8 +91,8 @@ ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
 		battle.setCommand(2, Command::ability("weaken", first + 1));
 		support::othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
-		const Event* moved = find(events, EventType::ActionStarted, 2);
-		t.expect(moved && moved->target == first, "retarget past the last formation position did not wrap to the first living enemy");
+		const std::string problem = retargetProblem(events, 2, first + 1, first);
+		t.expect(problem.empty(), "retarget past the last formation position did not wrap to the first living enemy: " + problem);
 	}
 
 	// One ally whose target fell moves to the actor.
@@ -73,9 +107,9 @@ ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
 		battle.setCommand(3, Command::ability("mend", 0));
 		support::othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
-		const Event* healed = find(events, EventType::ActionStarted, 3);
 		t.expect(!battle.combatant(0).alive(), "setup: the healer's target did not fall first");
-		t.expect(healed && healed->target == 3, "a one-ally heal whose target fell did not move to the actor");
+		const std::string problem = retargetProblem(events, 3, 0, 3);
+		t.expect(problem.empty(), "a one-ally heal whose target fell did not move to the actor: " + problem);
 	}
 
 	// One fallen ally that recovered before the action: the revive is cancelled with a reason.
@@ -90,8 +124,8 @@ ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
 		battle.setCommand(3, Command::ability("rekindle", 4));
 		support::othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
-		const Event* cancelled = find(events, EventType::ActionFailed, 3);
-		t.expect(cancelled && cancelled->fail == FailReason::NoTarget, "a revive aimed at an ally who recovered first was not cancelled with a no-target reason");
+		const std::string problem = cancelProblem(events, 3, CancelReason::NoTarget);
+		t.expect(problem.empty(), "a revive aimed at an ally who recovered first was not cancelled with a no-target reason: " + problem);
 		t.expect(!find(events, EventType::ResourceSpent, 3), "the cancelled revive still spent its cost");
 	}
 
@@ -107,8 +141,8 @@ ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
 		t.expect(battle.setCommand(1, Command::item("tonic", 4)).empty(), "selection refused a second use of the last item instead of validating at execution");
 		support::othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
-		const Event* cancelled = find(events, EventType::ActionFailed, 1);
-		t.expect(cancelled && cancelled->fail == FailReason::NoItem, "using an item the party ran out of earlier in the round was not cancelled with a cost reason");
+		const std::string problem = cancelProblem(events, 1, CancelReason::NoItem);
+		t.expect(problem.empty(), "using an item the party ran out of earlier in the round was not cancelled with a cost reason: " + problem);
 	}
 
 	// Technique points are checked at execution, not at selection.
@@ -119,8 +153,8 @@ ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
 		battle.combatant(1).tp = 2;
 		support::othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
-		const Event* cancelled = find(events, EventType::ActionFailed, 1);
-		t.expect(cancelled && cancelled->fail == FailReason::NotEnoughTp, "a technique that can no longer be paid was not cancelled with a cost reason");
+		const std::string problem = cancelProblem(events, 1, CancelReason::NotEnoughTp);
+		t.expect(problem.empty(), "a technique that can no longer be paid was not cancelled with a cost reason: " + problem);
 		t.expect(battle.combatant(1).tp == 2, "the cancelled technique still spent technique points");
 	}
 
@@ -141,13 +175,11 @@ ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
 		battle.setCommand(first, Command::attack(1));
 		support::othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
-		const Event* prevented = find(events, EventType::ActionPrevented, first);
-		t.expect(prevented && prevented->status == "sleep", "an actor put to sleep earlier in the round still acted, or no event gave the reason");
-		t.expect(!find(events, EventType::ActionStarted, first), "the disabled actor's action still started");
+		const std::string problem = cancelProblem(events, first, CancelReason::ActorUnable, "sleep");
+		t.expect(problem.empty(), "an actor put to sleep earlier in the round was not cancelled as unable to act: " + problem);
 	}
 
-	// Actor defeated before its action: record what the stream says, since BAT-115 lists "actor unable".
-	bool defeatedActorSilent = false;
+	// Actor defeated before its action: cancelled as unable to act, BAT-115's "actor unable".
 	{
 		Battle battle = support::create(db, support::setup(db, {"brass_warden"}, 28));
 		support::sturdy(battle, first);
@@ -159,12 +191,9 @@ ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
 		support::othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
 		t.expect(!battle.combatant(1).alive(), "setup: the actor did not fall first");
-		defeatedActorSilent = !find(events, EventType::ActionStarted, 1) && !find(events, EventType::ActionFailed, 1) && !find(events, EventType::ActionPrevented, 1);
+		const std::string problem = cancelProblem(events, 1, CancelReason::ActorUnable, kDefeatedStatus);
+		t.expect(problem.empty(), "an actor defeated earlier in the round was not cancelled as unable to act: " + problem);
 	}
 
-	t.gap("no Retargeted event: a retarget shows only as a different ActionStarted.target (BAT-015 via BAT-071, BAT-115)");
-	t.note("retarget to next living enemy (with wrap), ally to actor, recovered revive cancelled, item and TP costs re-checked at execution, sleeping actor prevented with a reason event");
-	if (defeatedActorSilent) {
-		t.gap("an actor defeated earlier in the round is dropped with no cancel event; BAT-115 lists 'actor unable' as an ActionCancelled reason");
-	}
+	t.note("Retargeted to the next living enemy (with wrap) and from a fallen ally to the actor, each before ActionStarted; a recovered revive cancelled with no_target; item and technique costs re-checked at execution and cancelled with no_item and not_enough_tp; a sleeping or fallen actor cancelled with actor_unable and the cause");
 }
