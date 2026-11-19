@@ -18,8 +18,8 @@ build/event_cli lint --entries sample_text/entries.txt samples/*.ev
 - Blocks (`if`, `while`, `choice`, `ask`, `battle`, `together`, `sequence` and `event` itself) close with `end`.
 - `#` starts a comment that runs to the end of the line. A `#` inside a quoted string is text.
 - Text is either a quoted string, `"Like this."`, or a string ID, `@harbor.greeting`. A string ID is looked up in the game's string tables (see [String tables](#string-tables)), so the same script works in every language. Inside quotes, `\"` is a quote, `\\` a backslash and `\n` a line break.
-- A renamed name in text is written as a name token, `{name:tide_lamp}`, never typed out. The game shows the shipped or the restored name depending on the "show shipped names" setting (see [Name glossary](#name-glossary)).
-- Other `{...}` codes in text are control tags for the game, for example `{page}` to wait for the player before the next page of a line. They are written `{word}` or `{word:value}`. A translation must keep the same control tags in the same order (see [String tables](#string-tables)).
+- A renamed name in text is written as a name token, `{name:tide_lamp}`, never typed out. `{name_upper:tide_lamp}` shows it in capitals and `{name_lower:tide_lamp}` in lowercase. The game shows the shipped or the restored name depending on the "show shipped names" setting (see [Name glossary](#name-glossary)).
+- Other `{...}` codes in text are control tags for the game, for example `{page}` to wait for the player before the next page of a line. They are written `{word}` or `{word:value}`. A translation must keep the same control tags in the same order (see [String tables](#string-tables) and [Control tags](#control-tags)).
 - Names (actors, flags, markers, cameras and so on) are letters, digits, `_` and `.`, and do not start with a digit. Use dots to group names: `harbor.met_guide`.
 - Numbers are written `3`, `-2` or `1.5`.
 
@@ -285,7 +285,7 @@ Check the tables against the scripts:
 build/event_cli strings check --table sample_text/en.strings --table sample_text/ja.strings samples/*.ev
 ```
 
-It reports, as errors, an ID a script uses that a table lacks, and a translation that drops, adds or changes a name token or a control tag. Name tokens may come in any order, since word order differs between languages; control tags must come in the same order. As warnings it reports an ID no script uses and an ID one language has and another lacks. Without script files it only compares the tables with each other. The command fails when there are errors.
+It reports, as errors, an ID a script uses that a table lacks, and a translation that drops, adds or changes a name token or a control tag. Name tokens may come in any order, since word order differs between languages, and may change their case form (`{name_upper:moth_swarm}` in English, `{name:moth_swarm}` in Japanese), since capitalization differs too; the IDs must match. Control tags must come in the same order, each written the same: `{wait:30}` and `{wait:15}` are different tags. As warnings it reports an ID no script uses and an ID one language has and another lacks. Without script files it only compares the tables with each other. The command fails when there are errors.
 
 To move a scene from quoted text to IDs, print a proposed table:
 
@@ -305,7 +305,17 @@ tide_lamp | Tidlamp | Tide Lantern | cut by the item name length limit
 moth_swarm | MothSwm | Moth Swarm | cut by the enemy name length limit
 ```
 
-One entry per line, fields separated by `|`. The reason is optional. In text, write `{name:tide_lamp}` instead of the name. The game shows the restored name, or the shipped name when the player turns on "show shipped names". That setting only applies to English text; other languages always show the restored name.
+One entry per line, fields separated by `|`. The reason is optional. In text, write a name token instead of the name. The game shows the restored name, or the shipped name when the player turns on "show shipped names". That setting only applies to English text; other languages always show the restored name.
+
+A name token has three forms, the same ones `tools/text` writes:
+
+| Token | Shows |
+| --- | --- |
+| `{name:tide_lamp}` | the name as the glossary writes it: `Tide Lantern`, or `Tidlamp` |
+| `{name_upper:tide_lamp}` | in capitals: `TIDE LANTERN`, or `TIDLAMP` |
+| `{name_lower:tide_lamp}` | in lowercase: `tide lantern`, or `tidlamp` |
+
+Only the letters A to Z change case; other characters show as the glossary writes them.
 
 List every line that mentions a glossary name:
 
@@ -313,7 +323,20 @@ List every line that mentions a glossary name:
 build/event_cli names sample_text/glossary.txt --table sample_text/en.strings samples/*.ev
 ```
 
-It reports each token with the name it shows (add `--show-shipped` to see the shipped set), each name typed out instead of using a token, and each token that is broken or not in the glossary. Lines that use a string ID are checked in every table given. Typed-out names, broken tokens and unknown tokens make the command fail.
+It reports each token, in any of the three forms, with the name it shows (add `--show-shipped` to see the shipped set), each name typed out instead of using a token, and each token that is broken or not in the glossary. Lines that use a string ID are checked in every table given. Typed-out names, broken tokens and unknown tokens make the command fail.
+
+## Control tags
+
+The interpreter does not interpret any control tag or name token. It gives the host each line (`Host::show_line`, or `Host::log_skipped_line` while skipping) with its text as written: the quoted text, or the string ID for the host to look up. The host resolves the ID, renders name tokens, and acts on the tags. These come from `tools/text` string table exports:
+
+| Tag | What the host does |
+| --- | --- |
+| `{page}` | Ends a page of the line: the host waits for the player to confirm, clears the box and shows the rest. The line is done after its last page. |
+| `{wait:N}` | Pauses the text reveal at that point. `N` is a whole number; this format does not fix its unit. Shows nothing. |
+| `{portrait:ID}` | Switches the speaker's portrait to `ID` from that point. The `as <portrait>` of `say` is the portrait the line starts with. Shows nothing. |
+| `{var:ID}` | Shows a value the game holds at runtime, such as a party member's name. `ID` is the game's name for it, not a script variable. |
+
+Any other `{word}` or `{word:value}` is a control tag too, and also goes to the host as written. The checks never reject a tag by its name: `strings check` and the strict check compare tags between languages, and the registry does not list them. `time` measures the text as written, so tags and name tokens count as characters.
 
 ## Timing a scene
 
@@ -386,7 +409,7 @@ var market.offer local default 30
 - quoted text anywhere a player sees it (`say`, `narrate`, prompts and options): every such text must be a string ID, so it can be translated;
 - any warning, including an ignored `on skip` block.
 
-Give `--glossary` to fail on glossary names typed out instead of written as name tokens, and on broken or unknown tokens, in the scripts and in every table given. Give `--table` to run the string table checks; their errors fail the check, and with `--strict` their warnings do too.
+Give `--glossary` to fail on glossary names typed out instead of written as name tokens, and on broken or unknown tokens in any of the three forms, in the scripts and in every table given. Give `--table` to run the string table checks; their errors fail the check, and with `--strict` their warnings do too.
 
 ## Error messages
 

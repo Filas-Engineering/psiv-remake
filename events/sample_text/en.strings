@@ -24,7 +24,7 @@ lighthouse.light_safe = The light is safe. Take this, you have earned it.
 lighthouse.wake_on_shore = The traveler wakes on the shore, the tower dark behind them.
 lighthouse.more_oil = We can come back with more oil.
 lighthouse.stay_and_help = I will stay and help the keeper rebuild.
-lighthouse.moths_nesting = A {name:moth_swarm} is nesting in the lamp room!
+lighthouse.moths_nesting = {name_upper:moth_swarm}! A whole nest of them in the lamp room!
 
 market.vendor_greeting = Lanterns! Oil! A {name:tide_lamp} for every brave soul!
 market.hard_bargain = Fine, fine. You drive a hard bargain.

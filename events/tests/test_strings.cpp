@@ -169,3 +169,35 @@ TEST(inline_text_check_flags_every_quoted_text_at_its_own_line) {
 	CHECK(any_contains(d, Severity::error, "test.ev:9:", "inline text in ask"));
 	CHECK_EQ(d.size(), 3u);
 }
+
+TEST(string_check_lets_a_translation_change_a_name_token_case_but_not_its_id) {
+	events::Program p = test::compile_ok("event a unskippable\n\tsay guide @a.one\n\tsay guide @a.two\n\tsay guide @a.three\nend\n");
+	StringTable en = table_ok("en.strings", "language en\na.one = {name_upper:moth_swarm}! Run!\n"
+		"a.two = The {name_lower:tide_lamp} is lit.\na.three = {name_upper:moth_swarm}!\n");
+	StringTable ja = table_ok("ja.strings", "language ja\na.one = {name:moth_swarm}だ！逃げて！\n"
+		"a.two = {name_upper:tide_lamp}が灯った。\na.three = {name_upper:tide_lamp}！\n");
+	std::vector<Diagnostic> d = events::check_strings(p, {en, ja});
+	CHECK(any_contains(d, Severity::error, "ja.strings:4:", "name tokens in 'a.three' (tide_lamp) differ from the 'en' table (moth_swarm)"));
+	// A case form is not a control tag, so changing it is never a tag error either.
+	CHECK_EQ(d.size(), 1u);
+	CHECK(events::find_control_tags("{name_upper:a}{page}{name_lower:b}{name_upper: c}") == (std::vector<std::string>{"{page}"}));
+}
+
+TEST(string_tables_keep_the_text_tool_control_codes_in_order) {
+	events::Program p = test::compile_ok("event a unskippable\n\tsay keeper @a.one\n\tsay keeper @a.two\n\tsay keeper @a.three\n\tsay keeper @a.four\nend\n");
+	const char* line = "{portrait:keeper_tired}Again, {var:leader}?{wait:30} Fine.{page}Go.";
+	StringTable en = table_ok("en.strings", std::string("language en\na.one = ") + line + "\na.two = " + line + "\na.three = " + line + "\na.four = " + line + "\n");
+	CHECK_EQ(*en.find("a.one"), std::string(line));
+	CHECK(events::find_control_tags(line) == (std::vector<std::string>{"{portrait:keeper_tired}", "{var:leader}", "{wait:30}", "{page}"}));
+
+	StringTable ja = table_ok("ja.strings", "language ja\n"
+		"a.one = {portrait:keeper_tired}また{var:leader}か？{wait:30}いいだろう。{page}行け。\n"
+		"a.two = {portrait:keeper_tired}また{var:leader}か？{page}行け。{wait:30}\n"
+		"a.three = また{var:leader}か？{wait:30}{page}行け。\n"
+		"a.four = {portrait:keeper_tired}また{var:leader}か？{wait:15}{page}行け。\n");
+	std::vector<Diagnostic> d = events::check_strings(p, {en, ja});
+	CHECK(any_contains(d, Severity::error, "ja.strings:3:", "control tags in 'a.two' ({portrait:keeper_tired}, {var:leader}, {page}, {wait:30})"));
+	CHECK(any_contains(d, Severity::error, "ja.strings:4:", "control tags in 'a.three' ({var:leader}, {wait:30}, {page})"));
+	CHECK(any_contains(d, Severity::error, "ja.strings:5:", "control tags in 'a.four' ({portrait:keeper_tired}, {var:leader}, {wait:15}, {page})"));
+	CHECK_EQ(d.size(), 3u);
+}

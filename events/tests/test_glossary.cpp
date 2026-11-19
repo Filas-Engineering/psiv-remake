@@ -130,3 +130,71 @@ end
 		std::printf("%s", test::join(got).c_str());
 	}
 }
+
+TEST(name_tokens_come_in_three_case_forms) {
+	std::vector<events::NameToken> t = events::find_name_tokens("{name:a} {name_upper:b} {name_lower:c} {name_upper: d} {name_uppr:e} {Name:f}");
+	CHECK_EQ(t.size(), 4u);
+	CHECK(t[0].id == "a" && t[0].name_case == events::NameCase::as_written);
+	CHECK(t[1].id == "b" && t[1].name_case == events::NameCase::upper);
+	CHECK(t[2].id == "c" && t[2].name_case == events::NameCase::lower);
+	// Broken: the opener of its own form, so the report names that form.
+	CHECK(t[3].id.empty() && t[3].name_case == events::NameCase::upper);
+	CHECK_EQ(t[3].end - t[3].begin, std::string("{name_upper:").size());
+}
+
+TEST(render_names_applies_the_token_case_to_either_name_set) {
+	Glossary g = glossary_ok();
+	const std::string line = "{name_upper:moth}! The {name_lower:tide_lamp} is out. Fetch the {name:tide_lamp}.";
+	CHECK_EQ(events::render_names(line, g, NameSet::restored), std::string("EMBER MOTH! The tide lantern is out. Fetch the Tide Lantern."));
+	CHECK_EQ(events::render_names(line, g, NameSet::shipped), std::string("MOTH! The tidlamp is out. Fetch the Tidlamp."));
+
+	std::vector<std::string> problems;
+	std::string rendered = events::render_names("{name_lower:ghost}, {name_upper: and {name_upper:reef_salt}", g, NameSet::restored, &problems);
+	CHECK_EQ(rendered, std::string("{name_lower:ghost}, {name_upper: and REEF SALT"));
+	CHECK(problems == (std::vector<std::string>{"{name_lower:ghost}", "{name_upper:"}));
+
+	Glossary accented;
+	std::vector<Diagnostic> d;
+	CHECK(events::load_glossary("names.txt", "brine | Brin | Brine Crème\n", accented, d));
+	CHECK_EQ(events::shown_name(accented.entries[0], NameSet::restored, events::NameCase::upper), std::string("BRINE CRèME"));
+	CHECK_EQ(events::shown_name(accented.entries[0], NameSet::restored, events::NameCase::lower), std::string("brine crème"));
+}
+
+TEST(mentions_and_name_check_keep_the_token_form) {
+	Glossary g = glossary_ok();
+	events::Program p = test::compile_ok(R"(event dock unskippable
+	say guide "{name_upper:moth}! Light the {name:moth} lure."
+	say guide "{name_lower:tide_lamp} and {name_upper:ghost}."
+	say guide "A {name_lower: broken one."
+end
+)");
+	std::vector<NameMention> m = events::find_name_mentions(p, g, {});
+	std::vector<std::string> got;
+	for (const NameMention& n : m) {
+		got.push_back(std::to_string(n.line) + " " + events::mention_kind_name(n.kind) + " " + events::name_case_word(n.name_case) + " " + n.id);
+	}
+	std::vector<std::string> expected = {
+		"2 token name_upper moth",
+		"2 token name moth",
+		"3 token name_lower tide_lamp",
+		"3 unknown token name_upper ghost",
+		"4 broken token name_lower ",
+	};
+	CHECK(got == expected);
+	if (got != expected) {
+		std::printf("%s", test::join(got).c_str());
+	}
+
+	got.clear();
+	for (const Diagnostic& diagnostic : events::check_names(p, g, {})) {
+		got.push_back(events::format_diagnostic(diagnostic));
+	}
+	expected = {
+		"test.ev:3: error: unknown name token {name_upper:ghost}: it is not in names.txt",
+		"test.ev:4: error: broken name token: write {name_lower:<id>}",
+	};
+	CHECK(got == expected);
+	if (got != expected) {
+		std::printf("%s", test::join(got).c_str());
+	}
+}

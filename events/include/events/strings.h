@@ -48,15 +48,16 @@ struct TextUse {
 std::vector<TextUse> collect_texts(const Program& program);
 
 // Every control tag in the text, in order: `{word}` or `{word:value}`, other
-// than the name tokens `{name:<id>}`. The host interprets them, for example
-// `{page}` for a page pause.
+// than the name tokens `{name:<id>}`, `{name_upper:<id>}` and
+// `{name_lower:<id>}`. The host interprets them, for example `{page}` for a
+// page pause; FORMAT.md ("Control tags") lists the known ones.
 std::vector<std::string> find_control_tags(const std::string& text);
 
-// Errors: an ID a script uses that a table lacks; an ID whose name tokens
-// (in any order) or control tags (in order) differ between languages, as
-// when a translation drops or changes one (TXT-034). Warnings: an ID no
-// script uses (only when the program has events), and an ID one language
-// has and another lacks.
+// Errors: an ID a script uses that a table lacks; an ID whose name token
+// IDs (in any order and case form) or control tags (in order) differ
+// between languages, as when a translation drops or changes one (TXT-034).
+// Warnings: an ID no script uses (only when the program has events), and an
+// ID one language has and another lacks.
 std::vector<Diagnostic> check_strings(const Program& program, const std::vector<StringTable>& tables);
 
 // An error for every quoted text in the program: player-facing text must

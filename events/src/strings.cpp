@@ -185,7 +185,8 @@ std::vector<std::string> find_control_tags(const std::string& text) {
 		}
 		std::string inside = text.substr(at + 1, close - at - 1);
 		std::string tag = inside.substr(0, inside.find(':'));
-		if (is_name(tag) && tag != "name" && inside.find_first_of("{ ") == std::string::npos) {
+		bool name_token = tag == name_case_word(NameCase::as_written) || tag == name_case_word(NameCase::upper) || tag == name_case_word(NameCase::lower);
+		if (is_name(tag) && !name_token && inside.find_first_of("{ ") == std::string::npos) {
 			tags.push_back(text.substr(at, close - at + 1));
 			at = close + 1;
 		} else {

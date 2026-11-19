@@ -491,3 +491,20 @@ end
 		"shop dock_stall", "say guide \"Bye.\""};
 	CHECK(host.trace == expected);
 }
+
+TEST(control_tags_and_name_tokens_reach_the_host_as_written) {
+	Program p = test::compile_ok(R"(event a skippable
+	say keeper "{portrait:keeper_tired}Again, {var:leader}?{wait:30}{page}The {name_upper:moth_swarm}." as cheerful
+	narrate "Gone.{wait:10}"
+end
+)");
+	RecordingHost host;
+	Interpreter it(p, host);
+	it.start("a");
+	test::run(it, host);
+	CHECK(spoken(host) == (std::vector<std::string>{
+		"say keeper \"{portrait:keeper_tired}Again, {var:leader}?{wait:30}{page}The {name_upper:moth_swarm}.\" as cheerful",
+		"narrate \"Gone.{wait:10}\"",
+	}));
+	check_clean(host);
+}

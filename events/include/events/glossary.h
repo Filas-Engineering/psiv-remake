@@ -35,9 +35,20 @@ enum class NameSet { restored, shipped };
 // other language always gets restored names.
 NameSet name_set_for(bool show_shipped_names, const std::string& text_language);
 
-// Replaces every {name:<id>} token with that entry's name from `names`.
-// A token with an unknown ID, or a broken one, is left as written and its
-// text is added to `problems` when given.
+// The three name token forms, as tools/text writes them: {name:<id>} shows
+// the name as the glossary writes it, {name_upper:<id>} in capitals and
+// {name_lower:<id>} in lowercase. Case mapping is ASCII only, so other
+// characters show as written.
+enum class NameCase { as_written, upper, lower };
+
+// "name", "name_upper" or "name_lower".
+const char* name_case_word(NameCase name_case);
+
+std::string shown_name(const GlossaryEntry& entry, NameSet names, NameCase name_case);
+
+// Replaces every name token, in any of the three forms, with that entry's
+// name from `names` in the token's case. A token with an unknown ID, or a
+// broken one, is left as written and its text is added to `problems` when given.
 std::string render_names(const std::string& text, const Glossary& glossary, NameSet names, std::vector<std::string>* problems = nullptr);
 
 struct NameToken {
@@ -45,6 +56,7 @@ struct NameToken {
 	std::size_t end = 0;
 	// Empty for a broken token: "{name:" without a valid ID and closing brace.
 	std::string id;
+	NameCase name_case = NameCase::as_written;
 };
 
 std::vector<NameToken> find_name_tokens(const std::string& text);
@@ -70,6 +82,8 @@ struct NameMention {
 	std::string via;
 	// The table's language for text that came through one, else empty.
 	std::string language;
+	// The form written, for token, unknown_token and broken_token.
+	NameCase name_case = NameCase::as_written;
 };
 
 // Every script line whose text mentions a glossary name, either through a

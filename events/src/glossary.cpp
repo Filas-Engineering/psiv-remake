@@ -9,7 +9,7 @@ namespace events {
 
 namespace {
 
-const std::string token_open = "{name:";
+const NameCase name_cases[] = {NameCase::as_written, NameCase::upper, NameCase::lower};
 
 std::vector<std::string> split_fields(const std::string& line) {
 	std::vector<std::string> fields;
@@ -34,15 +34,21 @@ struct Candidate {
 	MentionKind kind;
 };
 
-void scan(const std::string& text, const Glossary& glossary, const std::vector<Candidate>& candidates, std::vector<std::pair<MentionKind, std::string>>& found) {
+struct Found {
+	MentionKind kind;
+	std::string id;
+	NameCase name_case;
+};
+
+void scan(const std::string& text, const Glossary& glossary, const std::vector<Candidate>& candidates, std::vector<Found>& found) {
 	std::string masked = text;
 	for (const NameToken& t : find_name_tokens(text)) {
 		if (t.id.empty()) {
-			found.push_back({MentionKind::broken_token, ""});
+			found.push_back({MentionKind::broken_token, "", t.name_case});
 		} else if (glossary.find(t.id)) {
-			found.push_back({MentionKind::token, t.id});
+			found.push_back({MentionKind::token, t.id, t.name_case});
 		} else {
-			found.push_back({MentionKind::unknown_token, t.id});
+			found.push_back({MentionKind::unknown_token, t.id, t.name_case});
 		}
 		std::fill(masked.begin() + static_cast<long>(t.begin), masked.begin() + static_cast<long>(t.end), '\0');
 	}
@@ -52,7 +58,7 @@ void scan(const std::string& text, const Glossary& glossary, const std::vector<C
 			std::size_t end = at + c.name.size();
 			bool whole = (at == 0 || !is_word_byte(masked[at - 1])) && (end >= masked.size() || !is_word_byte(masked[end]));
 			if (whole) {
-				found.push_back({c.kind, c.id});
+				found.push_back({c.kind, c.id, NameCase::as_written});
 				std::fill(masked.begin() + static_cast<long>(at), masked.begin() + static_cast<long>(end), '\0');
 			}
 			at = end;
@@ -116,19 +122,58 @@ NameSet name_set_for(bool show_shipped_names, const std::string& text_language) 
 	return show_shipped_names && text_language == "en" ? NameSet::shipped : NameSet::restored;
 }
 
+const char* name_case_word(NameCase name_case) {
+	switch (name_case) {
+	case NameCase::as_written:
+		return "name";
+	case NameCase::upper:
+		return "name_upper";
+	case NameCase::lower:
+		return "name_lower";
+	}
+	return "name";
+}
+
+std::string shown_name(const GlossaryEntry& entry, NameSet names, NameCase name_case) {
+	std::string name = names == NameSet::shipped ? entry.shipped : entry.restored;
+	if (name_case == NameCase::as_written) {
+		return name;
+	}
+	for (char& c : name) {
+		if (c >= 'a' && c <= 'z' && name_case == NameCase::upper) {
+			c = static_cast<char>(c - 'a' + 'A');
+		} else if (c >= 'A' && c <= 'Z' && name_case == NameCase::lower) {
+			c = static_cast<char>(c - 'A' + 'a');
+		}
+	}
+	return name;
+}
+
 std::vector<NameToken> find_name_tokens(const std::string& text) {
 	std::vector<NameToken> tokens;
 	std::size_t at = 0;
-	while ((at = text.find(token_open, at)) != std::string::npos) {
+	while ((at = text.find('{', at)) != std::string::npos) {
 		NameToken token;
+		std::string open;
+		for (NameCase name_case : name_cases) {
+			std::string candidate = std::string("{") + name_case_word(name_case) + ":";
+			if (text.compare(at, candidate.size(), candidate) == 0) {
+				open = candidate;
+				token.name_case = name_case;
+			}
+		}
+		if (open.empty()) {
+			++at;
+			continue;
+		}
 		token.begin = at;
-		std::size_t close = text.find('}', at + token_open.size());
-		std::string id = close == std::string::npos ? std::string() : text.substr(at + token_open.size(), close - at - token_open.size());
+		std::size_t close = text.find('}', at + open.size());
+		std::string id = close == std::string::npos ? std::string() : text.substr(at + open.size(), close - at - open.size());
 		if (is_name(id)) {
 			token.id = id;
 			token.end = close + 1;
 		} else {
-			token.end = at + token_open.size();
+			token.end = at + open.size();
 		}
 		tokens.push_back(token);
 		at = token.end;
@@ -148,7 +193,7 @@ std::string render_names(const std::string& text, const Glossary& glossary, Name
 			continue;
 		}
 		out += text.substr(copied, t.begin - copied);
-		out += names == NameSet::shipped ? entry->shipped : entry->restored;
+		out += shown_name(*entry, names, t.name_case);
 		copied = t.end;
 	}
 	return out + text.substr(copied);
@@ -183,20 +228,23 @@ std::vector<NameMention> find_name_mentions(const Program& program, const Glossa
 			}
 		}
 		for (const Source& t : texts) {
-			std::vector<std::pair<MentionKind, std::string>> found;
+			std::vector<Found> found;
 			scan(t.text, glossary, candidates, found);
-			for (const auto& f : found) {
+			for (const Found& f : found) {
 				NameMention m;
 				m.file = program.files[use.file];
 				m.line = use.line;
 				m.event = use.event;
-				m.kind = f.first;
-				m.id = f.second;
+				m.kind = f.kind;
+				m.id = f.id;
 				m.via = t.via;
 				m.language = t.language;
+				m.name_case = f.name_case;
 				bool seen = false;
 				for (const NameMention& earlier : mentions) {
-					seen = seen || (earlier.file == m.file && earlier.line == m.line && earlier.kind == m.kind && earlier.id == m.id && earlier.via == m.via);
+					seen = seen ||
+						(earlier.file == m.file && earlier.line == m.line && earlier.kind == m.kind && earlier.id == m.id && earlier.via == m.via &&
+							earlier.name_case == m.name_case);
 				}
 				if (!seen) {
 					mentions.push_back(m);
@@ -222,10 +270,11 @@ std::vector<Diagnostic> check_names(const Program& program, const Glossary& glos
 					"} so the \"show shipped names\" setting can switch it"});
 			break;
 		case MentionKind::unknown_token:
-			out.push_back({Severity::error, m.file, m.line, "unknown name token {name:" + m.id + "}" + via + ": it is not in " + glossary.file});
+			out.push_back({Severity::error, m.file, m.line,
+				"unknown name token {" + std::string(name_case_word(m.name_case)) + ":" + m.id + "}" + via + ": it is not in " + glossary.file});
 			break;
 		case MentionKind::broken_token:
-			out.push_back({Severity::error, m.file, m.line, "broken name token" + via + ": write {name:<id>}"});
+			out.push_back({Severity::error, m.file, m.line, "broken name token" + via + ": write {" + std::string(name_case_word(m.name_case)) + ":<id>}"});
 			break;
 		}
 	}

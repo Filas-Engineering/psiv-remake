@@ -515,8 +515,9 @@ int names_command(int argc, char** argv) {
 		NameSet names = name_set_for(show_shipped, m.language.empty() ? language : m.language);
 		switch (m.kind) {
 		case MentionKind::token:
-			std::printf("%stoken {name:%s}%s shows \"%s\" (shipped \"%s\", restored \"%s\")\n", where.c_str(), m.id.c_str(), via.c_str(),
-				(names == NameSet::shipped ? entry->shipped : entry->restored).c_str(), entry->shipped.c_str(), entry->restored.c_str());
+			std::printf("%stoken {%s:%s}%s shows \"%s\" (shipped \"%s\", restored \"%s\")\n", where.c_str(), name_case_word(m.name_case), m.id.c_str(), via.c_str(),
+				shown_name(*entry, names, m.name_case).c_str(), shown_name(*entry, NameSet::shipped, m.name_case).c_str(),
+				shown_name(*entry, NameSet::restored, m.name_case).c_str());
 			break;
 		case MentionKind::literal_shipped:
 		case MentionKind::literal_restored:
@@ -525,11 +526,11 @@ int names_command(int argc, char** argv) {
 			broken = true;
 			break;
 		case MentionKind::unknown_token:
-			std::printf("%sunknown token {name:%s}%s: not in %s\n", where.c_str(), m.id.c_str(), via.c_str(), glossary_path.c_str());
+			std::printf("%sunknown token {%s:%s}%s: not in %s\n", where.c_str(), name_case_word(m.name_case), m.id.c_str(), via.c_str(), glossary_path.c_str());
 			broken = true;
 			break;
 		case MentionKind::broken_token:
-			std::printf("%sbroken name token%s: write {name:<id>}\n", where.c_str(), via.c_str());
+			std::printf("%sbroken name token%s: write {%s:<id>}\n", where.c_str(), via.c_str(), name_case_word(m.name_case));
 			broken = true;
 			break;
 		}
