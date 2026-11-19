@@ -1,0 +1,9 @@
+id,category,shipped,restored,reason,pronunciation,signoff
+ITM-001,item,Tonc,Tonic,Cut to fit the name table,TON-ik,placeholder lead
+ITM-002,item,Brine Pot,Brine Potion,Cut to fit the name table,BRYNE POH-shun,placeholder lead
+ITM-003,item,Gull Fthr,Gull Feather,Cut to fit the name table,GUL FETH-er,placeholder lead
+ITM-004,item,Rope,Rope,,,placeholder lead
+TEC-001,technique,Tidecal,Tidecall,Last letter cut,TIDE-call,placeholder lead
+SKL-001,skill,Net Thrw,Net Throw,Cut to fit the name table,NET THROH,
+ENM-001,enemy,Reef Crwlr,Reef Crawler,Cut to the 10-character cap,REEF CRAW-ler,placeholder lead
+MNU-001,menu,Dscrd,Discard,Menu label cut to fit the window,,placeholder lead

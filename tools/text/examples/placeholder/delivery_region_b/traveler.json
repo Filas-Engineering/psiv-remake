@@ -1,0 +1,44 @@
+[
+	{
+		"tree": "traveler_osk",
+		"index": 0,
+		"speaker": "OSK",
+		"text": "{portrait:OSK}{var:hero}, you look like you've  sailed before.",
+		"codes": ["portrait:OSK", "var:hero"],
+		"branches": [1],
+		"map": "saltmere_inn",
+		"trigger": "talk_osk"
+	},
+	{
+		"tree": "traveler_osk",
+		"index": 1,
+		"speaker": "OSK",
+		"text": "{portrait:OSK}I came to Saltmeer for the Gull Fthr market.{br}Have you seen one?",
+		"codes": ["portrait:OSK", "br"],
+		"branches": [2, 3],
+		"map": "saltmere_inn",
+		"trigger": "talk_osk"
+	},
+	{
+		"tree": "traveler_osk",
+		"index": 2,
+		"speaker": "OSK",
+		"text": "{portrait:OSK}A whole Gull{br}Fthr? Lucky!",
+		"codes": ["portrait:OSK", "br"],
+		"branches": [],
+		"map": "saltmere_inn",
+		"trigger": "talk_osk",
+		"context": "Choice: yes"
+	},
+	{
+		"tree": "traveler_osk",
+		"index": 3,
+		"speaker": "OSK",
+		"text": "{portrait:OSK}My Tidecal could call the tide,{br}but the Net Thrw is quicker.",
+		"codes": ["portrait:OSK", "br"],
+		"branches": [],
+		"map": "saltmere_inn",
+		"trigger": "talk_osk",
+		"context": "Choice: no"
+	}
+]

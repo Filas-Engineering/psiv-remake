@@ -1,0 +1,32 @@
+{
+	"br": {
+		"arg": "none",
+		"reflow": true,
+		"shows": "newline"
+	},
+	"end": {
+		"arg": "none",
+		"reflow": false,
+		"shows": ""
+	},
+	"page": {
+		"arg": "none",
+		"reflow": false,
+		"shows": "page"
+	},
+	"portrait": {
+		"arg": "id",
+		"reflow": false,
+		"shows": ""
+	},
+	"var": {
+		"arg": "id",
+		"reflow": false,
+		"shows": "placeholder"
+	},
+	"wait": {
+		"arg": "int",
+		"reflow": false,
+		"shows": ""
+	}
+}

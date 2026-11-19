@@ -1,0 +1,54 @@
+[
+	{
+		"tree": "menu",
+		"index": 0,
+		"speaker": null,
+		"text": "Dscrd",
+		"codes": [],
+		"branches": [],
+		"map": null,
+		"trigger": null,
+		"kind": "system",
+		"limit": 12,
+		"context": "Item menu command"
+	},
+	{
+		"tree": "menu",
+		"index": 1,
+		"speaker": null,
+		"text": "Use",
+		"codes": [],
+		"branches": [],
+		"map": null,
+		"trigger": null,
+		"kind": "system",
+		"limit": 12,
+		"context": "Item menu command"
+	},
+	{
+		"tree": "item_desc",
+		"index": 0,
+		"speaker": null,
+		"text": "Tonc: restores a little{br}health.",
+		"codes": ["br"],
+		"branches": [],
+		"map": null,
+		"trigger": null,
+		"kind": "system",
+		"limit": 24,
+		"context": "Item description"
+	},
+	{
+		"tree": "battle",
+		"index": 0,
+		"speaker": null,
+		"text": "{var:target} fell asleep.",
+		"codes": ["var:target"],
+		"branches": [],
+		"map": null,
+		"trigger": "status_sleep",
+		"kind": "system",
+		"limit": 28,
+		"context": "Battle status message"
+	}
+]

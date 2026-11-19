@@ -1,0 +1,54 @@
+[
+	{
+		"tree": "harbor_guide",
+		"index": 0,
+		"speaker": "FINCH",
+		"text": "{portrait:FINCH}Welcome to Saltmere!{br}I'm Finch, the harbor guide.{page}Ask me anything.",
+		"codes": ["portrait:FINCH", "br", "page"],
+		"branches": [1, 2],
+		"map": "saltmere_docks",
+		"trigger": "talk_finch"
+	},
+	{
+		"tree": "harbor_guide",
+		"index": 1,
+		"speaker": "FINCH",
+		"text": "{portrait:FINCH}The ferry leaves at dusk.{br}Bring a Tonc for the the crossing.",
+		"codes": ["portrait:FINCH", "br"],
+		"branches": [3],
+		"map": "saltmere_docks",
+		"trigger": "talk_finch",
+		"context": "Choice: ask about the ferry"
+	},
+	{
+		"tree": "harbor_guide",
+		"index": 2,
+		"speaker": "FINCH",
+		"text": "{portrait:FINCH}Feeling seasick? A Brine{br}Pot settles the stomach.{page}The shop is by the boats.The one with the red door.",
+		"codes": ["portrait:FINCH", "br", "page"],
+		"branches": [3],
+		"map": "saltmere_docks",
+		"trigger": "talk_finch",
+		"context": "Choice: ask about the shop"
+	},
+	{
+		"tree": "harbor_guide",
+		"index": 3,
+		"speaker": "FINCH",
+		"text": "{portrait:FINCH}Mind the Reef Crwlr nests on the north pier.{wait:20} They bite!",
+		"codes": ["portrait:FINCH", "wait:20"],
+		"branches": [],
+		"map": "saltmere_docks",
+		"trigger": "talk_finch"
+	},
+	{
+		"tree": "harbor_guide",
+		"index": 4,
+		"speaker": "FINCH",
+		"text": "{portrait:FINCH}TONC! TONC! Get your Tonc here !",
+		"codes": ["portrait:FINCH"],
+		"branches": [],
+		"map": "saltmere_market",
+		"trigger": "talk_finch_market"
+	}
+]
