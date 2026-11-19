@@ -15,7 +15,7 @@ The scope does not describe the menu tree. UI-003 proposes one; UI-004 is the sc
 
 | ID | Requirement | Label | Source |
 |---|---|---|---|
-| UI-003 | The field menu root lists: Items, Techniques, Skills, Equipment, Status, Macros, Combo Log, Quest Log, Encyclopedia, Settings, and Save where saving is allowed ([SAV-003](save-and-progression.md)) | Proposed (spec) | S-SYS-QOL |
+| UI-003 | The field menu root lists: Items, Techniques, Skills, Equipment, Status, Macros, Combo Log, Quest Log, Encyclopedia, Settings, and Save where saving is allowed ([SAV-003](save-and-progression.md)). Published sources say the original puts Save in a separate system window with the speed and button settings, so Save in the field menu is a change (UI-016); see [published-mechanics.md](../research/published-mechanics.md) | Proposed (spec) | S-SYS-QOL |
 | UI-004 | Macros are one input from the field menu root and one input from the battle command menu root | Proposed (scope) | S-PILLAR-1 |
 | UI-005 | The macro editor creates, renames, deletes and reorders macros; sets each entry's command and target rule ([BAT-054](battle.md)); and marks entries that are currently invalid (absent member, unaffordable cost) with the reason | Proposed (spec) | S-PILLAR-1 |
 | UI-006 | The battle screen shows: the command menu for the active party member, a target cursor, each party member's HP, TP and statuses, enemy names, and status messages ([BAT-083](battle.md)). Macro and Auto sit at the top level of the command menu | Proposed (spec) | S-PILLAR-1 |

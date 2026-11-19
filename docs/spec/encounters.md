@@ -43,7 +43,7 @@ How battles start in the field: visible enemies, the random-battle fallback, bat
 
 | ID | Requirement | Label | Source |
 |---|---|---|---|
-| ENC-030 | Escape is a party command. It resolves at its place in the execution order. On success the battle ends at once with the result Escaped, actions not yet executed are dropped, and no rewards are given. On failure the round continues | Proposed (spec) | L-CORE |
+| ENC-030 | Escape is a party command. It resolves at its place in the execution order. On success the battle ends at once with the result Escaped, actions not yet executed are dropped, and no rewards are given. On failure the round continues. Published sources say Run is one party-level entry in the original's top battle menu; whether it takes a place in the order is unknown (ENC-035); see [published-mechanics.md](../research/published-mechanics.md) | Proposed (spec) | L-CORE |
 | ENC-031 | Escape success uses the original's rule from ENC-035. A battle setup flag disables escape; bosses and battles whose event says so set it ([EVT-009](events-and-live-panels.md)) | Proposed (spec) | S-GOALS |
 | ENC-032 | Escape is always shown in the command menu. When disabled for the battle it is shown greyed with the reason | Proposed (spec) | S-FAN-TEXT |
 | ENC-035 | To measure: the original's escape rule: who can choose it, success chance and its inputs (agility, level, group), what happens to the rest of the party's commands on failure, and which battles forbid it. Method: rights holder formulas; cross-check with at least 200 attempts across three areas in the reference build. Feeds ENC-030 and ENC-031 | To measure | S-GOALS |

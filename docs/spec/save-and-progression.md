@@ -7,8 +7,8 @@ What a save holds, saving rules, round trip and versioning, and how the party pr
 | ID | Requirement | Label | Source |
 |---|---|---|---|
 | SAV-001 | A save holds every field in the table below and nothing else that affects play | Proposed (spec) | S-SYS-QOL |
-| SAV-002 | There are at least 10 manual save slots and the three rotating autosave slots from [FLOW-054](game-flow.md). The slot list shows location, play time, party, active difficulty and write time, and marks autosaves | Proposed (spec) | S-SYS-QOL |
-| SAV-003 | Manual saves are allowed only where the original allows saving (SAV-004), only in the Field mode, and never while an event runs ([EVT-053](events-and-live-panels.md)) | Proposed (spec) | S-GOALS |
+| SAV-002 | There are at least 10 manual save slots and the three rotating autosave slots from [FLOW-054](game-flow.md). The slot list shows location, play time, party, active difficulty and write time, and marks autosaves. Published sources say the original has three save files, so the larger slot count is an addition; see [published-mechanics.md](../research/published-mechanics.md) | Proposed (spec) | S-SYS-QOL |
+| SAV-003 | Manual saves are allowed only where the original allows saving (SAV-004), only in the Field mode, and never while an event runs ([EVT-053](events-and-live-panels.md)). Published sources say the original saves anywhere outside dungeons and battle, from a separate system window and not the field menu (SAV-004); see [published-mechanics.md](../research/published-mechanics.md) | Proposed (spec) | S-GOALS |
 | SAV-004 | To measure: where and how the original lets the player save (locations, objects, services, any cost) and whether it has any suspend feature. Method: rights holder data and a reference build playthrough. Feeds SAV-003 | To measure | S-GOALS |
 | SAV-005 | Settings other than difficulty and reward multiplier are stored in a global profile, not in saves. Difficulty and reward multiplier are per save | Proposed (spec) | S-SYS-DIFF |
 
