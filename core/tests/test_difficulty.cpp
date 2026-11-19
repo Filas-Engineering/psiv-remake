@@ -36,7 +36,8 @@ TEST(hardOverlayChangesDataOnly) {
 	CHECK_EQ(hard.abilities.at("mend").effects[0].power, 28 * 80 / 100);
 	const std::vector<std::string>& abilities = hard.enemies.at("brass_warden").abilities;
 	CHECK(std::find(abilities.begin(), abilities.end(), "numbing_sting") != abilities.end());
-	CHECK_EQ(hard.enemies.at("brass_warden").ai.size(), std::size_t(6));
+	CHECK_EQ(hard.enemies.at("brass_warden").ai.size(), std::size_t(7));
+	CHECK(hard.enemies.at("brass_warden").ai[1].target.rule == AiTargetRule::LastAttacker);
 	CHECK_EQ(hard.enemies.at("rust_hound").statusResist.at("sleep"), 50);
 	CHECK_EQ(hard.enemies.at("gel_mite").stats.maxHp, 60);
 }

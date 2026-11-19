@@ -32,7 +32,7 @@ TEST(recordReplaysToByteIdenticalEvents) {
 		setup.difficulty = "hard";
 		setup.rewardMultiplier = RewardMultiplier::X2;
 		ComboLog log;
-		log.discover("storm_spark");
+		log.discover("storm_spark", 125000, {"mystic", "scout"});
 		Battle battle = makeBattle(data(), setup, &log);
 		const std::string played = serializeEvents(playMixed(battle));
 		const std::string text = serializeRecord(battle.record());
@@ -86,7 +86,8 @@ TEST(recordParserReportsTheLine) {
 	std::string broken = text;
 	broken.replace(broken.find("seed 1"), 6, "seed x");
 	CHECK_EQ(parseRecord(broken).error, std::string("record line 5: bad value in 'seed x'"));
-	CHECK(parseRecord(text.substr(0, text.size() - 4)).error.find("without 'end'") != std::string::npos);
+	CHECK(parseRecord(text.substr(0, text.find("end\n"))).error.find("without 'end'") != std::string::npos);
+	CHECK_EQ(parseRecord(text.substr(0, text.find("checksum"))).error, std::string("record has no checksum line"));
 }
 
 TEST(eventTextIsStable) {
@@ -104,7 +105,24 @@ TEST(eventTextIsStable) {
 	combo.round = 1;
 	combo.actor = 1;
 	combo.ability = "storm spark";
+	combo.combo = "storm_spark";
 	combo.participants = {1, 2};
-	combo.firstDiscovery = true;
-	CHECK_EQ(serializeEvent(combo), std::string("1 ComboTriggered actor=1 ability=storm%20spark first_discovery=1 participants=1,2"));
+	CHECK_EQ(serializeEvent(combo), std::string("1 ComboTriggered actor=1 ability=storm%20spark combo=storm_spark participants=1,2"));
+}
+
+TEST(aDamagedRecordIsRefused) {
+	Battle battle = makeBattle(data(), {"gel_mite", "rust_hound"}, 5);
+	playToEnd(battle, 10);
+	const std::string text = serializeRecord(battle.record());
+	CHECK(parseRecord(text).ok());
+	int loaded = 0;
+	for (std::size_t at = 0; at < text.size(); ++at) {
+		std::string damaged = text;
+		damaged[at] = static_cast<char>(damaged[at] ^ 0x04);
+		loaded += parseRecord(damaged).ok() ? 1 : 0;
+	}
+	CHECK_EQ(loaded, 0);
+	std::string swapped = text;
+	swapped.replace(swapped.find("seed 5"), 6, "seed 6");
+	CHECK_EQ(parseRecord(swapped).error, std::string("record checksum does not match: the record is damaged"));
 }

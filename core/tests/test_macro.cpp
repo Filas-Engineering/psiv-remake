@@ -70,17 +70,36 @@ TEST(macroSkipsDefeatedMembers) {
 	CHECK(std::find(order.begin(), order.end(), kScout) == order.end());
 }
 
-TEST(macroFallsBackToAttackWhenAStepCannotRun) {
+TEST(macroKeepsAnUnaffordableStepAndCancelsItAtExecution) {
 	Battle battle = makeBattle(data(), {"gel_mite", "rust_hound"}, 1);
 	battle.combatant(kMystic).tp = 1;
 	addStatus(battle, kEngineer, "silence", 3);
 	const std::vector<MacroStepResult> results = battle.applyMacro(opener());
-	CHECK(results[0].status == MacroStepStatus::FellBack);
-	CHECK(results[0].issue == MacroIssue::NotEnoughTp);
-	CHECK(battle.command(kMystic).kind == CommandKind::Attack);
+	CHECK(results[0].status == MacroStepStatus::Applied && results[0].issue == MacroIssue::NotEnoughTp);
+	CHECK(battle.command(kMystic).kind == CommandKind::Ability && battle.command(kMystic).id == "spark");
 	CHECK_EQ(battle.command(kMystic).target, kFirstEnemy);
-	CHECK(results[3].issue == MacroIssue::Silenced);
-	CHECK_EQ(battle.command(kEngineer).target, kFirstEnemy + 1);
+	CHECK(results[3].status == MacroStepStatus::Applied && results[3].issue == MacroIssue::Silenced);
+	CHECK(battle.command(kEngineer).kind == CommandKind::Ability && battle.command(kEngineer).target == kFirstEnemy + 1);
+
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	const std::optional<Event> mystic = firstBy(events, EventType::ActionCancelled, kMystic);
+	CHECK(mystic && mystic->cancel == CancelReason::NotEnoughTp && mystic->ability == "spark");
+	const std::optional<Event> engineer = firstBy(events, EventType::ActionCancelled, kEngineer);
+	CHECK(engineer && engineer->cancel == CancelReason::Silenced);
+	CHECK_EQ(battle.combatant(kMystic).tp, 1);
+	CHECK(!firstBy(events, EventType::ActionStarted, kMystic).has_value());
+}
+
+TEST(macroStepTheBattleWouldRefuseFallsBackToAttack) {
+	Macro macro;
+	macro.name = "test";
+	macro.steps.push_back(step("mystic", CommandKind::Ability, "cleave", MacroTargetKind::Enemy, "", 1));
+	Battle battle = makeBattle(data(), {"gel_mite", "rust_hound"}, 1);
+	const std::vector<MacroStepResult> results = battle.applyMacro(macro);
+	CHECK(results[0].status == MacroStepStatus::FellBack && results[0].issue == MacroIssue::UnknownAbility);
+	CHECK(battle.command(kMystic).kind == CommandKind::Attack);
+	CHECK_EQ(battle.command(kMystic).target, kFirstEnemy + 1);
 }
 
 TEST(macroRetargetsWhenTheTargetIsGone) {
@@ -93,20 +112,37 @@ TEST(macroRetargetsWhenTheTargetIsGone) {
 	CHECK_EQ(battle.command(kMystic).id, std::string("spark"));
 }
 
-TEST(macroReviveWithNobodyDownFallsBack) {
+TEST(macroReviveWithNobodyDownWaitsForExecution) {
 	Macro macro;
 	macro.name = "test";
 	macro.steps.push_back(step("medic", CommandKind::Ability, "rekindle", MacroTargetKind::Member, "fighter"));
 	Battle battle = makeBattle(data(), {"gel_mite"}, 1);
 	std::vector<MacroStepResult> results = battle.applyMacro(macro);
-	CHECK(results[0].status == MacroStepStatus::FellBack);
-	CHECK(results[0].issue == MacroIssue::NoTarget);
-	CHECK(battle.command(kMedic).kind == CommandKind::Attack);
+	CHECK(results[0].status == MacroStepStatus::Applied && results[0].issue == MacroIssue::NoTarget);
+	CHECK(battle.command(kMedic).kind == CommandKind::Ability && battle.command(kMedic).target == kFighter);
+	othersDefend(battle);
+	const std::optional<Event> cancelled = firstBy(battle.resolveRound(), EventType::ActionCancelled, kMedic);
+	CHECK(cancelled && cancelled->cancel == CancelReason::NoTarget);
+
+	// The fighter falls to a faster enemy first, so the revive the macro kept now lands.
+	Database db = data();
+	db.characters["medic"].base.agility = 1;
+	db.enemies["gel_mite"].stats.agility = 300;
+	db.enemies["gel_mite"].stats.dexterity = 500;
+	Battle late = makeBattle(db, {"gel_mite"}, 1);
+	late.combatant(kFighter).hp = 1;
+	late.applyMacro(macro);
+	late.setCommand(kFirstEnemy, Command::attack(kFighter));
+	othersDefend(late);
+	const std::vector<Event> events = late.resolveRound();
+	CHECK(!ofType(events, EventType::CombatantDefeated).empty());
+	const std::vector<Event> revived = ofType(events, EventType::Revived);
+	CHECK(revived.size() == 1 && revived[0].actor == kMedic && revived[0].target == kFighter);
 
 	Battle downed = makeBattle(data(), {"gel_mite"}, 1);
 	downed.combatant(kFighter).hp = 0;
 	results = downed.applyMacro(macro);
-	CHECK(results[0].status == MacroStepStatus::Applied);
+	CHECK(results[0].status == MacroStepStatus::Applied && results[0].issue == MacroIssue::None);
 	CHECK_EQ(downed.command(kMedic).target, kFighter);
 }
 
@@ -116,11 +152,16 @@ TEST(macroReservesItemsAcrossSteps) {
 	macro.steps.push_back(step("fighter", CommandKind::Item, "tonic", MacroTargetKind::Member, "mystic"));
 	macro.steps.push_back(step("scout", CommandKind::Item, "tonic", MacroTargetKind::Member, "mystic"));
 	Battle battle = makeBattle(data(), {"gel_mite"}, 1, Inventory{{"tonic", 1}});
+	battle.combatant(kMystic).hp = 5;
 	const std::vector<MacroStepResult> results = battle.applyMacro(macro);
-	CHECK(results[0].status == MacroStepStatus::Applied);
-	CHECK(results[1].status == MacroStepStatus::FellBack);
-	CHECK(results[1].issue == MacroIssue::NoItem);
-	CHECK(battle.command(kScout).kind == CommandKind::Attack);
+	CHECK(results[0].status == MacroStepStatus::Applied && results[0].issue == MacroIssue::None);
+	CHECK(results[1].status == MacroStepStatus::Applied && results[1].issue == MacroIssue::NoItem);
+	CHECK(battle.command(kScout).kind == CommandKind::Item);
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	const std::optional<Event> cancelled = firstBy(events, EventType::ActionCancelled, kScout);
+	CHECK(cancelled && cancelled->cancel == CancelReason::NoItem);
+	CHECK_EQ(battle.inventory().at("tonic"), 0);
 }
 
 TEST(macroTargetsAreRulesNotIndexes) {

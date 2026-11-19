@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rules/stats.h"
+#include "rules/status.h"
 #include "rules/types.h"
 
 #include <map>
@@ -8,12 +9,6 @@
 #include <vector>
 
 namespace rules {
-
-struct ActiveStatus {
-	std::string id;
-	// Rounds left; 0 lasts until cured.
-	int remaining = 0;
-};
 
 struct ActiveModifier {
 	Stat stat = Stat::Strength;
@@ -40,6 +35,8 @@ struct Combatant {
 	std::vector<ActiveStatus> statuses;
 	std::vector<ActiveModifier> modifiers;
 	bool defending = false;
+	// The foe that last damaged this combatant, for the last_attacker AI target rule.
+	int lastAttacker = -1;
 
 	bool alive() const { return hp > 0; }
 	bool knows(const std::string& abilityId) const;

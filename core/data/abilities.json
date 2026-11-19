@@ -28,16 +28,16 @@
 		{"id": "weaken", "name": "Soften", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
 			{"type": "modify_stat", "stat": "defense", "percent": -30, "duration": 3}
 		]},
-		{"id": "mend", "name": "Mend", "kind": "technique", "cost": 3, "target": "one_ally", "effects": [
+		{"id": "mend", "name": "Mend", "kind": "technique", "cost": 3, "target": "one_ally", "field": true, "effects": [
 			{"type": "heal", "power": 28}
 		]},
-		{"id": "wide_mend", "name": "Wide Mend", "kind": "technique", "cost": 8, "target": "all_allies", "effects": [
+		{"id": "wide_mend", "name": "Wide Mend", "kind": "technique", "cost": 8, "target": "all_allies", "field": true, "effects": [
 			{"type": "heal", "power": 18}
 		]},
-		{"id": "purge", "name": "Purge", "kind": "technique", "cost": 2, "target": "one_ally", "effects": [
+		{"id": "purge", "name": "Purge", "kind": "technique", "cost": 2, "target": "one_ally", "field": true, "effects": [
 			{"type": "cure_status", "status": "poison"}
 		]},
-		{"id": "rekindle", "name": "Rekindle", "kind": "technique", "cost": 10, "target": "one_ally", "effects": [
+		{"id": "rekindle", "name": "Rekindle", "kind": "technique", "cost": 10, "target": "one_fallen_ally", "field": true, "effects": [
 			{"type": "revive", "power": 50}
 		]},
 		{"id": "rally", "name": "Rally Cry", "kind": "technique", "cost": 4, "target": "all_allies", "effects": [
@@ -49,7 +49,7 @@
 		{"id": "cleave", "name": "Cleave", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
 			{"type": "physical_damage", "power": 90}
 		]},
-		{"id": "renew", "name": "Renew", "kind": "technique", "cost": 6, "target": "one_ally", "effects": [
+		{"id": "renew", "name": "Renew", "kind": "technique", "cost": 6, "target": "one_ally", "field": true, "effects": [
 			{"type": "heal", "power": 45}
 		]},
 		{"id": "glint", "name": "Glint", "kind": "technique", "cost": 2, "target": "one_enemy", "effects": [
@@ -77,6 +77,47 @@
 			{"type": "heal", "power": 30},
 			{"type": "modify_stat", "stat": "strength", "percent": 40, "duration": 3}
 		]},
+		{"id": "cinder_gale", "name": "Cinder Gale", "kind": "combo", "target": "enemy_group", "effects": [
+			{"type": "elemental_damage", "power": 58, "element": "heat"}
+		]},
+		{"id": "brittle_frost", "name": "Brittle Frost", "kind": "combo", "target": "all_enemies", "effects": [
+			{"type": "elemental_damage", "power": 38, "element": "chill"},
+			{"type": "modify_stat", "stat": "defense", "percent": -30, "duration": 2}
+		]},
+		{"id": "quiet_hour", "name": "Quiet Hour", "kind": "combo", "target": "enemy_group", "effects": [
+			{"type": "apply_status", "status": "sleep", "chance": 80},
+			{"type": "apply_status", "status": "silence", "chance": 80}
+		]},
+		{"id": "sundering_cleave", "name": "Sundering Cleave", "kind": "combo", "target": "enemy_group", "effects": [
+			{"type": "physical_damage", "power": 150}
+		]},
+		{"id": "twin_arc", "name": "Twin Arc", "kind": "combo", "target": "one_enemy", "effects": [
+			{"type": "elemental_damage", "power": 66, "element": "shock"}
+		]},
+		{"id": "pinpoint_rend", "name": "Pinpoint Rend", "kind": "combo", "target": "one_enemy", "effects": [
+			{"type": "physical_damage", "power": 250, "critical": 30}
+		]},
+		{"id": "clean_slate", "name": "Clean Slate", "kind": "combo", "target": "all_allies", "effects": [
+			{"type": "cure_status", "status": "poison"},
+			{"type": "heal", "power": 16}
+		]},
+		{"id": "surge_step", "name": "Surge Step", "kind": "combo", "target": "all_allies", "effects": [
+			{"type": "modify_stat", "stat": "agility", "percent": 40, "duration": 3}
+		]},
+		{"id": "dawn_call", "name": "Dawn Call", "kind": "combo", "target": "all_allies", "effects": [
+			{"type": "revive", "power": 30},
+			{"type": "heal", "power": 12}
+		]},
+		{"id": "kiln_roar", "name": "Kiln Roar", "kind": "combo", "target": "all_enemies", "effects": [
+			{"type": "elemental_damage", "power": 84, "element": "heat"}
+		]},
+		{"id": "hailstorm", "name": "Hailstorm", "kind": "combo", "target": "all_enemies", "effects": [
+			{"type": "elemental_damage", "power": 44, "element": "chill"},
+			{"type": "elemental_damage", "power": 28, "element": "shock"}
+		]},
+		{"id": "dream_lance", "name": "Dream Lance", "kind": "combo", "target": "one_enemy", "effects": [
+			{"type": "physical_damage", "power": 210}
+		]},
 
 		{"id": "venom_spit", "name": "Venom Spit", "kind": "technique", "cost": 2, "target": "one_enemy", "effects": [
 			{"type": "physical_damage", "power": 70},
@@ -95,11 +136,18 @@
 		{"id": "gear_slam", "name": "Gear Slam", "kind": "technique", "cost": 5, "target": "one_enemy", "effects": [
 			{"type": "physical_damage", "power": 160}
 		]},
-		{"id": "rouse", "name": "Rouse", "kind": "technique", "cost": 8, "target": "one_ally", "effects": [
+		{"id": "rouse", "name": "Rouse", "kind": "technique", "cost": 8, "target": "one_fallen_ally", "effects": [
 			{"type": "revive", "power": 40}
 		]},
 		{"id": "steam_vent", "name": "Steam Vent", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
 			{"type": "elemental_damage", "power": 22, "element": "heat"}
+		]},
+		{"id": "lock_bolt", "name": "Lock Bolt", "kind": "technique", "cost": 5, "target": "one_enemy", "effects": [
+			{"type": "physical_damage", "power": 50},
+			{"type": "apply_status", "status": "gear_lock", "chance": 25}
+		]},
+		{"id": "muddle_spores", "name": "Muddle Spores", "kind": "technique", "cost": 5, "target": "enemy_group", "effects": [
+			{"type": "apply_status", "status": "jumble", "chance": 40}
 		]}
 	]
 }

@@ -27,6 +27,15 @@ void clampResources(PartyMember& member, const Database& db) {
 	member.tp = std::min(member.tp, stats.maxTp);
 }
 
+// A granted skill keeps its uses when the piece comes off, so swapping equipment never refills it.
+void putOn(PartyMember& member, const Database& db, const EquipmentDef& piece) {
+	member.equipment[piece.slot] = piece.id;
+	for (const std::string& id : piece.abilities) {
+		grantSkillUses(member, db, id);
+	}
+	clampResources(member, db);
+}
+
 }
 
 Stats statsAtLevel(const CharacterDef& character, int level) {
@@ -110,7 +119,9 @@ PartyMember makePartyMember(const Database& db, const CharacterDef& character, i
 	member.characterId = character.id;
 	member.level = std::clamp(level, 1, formulas::kMaxLevel);
 	for (const std::string& id : character.startingEquipment) {
-		equip(member, db, id);
+		if (canEquip(db, character.id, id).empty()) {
+			putOn(member, db, *db.equipmentPiece(id));
+		}
 	}
 	rest(member, db);
 	return member;
@@ -118,47 +129,64 @@ PartyMember makePartyMember(const Database& db, const CharacterDef& character, i
 
 void rest(PartyMember& member, const Database& db) {
 	const Stats stats = memberStats(db, member);
-	member.hp = stats.maxHp;
+	if (member.hp > 0 || db.battleRules.restRevives) {
+		member.hp = stats.maxHp;
+	}
 	member.tp = stats.maxTp;
 	member.skillUses.clear();
 	for (const std::string& id : knownAbilities(db, member)) {
 		grantSkillUses(member, db, id);
 	}
+	member.statuses.erase(std::remove_if(member.statuses.begin(), member.statuses.end(), [&db](const ActiveStatus& active) {
+		const StatusDef* def = db.status(active.id);
+		return !def || def->restCures;
+	}), member.statuses.end());
 }
 
-std::string canEquip(const Database& db, const std::string& characterId, const std::string& equipmentId) {
+Message canEquip(const Database& db, const std::string& characterId, const std::string& equipmentId) {
 	const CharacterDef* character = db.character(characterId);
 	if (!character) {
-		return "unknown character '" + characterId + "'";
+		return {"equip.unknown_character", {characterId}};
 	}
 	const EquipmentDef* piece = db.equipmentPiece(equipmentId);
 	if (!piece) {
-		return "unknown equipment '" + equipmentId + "'";
+		return {"equip.unknown_equipment", {equipmentId}};
 	}
 	const std::vector<std::string>& allowed = character->equipCategories;
 	if (std::find(allowed.begin(), allowed.end(), piece->category) == allowed.end()) {
-		return character->name + " cannot equip " + piece->name;
+		return {"equip.wrong_category", {characterId, equipmentId}};
 	}
-	return "";
+	return {};
 }
 
-// A granted skill keeps its uses when the piece comes off, so swapping equipment never refills it.
-std::string equip(PartyMember& member, const Database& db, const std::string& equipmentId) {
-	const std::string error = canEquip(db, member.characterId, equipmentId);
-	if (!error.empty()) {
-		return error;
+Message equip(PartyMember& member, const Database& db, EquipmentBag& bag, const std::string& equipmentId) {
+	const Message refused = canEquip(db, member.characterId, equipmentId);
+	if (!refused.empty()) {
+		return refused;
+	}
+	const auto held = bag.find(equipmentId);
+	if (held == bag.end() || held->second <= 0) {
+		return {"equip.not_in_bag", {equipmentId}};
 	}
 	const EquipmentDef& piece = *db.equipmentPiece(equipmentId);
-	member.equipment[piece.slot] = equipmentId;
-	for (const std::string& id : piece.abilities) {
-		grantSkillUses(member, db, id);
+	if (--held->second == 0) {
+		bag.erase(held);
 	}
-	clampResources(member, db);
-	return "";
+	const auto worn = member.equipment.find(piece.slot);
+	if (worn != member.equipment.end()) {
+		++bag[worn->second];
+	}
+	putOn(member, db, piece);
+	return {};
 }
 
-void unequip(PartyMember& member, const Database& db, EquipSlot slot) {
-	member.equipment.erase(slot);
+void unequip(PartyMember& member, const Database& db, EquipmentBag& bag, EquipSlot slot) {
+	const auto worn = member.equipment.find(slot);
+	if (worn == member.equipment.end()) {
+		return;
+	}
+	++bag[worn->second];
+	member.equipment.erase(worn);
 	clampResources(member, db);
 }
 

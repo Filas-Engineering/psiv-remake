@@ -1,6 +1,7 @@
 #include "rules/battle.h"
 
 #include "rules/formulas.h"
+#include "rules/text.h"
 
 #include <algorithm>
 
@@ -20,26 +21,26 @@ Effectiveness effectivenessOf(int affinity) {
 
 }
 
-FailReason Battle::checkUsable(int actor, const AbilityDef& ability) const {
+CancelReason Battle::checkUsable(int actor, const AbilityDef& ability) const {
 	const Combatant& c = combatants_[actor];
 	if (ability.kind == AbilityKind::Technique) {
 		for (const ActiveStatus& active : c.statuses) {
 			const StatusDef* def = db_->status(active.id);
 			if (def && def->blocksTechniques) {
-				return FailReason::Silenced;
+				return CancelReason::Silenced;
 			}
 		}
 		if (c.tp < ability.cost) {
-			return FailReason::NotEnoughTp;
+			return CancelReason::NotEnoughTp;
 		}
 	}
 	if (ability.kind == AbilityKind::Skill) {
 		const auto it = c.skillUses.find(ability.id);
 		if (it == c.skillUses.end() || it->second <= 0) {
-			return FailReason::NoUsesLeft;
+			return CancelReason::NoUsesLeft;
 		}
 	}
-	return FailReason::None;
+	return CancelReason::None;
 }
 
 void Battle::payCost(int actor, const AbilityDef& ability, std::vector<Event>& out) {
@@ -64,44 +65,35 @@ void Battle::payCost(int actor, const AbilityDef& ability, std::vector<Event>& o
 	}
 }
 
-bool Battle::skipsTurn(int actor) const {
-	for (const ActiveStatus& active : combatants_[actor].statuses) {
-		const StatusDef* def = db_->status(active.id);
-		if (def && def->skipsTurn) {
-			return true;
-		}
-	}
-	return false;
-}
-
-bool Battle::preventedByStatus(int actor, std::vector<Event>& out) {
+bool Battle::cancelledByStatus(int actor, const Command& command, std::vector<Event>& out) {
 	const std::vector<ActiveStatus> statuses = combatants_[actor].statuses;
 	for (const ActiveStatus& active : statuses) {
 		const StatusDef* def = db_->status(active.id);
-		if (!def || !def->skipsTurn) {
+		if (!def || def->action != StatusAction::CannotAct) {
 			continue;
 		}
 		if (def->recoverChance > 0 && rng_.chance(def->recoverChance)) {
-			removeStatus(actor, def->id);
-			Event& e = emit(out, EventType::StatusExpired);
-			e.target = actor;
-			e.status = def->id;
-			e.statusEnd = StatusEnd::Recovered;
+			emitStatusRemoved(-1, actor, def->id, StatusEnd::Recovered, out);
 			continue;
 		}
-		Event& e = emit(out, EventType::ActionPrevented);
-		e.actor = actor;
-		e.status = def->id;
+		cancel(actor, command, CancelReason::ActorUnable, def->id, out);
 		return true;
 	}
 	return false;
 }
 
 void Battle::takeTurn(int actor, std::vector<Event>& out) {
-	if (!combatants_[actor].alive() || preventedByStatus(actor, out)) {
+	const Command command = commands_[actor];
+	if (command.kind == CommandKind::None) {
 		return;
 	}
-	const Command command = commands_[actor];
+	if (!combatants_[actor].alive()) {
+		cancel(actor, command, CancelReason::ActorUnable, kDefeatedStatus, out);
+		return;
+	}
+	if (cancelledByStatus(actor, command, out)) {
+		return;
+	}
 	switch (command.kind) {
 	case CommandKind::None:
 		return;
@@ -130,17 +122,60 @@ void Battle::takeTurn(int actor, std::vector<Event>& out) {
 	}
 }
 
-void Battle::useAbility(int actor, const AbilityDef& ability, int target, CommandKind kind, std::vector<Event>& out) {
-	const FailReason why = checkUsable(actor, ability);
-	const std::vector<int> targets = why == FailReason::None ? resolveTargets(actor, ability.targeting, target, ability.revives()) : std::vector<int>();
-	if (why != FailReason::None || targets.empty()) {
-		Event& e = emit(out, EventType::ActionFailed);
-		e.actor = actor;
-		e.ability = ability.id;
-		e.command = kind;
-		e.fail = why != FailReason::None ? why : FailReason::NoTarget;
+std::vector<int> Battle::executionTargets(int user, Targeting targeting, int requested, bool revives) {
+	if (forced_[user] && requested >= 0 && combatants_[requested].alive()) {
+		return {requested};
+	}
+	std::vector<int> targets = resolveTargets(user, targeting, requested, revives);
+	if (targeting == Targeting::RandomEnemy && !targets.empty()) {
+		return {targets[rng_.range(0, static_cast<int>(targets.size()) - 1)]};
+	}
+	return targets;
+}
+
+void Battle::noteRetarget(int actor, Targeting targeting, int requested, const std::vector<int>& targets, std::vector<Event>& out) {
+	if (requested < 0 || requested >= static_cast<int>(combatants_.size()) || targets.empty()) {
 		return;
 	}
+	int now = requested;
+	switch (targeting) {
+	case Targeting::OneEnemy:
+	case Targeting::OneAlly:
+	case Targeting::OneFallenAlly:
+		now = targets.front();
+		break;
+	case Targeting::EnemyGroup:
+		if (std::find(targets.begin(), targets.end(), requested) == targets.end()) {
+			now = primaryFoe(actor, requested);
+		}
+		break;
+	case Targeting::AllEnemies:
+	case Targeting::AllAllies:
+	case Targeting::Self:
+	case Targeting::RandomEnemy:
+		return;
+	}
+	if (now != requested) {
+		Event& e = emit(out, EventType::Retargeted);
+		e.actor = actor;
+		e.previousTarget = requested;
+		e.target = now;
+	}
+}
+
+void Battle::useAbility(int actor, const AbilityDef& ability, int target, CommandKind kind, std::vector<Event>& out) {
+	const Command command = commands_[actor];
+	const CancelReason why = checkUsable(actor, ability);
+	if (why != CancelReason::None) {
+		cancel(actor, command, why, "", out);
+		return;
+	}
+	const std::vector<int> targets = executionTargets(actor, ability.targeting, target, ability.revives());
+	if (targets.empty()) {
+		cancel(actor, command, CancelReason::NoTarget, "", out);
+		return;
+	}
+	noteRetarget(actor, ability.targeting, target, targets, out);
 	Event& e = emit(out, EventType::ActionStarted);
 	e.actor = actor;
 	e.ability = ability.id;
@@ -151,29 +186,29 @@ void Battle::useAbility(int actor, const AbilityDef& ability, int target, Comman
 	if (kind == CommandKind::Attack) {
 		attacker.element = combatants_[actor].attackElement;
 	}
-	applyEffects(actor, attacker, ability.effects, targets, false, out);
+	applyEffects(actor, attacker, ability.id, ability.effects, targets, false, out);
 }
 
 void Battle::useItem(int actor, const Command& command, std::vector<Event>& out) {
 	const ItemDef* item = db_->item(command.id);
 	const auto stock = inventory_.find(command.id);
-	const bool inStock = item && stock != inventory_.end() && stock->second > 0;
-	const std::vector<int> targets = inStock ? resolveTargets(actor, item->targeting, command.target, effectsRevive(item->effects)) : std::vector<int>();
-	if (!inStock || targets.empty()) {
-		Event& e = emit(out, EventType::ActionFailed);
-		e.actor = actor;
-		e.ability = command.id;
-		e.command = CommandKind::Item;
-		e.fail = inStock ? FailReason::NoTarget : FailReason::NoItem;
+	if (!item || stock == inventory_.end() || stock->second <= 0) {
+		cancel(actor, command, CancelReason::NoItem, "", out);
 		return;
 	}
+	const std::vector<int> targets = executionTargets(actor, item->targeting, command.target, effectsRevive(item->effects));
+	if (targets.empty()) {
+		cancel(actor, command, CancelReason::NoTarget, "", out);
+		return;
+	}
+	noteRetarget(actor, item->targeting, command.target, targets, out);
 	Event& e = emit(out, EventType::ActionStarted);
 	e.actor = actor;
 	e.ability = item->id;
 	e.command = CommandKind::Item;
 	e.target = targets.size() == 1 ? targets.front() : -1;
 	// An item that changed nothing stays in the bag.
-	if (!applyEffects(actor, Attacker(), item->effects, targets, true, out)) {
+	if (!applyEffects(actor, Attacker(), item->id, item->effects, targets, true, out)) {
 		Event& kept = emit(out, EventType::ItemHadNoEffect);
 		kept.actor = actor;
 		kept.ability = item->id;
@@ -215,7 +250,7 @@ void Battle::attemptEscape(int actor, std::vector<Event>& out) {
 	}
 }
 
-bool Battle::applyEffects(int user, const Attacker& attacker, const std::vector<Effect>& effects, const std::vector<int>& targets, bool flatPower, std::vector<Event>& out) {
+bool Battle::applyEffects(int user, const Attacker& attacker, const std::string& source, const std::vector<Effect>& effects, const std::vector<int>& targets, bool flatPower, std::vector<Event>& out) {
 	bool changed = false;
 	for (int target : targets) {
 		bool missed = false;
@@ -231,9 +266,14 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::vector<
 					Event& e = emit(out, EventType::Missed);
 					e.actor = user;
 					e.target = target;
+					e.ability = source;
 					missed = true;
 					break;
 				}
+				Event& hit = emit(out, EventType::Hit);
+				hit.actor = user;
+				hit.target = target;
+				hit.ability = source;
 				const bool critical = !flatPower && rng_.chance(formulas::criticalChance(attacker.critical, effect.critical));
 				const int variance = rng_.range(formulas::kVarianceMin, formulas::kVarianceMax);
 				const int strength = flatPower ? effect.power : attacker.strength;
@@ -244,6 +284,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::vector<
 					Event& e = emit(out, EventType::Critical);
 					e.actor = user;
 					e.target = target;
+					e.ability = source;
 				}
 				Effectiveness effectiveness = Effectiveness::Normal;
 				if (attacker.element != Element::None) {
@@ -254,7 +295,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::vector<
 				if (t.defending && damage > 0) {
 					damage = formulas::defended(damage);
 				}
-				changed = dealDamage(target, damage, attacker.element, effectiveness, out) > 0 || changed;
+				changed = dealDamage(user, target, damage, attacker.element, effectiveness, out) > 0 || changed;
 				break;
 			}
 			case EffectKind::ElementalDamage: {
@@ -265,7 +306,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::vector<
 				if (t.defending && damage > 0) {
 					damage = formulas::defended(damage);
 				}
-				changed = dealDamage(target, damage, effect.element, effectivenessOf(affinity), out) > 0 || changed;
+				changed = dealDamage(user, target, damage, effect.element, effectivenessOf(affinity), out) > 0 || changed;
 				break;
 			}
 			case EffectKind::Heal: {
@@ -276,12 +317,22 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::vector<
 				e.actor = user;
 				e.target = target;
 				e.amount = healed;
+				e.hp = t.hp;
 				changed = changed || healed > 0;
 				break;
 			}
 			case EffectKind::ApplyStatus: {
 				const StatusDef* def = db_->status(effect.status);
 				if (!def) {
+					break;
+				}
+				const bool had = t.hasStatus(effect.status);
+				if (had && def->stacking == StatusStacking::Keep) {
+					Event& e = emit(out, EventType::StatusResisted);
+					e.actor = user;
+					e.target = target;
+					e.status = effect.status;
+					e.message = statusMessageKey(effect.status, "unchanged");
 					break;
 				}
 				const int resistance = t.resistance(effect.status);
@@ -291,24 +342,35 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::vector<
 					e.target = target;
 					e.status = effect.status;
 					e.effectiveness = resistance >= 100 ? Effectiveness::Immune : Effectiveness::Normal;
+					e.message = statusMessageKey(effect.status, resistance >= 100 ? "immune" : "resisted");
 					break;
 				}
-				removeStatus(target, effect.status);
-				t.statuses.push_back({effect.status, def->duration});
+				int remaining = def->duration;
+				if (had && def->stacking == StatusStacking::Extend) {
+					for (ActiveStatus& active : t.statuses) {
+						if (active.id == effect.status && active.remaining > 0 && def->duration > 0) {
+							active.remaining = std::min(99, active.remaining + def->duration);
+						}
+						if (active.id == effect.status) {
+							remaining = active.remaining;
+						}
+					}
+				} else {
+					removeStatus(target, effect.status);
+					t.statuses.push_back({effect.status, def->duration});
+				}
 				Event& e = emit(out, EventType::StatusApplied);
 				e.actor = user;
 				e.target = target;
 				e.status = effect.status;
+				e.duration = remaining;
+				e.message = statusMessageKey(effect.status, "applied");
 				changed = true;
 				break;
 			}
 			case EffectKind::CureStatus:
 				if (t.hasStatus(effect.status)) {
-					removeStatus(target, effect.status);
-					Event& e = emit(out, EventType::StatusCured);
-					e.actor = user;
-					e.target = target;
-					e.status = effect.status;
+					emitStatusRemoved(user, target, effect.status, StatusEnd::Cured, out);
 					changed = true;
 				}
 				break;
@@ -323,6 +385,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::vector<
 				e.target = target;
 				e.stat = effect.stat;
 				e.amount = effect.percent;
+				e.duration = effect.duration;
 				changed = true;
 				break;
 			}
@@ -334,6 +397,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::vector<
 					e.actor = user;
 					e.target = target;
 					e.amount = t.hp;
+					e.hp = t.hp;
 					changed = true;
 				}
 				break;
@@ -343,13 +407,18 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::vector<
 	return changed;
 }
 
-int Battle::dealDamage(int target, int amount, Element element, Effectiveness effectiveness, std::vector<Event>& out) {
+int Battle::dealDamage(int user, int target, int amount, Element element, Effectiveness effectiveness, std::vector<Event>& out) {
 	Combatant& t = combatants_[target];
 	const int dealt = std::min(amount, t.hp);
 	t.hp -= dealt;
+	if (dealt > 0 && user >= 0 && combatants_[user].side != t.side) {
+		t.lastAttacker = user;
+	}
 	Event& e = emit(out, EventType::DamageDealt);
+	e.actor = user;
 	e.target = target;
 	e.amount = dealt;
+	e.hp = t.hp;
 	e.element = element;
 	e.effectiveness = effectiveness;
 	if (!t.alive()) {
@@ -363,23 +432,28 @@ int Battle::dealDamage(int target, int amount, Element element, Effectiveness ef
 	for (const ActiveStatus& active : statuses) {
 		const StatusDef* def = db_->status(active.id);
 		if (def && def->wakesOnDamage) {
-			removeStatus(target, active.id);
-			Event& woke = emit(out, EventType::StatusExpired);
-			woke.target = target;
-			woke.status = active.id;
-			woke.statusEnd = StatusEnd::WokeOnDamage;
+			emitStatusRemoved(-1, target, active.id, StatusEnd::WokeOnDamage, out);
 		}
 	}
 	return dealt;
 }
 
+// Every status the fall clears gets its own removal event first, so the stream shows each change once.
 void Battle::defeat(int target, std::vector<Event>& out) {
+	const std::vector<ActiveStatus> statuses = combatants_[target].statuses;
+	for (const ActiveStatus& active : statuses) {
+		if (active.id != kDefeatedStatus) {
+			emitStatusRemoved(-1, target, active.id, StatusEnd::Defeated, out);
+		}
+	}
 	Combatant& t = combatants_[target];
 	t.hp = 0;
-	t.statuses.clear();
-	t.statuses.push_back({kDefeatedStatus, 0});
+	t.statuses = {{kDefeatedStatus, 0}};
 	t.modifiers.clear();
 	t.defending = false;
+	if (isParty(target) && autoActive_) {
+		autoMemberFell_ = true;
+	}
 	Event& e = emit(out, EventType::CombatantDefeated);
 	e.target = target;
 }
@@ -389,6 +463,16 @@ void Battle::removeStatus(int target, const std::string& statusId) {
 	statuses.erase(std::remove_if(statuses.begin(), statuses.end(), [&](const ActiveStatus& s) {
 		return s.id == statusId;
 	}), statuses.end());
+}
+
+void Battle::emitStatusRemoved(int actor, int target, const std::string& statusId, StatusEnd end, std::vector<Event>& out) {
+	removeStatus(target, statusId);
+	Event& e = emit(out, EventType::StatusRemoved);
+	e.actor = actor;
+	e.target = target;
+	e.status = statusId;
+	e.statusEnd = end;
+	e.message = statusMessageKey(statusId, "removed");
 }
 
 }

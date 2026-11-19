@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rules/stats.h"
+#include "rules/status.h"
 #include "rules/types.h"
 
 #include <map>
@@ -37,6 +38,8 @@ struct PartyMember {
 	int tp = 0;
 	std::map<std::string, int> skillUses;
 	std::map<EquipSlot, std::string> equipment;
+	// Only statuses that persist outside battle.
+	std::vector<ActiveStatus> statuses = {};
 };
 
 }

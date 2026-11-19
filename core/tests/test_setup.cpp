@@ -1,6 +1,8 @@
 #include "fixtures.h"
 #include "test.h"
 
+#include <set>
+
 using namespace rules;
 using namespace fixtures;
 
@@ -36,7 +38,9 @@ TEST(enemyFirstOpeningCostsThePartyARound) {
 	BattleSetup setup = makeSetup(data(), {"gel_mite", "rust_hound"}, 3);
 	setup.opening = Opening::EnemyFirst;
 	Battle battle = makeBattle(data(), setup);
-	CHECK_EQ(battle.setCommand(kFighter, Command::defend()), std::string("Test Fighter is caught off guard this round"));
+	const Message refused = battle.setCommand(kFighter, Command::defend());
+	CHECK_EQ(refused.key, std::string("command.caught_off_guard"));
+	CHECK_EQ(refused.params, (std::vector<std::string>{"fighter"}));
 	const std::vector<MacroStepResult> results = battle.applyMacro(*data().macro("opener"));
 	CHECK(results[0].status == MacroStepStatus::Skipped && results[0].issue == MacroIssue::CaughtOffGuard);
 	const std::vector<Event> first = battle.resolveRound();
@@ -79,7 +83,7 @@ TEST(encounterCanForbidEscape) {
 	CHECK(useEncounter(setup, data(), "warden").empty());
 	Battle battle = makeBattle(data(), setup);
 	CHECK(!battle.escapeAllowed());
-	CHECK_EQ(battle.setCommand(kScout, Command::escape()), std::string("escape is not allowed in this battle"));
+	CHECK_EQ(battle.setCommand(kScout, Command::escape()).key, std::string("command.escape_forbidden"));
 
 	Macro macro;
 	macro.name = "run";
@@ -98,9 +102,14 @@ TEST(escapeEndsTheBattleAtOnce) {
 	const std::vector<Event> events = battle.resolveRound();
 	CHECK(battle.outcome() == Outcome::Escaped);
 	CHECK(battle.lastTurnOrder().front() == kScout);
-	CHECK_EQ(events[1].type, EventType::EscapeAttempted);
-	CHECK(events[1].succeeded);
-	CHECK_EQ(events.size(), std::size_t(4));
+	std::vector<EventType> types;
+	for (const Event& e : events) {
+		types.push_back(e.type);
+	}
+	// Nothing runs between the escape and the end of the round.
+	CHECK_EQ(types, (std::vector<EventType>{EventType::BattleStarted, EventType::RoundStarted, EventType::CommandsLocked, EventType::OrderResolved,
+		EventType::EscapeAttempted, EventType::RoundEnded, EventType::BattleEnded}));
+	CHECK(events.size() == 7 && events[4].succeeded);
 	CHECK_EQ(battle.rewards().experience, 0);
 	CHECK_EQ(battle.rewards().memberExperience, (std::vector<int>{0, 0, 0, 0, 0}));
 }
@@ -144,4 +153,39 @@ TEST(singleTargetMovesToTheNextFormationPosition) {
 	battle.combatant(kFirstEnemy + 2).hp = 0;
 	CHECK_EQ(battle.resolveTargets(kFighter, Targeting::OneEnemy, kFirstEnemy + 2, false), (std::vector<int>{kFirstEnemy}));
 	CHECK_EQ(battle.resolveTargets(kFirstEnemy, Targeting::OneEnemy, kMystic, false), (std::vector<int>{kMystic}));
+}
+
+TEST(oneFallenAllyTargetsTheFallenOnly) {
+	Battle battle = makeBattle(data(), {"brass_warden"}, 1);
+	for (int i : {kScout, kEngineer}) {
+		battle.combatant(i).hp = 0;
+		battle.combatant(i).statuses = {{kDefeatedStatus, 0}};
+	}
+	CHECK_EQ(battle.resolveTargets(kMedic, Targeting::OneFallenAlly, -1, true), (std::vector<int>{kScout}));
+	CHECK_EQ(battle.resolveTargets(kMedic, Targeting::OneFallenAlly, kEngineer, true), (std::vector<int>{kEngineer}));
+	CHECK(battle.resolveTargets(kMedic, Targeting::OneFallenAlly, kFighter, true).empty());
+	battle.setCommand(kMedic, Command::ability("rekindle", -1));
+	othersDefend(battle);
+	const std::vector<Event> revived = ofType(battle.resolveRound(), EventType::Revived);
+	CHECK(revived.size() == 1 && revived[0].target == kScout);
+}
+
+TEST(randomEnemyPicksOneLivingFoeAtExecution) {
+	std::set<int> hit;
+	for (std::uint64_t seed = 1; seed <= 30; ++seed) {
+		Battle battle = makeBattle(data(), {"gel_mite", "rust_hound", "gel_mite"}, seed);
+		battle.combatant(kFirstEnemy + 1).hp = 0;
+		battle.combatant(kFirstEnemy + 1).statuses = {{kDefeatedStatus, 0}};
+		battle.setCommand(kMystic, Command::item("jolt_pod", kFirstEnemy + 1));
+		othersDefend(battle);
+		const std::vector<Event> events = battle.resolveRound();
+		const std::vector<Event> damage = ofType(events, EventType::DamageDealt);
+		CHECK_EQ(damage.size(), std::size_t(1));
+		CHECK(ofType(events, EventType::Retargeted).empty());
+		if (!damage.empty()) {
+			CHECK(damage[0].target == kFirstEnemy || damage[0].target == kFirstEnemy + 2);
+			hit.insert(damage[0].target);
+		}
+	}
+	CHECK_EQ(hit.size(), std::size_t(2));
 }

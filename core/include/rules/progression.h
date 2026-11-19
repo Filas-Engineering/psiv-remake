@@ -2,6 +2,7 @@
 
 #include "rules/character.h"
 #include "rules/database.h"
+#include "rules/message.h"
 #include "rules/stats.h"
 
 #include <string>
@@ -17,15 +18,20 @@ Stats memberStats(const Database& db, const PartyMember& member);
 // Starting abilities, abilities learned up to the member's level, then equipment-granted abilities.
 std::vector<std::string> knownAbilities(const Database& db, const PartyMember& member);
 
-// Full hit points, technique points and skill uses, wearing the character's starting equipment.
+// Full hit points, technique points and skill uses, wearing the character's starting equipment. The starting
+// pieces come with the character; they are not taken from an equipment bag.
 PartyMember makePartyMember(const Database& db, const CharacterDef& character, int level);
 
+// Refills hit points (a fallen member only when rules.json `rest_revives`), technique points and skill uses,
+// and cures the statuses whose data has `rest_cures`.
 void rest(PartyMember& member, const Database& db);
 
-// Each returns an empty string on success, otherwise why the change was refused.
-std::string canEquip(const Database& db, const std::string& characterId, const std::string& equipmentId);
-std::string equip(PartyMember& member, const Database& db, const std::string& equipmentId);
-void unequip(PartyMember& member, const Database& db, EquipSlot slot);
+// Each returns an empty message on success, otherwise why the change was refused.
+Message canEquip(const Database& db, const std::string& characterId, const std::string& equipmentId);
+// Takes the piece out of the bag; the piece worn in that slot before goes back into it.
+Message equip(PartyMember& member, const Database& db, EquipmentBag& bag, const std::string& equipmentId);
+// Puts the piece worn in that slot back into the bag.
+void unequip(PartyMember& member, const Database& db, EquipmentBag& bag, EquipSlot slot);
 
 struct LevelUp {
 	int levelsGained = 0;

@@ -14,10 +14,11 @@
 				{
 					"id": "brass_warden",
 					"stats_percent": {"hp": 115, "strength": 110},
-					"add_abilities": ["numbing_sting"],
+					"add_abilities": ["numbing_sting", "lock_bolt"],
 					"ai": [
 						{"ability": "rouse", "weight": 8, "when": {"type": "ally_defeated"}},
-						{"ability": "gear_slam", "weight": 8, "when": {"type": "self_hp_below", "value": 50}},
+						{"ability": "gear_slam", "weight": 8, "when": {"type": "self_hp_below", "value": 50}, "target": "last_attacker"},
+						{"ability": "lock_bolt", "weight": 2, "target": "lacks_status", "target_status": "gear_lock"},
 						{"ability": "numbing_sting", "weight": 4, "when": {"type": "foe_has_status", "status": "sleep"}},
 						{"ability": "steam_vent", "weight": 3},
 						{"ability": "numbing_sting", "weight": 2},
@@ -26,9 +27,11 @@
 				},
 				{
 					"id": "bog_wisp",
+					"add_abilities": ["muddle_spores"],
 					"ai": [
-						{"ability": "patch", "weight": 6, "when": {"type": "ally_hp_below", "value": 50}},
-						{"ability": "numbing_sting", "weight": 6, "when": {"type": "self_hp_below", "value": 50}},
+						{"ability": "patch", "weight": 6, "when": {"type": "ally_hp_below", "value": 50}, "target": "lowest_hp"},
+						{"ability": "numbing_sting", "weight": 6, "when": {"type": "self_hp_below", "value": 50}, "target": "highest_hp"},
+						{"ability": "muddle_spores", "weight": 1},
 						{"ability": "lullaby", "weight": 2},
 						{"ability": "numbing_sting", "weight": 4, "when": {"type": "foe_has_status", "status": "sleep"}},
 						{"ability": "bite", "weight": 2}

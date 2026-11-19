@@ -2,6 +2,18 @@
 	"combos": [
 		{"id": "storm_spark", "abilities": ["spark", "gust"], "result": "storm_spark"},
 		{"id": "tempest_flare", "abilities": ["spark", "gust", "flare_burst"], "result": "tempest_flare"},
-		{"id": "mending_chorus", "abilities": ["mend", "rally"], "result": "mending_chorus"}
+		{"id": "mending_chorus", "abilities": ["mend", "rally"], "result": "mending_chorus"},
+		{"id": "cinder_gale", "abilities": ["gust", "ember"], "ordered": true, "result": "cinder_gale"},
+		{"id": "brittle_frost", "abilities": ["frostbite", "weaken"], "result": "brittle_frost"},
+		{"id": "quiet_hour", "abilities": ["hush", "drowse"], "result": "quiet_hour"},
+		{"id": "sundering_cleave", "abilities": [{"ability": "cleave", "character": "fighter"}, "weaken"], "result": "sundering_cleave"},
+		{"id": "twin_arc", "abilities": [{"ability": "glint", "character": "medic"}, "spark"], "result": "twin_arc"},
+		{"id": "pinpoint_rend", "abilities": ["weaken", "focus_shot"], "ordered": true, "result": "pinpoint_rend"},
+		{"id": "clean_slate", "abilities": ["purge", "rally"], "result": "clean_slate"},
+		{"id": "surge_step", "abilities": ["overclock", "rally"], "result": "surge_step"},
+		{"id": "dawn_call", "abilities": ["rekindle", "rally"], "result": "dawn_call"},
+		{"id": "kiln_roar", "abilities": ["flare_burst", "ember"], "result": "kiln_roar"},
+		{"id": "hailstorm", "abilities": ["frostbite", "gust", "glint"], "result": "hailstorm"},
+		{"id": "dream_lance", "abilities": ["drowse", "focus_shot"], "ordered": true, "result": "dream_lance"}
 	]
 }

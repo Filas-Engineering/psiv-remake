@@ -32,14 +32,23 @@ Combatant fromEnemy(const Database& db, const EnemyDef& def, const std::string& 
 	return c;
 }
 
-std::string checkEquipment(const Database& db, const PartyMember& member) {
+std::string checkMember(const Database& db, const PartyMember& member) {
 	for (const auto& [slot, id] : member.equipment) {
-		const std::string error = canEquip(db, member.characterId, id);
-		if (!error.empty()) {
-			return error;
+		const Message refused = canEquip(db, member.characterId, id);
+		if (!refused.empty()) {
+			return "'" + member.characterId + "' cannot wear '" + id + "' (" + refused.key + ")";
 		}
 		if (db.equipmentPiece(id)->slot != slot) {
 			return "'" + id + "' does not go in that slot";
+		}
+	}
+	for (const ActiveStatus& active : member.statuses) {
+		const StatusDef* status = db.status(active.id);
+		if (!status || active.id == kDefeatedStatus) {
+			return "'" + member.characterId + "' carries unknown status '" + active.id + "'";
+		}
+		if (!status->persistsOutsideBattle) {
+			return "'" + member.characterId + "' carries status '" + active.id + "', which does not persist outside battle";
 		}
 	}
 	return "";
@@ -71,10 +80,29 @@ Combatant fromMember(const Database& db, const CharacterDef& def, const PartyMem
 			c.statusResist[status] = std::min(100, c.resistance(status) + percent);
 		}
 	}
-	if (!c.alive()) {
+	// Defeat clears every other status, so a fallen member carries none in.
+	if (c.alive()) {
+		c.statuses = member.statuses;
+	} else {
 		c.statuses.push_back({kDefeatedStatus, 0});
 	}
 	return c;
+}
+
+std::string checkScriptedEnd(const ScriptedEnd& end, int enemyCount) {
+	switch (end.kind) {
+	case ScriptedEndKind::None:
+		return "";
+	case ScriptedEndKind::SurviveRounds:
+		return end.rounds >= 1 ? "" : "a survive-rounds end needs at least 1 round";
+	case ScriptedEndKind::EnemyDefeated:
+		return end.enemySlot >= 0 && end.enemySlot < enemyCount ? "" : "the scripted end names formation position " + std::to_string(end.enemySlot) + ", which is empty";
+	}
+	return "";
+}
+
+std::string actionId(const Combatant& c, const Command& command) {
+	return command.kind == CommandKind::Attack ? c.basicAttack : command.id;
 }
 
 }
@@ -85,6 +113,10 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 	}
 	if (setup.enemies.empty() || setup.enemies.size() > static_cast<std::size_t>(kMaxEnemies)) {
 		return Result<Battle>::failure("a battle needs 1 to " + std::to_string(kMaxEnemies) + " enemies");
+	}
+	const std::string endError = checkScriptedEnd(setup.scriptedEnd, static_cast<int>(setup.enemies.size()));
+	if (!endError.empty()) {
+		return Result<Battle>::failure(endError);
 	}
 	const DifficultyDef* difficulty = nullptr;
 	if (!setup.difficulty.empty()) {
@@ -102,7 +134,7 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 	battle.record_.contentHash = db.contentHash;
 	battle.record_.setup = setup;
 	if (comboLog) {
-		battle.record_.knownCombos.assign(comboLog->discovered().begin(), comboLog->discovered().end());
+		battle.record_.knownCombos = comboLog->entries();
 	}
 	battle.inventory_ = setup.inventory;
 	battle.partyCount_ = static_cast<int>(setup.party.size());
@@ -113,9 +145,9 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 		if (!def) {
 			return Result<Battle>::failure("unknown character '" + member.characterId + "'");
 		}
-		const std::string equipmentError = checkEquipment(rulesDb, member);
-		if (!equipmentError.empty()) {
-			return Result<Battle>::failure(equipmentError);
+		const std::string memberError = checkMember(rulesDb, member);
+		if (!memberError.empty()) {
+			return Result<Battle>::failure(memberError);
 		}
 		battle.combatants_.push_back(fromMember(rulesDb, *def, member));
 	}
@@ -128,6 +160,7 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 	}
 	battle.commands_.resize(battle.combatants_.size());
 	battle.lastCommands_.resize(battle.combatants_.size());
+	battle.forced_.assign(battle.combatants_.size(), false);
 
 	for (const ComboRecipe& recipe : rulesDb.combos) {
 		battle.combosLongestFirst_.push_back(&recipe);
@@ -138,6 +171,19 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 
 	battle.updateOutcome();
 	return Result<Battle>::success(std::move(battle));
+}
+
+// A party with no enemies, for out-of-battle use. The data is borrowed: the battle must not outlive `db`.
+Battle Battle::partyOnly(const Database& db, const std::vector<PartyMember>& party) {
+	Battle battle;
+	battle.db_ = std::shared_ptr<const Database>(std::shared_ptr<const Database>(), &db);
+	battle.partyCount_ = static_cast<int>(party.size());
+	for (const PartyMember& member : party) {
+		battle.combatants_.push_back(fromMember(db, *db.character(member.characterId), member));
+	}
+	battle.commands_.resize(battle.combatants_.size());
+	battle.forced_.assign(battle.combatants_.size(), false);
+	return battle;
 }
 
 bool Battle::surprised(Side side, int round) const {
@@ -152,42 +198,45 @@ bool Battle::sideActsNextRound(Side side) const {
 	return !surprised(side, round_ + 1);
 }
 
-std::string Battle::setCommand(int actor, const Command& command) {
+Message Battle::setCommand(int actor, const Command& command) {
 	if (actor < 0 || actor >= static_cast<int>(combatants_.size())) {
-		return "no combatant at index " + std::to_string(actor);
+		return {"command.no_combatant", {std::to_string(actor)}};
 	}
 	const Combatant& c = combatants_[actor];
 	if (!c.alive()) {
-		return c.name + " is defeated";
+		return {"command.actor_defeated", {c.defId}};
 	}
 	if (!sideActsNextRound(c.side)) {
-		return c.name + " is caught off guard this round";
+		return {"command.caught_off_guard", {c.defId}};
+	}
+	if (const StatusDef* forced = statusWith(actor, StatusAction::Forced)) {
+		return {"command.forced_by_status", {c.defId, forced->id}};
 	}
 	if (command.target >= static_cast<int>(combatants_.size())) {
-		return "no combatant at index " + std::to_string(command.target);
+		return {"command.no_combatant", {std::to_string(command.target)}};
 	}
 	switch (command.kind) {
 	case CommandKind::Ability: {
 		const AbilityDef* ability = db_->ability(command.id);
 		if (!ability || !c.knows(command.id)) {
-			return c.name + " does not know '" + command.id + "'";
+			return {"command.unknown_ability", {c.defId, command.id}};
 		}
 		if (ability->kind == AbilityKind::Combo) {
-			return "combo abilities cannot be chosen directly";
+			return {"command.combo_not_selectable", {command.id}};
 		}
 		break;
 	}
 	case CommandKind::Item:
 		if (!db_->item(command.id)) {
-			return "unknown item '" + command.id + "'";
+			return {"command.unknown_item", {command.id}};
 		}
 		break;
 	case CommandKind::Escape:
 		if (!isParty(actor)) {
-			return "enemies cannot escape";
+			return {"command.enemy_cannot_escape", {c.defId}};
 		}
 		if (!escapeAllowed()) {
-			return "escape is not allowed in this battle";
+			return {"command.escape_forbidden", {}};
 		}
 		break;
 	case CommandKind::None:
@@ -196,16 +245,89 @@ std::string Battle::setCommand(int actor, const Command& command) {
 		break;
 	}
 	commands_[actor] = command;
-	return "";
+	return {};
+}
+
+bool Battle::startAuto(const Macro& macro) {
+	if (outcome_ != Outcome::Ongoing) {
+		return false;
+	}
+	autoMacro_ = macro;
+	autoActive_ = true;
+	autoCancelRequested_ = false;
+	autoMemberFell_ = false;
+	autoStop_ = AutoStop::None;
+	return true;
+}
+
+bool Battle::fillFromAuto() {
+	if (!autoActive_) {
+		return false;
+	}
+	AutoStop stop = AutoStop::None;
+	if (outcome_ != Outcome::Ongoing) {
+		stop = AutoStop::BattleEnded;
+	} else if (autoCancelRequested_) {
+		stop = AutoStop::Cancelled;
+	} else if (autoMemberFell_) {
+		stop = AutoStop::MemberFell;
+	} else {
+		for (const MacroStepResult& result : applyMacro(autoMacro_)) {
+			if (isCostIssue(result.issue)) {
+				stop = AutoStop::CannotPay;
+			}
+		}
+		if (stop != AutoStop::None) {
+			for (int i = 0; i < partyCount_; ++i) {
+				commands_[i] = Command();
+			}
+			forcedOrder_.clear();
+			macroName_.clear();
+		}
+	}
+	if (stop == AutoStop::None) {
+		return true;
+	}
+	autoActive_ = false;
+	autoStop_ = stop;
+	return false;
 }
 
 void Battle::fillMissingCommands() {
 	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
-		if (!combatants_[i].alive() || commands_[i].kind != CommandKind::None || surprised(combatants_[i].side, round_)) {
+		forced_[i] = false;
+		if (!combatants_[i].alive() || surprised(combatants_[i].side, round_)) {
 			continue;
 		}
-		commands_[i] = isParty(i) ? Command::attack(-1) : chooseEnemyCommand(i);
+		// A forced command replaces whatever was chosen (BAT-012).
+		if (const StatusDef* status = statusWith(i, StatusAction::Forced)) {
+			commands_[i] = forcedCommand(i, *status);
+			forced_[i] = true;
+			continue;
+		}
+		if (commands_[i].kind == CommandKind::None) {
+			commands_[i] = isParty(i) ? Command::attack(-1) : chooseEnemyCommand(i);
+		}
 	}
+}
+
+Command Battle::forcedCommand(int actor, const StatusDef& status) {
+	const Side side = combatants_[actor].side;
+	std::vector<int> pool;
+	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
+		const bool ally = combatants_[i].side == side;
+		const bool wanted = status.forcedTarget == ForcedTarget::RandomAny || (status.forcedTarget == ForcedTarget::RandomAlly) == ally;
+		if (i != actor && combatants_[i].alive() && wanted) {
+			pool.push_back(i);
+		}
+	}
+	if (pool.empty()) {
+		pool = livingFoes(actor);
+	}
+	if (pool.empty()) {
+		return Command::attack(-1);
+	}
+	return Command::attack(pool[rng_.range(0, static_cast<int>(pool.size()) - 1)]);
 }
 
 std::vector<Event> Battle::resolveRound() {
@@ -220,8 +342,23 @@ std::vector<Event> Battle::resolveRound() {
 		}
 	}
 	input.macroBlock = forcedOrder_;
+	input.macroName = macroName_;
+	input.playTimeMs = playTimeMs_;
 	record_.rounds.push_back(input);
 
+	if (round_ == 0) {
+		Event& started = emit(out, EventType::BattleStarted);
+		for (const Combatant& c : combatants_) {
+			started.ids.push_back(c.defId);
+			started.groups.push_back(c.group);
+		}
+		started.partyCount = partyCount_;
+		started.opening = record_.setup.opening;
+		started.flags = record_.setup.flags;
+		if (record_.setup.opening != Opening::Normal) {
+			emit(out, EventType::Message).message = record_.setup.opening == Opening::PartyFirst ? "battle.opening.party_first" : "battle.opening.enemy_first";
+		}
+	}
 	++round_;
 	emit(out, EventType::RoundStarted);
 	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
@@ -231,12 +368,20 @@ std::vector<Event> Battle::resolveRound() {
 	}
 	fillMissingCommands();
 	lastCommands_ = commands_;
+	Event& locked = emit(out, EventType::CommandsLocked);
+	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
+		if (commands_[i].kind != CommandKind::None) {
+			locked.commands.push_back({i, commands_[i]});
+		}
+	}
+	locked.macro = macroName_;
 	for (std::size_t i = 0; i < combatants_.size(); ++i) {
 		combatants_[i].defending = combatants_[i].alive() && commands_[i].kind == CommandKind::Defend;
 	}
 
 	const std::vector<int> order = computeTurnOrder();
 	lastTurnOrder_ = order;
+	emit(out, EventType::OrderResolved).order = order;
 	for (std::size_t i = 0; i < order.size() && outcome_ == Outcome::Ongoing;) {
 		const int consumed = tryCombo(order, i, out);
 		if (consumed > 0) {
@@ -252,7 +397,16 @@ std::vector<Event> Battle::resolveRound() {
 	}
 	emit(out, EventType::RoundEnded);
 	if (outcome_ != Outcome::Ongoing) {
-		emit(out, EventType::BattleEnded).outcome = outcome_;
+		const Rewards earned = rewards();
+		Event& ended = emit(out, EventType::BattleEnded);
+		ended.outcome = outcome_;
+		ended.experience = earned.experience;
+		ended.currency = earned.currency;
+		ended.gameOver = gameOver();
+		if (autoActive_) {
+			autoActive_ = false;
+			autoStop_ = AutoStop::BattleEnded;
+		}
 	}
 
 	for (Combatant& c : combatants_) {
@@ -260,24 +414,42 @@ std::vector<Event> Battle::resolveRound() {
 	}
 	std::fill(commands_.begin(), commands_.end(), Command());
 	forcedOrder_.clear();
+	macroName_.clear();
 	return out;
+}
+
+bool Battle::countsAsDown(int index) const {
+	const Combatant& c = combatants_[index];
+	if (!c.alive()) {
+		return true;
+	}
+	for (const ActiveStatus& active : c.statuses) {
+		const StatusDef* def = db_->status(active.id);
+		if (def && def->countsTowardDefeat) {
+			return true;
+		}
+	}
+	return false;
 }
 
 void Battle::updateOutcome() {
 	if (outcome_ != Outcome::Ongoing) {
 		return;
 	}
-	bool partyAlive = false;
-	bool enemiesAlive = false;
+	bool partyStanding = false;
+	bool enemiesStanding = false;
 	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
-		if (combatants_[i].alive()) {
-			(isParty(i) ? partyAlive : enemiesAlive) = true;
+		if (!countsAsDown(i)) {
+			(isParty(i) ? partyStanding : enemiesStanding) = true;
 		}
 	}
-	if (!partyAlive) {
+	const ScriptedEnd& end = record_.setup.scriptedEnd;
+	if (!partyStanding) {
 		outcome_ = Outcome::Defeat;
-	} else if (!enemiesAlive) {
+	} else if (!enemiesStanding) {
 		outcome_ = Outcome::Victory;
+	} else if (end.kind == ScriptedEndKind::EnemyDefeated && !combatants_[partyCount_ + end.enemySlot].alive()) {
+		outcome_ = Outcome::ScriptedEnd;
 	}
 }
 
@@ -303,13 +475,14 @@ Battle::Attacker Battle::attackerOf(int actor) const {
 Rewards Battle::rewards() const {
 	Rewards rewards;
 	rewards.memberExperience.assign(static_cast<std::size_t>(partyCount_), 0);
-	if (outcome_ != Outcome::Victory) {
+	if (outcome_ != Outcome::Victory && outcome_ != Outcome::ScriptedEnd) {
 		return rewards;
 	}
 	long long experience = 0;
 	long long currency = 0;
 	for (int i = partyCount_; i < static_cast<int>(combatants_.size()); ++i) {
-		if (const EnemyDef* def = db_->enemy(combatants_[i].defId)) {
+		const EnemyDef* def = db_->enemy(combatants_[i].defId);
+		if (def && (outcome_ == Outcome::Victory || !combatants_[i].alive())) {
 			experience += def->experience;
 			currency += def->currency;
 		}
@@ -345,6 +518,13 @@ std::vector<PartyMember> Battle::partyState() const {
 		party[i].hp = combatants_[i].hp;
 		party[i].tp = combatants_[i].tp;
 		party[i].skillUses = combatants_[i].skillUses;
+		party[i].statuses.clear();
+		for (const ActiveStatus& active : combatants_[i].statuses) {
+			const StatusDef* def = db_->status(active.id);
+			if (def && def->persistsOutsideBattle) {
+				party[i].statuses.push_back(active);
+			}
+		}
 	}
 	return party;
 }
@@ -380,7 +560,8 @@ Macro Battle::lastRoundAsMacro(const std::string& name) const {
 
 		const int t = command.target;
 		const bool foeTargeting = targeting == Targeting::OneEnemy || targeting == Targeting::EnemyGroup;
-		if (!aimed) {
+		const bool allyTargeting = targeting == Targeting::OneAlly || targeting == Targeting::OneFallenAlly;
+		if (!aimed || targeting == Targeting::RandomEnemy) {
 			step.target.kind = MacroTargetKind::Default;
 		} else if (targeting == Targeting::AllEnemies || targeting == Targeting::AllAllies) {
 			step.target.kind = MacroTargetKind::All;
@@ -391,13 +572,22 @@ Macro Battle::lastRoundAsMacro(const std::string& name) const {
 		} else if (foeTargeting && !isParty(t)) {
 			step.target.kind = MacroTargetKind::Enemy;
 			step.target.enemySlot = t - partyCount_;
-		} else if (!foeTargeting && isParty(t)) {
+		} else if (allyTargeting && isParty(t)) {
 			step.target.kind = t == actor ? MacroTargetKind::Self : MacroTargetKind::Member;
 			step.target.member = t == actor ? "" : combatants_[t].defId;
 		}
 		macro.steps.push_back(step);
 	}
 	return macro;
+}
+
+void Battle::cancel(int actor, const Command& command, CancelReason reason, const std::string& status, std::vector<Event>& out) {
+	Event& e = emit(out, EventType::ActionCancelled);
+	e.actor = actor;
+	e.ability = actionId(combatants_[actor], command);
+	e.command = command.kind;
+	e.cancel = reason;
+	e.status = status;
 }
 
 }

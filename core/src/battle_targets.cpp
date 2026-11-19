@@ -24,11 +24,23 @@ std::vector<int> Battle::allies(int actor) const {
 	return result;
 }
 
-// A single foe target that is gone moves to the next living foe by formation position. A single ally
-// target that is gone moves to the user. A revive whose chosen ally is already up is cancelled.
+// The requested foe, or the next living foe by formation position after it (wrapping to the first).
+int Battle::primaryFoe(int user, int requested) const {
+	const std::vector<int> foes = livingFoes(user);
+	if (foes.empty()) {
+		return -1;
+	}
+	if (requested >= 0 && requested < static_cast<int>(combatants_.size()) && combatants_[requested].side != combatants_[user].side) {
+		const auto next = std::lower_bound(foes.begin(), foes.end(), requested);
+		return next == foes.end() ? foes.front() : *next;
+	}
+	return foes.front();
+}
+
+// A single ally target that is gone moves to the user. A fallen-ally target that is back up cancels.
 std::vector<int> Battle::resolveTargets(int user, Targeting targeting, int requested, bool revives) const {
 	const bool validIndex = requested >= 0 && requested < static_cast<int>(combatants_.size());
-	const Side userSide = combatants_[user].side;
+	const bool requestedAlly = validIndex && combatants_[requested].side == combatants_[user].side;
 	std::vector<int> result;
 	switch (targeting) {
 	case Targeting::Self:
@@ -36,20 +48,15 @@ std::vector<int> Battle::resolveTargets(int user, Targeting targeting, int reque
 		break;
 	case Targeting::OneEnemy:
 	case Targeting::EnemyGroup: {
-		const std::vector<int> foes = livingFoes(user);
-		if (foes.empty()) {
+		const int primary = primaryFoe(user, requested);
+		if (primary < 0) {
 			break;
-		}
-		int primary = foes.front();
-		if (validIndex && combatants_[requested].side != userSide) {
-			const auto next = std::lower_bound(foes.begin(), foes.end(), requested);
-			primary = next == foes.end() ? foes.front() : *next;
 		}
 		if (targeting == Targeting::OneEnemy) {
 			result.push_back(primary);
 			break;
 		}
-		for (int foe : foes) {
+		for (int foe : livingFoes(user)) {
 			if (combatants_[foe].group == combatants_[primary].group) {
 				result.push_back(foe);
 			}
@@ -57,28 +64,26 @@ std::vector<int> Battle::resolveTargets(int user, Targeting targeting, int reque
 		break;
 	}
 	case Targeting::AllEnemies:
+	case Targeting::RandomEnemy:
 		result = livingFoes(user);
 		break;
-	case Targeting::OneAlly: {
-		const bool requestedAlly = validIndex && combatants_[requested].side == userSide;
-		if (revives) {
-			if (requestedAlly) {
-				if (!combatants_[requested].alive()) {
-					result.push_back(requested);
-				}
-				break;
-			}
-			for (int ally : allies(user)) {
-				if (!combatants_[ally].alive()) {
-					result.push_back(ally);
-					break;
-				}
+	case Targeting::OneAlly:
+		result.push_back(requestedAlly && combatants_[requested].alive() ? requested : user);
+		break;
+	case Targeting::OneFallenAlly:
+		if (requestedAlly) {
+			if (!combatants_[requested].alive()) {
+				result.push_back(requested);
 			}
 			break;
 		}
-		result.push_back(requestedAlly && combatants_[requested].alive() ? requested : user);
+		for (int ally : allies(user)) {
+			if (!combatants_[ally].alive()) {
+				result.push_back(ally);
+				break;
+			}
+		}
 		break;
-	}
 	case Targeting::AllAllies:
 		for (int ally : allies(user)) {
 			if (revives || combatants_[ally].alive()) {

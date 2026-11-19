@@ -21,4 +21,9 @@ struct Command {
 	static Command escape() { return {CommandKind::Escape, "", -1}; }
 };
 
+struct RecordedCommand {
+	int actor = -1;
+	Command command;
+};
+
 }

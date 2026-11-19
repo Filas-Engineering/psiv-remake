@@ -29,6 +29,8 @@ struct AbilityDef {
 	int uses = 0;
 	Targeting targeting = Targeting::OneEnemy;
 	std::vector<Effect> effects;
+	// Usable on party members outside battle.
+	bool field = false;
 
 	bool revives() const;
 	bool hasEffect(EffectKind kind) const;
@@ -39,6 +41,7 @@ struct ItemDef {
 	std::string name;
 	Targeting targeting = Targeting::OneAlly;
 	std::vector<Effect> effects;
+	bool field = false;
 };
 
 bool effectsRevive(const std::vector<Effect>& effects);

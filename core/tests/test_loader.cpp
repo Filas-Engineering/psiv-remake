@@ -2,6 +2,8 @@
 #include "rules/loader.h"
 #include "test.h"
 
+#include <algorithm>
+
 using namespace rules;
 
 namespace {
@@ -35,7 +37,7 @@ TEST(loaderReadsShippedData) {
 	CHECK_EQ(db.enemies.at("rust_hound").affinities.at(Element::Shock), 150);
 	CHECK(db.enemies.at("rust_hound").ai[2].condition.kind == AiConditionKind::SelfHpBelow);
 	CHECK_EQ(db.enemies.at("rust_hound").ai[2].condition.value, 50);
-	CHECK(db.statuses.at("paralysis").skipsTurn);
+	CHECK(db.statuses.at("paralysis").action == StatusAction::CannotAct);
 	CHECK_EQ(db.startingInventory.at("tonic"), 3);
 	const Macro* opener = db.macro("opener");
 	CHECK(opener != nullptr);
@@ -46,7 +48,7 @@ TEST(loaderReadsShippedData) {
 		CHECK(opener->steps[0].target.kind == MacroTargetKind::Enemy);
 		CHECK_EQ(opener->steps[0].target.enemySlot, 0);
 	}
-	CHECK_EQ(db.combos.size(), std::size_t(3));
+	CHECK_EQ(db.combos.size(), std::size_t(15));
 }
 
 TEST(loaderRejectsEnemyWithMissingAbility) {
@@ -93,8 +95,9 @@ TEST(loaderRejectsSchemaMistakes) {
 	}
 	{
 		auto files = fixtures::dataTexts();
-		replaceOnce(files["abilities.json"], "\"target\": \"one_ally\", \"effects\": [\n\t\t\t{\"type\": \"revive\"", "\"target\": \"all_enemies\", \"effects\": [\n\t\t\t{\"type\": \"revive\"");
-		expectError(files, "ability 'rekindle': revive effects need target one_ally or all_allies");
+		replaceOnce(files["abilities.json"], "\"target\": \"one_fallen_ally\", \"field\": true, \"effects\": [\n\t\t\t{\"type\": \"revive\"",
+			"\"target\": \"all_enemies\", \"effects\": [\n\t\t\t{\"type\": \"revive\"");
+		expectError(files, "ability 'rekindle': revive effects need target one_fallen_ally or all_allies");
 	}
 	{
 		auto files = fixtures::dataTexts();
@@ -180,5 +183,68 @@ TEST(loaderRejectsBadEquipmentAndLearning) {
 		auto files = fixtures::dataTexts();
 		replaceOnce(files["enemies.json"], "\"status_resist\": {\"poison\": 100}", "\"status_resist\": {\"defeated\": 100}");
 		expectError(files, "enemy 'gel_mite': the defeated status cannot be resisted");
+	}
+}
+
+TEST(loaderReadsTheNewRuleFields) {
+	const Database& db = fixtures::data();
+	const StatusDef& jumble = db.statuses.at("jumble");
+	CHECK(jumble.action == StatusAction::Forced && jumble.forcedTarget == ForcedTarget::RandomAny && jumble.stacking == StatusStacking::Keep);
+	CHECK(db.statuses.at("gear_lock").countsTowardDefeat && db.statuses.at("gear_lock").persistsOutsideBattle);
+	CHECK(!db.statuses.at("sleep").persistsOutsideBattle && db.statuses.at("sleep").restCures);
+	CHECK(db.battleRules.restRevives);
+	CHECK(db.abilities.at("rekindle").targeting == Targeting::OneFallenAlly && db.abilities.at("rekindle").field);
+	CHECK(!db.abilities.at("spark").field);
+	CHECK(db.items.at("jolt_pod").targeting == Targeting::RandomEnemy);
+	CHECK_EQ(db.startingEquipmentBag.at("copper_blade"), 1);
+	const ComboRecipe& twin = *std::find_if(db.combos.begin(), db.combos.end(), [](const ComboRecipe& r) { return r.id == "twin_arc"; });
+	CHECK_EQ(twin.characters, (std::vector<std::string>{"medic", ""}));
+	CHECK(!twin.ordered);
+	const ComboRecipe& cinder = *std::find_if(db.combos.begin(), db.combos.end(), [](const ComboRecipe& r) { return r.id == "cinder_gale"; });
+	CHECK(cinder.ordered);
+}
+
+TEST(loaderRejectsBadNewRuleFields) {
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["statuses.json"], "\"action\": \"forced\", \"forced_target\": \"random_any\"", "\"action\": \"forced\", \"forced_target\": \"random_crowd\"");
+		expectError(files, "status 'jumble': unknown forced_target 'random_crowd'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["statuses.json"], "\"blocks_techniques\": true, \"duration\": 3, \"stacking\": \"extend\"", "\"blocks_techniques\": true, \"duration\": 3, \"stacking\": \"pile\"");
+		expectError(files, "status 'silence': unknown stacking 'pile'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["abilities.json"], "\"id\": \"spark\", \"name\": \"Spark\", \"kind\": \"technique\", \"cost\": 3, \"target\": \"one_enemy\",",
+			"\"id\": \"spark\", \"name\": \"Spark\", \"kind\": \"technique\", \"cost\": 3, \"target\": \"one_enemy\", \"field\": true,");
+		expectError(files, "ability 'spark': field use needs a party target");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["difficulties.json"], "{\"ability\": \"rouse\", \"weight\": 8, \"when\": {\"type\": \"ally_defeated\"}}",
+			"{\"ability\": \"rouse\", \"weight\": 8, \"when\": {\"type\": \"ally_defeated\"}, \"target\": \"last_attacker\"}");
+		expectError(files, "difficulty 'hard': last_attacker needs an ability aimed at foes");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["difficulties.json"], "{\"ability\": \"steam_vent\", \"weight\": 3}", "{\"ability\": \"steam_vent\", \"weight\": 3, \"target\": \"has_status\", \"target_status\": \"smog\"}");
+		expectError(files, "difficulty 'hard': AI target names missing status 'smog'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["combos.json"], "{\"ability\": \"glint\", \"character\": \"medic\"}", "{\"ability\": \"glint\", \"character\": \"engineer\"}");
+		expectError(files, "combo 'twin_arc': character 'engineer' can never use 'glint'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["combos.json"], "\"abilities\": [\"frostbite\", \"gust\", \"glint\"]", "\"abilities\": [\"frostbite\", \"spark\", \"gust\"]");
+		expectError(files, "combo 'hailstorm': no set of different characters can use these abilities together");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["rules.json"], ",\n\t\"rest_revives\": true", "");
+		expectError(files, "rules.json:1: missing field 'rest_revives'");
 	}
 }

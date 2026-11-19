@@ -6,6 +6,16 @@
 
 namespace rules {
 
+const StatusDef* Battle::statusWith(int actor, StatusAction action) const {
+	for (const ActiveStatus& active : combatants_[actor].statuses) {
+		const StatusDef* def = db_->status(active.id);
+		if (def && def->action == action) {
+			return def;
+		}
+	}
+	return nullptr;
+}
+
 void Battle::endOfRound(std::vector<Event>& out) {
 	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
 		Combatant& c = combatants_[i];
@@ -24,6 +34,7 @@ void Battle::endOfRound(std::vector<Event>& out) {
 			e.target = i;
 			e.status = def->id;
 			e.amount = damage;
+			e.hp = c.hp;
 			if (!c.alive()) {
 				defeat(i, out);
 				break;
@@ -40,11 +51,7 @@ void Battle::endOfRound(std::vector<Event>& out) {
 			}
 		}
 		for (const std::string& id : expired) {
-			removeStatus(i, id);
-			Event& e = emit(out, EventType::StatusExpired);
-			e.target = i;
-			e.status = id;
-			e.statusEnd = StatusEnd::Duration;
+			emitStatusRemoved(-1, i, id, StatusEnd::Duration, out);
 		}
 
 		std::vector<Stat> worn;
@@ -63,6 +70,10 @@ void Battle::endOfRound(std::vector<Event>& out) {
 		}
 	}
 	updateOutcome();
+	const ScriptedEnd& end = record_.setup.scriptedEnd;
+	if (outcome_ == Outcome::Ongoing && end.kind == ScriptedEndKind::SurviveRounds && round_ >= end.rounds) {
+		outcome_ = Outcome::ScriptedEnd;
+	}
 }
 
 }

@@ -87,12 +87,33 @@ int Combatant::resistance(const std::string& statusId) const {
 	return it == statusResist.end() ? 0 : it->second;
 }
 
-bool ComboLog::discover(const std::string& recipeId) {
-	return discovered_.insert(recipeId).second;
+bool ComboLog::discover(const std::string& recipeId, std::int64_t playTimeMs, const std::vector<std::string>& characters) {
+	if (isDiscovered(recipeId)) {
+		return false;
+	}
+	entries_.push_back({recipeId, playTimeMs, characters});
+	return true;
 }
 
 bool ComboLog::isDiscovered(const std::string& recipeId) const {
-	return discovered_.count(recipeId) > 0;
+	return entry(recipeId) != nullptr;
+}
+
+const ComboLogEntry* ComboLog::entry(const std::string& recipeId) const {
+	for (const ComboLogEntry& e : entries_) {
+		if (e.recipe == recipeId) {
+			return &e;
+		}
+	}
+	return nullptr;
+}
+
+std::set<std::string> ComboLog::discovered() const {
+	std::set<std::string> ids;
+	for (const ComboLogEntry& e : entries_) {
+		ids.insert(e.recipe);
+	}
+	return ids;
 }
 
 const StatusDef* Database::status(const std::string& id) const { return findIn(statuses, id); }

@@ -8,16 +8,21 @@
 
 namespace rules {
 
-enum class Outcome { Ongoing, Victory, Defeat, Escaped };
+enum class Outcome { Ongoing, Victory, Defeat, Escaped, ScriptedEnd };
 
 enum class EventType {
+	BattleStarted,
 	RoundStarted,
+	CommandsLocked,
+	OrderResolved,
+	Retargeted,
 	ActionStarted,
-	ActionFailed,
-	ActionPrevented,
+	ActionCancelled,
 	ComboTriggered,
+	ComboDiscovered,
 	ResourceSpent,
 	ItemHadNoEffect,
+	Hit,
 	Missed,
 	Critical,
 	DamageDealt,
@@ -25,22 +30,23 @@ enum class EventType {
 	Revived,
 	StatusApplied,
 	StatusResisted,
-	StatusCured,
+	StatusRemoved,
 	StatusTicked,
-	StatusExpired,
 	StatModified,
 	StatModifierExpired,
 	CombatantDefeated,
 	EscapeAttempted,
+	Message,
 	RoundEnded,
 	BattleEnded,
 };
 
-enum class FailReason { None, Silenced, NotEnoughTp, NoUsesLeft, NoItem, NoTarget };
+// ActorUnable carries the cause in Event::status: a status that stops the actor, or "defeated".
+enum class CancelReason { None, ActorUnable, Silenced, NotEnoughTp, NoUsesLeft, NoItem, NoTarget };
 
 enum class Effectiveness { Normal, Weak, Resisted, Immune };
 
-enum class StatusEnd { Duration, Recovered, WokeOnDamage };
+enum class StatusEnd { Cured, Duration, Recovered, WokeOnDamage, Defeated };
 
 enum class ResourceKind { None, Tp, SkillUse, Item };
 
@@ -50,21 +56,46 @@ struct Event {
 	int round = 0;
 	int actor = -1;
 	int target = -1;
+	// Retargeted: the target the command named.
+	int previousTarget = -1;
 	// Ability, item or combo ability id.
 	std::string ability;
+	// Combination recipe id.
+	std::string combo;
 	std::string status;
+	// Status events and Message: a key into the host's string table.
+	std::string message;
+	std::vector<std::string> params;
 	int amount = 0;
+	// Hit points after the change.
+	int hp = -1;
+	// StatusApplied and StatModified: rounds it lasts, 0 for no round limit.
+	int duration = 0;
 	CommandKind command = CommandKind::None;
 	Element element = Element::None;
 	Effectiveness effectiveness = Effectiveness::Normal;
 	Stat stat = Stat::Strength;
-	FailReason fail = FailReason::None;
-	StatusEnd statusEnd = StatusEnd::Duration;
+	CancelReason cancel = CancelReason::None;
+	StatusEnd statusEnd = StatusEnd::Cured;
 	Outcome outcome = Outcome::Ongoing;
 	ResourceKind resource = ResourceKind::None;
+	Opening opening = Opening::Normal;
 	bool succeeded = false;
-	bool firstDiscovery = false;
+	bool gameOver = false;
+	int experience = 0;
+	int currency = 0;
+	// CommandsLocked: the macro that set the party's commands this round.
+	std::string macro;
 	std::vector<int> participants;
+	// OrderResolved: combatant indexes in execution order.
+	std::vector<int> order;
+	// BattleStarted: definition id and group per combatant index.
+	std::vector<std::string> ids;
+	std::vector<std::string> groups;
+	int partyCount = 0;
+	BattleFlags flags;
+	// CommandsLocked: every combatant's command for the round, by index.
+	std::vector<RecordedCommand> commands;
 };
 
 // One line per event: the round, the type, then every field that differs from its default, in declaration order.

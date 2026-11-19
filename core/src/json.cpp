@@ -324,6 +324,16 @@ const char* jsonTypeName(JsonValue::Type type) {
 	return "unknown";
 }
 
+bool parseJsonType(const std::string& text, JsonValue::Type& out) {
+	for (JsonValue::Type type : {JsonValue::Type::Null, JsonValue::Type::Bool, JsonValue::Type::Number, JsonValue::Type::String, JsonValue::Type::Array, JsonValue::Type::Object}) {
+		if (text == jsonTypeName(type)) {
+			out = type;
+			return true;
+		}
+	}
+	return false;
+}
+
 Result<JsonValue> parseJson(const std::string& text) {
 	return Parser(text).run();
 }

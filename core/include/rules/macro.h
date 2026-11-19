@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rules/command.h"
+#include "rules/result.h"
 
 #include <string>
 #include <vector>
@@ -30,6 +31,8 @@ struct Macro {
 	std::vector<MacroStep> steps;
 };
 
+// Applied with an issue (Silenced, NotEnoughTp, NoUsesLeft, NoItem, NoTarget) means the command is set as
+// written but cannot run now; it is cancelled at execution unless that changes first.
 enum class MacroStepStatus { Applied, Retargeted, FellBack, Skipped };
 
 enum class MacroIssue {
@@ -37,6 +40,8 @@ enum class MacroIssue {
 	NotInParty,
 	ActorDefeated,
 	CaughtOffGuard,
+	CannotAct,
+	ForcedByStatus,
 	UnknownAbility,
 	Silenced,
 	NotEnoughTp,
@@ -54,5 +59,12 @@ struct MacroStepResult {
 	MacroIssue issue = MacroIssue::None;
 	Command command;
 };
+
+// True for the issues that mean the step's cost cannot be paid now.
+bool isCostIssue(MacroIssue issue);
+
+// A versioned line-based text form for saves.
+std::string serializeMacros(const std::vector<Macro>& macros);
+Result<std::vector<Macro>> parseMacros(const std::string& text);
 
 }

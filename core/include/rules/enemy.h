@@ -17,10 +17,22 @@ struct AiCondition {
 	std::string status;
 };
 
+// How an entry picks its single target. Default keeps the per-ability rule: a random foe (among those with the
+// condition's status for foe_has_status), the ally with the lowest hit point share for heals, an ally with the
+// status for cures, the first fallen ally for revives.
+enum class AiTargetRule { Default, Random, LowestHp, HighestHp, HasStatus, LacksStatus, LastAttacker };
+
+struct AiTarget {
+	AiTargetRule rule = AiTargetRule::Default;
+	// For HasStatus and LacksStatus.
+	std::string status;
+};
+
 struct AiRule {
 	std::string ability;
 	int weight = 1;
 	AiCondition condition;
+	AiTarget target = {};
 };
 
 struct EnemyDef {

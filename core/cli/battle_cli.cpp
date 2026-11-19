@@ -5,6 +5,7 @@
 #include "rules/progression.h"
 #include "rules/record.h"
 #include "rules/setup.h"
+#include "rules/text.h"
 
 #include <cstdlib>
 #include <fstream>
@@ -37,7 +38,7 @@ const char* usage =
 	"usage: battle_cli [options]\n"
 	"  --seed N             battle seed (default 1)\n"
 	"  --auto               play the whole battle with the built-in policy and print the event log\n"
-	"  --macro NAME         with --auto, run this macro every round instead\n"
+	"  --macro NAME         with --auto, auto-battle with this macro; when it stops the built-in policy takes over\n"
 	"  --encounter ID       enemy group from enemies.json (default training)\n"
 	"  --difficulty ID      difficulty from difficulties.json (default original)\n"
 	"  --reward 1|1.5|2     reward multiplier (default 1)\n"
@@ -117,16 +118,35 @@ std::string statusName(const Battle& battle, const std::string& id) {
 	return status ? status->name : id;
 }
 
-const char* failText(FailReason reason) {
-	switch (reason) {
-	case FailReason::Silenced: return "is silenced";
-	case FailReason::NotEnoughTp: return "lacks technique points";
-	case FailReason::NoUsesLeft: return "has no uses left";
-	case FailReason::NoItem: return "has none left";
-	case FailReason::NoTarget: return "has no target";
-	case FailReason::None: return "fails";
+// Message parameters are ids or numbers; ids print as their display names.
+std::string paramName(const Database& db, const std::string& param) {
+	if (const AbilityDef* ability = db.ability(param)) {
+		return ability->name;
 	}
-	return "fails";
+	if (const ItemDef* item = db.item(param)) {
+		return item->name;
+	}
+	if (const StatusDef* status = db.status(param)) {
+		return status->name;
+	}
+	if (const CharacterDef* character = db.character(param)) {
+		return character->name;
+	}
+	if (const EnemyDef* enemy = db.enemy(param)) {
+		return enemy->name;
+	}
+	if (const EquipmentDef* piece = db.equipmentPiece(param)) {
+		return piece->name;
+	}
+	return param;
+}
+
+std::string messageText(const TextTable& text, const Database& db, const Message& message) {
+	std::vector<std::string> params;
+	for (const std::string& param : message.params) {
+		params.push_back(paramName(db, param));
+	}
+	return formatText(text, message.key, params);
 }
 
 const char* outcomeText(Outcome outcome) {
@@ -134,6 +154,7 @@ const char* outcomeText(Outcome outcome) {
 	case Outcome::Victory: return "Victory";
 	case Outcome::Defeat: return "Defeat";
 	case Outcome::Escaped: return "Escaped";
+	case Outcome::ScriptedEnd: return "Scripted end";
 	case Outcome::Ongoing: return "Ongoing";
 	}
 	return "?";
@@ -149,13 +170,22 @@ const char* resourceText(ResourceKind resource) {
 	return "";
 }
 
-std::string describe(const Battle& battle, const Event& e) {
+// An empty line means the event is not printed.
+std::string describe(const Battle& battle, const TextTable& text, const Event& e) {
 	std::ostringstream s;
 	const std::string actor = nameOf(battle, e.actor);
 	const std::string target = nameOf(battle, e.target);
 	switch (e.type) {
+	case EventType::BattleStarted:
+	case EventType::CommandsLocked:
+	case EventType::OrderResolved:
+	case EventType::Hit:
+		break;
 	case EventType::RoundStarted:
 		s << "-- Round " << e.round << " --";
+		break;
+	case EventType::Retargeted:
+		s << actor << " turns from " << nameOf(battle, e.previousTarget) << " to " << target << ".";
 		break;
 	case EventType::ActionStarted:
 		if (e.command == CommandKind::Defend) {
@@ -168,20 +198,22 @@ std::string describe(const Battle& battle, const Event& e) {
 			s << ".";
 		}
 		break;
-	case EventType::ActionFailed:
-		s << actor << " tries " << actionName(battle, e.ability) << " but " << failText(e.fail) << ".";
+	case EventType::ActionCancelled: {
+		const std::string cause = e.cancel == CancelReason::ActorUnable ? statusName(battle, e.status) : actionName(battle, e.ability);
+		s << formatText(text, std::string("cancel.") + toString(e.cancel), {actor, cause});
 		break;
-	case EventType::ActionPrevented:
-		s << actor << " cannot act (" << statusName(battle, e.status) << ").";
-		break;
+	}
 	case EventType::ComboTriggered: {
 		s << "Combo! ";
 		for (std::size_t i = 0; i < e.participants.size(); ++i) {
 			s << (i ? " + " : "") << nameOf(battle, e.participants[i]);
 		}
-		s << " unleash " << actionName(battle, e.ability) << (e.firstDiscovery ? " (new combo discovered)" : "") << ".";
+		s << " unleash " << actionName(battle, e.ability) << ".";
 		break;
 	}
+	case EventType::ComboDiscovered:
+		s << "New combination discovered: " << e.combo << ".";
+		break;
 	case EventType::ResourceSpent:
 		s << "  (" << actor << " spends " << e.amount << " " << resourceText(e.resource) << ")";
 		break;
@@ -215,19 +247,12 @@ std::string describe(const Battle& battle, const Event& e) {
 		s << target << " is back on their feet with " << e.amount << " HP.";
 		break;
 	case EventType::StatusApplied:
-		s << target << " is afflicted with " << statusName(battle, e.status) << ".";
-		break;
 	case EventType::StatusResisted:
-		s << target << (e.effectiveness == Effectiveness::Immune ? " is immune to " : " shrugs off ") << statusName(battle, e.status) << ".";
-		break;
-	case EventType::StatusCured:
-		s << target << " is cured of " << statusName(battle, e.status) << ".";
+	case EventType::StatusRemoved:
+		s << formatText(text, e.message, {target, statusName(battle, e.status)});
 		break;
 	case EventType::StatusTicked:
 		s << target << " loses " << e.amount << " HP to " << statusName(battle, e.status) << ".";
-		break;
-	case EventType::StatusExpired:
-		s << target << (e.statusEnd == StatusEnd::WokeOnDamage ? " wakes from " : " is free of ") << statusName(battle, e.status) << ".";
 		break;
 	case EventType::StatModified:
 		s << target << "'s " << toString(e.stat) << (e.amount > 0 ? " rises" : " falls") << " by " << (e.amount > 0 ? e.amount : -e.amount) << "%.";
@@ -241,6 +266,9 @@ std::string describe(const Battle& battle, const Event& e) {
 	case EventType::EscapeAttempted:
 		s << actor << (e.succeeded ? " leads the party away." : " tries to escape but is cut off.");
 		break;
+	case EventType::Message:
+		s << messageText(text, battle.database(), {e.message, e.params});
+		break;
 	case EventType::RoundEnded:
 		s << "-- End of round " << e.round << " --";
 		break;
@@ -249,6 +277,15 @@ std::string describe(const Battle& battle, const Event& e) {
 		break;
 	}
 	return s.str();
+}
+
+void printEvents(const Battle& battle, const TextTable& text, const std::vector<Event>& events) {
+	for (const Event& event : events) {
+		const std::string line = describe(battle, text, event);
+		if (!line.empty()) {
+			std::cout << line << "\n";
+		}
+	}
 }
 
 void printState(const Battle& battle) {
@@ -288,7 +325,7 @@ const Macro* findMacro(const Battle& battle, const std::vector<Macro>& saved, co
 }
 
 // Returns false when input ends or the player quits.
-bool chooseCommands(Battle& battle, std::vector<Macro>& saved) {
+bool chooseCommands(Battle& battle, const TextTable& text, std::vector<Macro>& saved) {
 	std::string line;
 	while (true) {
 		std::cout << "Macros:";
@@ -383,11 +420,11 @@ bool chooseCommands(Battle& battle, std::vector<Macro>& saved) {
 			} else {
 				continue;
 			}
-			const std::string error = battle.setCommand(i, command);
-			if (error.empty()) {
+			const Message refused = battle.setCommand(i, command);
+			if (refused.empty()) {
 				break;
 			}
-			std::cout << "    " << error << "\n";
+			std::cout << "    " << messageText(text, battle.database(), refused) << "\n";
 		}
 	}
 	return true;
@@ -446,15 +483,15 @@ void printHeader(const Battle& battle) {
 		<< "  reward x" << toString(setup.rewardMultiplier) << "\n";
 }
 
-int replay(const Options& options, const Database& db) {
+int replay(const Options& options, const Database& db, const TextTable& text) {
 	std::ifstream in(options.replayPath, std::ios::binary);
 	if (!in) {
 		std::cerr << "cannot open " << options.replayPath << "\n";
 		return 1;
 	}
-	std::ostringstream text;
-	text << in.rdbuf();
-	const Result<BattleRecord> record = parseRecord(text.str());
+	std::ostringstream contents;
+	contents << in.rdbuf();
+	const Result<BattleRecord> record = parseRecord(contents.str());
 	if (!record.ok()) {
 		std::cerr << options.replayPath << ": " << record.error << "\n";
 		return 1;
@@ -467,9 +504,7 @@ int replay(const Options& options, const Database& db) {
 		return 1;
 	}
 	printHeader(*replayed.value);
-	for (const Event& event : events) {
-		std::cout << describe(*replayed.value, event) << "\n";
-	}
+	printEvents(*replayed.value, text, events);
 	return printResult(db, *replayed.value, comboLog);
 }
 
@@ -491,8 +526,13 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	const Database& db = *loaded.value;
+	const Result<TextTable> text = loadTextTable(options.dataDir + "/text_en.json");
+	if (!text.ok()) {
+		std::cerr << "data error:\n" << text.error << "\n";
+		return 1;
+	}
 	if (!options.replayPath.empty()) {
-		return replay(options, db);
+		return replay(options, db, *text.value);
 	}
 
 	BattleSetup setup;
@@ -531,12 +571,18 @@ int main(int argc, char** argv) {
 	Battle& battle = *created.value;
 
 	printHeader(battle);
+	if (autoMacro) {
+		battle.startAuto(*autoMacro);
+	}
 	std::vector<Macro> savedMacros;
 	while (battle.outcome() == Outcome::Ongoing && battle.round() < options.maxRounds) {
 		if (options.autoPlay) {
-			if (autoMacro) {
-				battle.applyMacro(*autoMacro);
-			} else {
+			const bool wasAuto = battle.autoActive();
+			if (!battle.fillFromAuto()) {
+				// The stop notice goes to stderr so a replay, which has no auto-battle, prints the same log.
+				if (wasAuto) {
+					std::cerr << formatText(*text.value, std::string("auto.stopped.") + toString(battle.autoStop()), {}) << "\n";
+				}
 				for (int i = 0; i < battle.partyCount(); ++i) {
 					if (battle.combatant(i).alive() && battle.sideActsNextRound(Side::Party)) {
 						battle.setCommand(i, autoCommand(battle, i));
@@ -545,14 +591,12 @@ int main(int argc, char** argv) {
 			}
 		} else {
 			printState(battle);
-			if (!chooseCommands(battle, savedMacros)) {
+			if (!chooseCommands(battle, *text.value, savedMacros)) {
 				std::cout << "Quit.\n";
 				return writeRecord(options, battle) ? 0 : 1;
 			}
 		}
-		for (const Event& event : battle.resolveRound()) {
-			std::cout << describe(battle, event) << "\n";
-		}
+		printEvents(battle, *text.value, battle.resolveRound());
 	}
 	if (!writeRecord(options, battle)) {
 		return 1;

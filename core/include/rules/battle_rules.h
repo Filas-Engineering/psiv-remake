@@ -18,6 +18,8 @@ struct BattleRules {
 	int criticalDamagePercent = 150;
 	ExperienceSplit experienceSplit = ExperienceSplit::EachLiving;
 	EscapeRule escape;
+	// Whether rest stands a fallen member up (FLD-035).
+	bool restRevives = true;
 };
 
 }

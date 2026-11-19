@@ -50,13 +50,13 @@ Command autoCommand(const Battle& battle, int actor) {
 	std::vector<const AbilityDef*> usable;
 	for (const std::string& id : self.abilities) {
 		const AbilityDef* ability = db.ability(id);
-		if (ability && battle.checkUsable(actor, *ability) == FailReason::None) {
+		if (ability && battle.checkUsable(actor, *ability) == CancelReason::None) {
 			usable.push_back(ability);
 		}
 	}
 	if (defeatedAlly >= 0) {
 		for (const AbilityDef* ability : usable) {
-			if (ability->targeting == Targeting::OneAlly && ability->revives()) {
+			if (ability->targeting == Targeting::OneFallenAlly) {
 				return Command::ability(ability->id, defeatedAlly);
 			}
 		}

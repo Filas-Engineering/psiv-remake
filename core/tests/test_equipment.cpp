@@ -28,22 +28,28 @@ TEST(equipmentAddsStatsAndAbilities) {
 
 	PartyMember medic = makePartyMember(db, db.characters.at("medic"), 1);
 	CHECK(knows(knownAbilities(db, medic), "glint"));
-	unequip(medic, db, EquipSlot::Accessory);
+	EquipmentBag bag;
+	unequip(medic, db, bag, EquipSlot::Accessory);
 	CHECK(!knows(knownAbilities(db, medic), "glint"));
+	CHECK_EQ(bag.at("spark_ring"), 1);
 }
 
 TEST(equipRestrictionsArePerCharacter) {
 	const Database& db = data();
 	PartyMember mystic = makePartyMember(db, db.characters.at("mystic"), 1);
-	CHECK_EQ(equip(mystic, db, "copper_blade"), std::string("Test Mystic cannot equip Copper Blade"));
+	EquipmentBag bag = db.startingEquipmentBag;
+	const Message refused = equip(mystic, db, bag, "copper_blade");
+	CHECK_EQ(refused.key, std::string("equip.wrong_category"));
+	CHECK_EQ(refused.params, (std::vector<std::string>{"mystic", "copper_blade"}));
 	CHECK_EQ(mystic.equipment.at(EquipSlot::Weapon), std::string("ember_rod"));
+	CHECK_EQ(bag.at("copper_blade"), 1);
 	CHECK(!canEquip(db, "medic", "rivet_plate").empty());
 	CHECK(canEquip(db, "engineer", "rivet_plate").empty());
-	CHECK(!equip(mystic, db, "no_such_thing").empty());
+	CHECK_EQ(equip(mystic, db, bag, "no_such_thing").key, std::string("equip.unknown_equipment"));
 
 	// Taking off armor clamps hit points to the new maximum.
 	PartyMember fighter = makePartyMember(db, db.characters.at("fighter"), 1);
-	unequip(fighter, db, EquipSlot::Body);
+	unequip(fighter, db, bag, EquipSlot::Body);
 	CHECK_EQ(fighter.hp, 60);
 }
 
@@ -62,8 +68,9 @@ TEST(grantedSkillUsesDoNotRefillBySwapping) {
 	medic = battle.partyState()[kMedic];
 	CHECK_EQ(medic.skillUses.at("flare_burst"), 0);
 
-	unequip(medic, db, EquipSlot::Accessory);
-	CHECK(equip(medic, db, "spark_ring").empty());
+	EquipmentBag bag;
+	unequip(medic, db, bag, EquipSlot::Accessory);
+	CHECK(equip(medic, db, bag, "spark_ring").empty());
 	CHECK_EQ(medic.skillUses.at("flare_burst"), 0);
 	rest(medic, db);
 	CHECK_EQ(medic.skillUses.at("flare_burst"), 1);
@@ -137,4 +144,26 @@ TEST(abilitiesAreLearnedByLevel) {
 	CHECK_EQ(levelUp.learned, (std::vector<std::string>{"renew", "flare_burst"}));
 	CHECK_EQ(medic.skillUses.at("flare_burst"), 1);
 	CHECK(grantExperience(medic, wide, 100000).learned.empty());
+}
+
+TEST(equipmentMovesBetweenTheBagAndMembers) {
+	const Database& db = data();
+	PartyMember fighter = makePartyMember(db, db.characters.at("fighter"), 1);
+	PartyMember scout = makePartyMember(db, db.characters.at("scout"), 1);
+	EquipmentBag bag = {{"copper_blade", 1}};
+	CHECK(equip(scout, db, bag, "copper_blade").empty());
+	CHECK_EQ(scout.equipment.at(EquipSlot::Weapon), std::string("copper_blade"));
+	CHECK(bag.count("copper_blade") == 0 && bag.at("volley_sling") == 1);
+
+	// The one spare blade is worn, so nobody else can put one on.
+	PartyMember engineer = makePartyMember(db, db.characters.at("engineer"), 1);
+	CHECK_EQ(equip(engineer, db, bag, "copper_blade").key, std::string("equip.not_in_bag"));
+	CHECK(engineer.equipment.count(EquipSlot::Weapon) == 0);
+
+	unequip(fighter, db, bag, EquipSlot::Weapon);
+	CHECK_EQ(bag.at("copper_blade"), 1);
+	CHECK(equip(engineer, db, bag, "copper_blade").empty());
+	CHECK(bag.count("copper_blade") == 0);
+	unequip(fighter, db, bag, EquipSlot::Weapon);
+	CHECK(bag.count("copper_blade") == 0);
 }

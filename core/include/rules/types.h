@@ -11,7 +11,7 @@ enum class Stat { Strength, Mental, Agility, Dexterity, Defense };
 
 enum class Side { Party, Enemy };
 
-enum class Targeting { OneEnemy, EnemyGroup, AllEnemies, OneAlly, AllAllies, Self };
+enum class Targeting { OneEnemy, EnemyGroup, AllEnemies, OneAlly, AllAllies, Self, OneFallenAlly, RandomEnemy };
 
 enum class AbilityKind { Attack, Technique, Skill, Combo };
 
@@ -25,7 +25,17 @@ enum class RewardMultiplier { X1, X1_5, X2 };
 
 enum class ExperienceSplit { EachLiving, SplitLiving, EachMember };
 
+struct BattleFlags {
+	bool escapeAllowed = true;
+	// Without a defeat branch, Defeat is a game over (FLOW-040).
+	bool defeatHasBranch = false;
+	bool vehicleBattle = false;
+};
+
 using Inventory = std::map<std::string, int>;
+
+// Equipment id to the number of pieces nobody wears.
+using EquipmentBag = std::map<std::string, int>;
 
 // Percent of incoming elemental damage taken. Missing elements count as 100.
 using Affinities = std::map<Element, int>;

@@ -80,8 +80,8 @@ TEST(itemsUseFlatPowerAndAreConsumed) {
 	CHECK_EQ(battle.inventory().at("tonic"), 2);
 	CHECK_EQ(battle.inventory().at("second_wind"), 0);
 	// The second revive finds the stock empty.
-	CHECK_EQ(ofType(events, EventType::ActionFailed).size(), std::size_t(1));
-	CHECK(ofType(events, EventType::ActionFailed)[0].fail == FailReason::NoItem);
+	CHECK_EQ(ofType(events, EventType::ActionCancelled).size(), std::size_t(1));
+	CHECK(ofType(events, EventType::ActionCancelled)[0].cancel == CancelReason::NoItem);
 }
 
 TEST(reviveTechniqueNeedsADefeatedAlly) {
@@ -89,8 +89,8 @@ TEST(reviveTechniqueNeedsADefeatedAlly) {
 	const int tp = battle.combatant(kMedic).tp;
 	battle.setCommand(kMedic, Command::ability("rekindle", kScout));
 	othersDefend(battle);
-	const std::optional<Event> failed = firstBy(battle.resolveRound(), EventType::ActionFailed, kMedic);
-	CHECK(failed && failed->fail == FailReason::NoTarget);
+	const std::optional<Event> failed = firstBy(battle.resolveRound(), EventType::ActionCancelled, kMedic);
+	CHECK(failed && failed->cancel == CancelReason::NoTarget);
 	CHECK_EQ(battle.combatant(kMedic).tp, tp);
 
 	battle.combatant(kScout).hp = 0;
@@ -132,7 +132,7 @@ TEST(createValidatesTheSetup) {
 	setup.difficulty.clear();
 	setup.party[1].equipment[EquipSlot::Weapon] = "copper_blade";
 	const Result<Battle> wrongGear = Battle::create(db, setup, nullptr);
-	CHECK(!wrongGear.ok() && wrongGear.error == "Test Mystic cannot equip Copper Blade");
+	CHECK(!wrongGear.ok() && wrongGear.error == "'mystic' cannot wear 'copper_blade' (equip.wrong_category)");
 	setup.party[1].equipment[EquipSlot::Weapon] = "ember_rod";
 	CHECK(Battle::create(db, setup, nullptr).ok());
 }
@@ -199,4 +199,99 @@ TEST(spentResourcesAppearAsEvents) {
 	for (const Event& e : spent) {
 		CHECK(e.actor == kFighter ? (e.resource == ResourceKind::SkillUse && e.amount == 1) : (e.resource == ResourceKind::Tp && e.amount == 3));
 	}
+}
+
+namespace {
+
+void makeSturdy(Battle& battle) {
+	for (int i = 0; i < static_cast<int>(battle.combatants().size()); ++i) {
+		battle.combatant(i).stats.maxHp = 9999;
+		battle.combatant(i).hp = 9999;
+	}
+}
+
+}
+
+TEST(survivingTheRoundsEndsTheBattleAsScripted) {
+	BattleSetup setup = makeSetup(data(), {"gel_mite", "rust_hound"}, 4);
+	setup.scriptedEnd = {ScriptedEndKind::SurviveRounds, 2, -1};
+	Battle battle = makeBattle(data(), setup);
+	makeSturdy(battle);
+	partyDefends(battle);
+	battle.resolveRound();
+	CHECK(battle.outcome() == Outcome::Ongoing);
+	partyDefends(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	CHECK(battle.outcome() == Outcome::ScriptedEnd);
+	CHECK(events.back().type == EventType::BattleEnded && events.back().outcome == Outcome::ScriptedEnd);
+	CHECK_EQ(battle.rewards().experience, 0);
+	CHECK(battle.resolveRound().empty());
+}
+
+TEST(defeatingTheNamedEnemyEndsTheBattleAsScripted) {
+	Database db = data();
+	db.characters["fighter"].base.dexterity = 500;
+	db.characters["fighter"].base.agility = 900;
+	BattleSetup setup = makeSetup(db, {"gel_mite", "rust_hound", "gel_mite"}, 2);
+	setup.scriptedEnd = {ScriptedEndKind::EnemyDefeated, 0, 1};
+	Battle battle = makeBattle(db, setup);
+	battle.combatant(kFirstEnemy + 1).hp = 1;
+	battle.setCommand(kFighter, Command::attack(kFirstEnemy + 1));
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	CHECK(battle.outcome() == Outcome::ScriptedEnd);
+	// The fighter acts first and nothing acts after the condition is met.
+	CHECK_EQ(ofType(events, EventType::ActionStarted).size(), std::size_t(1));
+	// Only the fallen enemy pays out.
+	CHECK_EQ(battle.rewards().experience, 10);
+	CHECK_EQ(events.back().experience, 10);
+
+	// When the named enemy is the last one, the battle is a plain Victory.
+	setup.enemies = {{"rust_hound", "rust_hound"}};
+	setup.scriptedEnd.enemySlot = 0;
+	Battle alone = makeBattle(db, setup);
+	alone.combatant(kFirstEnemy).hp = 1;
+	alone.setCommand(kFighter, Command::attack(kFirstEnemy));
+	othersDefend(alone);
+	alone.resolveRound();
+	CHECK(alone.outcome() == Outcome::Victory);
+
+	setup.scriptedEnd.enemySlot = 3;
+	CHECK(!Battle::create(db, setup, nullptr).ok());
+	setup.scriptedEnd = {ScriptedEndKind::SurviveRounds, 0, -1};
+	CHECK(!Battle::create(db, setup, nullptr).ok());
+}
+
+TEST(defeatWithoutABranchIsAGameOver) {
+	for (bool branch : {false, true}) {
+		BattleSetup setup = makeSetup(data(), {"brass_warden"}, 9);
+		setup.flags.defeatHasBranch = branch;
+		Battle battle = makeBattle(data(), setup);
+		for (int i = 0; i < battle.partyCount(); ++i) {
+			battle.combatant(i).hp = 1;
+		}
+		std::vector<Event> last;
+		for (int round = 0; round < 30 && battle.outcome() == Outcome::Ongoing; ++round) {
+			partyDefends(battle);
+			last = battle.resolveRound();
+		}
+		CHECK(battle.outcome() == Outcome::Defeat);
+		CHECK_EQ(battle.gameOver(), !branch);
+		CHECK(!last.empty() && last.back().gameOver == !branch);
+	}
+}
+
+TEST(hardSeededBattleHasAFixedOutcome) {
+	// Golden values for the Hard overlay's target rules and added abilities; the CLI test plays the same battle.
+	ComboLog log;
+	BattleSetup setup = makeSetup(data(), {}, 7);
+	CHECK(useEncounter(setup, data(), "warden").empty());
+	setup.difficulty = "hard";
+	setup.rewardMultiplier = RewardMultiplier::X1_5;
+	Battle battle = makeBattle(data(), setup, &log);
+	playToEnd(battle, 50);
+	CHECK(battle.outcome() == Outcome::Defeat);
+	CHECK_EQ(battle.round(), 13);
+	CHECK(battle.gameOver());
+	CHECK(log.isDiscovered("storm_spark"));
 }

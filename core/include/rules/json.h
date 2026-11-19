@@ -26,6 +26,7 @@ public:
 };
 
 const char* jsonTypeName(JsonValue::Type type);
+bool parseJsonType(const std::string& text, JsonValue::Type& out);
 
 Result<JsonValue> parseJson(const std::string& text);
 

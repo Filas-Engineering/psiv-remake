@@ -32,6 +32,7 @@ struct Database {
 	std::vector<Macro> macros;
 	std::vector<std::string> lineup;
 	Inventory startingInventory;
+	EquipmentBag startingEquipmentBag;
 	// FNV-1a over the loaded file texts. Battle records carry it so a replay against other data is refused.
 	std::uint64_t contentHash = 0;
 

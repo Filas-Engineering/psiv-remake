@@ -4,13 +4,15 @@
 #include "rules/names.h"
 #include "text_encoding.h"
 
-#include <climits>
 #include <cstdlib>
 #include <sstream>
 
 namespace rules {
 
 namespace {
+
+using text::parseInt;
+using text::parseInt64;
 
 std::string hex64(std::uint64_t value) {
 	static const char digits[] = "0123456789abcdef";
@@ -20,29 +22,6 @@ std::string hex64(std::uint64_t value) {
 		value >>= 4;
 	}
 	return out;
-}
-
-std::vector<std::string> split(const std::string& line) {
-	std::vector<std::string> tokens;
-	std::istringstream in(line);
-	std::string token;
-	while (in >> token) {
-		tokens.push_back(token);
-	}
-	return tokens;
-}
-
-bool parseInt(const std::string& text, int& out) {
-	if (text.empty() || text.size() > 10) {
-		return false;
-	}
-	char* end = nullptr;
-	const long long value = std::strtoll(text.c_str(), &end, 10);
-	if (*end != '\0' || value < INT_MIN || value > INT_MAX) {
-		return false;
-	}
-	out = static_cast<int>(value);
-	return true;
 }
 
 bool parseU64(const std::string& text, std::uint64_t& out, int base) {
@@ -72,6 +51,8 @@ bool keyed(const std::string& token, const char* key, std::string& value) {
 	return true;
 }
 
+constexpr const char* kChecksumKey = "checksum ";
+
 }
 
 std::string serializeRecord(const BattleRecord& record) {
@@ -87,6 +68,7 @@ std::string serializeRecord(const BattleRecord& record) {
 	s << "opening " << toString(setup.opening) << '\n';
 	s << "flags escape=" << setup.flags.escapeAllowed << " defeat_branch=" << setup.flags.defeatHasBranch
 		<< " vehicle=" << setup.flags.vehicleBattle << '\n';
+	s << "scripted_end " << toString(setup.scriptedEnd.kind) << ' ' << setup.scriptedEnd.rounds << ' ' << setup.scriptedEnd.enemySlot << '\n';
 	s << "enemy_group " << text::encode(setup.enemyGroup) << '\n';
 	for (const FormationSlot& slot : setup.enemies) {
 		s << "enemy " << text::encode(slot.enemy) << ' ' << text::encode(slot.group) << '\n';
@@ -103,12 +85,15 @@ std::string serializeRecord(const BattleRecord& record) {
 		for (const auto& [slot, id] : member.equipment) {
 			s << "equip " << toString(slot) << ' ' << text::encode(id) << '\n';
 		}
+		for (const ActiveStatus& status : member.statuses) {
+			s << "member_status " << text::encode(status.id) << ' ' << status.remaining << '\n';
+		}
 	}
-	for (const std::string& id : record.knownCombos) {
-		s << "known_combo " << text::encode(id) << '\n';
+	for (const ComboLogEntry& entry : record.knownCombos) {
+		s << "known_combo " << text::encode(entry.recipe) << ' ' << entry.playTimeMs << ' ' << text::encodeList(entry.characters) << '\n';
 	}
 	for (const RoundInput& round : record.rounds) {
-		s << "round\n";
+		s << "round " << round.playTimeMs << ' ' << text::encode(round.macroName) << '\n';
 		for (const RecordedCommand& c : round.commands) {
 			s << "command " << c.actor << ' ' << toString(c.command.kind) << ' ' << text::encode(c.command.id) << ' '
 				<< c.command.target << '\n';
@@ -122,7 +107,8 @@ std::string serializeRecord(const BattleRecord& record) {
 		}
 	}
 	s << "end\n";
-	return s.str();
+	const std::string body = s.str();
+	return body + kChecksumKey + text::checksum(body) + '\n';
 }
 
 Result<BattleRecord> parseRecord(const std::string& text) {
@@ -133,21 +119,27 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 	int lineNumber = 0;
 	bool sawHeader = false;
 	bool ended = false;
+	std::size_t bodyLength = 0;
+	std::string checksum;
 	auto fail = [&](const std::string& message) {
 		return Result<BattleRecord>::failure("record line " + std::to_string(lineNumber) + ": " + message);
 	};
 
 	while (std::getline(in, line)) {
 		++lineNumber;
-		const std::vector<std::string> t = split(line);
+		const std::vector<std::string> t = text::split(line);
 		if (t.empty()) {
 			continue;
 		}
-		if (ended) {
-			return fail("content after 'end'");
-		}
 		const std::string& key = t[0];
 		const std::size_t n = t.size();
+		if (ended) {
+			if (key != "checksum" || n != 2 || !checksum.empty()) {
+				return fail("content after 'end'");
+			}
+			checksum = t[1];
+			continue;
+		}
 		if (!sawHeader) {
 			int version = 0;
 			if (key != "battle_record" || n != 2 || !parseInt(t[1], version)) {
@@ -169,7 +161,7 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 		} else if (key == "seed" && n == 2) {
 			ok = parseU64(t[1], setup.seed, 10);
 		} else if (key == "difficulty" && n == 2) {
-			ok = t[1] == "-" ? (setup.difficulty.clear(), true) : text::decode(t[1], setup.difficulty);
+			ok = text::decode(t[1], setup.difficulty);
 		} else if (key == "reward_multiplier" && n == 2) {
 			ok = parseRewardMultiplier(t[1], setup.rewardMultiplier);
 		} else if (key == "opening" && n == 2) {
@@ -180,44 +172,51 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 			std::string c;
 			ok = keyed(t[1], "escape", a) && keyed(t[2], "defeat_branch", b) && keyed(t[3], "vehicle", c)
 				&& parseBool(a, setup.flags.escapeAllowed) && parseBool(b, setup.flags.defeatHasBranch) && parseBool(c, setup.flags.vehicleBattle);
+		} else if (key == "scripted_end" && n == 4) {
+			ok = parseScriptedEndKind(t[1], setup.scriptedEnd.kind) && parseInt(t[2], setup.scriptedEnd.rounds) && parseInt(t[3], setup.scriptedEnd.enemySlot);
 		} else if (key == "enemy_group" && n == 2) {
-			ok = t[1] == "-" ? (setup.enemyGroup.clear(), true) : text::decode(t[1], setup.enemyGroup);
+			ok = text::decode(t[1], setup.enemyGroup);
 		} else if (key == "enemy" && n == 3) {
 			FormationSlot slot;
-			ok = text::decode(t[1], slot.enemy) && text::decode(t[2], slot.group);
+			ok = text::decode(t[1], slot.enemy) && text::decode(t[2], slot.group) && !slot.enemy.empty();
 			setup.enemies.push_back(slot);
 		} else if (key == "inventory" && n == 3) {
 			std::string id;
 			int count = 0;
-			ok = text::decode(t[1], id) && parseInt(t[2], count);
+			ok = text::decode(t[1], id) && parseInt(t[2], count) && !id.empty();
 			setup.inventory[id] = count;
 		} else if (key == "member" && n == 6) {
 			PartyMember member;
 			ok = text::decode(t[1], member.characterId) && parseInt(t[2], member.level) && parseInt(t[3], member.experience)
 				&& parseInt(t[4], member.hp) && parseInt(t[5], member.tp);
 			setup.party.push_back(member);
-		} else if ((key == "skill_uses" || key == "equip") && n == 3) {
+		} else if ((key == "skill_uses" || key == "equip" || key == "member_status") && n == 3) {
 			if (setup.party.empty()) {
 				return fail("'" + key + "' before any 'member'");
 			}
 			PartyMember& member = setup.party.back();
+			std::string id;
 			if (key == "skill_uses") {
-				std::string id;
 				int uses = 0;
 				ok = text::decode(t[1], id) && parseInt(t[2], uses);
 				member.skillUses[id] = uses;
-			} else {
+			} else if (key == "equip") {
 				EquipSlot slot = EquipSlot::Weapon;
-				std::string id;
 				ok = parseEquipSlot(t[1], slot) && text::decode(t[2], id);
 				member.equipment[slot] = id;
+			} else {
+				ActiveStatus status;
+				ok = text::decode(t[1], status.id) && parseInt(t[2], status.remaining);
+				member.statuses.push_back(status);
 			}
-		} else if (key == "known_combo" && n == 2) {
-			std::string id;
-			ok = text::decode(t[1], id);
-			record.knownCombos.push_back(id);
-		} else if (key == "round" && n == 1) {
-			record.rounds.emplace_back();
+		} else if (key == "known_combo" && n == 4) {
+			ComboLogEntry entry;
+			ok = text::decode(t[1], entry.recipe) && parseInt64(t[2], entry.playTimeMs) && text::decodeList(t[3], entry.characters);
+			record.knownCombos.push_back(entry);
+		} else if (key == "round" && n == 3) {
+			RoundInput round;
+			ok = parseInt64(t[1], round.playTimeMs) && text::decode(t[2], round.macroName);
+			record.rounds.push_back(round);
 		} else if ((key == "command" && n == 5) || key == "macro_block") {
 			if (record.rounds.empty()) {
 				return fail("'" + key + "' before any 'round'");
@@ -225,10 +224,7 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 			RoundInput& round = record.rounds.back();
 			if (key == "command") {
 				RecordedCommand c;
-				ok = parseInt(t[1], c.actor) && parseCommandKind(t[2], c.command.kind) && parseInt(t[4], c.command.target);
-				if (ok && t[3] != "-") {
-					ok = text::decode(t[3], c.command.id);
-				}
+				ok = parseInt(t[1], c.actor) && parseCommandKind(t[2], c.command.kind) && parseInt(t[4], c.command.target) && text::decode(t[3], c.command.id);
 				round.commands.push_back(c);
 			} else {
 				for (std::size_t i = 1; i < n && ok; ++i) {
@@ -239,6 +235,7 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 			}
 		} else if (key == "end" && n == 1) {
 			ended = true;
+			bodyLength = static_cast<std::size_t>(in.tellg() == std::streampos(-1) ? text.size() : static_cast<std::size_t>(in.tellg()));
 		} else {
 			return fail("unknown or malformed line '" + line + "'");
 		}
@@ -251,6 +248,12 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 	}
 	if (!ended) {
 		return Result<BattleRecord>::failure("record ends without 'end'");
+	}
+	if (checksum.empty()) {
+		return Result<BattleRecord>::failure("record has no checksum line");
+	}
+	if (checksum != text::checksum(text.substr(0, bodyLength))) {
+		return Result<BattleRecord>::failure("record checksum does not match: the record is damaged");
 	}
 	return Result<BattleRecord>::success(std::move(record));
 }
@@ -265,8 +268,8 @@ Result<Battle> replayBattle(const Database& db, const BattleRecord& record, Comb
 	if (record.contentHash != db.contentHash) {
 		return Result<Battle>::failure("the record was made with different data (content hash " + hex64(record.contentHash) + ", loaded " + hex64(db.contentHash) + ")");
 	}
-	for (const std::string& id : record.knownCombos) {
-		log.discover(id);
+	for (const ComboLogEntry& entry : record.knownCombos) {
+		log.discover(entry.recipe, entry.playTimeMs, entry.characters);
 	}
 	Result<Battle> created = Battle::create(db, record.setup, &log);
 	if (!created.ok()) {
@@ -292,6 +295,8 @@ Result<Battle> replayBattle(const Database& db, const BattleRecord& record, Comb
 			}
 		}
 		battle.forcedOrder_ = round.macroBlock;
+		battle.macroName_ = round.macroName;
+		battle.playTimeMs_ = round.playTimeMs;
 		const std::vector<Event> roundEvents = battle.resolveRound();
 		events.insert(events.end(), roundEvents.begin(), roundEvents.end());
 	}
