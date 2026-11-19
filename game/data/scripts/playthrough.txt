@@ -1,12 +1,22 @@
-# A full run of the placeholder adventure: arrival, the guide, the shop, the
-# inn, a manual save, both encounter zones, the chests, the boss, the epilogue
-# line, then a load of the manual save. Run with --seed 7 --auto-battle.
+# A full run of the placeholder adventure: arrival, the dockhand's job, the
+# guide, party talk, the shop, the inn, a manual save, both encounter zones,
+# the cache, a status carried out of battle, a peddler's shop opened from a
+# script, auto-battle with a macro until a stop rule, a campfire rest from a
+# script, the chests, the boss, the epilogue and the clear-data record, the
+# job's completion, the quest log, the encyclopedia and the text log, then a
+# load of the manual save. Run with --seed 7 --auto-battle.
 new
 status
+quests
+walk dock_front
+face north
+talk
+choose 0
 walk guide_front
 face north
 talk
 choose 0
+chat
 look
 walk stall_front
 face north
@@ -28,8 +38,22 @@ walk 13 4
 walk cache_front
 face north
 talk
+status
+chat
 walk 10 4
+walk peddler_front
+face south
+talk
+buy clear_gel 1
+leave
+set auto tempest
 walk 19 4
+status
+walk camp_front
+face north
+talk
+choose 0
+status
 walk box_front
 face south
 talk
@@ -41,11 +65,17 @@ walk bell_front
 face east
 talk
 status
+codex
 walk 0 4
 walk 0 4
+walk dock_front
+face north
+talk
 walk guide_front
 face north
 talk
+quests
+log
 pacing
 saves
 title

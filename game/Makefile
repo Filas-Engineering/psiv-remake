@@ -25,6 +25,9 @@ $(CORE_LIB) $(EVENTS_LIB): deps
 
 test: all
 	./$(TESTS)
+	$(MAKE) -C ../events build/event_cli
+	./$(CLI) --registry > $(BUILD)/registry.txt
+	../events/build/event_cli check --strict --registry $(BUILD)/registry.txt --glossary data/text/glossary.txt --table data/text/en.strings $(wildcard data/events/*.ev)
 	rm -rf $(BUILD)/cli_saves
 	./$(CLI) --seed 7 --auto-battle --script data/scripts/playthrough.txt --saves $(BUILD)/cli_saves > $(BUILD)/playthrough.log
 	cmp $(BUILD)/playthrough.log tests/expected/playthrough.txt

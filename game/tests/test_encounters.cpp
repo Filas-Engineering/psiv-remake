@@ -203,7 +203,7 @@ TEST(randomCounterWaitsOutGraceAndTowns) {
 	const Area& reeds = *test::data().area("reed_path");
 	const Area& town = *test::data().area("tidewater");
 	World w;
-	w.encounterStream.state = 3;
+	w.encounterStream.restore(3);
 	CHECK(!randomStep(w, town, {5, 5}));
 	CHECK_EQ(w.randomCounter, 0);
 	w.graceMs = 10;

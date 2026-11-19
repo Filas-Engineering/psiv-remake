@@ -8,13 +8,15 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <sstream>
 
 namespace game {
 
 namespace {
 
-constexpr int kChunkVersion = 1;
+constexpr int kHeaderVersion = 1;
+constexpr int kMidEventVersion = 1;
 
 std::uint64_t checksum(const std::string& text) {
 	std::uint64_t hash = 1469598103934665603ULL;
@@ -120,17 +122,6 @@ void writeChunk(std::string& out, const std::string& type, int version, const st
 	out += "\n";
 }
 
-bool parseMacroTarget(const std::string& text, rules::MacroTargetKind& out) {
-	for (rules::MacroTargetKind k : {rules::MacroTargetKind::Default, rules::MacroTargetKind::Self, rules::MacroTargetKind::Member,
-		 rules::MacroTargetKind::Enemy, rules::MacroTargetKind::All}) {
-		if (text == rules::toString(k)) {
-			out = k;
-			return true;
-		}
-	}
-	return false;
-}
-
 std::string locationChunk(const World& w) {
 	Writer o;
 	o.key("area").text(w.area).end();
@@ -156,6 +147,12 @@ std::string partyChunk(const World& w) {
 		for (const auto& [slot, piece] : m.equipment) {
 			o.key("wear").text(rules::toString(slot)).text(piece).end();
 		}
+		for (const rules::ActiveStatus& status : m.statuses) {
+			o.key("status").text(status.id).num(status.remaining).end();
+		}
+	}
+	for (const auto& [id, name] : w.memberNames) {
+		o.key("named").text(id).text(name).end();
 	}
 	return o.str();
 }
@@ -195,24 +192,16 @@ std::string worldChunk(const World& w) {
 	return o.str();
 }
 
+// The auto macro, then core's own macro and combo log forms, each of which ends with an "end" line.
 std::string battleChunk(const World& w) {
 	Writer o;
-	for (const rules::Macro& m : w.macros) {
-		o.key("macro").text(m.name).end();
-		for (const rules::MacroStep& s : m.steps) {
-			o.key("step").text(s.member).text(rules::toString(s.kind)).text(s.id).text(rules::toString(s.target.kind)).text(s.target.member).num(s.target.enemySlot).end();
-		}
-	}
 	o.key("auto").text(w.autoMacro).end();
-	for (const std::string& id : w.comboLog.discovered()) {
-		o.key("combo").text(id).end();
-	}
-	return o.str();
+	return o.str() + rules::serializeMacros(w.macros) + rules::serializeComboLog(w.comboLog);
 }
 
 std::string randomChunk(const World& w) {
 	Writer o;
-	o.key("stream").unum(w.encounterStream.state).end();
+	o.key("stream").unum(w.encounterStream.state()).end();
 	return o.str();
 }
 
@@ -223,19 +212,20 @@ std::string difficultyChunk(const World& w) {
 	return o.str();
 }
 
-std::string worldChunks(const World& w) {
-	std::string out;
-	writeChunk(out, "location", kChunkVersion, locationChunk(w));
-	writeChunk(out, "party", kChunkVersion, partyChunk(w));
-	writeChunk(out, "inventory", kChunkVersion, inventoryChunk(w));
-	writeChunk(out, "world", kChunkVersion, worldChunk(w));
-	writeChunk(out, "battle", kChunkVersion, battleChunk(w));
-	writeChunk(out, "random", kChunkVersion, randomChunk(w));
-	writeChunk(out, "difficulty", kChunkVersion, difficultyChunk(w));
-	for (const UnknownChunk& c : w.unknownChunks) {
-		writeChunk(out, c.type, c.version, c.payload);
+std::string questsChunk(const World& w) {
+	Writer o;
+	for (const auto& [id, state] : w.jobs) {
+		o.key("job").text(id).text(toString(state)).end();
 	}
-	return out;
+	return o.str();
+}
+
+std::string unlocksChunk(const World& w) {
+	Writer o;
+	for (const std::string& id : w.unlocked) {
+		o.key("entry").text(id).end();
+	}
+	return o.str();
 }
 
 bool toInt(const std::string& text, long long& out) {
@@ -337,6 +327,7 @@ bool readParty(const std::string& payload, World& w, std::string& error) {
 	Lines in("party", payload);
 	w.roster.clear();
 	w.lineup.clear();
+	w.memberNames.clear();
 	for (const auto& l : in.lines()) {
 		const std::string& k = l[0];
 		if (k == "lineup") {
@@ -364,6 +355,14 @@ bool readParty(const std::string& payload, World& w, std::string& error) {
 			} else {
 				w.roster.back().equipment[slot] = in.text(l[2]);
 			}
+		} else if (k == "status" && in.need(l, 2)) {
+			if (w.roster.empty()) {
+				in.fail("'status' before any member");
+			} else {
+				w.roster.back().statuses.push_back({in.text(l[1]), static_cast<int>(in.num(l[2]))});
+			}
+		} else if (k == "named" && in.need(l, 2)) {
+			w.memberNames[in.text(l[1])] = in.text(l[2]);
 		} else if (k != "lineup") {
 			in.fail("unknown line '" + k + "'");
 		}
@@ -438,47 +437,53 @@ bool readWorld(const std::string& payload, World& w, std::string& error) {
 	return error.empty();
 }
 
-bool readBattle(const std::string& payload, World& w, std::string& error) {
-	Lines in("battle", payload);
-	w.macros.clear();
-	w.autoMacro.clear();
-	w.comboLog = rules::ComboLog();
-	for (const auto& l : in.lines()) {
-		const std::string& k = l[0];
-		if (k == "macro" && in.need(l, 1)) {
-			rules::Macro m;
-			m.name = in.text(l[1]);
-			w.macros.push_back(m);
-		} else if (k == "step" && in.need(l, 6)) {
-			rules::MacroStep s;
-			s.member = in.text(l[1]);
-			if (w.macros.empty() || !rules::parseCommandKind(in.text(l[2]), s.kind) || !parseMacroTarget(in.text(l[4]), s.target.kind)) {
-				in.fail("bad macro step");
-				continue;
-			}
-			s.id = in.text(l[3]);
-			s.target.member = in.text(l[5]);
-			s.target.enemySlot = static_cast<int>(in.num(l[6]));
-			w.macros.back().steps.push_back(s);
-		} else if (k == "auto" && in.need(l, 1)) {
-			w.autoMacro = in.text(l[1]);
-		} else if (k == "combo" && in.need(l, 1)) {
-			w.comboLog.discover(in.text(l[1]));
-		} else {
-			in.fail("unknown line '" + k + "'");
-		}
+// Splits a battle chunk payload into its auto line and core's two blocks.
+bool splitBattle(const std::string& payload, std::string& autoLine, std::string& macros, std::string& combos) {
+	const std::size_t eol = payload.find('\n');
+	const std::size_t log = payload.find("\ncombo_log ");
+	if (eol == std::string::npos || log == std::string::npos || log < eol) {
+		return false;
 	}
-	error = in.error;
-	return error.empty();
+	autoLine = payload.substr(0, eol);
+	macros = payload.substr(eol + 1, log - eol);
+	combos = payload.substr(log + 1);
+	return true;
+}
+
+bool readBattle(const std::string& payload, World& w, std::string& error) {
+	std::string autoLine;
+	std::string macros;
+	std::string combos;
+	if (!splitBattle(payload, autoLine, macros, combos)) {
+		error = "battle: expected the auto line, the macros and the combo log";
+		return false;
+	}
+	Lines in("battle", autoLine);
+	if (in.lines().size() != 1 || in.lines()[0][0] != "auto" || !in.need(in.lines()[0], 1)) {
+		error = "battle: bad auto line";
+		return false;
+	}
+	w.autoMacro = in.text(in.lines()[0][1]);
+	rules::Result<std::vector<rules::Macro>> parsedMacros = rules::parseMacros(macros);
+	rules::Result<rules::ComboLog> parsedCombos = rules::parseComboLog(combos);
+	if (!in.error.empty() || !parsedMacros.ok() || !parsedCombos.ok()) {
+		error = !in.error.empty() ? in.error : "battle: " + (parsedMacros.ok() ? parsedCombos.error : parsedMacros.error);
+		return false;
+	}
+	w.macros = std::move(*parsedMacros.value);
+	w.comboLog = std::move(*parsedCombos.value);
+	return true;
 }
 
 bool readRandom(const std::string& payload, World& w, std::string& error) {
 	Lines in("random", payload);
 	for (const auto& l : in.lines()) {
 		if (l[0] == "stream" && in.need(l, 1)) {
-			if (!toUint(l[1], w.encounterStream.state)) {
+			std::uint64_t state = 0;
+			if (!toUint(l[1], state)) {
 				in.fail("bad stream state");
 			}
+			w.encounterStream.restore(state);
 		} else {
 			in.fail("unknown line '" + l[0] + "'");
 		}
@@ -504,22 +509,83 @@ bool readDifficulty(const std::string& payload, World& w, std::string& error) {
 	return error.empty();
 }
 
+bool readQuests(const std::string& payload, World& w, std::string& error) {
+	Lines in("quests", payload);
+	w.jobs.clear();
+	for (const auto& l : in.lines()) {
+		JobState state = JobState::Available;
+		if (l[0] == "job" && in.need(l, 2)) {
+			if (!parseJobState(in.text(l[2]), state)) {
+				in.fail("bad job state");
+			}
+			w.jobs[in.text(l[1])] = state;
+		} else {
+			in.fail("unknown line '" + l[0] + "'");
+		}
+	}
+	error = in.error;
+	return error.empty();
+}
+
+bool readUnlocks(const std::string& payload, World& w, std::string& error) {
+	Lines in("unlocks", payload);
+	w.unlocked.clear();
+	for (const auto& l : in.lines()) {
+		if (l[0] == "entry" && in.need(l, 1)) {
+			w.unlocked.insert(in.text(l[1]));
+		} else {
+			in.fail("unknown line '" + l[0] + "'");
+		}
+	}
+	error = in.error;
+	return error.empty();
+}
+
 using ChunkReader = bool (*)(const std::string&, World&, std::string&);
+using ChunkWriter = std::string (*)(const World&);
 
 struct KnownChunk {
 	const char* type;
+	int version;
+	ChunkWriter write;
 	ChunkReader read;
 };
 
+// In the order they are written.
 const KnownChunk kWorldChunks[] = {
-	{"location", readLocation},
-	{"party", readParty},
-	{"inventory", readInventory},
-	{"world", readWorld},
-	{"battle", readBattle},
-	{"random", readRandom},
-	{"difficulty", readDifficulty},
+	{"location", 1, locationChunk, readLocation},
+	{"party", 2, partyChunk, readParty},
+	{"inventory", 1, inventoryChunk, readInventory},
+	{"world", 1, worldChunk, readWorld},
+	{"battle", 2, battleChunk, readBattle},
+	{"random", 1, randomChunk, readRandom},
+	{"difficulty", 1, difficultyChunk, readDifficulty},
+	{"quests", 1, questsChunk, readQuests},
+	{"unlocks", 1, unlocksChunk, readUnlocks},
 };
+
+// The clear-data record holds these, from the same writers.
+const char* const kClearChunks[] = {"party", "inventory", "world"};
+
+const KnownChunk* knownChunk(const std::string& type) {
+	for (const KnownChunk& k : kWorldChunks) {
+		if (type == k.type) {
+			return &k;
+		}
+	}
+	return nullptr;
+}
+
+std::string worldChunks(const World& w) {
+	std::string out;
+	for (const KnownChunk& k : kWorldChunks) {
+		writeChunk(out, k.type, k.version, k.write(w));
+	}
+	for (const UnknownChunk& c : w.unknownChunks) {
+		writeChunk(out, c.type, c.version, c.payload);
+	}
+	return out;
+}
 
 // Splits `text` from `pos` into chunks until the end or an "end" line, which is left at `pos`.
 bool splitChunks(const std::string& text, std::size_t& pos, std::vector<Chunk>& chunks, std::string& error) {
@@ -553,32 +619,115 @@ bool splitChunks(const std::string& text, std::size_t& pos, std::vector<Chunk>& 
 	return true;
 }
 
-bool applyChunks(const std::vector<Chunk>& chunks, World& w, std::string& error) {
+// `required` lists the known chunks that must be present; every other known chunk is optional.
+bool applyChunks(const std::vector<Chunk>& chunks, World& w, const std::vector<std::string>& required, std::string& error) {
 	w.unknownChunks.clear();
+	std::set<std::string> seen;
 	for (const Chunk& c : chunks) {
-		const KnownChunk* known = nullptr;
-		for (const KnownChunk& k : kWorldChunks) {
-			if (c.type == k.type) {
-				known = &k;
-			}
-		}
 		if (c.type == "header" || c.type == "midevent") {
 			continue;
 		}
+		const KnownChunk* known = knownChunk(c.type);
 		if (!known) {
 			w.unknownChunks.push_back({c.type, c.version, c.payload});
 			continue;
 		}
-		if (c.version > kChunkVersion) {
+		if (c.version > known->version) {
 			error = "chunk '" + c.type + "' is from a newer build (version " + std::to_string(c.version) + ")";
+			return false;
+		}
+		if (c.version < known->version) {
+			error = "chunk '" + c.type + "' has version " + std::to_string(c.version) + ", which no migration produces";
+			return false;
+		}
+		if (!seen.insert(c.type).second) {
+			error = "chunk '" + c.type + "' appears twice";
 			return false;
 		}
 		if (!known->read(c.payload, w, error)) {
 			return false;
 		}
 	}
+	for (const std::string& type : required) {
+		if (!seen.count(type)) {
+			error = "the '" + type + "' chunk is missing";
+			return false;
+		}
+	}
 	return true;
 }
+
+std::vector<std::string> allWorldChunks() {
+	std::vector<std::string> out;
+	for (const KnownChunk& k : kWorldChunks) {
+		out.push_back(k.type);
+	}
+	return out;
+}
+
+// Schema 1 to 2. The battle chunk moves to core's macro and combo log forms; combinations found before have no
+// play time or participants, so they get 0 and none. Party lines are unchanged; schema 2 only adds lines. The
+// quests and unlocks chunks start empty, and the session fills them from the flags on load. A schema 1 midevent
+// chunk holds interpreter state in a format the events library no longer reads, so it is dropped and the save
+// continues in the field, as the events library asks for such a save.
+bool migrate1to2(std::vector<Chunk>& chunks, std::string& error) {
+	std::vector<Chunk> out;
+	for (Chunk c : chunks) {
+		if (c.type == "midevent") {
+			continue;
+		}
+		if (c.type == "party" && c.version == 1) {
+			c.version = 2;
+		} else if (c.type == "battle" && c.version == 1) {
+			Lines in("battle", c.payload);
+			World w;
+			for (const auto& l : in.lines()) {
+				const std::string& k = l[0];
+				if (k == "macro" && in.need(l, 1)) {
+					w.macros.push_back({in.text(l[1]), {}});
+				} else if (k == "step" && in.need(l, 6)) {
+					rules::MacroStep step;
+					step.member = in.text(l[1]);
+					step.id = in.text(l[3]);
+					step.target.member = in.text(l[5]);
+					step.target.enemySlot = static_cast<int>(in.num(l[6]));
+					if (w.macros.empty() || !rules::parseCommandKind(in.text(l[2]), step.kind) || !rules::parseMacroTargetKind(in.text(l[4]), step.target.kind)) {
+						in.fail("bad macro step");
+						continue;
+					}
+					w.macros.back().steps.push_back(step);
+				} else if (k == "auto" && in.need(l, 1)) {
+					w.autoMacro = in.text(l[1]);
+				} else if (k == "combo" && in.need(l, 1)) {
+					w.comboLog.discover(in.text(l[1]), 0, {});
+				} else {
+					in.fail("unknown line '" + k + "'");
+				}
+			}
+			if (!in.error.empty()) {
+				error = in.error;
+				return false;
+			}
+			c.version = 2;
+			c.payload = battleChunk(w);
+		}
+		out.push_back(c);
+	}
+	out.push_back({"quests", 1, ""});
+	out.push_back({"unlocks", 1, ""});
+	chunks = std::move(out);
+	return true;
+}
+
+struct Migration {
+	int from;
+	bool (*apply)(std::vector<Chunk>& chunks, std::string& error);
+};
+
+// Ordered: a save of schema N runs every migration from N up.
+const Migration kMigrations[] = {
+	{1, migrate1to2},
+};
 
 std::string headerChunk(const SaveFile& save) {
 	const World& w = save.world;
@@ -606,10 +755,11 @@ struct ParsedFile {
 	std::vector<Chunk> chunks;
 };
 
-bool splitFile(const std::string& text, ParsedFile& file, std::string& error) {
-	const std::string magic = std::string(kSaveMagic) + " ";
+// Checks the magic and the checksum, splits the chunks and returns the version after the magic.
+bool splitFile(const std::string& text, const char* fileMagic, ParsedFile& file, long long& version, std::string& error) {
+	const std::string magic = std::string(fileMagic) + " ";
 	if (text.compare(0, magic.size(), magic) != 0) {
-		error = "not a save file";
+		error = std::string("not a ") + (fileMagic == std::string(kSaveMagic) ? "save" : "clear-data") + " file";
 		return false;
 	}
 	const std::size_t endLine = text.rfind("\nend ");
@@ -627,18 +777,30 @@ bool splitFile(const std::string& text, ParsedFile& file, std::string& error) {
 		return false;
 	}
 	const std::size_t firstEol = text.find('\n');
+	if (!toInt(text.substr(magic.size(), firstEol - magic.size()), version) || version < 1) {
+		error = "bad version";
+		return false;
+	}
+	std::size_t pos = firstEol + 1;
+	return splitChunks(body, pos, file.chunks, error);
+}
+
+bool splitSave(const std::string& text, ParsedFile& file, std::string& error) {
 	long long schema = 0;
-	if (!toInt(text.substr(magic.size(), firstEol - magic.size()), schema)) {
-		error = "bad schema version";
+	if (!splitFile(text, kSaveMagic, file, schema, error)) {
 		return false;
 	}
 	if (schema > kSaveSchemaVersion) {
 		error = "the save is from a newer build (schema " + std::to_string(schema) + ")";
 		return false;
 	}
-	// Saves from older schemas would be migrated here, in order. Schema 1 is the first.
-	std::size_t pos = firstEol + 1;
-	return splitChunks(body, pos, file.chunks, error);
+	for (const Migration& m : kMigrations) {
+		if (m.from >= schema && !m.apply(file.chunks, error)) {
+			error = "migrating from schema " + std::to_string(m.from) + ": " + error;
+			return false;
+		}
+	}
+	return true;
 }
 
 }
@@ -654,8 +816,7 @@ bool parseWorldChunks(const std::string& text, World& world, std::string& error)
 		return false;
 	}
 	World w;
-	w.settings = world.settings;
-	if (!applyChunks(chunks, w, error)) {
+	if (!applyChunks(chunks, w, allWorldChunks(), error)) {
 		return false;
 	}
 	world = std::move(w);
@@ -664,27 +825,26 @@ bool parseWorldChunks(const std::string& text, World& world, std::string& error)
 
 std::string serializeSave(const SaveFile& save) {
 	std::string out = std::string(kSaveMagic) + " " + std::to_string(kSaveSchemaVersion) + "\n";
-	writeChunk(out, "header", kChunkVersion, headerChunk(save));
+	writeChunk(out, "header", kHeaderVersion, headerChunk(save));
 	out += worldChunks(save.world);
 	if (!save.midEvent.empty()) {
 		Writer o;
 		o.key("state").text(save.midEvent).end();
-		writeChunk(out, "midevent", kChunkVersion, o.str());
+		writeChunk(out, "midevent", kMidEventVersion, o.str());
 	}
 	out += "end " + hex(checksum(out)) + "\n";
 	return out;
 }
 
-rules::Result<SaveFile> parseSave(const std::string& text, const Settings& profile) {
+rules::Result<SaveFile> parseSave(const std::string& text) {
 	using R = rules::Result<SaveFile>;
 	ParsedFile file;
 	std::string error;
-	if (!splitFile(text, file, error)) {
+	if (!splitSave(text, file, error)) {
 		return R::failure(error);
 	}
 	SaveFile save;
-	save.world.settings = profile;
-	if (!applyChunks(file.chunks, save.world, error)) {
+	if (!applyChunks(file.chunks, save.world, allWorldChunks(), error)) {
 		return R::failure(error);
 	}
 	for (const Chunk& c : file.chunks) {
@@ -723,7 +883,7 @@ rules::Result<SaveSummary> readSummary(const std::string& text) {
 	using R = rules::Result<SaveSummary>;
 	ParsedFile file;
 	std::string error;
-	if (!splitFile(text, file, error)) {
+	if (!splitSave(text, file, error)) {
 		return R::failure(error);
 	}
 	SaveSummary s;
@@ -757,6 +917,41 @@ rules::Result<SaveSummary> readSummary(const std::string& text) {
 		}
 	}
 	return R::success(s);
+}
+
+std::string serializeClearRecord(const World& world, std::uint64_t contentHash, std::int64_t writeTime) {
+	std::string out = std::string(kClearMagic) + " " + std::to_string(kClearVersion) + "\n";
+	Writer o;
+	o.key("build").text(kGameBuild).end();
+	o.key("rules").num(rules::kRulesVersion).end();
+	o.key("content").text(hex(contentHash)).end();
+	o.key("written").num(writeTime).end();
+	o.key("play").num(world.playTimeMs).end();
+	writeChunk(out, "header", kHeaderVersion, o.str());
+	for (const char* type : kClearChunks) {
+		const KnownChunk* k = knownChunk(type);
+		writeChunk(out, k->type, k->version, k->write(world));
+	}
+	out += "end " + hex(checksum(out)) + "\n";
+	return out;
+}
+
+rules::Result<World> parseClearRecord(const std::string& text) {
+	using R = rules::Result<World>;
+	ParsedFile file;
+	long long version = 0;
+	std::string error;
+	if (!splitFile(text, kClearMagic, file, version, error)) {
+		return R::failure(error);
+	}
+	if (version != kClearVersion) {
+		return R::failure("clear-data version " + std::to_string(version) + " is not supported");
+	}
+	World w;
+	if (!applyChunks(file.chunks, w, {std::begin(kClearChunks), std::end(kClearChunks)}, error)) {
+		return R::failure(error);
+	}
+	return R::success(std::move(w));
 }
 
 bool writeFileAtomic(const std::string& path, const std::string& text, std::string& error) {

@@ -56,6 +56,12 @@ void Runner::error(const std::string& text) {
 	print("! " + text);
 }
 
+void Runner::report(const std::string& problem) {
+	if (!problem.empty()) {
+		error(problem);
+	}
+}
+
 std::string Runner::prompt() const {
 	return std::string(toString(session_.mode())) + "> ";
 }
@@ -84,20 +90,15 @@ std::string Runner::battleName(int index) const {
 }
 
 void Runner::printEvents(const std::vector<rules::Event>& events) {
-	const rules::Database& db = session_.data().db;
-	auto abilityName = [&](const std::string& id) {
-		if (const rules::AbilityDef* a = db.ability(id)) {
-			return a->name;
-		}
-		if (const rules::ItemDef* i = db.item(id)) {
-			return i->name;
-		}
-		return id;
-	};
+	const rules::TextTable& text = session_.data().text;
+	auto name = [&](const std::string& id) { return session_.displayName(id); };
 	for (const rules::Event& e : events) {
 		switch (e.type) {
 		case rules::EventType::RoundStarted:
 			print("-- round " + std::to_string(e.round) + " --");
+			break;
+		case rules::EventType::Retargeted:
+			print(battleName(e.actor) + " turns from " + battleName(e.previousTarget) + " to " + battleName(e.target) + ".");
 			break;
 		case rules::EventType::ActionStarted:
 			if (e.command == rules::CommandKind::Defend) {
@@ -105,17 +106,21 @@ void Runner::printEvents(const std::vector<rules::Event>& events) {
 			} else if (e.command == rules::CommandKind::Escape) {
 				print(battleName(e.actor) + " tries to escape.");
 			} else {
-				print(battleName(e.actor) + " uses " + abilityName(e.ability) + (e.target >= 0 ? " on " + battleName(e.target) : "") + ".");
+				print(battleName(e.actor) + " uses " + name(e.ability) + (e.target >= 0 ? " on " + battleName(e.target) : "") + ".");
 			}
 			break;
-		case rules::EventType::ActionFailed:
-			print("  It fails (" + std::string(rules::toString(e.fail)) + ").");
-			break;
-		case rules::EventType::ActionPrevented:
-			print(battleName(e.actor) + " cannot act (" + e.status + ").");
+		case rules::EventType::ActionCancelled:
+			print(rules::formatText(text, std::string("cancel.") + rules::toString(e.cancel),
+				{battleName(e.actor), e.cancel == rules::CancelReason::ActorUnable ? name(e.status) : name(e.ability)}));
 			break;
 		case rules::EventType::ComboTriggered:
-			print("Combo: " + abilityName(e.ability) + (e.firstDiscovery ? " (new!)" : "") + ".");
+			print("Combo: " + name(e.ability) + ".");
+			break;
+		case rules::EventType::ComboDiscovered:
+			print("  A new combination joins the combo log.");
+			break;
+		case rules::EventType::ItemHadNoEffect:
+			print("  " + name(e.ability) + " has no effect and is kept.");
 			break;
 		case rules::EventType::Missed:
 			print("  " + battleName(e.target) + " evades.");
@@ -133,23 +138,27 @@ void Runner::printEvents(const std::vector<rules::Event>& events) {
 			print("  " + battleName(e.target) + " is revived.");
 			break;
 		case rules::EventType::StatusApplied:
-			print("  " + battleName(e.target) + " is afflicted with " + e.status + ".");
-			break;
 		case rules::EventType::StatusResisted:
-			print("  " + battleName(e.target) + " resists " + e.status + ".");
-			break;
-		case rules::EventType::StatusCured:
-		case rules::EventType::StatusExpired:
-			print("  " + battleName(e.target) + " is free of " + e.status + ".");
+		case rules::EventType::StatusRemoved:
+			print("  " + rules::formatText(text, e.message, {battleName(e.target), name(e.status)}));
 			break;
 		case rules::EventType::StatusTicked:
-			print("  " + battleName(e.target) + " suffers " + std::to_string(e.amount) + " from " + e.status + ".");
+			print("  " + battleName(e.target) + " suffers " + std::to_string(e.amount) + " from " + name(e.status) + ".");
+			break;
+		case rules::EventType::StatModified:
+			print("  " + battleName(e.target) + "'s " + rules::toString(e.stat) + (e.amount > 0 ? " rises." : " falls."));
+			break;
+		case rules::EventType::StatModifierExpired:
+			print("  " + battleName(e.target) + "'s " + rules::toString(e.stat) + " returns to normal.");
 			break;
 		case rules::EventType::CombatantDefeated:
 			print("  " + battleName(e.target) + " falls.");
 			break;
 		case rules::EventType::EscapeAttempted:
 			print(e.succeeded ? "  The party escapes!" : "  No escape!");
+			break;
+		case rules::EventType::Message:
+			print(session_.render({e.message, e.params}));
 			break;
 		case rules::EventType::BattleEnded:
 			print("Outcome: " + std::string(rules::toString(e.outcome)));
@@ -202,12 +211,12 @@ void Runner::settle() {
 			continue;
 		}
 		if (const events::ChoiceRequest* c = session_.choice()) {
-			std::string text = c->prompt.value.empty() ? "Choose:" : c->prompt.value;
+			std::string text = c->prompt.value.empty() ? "Choose:" : session_.scriptText(c->prompt);
 			if (c->yes_no) {
 				text += " [0] yes [1] no";
 			} else {
 				for (std::size_t i = 0; i < c->options.size(); ++i) {
-					text += " [" + std::to_string(i) + "] " + c->options[i].value;
+					text += " [" + std::to_string(i) + "] " + session_.scriptText(c->options[i]);
 				}
 			}
 			print(text);
@@ -218,9 +227,18 @@ void Runner::settle() {
 	error("the game did not settle");
 }
 
+// Auto-battle with the save's auto macro when one is set; after a stop rule, or without a macro, the terminal
+// plays on with core's policy.
 void Runner::finishBattleAuto() {
+	if (!session_.world().autoMacro.empty() && session_.battle()->round() == 0 && !session_.autoActive()) {
+		report(session_.startAuto());
+	}
 	for (int round = 0; round < 60 && session_.mode() == Mode::Battle; ++round) {
-		printEvents(session_.autoRound());
+		if (!session_.fillFromAuto()) {
+			session_.fillFromPolicy();
+		}
+		flushOutput();
+		printEvents(session_.resolveRound());
 	}
 	if (session_.mode() == Mode::Battle) {
 		error("the battle did not end in 60 rounds");
@@ -236,8 +254,12 @@ void Runner::status() {
 	for (const std::string& id : w.lineup) {
 		const rules::PartyMember* m = w.member(id);
 		const rules::Stats s = rules::memberStats(session_.data().db, *m);
-		print("  " + session_.data().db.character(id)->name + " Lv" + std::to_string(m->level) + " HP " + std::to_string(m->hp) + "/" +
-			std::to_string(s.maxHp) + " TP " + std::to_string(m->tp) + "/" + std::to_string(s.maxTp) + " EXP " + std::to_string(m->experience));
+		std::string statuses;
+		for (const rules::ActiveStatus& status : m->statuses) {
+			statuses += " [" + session_.displayName(status.id) + (status.remaining > 0 ? " " + std::to_string(status.remaining) : "") + "]";
+		}
+		print("  " + session_.displayName(id) + " Lv" + std::to_string(m->level) + " HP " + std::to_string(m->hp) + "/" +
+			std::to_string(s.maxHp) + " TP " + std::to_string(m->tp) + "/" + std::to_string(s.maxTp) + " EXP " + std::to_string(m->experience) + statuses);
 	}
 	std::string items;
 	for (const auto& [id, n] : w.items) {
@@ -322,10 +344,12 @@ bool Runner::execute(const std::string& rawLine) {
 	}
 	const std::string& cmd = w[0];
 	const Mode mode = session_.mode();
-	auto report = [&](const std::string& problem) {
-		if (!problem.empty()) {
-			error(problem);
+	auto rest = [&](std::size_t from) {
+		std::string out;
+		for (std::size_t i = from; i < w.size(); ++i) {
+			out += (out.empty() ? "" : " ") + w[i];
 		}
+		return out;
 	};
 	auto actorIndex = [&](const std::string& text, int& out) {
 		if (toInt(text, out)) {
@@ -432,12 +456,37 @@ bool Runner::execute(const std::string& rawLine) {
 		printEvents(session_.resolveRound());
 	} else if (mode == Mode::Battle && cmd == "auto") {
 		finishBattleAuto();
+	} else if (mode == Mode::Battle && cmd == "cancel") {
+		session_.cancelAuto();
 	} else if (cmd == "menu") {
 		report(session_.openMenu());
 	} else if (cmd == "close" || cmd == "leave") {
 		report(session_.closeMenu());
-	} else if (cmd == "item" && w.size() == 3) {
-		report(session_.useItem(w[1], w[2]));
+	} else if (cmd == "item" && (w.size() == 2 || w.size() == 3)) {
+		report(session_.useItem(w[1], w.size() == 3 ? w[2] : ""));
+	} else if (cmd == "tech" && (w.size() == 3 || w.size() == 4)) {
+		report(session_.useAbility(w[1], w[2], w.size() == 4 ? w[3] : ""));
+	} else if (cmd == "name" && w.size() >= 2) {
+		report(session_.enterName(rest(1)));
+	} else if (cmd == "chat") {
+		report(session_.partyTalk());
+	} else if (cmd == "quests") {
+		const QuestLog log = session_.questLog();
+		print("  Objective: " + (log.objective.empty() ? std::string("-") : log.objective));
+		for (const JobView& job : log.jobs) {
+			print("  Job: " + job.title + " (" + toString(job.state) + ")");
+		}
+	} else if (cmd == "codex") {
+		for (const EncyclopediaView& entry : session_.encyclopedia()) {
+			print("  " + entry.title + ": " + entry.text);
+		}
+		for (const events::GlossaryEntry& g : session_.data().glossary.entries) {
+			print("  Glossary: " + g.restored + " (shipped as " + g.shipped + ")");
+		}
+	} else if (cmd == "log") {
+		for (const std::string& page : session_.textLog()) {
+			print("  " + page);
+		}
 	} else if (cmd == "equip" && w.size() == 3) {
 		report(session_.equip(w[1], w[2]));
 	} else if (cmd == "unequip" && w.size() == 3) {
@@ -467,27 +516,27 @@ bool Runner::execute(const std::string& rawLine) {
 		}
 	} else if (cmd == "set" && w.size() == 3) {
 		Settings s = session_.world().settings;
-		bool ok = true;
-		if (w[1] == "difficulty") {
-			s.difficulty = w[2];
-		} else if (w[1] == "reward") {
-			ok = rules::parseRewardMultiplier(w[2], s.rewardMultiplier);
-		} else if (w[1] == "text") {
-			ok = parseTextSpeed(w[2], s.textSpeed);
-		} else if (w[1] == "battle") {
-			ok = parseBattleSpeed(w[2], s.battleSpeed);
-		} else if (w[1] == "shipped") {
-			s.showShippedNames = w[2] == "on";
-			ok = w[2] == "on" || w[2] == "off";
-		} else if (w[1] == "auto") {
-			session_.world().autoMacro = w[2] == "-" ? "" : w[2];
-		} else {
-			ok = false;
-		}
-		if (!ok) {
-			error("bad setting");
-		} else {
+		if (w[1] == "difficulty" || w[1] == "reward") {
+			if (w[1] == "difficulty") {
+				s.difficulty = w[2];
+			} else if (!rules::parseRewardMultiplier(w[2], s.rewardMultiplier)) {
+				error("bad reward multiplier '" + w[2] + "'");
+				return true;
+			}
 			report(session_.setSettings(s));
+		} else if (w[1] == "auto") {
+			const std::vector<rules::Macro>& macros = session_.world().macros;
+			if (w[2] != "-" && std::none_of(macros.begin(), macros.end(), [&](const rules::Macro& m) { return m.name == w[2]; })) {
+				error("no macro named '" + w[2] + "'");
+			} else {
+				session_.world().autoMacro = w[2] == "-" ? "" : w[2];
+			}
+		} else {
+			static const std::map<std::string, std::string> shortNames = {{"text", "text_speed"}, {"battle", "battle_speed"}, {"shipped", "show_shipped_names"}};
+			auto shortName = shortNames.find(w[1]);
+			Profile profile = session_.profile();
+			const std::string problem = setProfileValue(profile, shortName == shortNames.end() ? w[1] : shortName->second, w[2]);
+			report(problem.empty() ? session_.setProfile(profile) : problem);
 		}
 	} else if (cmd == "status") {
 		status();
@@ -505,8 +554,8 @@ bool Runner::execute(const std::string& rawLine) {
 			for (const Exit& e : a->exits) put(e.at, '>');
 			for (const Hook& h : a->hooks) if (h.trigger == HookTrigger::Interact) put(h.at, 'N');
 			for (const Chest& c : a->chests) put(c.at, session_.world().flag(c.flag) ? 'c' : 'C');
-			for (const Shop& s : a->shops) put(s.at, '$');
-			for (const RestPoint& r : a->rests) put(r.at, 'R');
+			for (const Shop& s : a->shops) if (s.at) put(*s.at, '$');
+			for (const RestPoint& r : a->rests) if (r.at) put(*r.at, 'R');
 			for (const VisibleEnemy& e : session_.world().enemies) put(e.position, e.state == EnemyState::Chasing ? '!' : 'E');
 			put(session_.world().position, '@');
 			for (const std::string& r : rows) {

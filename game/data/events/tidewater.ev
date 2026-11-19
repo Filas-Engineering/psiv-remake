@@ -4,13 +4,9 @@
 event tidewater_arrival skippable
 	lock player
 	fade in 1.0
-	narrate "The ferry bumps against the pilings of Tidewater Landing."
-	say dockhand "Mind the ropes. The guide waits by the noticeboard."
+	narrate @tidewater.arrival.ferry
+	say dockhand @tidewater.arrival.ropes
 	set tidewater.arrived
-	unlock player
-on skip
-	set tidewater.arrived
-	fade in 0
 	unlock player
 end
 
@@ -18,25 +14,49 @@ event tidewater_guide unskippable
 	lock player
 	face guide fighter
 	if not tidewater.met_guide
-		say guide "You came about the bell? It rings every night at Bell Cove, east past the reeds."
-		ask "Will you look into it?"
+		say guide @tidewater.guide.bell
+		ask @tidewater.guide.ask
 		yes
-			say guide "Then take my apprentices. One knows a spark or two, the other knows bandages."
+			say guide @tidewater.guide.apprentices
 			party add mystic
 			party add medic
 			give tonic 2
 			set tidewater.met_guide
 		no
-			say guide "Come back when you change your mind."
+			say guide @tidewater.guide.later
 		end
 	else if cove.warden_beaten
-		say guide "Quiet nights again. The whole harbor owes you a supper."
+		say guide @tidewater.guide.quiet
+		set tidewater.reported
 	else
-		choice "Ask about..."
-		option "The bell"
-			say guide "Something made of brass guards it. Rest at the inn before you go."
-		option "The reeds"
-			say guide "Small pests, mostly. Walk around them if you can."
+		choice @tidewater.guide.topics
+		option @tidewater.guide.topic_bell
+			say guide @tidewater.guide.about_bell
+		option @tidewater.guide.topic_reeds
+			say guide @tidewater.guide.about_reeds
+		end
+	end
+	unlock player
+end
+
+# A guild job: the dockhand lost a cache of supplies in the reeds.
+event tidewater_dockhand unskippable
+	lock player
+	if job.lost_cache.done
+		say dockhand @tidewater.dockhand.thanks_again
+	else if chest.reed_cache and job.lost_cache.accepted
+		say dockhand @tidewater.dockhand.found
+		give clear_gel 2
+		set job.lost_cache.done
+	else if job.lost_cache.accepted
+		say dockhand @tidewater.dockhand.reminder
+	else
+		say dockhand @tidewater.dockhand.request
+		ask @tidewater.dockhand.ask into job.lost_cache.accepted
+		yes
+			say dockhand @tidewater.dockhand.accepted
+		no
+			say dockhand @tidewater.dockhand.declined
 		end
 	end
 	unlock player

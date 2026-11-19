@@ -33,6 +33,7 @@ public:
 private:
 	void print(const std::string& text);
 	void error(const std::string& text);
+	void report(const std::string& problem);
 	void flushOutput();
 	void printEvents(const std::vector<rules::Event>& events);
 	void finishBattleAuto();

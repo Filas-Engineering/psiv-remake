@@ -18,12 +18,15 @@
 	"markers": {
 		"west_gate": [1, 4],
 		"bell_front": [8, 4],
-		"box_front": [9, 6]
+		"box_front": [9, 6],
+		"camp_front": [2, 2]
 	},
 	"exits": [{"at": [0, 4], "to": "reed_path", "marker": "east_gate"}],
 	"hooks": [
 		{"id": "bell", "at": [9, 4], "event": "cove_bell", "block_flag": "cove.warden_beaten"},
-		{"id": "quiet", "trigger": "flag", "event": "cove_quiet", "require_flag": "cove.warden_beaten", "block_flag": "cove.quiet_seen"}
+		{"id": "quiet", "trigger": "flag", "event": "cove_quiet", "require_flag": "cove.warden_beaten", "block_flag": "cove.quiet_seen"},
+		{"id": "campfire", "at": [2, 1], "event": "cove_campfire"}
 	],
+	"rests": [{"id": "cove_camp", "cost": 5}],
 	"chests": [{"id": "cove_box", "at": [9, 7], "flag": "chest.cove_box", "items": {"tonic": 1}, "equipment": {"rivet_plate": 1}}]
 }

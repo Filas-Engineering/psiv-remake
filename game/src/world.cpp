@@ -37,54 +37,17 @@ bool parseFacing(const std::string& text, Facing& out) {
 	return false;
 }
 
-std::uint64_t EncounterStream::next() {
-	state += 0x9E3779B97F4A7C15ULL;
-	std::uint64_t z = state;
-	z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
-	z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
-	return z ^ (z >> 31);
-}
-
-int EncounterStream::range(int low, int high) {
-	if (high <= low) {
-		return low;
+const char* toString(JobState state) {
+	switch (state) {
+	case JobState::Available: return "available";
+	case JobState::Accepted: return "accepted";
+	case JobState::Completed: return "completed";
 	}
-	const std::uint64_t span = static_cast<std::uint64_t>(high - low) + 1;
-	return low + static_cast<int>(next() % span);
+	return "available";
 }
 
-const char* toString(TextSpeed speed) {
-	switch (speed) {
-	case TextSpeed::Slow: return "slow";
-	case TextSpeed::Normal: return "normal";
-	case TextSpeed::Fast: return "fast";
-	case TextSpeed::Instant: return "instant";
-	}
-	return "normal";
-}
-
-const char* toString(BattleSpeed speed) {
-	switch (speed) {
-	case BattleSpeed::X1: return "1x";
-	case BattleSpeed::X1_5: return "1.5x";
-	case BattleSpeed::X2: return "2x";
-	case BattleSpeed::X3: return "3x";
-	}
-	return "1x";
-}
-
-bool parseTextSpeed(const std::string& text, TextSpeed& out) {
-	for (TextSpeed s : {TextSpeed::Slow, TextSpeed::Normal, TextSpeed::Fast, TextSpeed::Instant}) {
-		if (text == toString(s)) {
-			out = s;
-			return true;
-		}
-	}
-	return false;
-}
-
-bool parseBattleSpeed(const std::string& text, BattleSpeed& out) {
-	for (BattleSpeed s : {BattleSpeed::X1, BattleSpeed::X1_5, BattleSpeed::X2, BattleSpeed::X3}) {
+bool parseJobState(const std::string& text, JobState& out) {
+	for (JobState s : {JobState::Available, JobState::Accepted, JobState::Completed}) {
 		if (text == toString(s)) {
 			out = s;
 			return true;
@@ -132,9 +95,21 @@ bool World::flag(const std::string& name) const {
 
 namespace {
 
+bool sameStatuses(const std::vector<rules::ActiveStatus>& a, const std::vector<rules::ActiveStatus>& b) {
+	if (a.size() != b.size()) {
+		return false;
+	}
+	for (std::size_t i = 0; i < a.size(); ++i) {
+		if (a[i].id != b[i].id || a[i].remaining != b[i].remaining) {
+			return false;
+		}
+	}
+	return true;
+}
+
 bool sameMember(const rules::PartyMember& a, const rules::PartyMember& b) {
 	return a.characterId == b.characterId && a.level == b.level && a.experience == b.experience && a.hp == b.hp &&
-		a.tp == b.tp && a.skillUses == b.skillUses && a.equipment == b.equipment;
+		a.tp == b.tp && a.skillUses == b.skillUses && a.equipment == b.equipment && sameStatuses(a.statuses, b.statuses);
 }
 
 bool sameMacro(const rules::Macro& a, const rules::Macro& b) {
@@ -184,12 +159,13 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 	if (a.vars != b.vars) return differs("vars");
 	if (!sameList(a.roster, b.roster, sameMember)) return differs("roster");
 	if (a.lineup != b.lineup) return differs("lineup");
+	if (a.memberNames != b.memberNames) return differs("memberNames");
 	if (a.items != b.items) return differs("items");
 	if (a.equipmentBag != b.equipmentBag) return differs("equipmentBag");
 	if (a.money != b.money) return differs("money");
 	if (!sameList(a.macros, b.macros, sameMacro)) return differs("macros");
 	if (a.autoMacro != b.autoMacro) return differs("autoMacro");
-	if (a.comboLog.discovered() != b.comboLog.discovered()) return differs("comboLog");
+	if (rules::serializeComboLog(a.comboLog) != rules::serializeComboLog(b.comboLog)) return differs("comboLog");
 	if (a.area != b.area) return differs("area");
 	if (a.position != b.position) return differs("position");
 	if (a.facing != b.facing) return differs("facing");
@@ -200,7 +176,9 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 	if (a.graceMs != b.graceMs) return differs("graceMs");
 	if (a.randomCounter != b.randomCounter) return differs("randomCounter");
 	if (a.randomThreshold != b.randomThreshold) return differs("randomThreshold");
-	if (a.encounterStream.state != b.encounterStream.state) return differs("encounterStream");
+	if (a.encounterStream.state() != b.encounterStream.state()) return differs("encounterStream");
+	if (a.jobs != b.jobs) return differs("jobs");
+	if (a.unlocked != b.unlocked) return differs("unlocked");
 	if (a.playTimeMs != b.playTimeMs) return differs("playTimeMs");
 	if (a.settings.difficulty != b.settings.difficulty) return differs("settings.difficulty");
 	if (a.settings.rewardMultiplier != b.settings.rewardMultiplier) return differs("settings.rewardMultiplier");

@@ -52,7 +52,7 @@ TEST(saveRoundTripsMidPlaythrough) {
 	SaveFile save = s.makeSave(false);
 	save.writeTime = 1234;
 	const std::string text = serializeSave(save);
-	rules::Result<SaveFile> loaded = parseSave(text, s.world().settings);
+	rules::Result<SaveFile> loaded = parseSave(text);
 	CHECK(loaded.ok());
 	std::string diff;
 	CHECK(sameWorld(loaded.value->world, s.world(), &diff));
@@ -95,17 +95,29 @@ TEST(preBattleAutosaveStoresTheEventAndResumesIntoTheBattle) {
 	const std::string slot = a.store()->latest();
 	std::string text;
 	CHECK(a.store()->read(slot, text));
-	rules::Result<SaveFile> save = parseSave(text, Settings());
+	rules::Result<SaveFile> save = parseSave(text);
 	CHECK(save.ok());
 	CHECK(!save.value->midEvent.empty());
 	CHECK(save.value->autosave);
-	CHECK(sameWorld(save.value->world, atBattle));
+	// The save holds the encounter stream from before the battle seed was drawn.
+	World expected = atBattle;
+	expected.encounterStream = save.value->world.encounterStream;
+	CHECK(sameWorld(save.value->world, expected));
+	CHECK(save.value->world.encounterStream.state() != atBattle.encounterStream.state());
 
 	Session b(test::data(), options);
 	CHECK(b.load(slot).empty());
 	CHECK(b.mode() == Mode::Battle);
 	CHECK(b.battleSource() == BattleSource::Event);
 	CHECK_EQ(b.battleEncounter(), std::string("warden"));
+	CHECK_EQ(b.battle()->setup().seed, a.battle()->setup().seed);
+	CHECK(sameWorld(b.world(), atBattle));
+	// Setting the battle up again from its own autosave writes no second one, and the presentation the scene
+	// had put up comes back with instant calls.
+	const std::vector<Output> output = b.drainOutput();
+	CHECK(!test::outputHas(output, "Autosaved"));
+	CHECK(test::outputHas(output, "music play brass_alarm (instant)"));
+	CHECK_EQ(b.store()->latest(), slot);
 }
 
 TEST(unknownChunksArePreserved) {
@@ -114,18 +126,18 @@ TEST(unknownChunksArePreserved) {
 	test::confirmLines(s);
 	SaveFile save = s.makeSave(false);
 	std::string text = serializeSave(save);
-	const std::string chunk = "chunk quests 3 21\njob harbor_nets open\n\n";
+	const std::string chunk = "chunk vehicles 3 21\njob harbor_nets open\n\n";
 	text.insert(text.rfind("chunk random"), chunk);
 	text = resign(text);
-	rules::Result<SaveFile> loaded = parseSave(text, Settings());
+	rules::Result<SaveFile> loaded = parseSave(text);
 	CHECK(loaded.ok());
 	CHECK_EQ(loaded.value->world.unknownChunks.size(), 1u);
-	CHECK_EQ(loaded.value->world.unknownChunks[0].type, std::string("quests"));
+	CHECK_EQ(loaded.value->world.unknownChunks[0].type, std::string("vehicles"));
 	CHECK_EQ(loaded.value->world.unknownChunks[0].version, 3);
 	CHECK_EQ(loaded.value->world.unknownChunks[0].payload, std::string("job harbor_nets open\n"));
 	const std::string again = serializeSave(*loaded.value);
 	CHECK(again.find(chunk) != std::string::npos);
-	rules::Result<SaveFile> twice = parseSave(again, Settings());
+	rules::Result<SaveFile> twice = parseSave(again);
 	CHECK(twice.ok());
 	CHECK_EQ(serializeSave(*twice.value), again);
 }
@@ -138,23 +150,23 @@ TEST(damagedAndNewerSavesAreRefused) {
 
 	std::string damaged = text;
 	damaged[damaged.find("money ") + 6] = '9';
-	rules::Result<SaveFile> r = parseSave(damaged, Settings());
+	rules::Result<SaveFile> r = parseSave(damaged);
 	CHECK(!r.ok());
 	CHECK(r.error.find("damaged") != std::string::npos);
 
 	std::string newer = text;
-	newer.replace(0, std::string("PSR-SAVE 1").size(), "PSR-SAVE 2");
-	r = parseSave(resign(newer), Settings());
+	newer.replace(0, std::string("PSR-SAVE 2").size(), "PSR-SAVE 3");
+	r = parseSave(resign(newer));
 	CHECK(!r.ok());
 	CHECK(r.error.find("newer build") != std::string::npos);
 
 	std::string newerChunk = text;
-	newerChunk.replace(newerChunk.find("chunk party 1"), 13, "chunk party 2");
-	r = parseSave(resign(newerChunk), Settings());
+	newerChunk.replace(newerChunk.find("chunk party 2"), 13, "chunk party 3");
+	r = parseSave(resign(newerChunk));
 	CHECK(!r.ok());
 	CHECK(r.error.find("newer build") != std::string::npos);
 
-	CHECK(!parseSave(text.substr(0, text.size() / 2), Settings()).ok());
+	CHECK(!parseSave(text.substr(0, text.size() / 2)).ok());
 }
 
 TEST(autosavesRotateThroughThreeSlots) {
@@ -226,4 +238,67 @@ TEST(manualSavesAreFieldMenuOnly) {
 	CHECK(s.mode() == Mode::Event);
 	CHECK(!s.saveManual("manual_0").empty());
 	CHECK(!s.openMenu().empty());
+}
+
+TEST(schemaOneSavesMigrateToSchemaTwo) {
+	auto chunk = [](const std::string& type, const std::string& payload) {
+		return "chunk " + type + " 1 " + std::to_string(payload.size()) + "\n" + payload + "\n";
+	};
+	std::string text = "PSR-SAVE 1\n";
+	text += chunk("header", "schema 1\nbuild game-0.1\nrules 2\ncontent 0\nwritten 5\nsequence 1\nautosave 0\nplay 1000\narea tidewater\nparty fighter:3\ndifficulty original\n");
+	text += chunk("location", "area tidewater\nposition 3 4\nfacing east\ncamera -\nvehicle -\n");
+	text += chunk("party", "lineup fighter\nmember fighter 3 0 86 8\nwear weapon copper_blade\n");
+	text += chunk("inventory", "money 50\nitem tonic 1\n");
+	text += chunk("world", "flag tidewater.arrived 1\nvisited tidewater\ncontrol 1\nnext_enemy 1\ngrace 0\nrandom 0 0\nplay 1000\n");
+	text += chunk("battle", "macro duo\nstep fighter attack - enemy - 0\nstep mystic ability spark default - -1\nauto duo\ncombo storm_spark\n");
+	text += chunk("random", "stream 7\n");
+	text += chunk("difficulty", "difficulty original\nreward 1\n");
+	text += chunk("midevent", "state events-save%202%20old\n");
+	text = resign(text + "end 0\n");
+
+	rules::Result<SaveFile> save = parseSave(text);
+	CHECK(save.ok());
+	const World& w = save.value->world;
+	CHECK_EQ(w.macros.size(), 1u);
+	CHECK_EQ(w.macros[0].name, std::string("duo"));
+	CHECK_EQ(w.macros[0].steps.size(), 2u);
+	CHECK(w.macros[0].steps[1].kind == rules::CommandKind::Ability);
+	CHECK_EQ(w.autoMacro, std::string("duo"));
+	CHECK_EQ(w.comboLog.entries().size(), 1u);
+	CHECK_EQ(w.comboLog.entries()[0].recipe, std::string("storm_spark"));
+	CHECK_EQ(w.comboLog.entries()[0].playTimeMs, 0);
+	CHECK(save.value->midEvent.empty());
+	CHECK(w.jobs.empty());
+	CHECK_EQ(w.encounterStream.state(), 7u);
+
+	const std::string again = serializeSave(*save.value);
+	CHECK(again.compare(0, 11, "PSR-SAVE 2\n") == 0);
+	CHECK(again.find("chunk battle 2 ") != std::string::npos);
+	CHECK(again.find("chunk quests 1 ") != std::string::npos);
+
+	// Loading fills the quests and unlocks the schema 1 save did not have from its flags.
+	SessionOptions options;
+	options.saveDirectory = test::freshDirectory("migrate");
+	Session s(test::data(), options);
+	std::string error;
+	CHECK(writeFileAtomic(s.store()->path("manual_0"), text, error));
+	CHECK(s.load("manual_0").empty());
+	CHECK(s.mode() == Mode::Field);
+	CHECK(s.world().jobs.at("lost_cache") == JobState::Available);
+	CHECK(s.world().unlocked.count("tidewater"));
+}
+
+TEST(persistentStatusesAndNamesRoundTrip) {
+	Session s(test::data(), SessionOptions());
+	s.newGame();
+	test::confirmLines(s);
+	s.world().member("fighter")->statuses = {{"poison", 2}, {"gear_lock", 0}};
+	s.world().memberNames["fighter"] = "Rook Tide";
+	const std::string text = serializeSave(s.makeSave(false));
+	rules::Result<SaveFile> loaded = parseSave(text);
+	CHECK(loaded.ok());
+	std::string diff;
+	CHECK(sameWorld(loaded.value->world, s.world(), &diff));
+	CHECK_EQ(diff, std::string(""));
+	CHECK_EQ(serializeSave(*loaded.value), text);
 }

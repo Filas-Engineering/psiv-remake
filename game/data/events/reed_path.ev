@@ -1,9 +1,18 @@
-# Reed Path: a scout who has mapped the marsh joins on the way to the cove.
+# Reed Path: a scout who has mapped the marsh joins on the way to the cove,
+# and a peddler sells from a cart the map does not show.
 
 event reed_path_scout unskippable
 	lock player
-	say scout "Heading for the cove? I have mapped these reeds twice over. I am coming along."
+	say scout @reed.scout.joins
 	party add scout
 	set reed.scout_joined
+	unlock player
+end
+
+event reed_path_peddler unskippable
+	lock player
+	say peddler @reed.peddler.greeting
+	shop reed_peddler
+	say peddler @reed.peddler.farewell
 	unlock player
 end

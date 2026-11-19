@@ -22,7 +22,7 @@ struct EncounterStart {
 bool inRearArc(Cell body, Facing facing, Cell point);
 
 // Picks a group from the zone's table by weight, from the encounter stream (ENC-004).
-std::string drawEncounter(EncounterStream& stream, const Zone& zone);
+std::string drawEncounter(rules::Rng& stream, const Zone& zone);
 
 // Clears the area's visible enemies and spawns each visible zone up to its cap (ENC-010, ENC-014).
 void spawnVisibleEnemies(World& world, const Area& area);

@@ -4,13 +4,24 @@
 	"areas": ["areas/tidewater.json", "areas/reed_path.json", "areas/bell_cove.json"],
 	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev"],
 	"glossary": "text/glossary.txt",
-	"speakers": {
-		"dockhand": "Dockhand",
-		"guide": "Harbor Guide",
-		"medic": "Test Medic",
-		"mystic": "Test Mystic",
-		"scout": "Test Scout"
-	},
+	"strings": "text/en.strings",
+	"text": "text/en.json",
+	"journal": "journal.json",
+	"actors": ["dockhand", "guide", "peddler"],
+	"presentation": {"audio": ["brass_alarm"]},
+	"flags": [
+		"cove.quiet_seen",
+		"cove.warden_beaten",
+		"cove.warden_lost",
+		"cove.warden_seen",
+		"job.lost_cache.accepted",
+		"job.lost_cache.done",
+		"reed.scout_joined",
+		"tidewater.arrived",
+		"tidewater.met_guide",
+		"tidewater.reported"
+	],
+	"clear_flag": "cove.quiet_seen",
 	"start": {
 		"area": "tidewater",
 		"marker": "start",
@@ -27,6 +38,7 @@
 		"wake_chime": 15,
 		"second_wind": 30,
 		"spark_flask": 12,
+		"loosen_oil": 20,
 		"grip_bands": 40,
 		"rivet_plate": 60,
 		"drift_feather": 50

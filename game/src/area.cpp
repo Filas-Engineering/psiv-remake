@@ -292,10 +292,13 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			reader.only(s, {"id", "at", "stock", "sell_percent"});
 			Shop shop;
 			reader.text(s, "id", shop.id, true);
-			reader.cellField(s, "at", shop.at, true);
+			if (s.is(JsonValue::Type::Object) && reader.field(s, "at", JsonValue::Type::Array, false)) {
+				shop.at.emplace();
+				reader.cellField(s, "at", *shop.at, true);
+				checkCell(s, *shop.at, "shop '" + shop.id + "'");
+			}
 			reader.texts(s, "stock", shop.stock, true);
 			reader.integer(s, "sell_percent", shop.sellPercent, false, 0, 100);
-			checkCell(s, shop.at, "shop '" + shop.id + "'");
 			area.shops.push_back(shop);
 		}
 	}
@@ -304,9 +307,12 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			reader.only(r, {"id", "at", "cost"});
 			RestPoint rest;
 			reader.text(r, "id", rest.id, true);
-			reader.cellField(r, "at", rest.at, true);
+			if (r.is(JsonValue::Type::Object) && reader.field(r, "at", JsonValue::Type::Array, false)) {
+				rest.at.emplace();
+				reader.cellField(r, "at", *rest.at, true);
+				checkCell(r, *rest.at, "rest point '" + rest.id + "'");
+			}
 			reader.integer(r, "cost", rest.cost, false, 0, 1000000);
-			checkCell(r, rest.at, "rest point '" + rest.id + "'");
 			area.rests.push_back(rest);
 		}
 	}

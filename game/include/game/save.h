@@ -10,9 +10,13 @@
 
 namespace game {
 
-constexpr int kSaveSchemaVersion = 1;
+// Schema 2 added the party's statuses and names, core's macro and combo log forms, and the quests and unlocks
+// chunks. Older schemas are migrated in order when they load (SAV-021).
+constexpr int kSaveSchemaVersion = 2;
 constexpr const char* kSaveMagic = "PSR-SAVE";
-constexpr const char* kGameBuild = "game-0.1";
+constexpr const char* kClearMagic = "PSR-CLEAR";
+constexpr int kClearVersion = 1;
+constexpr const char* kGameBuild = "game-0.2";
 
 struct SaveFile {
 	World world;
@@ -42,14 +46,19 @@ struct SaveSummary {
 // world.unknownChunks.
 std::string serializeSave(const SaveFile& save);
 
-// Verifies magic, schema version and checksum. Settings outside the save (SAV-005) are taken from `profile`.
-rules::Result<SaveFile> parseSave(const std::string& text, const Settings& profile);
+// Verifies magic, schema version and checksum, then migrates an older schema.
+rules::Result<SaveFile> parseSave(const std::string& text);
 
 // The world chunks alone, without header or checksum: the opaque blob events::Host::snapshot_world returns.
 std::string serializeWorldChunks(const World& world);
 bool parseWorldChunks(const std::string& text, World& world, std::string& error);
 
 rules::Result<SaveSummary> readSummary(const std::string& text);
+
+// The clear-data record (SAV-024): the header, party, inventory and world chunks of the save format under its own
+// magic, so a later product can read the final party and flags.
+std::string serializeClearRecord(const World& world, std::uint64_t contentHash, std::int64_t writeTime);
+rules::Result<World> parseClearRecord(const std::string& text);
 
 // Writes `path.tmp`, then renames it over `path`, so an interrupted write leaves the old file (SAV-013).
 bool writeFileAtomic(const std::string& path, const std::string& text, std::string& error);
@@ -71,6 +80,9 @@ public:
 	std::vector<SaveSummary> list() const;
 	// The autosave slot the next autosave writes: an empty one, otherwise the oldest (FLOW-054).
 	std::string nextAutosaveSlot() const;
+	// The clear-data record and the global profile sit next to the slots.
+	std::string clearRecordPath() const { return directory_ + "/clear.sav"; }
+	std::string profilePath() const { return directory_ + "/profile.cfg"; }
 	// The newest save by write time, manual or autosave (FLOW-021). Empty when none exists or all are damaged.
 	std::string latest() const;
 	// One past the highest sequence number on disk.

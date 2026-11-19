@@ -1,0 +1,38 @@
+# Dialogue for the placeholder adventure. See ../../../events/FORMAT.md, "String tables".
+language en
+
+tidewater.arrival.ferry = The ferry bumps against the pilings of Tidewater Landing.
+tidewater.arrival.ropes = Mind the ropes. The guide waits by the noticeboard.
+
+tidewater.guide.bell = You came about the bell? It rings every night at Bell Cove, east past the reeds.
+tidewater.guide.ask = Will you look into it?
+tidewater.guide.apprentices = Then take my apprentices. One knows a spark or two, the other knows bandages.
+tidewater.guide.later = Come back when you change your mind.
+tidewater.guide.quiet = Quiet nights again. The whole harbor owes you a supper.
+tidewater.guide.topics = Ask about...
+tidewater.guide.topic_bell = The bell
+tidewater.guide.topic_reeds = The reeds
+tidewater.guide.about_bell = Something made of brass guards it. Rest at the inn before you go.
+tidewater.guide.about_reeds = Small pests, mostly. Walk around them if you can.
+
+tidewater.dockhand.request = A crate of my supplies washed into the reeds last storm. Nobody will wade out for it.
+tidewater.dockhand.ask = Keep an eye out for it?
+tidewater.dockhand.accepted = Bless you. It sits on a dry patch, north side of the path.
+tidewater.dockhand.declined = Fair enough. The reeds bite.
+tidewater.dockhand.reminder = North side of the path, on the dry patch. You cannot miss it.
+tidewater.dockhand.found = You found it? Keep the coin, it was yours the moment you got your boots wet. Take these too.
+tidewater.dockhand.thanks_again = Every ferry that docks, I tell them about you.
+
+reed.scout.joins = Heading for the cove? I have mapped these reeds twice over. I am coming along.
+reed.peddler.greeting = Psst. Best prices this side of the marsh, and the only prices.
+reed.peddler.farewell = Mind the wisps. They hum before they bite.
+
+cove.bell.frame = A cracked bell hangs from a driftwood frame. Something stirs beneath it.
+cove.bell.warden = That is no bell keeper. That is a {name:bell_warden}!
+cove.bell.won = It is only gears now. The bell can rest.
+cove.bell.lost = The party wakes at the inn, sore and humbled.
+cove.quiet.tide = For the first time in a week, the tide is the only sound in the cove.
+cove.campfire.embers = Someone left a fire banked under the cliff. The embers still glow.
+cove.campfire.ask = Rest by the fire? It costs a little driftwood.
+cove.campfire.rested = The warmth draws the ache out of everyone.
+cove.campfire.declined = The embers settle back into the ash.

@@ -4,11 +4,13 @@
 
 #include "events/glossary.h"
 #include "events/save_state.h"
+#include "events/strings.h"
 #include "rules/auto_policy.h"
-#include "rules/formulas.h"
+#include "rules/field.h"
 #include "rules/names.h"
 #include "rules/progression.h"
 #include "rules/setup.h"
+#include "rules/text.h"
 
 #include <algorithm>
 
@@ -16,12 +18,83 @@ namespace game {
 
 namespace {
 
-const char* kBeforeBattle = "before an event battle";
+const char* kAreaEntry = "area_entry";
+const char* kEventEnd = "event_end";
+const char* kBeforeBattle = "before_battle";
+const char* kAfterRest = "after_rest";
+
+constexpr std::size_t kTextLogPages = 500;
+constexpr std::size_t kMaxNameLength = 16;
 
 bool hookHolds(const Hook& hook, const World& world) {
 	return (hook.requireFlag.empty() || world.flag(hook.requireFlag)) && (hook.blockFlag.empty() || !world.flag(hook.blockFlag));
 }
 
+bool rangeHolds(const FlagRange& range, const World& world) {
+	return (range.after.empty() || world.flag(range.after)) && (range.until.empty() || !world.flag(range.until));
+}
+
+rules::Opening toOpening(events::BattleOpening opening) {
+	switch (opening) {
+	case events::BattleOpening::party_first: return rules::Opening::PartyFirst;
+	case events::BattleOpening::enemy_first: return rules::Opening::EnemyFirst;
+	case events::BattleOpening::normal: break;
+	}
+	return rules::Opening::Normal;
+}
+
+}
+
+const std::vector<std::string>& sessionTextKeys() {
+	static const std::vector<std::string> keys = {
+		"game.arrive",
+		"game.auto_on",
+		"game.autosave_failed",
+		"game.autosave_point",
+		"game.autosaved",
+		"game.battle_start",
+		"game.bought",
+		"game.chest_empty",
+		"game.clear_recorded",
+		"game.equipped",
+		"game.event_cannot_resume",
+		"game.event_damaged",
+		"game.fallen",
+		"game.found",
+		"game.found_money",
+		"game.game_over",
+		"game.got_away",
+		"game.healed",
+		"game.inn_offer",
+		"game.job.accepted",
+		"game.job.available",
+		"game.job.completed",
+		"game.joins",
+		"game.learned",
+		"game.leaves",
+		"game.level_up",
+		"game.loaded",
+		"game.named",
+		"game.no_effect",
+		"game.reason.after_rest",
+		"game.reason.area_entry",
+		"game.reason.before_battle",
+		"game.reason.event_end",
+		"game.rest_no_money",
+		"game.rested",
+		"game.revived",
+		"game.saved",
+		"game.scripted_end",
+		"game.shop_open",
+		"game.skipped",
+		"game.sold",
+		"game.unequipped",
+		"game.unlocked",
+		"game.used",
+		"game.used_ability",
+		"game.victory",
+	};
+	return keys;
 }
 
 class Session::GameHost : public events::Host {
@@ -35,8 +108,10 @@ public:
 		HandleState state;
 		state.kind = HandleKind::Action;
 		const events::Handle handle = s_.newHandle(state);
-		s_.handles_[handle].done = s_.options_.presenter ? s_.options_.presenter->begin(handle, action) : true;
-		s_.emit(OutputKind::Action, events::describe(action));
+		const bool finished = s_.options_.presenter ? s_.options_.presenter->begin(handle, action) : true;
+		// An instant action has its end state on screen once begin returns, whatever the presenter says.
+		s_.handles_[handle].done = finished || action.instant;
+		s_.output_.push_back({OutputKind::Action, {}, events::describe(action) + (action.instant ? " (instant)" : "")});
 		return handle;
 	}
 
@@ -45,8 +120,11 @@ public:
 		state.kind = HandleKind::Line;
 		state.line = line;
 		s_.lineHandle_ = s_.newHandle(state);
+		s_.addLog(line, false);
 		return s_.lineHandle_;
 	}
+
+	void log_skipped_line(const events::Line& line) override { s_.addLog(line, true); }
 
 	events::Handle present_choice(const events::ChoiceRequest& request) override {
 		HandleState state;
@@ -63,15 +141,62 @@ public:
 		s_.battleSource_ = BattleSource::Event;
 		s_.battleHandle_ = handle;
 		s_.battleEnemyId_ = 0;
-		const std::string error = s_.startBattle(request.encounter, rules::Opening::Normal, request.escape_allowed, request.defeat_handled);
+		const std::string error = s_.startBattle(request.encounter, toOpening(request.opening), request.escape_allowed, request.defeat_handled);
 		if (!error.empty()) {
 			// Encounters are checked when the data loads, so this only happens if the party is empty.
-			s_.emit(OutputKind::Warning, "battle '" + request.encounter + "' could not start: " + error);
+			s_.warn("battle '" + request.encounter + "' could not start: " + error);
 			s_.handles_[handle].done = true;
 			s_.handles_[handle].result = static_cast<int>(events::BattleResult::win);
+		} else if (!s_.resumedSlot_.empty()) {
+			// Set up again from its own autosave: that save is already the one to retry from.
+			s_.pendingRetrySlot_ = s_.resumedSlot_;
+			s_.resumedSlot_.clear();
 		} else {
-			s_.battleAutosavePending_ = true;
+			s_.autosave(kBeforeBattle);
 		}
+		return handle;
+	}
+
+	events::Handle open_shop(const std::string& shop) override {
+		if (!s_.data_.shop(shop)) {
+			return 0;
+		}
+		const events::Handle handle = menuHandle();
+		s_.shopId_ = shop;
+		s_.openScriptMenu(Mode::Shop, MenuKind::None, handle);
+		s_.emit(OutputKind::Notice, "game.shop_open");
+		return handle;
+	}
+
+	events::Handle rest_party(const events::RestRequest& request) override {
+		const RestPoint* point = request.point.empty() ? nullptr : s_.data_.rest(request.point);
+		if (!request.point.empty() && !point) {
+			return 0;
+		}
+		HandleState state;
+		state.kind = HandleKind::Menu;
+		state.done = true;
+		const events::Handle handle = s_.newHandle(state);
+		const std::string problem = s_.payRest(point);
+		if (!problem.empty()) {
+			s_.emit(OutputKind::Notice, "game.rest_no_money");
+		}
+		return handle;
+	}
+
+	events::Handle open_save_prompt() override {
+		const events::Handle handle = menuHandle();
+		s_.openScriptMenu(Mode::Menu, MenuKind::SavePrompt, handle);
+		return handle;
+	}
+
+	events::Handle open_name_entry(const std::string& member) override {
+		if (!s_.data_.db.character(member)) {
+			return 0;
+		}
+		const events::Handle handle = menuHandle();
+		s_.nameMember_ = member;
+		s_.openScriptMenu(Mode::Menu, MenuKind::NameEntry, handle);
 		return handle;
 	}
 
@@ -104,10 +229,15 @@ public:
 	bool get_flag(const std::string& name) override { return s_.world_.flag(name); }
 
 	void set_flag(const std::string& name, bool value) override {
-		if (s_.world_.flag(name) != value) {
+		const bool before = s_.world_.flag(name);
+		if (before != value) {
 			s_.eventChangedFlag_ = true;
 		}
 		s_.world_.flags[name] = value;
+		if (value && !before && name == s_.data_.config.clearFlag) {
+			s_.clearPending_ = true;
+		}
+		s_.refreshJournal(true);
 	}
 
 	std::int64_t get_var(const std::string& name) override {
@@ -140,7 +270,7 @@ public:
 		}
 		if (std::find(w.lineup.begin(), w.lineup.end(), member) == w.lineup.end() && w.lineup.size() < static_cast<std::size_t>(rules::kMaxPartySize)) {
 			w.lineup.push_back(member);
-			s_.emit(OutputKind::Notice, s_.memberName(member) + " joins the party.");
+			s_.emit(OutputKind::Notice, "game.joins", {member});
 		}
 	}
 
@@ -151,11 +281,11 @@ public:
 			return;
 		}
 		if (w.lineup.size() == 1) {
-			s_.emit(OutputKind::Warning, "the last active member cannot leave the party");
+			s_.warn("the last active member cannot leave the party");
 			return;
 		}
 		w.lineup.erase(it);
-		s_.emit(OutputKind::Notice, s_.memberName(member) + " leaves the party.");
+		s_.emit(OutputKind::Notice, "game.leaves", {member});
 	}
 
 	void set_player_control(bool enabled) override { s_.world_.playerControl = enabled; }
@@ -165,13 +295,19 @@ public:
 	bool restore_world(const std::string& snapshot) override {
 		std::string error;
 		if (!parseWorldChunks(snapshot, s_.world_, error)) {
-			s_.emit(OutputKind::Warning, "cannot restore the event-start world: " + error);
+			s_.warn("cannot restore the event-start world: " + error);
 			return false;
 		}
 		return true;
 	}
 
 private:
+	events::Handle menuHandle() {
+		HandleState state;
+		state.kind = HandleKind::Menu;
+		return s_.newHandle(state);
+	}
+
 	void forget(events::Handle handle) {
 		s_.handles_.erase(handle);
 		if (handle == s_.lineHandle_) {
@@ -183,6 +319,9 @@ private:
 		if (handle == s_.battleHandle_) {
 			s_.battleHandle_ = 0;
 		}
+		if (handle == s_.menuHandle_) {
+			s_.menuHandle_ = 0;
+		}
 	}
 
 	Session& s_;
@@ -191,6 +330,15 @@ private:
 Session::Session(const GameData& data, SessionOptions options) : data_(data), options_(std::move(options)) {
 	if (!options_.saveDirectory.empty()) {
 		store_.emplace(options_.saveDirectory, data_.config.manualSlots, data_.config.autosaveSlots);
+		std::string text;
+		if (readFile(store_->profilePath(), text)) {
+			rules::Result<Profile> loaded = parseProfile(text);
+			if (loaded.ok()) {
+				profile_ = *loaded.value;
+			} else {
+				warn("the profile cannot be read, so the default settings apply: " + loaded.error);
+			}
+		}
 	}
 	host_ = std::make_unique<GameHost>(*this);
 }
@@ -215,19 +363,85 @@ std::vector<Output> Session::drainOutput() {
 	return out;
 }
 
-void Session::emit(OutputKind kind, const std::string& text) {
-	output_.push_back({kind, text});
+void Session::emit(OutputKind kind, const std::string& key, std::vector<std::string> params) {
+	rules::Message message{key, std::move(params)};
+	std::string rendered = render(message);
+	output_.push_back({kind, std::move(message), std::move(rendered)});
+}
+
+void Session::warn(const std::string& text) {
+	output_.push_back({OutputKind::Warning, {}, text});
+}
+
+std::string Session::text(const std::string& key, std::vector<std::string> params) const {
+	return render({key, std::move(params)});
+}
+
+std::string Session::render(const rules::Message& message) const {
+	std::vector<std::string> params;
+	for (const std::string& p : message.params) {
+		params.push_back(displayName(p));
+	}
+	return events::render_names(rules::formatText(data_.text, message.key, params), data_.glossary,
+		events::name_set_for(profile_.showShippedNames, profile_.textLanguage));
+}
+
+std::string Session::scriptText(const events::Text& text) const {
+	std::string out;
+	events::resolve_text(text, data_.strings, out);
+	return events::render_names(out, data_.glossary, events::name_set_for(profile_.showShippedNames, profile_.textLanguage));
+}
+
+std::string Session::displayName(const std::string& id) const {
+	const rules::Database& db = data_.db;
+	auto named = world_.memberNames.find(id);
+	if (named != world_.memberNames.end()) {
+		return named->second;
+	}
+	if (const rules::CharacterDef* c = db.character(id)) {
+		return c->name;
+	}
+	auto speaker = data_.text.find("speaker." + id);
+	if (speaker != data_.text.end()) {
+		return speaker->second;
+	}
+	if (const rules::AbilityDef* a = db.ability(id)) {
+		return a->name;
+	}
+	if (const rules::ItemDef* i = db.item(id)) {
+		return i->name;
+	}
+	if (const rules::StatusDef* s = db.status(id)) {
+		return s->name;
+	}
+	if (const rules::EnemyDef* e = db.enemy(id)) {
+		return e->name;
+	}
+	if (const rules::EquipmentDef* e = db.equipmentPiece(id)) {
+		return e->name;
+	}
+	if (const Area* a = data_.area(id)) {
+		return a->name;
+	}
+	return id;
+}
+
+std::string Session::setProfile(const Profile& profile) {
+	profile_ = profile;
+	if (!store_) {
+		return "";
+	}
+	std::string error;
+	if (!writeFileAtomic(store_->profilePath(), serializeProfile(profile_), error)) {
+		return "the profile was not written: " + error;
+	}
+	return "";
 }
 
 events::Handle Session::newHandle(HandleState state) {
 	const events::Handle handle = nextHandle_++;
 	handles_[handle] = std::move(state);
 	return handle;
-}
-
-std::string Session::memberName(const std::string& characterId) const {
-	const rules::CharacterDef* def = data_.db.character(characterId);
-	return def ? def->name : characterId;
 }
 
 std::vector<rules::PartyMember> Session::activeParty() const {
@@ -251,6 +465,75 @@ int Session::averageLevelX100() const {
 	return total * 100 / static_cast<int>(world_.lineup.size());
 }
 
+void Session::addLog(const events::Line& line, bool skipped) {
+	textLog_.push_back({line.speaker, line.text, skipped});
+	if (textLog_.size() > kTextLogPages) {
+		textLog_.pop_front();
+	}
+}
+
+std::vector<std::string> Session::textLog() const {
+	std::vector<std::string> out;
+	for (const LogEntry& e : textLog_) {
+		const std::string line = (e.speaker.empty() ? "" : displayName(e.speaker) + ": ") + scriptText(e.text);
+		out.push_back(e.skipped ? text("game.skipped", {line}) : line);
+	}
+	return out;
+}
+
+// Jobs and unlocks follow the flags, and only ever move forward.
+void Session::refreshJournal(bool announce) {
+	for (const Job& job : data_.journal.jobs) {
+		std::optional<JobState> next;
+		if (world_.flag(job.completedFlag)) {
+			next = JobState::Completed;
+		} else if (world_.flag(job.acceptedFlag)) {
+			next = JobState::Accepted;
+		} else if (job.availableFlag.empty() || world_.flag(job.availableFlag)) {
+			next = JobState::Available;
+		}
+		auto current = world_.jobs.find(job.id);
+		if (!next || (current != world_.jobs.end() && current->second >= *next)) {
+			continue;
+		}
+		world_.jobs[job.id] = *next;
+		if (announce) {
+			emit(OutputKind::Notice, std::string("game.job.") + toString(*next), {text(job.title)});
+		}
+	}
+	for (const EncyclopediaEntry& entry : data_.journal.encyclopedia) {
+		if (world_.flag(entry.flag) && world_.unlocked.insert(entry.id).second && announce) {
+			emit(OutputKind::Notice, "game.unlocked", {text(entry.title)});
+		}
+	}
+}
+
+QuestLog Session::questLog() const {
+	QuestLog log;
+	for (const Objective& o : data_.journal.objectives) {
+		if (rangeHolds(o.range, world_)) {
+			log.objective = text(o.text);
+		}
+	}
+	for (const Job& job : data_.journal.jobs) {
+		auto state = world_.jobs.find(job.id);
+		if (state != world_.jobs.end()) {
+			log.jobs.push_back({job.id, text(job.title), state->second});
+		}
+	}
+	return log;
+}
+
+std::vector<EncyclopediaView> Session::encyclopedia() const {
+	std::vector<EncyclopediaView> out;
+	for (const EncyclopediaEntry& entry : data_.journal.encyclopedia) {
+		if (world_.unlocked.count(entry.id)) {
+			out.push_back({entry.id, text(entry.title), text(entry.text)});
+		}
+	}
+	return out;
+}
+
 // Title
 
 std::string Session::newGame() {
@@ -258,10 +541,17 @@ std::string Session::newGame() {
 		return "a new game starts from the title screen";
 	}
 	const GameConfig& c = data_.config;
-	const Settings profile = world_.settings;
 	world_ = World();
-	world_.settings = profile;
-	world_.encounterStream.state = options_.seed;
+	world_.encounterStream.restore(options_.seed);
+	for (const events::Declaration& d : data_.program.declarations) {
+		if (!d.local && d.initial != 0) {
+			if (d.is_flag) {
+				world_.flags[d.name] = true;
+			} else {
+				world_.vars[d.name] = d.initial;
+			}
+		}
+	}
 	for (const std::string& id : c.startLineup) {
 		world_.roster.push_back(rules::makePartyMember(data_.db, *data_.db.character(id), c.startLevel));
 		world_.lineup.push_back(id);
@@ -271,14 +561,17 @@ std::string Session::newGame() {
 		giveThing(id, n);
 	}
 	world_.macros = data_.db.macros;
+	refreshJournal(false);
 	dropEvent();
 	battle_.reset();
+	textLog_.clear();
 	gameOver_ = false;
 	retrySlot_.clear();
 	pendingRetrySlot_.clear();
 	retryCount_ = 0;
 	areasSinceAutosave_.clear();
 	autosaveReason_.clear();
+	clearPending_ = false;
 	modes_.transition(Mode::Field);
 	enterArea(c.startArea, c.startMarker);
 	world_.facing = c.startFacing;
@@ -324,7 +617,7 @@ std::string Session::loadText(const std::string& text, const std::string& slot) 
 	if (mode() != Mode::Title) {
 		return "saves load from the title screen";
 	}
-	rules::Result<SaveFile> save = parseSave(text, world_.settings);
+	rules::Result<SaveFile> save = parseSave(text);
 	if (!save.ok()) {
 		return "save slot '" + slot + "' cannot be loaded: " + save.error;
 	}
@@ -334,10 +627,13 @@ std::string Session::loadText(const std::string& text, const std::string& slot) 
 	dropEvent();
 	battle_.reset();
 	world_ = std::move(save.value->world);
+	refreshJournal(false);
+	textLog_.clear();
 	gameOver_ = false;
 	pendingRetrySlot_.clear();
 	areasSinceAutosave_ = {world_.area};
 	autosaveReason_.clear();
+	clearPending_ = false;
 	loadHooksPending_ = false;
 	loadHooksFired_.clear();
 	stepProgressMs_ = 0;
@@ -345,26 +641,29 @@ std::string Session::loadText(const std::string& text, const std::string& slot) 
 	modes_.transition(Mode::Field);
 	const Area* a = area();
 	pacing_.enterArea(a->id, a->kind == AreaKind::Dungeon);
-	emit(OutputKind::Notice, "Loaded " + slot + ".");
+	emit(OutputKind::Notice, "game.loaded", {slot});
 	if (save.value->midEvent.empty()) {
 		return "";
 	}
 	events::SaveState state;
 	std::string error;
 	if (!events::save_state_from_text(save.value->midEvent, state)) {
-		emit(OutputKind::Warning, "the saved event state is damaged; continuing in the field");
+		emit(OutputKind::Warning, "game.event_damaged");
 		return "";
 	}
 	modes_.transition(Mode::Event);
 	interpreter_ = std::make_unique<events::Interpreter>(data_.program, *host_);
 	eventChangedFlag_ = false;
 	if (!interpreter_->restore(state, error)) {
-		emit(OutputKind::Warning, "the saved event cannot resume: " + error);
+		emit(OutputKind::Warning, "game.event_cannot_resume");
+		warn(error);
 		dropEvent();
 		modes_.transition(Mode::Field);
 		return "";
 	}
+	resumedSlot_ = slot;
 	pumpEvent(0);
+	resumedSlot_.clear();
 	return "";
 }
 
@@ -467,7 +766,7 @@ void Session::arrive(Cell cell) {
 void Session::enterArea(const std::string& areaId, const std::string& marker) {
 	const Area* a = data_.area(areaId);
 	if (!a) {
-		emit(OutputKind::Warning, "unknown area '" + areaId + "'");
+		warn("unknown area '" + areaId + "'");
 		return;
 	}
 	world_.area = a->id;
@@ -485,10 +784,10 @@ void Session::enterArea(const std::string& areaId, const std::string& marker) {
 	if (!areasSinceAutosave_.count(a->id)) {
 		areasSinceAutosave_.insert(a->id);
 		if (autosaveReason_.empty()) {
-			autosaveReason_ = "area entry";
+			autosaveReason_ = kAreaEntry;
 		}
 	}
-	emit(OutputKind::Notice, "You arrive at " + a->name + ".");
+	emit(OutputKind::Notice, "game.arrive", {a->id});
 }
 
 void Session::settleField() {
@@ -510,6 +809,10 @@ void Session::settleField() {
 			startEvent(hook.event);
 			return;
 		}
+	}
+	if (clearPending_) {
+		clearPending_ = false;
+		writeClearRecord();
 	}
 	if (!autosaveReason_.empty()) {
 		autosave(autosaveReason_);
@@ -567,38 +870,66 @@ std::string Session::interact() {
 	if (const Shop* shop = a.shopAt(target)) {
 		modes_.transition(Mode::Shop);
 		shopId_ = shop->id;
-		emit(OutputKind::Notice, "The shop is open.");
+		emit(OutputKind::Notice, "game.shop_open");
 		return "";
 	}
 	if (const RestPoint* rest = a.restAt(target)) {
 		modes_.transition(Mode::Menu);
+		menuKind_ = MenuKind::Inn;
 		innId_ = rest->id;
-		emit(OutputKind::Notice, "A night's rest costs " + std::to_string(rest->cost) + ".");
+		emit(OutputKind::Notice, "game.inn_offer", {std::to_string(rest->cost)});
 		return "";
 	}
 	return "there is nothing there";
 }
 
+std::string Session::partyTalk() {
+	if (mode() != Mode::Field || interpreter_) {
+		return "party talk is only available in the field";
+	}
+	const TalkSet* best = nullptr;
+	int bestScore = -1;
+	for (const TalkSet& set : data_.journal.partyTalk) {
+		if ((!set.area.empty() && set.area != world_.area) || !rangeHolds(set.range, world_)) {
+			continue;
+		}
+		const int score = (set.area.empty() ? 0 : 4) + (set.range.after.empty() ? 0 : 1) + (set.range.until.empty() ? 0 : 1);
+		if (score > bestScore) {
+			best = &set;
+			bestScore = score;
+		}
+	}
+	bool spoke = false;
+	for (const TalkLine& line : best ? best->lines : std::vector<TalkLine>()) {
+		// A line of someone who is not in the active party is left out.
+		if (std::find(world_.lineup.begin(), world_.lineup.end(), line.speaker) == world_.lineup.end()) {
+			continue;
+		}
+		output_.push_back({OutputKind::Line, {line.text, {}}, displayName(line.speaker) + ": " + text(line.text)});
+		spoke = true;
+	}
+	return spoke ? "" : "nobody has anything to say";
+}
+
 void Session::openChest(const Chest& chest) {
 	if (world_.flag(chest.flag)) {
-		emit(OutputKind::Notice, "The chest is empty.");
+		emit(OutputKind::Notice, "game.chest_empty");
 		return;
 	}
-	std::string found;
 	for (const auto& [id, n] : chest.items) {
 		giveThing(id, n);
-		found += (found.empty() ? "" : ", ") + std::to_string(n) + " " + data_.db.item(id)->name;
+		emit(OutputKind::Notice, "game.found", {std::to_string(n), id});
 	}
 	for (const auto& [id, n] : chest.equipment) {
 		giveThing(id, n);
-		found += (found.empty() ? "" : ", ") + std::to_string(n) + " " + data_.db.equipmentPiece(id)->name;
+		emit(OutputKind::Notice, "game.found", {std::to_string(n), id});
 	}
 	if (chest.money > 0) {
 		world_.money = std::min(data_.config.moneyCap, world_.money + chest.money);
-		found += (found.empty() ? "" : ", ") + std::to_string(chest.money) + " money";
+		emit(OutputKind::Notice, "game.found_money", {std::to_string(chest.money)});
 	}
 	world_.flags[chest.flag] = true;
-	emit(OutputKind::Notice, "Found " + (found.empty() ? std::string("nothing") : found) + ".");
+	refreshJournal(true);
 }
 
 void Session::giveThing(const std::string& id, int count) {
@@ -615,7 +946,7 @@ bool Session::startEvent(const std::string& event) {
 	interpreter_ = std::make_unique<events::Interpreter>(data_.program, *host_);
 	eventChangedFlag_ = false;
 	if (!interpreter_->start(event)) {
-		emit(OutputKind::Warning, "event '" + event + "' cannot start: " + interpreter_->error());
+		warn("event '" + event + "' cannot start: " + interpreter_->error());
 		dropEvent();
 		modes_.transition(Mode::Field);
 		return false;
@@ -629,12 +960,8 @@ void Session::pumpEvent(double seconds) {
 		return;
 	}
 	const events::Status status = interpreter_->step(seconds);
-	if (battleAutosavePending_) {
-		battleAutosavePending_ = false;
-		autosave(kBeforeBattle);
-	}
 	if (status == events::Status::error) {
-		emit(OutputKind::Warning, "event error: " + interpreter_->error());
+		warn("event error: " + interpreter_->error());
 		endEvent();
 	} else if (status == events::Status::finished) {
 		endEvent();
@@ -644,7 +971,7 @@ void Session::pumpEvent(double seconds) {
 void Session::endEvent() {
 	dropEvent();
 	if (eventChangedFlag_) {
-		autosaveReason_ = "event end";
+		autosaveReason_ = kEventEnd;
 	}
 	if (mode() == Mode::Event) {
 		modes_.transition(Mode::Field);
@@ -658,7 +985,7 @@ void Session::dropEvent() {
 	lineHandle_ = 0;
 	choiceHandle_ = 0;
 	battleHandle_ = 0;
-	battleAutosavePending_ = false;
+	menuHandle_ = 0;
 }
 
 bool Session::linePending() const {
@@ -672,13 +999,8 @@ std::string Session::lineText() const {
 		return "";
 	}
 	const events::Line& line = it->second.line;
-	std::string text = line.text.is_id ? "@" + line.text.value : line.text.value;
-	text = events::render_names(text, data_.glossary, events::name_set_for(world_.settings.showShippedNames, "en"));
-	if (line.speaker.empty()) {
-		return text;
-	}
-	auto name = data_.config.speakers.find(line.speaker);
-	return (name == data_.config.speakers.end() ? line.speaker : name->second) + ": " + text;
+	const std::string text = scriptText(line.text);
+	return line.speaker.empty() ? text : displayName(line.speaker) + ": " + text;
 }
 
 void Session::confirmLine() {
@@ -725,6 +1047,25 @@ bool Session::skip() {
 	return true;
 }
 
+// Menus an event opens
+
+void Session::openScriptMenu(Mode mode, MenuKind kind, events::Handle handle) {
+	if (!modes_.transition(mode)) {
+		warn(std::string("a menu cannot open from ") + toString(this->mode()));
+		handles_[handle].done = true;
+		return;
+	}
+	menuKind_ = kind;
+	menuHandle_ = handle;
+}
+
+void Session::finishScriptMenu() {
+	auto it = handles_.find(menuHandle_);
+	if (it != handles_.end()) {
+		it->second.done = true;
+	}
+}
+
 // Battles
 
 void Session::startFieldBattle(const EncounterStart& start) {
@@ -733,7 +1074,7 @@ void Session::startFieldBattle(const EncounterStart& start) {
 	battleHandle_ = 0;
 	const std::string error = startBattle(start.encounter, start.opening, true, false);
 	if (!error.empty()) {
-		emit(OutputKind::Warning, "battle '" + start.encounter + "' could not start: " + error);
+		warn("battle '" + start.encounter + "' could not start: " + error);
 	}
 }
 
@@ -748,8 +1089,15 @@ std::string Session::startBattle(const std::string& encounter, rules::Opening op
 	setup.flags.escapeAllowed = setup.flags.escapeAllowed && escapeAllowed;
 	setup.flags.defeatHasBranch = defeatHasBranch;
 	setup.opening = opening;
+	if (battleSource_ == BattleSource::Event) {
+		auto end = data_.config.scriptedEnds.find(encounter);
+		if (end != data_.config.scriptedEnds.end()) {
+			setup.scriptedEnd = end->second;
+		}
+	}
 	setup.difficulty = world_.settings.difficulty;
 	setup.rewardMultiplier = world_.settings.rewardMultiplier;
+	streamBeforeBattle_ = world_.encounterStream.state();
 	// BAT-134: drawn from the encounter stream; a retry mixes in its counter so it rolls differently.
 	setup.seed = world_.encounterStream.next() ^ (static_cast<std::uint64_t>(retryCount_) * 0x9E3779B97F4A7C15ULL);
 	rules::Result<rules::Battle> created = rules::Battle::create(data_.db, setup, &world_.comboLog);
@@ -769,7 +1117,7 @@ std::string Session::startBattle(const std::string& encounter, rules::Opening op
 	if (boss) {
 		pacing_.bossStarted(boss->flag, encounter, averageLevelX100());
 	}
-	emit(OutputKind::Notice, std::string("Battle! (") + rules::toString(opening) + ")");
+	emit(OutputKind::Notice, "game.battle_start");
 	return "";
 }
 
@@ -777,7 +1125,7 @@ std::string Session::setCommand(int actor, const rules::Command& command) {
 	if (!battle_) {
 		return "there is no battle";
 	}
-	return battle_->setCommand(actor, command);
+	return render(battle_->setCommand(actor, command));
 }
 
 std::string Session::applyMacro(const std::string& name, std::vector<rules::MacroStepResult>* results) {
@@ -796,10 +1144,60 @@ std::string Session::applyMacro(const std::string& name, std::vector<rules::Macr
 	return "no macro named '" + name + "'";
 }
 
+std::string Session::startAuto() {
+	if (!battle_) {
+		return "there is no battle";
+	}
+	if (world_.autoMacro.empty()) {
+		return "no auto-battle macro is set";
+	}
+	for (const rules::Macro& m : world_.macros) {
+		if (m.name == world_.autoMacro) {
+			battle_->startAuto(m);
+			emit(OutputKind::Notice, "game.auto_on", {m.name});
+			return "";
+		}
+	}
+	return "no macro named '" + world_.autoMacro + "'";
+}
+
+void Session::cancelAuto() {
+	if (battle_) {
+		battle_->cancelAuto();
+	}
+}
+
+bool Session::autoActive() const {
+	return battle_ && battle_->autoActive();
+}
+
+bool Session::fillFromAuto() {
+	if (!autoActive()) {
+		return false;
+	}
+	if (battle_->fillFromAuto()) {
+		return true;
+	}
+	emit(OutputKind::Notice, std::string("auto.stopped.") + rules::toString(battle_->autoStop()));
+	return false;
+}
+
+void Session::fillFromPolicy() {
+	if (!battle_ || !battle_->sideActsNextRound(rules::Side::Party)) {
+		return;
+	}
+	for (int i = 0; i < battle_->partyCount(); ++i) {
+		if (battle_->combatant(i).alive()) {
+			battle_->setCommand(i, rules::autoCommand(*battle_, i));
+		}
+	}
+}
+
 std::vector<rules::Event> Session::resolveRound() {
 	if (!battle_) {
 		return {};
 	}
+	battle_->setPlayTime(world_.playTimeMs);
 	std::vector<rules::Event> events = battle_->resolveRound();
 	++battleRounds_;
 	addTime(data_.config.roundMs);
@@ -807,24 +1205,6 @@ std::vector<rules::Event> Session::resolveRound() {
 		finishBattle();
 	}
 	return events;
-}
-
-std::vector<rules::Event> Session::autoRound() {
-	if (!battle_) {
-		return {};
-	}
-	bool usedMacro = false;
-	if (!world_.autoMacro.empty()) {
-		usedMacro = applyMacro(world_.autoMacro).empty();
-	}
-	if (!usedMacro && battle_->sideActsNextRound(rules::Side::Party)) {
-		for (int i = 0; i < battle_->partyCount(); ++i) {
-			if (battle_->combatant(i).alive()) {
-				battle_->setCommand(i, rules::autoCommand(*battle_, i));
-			}
-		}
-	}
-	return resolveRound();
 }
 
 void Session::finishBattle() {
@@ -845,27 +1225,25 @@ void Session::finishBattle() {
 	}
 	int experience = 0;
 	int money = 0;
-	if (outcome == rules::Outcome::Victory) {
+	if (outcome == rules::Outcome::Victory || outcome == rules::Outcome::ScriptedEnd) {
 		experience = rewards.experience;
 		money = rewards.currency;
 		world_.money = std::min(data_.config.moneyCap, world_.money + money);
-		emit(OutputKind::Notice, "Victory. " + std::to_string(experience) + " experience, " + std::to_string(money) + " money.");
+		emit(OutputKind::Notice, outcome == rules::Outcome::Victory ? "game.victory" : "game.scripted_end", {std::to_string(experience), std::to_string(money)});
 		for (std::size_t i = 0; i < state.size() && i < rewards.memberExperience.size(); ++i) {
 			rules::PartyMember* member = world_.member(state[i].characterId);
 			const rules::LevelUp up = rules::grantExperience(*member, data_.db, rewards.memberExperience[i]);
 			if (up.levelsGained > 0) {
-				std::string line = memberName(member->characterId) + " reached level " + std::to_string(member->level);
-				for (std::size_t k = 0; k < up.learned.size(); ++k) {
-					const rules::AbilityDef* ability = data_.db.ability(up.learned[k]);
-					line += (k == 0 ? " and learned " : ", ") + (ability ? ability->name : up.learned[k]);
-				}
-				emit(OutputKind::Notice, line + ".");
+				emit(OutputKind::Notice, "game.level_up", {member->characterId, std::to_string(member->level)});
+			}
+			for (const std::string& ability : up.learned) {
+				emit(OutputKind::Notice, "game.learned", {member->characterId, ability});
 			}
 		}
 	} else if (outcome == rules::Outcome::Escaped) {
-		emit(OutputKind::Notice, "The party got away.");
+		emit(OutputKind::Notice, "game.got_away");
 	} else {
-		emit(OutputKind::Notice, "The party has fallen.");
+		emit(OutputKind::Notice, "game.fallen");
 	}
 	pacing_.battleEnded(battleRounds_, data_.config.roundMs, experience, money);
 	if (battleIsBoss_ && outcome == rules::Outcome::Victory) {
@@ -920,7 +1298,7 @@ void Session::finishBattle() {
 }
 
 void Session::enterGameOver() {
-	emit(OutputKind::Notice, "Game over.");
+	emit(OutputKind::Notice, "game.game_over");
 	dropEvent();
 	battle_.reset();
 	modes_.transition(Mode::Title);
@@ -951,28 +1329,44 @@ void Session::autosave(std::string reason) {
 	}
 	if (reason == kBeforeBattle && interpreter_) {
 		save.midEvent = events::save_state_to_text(interpreter_->save());
+		save.world.encounterStream.restore(streamBeforeBattle_);
 	}
+	const std::string why = text("game.reason." + reason);
 	if (!store_) {
-		emit(OutputKind::Autosave, "Autosave point (" + reason + ").");
+		emit(OutputKind::Autosave, "game.autosave_point", {why});
 		return;
 	}
 	const std::string slot = store_->nextAutosaveSlot();
 	std::string error;
 	if (!store_->write(slot, serializeSave(save), error)) {
-		emit(OutputKind::Warning, "autosave failed, will retry at the next autosave point: " + error);
+		emit(OutputKind::Warning, "game.autosave_failed", {error});
 		return;
 	}
 	if (reason == kBeforeBattle) {
 		pendingRetrySlot_ = slot;
 	}
-	emit(OutputKind::Autosave, "Autosaved to " + slot + " (" + reason + ").");
+	emit(OutputKind::Autosave, "game.autosaved", {slot, why});
+}
+
+void Session::writeClearRecord() {
+	if (store_) {
+		std::string error;
+		const std::int64_t time = options_.clock ? options_.clock() : ++clockCounter_;
+		if (!writeFileAtomic(store_->clearRecordPath(), serializeClearRecord(world_, data_.contentHash, time), error)) {
+			warn("the clear-data record was not written: " + error);
+			return;
+		}
+	}
+	emit(OutputKind::Notice, "game.clear_recorded");
 }
 
 std::string Session::saveManual(const std::string& slot) {
-	if (mode() != Mode::Menu || modes_.returnMode() != Mode::Field || !innId_.empty()) {
-		return "saving is only allowed from the field menu";
+	const bool fieldMenu = mode() == Mode::Menu && menuKind_ == MenuKind::Field && modes_.returnMode() == Mode::Field;
+	const bool prompt = mode() == Mode::Menu && menuKind_ == MenuKind::SavePrompt;
+	if (!fieldMenu && !prompt) {
+		return "saving is only allowed from the field menu or a save prompt";
 	}
-	if (interpreter_) {
+	if (fieldMenu && interpreter_) {
 		return "you cannot save while an event runs";
 	}
 	if (!store_) {
@@ -985,11 +1379,13 @@ std::string Session::saveManual(const std::string& slot) {
 	if (!options_.clock) {
 		save.writeTime = ++clockCounter_;
 	}
+	// A save prompt's save loads into the field (EVT-053), so it must not keep the event's lock on the player.
+	save.world.playerControl = true;
 	std::string error;
 	if (!store_->write(slot, serializeSave(save), error)) {
 		return error;
 	}
-	emit(OutputKind::Notice, "Saved to " + slot + ".");
+	emit(OutputKind::Notice, "game.saved", {slot});
 	return "";
 }
 
@@ -1002,6 +1398,7 @@ std::string Session::openMenu() {
 	if (!modes_.transition(Mode::Menu)) {
 		return "the menu cannot open now";
 	}
+	menuKind_ = MenuKind::Field;
 	innId_.clear();
 	shopId_.clear();
 	return "";
@@ -1012,8 +1409,11 @@ std::string Session::closeMenu() {
 		return "no menu is open";
 	}
 	modes_.transition(modes_.returnMode());
+	finishScriptMenu();
+	menuKind_ = MenuKind::None;
 	innId_.clear();
 	shopId_.clear();
+	nameMember_.clear();
 	settleField();
 	if (mode() == Mode::Event) {
 		pumpEvent(0);
@@ -1022,11 +1422,11 @@ std::string Session::closeMenu() {
 }
 
 const Shop* Session::shop() const {
-	return mode() == Mode::Shop ? area()->shop(shopId_) : nullptr;
+	return mode() == Mode::Shop ? data_.shop(shopId_) : nullptr;
 }
 
 const RestPoint* Session::inn() const {
-	return mode() == Mode::Menu && !innId_.empty() ? area()->rest(innId_) : nullptr;
+	return menuKind() == MenuKind::Inn ? data_.rest(innId_) : nullptr;
 }
 
 std::string Session::buy(const std::string& id, int count) {
@@ -1051,7 +1451,7 @@ std::string Session::buy(const std::string& id, int count) {
 	}
 	world_.money -= static_cast<int>(total);
 	giveThing(id, count);
-	emit(OutputKind::Notice, "Bought " + std::to_string(count) + " " + id + " for " + std::to_string(total) + ".");
+	emit(OutputKind::Notice, "game.bought", {std::to_string(count), id, std::to_string(total)});
 	return "";
 }
 
@@ -1077,7 +1477,24 @@ std::string Session::sell(const std::string& id, int count) {
 		bag.erase(held);
 	}
 	world_.money = static_cast<int>(std::min<std::int64_t>(data_.config.moneyCap, world_.money + value));
-	emit(OutputKind::Notice, "Sold " + std::to_string(count) + " " + id + " for " + std::to_string(value) + ".");
+	emit(OutputKind::Notice, "game.sold", {std::to_string(count), id, std::to_string(value)});
+	return "";
+}
+
+// Rest for the whole roster, active or not (FLD-034). A null point is a free rest.
+std::string Session::payRest(const RestPoint* point) {
+	const int cost = point ? point->cost : 0;
+	if (world_.money < cost) {
+		return "not enough money";
+	}
+	world_.money -= cost;
+	for (rules::PartyMember& m : world_.roster) {
+		rules::rest(m, data_.db);
+	}
+	emit(OutputKind::Notice, "game.rested");
+	if (autosaveReason_.empty()) {
+		autosaveReason_ = kAfterRest;
+	}
 	return "";
 }
 
@@ -1086,114 +1503,133 @@ std::string Session::rest() {
 	if (!r) {
 		return "there is nowhere to rest";
 	}
-	if (world_.money < r->cost) {
-		return "not enough money";
+	const std::string problem = payRest(r);
+	if (!problem.empty()) {
+		return problem;
 	}
-	world_.money -= r->cost;
-	for (rules::PartyMember& m : world_.roster) {
-		rules::rest(m, data_.db);
-	}
-	emit(OutputKind::Notice, "The party rests and recovers.");
-	modes_.transition(modes_.returnMode());
-	innId_.clear();
-	if (mode() == Mode::Field) {
-		autosaveReason_ = "after rest";
-		settleField();
-	}
+	closeMenu();
 	return "";
 }
 
+void Session::reportFieldUse(const std::vector<rules::Event>& events, const std::vector<rules::PartyMember>& party) {
+	auto who = [&](int index) { return index >= 0 && index < static_cast<int>(party.size()) ? party[index].characterId : std::string(); };
+	for (const rules::Event& e : events) {
+		if (e.type == rules::EventType::Healed) {
+			emit(OutputKind::Notice, "game.healed", {who(e.target), std::to_string(e.amount)});
+		} else if (e.type == rules::EventType::Revived) {
+			emit(OutputKind::Notice, "game.revived", {who(e.target), std::to_string(e.amount)});
+		} else if (e.type == rules::EventType::StatusRemoved) {
+			emit(OutputKind::Notice, e.message, {who(e.target), e.status});
+		}
+	}
+}
+
 std::string Session::useItem(const std::string& item, const std::string& member) {
-	if (mode() != Mode::Menu || !innId_.empty()) {
+	if (menuKind() != MenuKind::Field) {
 		return "items are used from the field menu";
 	}
-	const rules::ItemDef* def = data_.db.item(item);
+	std::vector<rules::PartyMember> party = activeParty();
+	int target = -1;
+	if (!member.empty()) {
+		auto it = std::find(world_.lineup.begin(), world_.lineup.end(), member);
+		if (it == world_.lineup.end()) {
+			return render({"field.unknown_member", {member}});
+		}
+		target = static_cast<int>(it - world_.lineup.begin());
+	}
+	const rules::FieldUse use = rules::useItemOutsideBattle(data_.db, party, world_.items, item, target);
+	if (!use.rejection.empty()) {
+		return render(use.rejection);
+	}
 	auto held = world_.items.find(item);
-	if (!def || held == world_.items.end()) {
-		return "you have no '" + item + "'";
-	}
-	std::vector<rules::PartyMember*> targets;
-	if (def->targeting == rules::Targeting::OneAlly || def->targeting == rules::Targeting::Self) {
-		if (std::find(world_.lineup.begin(), world_.lineup.end(), member) == world_.lineup.end()) {
-			return "'" + member + "' is not in the party";
-		}
-		targets.push_back(world_.member(member));
-	} else if (def->targeting == rules::Targeting::AllAllies) {
-		for (const std::string& id : world_.lineup) {
-			targets.push_back(world_.member(id));
-		}
-	} else {
-		return def->name + " can only be used in battle";
-	}
-	// Core has no out-of-battle item rule, so the battle formulas are applied here with flat item power.
-	bool changed = false;
-	for (rules::PartyMember* m : targets) {
-		const int maxHp = rules::memberStats(data_.db, *m).maxHp;
-		for (const rules::Effect& e : def->effects) {
-			if (e.kind == rules::EffectKind::Heal && m->hp > 0 && m->hp < maxHp) {
-				m->hp = std::min(maxHp, m->hp + rules::formulas::healAmount(e.power, 0));
-				changed = true;
-			} else if (e.kind == rules::EffectKind::Revive && m->hp <= 0) {
-				m->hp = rules::formulas::reviveHp(maxHp, e.power);
-				changed = true;
-			}
-		}
-	}
-	if (!changed) {
-		return def->name + " would have no effect";
-	}
-	if (--held->second == 0) {
+	if (held != world_.items.end() && held->second <= 0) {
 		world_.items.erase(held);
 	}
-	emit(OutputKind::Notice, "Used " + def->name + ".");
+	if (std::any_of(use.events.begin(), use.events.end(), [](const rules::Event& e) { return e.type == rules::EventType::ItemHadNoEffect; })) {
+		return text("game.no_effect", {item});
+	}
+	for (std::size_t i = 0; i < party.size(); ++i) {
+		*world_.member(world_.lineup[i]) = party[i];
+	}
+	emit(OutputKind::Notice, "game.used", {item});
+	reportFieldUse(use.events, party);
+	return "";
+}
+
+std::string Session::useAbility(const std::string& user, const std::string& ability, const std::string& member) {
+	if (menuKind() != MenuKind::Field) {
+		return "techniques are used from the field menu";
+	}
+	auto index = [&](const std::string& id) {
+		auto it = std::find(world_.lineup.begin(), world_.lineup.end(), id);
+		return it == world_.lineup.end() ? -1 : static_cast<int>(it - world_.lineup.begin());
+	};
+	const int userIndex = index(user);
+	const int target = member.empty() ? -1 : index(member);
+	if (userIndex < 0 || (!member.empty() && target < 0)) {
+		return render({"field.unknown_member", {userIndex < 0 ? user : member}});
+	}
+	std::vector<rules::PartyMember> party = activeParty();
+	const rules::FieldUse use = rules::useAbilityOutsideBattle(data_.db, party, userIndex, ability, target);
+	if (!use.rejection.empty()) {
+		return render(use.rejection);
+	}
+	for (std::size_t i = 0; i < party.size(); ++i) {
+		*world_.member(world_.lineup[i]) = party[i];
+	}
+	emit(OutputKind::Notice, "game.used_ability", {user, ability});
+	reportFieldUse(use.events, party);
 	return "";
 }
 
 std::string Session::equip(const std::string& member, const std::string& equipment) {
-	if (mode() != Mode::Menu || !innId_.empty()) {
+	if (menuKind() != MenuKind::Field) {
 		return "equipment is changed from the field menu";
 	}
 	rules::PartyMember* m = world_.member(member);
 	if (!m) {
-		return "'" + member + "' is not in the roster";
+		return render({"equip.unknown_character", {member}});
 	}
-	auto held = world_.equipmentBag.find(equipment);
-	if (held == world_.equipmentBag.end()) {
-		return "you have no '" + equipment + "'";
+	const rules::Message refused = rules::equip(*m, data_.db, world_.equipmentBag, equipment);
+	if (!refused.empty()) {
+		return render(refused);
 	}
-	const rules::EquipmentDef* piece = data_.db.equipmentPiece(equipment);
-	auto worn = m->equipment.find(piece->slot);
-	const std::string previous = worn == m->equipment.end() ? "" : worn->second;
-	const std::string error = rules::equip(*m, data_.db, equipment);
-	if (!error.empty()) {
-		return error;
-	}
-	if (--held->second == 0) {
-		world_.equipmentBag.erase(held);
-	}
-	if (!previous.empty()) {
-		++world_.equipmentBag[previous];
-	}
-	emit(OutputKind::Notice, memberName(member) + " equips " + piece->name + ".");
+	emit(OutputKind::Notice, "game.equipped", {member, equipment});
 	return "";
 }
 
 std::string Session::unequip(const std::string& member, rules::EquipSlot slot) {
-	if (mode() != Mode::Menu || !innId_.empty()) {
+	if (menuKind() != MenuKind::Field) {
 		return "equipment is changed from the field menu";
 	}
 	rules::PartyMember* m = world_.member(member);
 	if (!m) {
-		return "'" + member + "' is not in the roster";
+		return render({"equip.unknown_character", {member}});
 	}
 	auto worn = m->equipment.find(slot);
 	if (worn == m->equipment.end()) {
 		return "nothing is worn there";
 	}
 	const std::string piece = worn->second;
-	rules::unequip(*m, data_.db, slot);
-	++world_.equipmentBag[piece];
+	rules::unequip(*m, data_.db, world_.equipmentBag, slot);
+	emit(OutputKind::Notice, "game.unequipped", {member, piece});
 	return "";
+}
+
+std::string Session::enterName(const std::string& name) {
+	if (menuKind() != MenuKind::NameEntry) {
+		return "no name entry is open";
+	}
+	const std::size_t first = name.find_first_not_of(' ');
+	const std::size_t last = name.find_last_not_of(' ');
+	const std::string trimmed = first == std::string::npos ? "" : name.substr(first, last - first + 1);
+	if (trimmed.empty() || trimmed.size() > kMaxNameLength ||
+		std::any_of(trimmed.begin(), trimmed.end(), [](unsigned char c) { return c < 0x20 || c == 0x7F; })) {
+		return "a name has 1 to " + std::to_string(kMaxNameLength) + " characters";
+	}
+	emit(OutputKind::Notice, "game.named", {displayName(nameMember_), trimmed});
+	world_.memberNames[nameMember_] = trimmed;
+	return closeMenu();
 }
 
 std::string Session::setSettings(const Settings& settings) {

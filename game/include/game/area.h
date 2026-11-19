@@ -6,6 +6,7 @@
 #include "rules/types.h"
 
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,9 +36,10 @@ struct Hook {
 	std::string blockFlag;
 };
 
+// A shop or rest point without a cell is reached only from a script.
 struct Shop {
 	std::string id;
-	Cell at;
+	std::optional<Cell> at;
 	// Item or equipment ids; prices come from the game's price table.
 	std::vector<std::string> stock;
 	int sellPercent = 50;
@@ -45,7 +47,7 @@ struct Shop {
 
 struct RestPoint {
 	std::string id;
-	Cell at;
+	std::optional<Cell> at;
 	int cost = 0;
 };
 

@@ -16,6 +16,7 @@ void usage() {
 				 "  game_cli [--data DIR] [--seed N] [--saves DIR] [--auto-battle] [--encounters visible|random]\n"
 				 "  game_cli --script FILE ...      run the commands in FILE, print the transcript, then exit\n"
 				 "  game_cli --bot [--route FILE]   walk the route in both encounter modes and print pacing tables\n"
+				 "  game_cli --registry             print the registry built from the data, for event_cli check --registry\n"
 				 "\n"
 				 "Defaults: --data data, --seed 1, --saves saves, --route DATA/routes/main.route.\n"
 				 "Type 'help' at the prompt for the command list.\n"
@@ -24,12 +25,12 @@ void usage() {
 
 void commands() {
 	std::cout << "title:  new | continue | load SLOT | retry | quit\n"
-				 "field:  n|e|s|w [COUNT] | walk MARKER | walk X Y | face DIR | talk | menu | look | status | wait MS\n"
+				 "field:  n|e|s|w [COUNT] | walk MARKER | walk X Y | face DIR | talk | chat | menu | look | status | wait MS\n"
 				 "event:  choose N | skip\n"
-				 "battle: attack M [eN] | use M ABILITY [eN|pN] | item M ITEM [eN|pN] | defend M | escape M | macro NAME | round | auto\n"
-				 "menu:   item ITEM MEMBER | equip MEMBER PIECE | unequip MEMBER SLOT | save manual_N | saves | close\n"
-				 "shop:   buy ID [N] | sell ID [N] | leave      inn: rest | close\n"
-				 "any:    set difficulty|reward|text|battle|shipped|auto VALUE | pacing | title\n";
+				 "battle: attack M [eN] | use M ABILITY [eN|pN] | item M ITEM [eN|pN] | defend M | escape M | macro NAME | round | auto | cancel\n"
+				 "menu:   item ITEM [MEMBER] | tech USER ABILITY [MEMBER] | equip MEMBER PIECE | unequip MEMBER SLOT | save manual_N | saves | close\n"
+				 "shop:   buy ID [N] | sell ID [N] | leave      inn: rest | close      name entry: name TEXT\n"
+				 "any:    set difficulty|reward|auto|text|battle|shipped|PROFILE_KEY VALUE | quests | codex | log | pacing | title\n";
 }
 
 bool parseSeed(const std::string& text, std::uint64_t& out) {
@@ -47,6 +48,7 @@ int main(int argc, char** argv) {
 	std::string route;
 	std::uint64_t seed = 1;
 	bool bot = false;
+	bool registry = false;
 	bool autoBattle = false;
 	std::optional<game::EncounterMode> mode;
 	for (int i = 1; i < argc; ++i) {
@@ -78,6 +80,8 @@ int main(int argc, char** argv) {
 			autoBattle = true;
 		} else if (arg == "--bot") {
 			bot = true;
+		} else if (arg == "--registry") {
+			registry = true;
 		} else {
 			std::cerr << "bad argument '" << arg << "' (try --help)\n";
 			return 2;
@@ -88,6 +92,11 @@ int main(int argc, char** argv) {
 	if (!data.ok()) {
 		std::cerr << data.error << "\n";
 		return 1;
+	}
+
+	if (registry) {
+		std::cout << game::registryText(data.value->registry);
+		return 0;
 	}
 
 	if (bot) {

@@ -1,0 +1,27 @@
+{
+	"objectives": [
+		{"id": "meet_guide", "text": "objective.meet_guide", "until": "tidewater.met_guide"},
+		{"id": "reach_cove", "text": "objective.reach_cove", "after": "tidewater.met_guide", "until": "cove.warden_beaten"},
+		{"id": "report_back", "text": "objective.report_back", "after": "cove.warden_beaten", "until": "tidewater.reported"},
+		{"id": "done", "text": "objective.done", "after": "tidewater.reported"}
+	],
+	"jobs": [
+		{"id": "lost_cache", "title": "job.lost_cache", "available": "tidewater.arrived", "accepted": "job.lost_cache.accepted", "completed": "job.lost_cache.done"}
+	],
+	"encyclopedia": [
+		{"id": "tidewater", "title": "codex.tidewater.title", "text": "codex.tidewater.text", "flag": "tidewater.arrived"},
+		{"id": "bell_warden", "title": "codex.bell_warden.title", "text": "codex.bell_warden.text", "flag": "cove.warden_seen"}
+	],
+	"party_talk": [
+		{"id": "reeds", "area": "reed_path", "after": "tidewater.met_guide", "lines": [
+			{"speaker": "mystic", "text": "talk.reeds.1"},
+			{"speaker": "medic", "text": "talk.reeds.2"}
+		]},
+		{"id": "chapter_one", "after": "tidewater.met_guide", "until": "cove.warden_beaten", "lines": [
+			{"speaker": "mystic", "text": "talk.chapter_one.1"}
+		]},
+		{"id": "after_bell", "after": "cove.warden_beaten", "lines": [
+			{"speaker": "medic", "text": "talk.after_bell.1"}
+		]}
+	]
+}

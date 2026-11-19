@@ -25,27 +25,12 @@ void weaken(Session& s) {
 }
 
 void fightToTheEnd(Session& s) {
-	for (int i = 0; i < 80 && s.mode() == Mode::Battle; ++i) {
-		s.autoRound();
-	}
+	test::fightToTheEnd(s);
 }
 
 // The real adventure with the boss event replaced by one that has no `lose` section.
 GameData withoutLoseBranch() {
-	GameData d = test::data();
-	std::vector<events::Source> sources;
-	for (const std::string& file : d.config.eventFiles) {
-		std::string text;
-		readFile("data/" + file, text);
-		if (file == "events/bell_cove.ev") {
-			text = "event cove_bell unskippable\n\tbattle warden\n\twin\n\t\tset cove.warden_beaten\n\tend\nend\n";
-		}
-		sources.push_back({file, text});
-	}
-	events::CompileResult compiled = events::compile(sources);
-	CHECK(compiled.ok());
-	d.program = compiled.program;
-	return d;
+	return test::withScript("events/bell_cove.ev", "event cove_bell unskippable\n\tbattle warden\n\twin\n\t\tset cove.warden_beaten\n\tend\nend\n");
 }
 
 }
@@ -168,8 +153,8 @@ TEST(shippedNamesSettingRendersTheGlossary) {
 	s.interact();
 	s.confirmLine();
 	CHECK(s.lineText().find("Bell Warden") != std::string::npos);
-	Settings settings = s.world().settings;
-	settings.showShippedNames = true;
-	CHECK(s.setSettings(settings).empty());
+	Profile profile = s.profile();
+	profile.showShippedNames = true;
+	CHECK(s.setProfile(profile).empty());
 	CHECK(s.lineText().find("BelWrdn") != std::string::npos);
 }

@@ -21,12 +21,14 @@
 		"guide_front": [5, 3],
 		"stall_front": [8, 3],
 		"inn_front": [3, 6],
-		"crate_front": [11, 6]
+		"crate_front": [11, 6],
+		"dock_front": [10, 3]
 	},
 	"exits": [{"at": [13, 4], "to": "reed_path", "marker": "west_gate"}],
 	"hooks": [
 		{"id": "arrival", "trigger": "load", "event": "tidewater_arrival", "block_flag": "tidewater.arrived"},
-		{"id": "guide", "at": [5, 2], "event": "tidewater_guide"}
+		{"id": "guide", "at": [5, 2], "event": "tidewater_guide"},
+		{"id": "dockhand", "at": [10, 2], "event": "tidewater_dockhand"}
 	],
 	"shops": [{"id": "tidewater_stall", "at": [8, 2], "stock": ["tonic", "clear_gel", "second_wind", "spark_flask", "grip_bands"], "sell_percent": 50}],
 	"rests": [{"id": "tidewater_inn", "at": [2, 6], "cost": 10}],

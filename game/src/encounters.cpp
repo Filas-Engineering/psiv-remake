@@ -99,7 +99,7 @@ bool inRearArc(Cell body, Facing facing, Cell point) {
 	return dot > 0 && cross <= dot;
 }
 
-std::string drawEncounter(EncounterStream& stream, const Zone& zone) {
+std::string drawEncounter(rules::Rng& stream, const Zone& zone) {
 	int total = 0;
 	for (const TableEntry& t : zone.table) {
 		total += t.weight;

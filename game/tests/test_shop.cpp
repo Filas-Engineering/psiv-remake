@@ -143,12 +143,12 @@ TEST(levelUpsReportLearnedAbilities) {
 	s.world().enemies.push_back(e);
 	s.walk(Facing::East);
 	CHECK(s.mode() == Mode::Battle);
-	for (int i = 0; i < 50 && s.mode() == Mode::Battle; ++i) {
-		s.autoRound();
-	}
+	test::fightToTheEnd(s);
 	CHECK(s.mode() == Mode::Field);
 	CHECK_EQ(s.world().member("medic")->level, 4);
-	CHECK(test::outputHas(s.drainOutput(), "Test Medic reached level 4 and learned Renew."));
+	const std::vector<Output> output = s.drainOutput();
+	CHECK(test::outputHas(output, "Test Medic reached level 4."));
+	CHECK(test::outputHas(output, "Test Medic learned Renew."));
 	CHECK(s.world().enemies.empty());
 	CHECK_EQ(s.world().graceMs, test::data().config.graceMs);
 }

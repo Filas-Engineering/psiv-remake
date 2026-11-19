@@ -39,6 +39,11 @@ void confirmLines(game::Session& session);
 // Starts a new game, then moves the leader to a marker with no visible enemies around.
 void placeParty(game::Session& session, const std::string& area, const std::string& marker, game::Facing facing);
 bool outputHas(const std::vector<game::Output>& output, const std::string& fragment);
+// One round the way the terminal plays it: the auto macro while it runs, otherwise core's policy.
+std::vector<rules::Event> autoRound(game::Session& session);
+void fightToTheEnd(game::Session& session);
+// The adventure with one script file replaced; compiled without the registry, so tests can use any names.
+game::GameData withScript(const std::string& file, const std::string& text);
 
 }
 

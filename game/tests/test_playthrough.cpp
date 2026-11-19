@@ -27,6 +27,16 @@ TEST(scriptedPlaythroughReachesItsFixedEnding) {
 	CHECK(text.find("That is a BelWrdn!") != std::string::npos);
 	CHECK(text.find("the tide is the only sound") != std::string::npos);
 	CHECK(text.find("Quiet nights again") != std::string::npos);
+	// The poison from the first reed battle is carried out of it and cured by the campfire rest.
+	const std::size_t poisoned = text.find("[Poison 3]");
+	const std::size_t campfire = text.find("The warmth draws the ache out of everyone.");
+	CHECK(poisoned != std::string::npos && campfire != std::string::npos && poisoned < campfire);
+	CHECK(text.find("[Poison", campfire) == std::string::npos);
+	CHECK(text.find("Reed Peddler: Psst.") != std::string::npos);
+	CHECK(text.find("Auto-battle on with tempest.") != std::string::npos);
+	CHECK(text.find("Auto-battle stops: a macro entry cannot be paid.") != std::string::npos);
+	CHECK(text.find("Job completed: The dockhand's lost crate.") != std::string::npos);
+	CHECK(text.find("Clear data recorded.") != std::string::npos);
 	CHECK_EQ(s.pacing().bosses().size(), 1u);
 	CHECK_EQ(s.pacing().bosses()[0].averageLevelX100, 325);
 	CHECK_EQ(s.pacing().totalBattles(), 5);

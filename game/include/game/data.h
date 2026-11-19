@@ -5,8 +5,12 @@
 
 #include "events/glossary.h"
 #include "events/program.h"
+#include "events/registry.h"
+#include "events/strings.h"
 #include "rules/database.h"
 #include "rules/result.h"
+#include "rules/setup.h"
+#include "rules/text.h"
 
 #include <cstdint>
 #include <map>
@@ -21,6 +25,66 @@ struct Boss {
 	std::string flag;
 };
 
+// A flag range (FLD-072, UI-012): holds while `after` is set (or empty) and `until` is not set (or empty).
+struct FlagRange {
+	std::string after;
+	std::string until;
+};
+
+// The main objective line of the quest log; the last listed one whose range holds is shown.
+struct Objective {
+	std::string id;
+	std::string text;
+	FlagRange range;
+};
+
+// A guild job. Its state follows its flags and never moves back (UI-012).
+struct Job {
+	std::string id;
+	std::string title;
+	// Empty: available from the start.
+	std::string availableFlag;
+	std::string acceptedFlag;
+	std::string completedFlag;
+};
+
+struct EncyclopediaEntry {
+	std::string id;
+	std::string title;
+	std::string text;
+	std::string flag;
+};
+
+struct TalkLine {
+	std::string speaker;
+	std::string text;
+};
+
+// A party talk set (FLD-072). Without an area it is a chapter set, the fallback for its flag range.
+struct TalkSet {
+	std::string id;
+	std::string area;
+	FlagRange range;
+	std::vector<TalkLine> lines;
+};
+
+// journal.json. Every text is a key of the game's text table.
+struct Journal {
+	std::vector<Objective> objectives;
+	std::vector<Job> jobs;
+	std::vector<EncyclopediaEntry> encyclopedia;
+	std::vector<TalkSet> partyTalk;
+};
+
+// Names the scripts may use for presentation; the engine owns the assets behind them.
+struct PresentationNames {
+	std::vector<std::string> audio;
+	std::vector<std::string> cameras;
+	std::vector<std::string> layouts;
+	std::vector<std::string> animations;
+	std::vector<std::string> portraits;
+};
+
 // game.json: everything about the adventure that is not an area, a script or battle data.
 struct GameConfig {
 	std::string title;
@@ -28,8 +92,20 @@ struct GameConfig {
 	std::vector<std::string> areaFiles;
 	std::vector<std::string> eventFiles;
 	std::string glossaryFile;
-	// Display names for script speaker ids.
-	std::map<std::string, std::string> speakers;
+	// The dialogue string table (events format) and the game's own text table (core format).
+	std::string stringsFile;
+	std::string textFile;
+	std::string journalFile;
+	// Script actors that are not characters; each needs a `speaker.<id>` text.
+	std::vector<std::string> actors;
+	PresentationNames presentation;
+	// Every flag and variable a script, hook or journal entry uses, except chest flags, which the areas declare.
+	std::vector<std::string> flags;
+	std::map<std::string, int> vars;
+	// The flag the last story event sets; control returning after it writes the clear-data record (SAV-024).
+	std::string clearFlag;
+	// Scripted ends (BAT-013) for event battles, by encounter. The script format has no way to say one.
+	std::map<std::string, rules::ScriptedEnd> scriptedEnds;
 
 	std::string startArea;
 	std::string startMarker;
@@ -59,8 +135,14 @@ struct GameConfig {
 struct GameData {
 	GameConfig config;
 	rules::Database db;
+	// Core's English table merged with the game's own keys.
+	rules::TextTable text;
+	events::StringTable strings;
 	events::Program program;
+	// Built from the data; the scripts were compiled against it.
+	events::Registry registry;
 	events::Glossary glossary;
+	Journal journal;
 	std::map<std::string, Area> areas;
 	// Battle data hash mixed with the script fingerprint and the area texts.
 	std::uint64_t contentHash = 0;
@@ -68,10 +150,20 @@ struct GameData {
 	const Area* area(const std::string& id) const;
 	const Boss* boss(const std::string& encounter) const;
 	int price(const std::string& id) const;
+	// Shop and rest point ids are unique across areas, so scripts can name them without an area.
+	const Shop* shop(const std::string& id) const;
+	const RestPoint* rest(const std::string& id) const;
 };
 
-// Loads game.json from `directory`, then the battle data, areas, scripts and glossary it names, and checks
-// every cross-reference (exits, hooks, encounters, warps, shop stock).
+// Loads game.json from `directory`, then the battle data, text tables, areas, journal, glossary and scripts it
+// names, and checks every cross-reference. The scripts compile against a registry built from the rest, and must
+// pass the strict check: string IDs only, no warnings, tables and glossary consistent.
 rules::Result<GameData> loadGameData(const std::string& directory);
+
+// The registry in the events registry file format, for `event_cli check --registry`.
+std::string registryText(const events::Registry& registry);
+
+// Every key of the game's own text table the session can emit.
+const std::vector<std::string>& sessionTextKeys();
 
 }

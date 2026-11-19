@@ -1,5 +1,8 @@
 #include "test.h"
 
+#include "events/compiler.h"
+#include "game/save.h"
+
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -63,6 +66,43 @@ bool outputHas(const std::vector<game::Output>& output, const std::string& fragm
 		}
 	}
 	return false;
+}
+
+std::vector<rules::Event> autoRound(game::Session& session) {
+	if (!session.fillFromAuto()) {
+		session.fillFromPolicy();
+	}
+	return session.resolveRound();
+}
+
+void fightToTheEnd(game::Session& session) {
+	for (int i = 0; i < 80 && session.mode() == game::Mode::Battle; ++i) {
+		autoRound(session);
+	}
+}
+
+game::GameData withScript(const std::string& file, const std::string& text) {
+	game::GameData d = data();
+	std::vector<events::Source> sources;
+	bool replaced = false;
+	for (const std::string& f : d.config.eventFiles) {
+		std::string source;
+		game::readFile("data/" + f, source);
+		if (f == file) {
+			source = text;
+			replaced = true;
+		}
+		sources.push_back({f, source});
+	}
+	if (!replaced) {
+		sources.push_back({file, text});
+	}
+	events::CompileResult compiled = events::compile(sources);
+	if (!compiled.ok()) {
+		fail(__FILE__, __LINE__, "test scripts do not compile: " + events::format_diagnostic(compiled.diagnostics[0]));
+	}
+	d.program = compiled.program;
+	return d;
 }
 
 }

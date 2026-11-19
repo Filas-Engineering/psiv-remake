@@ -3,6 +3,7 @@
 #include "rules/character.h"
 #include "rules/combo.h"
 #include "rules/macro.h"
+#include "rules/rng.h"
 #include "rules/types.h"
 
 #include <cstdint>
@@ -29,32 +30,17 @@ Cell stepFrom(Cell cell, Facing facing);
 const char* toString(Facing facing);
 bool parseFacing(const std::string& text, Facing& out);
 
-// SplitMix64, kept in the game so its state can be saved (ENC-006).
-struct EncounterStream {
-	std::uint64_t state = 0;
-
-	std::uint64_t next();
-	// Inclusive on both ends.
-	int range(int low, int high);
-};
-
-enum class TextSpeed { Slow, Normal, Fast, Instant };
-enum class BattleSpeed { X1, X1_5, X2, X3 };
-
+// The settings saved per game (SAV-005). Everything else is in the global profile (profile.h).
 struct Settings {
-	// Saved per game (SAV-005).
 	std::string difficulty = "original";
 	rules::RewardMultiplier rewardMultiplier = rules::RewardMultiplier::X1;
-	// Global profile, not saved per game (SAV-005).
-	TextSpeed textSpeed = TextSpeed::Normal;
-	BattleSpeed battleSpeed = BattleSpeed::X1;
-	bool showShippedNames = false;
 };
 
-const char* toString(TextSpeed speed);
-const char* toString(BattleSpeed speed);
-bool parseTextSpeed(const std::string& text, TextSpeed& out);
-bool parseBattleSpeed(const std::string& text, BattleSpeed& out);
+// A guild job's state only moves forward (UI-012); a job that is not yet available has no entry.
+enum class JobState { Available, Accepted, Completed };
+
+const char* toString(JobState state);
+bool parseJobState(const std::string& text, JobState& out);
 
 enum class EnemyState { Idle, Chasing, Returning };
 
@@ -89,9 +75,10 @@ struct World {
 	std::vector<rules::PartyMember> roster;
 	// Character ids of the active party, in battle order.
 	std::vector<std::string> lineup;
+	// Names given at name entry, by character id.
+	std::map<std::string, std::string> memberNames;
 	rules::Inventory items;
-	// Unworn equipment, by id.
-	std::map<std::string, int> equipmentBag;
+	rules::EquipmentBag equipmentBag;
 	int money = 0;
 
 	std::vector<rules::Macro> macros;
@@ -111,7 +98,11 @@ struct World {
 	// Random mode distance counter and the threshold it is racing (ENC-040).
 	int randomCounter = 0;
 	int randomThreshold = 0;
-	EncounterStream encounterStream;
+	rules::Rng encounterStream{0};
+
+	std::map<std::string, JobState> jobs;
+	// Encyclopedia entries, kept once unlocked even if their flag is cleared later (TXT-041).
+	std::set<std::string> unlocked;
 
 	std::int64_t playTimeMs = 0;
 	Settings settings;
