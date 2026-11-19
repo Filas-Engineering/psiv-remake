@@ -25,7 +25,7 @@ The scope does not describe the menu tree. UI-003 proposes one; UI-004 is the sc
 | UI-010 | Opening any menu takes at most 100 ms. Menu navigation responds within one frame of input | Proposed (spec) | S-PILLAR-1 |
 | UI-011 | The combo log screen shows discovered combinations with their participants and required abilities, and offers "make macro" ([BAT-065](battle.md)). Undiscovered combinations show as locked entries with a total count | Proposed (spec) | S-CONTENT, S-SYS-BATTLE |
 | UI-012 | The quest log shows the current main objective and the guild jobs. The main objective is a short line chosen by story flag range. Guild jobs show as available, accepted or completed. No objective line reveals a story beat the player has not reached | Proposed (scope) | S-SYS-QOL, S-CONTENT |
-| UI-016 | To measure: the original's menu tree, labels and depth for every field and battle menu. Method: a reference build session that records every screen; compared with UI-003 so nothing the original offers is missing | To measure | S-GOALS |
+| UI-016 | To measure: the original's menu tree, labels and depth for every field and battle menu. Method: a reference build session that records every screen; compared with UI-003 so nothing the original offers is missing. Feeds UI-003 | To measure | S-GOALS |
 
 ## Settings
 
