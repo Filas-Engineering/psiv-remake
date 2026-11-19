@@ -1,4 +1,5 @@
 #include "fixtures.h"
+#include "rules/formulas.h"
 #include "test.h"
 
 #include <algorithm>
@@ -126,5 +127,27 @@ TEST(macroOrderMakesSupportCombosReliable) {
 		const std::vector<Event> combos = ofType(events, EventType::ComboTriggered);
 		CHECK(!combos.empty() && combos[0].ability == "mending_chorus");
 		CHECK_EQ(ofType(events, EventType::Healed).size(), std::size_t(6));
+	}
+}
+
+TEST(comboAveragesEveryParticipantsStats) {
+	Database db = orderedData("");
+	db.characters["scout"].base.mental = 200;
+	for (std::uint64_t seed = 1; seed <= 5; ++seed) {
+		Battle battle = makeBattle(db, {"brass_warden"}, seed);
+		battle.combatant(kFirstEnemy).hp = 2000;
+		const std::vector<Event> events = sparkThenGust(battle);
+		CHECK_EQ(ofType(events, EventType::ComboTriggered).size(), std::size_t(1));
+		const int mental = (battle.combatant(kMystic).stats.mental + battle.combatant(kScout).stats.mental) / 2;
+		const int low = formulas::defended(formulas::elementalDamage(80, mental, 10, 100, formulas::kVarianceMin));
+		const int high = formulas::defended(formulas::elementalDamage(80, mental, 10, 100, formulas::kVarianceMax));
+		bool found = false;
+		for (const Event& e : ofType(events, EventType::DamageDealt)) {
+			if (e.target == kFirstEnemy && e.element == Element::Shock) {
+				found = true;
+				CHECK(e.amount >= low && e.amount <= high);
+			}
+		}
+		CHECK(found);
 	}
 }

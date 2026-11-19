@@ -11,6 +11,14 @@ struct Stats {
 	int dexterity = 1;
 	int defense = 0;
 	int level = 1;
+	// Percent chance to land a critical hit with physical damage.
+	int critical = 0;
+	// Percent taken off the hit chance of physical attacks aimed at this combatant.
+	int evasion = 0;
+
+	static Stats filled(int value) {
+		return {value, value, value, value, value, value, value, value, value, value};
+	}
 };
 
 }

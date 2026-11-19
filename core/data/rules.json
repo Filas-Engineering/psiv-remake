@@ -1,0 +1,6 @@
+{
+	"surprise_rounds": 1,
+	"critical_damage_percent": 150,
+	"experience_split": "each_living",
+	"escape": {"base_chance": 50, "agility_factor": 2, "min_chance": 10, "max_chance": 90}
+}

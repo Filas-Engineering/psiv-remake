@@ -41,16 +41,27 @@ int Battle::tryCombo(const std::vector<int>& order, std::size_t index, std::vect
 		if (targets.empty()) {
 			continue;
 		}
-		for (int actor : participants) {
-			payCost(actor, *db_->ability(commands_[actor].id));
-		}
 		Event& e = emit(out, EventType::ComboTriggered);
 		e.actor = lead;
 		e.ability = combo->id;
 		e.target = targets.size() == 1 ? targets.front() : -1;
 		e.participants = participants;
 		e.firstDiscovery = comboLog_ && comboLog_->discover(recipe->id);
-		applyEffects(lead, combo->effects, targets, false, out);
+		Attacker team;
+		for (int actor : participants) {
+			payCost(actor, *db_->ability(commands_[actor].id), out);
+			const Attacker member = attackerOf(actor);
+			team.strength += member.strength;
+			team.mental += member.mental;
+			team.dexterity += member.dexterity;
+			team.critical += member.critical;
+		}
+		const int count = static_cast<int>(participants.size());
+		team.strength /= count;
+		team.mental /= count;
+		team.dexterity /= count;
+		team.critical /= count;
+		applyEffects(lead, team, combo->effects, targets, false, out);
 		return static_cast<int>(size);
 	}
 	return 0;

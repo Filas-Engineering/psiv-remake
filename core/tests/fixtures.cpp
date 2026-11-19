@@ -27,8 +27,8 @@ const Database& data() {
 
 std::map<std::string, std::string> dataTexts() {
 	std::map<std::string, std::string> files;
-	for (const char* name : {"statuses.json", "abilities.json", "items.json", "party.json", "enemies.json", "combos.json"}) {
-		std::ifstream in(std::string("data/") + name);
+	for (const std::string& name : dataFileNames()) {
+		std::ifstream in("data/" + name);
 		std::ostringstream text;
 		text << in.rdbuf();
 		files[name] = text.str();
@@ -36,14 +36,21 @@ std::map<std::string, std::string> dataTexts() {
 	return files;
 }
 
-namespace {
-
-Battle create(const Database& db, const std::vector<std::string>& enemies, std::uint64_t seed, const Inventory& inventory, ComboLog* log) {
-	std::vector<PartyMember> party;
+BattleSetup makeSetup(const Database& db, const std::vector<std::string>& enemies, std::uint64_t seed) {
+	BattleSetup setup;
 	for (const std::string& id : db.lineup) {
-		party.push_back(makePartyMember(db, *db.character(id), 1));
+		setup.party.push_back(makePartyMember(db, *db.character(id), 1));
 	}
-	Result<Battle> battle = Battle::create(db, party, enemies, inventory, seed, log);
+	for (const std::string& id : enemies) {
+		setup.enemies.push_back({id, id});
+	}
+	setup.inventory = db.startingInventory;
+	setup.seed = seed;
+	return setup;
+}
+
+Battle makeBattle(const Database& db, const BattleSetup& setup, ComboLog* log) {
+	Result<Battle> battle = Battle::create(db, setup, log);
 	if (!battle.ok()) {
 		std::printf("cannot create battle: %s\n", battle.error.c_str());
 		std::exit(1);
@@ -51,14 +58,14 @@ Battle create(const Database& db, const std::vector<std::string>& enemies, std::
 	return *battle.value;
 }
 
-}
-
 Battle makeBattle(const Database& db, const std::vector<std::string>& enemies, std::uint64_t seed, const Inventory& inventory) {
-	return create(db, enemies, seed, inventory, nullptr);
+	BattleSetup setup = makeSetup(db, enemies, seed);
+	setup.inventory = inventory;
+	return makeBattle(db, setup, nullptr);
 }
 
 Battle makeBattle(const Database& db, const std::vector<std::string>& enemies, std::uint64_t seed, ComboLog* log) {
-	return create(db, enemies, seed, db.startingInventory, log);
+	return makeBattle(db, makeSetup(db, enemies, seed), log);
 }
 
 void othersDefend(Battle& battle) {
@@ -100,24 +107,19 @@ std::optional<Event> firstBy(const std::vector<Event>& events, EventType type, i
 	return std::nullopt;
 }
 
-std::string serialize(const std::vector<Event>& events) {
-	std::ostringstream s;
-	for (const Event& e : events) {
-		s << static_cast<int>(e.type) << ' ' << e.round << ' ' << e.actor << ' ' << e.target << ' ' << e.ability << ' '
-			<< e.status << ' ' << e.amount << ' ' << static_cast<int>(e.effectiveness) << ' ' << e.succeeded << '\n';
+std::vector<Event> playRound(Battle& battle) {
+	for (int i = 0; i < battle.partyCount(); ++i) {
+		if (battle.combatant(i).alive() && battle.sideActsNextRound(Side::Party)) {
+			battle.setCommand(i, autoCommand(battle, i));
+		}
 	}
-	return s.str();
+	return battle.resolveRound();
 }
 
 std::vector<Event> playToEnd(Battle& battle, int maxRounds) {
 	std::vector<Event> all;
 	while (battle.outcome() == Outcome::Ongoing && battle.round() < maxRounds) {
-		for (int i = 0; i < battle.partyCount(); ++i) {
-			if (battle.combatant(i).alive()) {
-				battle.setCommand(i, autoCommand(battle, i));
-			}
-		}
-		const std::vector<Event> events = battle.resolveRound();
+		const std::vector<Event> events = playRound(battle);
 		all.insert(all.end(), events.begin(), events.end());
 	}
 	return all;

@@ -12,8 +12,8 @@ TEST(sameSeedAndCommandsGiveTheSameBattle) {
 		ComboLog logB;
 		Battle a = makeBattle(data(), {"brass_warden", "bog_wisp"}, seed, &logA);
 		Battle b = makeBattle(data(), {"brass_warden", "bog_wisp"}, seed, &logB);
-		const std::string runA = serialize(playToEnd(a, 40));
-		const std::string runB = serialize(playToEnd(b, 40));
+		const std::string runA = serializeEvents(playToEnd(a, 40));
+		const std::string runB = serializeEvents(playToEnd(b, 40));
 		CHECK(!runA.empty());
 		CHECK_EQ(runA, runB);
 		CHECK(a.outcome() == b.outcome());

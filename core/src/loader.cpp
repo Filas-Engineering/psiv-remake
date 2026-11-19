@@ -2,6 +2,7 @@
 
 #include "loader_reader.h"
 #include "rules/battle.h"
+#include "rules/formulas.h"
 #include "rules/names.h"
 
 #include <algorithm>
@@ -16,7 +17,27 @@ namespace {
 using loader::Reader;
 using Type = JsonValue::Type;
 
-const char* const kFiles[] = {"statuses.json", "abilities.json", "items.json", "party.json", "enemies.json", "combos.json"};
+const std::vector<std::string> kFiles = {
+	"rules.json", "statuses.json", "abilities.json", "items.json", "equipment.json", "party.json", "enemies.json", "combos.json", "difficulties.json"};
+
+const char* const kStatKeys[] = {"hp", "tp", "strength", "mental", "agility", "dexterity", "defense"};
+
+int* statField(Stats& stats, const std::string& key) {
+	if (key == "hp") return &stats.maxHp;
+	if (key == "tp") return &stats.maxTp;
+	if (key == "strength") return &stats.strength;
+	if (key == "mental") return &stats.mental;
+	if (key == "agility") return &stats.agility;
+	if (key == "dexterity") return &stats.dexterity;
+	if (key == "defense") return &stats.defense;
+	if (key == "critical") return &stats.critical;
+	if (key == "evasion") return &stats.evasion;
+	return nullptr;
+}
+
+bool contains(const std::vector<std::string>& list, const std::string& value) {
+	return std::find(list.begin(), list.end(), value) != list.end();
+}
 
 template <class Map, class Value>
 void insertUnique(Map& map, const std::string& id, Value value, Reader& reader, const JsonValue& at) {
@@ -33,7 +54,7 @@ void parseStats(Reader& reader, const JsonValue& object, const char* key, Stats&
 		return;
 	}
 	const int minimum = growth ? 0 : 1;
-	reader.rejectUnknownKeys(*stats, {"hp", "tp", "strength", "mental", "agility", "dexterity", "defense", "level"});
+	reader.rejectUnknownKeys(*stats, {"hp", "tp", "strength", "mental", "agility", "dexterity", "defense", "level", "critical", "evasion"});
 	reader.integer(*stats, "hp", out.maxHp, true, minimum, 99999);
 	reader.integer(*stats, "tp", out.maxTp, true, 0, 9999);
 	reader.integer(*stats, "strength", out.strength, true, minimum, 999);
@@ -41,8 +62,12 @@ void parseStats(Reader& reader, const JsonValue& object, const char* key, Stats&
 	reader.integer(*stats, "agility", out.agility, true, minimum, 999);
 	reader.integer(*stats, "dexterity", out.dexterity, true, minimum, 999);
 	reader.integer(*stats, "defense", out.defense, true, 0, 999);
+	reader.integer(*stats, "critical", out.critical, false, 0, growth ? 10 : 100);
+	reader.integer(*stats, "evasion", out.evasion, false, 0, growth ? 10 : 100);
 	if (!growth) {
 		reader.integer(*stats, "level", out.level, false, 1, 99);
+	} else if (stats->find("level")) {
+		reader.fail(*stats->find("level"), "growth has no level");
 	}
 }
 
@@ -79,6 +104,28 @@ bool readStatusRef(Reader& reader, const Database& db, const JsonValue& object, 
 	return true;
 }
 
+void parseStatusResist(Reader& reader, const Database& db, const JsonValue& object, StatusResists& out) {
+	const JsonValue* resists = reader.get(object, "status_resist", Type::Object, false);
+	if (!resists) {
+		return;
+	}
+	for (std::size_t i = 0; i < resists->keys.size(); ++i) {
+		const std::string& id = resists->keys[i];
+		if (!db.status(id)) {
+			reader.fail(resists->values[i], "status_resist names missing status '" + id + "'");
+			continue;
+		}
+		if (id == kDefeatedStatus) {
+			reader.fail(resists->values[i], "the defeated status cannot be resisted");
+			continue;
+		}
+		int percent = 0;
+		if (reader.integer(*resists, id.c_str(), percent, true, 0, 100)) {
+			out[id] = percent;
+		}
+	}
+}
+
 void parseEffects(Reader& reader, const Database& db, const JsonValue& object, std::vector<Effect>& out) {
 	const std::vector<const JsonValue*> entries = reader.objects(object, "effects", true);
 	if (entries.empty() && object.find("effects")) {
@@ -96,6 +143,10 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, s
 		}
 		switch (effect.kind) {
 		case EffectKind::PhysicalDamage:
+			reader.rejectUnknownKeys(*entry, {"type", "power", "critical"});
+			reader.integer(*entry, "power", effect.power, true, 1, 9999);
+			reader.integer(*entry, "critical", effect.critical, false, 0, 100);
+			break;
 		case EffectKind::Heal:
 			reader.rejectUnknownKeys(*entry, {"type", "power"});
 			reader.integer(*entry, "power", effect.power, true, 1, 9999);
@@ -154,6 +205,27 @@ bool readTargeting(Reader& reader, const JsonValue& object, Targeting& out) {
 void checkReviveTargeting(Reader& reader, const JsonValue& at, Targeting targeting, const std::vector<Effect>& effects) {
 	if (effectsRevive(effects) && targeting != Targeting::OneAlly && targeting != Targeting::AllAllies) {
 		reader.fail(at, "revive effects need target one_ally or all_allies");
+	}
+}
+
+void parseRules(Reader& reader, const JsonValue& root, Database& db) {
+	BattleRules& rules = db.battleRules;
+	reader.rejectUnknownKeys(root, {"surprise_rounds", "critical_damage_percent", "experience_split", "escape"});
+	reader.integer(root, "surprise_rounds", rules.surpriseRounds, true, 0, 9);
+	reader.integer(root, "critical_damage_percent", rules.criticalDamagePercent, true, 100, 400);
+	std::string split;
+	if (reader.string(root, "experience_split", split) && !parseExperienceSplit(split, rules.experienceSplit)) {
+		reader.fail(*root.find("experience_split"), "unknown experience split '" + split + "'");
+	}
+	if (const JsonValue* escape = reader.get(root, "escape", Type::Object, true)) {
+		reader.rejectUnknownKeys(*escape, {"base_chance", "agility_factor", "min_chance", "max_chance"});
+		reader.integer(*escape, "base_chance", rules.escape.baseChance, true, 0, 100);
+		reader.integer(*escape, "agility_factor", rules.escape.agilityFactor, true, 0, 100);
+		reader.integer(*escape, "min_chance", rules.escape.minChance, true, 0, 100);
+		reader.integer(*escape, "max_chance", rules.escape.maxChance, true, 0, 100);
+		if (rules.escape.minChance > rules.escape.maxChance) {
+			reader.fail(*escape, "min_chance is above max_chance");
+		}
 	}
 }
 
@@ -231,6 +303,65 @@ void parseItems(Reader& reader, const JsonValue& root, Database& db) {
 	}
 }
 
+void parseEquipment(Reader& reader, const JsonValue& root, Database& db) {
+	reader.rejectUnknownKeys(root, {"equipment"});
+	for (const JsonValue* entry : reader.objects(root, "equipment", true)) {
+		EquipmentDef piece;
+		if (!reader.string(*entry, "id", piece.id)) {
+			continue;
+		}
+		reader.setContext("equipment '" + piece.id + "'");
+		reader.rejectUnknownKeys(*entry, {"id", "name", "slot", "category", "stats", "element", "attack", "abilities", "status_resist"});
+		reader.string(*entry, "name", piece.name);
+		std::string slot;
+		if (reader.string(*entry, "slot", slot) && !parseEquipSlot(slot, piece.slot)) {
+			reader.fail(*entry->find("slot"), "unknown slot '" + slot + "'");
+		}
+		reader.string(*entry, "category", piece.category);
+		if (const JsonValue* stats = reader.get(*entry, "stats", Type::Object, false)) {
+			for (std::size_t i = 0; i < stats->keys.size(); ++i) {
+				int* field = statField(piece.bonus, stats->keys[i]);
+				if (!field) {
+					reader.fail(stats->values[i], "unknown stat '" + stats->keys[i] + "'");
+					continue;
+				}
+				reader.integer(*stats, stats->keys[i].c_str(), *field, true, -999, 999);
+			}
+		}
+		const bool weapon = piece.slot == EquipSlot::Weapon;
+		std::string element;
+		if (reader.string(*entry, "element", element, false)) {
+			if (!weapon) {
+				reader.fail(*entry->find("element"), "only weapons have an element");
+			} else if (!parseElement(element, piece.element) || piece.element == Element::None) {
+				reader.fail(*entry->find("element"), "unknown element '" + element + "'");
+			}
+		}
+		if (reader.string(*entry, "attack", piece.attack, false)) {
+			const AbilityDef* attack = db.ability(piece.attack);
+			if (!weapon) {
+				reader.fail(*entry->find("attack"), "only weapons have an attack");
+			} else if (!attack) {
+				reader.fail(*entry->find("attack"), "names missing ability '" + piece.attack + "'");
+			} else if (attack->kind != AbilityKind::Attack) {
+				reader.fail(*entry->find("attack"), "attack '" + piece.attack + "' must have kind attack");
+			}
+		}
+		piece.abilities = reader.strings(*entry, "abilities", false);
+		for (const std::string& id : piece.abilities) {
+			const AbilityDef* ability = db.ability(id);
+			if (!ability) {
+				reader.fail(*entry->find("abilities"), "names missing ability '" + id + "'");
+			} else if (ability->kind != AbilityKind::Technique && ability->kind != AbilityKind::Skill) {
+				reader.fail(*entry->find("abilities"), "ability '" + id + "' must be a technique or a skill");
+			}
+		}
+		parseStatusResist(reader, db, *entry, piece.statusResist);
+		insertUnique(db.equipment, piece.id, piece, reader, *entry);
+		reader.setContext("");
+	}
+}
+
 void readBasicAttack(Reader& reader, const Database& db, const JsonValue& entry, std::string& out) {
 	if (!reader.string(entry, "basic_attack", out)) {
 		return;
@@ -255,6 +386,77 @@ void readAbilityList(Reader& reader, const Database& db, const JsonValue& entry,
 	}
 }
 
+void parseLearns(Reader& reader, const Database& db, const JsonValue& entry, CharacterDef& character) {
+	for (const JsonValue* learnEntry : reader.objects(entry, "learns", false)) {
+		LearnedAbility learned;
+		reader.rejectUnknownKeys(*learnEntry, {"level", "ability"});
+		reader.integer(*learnEntry, "level", learned.level, true, 2, formulas::kMaxLevel);
+		if (!reader.string(*learnEntry, "ability", learned.ability)) {
+			continue;
+		}
+		const AbilityDef* ability = db.ability(learned.ability);
+		if (!ability) {
+			reader.fail(*learnEntry, "learns missing ability '" + learned.ability + "'");
+		} else if (ability->kind != AbilityKind::Technique && ability->kind != AbilityKind::Skill) {
+			reader.fail(*learnEntry, "learned ability '" + learned.ability + "' must be a technique or a skill");
+		}
+		bool known = contains(character.abilities, learned.ability);
+		for (const LearnedAbility& other : character.learns) {
+			known = known || other.ability == learned.ability;
+		}
+		if (known) {
+			reader.fail(*learnEntry, "ability '" + learned.ability + "' is already known or learned");
+		}
+		character.learns.push_back(learned);
+	}
+}
+
+void parseCharacterEquipment(Reader& reader, const Database& db, const JsonValue& entry, CharacterDef& character) {
+	character.equipCategories = reader.strings(entry, "equip", false);
+	for (const std::string& category : character.equipCategories) {
+		bool used = false;
+		for (const auto& [id, piece] : db.equipment) {
+			used = used || piece.category == category;
+		}
+		if (!used) {
+			reader.fail(*entry.find("equip"), "no equipment has category '" + category + "'");
+		}
+	}
+	character.startingEquipment = reader.strings(entry, "equipment", false);
+	std::set<EquipSlot> slots;
+	for (const std::string& id : character.startingEquipment) {
+		const EquipmentDef* piece = db.equipmentPiece(id);
+		if (!piece) {
+			reader.fail(*entry.find("equipment"), "names missing equipment '" + id + "'");
+			continue;
+		}
+		if (!contains(character.equipCategories, piece->category)) {
+			reader.fail(*entry.find("equipment"), "cannot equip '" + id + "' (category '" + piece->category + "')");
+		}
+		if (!slots.insert(piece->slot).second) {
+			reader.fail(*entry.find("equipment"), "more than one piece for slot '" + std::string(toString(piece->slot)) + "'");
+		}
+	}
+}
+
+// Every ability the character can ever use: starting, learned, or granted by equipment it may wear.
+bool canEverKnow(const Database& db, const CharacterDef& character, const std::string& abilityId) {
+	if (contains(character.abilities, abilityId)) {
+		return true;
+	}
+	for (const LearnedAbility& learned : character.learns) {
+		if (learned.ability == abilityId) {
+			return true;
+		}
+	}
+	for (const auto& [id, piece] : db.equipment) {
+		if (contains(character.equipCategories, piece.category) && contains(piece.abilities, abilityId)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void parseCharacters(Reader& reader, const JsonValue& root, Database& db) {
 	for (const JsonValue* entry : reader.objects(root, "characters", true)) {
 		CharacterDef character;
@@ -262,20 +464,88 @@ void parseCharacters(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("character '" + character.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "base", "growth", "basic_attack", "abilities", "affinities"});
+		reader.rejectUnknownKeys(*entry, {"id", "name", "base", "growth", "basic_attack", "abilities", "learns", "affinities", "status_resist", "equip", "equipment"});
 		reader.string(*entry, "name", character.name);
 		parseStats(reader, *entry, "base", character.base, false);
 		parseStats(reader, *entry, "growth", character.growth, true);
 		readBasicAttack(reader, db, *entry, character.basicAttack);
 		readAbilityList(reader, db, *entry, character.abilities, false);
+		parseLearns(reader, db, *entry, character);
 		parseAffinities(reader, *entry, character.affinities);
+		parseStatusResist(reader, db, *entry, character.statusResist);
+		parseCharacterEquipment(reader, db, *entry, character);
 		insertUnique(db.characters, character.id, character, reader, *entry);
 		reader.setContext("");
 	}
 }
 
+bool targetFits(MacroTargetKind target, CommandKind command, Targeting targeting) {
+	if (target == MacroTargetKind::Default) {
+		return true;
+	}
+	switch (command) {
+	case CommandKind::Attack:
+		return target == MacroTargetKind::Enemy || target == MacroTargetKind::All;
+	case CommandKind::Ability:
+	case CommandKind::Item:
+		switch (targeting) {
+		case Targeting::OneEnemy:
+		case Targeting::EnemyGroup:
+			return target == MacroTargetKind::Enemy;
+		case Targeting::AllEnemies:
+		case Targeting::AllAllies:
+			return target == MacroTargetKind::All;
+		case Targeting::OneAlly:
+			return target == MacroTargetKind::Self || target == MacroTargetKind::Member;
+		case Targeting::Self:
+			return target == MacroTargetKind::Self;
+		}
+		return false;
+	case CommandKind::None:
+	case CommandKind::Defend:
+	case CommandKind::Escape:
+		return false;
+	}
+	return false;
+}
+
+void parseMacroTarget(Reader& reader, const Database& db, const JsonValue& entry, MacroTarget& out) {
+	const JsonValue* target = entry.find("target");
+	if (!target) {
+		return;
+	}
+	if (target->is(Type::String)) {
+		if (target->string == "self") {
+			out.kind = MacroTargetKind::Self;
+		} else if (target->string == "all") {
+			out.kind = MacroTargetKind::All;
+		} else {
+			reader.fail(*target, "unknown target '" + target->string + "'");
+		}
+		return;
+	}
+	if (!target->is(Type::Object)) {
+		reader.fail(*target, "target must be \"self\", \"all\", {\"enemy\": slot} or {\"member\": character}");
+		return;
+	}
+	reader.rejectUnknownKeys(*target, {"enemy", "member"});
+	if (target->keys.size() != 1) {
+		reader.fail(*target, "target needs exactly one of 'enemy' or 'member'");
+		return;
+	}
+	if (target->find("enemy")) {
+		out.kind = MacroTargetKind::Enemy;
+		reader.integer(*target, "enemy", out.enemySlot, true, 0, kMaxEnemies - 1);
+	} else if (target->find("member")) {
+		out.kind = MacroTargetKind::Member;
+		if (reader.string(*target, "member", out.member) && !db.character(out.member)) {
+			reader.fail(*target, "names missing character '" + out.member + "'");
+		}
+	}
+}
+
 void parseMacroStep(Reader& reader, const Database& db, const JsonValue& entry, MacroStep& step) {
-	reader.rejectUnknownKeys(entry, {"member", "command", "id", "target", "target_member"});
+	reader.rejectUnknownKeys(entry, {"member", "command", "id", "target"});
 	if (!reader.string(entry, "member", step.member)) {
 		return;
 	}
@@ -288,19 +558,29 @@ void parseMacroStep(Reader& reader, const Database& db, const JsonValue& entry, 
 		reader.fail(*entry.find("command"), "unknown command '" + command + "'");
 		return;
 	}
+	Targeting targeting = Targeting::Self;
 	if (step.kind == CommandKind::Ability && reader.string(entry, "id", step.id)) {
 		const AbilityDef* ability = db.ability(step.id);
 		if (!ability) {
 			reader.fail(*entry.find("id"), "names missing ability '" + step.id + "'");
-		} else if (member && std::find(member->abilities.begin(), member->abilities.end(), step.id) == member->abilities.end()) {
-			reader.fail(*entry.find("id"), "character '" + step.member + "' does not know ability '" + step.id + "'");
+		} else {
+			targeting = ability->targeting;
+			if (member && !canEverKnow(db, *member, step.id)) {
+				reader.fail(*entry.find("id"), "character '" + step.member + "' does not know ability '" + step.id + "'");
+			}
 		}
-	} else if (step.kind == CommandKind::Item && reader.string(entry, "id", step.id) && !db.item(step.id)) {
-		reader.fail(*entry.find("id"), "names missing item '" + step.id + "'");
+	} else if (step.kind == CommandKind::Item && reader.string(entry, "id", step.id)) {
+		if (const ItemDef* item = db.item(step.id)) {
+			targeting = item->targeting;
+		} else {
+			reader.fail(*entry.find("id"), "names missing item '" + step.id + "'");
+		}
+	} else if (entry.find("id") && step.kind != CommandKind::Ability && step.kind != CommandKind::Item) {
+		reader.fail(*entry.find("id"), "only ability and item steps have an id");
 	}
-	reader.integer(entry, "target", step.enemySlot, false, 0, kMaxEnemies - 1);
-	if (reader.string(entry, "target_member", step.allyMember, false) && !db.character(step.allyMember)) {
-		reader.fail(*entry.find("target_member"), "names missing character '" + step.allyMember + "'");
+	parseMacroTarget(reader, db, entry, step.target);
+	if (entry.find("target") && !targetFits(step.target.kind, step.kind, targeting)) {
+		reader.fail(*entry.find("target"), "target '" + std::string(toString(step.target.kind)) + "' does not fit this command");
 	}
 }
 
@@ -408,12 +688,13 @@ void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("enemy '" + enemy.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "stats", "basic_attack", "abilities", "affinities", "ai", "experience", "currency"});
+		reader.rejectUnknownKeys(*entry, {"id", "name", "stats", "basic_attack", "abilities", "affinities", "status_resist", "ai", "experience", "currency"});
 		reader.string(*entry, "name", enemy.name);
 		parseStats(reader, *entry, "stats", enemy.stats, false);
 		readBasicAttack(reader, db, *entry, enemy.basicAttack);
 		readAbilityList(reader, db, *entry, enemy.abilities, false);
 		parseAffinities(reader, *entry, enemy.affinities);
+		parseStatusResist(reader, db, *entry, enemy.statusResist);
 		for (const JsonValue* ruleEntry : reader.objects(*entry, "ai", false)) {
 			AiRule rule;
 			parseAiRule(reader, db, enemy, *ruleEntry, rule);
@@ -430,16 +711,35 @@ void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("encounter '" + encounter.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "enemies"});
-		encounter.enemies = reader.strings(*entry, "enemies", true);
-		const JsonValue* list = entry->find("enemies");
-		if (list && (encounter.enemies.empty() || encounter.enemies.size() > static_cast<std::size_t>(kMaxEnemies))) {
-			reader.fail(*list, "needs 1 to " + std::to_string(kMaxEnemies) + " enemies");
+		reader.rejectUnknownKeys(*entry, {"id", "enemies", "escape"});
+		reader.boolean(*entry, "escape", encounter.escapeAllowed);
+		const JsonValue* list = reader.get(*entry, "enemies", Type::Array, true);
+		if (!list) {
+			reader.setContext("");
+			continue;
 		}
-		for (const std::string& id : encounter.enemies) {
-			if (!db.enemy(id)) {
-				reader.fail(*list, "names missing enemy '" + id + "'");
+		for (const JsonValue& item : list->items) {
+			FormationSlot slot;
+			if (item.is(Type::String) && !item.string.empty()) {
+				slot.enemy = item.string;
+			} else if (item.is(Type::Object)) {
+				reader.rejectUnknownKeys(item, {"enemy", "group"});
+				reader.string(item, "enemy", slot.enemy);
+				reader.string(item, "group", slot.group, false);
+			} else {
+				reader.fail(item, "entries of 'enemies' must be enemy ids or {\"enemy\", \"group\"} objects");
+				continue;
 			}
+			if (!slot.enemy.empty() && !db.enemy(slot.enemy)) {
+				reader.fail(item, "names missing enemy '" + slot.enemy + "'");
+			}
+			if (slot.group.empty()) {
+				slot.group = slot.enemy;
+			}
+			encounter.enemies.push_back(slot);
+		}
+		if (encounter.enemies.empty() || encounter.enemies.size() > static_cast<std::size_t>(kMaxEnemies)) {
+			reader.fail(*list, "needs 1 to " + std::to_string(kMaxEnemies) + " enemies");
 		}
 		insertUnique(db.encounters, encounter.id, encounter, reader, *entry);
 		reader.setContext("");
@@ -491,22 +791,131 @@ void parseCombos(Reader& reader, const JsonValue& root, Database& db) {
 	}
 }
 
+void parseEnemyOverlay(Reader& reader, const Database& db, const JsonValue& entry, EnemyOverlay& overlay) {
+	reader.rejectUnknownKeys(entry, {"id", "stats_percent", "add_abilities", "ai", "status_resist"});
+	if (!reader.string(entry, "id", overlay.enemy)) {
+		return;
+	}
+	const EnemyDef* base = db.enemy(overlay.enemy);
+	if (!base) {
+		reader.fail(entry, "names missing enemy '" + overlay.enemy + "'");
+		return;
+	}
+	if (const JsonValue* stats = reader.get(entry, "stats_percent", Type::Object, false)) {
+		reader.rejectUnknownKeys(*stats, {"hp", "tp", "strength", "mental", "agility", "dexterity", "defense"});
+		for (const char* key : kStatKeys) {
+			// The spec caps how far a preset may move hit points, attack and defense.
+			const bool capped = std::string(key) == "hp" || std::string(key) == "strength" || std::string(key) == "defense";
+			reader.integer(*stats, key, *statField(overlay.statsPercent, key), false, capped ? 80 : 50, capped ? 120 : 200);
+		}
+	}
+	EnemyDef overlaid = *base;
+	if (entry.find("add_abilities")) {
+		overlay.addAbilities = reader.strings(entry, "add_abilities", false);
+		for (const std::string& id : overlay.addAbilities) {
+			const AbilityDef* ability = db.ability(id);
+			if (!ability) {
+				reader.fail(*entry.find("add_abilities"), "names missing ability '" + id + "'");
+			} else if (ability->kind != AbilityKind::Technique && ability->kind != AbilityKind::Skill) {
+				reader.fail(*entry.find("add_abilities"), "ability '" + id + "' must be a technique or a skill");
+			}
+			overlaid.abilities.push_back(id);
+		}
+	}
+	if (reader.get(entry, "ai", Type::Array, false)) {
+		std::vector<AiRule> rules;
+		for (const JsonValue* ruleEntry : reader.objects(entry, "ai", false)) {
+			AiRule rule;
+			parseAiRule(reader, db, overlaid, *ruleEntry, rule);
+			rules.push_back(rule);
+		}
+		overlay.ai = rules;
+	}
+	parseStatusResist(reader, db, entry, overlay.statusResist);
+}
+
+void parseDifficulties(Reader& reader, const JsonValue& root, Database& db) {
+	reader.rejectUnknownKeys(root, {"difficulties"});
+	for (const JsonValue* entry : reader.objects(root, "difficulties", true)) {
+		DifficultyDef difficulty;
+		if (!reader.string(*entry, "id", difficulty.id)) {
+			continue;
+		}
+		reader.setContext("difficulty '" + difficulty.id + "'");
+		reader.rejectUnknownKeys(*entry, {"id", "name", "reward_percent", "abilities", "enemies"});
+		reader.string(*entry, "name", difficulty.name);
+		reader.integer(*entry, "reward_percent", difficulty.rewardPercent, false, 1, 1000);
+		for (const JsonValue* abilityEntry : reader.objects(*entry, "abilities", false)) {
+			AbilityOverlay overlay;
+			reader.rejectUnknownKeys(*abilityEntry, {"id", "power_percent", "cost", "uses"});
+			if (!reader.string(*abilityEntry, "id", overlay.ability)) {
+				continue;
+			}
+			const AbilityDef* ability = db.ability(overlay.ability);
+			if (!ability) {
+				reader.fail(*abilityEntry, "names missing ability '" + overlay.ability + "'");
+				continue;
+			}
+			reader.integer(*abilityEntry, "power_percent", overlay.powerPercent, false, 1, 500);
+			int value = 0;
+			if (abilityEntry->find("cost")) {
+				if (ability->kind != AbilityKind::Technique) {
+					reader.fail(*abilityEntry->find("cost"), "only techniques have a cost");
+				} else if (reader.integer(*abilityEntry, "cost", value, true, 0, 999)) {
+					overlay.cost = value;
+				}
+			}
+			if (abilityEntry->find("uses")) {
+				if (ability->kind != AbilityKind::Skill) {
+					reader.fail(*abilityEntry->find("uses"), "only skills have uses");
+				} else if (reader.integer(*abilityEntry, "uses", value, true, 1, 99)) {
+					overlay.uses = value;
+				}
+			}
+			difficulty.abilities.push_back(overlay);
+		}
+		for (const JsonValue* enemyEntry : reader.objects(*entry, "enemies", false)) {
+			EnemyOverlay overlay;
+			parseEnemyOverlay(reader, db, *enemyEntry, overlay);
+			difficulty.enemies.push_back(overlay);
+		}
+		insertUnique(db.difficulties, difficulty.id, difficulty, reader, *entry);
+		reader.setContext("");
+	}
+}
+
+std::uint64_t fnv1a(std::uint64_t hash, const std::string& text) {
+	for (char c : text) {
+		hash ^= static_cast<unsigned char>(c);
+		hash *= 1099511628211ULL;
+	}
+	hash ^= 0xFF;
+	return hash * 1099511628211ULL;
+}
+
 using FileParser = void (*)(Reader&, const JsonValue&, Database&);
 
 }
 
+const std::vector<std::string>& dataFileNames() {
+	return kFiles;
+}
+
 Result<Database> loadDatabaseFromTexts(const std::map<std::string, std::string>& files) {
 	// Order matters: each file may reference the ones before it.
-	const FileParser parsers[] = {parseStatuses, parseAbilities, parseItems, parseParty, parseEnemies, parseCombos};
+	const FileParser parsers[] = {parseRules, parseStatuses, parseAbilities, parseItems, parseEquipment, parseParty, parseEnemies, parseCombos, parseDifficulties};
+	static_assert(std::size(parsers) == 9, "one parser per data file");
 	Database db;
+	db.contentHash = 14695981039346656037ULL;
 	std::vector<std::string> errors;
-	for (std::size_t i = 0; i < std::size(kFiles); ++i) {
-		const std::string name = kFiles[i];
+	for (std::size_t i = 0; i < kFiles.size(); ++i) {
+		const std::string& name = kFiles[i];
 		const auto it = files.find(name);
 		if (it == files.end()) {
 			errors.push_back(name + ": missing file");
 			continue;
 		}
+		db.contentHash = fnv1a(fnv1a(db.contentHash, name), it->second);
 		Result<JsonValue> json = parseJson(it->second);
 		if (!json.ok()) {
 			errors.push_back(name + ": " + json.error);
@@ -531,7 +940,7 @@ Result<Database> loadDatabaseFromTexts(const std::map<std::string, std::string>&
 
 Result<Database> loadDatabaseFromDirectory(const std::string& directory) {
 	std::map<std::string, std::string> files;
-	for (const char* name : kFiles) {
+	for (const std::string& name : kFiles) {
 		const std::string path = directory + "/" + name;
 		std::ifstream in(path, std::ios::binary);
 		if (!in) {

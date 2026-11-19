@@ -3,10 +3,13 @@
 		{
 			"id": "fighter",
 			"name": "Test Fighter",
-			"base": {"hp": 60, "tp": 6, "strength": 14, "mental": 4, "agility": 8, "dexterity": 10, "defense": 8},
+			"base": {"hp": 60, "tp": 6, "strength": 14, "mental": 4, "agility": 8, "dexterity": 10, "defense": 8, "critical": 4},
 			"growth": {"hp": 8, "tp": 1, "strength": 2, "mental": 0, "agility": 1, "dexterity": 1, "defense": 1},
 			"basic_attack": "strike",
-			"abilities": ["rally", "focus_shot"]
+			"abilities": ["rally", "focus_shot"],
+			"learns": [{"level": 3, "ability": "cleave"}],
+			"equip": ["blade", "light_armor", "heavy_armor", "charm"],
+			"equipment": ["copper_blade", "tin_cap", "padded_coat"]
 		},
 		{
 			"id": "mystic",
@@ -15,15 +18,19 @@
 			"growth": {"hp": 4, "tp": 3, "strength": 0, "mental": 2, "agility": 1, "dexterity": 1, "defense": 0},
 			"basic_attack": "strike",
 			"abilities": ["spark", "ember", "frostbite", "hush"],
-			"affinities": {"shock": 50}
+			"affinities": {"shock": 50},
+			"equip": ["rod", "light_armor", "charm"],
+			"equipment": ["ember_rod", "calm_charm"]
 		},
 		{
 			"id": "scout",
 			"name": "Test Scout",
-			"base": {"hp": 45, "tp": 12, "strength": 10, "mental": 9, "agility": 15, "dexterity": 14, "defense": 6},
+			"base": {"hp": 45, "tp": 12, "strength": 10, "mental": 9, "agility": 15, "dexterity": 14, "defense": 6, "critical": 6, "evasion": 5},
 			"growth": {"hp": 5, "tp": 2, "strength": 1, "mental": 1, "agility": 2, "dexterity": 2, "defense": 1},
 			"basic_attack": "strike",
-			"abilities": ["gust", "weaken", "overclock"]
+			"abilities": ["gust", "weaken", "overclock"],
+			"equip": ["blade", "sling", "light_armor", "charm"],
+			"equipment": ["volley_sling", "grip_bands", "drift_feather"]
 		},
 		{
 			"id": "medic",
@@ -31,7 +38,10 @@
 			"base": {"hp": 42, "tp": 26, "strength": 7, "mental": 12, "agility": 7, "dexterity": 8, "defense": 5},
 			"growth": {"hp": 5, "tp": 3, "strength": 0, "mental": 2, "agility": 1, "dexterity": 1, "defense": 0},
 			"basic_attack": "strike",
-			"abilities": ["mend", "wide_mend", "purge", "rekindle"]
+			"abilities": ["mend", "wide_mend", "purge", "rekindle"],
+			"learns": [{"level": 4, "ability": "renew"}],
+			"equip": ["rod", "light_armor", "charm"],
+			"equipment": ["tin_cap", "spark_ring"]
 		},
 		{
 			"id": "engineer",
@@ -40,7 +50,10 @@
 			"growth": {"hp": 7, "tp": 1, "strength": 1, "mental": 1, "agility": 0, "dexterity": 1, "defense": 2},
 			"basic_attack": "strike",
 			"abilities": ["drowse", "flare_burst"],
-			"affinities": {"heat": 50}
+			"affinities": {"heat": 50},
+			"status_resist": {"paralysis": 50},
+			"equip": ["blade", "light_armor", "heavy_armor"],
+			"equipment": ["rivet_plate", "grip_bands"]
 		}
 	],
 	"lineup": ["fighter", "mystic", "scout", "medic", "engineer"],
@@ -49,31 +62,31 @@
 		{
 			"name": "opener",
 			"steps": [
-				{"member": "mystic", "command": "ability", "id": "spark", "target": 0},
-				{"member": "scout", "command": "ability", "id": "gust", "target": 0},
-				{"member": "fighter", "command": "attack", "target": 0},
-				{"member": "engineer", "command": "ability", "id": "drowse", "target": 1},
-				{"member": "medic", "command": "ability", "id": "mend", "target_member": "fighter"}
+				{"member": "mystic", "command": "ability", "id": "spark", "target": {"enemy": 0}},
+				{"member": "scout", "command": "ability", "id": "gust", "target": {"enemy": 0}},
+				{"member": "fighter", "command": "attack", "target": {"enemy": 0}},
+				{"member": "engineer", "command": "ability", "id": "drowse", "target": {"enemy": 1}},
+				{"member": "medic", "command": "ability", "id": "mend", "target": {"member": "fighter"}}
 			]
 		},
 		{
 			"name": "tempest",
 			"steps": [
-				{"member": "mystic", "command": "ability", "id": "spark", "target": 0},
-				{"member": "scout", "command": "ability", "id": "gust", "target": 0},
-				{"member": "engineer", "command": "ability", "id": "flare_burst"},
-				{"member": "fighter", "command": "attack", "target": 0},
+				{"member": "mystic", "command": "ability", "id": "spark", "target": {"enemy": 0}},
+				{"member": "scout", "command": "ability", "id": "gust", "target": {"enemy": 0}},
+				{"member": "engineer", "command": "ability", "id": "flare_burst", "target": "all"},
+				{"member": "fighter", "command": "attack", "target": {"enemy": 0}},
 				{"member": "medic", "command": "defend"}
 			]
 		},
 		{
 			"name": "regroup",
 			"steps": [
-				{"member": "medic", "command": "ability", "id": "mend", "target_member": "fighter"},
-				{"member": "fighter", "command": "ability", "id": "rally"},
+				{"member": "medic", "command": "ability", "id": "mend", "target": {"member": "fighter"}},
+				{"member": "fighter", "command": "ability", "id": "rally", "target": "all"},
 				{"member": "mystic", "command": "ability", "id": "frostbite"},
-				{"member": "scout", "command": "attack", "target": 0},
-				{"member": "engineer", "command": "item", "id": "tonic", "target_member": "mystic"}
+				{"member": "scout", "command": "attack", "target": {"enemy": 0}},
+				{"member": "engineer", "command": "item", "id": "tonic", "target": {"member": "mystic"}}
 			]
 		}
 	]

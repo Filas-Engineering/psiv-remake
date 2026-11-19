@@ -14,6 +14,9 @@ namespace fixtures {
 const rules::Database& data();
 std::map<std::string, std::string> dataTexts();
 
+// A level 1 lineup in starting equipment against the given enemies, each in its own group by enemy id.
+rules::BattleSetup makeSetup(const rules::Database& db, const std::vector<std::string>& enemies, std::uint64_t seed);
+rules::Battle makeBattle(const rules::Database& db, const rules::BattleSetup& setup, rules::ComboLog* log = nullptr);
 rules::Battle makeBattle(const rules::Database& db, const std::vector<std::string>& enemies, std::uint64_t seed, rules::ComboLog* log = nullptr);
 rules::Battle makeBattle(const rules::Database& db, const std::vector<std::string>& enemies, std::uint64_t seed, const rules::Inventory& inventory);
 
@@ -25,8 +28,8 @@ void addStatus(rules::Battle& battle, int index, const std::string& status, int 
 
 std::vector<rules::Event> ofType(const std::vector<rules::Event>& events, rules::EventType type);
 std::optional<rules::Event> firstBy(const std::vector<rules::Event>& events, rules::EventType type, int actor);
-std::string serialize(const std::vector<rules::Event>& events);
 std::vector<rules::Event> playToEnd(rules::Battle& battle, int maxRounds);
+std::vector<rules::Event> playRound(rules::Battle& battle);
 
 // Party indexes follow the lineup in data/party.json.
 constexpr int kFighter = 0;

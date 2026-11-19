@@ -8,7 +8,7 @@
 
 namespace rules {
 
-enum class Outcome { Ongoing, Victory, Defeat, Fled };
+enum class Outcome { Ongoing, Victory, Defeat, Escaped };
 
 enum class EventType {
 	RoundStarted,
@@ -16,7 +16,10 @@ enum class EventType {
 	ActionFailed,
 	ActionPrevented,
 	ComboTriggered,
+	ResourceSpent,
+	ItemHadNoEffect,
 	Missed,
+	Critical,
 	DamageDealt,
 	Healed,
 	Revived,
@@ -28,7 +31,7 @@ enum class EventType {
 	StatModified,
 	StatModifierExpired,
 	CombatantDefeated,
-	FleeAttempted,
+	EscapeAttempted,
 	RoundEnded,
 	BattleEnded,
 };
@@ -38,6 +41,8 @@ enum class FailReason { None, Silenced, NotEnoughTp, NoUsesLeft, NoItem, NoTarge
 enum class Effectiveness { Normal, Weak, Resisted, Immune };
 
 enum class StatusEnd { Duration, Recovered, WokeOnDamage };
+
+enum class ResourceKind { None, Tp, SkillUse, Item };
 
 // Fields not relevant to a type keep their defaults.
 struct Event {
@@ -56,9 +61,14 @@ struct Event {
 	FailReason fail = FailReason::None;
 	StatusEnd statusEnd = StatusEnd::Duration;
 	Outcome outcome = Outcome::Ongoing;
+	ResourceKind resource = ResourceKind::None;
 	bool succeeded = false;
 	bool firstDiscovery = false;
 	std::vector<int> participants;
 };
+
+// One line per event: the round, the type, then every field that differs from its default, in declaration order.
+std::string serializeEvent(const Event& event);
+std::string serializeEvents(const std::vector<Event>& events);
 
 }

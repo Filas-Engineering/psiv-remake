@@ -30,14 +30,23 @@ struct EnemyDef {
 	std::string basicAttack;
 	std::vector<std::string> abilities;
 	Affinities affinities;
+	StatusResists statusResist;
 	std::vector<AiRule> ai;
 	int experience = 0;
 	int currency = 0;
 };
 
+// One position in an enemy group's formation. Group targeting hits every living enemy with the same group.
+struct FormationSlot {
+	std::string enemy;
+	std::string group;
+};
+
+// An enemy group: the enemy side of one battle, in formation order.
 struct Encounter {
 	std::string id;
-	std::vector<std::string> enemies;
+	std::vector<FormationSlot> enemies;
+	bool escapeAllowed = true;
 };
 
 }

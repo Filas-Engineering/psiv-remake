@@ -9,19 +9,21 @@ using namespace fixtures;
 TEST(seededBattleHasAFixedOutcome) {
 	// Golden values: if a formula or the data changes on purpose, update them alongside.
 	ComboLog log;
-	Battle battle = makeBattle(data(), data().encounter("warden")->enemies, 1, &log);
+	BattleSetup setup = makeSetup(data(), {}, 1);
+	CHECK(useEncounter(setup, data(), "warden").empty());
+	Battle battle = makeBattle(data(), setup, &log);
 	const std::vector<Event> events = playToEnd(battle, 40);
 	CHECK(battle.outcome() == Outcome::Victory);
-	CHECK_EQ(battle.round(), 6);
+	CHECK_EQ(battle.round(), 4);
 	std::vector<int> hp;
 	for (int i = 0; i < battle.partyCount(); ++i) {
 		hp.push_back(battle.combatant(i).hp);
 	}
-	CHECK_EQ(hp, (std::vector<int>{56, 38, 45, 14, 28}));
+	CHECK_EQ(hp, (std::vector<int>{70, 38, 45, 16, 56}));
 	CHECK_EQ(battle.rewards().experience, 72);
 	CHECK_EQ(battle.rewards().currency, 59);
 	CHECK(log.isDiscovered("storm_spark"));
-	CHECK_EQ(ofType(events, EventType::Revived).size(), std::size_t(2));
+	CHECK_EQ(ofType(events, EventType::Revived).size(), std::size_t(1));
 	CHECK(events.back().type == EventType::BattleEnded && events.back().outcome == Outcome::Victory);
 	CHECK(battle.resolveRound().empty());
 }
@@ -41,18 +43,18 @@ TEST(partyCanBeDefeated) {
 	CHECK_EQ(battle.rewards().experience, 0);
 }
 
-TEST(fleeingEndsTheBattleWithoutRewards) {
+TEST(escapingEndsTheBattleWithoutRewards) {
 	int fled = 0;
 	for (std::uint64_t seed = 1; seed <= 20; ++seed) {
 		Battle battle = makeBattle(data(), {"gel_mite"}, seed);
-		battle.setCommand(kScout, Command::flee());
+		battle.setCommand(kScout, Command::escape());
 		othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
-		const std::optional<Event> attempt = firstBy(events, EventType::FleeAttempted, kScout);
+		const std::optional<Event> attempt = firstBy(events, EventType::EscapeAttempted, kScout);
 		CHECK(attempt.has_value());
 		if (attempt && attempt->succeeded) {
 			++fled;
-			CHECK(battle.outcome() == Outcome::Fled);
+			CHECK(battle.outcome() == Outcome::Escaped);
 			CHECK(events.back().type == EventType::BattleEnded);
 			CHECK_EQ(battle.rewards().currency, 0);
 		} else {
@@ -105,7 +107,7 @@ TEST(setCommandRejectsInvalidCommands) {
 	Battle battle = makeBattle(data(), {"gel_mite"}, 1);
 	CHECK(!battle.setCommand(kFighter, Command::ability("spark", kFirstEnemy)).empty());
 	CHECK(!battle.setCommand(kMystic, Command::ability("storm_spark", kFirstEnemy)).empty());
-	CHECK(!battle.setCommand(kFirstEnemy, Command::flee()).empty());
+	CHECK(!battle.setCommand(kFirstEnemy, Command::escape()).empty());
 	CHECK(!battle.setCommand(kFighter, Command::item("nothing", -1)).empty());
 	CHECK(!battle.setCommand(99, Command::defend()).empty());
 	battle.combatant(kScout).hp = 0;
@@ -113,18 +115,26 @@ TEST(setCommandRejectsInvalidCommands) {
 	CHECK(battle.setCommand(kMystic, Command::ability("spark", kFirstEnemy)).empty());
 }
 
-TEST(createValidatesParticipants) {
+TEST(createValidatesTheSetup) {
 	const Database& db = data();
-	std::vector<PartyMember> party;
-	for (int i = 0; i < 6; ++i) {
-		party.push_back(makePartyMember(db, db.characters.at("fighter"), 1));
-	}
-	CHECK(!Battle::create(db, party, {"gel_mite"}, {}, 1, nullptr).ok());
-	party.resize(2);
-	CHECK(!Battle::create(db, party, {}, {}, 1, nullptr).ok());
-	const Result<Battle> unknown = Battle::create(db, party, {"ghost"}, {}, 1, nullptr);
+	BattleSetup setup = makeSetup(db, {"gel_mite"}, 1);
+	setup.party.push_back(makePartyMember(db, db.characters.at("fighter"), 1));
+	CHECK(!Battle::create(db, setup, nullptr).ok());
+	setup.party.resize(2);
+	setup.enemies.clear();
+	CHECK(!Battle::create(db, setup, nullptr).ok());
+	setup.enemies = {{"ghost", "ghost"}};
+	const Result<Battle> unknown = Battle::create(db, setup, nullptr);
 	CHECK(!unknown.ok() && unknown.error == "unknown enemy 'ghost'");
-	CHECK(Battle::create(db, party, {"gel_mite"}, {}, 1, nullptr).ok());
+	setup.enemies = {{"gel_mite", "gel_mite"}};
+	setup.difficulty = "nightmare";
+	CHECK(!Battle::create(db, setup, nullptr).ok());
+	setup.difficulty.clear();
+	setup.party[1].equipment[EquipSlot::Weapon] = "copper_blade";
+	const Result<Battle> wrongGear = Battle::create(db, setup, nullptr);
+	CHECK(!wrongGear.ok() && wrongGear.error == "Test Mystic cannot equip Copper Blade");
+	setup.party[1].equipment[EquipSlot::Weapon] = "ember_rod";
+	CHECK(Battle::create(db, setup, nullptr).ok());
 }
 
 TEST(partyStateCarriesResourcesOutOfBattle) {
@@ -149,13 +159,44 @@ TEST(experienceLevelsUpWithGrowth) {
 	PartyMember member = makePartyMember(db, fighter, 1);
 	CHECK_EQ(formulas::experienceToNextLevel(1), 25);
 	CHECK_EQ(formulas::experienceToNextLevel(2), 70);
-	CHECK_EQ(grantExperience(member, fighter, 24), 0);
+	CHECK_EQ(grantExperience(member, db, 24).levelsGained, 0);
 	CHECK_EQ(member.level, 1);
-	CHECK_EQ(grantExperience(member, fighter, 76), 2);
+	const LevelUp levelUp = grantExperience(member, db, 76);
+	CHECK_EQ(levelUp.levelsGained, 2);
+	CHECK_EQ(levelUp.learned, (std::vector<std::string>{"cleave"}));
 	CHECK_EQ(member.level, 3);
 	CHECK_EQ(member.experience, 5);
-	CHECK_EQ(member.hp, 60 + 2 * 8);
+	// Base 60, padded coat 10, two levels of growth 8.
+	CHECK_EQ(member.hp, 60 + 10 + 2 * 8);
 	CHECK_EQ(statsAtLevel(fighter, 3).strength, 18);
 	CHECK_EQ(statsAtLevel(fighter, 3).level, 3);
 	CHECK_EQ(statsAtLevel(fighter, 500).level, formulas::kMaxLevel);
+}
+
+TEST(itemWithNoEffectIsKept) {
+	Battle battle = makeBattle(data(), {"brass_warden"}, 1);
+	battle.combatant(kScout).hp = 10;
+	battle.setCommand(kFighter, Command::item("tonic", kMystic));
+	battle.setCommand(kMystic, Command::item("clear_gel", kMedic));
+	battle.setCommand(kMedic, Command::item("tonic", kScout));
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	const std::vector<Event> kept = ofType(events, EventType::ItemHadNoEffect);
+	CHECK_EQ(kept.size(), std::size_t(2));
+	const std::vector<Event> spent = ofType(events, EventType::ResourceSpent);
+	CHECK(spent.size() == 1 && spent[0].actor == kMedic && spent[0].resource == ResourceKind::Item);
+	CHECK_EQ(battle.inventory().at("tonic"), 2);
+	CHECK_EQ(battle.inventory().at("clear_gel"), 2);
+}
+
+TEST(spentResourcesAppearAsEvents) {
+	Battle battle = makeBattle(data(), {"brass_warden"}, 1);
+	battle.setCommand(kFighter, Command::ability("focus_shot", kFirstEnemy));
+	battle.setCommand(kMystic, Command::ability("hush", kFirstEnemy));
+	othersDefend(battle);
+	const std::vector<Event> spent = ofType(battle.resolveRound(), EventType::ResourceSpent);
+	CHECK_EQ(spent.size(), std::size_t(2));
+	for (const Event& e : spent) {
+		CHECK(e.actor == kFighter ? (e.resource == ResourceKind::SkillUse && e.amount == 1) : (e.resource == ResourceKind::Tp && e.amount == 3));
+	}
 }

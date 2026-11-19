@@ -6,6 +6,9 @@
 		{"id": "bite", "name": "Bite", "kind": "attack", "target": "one_enemy", "effects": [
 			{"type": "physical_damage", "power": 100}
 		]},
+		{"id": "scatter_shot", "name": "Scatter Shot", "kind": "attack", "target": "enemy_group", "effects": [
+			{"type": "physical_damage", "power": 60}
+		]},
 
 		{"id": "spark", "name": "Spark", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
 			{"type": "elemental_damage", "power": 26, "element": "shock"}
@@ -43,9 +46,18 @@
 		{"id": "drowse", "name": "Drowse", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
 			{"type": "apply_status", "status": "sleep", "chance": 60}
 		]},
+		{"id": "cleave", "name": "Cleave", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
+			{"type": "physical_damage", "power": 90}
+		]},
+		{"id": "renew", "name": "Renew", "kind": "technique", "cost": 6, "target": "one_ally", "effects": [
+			{"type": "heal", "power": 45}
+		]},
+		{"id": "glint", "name": "Glint", "kind": "technique", "cost": 2, "target": "one_enemy", "effects": [
+			{"type": "elemental_damage", "power": 18, "element": "shock"}
+		]},
 
 		{"id": "focus_shot", "name": "Focus Shot", "kind": "skill", "uses": 3, "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 180}
+			{"type": "physical_damage", "power": 180, "critical": 20}
 		]},
 		{"id": "overclock", "name": "Overclock", "kind": "skill", "uses": 2, "target": "self", "effects": [
 			{"type": "modify_stat", "stat": "agility", "percent": 50, "duration": 3}
@@ -70,7 +82,7 @@
 			{"type": "physical_damage", "power": 70},
 			{"type": "apply_status", "status": "poison", "chance": 70}
 		]},
-		{"id": "lullaby", "name": "Drone Hum", "kind": "technique", "cost": 4, "target": "all_enemies", "effects": [
+		{"id": "lullaby", "name": "Drone Hum", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
 			{"type": "apply_status", "status": "sleep", "chance": 35}
 		]},
 		{"id": "patch", "name": "Patch Up", "kind": "technique", "cost": 3, "target": "one_ally", "effects": [
@@ -85,6 +97,9 @@
 		]},
 		{"id": "rouse", "name": "Rouse", "kind": "technique", "cost": 8, "target": "one_ally", "effects": [
 			{"type": "revive", "power": 40}
+		]},
+		{"id": "steam_vent", "name": "Steam Vent", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
+			{"type": "elemental_damage", "power": 22, "element": "heat"}
 		]}
 	]
 }

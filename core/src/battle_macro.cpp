@@ -16,10 +16,6 @@ MacroIssue issueFor(FailReason reason) {
 	return MacroIssue::None;
 }
 
-bool targetsFoes(Targeting targeting) {
-	return targeting == Targeting::OneEnemy || targeting == Targeting::EnemyGroup || targeting == Targeting::AllEnemies;
-}
-
 }
 
 // A step that cannot run as written falls back to a basic attack on its intended enemy (or the first
@@ -28,6 +24,7 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro) {
 	std::vector<MacroStepResult> results;
 	forcedOrder_.clear();
 	Inventory reserved;
+	const bool caughtOffGuard = !sideActsNextRound(Side::Party);
 
 	auto partyIndexOf = [this](const std::string& characterId) {
 		for (int i = 0; i < partyCount_; ++i) {
@@ -42,34 +39,54 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro) {
 		MacroStepResult result;
 		result.member = step.member;
 		result.actor = partyIndexOf(step.member);
-		if (result.actor < 0 || !combatants_[result.actor].alive()) {
+		if (result.actor < 0 || !combatants_[result.actor].alive() || caughtOffGuard) {
 			result.status = MacroStepStatus::Skipped;
-			result.issue = result.actor < 0 ? MacroIssue::NotInParty : MacroIssue::ActorDefeated;
+			result.issue = result.actor < 0 ? MacroIssue::NotInParty : caughtOffGuard ? MacroIssue::CaughtOffGuard : MacroIssue::ActorDefeated;
 			results.push_back(result);
 			continue;
 		}
 		const int actor = result.actor;
-		const int enemyIndex = step.enemySlot >= 0 ? partyCount_ + step.enemySlot : -1;
+		const int enemyIndex = step.target.kind == MacroTargetKind::Enemy ? partyCount_ + step.target.enemySlot : -1;
 		const bool enemyThere = enemyIndex >= partyCount_ && enemyIndex < static_cast<int>(combatants_.size());
-		const int allyIndex = step.allyMember.empty() ? -1 : partyIndexOf(step.allyMember);
+		int requested = -1;
+		bool intendedGone = false;
+		switch (step.target.kind) {
+		case MacroTargetKind::Default:
+		case MacroTargetKind::All:
+			break;
+		case MacroTargetKind::Self:
+			requested = actor;
+			break;
+		case MacroTargetKind::Member:
+			requested = partyIndexOf(step.target.member);
+			intendedGone = requested < 0;
+			break;
+		case MacroTargetKind::Enemy:
+			requested = enemyThere ? enemyIndex : -1;
+			intendedGone = !enemyThere;
+			break;
+		}
 
 		Targeting targeting = Targeting::Self;
+		bool aimed = true;
 		bool revives = false;
-		FailReason why = FailReason::None;
+		MacroIssue issue = MacroIssue::None;
 		Command command;
 		command.kind = step.kind;
 		command.id = step.id;
 		switch (step.kind) {
 		case CommandKind::Attack:
-			targeting = Targeting::OneEnemy;
+			if (const AbilityDef* ability = db_->ability(combatants_[actor].basicAttack)) {
+				targeting = ability->targeting;
+			}
 			break;
 		case CommandKind::Ability:
 			if (const AbilityDef* ability = db_->ability(step.id); ability && combatants_[actor].knows(step.id)) {
 				targeting = ability->targeting;
 				revives = ability->revives();
-				why = checkUsable(actor, *ability);
+				issue = issueFor(checkUsable(actor, *ability));
 			} else {
-				why = FailReason::NoTarget;
+				issue = MacroIssue::UnknownAbility;
 			}
 			break;
 		case CommandKind::Item:
@@ -78,35 +95,40 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro) {
 				revives = effectsRevive(item->effects);
 				const auto stock = inventory_.find(step.id);
 				if (stock == inventory_.end() || stock->second - reserved[step.id] <= 0) {
-					why = FailReason::NoItem;
+					issue = MacroIssue::NoItem;
 				}
 			} else {
-				why = FailReason::NoItem;
+				issue = MacroIssue::NoItem;
+			}
+			break;
+		case CommandKind::Escape:
+			aimed = false;
+			if (!escapeAllowed()) {
+				issue = MacroIssue::EscapeNotAllowed;
 			}
 			break;
 		case CommandKind::None:
 		case CommandKind::Defend:
-		case CommandKind::Flee:
+			aimed = false;
 			break;
 		}
 
-		if (why == FailReason::None && step.kind != CommandKind::Defend && step.kind != CommandKind::Flee) {
-			const int requested = targetsFoes(targeting) ? (enemyThere ? enemyIndex : -1) : allyIndex;
+		if (issue == MacroIssue::None && aimed) {
 			const std::vector<int> targets = resolveTargets(actor, targeting, requested, revives);
 			if (targets.empty()) {
-				why = FailReason::NoTarget;
+				issue = MacroIssue::NoTarget;
 			} else if (targeting == Targeting::OneEnemy || targeting == Targeting::EnemyGroup || targeting == Targeting::OneAlly) {
 				command.target = targets.front();
-				if (requested >= 0 && targets.front() != requested) {
+				if (intendedGone || (requested >= 0 && targets.front() != requested)) {
 					result.status = MacroStepStatus::Retargeted;
 					result.issue = MacroIssue::TargetGone;
 				}
 			}
 		}
 
-		if (why != FailReason::None) {
+		if (issue != MacroIssue::None) {
 			result.status = MacroStepStatus::FellBack;
-			result.issue = issueFor(why);
+			result.issue = issue;
 			const std::vector<int> foes = livingFoes(actor);
 			const bool intended = enemyThere && combatants_[enemyIndex].alive();
 			command = Command::attack(intended ? enemyIndex : (foes.empty() ? -1 : foes.front()));

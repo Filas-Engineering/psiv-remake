@@ -17,6 +17,8 @@ struct Effect {
 	Stat stat = Stat::Strength;
 	int percent = 0;
 	int duration = 0;
+	// Added to the user's critical chance for this physical damage effect.
+	int critical = 0;
 };
 
 struct AbilityDef {

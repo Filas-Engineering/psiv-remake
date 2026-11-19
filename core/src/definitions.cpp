@@ -82,6 +82,11 @@ int Combatant::affinity(Element element) const {
 	return it == affinities.end() ? 100 : it->second;
 }
 
+int Combatant::resistance(const std::string& statusId) const {
+	const auto it = statusResist.find(statusId);
+	return it == statusResist.end() ? 0 : it->second;
+}
+
 bool ComboLog::discover(const std::string& recipeId) {
 	return discovered_.insert(recipeId).second;
 }
@@ -93,9 +98,11 @@ bool ComboLog::isDiscovered(const std::string& recipeId) const {
 const StatusDef* Database::status(const std::string& id) const { return findIn(statuses, id); }
 const AbilityDef* Database::ability(const std::string& id) const { return findIn(abilities, id); }
 const ItemDef* Database::item(const std::string& id) const { return findIn(items, id); }
+const EquipmentDef* Database::equipmentPiece(const std::string& id) const { return findIn(equipment, id); }
 const CharacterDef* Database::character(const std::string& id) const { return findIn(characters, id); }
 const EnemyDef* Database::enemy(const std::string& id) const { return findIn(enemies, id); }
 const Encounter* Database::encounter(const std::string& id) const { return findIn(encounters, id); }
+const DifficultyDef* Database::difficulty(const std::string& id) const { return findIn(difficulties, id); }
 
 const Macro* Database::macro(const std::string& name) const {
 	for (const Macro& m : macros) {

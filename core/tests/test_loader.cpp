@@ -41,8 +41,10 @@ TEST(loaderReadsShippedData) {
 	CHECK(opener != nullptr);
 	if (opener) {
 		CHECK_EQ(opener->steps.size(), std::size_t(5));
-		CHECK_EQ(opener->steps[4].allyMember, std::string("fighter"));
-		CHECK_EQ(opener->steps[0].enemySlot, 0);
+		CHECK(opener->steps[4].target.kind == MacroTargetKind::Member);
+		CHECK_EQ(opener->steps[4].target.member, std::string("fighter"));
+		CHECK(opener->steps[0].target.kind == MacroTargetKind::Enemy);
+		CHECK_EQ(opener->steps[0].target.enemySlot, 0);
 	}
 	CHECK_EQ(db.combos.size(), std::size_t(3));
 }
@@ -50,7 +52,7 @@ TEST(loaderReadsShippedData) {
 TEST(loaderRejectsEnemyWithMissingAbility) {
 	auto files = fixtures::dataTexts();
 	replaceOnce(files["enemies.json"], "\"abilities\": [\"venom_spit\"]", "\"abilities\": [\"venom_spat\"]");
-	expectError(files, "enemies.json:20: enemy 'rust_hound': names missing ability 'venom_spat'");
+	expectError(files, "enemies.json:21: enemy 'rust_hound': names missing ability 'venom_spat'");
 }
 
 TEST(loaderRejectsAiAbilityTheEnemyDoesNotHave) {
@@ -72,8 +74,8 @@ TEST(loaderRejectsBadReferencesAcrossFiles) {
 	}
 	{
 		auto files = fixtures::dataTexts();
-		replaceOnce(files["party.json"], "{\"member\": \"mystic\", \"command\": \"ability\", \"id\": \"spark\", \"target\": 0}",
-			"{\"member\": \"mystic\", \"command\": \"ability\", \"id\": \"mend\", \"target\": 0}");
+		replaceOnce(files["party.json"], "{\"member\": \"mystic\", \"command\": \"ability\", \"id\": \"spark\", \"target\": {\"enemy\": 0}}",
+			"{\"member\": \"mystic\", \"command\": \"ability\", \"id\": \"mend\", \"target\": {\"enemy\": 0}}");
 		expectError(files, "macro 'opener': character 'mystic' does not know ability 'mend'");
 	}
 	{
@@ -122,4 +124,61 @@ TEST(loaderCollectsEveryError) {
 	CHECK(loaded.error.find("items.json: missing file") != std::string::npos);
 	CHECK(loaded.error.find("venom_spat") != std::string::npos);
 	CHECK(loaded.error.find("names missing ability 'nap'") != std::string::npos);
+}
+
+TEST(loaderReadsEquipmentLearningAndGroups) {
+	const Database& db = fixtures::data();
+	const EquipmentDef& sling = db.equipment.at("volley_sling");
+	CHECK(sling.slot == EquipSlot::Weapon);
+	CHECK_EQ(sling.attack, std::string("scatter_shot"));
+	CHECK(db.equipment.at("ember_rod").element == Element::Heat);
+	CHECK_EQ(db.equipment.at("rivet_plate").bonus.agility, -2);
+	CHECK_EQ(db.characters.at("fighter").learns.at(0).ability, std::string("cleave"));
+	CHECK_EQ(db.enemies.at("brass_warden").statusResist.at("sleep"), 100);
+	CHECK_EQ(db.encounter("marsh")->enemies.at(0).group, std::string("wisps"));
+	CHECK_EQ(db.encounter("marsh")->enemies.at(2).group, std::string("gel_mite"));
+	CHECK(!db.encounter("warden")->escapeAllowed);
+	CHECK(db.battleRules.experienceSplit == ExperienceSplit::EachLiving);
+	CHECK(db.contentHash != 0);
+}
+
+TEST(loaderRejectsBadEquipmentAndLearning) {
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["equipment.json"], "\"slot\": \"head\", \"category\": \"light_armor\", \"stats\": {\"defense\": 2}",
+			"\"slot\": \"head\", \"category\": \"light_armor\", \"element\": \"heat\", \"stats\": {\"defense\": 2}");
+		expectError(files, "equipment 'tin_cap': only weapons have an element");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["party.json"], "\"equipment\": [\"ember_rod\", \"calm_charm\"]", "\"equipment\": [\"copper_blade\", \"calm_charm\"]");
+		expectError(files, "character 'mystic': cannot equip 'copper_blade' (category 'blade')");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["party.json"], "\"equip\": [\"rod\", \"light_armor\", \"charm\"],\n\t\t\t\"equipment\": [\"ember_rod\"",
+			"\"equip\": [\"wand\", \"rod\", \"light_armor\", \"charm\"],\n\t\t\t\"equipment\": [\"ember_rod\"");
+		expectError(files, "character 'mystic': no equipment has category 'wand'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["party.json"], "{\"level\": 3, \"ability\": \"cleave\"}", "{\"level\": 3, \"ability\": \"rally\"}");
+		expectError(files, "character 'fighter': ability 'rally' is already known or learned");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["party.json"], "{\"member\": \"fighter\", \"command\": \"ability\", \"id\": \"rally\", \"target\": \"all\"}",
+			"{\"member\": \"fighter\", \"command\": \"ability\", \"id\": \"rally\", \"target\": {\"enemy\": 1}}");
+		expectError(files, "macro 'regroup': target 'enemy' does not fit this command");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["rules.json"], "\"each_living\"", "\"winner_takes_all\"");
+		expectError(files, "rules.json:4: unknown experience split 'winner_takes_all'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["enemies.json"], "\"status_resist\": {\"poison\": 100}", "\"status_resist\": {\"defeated\": 100}");
+		expectError(files, "enemy 'gel_mite': the defeated status cannot be resisted");
+	}
 }

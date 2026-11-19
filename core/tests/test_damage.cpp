@@ -13,9 +13,12 @@ TEST(physicalDamageMath) {
 	CHECK_EQ(formulas::physicalDamage(10, 50, 100, 100), 2);
 	CHECK_EQ(formulas::physicalDamage(1, 50, 10, 90), 1);
 	CHECK_EQ(formulas::defended(21), 10);
-	CHECK_EQ(formulas::hitChance(10, 8), 87);
-	CHECK_EQ(formulas::hitChance(500, 8), 100);
-	CHECK_EQ(formulas::hitChance(1, 300), 40);
+	CHECK_EQ(formulas::hitChance(10, 8, 0), 87);
+	CHECK_EQ(formulas::hitChance(500, 8, 0), 100);
+	CHECK_EQ(formulas::hitChance(1, 300, 0), 40);
+	// Evasion scales whatever chance is left after the clamp.
+	CHECK_EQ(formulas::hitChance(10, 8, 10), 78);
+	CHECK_EQ(formulas::hitChance(500, 8, 100), 0);
 }
 
 TEST(elementalDamageAndAffinityMath) {
@@ -32,7 +35,9 @@ TEST(elementalDamageAndAffinityMath) {
 }
 
 TEST(battleAppliesWeaknessResistanceAndImmunity) {
-	const Database& db = data();
+	// Without recipes, so spark and gust never merge into a combo when they land back to back.
+	Database db = data();
+	db.combos.clear();
 	for (std::uint64_t seed = 1; seed <= 5; ++seed) {
 		Battle battle = makeBattle(db, {"rust_hound", "bog_wisp", "brass_warden"}, seed);
 		// Room for every hit, so no damage event is capped by remaining hit points.

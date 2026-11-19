@@ -1,5 +1,7 @@
 #include "rules/battle.h"
 
+#include <algorithm>
+
 namespace rules {
 
 std::vector<int> Battle::livingFoes(int actor) const {
@@ -22,8 +24,8 @@ std::vector<int> Battle::allies(int actor) const {
 	return result;
 }
 
-// Single-target commands whose target is gone move to the first valid one, so a queued action is
-// never wasted. Heals and cures fall back to the user; revives look for any defeated ally.
+// A single foe target that is gone moves to the next living foe by formation position. A single ally
+// target that is gone moves to the user. A revive whose chosen ally is already up is cancelled.
 std::vector<int> Battle::resolveTargets(int user, Targeting targeting, int requested, bool revives) const {
 	const bool validIndex = requested >= 0 && requested < static_cast<int>(combatants_.size());
 	const Side userSide = combatants_[user].side;
@@ -39,15 +41,16 @@ std::vector<int> Battle::resolveTargets(int user, Targeting targeting, int reque
 			break;
 		}
 		int primary = foes.front();
-		if (validIndex && combatants_[requested].side != userSide && combatants_[requested].alive()) {
-			primary = requested;
+		if (validIndex && combatants_[requested].side != userSide) {
+			const auto next = std::lower_bound(foes.begin(), foes.end(), requested);
+			primary = next == foes.end() ? foes.front() : *next;
 		}
 		if (targeting == Targeting::OneEnemy) {
 			result.push_back(primary);
 			break;
 		}
 		for (int foe : foes) {
-			if (combatants_[foe].defId == combatants_[primary].defId) {
+			if (combatants_[foe].group == combatants_[primary].group) {
 				result.push_back(foe);
 			}
 		}
@@ -59,8 +62,10 @@ std::vector<int> Battle::resolveTargets(int user, Targeting targeting, int reque
 	case Targeting::OneAlly: {
 		const bool requestedAlly = validIndex && combatants_[requested].side == userSide;
 		if (revives) {
-			if (requestedAlly && !combatants_[requested].alive()) {
-				result.push_back(requested);
+			if (requestedAlly) {
+				if (!combatants_[requested].alive()) {
+					result.push_back(requested);
+				}
 				break;
 			}
 			for (int ally : allies(user)) {

@@ -1,0 +1,14 @@
+{
+	"equipment": [
+		{"id": "copper_blade", "name": "Copper Blade", "slot": "weapon", "category": "blade", "stats": {"strength": 4, "critical": 4}},
+		{"id": "ember_rod", "name": "Ember Rod", "slot": "weapon", "category": "rod", "element": "heat", "stats": {"mental": 3}},
+		{"id": "volley_sling", "name": "Volley Sling", "slot": "weapon", "category": "sling", "attack": "scatter_shot", "stats": {"dexterity": 2}},
+		{"id": "tin_cap", "name": "Tin Cap", "slot": "head", "category": "light_armor", "stats": {"defense": 2}},
+		{"id": "padded_coat", "name": "Padded Coat", "slot": "body", "category": "light_armor", "stats": {"hp": 10, "defense": 3}},
+		{"id": "rivet_plate", "name": "Rivet Plate", "slot": "body", "category": "heavy_armor", "stats": {"hp": 20, "defense": 6, "agility": -2}},
+		{"id": "grip_bands", "name": "Grip Bands", "slot": "arms", "category": "light_armor", "stats": {"dexterity": 2, "critical": 5}},
+		{"id": "calm_charm", "name": "Calm Charm", "slot": "accessory", "category": "charm", "status_resist": {"sleep": 100}},
+		{"id": "spark_ring", "name": "Spark Ring", "slot": "accessory", "category": "charm", "abilities": ["glint"]},
+		{"id": "drift_feather", "name": "Drift Feather", "slot": "accessory", "category": "charm", "stats": {"evasion": 10, "agility": 2}}
+	]
+}

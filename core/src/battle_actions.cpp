@@ -42,12 +42,25 @@ FailReason Battle::checkUsable(int actor, const AbilityDef& ability) const {
 	return FailReason::None;
 }
 
-void Battle::payCost(int actor, const AbilityDef& ability) {
+void Battle::payCost(int actor, const AbilityDef& ability, std::vector<Event>& out) {
 	Combatant& c = combatants_[actor];
-	if (ability.kind == AbilityKind::Technique) {
+	ResourceKind resource = ResourceKind::None;
+	int amount = 0;
+	if (ability.kind == AbilityKind::Technique && ability.cost > 0) {
 		c.tp -= ability.cost;
+		resource = ResourceKind::Tp;
+		amount = ability.cost;
 	} else if (ability.kind == AbilityKind::Skill) {
 		--c.skillUses[ability.id];
+		resource = ResourceKind::SkillUse;
+		amount = 1;
+	}
+	if (resource != ResourceKind::None) {
+		Event& e = emit(out, EventType::ResourceSpent);
+		e.actor = actor;
+		e.ability = ability.id;
+		e.resource = resource;
+		e.amount = amount;
 	}
 }
 
@@ -98,8 +111,8 @@ void Battle::takeTurn(int actor, std::vector<Event>& out) {
 		e.command = CommandKind::Defend;
 		return;
 	}
-	case CommandKind::Flee:
-		attemptFlee(actor, out);
+	case CommandKind::Escape:
+		attemptEscape(actor, out);
 		return;
 	case CommandKind::Attack:
 		if (const AbilityDef* ability = db_->ability(combatants_[actor].basicAttack)) {
@@ -128,13 +141,17 @@ void Battle::useAbility(int actor, const AbilityDef& ability, int target, Comman
 		e.fail = why != FailReason::None ? why : FailReason::NoTarget;
 		return;
 	}
-	payCost(actor, ability);
 	Event& e = emit(out, EventType::ActionStarted);
 	e.actor = actor;
 	e.ability = ability.id;
 	e.command = kind;
 	e.target = targets.size() == 1 ? targets.front() : -1;
-	applyEffects(actor, ability.effects, targets, false, out);
+	payCost(actor, ability, out);
+	Attacker attacker = attackerOf(actor);
+	if (kind == CommandKind::Attack) {
+		attacker.element = combatants_[actor].attackElement;
+	}
+	applyEffects(actor, attacker, ability.effects, targets, false, out);
 }
 
 void Battle::useItem(int actor, const Command& command, std::vector<Event>& out) {
@@ -150,16 +167,27 @@ void Battle::useItem(int actor, const Command& command, std::vector<Event>& out)
 		e.fail = inStock ? FailReason::NoTarget : FailReason::NoItem;
 		return;
 	}
-	--stock->second;
 	Event& e = emit(out, EventType::ActionStarted);
 	e.actor = actor;
 	e.ability = item->id;
 	e.command = CommandKind::Item;
 	e.target = targets.size() == 1 ? targets.front() : -1;
-	applyEffects(actor, item->effects, targets, true, out);
+	// An item that changed nothing stays in the bag.
+	if (!applyEffects(actor, Attacker(), item->effects, targets, true, out)) {
+		Event& kept = emit(out, EventType::ItemHadNoEffect);
+		kept.actor = actor;
+		kept.ability = item->id;
+		return;
+	}
+	--stock->second;
+	Event& spent = emit(out, EventType::ResourceSpent);
+	spent.actor = actor;
+	spent.ability = item->id;
+	spent.resource = ResourceKind::Item;
+	spent.amount = 1;
 }
 
-void Battle::attemptFlee(int actor, std::vector<Event>& out) {
+void Battle::attemptEscape(int actor, std::vector<Event>& out) {
 	int partyAgility = 0;
 	int partyCount = 0;
 	int enemyAgility = 0;
@@ -177,18 +205,18 @@ void Battle::attemptFlee(int actor, std::vector<Event>& out) {
 			++enemyCount;
 		}
 	}
-	const int chance = formulas::fleeChance(partyAgility / std::max(1, partyCount), enemyAgility / std::max(1, enemyCount));
-	Event& e = emit(out, EventType::FleeAttempted);
+	const int chance = formulas::escapeChance(partyAgility / std::max(1, partyCount), enemyAgility / std::max(1, enemyCount), db_->battleRules.escape);
+	Event& e = emit(out, EventType::EscapeAttempted);
 	e.actor = actor;
-	e.command = CommandKind::Flee;
+	e.command = CommandKind::Escape;
 	e.succeeded = rng_.chance(chance);
 	if (e.succeeded) {
-		outcome_ = Outcome::Fled;
+		outcome_ = Outcome::Escaped;
 	}
 }
 
-void Battle::applyEffects(int user, const std::vector<Effect>& effects, const std::vector<int>& targets, bool flatPower, std::vector<Event>& out) {
-	const Combatant& source = combatants_[user];
+bool Battle::applyEffects(int user, const Attacker& attacker, const std::vector<Effect>& effects, const std::vector<int>& targets, bool flatPower, std::vector<Event>& out) {
+	bool changed = false;
 	for (int target : targets) {
 		bool missed = false;
 		for (const Effect& effect : effects) {
@@ -198,7 +226,7 @@ void Battle::applyEffects(int user, const std::vector<Effect>& effects, const st
 			}
 			switch (effect.kind) {
 			case EffectKind::PhysicalDamage: {
-				const int chance = flatPower ? 100 : formulas::hitChance(source.effective(Stat::Dexterity), t.effective(Stat::Agility));
+				const int chance = flatPower ? 100 : formulas::hitChance(attacker.dexterity, t.effective(Stat::Agility), t.stats.evasion);
 				if (!rng_.chance(chance)) {
 					Event& e = emit(out, EventType::Missed);
 					e.actor = user;
@@ -206,35 +234,49 @@ void Battle::applyEffects(int user, const std::vector<Effect>& effects, const st
 					missed = true;
 					break;
 				}
+				const bool critical = !flatPower && rng_.chance(formulas::criticalChance(attacker.critical, effect.critical));
 				const int variance = rng_.range(formulas::kVarianceMin, formulas::kVarianceMax);
-				const int strength = flatPower ? effect.power : source.effective(Stat::Strength);
+				const int strength = flatPower ? effect.power : attacker.strength;
 				const int power = flatPower ? 100 : effect.power;
 				int damage = formulas::physicalDamage(strength, t.effective(Stat::Defense), power, variance);
-				if (t.defending) {
+				if (critical) {
+					damage = formulas::criticalDamage(damage, db_->battleRules.criticalDamagePercent);
+					Event& e = emit(out, EventType::Critical);
+					e.actor = user;
+					e.target = target;
+				}
+				Effectiveness effectiveness = Effectiveness::Normal;
+				if (attacker.element != Element::None) {
+					const int affinity = t.affinity(attacker.element);
+					damage = formulas::elementScaled(damage, affinity);
+					effectiveness = effectivenessOf(affinity);
+				}
+				if (t.defending && damage > 0) {
 					damage = formulas::defended(damage);
 				}
-				dealDamage(target, damage, Element::None, Effectiveness::Normal, out);
+				changed = dealDamage(target, damage, attacker.element, effectiveness, out) > 0 || changed;
 				break;
 			}
 			case EffectKind::ElementalDamage: {
 				const int affinity = t.affinity(effect.element);
 				const int variance = rng_.range(formulas::kVarianceMin, formulas::kVarianceMax);
-				const int mental = flatPower ? 0 : source.effective(Stat::Mental);
+				const int mental = flatPower ? 0 : attacker.mental;
 				int damage = formulas::elementalDamage(effect.power, mental, t.effective(Stat::Mental), affinity, variance);
 				if (t.defending && damage > 0) {
 					damage = formulas::defended(damage);
 				}
-				dealDamage(target, damage, effect.element, effectivenessOf(affinity), out);
+				changed = dealDamage(target, damage, effect.element, effectivenessOf(affinity), out) > 0 || changed;
 				break;
 			}
 			case EffectKind::Heal: {
-				const int amount = flatPower ? effect.power : formulas::healAmount(effect.power, source.effective(Stat::Mental));
+				const int amount = flatPower ? effect.power : formulas::healAmount(effect.power, attacker.mental);
 				const int healed = std::min(amount, t.stats.maxHp - t.hp);
 				t.hp += healed;
 				Event& e = emit(out, EventType::Healed);
 				e.actor = user;
 				e.target = target;
 				e.amount = healed;
+				changed = changed || healed > 0;
 				break;
 			}
 			case EffectKind::ApplyStatus: {
@@ -242,11 +284,13 @@ void Battle::applyEffects(int user, const std::vector<Effect>& effects, const st
 				if (!def) {
 					break;
 				}
-				if (!rng_.chance(effect.chance)) {
+				const int resistance = t.resistance(effect.status);
+				if (resistance >= 100 || !rng_.chance(formulas::statusChance(effect.chance, resistance))) {
 					Event& e = emit(out, EventType::StatusResisted);
 					e.actor = user;
 					e.target = target;
 					e.status = effect.status;
+					e.effectiveness = resistance >= 100 ? Effectiveness::Immune : Effectiveness::Normal;
 					break;
 				}
 				removeStatus(target, effect.status);
@@ -255,6 +299,7 @@ void Battle::applyEffects(int user, const std::vector<Effect>& effects, const st
 				e.actor = user;
 				e.target = target;
 				e.status = effect.status;
+				changed = true;
 				break;
 			}
 			case EffectKind::CureStatus:
@@ -264,6 +309,7 @@ void Battle::applyEffects(int user, const std::vector<Effect>& effects, const st
 					e.actor = user;
 					e.target = target;
 					e.status = effect.status;
+					changed = true;
 				}
 				break;
 			case EffectKind::ModifyStat: {
@@ -277,6 +323,7 @@ void Battle::applyEffects(int user, const std::vector<Effect>& effects, const st
 				e.target = target;
 				e.stat = effect.stat;
 				e.amount = effect.percent;
+				changed = true;
 				break;
 			}
 			case EffectKind::Revive:
@@ -287,14 +334,16 @@ void Battle::applyEffects(int user, const std::vector<Effect>& effects, const st
 					e.actor = user;
 					e.target = target;
 					e.amount = t.hp;
+					changed = true;
 				}
 				break;
 			}
 		}
 	}
+	return changed;
 }
 
-void Battle::dealDamage(int target, int amount, Element element, Effectiveness effectiveness, std::vector<Event>& out) {
+int Battle::dealDamage(int target, int amount, Element element, Effectiveness effectiveness, std::vector<Event>& out) {
 	Combatant& t = combatants_[target];
 	const int dealt = std::min(amount, t.hp);
 	t.hp -= dealt;
@@ -305,10 +354,10 @@ void Battle::dealDamage(int target, int amount, Element element, Effectiveness e
 	e.effectiveness = effectiveness;
 	if (!t.alive()) {
 		defeat(target, out);
-		return;
+		return dealt;
 	}
 	if (dealt == 0) {
-		return;
+		return dealt;
 	}
 	const std::vector<ActiveStatus> statuses = t.statuses;
 	for (const ActiveStatus& active : statuses) {
@@ -321,6 +370,7 @@ void Battle::dealDamage(int target, int amount, Element element, Effectiveness e
 			woke.statusEnd = StatusEnd::WokeOnDamage;
 		}
 	}
+	return dealt;
 }
 
 void Battle::defeat(int target, std::vector<Event>& out) {
