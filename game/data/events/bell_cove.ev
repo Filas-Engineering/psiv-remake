@@ -1,0 +1,29 @@
+# Bell Cove: the boss guards the bell. Losing sends the party back to the
+# inn, so the fight can be tried again.
+
+event cove_bell unskippable
+	lock player
+	narrate "A cracked bell hangs from a driftwood frame. Something stirs beneath it."
+	say mystic "That is no bell keeper. That is a {name:bell_warden}!"
+	music play brass_alarm
+	battle warden
+	win
+		say mystic "It is only gears now. The bell can rest."
+		give spark_flask 1
+		set cove.warden_beaten
+	lose
+		narrate "The party wakes at the inn, sore and humbled."
+		warp tidewater inn_front
+		set cove.warden_lost
+	end
+	music stop
+	unlock player
+end
+
+# Fires from a flag hook once the warden is down and control is back.
+event cove_quiet skippable
+	narrate "For the first time in a week, the tide is the only sound in the cove."
+	set cove.quiet_seen
+on skip
+	set cove.quiet_seen
+end

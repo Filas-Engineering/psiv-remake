@@ -1,0 +1,42 @@
+{
+	"title": "The Bell at Tidewater",
+	"core_data": "../../core/data",
+	"areas": ["areas/tidewater.json", "areas/reed_path.json", "areas/bell_cove.json"],
+	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev"],
+	"glossary": "text/glossary.txt",
+	"speakers": {
+		"dockhand": "Dockhand",
+		"guide": "Harbor Guide",
+		"medic": "Test Medic",
+		"mystic": "Test Mystic",
+		"scout": "Test Scout"
+	},
+	"start": {
+		"area": "tidewater",
+		"marker": "start",
+		"facing": "east",
+		"lineup": ["fighter"],
+		"level": 3,
+		"money": 50,
+		"items": {"tonic": 1}
+	},
+	"join_levels": {"mystic": 3, "medic": 3, "scout": 4},
+	"prices": {
+		"tonic": 8,
+		"clear_gel": 6,
+		"wake_chime": 15,
+		"second_wind": 30,
+		"spark_flask": 12,
+		"grip_bands": 40,
+		"rivet_plate": 60,
+		"drift_feather": 50
+	},
+	"item_cap": 99,
+	"money_cap": 999999,
+	"tick_ms": 50,
+	"grace_ms": 3000,
+	"round_ms": 4000,
+	"autosave_slots": 3,
+	"manual_slots": 10,
+	"bosses": [{"encounter": "warden", "flag": "cove.warden_beaten"}]
+}

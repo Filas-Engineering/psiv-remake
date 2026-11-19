@@ -1,0 +1,9 @@
+# Reed Path: a scout who has mapped the marsh joins on the way to the cove.
+
+event reed_path_scout unskippable
+	lock player
+	say scout "Heading for the cove? I have mapped these reeds twice over. I am coming along."
+	party add scout
+	set reed.scout_joined
+	unlock player
+end

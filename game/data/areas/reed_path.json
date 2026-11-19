@@ -1,0 +1,49 @@
+{
+	"id": "reed_path",
+	"name": "Reed Path",
+	"kind": "field",
+	"encounter_mode": "visible",
+	"step_ms": 250,
+	"map": [
+		"####################",
+		"#..................#",
+		"#.....~~...........#",
+		"#.....~~.......~~..#",
+		"....................",
+		"#..............~~..#",
+		"#..................#",
+		"#..................#",
+		"####################"
+	],
+	"markers": {
+		"west_gate": [1, 4],
+		"east_gate": [18, 4],
+		"cache_front": [10, 2]
+	},
+	"exits": [
+		{"at": [0, 4], "to": "tidewater", "marker": "east_gate"},
+		{"at": [19, 4], "to": "bell_cove", "marker": "west_gate"}
+	],
+	"hooks": [
+		{"id": "scout", "at": [10, 4], "trigger": "step", "event": "reed_path_scout", "block_flag": "reed.scout_joined"}
+	],
+	"chests": [{"id": "reed_cache", "at": [10, 1], "flag": "chest.reed_cache", "items": {"second_wind": 1}, "money": 30}],
+	"zones": [
+		{
+			"id": "west_reeds",
+			"from": [2, 1],
+			"to": [9, 7],
+			"table": [{"encounter": "training", "weight": 1}],
+			"visible": {"spawns": [[4, 2], [8, 6], [3, 6]], "cap": 2, "detection_radius": 3, "leash_radius": 2},
+			"random": {"min_steps": 6, "max_steps": 12}
+		},
+		{
+			"id": "east_marsh",
+			"from": [11, 1],
+			"to": [18, 7],
+			"table": [{"encounter": "marsh", "weight": 2}, {"encounter": "training", "weight": 1}],
+			"visible": {"spawns": [[13, 2], [16, 6], [14, 5]], "cap": 2, "detection_radius": 4, "leash_radius": 3, "chase_speed_percent": 110, "chase_ms": 6000},
+			"random": {"min_steps": 5, "max_steps": 10, "party_first_percent": 10, "enemy_first_percent": 10}
+		}
+	]
+}

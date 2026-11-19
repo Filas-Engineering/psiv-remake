@@ -1,0 +1,54 @@
+# A full run of the placeholder adventure: arrival, the guide, the shop, the
+# inn, a manual save, both encounter zones, the chests, the boss, the epilogue
+# line, then a load of the manual save. Run with --seed 7 --auto-battle.
+new
+status
+walk guide_front
+face north
+talk
+choose 0
+look
+walk stall_front
+face north
+talk
+buy tonic 2
+sell tonic 1
+leave
+walk crate_front
+face south
+talk
+walk inn_front
+face west
+talk
+rest
+menu
+save manual_0
+close
+walk 13 4
+walk cache_front
+face north
+talk
+walk 10 4
+walk 19 4
+walk box_front
+face south
+talk
+menu
+equip fighter rivet_plate
+close
+set shipped on
+walk bell_front
+face east
+talk
+status
+walk 0 4
+walk 0 4
+walk guide_front
+face north
+talk
+pacing
+saves
+title
+load manual_0
+status
+quit

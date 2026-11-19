@@ -1,0 +1,3 @@
+# Name glossary for the placeholder adventure. See ../../../events/FORMAT.md, "Name glossary".
+# id | shipped name | restored name | reason
+bell_warden | BelWrdn | Bell Warden | cut by the enemy name length limit

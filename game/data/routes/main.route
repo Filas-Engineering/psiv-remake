@@ -1,0 +1,24 @@
+# The critical path for the pacing bot: no detours, every battle auto-resolved.
+new
+walk guide_front
+face north
+talk
+choose 0
+walk crate_front
+face south
+talk
+walk 13 4
+walk cache_front
+face north
+talk
+walk 10 4
+walk 19 4
+walk box_front
+face south
+talk
+menu
+equip fighter rivet_plate
+close
+walk bell_front
+face east
+talk
