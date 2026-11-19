@@ -1,4 +1,4 @@
-.PHONY: all test clean acceptance bindings
+.PHONY: all test clean acceptance bindings linux-check
 
 all clean:
 	$(MAKE) -C core $@
@@ -16,3 +16,7 @@ acceptance:
 
 bindings:
 	$(MAKE) -C bindings test
+
+# Linux in Docker, with g++ and clang++ (see "Platforms" in README.md).
+linux-check:
+	tools/linux-check.sh

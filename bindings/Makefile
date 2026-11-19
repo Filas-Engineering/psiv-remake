@@ -55,7 +55,7 @@ SCRIPT = $(GAME)/data/scripts/playthrough.txt
 SAMPLE = monogame/Psiv.Sample/Psiv.Sample.csproj
 SAMPLE_SCRIPT = monogame/Psiv.Sample/scripts/smoke.txt
 
-.PHONY: all test native-test dotnet dotnet-test clean deps
+.PHONY: all test native-test dotnet dotnet-test dotnet-missing clean deps
 
 all: $(LIB) $(PLAYTHROUGH) $(TESTS)
 ifneq ($(wildcard $(DOTNET)),)
@@ -90,6 +90,8 @@ $(BUILD)/c/tests/%.o: c/tests/%.c
 test: native-test
 ifneq ($(wildcard $(DOTNET)),)
 test: dotnet-test
+else
+test: dotnet-missing
 endif
 
 native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI)
@@ -112,6 +114,9 @@ dotnet-test: dotnet
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_saves --script $(SAMPLE_SCRIPT) --frames 2000 > $(BUILD)/sample_headless.txt \
 		|| (cat $(BUILD)/sample_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_headless.txt
+
+dotnet-missing:
+	@echo "no dotnet at $(DOTNET): skipped the C# tests and the sample's headless run"
 
 clean:
 	rm -rf $(BUILD) csharp/*/bin csharp/*/obj monogame/*/bin monogame/*/obj

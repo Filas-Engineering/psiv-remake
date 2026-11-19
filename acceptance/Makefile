@@ -1,4 +1,6 @@
 CXX = clang++
+# ACC-BAT-01 compiles core sources itself with the same compiler.
+export CXX
 WARNINGS = -std=c++17 -Wall -Wextra -Werror
 CXXFLAGS = $(WARNINGS) -O1 -MMD -MP
 PYTHON = python3

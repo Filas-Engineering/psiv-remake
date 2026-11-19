@@ -1,5 +1,6 @@
 #include "game/profile.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <sstream>

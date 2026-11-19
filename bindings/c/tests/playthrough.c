@@ -457,7 +457,8 @@ static int execute(const char* rawLine) {
 	char line[LINE_SIZE];
 	char words[MAX_WORDS][LINE_SIZE];
 	int wordCount = 0;
-	char message[LINE_SIZE];
+	/* Room for a whole line plus the text around it, so no message is cut short. */
+	char message[LINE_SIZE + 64];
 	snprintf(line, sizeof line, "%s", rawLine);
 	char* hash = strchr(line, '#');
 	if (hash) {
@@ -672,7 +673,7 @@ static int execute(const char* rawLine) {
 			int32_t reward = settings.reward_multiplier;
 			snprintf(difficulty, sizeof difficulty, "%s", settings.difficulty);
 			if (strcmp(words[1], "difficulty") == 0) {
-				snprintf(difficulty, sizeof difficulty, "%s", words[2]);
+				snprintf(difficulty, sizeof difficulty, "%.*s", NAME_SIZE - 1, words[2]);
 			} else if (psiv_parse_name(PSIV_NAME_REWARD_MULTIPLIER, words[2], &reward) != PSIV_OK) {
 				snprintf(message, sizeof message, "bad reward multiplier '%s'", words[2]);
 				error(message);

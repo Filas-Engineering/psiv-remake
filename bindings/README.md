@@ -18,7 +18,7 @@ A flat C interface to the headless game session in `../game` (with `../core` and
 
 ## Build
 
-Needs `clang++`/`clang` and GNU Make 3.81 or later for the native layers, and the .NET 10 SDK for the rest. The Makefile looks for `dotnet` at `~/.dotnet/dotnet`; pass `DOTNET=/path/to/dotnet` to use another. When it is missing, `make` and `make test` do the native layers only.
+Needs `clang++`/`clang` and GNU Make 3.81 or later for the native layers, and the .NET 10 SDK for the rest. The Makefile looks for `dotnet` at `~/.dotnet/dotnet`; pass `DOTNET=/path/to/dotnet` to use another. When it is missing, `make` and `make test` do the native layers only, and `make test` says so.
 
 ```
 make          # ../core, ../events, ../game through their Makefiles, then build/libpsiv_session.*, the C tests, and the .NET projects
@@ -169,7 +169,7 @@ This round: `PSIV_ABI_VERSION` 2. The binding now calls the game for everything 
 
 ## Not covered
 
-* Builds on Linux and Windows: the Makefile branches and the font list are written, not run.
+* Windows: the Makefile branch and the font list are written, not run. Linux passes `make test` with g++ and clang++ (see "Platforms" in `../README.md`), but only the sample's headless mode has run there, not its window.
 * Editing macros, the combo log, the pause overlay and anything else `game` itself does not build (see `../game/README.md`, "Not built").
 * The pacing bot and the events tools have no C entry points.
 * One session per data load: two sessions load the data twice.

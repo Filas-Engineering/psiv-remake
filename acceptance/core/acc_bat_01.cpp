@@ -130,9 +130,12 @@ ACC_CHECK(acc_bat_01, "ACC-BAT-01", "BAT-002") {
 	int status = 0;
 	run("mkdir -p '" + out + "'", status);
 	int compiled = 0;
+	// The Makefile exports CXX; run by hand, the check falls back to clang++.
+	const char* fromMake = std::getenv("CXX");
+	const std::string compiler = fromMake != nullptr && *fromMake != '\0' ? fromMake : "clang++";
 	for (const std::string& source : sources) {
 		const std::string name = source.substr(source.rfind('/') + 1);
-		const std::string command = "clang++ -std=c++17 -Wall -Wextra -Werror -O0 -I'" + core + "/include' -I'" + core + "/src' -c '" + source + "' -o '" + out + "/" + name + ".o'";
+		const std::string command = compiler + " -std=c++17 -Wall -Wextra -Werror -O0 -I'" + core + "/include' -I'" + core + "/src' -c '" + source + "' -o '" + out + "/" + name + ".o'";
 		const std::string output = run(command, status);
 		if (t.expect(status == 0, "isolated compile failed for " + name + ": " + output.substr(0, 200))) {
 			++compiled;
@@ -143,7 +146,7 @@ ACC_CHECK(acc_bat_01, "ACC-BAT-01", "BAT-002") {
 	const std::string suite = run("cd '" + core + "' && ./build/rules_tests", status);
 	t.expect(status == 0, "core suite build/rules_tests failed: " + suite.substr(suite.size() > 300 ? suite.size() - 300 : 0));
 
-	const std::string version = run("clang++ --version | head -n 1", status);
+	const std::string version = run(compiler + " --version | head -n 1", status);
 	t.note(std::to_string(compiled) + " core sources compile with only core/include and core/src on the include path; " +
 		std::to_string(scanned) + " includes are standard or core-local; resolution code has no clock, file, network or thread access (" + std::to_string(hostLoads) +
 		" file reads sit in host-side load functions outside loader and json sources); core suite passes");

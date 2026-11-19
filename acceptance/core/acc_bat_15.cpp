@@ -100,5 +100,5 @@ ACC_CHECK(acc_bat_15, "ACC-BAT-15", "BAT-130, BAT-131, BAT-132") {
 	t.note(std::to_string(repeated) + " random setups (encounter, level, difficulty, opening, multiplier, flags, scripted end, carried statuses, macros and auto-battle) played twice give byte-identical streams and records");
 	t.note(std::to_string(replayed) + " records round-trip and replay byte-identically; records from other data or rules versions are refused; 300 battles are byte-identical across -O0, -O1 and -O3 builds");
 	t.note("no floating-point type in rules code (the JSON number reader in " + loaderUse + " uses double only while loading data)");
-	t.note("platforms covered: this host only (Apple clang, one architecture)");
+	t.note("platforms covered: this host only (" __VERSION__ ", one architecture)");
 }
