@@ -47,6 +47,20 @@ Macro comboMacro(const Battle& battle, const ComboRecipe& recipe, const std::vec
 	return macro;
 }
 
+// The macro plus a Defend step for every party member it leaves out, so the whole party acts in macro order.
+Macro withRest(const Battle& battle, Macro macro) {
+	for (int i = 0; i < battle.partyCount(); ++i) {
+		const std::string& member = battle.combatant(i).defId;
+		if (std::none_of(macro.steps.begin(), macro.steps.end(), [&](const MacroStep& step) { return step.member == member; })) {
+			MacroStep step;
+			step.member = member;
+			step.kind = CommandKind::Defend;
+			macro.steps.push_back(step);
+		}
+	}
+	return macro;
+}
+
 std::vector<std::size_t> listed(const ComboRecipe& recipe) {
 	std::vector<std::size_t> order;
 	for (std::size_t k = 0; k < recipe.abilities.size(); ++k) {
@@ -58,6 +72,8 @@ std::vector<std::size_t> listed(const ComboRecipe& recipe) {
 Battle comboBattle(const Database& db, std::uint64_t seed) {
 	Battle battle = support::create(db, support::setup(db, {"brass_warden"}, seed, 6));
 	support::sturdy(battle, kFirst);
+	// Too slow to take a turn between two party members; the last part of the check covers that case.
+	battle.combatant(kFirst).stats.agility = 1;
 	for (int i = 0; i < battle.partyCount(); ++i) {
 		battle.combatant(i).hp = battle.combatant(i).stats.maxHp / 2;
 	}
@@ -81,7 +97,7 @@ ACC_CHECK(acc_bat_11, "ACC-BAT-11", "BAT-060, BAT-061, BAT-062") {
 		{
 			Battle battle = comboBattle(db, 3);
 			std::vector<int> actors;
-			battle.applyMacro(comboMacro(battle, recipe, listed(recipe), actors));
+			battle.applyMacro(withRest(battle, comboMacro(battle, recipe, listed(recipe), actors)));
 			if (!t.expect(std::find(actors.begin(), actors.end(), -1) == actors.end(), recipe.id + ": setup: no party member at level 6 can use every component")) {
 				continue;
 			}
@@ -124,7 +140,7 @@ ACC_CHECK(acc_bat_11, "ACC-BAT-11", "BAT-060, BAT-061, BAT-062") {
 			std::vector<std::size_t> reversed = listed(recipe);
 			std::reverse(reversed.begin(), reversed.end());
 			std::vector<int> actors;
-			battle.applyMacro(comboMacro(battle, recipe, reversed, actors));
+			battle.applyMacro(withRest(battle, comboMacro(battle, recipe, reversed, actors)));
 			const std::vector<Event> combos = fired(battle);
 			const bool fires = std::any_of(combos.begin(), combos.end(), [&](const Event& e) { return e.combo == recipe.id; });
 			t.expect(fires != recipe.ordered, recipe.id + (recipe.ordered ? ": an ordered combination fired with its components in reverse order" : ": an unordered combination did not fire with its components in reverse order"));
@@ -150,7 +166,7 @@ ACC_CHECK(acc_bat_11, "ACC-BAT-11", "BAT-060, BAT-061, BAT-062") {
 			battle.combatant(stranger).skillUses[recipe.abilities[k]] = 9;
 			battle.combatant(stranger).tp = 99;
 			macro.steps[k].member = battle.combatant(stranger).defId;
-			battle.applyMacro(macro);
+			battle.applyMacro(withRest(battle, macro));
 			const std::vector<Event> combos = fired(battle);
 			t.expect(std::none_of(combos.begin(), combos.end(), [&](const Event& e) { return e.combo == recipe.id; }),
 				recipe.id + ": fired with " + recipe.abilities[k] + " used by " + battle.combatant(stranger).defId + " instead of its tied character " + tiedTo(recipe, k));
@@ -176,7 +192,7 @@ ACC_CHECK(acc_bat_11, "ACC-BAT-11", "BAT-060, BAT-061, BAT-062") {
 				step.kind = CommandKind::Ability;
 				step.id = blockerAbility;
 				macro.steps.insert(macro.steps.begin() + 1, step);
-				battle.applyMacro(macro);
+				battle.applyMacro(withRest(battle, macro));
 				battle.combatant(blocker).tp = 0;
 				support::othersDefend(battle);
 				const std::vector<Event> events = battle.resolveRound();

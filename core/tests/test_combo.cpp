@@ -122,17 +122,41 @@ TEST(longestRecipeWinsInsideAMacro) {
 	CHECK(!log.isDiscovered("storm_spark"));
 }
 
-TEST(macroOrderMakesSupportCombosReliable) {
+TEST(macroComboFiresWhenNoEnemyActsBetweenItsSteps) {
+	Database db = data();
+	db.enemies["brass_warden"].stats.agility = 1;
 	for (std::uint64_t seed = 1; seed <= 10; ++seed) {
-		Battle battle = makeBattle(data(), {"brass_warden"}, seed);
+		Battle battle = makeBattle(db, {"brass_warden"}, seed);
 		battle.combatant(kFighter).hp = 20;
-		battle.applyMacro(*data().macro("regroup"));
+		battle.applyMacro(*db.macro("regroup"));
 		battle.setCommand(kFirstEnemy, Command::defend());
 		const std::vector<Event> events = battle.resolveRound();
 		const std::vector<Event> combos = ofType(events, EventType::ComboTriggered);
 		CHECK(!combos.empty() && combos[0].ability == "mending_chorus");
 		CHECK_EQ(ofType(events, EventType::Healed).size(), std::size_t(6));
 	}
+}
+
+TEST(anEnemyTurnBetweenMacroStepsBreaksTheCombo) {
+	int fired = 0;
+	int broken = 0;
+	for (std::uint64_t seed = 1; seed <= 10; ++seed) {
+		Battle battle = makeBattle(data(), {"brass_warden"}, seed);
+		battle.combatant(kFighter).hp = 20;
+		battle.applyMacro(*data().macro("regroup"));
+		battle.setCommand(kFirstEnemy, Command::defend());
+		const std::vector<Event> events = battle.resolveRound();
+		if (!ofType(events, EventType::ComboTriggered).empty()) {
+			++fired;
+			continue;
+		}
+		++broken;
+		const std::vector<int>& order = battle.lastTurnOrder();
+		const auto enemy = std::find(order.begin(), order.end(), kFirstEnemy);
+		CHECK(enemy != order.begin() && enemy != order.end() && enemy + 1 != order.end());
+	}
+	CHECK(fired > 0);
+	CHECK(broken > 0);
 }
 
 TEST(comboAveragesEveryParticipantsStats) {
@@ -172,7 +196,8 @@ int knower(const Battle& battle, const std::string& ability, const std::vector<i
 }
 
 TEST(everyShippedRecipeFiresFromAMacro) {
-	const Database& db = data();
+	Database db = data();
+	db.enemies["brass_warden"].stats.agility = 1;
 	CHECK_EQ(db.combos.size(), std::size_t(15));
 	for (const ComboRecipe& recipe : db.combos) {
 		ComboLog log;
@@ -192,6 +217,12 @@ TEST(everyShippedRecipeFiresFromAMacro) {
 			}
 			taken.push_back(actor);
 			macro.steps.push_back({actor >= 0 ? battle.combatant(actor).defId : "", CommandKind::Ability, recipe.abilities[k], {}});
+		}
+		// The rest of the party goes after the recipe, and the enemy is too slow to cut in.
+		for (int i = 0; i < kFirstEnemy; ++i) {
+			if (std::find(taken.begin(), taken.end(), i) == taken.end()) {
+				macro.steps.push_back({battle.combatant(i).defId, CommandKind::Defend, "", {}});
+			}
 		}
 		battle.applyMacro(macro);
 		othersDefend(battle);

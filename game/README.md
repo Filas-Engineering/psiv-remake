@@ -229,7 +229,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 
 ## Changes in the previous round
 
-* Builds against core rules version 4 (item drops, vehicles in data) and the events marker maps, scripted ends and game strings.
+* Builds against core rules version 5 (macros no longer act as one block; item drops, vehicles in data) and the events marker maps, scripted ends and game strings.
 * Battle drops are added to the inventory and shown. Scripted ends come from the script's `until`; `game.json` no longer takes `scripted_ends`. The registry knows each marker's area and each hook event's starting area, so the game's own warp check is gone.
 * Several languages: `game.json` takes `languages` instead of `strings` and `text`; a placeholder Japanese pair (`text/ja.strings`, `text/ja.json`) is added; the profile's text language picks the tables.
 * Speaker names and journal text moved from the text table to the dialogue tables. Area display names moved from the area files to `area.<id>` text keys (areas no longer take `name`). `Session` refusals are text keys.

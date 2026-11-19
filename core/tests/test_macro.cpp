@@ -25,12 +25,13 @@ MacroStep step(const char* member, CommandKind kind, const char* id, MacroTarget
 
 }
 
-TEST(macroForcesRelativeOrderAsOneBlock) {
+TEST(macroForcesRelativeOrderAndEnemiesKeepTheirTurns) {
 	Database db = data();
 	db.characters["medic"].base.agility = 300;
 	db.characters["fighter"].base.agility = 200;
 	db.characters["mystic"].base.agility = 1;
 	const std::vector<int> expected = {kMystic, kScout, kFighter, kEngineer, kMedic};
+	int interrupted = 0;
 	for (std::uint64_t seed = 1; seed <= 20; ++seed) {
 		Battle battle = makeBattle(db, {"gel_mite", "rust_hound"}, seed);
 		const std::vector<MacroStepResult> results = battle.applyMacro(*db.macro("opener"));
@@ -39,12 +40,20 @@ TEST(macroForcesRelativeOrderAsOneBlock) {
 		}
 		battle.resolveRound();
 		const std::vector<int>& order = battle.lastTurnOrder();
-		const auto start = std::find(order.begin(), order.end(), kMystic);
-		CHECK(start != order.end() && order.end() - start >= 5);
-		if (start != order.end() && order.end() - start >= 5) {
-			CHECK_EQ(std::vector<int>(start, start + 5), expected);
+		std::vector<int> party;
+		for (int actor : order) {
+			if (battle.isParty(actor)) {
+				party.push_back(actor);
+			}
+		}
+		CHECK_EQ(party, expected);
+		const auto first = std::find(order.begin(), order.end(), expected.front());
+		const auto last = std::find(order.begin(), order.end(), expected.back());
+		if (first != order.end() && last != order.end() && last - first > 4) {
+			++interrupted;
 		}
 	}
+	CHECK(interrupted > 0);
 }
 
 TEST(macroFillsCommandsWithTargets) {

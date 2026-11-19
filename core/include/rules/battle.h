@@ -69,7 +69,7 @@ public:
 	// Returns an empty message on success, otherwise why the command was rejected.
 	Message setCommand(int actor, const Command& command);
 
-	// Sets commands for the macro's members and makes them act as one block, in step order.
+	// Sets commands for the macro's members and fixes their order among themselves. Enemies keep their own turns.
 	std::vector<MacroStepResult> applyMacro(const Macro& macro);
 
 	// The host's play time, stored in the combo log when a combination is first discovered.

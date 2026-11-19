@@ -36,12 +36,10 @@ std::vector<int> Battle::computeTurnOrder() {
 	});
 
 	std::vector<int> block;
-	int blockTotal = 0;
 	for (int actor : forcedOrder_) {
 		for (const Slot& slot : slots) {
 			if (slot.actor == actor) {
 				block.push_back(actor);
-				blockTotal += slot.initiative;
 			}
 		}
 	}
@@ -54,21 +52,15 @@ std::vector<int> Battle::computeTurnOrder() {
 		return order;
 	}
 
-	// A macro acts as one block, at its members' average initiative, so its steps stay adjacent.
-	const int blockInitiative = blockTotal / static_cast<int>(block.size());
-	bool placed = false;
+	// A macro fixes its members' order among themselves. Each turn stays where its
+	// initiative put it, so an enemy can act between two macro steps.
+	std::size_t next = 0;
 	for (const Slot& slot : slots) {
 		if (std::find(block.begin(), block.end(), slot.actor) != block.end()) {
-			continue;
+			order.push_back(block[next++]);
+		} else {
+			order.push_back(slot.actor);
 		}
-		if (!placed && slot.initiative <= blockInitiative) {
-			order.insert(order.end(), block.begin(), block.end());
-			placed = true;
-		}
-		order.push_back(slot.actor);
-	}
-	if (!placed) {
-		order.insert(order.end(), block.begin(), block.end());
 	}
 	return order;
 }

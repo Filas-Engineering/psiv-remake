@@ -36,6 +36,7 @@ ACC_CHECK(acc_bat_10, "ACC-BAT-10", "BAT-051, BAT-052, BAT-053, BAT-054") {
 	const Database& db = support::data(t);
 	const std::vector<std::string> enemies = {"rust_hound", "gel_mite", "bog_wisp"};
 	int rounds = 0;
+	int interrupted = 0;
 	for (const Macro& macro : db.macros) {
 		for (std::uint64_t seed = 1; seed <= 300; ++seed) {
 			// With the macro.
@@ -64,39 +65,26 @@ ACC_CHECK(acc_bat_10, "ACC-BAT-10", "BAT-051, BAT-052, BAT-053, BAT-054") {
 				without.setCommand(i, with.command(i));
 			}
 
-			// Each initiative, replayed from the seed before anything changes agility.
-			int blockTotal = 0;
-			std::map<int, int> initiative;
-			Rng rng(seed);
-			for (int i = 0; i < static_cast<int>(without.combatants().size()); ++i) {
-				const int agility = without.combatant(i).effective(Stat::Agility);
-				initiative[i] = formulas::initiative(agility, rng.range(0, formulas::initiativeSpread(agility)));
-			}
-			for (int actor : macroOrder) {
-				blockTotal += initiative[actor];
-			}
-			const int blockInitiative = blockTotal / static_cast<int>(macroOrder.size());
-
 			const std::vector<Event> events = with.resolveRound();
 			without.resolveRound();
 			const std::vector<int>& order = with.lastTurnOrder();
 
-			// The party block is contiguous, in macro order.
-			const auto start = std::find(order.begin(), order.end(), macroOrder.front());
-			const bool contiguous = start != order.end() && static_cast<std::size_t>(order.end() - start) >= macroOrder.size() && std::equal(macroOrder.begin(), macroOrder.end(), start);
-			t.expect(contiguous, macro.name + " seed " + std::to_string(seed) + ": party actions are not one block in macro order");
+			// Party turns run in macro order, in the slots the party's initiative rolls earned.
 			const std::vector<int> acted = support::actingOrder(events);
+			t.expect(subsequence(order, true, with) == macroOrder, macro.name + " seed " + std::to_string(seed) + ": party turns are not in macro order");
 			t.expect(subsequence(acted, true, with) == macroOrder, macro.name + ": party actions did not execute in macro order");
 
-			// Enemies keep their relative order and sit before or after the block by its average initiative.
-			t.expect(subsequence(order, false, with) == subsequence(without.lastTurnOrder(), false, without), macro.name + " seed " + std::to_string(seed) + ": enemy order differs from the run without the macro");
-			const std::size_t blockAt = static_cast<std::size_t>(start - order.begin());
-			for (std::size_t i = 0; contiguous && i < order.size(); ++i) {
-				if (!with.isParty(order[i])) {
-					const bool before = i < blockAt;
-					t.expect(before == (initiative[order[i]] > blockInitiative), macro.name + " seed " + std::to_string(seed) + ": enemy " + std::to_string(order[i]) +
-						" is on the wrong side of the block for the block's average initiative");
-				}
+			// Every enemy keeps the exact turn it has without the macro, so it can act between two macro steps.
+			const std::vector<int>& plain = without.lastTurnOrder();
+			bool sameSlots = plain.size() == order.size();
+			for (std::size_t i = 0; sameSlots && i < order.size(); ++i) {
+				sameSlots = with.isParty(order[i]) ? without.isParty(plain[i]) : order[i] == plain[i];
+			}
+			t.expect(sameSlots, macro.name + " seed " + std::to_string(seed) + ": an enemy's turn moved because of the macro");
+			const auto first = std::find(order.begin(), order.end(), macroOrder.front());
+			const auto last = std::find(order.begin(), order.end(), macroOrder.back());
+			if (first != order.end() && last != order.end() && static_cast<std::size_t>(last - first) >= macroOrder.size()) {
+				++interrupted;
 			}
 			++rounds;
 		}
@@ -149,5 +137,5 @@ ACC_CHECK(acc_bat_10, "ACC-BAT-10", "BAT-051, BAT-052, BAT-053, BAT-054") {
 		}
 	}
 
-	t.note(std::to_string(rounds) + " rounds with the data macros: every member's command comes from the macro, the block runs contiguously in macro order, enemy order matches the run without it; absent, fallen and disabled entries are skipped; an unaffordable entry is kept, marked with a cost issue and cancelled at execution with not_enough_tp; targets are rules");
+	t.note(std::to_string(rounds) + " rounds with the data macros: every member's command comes from the macro, party turns run in macro order, every enemy keeps the turn it has without the macro (an enemy acted between macro steps in " + std::to_string(interrupted) + " rounds); absent, fallen and disabled entries are skipped; an unaffordable entry is kept, marked with a cost issue and cancelled at execution with not_enough_tp; targets are rules");
 }
