@@ -1,4 +1,4 @@
-.PHONY: all test clean acceptance
+.PHONY: all test clean acceptance bindings
 
 all clean:
 	$(MAKE) -C core $@
@@ -13,3 +13,6 @@ test:
 
 acceptance:
 	$(MAKE) -C acceptance test
+
+bindings:
+	$(MAKE) -C bindings test

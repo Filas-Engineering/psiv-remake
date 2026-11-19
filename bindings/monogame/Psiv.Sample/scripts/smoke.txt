@@ -1,0 +1,85 @@
+# Headless smoke run of the sample's screens: title, dialogue and a choice, walking with held keys, the
+# quest log, the field menu and a manual save, party talk, a shop, the inn, a battle played from the
+# command menu (attack, technique, then auto) and the menu after it. `cmd` lines use game_cli's command
+# language to walk to a marker; everything else is key presses through the same controller as the window.
+
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+expect screen Field
+hold Right 36
+dump
+
+cmd walk dock_front
+press Up
+press Enter
+expect screen Dialogue
+pressuntil Enter Field 400
+
+press Q
+expect screen QuestLog
+dump
+press Escape
+expect screen Field
+
+cmd walk guide_front
+press Up
+press Enter
+pressuntil Enter Field 400
+press T
+wait 10
+
+press M
+expect screen Menu
+press Right
+dump
+press Right 2
+press Enter
+press Escape
+expect screen Field
+
+cmd walk stall_front
+press Up
+press Enter
+expect screen Shop
+press Enter
+press Right
+press Enter
+dump
+press Escape
+expect screen Field
+
+cmd walk inn_front
+press Left
+press Enter
+expect screen Inn
+press Enter
+expect screen Field
+
+cmd walk 13 4
+cmd walk cache_front
+expect mode Battle
+wait 60
+expect screen Battle
+dump
+# Fighter attacks the first enemy, the mystic uses a technique, then auto-battle takes over.
+press Enter
+press Enter
+press Down
+press Enter
+press Enter
+press Enter
+press Up
+press Enter
+pressuntil Enter Field 4000
+expect mode Field
+
+press M
+expect screen Menu
+dump
+press Escape
+expect screen Field
+press L
+expect screen TextLog
+press Escape
+wait 30

@@ -10,6 +10,7 @@ Scoping for a modern remake of Phantasy Star IV.
 - [Game session](game/README.md): joins event scripts to battles, with areas, encounters, shops and saving. Playable in the terminal through a small invented adventure
 - [Text tooling](tools/text/README.md): line database, name glossary, rename review and localization export for a delivered script
 - [Acceptance checks](acceptance/README.md): the spec's checks that need no rendering, run against the libraries, with a report mapping every requirement to its status
+- [Bindings](bindings/README.md): a C interface over the game session, a C# wrapper, and a MonoGame sample that plays the placeholder adventure
 
 This repo holds planning documents, engine-neutral libraries and tooling. The libraries ship with invented placeholder data only. It holds no script text, art, audio or other source material. Those stay in the rights holder's own storage until asset handling is agreed (see "Source material" in the scope).
 
@@ -20,5 +21,7 @@ Needs `clang++` and `make`.
 ```bash
 make test
 ```
+
+`make bindings` builds and tests the C interface, and the C# wrapper and MonoGame sample when the .NET SDK is at `~/.dotnet`.
 
 `make acceptance` runs the spec's acceptance checks. It fails while any check contradicts the spec.
