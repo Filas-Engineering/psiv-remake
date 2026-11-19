@@ -111,7 +111,7 @@ TEST(string_check_without_scripts_only_compares_languages) {
 	StringTable ja = table_ok("ja.strings", "language ja\nb = ランプ\n");
 	std::vector<Diagnostic> d = events::check_strings(events::Program(), {en, ja});
 	CHECK(any_contains(d, Severity::warning, "en.strings:2:", "'a' is in the 'en' table but missing from 'ja'"));
-	CHECK(any_contains(d, Severity::warning, "ja.strings:2:", "name tokens in 'b' (none) differ from the 'en' table (tide_lamp)"));
+	CHECK(any_contains(d, Severity::error, "ja.strings:2:", "name tokens in 'b' (none) differ from the 'en' table (tide_lamp)"));
 	CHECK_EQ(d.size(), 2u);
 }
 
@@ -120,7 +120,8 @@ TEST(extract_lists_every_inline_text_in_order_and_skips_ids) {
 	std::string table = events::extract_strings(p, "en");
 	CHECK(table.find("language en\n") != std::string::npos);
 	CHECK(table.find("# test.ev:3 dock: narrate\ndock.1 = The planks creak.\n") != std::string::npos);
-	CHECK(table.find("# test.ev:4 dock: option\ndock.2 = North\n") != std::string::npos);
+	// An option cites its own line, not its choice's.
+	CHECK(table.find("# test.ev:5 dock: option\ndock.2 = North\n") != std::string::npos);
 	CHECK(table.find("# test.ev:9 dock: ask\ndock.3 = Stay a while?\n") != std::string::npos);
 	CHECK(table.find("dock.4") == std::string::npos);
 	CHECK(table.find("@dock") == std::string::npos);
@@ -143,4 +144,28 @@ TEST(collect_texts_names_event_role_and_line) {
 	CHECK_EQ(uses[6].role, std::string("ask"));
 	CHECK_EQ(uses[7].event, std::string("second"));
 	CHECK_EQ(uses[7].line, 14);
+}
+
+TEST(string_check_rejects_translations_that_drop_or_change_tokens_or_control_tags) {
+	events::Program p = test::compile_ok("event a unskippable\n\tsay guide @a.one\n\tsay guide @a.two\n\tsay guide @a.three\n\tsay guide @a.four\nend\n");
+	StringTable en = table_ok("en.strings", "language en\na.one = Take the {name:tide_lamp}.{page}And the {name:rope}.\n"
+		"a.two = Wait.{pause:0.5} Now.{page}Go.\na.three = Plain.\na.four = A {name:rope} and a {name:tide_lamp}.\n");
+	StringTable ja = table_ok("ja.strings", "language ja\na.one = {name:tide_lamp}を取って。{page}縄も。\n"
+		"a.two = 待って。{page}今だ。{pause:0.5}行こう。\na.three = {page}ふつう。\na.four = {name:tide_lamp}と{name:rope}。\n");
+	std::vector<Diagnostic> d = events::check_strings(p, {en, ja});
+	CHECK(any_contains(d, Severity::error, "ja.strings:2:", "name tokens in 'a.one' (tide_lamp) differ from the 'en' table (rope, tide_lamp)"));
+	CHECK(any_contains(d, Severity::error, "ja.strings:3:", "control tags in 'a.two' ({page}, {pause:0.5}) differ from the 'en' table ({pause:0.5}, {page})"));
+	CHECK(any_contains(d, Severity::error, "ja.strings:4:", "control tags in 'a.three' ({page}) differ from the 'en' table (none)"));
+	// Name tokens may move with the word order; that is not an error.
+	CHECK_EQ(d.size(), 3u);
+	CHECK(events::find_control_tags("{name:x} {page} {not a tag} {pause:1}{") == (std::vector<std::string>{"{page}", "{pause:1}"}));
+}
+
+TEST(inline_text_check_flags_every_quoted_text_at_its_own_line) {
+	events::Program p = test::compile_ok(script);
+	std::vector<Diagnostic> d = events::check_inline_text(p);
+	CHECK(any_contains(d, Severity::error, "test.ev:3:", "inline text in narrate in event 'dock'"));
+	CHECK(any_contains(d, Severity::error, "test.ev:5:", "inline text in option"));
+	CHECK(any_contains(d, Severity::error, "test.ev:9:", "inline text in ask"));
+	CHECK_EQ(d.size(), 3u);
 }

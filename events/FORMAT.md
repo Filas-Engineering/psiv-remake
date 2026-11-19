@@ -6,10 +6,11 @@ Check your scripts with:
 
 ```
 build/event_cli check samples/*.ev
+build/event_cli check --strict --registry sample_text/registry.txt --glossary sample_text/glossary.txt --table sample_text/en.strings --table sample_text/ja.strings samples/*.ev
 build/event_cli lint --entries sample_text/entries.txt samples/*.ev
 ```
 
-`check` reports errors that stop a script from compiling. `lint` reports likely mistakes in scripts that do compile (see [Lint](#lint)).
+`check` reports errors that stop a script from compiling. With `--registry` it also rejects names the game does not have (see [Registry](#registry)). `--table` adds the string table checks and `--glossary` the name checks. `--strict` is the gate for shipped scripts (see [Strict check](#strict-check)). `lint` reports likely mistakes in scripts that do compile (see [Lint](#lint)).
 
 ## The basics
 
@@ -18,6 +19,7 @@ build/event_cli lint --entries sample_text/entries.txt samples/*.ev
 - `#` starts a comment that runs to the end of the line. A `#` inside a quoted string is text.
 - Text is either a quoted string, `"Like this."`, or a string ID, `@harbor.greeting`. A string ID is looked up in the game's string tables (see [String tables](#string-tables)), so the same script works in every language. Inside quotes, `\"` is a quote, `\\` a backslash and `\n` a line break.
 - A renamed name in text is written as a name token, `{name:tide_lamp}`, never typed out. The game shows the shipped or the restored name depending on the "show shipped names" setting (see [Name glossary](#name-glossary)).
+- Other `{...}` codes in text are control tags for the game, for example `{page}` to wait for the player before the next page of a line. They are written `{word}` or `{word:value}`. A translation must keep the same control tags in the same order (see [String tables](#string-tables)).
 - Names (actors, flags, markers, cameras and so on) are letters, digits, `_` and `.`, and do not start with a digit. Use dots to group names: `harbor.met_guide`.
 - Numbers are written `3`, `-2` or `1.5`.
 
@@ -25,50 +27,32 @@ build/event_cli lint --entries sample_text/entries.txt samples/*.ev
 
 ```
 event harbor_arrival skippable
-	say guide "Welcome."
-	set harbor.met_guide
-on skip
+	say guide @harbor.welcome
 	set harbor.met_guide
 end
 ```
 
-Every event is marked `skippable` or `unskippable`. A skippable event can have an `on skip` block before its `end`.
+Every event is marked `skippable` or `unskippable`.
 
-When the player skips, the game cancels everything the scene was doing and runs the `on skip` block. That block must leave the world exactly as playing the scene to the end would: the same flags, variables, items, party and player control. Write it as the scene's total effect, as if nothing had happened yet:
+### Skipping
 
-```
-on skip
-	give harbor_map
-	var harbor.visits += 1
-	set harbor.met_guide
-	unlock player
-end
-```
+When the player skips a skippable event, the rest of the scene plays at once:
 
-The player may skip halfway, after the scene has already given some items. The interpreter keeps count of what the played part of the scene gave, took and added with `+=`/`-=`, including inside events it called. When `on skip` gives, takes or adds, it only applies the part that is still missing. If the scene already gave the map, `give harbor_map` in `on skip` gives nothing; if it gave one of two shells, `give shell 2` gives one more. So a skip at any moment applies each change once.
+- Every command that changes the game applies, in order, exactly as when the scene is watched: flags, variables, items, party, player control, warps and rests.
+- Lines are not shown. The game's text log still gets them, marked as skipped.
+- Waits take no time.
+- Moves, camera, panels, fades, music and ambient sound complete at once: the game puts everything at its end state without playing it. Shakes and one-shot sounds are dropped, because they leave nothing behind.
+- The skip stops at the next `choice`, `ask`, `battle`, `shop`, `save prompt` or `name entry`. The player answers or fights as usual and can skip again afterwards.
 
-`set`, `clear`, `party add`, `party remove`, `var x = n`, `lock player` and `unlock player` are safe to repeat and need nothing special.
+So the game after a skip is the same as after watching the same choices and battles, whenever the player skips. Write the scene once; there is nothing to add for skipping.
 
-Guarding with a flag, as older scripts do, still works:
+Older scripts end skippable events with an `on skip` block that repeats the scene's effects. The checker still accepts one, warns that it is ignored, and never runs it. Delete it.
 
-```
-on skip
-	if not harbor.met_guide
-		give harbor_map
-		set harbor.met_guide
-	end
-end
-```
-
-The count is per item and per variable, and per direction: a `give` in `on skip` is only reduced by gives in the played part, a `take` only by takes. It covers changes made by the script, not ones the game makes itself (battle rewards, for example). It is kept in mid-event saves.
-
-`on skip` cannot contain `say`, `narrate`, `choice`, `ask`, `battle`, `together`, `call`, `goto` or `label`. It can use `if`, `while`, `wait` and any world command (warp, music, camera, fade and so on).
-
-If a skippable event changes game state but has no `on skip` block, the checker warns you.
+A loop that only waits for the game to change a flag never ends while skipping, because its waits take no time. The event then stops with a runtime error.
 
 ### Skipping inside other events
 
-A skippable event can be called from an unskippable one. If the player skips while it runs, only that event is skipped. Its `on skip` block runs, then the calling event carries on from the line after the `call`. When several skippable events are nested, the skip goes back to the outermost one in that chain and runs its `on skip` block.
+A skippable event can be called from an unskippable one. If the player skips while it runs, only that event is skipped, then the calling event carries on normally from the line after the `call`. When several skippable events call each other, the skip covers all of them, up to the outermost one in that chain. Unskippable events they call are skipped with them.
 
 ## Dialogue
 
@@ -89,28 +73,30 @@ Each line waits until the player confirms it.
 A multi-option choice. The prompt is optional. Each `option` starts a branch, and the choice needs at least two options:
 
 ```
-choice "Where to first?"
-option "The market"
-	var harbor.first_stop = 1
+choice @harbor.first_stop_prompt into harbor.first_stop
+option @harbor.option_market
+	say guide @harbor.market_hint
 option @harbor.option_rest
-	say guide "The inn it is."
+	say guide @harbor.inn_hint
 end
 ```
 
 A yes/no question. Both branches are optional:
 
 ```
-ask "Carry the satchel?"
+ask @harbor.satchel_question into harbor.satchel_carried
 yes
-	set harbor.satchel_carried
+	say guide @harbor.satchel_light
 no
-	say guide "Suit yourself."
+	say guide @harbor.satchel_refused
 end
 ```
 
+`into` is optional and records the answer before its branch runs: a `choice` sets the variable to the option's number, 1 for the first; an `ask` sets the flag for yes and clears it for no.
+
 ## Flags and variables
 
-Flags are true or false and start false. Variables are whole numbers and start at 0.
+Flags are true or false and start false. Variables are whole numbers and start at 0. A registry can declare other starting values, and flags and variables that belong to one event (see [Registry](#registry)).
 
 | Command | Example |
 | --- | --- |
@@ -185,7 +171,11 @@ Live panels are comic-style frames, each showing what a named camera sees in the
 | `music play <track> [nowait]` | `music play tide_theme` |
 | `music stop [nowait]` | `music stop` |
 | `music fade <seconds> [nowait]` | `music fade 1.0` (fades out, then stops) |
+| `ambient play <sound> [nowait]` | `ambient play harbor_gulls` (a background loop such as wind or surf) |
+| `ambient stop [nowait]` | `ambient stop` |
 | `sound <cue> [nowait]` | `sound bell_chime` |
+
+Music and ambient sound are part of what a save rebuilds; a one-shot `sound` is not.
 
 ## Waiting and running things in parallel
 
@@ -196,7 +186,7 @@ By default every actor, camera, panel, screen and audio command waits until the 
 - An event does not end until its `nowait` commands have finished.
 - `wait <seconds>` pauses the script: `wait 0.5`.
 
-`together` runs each command inside it at the same time, and continues once all of them are done. To chain several steps in one parallel branch, wrap them in `sequence`:
+`together` runs each command inside it at the same time, and continues once all of them are done. `race` runs them the same way but continues as soon as the first one is done; the others stop where they are and do nothing more. To chain several steps in one parallel branch, wrap them in `sequence`:
 
 ```
 together
@@ -209,7 +199,14 @@ together
 end
 ```
 
-Inside `together` you can use only actor, camera, panel, screen and audio commands, `wait` and `sequence`. You cannot use `nowait` there, because every branch already runs in parallel. A `sequence` cannot contain another `sequence`.
+```
+race
+	camera move ferry_departing 4.0
+	wait 2.5
+end
+```
+
+Inside `together` and `race` you can use only actor, camera, panel, screen and audio commands, `wait` and `sequence`. You cannot use `nowait` there, because every branch already runs in parallel. A `sequence` cannot contain another `sequence`.
 
 ## Flow
 
@@ -230,18 +227,33 @@ Inside `together` you can use only actor, camera, panel, screen and audio comman
 | `lock player` | stops player input during the scene |
 | `unlock player` | gives control back |
 
+## Menus and rests
+
+Each of these waits until the game is done with it.
+
+| Command | Example |
+| --- | --- |
+| `shop <shop>` | `shop vendor_stall` (until the player leaves the shop) |
+| `rest [<rest point>]` | `rest harbor_inn` (an inn's rules, such as its price, apply); `rest` alone heals the party for free |
+| `save prompt` | lets the player save; the save is an ordinary one, so loading it does not come back into this event |
+| `name entry <member>` | `name entry traveler` (until the player confirms a name) |
+
+A skip stops at `shop`, `save prompt` and `name entry`, because the player decides something there. A `rest` happens while skipping, without its usual presentation.
+
 ## Battles
 
 ```
-battle lamp_room_moths
+battle lamp_room_moths opening enemy_first
 win
 	give brass_key
 lose
 	warp harbor pier_end
 flee
-	say guide "We can come back later."
+	say guide @lighthouse.more_oil
 end
 ```
+
+`opening` is optional: `normal` (the default), `party_first` or `enemy_first`.
 
 The sections decide how the battle is set up:
 
@@ -273,7 +285,7 @@ Check the tables against the scripts:
 build/event_cli strings check --table sample_text/en.strings --table sample_text/ja.strings samples/*.ev
 ```
 
-It reports, as errors, an ID a script uses that a table lacks. As warnings it reports an ID no script uses, an ID one language has and another lacks, and an ID whose name tokens differ between languages. Without script files it only compares the tables with each other.
+It reports, as errors, an ID a script uses that a table lacks, and a translation that drops, adds or changes a name token or a control tag. Name tokens may come in any order, since word order differs between languages; control tags must come in the same order. As warnings it reports an ID no script uses and an ID one language has and another lacks. Without script files it only compares the tables with each other. The command fails when there are errors.
 
 To move a scene from quoted text to IDs, print a proposed table:
 
@@ -281,7 +293,7 @@ To move a scene from quoted text to IDs, print a proposed table:
 build/event_cli strings extract samples/harbor.ev > harbor_proposed.strings
 ```
 
-It lists every quoted text in the scripts with an ID of the form `<event>.<n>`, and the file and line it came from (options show the line of their `choice`). It changes no file. Rename the IDs you want, add the lines to your tables, and replace each quoted text in the script with its `@id`.
+It lists every quoted text in the scripts with an ID of the form `<event>.<n>`, and the file and line it came from. It changes no file. Rename the IDs you want, add the lines to your tables, and replace each quoted text in the script with its `@id`.
 
 ## Name glossary
 
@@ -301,7 +313,7 @@ List every line that mentions a glossary name:
 build/event_cli names sample_text/glossary.txt --table sample_text/en.strings samples/*.ev
 ```
 
-It reports each token with the name it shows (add `--show-shipped` to see the shipped set), each name typed out instead of using a token, and each token that is broken or not in the glossary. Lines that use a string ID are checked in every table given. Broken and unknown tokens make the command fail.
+It reports each token with the name it shows (add `--show-shipped` to see the shipped set), each name typed out instead of using a token, and each token that is broken or not in the glossary. Lines that use a string ID are checked in every table given. Typed-out names, broken tokens and unknown tokens make the command fail.
 
 ## Timing a scene
 
@@ -325,7 +337,7 @@ duration move 1.5      # every move
 duration move traveler 2.5   # moves of one actor
 ```
 
-`duration` takes an action name, an optional subject (actor, camera, panel or track) and seconds. The action names are `move`, `face`, `anim`, `show`, `hide`, `panel_show`, `panel_hide`, `panel_clear`, `camera_cut`, `camera_move`, `fade_in`, `fade_out`, `shake`, `music_play`, `music_stop`, `music_fade`, `sound` and `warp`. An action with no `duration` lasts the seconds written in the script (fades, camera moves, shakes, music fades), or no time at all.
+`duration` takes an action name, an optional subject (actor, camera, panel or track) and seconds. The action names are `move`, `face`, `anim`, `show`, `hide`, `panel_show`, `panel_hide`, `panel_clear`, `camera_cut`, `camera_move`, `fade_in`, `fade_out`, `shake`, `music_play`, `music_stop`, `music_fade`, `ambient_play`, `ambient_stop`, `sound` and `warp`. Menus and rests take no time. An action with no `duration` lasts the seconds written in the script (fades, camera moves, shakes, music fades), or no time at all.
 
 ## Lint
 
@@ -333,8 +345,48 @@ duration move traveler 2.5   # moves of one actor
 
 - A flag set or cleared but never tested, or tested but never set or cleared, by any script. The same for variables. The game may read or write some of these itself, so treat them as questions.
 - An event that no other event calls and that is not an entry event. Entry events are the ones the game starts itself; list them with `--entry harbor_arrival,market_haggle` or in a file with one name per line, given with `--entries`.
-- Two options of a `choice` with identical branches, or an `ask` whose `yes` and `no` do the same thing.
+- Two options of a `choice` with identical branches, or an `ask` whose `yes` and `no` do the same thing, unless it records the answer with `into`.
 - A command right after `return` or `goto` in the same block, which nothing can reach unless a `label` comes first.
+
+## Registry
+
+The registry lists the game's content, so `check --registry` can reject a name the game does not have, such as a misspelled actor or a flag nobody declared. Without a registry any name compiles.
+
+```
+# Comments start with '#'.
+actor guide innkeeper keeper traveler vendor
+marker door_inside pier_end stall_counter
+camera pier_wide stall_front
+layout full top_left top_right
+audio tide_theme harbor_gulls bell_chime
+animation bow shrug wave
+portrait cheerful strained
+item brass_key harbor_map
+member guide traveler
+encounter lamp_room_moths
+map harbor lighthouse_base
+shop vendor_stall
+rest harbor_inn
+
+flag harbor.met_guide
+flag scene.door_open local default true
+var harbor.first_stop
+var market.offer local default 30
+```
+
+- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `face` and `anim` subject), `marker` (`move`, `face` and `warp` targets), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation`, `portrait` (the `as` of `say`), `item`, `member` (`party` and `name entry`), `encounter`, `map`, `shop` and `rest`. Panel IDs are not listed; each scene names its own.
+- `flag <name>` and `var <name>` declare one flag or variable each, with `global` (the default) or `local`, and `default <value>` (`true` or `false` for a flag, an integer for a variable). Using a flag as a variable, or the other way round, is an error.
+- A `local` flag or variable belongs to one run of an event: it starts at its default each time the game starts an event, is shared with the events that event calls, is kept in mid-event saves, and is never part of the game's own state.
+- A global default is for the game to apply when it starts a new game; the scripts do not apply it.
+
+## Strict check
+
+`check --strict` is the gate for shipped scripts. On top of the normal checks it fails on:
+
+- quoted text anywhere a player sees it (`say`, `narrate`, prompts and options): every such text must be a string ID, so it can be translated;
+- any warning, including an ignored `on skip` block.
+
+Give `--glossary` to fail on glossary names typed out instead of written as name tokens, and on broken or unknown tokens, in the scripts and in every table given. Give `--table` to run the string table checks; their errors fail the check, and with `--strict` their warnings do too.
 
 ## Error messages
 
@@ -344,6 +396,7 @@ The checker reports every problem it finds as `file:line: error: message`. It ca
 - blocks without an `end`, and an `end`, `else`, `option`, `yes`, `no`, `win`, `lose` or `flee` in the wrong place
 - unknown or duplicate labels, unknown or duplicate events
 - branches that can never run
-- commands that are not allowed inside `together` or `on skip`
+- commands that are not allowed inside `together` or `race`
 - a choice with fewer than two options, and duplicate `yes`, `no`, `win`, `lose` or `flee` sections
 - a battle without a `win` section
+- with a registry: names it does not list, and flags and variables that are undeclared or used as the other type

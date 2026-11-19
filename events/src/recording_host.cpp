@@ -42,6 +42,7 @@ void RecordingHost::advance(double seconds) {
 RecordingHost RecordingHost::reloaded() const {
 	RecordingHost copy = *this;
 	copy.trace.clear();
+	copy.instant_calls.clear();
 	copy.errors.clear();
 	copy.live_.clear();
 	return copy;
@@ -73,6 +74,13 @@ Handle RecordingHost::start_action(const Action& action) {
 	}
 	std::string description = describe(action);
 	trace.push_back("action " + description);
+	if (action.instant) {
+		instant_calls.push_back(description);
+		// An instant warp skips its transition, but the map still has to load.
+		if (presentation_only(action.type)) {
+			seconds = 0;
+		}
+	}
 	return open(seconds, 0, description);
 }
 
@@ -205,6 +213,34 @@ void RecordingHost::remove_party_member(const std::string& member) {
 void RecordingHost::set_player_control(bool enabled) {
 	trace.push_back(std::string("player_control ") + (enabled ? "on" : "off"));
 	player_control = enabled;
+}
+
+Handle RecordingHost::open_shop(const std::string& shop) {
+	trace.push_back("shop " + shop);
+	return open(0, 0, "shop " + shop);
+}
+
+Handle RecordingHost::rest_party(const RestRequest& request) {
+	std::string description = describe(request);
+	trace.push_back(description);
+	if (request.instant) {
+		instant_calls.push_back(description);
+	}
+	return open(0, 0, description);
+}
+
+Handle RecordingHost::open_save_prompt() {
+	trace.push_back("save prompt");
+	return open(0, 0, "save prompt");
+}
+
+Handle RecordingHost::open_name_entry(const std::string& member) {
+	trace.push_back("name entry " + member);
+	return open(0, 0, "name entry " + member);
+}
+
+void RecordingHost::log_skipped_line(const Line& line) {
+	trace.push_back("skipped " + describe(line));
 }
 
 // One record per line: "flag name 0|1", "var name n", "item name n",

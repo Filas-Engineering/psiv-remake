@@ -48,6 +48,10 @@ const char* action_type_name(ActionType type) {
 		return "music stop";
 	case ActionType::music_fade:
 		return "music fade";
+	case ActionType::ambient_play:
+		return "ambient play";
+	case ActionType::ambient_stop:
+		return "ambient stop";
 	case ActionType::sound:
 		return "sound";
 	case ActionType::warp:
@@ -92,6 +96,7 @@ std::string describe(const Action& action) {
 	case ActionType::panel_hide:
 	case ActionType::camera_cut:
 	case ActionType::music_play:
+	case ActionType::ambient_play:
 	case ActionType::sound:
 		out += " " + action.subject;
 		break;
@@ -108,6 +113,7 @@ std::string describe(const Action& action) {
 		break;
 	case ActionType::panel_clear:
 	case ActionType::music_stop:
+	case ActionType::ambient_stop:
 		break;
 	}
 	return out;
@@ -143,7 +149,14 @@ std::string describe(const BattleRequest& request) {
 	std::string out = "battle " + request.encounter;
 	out += request.escape_allowed ? " escape" : " no-escape";
 	out += request.defeat_handled ? " defeat-branch" : " defeat-game-over";
+	if (request.opening != BattleOpening::normal) {
+		out += std::string(" opening ") + battle_opening_name(request.opening);
+	}
 	return out;
+}
+
+std::string describe(const RestRequest& request) {
+	return request.point.empty() ? "rest" : "rest " + request.point;
 }
 
 const char* battle_result_name(BattleResult result) {
@@ -157,5 +170,39 @@ const char* battle_result_name(BattleResult result) {
 	}
 	return "unknown";
 }
+
+const char* battle_opening_name(BattleOpening opening) {
+	switch (opening) {
+	case BattleOpening::normal:
+		return "normal";
+	case BattleOpening::party_first:
+		return "party_first";
+	case BattleOpening::enemy_first:
+		return "enemy_first";
+	}
+	return "unknown";
+}
+
+bool presentation_only(ActionType type) {
+	return type != ActionType::warp;
+}
+
+Handle Host::open_shop(const std::string&) {
+	return 0;
+}
+
+Handle Host::rest_party(const RestRequest&) {
+	return 0;
+}
+
+Handle Host::open_save_prompt() {
+	return 0;
+}
+
+Handle Host::open_name_entry(const std::string&) {
+	return 0;
+}
+
+void Host::log_skipped_line(const Line&) {}
 
 }

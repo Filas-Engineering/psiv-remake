@@ -47,9 +47,16 @@ enum class ActionType {
 	music_play,
 	music_stop,
 	music_fade,
+	ambient_play,
+	ambient_stop,
 	sound,
 	warp,
 };
+
+// EVT-023: every action except warp only changes what is on screen or heard.
+// While skipping, the interpreter applies these to its presentation state
+// instead of calling the host, and rebuilds the screen when the skip stops.
+bool presentation_only(ActionType type);
 
 struct Vec3 {
 	double x = 0;
@@ -69,9 +76,16 @@ struct Action {
 	double speed = 0;
 	double strength = 0;
 	bool loop = false;
+	// Reach the end state at once, with no transition, and report done
+	// immediately. Set when the interpreter rebuilds the screen after a skip
+	// or a restore, and on warps run while skipping. When the end state is
+	// already on screen (the music is already playing), do nothing.
+	bool instant = false;
 };
 
 enum class BattleResult : int { win = 0, lose = 1, flee = 2 };
+
+enum class BattleOpening : int { normal = 0, party_first = 1, enemy_first = 2 };
 
 // What a `battle` block asks of the host's battle rules. Both options follow
 // from which sections the script wrote (see README.md, "Battles").
@@ -83,6 +97,15 @@ struct BattleRequest {
 	// The script has a `lose` section. When false a defeat goes to the game's
 	// game-over flow and the host must never report BattleResult::lose.
 	bool defeat_handled = false;
+	BattleOpening opening = BattleOpening::normal;
+};
+
+struct RestRequest {
+	// Empty for a free full heal; otherwise a rest point (an inn) whose own
+	// rules, such as its price, apply.
+	std::string point;
+	// Set while skipping: heal without the rest's usual presentation.
+	bool instant = false;
 };
 
 class Host {
@@ -92,7 +115,9 @@ public:
 	virtual Handle start_action(const Action& action) = 0;
 	virtual Handle show_line(const Line& line) = 0;
 	virtual Handle present_choice(const ChoiceRequest& request) = 0;
-	// Done when the battle is over; result() is then a BattleResult.
+	// Done when the battle is over; result() is then a BattleResult. The
+	// host may call Interpreter::save() from inside this call to write the
+	// autosave before an event battle (EVT-050); see Interpreter::save().
 	virtual Handle start_battle(const BattleRequest& request) = 0;
 	virtual bool is_done(Handle handle) = 0;
 	// Only read once is_done() is true. Choice: the picked option index
@@ -118,6 +143,17 @@ public:
 	// Puts back a blob from snapshot_world(). Called only when a save made
 	// with different scripts is restored; returns false if it cannot.
 	virtual bool restore_world(const std::string& snapshot) = 0;
+
+	// Blocking calls for the `shop`, `rest`, `save prompt` and `name entry`
+	// commands, done when the menu closes or the rest is over. The defaults
+	// return 0, which stops a script that uses the command with a runtime
+	// error, so hosts that never run these commands need not override them.
+	virtual Handle open_shop(const std::string& shop);
+	virtual Handle rest_party(const RestRequest& request);
+	virtual Handle open_save_prompt();
+	virtual Handle open_name_entry(const std::string& member);
+	// A line a skip passed over, for the text log (TXT-028).
+	virtual void log_skipped_line(const Line& line);
 };
 
 const char* action_type_name(ActionType type);
@@ -127,6 +163,8 @@ std::string describe(const Action& action);
 std::string describe(const Line& line);
 std::string describe(const ChoiceRequest& request);
 std::string describe(const BattleRequest& request);
+std::string describe(const RestRequest& request);
 const char* battle_result_name(BattleResult result);
+const char* battle_opening_name(BattleOpening opening);
 
 }

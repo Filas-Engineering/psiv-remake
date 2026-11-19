@@ -1,27 +1,28 @@
-# The keeper's lighthouse is overrun. Exercises battles, warps, screen
-# effects, audio fades, party changes and a skippable scene inside an
-# unskippable one.
+# The keeper's lighthouse is overrun. Exercises battles with an opening,
+# warps, a free rest, screen effects, audio fades, party changes and a
+# skippable scene inside an unskippable one.
 
 event lighthouse_ambush unskippable
 	lock player
 	call lighthouse_alarm
 
-	battle lamp_room_moths
+	battle lamp_room_moths opening enemy_first
 	win
-		say keeper "The light is safe. Take this, you have earned it."
+		say keeper @lighthouse.light_safe
 		give brass_key
+		rest
 		set lighthouse.cleared
 	lose
-		narrate "The traveler wakes on the shore, the tower dark behind them."
+		narrate @lighthouse.wake_on_shore
 		warp harbor pier_end
 	flee
-		say guide "We can come back with more oil." as worried
+		say guide @lighthouse.more_oil as worried
 		clear lighthouse.cleared
 	end
 
 	if lighthouse.cleared
 		party remove guide
-		say guide "I will stay and help the keeper rebuild." as resolute
+		say guide @lighthouse.stay_and_help as resolute
 		anim keeper bow loop
 		wait 0.5
 	end
@@ -39,10 +40,6 @@ event lighthouse_alarm skippable
 	shake 0.8 strength 0.4
 	sound glass_crack
 	panel hide p1
-	say keeper "A {name:moth_swarm} is nesting in the lamp room!" as alarmed
+	say keeper @lighthouse.moths_nesting as alarmed
 	music fade 1.0
-on skip
-	warp lighthouse_base door_inside
-	panel clear
-	music stop
 end

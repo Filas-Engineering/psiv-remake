@@ -1,11 +1,12 @@
 # The traveler steps off the ferry and meets the guide on the pier.
-# Exercises dialogue, choices, panels, camera, actors in parallel, on skip
-# and a name token.
+# Exercises dialogue, name entry, choices that record their answer, panels,
+# camera, actors in parallel, a race, ambient sound and a name token.
 
 event harbor_arrival skippable
 	lock player
 	fade out 0
 	music play tide_theme
+	ambient play harbor_gulls
 	camera cut pier_wide
 	show traveler
 	fade in 1.5
@@ -22,28 +23,31 @@ event harbor_arrival skippable
 	end
 	panel clear
 
-	say guide "You made it before the fog. Welcome to the harbor." as cheerful
-	say traveler "The crossing felt longer than the map promised."
-	narrate "Gulls circle the masts, waiting for scraps."
+	say guide @harbor.welcome as cheerful
+	name entry traveler
+	say traveler @harbor.crossing
+	narrate @harbor.gulls
 
-	ask "Will you let the guide carry your satchel?"
+	ask @harbor.satchel_question into harbor.satchel_carried
 	yes
-		say guide "Light as a feather. Mostly." as strained
-		set harbor.satchel_carried
+		say guide @harbor.satchel_light as strained
 	no
-		say guide "Suit yourself, but the hill is steep." as amused
+		say guide @harbor.satchel_refused as amused
 	end
 
-	choice "Where to first?"
-	option "The market"
-		say guide "Follow the smell of roasted nuts."
-		var harbor.first_stop = 1
-	option "The lighthouse"
-		say guide "Brave choice. Bring a {name:tide_lamp}, the keeper is in a mood today."
-		var harbor.first_stop = 2
+	choice @harbor.first_stop_prompt into harbor.first_stop
+	option @harbor.option_market
+		say guide @harbor.market_hint
+	option @harbor.option_lighthouse
+		say guide @harbor.lighthouse_hint
 	option @harbor.option_rest
-		say guide "The inn has a room facing the water."
-		var harbor.first_stop = 3
+		say guide @harbor.inn_hint
+	end
+
+	# The ferry pulls away; the camera follows it until the guide moves on.
+	race
+		camera move ferry_departing 4.0
+		wait 2.5
 	end
 
 	if not harbor.met_guide
@@ -51,21 +55,6 @@ event harbor_arrival skippable
 		party add guide
 		set harbor.met_guide
 	end
-	unlock player
-on skip
-	if not harbor.met_guide
-		give harbor_map
-		party add guide
-		set harbor.met_guide
-	end
-	if harbor.first_stop == 0
-		var harbor.first_stop = 1
-	end
-	panel clear
-	music play tide_theme
-	camera cut pier_wide
-	show traveler
-	move traveler to pier_end
-	fade in 0
+	ambient stop
 	unlock player
 end

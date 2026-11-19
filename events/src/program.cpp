@@ -77,6 +77,14 @@ const char* op_name(Op op) {
 		return "fork";
 	case Op::end_branch:
 		return "end_branch";
+	case Op::shop:
+		return "shop";
+	case Op::rest:
+		return "rest";
+	case Op::save_prompt:
+		return "save prompt";
+	case Op::name_entry:
+		return "name entry";
 	}
 	return "unknown";
 }

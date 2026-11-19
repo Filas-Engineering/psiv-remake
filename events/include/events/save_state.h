@@ -1,6 +1,9 @@
 #pragma once
 
+#include "events/host.h"
+
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -26,15 +29,51 @@ struct SavedBackground {
 	int depth = 0;
 };
 
-enum class ChangeKind : int { item = 0, var = 1 };
+// What the running event last told the host to show for one actor. Only
+// what the event commanded is known; the rest is up to the game.
+struct ActorState {
+	std::string actor;
+	// -1 when the event never showed or hid the actor, 0 hidden, 1 shown.
+	int visible = -1;
+	// The last move's target: a marker, or a position when has_position.
+	std::string marker;
+	bool has_position = false;
+	Vec3 position;
+	// The last `face` target since the last move.
+	std::string facing;
+	// The last looping animation; a one-shot animation ends it.
+	std::string pose;
 
-// A running total of the gives and takes (item) or `+=`/`-=` (var) that
-// one call depth applied. `on skip` reads these so it never applies twice.
-struct SavedChange {
-	ChangeKind kind = ChangeKind::item;
-	std::string name;
-	int depth = 0;
-	std::int64_t amount = 0;
+	bool operator==(const ActorState& other) const;
+};
+
+struct PanelState {
+	std::string panel;
+	std::string camera;
+	std::string slot;
+
+	bool operator==(const PanelState& other) const;
+};
+
+// What the running event put on screen and in the speakers (EVT-022). A
+// restore, and the end of a skip, re-issue host calls to rebuild it
+// (EVT-051). Fields the event never set stay as the game has them.
+struct PresentationState {
+	bool music_set = false;
+	// Empty when the event stopped the music.
+	std::string music;
+	bool ambient_set = false;
+	std::string ambient;
+	bool fade_set = false;
+	bool faded_out = false;
+	// The last camera cut or move; empty when unset.
+	std::string camera;
+	// The panels on screen, in the order they were first shown: the page.
+	std::vector<PanelState> panels;
+	// Sorted by actor.
+	std::vector<ActorState> actors;
+
+	bool operator==(const PresentationState& other) const;
 };
 
 // Plain data only. Host handles are not saved: whatever was in flight is
@@ -46,18 +85,20 @@ struct SaveState {
 	std::string event;
 	std::string start_world;
 	Status status = Status::idle;
-	// Frame depth whose `on skip` block is running, or -1.
+	// Frame depth of the outermost event being skipped, or -1.
 	int skip_depth = -1;
 	std::vector<SavedFrame> frames;
 	SavedThread main;
 	std::vector<SavedThread> children;
 	std::vector<SavedBackground> background;
-	std::vector<SavedChange> applied;
-	// What the played part applied that the running `on skip` has not yet
-	// counted against its own changes.
-	std::vector<SavedChange> skip_credit;
+	PresentationState presentation;
+	// Values of the registry's local flags (0 or 1) and variables.
+	std::map<std::string, std::int64_t> locals;
 };
 
+// The text form ends with a checksum of everything before it, so damage is
+// detected (SAV-014): save_state_from_text rejects a text whose checksum
+// does not match, and texts from other format versions.
 std::string save_state_to_text(const SaveState& state);
 bool save_state_from_text(const std::string& text, SaveState& state);
 

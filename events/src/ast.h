@@ -27,7 +27,7 @@ struct Stmt {
 	Instruction ins;
 	// if_chain: one per if / else if / else. while_loop, sequence: one body.
 	// choice: one per option (ask: yes, no). battle: win, lose, flee.
-	// together: one per parallel branch.
+	// together and race: one per parallel branch.
 	std::vector<Branch> branches;
 };
 
@@ -37,9 +37,6 @@ struct EventDecl {
 	int line = 0;
 	bool skippable = false;
 	std::vector<Stmt> body;
-	bool has_skip = false;
-	int skip_line = 0;
-	std::vector<Stmt> on_skip;
 };
 
 }

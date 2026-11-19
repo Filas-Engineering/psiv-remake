@@ -179,39 +179,114 @@ end
 	CHECK_EQ(d.size(), 6u);
 }
 
-TEST(skip_markers_and_on_skip_rules) {
+TEST(skip_markers_are_required_and_on_skip_blocks_are_ignored_with_a_warning) {
 	auto d = test::compile_errors(R"(event a
 	set seen
 end
-event b unskippable
-	wait 1
-on skip
-	set seen
-end
-event c skippable
-	set seen
-on skip
-	set seen
-	say guide "skipped scenes stay silent"
-	if ready
-		call a
-	end
-end
 )");
 	CHECK(test::has_diagnostic(d, 1, "event 'a' must be marked 'skippable' or 'unskippable'"));
-	CHECK(test::has_diagnostic(d, 6, "'on skip' in event 'b', which is not skippable"));
-	CHECK(test::has_diagnostic(d, 13, "'say' is not allowed in 'on skip'"));
-	CHECK(test::has_diagnostic(d, 15, "'call' is not allowed in 'on skip'"));
-	CHECK_EQ(d.size(), 4u);
-}
+	CHECK_EQ(d.size(), 1u);
 
-TEST(skippable_state_change_without_on_skip_is_a_warning) {
-	events::CompileResult result = events::compile({{"test.ev", "event a skippable\n\twait 1\n\tif ready\n\t\tgive rope\n\tend\nend\n"
-		"event b skippable\n\twait 1\nend\n"}});
+	// Older scripts still compile; the block's contents never run.
+	events::CompileResult result = events::compile({{"test.ev", R"(event c skippable
+	set seen
+on skip
+	say guide "old style"
+	set skipped
+end
+)"}});
 	CHECK(result.ok());
 	CHECK_EQ(result.diagnostics.size(), 1u);
 	CHECK(result.diagnostics[0].severity == Severity::warning);
-	CHECK(test::has_diagnostic(result.diagnostics, 1, "has no 'on skip' block"));
+	CHECK(test::has_diagnostic(result.diagnostics, 3, "'on skip' is ignored"));
+	for (const events::Instruction& ins : result.program.code) {
+		CHECK(ins.name != "skipped");
+		CHECK(ins.op != events::Op::say);
+	}
+}
+
+TEST(race_into_opening_ambient_and_menu_commands_compile_to_their_instructions) {
+	events::Program p = test::compile_ok(R"(event a unskippable
+	race
+		move guide to pier
+		wait 2
+	end
+	choice "Which?" into pick.way
+	option "One"
+	option "Two"
+	end
+	ask "Sure?" into pick.sure
+	end
+	battle reef_crabs opening party_first
+	win
+	end
+	ambient play surf nowait
+	ambient stop
+	shop dock_stall
+	rest
+	rest harbor_inn
+	save prompt
+	name entry traveler
+end
+)");
+	std::vector<std::string> ops;
+	for (const events::Instruction& ins : p.code) {
+		ops.push_back(events::op_name(ins.op));
+	}
+	CHECK_EQ(ops[0], std::string("fork"));
+	CHECK_EQ(p.code[0].number, 1);
+	const events::Instruction* choice = nullptr;
+	const events::Instruction* ask = nullptr;
+	const events::Instruction* battle = nullptr;
+	for (const events::Instruction& ins : p.code) {
+		if (ins.op == events::Op::choice) {
+			(ins.choice.yes_no ? ask : choice) = &ins;
+		}
+		if (ins.op == events::Op::battle) {
+			battle = &ins;
+		}
+	}
+	CHECK(choice && choice->name == "pick.way");
+	CHECK(choice && choice->option_lines == (std::vector<int>{7, 8}));
+	CHECK(ask && ask->name == "pick.sure");
+	CHECK(battle && battle->battle.opening == events::BattleOpening::party_first);
+	std::vector<std::string> tail(ops.end() - 8, ops.end());
+	std::vector<std::string> expected = {"action", "action", "shop", "rest", "rest", "save prompt", "name entry", "return"};
+	CHECK(tail == expected);
+}
+
+TEST(new_command_syntax_errors) {
+	auto d = test::compile_errors(R"(event a unskippable
+	battle reef_crabs opening sideways
+	win
+	end
+	choice into
+	option "a"
+	option "b"
+	end
+	ambient loud
+	save game
+	name traveler
+	shop
+	race
+		say guide "racing"
+		wait 1
+	end
+	race
+		move guide to pier nowait
+		wait 1
+	end
+end
+)");
+	CHECK(test::has_diagnostic(d, 2, "expected 'normal', 'party_first' or 'enemy_first' after 'opening', found 'sideways'"));
+	CHECK(test::has_diagnostic(d, 5, "choice: expected a variable name after 'into'"));
+	CHECK(test::has_diagnostic(d, 9, "ambient: expected 'play' or 'stop'"));
+	CHECK(test::has_diagnostic(d, 10, "save: expected 'prompt'"));
+	CHECK(test::has_diagnostic(d, 11, "name: expected 'entry'"));
+	CHECK(test::has_diagnostic(d, 12, "shop: expected a shop name"));
+	CHECK(test::has_diagnostic(d, 14, "'say' is not allowed inside 'race'"));
+	CHECK(test::has_diagnostic(d, 18, "'nowait' has no effect inside 'race'"));
+	CHECK_EQ(d.size(), 8u);
 }
 
 TEST(choice_ask_and_battle_structure) {

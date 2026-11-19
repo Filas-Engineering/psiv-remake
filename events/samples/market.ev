@@ -1,5 +1,6 @@
-# A vendor haggles with the traveler. Exercises variables, conditions,
-# loops, labels, calls, localized text and background actions.
+# A vendor haggles with the traveler. Exercises variables (two of them
+# local to the event), conditions, loops, labels, calls, a shop and
+# background actions.
 
 event market_haggle unskippable
 	camera cut stall_front
@@ -17,11 +18,11 @@ event market_haggle unskippable
 	end
 
 	if market.offer <= 18 or market.patience == 0
-		say vendor "Fine, fine. You drive a hard bargain." as defeated
+		say vendor @market.hard_bargain as defeated
 	else if market.offer < 25
-		say vendor "That is my final price."
+		say vendor @market.final_price
 	else
-		say vendor "Prices are prices, friend."
+		say vendor @market.prices_are_prices
 	end
 
 	if harbor.met_guide and not market.bought_lantern
@@ -31,14 +32,14 @@ event market_haggle unskippable
 	if market.bought_lantern
 		goto farewell
 	end
-	say vendor "Mind the crates on your way out."
+	say vendor @market.mind_the_crates
 	label farewell
 	hide vendor
 	narrate @market.closing_narration
 end
 
 event market_counter_offer unskippable
-	say traveler "Surely you can do better than that."
+	say traveler @market.do_better
 	var market.offer -= 5
 	var market.rounds += 1
 	anim vendor shrug
@@ -46,16 +47,18 @@ event market_counter_offer unskippable
 		var market.patience = 0
 		return
 	end
-	say vendor "Perhaps a little better."
+	say vendor @market.little_better
 end
 
 event market_buy_lantern unskippable
 	choice
-	option "Buy the lantern"
+	option @market.option_buy
 		take coin_pouch
 		give lantern_oil 2
 		set market.bought_lantern
-	option "Not today"
-		say vendor "Come back when the nights get long."
+	option @market.option_browse
+		shop vendor_stall
+	option @market.option_not_today
+		say vendor @market.come_back
 	end
 end

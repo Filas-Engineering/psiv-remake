@@ -207,6 +207,31 @@ std::vector<NameMention> find_name_mentions(const Program& program, const Glossa
 	return mentions;
 }
 
+std::vector<Diagnostic> check_names(const Program& program, const Glossary& glossary, const std::vector<StringTable>& tables) {
+	std::vector<Diagnostic> out;
+	for (const NameMention& m : find_name_mentions(program, glossary, tables)) {
+		const std::string via = m.via.empty() ? "" : " (via " + m.via + ")";
+		const GlossaryEntry* entry = glossary.find(m.id);
+		switch (m.kind) {
+		case MentionKind::token:
+			break;
+		case MentionKind::literal_shipped:
+		case MentionKind::literal_restored:
+			out.push_back({Severity::error, m.file, m.line,
+				"the name \"" + (m.kind == MentionKind::literal_shipped ? entry->shipped : entry->restored) + "\" is typed out" + via + "; write {name:" + m.id +
+					"} so the \"show shipped names\" setting can switch it"});
+			break;
+		case MentionKind::unknown_token:
+			out.push_back({Severity::error, m.file, m.line, "unknown name token {name:" + m.id + "}" + via + ": it is not in " + glossary.file});
+			break;
+		case MentionKind::broken_token:
+			out.push_back({Severity::error, m.file, m.line, "broken name token" + via + ": write {name:<id>}"});
+			break;
+		}
+	}
+	return out;
+}
+
 const char* mention_kind_name(MentionKind kind) {
 	switch (kind) {
 	case MentionKind::token:

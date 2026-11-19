@@ -11,27 +11,7 @@ struct Walk {
 	std::vector<const Stmt*> gotos;
 	std::vector<const Stmt*> calls;
 	std::vector<std::pair<std::string, int>> duplicate_labels;
-	bool changes_state = false;
 };
-
-bool is_state_change(const Instruction& ins) {
-	switch (ins.op) {
-	case Op::set_flag:
-	case Op::clear_flag:
-	case Op::var_set:
-	case Op::var_add:
-	case Op::give:
-	case Op::take:
-	case Op::party_add:
-	case Op::party_remove:
-	case Op::call:
-		return true;
-	case Op::action:
-		return ins.action.type == ActionType::warp;
-	default:
-		return false;
-	}
-}
 
 void walk(const std::vector<Stmt>& body, Walk& w) {
 	for (const Stmt& s : body) {
@@ -44,13 +24,8 @@ void walk(const std::vector<Stmt>& body, Walk& w) {
 			}
 		} else if (s.kind == StmtKind::go_to) {
 			w.gotos.push_back(&s);
-		} else if (s.kind == StmtKind::simple) {
-			if (s.ins.op == Op::call) {
-				w.calls.push_back(&s);
-			}
-			if (is_state_change(s.ins)) {
-				w.changes_state = true;
-			}
+		} else if (s.kind == StmtKind::simple && s.ins.op == Op::call) {
+			w.calls.push_back(&s);
 		}
 		for (const Branch& b : s.branches) {
 			walk(b.body, w);
@@ -58,9 +33,165 @@ void walk(const std::vector<Stmt>& body, Walk& w) {
 	}
 }
 
+class RegistryCheck {
+public:
+	RegistryCheck(const Registry& registry, const std::string& file, std::vector<Diagnostic>& diagnostics)
+		: registry_(registry), file_(file), diagnostics_(diagnostics) {}
+
+	void block(const std::vector<Stmt>& body) {
+		for (const Stmt& s : body) {
+			statement(s);
+			for (const Branch& b : s.branches) {
+				if (b.has_condition) {
+					condition(b.condition, b.line);
+				}
+				block(b.body);
+			}
+		}
+	}
+
+private:
+	void error(int line, const std::string& message) {
+		diagnostics_.push_back({Severity::error, file_, line, message});
+	}
+
+	std::string where() const {
+		return registry_.file.empty() ? std::string(" in the registry") : " in " + registry_.file;
+	}
+
+	void name(NameKind kind, const std::string& value, int line) {
+		if (!value.empty() && !registry_.has(kind, value)) {
+			error(line, std::string("unknown ") + name_kind_name(kind) + " '" + value + "': it is not listed" + where());
+		}
+	}
+
+	void declared(const std::string& value, bool is_flag, int line) {
+		const Declaration* d = registry_.find(value);
+		if (!d) {
+			error(line, std::string(is_flag ? "flag" : "variable") + " '" + value + "' is not declared" + where());
+		} else if (d->is_flag != is_flag) {
+			error(line, "'" + value + "' is declared as a " + (d->is_flag ? "flag" : "variable") + ", not a " + (is_flag ? "flag" : "variable"));
+		}
+	}
+
+	void condition(const Condition& c, int line) {
+		for (const Term& t : c.terms) {
+			declared(t.name, t.is_flag, line);
+		}
+	}
+
+	void action(const Action& a, int line) {
+		switch (a.type) {
+		case ActionType::move:
+			name(NameKind::actor, a.subject, line);
+			if (!a.has_position) {
+				name(NameKind::marker, a.target, line);
+			}
+			break;
+		case ActionType::face:
+			name(NameKind::actor, a.subject, line);
+			if (!registry_.has(NameKind::actor, a.target) && !registry_.has(NameKind::marker, a.target)) {
+				error(line, "unknown actor or marker '" + a.target + "': it is not listed" + where());
+			}
+			break;
+		case ActionType::animate:
+			name(NameKind::actor, a.subject, line);
+			name(NameKind::animation, a.target, line);
+			break;
+		case ActionType::show_actor:
+		case ActionType::hide_actor:
+			name(NameKind::actor, a.subject, line);
+			break;
+		case ActionType::panel_show:
+			name(NameKind::camera, a.target, line);
+			name(NameKind::layout, a.slot, line);
+			break;
+		case ActionType::camera_cut:
+		case ActionType::camera_move:
+			name(NameKind::camera, a.subject, line);
+			break;
+		case ActionType::music_play:
+		case ActionType::ambient_play:
+		case ActionType::sound:
+			name(NameKind::audio, a.subject, line);
+			break;
+		case ActionType::warp:
+			name(NameKind::map, a.subject, line);
+			name(NameKind::marker, a.target, line);
+			break;
+		case ActionType::panel_hide:
+		case ActionType::panel_clear:
+		case ActionType::fade_in:
+		case ActionType::fade_out:
+		case ActionType::shake:
+		case ActionType::music_stop:
+		case ActionType::music_fade:
+		case ActionType::ambient_stop:
+			break;
+		}
+	}
+
+	void statement(const Stmt& s) {
+		const Instruction& ins = s.ins;
+		if (s.kind == StmtKind::while_loop) {
+			condition(ins.condition, s.line);
+			return;
+		}
+		if (s.kind != StmtKind::simple && s.kind != StmtKind::choice && s.kind != StmtKind::battle) {
+			return;
+		}
+		switch (ins.op) {
+		case Op::say:
+			name(NameKind::actor, ins.dialogue.speaker, s.line);
+			name(NameKind::portrait, ins.dialogue.portrait, s.line);
+			break;
+		case Op::choice:
+			if (!ins.name.empty()) {
+				declared(ins.name, ins.choice.yes_no, s.line);
+			}
+			break;
+		case Op::set_flag:
+		case Op::clear_flag:
+			declared(ins.name, true, s.line);
+			break;
+		case Op::var_set:
+		case Op::var_add:
+			declared(ins.name, false, s.line);
+			break;
+		case Op::give:
+		case Op::take:
+			name(NameKind::item, ins.name, s.line);
+			break;
+		case Op::party_add:
+		case Op::party_remove:
+		case Op::name_entry:
+			name(NameKind::member, ins.name, s.line);
+			break;
+		case Op::shop:
+			name(NameKind::shop, ins.name, s.line);
+			break;
+		case Op::rest:
+			name(NameKind::rest_point, ins.name, s.line);
+			break;
+		case Op::battle:
+			name(NameKind::encounter, ins.battle.encounter, s.line);
+			break;
+		case Op::action:
+			action(ins.action, s.line);
+			break;
+		default:
+			break;
+		}
+	}
+
+	const Registry& registry_;
+	const std::string& file_;
+	std::vector<Diagnostic>& diagnostics_;
+};
+
 }
 
-void validate(const std::vector<EventDecl>& events, const std::vector<std::string>& files, std::vector<Diagnostic>& diagnostics) {
+void validate(const std::vector<EventDecl>& events, const std::vector<std::string>& files, const Registry* registry, std::vector<Diagnostic>& diagnostics) {
 	std::map<std::string, const EventDecl*> by_name;
 	for (const EventDecl& ev : events) {
 		auto found = by_name.find(ev.name);
@@ -91,9 +222,8 @@ void validate(const std::vector<EventDecl>& events, const std::vector<std::strin
 				diagnostics.push_back({Severity::error, file, c->line, "call: unknown event '" + c->ins.name + "'"});
 			}
 		}
-		if (ev.skippable && !ev.has_skip && w.changes_state) {
-			diagnostics.push_back({Severity::warning, file, ev.line,
-				"event '" + ev.name + "' is skippable and changes game state but has no 'on skip' block; skipping it would lose those changes"});
+		if (registry) {
+			RegistryCheck(*registry, file, diagnostics).block(ev.body);
 		}
 	}
 }

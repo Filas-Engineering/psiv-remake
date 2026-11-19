@@ -377,3 +377,117 @@ end
 		CHECK(it.status() == Status::error);
 	}
 }
+
+TEST(race_continues_when_its_first_branch_ends_and_stops_the_rest) {
+	Program p = test::compile_ok(R"(event a unskippable
+	race
+		sequence
+			move guide to pier
+			sound guide_arrived
+		end
+		sequence
+			anim traveler stretch
+			sound traveler_done
+		end
+	end
+	sound race_over
+end
+)");
+	for (int order = 0; order < 2; ++order) {
+		RecordingHost host;
+		host.set_duration(ActionType::move, order == 0 ? 0.2 : 0.6);
+		host.set_duration(ActionType::animate, order == 0 ? 0.6 : 0.2);
+		Interpreter it(p, host);
+		it.start("a");
+		Timeline t = run_timed(it, host, 0.1);
+		const std::string winner = order == 0 ? "action sound guide_arrived" : "action sound traveler_done";
+		const std::string loser = order == 0 ? "action sound traveler_done" : "action sound guide_arrived";
+		const std::string cancelled = order == 0 ? "cancel anim traveler stretch" : "cancel move guide to pier";
+		CHECK_EQ(t.step_of(host, winner), 3);
+		CHECK_EQ(t.step_of(host, cancelled), 3);
+		CHECK_EQ(t.step_of(host, "action sound race_over"), 3);
+		// The stopped branch never reaches its next command.
+		CHECK_EQ(t.step_of(host, loser), -1);
+		CHECK(it.status() == Status::finished);
+		check_clean(host);
+	}
+}
+
+TEST(a_race_won_by_a_wait_cancels_the_slower_action) {
+	Program p = test::compile_ok(R"(event a unskippable
+	race
+		camera move far_cam 5.0
+		wait 0.5
+	end
+	say guide "Moving on."
+end
+)");
+	RecordingHost host;
+	Interpreter it(p, host);
+	it.start("a");
+	Timeline t = run_timed(it, host, 0.1);
+	CHECK_EQ(t.step_of(host, "cancel camera move far_cam 5"), 6);
+	CHECK_EQ(t.step_of(host, "say guide \"Moving on.\""), 6);
+	check_clean(host);
+}
+
+namespace {
+
+// A host that runs no menus: the Host defaults answer with no handle.
+class PlainHost : public RecordingHost {
+public:
+	events::Handle open_shop(const std::string& shop) override { return events::Host::open_shop(shop); }
+};
+
+}
+
+TEST(menus_and_rests_are_blocking_host_calls) {
+	Program p = test::compile_ok(R"(event a unskippable
+	shop dock_stall
+	rest
+	rest dock_inn
+	save prompt
+	name entry traveler
+	say guide "All done."
+end
+)");
+	RecordingHost host;
+	Interpreter it(p, host);
+	it.start("a");
+	test::run(it, host);
+	std::vector<std::string> expected = {"shop dock_stall", "rest", "rest dock_inn", "save prompt", "name entry traveler", "say guide \"All done.\""};
+	CHECK(host.trace == expected);
+	CHECK(it.status() == Status::finished);
+	check_clean(host);
+
+	PlainHost plain;
+	Interpreter refused(p, plain);
+	refused.start("a");
+	test::run(refused, plain);
+	CHECK(refused.status() == Status::error);
+	CHECK_EQ(refused.error(), std::string("test.ev:2: the host does not support 'shop': Host::open_shop returned no handle"));
+}
+
+TEST(a_skip_stops_at_a_menu_but_rests_while_skipping) {
+	Program p = test::compile_ok(R"(event a skippable
+	say guide "Long day."
+	rest dock_inn
+	say guide "Fresh again."
+	shop dock_stall
+	say guide "Bye."
+end
+)");
+	RecordingHost host;
+	host.set_line_duration(1);
+	Interpreter it(p, host);
+	it.start("a");
+	it.step(0.1);
+	CHECK(it.skip());
+	it.step(0.1);
+	CHECK(host.instant_calls == std::vector<std::string>{"rest dock_inn"});
+	CHECK(!it.skipping());
+	CHECK_EQ(host.trace.back(), std::string("say guide \"Bye.\""));
+	std::vector<std::string> expected = {"say guide \"Long day.\"", "cancel say guide \"Long day.\"", "rest dock_inn", "skipped say guide \"Fresh again.\"",
+		"shop dock_stall", "say guide \"Bye.\""};
+	CHECK(host.trace == expected);
+}

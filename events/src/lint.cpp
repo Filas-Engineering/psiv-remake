@@ -45,7 +45,6 @@ public:
 
 	void event(const EventDecl& ev) {
 		block(ev.body);
-		block(ev.on_skip);
 	}
 
 	void finish(const std::vector<EventDecl>& events, const LintOptions& options) {
@@ -121,6 +120,11 @@ private:
 		case Op::call:
 			calls_.insert(ins.name);
 			break;
+		case Op::choice:
+			if (!ins.name.empty()) {
+				note(ins.choice.yes_no ? flag_writes_ : var_writes_, ins.name, ins);
+			}
+			break;
 		default:
 			break;
 		}
@@ -139,6 +143,10 @@ private:
 	}
 
 	void identical_branches(const Stmt& s) {
+		// The recorded answer is itself an effect.
+		if (!s.ins.name.empty()) {
+			return;
+		}
 		std::vector<std::string> forms;
 		for (const Branch& b : s.branches) {
 			forms.push_back(canonical(b.body));

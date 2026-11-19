@@ -31,7 +31,7 @@ const char* const battles = R"(event full unskippable
 	end
 end
 event strict unskippable
-	battle tide_wyrm
+	battle tide_wyrm opening enemy_first
 	win
 	end
 	say guide "after"
@@ -55,6 +55,9 @@ TEST(battle_options_follow_the_sections_the_script_wrote) {
 	CHECK_EQ(host.requests[1].encounter, std::string("tide_wyrm"));
 	CHECK(!host.requests[1].escape_allowed);
 	CHECK(!host.requests[1].defeat_handled);
+	CHECK(host.requests[0].opening == events::BattleOpening::normal);
+	CHECK(host.requests[1].opening == events::BattleOpening::enemy_first);
+	CHECK_EQ(events::describe(host.requests[1]), std::string("battle tide_wyrm no-escape defeat-game-over opening enemy_first"));
 	CHECK_EQ(host.trace.back(), std::string("say guide \"after\""));
 }
 
@@ -105,4 +108,63 @@ TEST(a_save_during_a_battle_starts_the_battle_again) {
 	CHECK(resumed.status() == Status::finished);
 	CHECK_EQ(resumed_host.requests.size(), 1u);
 	CHECK_EQ(resumed_host.vars["crabs.fled"], 1);
+}
+
+namespace {
+
+// Writes its autosave from inside start_battle, as a game would (EVT-050).
+class SavingHost : public RecordingHost {
+public:
+	Interpreter* interpreter = nullptr;
+	std::vector<std::string> saves;
+
+	events::Handle start_battle(const BattleRequest& request) override {
+		saves.push_back(events::save_state_to_text(interpreter->save()));
+		return RecordingHost::start_battle(request);
+	}
+};
+
+}
+
+TEST(a_save_written_inside_start_battle_restores_to_the_same_battle) {
+	Program p = test::compile_ok(R"(event cove skippable
+	give rope
+	music play alarm
+	say guide "Something stirs."
+	battle reef_crabs
+	win
+		set crabs.beaten
+	flee
+		var crabs.fled += 1
+	end
+	say guide "Onward."
+end
+)");
+	SavingHost host;
+	host.set_line_duration(0.3);
+	Interpreter it(p, host);
+	host.interpreter = &it;
+	it.start("cove");
+	// Skipping into the battle: the save sees the stopped skip, not a running one.
+	it.step(0.1);
+	CHECK(it.skip());
+	it.step(0.1);
+	CHECK_EQ(host.saves.size(), 1u);
+
+	events::SaveState loaded;
+	CHECK(events::save_state_from_text(host.saves[0], loaded));
+	CHECK_EQ(loaded.skip_depth, -1);
+	CHECK_EQ(loaded.presentation.music, std::string("alarm"));
+	RecordingHost resumed_host = host.reloaded();
+	resumed_host.queue_battle_results({BattleResult::flee});
+	Interpreter resumed(p, resumed_host);
+	std::string error;
+	CHECK(resumed.restore(loaded, error));
+	test::run(resumed, resumed_host);
+	CHECK(resumed.status() == Status::finished);
+	std::vector<std::string> expected = {"action music play alarm", "battle reef_crabs escape defeat-game-over -> flee", "get_var crabs.fled -> 0",
+		"set_var crabs.fled 1", "say guide \"Onward.\""};
+	CHECK(resumed_host.trace == expected);
+	CHECK_EQ(resumed_host.items["rope"], 1);
+	CHECK(resumed_host.errors.empty());
 }

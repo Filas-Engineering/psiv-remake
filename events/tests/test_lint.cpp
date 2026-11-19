@@ -37,9 +37,14 @@ TEST(lint_reports_flags_and_variables_written_or_read_on_one_side_only) {
 	while dock.count < 3 and dock.ghost > 0
 		var dock.count += 1
 	end
-on skip
-	if dock.skip_flag
-		set dock.used
+	ask "Stay?" into dock.stay
+	end
+	choice into dock.way
+	option "Left"
+	option "Right"
+	end
+	if dock.way == 2
+		wait 1
 	end
 end
 )", {"a"}), {
@@ -48,7 +53,7 @@ end
 		"6 flag 'dock.never_set' is read but never set by any script",
 		"7 variable 'dock.tally' is written but never read by any script",
 		"9 variable 'dock.ghost' is read but never written by any script",
-		"13 flag 'dock.skip_flag' is read but never set by any script",
+		"12 flag 'dock.stay' is set but never read by any script",
 	});
 }
 

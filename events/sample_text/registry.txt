@@ -1,0 +1,24 @@
+# Content the sample scripts may name. See FORMAT.md, "Registry".
+actor guide innkeeper keeper traveler vendor
+marker door_inside pier_end stall_counter
+camera ferry_departing ferry_ramp guide_close lamp_overlook pier_follow pier_wide stair_spiral stall_front
+layout full top_left top_right
+audio bell_chime glass_crack harbor_gulls hearth_crackle keeper_hum tide_theme
+animation bow shrug wave
+portrait alarmed amused beaming cheerful defeated resolute strained warm worried
+item brass_key coin_pouch harbor_map lantern_oil
+member guide traveler
+encounter lamp_room_moths
+map harbor lighthouse_base
+shop vendor_stall
+rest harbor_inn
+
+flag harbor.met_guide
+flag harbor.satchel_carried
+flag inn.stayed
+flag lighthouse.cleared
+flag market.bought_lantern
+var harbor.first_stop
+var market.offer local default 30
+var market.patience
+var market.rounds local

@@ -8,9 +8,25 @@ namespace events {
 namespace {
 
 const char* const header = "events-save";
-const int version = 2;
+const int version = 3;
+const char* const checksum_mark = " sum ";
 // Stands in for an empty word, which the space-separated form cannot hold.
 const char* const empty_word = "-";
+
+std::uint64_t fnv1a(const std::string& data) {
+	std::uint64_t hash = 14695981039346656037ull;
+	for (unsigned char c : data) {
+		hash ^= c;
+		hash *= 1099511628211ull;
+	}
+	return hash;
+}
+
+std::string hex64(std::uint64_t value) {
+	char buffer[20];
+	std::snprintf(buffer, sizeof buffer, "%016llx", static_cast<unsigned long long>(value));
+	return buffer;
+}
 
 std::string real(double value) {
 	char buffer[40];
@@ -84,31 +100,81 @@ bool read_count(std::istringstream& in, std::size_t& count) {
 	return true;
 }
 
-void write_changes(std::ostringstream& out, const std::vector<SavedChange>& changes) {
-	out << ' ' << changes.size();
-	for (const SavedChange& c : changes) {
-		out << ' ' << static_cast<int>(c.kind) << ' ' << word(c.name) << ' ' << c.depth << ' ' << c.amount;
+bool read_word(std::istringstream& in, std::string& out) {
+	std::string w;
+	if (!(in >> w)) {
+		return false;
+	}
+	out = unword(w);
+	return true;
+}
+
+bool read_bool(std::istringstream& in, bool& out) {
+	int value = 0;
+	if (!(in >> value) || value < 0 || value > 1) {
+		return false;
+	}
+	out = value == 1;
+	return true;
+}
+
+void write_presentation(std::ostringstream& out, const PresentationState& p) {
+	out << ' ' << p.music_set << ' ' << word(p.music) << ' ' << p.ambient_set << ' ' << word(p.ambient);
+	out << ' ' << p.fade_set << ' ' << p.faded_out << ' ' << word(p.camera);
+	out << ' ' << p.panels.size();
+	for (const PanelState& panel : p.panels) {
+		out << ' ' << word(panel.panel) << ' ' << word(panel.camera) << ' ' << word(panel.slot);
+	}
+	out << ' ' << p.actors.size();
+	for (const ActorState& a : p.actors) {
+		out << ' ' << word(a.actor) << ' ' << a.visible << ' ' << word(a.marker) << ' ' << a.has_position << ' ' << real(a.position.x) << ' '
+			<< real(a.position.y) << ' ' << real(a.position.z) << ' ' << word(a.facing) << ' ' << word(a.pose);
 	}
 }
 
-bool read_changes(std::istringstream& in, std::vector<SavedChange>& changes) {
+bool read_presentation(std::istringstream& in, PresentationState& p) {
+	if (!read_bool(in, p.music_set) || !read_word(in, p.music) || !read_bool(in, p.ambient_set) || !read_word(in, p.ambient) ||
+		!read_bool(in, p.fade_set) || !read_bool(in, p.faded_out) || !read_word(in, p.camera)) {
+		return false;
+	}
 	std::size_t count = 0;
 	if (!read_count(in, count)) {
 		return false;
 	}
-	changes.resize(count);
-	for (SavedChange& c : changes) {
-		int kind = 0;
-		std::string name;
-		if (!(in >> kind >> name >> c.depth >> c.amount) || kind < 0 || kind > static_cast<int>(ChangeKind::var)) {
+	p.panels.resize(count);
+	for (PanelState& panel : p.panels) {
+		if (!read_word(in, panel.panel) || !read_word(in, panel.camera) || !read_word(in, panel.slot)) {
 			return false;
 		}
-		c.kind = static_cast<ChangeKind>(kind);
-		c.name = unword(name);
+	}
+	if (!read_count(in, count)) {
+		return false;
+	}
+	p.actors.resize(count);
+	for (ActorState& a : p.actors) {
+		if (!read_word(in, a.actor) || !(in >> a.visible) || a.visible < -1 || a.visible > 1 || !read_word(in, a.marker) || !read_bool(in, a.has_position) ||
+			!(in >> a.position.x >> a.position.y >> a.position.z) || !read_word(in, a.facing) || !read_word(in, a.pose)) {
+			return false;
+		}
 	}
 	return true;
 }
 
+}
+
+bool ActorState::operator==(const ActorState& other) const {
+	return actor == other.actor && visible == other.visible && marker == other.marker && has_position == other.has_position &&
+		position.x == other.position.x && position.y == other.position.y && position.z == other.position.z && facing == other.facing &&
+		pose == other.pose;
+}
+
+bool PanelState::operator==(const PanelState& other) const {
+	return panel == other.panel && camera == other.camera && slot == other.slot;
+}
+
+bool PresentationState::operator==(const PresentationState& other) const {
+	return music_set == other.music_set && music == other.music && ambient_set == other.ambient_set && ambient == other.ambient &&
+		fade_set == other.fade_set && faded_out == other.faded_out && camera == other.camera && panels == other.panels && actors == other.actors;
 }
 
 std::string save_state_to_text(const SaveState& state) {
@@ -128,13 +194,25 @@ std::string save_state_to_text(const SaveState& state) {
 	for (const SavedBackground& b : state.background) {
 		out << ' ' << b.pc << ' ' << b.depth;
 	}
-	write_changes(out, state.applied);
-	write_changes(out, state.skip_credit);
-	return out.str();
+	write_presentation(out, state.presentation);
+	out << ' ' << state.locals.size();
+	for (const auto& local : state.locals) {
+		out << ' ' << word(local.first) << ' ' << local.second;
+	}
+	const std::string body = out.str();
+	return body + checksum_mark + hex64(fnv1a(body));
 }
 
 bool save_state_from_text(const std::string& text, SaveState& state) {
-	std::istringstream in(text);
+	const std::size_t mark = text.rfind(checksum_mark);
+	if (mark == std::string::npos) {
+		return false;
+	}
+	const std::string body = text.substr(0, mark);
+	if (text.substr(mark + std::string(checksum_mark).size()) != hex64(fnv1a(body))) {
+		return false;
+	}
+	std::istringstream in(body);
 	std::string w;
 	int file_version = 0;
 	int status = 0;
@@ -142,16 +220,14 @@ bool save_state_from_text(const std::string& text, SaveState& state) {
 	if (!(in >> w >> file_version) || w != header || file_version != version) {
 		return false;
 	}
-	if (!(in >> s.fingerprint >> status >> s.skip_depth) || status < 0 || status > static_cast<int>(Status::error)) {
+	if (!(in >> s.fingerprint >> status >> s.skip_depth) || status < 0 || status > static_cast<int>(Status::error) || s.skip_depth < -1) {
 		return false;
 	}
 	s.status = static_cast<Status>(status);
-	std::string event;
 	std::string world;
-	if (!(in >> event >> world) || !from_hex(unword(world), s.start_world)) {
+	if (!read_word(in, s.event) || !(in >> world) || !from_hex(unword(world), s.start_world)) {
 		return false;
 	}
-	s.event = unword(event);
 	std::size_t count = 0;
 	if (!read_count(in, count)) {
 		return false;
@@ -180,8 +256,16 @@ bool save_state_from_text(const std::string& text, SaveState& state) {
 			return false;
 		}
 	}
-	if (!read_changes(in, s.applied) || !read_changes(in, s.skip_credit)) {
+	if (!read_presentation(in, s.presentation) || !read_count(in, count)) {
 		return false;
+	}
+	for (std::size_t i = 0; i < count; ++i) {
+		std::string name;
+		std::int64_t value = 0;
+		if (!read_word(in, name) || !(in >> value)) {
+			return false;
+		}
+		s.locals[name] = value;
 	}
 	if (in >> w) {
 		return false;

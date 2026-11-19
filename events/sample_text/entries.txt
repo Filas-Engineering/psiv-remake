@@ -1,4 +1,5 @@
 # Events the game starts itself, for event_cli lint --entries.
 harbor_arrival
+inn_counter
 lighthouse_ambush
 market_haggle

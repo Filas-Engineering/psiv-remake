@@ -37,6 +37,7 @@ bool resolve_text(const Text& text, const StringTable& table, std::string& out);
 // order, with where it came from.
 struct TextUse {
 	int file = 0;
+	// For an option, the line of the option itself.
 	int line = 0;
 	std::string event;
 	// "say <speaker>", "narrate", "choice prompt", "option" or "ask".
@@ -46,10 +47,21 @@ struct TextUse {
 
 std::vector<TextUse> collect_texts(const Program& program);
 
-// Errors: an ID a script uses that a table lacks. Warnings: an ID no script
-// uses (only when the program has events), an ID one language has and
-// another lacks, and an ID whose name tokens differ between languages.
+// Every control tag in the text, in order: `{word}` or `{word:value}`, other
+// than the name tokens `{name:<id>}`. The host interprets them, for example
+// `{page}` for a page pause.
+std::vector<std::string> find_control_tags(const std::string& text);
+
+// Errors: an ID a script uses that a table lacks; an ID whose name tokens
+// (in any order) or control tags (in order) differ between languages, as
+// when a translation drops or changes one (TXT-034). Warnings: an ID no
+// script uses (only when the program has events), and an ID one language
+// has and another lacks.
 std::vector<Diagnostic> check_strings(const Program& program, const std::vector<StringTable>& tables);
+
+// An error for every quoted text in the program: player-facing text must
+// come from string tables (TXT-030).
+std::vector<Diagnostic> check_inline_text(const Program& program);
 
 // A proposed table holding every inline text in the program, with IDs of
 // the form <event>.<n>. Nothing is rewritten; writers move lines to IDs by hand.

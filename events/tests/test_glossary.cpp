@@ -103,3 +103,30 @@ end
 		std::printf("%s", test::join(got).c_str());
 	}
 }
+
+TEST(name_check_rejects_typed_names_and_bad_tokens_through_tables) {
+	Glossary g = glossary_ok();
+	events::Program p = test::compile_ok(R"(event dock unskippable
+	say guide "Your {name:tide_lamp} is low."
+	narrate @dock.salt
+	say guide "A {name:ghost} and a {name: broken one."
+end
+)");
+	events::StringTable en;
+	std::vector<Diagnostic> d;
+	CHECK(events::load_string_table("en.strings", "language en\ndock.salt = The air tastes of Reefslt.\n", en, d));
+	std::vector<Diagnostic> found = events::check_names(p, g, {en});
+	std::vector<std::string> got;
+	for (const Diagnostic& diagnostic : found) {
+		got.push_back(events::format_diagnostic(diagnostic));
+	}
+	std::vector<std::string> expected = {
+		"test.ev:3: error: the name \"Reefslt\" is typed out (via @dock.salt (en.strings)); write {name:reef_salt} so the \"show shipped names\" setting can switch it",
+		"test.ev:4: error: unknown name token {name:ghost}: it is not in names.txt",
+		"test.ev:4: error: broken name token: write {name:<id>}",
+	};
+	CHECK(got == expected);
+	if (got != expected) {
+		std::printf("%s", test::join(got).c_str());
+	}
+}

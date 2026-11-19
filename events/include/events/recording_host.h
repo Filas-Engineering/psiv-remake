@@ -23,9 +23,13 @@ public:
 	bool player_control = true;
 	// Misuse such as polling a released handle; tests expect it to stay empty.
 	std::vector<std::string> errors;
+	// The descriptions of the calls made with `instant` set, in order. The
+	// trace shows them like any other call.
+	std::vector<std::string> instant_calls;
 
 	// An action lasts its own `seconds` (fades, camera moves...) unless one of
 	// these overrides it; the subject override wins over the type override.
+	// Instant actions take no time, except warps.
 	void set_duration(ActionType type, double seconds);
 	void set_subject_duration(ActionType type, const std::string& subject, double seconds);
 	void set_line_duration(double seconds);
@@ -62,6 +66,12 @@ public:
 	void set_player_control(bool enabled) override;
 	std::string snapshot_world() override;
 	bool restore_world(const std::string& snapshot) override;
+	// Menus and rests are logged and done at once.
+	Handle open_shop(const std::string& shop) override;
+	Handle rest_party(const RestRequest& request) override;
+	Handle open_save_prompt() override;
+	Handle open_name_entry(const std::string& member) override;
+	void log_skipped_line(const Line& line) override;
 
 protected:
 	// Hooks for hosts built on this one (TimingHost). The defaults use the

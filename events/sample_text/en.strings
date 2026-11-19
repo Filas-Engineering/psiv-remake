@@ -1,6 +1,40 @@
 # English string table for the samples. See FORMAT.md, "String tables".
 language en
 
+harbor.welcome = You made it before the fog.{page}Welcome to the harbor.
+harbor.crossing = The crossing felt longer than the map promised.
+harbor.gulls = Gulls circle the masts, waiting for scraps.
+harbor.satchel_question = Will you let the guide carry your satchel?
+harbor.satchel_light = Light as a feather. Mostly.
+harbor.satchel_refused = Suit yourself, but the hill is steep.
+harbor.first_stop_prompt = Where to first?
+harbor.option_market = The market
+harbor.option_lighthouse = The lighthouse
 harbor.option_rest = The inn, I need a rest
+harbor.market_hint = Follow the smell of roasted nuts.
+harbor.lighthouse_hint = Brave choice. Bring a {name:tide_lamp}, the keeper is in a mood today.
+harbor.inn_hint = The inn has a room facing the water.
+
+inn.greeting = A bed by the hearth, a bowl of chowder, and no questions asked.
+inn.stay_question = Stay the night?
+inn.morning = Morning already. The kettle is on.
+inn.another_time = The door is always open.
+
+lighthouse.light_safe = The light is safe. Take this, you have earned it.
+lighthouse.wake_on_shore = The traveler wakes on the shore, the tower dark behind them.
+lighthouse.more_oil = We can come back with more oil.
+lighthouse.stay_and_help = I will stay and help the keeper rebuild.
+lighthouse.moths_nesting = A {name:moth_swarm} is nesting in the lamp room!
+
 market.vendor_greeting = Lanterns! Oil! A {name:tide_lamp} for every brave soul!
+market.hard_bargain = Fine, fine. You drive a hard bargain.
+market.final_price = That is my final price.
+market.prices_are_prices = Prices are prices, friend.
+market.mind_the_crates = Mind the crates on your way out.
 market.closing_narration = The stall shutters rattle down as the evening bell rings.\nThe square empties.
+market.do_better = Surely you can do better than that.
+market.little_better = Perhaps a little better.
+market.option_buy = Buy the lantern
+market.option_browse = Look at the other wares
+market.option_not_today = Not today
+market.come_back = Come back when the nights get long.

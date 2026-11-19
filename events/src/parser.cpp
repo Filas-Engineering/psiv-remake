@@ -8,9 +8,9 @@ namespace events {
 namespace {
 
 struct Context {
-	bool in_together = false;
+	// "together" or "race" inside a parallel block, else null.
+	const char* parallel = nullptr;
 	bool in_sequence = false;
-	bool in_skip = false;
 };
 
 bool one_of(const std::string& word, std::initializer_list<const char*> words) {
@@ -273,18 +273,17 @@ private:
 		Context ctx;
 		std::string stop = parse_block(ctx, {"on", "end"}, ev.body);
 		if (stop == "on") {
-			ev.skip_line = line().number;
+			// Older scripts describe a skip's effect here; a skip now plays the
+			// rest of the event at once, so the block is parsed and dropped.
+			int skip_line = line().number;
 			Args s = args();
 			s.expect_keyword("skip");
 			s.finish();
-			if (!ev.skippable) {
-				error(ev.skip_line, "'on skip' in event '" + ev.name + "', which is not skippable");
-			}
-			ev.has_skip = true;
+			diagnostics_.push_back({Severity::warning, file_, skip_line,
+				"'on skip' is ignored: a skip now plays the rest of the event at once, applying its state changes; remove the block"});
 			++pos_;
-			Context skip_ctx;
-			skip_ctx.in_skip = true;
-			stop = parse_block(skip_ctx, {"end"}, ev.on_skip);
+			std::vector<Stmt> ignored;
+			stop = parse_block(Context(), {"end"}, ignored);
 		}
 		if (stop == "end") {
 			Args e = args();
@@ -423,6 +422,13 @@ private:
 		}
 	}
 
+	// The optional `into <name>` that records the answer (EVT-006).
+	void into(Args& a, Stmt& s, const char* what) {
+		if (a.keyword("into")) {
+			a.name(s.ins.name, what);
+		}
+	}
+
 	void parse_choice(const Context& ctx, std::vector<Stmt>& out) {
 		Stmt s = simple(Op::choice);
 		s.kind = StmtKind::choice;
@@ -430,6 +436,7 @@ private:
 		if (a.next_is_text()) {
 			a.text(s.ins.choice.prompt, text_what);
 		}
+		into(a, s, "a variable name after 'into'");
 		a.finish();
 		++pos_;
 		std::vector<Stmt> stray;
@@ -444,6 +451,7 @@ private:
 			o.text(label, "option text (a quoted string or @string.id)");
 			o.finish();
 			s.ins.choice.options.push_back(label);
+			s.ins.option_lines.push_back(b.line);
 			++pos_;
 			stop = parse_block(ctx, {"option", "end"}, b.body);
 			s.branches.push_back(std::move(b));
@@ -502,6 +510,7 @@ private:
 		s.ins.choice.yes_no = true;
 		Args a = args();
 		a.text(s.ins.choice.prompt, "a question (a quoted string or @string.id)");
+		into(a, s, "a flag name after 'into'");
 		a.finish();
 		++pos_;
 		parse_sections(ctx, s, {"yes", "no"}, "ask");
@@ -513,6 +522,18 @@ private:
 		s.kind = StmtKind::battle;
 		Args a = args();
 		a.name(s.ins.battle.encounter, "an encounter name");
+		if (a.keyword("opening")) {
+			std::string opening;
+			if (a.name(opening, "'normal', 'party_first' or 'enemy_first' after 'opening'")) {
+				if (opening == "party_first") {
+					s.ins.battle.opening = BattleOpening::party_first;
+				} else if (opening == "enemy_first") {
+					s.ins.battle.opening = BattleOpening::enemy_first;
+				} else if (opening != "normal") {
+					a.error("expected 'normal', 'party_first' or 'enemy_first' after 'opening', found '" + opening + "'");
+				}
+			}
+		}
 		a.finish();
 		++pos_;
 		parse_sections(ctx, s, {"win", "lose", "flee"}, "battle");
@@ -524,14 +545,16 @@ private:
 		out.push_back(std::move(s));
 	}
 
-	void parse_together(const Context& ctx, std::vector<Stmt>& out) {
+	void parse_together(const Context& ctx, std::vector<Stmt>& out, bool race) {
+		const char* what = race ? "race" : "together";
 		Stmt s = simple(Op::fork);
 		s.kind = StmtKind::together;
+		s.ins.number = race ? 1 : 0;
 		Args a = args();
 		a.finish();
 		++pos_;
 		Context inner = ctx;
-		inner.in_together = true;
+		inner.parallel = what;
 		std::vector<Stmt> items;
 		std::string stop = parse_block(inner, {"end"}, items);
 		for (Stmt& item : items) {
@@ -545,8 +568,8 @@ private:
 			}
 			s.branches.push_back(std::move(b));
 		}
-		if (close_block(stop, "together", s.line) && s.branches.empty()) {
-			error(s.line, "together: the block is empty");
+		if (close_block(stop, what, s.line) && s.branches.empty()) {
+			error(s.line, std::string(what) + ": the block is empty");
 		}
 		out.push_back(std::move(s));
 	}
@@ -572,8 +595,8 @@ private:
 	void action_options(const Context& ctx, Args& a, Stmt& s, bool speed, bool strength, bool loop) {
 		while (!a.failed() && !a.done()) {
 			if (a.keyword("nowait")) {
-				if (ctx.in_together) {
-					a.error("'nowait' has no effect inside 'together'; every branch already runs in parallel");
+				if (ctx.parallel) {
+					a.error(std::string("'nowait' has no effect inside '") + ctx.parallel + "'; every branch already runs in parallel");
 				}
 				s.ins.wait = false;
 			} else if (speed && a.keyword("speed")) {
@@ -631,9 +654,10 @@ private:
 		}
 
 		static const std::initializer_list<const char*> known = {
-			"anim", "ask", "battle", "call", "camera", "choice", "clear", "face", "fade", "give", "goto", "hide", "if",
-			"label", "lock", "move", "music", "narrate", "panel", "party", "return", "say", "sequence", "set", "shake",
-			"show", "sound", "sync", "take", "together", "unlock", "var", "wait", "warp", "while",
+			"ambient", "anim", "ask", "battle", "call", "camera", "choice", "clear", "face", "fade", "give", "goto", "hide",
+			"if", "label", "lock", "move", "music", "name", "narrate", "panel", "party", "race", "rest", "return", "save",
+			"say", "sequence", "set", "shake", "shop", "show", "sound", "sync", "take", "together", "unlock", "var", "wait",
+			"warp", "while",
 		};
 		if (!one_of(cmd, known)) {
 			error(l.number, "unknown command '" + cmd + "'");
@@ -641,18 +665,13 @@ private:
 			return;
 		}
 
-		if (ctx.in_together && !one_of(cmd, {"anim", "camera", "face", "fade", "hide", "move", "music", "panel", "sequence", "shake", "show", "sound", "wait"})) {
-			error(l.number, "'" + cmd + "' is not allowed inside 'together'; only actor, camera, panel, screen and audio commands and 'wait' run in parallel");
+		if (ctx.parallel && !one_of(cmd, {"ambient", "anim", "camera", "face", "fade", "hide", "move", "music", "panel", "sequence", "shake", "show", "sound", "wait"})) {
+			error(l.number, "'" + cmd + "' is not allowed inside '" + ctx.parallel + "'; only actor, camera, panel, screen and audio commands and 'wait' run in parallel");
 			skip_command(ctx);
 			return;
 		}
-		if (cmd == "sequence" && (!ctx.in_together || ctx.in_sequence)) {
-			error(l.number, "'sequence' is only allowed directly inside 'together'");
-			skip_command(ctx);
-			return;
-		}
-		if (ctx.in_skip && one_of(cmd, {"ask", "battle", "call", "choice", "goto", "label", "narrate", "say", "together"})) {
-			error(l.number, "'" + cmd + "' is not allowed in 'on skip'; it must only apply the scene's state changes");
+		if (cmd == "sequence" && (!ctx.parallel || ctx.in_sequence)) {
+			error(l.number, "'sequence' is only allowed directly inside 'together' or 'race'");
 			skip_command(ctx);
 			return;
 		}
@@ -667,8 +686,8 @@ private:
 			parse_ask(ctx, out);
 		} else if (cmd == "battle") {
 			parse_battle(ctx, out);
-		} else if (cmd == "together") {
-			parse_together(ctx, out);
+		} else if (cmd == "together" || cmd == "race") {
+			parse_together(ctx, out, cmd == "race");
 		} else if (cmd == "sequence") {
 			parse_sequence(ctx, out);
 		} else {
@@ -681,12 +700,11 @@ private:
 	// not close the wrong parent.
 	void skip_command(const Context& ctx) {
 		std::string cmd = head();
-		if (one_of(cmd, {"if", "while", "choice", "ask", "battle", "together", "sequence"})) {
+		if (one_of(cmd, {"if", "while", "choice", "ask", "battle", "together", "race", "sequence"})) {
 			std::vector<Stmt> discard;
 			Context quiet = ctx;
-			quiet.in_together = false;
+			quiet.parallel = nullptr;
 			quiet.in_sequence = false;
-			quiet.in_skip = false;
 			if (cmd == "if") {
 				parse_if(quiet, discard);
 			} else if (cmd == "while") {
@@ -697,10 +715,10 @@ private:
 				parse_ask(quiet, discard);
 			} else if (cmd == "battle") {
 				parse_battle(quiet, discard);
-			} else if (cmd == "together") {
-				parse_together(quiet, discard);
+			} else if (cmd == "together" || cmd == "race") {
+				parse_together(quiet, discard, cmd == "race");
 			} else {
-				quiet.in_together = true;
+				quiet.parallel = "together";
 				parse_sequence(quiet, discard);
 			}
 			return;
@@ -858,6 +876,31 @@ private:
 				a.expected("'play', 'stop' or 'fade'");
 			}
 			action_options(ctx, a, s, false, false, false);
+		} else if (cmd == "ambient") {
+			s = action(ActionType::ambient_play);
+			if (a.keyword("play")) {
+				a.name(s.ins.action.subject, "an ambient sound name");
+			} else if (a.keyword("stop")) {
+				s.ins.action.type = ActionType::ambient_stop;
+			} else {
+				a.expected("'play' or 'stop'");
+			}
+			action_options(ctx, a, s, false, false, false);
+		} else if (cmd == "shop") {
+			s = simple(Op::shop);
+			a.name(s.ins.name, "a shop name");
+		} else if (cmd == "rest") {
+			s = simple(Op::rest);
+			if (!a.done()) {
+				a.name(s.ins.name, "a rest point name");
+			}
+		} else if (cmd == "save") {
+			s = simple(Op::save_prompt);
+			a.expect_keyword("prompt");
+		} else if (cmd == "name") {
+			s = simple(Op::name_entry);
+			a.expect_keyword("entry");
+			a.name(s.ins.name, "a party member name");
 		} else if (cmd == "sound") {
 			s = action(ActionType::sound);
 			a.name(s.ins.action.subject, "a sound cue name");

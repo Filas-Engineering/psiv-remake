@@ -1,6 +1,40 @@
 # Japanese string table for the samples. Placeholder translations.
 language ja
 
+harbor.welcome = 霧が出る前に着いたね。{page}港へようこそ。
+harbor.crossing = 船旅は地図よりずっと長く感じた。
+harbor.gulls = カモメがマストの上を回り、残り物を待っている。
+harbor.satchel_question = 案内人にかばんを持ってもらう？
+harbor.satchel_light = 羽のように軽い。たぶん。
+harbor.satchel_refused = お好きにどうぞ。でも坂は急だよ。
+harbor.first_stop_prompt = まずどこへ？
+harbor.option_market = 市場
+harbor.option_lighthouse = 灯台
 harbor.option_rest = 宿へ。少し休みたい
+harbor.market_hint = 焼き木の実の匂いをたどって。
+harbor.lighthouse_hint = 勇敢だね。{name:tide_lamp}を持っていって。灯台守は今日は機嫌が悪い。
+harbor.inn_hint = 宿には海に面した部屋があるよ。
+
+inn.greeting = 暖炉のそばの寝床に、温かいスープ。何も聞かないよ。
+inn.stay_question = 泊まっていく？
+inn.morning = もう朝だ。お湯が沸いているよ。
+inn.another_time = いつでもどうぞ。
+
+lighthouse.light_safe = 灯りは守られた。これを持っていきなさい。
+lighthouse.wake_on_shore = 旅人は岸辺で目を覚ます。背後の塔は暗いままだ。
+lighthouse.more_oil = 油を持ってまた来よう。
+lighthouse.stay_and_help = ここに残って灯台守の再建を手伝うよ。
+lighthouse.moths_nesting = ランプ室に{name:moth_swarm}が巣を作っている！
+
 market.vendor_greeting = ランタン！油！勇敢な人には{name:tide_lamp}を！
+market.hard_bargain = わかった、わかった。手ごわいね。
+market.final_price = これが最後の値段だ。
+market.prices_are_prices = 値段は値段だよ。
+market.mind_the_crates = 帰りは木箱に気をつけて。
 market.closing_narration = 夕方の鐘が鳴り、屋台のシャッターが下りる。\n広場から人が消えていく。
+market.do_better = もう少し安くならない？
+market.little_better = 少しだけなら。
+market.option_buy = ランタンを買う
+market.option_browse = ほかの品を見る
+market.option_not_today = 今日はやめておく
+market.come_back = 夜が長くなったらまたおいで。

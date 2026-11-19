@@ -10,38 +10,51 @@ using events::WaitKind;
 
 namespace {
 
+// A line, a race, an answered choice whose branch gives before its line, a
+// nested call, a battle and background presentation: everything a skip has
+// to pass through or stop at.
 const char* const skippable_scene = R"(event scene skippable
 	lock player
 	music play theme
 	together
 		move guide to pier
-		anim traveler wave
+		sequence
+			anim traveler wave
+			face traveler guide
+		end
 	end
 	say guide "Hello again."
-	if not got_rope
+	choice "Which way?" into scene.way
+	option "Coast"
 		give rope
-		set got_rope
+		say guide "The coast it is."
+		var visits += 1
+	option "Hills"
+		say guide "Up we go."
+		set scene.hills
 	end
+	call helper
 	move traveler to dock nowait
 	wait 0.5
-	party add guide
-	if not scene.visit_counted
-		var visits += 1
-		set scene.visit_counted
+	battle reef_crabs
+	win
+		party add guide
+	flee
+		say guide "Run!"
+		take rope
 	end
+	panel show p1 camera dock_wide layout full
 	say guide "Off we go."
 	unlock player
-on skip
-	if not got_rope
-		give rope
-		set got_rope
+end
+event helper unskippable
+	wait 0.4
+	say guide "A short aside."
+	var visits += 2
+	race
+		camera move gull_cam 3.0
+		wait 0.6
 	end
-	party add guide
-	if not scene.visit_counted
-		var visits += 1
-		set scene.visit_counted
-	end
-	unlock player
 end
 )";
 
@@ -49,6 +62,8 @@ void configure(RecordingHost& host) {
 	host.set_duration(ActionType::move, 0.4);
 	host.set_duration(ActionType::animate, 0.7);
 	host.set_line_duration(0.3);
+	host.set_choice_duration(0.2);
+	host.set_battle_duration(0.5);
 	host.vars["visits"] = 2;
 }
 
@@ -61,60 +76,166 @@ bool contains(const std::vector<std::string>& trace, const std::string& line) {
 	return false;
 }
 
-}
-
-TEST(skipping_at_any_step_leaves_the_same_world_as_playing_through) {
-	Program p = test::compile_ok(skippable_scene);
-	RecordingHost played;
-	configure(played);
-	Interpreter full(p, played);
-	full.start("scene");
-	int total = test::run(full, played);
-	CHECK(full.status() == Status::finished);
-	CHECK_EQ(played.vars["visits"], 3);
-	CHECK(played.player_control);
-	CHECK(total > 10);
-
-	bool saw_cancel_in_together = false;
-	for (int k = 0; k < total; ++k) {
-		RecordingHost host;
-		configure(host);
-		Interpreter it(p, host);
-		it.start("scene");
-		for (int i = 0; i < k; ++i) {
-			host.advance(0.1);
-			it.step(0.1);
+bool starts_any(const std::vector<std::string>& trace, const std::string& prefix) {
+	for (const std::string& l : trace) {
+		if (l.rfind(prefix, 0) == 0) {
+			return true;
 		}
-		CHECK(it.skip());
-		CHECK(!it.can_skip());
-		test::run(it, host);
-		CHECK(it.status() == Status::finished);
-		CHECK(host.same_world(played));
-		CHECK_EQ(host.live_handles(), 0u);
-		CHECK(host.errors.empty());
-		saw_cancel_in_together = saw_cancel_in_together || (contains(host.trace, "cancel move guide to pier") && contains(host.trace, "cancel anim traveler wave"));
 	}
-	CHECK(saw_cancel_in_together);
+	return false;
 }
 
-TEST(skip_is_refused_for_unskippable_events) {
+struct Answers {
+	int way = 0;
+	events::BattleResult battle = events::BattleResult::win;
+};
+
+void answer(RecordingHost& host, const Answers& a) {
+	host.queue_choices({a.way});
+	host.queue_battle_results({a.battle});
+}
+
+}
+
+TEST(skipping_at_any_step_on_every_path_leaves_the_world_of_watching) {
+	Program p = test::compile_ok(skippable_scene);
+	int skips = 0;
+	for (int way = 0; way < 2; ++way) {
+		for (events::BattleResult battle : {events::BattleResult::win, events::BattleResult::flee}) {
+			const Answers answers{way, battle};
+			RecordingHost watched;
+			configure(watched);
+			answer(watched, answers);
+			Interpreter full(p, watched);
+			full.start("scene");
+			const int total = test::run(full, watched);
+			CHECK(full.status() == Status::finished);
+			CHECK(total > 15);
+
+			// Skip once at step k, then again at every chance after each stop.
+			for (int k = 0; k < total; ++k) {
+				RecordingHost host;
+				configure(host);
+				answer(host, answers);
+				Interpreter it(p, host);
+				it.start("scene");
+				for (int i = 0; i < k; ++i) {
+					host.advance(0.1);
+					it.step(0.1);
+				}
+				for (int guard = 0; it.status() == Status::running && guard < 1000; ++guard) {
+					if (it.can_skip()) {
+						CHECK(it.skip());
+						CHECK(!it.can_skip());
+						++skips;
+					}
+					host.advance(0.1);
+					it.step(0.1);
+				}
+				CHECK(it.status() == Status::finished);
+				CHECK(host.same_world(watched));
+				CHECK(it.presentation() == full.presentation());
+				CHECK_EQ(host.live_handles(), 0u);
+				CHECK(host.errors.empty());
+				// The decisions were still put to the player.
+				CHECK(starts_any(host.trace, "choice "));
+				CHECK(starts_any(host.trace, "battle "));
+			}
+		}
+	}
+	CHECK(skips > 100);
+}
+
+TEST(skip_stops_at_the_next_choice_and_battle_and_is_offered_again_after_each) {
+	Program p = test::compile_ok(skippable_scene);
+	RecordingHost host;
+	configure(host);
+	host.set_choice_duration(1);
+	host.set_battle_duration(1);
+	answer(host, {0, events::BattleResult::win});
+	Interpreter it(p, host);
+	it.start("scene");
+	it.step(0.1);
+	CHECK(it.skip());
+	host.advance(0.1);
+	it.step(0.1);
+	// The skip stopped at the choice: it is on screen, and nothing after it ran.
+	CHECK(!it.skipping());
+	CHECK(starts_any(host.trace, "choice "));
+	CHECK(!contains(host.trace, "give rope 1"));
+	CHECK(!it.can_skip());
+	for (int i = 0; i < 12 && !it.can_skip(); ++i) {
+		host.advance(0.1);
+		it.step(0.1);
+	}
+	CHECK(it.can_skip());
+	CHECK(it.skip());
+	host.advance(0.1);
+	it.step(0.1);
+	// Through the branch and the unskippable helper, up to the battle.
+	CHECK(contains(host.trace, "give rope 1"));
+	CHECK(contains(host.trace, "skipped say guide \"A short aside.\""));
+	CHECK(starts_any(host.trace, "battle "));
+	CHECK(!it.can_skip());
+	CHECK_EQ(host.vars["visits"], 5);
+	test::run(it, host);
+	CHECK(it.status() == Status::finished);
+	CHECK(host.errors.empty());
+}
+
+TEST(a_choice_writes_its_answer_before_its_branch_runs) {
+	Program p = test::compile_ok(R"(event a skippable
+	choice "Pick." into pick.way
+	option "One"
+		say guide "One."
+	option "Two"
+		say guide "Two."
+	end
+	ask "Sure?" into pick.sure
+	yes
+		say guide "Good."
+	end
+end
+)");
+	RecordingHost host;
+	host.set_line_duration(1);
+	host.queue_choices({1, 1});
+	Interpreter it(p, host);
+	it.start("a");
+	it.step(0.1);
+	// The answer lands in the step that takes the branch, before its first line.
+	CHECK_EQ(host.vars["pick.way"], 2);
+	CHECK_EQ(host.trace.back(), std::string("say guide \"Two.\""));
+	test::run(it, host);
+	CHECK(host.flags.count("pick.sure") == 1 && !host.flags["pick.sure"]);
+}
+
+TEST(skip_is_refused_for_unskippable_events_and_while_a_decision_is_open) {
 	Program p = test::compile_ok(R"(event locked unskippable
 	say guide "Listen closely."
 	call aside
 	say guide "Done."
 end
 event aside skippable
-	say guide "A short aside."
+	ask "Ready?"
+	end
 	wait 1
 end
 )");
 	RecordingHost host;
 	host.set_line_duration(1);
+	host.set_choice_duration(1);
 	Interpreter it(p, host);
 	CHECK(!it.can_skip());
 	it.start("locked");
 	it.step(0.1);
 	CHECK(!it.skip());
+	for (int i = 0; i < 15 && !starts_any(host.trace, "ask "); ++i) {
+		host.advance(0.1);
+		it.step(0.1);
+	}
+	CHECK(starts_any(host.trace, "ask "));
+	CHECK(!it.can_skip());
 	test::run(it, host);
 	CHECK(it.status() == Status::finished);
 	CHECK(!contains(host.trace, "cancel say guide \"Listen closely.\""));
@@ -131,8 +252,7 @@ event intro skippable
 	music play intro_theme nowait
 	wait 5
 	say guide "Intro tail."
-on skip
-	set intro.skipped
+	set intro.done
 end
 )");
 	RecordingHost host;
@@ -143,28 +263,30 @@ end
 	it.step(0.1);
 	CHECK(it.can_skip());
 	CHECK(it.skip());
+	host.advance(0.1);
+	it.step(0.1);
+	CHECK(!it.skipping());
+	CHECK(host.flags["intro.done"]);
+	CHECK(contains(host.trace, "skipped say guide \"Intro tail.\""));
+	CHECK(!contains(host.trace, "say guide \"Intro tail.\""));
+	CHECK(contains(host.trace, "say guide \"After the intro.\""));
+	// The skip ends the intro's music at once, not the caller's walk.
+	CHECK(!contains(host.trace, "cancel move guide to far"));
+	CHECK(host.instant_calls == std::vector<std::string>{"music play intro_theme"});
 	test::run(it, host);
 	CHECK(it.status() == Status::finished);
-	CHECK(host.flags["intro.skipped"]);
-	CHECK(contains(host.trace, "say guide \"After the intro.\""));
-	CHECK(!contains(host.trace, "say guide \"Intro tail.\""));
-	// The skip cancels what the intro started, not the caller's walk.
-	CHECK(contains(host.trace, "cancel music play intro_theme"));
-	CHECK(!contains(host.trace, "cancel move guide to far"));
 	CHECK_EQ(host.live_handles(), 0u);
 }
 
-TEST(skip_inside_nested_skippable_events_runs_the_outermost_on_skip) {
+TEST(a_skip_inside_nested_skippable_events_fast_forwards_the_whole_chain) {
 	Program p = test::compile_ok(R"(event root skippable
 	call child
+	say guide "Root tail."
 	set root.played
-on skip
-	set root.skipped
 end
 event child skippable
 	wait 3
-on skip
-	set child.skipped
+	set child.played
 end
 )");
 	RecordingHost host;
@@ -172,11 +294,92 @@ end
 	it.start("root");
 	it.step(0.1);
 	CHECK(it.skip());
-	test::run(it, host);
+	it.step(0.1);
 	CHECK(it.status() == Status::finished);
-	CHECK(host.flags.count("root.skipped") == 1);
-	CHECK(host.flags.count("child.skipped") == 0);
-	CHECK(host.flags.count("root.played") == 0);
+	CHECK(host.flags["child.played"]);
+	CHECK(host.flags["root.played"]);
+}
+
+TEST(skip_completes_running_branches_with_their_end_state) {
+	Program p = test::compile_ok(R"(event a skippable
+	music play theme
+	together
+		move guide to pier
+		sequence
+			anim traveler wave
+			face traveler guide
+			anim traveler sit loop
+		end
+	end
+	say guide "Done."
+	shake 1.0
+	sound thud
+	fade out 1.0
+end
+)");
+	RecordingHost host;
+	host.set_duration(ActionType::move, 1);
+	host.set_duration(ActionType::animate, 1);
+	Interpreter it(p, host);
+	it.start("a");
+	it.step(0.1);
+	CHECK(it.skip());
+	it.step(0.1);
+	CHECK(it.status() == Status::finished);
+	CHECK(contains(host.trace, "cancel move guide to pier"));
+	CHECK(contains(host.trace, "cancel anim traveler wave"));
+	// What is left on screen is rebuilt at once; effects with no end state are dropped.
+	std::vector<std::string> expected = {"move guide to pier", "face traveler guide", "anim traveler sit loop", "fade out 0"};
+	CHECK(host.instant_calls == expected);
+	CHECK(!starts_any(host.trace, "action shake"));
+	CHECK(!starts_any(host.trace, "action sound"));
+	CHECK_EQ(host.live_handles(), 0u);
+}
+
+TEST(a_warp_still_happens_while_skipping_and_a_save_during_it_keeps_skipping) {
+	Program p = test::compile_ok(R"(event a skippable
+	move guide to pier
+	say guide "Let us go."
+	warp lighthouse door
+	show keeper
+	say keeper "Welcome."
+	set arrived
+end
+)");
+	RecordingHost played;
+	played.set_duration(ActionType::warp, 1);
+	Interpreter full(p, played);
+	full.start("a");
+	test::run(full, played);
+
+	RecordingHost host;
+	host.set_duration(ActionType::warp, 1);
+	host.set_duration(ActionType::move, 1);
+	Interpreter it(p, host);
+	it.start("a");
+	it.step(0.1);
+	CHECK(it.skip());
+	host.advance(0.1);
+	it.step(0.1);
+	// Waiting on the map load, still skipping.
+	CHECK(it.skipping());
+	CHECK(contains(host.trace, "action warp lighthouse door"));
+	SaveState loaded;
+	CHECK(events::save_state_from_text(events::save_state_to_text(it.save()), loaded));
+	CHECK_EQ(loaded.skip_depth, 0);
+	// The guide belonged to the old map, so nothing rebuilds it.
+	CHECK(loaded.presentation.actors.empty());
+
+	RecordingHost resumed_host = host.reloaded();
+	Interpreter resumed(p, resumed_host);
+	std::string error;
+	CHECK(resumed.restore(loaded, error));
+	CHECK(!resumed.can_skip());
+	test::run(resumed, resumed_host);
+	CHECK(resumed.status() == Status::finished);
+	CHECK(resumed_host.same_world(played));
+	CHECK(!contains(resumed_host.trace, "say keeper \"Welcome.\""));
+	CHECK(resumed_host.instant_calls == (std::vector<std::string>{"warp lighthouse door", "show keeper"}));
 }
 
 namespace {
@@ -460,157 +663,105 @@ TEST(restore_after_a_script_change_fails_when_the_event_is_gone) {
 	CHECK(error.find("'reward' no longer exists") != std::string::npos);
 }
 
-namespace {
-
-// The `on skip` gives and adds without any guard. The played part gives the
-// shells before it sets anything a guard could test.
-const char* const unguarded_scene = R"(event haul skippable
-	lock player
-	give shell 2
-	say guide "Take these."
-	call helper
-	var tides += 3
-	say guide "Mind the current."
-	take coin
-	give shell
-	unlock player
-on skip
-	give shell 3
-	give net
-	var tides += 3
-	take coin
-	unlock player
-end
-event helper unskippable
-	give net
-	wait 0.4
-end
-)";
-
-void configure_haul(RecordingHost& host) {
-	host.items["coin"] = 4;
-	host.items["shell"] = 1;
-	host.vars["tides"] = 10;
-	host.set_line_duration(0.3);
-}
-
-}
-
-TEST(on_skip_never_reapplies_what_the_played_part_already_gave_took_or_added) {
-	Program p = test::compile_ok(unguarded_scene);
-	RecordingHost played;
-	configure_haul(played);
-	Interpreter full(p, played);
-	full.start("haul");
-	int total = test::run(full, played);
-	CHECK(full.status() == Status::finished);
-	CHECK_EQ(played.items["shell"], 4);
-	CHECK_EQ(played.items["net"], 1);
-	CHECK_EQ(played.items["coin"], 3);
-	CHECK_EQ(played.vars["tides"], 13);
-
-	for (int k = 0; k < total; ++k) {
-		RecordingHost host;
-		configure_haul(host);
-		Interpreter it(p, host);
-		it.start("haul");
-		for (int i = 0; i < k; ++i) {
-			host.advance(0.1);
-			it.step(0.1);
-		}
-		if (!it.skip()) {
-			continue;
-		}
-		test::run(it, host);
-		CHECK(it.status() == Status::finished);
-		CHECK(host.same_world(played));
-		CHECK(host.errors.empty());
-	}
-}
-
-TEST(a_save_inside_on_skip_keeps_what_is_left_to_apply) {
-	Program p = test::compile_ok(R"(event haul skippable
-	give shell 2
-	say guide "Take these."
-	give shell
-on skip
-	wait 0.5
-	give shell 3
+TEST(a_restore_rebuilds_what_the_event_put_on_screen_before_anything_else) {
+	Program p = test::compile_ok(R"(event a unskippable
+	fade out 0
+	music play theme
+	ambient play surf
+	camera cut wide
+	show guide
+	move guide to pier
+	face guide traveler
+	anim guide idle_sway loop
+	hide vendor
+	move traveler to 1.5 0 -2
+	panel show p1 camera wide layout left
+	panel show p2 camera close layout right
+	panel show p1 camera close_up layout left
+	sound bell
+	say guide "Hold still."
+	set done
 end
 )");
-	RecordingHost played;
-	played.set_line_duration(0.3);
-	Interpreter full(p, played);
-	full.start("haul");
-	test::run(full, played);
-
 	RecordingHost host;
-	host.set_line_duration(0.3);
+	host.set_line_duration(1);
 	Interpreter it(p, host);
-	it.start("haul");
-	host.advance(0.1);
+	it.start("a");
 	it.step(0.1);
-	CHECK(it.skip());
-	host.advance(0.1);
-	it.step(0.1);
+	const std::string text = events::save_state_to_text(it.save());
 	SaveState loaded;
-	CHECK(events::save_state_from_text(events::save_state_to_text(it.save()), loaded));
-	CHECK_EQ(loaded.skip_credit.size(), 1u);
+	CHECK(events::save_state_from_text(text, loaded));
+	CHECK(loaded.presentation == it.presentation());
+	CHECK_EQ(loaded.presentation.panels.size(), 2u);
 
 	RecordingHost resumed_host = host.reloaded();
 	Interpreter resumed(p, resumed_host);
 	std::string error;
 	CHECK(resumed.restore(loaded, error));
-	CHECK(!resumed.can_skip());
+	CHECK(resumed_host.trace.empty());
+	resumed.step(0.1);
+	std::vector<std::string> expected = {
+		"action music play theme",
+		"action ambient play surf",
+		"action camera cut wide",
+		"action show guide",
+		"action move guide to pier",
+		"action face guide traveler",
+		"action anim guide idle_sway loop",
+		"action move traveler to 1.5 0 -2",
+		"action hide vendor",
+		"action panel show p1 camera close_up layout left",
+		"action panel show p2 camera close layout right",
+		"action fade out 0",
+		"say guide \"Hold still.\"",
+	};
+	CHECK(resumed_host.trace == expected);
+	if (resumed_host.trace != expected) {
+		std::printf("%s", test::join(resumed_host.trace).c_str());
+	}
+	CHECK_EQ(resumed_host.instant_calls.size(), expected.size() - 1);
 	test::run(resumed, resumed_host);
 	CHECK(resumed.status() == Status::finished);
-	CHECK_EQ(resumed_host.items["shell"], 3);
-	CHECK(resumed_host.same_world(played));
+	CHECK_EQ(resumed_host.live_handles(), 0u);
 }
 
-TEST(a_nested_skip_counts_toward_an_outer_skippable_event) {
-	// outer (skippable) calls middle (unskippable) calls inner (skippable).
-	// Skipping inner applies its rest; skipping outer later must count both
-	// the played gives and what inner's skip applied.
-	Program p = test::compile_ok(R"(event outer skippable
-	call middle
-	say guide "Back outside."
-	give shell
-on skip
-	give shell 4
-end
-event middle unskippable
-	call inner
-	say guide "In the middle."
-end
-event inner skippable
-	give shell
-	say guide "Inside."
-	give shell 2
-on skip
-	give shell 3
-end
-)");
+TEST(a_damaged_save_text_is_rejected) {
+	Program p = test::compile_ok(save_scene);
 	RecordingHost host;
-	host.set_line_duration(0.3);
+	configure_save(host);
 	Interpreter it(p, host);
-	it.start("outer");
-	host.advance(0.1);
-	it.step(0.1);
-	CHECK_EQ(host.items["shell"], 1);
-	CHECK(it.skip());
-	host.advance(0.1);
-	it.step(0.1);
-	CHECK_EQ(host.items["shell"], 3);
-	// Now in middle's line, which is unskippable.
-	CHECK(!it.can_skip());
-	for (int i = 0; i < 5 && !it.can_skip(); ++i) {
+	it.start("scene");
+	for (int i = 0; i < 6; ++i) {
 		host.advance(0.1);
 		it.step(0.1);
 	}
-	CHECK(it.can_skip());
-	CHECK(it.skip());
-	test::run(it, host);
-	CHECK(it.status() == Status::finished);
-	CHECK_EQ(host.items["shell"], 4);
+	const std::string text = events::save_state_to_text(it.save());
+	SaveState parsed;
+	CHECK(events::save_state_from_text(text, parsed));
+	int accepted = 0;
+	for (std::size_t at = 0; at < text.size(); ++at) {
+		std::string flipped = text;
+		flipped[at] = static_cast<char>(flipped[at] ^ 0x04);
+		accepted += events::save_state_from_text(flipped, parsed) ? 1 : 0;
+	}
+	for (std::size_t length = 0; length < text.size(); ++length) {
+		accepted += events::save_state_from_text(text.substr(0, length), parsed) ? 1 : 0;
+	}
+	CHECK_EQ(accepted, 0);
+	// Another version is rejected even with a checksum that matches.
+	CHECK(text.rfind("events-save 3 ", 0) == 0);
+	auto checksum = [](const std::string& body) {
+		std::uint64_t hash = 14695981039346656037ull;
+		for (unsigned char c : body) {
+			hash ^= c;
+			hash *= 1099511628211ull;
+		}
+		char sum[20];
+		std::snprintf(sum, sizeof sum, "%016llx", static_cast<unsigned long long>(hash));
+		return std::string(sum);
+	};
+	const std::size_t mark = text.rfind(" sum ");
+	CHECK_EQ(checksum(text.substr(0, mark)), text.substr(mark + 5));
+	const std::string older = "events-save 2" + text.substr(13, mark - 13);
+	CHECK(!events::save_state_from_text(older + " sum " + checksum(older), parsed));
 }

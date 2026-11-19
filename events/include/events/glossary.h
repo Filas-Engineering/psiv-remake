@@ -78,4 +78,8 @@ std::vector<NameMention> find_name_mentions(const Program& program, const Glossa
 
 const char* mention_kind_name(MentionKind kind);
 
+// An error for every mention that is not a valid token: a glossary name
+// typed out instead of a name token (TXT-005), an unknown token or a broken one.
+std::vector<Diagnostic> check_names(const Program& program, const Glossary& glossary, const std::vector<StringTable>& tables);
+
 }

@@ -11,9 +11,32 @@ const long step_budget = 100000;
 const std::size_t max_call_depth = 32;
 const double time_epsilon = 1e-9;
 
+bool waits_on_player(Op op) {
+	return op == Op::choice || op == Op::battle || op == Op::shop || op == Op::save_prompt || op == Op::name_entry;
 }
 
-Interpreter::Interpreter(const Program& program, Host& host) : program_(program), host_(host) {}
+const char* service_method(Op op) {
+	switch (op) {
+	case Op::shop:
+		return "open_shop";
+	case Op::rest:
+		return "rest_party";
+	case Op::save_prompt:
+		return "open_save_prompt";
+	default:
+		return "open_name_entry";
+	}
+}
+
+}
+
+Interpreter::Interpreter(const Program& program, Host& host) : program_(program), host_(host) {
+	for (const Declaration& d : program.declarations) {
+		if (d.local) {
+			local_initial_[d.name] = d.initial;
+		}
+	}
+}
 
 bool Interpreter::start(const std::string& event) {
 	int index = program_.find_event(event);
@@ -30,8 +53,10 @@ bool Interpreter::start(const std::string& event) {
 	main_.pc = program_.events[index].entry;
 	children_.clear();
 	background_.clear();
-	applied_.clear();
-	skip_credit_.clear();
+	presentation_ = PresentationState();
+	dirty_.clear();
+	rebuild_pending_ = false;
+	locals_ = local_initial_;
 	start_world_ = host_.snapshot_world();
 	restarted_ = false;
 	return true;
@@ -49,9 +74,13 @@ Status Interpreter::step(double delta_seconds) {
 			child.timer -= delta_seconds;
 		}
 	}
+	if (rebuild_pending_) {
+		rebuild_pending_ = false;
+		rebuild(true);
+	}
 	// Entries without a handle come from restore() and are started again.
 	for (Background& b : background_) {
-		if (b.handle == 0) {
+		if (b.handle == 0 && b.pc >= 0) {
 			b.handle = host_.start_action(program_.code[b.pc].action);
 		}
 	}
@@ -123,6 +152,15 @@ bool Interpreter::resolve_wait(Thread& thread) {
 				fail(thread.pc, refused);
 				return false;
 			}
+			// Written in the same step that takes the branch, so no save or
+			// skip can fall between the answer and its record (EVT-006).
+			if (ins.op == Op::choice && !ins.name.empty()) {
+				if (ins.choice.yes_no) {
+					write_flag(ins.name, picked == 0);
+				} else {
+					write_var(ins.name, picked + 1);
+				}
+			}
 			next = ins.targets[picked];
 		}
 		host_.release(thread.handle);
@@ -157,33 +195,86 @@ bool Interpreter::resolve_wait(Thread& thread) {
 	return false;
 }
 
+void Interpreter::start_action(Thread& thread, const Instruction& ins, const Action& action) {
+	Handle handle = host_.start_action(action);
+	if (ins.wait) {
+		thread.handle = handle;
+		thread.wait = WaitKind::handle;
+		return;
+	}
+	background_.push_back({handle, thread.pc, static_cast<int>(frames_.size()) - 1});
+	thread.pc++;
+}
+
 void Interpreter::execute(Thread& thread) {
 	const Instruction& ins = program_.code[thread.pc];
+	const bool skipping = skip_depth_ >= 0;
 	switch (ins.op) {
 	case Op::say:
+		if (skipping) {
+			host_.log_skipped_line(ins.dialogue);
+			break;
+		}
 		thread.handle = host_.show_line(ins.dialogue);
 		thread.wait = WaitKind::handle;
 		return;
 	case Op::choice:
+		stop_skipping();
 		thread.handle = host_.present_choice(ins.choice);
 		thread.wait = WaitKind::handle;
 		return;
-	case Op::action: {
-		Handle handle = host_.start_action(ins.action);
-		if (ins.wait) {
-			thread.handle = handle;
-			thread.wait = WaitKind::handle;
-			return;
-		}
-		background_.push_back({handle, thread.pc, static_cast<int>(frames_.size()) - 1});
-		break;
-	}
 	case Op::battle:
+		stop_skipping();
 		thread.handle = host_.start_battle(ins.battle);
 		thread.wait = WaitKind::handle;
 		return;
+	case Op::shop:
+	case Op::rest:
+	case Op::save_prompt:
+	case Op::name_entry: {
+		if (ins.op != Op::rest) {
+			stop_skipping();
+		}
+		Handle handle = 0;
+		if (ins.op == Op::shop) {
+			handle = host_.open_shop(ins.name);
+		} else if (ins.op == Op::rest) {
+			handle = host_.rest_party({ins.name, skipping});
+		} else if (ins.op == Op::save_prompt) {
+			handle = host_.open_save_prompt();
+		} else {
+			handle = host_.open_name_entry(ins.name);
+		}
+		if (handle == 0) {
+			fail(thread.pc, std::string("the host does not support '") + op_name(ins.op) + "': Host::" + service_method(ins.op) + " returned no handle");
+			return;
+		}
+		thread.handle = handle;
+		thread.wait = WaitKind::handle;
+		return;
+	}
+	case Op::action:
+		if (ins.action.type == ActionType::warp) {
+			// The new map places its own actors and cameras.
+			presentation_.actors.clear();
+			presentation_.camera.clear();
+			for (auto it = dirty_.begin(); it != dirty_.end();) {
+				it = it->rfind("actor:", 0) == 0 || *it == "camera" ? dirty_.erase(it) : std::next(it);
+			}
+			Action action = ins.action;
+			action.instant = skipping;
+			start_action(thread, ins, action);
+			return;
+		}
+		record(ins.action);
+		if (skipping) {
+			mark_dirty(ins.action);
+			break;
+		}
+		start_action(thread, ins, ins.action);
+		return;
 	case Op::wait:
-		if (ins.seconds > 0) {
+		if (ins.seconds > 0 && !skipping) {
 			thread.timer = ins.seconds;
 			thread.wait = WaitKind::timer;
 			return;
@@ -202,6 +293,18 @@ void Interpreter::execute(Thread& thread) {
 		return;
 	case Op::end_branch:
 		thread.alive = false;
+		// EVT-008: the first branch of a race to finish stops the others
+		// where they wait, so they apply nothing further.
+		if (in_race()) {
+			for (Thread& other : children_) {
+				if (other.alive) {
+					if (other.wait == WaitKind::handle) {
+						host_.cancel(other.handle);
+					}
+					other.alive = false;
+				}
+			}
+		}
 		return;
 	case Op::jump:
 		thread.pc = ins.target;
@@ -220,13 +323,8 @@ void Interpreter::execute(Thread& thread) {
 	case Op::ret: {
 		Frame top = frames_.back();
 		frames_.pop_back();
-		int depth = static_cast<int>(frames_.size());
-		if (skip_depth_ >= depth) {
-			skip_depth_ = -1;
-			skip_credit_.clear();
-		}
-		if (depth > 0) {
-			merge_changes(depth, depth - 1);
+		if (skip_depth_ >= static_cast<int>(frames_.size())) {
+			stop_skipping();
 		}
 		if (frames_.empty()) {
 			// Let actors started with `nowait` arrive before the event ends.
@@ -237,22 +335,22 @@ void Interpreter::execute(Thread& thread) {
 		return;
 	}
 	case Op::set_flag:
-		host_.set_flag(ins.name, true);
+		write_flag(ins.name, true);
 		break;
 	case Op::clear_flag:
-		host_.set_flag(ins.name, false);
+		write_flag(ins.name, false);
 		break;
 	case Op::var_set:
-		host_.set_var(ins.name, ins.number);
+		write_var(ins.name, ins.number);
 		break;
 	case Op::var_add:
-		apply_change(ChangeKind::var, ins.name, ins.number);
+		write_var(ins.name, read_var(ins.name) + ins.number);
 		break;
 	case Op::give:
-		apply_change(ChangeKind::item, ins.name, ins.number);
+		host_.give_item(ins.name, static_cast<int>(ins.number));
 		break;
 	case Op::take:
-		apply_change(ChangeKind::item, ins.name, -ins.number);
+		host_.take_item(ins.name, static_cast<int>(ins.number));
 		break;
 	case Op::party_add:
 		host_.add_party_member(ins.name);
@@ -270,62 +368,41 @@ void Interpreter::execute(Thread& thread) {
 	thread.pc++;
 }
 
-void Interpreter::apply_change(ChangeKind kind, const std::string& name, std::int64_t amount) {
-	std::int64_t rest = amount;
-	if (skip_depth_ >= 0) {
-		for (Change& credit : skip_credit_) {
-			if (credit.kind == kind && credit.name == name && ((credit.amount > 0 && amount > 0) || (credit.amount < 0 && amount < 0))) {
-				std::int64_t used = amount > 0 ? std::min(amount, credit.amount) : std::max(amount, credit.amount);
-				credit.amount -= used;
-				rest -= used;
-				break;
-			}
-		}
-	}
-	if (rest == 0) {
-		return;
-	}
-	int depth = static_cast<int>(frames_.size()) - 1;
-	auto found = std::find_if(applied_.begin(), applied_.end(),
-		[&](const Change& c) { return c.kind == kind && c.name == name && c.depth == depth; });
-	if (found == applied_.end()) {
-		applied_.push_back({kind, name, depth, rest});
+bool Interpreter::read_flag(const std::string& name) {
+	auto local = locals_.find(name);
+	return local != locals_.end() ? local->second != 0 : host_.get_flag(name);
+}
+
+void Interpreter::write_flag(const std::string& name, bool value) {
+	auto local = locals_.find(name);
+	if (local != locals_.end()) {
+		local->second = value ? 1 : 0;
 	} else {
-		found->amount += rest;
-	}
-	if (kind == ChangeKind::var) {
-		host_.set_var(name, host_.get_var(name) + rest);
-	} else if (rest > 0) {
-		host_.give_item(name, static_cast<int>(rest));
-	} else {
-		host_.take_item(name, static_cast<int>(-rest));
+		host_.set_flag(name, value);
 	}
 }
 
-void Interpreter::merge_changes(int from_depth, int into_depth) {
-	std::vector<Change> merged;
-	for (Change c : applied_) {
-		if (c.depth == from_depth) {
-			c.depth = into_depth;
-		}
-		auto found = std::find_if(merged.begin(), merged.end(),
-			[&](const Change& m) { return m.kind == c.kind && m.name == c.name && m.depth == c.depth; });
-		if (found == merged.end()) {
-			merged.push_back(c);
-		} else {
-			found->amount += c.amount;
-		}
+std::int64_t Interpreter::read_var(const std::string& name) {
+	auto local = locals_.find(name);
+	return local != locals_.end() ? local->second : host_.get_var(name);
+}
+
+void Interpreter::write_var(const std::string& name, std::int64_t value) {
+	auto local = locals_.find(name);
+	if (local != locals_.end()) {
+		local->second = value;
+	} else {
+		host_.set_var(name, value);
 	}
-	applied_.swap(merged);
 }
 
 bool Interpreter::evaluate(const Condition& condition) {
 	for (const Term& term : condition.terms) {
 		bool value;
 		if (term.is_flag) {
-			value = host_.get_flag(term.name);
+			value = read_flag(term.name);
 		} else {
-			std::int64_t v = host_.get_var(term.name);
+			std::int64_t v = read_var(term.name);
 			switch (term.compare) {
 			case Compare::eq:
 				value = v == term.value;
@@ -372,8 +449,16 @@ void Interpreter::prune_background() {
 	background_.swap(running);
 }
 
+bool Interpreter::waiting_on_player() const {
+	return main_.wait == WaitKind::handle && waits_on_player(program_.code[main_.pc].op);
+}
+
+bool Interpreter::in_race() const {
+	return main_.wait == WaitKind::children && program_.code[main_.pc].op == Op::fork && program_.code[main_.pc].number == 1;
+}
+
 bool Interpreter::can_skip() const {
-	return status_ == Status::running && skip_depth_ < 0 && !frames_.empty() && program_.events[frames_.back().event].skippable;
+	return status_ == Status::running && skip_depth_ < 0 && !frames_.empty() && program_.events[frames_.back().event].skippable && !waiting_on_player();
 }
 
 bool Interpreter::skip() {
@@ -384,42 +469,254 @@ bool Interpreter::skip() {
 	while (depth > 0 && program_.events[frames_[depth - 1].event].skippable) {
 		--depth;
 	}
-	cancel_from(depth);
-	for (int d = static_cast<int>(frames_.size()) - 1; d > depth; --d) {
-		merge_changes(d, depth);
-	}
-	frames_.resize(depth + 1);
 	skip_depth_ = depth;
-	skip_credit_.clear();
-	for (const Change& c : applied_) {
-		if (c.depth == depth && c.amount != 0) {
-			skip_credit_.push_back(c);
+	fast_forward(main_);
+	for (Thread& child : children_) {
+		if (child.alive) {
+			fast_forward(child);
 		}
 	}
-	main_ = Thread();
-	main_.pc = program_.events[frames_.back().event].skip_entry;
+	// Background presentation from the skipped events completes at once; a
+	// warp keeps loading, and the callers' own actions are not theirs to stop.
+	std::vector<Background> kept;
+	for (const Background& b : background_) {
+		if (b.pc >= 0 && b.depth >= depth && presentation_only(program_.code[b.pc].action.type)) {
+			if (b.handle != 0) {
+				host_.cancel(b.handle);
+			}
+			mark_dirty(program_.code[b.pc].action);
+		} else {
+			kept.push_back(b);
+		}
+	}
+	background_.swap(kept);
 	return true;
 }
 
-void Interpreter::cancel_from(int depth) {
+void Interpreter::fast_forward(Thread& thread) {
+	if (thread.wait == WaitKind::timer) {
+		thread.wait = WaitKind::none;
+		thread.timer = 0;
+		thread.pc++;
+		return;
+	}
+	if (thread.wait != WaitKind::handle) {
+		return;
+	}
+	const Instruction& ins = program_.code[thread.pc];
+	const bool presentation = ins.op == Op::action && presentation_only(ins.action.type);
+	if (ins.op != Op::say && !presentation) {
+		return;
+	}
+	host_.cancel(thread.handle);
+	thread.handle = 0;
+	thread.wait = WaitKind::none;
+	thread.pc++;
+	if (presentation) {
+		mark_dirty(ins.action);
+	}
+}
+
+void Interpreter::stop_skipping() {
+	if (skip_depth_ < 0) {
+		return;
+	}
+	skip_depth_ = -1;
+	rebuild(false);
+	dirty_.clear();
+}
+
+ActorState& Interpreter::actor(const std::string& name) {
+	auto it = std::lower_bound(presentation_.actors.begin(), presentation_.actors.end(), name,
+		[](const ActorState& a, const std::string& n) { return a.actor < n; });
+	if (it == presentation_.actors.end() || it->actor != name) {
+		ActorState fresh;
+		fresh.actor = name;
+		it = presentation_.actors.insert(it, fresh);
+	}
+	return *it;
+}
+
+void Interpreter::record(const Action& action) {
+	PresentationState& p = presentation_;
+	switch (action.type) {
+	case ActionType::move: {
+		ActorState& a = actor(action.subject);
+		a.has_position = action.has_position;
+		a.marker = action.has_position ? std::string() : action.target;
+		a.position = action.position;
+		a.facing.clear();
+		break;
+	}
+	case ActionType::face:
+		actor(action.subject).facing = action.target;
+		break;
+	case ActionType::animate:
+		actor(action.subject).pose = action.loop ? action.target : std::string();
+		break;
+	case ActionType::show_actor:
+	case ActionType::hide_actor:
+		actor(action.subject).visible = action.type == ActionType::show_actor ? 1 : 0;
+		break;
+	case ActionType::panel_show: {
+		auto it = std::find_if(p.panels.begin(), p.panels.end(), [&](const PanelState& s) { return s.panel == action.subject; });
+		if (it == p.panels.end()) {
+			p.panels.push_back({action.subject, action.target, action.slot});
+		} else {
+			it->camera = action.target;
+			it->slot = action.slot;
+		}
+		break;
+	}
+	case ActionType::panel_hide:
+		p.panels.erase(std::remove_if(p.panels.begin(), p.panels.end(), [&](const PanelState& s) { return s.panel == action.subject; }), p.panels.end());
+		break;
+	case ActionType::panel_clear:
+		p.panels.clear();
+		break;
+	case ActionType::camera_cut:
+	case ActionType::camera_move:
+		p.camera = action.subject;
+		break;
+	case ActionType::fade_in:
+	case ActionType::fade_out:
+		p.fade_set = true;
+		p.faded_out = action.type == ActionType::fade_out;
+		break;
+	case ActionType::music_play:
+	case ActionType::music_stop:
+	case ActionType::music_fade:
+		p.music_set = true;
+		p.music = action.type == ActionType::music_play ? action.subject : std::string();
+		break;
+	case ActionType::ambient_play:
+	case ActionType::ambient_stop:
+		p.ambient_set = true;
+		p.ambient = action.type == ActionType::ambient_play ? action.subject : std::string();
+		break;
+	case ActionType::shake:
+	case ActionType::sound:
+	case ActionType::warp:
+		break;
+	}
+}
+
+void Interpreter::mark_dirty(const Action& action) {
+	switch (action.type) {
+	case ActionType::move:
+	case ActionType::face:
+	case ActionType::animate:
+	case ActionType::show_actor:
+	case ActionType::hide_actor:
+		dirty_.insert("actor:" + action.subject);
+		break;
+	case ActionType::panel_show:
+	case ActionType::panel_hide:
+	case ActionType::panel_clear:
+		dirty_.insert("panels");
+		break;
+	case ActionType::camera_cut:
+	case ActionType::camera_move:
+		dirty_.insert("camera");
+		break;
+	case ActionType::fade_in:
+	case ActionType::fade_out:
+		dirty_.insert("fade");
+		break;
+	case ActionType::music_play:
+	case ActionType::music_stop:
+	case ActionType::music_fade:
+		dirty_.insert("music");
+		break;
+	case ActionType::ambient_play:
+	case ActionType::ambient_stop:
+		dirty_.insert("ambient");
+		break;
+	case ActionType::shake:
+	case ActionType::sound:
+	case ActionType::warp:
+		break;
+	}
+}
+
+void Interpreter::issue_instant(Action action) {
+	action.instant = true;
+	background_.push_back({host_.start_action(action), -1, 0});
+}
+
+void Interpreter::rebuild(bool everything) {
+	const PresentationState& p = presentation_;
+	auto wanted = [&](const std::string& key) { return everything || dirty_.count(key) > 0; };
+	auto make = [](ActionType type, const std::string& subject = std::string(), const std::string& target = std::string()) {
+		Action a;
+		a.type = type;
+		a.subject = subject;
+		a.target = target;
+		return a;
+	};
+	if (p.music_set && wanted("music") && (!p.music.empty() || !everything)) {
+		issue_instant(p.music.empty() ? make(ActionType::music_stop) : make(ActionType::music_play, p.music));
+	}
+	if (p.ambient_set && wanted("ambient") && (!p.ambient.empty() || !everything)) {
+		issue_instant(p.ambient.empty() ? make(ActionType::ambient_stop) : make(ActionType::ambient_play, p.ambient));
+	}
+	if (!p.camera.empty() && wanted("camera")) {
+		issue_instant(make(ActionType::camera_cut, p.camera));
+	}
+	for (const ActorState& a : p.actors) {
+		if (!wanted("actor:" + a.actor)) {
+			continue;
+		}
+		if (a.visible >= 0) {
+			issue_instant(make(a.visible ? ActionType::show_actor : ActionType::hide_actor, a.actor));
+		}
+		if (a.has_position || !a.marker.empty()) {
+			Action move = make(ActionType::move, a.actor, a.marker);
+			move.has_position = a.has_position;
+			move.position = a.position;
+			issue_instant(move);
+		}
+		if (!a.facing.empty()) {
+			issue_instant(make(ActionType::face, a.actor, a.facing));
+		}
+		if (!a.pose.empty()) {
+			Action pose = make(ActionType::animate, a.actor, a.pose);
+			pose.loop = true;
+			issue_instant(pose);
+		}
+	}
+	if (wanted("panels")) {
+		if (!everything) {
+			issue_instant(make(ActionType::panel_clear));
+		}
+		for (const PanelState& panel : p.panels) {
+			Action show = make(ActionType::panel_show, panel.panel, panel.camera);
+			show.slot = panel.slot;
+			issue_instant(show);
+		}
+	}
+	if (p.fade_set && wanted("fade") && (p.faded_out || !everything)) {
+		issue_instant(make(p.faded_out ? ActionType::fade_out : ActionType::fade_in));
+	}
+}
+
+void Interpreter::cancel_all() {
 	if (main_.wait == WaitKind::handle) {
 		host_.cancel(main_.handle);
 	}
+	main_.wait = WaitKind::none;
 	for (const Thread& child : children_) {
 		if (child.alive && child.wait == WaitKind::handle) {
 			host_.cancel(child.handle);
 		}
 	}
 	children_.clear();
-	std::vector<Background> kept;
 	for (const Background& b : background_) {
-		if (b.depth < depth) {
-			kept.push_back(b);
-		} else if (b.handle != 0) {
+		if (b.handle != 0) {
 			host_.cancel(b.handle);
 		}
 	}
-	background_.swap(kept);
+	background_.clear();
 }
 
 void Interpreter::finish() {
@@ -429,8 +726,8 @@ void Interpreter::finish() {
 void Interpreter::fail(int pc, const std::string& message) {
 	const Instruction& ins = program_.code[pc];
 	error_ = program_.files[ins.file] + ":" + std::to_string(ins.source_line) + ": " + message;
-	cancel_from(0);
-	main_.wait = WaitKind::none;
+	cancel_all();
+	skip_depth_ = -1;
 	status_ = Status::error;
 }
 
@@ -453,14 +750,12 @@ SaveState Interpreter::save() const {
 		}
 	}
 	for (const Background& b : background_) {
-		state.background.push_back({b.pc, b.depth});
+		if (b.pc >= 0) {
+			state.background.push_back({b.pc, b.depth});
+		}
 	}
-	for (const Change& c : applied_) {
-		state.applied.push_back({c.kind, c.name, c.depth, c.amount});
-	}
-	for (const Change& c : skip_credit_) {
-		state.skip_credit.push_back({c.kind, c.name, c.depth, c.amount});
-	}
+	state.presentation = presentation_;
+	state.locals = locals_;
 	return state;
 }
 
@@ -484,7 +779,7 @@ bool Interpreter::restore(const SaveState& state, std::string& error) {
 	int event_count = static_cast<int>(program_.events.size());
 	auto valid_pc = [code_size](int pc) { return pc >= 0 && pc < code_size; };
 	if (state.status == Status::running) {
-		bool ok = valid_pc(state.main.pc) && state.skip_depth < static_cast<int>(state.frames.size());
+		bool ok = valid_pc(state.main.pc) && state.skip_depth < static_cast<int>(state.frames.size()) && !state.frames.empty();
 		for (const SavedFrame& f : state.frames) {
 			ok = ok && f.event >= 0 && f.event < event_count && (f.return_pc == -1 || valid_pc(f.return_pc));
 		}
@@ -501,7 +796,7 @@ bool Interpreter::restore(const SaveState& state, std::string& error) {
 	}
 
 	// Whatever was in flight is started again: a thread that waited on a
-	// handle re-runs its instruction, background actions restart in step().
+	// handle re-runs its instruction, and background warps restart in step().
 	auto thread_from = [](const SavedThread& saved) {
 		Thread t;
 		t.pc = saved.pc;
@@ -521,17 +816,23 @@ bool Interpreter::restore(const SaveState& state, std::string& error) {
 	for (const SavedThread& t : state.children) {
 		children_.push_back(thread_from(t));
 	}
+	// The rebuild puts background presentation at its end state; only a warp
+	// has to run again.
 	background_.clear();
 	for (const SavedBackground& b : state.background) {
-		background_.push_back({0, b.pc, b.depth});
+		if (!presentation_only(program_.code[b.pc].action.type)) {
+			background_.push_back({0, b.pc, b.depth});
+		}
 	}
-	applied_.clear();
-	for (const SavedChange& c : state.applied) {
-		applied_.push_back({c.kind, c.name, c.depth, c.amount});
-	}
-	skip_credit_.clear();
-	for (const SavedChange& c : state.skip_credit) {
-		skip_credit_.push_back({c.kind, c.name, c.depth, c.amount});
+	presentation_ = state.presentation;
+	dirty_.clear();
+	rebuild_pending_ = status_ == Status::running;
+	locals_ = local_initial_;
+	for (const auto& saved : state.locals) {
+		auto local = locals_.find(saved.first);
+		if (local != locals_.end()) {
+			local->second = saved.second;
+		}
 	}
 	start_world_ = state.start_world;
 	return true;

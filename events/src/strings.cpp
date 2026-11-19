@@ -164,14 +164,46 @@ std::vector<TextUse> collect_texts(const Program& program) {
 				use.text = ins.choice.prompt;
 				uses.push_back(use);
 			}
-			for (const Text& option : ins.choice.options) {
+			for (std::size_t i = 0; i < ins.choice.options.size(); ++i) {
 				use.role = "option";
-				use.text = option;
+				use.text = ins.choice.options[i];
+				use.line = i < ins.option_lines.size() ? ins.option_lines[i] : ins.source_line;
 				uses.push_back(use);
 			}
 		}
 	}
 	return uses;
+}
+
+std::vector<std::string> find_control_tags(const std::string& text) {
+	std::vector<std::string> tags;
+	std::size_t at = 0;
+	while ((at = text.find('{', at)) != std::string::npos) {
+		std::size_t close = text.find('}', at);
+		if (close == std::string::npos) {
+			break;
+		}
+		std::string inside = text.substr(at + 1, close - at - 1);
+		std::string tag = inside.substr(0, inside.find(':'));
+		if (is_name(tag) && tag != "name" && inside.find_first_of("{ ") == std::string::npos) {
+			tags.push_back(text.substr(at, close - at + 1));
+			at = close + 1;
+		} else {
+			++at;
+		}
+	}
+	return tags;
+}
+
+std::vector<Diagnostic> check_inline_text(const Program& program) {
+	std::vector<Diagnostic> out;
+	for (const TextUse& use : collect_texts(program)) {
+		if (!use.text.is_id) {
+			out.push_back({Severity::error, program.files[use.file], use.line,
+				"inline text in " + use.role + " in event '" + use.event + "': player-facing text must be a string ID (@id) from the string tables"});
+		}
+	}
+	return out;
 }
 
 std::vector<Diagnostic> check_strings(const Program& program, const std::vector<StringTable>& tables) {
@@ -228,8 +260,15 @@ std::vector<Diagnostic> check_strings(const Program& program, const std::vector<
 			std::vector<std::string> expected = token_ids(reference.text);
 			std::vector<std::string> got = token_ids(found->second.text);
 			if (expected != got) {
-				out.push_back({Severity::warning, table.file, found->second.line,
+				out.push_back({Severity::error, table.file, found->second.line,
 					"name tokens in '" + id + "' (" + join(got) + ") differ from the '" + first->language + "' table (" + join(expected) + ")"});
+			}
+			std::vector<std::string> expected_tags = find_control_tags(reference.text);
+			std::vector<std::string> got_tags = find_control_tags(found->second.text);
+			if (expected_tags != got_tags) {
+				out.push_back({Severity::error, table.file, found->second.line,
+					"control tags in '" + id + "' (" + join(got_tags) + ") differ from the '" + first->language + "' table (" + join(expected_tags) +
+						"); a translation keeps the same tags in the same order"});
 			}
 		}
 	}

@@ -24,7 +24,7 @@ const int max_steps = 100000;
 int usage() {
 	std::fprintf(stderr,
 		"usage:\n"
-		"  event_cli check <file>...\n"
+		"  event_cli check [--strict] [--registry FILE] [--glossary FILE] [--table FILE]... <file>...\n"
 		"  event_cli run <file>... <event> [--choose 1,0] [--battle win,lose,flee] [--skip-at STEP] [--dt SECONDS]\n"
 		"  event_cli lint [--entry EVENT,...] [--entries FILE] [--strict] <file>...\n"
 		"  event_cli time <file>... <event> [--config FILE] [--text-speed CPS] [--table FILE] [--set FLAG,...] [--var NAME=N]...\n"
@@ -75,12 +75,14 @@ bool read_sources(const std::vector<std::string>& paths, std::vector<Source>& so
 	return true;
 }
 
-bool compile_files(const std::vector<std::string>& paths, CompileResult& result) {
+bool compile_files(const std::vector<std::string>& paths, CompileResult& result, const Registry* registry = nullptr) {
 	std::vector<Source> sources;
 	if (!read_sources(paths, sources)) {
 		return false;
 	}
-	result = compile(sources);
+	CompileOptions options;
+	options.registry = registry;
+	result = compile(sources, options);
 	print_diagnostics(result.diagnostics);
 	return result.ok();
 }
@@ -89,6 +91,25 @@ bool load_table(const std::string& path, StringTable& table) {
 	std::string text;
 	std::vector<Diagnostic> diagnostics;
 	bool ok = read_text(path, text) && load_string_table(path, text, table, diagnostics);
+	print_diagnostics(diagnostics);
+	return ok;
+}
+
+bool load_tables(const std::vector<std::string>& paths, std::vector<StringTable>& tables) {
+	for (const std::string& path : paths) {
+		StringTable table;
+		if (!load_table(path, table)) {
+			return false;
+		}
+		tables.push_back(table);
+	}
+	return true;
+}
+
+bool load_glossary_file(const std::string& path, Glossary& glossary) {
+	std::string text;
+	std::vector<Diagnostic> diagnostics;
+	bool ok = read_text(path, text) && load_glossary(path, text, glossary, diagnostics);
 	print_diagnostics(diagnostics);
 	return ok;
 }
@@ -152,12 +173,51 @@ struct Args {
 	}
 };
 
-int check(const std::vector<std::string>& paths) {
-	CompileResult result;
-	if (!compile_files(paths, result)) {
+int check(int argc, char** argv) {
+	Args args(argc, argv, 2, {"--strict"});
+	if (!args.ok || !args.only({"--strict", "--registry", "--glossary", "--table"}) || args.positional.empty()) {
+		return usage();
+	}
+	const bool strict = args.has("--strict");
+	Registry registry;
+	if (args.has("--registry")) {
+		std::string text;
+		std::vector<Diagnostic> diagnostics;
+		bool ok = read_text(args.get("--registry"), text) && load_registry(args.get("--registry"), text, registry, diagnostics);
+		print_diagnostics(diagnostics);
+		if (!ok) {
+			return 1;
+		}
+	}
+	std::vector<StringTable> tables;
+	Glossary glossary;
+	if (!load_tables(args.all("--table"), tables) || (args.has("--glossary") && !load_glossary_file(args.get("--glossary"), glossary))) {
 		return 1;
 	}
-	std::printf("ok: %zu file(s), %zu event(s)\n", paths.size(), result.program.events.size());
+	CompileResult result;
+	if (!compile_files(args.positional, result, args.has("--registry") ? &registry : nullptr)) {
+		return 1;
+	}
+	std::vector<Diagnostic> findings = result.diagnostics;
+	std::vector<Diagnostic> more;
+	if (strict) {
+		more = check_inline_text(result.program);
+		findings.insert(findings.end(), more.begin(), more.end());
+	}
+	if (!tables.empty()) {
+		more = check_strings(result.program, tables);
+		findings.insert(findings.end(), more.begin(), more.end());
+	}
+	if (args.has("--glossary")) {
+		more = check_names(result.program, glossary, tables);
+		findings.insert(findings.end(), more.begin(), more.end());
+	}
+	print_diagnostics(std::vector<Diagnostic>(findings.begin() + static_cast<long>(result.diagnostics.size()), findings.end()));
+	if (has_errors(findings) || (strict && !findings.empty())) {
+		std::fprintf(stderr, "check failed: %zu finding(s)%s\n", findings.size(), strict ? "; --strict fails on warnings too" : "");
+		return 1;
+	}
+	std::printf("ok: %zu file(s), %zu event(s)%s\n", args.positional.size(), result.program.events.size(), strict ? ", strict" : "");
 	return 0;
 }
 
@@ -409,12 +469,8 @@ int strings_command(int argc, char** argv) {
 			return usage();
 		}
 		std::vector<StringTable> tables;
-		for (const std::string& path : args.all("--table")) {
-			StringTable table;
-			if (!load_table(path, table)) {
-				return 1;
-			}
-			tables.push_back(table);
+		if (!load_tables(args.all("--table"), tables)) {
+			return 1;
 		}
 		CompileResult result;
 		if (!args.positional.empty() && !compile_files(args.positional, result)) {
@@ -436,21 +492,13 @@ int names_command(int argc, char** argv) {
 		return usage();
 	}
 	std::string glossary_path = args.positional.front();
-	std::string text;
 	Glossary glossary;
-	std::vector<Diagnostic> diagnostics;
-	bool loaded = read_text(glossary_path, text) && load_glossary(glossary_path, text, glossary, diagnostics);
-	print_diagnostics(diagnostics);
-	if (!loaded) {
+	if (!load_glossary_file(glossary_path, glossary)) {
 		return 1;
 	}
 	std::vector<StringTable> tables;
-	for (const std::string& path : args.all("--table")) {
-		StringTable table;
-		if (!load_table(path, table)) {
-			return 1;
-		}
-		tables.push_back(table);
+	if (!load_tables(args.all("--table"), tables)) {
+		return 1;
 	}
 	CompileResult result;
 	if (!compile_files(std::vector<std::string>(args.positional.begin() + 1, args.positional.end()), result)) {
@@ -474,6 +522,7 @@ int names_command(int argc, char** argv) {
 		case MentionKind::literal_restored:
 			std::printf("%s%s \"%s\"%s; use {name:%s} so the setting can switch it\n", where.c_str(), mention_kind_name(m.kind),
 				(m.kind == MentionKind::literal_shipped ? entry->shipped : entry->restored).c_str(), via.c_str(), m.id.c_str());
+			broken = true;
 			break;
 		case MentionKind::unknown_token:
 			std::printf("%sunknown token {name:%s}%s: not in %s\n", where.c_str(), m.id.c_str(), via.c_str(), glossary_path.c_str());
@@ -497,8 +546,8 @@ int main(int argc, char** argv) {
 		return usage();
 	}
 	std::string command = argv[1];
-	if (command == "check" && argc >= 3) {
-		return check(std::vector<std::string>(argv + 2, argv + argc));
+	if (command == "check") {
+		return check(argc, argv);
 	}
 	if (command == "run") {
 		return run(argc, argv);

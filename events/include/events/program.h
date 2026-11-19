@@ -52,6 +52,10 @@ enum class Op {
 	unlock_player,
 	fork,
 	end_branch,
+	shop,
+	rest,
+	save_prompt,
+	name_entry,
 };
 
 const char* op_name(Op op);
@@ -60,7 +64,10 @@ struct Instruction {
 	Op op = Op::ret;
 	int file = 0;
 	int source_line = 0;
+	// choice: the variable (choice) or flag (ask) the answer is written to,
+	// if any. shop, rest, name_entry: the shop, rest point or party member.
 	std::string name;
+	// fork: 1 for a `race`, which ends when its first branch does.
 	std::int64_t number = 0;
 	double seconds = 0;
 	Line dialogue;
@@ -73,6 +80,8 @@ struct Instruction {
 	int target = -1;
 	// choice: one pc per option. battle: win, lose, flee. fork: one pc per branch.
 	std::vector<int> targets;
+	// choice: the source line of each option.
+	std::vector<int> option_lines;
 };
 
 struct EventInfo {
@@ -81,17 +90,32 @@ struct EventInfo {
 	int line = 0;
 	bool skippable = false;
 	int entry = -1;
-	int skip_entry = -1;
+};
+
+// A flag or variable declared in a registry (EVT-004). Local ones live in
+// the interpreter for one run of an event and its calls, start at
+// `initial` each time, and never reach the host. A host that seeds a new
+// game can read the initial values of the global ones.
+struct Declaration {
+	std::string name;
+	bool is_flag = true;
+	bool local = false;
+	std::int64_t initial = 0;
+	int line = 0;
 };
 
 struct Program {
 	std::vector<std::string> files;
 	std::vector<EventInfo> events;
 	std::vector<Instruction> code;
-	// Hash of every source's file name and tokens, so comments, blank lines
-	// and indentation do not change it. A save whose fingerprint differs
+	// Hash of every source's file name and tokens, the compiler's code
+	// layout version and the registry's local declarations, so comments,
+	// blank lines and indentation do not change it. A save whose fingerprint differs
 	// restarts its event instead of resuming (see Interpreter::restore).
 	std::uint64_t fingerprint = 0;
+	// Every flag and variable of the registry the program was compiled
+	// with; empty without one.
+	std::vector<Declaration> declarations;
 
 	int find_event(const std::string& name) const;
 };

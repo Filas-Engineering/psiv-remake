@@ -22,11 +22,6 @@ public:
 		info.entry = here();
 		block(ev.body);
 		emit_ret(ev.file, ev.line);
-		if (ev.skippable) {
-			info.skip_entry = here();
-			block(ev.on_skip);
-			emit_ret(ev.file, ev.has_skip ? ev.skip_line : ev.line);
-		}
 		for (int pc : gotos_) {
 			code()[pc].target = labels_[code()[pc].name];
 		}
