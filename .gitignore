@@ -5,3 +5,5 @@ source-material/
 *.bin
 *.gen
 *.smd
+
+.DS_Store
