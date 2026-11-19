@@ -16,6 +16,7 @@ enum class AreaKind { Town, Field, Dungeon };
 enum class EncounterMode { Visible, Random };
 enum class HookTrigger { Interact, Step, Load, Flag };
 
+const char* toString(AreaKind kind);
 const char* toString(EncounterMode mode);
 bool parseEncounterMode(const std::string& text, EncounterMode& out);
 

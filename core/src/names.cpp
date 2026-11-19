@@ -30,7 +30,8 @@ const char* const kAbilityKinds[] = {"attack", "technique", "skill", "combo"};
 const char* const kEffectKinds[] = {"physical_damage", "elemental_damage", "heal", "apply_status", "cure_status", "modify_stat", "revive"};
 const char* const kEquipSlots[] = {"weapon", "head", "body", "arms", "accessory"};
 const char* const kOpenings[] = {"normal", "party_first", "enemy_first"};
-const char* const kRewardMultipliers[] = {"1", "1.5", "2"};
+const char* const kRewardMultipliers[] = {"x1", "x1_5", "x2"};
+const char* const kRewardMultipliersBefore[] = {"1", "1.5", "2"};
 const char* const kExperienceSplits[] = {"each_living", "split_living", "each_member"};
 const char* const kStatusActions[] = {"normal", "cannot_act", "forced"};
 const char* const kForcedTargets[] = {"random_any", "random_ally", "random_foe"};
@@ -46,6 +47,13 @@ const char* const kMacroIssues[] = {
 const char* const kScriptedEndKinds[] = {"none", "survive_rounds", "enemy_defeated"};
 const char* const kAutoStops[] = {"none", "cancelled", "member_fell", "cannot_pay", "battle_ended"};
 const char* const kEventTypes[] = {
+	"battle_started", "round_started", "commands_locked", "order_resolved", "retargeted", "action_started",
+	"action_cancelled", "combo_triggered", "combo_discovered", "resource_spent", "item_had_no_effect", "hit", "missed",
+	"critical", "damage_dealt", "healed", "revived", "status_applied", "status_resisted", "status_removed",
+	"status_ticked", "stat_modified", "stat_modifier_expired", "combatant_defeated", "escape_attempted", "message",
+	"round_ended", "battle_ended"};
+// The spellings record and event text files used before the names were unified.
+const char* const kEventTypesBefore[] = {
 	"BattleStarted", "RoundStarted", "CommandsLocked", "OrderResolved", "Retargeted", "ActionStarted", "ActionCancelled",
 	"ComboTriggered", "ComboDiscovered", "ResourceSpent", "ItemHadNoEffect", "Hit", "Missed", "Critical", "DamageDealt",
 	"Healed", "Revived", "StatusApplied", "StatusResisted", "StatusRemoved", "StatusTicked", "StatModified",
@@ -94,7 +102,9 @@ bool parseAbilityKind(const std::string& text, AbilityKind& out) { return parseN
 bool parseEffectKind(const std::string& text, EffectKind& out) { return parseName(kEffectKinds, text, out); }
 bool parseEquipSlot(const std::string& text, EquipSlot& out) { return parseName(kEquipSlots, text, out); }
 bool parseOpening(const std::string& text, Opening& out) { return parseName(kOpenings, text, out); }
-bool parseRewardMultiplier(const std::string& text, RewardMultiplier& out) { return parseName(kRewardMultipliers, text, out); }
+bool parseRewardMultiplier(const std::string& text, RewardMultiplier& out) {
+	return parseName(kRewardMultipliers, text, out) || parseName(kRewardMultipliersBefore, text, out);
+}
 bool parseExperienceSplit(const std::string& text, ExperienceSplit& out) { return parseName(kExperienceSplits, text, out); }
 bool parseStatusAction(const std::string& text, StatusAction& out) { return parseName(kStatusActions, text, out); }
 bool parseForcedTarget(const std::string& text, ForcedTarget& out) { return parseName(kForcedTargets, text, out); }
@@ -107,7 +117,9 @@ bool parseMacroStepStatus(const std::string& text, MacroStepStatus& out) { retur
 bool parseMacroIssue(const std::string& text, MacroIssue& out) { return parseName(kMacroIssues, text, out); }
 bool parseScriptedEndKind(const std::string& text, ScriptedEndKind& out) { return parseName(kScriptedEndKinds, text, out); }
 bool parseAutoStop(const std::string& text, AutoStop& out) { return parseName(kAutoStops, text, out); }
-bool parseEventType(const std::string& text, EventType& out) { return parseName(kEventTypes, text, out); }
+bool parseEventType(const std::string& text, EventType& out) {
+	return parseName(kEventTypes, text, out) || parseName(kEventTypesBefore, text, out);
+}
 bool parseOutcome(const std::string& text, Outcome& out) { return parseName(kOutcomes, text, out); }
 bool parseCancelReason(const std::string& text, CancelReason& out) { return parseName(kCancelReasons, text, out); }
 bool parseEffectiveness(const std::string& text, Effectiveness& out) { return parseName(kEffectiveness, text, out); }

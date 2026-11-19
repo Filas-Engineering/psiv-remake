@@ -47,16 +47,20 @@ const char* const kFixedKeys[] = {
 Result<TextTable> parseTextTable(const std::string& json) {
 	const Result<JsonValue> parsed = parseJson(json);
 	if (!parsed.ok()) {
-		return Result<TextTable>::failure(parsed.error);
+		return Result<TextTable>::failure(parsed.problems, parsed.error);
 	}
+	auto fail = [](int line, const char* key, std::vector<std::string> params) {
+		Problem problem{"", line, "", {key, std::move(params)}};
+		return Result<TextTable>::failure({problem}, formatProblem(problem, problemText()));
+	};
 	const JsonValue* entries = parsed.value->is(JsonValue::Type::Object) ? parsed.value->find("text") : nullptr;
 	if (!entries || !entries->is(JsonValue::Type::Object) || parsed.value->keys.size() != 1) {
-		return Result<TextTable>::failure("a text table is {\"text\": {\"key\": \"template\"}}");
+		return fail(parsed.value->line, "text.table_shape", {});
 	}
 	TextTable table;
 	for (std::size_t i = 0; i < entries->keys.size(); ++i) {
 		if (!entries->values[i].is(JsonValue::Type::String)) {
-			return Result<TextTable>::failure("line " + std::to_string(entries->values[i].line) + ": text for '" + entries->keys[i] + "' must be a string");
+			return fail(entries->values[i].line, "text.not_string", {entries->keys[i]});
 		}
 		table[entries->keys[i]] = entries->values[i].string;
 	}
@@ -66,15 +70,41 @@ Result<TextTable> parseTextTable(const std::string& json) {
 Result<TextTable> loadTextTable(const std::string& path) {
 	std::ifstream in(path, std::ios::binary);
 	if (!in) {
-		return Result<TextTable>::failure(path + ": cannot open file");
+		Problem problem{path, 0, "", {"load.cannot_open", {}}};
+		return Result<TextTable>::failure({problem}, formatProblem(problem, problemText()));
 	}
 	std::ostringstream text;
 	text << in.rdbuf();
 	Result<TextTable> table = parseTextTable(text.str());
+	for (Problem& problem : table.problems) {
+		problem.file = path;
+	}
 	if (!table.ok()) {
-		table.error = path + ": " + table.error;
+		table.error = formatProblems(table.problems, problemText());
 	}
 	return table;
+}
+
+std::string formatProblem(const Problem& problem, const TextTable& table) {
+	std::string out = problem.file;
+	if (problem.line > 0) {
+		out += (out.empty() ? "line " : ":") + std::to_string(problem.line);
+	}
+	if (!out.empty()) {
+		out += ": ";
+	}
+	if (!problem.entry.empty()) {
+		out += problem.entry + ": ";
+	}
+	return out + formatText(table, problem.message.key, problem.message.params);
+}
+
+std::string formatProblems(const std::vector<Problem>& problems, const TextTable& table) {
+	std::string out;
+	for (const Problem& problem : problems) {
+		out += (out.empty() ? "" : "\n") + formatProblem(problem, table);
+	}
+	return out;
 }
 
 std::string formatText(const TextTable& table, const std::string& key, const std::vector<std::string>& params) {

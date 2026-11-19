@@ -41,18 +41,21 @@ public:
 
 	const Token* peek() const { return done() ? nullptr : &line_.tokens[pos_]; }
 
-	void error(const std::string& message) {
+	// The rendered message starts with the command, so the line's problem reads in context.
+	void error(const char* key, std::vector<std::string> params) {
 		if (!failed_) {
-			diagnostics_.push_back({Severity::error, file_, line_.number, command_ + ": " + message});
+			Diagnostic d = diagnostic(Severity::error, file_, line_.number, key, std::move(params));
+			d.message = command_ + ": " + d.message;
+			diagnostics_.push_back(std::move(d));
 		}
 		failed_ = true;
 	}
 
 	void expected(const std::string& what) {
 		if (done()) {
-			error("expected " + what + ", but the line ended");
+			error("script.expected_but_line_ended", {what});
 		} else {
-			error("expected " + what + ", found " + describe_token(line_.tokens[pos_]));
+			error("script.expected_found", {what, std::string(describe_token(line_.tokens[pos_]))});
 		}
 	}
 
@@ -155,7 +158,7 @@ public:
 			return false;
 		}
 		if (!done()) {
-			error("unexpected " + describe_token(line_.tokens[pos_]));
+			error("script.unexpected", {std::string(describe_token(line_.tokens[pos_]))});
 			return false;
 		}
 		return true;
@@ -183,10 +186,10 @@ public:
 			if (h == "event") {
 				parse_event();
 			} else if (h == "end") {
-				error(line().number, "'end' without an open block");
+				error(line().number, "script.end_without_open_block", {});
 				++pos_;
 			} else {
-				error(line().number, "expected 'event' at the top level, found " + describe_token(line().tokens[0]));
+				error(line().number, "script.expected_event_at_top_level", {std::string(describe_token(line().tokens[0]))});
 				++pos_;
 			}
 		}
@@ -201,8 +204,8 @@ private:
 		return t.kind == TokenKind::word ? t.text : std::string();
 	}
 
-	void error(int number, const std::string& message) {
-		diagnostics_.push_back({Severity::error, file_, number, message});
+	void error(int number, const char* key, std::vector<std::string> params) {
+		diagnostics_.push_back(diagnostic(Severity::error, file_, number, key, std::move(params)));
 	}
 
 	Args args(std::size_t start = 1) {
@@ -236,7 +239,7 @@ private:
 
 	void unterminated(const char* what, int opened) {
 		int at = pos_ < lines_.size() ? line().number : (lines_.empty() ? opened : lines_.back().number);
-		error(at, std::string("unterminated '") + what + "' block opened at line " + std::to_string(opened) + ": missing 'end'");
+		error(at, "script.unterminated_block_opened_at_line", {what, std::to_string(opened)});
 	}
 
 	bool close_block(const std::string& stop, const char* what, int opened) {
@@ -264,7 +267,7 @@ private:
 				marked = true;
 			}
 			if (!marked && !a.failed()) {
-				error(ev.line, "event '" + ev.name + "' must be marked 'skippable' or 'unskippable'");
+				error(ev.line, "script.event_marked_skippable_unskippable", {ev.name});
 			} else {
 				a.finish();
 			}
@@ -279,8 +282,7 @@ private:
 			Args s = args();
 			s.expect_keyword("skip");
 			s.finish();
-			diagnostics_.push_back({Severity::warning, file_, skip_line,
-				"'on skip' is ignored: a skip now plays the rest of the event at once, applying its state changes; remove the block"});
+			diagnostics_.push_back(diagnostic(Severity::warning, file_, skip_line, "script.on_skip_ignored_skip_now", {}));
 			++pos_;
 			std::vector<Stmt> ignored;
 			stop = parse_block(Context(), {"end"}, ignored);
@@ -291,7 +293,7 @@ private:
 			++pos_;
 		} else {
 			int at = pos_ < lines_.size() ? line().number : (lines_.empty() ? ev.line : lines_.back().number);
-			error(at, "event '" + ev.name + "' opened at line " + std::to_string(ev.line) + " is missing 'end'");
+			error(at, "script.event_opened_at_line_missing", {ev.name, std::to_string(ev.line)});
 		}
 		events_.push_back(std::move(ev));
 	}
@@ -307,7 +309,7 @@ private:
 				return false;
 			}
 			if (one_of(term.name, {"and", "or", "not"})) {
-				a.error("'" + term.name + "' cannot be used as a flag or variable name");
+				a.error("script.cannot_used_as_flag_variable", {term.name});
 				return false;
 			}
 			if (a.next_is_op()) {
@@ -327,7 +329,7 @@ private:
 				} else if (op == ">=") {
 					term.compare = Compare::ge;
 				} else {
-					a.error("'" + op + "' is not a comparison; use ==, !=, <, <=, > or >=");
+					a.error("script.comparison_use", {op});
 					return false;
 				}
 				if (!a.integer(term.value, "an integer to compare with")) {
@@ -344,7 +346,7 @@ private:
 				return false;
 			}
 			if (joiner && std::strcmp(joiner, next) != 0) {
-				a.error("mixing 'and' and 'or' in one condition is not supported; split it into nested ifs");
+				a.error("script.mixing_one_condition_supported_split", {});
 				return false;
 			}
 			joiner = next;
@@ -372,7 +374,7 @@ private:
 			b.present = true;
 			bool is_elif = line().tokens.size() > 1 && line().tokens[1].kind == TokenKind::word && line().tokens[1].text == "if";
 			if (else_line) {
-				error(b.line, std::string("unreachable '") + (is_elif ? "else if" : "else") + "': it follows the 'else' at line " + std::to_string(else_line));
+				error(b.line, "script.unreachable_follows_else_at_line", {std::string((is_elif ? "else if" : "else")), std::to_string(else_line)});
 			}
 			if (is_elif) {
 				b.has_condition = true;
@@ -381,7 +383,7 @@ private:
 					std::string text = describe(b.condition);
 					for (const Branch& earlier : s.branches) {
 						if (earlier.has_condition && describe(earlier.condition) == text) {
-							error(b.line, "unreachable 'else if': '" + text + "' was already tested at line " + std::to_string(earlier.line));
+							error(b.line, "script.unreachable_else_if_was_already", {text, std::to_string(earlier.line)});
 							break;
 						}
 					}
@@ -418,7 +420,7 @@ private:
 
 	void reject_leading(const std::vector<Stmt>& stray, const char* first_section) {
 		if (!stray.empty()) {
-			error(stray.front().line, std::string("commands must come after the first '") + first_section + "'");
+			error(stray.front().line, "script.commands_come_after_first", {first_section});
 		}
 	}
 
@@ -457,7 +459,7 @@ private:
 			s.branches.push_back(std::move(b));
 		}
 		if (close_block(stop, "choice", s.line) && s.branches.size() < 2) {
-			error(s.line, "choice: needs at least two options");
+			error(s.line, "script.choice_needs_at_least_two", {});
 		}
 		out.push_back(std::move(s));
 	}
@@ -484,7 +486,7 @@ private:
 			}
 			Branch& b = s.branches[index];
 			if (b.present) {
-				error(line().number, "duplicate '" + stop + "' section; the first one is at line " + std::to_string(b.line));
+				error(line().number, "script.duplicate_section_first_one_at", {stop, std::to_string(b.line)});
 			}
 			Branch fresh;
 			fresh.present = true;
@@ -522,6 +524,9 @@ private:
 		s.kind = StmtKind::battle;
 		Args a = args();
 		a.name(s.ins.battle.encounter, "an encounter name");
+		if (a.keyword("aboard")) {
+			a.name(s.ins.battle.vehicle, "a vehicle name after 'aboard'");
+		}
 		if (a.keyword("opening")) {
 			std::string opening;
 			if (a.name(opening, "'normal', 'party_first' or 'enemy_first' after 'opening'")) {
@@ -530,7 +535,7 @@ private:
 				} else if (opening == "enemy_first") {
 					s.ins.battle.opening = BattleOpening::enemy_first;
 				} else if (opening != "normal") {
-					a.error("expected 'normal', 'party_first' or 'enemy_first' after 'opening', found '" + opening + "'");
+					a.error("script.expected_normal_party_first_enemy", {opening});
 				}
 			}
 		}
@@ -539,7 +544,7 @@ private:
 			if (a.keyword("survive")) {
 				if (a.integer(rounds, "a number of rounds after 'survive'")) {
 					if (rounds < 1 || rounds > 999) {
-						a.error("the rounds to survive must be 1 to 999, found " + std::to_string(rounds));
+						a.error("script.rounds_survive_1_999_found", {std::to_string(rounds)});
 					}
 					s.ins.battle.end = BattleEndKind::survive_rounds;
 					s.ins.battle.end_rounds = static_cast<int>(rounds);
@@ -556,7 +561,7 @@ private:
 		++pos_;
 		parse_sections(ctx, s, {"win", "lose", "flee"}, "battle");
 		if (!s.branches[0].present) {
-			error(s.line, "battle: needs a 'win' section");
+			error(s.line, "script.battle_needs_win_section", {});
 		}
 		s.ins.battle.defeat_handled = s.branches[1].present;
 		s.ins.battle.escape_allowed = s.branches[2].present;
@@ -587,7 +592,7 @@ private:
 			s.branches.push_back(std::move(b));
 		}
 		if (close_block(stop, what, s.line) && s.branches.empty()) {
-			error(s.line, std::string(what) + ": the block is empty");
+			error(s.line, "script.block_empty", {std::string(what)});
 		}
 		out.push_back(std::move(s));
 	}
@@ -614,7 +619,7 @@ private:
 		while (!a.failed() && !a.done()) {
 			if (a.keyword("nowait")) {
 				if (ctx.parallel) {
-					a.error(std::string("'nowait' has no effect inside '") + ctx.parallel + "'; every branch already runs in parallel");
+					a.error("script.nowait_has_effect_inside_every", {ctx.parallel});
 				}
 				s.ins.wait = false;
 			} else if (speed && a.keyword("speed")) {
@@ -640,33 +645,33 @@ private:
 		const SourceLine& l = line();
 		std::string cmd = head();
 		if (cmd.empty()) {
-			error(l.number, "expected a command, found " + describe_token(l.tokens[0]));
+			error(l.number, "script.expected_command_found", {std::string(describe_token(l.tokens[0]))});
 			++pos_;
 			return;
 		}
 
 		if (cmd == "else") {
-			error(l.number, "'else' without a matching 'if'");
+			error(l.number, "script.else_without_matching_if", {});
 			++pos_;
 			return;
 		}
 		if (cmd == "option") {
-			error(l.number, "'option' outside of a 'choice' block");
+			error(l.number, "script.option_outside_choice_block", {});
 			++pos_;
 			return;
 		}
 		if (cmd == "yes" || cmd == "no") {
-			error(l.number, "'" + cmd + "' outside of an 'ask' block");
+			error(l.number, "script.outside_ask_block", {cmd});
 			++pos_;
 			return;
 		}
 		if (cmd == "win" || cmd == "lose" || cmd == "flee") {
-			error(l.number, "'" + cmd + "' outside of a 'battle' block");
+			error(l.number, "script.outside_battle_block", {cmd});
 			++pos_;
 			return;
 		}
 		if (cmd == "on") {
-			error(l.number, "'on skip' must directly close an event body and may appear only once");
+			error(l.number, "script.on_skip_directly_close_event", {});
 			++pos_;
 			return;
 		}
@@ -678,18 +683,18 @@ private:
 			"warp", "while",
 		};
 		if (!one_of(cmd, known)) {
-			error(l.number, "unknown command '" + cmd + "'");
+			error(l.number, "script.unknown_command", {cmd});
 			++pos_;
 			return;
 		}
 
 		if (ctx.parallel && !one_of(cmd, {"ambient", "anim", "camera", "face", "fade", "hide", "move", "music", "panel", "sequence", "shake", "show", "sound", "wait"})) {
-			error(l.number, "'" + cmd + "' is not allowed inside '" + ctx.parallel + "'; only actor, camera, panel, screen and audio commands and 'wait' run in parallel");
+			error(l.number, "script.allowed_inside_only_actor_camera", {cmd, ctx.parallel});
 			skip_command(ctx);
 			return;
 		}
 		if (cmd == "sequence" && (!ctx.parallel || ctx.in_sequence)) {
-			error(l.number, "'sequence' is only allowed directly inside 'together' or 'race'");
+			error(l.number, "script.sequence_only_allowed_directly_inside", {});
 			skip_command(ctx);
 			return;
 		}
@@ -768,7 +773,7 @@ private:
 				if (op == "+=" || op == "-=") {
 					s.ins.op = Op::var_add;
 				} else if (op != "=") {
-					a.error("expected '=', '+=' or '-=', found '" + op + "'");
+					a.error("script.expected_found_2", {op});
 				}
 			}
 			if (a.integer(s.ins.number, "an integer value") && op == "-=") {
@@ -779,7 +784,7 @@ private:
 			a.name(s.ins.name, "an item name");
 			s.ins.number = 1;
 			if (!a.done() && a.integer(s.ins.number, "an item count") && s.ins.number < 1) {
-				a.error("the item count must be at least 1");
+				a.error("script.item_count_at_least_1", {});
 			}
 		} else if (cmd == "party") {
 			s = simple(Op::party_add);
@@ -795,7 +800,7 @@ private:
 		} else if (cmd == "wait") {
 			s = simple(Op::wait);
 			if (a.number(s.ins.seconds, "a duration in seconds") && s.ins.seconds < 0) {
-				a.error("the duration cannot be negative");
+				a.error("script.duration_cannot_negative", {});
 			}
 		} else if (cmd == "sync") {
 			s = simple(Op::sync);

@@ -39,7 +39,18 @@ TEST(scriptedPlaythroughReachesItsFixedEnding) {
 	CHECK(text.find("Clear data recorded.") != std::string::npos);
 	CHECK_EQ(s.pacing().bosses().size(), 1u);
 	CHECK_EQ(s.pacing().bosses()[0].averageLevelX100, 325);
-	CHECK_EQ(s.pacing().totalBattles(), 5);
+	// The hold battle counts once per attempt: two defeats and the win after the second retry.
+	CHECK_EQ(s.pacing().totalBattles(), 9);
+	const std::size_t lost = text.find("Game over.");
+	const std::size_t retried = text.find("title> retry", lost);
+	CHECK(lost != std::string::npos && retried != std::string::npos);
+	CHECK(text.find("The hold falls quiet.", retried) != std::string::npos);
+	CHECK(text.find("Test Fighter will be called Bryn.") != std::string::npos);
+	CHECK(text.find("Bryn: Tell the ferry I am staying a while.") != std::string::npos);
+	CHECK(text.find("Bryn uses ") != std::string::npos);
+	const std::size_t skimmer = text.find("Enemies: Bog Wisp A, Bog Wisp B, Gel Mite.", text.find("Take the skimmer out"));
+	CHECK(skimmer != std::string::npos && text.find("Reed Skimmer uses ", skimmer) != std::string::npos);
+	CHECK(text.find("menu> save manual_1\nSaved to manual_1.") != std::string::npos);
 	CHECK(s.modes().refused().empty());
 
 	// The script ends by loading the manual save made at the inn, before the reeds.

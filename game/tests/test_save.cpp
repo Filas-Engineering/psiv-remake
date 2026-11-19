@@ -37,7 +37,7 @@ void playSome(Session& s, const std::string& script) {
 	CHECK_EQ(runner.errors(), 0);
 }
 
-const char* kToTheMarsh = "new\nwalk guide_front\nface north\ntalk\nchoose 0\nwalk 13 4\nwalk 10 4\nwalk 14 3\n";
+const char* kToTheMarsh = "new\nwalk guide_front\nface north\ntalk\nchoose 0\nname Bryn\nwalk 13 4\nwalk 10 4\nwalk 14 3\n";
 
 }
 

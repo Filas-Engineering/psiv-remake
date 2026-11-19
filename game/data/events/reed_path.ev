@@ -3,7 +3,7 @@
 
 event reed_path_scout unskippable
 	lock player
-	say scout @reed.scout.joins
+	say scout @reed.scout.joins as scout_grin
 	party add scout
 	set reed.scout_joined
 	unlock player
@@ -14,5 +14,27 @@ event reed_path_peddler unskippable
 	say peddler @reed.peddler.greeting
 	shop reed_peddler
 	say peddler @reed.peddler.farewell
+	unlock player
+end
+
+# A skimmer moored in the east marsh. The party fights aboard it.
+event reed_path_skimmer unskippable
+	lock player
+	if reed.skimmer_cleared
+		narrate @reed.skimmer.idle
+	else
+		narrate @reed.skimmer.moored
+		ask @reed.skimmer.ask
+		yes
+			battle marsh aboard reed_skimmer
+			win
+				say scout @reed.skimmer.won
+				give loosen_oil 1
+				set reed.skimmer_cleared
+			end
+		no
+			narrate @reed.skimmer.declined
+		end
+	end
 	unlock player
 end

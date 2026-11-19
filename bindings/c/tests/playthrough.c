@@ -20,7 +20,6 @@ static int errors;
 static int autoBattle;
 static char battleNames[MAX_COMBATANTS][NAME_SIZE];
 static int battleNameCount;
-static int tickMs = 50;
 
 static void print(const char* format, ...) {
 	va_list args;
@@ -107,12 +106,7 @@ static const char* displayName(const char* id) {
 	return out;
 }
 
-static void flushOutput(void) {
-	const psiv_notice* notices;
-	int32_t count;
-	if (psiv_notices_drain(S, &notices, &count) != PSIV_OK) {
-		return;
-	}
+static void printNotices(const psiv_notice* notices, int32_t count) {
 	for (int32_t i = 0; i < count; ++i) {
 		switch (notices[i].kind) {
 		case PSIV_NOTICE_ACTION:
@@ -128,6 +122,14 @@ static void flushOutput(void) {
 			print("%s", notices[i].text);
 			break;
 		}
+	}
+}
+
+static void flushOutput(void) {
+	const psiv_notice* notices;
+	int32_t count;
+	if (psiv_notices_drain(S, &notices, &count) == PSIV_OK) {
+		printNotices(notices, count);
 	}
 }
 
@@ -224,22 +226,18 @@ static void resolveAndPrint(void) {
 }
 
 static void finishBattleAuto(void) {
-	psiv_settings settings;
-	psiv_battle_info info;
-	psiv_settings_get(S, &settings);
-	if (settings.auto_macro[0] && psiv_battle_info_get(S, &info) == PSIV_OK && info.round == 0 && !info.auto_active) {
-		report(psiv_battle_start_auto(S));
+	psiv_auto_battle played;
+	if (psiv_battle_play(S, 60, &played) != PSIV_OK) {
+		return;
 	}
-	for (int round = 0; round < 60 && psiv_mode_get(S) == PSIV_MODE_BATTLE; ++round) {
-		int32_t filled = 0;
-		psiv_battle_fill_from_auto(S, &filled);
-		if (!filled) {
-			psiv_battle_fill_from_policy(S);
-		}
-		flushOutput();
-		resolveAndPrint();
+	if (played.refusal_key[0]) {
+		error(played.refusal_text);
 	}
-	if (psiv_mode_get(S) == PSIV_MODE_BATTLE) {
+	for (int32_t i = 0; i < played.round_count; ++i) {
+		printNotices(played.rounds[i].notices, played.rounds[i].notice_count);
+		printEvents(played.rounds[i].events, played.rounds[i].event_count);
+	}
+	if (!played.ended) {
 		error("the battle did not end in 60 rounds");
 	}
 	flushOutput();
@@ -288,12 +286,8 @@ static void settle(void) {
 			bclear(&text);
 			psiv_choice_get(S, &choice);
 			badd(&text, "%s", choice.prompt[0] ? choice.prompt : "Choose:");
-			if (choice.yes_no) {
-				badd(&text, " [0] yes [1] no");
-			} else {
-				for (int32_t i = 0; i < choice.option_count; ++i) {
-					badd(&text, " [%d] %s", i, choice.options[i]);
-				}
+			for (int32_t i = 0; i < choice.option_count; ++i) {
+				badd(&text, " [%d] %s", i, choice.options[i]);
 			}
 			print("%s", text.text);
 			return;
@@ -403,94 +397,21 @@ static void look(void) {
 	free(map);
 }
 
-static int walkTo(int goalX, int goalY) {
-	static const int dx[] = {0, 1, 0, -1};
-	static const int dy[] = {-1, 0, 1, 0};
-	for (int guard = 0; guard < 4000; ++guard) {
-		psiv_field_info field;
-		if (psiv_mode_get(S) != PSIV_MODE_FIELD || psiv_field_info_get(S, &field) != PSIV_OK) {
-			return 0;
-		}
-		if (field.leader_x == goalX && field.leader_y == goalY) {
-			return 1;
-		}
-		const uint8_t* grid;
-		const psiv_exit* exits;
-		int32_t cells;
-		int32_t exitCount;
-		psiv_field_grid(S, &grid, &cells);
-		psiv_field_exits(S, &exits, &exitCount);
-		const int w = field.width;
-		const int h = field.height;
-		int* from = malloc(sizeof(int) * (size_t)cells);
-		int* queue = malloc(sizeof(int) * (size_t)cells);
-		for (int i = 0; i < cells; ++i) {
-			from[i] = -1;
-		}
-		const int start = field.leader_y * w + field.leader_x;
-		const int goal = goalY * w + goalX;
-		const int goalInside = goalX >= 0 && goalY >= 0 && goalX < w && goalY < h;
-		int head = 0;
-		int tail = 0;
-		queue[tail++] = start;
-		from[start] = start;
-		/* Breadth-first search over floor; enemies are ignored, so bumping into one starts its battle. */
-		while (head < tail && !(goalInside && from[goal] >= 0)) {
-			const int c = queue[head++];
-			for (int f = 0; f < 4; ++f) {
-				const int nx = c % w + dx[f];
-				const int ny = c / w + dy[f];
-				if (nx < 0 || ny < 0 || nx >= w || ny >= h) {
-					continue;
-				}
-				const int n = ny * w + nx;
-				int isExit = 0;
-				for (int32_t e = 0; e < exitCount; ++e) {
-					isExit = isExit || (exits[e].x == nx && exits[e].y == ny);
-				}
-				if (from[n] >= 0 || !(grid[n] & PSIV_CELL_WALKABLE) || (isExit && n != goal)) {
-					continue;
-				}
-				from[n] = c;
-				queue[tail++] = n;
-			}
-		}
-		if (!goalInside || from[goal] < 0) {
-			char text[64];
-			snprintf(text, sizeof text, "no path to (%d,%d)", goalX, goalY);
-			error(text);
-			free(from);
-			free(queue);
-			return 0;
-		}
-		int next = goal;
-		while (from[next] != start) {
-			next = from[next];
-		}
-		free(from);
-		free(queue);
-		int dir = PSIV_DIRECTION_NORTH;
-		for (int f = 0; f < 4; ++f) {
-			if (field.leader_x + dx[f] == next % w && field.leader_y + dy[f] == next / w) {
-				dir = f;
-			}
-		}
-		char startArea[NAME_SIZE];
-		snprintf(startArea, sizeof startArea, "%s", field.area_id);
-		if (psiv_walk(S, dir) != PSIV_OK) {
-			/* A visible enemy in the way during the grace period: let the moment pass. */
-			psiv_update(S, tickMs, PSIV_DIRECTION_NONE);
-		}
-		settle();
-		if (psiv_mode_get(S) != PSIV_MODE_FIELD || psiv_field_info_get(S, &field) != PSIV_OK) {
-			return 0;
-		}
-		if (strcmp(field.area_id, startArea) != 0) {
-			return 1;
-		}
+static void walkTo(int goalX, int goalY) {
+	int32_t status = PSIV_WALK_WALKING;
+	if (psiv_walk_to(S, goalX, goalY) != PSIV_OK) {
+		return;
 	}
-	error("walking took too long");
-	return 0;
+	while (psiv_walk_step(S, &status) == PSIV_OK && status == PSIV_WALK_WALKING) {
+		settle();
+	}
+	if (status == PSIV_WALK_NO_PATH) {
+		char text[64];
+		snprintf(text, sizeof text, "no path to (%d,%d)", goalX, goalY);
+		error(text);
+	} else if (status == PSIV_WALK_TOO_LONG) {
+		error("walking took too long");
+	}
 }
 
 static int actorIndex(const char* text, int* out) {
@@ -593,7 +514,7 @@ static int execute(const char* rawLine) {
 			}
 		}
 	} else if (strcmp(cmd, "face") == 0 && wordCount == 2 && parseFacing(words[1], &facing)) {
-		psiv_face(S, facing);
+		report(psiv_face(S, facing));
 	} else if (strcmp(cmd, "walk") == 0 && (wordCount == 2 || wordCount == 3)) {
 		int x = 0;
 		int y = 0;
@@ -748,30 +669,18 @@ static int execute(const char* rawLine) {
 		psiv_settings_get(S, &settings);
 		if (strcmp(words[1], "difficulty") == 0 || strcmp(words[1], "reward") == 0) {
 			char difficulty[NAME_SIZE];
-			int reward = settings.reward_multiplier;
+			int32_t reward = settings.reward_multiplier;
 			snprintf(difficulty, sizeof difficulty, "%s", settings.difficulty);
 			if (strcmp(words[1], "difficulty") == 0) {
 				snprintf(difficulty, sizeof difficulty, "%s", words[2]);
-			} else {
-				reward = -1;
-				for (int i = PSIV_REWARD_X1; i <= PSIV_REWARD_X2; ++i) {
-					if (strcmp(psiv_name_of(PSIV_NAME_REWARD_MULTIPLIER, i), words[2]) == 0) {
-						reward = i;
-					}
-				}
-				if (reward < 0) {
-					snprintf(message, sizeof message, "bad reward multiplier '%s'", words[2]);
-					error(message);
-					return 1;
-				}
+			} else if (psiv_parse_name(PSIV_NAME_REWARD_MULTIPLIER, words[2], &reward) != PSIV_OK) {
+				snprintf(message, sizeof message, "bad reward multiplier '%s'", words[2]);
+				error(message);
+				return 1;
 			}
 			report(psiv_settings_set(S, difficulty, reward));
 		} else if (strcmp(words[1], "auto") == 0) {
-			const char* name = strcmp(words[2], "-") == 0 ? "" : words[2];
-			if (psiv_settings_set_auto_macro(S, name) != PSIV_OK) {
-				snprintf(message, sizeof message, "no macro named '%s'", words[2]);
-				error(message);
-			}
+			report(psiv_settings_set_auto_macro(S, strcmp(words[2], "-") == 0 ? "" : words[2]));
 		} else {
 			const char* key = strcmp(words[1], "text") == 0 ? "text_speed"
 				: strcmp(words[1], "battle") == 0 ? "battle_speed"
@@ -840,7 +749,6 @@ int main(int argc, char** argv) {
 	}
 	psiv_game_info info;
 	psiv_game_info_get(S, &info);
-	tickMs = info.tick_ms;
 	print("%s (seed %llu)", info.title, (unsigned long long)options.seed);
 	settle();
 	char line[LINE_SIZE];

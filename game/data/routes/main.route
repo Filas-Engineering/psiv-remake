@@ -4,6 +4,7 @@ walk guide_front
 face north
 talk
 choose 0
+name Bryn
 walk crate_front
 face south
 talk

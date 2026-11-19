@@ -44,6 +44,8 @@ public:
 	void bossEnded();
 
 	const std::map<std::string, AreaPacing>& areas() const { return areas_; }
+	// Area ids in first-visit order.
+	const std::vector<std::string>& areaOrder() const { return order_; }
 	const std::vector<BossPacing>& bosses() const { return bosses_; }
 	int totalBattles() const;
 

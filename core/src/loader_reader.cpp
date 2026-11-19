@@ -6,24 +6,20 @@ namespace rules::loader {
 
 using Type = JsonValue::Type;
 
-void Reader::fail(const JsonValue& at, const std::string& message) {
-	std::string text = file_ + ":" + std::to_string(at.line) + ": ";
-	if (!context_.empty()) {
-		text += context_ + ": ";
-	}
-	errors_.push_back(text + message);
+void Reader::fail(const JsonValue& at, const char* key, std::vector<std::string> params) {
+	problems_.push_back({file_, at.line, context_, {key, std::move(params)}});
 }
 
 const JsonValue* Reader::get(const JsonValue& object, const char* key, Type type, bool required) {
 	const JsonValue* value = object.find(key);
 	if (!value) {
 		if (required) {
-			fail(object, std::string("missing field '") + key + "'");
+			fail(object, "load.missing_field", {key});
 		}
 		return nullptr;
 	}
 	if (value->type != type) {
-		fail(*value, std::string("field '") + key + "' must be a " + jsonTypeName(type) + ", found " + jsonTypeName(value->type));
+		fail(*value, "load.field_wrong_type", {key, std::string(jsonTypeName(type)), std::string(jsonTypeName(value->type))});
 		return nullptr;
 	}
 	return value;
@@ -35,7 +31,7 @@ bool Reader::string(const JsonValue& object, const char* key, std::string& out, 
 		return false;
 	}
 	if (value->string.empty()) {
-		fail(*value, std::string("field '") + key + "' cannot be empty");
+		fail(*value, "load.field_cannot_empty", {key});
 		return false;
 	}
 	out = value->string;
@@ -49,11 +45,11 @@ bool Reader::integer(const JsonValue& object, const char* key, int& out, bool re
 	}
 	const double n = value->number;
 	if (n != std::floor(n)) {
-		fail(*value, std::string("field '") + key + "' must be a whole number");
+		fail(*value, "load.field_whole_number", {key});
 		return false;
 	}
 	if (n < min || n > max) {
-		fail(*value, std::string("field '") + key + "' must be between " + std::to_string(min) + " and " + std::to_string(max));
+		fail(*value, "load.field_out_of_range", {key, std::to_string(min), std::to_string(max)});
 		return false;
 	}
 	out = static_cast<int>(n);
@@ -77,7 +73,7 @@ std::vector<const JsonValue*> Reader::objects(const JsonValue& object, const cha
 	}
 	for (const JsonValue& item : array->items) {
 		if (item.type != Type::Object) {
-			fail(item, std::string("entries of '") + key + "' must be objects");
+			fail(item, "load.entries_objects", {key});
 			continue;
 		}
 		result.push_back(&item);
@@ -93,7 +89,7 @@ std::vector<std::string> Reader::strings(const JsonValue& object, const char* ke
 	}
 	for (const JsonValue& item : array->items) {
 		if (item.type != Type::String || item.string.empty()) {
-			fail(item, std::string("entries of '") + key + "' must be non-empty strings");
+			fail(item, "load.entries_non_empty_strings", {key});
 			continue;
 		}
 		result.push_back(item.string);
@@ -111,7 +107,7 @@ void Reader::rejectUnknownKeys(const JsonValue& object, std::initializer_list<co
 			}
 		}
 		if (!known) {
-			fail(object.values[i], "unknown field '" + object.keys[i] + "'");
+			fail(object.values[i], "load.unknown_field", {object.keys[i]});
 		}
 	}
 }

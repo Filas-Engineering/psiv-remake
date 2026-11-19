@@ -1,5 +1,5 @@
 CXX = clang++
-CXXFLAGS = -std=c++17 -Wall -Wextra -Werror -O1 -Iinclude
+CXXFLAGS = -std=c++17 -Wall -Wextra -Werror -O1 -fPIC -Iinclude
 AR = ar
 
 BUILD = build

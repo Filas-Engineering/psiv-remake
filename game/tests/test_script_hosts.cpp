@@ -128,6 +128,10 @@ TEST(scriptRestChargesTheRestPointAndCuresCarriedStatuses) {
 	test::confirmLines(s);
 	CHECK(s.choose(0).empty());
 	test::confirmLines(s);
+	// The campfire offers a save prompt after resting, whether the rest was paid for or not.
+	CHECK(s.menuKind() == MenuKind::SavePrompt);
+	CHECK(s.closeMenu().empty());
+	test::confirmLines(s);
 	CHECK(s.mode() == Mode::Field);
 	CHECK(test::outputHas(s.drainOutput(), "not enough money"));
 	CHECK_EQ(fighter.hp, 20);
@@ -137,6 +141,8 @@ TEST(scriptRestChargesTheRestPointAndCuresCarriedStatuses) {
 	s.interact();
 	test::confirmLines(s);
 	s.choose(0);
+	test::confirmLines(s);
+	s.closeMenu();
 	test::confirmLines(s);
 	CHECK_EQ(s.world().money, 5);
 	CHECK_EQ(fighter.hp, rules::memberStats(test::data().db, fighter).maxHp);

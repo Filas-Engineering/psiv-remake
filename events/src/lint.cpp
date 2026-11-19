@@ -48,31 +48,30 @@ public:
 	}
 
 	void finish(const std::vector<EventDecl>& events, const LintOptions& options) {
-		pair_up(flag_writes_, flag_reads_, "flag", "set but never read by any script", "read but never set by any script");
-		pair_up(var_writes_, var_reads_, "variable", "written but never read by any script", "read but never written by any script");
+		pair_up(flag_writes_, flag_reads_, "lint.flag_never_read", "lint.flag_never_set");
+		pair_up(var_writes_, var_reads_, "lint.variable_never_read", "lint.variable_never_written");
 		std::set<std::string> entries(options.entry_events.begin(), options.entry_events.end());
 		for (const EventDecl& ev : events) {
 			if (!calls_.count(ev.name) && !entries.count(ev.name)) {
-				warn(ev.file, ev.line, "event '" + ev.name + "' is never called by another event and is not listed as an entry event");
+				warn(ev.file, ev.line, "lint.event_never_called_another_event", {ev.name});
 			}
 		}
 	}
 
 private:
-	void warn(int file, int line, const std::string& message) {
-		out_.push_back({Severity::warning, files_[file], line, message});
+	void warn(int file, int line, const char* key, std::vector<std::string> params) {
+		out_.push_back(diagnostic(Severity::warning, files_[file], line, key, std::move(params)));
 	}
 
-	void pair_up(const std::map<std::string, Location>& writes, const std::map<std::string, Location>& reads, const char* what,
-		const char* unread, const char* unwritten) {
+	void pair_up(const std::map<std::string, Location>& writes, const std::map<std::string, Location>& reads, const char* unread, const char* unwritten) {
 		for (const auto& w : writes) {
 			if (!reads.count(w.first)) {
-				warn(w.second.file, w.second.line, std::string(what) + " '" + w.first + "' is " + unread);
+				warn(w.second.file, w.second.line, unread, {w.first});
 			}
 		}
 		for (const auto& r : reads) {
 			if (!writes.count(r.first)) {
-				warn(r.second.file, r.second.line, std::string(what) + " '" + r.first + "' is " + unwritten);
+				warn(r.second.file, r.second.line, unwritten, {r.first});
 			}
 		}
 	}
@@ -95,8 +94,7 @@ private:
 			if (s.kind == StmtKind::label) {
 				ender = nullptr;
 			} else if (ender) {
-				warn(s.ins.file, s.line, std::string("unreachable: nothing jumps here after the '") + (ender->kind == StmtKind::go_to ? "goto" : "return") +
-					"' at line " + std::to_string(ender->line) + "; add a label or remove it");
+				warn(s.ins.file, s.line, "lint.unreachable_nothing_jumps_here_after", {std::string((ender->kind == StmtKind::go_to ? "goto" : "return")), std::to_string(ender->line)});
 				ender = nullptr;
 			}
 			statement(s);
@@ -153,14 +151,14 @@ private:
 		}
 		if (s.ins.choice.yes_no) {
 			if (forms.size() == 2 && forms[0] == forms[1]) {
-				warn(s.ins.file, s.line, "the 'yes' and 'no' branches of this ask are identical, so the answer changes nothing");
+				warn(s.ins.file, s.line, "lint.yes_branches_this_ask_are", {});
 			}
 			return;
 		}
 		for (std::size_t i = 1; i < forms.size(); ++i) {
 			for (std::size_t j = 0; j < i; ++j) {
 				if (forms[i] == forms[j]) {
-					warn(s.ins.file, s.branches[i].line, "option " + std::to_string(i + 1) + " of this choice has the same branch as option " + std::to_string(j + 1));
+					warn(s.ins.file, s.branches[i].line, "lint.option_this_choice_has_same", {std::to_string(i + 1), std::to_string(j + 1)});
 					break;
 				}
 			}

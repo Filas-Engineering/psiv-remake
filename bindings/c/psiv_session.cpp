@@ -6,9 +6,10 @@
 
 #include "events/glossary.h"
 #include "events/strings.h"
-#include "rules/auto_policy.h"
+#include "rules/event.h"
 #include "rules/names.h"
 #include "rules/progression.h"
+#include "rules/record.h"
 #include "rules/text.h"
 #include "rules/version.h"
 
@@ -20,12 +21,11 @@
 #include <map>
 #include <memory>
 #include <new>
-#include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
-#define PSIV_BINDING_VERSION "0.1.0"
+#define PSIV_BINDING_VERSION "0.2.0"
 
 static_assert(PSIV_MODE_SHOP == static_cast<int>(game::Mode::Shop), "psiv_mode");
 static_assert(PSIV_MENU_NAME_ENTRY == static_cast<int>(game::MenuKind::NameEntry), "psiv_menu_kind");
@@ -57,6 +57,10 @@ static_assert(PSIV_AUTO_STOP_BATTLE_ENDED == static_cast<int>(rules::AutoStop::B
 static_assert(PSIV_MACRO_SKIPPED == static_cast<int>(rules::MacroStepStatus::Skipped), "psiv_macro_step_status");
 static_assert(PSIV_ISSUE_NO_TARGET == static_cast<int>(rules::MacroIssue::NoTarget), "psiv_macro_issue");
 static_assert(PSIV_ACTION_WARP == static_cast<int>(events::ActionType::warp), "psiv_action_type");
+static_assert(PSIV_ACTION_CANCEL == static_cast<int>(game::ActionPhase::Cancel), "psiv_action_phase");
+static_assert(PSIV_PRESENTATION_WAIT == static_cast<int>(game::Presentation::Queued), "psiv_presentation");
+static_assert(PSIV_WALK_TOO_LONG == static_cast<int>(game::WalkStatus::TooLong), "psiv_walk_status");
+static_assert(PSIV_AREA_DUNGEON == static_cast<int>(game::AreaKind::Dungeon), "psiv_area_kind");
 
 namespace {
 
@@ -114,17 +118,39 @@ struct ErrorRecord {
 
 thread_local ErrorRecord createError;
 
-struct ActionRecord {
-	std::uint64_t handle = 0;
-	psiv_action_phase phase = PSIV_ACTION_BEGIN;
-	events::Action action;
-	std::string description;
+struct ProblemRecords {
+	std::vector<rules::Problem> problems;
+	std::vector<std::string> texts;
+	std::vector<std::vector<const char*>> params;
+	std::vector<psiv_problem> views;
+
+	void set(const std::vector<rules::Problem>& list) {
+		problems = list;
+		texts.clear();
+		params.clear();
+		views.clear();
+		for (const rules::Problem& p : problems) {
+			texts.push_back(rules::formatProblem(p, game::problemText()));
+			std::vector<const char*> pointers;
+			for (const std::string& param : p.message.params) {
+				pointers.push_back(param.c_str());
+			}
+			params.push_back(std::move(pointers));
+		}
+		for (std::size_t i = 0; i < problems.size(); ++i) {
+			const rules::Problem& p = problems[i];
+			views.push_back({p.file.c_str(), p.line, p.entry.c_str(), p.message.key.c_str(), static_cast<int32_t>(p.message.params.size()),
+				params[i].empty() ? nullptr : params[i].data(), texts[i].c_str()});
+		}
+	}
 };
 
-void fillAction(const ActionRecord& r, psiv_action& out, Arena& arena) {
+thread_local ProblemRecords createProblems;
+
+void fillAction(const game::PresentedAction& r, psiv_action& out, Arena& arena) {
 	out = psiv_action();
 	out.handle = r.handle;
-	out.phase = r.phase;
+	out.phase = static_cast<int32_t>(r.phase);
 	out.type = static_cast<int32_t>(r.action.type);
 	out.subject = arena.str(r.action.subject);
 	out.target = arena.str(r.action.target);
@@ -141,80 +167,6 @@ void fillAction(const ActionRecord& r, psiv_action& out, Arena& arena) {
 	out.description = arena.str(r.description);
 }
 
-class BindingPresenter : public game::Presenter {
-public:
-	bool wait = false;
-	psiv_action_callback callback = nullptr;
-	void* user = nullptr;
-	std::vector<ActionRecord> queue;
-	std::set<std::uint64_t> running;
-
-	bool begin(std::uint64_t handle, const events::Action& action) override {
-		push({handle, PSIV_ACTION_BEGIN, action, events::describe(action)});
-		if (!wait || action.instant) {
-			return true;
-		}
-		running.insert(handle);
-		return false;
-	}
-
-	bool finished(std::uint64_t handle) override { return !running.count(handle); }
-
-	void cancel(std::uint64_t handle) override {
-		running.erase(handle);
-		push({handle, PSIV_ACTION_CANCEL, events::Action(), ""});
-	}
-
-private:
-	void push(ActionRecord record) {
-		queue.push_back(std::move(record));
-		if (callback) {
-			Arena scratch;
-			psiv_action view;
-			fillAction(queue.back(), view, scratch);
-			callback(user, &view);
-		}
-	}
-};
-
-// A say instruction of the program. Session shows a line only as "Speaker: text", so the binding finds the
-// instruction it came from to give the speaker id and portrait separately.
-struct CatalogLine {
-	events::Line line;
-};
-
-struct StatusSnap {
-	std::string id;
-	int remaining = 0;
-};
-
-struct CombatantSnap {
-	std::string id;
-	std::string name;
-	std::string label;
-	rules::Side side = rules::Side::Party;
-	std::string group;
-	int hp = 0;
-	int maxHp = 0;
-	int tp = 0;
-	int maxTp = 0;
-	bool defending = false;
-	std::vector<StatusSnap> statuses;
-	rules::Command command;
-};
-
-struct BattleSnap {
-	bool present = false;
-	std::string encounter;
-	game::BattleSource source = game::BattleSource::Visible;
-	int round = 0;
-	int partyCount = 0;
-	rules::Outcome outcome = rules::Outcome::Ongoing;
-	bool escapeAllowed = false;
-	bool gameOver = false;
-	std::vector<CombatantSnap> combatants;
-};
-
 std::string str(const char* text) {
 	return text ? std::string(text) : std::string();
 }
@@ -223,13 +175,13 @@ std::string str(const char* text) {
 
 struct psiv_session {
 	std::unique_ptr<game::GameData> data;
-	BindingPresenter presenter;
 	std::unique_ptr<game::Session> session;
 	Arena arena;
 	ErrorRecord error;
-	std::vector<CatalogLine> catalog;
-	BattleSnap lastBattle;
+	psiv_action_callback callback = nullptr;
+	void* user = nullptr;
 	std::vector<rules::Event> lastEvents;
+	std::optional<game::PathWalk> walk;
 };
 
 namespace {
@@ -289,96 +241,42 @@ bool validDirection(int32_t direction) {
 	return direction >= PSIV_DIRECTION_NONE && direction <= PSIV_DIRECTION_WEST;
 }
 
-std::string label(const std::vector<CombatantSnap>& list, int index) {
-	return index >= 0 && index < static_cast<int>(list.size()) ? list[index].label : std::string("?");
+// The battle combatant and event reads describe: the live one, else the ended one the game keeps.
+const rules::Battle* shownBattle(const Session& s) {
+	if (const rules::Battle* b = s.session->battle()) {
+		return b;
+	}
+	const game::EndedBattle* ended = s.session->endedBattle();
+	return ended ? &ended->battle : nullptr;
 }
 
-std::vector<CombatantSnap> snapshot(const Session& s, const rules::Battle& b) {
-	std::vector<CombatantSnap> out;
+// Combatant names, with A, B, ... added when several enemies share one.
+std::vector<std::string> labels(const rules::Battle* b) {
+	std::vector<std::string> out;
+	if (!b) {
+		return out;
+	}
 	std::map<std::string, int> total;
 	std::map<std::string, int> seen;
-	for (const rules::Combatant& c : b.combatants()) {
+	for (const rules::Combatant& c : b->combatants()) {
 		total[c.name]++;
 	}
-	for (int i = 0; i < static_cast<int>(b.combatants().size()); ++i) {
-		const rules::Combatant& c = b.combatant(i);
-		CombatantSnap snap;
-		snap.id = c.defId;
-		snap.name = b.isParty(i) ? s.session->displayName(c.defId) : c.name;
-		snap.label = c.name;
-		if (!b.isParty(i) && total[c.name] > 1) {
-			snap.label += " " + std::string(1, static_cast<char>('A' + seen[c.name]++));
+	for (int i = 0; i < static_cast<int>(b->combatants().size()); ++i) {
+		const rules::Combatant& c = b->combatant(i);
+		std::string name = c.name;
+		if (!b->isParty(i) && total[c.name] > 1) {
+			name += " " + std::string(1, static_cast<char>('A' + seen[c.name]++));
 		}
-		snap.side = c.side;
-		snap.group = c.group;
-		snap.hp = c.hp;
-		snap.maxHp = c.stats.maxHp;
-		snap.tp = c.tp;
-		snap.maxTp = c.stats.maxTp;
-		snap.defending = c.defending;
-		for (const rules::ActiveStatus& st : c.statuses) {
-			snap.statuses.push_back({st.id, st.remaining});
-		}
-		snap.command = b.command(i);
-		out.push_back(std::move(snap));
+		out.push_back(std::move(name));
 	}
 	return out;
 }
 
-// The battle ends inside Session::resolveRound, which drops it, so the last round's effects are applied to
-// the snapshot taken before the round.
-void applyEvents(BattleSnap& snap, const std::vector<rules::Event>& events) {
-	auto at = [&](int index) -> CombatantSnap* { return index >= 0 && index < static_cast<int>(snap.combatants.size()) ? &snap.combatants[index] : nullptr; };
-	for (const rules::Event& e : events) {
-		if (e.round > snap.round) {
-			snap.round = e.round;
-		}
-		CombatantSnap* target = at(e.target);
-		switch (e.type) {
-		case rules::EventType::DamageDealt:
-		case rules::EventType::Healed:
-		case rules::EventType::Revived:
-		case rules::EventType::StatusTicked:
-			if (target && e.hp >= 0) {
-				target->hp = e.hp;
-			}
-			break;
-		case rules::EventType::CombatantDefeated:
-			if (target) {
-				target->hp = 0;
-			}
-			break;
-		case rules::EventType::StatusApplied:
-			if (target) {
-				target->statuses.erase(std::remove_if(target->statuses.begin(), target->statuses.end(), [&](const StatusSnap& st) { return st.id == e.status; }), target->statuses.end());
-				target->statuses.push_back({e.status, e.duration});
-			}
-			break;
-		case rules::EventType::StatusRemoved:
-			if (target) {
-				target->statuses.erase(std::remove_if(target->statuses.begin(), target->statuses.end(), [&](const StatusSnap& st) { return st.id == e.status; }), target->statuses.end());
-			}
-			break;
-		case rules::EventType::ResourceSpent:
-			if (CombatantSnap* actor = at(e.actor); actor && e.resource == rules::ResourceKind::Tp) {
-				actor->tp = std::max(0, actor->tp - e.amount);
-			}
-			break;
-		case rules::EventType::BattleEnded:
-			snap.outcome = e.outcome;
-			snap.gameOver = e.gameOver;
-			break;
-		default:
-			break;
-		}
-	}
-	for (CombatantSnap& c : snap.combatants) {
-		c.command = rules::Command();
-		c.defending = false;
-	}
+std::string label(const std::vector<std::string>& names, int index) {
+	return index >= 0 && index < static_cast<int>(names.size()) ? names[index] : std::string("?");
 }
 
-void fillStatuses(Session& s, const std::vector<StatusSnap>& statuses, int32_t& count, const psiv_active_status*& out) {
+void fillStatuses(Session& s, const std::vector<rules::ActiveStatus>& statuses, int32_t& count, const psiv_active_status*& out) {
 	psiv_active_status* list = s.arena.array<psiv_active_status>(statuses.size());
 	for (std::size_t i = 0; i < statuses.size(); ++i) {
 		list[i].id = s.arena.str(statuses[i].id);
@@ -389,7 +287,7 @@ void fillStatuses(Session& s, const std::vector<StatusSnap>& statuses, int32_t& 
 	out = list;
 }
 
-std::string eventText(const Session& s, const std::vector<CombatantSnap>& names, const rules::Event& e) {
+std::string eventText(const Session& s, const std::vector<std::string>& names, const rules::Event& e) {
 	const rules::TextTable& table = s.session->language().text;
 	auto name = [&](const std::string& id) { return s.session->displayName(id); };
 	switch (e.type) {
@@ -407,7 +305,7 @@ std::string eventText(const Session& s, const std::vector<CombatantSnap>& names,
 	}
 }
 
-void fillEvent(Session& s, const std::vector<CombatantSnap>& names, const rules::Event& e, psiv_battle_event& out) {
+void fillEvent(Session& s, const std::vector<std::string>& names, const rules::Event& e, psiv_battle_event& out) {
 	Arena& a = s.arena;
 	out = psiv_battle_event();
 	out.type = static_cast<int32_t>(e.type);
@@ -476,24 +374,32 @@ void fillEvent(Session& s, const std::vector<CombatantSnap>& names, const rules:
 	out.commands = commands;
 }
 
-const psiv_battle_event* fillEvents(Session& s, int32_t* count) {
-	const std::vector<CombatantSnap>& names = s.lastBattle.combatants;
-	psiv_battle_event* list = s.arena.array<psiv_battle_event>(s.lastEvents.size());
-	for (std::size_t i = 0; i < s.lastEvents.size(); ++i) {
-		fillEvent(s, names, s.lastEvents[i], list[i]);
+const psiv_battle_event* fillEvents(Session& s, const std::vector<rules::Event>& events, const std::vector<std::string>& names, int32_t* count) {
+	psiv_battle_event* list = s.arena.array<psiv_battle_event>(events.size());
+	for (std::size_t i = 0; i < events.size(); ++i) {
+		fillEvent(s, names, events[i], list[i]);
 	}
-	*count = static_cast<int32_t>(s.lastEvents.size());
+	*count = static_cast<int32_t>(events.size());
 	return list;
 }
 
-std::string lineDisplay(const Session& s, const events::Line& line) {
-	const std::string text = s.session->scriptText(line.text);
-	return line.speaker.empty() ? text : s.session->displayName(line.speaker) + ": " + text;
+const psiv_notice* fillNotices(Session& s, const std::vector<game::Output>& outputs, int32_t* count) {
+	psiv_notice* list = s.arena.array<psiv_notice>(outputs.size());
+	for (std::size_t i = 0; i < outputs.size(); ++i) {
+		list[i].kind = static_cast<int32_t>(outputs[i].kind);
+		list[i].key = s.arena.str(outputs[i].message.key);
+		list[i].param_count = static_cast<int32_t>(outputs[i].message.params.size());
+		list[i].params = s.arena.strs(outputs[i].message.params);
+		list[i].text = s.arena.str(outputs[i].text);
+	}
+	*count = static_cast<int32_t>(outputs.size());
+	return list;
 }
 
-void forgetBattle(Session& s) {
-	s.lastBattle = BattleSnap();
+// A new game, load or the title leaves nothing of the last round or walk.
+void forgetRun(Session& s) {
 	s.lastEvents.clear();
+	s.walk.reset();
 }
 
 const game::Area* currentArea(Session* s) {
@@ -549,7 +455,8 @@ uint32_t psiv_sizeof(const char* struct_name) {
 		PSIV_SIZE(psiv_item_count), PSIV_SIZE(psiv_job), PSIV_SIZE(psiv_line), PSIV_SIZE(psiv_macro_step_result), PSIV_SIZE(psiv_marker),
 		PSIV_SIZE(psiv_member), PSIV_SIZE(psiv_notice), PSIV_SIZE(psiv_point), PSIV_SIZE(psiv_profile), PSIV_SIZE(psiv_quest_log),
 		PSIV_SIZE(psiv_recorded_command), PSIV_SIZE(psiv_save_summary), PSIV_SIZE(psiv_session_options), PSIV_SIZE(psiv_settings),
-		PSIV_SIZE(psiv_shop_info), PSIV_SIZE(psiv_world_info),
+		PSIV_SIZE(psiv_shop_info), PSIV_SIZE(psiv_world_info), PSIV_SIZE(psiv_problem), PSIV_SIZE(psiv_level_up), PSIV_SIZE(psiv_battle_result),
+		PSIV_SIZE(psiv_auto_round), PSIV_SIZE(psiv_auto_battle), PSIV_SIZE(psiv_pacing_area), PSIV_SIZE(psiv_pacing_boss),
 	};
 #undef PSIV_SIZE
 	if (!struct_name) {
@@ -573,22 +480,18 @@ psiv_status psiv_last_error(const psiv_session* session, psiv_error* out) {
 }
 
 const char* psiv_name_of(int32_t kind, int32_t value) {
-	static const char* const menuKinds[] = {"none", "field", "inn", "save_prompt", "name_entry"};
-	static const char* const noticeKinds[] = {"line", "choice", "action", "notice", "warning", "autosave"};
-	static const char* const areaKinds[] = {"town", "field", "dungeon"};
 	static const char* const pointKinds[] = {"talk", "step", "chest", "shop", "rest"};
-	static const char* const battleSources[] = {"visible", "random", "event"};
 	switch (kind) {
 	case PSIV_NAME_MODE:
 		return value >= 0 && value <= PSIV_MODE_SHOP ? game::toString(static_cast<game::Mode>(value)) : "";
 	case PSIV_NAME_MENU_KIND:
-		return fromList(menuKinds, 5, value);
+		return value >= 0 && value <= PSIV_MENU_NAME_ENTRY ? game::toString(static_cast<game::MenuKind>(value)) : "";
 	case PSIV_NAME_DIRECTION:
 		return value == PSIV_DIRECTION_NONE ? "none" : value >= 0 && value <= PSIV_DIRECTION_WEST ? game::toString(static_cast<game::Facing>(value)) : "";
 	case PSIV_NAME_NOTICE_KIND:
-		return fromList(noticeKinds, 6, value);
+		return value >= 0 && value <= PSIV_NOTICE_AUTOSAVE ? game::toString(static_cast<game::OutputKind>(value)) : "";
 	case PSIV_NAME_AREA_KIND:
-		return fromList(areaKinds, 3, value);
+		return value >= 0 && value <= PSIV_AREA_DUNGEON ? game::toString(static_cast<game::AreaKind>(value)) : "";
 	case PSIV_NAME_ENCOUNTER_MODE:
 		return value >= 0 && value <= PSIV_ENCOUNTERS_RANDOM ? game::toString(static_cast<game::EncounterMode>(value)) : "";
 	case PSIV_NAME_ENEMY_STATE:
@@ -604,7 +507,7 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 	case PSIV_NAME_REWARD_MULTIPLIER:
 		return value >= 0 && value <= PSIV_REWARD_X2 ? rules::toString(static_cast<rules::RewardMultiplier>(value)) : "";
 	case PSIV_NAME_BATTLE_SOURCE:
-		return fromList(battleSources, 3, value);
+		return value >= 0 && value <= PSIV_BATTLE_EVENT ? game::toString(static_cast<game::BattleSource>(value)) : "";
 	case PSIV_NAME_SIDE:
 		return value >= 0 && value <= PSIV_SIDE_ENEMY ? rules::toString(static_cast<rules::Side>(value)) : "";
 	case PSIV_NAME_COMMAND_KIND:
@@ -646,6 +549,49 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 	}
 }
 
+psiv_status psiv_parse_name(int32_t kind, const char* text, int32_t* out) {
+	if (!text || !out) {
+		return PSIV_INVALID_ARGUMENT;
+	}
+	const std::string name = text;
+	if (kind == PSIV_NAME_REWARD_MULTIPLIER) {
+		rules::RewardMultiplier value;
+		if (rules::parseRewardMultiplier(name, value)) {
+			*out = static_cast<int32_t>(value);
+			return PSIV_OK;
+		}
+		return PSIV_NOT_FOUND;
+	}
+	if (kind == PSIV_NAME_EVENT_TYPE) {
+		rules::EventType value;
+		if (rules::parseEventType(name, value)) {
+			*out = static_cast<int32_t>(value);
+			return PSIV_OK;
+		}
+		return PSIV_NOT_FOUND;
+	}
+	for (int32_t value = kind == PSIV_NAME_DIRECTION ? PSIV_DIRECTION_NONE : 0; value < 64; ++value) {
+		const char* candidate = psiv_name_of(kind, value);
+		if (!*candidate && value >= 0) {
+			break;
+		}
+		if (name == candidate) {
+			*out = value;
+			return PSIV_OK;
+		}
+	}
+	return PSIV_NOT_FOUND;
+}
+
+psiv_status psiv_data_problems(const psiv_problem** out, int32_t* count) {
+	if (!out || !count) {
+		return PSIV_INVALID_ARGUMENT;
+	}
+	*out = createProblems.views.empty() ? nullptr : createProblems.views.data();
+	*count = static_cast<int32_t>(createProblems.views.size());
+	return PSIV_OK;
+}
+
 void psiv_session_options_init(psiv_session_options* options) {
 	if (!options) {
 		return;
@@ -678,14 +624,25 @@ psiv_status psiv_session_create(const psiv_session_options* options, psiv_sessio
 		return outOfRange(nullptr, "options->presentation", options->presentation);
 	}
 	try {
-		rules::Result<game::GameData> loaded = game::loadGameData(options->data_dir);
+		createProblems.set({});
+		rules::Result<game::GameData> loaded = game::loadGameData(game::DataDirectories{options->data_dir, str(options->core_data_dir)});
 		if (!loaded.ok()) {
+			createProblems.set(loaded.problems);
 			return fail(nullptr, PSIV_DATA_ERROR, "binding.data_error", {loaded.error}, loaded.error);
 		}
 		auto s = std::make_unique<psiv_session>();
 		s->data = std::make_unique<game::GameData>(std::move(*loaded.value));
-		s->presenter.wait = options->presentation == PSIV_PRESENTATION_WAIT;
 		game::SessionOptions sessionOptions;
+		sessionOptions.presentation = static_cast<game::Presentation>(options->presentation);
+		psiv_session* raw = s.get();
+		sessionOptions.onAction = [raw](const game::PresentedAction& action) {
+			if (raw->callback) {
+				Arena scratch;
+				psiv_action view;
+				fillAction(action, view, scratch);
+				raw->callback(raw->user, &view);
+			}
+		};
 		sessionOptions.saveDirectory = str(options->save_dir);
 		sessionOptions.seed = options->seed;
 		if (options->encounter_mode >= 0) {
@@ -694,13 +651,7 @@ psiv_status psiv_session_create(const psiv_session_options* options, psiv_sessio
 		if (options->wall_clock) {
 			sessionOptions.clock = [] { return static_cast<std::int64_t>(std::time(nullptr)); };
 		}
-		sessionOptions.presenter = &s->presenter;
 		s->session = std::make_unique<game::Session>(*s->data, std::move(sessionOptions));
-		for (const events::Instruction& instruction : s->data->program.code) {
-			if (instruction.op == events::Op::say) {
-				s->catalog.push_back({instruction.dialogue});
-			}
-		}
 		*out = s.release();
 		return PSIV_OK;
 	} catch (const std::bad_alloc&) {
@@ -853,13 +804,7 @@ psiv_status psiv_settings_set(psiv_session* session, const char* difficulty, int
 psiv_status psiv_settings_set_auto_macro(psiv_session* session, const char* macro) {
 	const std::string name = str(macro);
 	return guard(session, true, [&] {
-		// Session has no setter: the auto macro is world state the terminal front end writes directly.
-		game::World& w = session->session->world();
-		if (!name.empty() && std::none_of(w.macros.begin(), w.macros.end(), [&](const rules::Macro& m) { return m.name == name; })) {
-			return fail(session, PSIV_NOT_FOUND, "game.refuse.no_macro", {name}, session->session->render({"game.refuse.no_macro", {name}}));
-		}
-		w.autoMacro = name;
-		return PSIV_OK;
+		return refused(session, session->session->setAutoMacro(name));
 	});
 }
 
@@ -884,7 +829,7 @@ psiv_status psiv_new_game(psiv_session* session) {
 	return guard(session, true, [&] {
 		const psiv_status status = refused(session, session->session->newGame());
 		if (status == PSIV_OK) {
-			forgetBattle(*session);
+			forgetRun(*session);
 		}
 		return status;
 	});
@@ -894,7 +839,7 @@ psiv_status psiv_continue_game(psiv_session* session) {
 	return guard(session, true, [&] {
 		const psiv_status status = refused(session, session->session->continueGame());
 		if (status == PSIV_OK) {
-			forgetBattle(*session);
+			forgetRun(*session);
 		}
 		return status;
 	});
@@ -908,7 +853,7 @@ psiv_status psiv_load(psiv_session* session, const char* slot) {
 		}
 		const psiv_status status = refused(session, session->session->load(name));
 		if (status == PSIV_OK) {
-			forgetBattle(*session);
+			forgetRun(*session);
 		}
 		return status;
 	});
@@ -918,7 +863,7 @@ psiv_status psiv_retry_battle(psiv_session* session) {
 	return guard(session, true, [&] {
 		const psiv_status status = refused(session, session->session->retryBattle());
 		if (status == PSIV_OK) {
-			forgetBattle(*session);
+			forgetRun(*session);
 		}
 		return status;
 	});
@@ -927,7 +872,7 @@ psiv_status psiv_retry_battle(psiv_session* session) {
 psiv_status psiv_quit_to_title(psiv_session* session) {
 	return guard(session, true, [&] {
 		session->session->quitToTitle();
-		forgetBattle(*session);
+		forgetRun(*session);
 		return PSIV_OK;
 	});
 }
@@ -1043,11 +988,33 @@ psiv_status psiv_face(psiv_session* session, int32_t direction) {
 		if (direction < PSIV_DIRECTION_NORTH || direction > PSIV_DIRECTION_WEST) {
 			return outOfRange(session, "direction", direction);
 		}
+		return refused(session, session->session->face(static_cast<game::Facing>(direction)));
+	});
+}
+
+psiv_status psiv_walk_to(psiv_session* session, int32_t x, int32_t y) {
+	return guard(session, true, [&] {
 		if (session->session->mode() != game::Mode::Field) {
 			return refused(session, {"game.refuse.walk_field_only", {}});
 		}
-		// Session has no turn call; facing is world state, as the terminal front end sets it.
-		session->session->world().facing = static_cast<game::Facing>(direction);
+		session->walk = session->session->beginWalk({x, y});
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_walk_step(psiv_session* session, int32_t* status) {
+	return guard(session, true, [&] {
+		if (!status) {
+			return nullArgument(session, "status");
+		}
+		if (!session->walk) {
+			return notFound(session, "walk");
+		}
+		const game::WalkStatus result = session->session->walkStep(*session->walk);
+		if (result != game::WalkStatus::Walking) {
+			session->walk.reset();
+		}
+		*status = static_cast<int32_t>(result);
 		return PSIV_OK;
 	});
 }
@@ -1252,22 +1219,14 @@ psiv_status psiv_line_get(psiv_session* session, psiv_line* out) {
 		if (!session->session->linePending()) {
 			return notFound(session, "line");
 		}
-		const std::string display = session->session->lineText();
+		const game::LineView line = *session->session->line();
 		*out = psiv_line();
-		out->display = session->arena.str(display);
-		for (const CatalogLine& entry : session->catalog) {
-			if (lineDisplay(*session, entry.line) == display) {
-				out->speaker_id = session->arena.str(entry.line.speaker);
-				out->speaker_name = session->arena.str(entry.line.speaker.empty() ? "" : session->session->displayName(entry.line.speaker));
-				out->text = session->arena.str(session->session->scriptText(entry.line.text));
-				out->portrait = session->arena.str(entry.line.portrait);
-				return PSIV_OK;
-			}
-		}
-		out->speaker_id = "";
-		out->speaker_name = "";
-		out->text = out->display;
-		out->portrait = "";
+		out->speaker_id = session->arena.str(line.speakerId);
+		out->speaker_name = session->arena.str(line.speakerName);
+		out->text_id = session->arena.str(line.textId);
+		out->text = session->arena.str(line.text);
+		out->portrait = session->arena.str(line.portrait);
+		out->display = session->arena.str(session->session->lineText());
 		return PSIV_OK;
 	});
 }
@@ -1291,24 +1250,15 @@ psiv_status psiv_choice_get(psiv_session* session, psiv_choice* out) {
 		if (!out) {
 			return nullArgument(session, "out");
 		}
-		const events::ChoiceRequest* c = session->session->choice();
+		const std::optional<game::ChoiceView> c = session->session->choiceView();
 		if (!c) {
 			return notFound(session, "choice");
 		}
 		*out = psiv_choice();
-		out->prompt = session->arena.str(c->prompt.value.empty() ? "" : session->session->scriptText(c->prompt));
-		out->yes_no = c->yes_no;
-		std::vector<std::string> options;
-		if (c->yes_no) {
-			// The game's text tables have no yes/no strings, so these are the terminal's own words.
-			options = {"yes", "no"};
-		} else {
-			for (const events::Text& t : c->options) {
-				options.push_back(session->session->scriptText(t));
-			}
-		}
-		out->option_count = static_cast<int32_t>(options.size());
-		out->options = session->arena.strs(options);
+		out->prompt = session->arena.str(c->prompt);
+		out->yes_no = c->yesNo;
+		out->option_count = static_cast<int32_t>(c->options.size());
+		out->options = session->arena.strs(c->options);
 		return PSIV_OK;
 	});
 }
@@ -1337,8 +1287,7 @@ psiv_status psiv_actions_poll(psiv_session* session, const psiv_action** out, in
 		if (!out || !count) {
 			return nullArgument(session, out ? "count" : "out");
 		}
-		std::vector<ActionRecord> records;
-		records.swap(session->presenter.queue);
+		const std::vector<game::PresentedAction> records = session->session->pollActions();
 		psiv_action* list = session->arena.array<psiv_action>(records.size());
 		for (std::size_t i = 0; i < records.size(); ++i) {
 			fillAction(records[i], list[i], session->arena);
@@ -1351,15 +1300,15 @@ psiv_status psiv_actions_poll(psiv_session* session, const psiv_action** out, in
 
 psiv_status psiv_action_finish(psiv_session* session, uint64_t handle) {
 	return guard(session, true, [&] {
-		session->presenter.running.erase(handle);
+		session->session->finishAction(handle);
 		return PSIV_OK;
 	});
 }
 
 psiv_status psiv_actions_set_callback(psiv_session* session, psiv_action_callback callback, void* user) {
 	return guard(session, false, [&] {
-		session->presenter.callback = callback;
-		session->presenter.user = user;
+		session->callback = callback;
+		session->user = user;
 		return PSIV_OK;
 	});
 }
@@ -1371,17 +1320,7 @@ psiv_status psiv_notices_drain(psiv_session* session, const psiv_notice** out, i
 		if (!out || !count) {
 			return nullArgument(session, out ? "count" : "out");
 		}
-		const std::vector<game::Output> outputs = session->session->drainOutput();
-		psiv_notice* list = session->arena.array<psiv_notice>(outputs.size());
-		for (std::size_t i = 0; i < outputs.size(); ++i) {
-			list[i].kind = static_cast<int32_t>(outputs[i].kind);
-			list[i].key = session->arena.str(outputs[i].message.key);
-			list[i].param_count = static_cast<int32_t>(outputs[i].message.params.size());
-			list[i].params = session->arena.strs(outputs[i].message.params);
-			list[i].text = session->arena.str(outputs[i].text);
-		}
-		*out = list;
-		*count = static_cast<int32_t>(outputs.size());
+		*out = fillNotices(*session, session->session->drainOutput(), count);
 		return PSIV_OK;
 	});
 }
@@ -1394,34 +1333,23 @@ psiv_status psiv_battle_info_get(psiv_session* session, psiv_battle_info* out) {
 			return nullArgument(session, "out");
 		}
 		const game::Session& g = *session->session;
-		*out = psiv_battle_info();
-		if (const rules::Battle* b = g.battle()) {
-			out->live = 1;
-			out->encounter = session->arena.str(g.battleEncounter());
-			out->source = static_cast<int32_t>(g.battleSource());
-			out->round = b->round();
-			out->party_count = b->partyCount();
-			out->combatant_count = static_cast<int32_t>(b->combatants().size());
-			out->outcome = static_cast<int32_t>(b->outcome());
-			out->escape_allowed = b->escapeAllowed();
-			out->auto_active = b->autoActive();
-			out->party_acts_next_round = b->sideActsNextRound(rules::Side::Party);
-			out->game_over = b->gameOver();
-			return PSIV_OK;
-		}
-		const BattleSnap& snap = session->lastBattle;
-		if (!snap.present) {
+		const rules::Battle* b = shownBattle(*session);
+		if (!b) {
 			return notFound(session, "battle");
 		}
-		out->live = 0;
-		out->encounter = session->arena.str(snap.encounter);
-		out->source = static_cast<int32_t>(snap.source);
-		out->round = snap.round;
-		out->party_count = snap.partyCount;
-		out->combatant_count = static_cast<int32_t>(snap.combatants.size());
-		out->outcome = static_cast<int32_t>(snap.outcome);
-		out->escape_allowed = snap.escapeAllowed;
-		out->game_over = snap.gameOver;
+		const game::EndedBattle* ended = g.battle() ? nullptr : g.endedBattle();
+		*out = psiv_battle_info();
+		out->live = ended == nullptr;
+		out->encounter = session->arena.str(ended ? ended->encounter : g.battleEncounter());
+		out->source = static_cast<int32_t>(ended ? ended->source : g.battleSource());
+		out->round = b->round();
+		out->party_count = b->partyCount();
+		out->combatant_count = static_cast<int32_t>(b->combatants().size());
+		out->outcome = static_cast<int32_t>(b->outcome());
+		out->escape_allowed = b->escapeAllowed();
+		out->auto_active = !ended && b->autoActive();
+		out->party_acts_next_round = !ended && b->sideActsNextRound(rules::Side::Party);
+		out->game_over = b->gameOver();
 		return PSIV_OK;
 	});
 }
@@ -1431,38 +1359,85 @@ psiv_status psiv_battle_combatants(psiv_session* session, const psiv_combatant**
 		if (!out || !count) {
 			return nullArgument(session, out ? "count" : "out");
 		}
-		std::vector<CombatantSnap> list;
-		if (const rules::Battle* b = session->session->battle()) {
-			list = snapshot(*session, *b);
-		} else if (session->lastBattle.present) {
-			list = session->lastBattle.combatants;
-		} else {
+		const rules::Battle* b = shownBattle(*session);
+		if (!b) {
 			return notFound(session, "battle");
 		}
+		const bool live = session->session->battle() != nullptr;
+		const std::vector<std::string> names = labels(b);
 		Arena& a = session->arena;
-		psiv_combatant* items = a.array<psiv_combatant>(list.size());
-		for (std::size_t i = 0; i < list.size(); ++i) {
-			const CombatantSnap& c = list[i];
+		psiv_combatant* items = a.array<psiv_combatant>(names.size());
+		for (std::size_t i = 0; i < names.size(); ++i) {
+			const rules::Combatant& c = b->combatant(static_cast<int>(i));
+			const rules::Command command = live ? b->command(static_cast<int>(i)) : rules::Command();
 			psiv_combatant& o = items[i];
 			o.index = static_cast<int32_t>(i);
-			o.id = a.str(c.id);
+			o.id = a.str(c.defId);
 			o.name = a.str(c.name);
-			o.label = a.str(c.label);
+			o.label = a.str(names[i]);
 			o.side = static_cast<int32_t>(c.side);
 			o.group = a.str(c.group);
 			o.hp = c.hp;
-			o.max_hp = c.maxHp;
+			o.max_hp = c.stats.maxHp;
 			o.tp = c.tp;
-			o.max_tp = c.maxTp;
+			o.max_tp = c.stats.maxTp;
 			o.alive = c.hp > 0;
 			o.defending = c.defending;
 			fillStatuses(*session, c.statuses, o.status_count, o.statuses);
-			o.command_kind = static_cast<int32_t>(c.command.kind);
-			o.command_id = a.str(c.command.id);
-			o.command_target = c.command.target;
+			o.command_kind = static_cast<int32_t>(command.kind);
+			o.command_id = a.str(command.id);
+			o.command_target = command.target;
 		}
 		*out = items;
-		*count = static_cast<int32_t>(list.size());
+		*count = static_cast<int32_t>(names.size());
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_battle_result_get(psiv_session* session, psiv_battle_result* out) {
+	return guard(session, false, [&] {
+		if (!out) {
+			return nullArgument(session, "out");
+		}
+		const game::EndedBattle* ended = session->session->endedBattle();
+		if (!ended) {
+			return notFound(session, "ended_battle");
+		}
+		Arena& a = session->arena;
+		*out = psiv_battle_result();
+		out->encounter = a.str(ended->encounter);
+		out->source = static_cast<int32_t>(ended->source);
+		out->outcome = static_cast<int32_t>(ended->outcome);
+		out->game_over = ended->gameOver;
+		out->experience = ended->rewards.experience;
+		out->money = ended->rewards.currency;
+		psiv_item_count* drops = a.array<psiv_item_count>(ended->rewards.items.size());
+		int n = 0;
+		for (const auto& [id, count] : ended->rewards.items) {
+			drops[n].id = a.str(id);
+			drops[n].count = count;
+			++n;
+		}
+		out->drop_count = n;
+		out->drops = drops;
+		psiv_level_up* ups = a.array<psiv_level_up>(ended->levelUps.size());
+		for (std::size_t i = 0; i < ended->levelUps.size(); ++i) {
+			const game::LevelUpView& up = ended->levelUps[i];
+			ups[i].member = a.str(up.member);
+			ups[i].name = a.str(session->session->displayName(up.member));
+			ups[i].level = up.level;
+			ups[i].learned_count = static_cast<int32_t>(up.learned.size());
+			ups[i].learned = a.strs(up.learned);
+		}
+		out->level_up_count = static_cast<int32_t>(ended->levelUps.size());
+		out->level_ups = ups;
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_battle_dismiss(psiv_session* session) {
+	return guard(session, true, [&] {
+		session->session->dismissBattle();
 		return PSIV_OK;
 	});
 }
@@ -1610,29 +1585,25 @@ psiv_status psiv_battle_fill_from_policy(psiv_session* session) {
 	});
 }
 
+psiv_status psiv_battle_fill_auto_round(psiv_session* session) {
+	return guard(session, true, [&] {
+		if (!session->session->battle()) {
+			return refused(session, {"game.refuse.no_battle", {}});
+		}
+		return refused(session, session->session->fillAutoRound());
+	});
+}
+
 psiv_status psiv_battle_resolve_round(psiv_session* session, const psiv_battle_event** out, int32_t* count) {
 	return guard(session, true, [&] {
 		if (!out || !count) {
 			return nullArgument(session, out ? "count" : "out");
 		}
-		game::Session& g = *session->session;
-		const rules::Battle* b = g.battle();
-		if (!b) {
+		if (!session->session->battle()) {
 			return refused(session, {"game.refuse.no_battle", {}});
 		}
-		BattleSnap snap;
-		snap.present = true;
-		snap.encounter = g.battleEncounter();
-		snap.source = g.battleSource();
-		snap.round = b->round();
-		snap.partyCount = b->partyCount();
-		snap.outcome = b->outcome();
-		snap.escapeAllowed = b->escapeAllowed();
-		snap.combatants = snapshot(*session, *b);
-		session->lastEvents = g.resolveRound();
-		applyEvents(snap, session->lastEvents);
-		session->lastBattle = std::move(snap);
-		*out = fillEvents(*session, count);
+		session->lastEvents = session->session->resolveRound();
+		*out = fillEvents(*session, session->lastEvents, labels(shownBattle(*session)), count);
 		return PSIV_OK;
 	});
 }
@@ -1642,7 +1613,79 @@ psiv_status psiv_battle_last_events(psiv_session* session, const psiv_battle_eve
 		if (!out || !count) {
 			return nullArgument(session, out ? "count" : "out");
 		}
-		*out = fillEvents(*session, count);
+		*out = fillEvents(*session, session->lastEvents, labels(shownBattle(*session)), count);
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_battle_play(psiv_session* session, int32_t max_rounds, psiv_auto_battle* out) {
+	return guard(session, true, [&] {
+		if (!out) {
+			return nullArgument(session, "out");
+		}
+		if (!session->session->battle()) {
+			return refused(session, {"game.refuse.no_battle", {}});
+		}
+		const std::vector<std::string> names = labels(session->session->battle());
+		const game::AutoBattle played = session->session->playBattle(max_rounds > 0 ? max_rounds : 60);
+		Arena& a = session->arena;
+		*out = psiv_auto_battle();
+		out->refusal_key = a.str(played.refusal.key);
+		out->refusal_param_count = static_cast<int32_t>(played.refusal.params.size());
+		out->refusal_params = a.strs(played.refusal.params);
+		out->refusal_text = a.str(played.refusal.empty() ? "" : session->session->render(played.refusal));
+		psiv_auto_round* rounds = a.array<psiv_auto_round>(played.rounds.size());
+		for (std::size_t i = 0; i < played.rounds.size(); ++i) {
+			rounds[i].notices = fillNotices(*session, played.rounds[i].output, &rounds[i].notice_count);
+			rounds[i].events = fillEvents(*session, played.rounds[i].events, names, &rounds[i].event_count);
+		}
+		out->round_count = static_cast<int32_t>(played.rounds.size());
+		out->rounds = rounds;
+		out->ended = played.ended;
+		if (!played.rounds.empty()) {
+			session->lastEvents = played.rounds.back().events;
+		}
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_battle_record(psiv_session* session, const char** out) {
+	return guard(session, false, [&] {
+		if (!out) {
+			return nullArgument(session, "out");
+		}
+		const rules::Battle* b = shownBattle(*session);
+		if (!b) {
+			return notFound(session, "battle");
+		}
+		*out = session->arena.str(rules::serializeRecord(b->record()));
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_battle_replay(psiv_session* session, const char* record, const psiv_battle_event** events, int32_t* count, const char** event_text) {
+	const std::string text = str(record);
+	return guard(session, false, [&] {
+		if (!record) {
+			return nullArgument(session, "record");
+		}
+		if (!events || !count) {
+			return nullArgument(session, events ? "count" : "events");
+		}
+		const rules::Result<rules::BattleRecord> parsed = rules::parseRecord(text);
+		if (!parsed.ok()) {
+			return fail(session, PSIV_DATA_ERROR, "binding.bad_record", {parsed.error}, parsed.error);
+		}
+		rules::ComboLog log;
+		std::vector<rules::Event> replayed;
+		const rules::Result<rules::Battle> battle = rules::replayBattle(session->data->db, *parsed.value, log, replayed);
+		if (!battle.ok()) {
+			return fail(session, PSIV_DATA_ERROR, "binding.bad_record", {battle.error}, battle.error);
+		}
+		*events = fillEvents(*session, replayed, labels(&*battle.value), count);
+		if (event_text) {
+			*event_text = session->arena.str(rules::serializeEvents(replayed));
+		}
 		return PSIV_OK;
 	});
 }
@@ -1687,11 +1730,7 @@ psiv_status psiv_party(psiv_session* session, const psiv_member** out, int32_t* 
 			o.agility = stats.agility;
 			o.dexterity = stats.dexterity;
 			o.defense = stats.defense;
-			std::vector<StatusSnap> statuses;
-			for (const rules::ActiveStatus& st : m.statuses) {
-				statuses.push_back({st.id, st.remaining});
-			}
-			fillStatuses(*session, statuses, o.status_count, o.statuses);
+			fillStatuses(*session, m.statuses, o.status_count, o.statuses);
 			for (int slot = 0; slot < PSIV_SLOT_COUNT; ++slot) {
 				auto worn = m.equipment.find(static_cast<rules::EquipSlot>(slot));
 				const std::string piece = worn == m.equipment.end() ? "" : worn->second;
@@ -1982,6 +2021,62 @@ psiv_status psiv_pacing_table(psiv_session* session, const char** out) {
 			return nullArgument(session, "out");
 		}
 		*out = session->arena.str(session->session->pacing().table());
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_pacing_areas(psiv_session* session, const psiv_pacing_area** out, int32_t* count) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		const game::PacingRecorder& pacing = session->session->pacing();
+		Arena& a = session->arena;
+		const std::vector<std::string>& order = pacing.areaOrder();
+		psiv_pacing_area* list = a.array<psiv_pacing_area>(order.size());
+		for (std::size_t i = 0; i < order.size(); ++i) {
+			const game::AreaPacing& p = pacing.areas().at(order[i]);
+			psiv_pacing_area& o = list[i];
+			o.area = a.str(order[i]);
+			o.visits = p.visits;
+			o.battles = p.battles;
+			o.steps = p.steps;
+			o.field_ms = p.fieldMs;
+			o.battle_ms = p.battleMs;
+			o.event_ms = p.eventMs;
+			o.experience = p.experience;
+			o.money = p.money;
+			o.gap_count = static_cast<int32_t>(p.msBetweenBattles.size());
+			int64_t* gapMs = a.array<int64_t>(p.msBetweenBattles.size());
+			std::copy(p.msBetweenBattles.begin(), p.msBetweenBattles.end(), gapMs);
+			int32_t* gapSteps = a.array<int32_t>(p.stepsBetweenBattles.size());
+			std::copy(p.stepsBetweenBattles.begin(), p.stepsBetweenBattles.end(), gapSteps);
+			o.gap_ms = gapMs;
+			o.gap_steps = gapSteps;
+		}
+		*out = list;
+		*count = static_cast<int32_t>(order.size());
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_pacing_bosses(psiv_session* session, const psiv_pacing_boss** out, int32_t* count) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		const std::vector<game::BossPacing>& bosses = session->session->pacing().bosses();
+		Arena& a = session->arena;
+		psiv_pacing_boss* list = a.array<psiv_pacing_boss>(bosses.size());
+		for (std::size_t i = 0; i < bosses.size(); ++i) {
+			list[i].flag = a.str(bosses[i].flag);
+			list[i].encounter = a.str(bosses[i].encounter);
+			list[i].area = a.str(bosses[i].area);
+			list[i].average_level_x100 = bosses[i].averageLevelX100;
+			list[i].dungeon_ms = bosses[i].dungeonMs;
+		}
+		*out = list;
+		*count = static_cast<int32_t>(bosses.size());
 		return PSIV_OK;
 	});
 }

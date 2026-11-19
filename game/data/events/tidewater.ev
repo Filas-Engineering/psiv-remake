@@ -14,9 +14,12 @@ event tidewater_guide unskippable
 	lock player
 	face guide fighter
 	if not tidewater.met_guide
-		say guide @tidewater.guide.bell
+		say guide @tidewater.guide.bell as guide_smile
 		ask @tidewater.guide.ask
 		yes
+			say guide @tidewater.guide.name_ask
+			name entry fighter
+			say fighter @tidewater.guide.name_reply
 			say guide @tidewater.guide.apprentices
 			party add mystic
 			party add medic
@@ -57,6 +60,24 @@ event tidewater_dockhand unskippable
 			say dockhand @tidewater.dockhand.accepted
 		no
 			say dockhand @tidewater.dockhand.declined
+		end
+	end
+	unlock player
+end
+
+# Something gnaws at a crate in the ferry's hold. Without a lose section a
+# defeat is a game over, and Retry sets the fight up again from its autosave.
+event tidewater_hold unskippable
+	lock player
+	if tidewater.hold_cleared
+		narrate @tidewater.hold.empty
+	else
+		narrate @tidewater.hold.gnawing
+		battle training opening enemy_first until survive 6
+		win
+			narrate @tidewater.hold.cleared
+			give tonic 1
+			set tidewater.hold_cleared
 		end
 	end
 	unlock player

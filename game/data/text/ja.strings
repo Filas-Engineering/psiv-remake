@@ -8,6 +8,8 @@ tidewater.guide.bell = 鐘のことで来たのかい？毎晩、葦の向こう
 tidewater.guide.ask = 調べてくれるかい？
 tidewater.guide.apprentices = なら弟子たちを連れていきな。一人は火花を少し、もう一人は包帯を知っている。
 tidewater.guide.later = 気が変わったらまた来てくれ。
+tidewater.guide.name_ask = 行く前に、港ではあなたを何と呼べばいい？
+tidewater.guide.name_reply = フェリーに伝えて。しばらくここにいるって。
 tidewater.guide.quiet = また静かな夜だ。港じゅうが夕飯をおごりたがってるよ。
 tidewater.guide.topics = 何について聞く？
 tidewater.guide.topic_bell = 鐘
@@ -23,9 +25,18 @@ tidewater.dockhand.reminder = 道の北側、乾いた所だ。見落とすは�
 tidewater.dockhand.found = 見つけたのか？お金は取っておいてくれ。靴を濡らした時点で君のものさ。これも持っていきな。
 tidewater.dockhand.thanks_again = フェリーが着くたびに、君の話をしているよ。
 
+tidewater.hold.gnawing = フェリーの船倉で何かが荷箱をかじっている。こちらを向いた。
+tidewater.hold.cleared = 船倉が静かになった。荷箱の陰から傷薬が転がり出る。
+tidewater.hold.empty = 荷箱には歯の跡だけが残っている。
+
 reed.scout.joins = 入り江へ行くのかい？この葦原は二度も地図にした。ついて行くよ。
 reed.peddler.greeting = おい。沼のこっち側で一番安い店だよ。というか、ここしかない。
 reed.peddler.farewell = ウィスプに気をつけな。噛む前に羽音がするから。
+reed.skimmer.moored = 葦の滑走艇が係留されて揺れている。釜はまだ温かい。
+reed.skimmer.ask = 滑走艇で湿地を渡る？
+reed.skimmer.won = 鬼火が散った。この古い船体はなかなか丈夫だ。
+reed.skimmer.declined = 滑走艇がそっと杭にぶつかる。
+reed.skimmer.idle = 滑走艇は係留されたまま、通気口から湯気が上がっている。
 
 cove.bell.frame = 流木の枠にひびの入った鐘が下がっている。その下で何かが動いた。
 cove.bell.warden = あれは鐘の番人なんかじゃない。{name:bell_warden}だ！
@@ -36,8 +47,12 @@ cove.campfire.embers = 崖の下に誰かが火を埋めていった。まだ燃
 cove.campfire.ask = 火のそばで休む？流木が少し要る。
 cove.campfire.rested = 暖かさがみんなの痛みを引き出していく。
 cove.campfire.declined = 燃えさしは灰の中に沈んでいった。
+cove.campfire.journal = この火明かりなら日誌が書ける。
 
 # Text the game shows itself, not a script: speaker names, the quest log, the encyclopedia and party talk.
+choice.yes = はい
+choice.no = いいえ
+
 speaker.dockhand = 港の荷役
 speaker.guide = 港の案内人
 speaker.peddler = 葦の行商人

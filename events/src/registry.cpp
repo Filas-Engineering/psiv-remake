@@ -29,6 +29,7 @@ const Keyword keywords[] = {
 	{"shop", NameKind::shop},
 	{"rest", NameKind::rest_point},
 	{"enemy", NameKind::enemy},
+	{"vehicle", NameKind::vehicle},
 };
 
 bool parse_integer(const std::string& word, std::int64_t& out) {
@@ -89,8 +90,8 @@ bool load_registry(const std::string& file, const std::string& text, Registry& r
 	std::vector<std::string> lines = split_lines(text);
 	for (std::size_t i = 0; i < lines.size(); ++i) {
 		const int number = static_cast<int>(i) + 1;
-		auto error = [&](const std::string& message) {
-			diagnostics.push_back({Severity::error, file, number, message});
+		auto error = [&](const char* key, std::vector<std::string> params) {
+			diagnostics.push_back(diagnostic(Severity::error, file, number, key, std::move(params)));
 			ok = false;
 		};
 		std::istringstream in(trim(lines[i].substr(0, lines[i].find('#'))));
@@ -107,9 +108,9 @@ bool load_registry(const std::string& file, const std::string& text, Registry& r
 			Declaration d;
 			d.is_flag = key == "flag";
 			d.line = number;
-			std::string problem;
+			DiagnosticMessage problem;
 			if (words.size() < 2 || !is_name(words[1])) {
-				problem = key + ": expected a name";
+				problem = {"registry.expected_name", {key}};
 			} else {
 				d.name = words[1];
 			}
@@ -123,19 +124,19 @@ bool load_registry(const std::string& file, const std::string& text, Registry& r
 					if (d.is_flag && (value == "true" || value == "false")) {
 						d.initial = value == "true" ? 1 : 0;
 					} else if (d.is_flag || !parse_integer(value, d.initial)) {
-						problem = key + ": the default must be " + (d.is_flag ? "true or false" : "an integer") + ", found '" + value + "'";
+						problem = {d.is_flag ? "registry.flag_default" : "registry.variable_default", {key, value}};
 					}
 				} else {
-					problem = key + ": expected 'global', 'local' or 'default <value>', found '" + words[j] + "'";
+					problem = {"registry.expected_scope", {key, words[j]}};
 				}
 			}
 			if (problem.empty()) {
 				if (const Declaration* earlier = result.find(d.name)) {
-					problem = "'" + d.name + "' is already declared at line " + std::to_string(earlier->line);
+					problem = {"registry.already_declared", {d.name, std::to_string(earlier->line)}};
 				}
 			}
 			if (!problem.empty()) {
-				error(problem);
+				error(problem.key.c_str(), problem.params);
 				continue;
 			}
 			result.declarations.push_back(d);
@@ -144,12 +145,12 @@ bool load_registry(const std::string& file, const std::string& text, Registry& r
 		if (key == "map_markers" || key == "event_map") {
 			const bool markers = key == "map_markers";
 			if (words.size() < 3) {
-				error(key + ": expected a map and one or more " + (markers ? "markers" : "events"));
+				error("registry.expected_map_one_more", {key, std::string((markers ? "markers" : "events"))});
 				continue;
 			}
 			for (std::size_t j = 1; j < words.size(); ++j) {
 				if (!is_name(words[j])) {
-					error(key + ": '" + words[j] + "' is not a valid name");
+					error("registry.valid_name", {key, words[j]});
 				}
 			}
 			maps_named.push_back({words[1], number});
@@ -159,7 +160,7 @@ bool load_registry(const std::string& file, const std::string& text, Registry& r
 				}
 				const std::set<std::string>& listed = markers ? result.marker_maps[words[j]] : result.event_maps[words[j]];
 				if (listed.count(words[1])) {
-					error(key + ": '" + words[j] + "' is already listed for map '" + words[1] + "'");
+					error("registry.already_listed_for_map", {key, words[j], words[1]});
 				} else if (markers) {
 					result.add_marker(words[1], words[j]);
 				} else {
@@ -173,21 +174,21 @@ bool load_registry(const std::string& file, const std::string& text, Registry& r
 			keyword = key == k.word ? &k : keyword;
 		}
 		if (!keyword) {
-			error("unknown kind '" + key + "'");
+			error("registry.unknown_kind", {key});
 			continue;
 		}
 		if (words.size() < 2) {
-			error(key + ": expected one or more names");
+			error("registry.expected_one_more_names", {key});
 			continue;
 		}
 		for (std::size_t j = 1; j < words.size(); ++j) {
 			if (!is_name(words[j])) {
-				error(key + ": '" + words[j] + "' is not a valid name");
+				error("registry.valid_name", {key, words[j]});
 				continue;
 			}
 			auto found = seen.find({keyword->kind, words[j]});
 			if (found != seen.end()) {
-				error(key + ": '" + words[j] + "' is already listed at line " + std::to_string(found->second));
+				error("registry.already_listed_at_line", {key, words[j], std::to_string(found->second)});
 				continue;
 			}
 			seen[{keyword->kind, words[j]}] = number;
@@ -196,7 +197,7 @@ bool load_registry(const std::string& file, const std::string& text, Registry& r
 	}
 	for (const auto& [map, line] : maps_named) {
 		if (!result.has(NameKind::map, map)) {
-			diagnostics.push_back({Severity::error, file, line, "map '" + map + "' is not listed on a 'map' line"});
+			diagnostics.push_back(diagnostic(Severity::error, file, line, "registry.map_listed_on_map_line", {map}));
 			ok = false;
 		}
 	}
@@ -236,6 +237,8 @@ const char* name_kind_name(NameKind kind) {
 		return "rest point";
 	case NameKind::enemy:
 		return "enemy";
+	case NameKind::vehicle:
+		return "vehicle";
 	}
 	return "name";
 }

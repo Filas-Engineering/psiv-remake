@@ -76,7 +76,7 @@ public static class Program
 		GameSession session;
 		try
 		{
-			session = GameSession.Create(new SessionOptions { DataDirectory = data, SaveDirectory = saves, Seed = seed, WallClock = script is null });
+			session = GameSession.Create(new SessionOptions { DataDirectory = data, SaveDirectory = saves, Seed = seed, WallClock = script is null, Presentation = Presentation.Wait });
 		}
 		catch (PsivException e)
 		{

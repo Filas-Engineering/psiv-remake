@@ -80,6 +80,9 @@ std::string serializeRecord(const BattleRecord& record) {
 	for (const PartyMember& member : setup.party) {
 		s << "member " << text::encode(member.characterId) << ' ' << member.level << ' ' << member.experience << ' '
 			<< member.hp << ' ' << member.tp << '\n';
+		if (!member.name.empty()) {
+			s << "member_name " << text::encode(member.name) << '\n';
+		}
 		for (const auto& [id, uses] : member.skillUses) {
 			s << "skill_uses " << text::encode(id) << ' ' << uses << '\n';
 		}
@@ -146,7 +149,8 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 			if (key != "battle_record" || n != 2 || !parseInt(t[1], version)) {
 				return fail("expected 'battle_record <version>'");
 			}
-			if (version != kRecordFormatVersion) {
+			// Format 3 differs only in having no member names.
+			if (version != kRecordFormatVersion && version != 3) {
 				return fail("record format " + t[1] + " is not supported (this build reads " + std::to_string(kRecordFormatVersion) + ")");
 			}
 			sawHeader = true;
@@ -193,6 +197,11 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 			ok = text::decode(t[1], member.characterId) && parseInt(t[2], member.level) && parseInt(t[3], member.experience)
 				&& parseInt(t[4], member.hp) && parseInt(t[5], member.tp);
 			setup.party.push_back(member);
+		} else if (key == "member_name" && n == 2) {
+			if (setup.party.empty()) {
+				return fail("'member_name' before any 'member'");
+			}
+			ok = text::decode(t[1], setup.party.back().name) && !setup.party.back().name.empty();
 		} else if ((key == "skill_uses" || key == "equip" || key == "member_status") && n == 3) {
 			if (setup.party.empty()) {
 				return fail("'" + key + "' before any 'member'");

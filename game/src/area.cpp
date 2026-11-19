@@ -1,10 +1,22 @@
 #include "game/area.h"
 
+#include "game/data.h"
+#include "rules/text.h"
+
 #include "json_read.h"
 
 namespace game {
 
 using rules::JsonValue;
+
+const char* toString(AreaKind kind) {
+	switch (kind) {
+	case AreaKind::Town: return "town";
+	case AreaKind::Field: return "field";
+	case AreaKind::Dungeon: return "dungeon";
+	}
+	return "field";
+}
 
 const char* toString(EncounterMode mode) {
 	return mode == EncounterMode::Visible ? "visible" : "random";
@@ -140,7 +152,7 @@ void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 	if (const JsonValue* table = reader.field(z, "table", JsonValue::Type::Array, true)) {
 		for (const JsonValue& t : table->items) {
 			if (!t.is(JsonValue::Type::Object)) {
-				reader.fail(t, "a table entry is an object");
+				reader.fail(t, "data.table_entry_object", {});
 				continue;
 			}
 			reader.only(t, {"encounter", "weight"});
@@ -150,7 +162,7 @@ void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 			zone.table.push_back(entry);
 		}
 		if (table->items.empty()) {
-			reader.fail(*table, "zone '" + zone.id + "' needs at least one table entry");
+			reader.fail(*table, "data.zone_needs_table_entry", {zone.id});
 		}
 	}
 	if (const JsonValue* v = reader.field(z, "visible", JsonValue::Type::Object, false)) {
@@ -181,10 +193,10 @@ void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 		reader.integer(*v, "party_first_percent", r.partyFirstPercent, false, 0, 100);
 		reader.integer(*v, "enemy_first_percent", r.enemyFirstPercent, false, 0, 100);
 		if (r.maxSteps < r.minSteps) {
-			reader.fail(*v, "max_steps is below min_steps");
+			reader.fail(*v, "data.max_steps_below_min_steps", {});
 		}
 		if (r.partyFirstPercent + r.enemyFirstPercent > 100) {
-			reader.fail(*v, "opening percents add up to more than 100");
+			reader.fail(*v, "data.opening_percents_over_100", {});
 		}
 	}
 }
@@ -194,14 +206,18 @@ void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 rules::Result<Area> parseArea(const std::string& file, const std::string& text) {
 	rules::Result<JsonValue> parsed = rules::parseJson(text);
 	if (!parsed.ok()) {
-		return rules::Result<Area>::failure(file + ": " + parsed.error);
+		std::vector<rules::Problem> problems = parsed.problems;
+		for (rules::Problem& p : problems) {
+			p.file = file;
+		}
+		return rules::Result<Area>::failure(problems, rules::formatProblems(problems, problemText()));
 	}
 	const JsonValue& json = *parsed.value;
 	JsonReader reader(file);
 	Area area;
 	if (!json.is(JsonValue::Type::Object)) {
-		reader.fail(json, "an area is an object");
-		return rules::Result<Area>::failure(reader.errors());
+		reader.fail(json, "data.area_object", {});
+		return rules::Result<Area>::failure(reader.problems(), reader.errors());
 	}
 	reader.only(json, {"id", "kind", "encounter_mode", "step_ms", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "zones"});
 	reader.text(json, "id", area.id, true);
@@ -212,28 +228,28 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	} else if (kind == "dungeon") {
 		area.kind = AreaKind::Dungeon;
 	} else if (kind != "field") {
-		reader.fail(json, "kind must be town, field or dungeon");
+		reader.fail(json, "data.bad_area_kind", {});
 	}
 	std::string mode = "visible";
 	reader.text(json, "encounter_mode", mode, false);
 	if (!parseEncounterMode(mode, area.mode)) {
-		reader.fail(json, "encounter_mode must be visible or random");
+		reader.fail(json, "data.bad_encounter_mode", {});
 	}
 	reader.integer(json, "step_ms", area.stepMs, false, 50, 5000);
 	reader.texts(json, "map", area.rows, true);
 	for (const std::string& row : area.rows) {
 		if (row.size() != area.rows[0].size()) {
-			reader.fail(json, "every map row must have the same width");
+			reader.fail(json, "data.map_rows_differ", {});
 			break;
 		}
 		if (row.find_first_not_of(".#~") != std::string::npos) {
-			reader.fail(json, "map rows use '.' for floor, '#' for wall and '~' for water");
+			reader.fail(json, "data.bad_map_character", {});
 			break;
 		}
 	}
 	auto checkCell = [&](const JsonValue& at, Cell c, const std::string& what) {
 		if (!area.inside(c) || area.rows[c.y][c.x] != '.') {
-			reader.fail(at, what + " is not on a floor cell");
+			reader.fail(at, "data.not_on_floor", {what});
 		}
 	};
 
@@ -274,10 +290,10 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			} else if (trigger == "flag") {
 				hook.trigger = HookTrigger::Flag;
 				if (hook.blockFlag.empty()) {
-					reader.fail(h, "flag hook '" + hook.id + "' needs a block_flag, or it would fire forever");
+					reader.fail(h, "data.flag_hook_needs_block_flag", {hook.id});
 				}
 			} else if (trigger != "interact") {
-				reader.fail(h, "trigger must be interact, step, load or flag");
+				reader.fail(h, "data.bad_trigger", {});
 			}
 			if (hook.trigger == HookTrigger::Interact || hook.trigger == HookTrigger::Step) {
 				reader.cellField(h, "at", hook.at, true);
@@ -336,14 +352,14 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			for (Cell s : zone.visible.spawns) {
 				checkCell(z, s, "spawn point of zone '" + zone.id + "'");
 				if (!zone.contains(s)) {
-					reader.fail(z, "a spawn point of zone '" + zone.id + "' is outside the zone");
+					reader.fail(z, "data.spawn_outside_zone", {zone.id});
 				}
 			}
 			area.zones.push_back(zone);
 		}
 	}
 	if (!reader.ok()) {
-		return rules::Result<Area>::failure(reader.errors());
+		return rules::Result<Area>::failure(reader.problems(), reader.errors());
 	}
 	return rules::Result<Area>::success(std::move(area));
 }

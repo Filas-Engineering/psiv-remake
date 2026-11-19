@@ -1,5 +1,6 @@
 #include "fixtures.h"
 #include "rules/loader.h"
+#include "rules/text.h"
 #include "test.h"
 
 #include <algorithm>
@@ -114,7 +115,7 @@ TEST(loaderRejectsSchemaMistakes) {
 TEST(loaderReportsSyntaxErrorsWithFileAndLine) {
 	auto files = fixtures::dataTexts();
 	replaceOnce(files["items.json"], "\"name\": \"Tonic\",", "\"name\": \"Tonic\"");
-	expectError(files, "items.json: line 3: expected ',' or '}' in object");
+	expectError(files, "items.json:3: expected ',' or '}' in object");
 }
 
 TEST(loaderCollectsEveryError) {
@@ -246,5 +247,43 @@ TEST(loaderRejectsBadNewRuleFields) {
 		auto files = fixtures::dataTexts();
 		replaceOnce(files["rules.json"], ",\n\t\"rest_revives\": true", "");
 		expectError(files, "rules.json:1: missing field 'rest_revives'");
+	}
+}
+
+TEST(loaderProblemsCarryKeysAndParameters) {
+	auto files = fixtures::dataTexts();
+	replaceOnce(files["enemies.json"], "\"abilities\": [\"venom_spit\"]", "\"abilities\": [\"venom_spat\"]");
+	files.erase("difficulties.json");
+	const Result<Database> loaded = loadDatabaseFromTexts(files);
+	CHECK(!loaded.ok());
+	// The ability list and the two AI entries that use the ability, then the missing file.
+	CHECK_EQ(loaded.problems.size(), std::size_t(4));
+	if (loaded.problems.size() != 4) {
+		return;
+	}
+	const Problem& missing = loaded.problems[0];
+	CHECK_EQ(missing.file, std::string("enemies.json"));
+	CHECK_EQ(missing.line, 22);
+	CHECK_EQ(missing.entry, std::string("enemy 'rust_hound'"));
+	CHECK_EQ(missing.message.key, std::string("load.names_missing_ability"));
+	CHECK(missing.message.params == std::vector<std::string>{"venom_spat"});
+	CHECK_EQ(loaded.problems[1].message.key, std::string("load.ai_ability_not_in_enemy"));
+	CHECK_EQ(loaded.problems[3].message.key, std::string("load.missing_file"));
+	CHECK_EQ(loaded.problems[3].file, std::string("difficulties.json"));
+	CHECK_EQ(loaded.problems[3].line, 0);
+	CHECK_EQ(loaded.error, formatProblems(loaded.problems, problemText()));
+	CHECK_EQ(formatProblem(missing, {{"load.names_missing_ability", "ability {0} is not defined"}}),
+		std::string("enemies.json:22: enemy 'rust_hound': ability venom_spat is not defined"));
+}
+
+TEST(syntaxErrorsCarryAKeyToo) {
+	auto files = fixtures::dataTexts();
+	replaceOnce(files["items.json"], "{", "{{");
+	const Result<Database> loaded = loadDatabaseFromTexts(files);
+	CHECK(!loaded.ok() && !loaded.problems.empty());
+	if (!loaded.problems.empty()) {
+		CHECK_EQ(loaded.problems[0].file, std::string("items.json"));
+		CHECK(loaded.problems[0].message.key.compare(0, 5, "json.") == 0);
+		CHECK(problemText().count(loaded.problems[0].message.key) == 1);
 	}
 }

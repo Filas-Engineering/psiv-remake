@@ -299,3 +299,40 @@ end
 	CHECK(test::has_diagnostic(d, 5, "unknown enemy 'crab_queen'"));
 	CHECK_EQ(d.size(), 1u);
 }
+
+TEST(a_vehicle_battle_names_a_listed_vehicle) {
+	Registry r = registry_ok();
+	r.add(NameKind::vehicle, "skiff");
+	CompileOptions options;
+	options.registry = &r;
+	auto ok = events::compile({{"dock.ev", "event e unskippable\n\tbattle reef_crabs aboard skiff\n\twin\n\tend\nend\n"}}, options);
+	CHECK(ok.ok());
+	if (ok.ok()) {
+		const events::Instruction* battle = nullptr;
+		for (const events::Instruction& ins : ok.program.code) {
+			if (ins.op == events::Op::battle) {
+				battle = &ins;
+			}
+		}
+		CHECK(battle && battle->battle.vehicle == "skiff");
+		CHECK(battle && events::describe(battle->battle) == "battle reef_crabs aboard skiff no-escape defeat-game-over");
+	}
+	auto unknown = events::compile({{"dock.ev", "event e unskippable\n\tbattle reef_crabs aboard raft\n\twin\n\tend\nend\n"}}, options);
+	CHECK(!unknown.ok());
+	CHECK(!unknown.diagnostics.empty() && unknown.diagnostics[0].key == "script.unknown_name");
+	CHECK(!unknown.diagnostics.empty() && unknown.diagnostics[0].params[0] == "vehicle" && unknown.diagnostics[0].params[1] == "raft");
+}
+
+TEST(registry_problems_carry_keys) {
+	Registry r;
+	std::vector<Diagnostic> d;
+	CHECK(!events::load_registry("bad.registry", "flag dock.met\nflag dock.met\nwidget spanner\n", r, d));
+	CHECK_EQ(d.size(), std::size_t(2));
+	if (d.size() == 2) {
+		CHECK_EQ(d[0].key, std::string("registry.already_declared"));
+		CHECK(d[0].params == (std::vector<std::string>{"dock.met", "1"}));
+		CHECK_EQ(d[0].message, std::string("'dock.met' is already declared at line 1"));
+		CHECK_EQ(d[1].key, std::string("registry.unknown_kind"));
+		CHECK_EQ(d[1].line, 3);
+	}
+}

@@ -3,6 +3,7 @@
 #include "game/world.h"
 
 #include "rules/json.h"
+#include "rules/result.h"
 
 #include <map>
 #include <string>
@@ -11,13 +12,15 @@
 
 namespace game {
 
-// Typed field access that collects every problem as "file:line: message" instead of stopping at the first.
+// Typed field access that collects every problem instead of stopping at the first.
 class JsonReader {
 public:
 	explicit JsonReader(std::string file) : file_(std::move(file)) {}
 
-	void fail(const rules::JsonValue& at, const std::string& message);
-	bool ok() const { return errors_.empty(); }
+	void fail(const rules::JsonValue& at, const char* key, std::vector<std::string> params);
+	bool ok() const { return problems_.empty(); }
+	const std::vector<rules::Problem>& problems() const { return problems_; }
+	// One "file:line: message" per problem.
 	std::string errors() const;
 
 	// Rejects keys outside `known`, which catches typos in data.
@@ -35,7 +38,7 @@ public:
 
 private:
 	std::string file_;
-	std::vector<std::string> errors_;
+	std::vector<rules::Problem> problems_;
 };
 
 }

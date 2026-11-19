@@ -32,6 +32,8 @@ struct CharacterDef {
 // The persistent state of a party member between battles. The host owns it.
 struct PartyMember {
 	std::string characterId;
+	// The name the player gave the member; empty shows the character's data name. Battle combatants take it.
+	std::string name;
 	int level = 1;
 	int experience = 0;
 	int hp = 0;

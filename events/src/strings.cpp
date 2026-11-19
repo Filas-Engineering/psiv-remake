@@ -10,7 +10,7 @@ namespace events {
 
 namespace {
 
-bool unescape(const std::string& text, std::string& out, std::string& error) {
+bool unescape(const std::string& text, std::string& out, DiagnosticMessage& error) {
 	out.clear();
 	for (std::size_t i = 0; i < text.size(); ++i) {
 		char c = text[i];
@@ -19,7 +19,7 @@ bool unescape(const std::string& text, std::string& out, std::string& error) {
 			continue;
 		}
 		if (i + 1 >= text.size()) {
-			error = "a '\\' at the end of the line";
+			error = {"strings.escape_at_end", {}};
 			return false;
 		}
 		char e = text[++i];
@@ -28,7 +28,7 @@ bool unescape(const std::string& text, std::string& out, std::string& error) {
 		} else if (e == '\\') {
 			out += '\\';
 		} else {
-			error = std::string("unknown escape '\\") + e + "'";
+			error = {"strings.unknown_escape", {std::string(1, e)}};
 			return false;
 		}
 	}
@@ -77,8 +77,8 @@ bool load_string_table(const std::string& file, const std::string& text, StringT
 	StringTable result;
 	result.file = file;
 	bool ok = true;
-	auto error = [&](int line, const std::string& message) {
-		diagnostics.push_back({Severity::error, file, line, message});
+	auto error = [&](int line, const char* key, std::vector<std::string> params) {
+		diagnostics.push_back(diagnostic(Severity::error, file, line, key, std::move(params)));
 		ok = false;
 	};
 	std::vector<std::string> lines = split_lines(text);
@@ -92,7 +92,7 @@ bool load_string_table(const std::string& file, const std::string& text, StringT
 			std::string head = line.substr(0, line.find_first_of(" \t"));
 			std::string code = trim(line.substr(head.size()));
 			if (head != "language" || !is_name(code)) {
-				error(number, "the table must start with 'language <code>'");
+				error(number, "strings.table_start_with_language_code", {});
 				return false;
 			}
 			result.language = code;
@@ -100,30 +100,30 @@ bool load_string_table(const std::string& file, const std::string& text, StringT
 		}
 		std::size_t eq = line.find('=');
 		if (eq == std::string::npos) {
-			error(number, "expected '<id> = <text>'");
+			error(number, "strings.expected_id_text", {});
 			continue;
 		}
 		std::string id = trim(line.substr(0, eq));
 		if (!is_name(id)) {
-			error(number, "'" + id + "' is not a valid string ID");
+			error(number, "strings.valid_string_id", {id});
 			continue;
 		}
 		StringEntry entry;
 		entry.line = number;
-		std::string problem;
+		DiagnosticMessage problem;
 		if (!unescape(trim(line.substr(eq + 1)), entry.text, problem)) {
-			error(number, problem);
+			error(number, problem.key.c_str(), problem.params);
 			continue;
 		}
 		auto found = result.entries.find(id);
 		if (found != result.entries.end()) {
-			error(number, "duplicate string ID '" + id + "'; it is already defined at line " + std::to_string(found->second.line));
+			error(number, "strings.duplicate_string_id_already_defined", {id, std::to_string(found->second.line)});
 			continue;
 		}
 		result.entries[id] = entry;
 	}
 	if (result.language.empty()) {
-		error(1, "the table must start with 'language <code>'");
+		error(1, "strings.table_start_with_language_code", {});
 	}
 	if (ok) {
 		table = result;
@@ -200,8 +200,7 @@ std::vector<Diagnostic> check_inline_text(const Program& program) {
 	std::vector<Diagnostic> out;
 	for (const TextUse& use : collect_texts(program)) {
 		if (!use.text.is_id) {
-			out.push_back({Severity::error, program.files[use.file], use.line,
-				"inline text in " + use.role + " in event '" + use.event + "': player-facing text must be a string ID (@id) from the string tables"});
+			out.push_back(diagnostic(Severity::error, program.files[use.file], use.line, "strings.inline_text_event_player_facing", {use.role, use.event}));
 		}
 	}
 	return out;
@@ -235,12 +234,12 @@ bool load_game_strings(const std::string& file, const std::string& text, GameStr
 		// A prefix may end in '.' ("area.*"), which is not a valid name on its own.
 		const std::string checked = prefix && !name.empty() && name.back() == '.' ? name.substr(0, name.size() - 1) : name;
 		if (!is_name(checked)) {
-			diagnostics.push_back({Severity::error, file, number, "'" + entry + "' is not a string ID or a prefix ending in '*'"});
+			diagnostics.push_back(diagnostic(Severity::error, file, number, "strings.string_id_prefix_ending", {entry}));
 			ok = false;
 		} else if (prefix) {
 			result.prefixes.push_back(name);
 		} else if (!result.ids.emplace(name, number).second) {
-			diagnostics.push_back({Severity::error, file, number, "'" + name + "' is already listed at line " + std::to_string(result.ids[name])});
+			diagnostics.push_back(diagnostic(Severity::error, file, number, "strings.already_listed_at_line", {name, std::to_string(result.ids[name])}));
 			ok = false;
 		}
 	}
@@ -257,7 +256,7 @@ std::vector<Diagnostic> check_strings(const Program& program, const std::vector<
 		referenced.insert(id);
 		for (const StringTable& table : tables) {
 			if (!table.find(id)) {
-				out.push_back({Severity::error, game.file, line, "string ID '" + id + "' is missing from the '" + table.language + "' table (" + table.file + ")"});
+				out.push_back(diagnostic(Severity::error, game.file, line, "strings.string_id_missing_from_table", {id, table.language, table.file}));
 			}
 		}
 	}
@@ -268,8 +267,7 @@ std::vector<Diagnostic> check_strings(const Program& program, const std::vector<
 		referenced.insert(use.text.value);
 		for (const StringTable& table : tables) {
 			if (!table.find(use.text.value)) {
-				out.push_back({Severity::error, program.files[use.file], use.line,
-					"string ID '" + use.text.value + "' is missing from the '" + table.language + "' table (" + table.file + ")"});
+				out.push_back(diagnostic(Severity::error, program.files[use.file], use.line, "strings.string_id_missing_from_table", {use.text.value, table.language, table.file}));
 			}
 		}
 	}
@@ -277,7 +275,7 @@ std::vector<Diagnostic> check_strings(const Program& program, const std::vector<
 		for (const StringTable& table : tables) {
 			for (const auto& entry : table.entries) {
 				if (!referenced.count(entry.first) && !game.covers(entry.first)) {
-					out.push_back({Severity::warning, table.file, entry.second.line, "string ID '" + entry.first + "' is not used by any script or by the game"});
+					out.push_back(diagnostic(Severity::warning, table.file, entry.second.line, "strings.string_id_used_any_script", {entry.first}));
 				}
 			}
 		}
@@ -301,8 +299,7 @@ std::vector<Diagnostic> check_strings(const Program& program, const std::vector<
 			auto found = table.entries.find(id);
 			if (found == table.entries.end()) {
 				if (!referenced.count(id)) {
-					out.push_back({Severity::warning, first->file, reference.line,
-						"string ID '" + id + "' is in the '" + first->language + "' table but missing from '" + table.language + "' (" + table.file + ")"});
+					out.push_back(diagnostic(Severity::warning, first->file, reference.line, "strings.string_id_table_but_missing", {id, first->language, table.language, table.file}));
 				}
 				continue;
 			}
@@ -312,15 +309,12 @@ std::vector<Diagnostic> check_strings(const Program& program, const std::vector<
 			std::vector<std::string> expected = token_ids(reference.text);
 			std::vector<std::string> got = token_ids(found->second.text);
 			if (expected != got) {
-				out.push_back({Severity::error, table.file, found->second.line,
-					"name tokens in '" + id + "' (" + join(got) + ") differ from the '" + first->language + "' table (" + join(expected) + ")"});
+				out.push_back(diagnostic(Severity::error, table.file, found->second.line, "strings.name_tokens_differ_from_table", {id, std::string(join(got)), first->language, std::string(join(expected))}));
 			}
 			std::vector<std::string> expected_tags = find_control_tags(reference.text);
 			std::vector<std::string> got_tags = find_control_tags(found->second.text);
 			if (expected_tags != got_tags) {
-				out.push_back({Severity::error, table.file, found->second.line,
-					"control tags in '" + id + "' (" + join(got_tags) + ") differ from the '" + first->language + "' table (" + join(expected_tags) +
-						"); a translation keeps the same tags in the same order"});
+				out.push_back(diagnostic(Severity::error, table.file, found->second.line, "strings.control_tags_differ_from_table", {id, std::string(join(got_tags)), first->language, std::string(join(expected_tags))}));
 			}
 		}
 	}

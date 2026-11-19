@@ -55,6 +55,7 @@ public enum ActionType
 
 public enum ActionPhase { Begin, Cancel }
 public enum Presentation { Instant, Wait }
+public enum WalkStatus { Walking, Arrived, LeftArea, Stopped, NoPath, TooLong }
 
 [Flags]
 public enum CellFlags : byte { Floor = 0, Wall = 1, Water = 2, TerrainMask = 3, Walkable = 16 }
@@ -96,6 +97,8 @@ public readonly record struct PsivResult(PsivError? Error)
 public sealed record SessionOptions
 {
 	public required string DataDirectory { get; init; }
+	// Core's battle data; null uses game.json's core_data, relative to DataDirectory.
+	public string? CoreDataDirectory { get; init; }
 	public string? SaveDirectory { get; init; }
 	public ulong Seed { get; init; } = 1;
 	public EncounterMode? EncounterMode { get; init; }
@@ -132,7 +135,7 @@ public sealed record FieldView(FieldInfo Info, IReadOnlyList<CellFlags> Grid, IR
 	public CellFlags Cell(int x, int y) => x < 0 || y < 0 || x >= Info.Width || y >= Info.Height ? CellFlags.Wall : Grid[y * Info.Width + x];
 }
 
-public sealed record Line(string SpeakerId, string SpeakerName, string Text, string Portrait, string Display);
+public sealed record Line(string SpeakerId, string SpeakerName, string TextId, string Text, string Portrait, string Display);
 
 public sealed record Choice(string Prompt, bool YesNo, IReadOnlyList<string> Options);
 
@@ -188,3 +191,30 @@ public sealed record QuestLog(string Objective, IReadOnlyList<Job> Jobs);
 public sealed record CodexEntry(string Id, string Title, string Text);
 
 public sealed record GlossaryEntry(string Id, string Restored, string Shipped);
+
+// One data load problem: where, and a text key with its parameters.
+public sealed record DataProblem(string File, int Line, string Entry, string Key, IReadOnlyList<string> Params, string Text);
+
+public sealed class PsivDataException(PsivError error, IReadOnlyList<DataProblem> problems) : Exception(error.Text)
+{
+	public PsivError Error { get; } = error;
+	public IReadOnlyList<DataProblem> Problems { get; } = problems;
+}
+
+public sealed record LevelUp(string Member, string Name, int Level, IReadOnlyList<string> Learned);
+
+// What an ended battle paid out; zero and empty unless the party won or reached a scripted end.
+public sealed record BattleResult(string Encounter, BattleSource Source, Outcome Outcome, bool GameOver, int Experience, int Money,
+	IReadOnlyDictionary<string, int> Drops, IReadOnlyList<LevelUp> LevelUps);
+
+public sealed record AutoRound(IReadOnlyList<Notice> Notices, IReadOnlyList<BattleEvent> Events);
+
+// Refusal is why auto-battle with the auto macro did not start, or null.
+public sealed record AutoBattle(PsivError? Refusal, IReadOnlyList<AutoRound> Rounds, bool Ended);
+
+public sealed record Replay(IReadOnlyList<BattleEvent> Events, string EventText);
+
+public sealed record PacingArea(string Area, int Visits, int Battles, int Steps, long FieldMs, long BattleMs, long EventMs, int Experience, int Money,
+	IReadOnlyList<long> GapMs, IReadOnlyList<int> GapSteps);
+
+public sealed record PacingBoss(string Flag, string Encounter, string Area, int AverageLevelX100, long DungeonMs);

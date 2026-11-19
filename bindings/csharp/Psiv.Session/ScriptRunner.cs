@@ -8,7 +8,6 @@ namespace Psiv.Session.Scripting;
 public sealed class ScriptRunner(GameSession session, TextWriter output, bool autoBattle)
 {
 	private readonly List<string> _battleNames = [];
-	private readonly int _tickMs = session.GameInfo().TickMs;
 
 	public int Errors { get; private set; }
 
@@ -54,9 +53,11 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 		return false;
 	}
 
-	public void FlushOutput()
+	public void FlushOutput() => PrintNotices(session.DrainNotices());
+
+	private void PrintNotices(IReadOnlyList<Notice> notices)
 	{
-		foreach (Notice n in session.DrainNotices())
+		foreach (Notice n in notices)
 		{
 			Print(n.Kind switch
 			{
@@ -81,20 +82,17 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 
 	private void FinishBattleAuto()
 	{
-		if (session.Settings().AutoMacro.Length > 0 && session.BattleInfo() is { Round: 0, AutoActive: false })
+		AutoBattle played = session.PlayBattle();
+		if (played.Refusal is { } refusal)
 		{
-			Report(session.StartAuto());
+			Error(refusal.Text);
 		}
-		for (int round = 0; round < 60 && session.Mode == Mode.Battle; round++)
+		foreach (AutoRound round in played.Rounds)
 		{
-			if (!session.FillFromAuto())
-			{
-				session.FillFromPolicy();
-			}
-			FlushOutput();
-			PrintEvents(session.ResolveRound());
+			PrintNotices(round.Notices);
+			PrintEvents(round.Events);
 		}
-		if (session.Mode == Mode.Battle)
+		if (!played.Ended)
 		{
 			Error("the battle did not end in 60 rounds");
 		}
@@ -143,16 +141,9 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 			if (session.Choice() is { } choice)
 			{
 				var text = new StringBuilder(choice.Prompt.Length == 0 ? "Choose:" : choice.Prompt);
-				if (choice.YesNo)
+				for (int i = 0; i < choice.Options.Count; i++)
 				{
-					text.Append(" [0] yes [1] no");
-				}
-				else
-				{
-					for (int i = 0; i < choice.Options.Count; i++)
-					{
-						text.Append(CultureInfo.InvariantCulture, $" [{i}] {choice.Options[i]}");
-					}
+					text.Append(CultureInfo.InvariantCulture, $" [{i}] {choice.Options[i]}");
 				}
 				Print(text.ToString());
 				return;
@@ -222,88 +213,25 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 		}
 	}
 
-	private static readonly (int X, int Y)[] Steps = [(0, -1), (1, 0), (0, 1), (-1, 0)];
-
-	private bool WalkTo(int goalX, int goalY)
+	private void WalkTo(int goalX, int goalY)
 	{
-		for (int guard = 0; guard < 4000; guard++)
+		if (!session.WalkTo(goalX, goalY).Ok)
 		{
-			if (session.Mode != Mode.Field || session.Field() is not { } view)
-			{
-				return false;
-			}
-			FieldInfo f = view.Info;
-			if (f.LeaderX == goalX && f.LeaderY == goalY)
-			{
-				return true;
-			}
-			int w = f.Width;
-			int h = f.Height;
-			bool goalInside = goalX >= 0 && goalY >= 0 && goalX < w && goalY < h;
-			int goal = goalY * w + goalX;
-			int start = f.LeaderY * w + f.LeaderX;
-			var from = new int[w * h];
-			Array.Fill(from, -1);
-			var queue = new Queue<int>();
-			queue.Enqueue(start);
-			from[start] = start;
-			// Breadth-first search over floor; enemies are ignored, so bumping into one starts its battle.
-			while (queue.Count > 0 && !(goalInside && from[goal] >= 0))
-			{
-				int c = queue.Dequeue();
-				foreach ((int dx, int dy) in Steps)
-				{
-					int nx = c % w + dx;
-					int ny = c / w + dy;
-					if (nx < 0 || ny < 0 || nx >= w || ny >= h)
-					{
-						continue;
-					}
-					int n = ny * w + nx;
-					bool exit = view.Exits.Any(e => e.X == nx && e.Y == ny);
-					if (from[n] >= 0 || !view.Grid[n].HasFlag(CellFlags.Walkable) || (exit && n != goal))
-					{
-						continue;
-					}
-					from[n] = c;
-					queue.Enqueue(n);
-				}
-			}
-			if (!goalInside || from[goal] < 0)
-			{
-				Error($"no path to ({goalX},{goalY})");
-				return false;
-			}
-			int next = goal;
-			while (from[next] != start)
-			{
-				next = from[next];
-			}
-			var direction = Direction.North;
-			for (int d = 0; d < 4; d++)
-			{
-				if (f.LeaderX + Steps[d].X == next % w && f.LeaderY + Steps[d].Y == next / w)
-				{
-					direction = (Direction)d;
-				}
-			}
-			if (!session.Walk(direction).Ok)
-			{
-				// A visible enemy in the way during the grace period: let the moment pass.
-				session.Update(_tickMs);
-			}
-			Settle();
-			if (session.Mode != Mode.Field || session.FieldInfo() is not { } after)
-			{
-				return false;
-			}
-			if (after.AreaId != f.AreaId)
-			{
-				return true;
-			}
+			return;
 		}
-		Error("walking took too long");
-		return false;
+		WalkStatus status;
+		while ((status = session.WalkStep()) == WalkStatus.Walking)
+		{
+			Settle();
+		}
+		if (status == WalkStatus.NoPath)
+		{
+			Error($"no path to ({goalX},{goalY})");
+		}
+		else if (status == WalkStatus.TooLong)
+		{
+			Error("walking took too long");
+		}
 	}
 
 	private bool ActorIndex(string text, out int index)
@@ -391,7 +319,7 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 		}
 		else if (cmd == "face" && w.Length == 2 && ParseFacing(w[1], out Direction turn))
 		{
-			session.Face(turn);
+			Report(session.Face(turn));
 		}
 		else if (cmd == "walk" && w.Length is 2 or 3)
 		{
@@ -586,8 +514,7 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 				}
 				else
 				{
-					int found = Enumerable.Range(0, 3).FirstOrDefault(i => GameSession.NameOf(NameKind.RewardMultiplier, i) == w[2], -1);
-					if (found < 0)
+					if (GameSession.ParseName(NameKind.RewardMultiplier, w[2]) is not { } found)
 					{
 						Error($"bad reward multiplier '{w[2]}'");
 						return true;
@@ -598,10 +525,7 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 			}
 			else if (w[1] == "auto")
 			{
-				if (!session.SetAutoMacro(w[2] == "-" ? "" : w[2]).Ok)
-				{
-					Error($"no macro named '{w[2]}'");
-				}
+				Report(session.SetAutoMacro(w[2] == "-" ? "" : w[2]));
 			}
 			else
 			{

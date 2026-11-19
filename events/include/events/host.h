@@ -107,6 +107,8 @@ struct BattleRequest {
 	int end_rounds = 0;
 	// enemy_defeated: the enemy (by its game ID) whose fall ends the battle.
 	std::string end_enemy;
+	// Empty, or the vehicle the party fights aboard.
+	std::string vehicle;
 };
 
 struct RestRequest {

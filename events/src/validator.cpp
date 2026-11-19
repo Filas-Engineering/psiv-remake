@@ -72,8 +72,8 @@ public:
 	}
 
 private:
-	void error(int line, const std::string& message) {
-		diagnostics_.push_back({Severity::error, file_, line, message});
+	void error(int line, const char* key, std::vector<std::string> params) {
+		diagnostics_.push_back(diagnostic(Severity::error, file_, line, key, std::move(params)));
 	}
 
 	std::string where() const {
@@ -82,16 +82,16 @@ private:
 
 	void name(NameKind kind, const std::string& value, int line) {
 		if (!value.empty() && !registry_.has(kind, value)) {
-			error(line, std::string("unknown ") + name_kind_name(kind) + " '" + value + "': it is not listed" + where());
+			error(line, "script.unknown_name", {std::string(name_kind_name(kind)), value, where()});
 		}
 	}
 
 	void declared(const std::string& value, bool is_flag, int line) {
 		const Declaration* d = registry_.find(value);
 		if (!d) {
-			error(line, std::string(is_flag ? "flag" : "variable") + " '" + value + "' is not declared" + where());
+			error(line, is_flag ? "script.flag_not_declared" : "script.variable_not_declared", {value, where()});
 		} else if (d->is_flag != is_flag) {
-			error(line, "'" + value + "' is declared as a " + (d->is_flag ? "flag" : "variable") + ", not a " + (is_flag ? "flag" : "variable"));
+			error(line, d->is_flag ? "script.declared_as_flag" : "script.declared_as_variable", {value});
 		}
 	}
 
@@ -124,7 +124,7 @@ private:
 		for (const std::string& m : registry_.marker_maps.at(marker)) {
 			maps += (maps.empty() ? "" : ", ") + m;
 		}
-		error(line, "marker '" + marker + "' is not on map '" + map + "'" + why + "; it is on " + maps);
+		error(line, "script.marker_not_on_map", {marker, map, why, maps});
 	}
 
 	void action(const Action& a, int line, std::string& map) {
@@ -139,7 +139,7 @@ private:
 		case ActionType::face:
 			name(NameKind::actor, a.subject, line);
 			if (!registry_.has(NameKind::actor, a.target) && !registry_.has(NameKind::marker, a.target)) {
-				error(line, "unknown actor or marker '" + a.target + "': it is not listed" + where());
+				error(line, "script.unknown_actor_or_marker", {a.target, where()});
 			}
 			break;
 		case ActionType::animate:
@@ -225,6 +225,9 @@ private:
 			break;
 		case Op::battle:
 			name(NameKind::encounter, ins.battle.encounter, s.line);
+			if (!ins.battle.vehicle.empty()) {
+				name(NameKind::vehicle, ins.battle.vehicle, s.line);
+			}
 			if (ins.battle.end == BattleEndKind::enemy_defeated) {
 				name(NameKind::enemy, ins.battle.end_enemy, s.line);
 			}
@@ -254,8 +257,7 @@ void validate(const std::vector<EventDecl>& events, const std::vector<std::strin
 		auto found = by_name.find(ev.name);
 		if (found != by_name.end()) {
 			const EventDecl* first = found->second;
-			diagnostics.push_back({Severity::error, files[ev.file], ev.line,
-				"duplicate event '" + ev.name + "'; it is already defined at " + files[first->file] + ":" + std::to_string(first->line)});
+			diagnostics.push_back(diagnostic(Severity::error, files[ev.file], ev.line, "script.duplicate_event_already_defined_at", {ev.name, files[first->file], std::to_string(first->line)}));
 		} else {
 			by_name[ev.name] = &ev;
 		}
@@ -266,17 +268,16 @@ void validate(const std::vector<EventDecl>& events, const std::vector<std::strin
 		Walk w;
 		walk(ev.body, w);
 		for (const auto& dup : w.duplicate_labels) {
-			diagnostics.push_back({Severity::error, file, dup.second,
-				"duplicate label '" + dup.first + "'; it is already defined at line " + std::to_string(w.labels[dup.first])});
+			diagnostics.push_back(diagnostic(Severity::error, file, dup.second, "script.duplicate_label_already_defined_at", {dup.first, std::to_string(w.labels[dup.first])}));
 		}
 		for (const Stmt* g : w.gotos) {
 			if (!w.labels.count(g->ins.name)) {
-				diagnostics.push_back({Severity::error, file, g->line, "goto: unknown label '" + g->ins.name + "' in event '" + ev.name + "'"});
+				diagnostics.push_back(diagnostic(Severity::error, file, g->line, "script.goto_unknown_label_event", {g->ins.name, ev.name}));
 			}
 		}
 		for (const Stmt* c : w.calls) {
 			if (!by_name.count(c->ins.name)) {
-				diagnostics.push_back({Severity::error, file, c->line, "call: unknown event '" + c->ins.name + "'"});
+				diagnostics.push_back(diagnostic(Severity::error, file, c->line, "script.call_unknown_event", {c->ins.name}));
 			}
 		}
 		if (registry) {

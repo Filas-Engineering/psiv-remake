@@ -18,7 +18,8 @@
 		"west_gate": [1, 4],
 		"east_gate": [18, 4],
 		"cache_front": [10, 2],
-		"peddler_front": [10, 6]
+		"peddler_front": [10, 6],
+		"skimmer_front": [17, 6]
 	},
 	"exits": [
 		{"at": [0, 4], "to": "tidewater", "marker": "east_gate"},
@@ -26,7 +27,8 @@
 	],
 	"hooks": [
 		{"id": "scout", "at": [10, 4], "trigger": "step", "event": "reed_path_scout", "block_flag": "reed.scout_joined"},
-		{"id": "peddler", "at": [10, 7], "event": "reed_path_peddler"}
+		{"id": "peddler", "at": [10, 7], "event": "reed_path_peddler"},
+		{"id": "skimmer", "at": [17, 5], "event": "reed_path_skimmer"}
 	],
 	"shops": [{"id": "reed_peddler", "stock": ["tonic", "clear_gel", "loosen_oil"], "sell_percent": 40}],
 	"chests": [{"id": "reed_cache", "at": [10, 1], "flag": "chest.reed_cache", "items": {"second_wind": 1}, "money": 30}],

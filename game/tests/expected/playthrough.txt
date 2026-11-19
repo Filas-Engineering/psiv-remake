@@ -14,31 +14,190 @@ Mode field, Tidewater Landing (3,4) facing east, play time 0:00:00.
 field> quests
   Objective: Find the harbor guide by the noticeboard.
   Job: The dockhand's lost crate (available)
+field> walk hold_front
+field> face north
+field> talk
+Something is gnawing at a crate in the ferry hold. It turns to face you.
+Battle!
+[Autosaved to auto_1 (before an event battle).]
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+The enemies catch the party off guard!
+-- round 1 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter evades.
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 6 damage.
+Gel Mite A uses Bite on Test Fighter.
+  Test Fighter evades.
+-- round 2 --
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter takes 9 damage.
+  Test Fighter is poisoned!
+Test Fighter uses Focus Shot on Gel Mite A.
+  Gel Mite A takes 60 damage.
+  Gel Mite A falls.
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 6 damage.
+Gel Mite A cannot act (Defeated).
+  Test Fighter suffers 6 from Poison.
+-- round 3 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 12 damage.
+Test Fighter uses Focus Shot on Gel Mite B.
+  Gel Mite B takes 60 damage.
+  Gel Mite B falls.
+Gel Mite B cannot act (Defeated).
+  Test Fighter suffers 6 from Poison.
+-- round 4 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 14 damage.
+Test Fighter uses Focus Shot on Rust Hound.
+  Rust Hound takes 74 damage.
+  Test Fighter suffers 6 from Poison.
+-- round 5 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 12 damage.
+Test Fighter uses Cleave on Rust Hound.
+  Rust Hound evades.
+  Test Fighter suffers 6 from Poison.
+  The poison leaves Test Fighter.
+-- round 6 --
+Rust Hound uses Bite on Test Fighter.
+  Critical hit!
+  Test Fighter takes 3 damage.
+  Test Fighter falls.
+Outcome: defeat
+The party has fallen.
+Game over.
+title> retry
+Loaded auto_1.
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+The enemies catch the party off guard!
+-- round 1 --
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter takes 9 damage.
+  Test Fighter is poisoned!
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter evades.
+Gel Mite A uses Bite on Test Fighter.
+  Test Fighter takes 7 damage.
+  Test Fighter suffers 6 from Poison.
+-- round 2 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 11 damage.
+Test Fighter uses Focus Shot on Gel Mite A.
+  Gel Mite A takes 60 damage.
+  Gel Mite A falls.
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter evades.
+Gel Mite A cannot act (Defeated).
+  Test Fighter suffers 6 from Poison.
+-- round 3 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 11 damage.
+Test Fighter uses Focus Shot on Gel Mite B.
+  Gel Mite B takes 60 damage.
+  Gel Mite B falls.
+Gel Mite B cannot act (Defeated).
+  Test Fighter suffers 6 from Poison.
+-- round 4 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter evades.
+Test Fighter uses Focus Shot on Rust Hound.
+  Rust Hound evades.
+  Test Fighter suffers 6 from Poison.
+  The poison leaves Test Fighter.
+-- round 5 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 13 damage.
+Test Fighter uses Cleave on Rust Hound.
+  Rust Hound takes 32 damage.
+-- round 6 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 11 damage.
+  Test Fighter falls.
+Outcome: defeat
+The party has fallen.
+Game over.
+title> retry
+Loaded auto_1.
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+The enemies catch the party off guard!
+-- round 1 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 13 damage.
+Gel Mite A uses Bite on Test Fighter.
+  Test Fighter takes 7 damage.
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 6 damage.
+-- round 2 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter evades.
+Test Fighter uses Focus Shot on Gel Mite A.
+  Gel Mite A takes 60 damage.
+  Gel Mite A falls.
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 6 damage.
+Gel Mite A cannot act (Defeated).
+-- round 3 --
+Test Fighter uses Focus Shot on Gel Mite B.
+  Gel Mite B takes 60 damage.
+  Gel Mite B falls.
+Gel Mite B cannot act (Defeated).
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter evades.
+-- round 4 --
+Test Fighter uses Focus Shot on Rust Hound.
+  Rust Hound takes 70 damage.
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter takes 8 damage.
+  Test Fighter is poisoned!
+  Test Fighter suffers 6 from Poison.
+-- round 5 --
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter evades.
+Test Fighter uses Cleave on Rust Hound.
+  Rust Hound takes 20 damage.
+  Rust Hound falls.
+Outcome: victory
+Victory. 22 experience, 15 money.
+The hold falls quiet. A tonic rolls out from behind the crate.
+[Autosaved to auto_2 (event end).]
+field> status
+Mode field, Tidewater Landing (12,2) facing north, play time 0:00:22.
+  Test Fighter Lv3 HP 40/86 TP 4/8 EXP 22 [Poison 3]
+  Money 65. Items: tonic x2.
 field> walk dock_front
 field> face north
 field> talk
 Dockhand: A crate of my supplies washed into the reeds last storm. Nobody will wade out for it.
-Keep an eye out for it? [0] yes [1] no
+Keep an eye out for it? [0] Yes [1] No
 event> choose 0
 Job accepted: The dockhand's lost crate.
 Dockhand: Bless you. It sits on a dry patch, north side of the path.
-[Autosaved to auto_1 (event end).]
+[Autosaved to auto_0 (event end).]
 field> walk guide_front
 field> face north
 field> talk
   (face guide fighter)
 Harbor Guide: You came about the bell? It rings every night at Bell Cove, east past the reeds.
-Will you look into it? [0] yes [1] no
+Will you look into it? [0] Yes [1] No
 event> choose 0
+Harbor Guide: Before you go: what should the harbor call you?
+menu> name Bryn
+Test Fighter will be called Bryn.
+Bryn: Tell the ferry I am staying a while.
 Harbor Guide: Then take my apprentices. One knows a spark or two, the other knows bandages.
 Test Mystic joins the party.
 Test Medic joins the party.
-[Autosaved to auto_2 (event end).]
+[Autosaved to auto_1 (event end).]
 field> chat
 Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
 field> look
   ##############
-  #............#
+  #...........N#
   #....N..$.N..#
   #....@.......#
   #............>
@@ -65,41 +224,40 @@ field> talk
 A night's rest costs 10.
 menu> rest
 The party rests and recovers.
-[Autosaved to auto_0 (after rest).]
+[Autosaved to auto_2 (after rest).]
 field> menu
 menu> save manual_0
 Saved to manual_0.
 menu> close
 field> walk 13 4
 You arrive at Reed Path.
-[Autosaved to auto_1 (area entry).]
+[Autosaved to auto_0 (area entry).]
 field> walk cache_front
 Battle!
 Enemies: Gel Mite A, Gel Mite B, Rust Hound.
 -- round 1 --
-Test Fighter uses Focus Shot on Gel Mite A.
-  Gel Mite A takes 60 damage.
+Test Mystic uses Spark on Gel Mite A.
+  Gel Mite A takes 42 damage.
+Rust Hound uses Venom Spit on Test Mystic.
+  Test Mystic takes 16 damage.
+  Test Mystic resists the poison.
+Test Medic uses Glint on Gel Mite A.
+  Gel Mite A takes 18 damage.
   Gel Mite A falls.
-Test Medic turns from Gel Mite A to Gel Mite B.
-Test Medic uses Glint on Gel Mite B.
-  Gel Mite B takes 31 damage.
-Rust Hound uses Venom Spit on Test Fighter.
-  Test Fighter takes 8 damage.
-  Test Fighter is poisoned!
-Test Mystic turns from Gel Mite A to Gel Mite B.
-Test Mystic uses Spark on Gel Mite B.
-  Gel Mite B takes 29 damage.
+Bryn turns from Gel Mite A to Gel Mite B.
+Bryn uses Focus Shot on Gel Mite B.
+  Gel Mite B takes 60 damage.
   Gel Mite B falls.
-Gel Mite B cannot act (Defeated).
 Gel Mite A cannot act (Defeated).
-  Test Fighter suffers 6 from Poison.
+Gel Mite B cannot act (Defeated).
 -- round 2 --
-Test Mystic uses Spark on Rust Hound.
-  Rust Hound takes 66 damage.
-Rust Hound uses Bite on Test Medic.
-  Test Medic evades.
-Test Fighter uses Focus Shot on Rust Hound.
-  Rust Hound takes 24 damage.
+Bryn uses Focus Shot on Rust Hound.
+  Rust Hound evades.
+Rust Hound uses Bite on Bryn.
+  Bryn takes 13 damage.
+Combo: Twin Arc.
+  A new combination joins the combo log.
+  Rust Hound takes 90 damage.
   Rust Hound falls.
 Outcome: victory
 Victory. 22 experience, 15 money.
@@ -108,18 +266,18 @@ field> talk
 Found 1 Second Wind.
 Found 30 money.
 field> status
-Mode field, Reed Path (10,2) facing north, play time 0:00:21.
-  Test Fighter Lv3 HP 72/86 TP 8/8 EXP 22 [Poison 3]
-  Test Mystic Lv3 HP 46/46 TP 24/30 EXP 22
-  Test Medic Lv3 HP 52/52 TP 30/32 EXP 22
-  Money 73. Items: second_wind x1, tonic x6.
+Mode field, Reed Path (10,2) facing north, play time 0:00:42.
+  Bryn Lv3 HP 73/86 TP 8/8 EXP 44
+  Test Mystic Lv3 HP 30/46 TP 24/30 EXP 22
+  Test Medic Lv3 HP 52/52 TP 28/32 EXP 22
+  Money 88. Items: second_wind x1, tonic x7.
 field> chat
 Test Mystic: Every step out here squelches. I am counting them.
 Test Medic: Count the bites instead. I am the one who has to dress them.
 field> walk 10 4
 Test Scout: Heading for the cove? I have mapped these reeds twice over. I am coming along.
 Test Scout joins the party.
-[Autosaved to auto_2 (event end).]
+[Autosaved to auto_1 (event end).]
 field> walk peddler_front
 field> face south
 field> talk
@@ -129,74 +287,186 @@ shop> buy clear_gel 1
 Bought 1 Clear Gel for 6.
 shop> leave
 Reed Peddler: Mind the wisps. They hum before they bite.
-field> set auto tempest
-field> walk 19 4
+field> walk skimmer_front
 Battle!
 Enemies: Gel Mite A, Gel Mite B, Rust Hound.
-Auto-battle on with tempest.
 -- round 1 --
-Combo: Storm Spark.
-  A new combination joins the combo log.
-  Gel Mite A takes 60 damage.
+Test Scout uses Gust on Gel Mite A.
+  Gel Mite A takes 35 damage.
+Bryn uses Focus Shot on Gel Mite A.
+  Gel Mite A takes 25 damage.
   Gel Mite A falls.
-Test Fighter turns from Gel Mite A to Gel Mite B.
-Test Fighter uses Strike on Gel Mite B.
-  Gel Mite B takes 37 damage.
-Test Medic defends.
-Rust Hound uses Bite on Test Fighter.
-  Test Fighter takes 13 damage.
+Test Medic turns from Gel Mite A to Gel Mite B.
+Combo: Twin Arc.
+  Gel Mite B takes 60 damage.
+  Gel Mite B falls.
 Gel Mite A cannot act (Defeated).
-Gel Mite B uses Bite on Test Scout.
-  Test Scout takes 13 damage.
-  Test Fighter suffers 6 from Poison.
+Rust Hound uses Bite on Test Mystic.
+  Test Mystic takes 22 damage.
+Gel Mite B cannot act (Defeated).
 -- round 2 --
 Combo: Storm Spark.
-  Gel Mite B takes 23 damage.
-  Gel Mite B falls.
-Test Fighter turns from Gel Mite B to Rust Hound.
-Test Fighter uses Strike on Rust Hound.
-  Critical hit!
-  Rust Hound takes 52 damage.
-Test Medic defends.
-Rust Hound uses Bite on Test Mystic.
-  Test Mystic takes 24 damage.
-Gel Mite B cannot act (Defeated).
-  Test Fighter suffers 6 from Poison.
--- round 3 --
-Rust Hound uses Venom Spit on Test Fighter.
-  Test Fighter takes 9 damage.
-  Test Fighter is poisoned!
-Combo: Storm Spark.
-  Rust Hound takes 38 damage.
+  A new combination joins the combo log.
+  Rust Hound takes 90 damage.
   Rust Hound falls.
 Outcome: victory
 Victory. 22 experience, 15 money.
-The enemies dropped 1 Tonic.
-You arrive at Bell Cove.
-[Autosaved to auto_0 (area entry).]
+field> face north
+field> talk
+A reed skimmer bobs at its mooring, its boiler still warm.
+Take the skimmer out across the marsh? [0] Yes [1] No
+event> choose 0
+Battle!
+[Autosaved to auto_2 (before an event battle).]
+Enemies: Bog Wisp A, Bog Wisp B, Gel Mite.
+-- round 1 --
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer evades.
+Bog Wisp A uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer is paralyzed!
+Reed Skimmer cannot act (Paralysis).
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 8 damage.
+  Bryn takes 2 damage.
+  Test Mystic takes 2 damage.
+  Test Medic takes 2 damage.
+  Test Scout takes 2 damage.
+-- round 2 --
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer resists the paralysis.
+Bog Wisp A uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer resists the paralysis.
+Reed Skimmer cannot act (Paralysis).
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 8 damage.
+  Bryn takes 2 damage.
+  Test Mystic takes 2 damage.
+  Test Medic takes 2 damage.
+  Test Scout takes 2 damage.
+-- round 3 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+Reed Skimmer cannot act (Paralysis).
+Bog Wisp B uses Drone Hum on Reed Skimmer.
+  Reed Skimmer falls asleep!
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 8 damage.
+  Reed Skimmer wakes up.
+  Bryn takes 2 damage.
+  Test Mystic takes 2 damage.
+  Test Medic takes 2 damage.
+  Test Scout takes 2 damage.
+  Reed Skimmer can move again.
+-- round 4 --
+Bog Wisp A uses Drone Hum on Reed Skimmer.
+  Reed Skimmer falls asleep!
+Reed Skimmer cannot act (Sleep).
+Bog Wisp B uses Drone Hum on Reed Skimmer.
+  Reed Skimmer stays awake.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 8 damage.
+  Reed Skimmer wakes up.
+  Bryn takes 2 damage.
+  Test Mystic takes 2 damage.
+  Test Mystic falls.
+  Test Medic takes 2 damage.
+  Test Scout takes 2 damage.
+-- round 5 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer resists the paralysis.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 7 damage.
+  Bryn takes 1 damage.
+  Test Medic takes 1 damage.
+  Test Scout takes 1 damage.
+Reed Skimmer uses Steam Vent on Gel Mite.
+  Gel Mite takes 42 damage.
+-- round 6 --
+Bog Wisp B uses Patch Up on Gel Mite.
+  Gel Mite recovers 26.
+Reed Skimmer uses Steam Vent on Gel Mite.
+  Gel Mite takes 44 damage.
+  Gel Mite falls.
+Bog Wisp A uses Drone Hum on Reed Skimmer.
+  Reed Skimmer falls asleep!
+Gel Mite cannot act (Defeated).
+-- round 7 --
+Bog Wisp A uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer wakes up.
+  Reed Skimmer resists the paralysis.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer evades.
+Reed Skimmer uses Steam Vent.
+  Bog Wisp A takes 21 damage.
+  Bog Wisp B takes 24 damage.
+-- round 8 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+Reed Skimmer uses Steam Vent.
+  Bog Wisp A takes 24 damage.
+  Bog Wisp B takes 21 damage.
+-- round 9 --
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 25 damage.
+  Bog Wisp A falls.
+Bog Wisp A cannot act (Defeated).
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+-- round 10 --
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 25 damage.
+  Bog Wisp B falls.
+Outcome: victory
+Victory. 30 experience, 22 money.
+Test Scout: The wisps scatter. This old hull can take a beating.
+[Autosaved to auto_0 (event end).]
 field> status
-Mode field, Bell Cove (1,4) facing east, play time 0:00:37.
-  Test Fighter Lv3 HP 38/86 TP 8/8 EXP 44 [Poison 4]
-  Test Mystic Lv3 HP 22/46 TP 15/30 EXP 44
-  Test Medic Lv3 HP 52/52 TP 30/32 EXP 44
-  Test Scout Lv4 HP 47/60 TP 9/18 EXP 22
-  Money 82. Items: clear_gel x1, second_wind x1, tonic x7.
+Mode field, Reed Path (17,6) facing north, play time 0:01:33.
+  Bryn Lv3 HP 64/86 TP 8/8 EXP 96
+  Test Mystic Lv3 HP 0/46 TP 18/30 EXP 44
+  Test Medic Lv3 HP 43/52 TP 26/32 EXP 74
+  Test Scout Lv4 HP 51/60 TP 12/18 EXP 52
+  Money 119. Items: clear_gel x1, loosen_oil x1, second_wind x1, tonic x7.
+field> set auto tempest
+field> walk 19 4
+You arrive at Bell Cove.
+[Autosaved to auto_1 (area entry).]
+field> status
+Mode field, Bell Cove (1,4) facing east, play time 0:01:34.
+  Bryn Lv3 HP 64/86 TP 8/8 EXP 96
+  Test Mystic Lv3 HP 0/46 TP 18/30 EXP 44
+  Test Medic Lv3 HP 43/52 TP 26/32 EXP 74
+  Test Scout Lv4 HP 51/60 TP 12/18 EXP 52
+  Money 119. Items: clear_gel x1, loosen_oil x1, second_wind x1, tonic x7.
 field> walk camp_front
 field> face north
 field> talk
 Someone left a fire banked under the cliff. The embers still glow.
-Rest by the fire? It costs a little driftwood. [0] yes [1] no
+Rest by the fire? It costs a little driftwood. [0] Yes [1] No
 event> choose 0
 The party rests and recovers.
 The warmth draws the ache out of everyone.
-[Autosaved to auto_1 (after rest).]
+The firelight is good enough to write by.
+menu> save manual_1
+Saved to manual_1.
+menu> close
+[Autosaved to auto_2 (after rest).]
 field> status
-Mode field, Bell Cove (2,2) facing north, play time 0:00:38.
-  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 44
+Mode field, Bell Cove (2,2) facing north, play time 0:01:35.
+  Bryn Lv3 HP 86/86 TP 8/8 EXP 96
   Test Mystic Lv3 HP 46/46 TP 30/30 EXP 44
-  Test Medic Lv3 HP 52/52 TP 32/32 EXP 44
-  Test Scout Lv4 HP 60/60 TP 18/18 EXP 22
-  Money 77. Items: clear_gel x1, second_wind x1, tonic x7.
+  Test Medic Lv3 HP 52/52 TP 32/32 EXP 74
+  Test Scout Lv4 HP 60/60 TP 18/18 EXP 52
+  Money 114. Items: clear_gel x1, loosen_oil x1, second_wind x1, tonic x7.
 field> walk box_front
 field> face south
 field> talk
@@ -204,7 +474,7 @@ Found 1 Tonic.
 Found 1 Rivet Plate.
 field> menu
 menu> equip fighter rivet_plate
-Test Fighter equips Rivet Plate.
+Bryn equips Rivet Plate.
 menu> close
 field> set shipped on
 field> walk bell_front
@@ -215,230 +485,233 @@ Test Mystic: That is no bell keeper. That is a BelWrdn!
 New encyclopedia entry: BelWrdn.
   (music play brass_alarm)
 Battle!
-[Autosaved to auto_2 (before an event battle).]
+[Autosaved to auto_0 (before an event battle).]
 Enemies: Brass Warden, Bog Wisp.
 Auto-battle on with tempest.
 -- round 1 --
+Combo: Storm Spark.
+  Brass Warden takes 83 damage.
+Bryn uses Strike on Brass Warden.
+  Brass Warden takes 32 damage.
+Test Medic defends.
 Bog Wisp uses Drone Hum.
-  Test Fighter stays awake.
+  Bryn falls asleep!
   Test Mystic cannot be put to sleep.
   Test Medic stays awake.
   Test Scout stays awake.
-Combo: Storm Spark.
-  Brass Warden takes 92 damage.
-Test Fighter uses Strike on Brass Warden.
-  Brass Warden takes 29 damage.
-Test Medic defends.
 Brass Warden uses Steam Vent.
-  Test Fighter takes 27 damage.
-  Test Mystic takes 20 damage.
-  Test Medic takes 10 damage.
+  Bryn takes 30 damage.
+  Bryn wakes up.
+  Test Mystic takes 24 damage.
+  Test Medic takes 12 damage.
   Test Scout takes 25 damage.
 -- round 2 --
 Combo: Storm Spark.
-  Brass Warden takes 97 damage.
-Test Fighter uses Strike on Brass Warden.
-  Brass Warden takes 34 damage.
+  Brass Warden takes 98 damage.
+Bryn uses Strike on Brass Warden.
+  Brass Warden takes 32 damage.
 Test Medic defends.
-Bog Wisp uses Numbing Sting on Test Mystic.
-  Test Mystic takes 6 damage.
-  Test Mystic resists the paralysis.
-Brass Warden uses Gear Slam on Test Medic.
-  Test Medic takes 23 damage.
+Brass Warden uses Steam Vent.
+  Bryn takes 30 damage.
+  Test Mystic takes 22 damage.
+  Test Mystic falls.
+  Test Medic takes 12 damage.
+  Test Scout takes 28 damage.
+Bog Wisp turns from Test Mystic to Test Medic.
+Bog Wisp uses Numbing Sting on Test Medic.
+  Test Medic takes 2 damage.
+  Test Medic is paralyzed!
+Auto-battle stops: a party member fell.
 -- round 3 --
-Combo: Storm Spark.
+Test Scout uses Gust on Brass Warden.
   Brass Warden takes 28 damage.
+Bryn uses Focus Shot on Brass Warden.
+  Brass Warden takes 7 damage.
   Brass Warden falls.
-Test Fighter turns from Brass Warden to Bog Wisp.
-Test Fighter uses Strike on Bog Wisp.
-  Bog Wisp takes 38 damage.
-Test Medic defends.
-Bog Wisp uses Bite on Test Fighter.
-  Test Fighter takes 1 damage.
+Test Medic cannot act (Paralysis).
+Bog Wisp uses Numbing Sting on Bryn.
+  Bryn takes 1 damage.
+  Bryn is paralyzed!
 Brass Warden cannot act (Defeated).
 -- round 4 --
-Bog Wisp uses Numbing Sting on Test Fighter.
-  Test Fighter takes 1 damage.
-  Test Fighter resists the paralysis.
-Combo: Storm Spark.
-  Bog Wisp takes 0 damage.
-Test Fighter uses Strike on Bog Wisp.
-  Bog Wisp takes 32 damage.
+Test Scout uses Gust on Bog Wisp.
+  Bog Wisp takes 45 damage.
+  Bryn can move again.
+Bryn uses Focus Shot on Bog Wisp.
+  Bog Wisp evades.
+Bog Wisp uses Numbing Sting on Test Medic.
+  Test Medic takes 4 damage.
+  Test Medic resists the paralysis.
+Test Medic cannot act (Paralysis).
+  Test Medic can move again.
+-- round 5 --
+Test Scout uses Gust on Bog Wisp.
+  Bog Wisp takes 25 damage.
   Bog Wisp falls.
 Outcome: victory
 Victory. 72 experience, 59 money.
 The enemies dropped 1 Loosen Oil.
-The enemies dropped 1 Wake Chime.
+Bryn reached level 4.
+Test Medic reached level 4.
+Test Medic learned Renew.
 Test Mystic: It is only gears now. The bell can rest.
   (music stop)
 For the first time in a week, the tide is the only sound in the cove.
 The story is complete. Clear data recorded.
-[Autosaved to auto_0 (event end).]
+[Autosaved to auto_1 (event end).]
 field> status
-Mode field, Bell Cove (8,4) facing east, play time 0:00:57.
-  Test Fighter Lv3 HP 57/96 TP 8/8 EXP 116
-  Test Mystic Lv3 HP 20/46 TP 18/30 EXP 116
-  Test Medic Lv3 HP 19/52 TP 32/32 EXP 116
-  Test Scout Lv4 HP 35/60 TP 6/18 EXP 94
-  Money 136. Items: clear_gel x1, loosen_oil x1, second_wind x1, spark_flask x1, tonic x8, wake_chime x1, padded_coat x1.
+Mode field, Bell Cove (8,4) facing east, play time 0:01:58.
+  Bryn Lv4 HP 33/104 TP 9/9 EXP 23
+  Test Mystic Lv3 HP 0/46 TP 24/30 EXP 44
+  Test Medic Lv4 HP 27/57 TP 35/35 EXP 1
+  Test Scout Lv4 HP 7/60 TP 3/18 EXP 124
+  Money 173. Items: clear_gel x1, loosen_oil x2, second_wind x1, spark_flask x1, tonic x8, padded_coat x1.
 field> codex
   Tidewater Landing: A ferry town built on pilings. Its noticeboard is the only post office for three bays.
   BelWrdn: A clockwork keeper wound to guard the cove bell. Nobody remembers who wound it.
   Glossary: Bell Warden (shipped as BelWrdn)
 field> walk 0 4
 You arrive at Reed Path.
-[Autosaved to auto_1 (area entry).]
+[Autosaved to auto_2 (area entry).]
 field> walk 0 4
 Battle!
 Enemies: Bog Wisp A, Bog Wisp B, Gel Mite.
 Auto-battle on with tempest.
 -- round 1 --
-Combo: Storm Spark.
-  Bog Wisp A takes 0 damage.
-Test Fighter uses Strike on Bog Wisp A.
-  Bog Wisp A takes 38 damage.
+Test Scout uses Gust on Bog Wisp A.
+  Bog Wisp A takes 48 damage.
+Bryn uses Strike on Bog Wisp A.
+  Bog Wisp A takes 22 damage.
+  Bog Wisp A falls.
 Test Medic defends.
-Bog Wisp B uses Drone Hum.
-  Test Fighter falls asleep!
-  Test Mystic cannot be put to sleep.
-  Test Medic stays awake.
-  Test Scout stays awake.
-Gel Mite uses Bite on Test Medic.
-  Test Medic takes 7 damage.
-Bog Wisp A uses Numbing Sting on Test Medic.
-  Test Medic takes 2 damage.
-  Test Medic resists the paralysis.
+Bog Wisp A cannot act (Defeated).
+Gel Mite uses Bite on Bryn.
+  Bryn takes 2 damage.
+Bog Wisp B uses Numbing Sting on Test Medic.
+  Test Medic evades.
+Auto-battle stops: a macro entry cannot be paid.
 -- round 2 --
-Combo: Storm Spark.
-  Bog Wisp A takes 0 damage.
-Test Medic defends.
-Bog Wisp A uses Drone Hum.
-  Test Fighter falls asleep!
-  Test Mystic cannot be put to sleep.
-  Test Medic stays awake.
-  Test Scout stays awake.
+Test Scout uses Scatter Shot on Gel Mite.
+  Gel Mite takes 13 damage.
+Test Medic uses Rekindle on Test Mystic.
+  Test Mystic is revived.
+Bryn uses Focus Shot on Gel Mite.
+  Gel Mite evades.
 Bog Wisp B uses Drone Hum.
-  Test Fighter falls asleep!
+  Bryn stays awake.
   Test Mystic cannot be put to sleep.
   Test Medic falls asleep!
   Test Scout stays awake.
-Gel Mite uses Bite on Test Fighter.
-  Test Fighter takes 3 damage.
-  Test Fighter wakes up.
-Test Fighter uses Strike on Bog Wisp A.
-  Bog Wisp A takes 32 damage.
-  Bog Wisp A falls.
-Auto-battle stops: a macro entry cannot be paid.
+Gel Mite uses Bite on Test Medic.
+  Test Medic takes 14 damage.
+  Test Medic wakes up.
 -- round 3 --
 Test Scout uses Scatter Shot on Gel Mite.
-  Gel Mite takes 13 damage.
-Test Fighter uses Focus Shot on Gel Mite.
-  Gel Mite takes 47 damage.
+  Gel Mite takes 14 damage.
+Test Mystic uses Spark on Gel Mite.
+  Gel Mite takes 33 damage.
   Gel Mite falls.
-Test Medic cannot act (Sleep).
-Bog Wisp B uses Numbing Sting on Test Mystic.
-  Test Mystic takes 7 damage.
-  Test Mystic resists the paralysis.
-Test Mystic turns from Gel Mite to Bog Wisp B.
-Test Mystic uses Spark on Bog Wisp B.
-  Bog Wisp B takes 0 damage.
+Bog Wisp B uses Numbing Sting on Test Scout.
+  Test Scout takes 3 damage.
+  Test Scout is paralyzed!
 Gel Mite cannot act (Defeated).
+Test Medic uses Mend on Test Scout.
+  Test Scout recovers 37.
+Bryn turns from Gel Mite to Bog Wisp B.
+Bryn uses Cleave on Bog Wisp B.
+  Bog Wisp B takes 42 damage.
 -- round 4 --
-Test Scout uses Scatter Shot on Bog Wisp B.
-  Bog Wisp B takes 12 damage.
+Test Scout cannot act (Paralysis).
 Test Mystic uses Spark on Bog Wisp B.
   Bog Wisp B takes 0 damage.
-Bog Wisp B uses Numbing Sting on Test Medic.
-  Test Medic takes 5 damage.
-  Test Medic wakes up.
-  Test Medic resists the paralysis.
-Test Fighter uses Focus Shot on Bog Wisp B.
-  Critical hit!
-  Bog Wisp B takes 58 damage.
+Bog Wisp B uses Bite on Bryn.
+  Bryn takes 1 damage.
+Bryn uses Cleave on Bog Wisp B.
+  Bog Wisp B evades.
+Test Medic uses Mend on Test Medic.
+  Test Medic recovers 37.
+-- round 5 --
+Test Scout cannot act (Paralysis).
+Test Mystic uses Spark on Bog Wisp B.
+  Bog Wisp B takes 0 damage.
+Test Medic uses Mend on Bryn.
+  Bryn recovers 37.
+Bryn uses Strike on Bog Wisp B.
+  Bog Wisp B takes 28 damage.
   Bog Wisp B falls.
 Outcome: victory
 Victory. 30 experience, 22 money.
-Test Fighter reached level 4.
-Test Mystic reached level 4.
-Test Medic reached level 4.
-Test Medic learned Renew.
 Battle!
 Enemies: Gel Mite A, Gel Mite B, Rust Hound.
 Auto-battle on with tempest.
 Auto-battle stops: a macro entry cannot be paid.
 -- round 1 --
 Test Scout uses Scatter Shot.
-  Critical hit!
-  Gel Mite A takes 16 damage.
-  Gel Mite B takes 12 damage.
-Test Medic uses Mend on Test Medic.
-  Test Medic recovers 37.
-Rust Hound uses Bite on Test Mystic.
-  Test Mystic takes 17 damage.
-  Test Mystic falls.
-Test Mystic cannot act (Defeated).
-Test Fighter uses Focus Shot on Gel Mite A.
-  Gel Mite A takes 44 damage.
-  Gel Mite A falls.
-Gel Mite B uses Bite on Test Medic.
-  Test Medic takes 15 damage.
-Gel Mite A cannot act (Defeated).
--- round 2 --
-Test Scout uses Scatter Shot on Gel Mite B.
+  Gel Mite A takes 12 damage.
   Gel Mite B takes 11 damage.
+Test Mystic uses Spark on Gel Mite A.
+  Gel Mite A takes 48 damage.
+  Gel Mite A falls.
+Bryn turns from Gel Mite A to Gel Mite B.
+Bryn uses Strike on Gel Mite B.
+  Gel Mite B takes 47 damage.
 Rust Hound uses Venom Spit on Test Scout.
-  Test Scout takes 11 damage.
-  Test Scout resists the poison.
-Test Fighter uses Cleave on Gel Mite B.
-  Gel Mite B takes 37 damage.
+  Test Scout takes 14 damage.
+  Test Scout is poisoned!
+Test Medic turns from Gel Mite A to Gel Mite B.
+Test Medic uses Glint on Gel Mite B.
+  Gel Mite B takes 2 damage.
   Gel Mite B falls.
+Gel Mite A cannot act (Defeated).
 Gel Mite B cannot act (Defeated).
-Test Medic uses Rekindle on Test Mystic.
-  Test Mystic is revived.
--- round 3 --
+  Test Scout suffers 4 from Poison.
+-- round 2 --
 Test Scout uses Scatter Shot on Rust Hound.
   Rust Hound evades.
-Test Mystic uses Strike on Rust Hound.
-  Rust Hound takes 6 damage.
-Test Medic uses Glint on Rust Hound.
-  Rust Hound takes 52 damage.
-Rust Hound uses Bite on Test Fighter.
-  Test Fighter takes 9 damage.
-Test Fighter uses Cleave on Rust Hound.
-  Rust Hound takes 32 damage.
+Bryn uses Strike on Rust Hound.
+  Rust Hound takes 42 damage.
+Test Medic uses Mend on Test Scout.
+  Test Scout recovers 37.
+Rust Hound uses Bite on Test Medic.
+  Test Medic takes 21 damage.
+Test Mystic uses Spark on Rust Hound.
+  Rust Hound takes 48 damage.
   Rust Hound falls.
 Outcome: victory
 Victory. 22 experience, 15 money.
-The enemies dropped 1 Tonic.
 You arrive at Tidewater Landing.
-[Autosaved to auto_2 (area entry).]
+[Autosaved to auto_0 (area entry).]
 field> walk dock_front
 field> face north
 field> talk
 Dockhand: You found it? Keep the coin, it was yours the moment you got your boots wet. Take these too.
 Job completed: The dockhand's lost crate.
-[Autosaved to auto_0 (event end).]
+[Autosaved to auto_1 (event end).]
 field> walk guide_front
 field> face north
 field> talk
   (face guide fighter)
 Harbor Guide: Quiet nights again. The whole harbor owes you a supper.
-[Autosaved to auto_1 (event end).]
+[Autosaved to auto_2 (event end).]
 field> quests
   Objective: Enjoy the quiet nights at Tidewater Landing.
   Job: The dockhand's lost crate (completed)
 field> log
-  The ferry bumps against the pilings of Tidewater Landing.
-  Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  The hold falls quiet. A tonic rolls out from behind the crate.
   Dockhand: A crate of my supplies washed into the reeds last storm. Nobody will wade out for it.
   Dockhand: Bless you. It sits on a dry patch, north side of the path.
   Harbor Guide: You came about the bell? It rings every night at Bell Cove, east past the reeds.
+  Harbor Guide: Before you go: what should the harbor call you?
+  Bryn: Tell the ferry I am staying a while.
   Harbor Guide: Then take my apprentices. One knows a spark or two, the other knows bandages.
   Test Scout: Heading for the cove? I have mapped these reeds twice over. I am coming along.
   Reed Peddler: Psst. Best prices this side of the marsh, and the only prices.
   Reed Peddler: Mind the wisps. They hum before they bite.
+  A reed skimmer bobs at its mooring, its boiler still warm.
+  Test Scout: The wisps scatter. This old hull can take a beating.
   Someone left a fire banked under the cliff. The embers still glow.
   The warmth draws the ache out of everyone.
+  The firelight is good enough to write by.
   A cracked bell hangs from a driftwood frame. Something stirs beneath it.
   Test Mystic: That is no bell keeper. That is a BelWrdn!
   Test Mystic: It is only gears now. The bell can rest.
@@ -447,24 +720,25 @@ field> log
   Harbor Guide: Quiet nights again. The whole harbor owes you a supper.
 field> pacing
 area          visits  battles  steps  field_s  battle_s  event_s  med_gap_s  med_gap_steps  exp   money
-tidewater     2       0        50     12.5     0.0       0.0      -          -              0     0
-reed_path     2       4        44     12.4     48.0      0.0      3.0        11             96    67
-bell_cove     1       1        25     6.2      16.0      0.0      5.5        22             72    59
+tidewater     4       3        56     14.0     68.0      0.0      0.0        0              22    15
+reed_path     2       5        44     12.0     84.0      0.0      3.2        12             126   89
+bell_cove     1       1        25     6.2      20.0      0.0      5.2        21             72    59
 boss_flag             encounter  area        avg_level  dungeon_s
-cove.warden_beaten    warden     bell_cove   3.25       20.2
+cove.warden_beaten    warden     bell_cove   3.25       24.2
 field> saves
-  manual_0 tidewater 0:00:07 [fighter:3 mystic:3 medic:3] original
-  auto_0 tidewater 0:01:33 [fighter:4 mystic:4 medic:4 scout:4] original (auto)
-  auto_1 tidewater 0:01:35 [fighter:4 mystic:4 medic:4 scout:4] original (auto)
-  auto_2 tidewater 0:01:33 [fighter:4 mystic:4 medic:4 scout:4] original (auto)
+  manual_0 tidewater 0:00:29 [fighter:3 mystic:3 medic:3] original
+  manual_1 bell_cove 0:01:35 [fighter:3 mystic:3 medic:3 scout:4] original
+  auto_0 tidewater 0:02:34 [fighter:4 mystic:3 medic:4 scout:4] original (auto)
+  auto_1 tidewater 0:02:35 [fighter:4 mystic:3 medic:4 scout:4] original (auto)
+  auto_2 tidewater 0:02:36 [fighter:4 mystic:3 medic:4 scout:4] original (auto)
 field> title
 title> load manual_0
 Loaded manual_0.
 field> status
-Mode field, Tidewater Landing (3,6) facing west, play time 0:00:07.
-  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 0
+Mode field, Tidewater Landing (3,6) facing west, play time 0:00:29.
+  Bryn Lv3 HP 86/86 TP 8/8 EXP 22
   Test Mystic Lv3 HP 46/46 TP 30/30 EXP 0
   Test Medic Lv3 HP 52/52 TP 32/32 EXP 0
-  Money 28. Items: tonic x6.
+  Money 43. Items: tonic x7.
 field> quit
 End of script.

@@ -19,7 +19,7 @@ bool is_digit(char c) {
 	return std::isdigit(static_cast<unsigned char>(c)) != 0;
 }
 
-bool lex_line(const std::string& text, std::vector<Token>& tokens, std::string& error) {
+bool lex_line(const std::string& text, std::vector<Token>& tokens, DiagnosticMessage& error) {
 	std::size_t i = 0;
 	while (i < text.size()) {
 		char c = text[i];
@@ -51,7 +51,7 @@ bool lex_line(const std::string& text, std::vector<Token>& tokens, std::string& 
 					} else if (e == '"' || e == '\\') {
 						token.text += e;
 					} else {
-						error = std::string("unknown escape '\\") + e + "' in string";
+						error = {"script.unknown_escape_in_string", {std::string(1, e)}};
 						return false;
 					}
 					continue;
@@ -59,7 +59,7 @@ bool lex_line(const std::string& text, std::vector<Token>& tokens, std::string& 
 				token.text += d;
 			}
 			if (!closed) {
-				error = "unterminated string";
+				error = {"script.unterminated_string", {}};
 				return false;
 			}
 		} else if (c == '@') {
@@ -70,7 +70,7 @@ bool lex_line(const std::string& text, std::vector<Token>& tokens, std::string& 
 				++i;
 			}
 			if (i == start) {
-				error = "expected a string ID after '@'";
+				error = {"script.expected_string_id", {}};
 				return false;
 			}
 			token.text = text.substr(start, i - start);
@@ -81,7 +81,7 @@ bool lex_line(const std::string& text, std::vector<Token>& tokens, std::string& 
 			while (i < text.size() && (is_digit(text[i]) || text[i] == '.')) {
 				if (text[i] == '.') {
 					if (real) {
-						error = "malformed number";
+						error = {"script.malformed_number", {}};
 						return false;
 					}
 					real = true;
@@ -89,7 +89,7 @@ bool lex_line(const std::string& text, std::vector<Token>& tokens, std::string& 
 				++i;
 			}
 			if (i < text.size() && is_word_char(text[i])) {
-				error = "malformed number '" + text.substr(start, i - start + 1) + "'";
+				error = {"script.malformed_number_named", {text.substr(start, i - start + 1)}};
 				return false;
 			}
 			token.text = text.substr(start, i - start);
@@ -112,13 +112,13 @@ bool lex_line(const std::string& text, std::vector<Token>& tokens, std::string& 
 			token.kind = TokenKind::op;
 			bool has_eq = i + 1 < text.size() && text[i + 1] == '=';
 			if ((c == '!' || c == '+' || c == '-') && !has_eq) {
-				error = std::string("unexpected character '") + c + "'";
+				error = {"script.unexpected_character", {std::string(1, c)}};
 				return false;
 			}
 			token.text = text.substr(i, has_eq ? 2 : 1);
 			i += has_eq ? 2 : 1;
 		} else {
-			error = std::string("unexpected character '") + c + "'";
+			error = {"script.unexpected_character", {std::string(1, c)}};
 			return false;
 		}
 		tokens.push_back(token);
@@ -140,9 +140,9 @@ std::vector<SourceLine> tokenize(const std::string& file, const std::string& tex
 		++number;
 		SourceLine line;
 		line.number = number;
-		std::string error;
+		DiagnosticMessage error;
 		if (!lex_line(text.substr(start, end - start), line.tokens, error)) {
-			diagnostics.push_back({Severity::error, file, number, error});
+			diagnostics.push_back(diagnostic(Severity::error, file, number, error));
 		} else if (!line.tokens.empty()) {
 			lines.push_back(line);
 		}

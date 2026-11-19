@@ -484,7 +484,7 @@ void printHeader(const Battle& battle) {
 	const BattleSetup& setup = battle.setup();
 	std::cout << "Encounter: " << setup.enemyGroup << "  seed " << setup.seed << "  difficulty "
 		<< (setup.difficulty.empty() ? "none" : setup.difficulty) << "  opening " << toString(setup.opening)
-		<< "  reward x" << toString(setup.rewardMultiplier) << "\n";
+		<< "  reward " << toString(setup.rewardMultiplier) << "\n";
 }
 
 int replay(const Options& options, const Database& db, const TextTable& text) {

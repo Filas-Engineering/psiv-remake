@@ -1,5 +1,5 @@
 CXX := clang++
-CXXFLAGS := -std=c++17 -Wall -Wextra -Werror -Iinclude -Isrc -MMD -MP
+CXXFLAGS := -std=c++17 -Wall -Wextra -Werror -fPIC -Iinclude -Isrc -MMD -MP
 
 BUILD := build
 LIB_SOURCES := $(wildcard src/*.cpp)

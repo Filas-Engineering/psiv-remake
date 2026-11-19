@@ -63,12 +63,12 @@ bool load_timing_config(const std::string& file, const std::string& text, Timing
 		while (in >> w) {
 			words.push_back(w);
 		}
-		std::string problem;
+		DiagnosticMessage problem;
 		double seconds = 0;
 		const std::string& key = words[0];
 		if (key == "text_speed" || key == "line_pause" || key == "choice_time" || key == "battle_time") {
 			if (words.size() != 2 || !parse_seconds(words[1], seconds)) {
-				problem = key + ": expected one non-negative number";
+				problem = {"timing.expected_number", {key}};
 			} else if (key == "text_speed") {
 				result.chars_per_second = seconds;
 			} else if (key == "line_pause") {
@@ -81,21 +81,21 @@ bool load_timing_config(const std::string& file, const std::string& text, Timing
 		} else if (key == "duration") {
 			ActionType type = ActionType::move;
 			if (words.size() < 3 || words.size() > 4) {
-				problem = "duration: expected '<action> [<subject>] <seconds>'";
+				problem = {"timing.duration_shape", {}};
 			} else if (!parse_action_type(words[1], type)) {
-				problem = "duration: unknown action '" + words[1] + "'";
+				problem = {"timing.unknown_action", {words[1]}};
 			} else if (!parse_seconds(words.back(), seconds)) {
-				problem = "duration: expected a non-negative number of seconds, found '" + words.back() + "'";
+				problem = {"timing.duration_seconds", {words.back()}};
 			} else if (words.size() == 4) {
 				result.subject_seconds[{type, words[2]}] = seconds;
 			} else {
 				result.action_seconds[type] = seconds;
 			}
 		} else {
-			problem = "unknown setting '" + key + "'";
+			problem = {"timing.unknown_setting", {key}};
 		}
 		if (!problem.empty()) {
-			diagnostics.push_back({Severity::error, file, number, problem});
+			diagnostics.push_back(diagnostic(Severity::error, file, number, problem));
 			ok = false;
 		}
 	}

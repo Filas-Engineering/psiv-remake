@@ -313,14 +313,14 @@ TEST(eventTypesHaveStableNames) {
 	cancelled.command = CommandKind::Ability;
 	cancelled.cancel = CancelReason::ActorUnable;
 	cancelled.status = "sleep";
-	CHECK_EQ(serializeEvent(cancelled), std::string("2 ActionCancelled actor=1 ability=spark status=sleep command=ability cancel=actor_unable"));
+	CHECK_EQ(serializeEvent(cancelled), std::string("2 action_cancelled actor=1 ability=spark status=sleep command=ability cancel=actor_unable"));
 
 	Event locked;
 	locked.type = EventType::CommandsLocked;
 	locked.round = 1;
 	locked.macro = "opener";
 	locked.commands = {{0, Command::attack(5)}, {1, Command::ability("spark", -1)}};
-	CHECK_EQ(serializeEvent(locked), std::string("1 CommandsLocked macro=opener commands=0:attack:-:5,1:ability:spark:-1"));
+	CHECK_EQ(serializeEvent(locked), std::string("1 commands_locked macro=opener commands=0:attack:-:5,1:ability:spark:-1"));
 
 	Event damage;
 	damage.type = EventType::DamageDealt;
@@ -328,5 +328,5 @@ TEST(eventTypesHaveStableNames) {
 	damage.target = 5;
 	damage.amount = 12;
 	damage.hp = 0;
-	CHECK_EQ(serializeEvent(damage), std::string("3 DamageDealt target=5 amount=12 hp=0"));
+	CHECK_EQ(serializeEvent(damage), std::string("3 damage_dealt target=5 amount=12 hp=0"));
 }

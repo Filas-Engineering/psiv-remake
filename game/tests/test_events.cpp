@@ -140,6 +140,12 @@ TEST(choiceBranchesAndPartyChangesFromEvents) {
 	s.confirmLine();
 	CHECK(s.choose(0).empty());
 	s.confirmLine();
+	CHECK(s.menuKind() == MenuKind::NameEntry);
+	CHECK_EQ(s.nameEntryMember(), std::string("fighter"));
+	CHECK(s.enterName("Bryn").empty());
+	CHECK(s.mode() == Mode::Event);
+	CHECK_EQ(s.lineText(), std::string("Bryn: Tell the ferry I am staying a while."));
+	test::confirmLines(s);
 	CHECK(s.mode() == Mode::Field);
 	CHECK_EQ(s.world().lineup.size(), 3u);
 	CHECK_EQ(s.world().member("mystic")->level, 3);

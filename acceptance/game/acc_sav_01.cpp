@@ -52,7 +52,7 @@ ACC_CHECK(acc_sav_01, "ACC-SAV-01", "SAV-010, SAV-011") {
 	t.expect(points + files >= 50, "only " + std::to_string(points + files) + " save points were taken; the check needs 50");
 	t.expect(midEvent > 0, "the playthrough wrote no autosave with mid-event state, so that chunk was not round-tripped");
 	t.note(std::to_string(points) + " saves taken after each command of game/data/scripts/playthrough.txt and " + std::to_string(files) +
-		" save files the game wrote on the way (" + std::to_string(midEvent) + " with mid-event state) load and save again byte-identically; a new write time changes only the header's write time and the checksum; every SAV-001 field compares equal field by field (sameWorld) to the live world; camera volume and vehicle round-trip empty, since the adventure has neither");
+		" save files the game wrote on the way (" + std::to_string(midEvent) + " with mid-event state) load and save again byte-identically; a new write time changes only the header's write time and the checksum; every SAV-001 field compares equal field by field (sameWorld) to the live world; camera volume and vehicle round-trip empty, since the adventure has no camera volumes and no vehicle in the field (its skimmer fights only in an event battle)");
 	std::error_code ignored;
 	std::filesystem::remove_all(dir, ignored);
 }

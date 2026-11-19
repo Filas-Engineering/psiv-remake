@@ -253,6 +253,8 @@ flee
 end
 ```
 
+`aboard <vehicle>` is optional and comes right after the encounter: the party fights riding that vehicle, which takes the commands while the members ride along (`battle reef_crabs aboard skiff`). With a registry, the vehicle must be listed on a `vehicle` line.
+
 `opening` is optional: `normal` (the default), `party_first` or `enemy_first`.
 
 `until` is optional and gives the battle a scripted end, after `opening` if both are written:
@@ -414,6 +416,7 @@ map_markers harbor pier_end stall_counter
 map_markers lighthouse_base door_inside
 event_map harbor harbor_arrival
 enemy lamp_moth
+vehicle skiff
 shop vendor_stall
 rest harbor_inn
 
@@ -423,7 +426,7 @@ var harbor.first_stop
 var market.offer local default 30
 ```
 
-- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `face` and `anim` subject), `marker` (`move`, `face` and `warp` targets), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation`, `portrait` (the `as` of `say`), `item`, `member` (`party` and `name entry`), `encounter`, `enemy` (`until defeat`), `map`, `shop` and `rest`. Panel IDs are not listed; each scene names its own.
+- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `face` and `anim` subject), `marker` (`move`, `face` and `warp` targets), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation`, `portrait` (the `as` of `say`), `item`, `member` (`party` and `name entry`), `encounter`, `enemy` (`until defeat`), `vehicle` (`battle ... aboard`), `map`, `shop` and `rest`. Panel IDs are not listed; each scene names its own.
 - `map_markers <map> <marker>...` lists the markers on one map; they count as listed markers. A marker on several maps is listed for each. `warp <map> <marker>` to a marker that is not on that map is an error. The checker also follows the map the party is on through each event, from its last `warp` (and from the start, see `event_map`), so a `move` to a marker on another map is an error too. Where the map cannot be known (after a branch that warps on one side only, a `call`, a `label`, or in a loop that warps), nothing more is checked until the next `warp`.
 - `event_map <map> <event>...` says the game starts those events on that map, for example from a hook in that area. An event listed for one map starts the move check on it; one listed for several, or none, starts with the map unknown.
 - `enemy <name>...` lists the enemies a `battle ... until defeat` may name.
@@ -443,7 +446,7 @@ Give `--glossary` to fail on glossary names typed out instead of written as name
 
 ## Error messages
 
-The checker reports every problem it finds as `file:line: error: message`. It catches:
+The checker reports every problem it finds as `file:line: error: message`. Each diagnostic also carries a text key and its parameters (`Diagnostic::key` and `params`), so a tool can show it in another language; `diagnostic_text()` has the English template of every key. It catches:
 
 - unknown commands, and missing, extra or wrong-type arguments
 - blocks without an `end`, and an `end`, `else`, `option`, `yes`, `no`, `win`, `lose` or `flee` in the wrong place

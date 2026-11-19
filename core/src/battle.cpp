@@ -79,7 +79,7 @@ std::string checkMember(const Database& db, const PartyMember& member) {
 Combatant fromMember(const Database& db, const CharacterDef& def, const PartyMember& member) {
 	Combatant c;
 	c.defId = def.id;
-	c.name = def.name;
+	c.name = member.name.empty() ? def.name : member.name;
 	c.side = Side::Party;
 	c.group = kPartyGroup;
 	c.stats = memberStats(db, member);

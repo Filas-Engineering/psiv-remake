@@ -105,6 +105,16 @@ static void testVersion(void) {
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_CANCEL_REASON, PSIV_CANCEL_NOT_ENOUGH_TP), "not_enough_tp") == 0);
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_ACTION_TYPE, PSIV_ACTION_WARP), "warp") == 0);
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_EVENT_TYPE, 999), "") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_EVENT_TYPE, PSIV_EVENT_BATTLE_ENDED), "battle_ended") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_REWARD_MULTIPLIER, PSIV_REWARD_X1_5), "x1_5") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_MENU_KIND, PSIV_MENU_SAVE_PROMPT), "save_prompt") == 0);
+	int32_t value = -1;
+	CHECK(psiv_parse_name(PSIV_NAME_REWARD_MULTIPLIER, "1.5", &value) == PSIV_OK && value == PSIV_REWARD_X1_5);
+	CHECK(psiv_parse_name(PSIV_NAME_REWARD_MULTIPLIER, "x2", &value) == PSIV_OK && value == PSIV_REWARD_X2);
+	CHECK(psiv_parse_name(PSIV_NAME_EVENT_TYPE, "BattleEnded", &value) == PSIV_OK && value == PSIV_EVENT_BATTLE_ENDED);
+	CHECK(psiv_parse_name(PSIV_NAME_DIRECTION, "none", &value) == PSIV_OK && value == PSIV_DIRECTION_NONE);
+	CHECK(psiv_parse_name(PSIV_NAME_OUTCOME, "scripted_end", &value) == PSIV_OK && value == PSIV_OUTCOME_SCRIPTED_END);
+	CHECK(psiv_parse_name(PSIV_NAME_OUTCOME, "won", &value) == PSIV_NOT_FOUND);
 	CHECK(strcmp(psiv_name_of(999, 0), "") == 0);
 }
 
@@ -129,6 +139,22 @@ static void testCreateErrors(void) {
 	CHECK(e.status == PSIV_DATA_ERROR);
 	CHECK(strcmp(e.key, "binding.data_error") == 0);
 	CHECK(strlen(e.text) > 0);
+	const psiv_problem* problems;
+	int32_t problemCount;
+	CHECK(psiv_data_problems(&problems, &problemCount) == PSIV_OK);
+	CHECK(problemCount == 1 && strcmp(problems[0].key, "data.cannot_read") == 0 && strcmp(problems[0].params[0], "no/such/directory/game.json") == 0);
+
+	options.data_dir = dataDir;
+	options.core_data_dir = "no/such/core";
+	CHECK(psiv_session_create(&options, &s) == PSIV_DATA_ERROR);
+	CHECK(psiv_data_problems(&problems, &problemCount) == PSIV_OK);
+	CHECK(problemCount == 1 && strcmp(problems[0].key, "load.cannot_open") == 0 && strcmp(problems[0].file, "no/such/core/rules.json") == 0);
+	CHECK(strcmp(problems[0].text, "no/such/core/rules.json: cannot open file") == 0);
+	options.core_data_dir = "../core/data";
+	CHECK(psiv_session_create(&options, &s) == PSIV_OK);
+	psiv_session_destroy(s);
+	CHECK(psiv_data_problems(&problems, &problemCount) == PSIV_OK && problemCount == 0);
+	options.core_data_dir = NULL;
 
 	options.data_dir = dataDir;
 	options.struct_size = 4;
@@ -196,7 +222,9 @@ static void testRefusals(void) {
 	CHECK(psiv_mode_get(s) == PSIV_MODE_FIELD);
 	CHECK(psiv_buy(s, "tonic", 1) == PSIV_REFUSED);
 	CHECK(psiv_unequip(s, "fighter", 42) == PSIV_INVALID_ARGUMENT);
-	CHECK(psiv_settings_set_auto_macro(s, "no_such_macro") == PSIV_NOT_FOUND);
+	CHECK(psiv_settings_set_auto_macro(s, "no_such_macro") == PSIV_REFUSED);
+	psiv_last_error(s, &e);
+	CHECK(strcmp(e.key, "game.refuse.no_macro") == 0 && e.param_count == 1 && strcmp(e.params[0], "no_such_macro") == 0);
 	CHECK(psiv_settings_set(s, "no_such_difficulty", PSIV_REWARD_X1) == PSIV_REFUSED);
 	psiv_last_error(s, &e);
 	CHECK(strcmp(e.key, "game.refuse.unknown_difficulty") == 0);
@@ -600,7 +628,7 @@ static void testFieldAndMenus(void) {
 	CHECK_OK(psiv_field_exits(s, &exits, &count));
 	CHECK(count == 1 && exits[0].x == 13 && strcmp(exits[0].to_area, "reed_path") == 0);
 	CHECK_OK(psiv_field_markers(s, &markers, &count));
-	CHECK(count == 7);
+	CHECK(count == 8);
 	CHECK_OK(psiv_field_points(s, &points, &count));
 	int talk = 0;
 	int shop = 0;
@@ -612,7 +640,7 @@ static void testFieldAndMenus(void) {
 		rest += points[i].kind == PSIV_POINT_REST;
 		chest += points[i].kind == PSIV_POINT_CHEST;
 	}
-	CHECK(talk == 2 && shop == 1 && rest == 1 && chest == 1);
+	CHECK(talk == 3 && shop == 1 && rest == 1 && chest == 1);
 
 	/* Shop at the stall (8,2) from stall_front (8,3). */
 	for (int i = 0; i < 5; ++i) {
@@ -681,6 +709,140 @@ static void testFieldAndMenus(void) {
 	psiv_session_destroy(s);
 }
 
+/* Walks to a marker of the current area with psiv_walk_to, running events between the steps. */
+static int32_t walkToMarker(psiv_session* s, const char* name) {
+	const psiv_marker* markers;
+	int32_t count;
+	int32_t status = -1;
+	if (psiv_field_markers(s, &markers, &count) != PSIV_OK) {
+		return status;
+	}
+	for (int32_t i = 0; i < count; ++i) {
+		if (strcmp(markers[i].name, name) == 0 && psiv_walk_to(s, markers[i].x, markers[i].y) == PSIV_OK) {
+			while (psiv_walk_step(s, &status) == PSIV_OK && status == PSIV_WALK_WALKING) {
+				settle(s);
+			}
+			return status;
+		}
+	}
+	return status;
+}
+
+/* The paths the placeholder adventure added for hosts: line data with portraits, localized yes and no, a
+ * name entry, a lost event battle kept readable and retried, its record replayed, and the pacing numbers. */
+static void testAdventurePaths(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/paths", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	psiv_line line;
+	psiv_choice choice;
+	psiv_error e;
+	int32_t status = -1;
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+
+	CHECK(walkToMarker(s, "hold_front") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	CHECK(psiv_mode_get(s) == PSIV_MODE_BATTLE);
+	const psiv_combatant* combatants;
+	int32_t count;
+	CHECK_OK(psiv_battle_combatants(s, &combatants, &count));
+	CHECK(count == 4 && strcmp(combatants[0].name, "Test Fighter") == 0 && strcmp(combatants[1].label, "Gel Mite A") == 0);
+	psiv_auto_battle played;
+	CHECK_OK(psiv_battle_play(s, 0, &played));
+	CHECK(played.ended && played.round_count >= 1 && strcmp(played.refusal_key, "") == 0);
+	CHECK(played.rounds[0].event_count > 0 && played.rounds[0].events[0].type == PSIV_EVENT_BATTLE_STARTED);
+	/* The fighter alone falls to the enemy-first ambush: a game over, with the battle still readable. */
+	CHECK(psiv_mode_get(s) == PSIV_MODE_TITLE);
+	psiv_battle_info info;
+	CHECK_OK(psiv_battle_info_get(s, &info));
+	CHECK(!info.live && info.outcome == PSIV_OUTCOME_DEFEAT && info.game_over && info.source == PSIV_BATTLE_EVENT);
+	CHECK_OK(psiv_battle_combatants(s, &combatants, &count));
+	CHECK(count == 4 && !combatants[0].alive);
+	psiv_battle_result result;
+	CHECK_OK(psiv_battle_result_get(s, &result));
+	CHECK(strcmp(result.encounter, "training") == 0 && result.outcome == PSIV_OUTCOME_DEFEAT && result.game_over);
+	CHECK(result.experience == 0 && result.drop_count == 0 && result.level_up_count == 0);
+
+	const char* record;
+	CHECK_OK(psiv_battle_record(s, &record));
+	char* recordCopy = malloc(strlen(record) + 1);
+	strcpy(recordCopy, record);
+	const psiv_battle_event* replayed;
+	int32_t replayedCount;
+	const char* eventText;
+	CHECK_OK(psiv_battle_replay(s, recordCopy, &replayed, &replayedCount, &eventText));
+	CHECK(replayedCount > 0 && replayed[replayedCount - 1].type == PSIV_EVENT_BATTLE_ENDED && replayed[replayedCount - 1].outcome == PSIV_OUTCOME_DEFEAT);
+	CHECK(strncmp(eventText, "0 battle_started", 16) == 0);
+	recordCopy[strlen(recordCopy) / 2] ^= 1;
+	CHECK(psiv_battle_replay(s, recordCopy, &replayed, &replayedCount, NULL) == PSIV_DATA_ERROR);
+	psiv_last_error(s, &e);
+	CHECK(strcmp(e.key, "binding.bad_record") == 0);
+	free(recordCopy);
+
+	psiv_world_info world;
+	CHECK_OK(psiv_world_info_get(s, &world));
+	CHECK(world.game_over && world.can_retry);
+	CHECK_OK(psiv_retry_battle(s));
+	settle(s);
+	CHECK(psiv_mode_get(s) == PSIV_MODE_BATTLE);
+	CHECK(psiv_battle_result_get(s, &result) == PSIV_NOT_FOUND);
+	CHECK_OK(psiv_battle_play(s, 0, &played));
+	CHECK(played.ended);
+	settle(s);
+	CHECK(psiv_mode_get(s) == PSIV_MODE_TITLE || psiv_mode_get(s) == PSIV_MODE_FIELD);
+	CHECK_OK(psiv_battle_dismiss(s));
+	CHECK(psiv_battle_info_get(s, &info) == PSIV_NOT_FOUND);
+	CHECK(psiv_walk_step(s, &status) == PSIV_NOT_FOUND);
+	psiv_session_destroy(s);
+
+	/* The guide: a portrait on the first line, the string table's yes and no, and a name entry. */
+	removeFiles(saves);
+	s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK(walkToMarker(s, "guide_front") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	CHECK_OK(psiv_line_get(s, &line));
+	CHECK(strcmp(line.speaker_id, "guide") == 0 && strcmp(line.speaker_name, "Harbor Guide") == 0);
+	CHECK(strcmp(line.text_id, "tidewater.guide.bell") == 0 && strcmp(line.portrait, "guide_smile") == 0);
+	CHECK_OK(psiv_line_confirm(s));
+	CHECK_OK(psiv_choice_get(s, &choice));
+	CHECK(choice.yes_no && choice.option_count == 2 && strcmp(choice.options[0], "Yes") == 0 && strcmp(choice.options[1], "No") == 0);
+	CHECK_OK(psiv_profile_set_value(s, "text_language", "ja"));
+	CHECK_OK(psiv_choice_get(s, &choice));
+	CHECK(strcmp(choice.options[0], "\xE3\x81\xAF\xE3\x81\x84") == 0);
+	CHECK_OK(psiv_profile_set_value(s, "text_language", "en"));
+	CHECK_OK(psiv_choose(s, 0));
+	CHECK_OK(psiv_line_confirm(s));
+	CHECK(psiv_menu_kind_get(s) == PSIV_MENU_NAME_ENTRY);
+	CHECK(strcmp(psiv_name_entry_member(s), "fighter") == 0);
+	CHECK(psiv_enter_name(s, "") == PSIV_REFUSED);
+	CHECK_OK(psiv_enter_name(s, "Bryn"));
+	CHECK_OK(psiv_line_get(s, &line));
+	CHECK(strcmp(line.speaker_id, "fighter") == 0 && strcmp(line.speaker_name, "Bryn") == 0 && strcmp(line.portrait, "") == 0);
+	CHECK(strcmp(line.display, "Bryn: Tell the ferry I am staying a while.") == 0);
+	settle(s);
+	CHECK(psiv_mode_get(s) == PSIV_MODE_FIELD);
+	CHECK(walkToMarker(s, "no_such_marker") == -1);
+	CHECK_OK(psiv_walk_to(s, 0, 0));
+	CHECK_OK(psiv_walk_step(s, &status));
+	CHECK(status == PSIV_WALK_NO_PATH);
+
+	const psiv_pacing_area* areas;
+	const psiv_pacing_boss* bosses;
+	CHECK_OK(psiv_pacing_areas(s, &areas, &count));
+	CHECK(count == 1 && strcmp(areas[0].area, "tidewater") == 0 && areas[0].visits == 1 && areas[0].steps > 0 && areas[0].battles == 0);
+	CHECK_OK(psiv_pacing_bosses(s, &bosses, &count));
+	CHECK(count == 0);
+	psiv_session_destroy(s);
+}
+
 int main(int argc, char** argv) {
 	for (int i = 1; i + 1 < argc; i += 2) {
 		if (strcmp(argv[i], "--data") == 0) {
@@ -698,6 +860,7 @@ int main(int argc, char** argv) {
 	testBattleStream();
 	testPresentation();
 	testFieldAndMenus();
+	testAdventurePaths();
 	if (failures) {
 		fprintf(stderr, "%d of %d checks failed\n", failures, checks);
 		return 1;

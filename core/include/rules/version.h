@@ -6,8 +6,8 @@ namespace rules {
 inline constexpr int kRulesVersion = 4;
 
 // Changes whenever an event type or field changes.
-inline constexpr int kEventSchemaVersion = 4;
+inline constexpr int kEventSchemaVersion = 5;
 
-inline constexpr int kRecordFormatVersion = 3;
+inline constexpr int kRecordFormatVersion = 4;
 
 }

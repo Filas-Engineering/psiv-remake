@@ -9,13 +9,13 @@
 
 namespace rules::loader {
 
-// Field access with error collection. Every message carries the file, line and the entry being read.
+// Field access with problem collection. Every problem carries the file, line and the entry being read.
 class Reader {
 public:
-	Reader(std::string file, std::vector<std::string>& errors) : file_(std::move(file)), errors_(errors) {}
+	Reader(std::string file, std::vector<Problem>& problems) : file_(std::move(file)), problems_(problems) {}
 
 	void setContext(std::string context) { context_ = std::move(context); }
-	void fail(const JsonValue& at, const std::string& message);
+	void fail(const JsonValue& at, const char* key, std::vector<std::string> params);
 
 	const JsonValue* get(const JsonValue& object, const char* key, JsonValue::Type type, bool required);
 	bool string(const JsonValue& object, const char* key, std::string& out, bool required = true);
@@ -28,7 +28,7 @@ public:
 private:
 	std::string file_;
 	std::string context_;
-	std::vector<std::string>& errors_;
+	std::vector<Problem>& problems_;
 };
 
 }

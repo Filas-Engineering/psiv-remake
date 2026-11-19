@@ -1,13 +1,21 @@
-# A full run of the placeholder adventure: arrival, the dockhand's job, the
-# guide, party talk, the shop, the inn, a manual save, both encounter zones,
-# the cache, a status carried out of battle, a peddler's shop opened from a
-# script, auto-battle with a macro until a stop rule, a campfire rest from a
+# A full run of the placeholder adventure: arrival, an event battle lost
+# twice and retried from its autosave, the dockhand's job, the guide with a
+# name entry and a portrait, party talk, the shop, the inn, a manual save,
+# both encounter zones, the cache, a status carried out of battle, a peddler's
+# shop opened from a script, a battle aboard the reed skimmer, auto-battle
+# with a macro until a stop rule, a campfire rest and save prompt from a
 # script, the chests, the boss, the epilogue and the clear-data record, the
 # job's completion, the quest log, the encyclopedia and the text log, then a
 # load of the manual save. Run with --seed 7 --auto-battle.
 new
 status
 quests
+walk hold_front
+face north
+talk
+retry
+retry
+status
 walk dock_front
 face north
 talk
@@ -16,6 +24,7 @@ walk guide_front
 face north
 talk
 choose 0
+name Bryn
 chat
 look
 walk stall_front
@@ -46,6 +55,11 @@ face south
 talk
 buy clear_gel 1
 leave
+walk skimmer_front
+face north
+talk
+choose 0
+status
 set auto tempest
 walk 19 4
 status
@@ -53,6 +67,8 @@ walk camp_front
 face north
 talk
 choose 0
+save manual_1
+close
 status
 walk box_front
 face south

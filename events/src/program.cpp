@@ -94,6 +94,42 @@ std::string format_diagnostic(const Diagnostic& diagnostic) {
 		(diagnostic.severity == Severity::error ? "error" : "warning") + ": " + diagnostic.message;
 }
 
+std::string format_message(const std::map<std::string, std::string>& table, const std::string& key, const std::vector<std::string>& params) {
+	auto found = table.find(key);
+	if (found == table.end()) {
+		return key;
+	}
+	const std::string& pattern = found->second;
+	std::string out;
+	for (std::size_t i = 0; i < pattern.size(); ++i) {
+		std::size_t close = pattern[i] == '{' ? pattern.find('}', i) : std::string::npos;
+		if (close != std::string::npos && close > i + 1 && close - i <= 3 &&
+			pattern.find_first_not_of("0123456789", i + 1) == close) {
+			std::size_t index = static_cast<std::size_t>(std::stoi(pattern.substr(i + 1, close - i - 1)));
+			out += index < params.size() ? params[index] : "";
+			i = close;
+			continue;
+		}
+		out += pattern[i];
+	}
+	return out;
+}
+
+Diagnostic diagnostic(Severity severity, std::string file, int line, std::string key, std::vector<std::string> params) {
+	Diagnostic d;
+	d.severity = severity;
+	d.file = std::move(file);
+	d.line = line;
+	d.message = format_message(diagnostic_text(), key, params);
+	d.key = std::move(key);
+	d.params = std::move(params);
+	return d;
+}
+
+Diagnostic diagnostic(Severity severity, std::string file, int line, const DiagnosticMessage& message) {
+	return diagnostic(severity, std::move(file), line, message.key, message.params);
+}
+
 bool has_errors(const std::vector<Diagnostic>& diagnostics) {
 	for (const Diagnostic& d : diagnostics) {
 		if (d.severity == Severity::error) {

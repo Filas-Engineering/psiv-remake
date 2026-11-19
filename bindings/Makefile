@@ -28,9 +28,6 @@ SHARED_FLAGS = -shared -Wl,-soname,$(LIB_NAME) -Wl,--version-script=c/exports_li
 RPATH = -Wl,-rpath,'$$ORIGIN'
 LINK_LIB = $(BUILD)/$(LIB_NAME)
 EXE =
-# The static libraries end up inside a shared object, so they need position-independent code.
-PIC = -fPIC
-DEP_FLAGS = CXX="$(CXX) -fPIC"
 endif
 ifeq ($(PLATFORM),windows)
 LIB_NAME = psiv_session.dll
@@ -40,7 +37,7 @@ LINK_LIB = $(BUILD)/libpsiv_session.dll.a
 EXE = .exe
 endif
 
-CXXFLAGS = -std=c++17 -Wall -Wextra -Werror -O1 $(PIC) -fvisibility=hidden -fvisibility-inlines-hidden -DPSIV_BUILDING \
+CXXFLAGS = -std=c++17 -Wall -Wextra -Werror -O1 -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -DPSIV_BUILDING \
 	-Ic -I$(GAME)/include -I$(CORE)/include -I$(EVENTS)/include -MMD -MP
 CFLAGS = -std=c11 -Wall -Wextra -Werror -pedantic -O1 -Ic -MMD -MP
 
@@ -67,9 +64,9 @@ endif
 
 # The sibling libraries decide for themselves whether they are up to date.
 deps:
-	$(MAKE) -C $(CORE) build/librules.a $(DEP_FLAGS)
-	$(MAKE) -C $(EVENTS) build/libevents.a $(DEP_FLAGS)
-	$(MAKE) -C $(GAME) build/libgame.a build/game_cli$(EXE) $(DEP_FLAGS)
+	$(MAKE) -C $(CORE) build/librules.a
+	$(MAKE) -C $(EVENTS) build/libevents.a
+	$(MAKE) -C $(GAME) build/libgame.a build/game_cli$(EXE)
 
 $(DEP_LIBS) $(GAME_CLI): deps
 

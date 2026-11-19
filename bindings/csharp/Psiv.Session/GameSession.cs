@@ -36,6 +36,9 @@ public sealed unsafe class GameSession : IDisposable
 
 	public static string NameOf(NameKind kind, int value) => Native.Str(Native.NameOf((int)kind, value));
 
+	// Also the spellings older files use for reward multipliers and event types; null for an unknown name.
+	public static int? ParseName(NameKind kind, string text) => Native.ParseName((int)kind, text, out int value) == 0 ? value : null;
+
 	public static GameSession Create(SessionOptions options)
 	{
 		if (Native.AbiVersionOf() != Native.AbiVersion)
@@ -46,10 +49,12 @@ public sealed unsafe class GameSession : IDisposable
 		var native = new PsivSessionOptions();
 		Native.SessionOptionsInit(ref native);
 		IntPtr dataDir = Marshal.StringToCoTaskMemUTF8(options.DataDirectory);
+		IntPtr coreDir = options.CoreDataDirectory is null ? IntPtr.Zero : Marshal.StringToCoTaskMemUTF8(options.CoreDataDirectory);
 		IntPtr saveDir = options.SaveDirectory is null ? IntPtr.Zero : Marshal.StringToCoTaskMemUTF8(options.SaveDirectory);
 		try
 		{
 			native.DataDir = dataDir;
+			native.CoreDataDir = coreDir;
 			native.SaveDir = saveDir;
 			native.Seed = options.Seed;
 			native.EncounterMode = options.EncounterMode is { } mode ? (int)mode : -1;
@@ -59,6 +64,10 @@ public sealed unsafe class GameSession : IDisposable
 			if (status != 0)
 			{
 				Native.LastErrorRaw(IntPtr.Zero, out PsivErrorNative error);
+				if ((PsivStatus)status == PsivStatus.DataError)
+				{
+					throw new PsivDataException(ToError(error), DataProblems());
+				}
 				throw new PsivException(ToError(error));
 			}
 			return new GameSession(new SessionHandle(session));
@@ -66,11 +75,26 @@ public sealed unsafe class GameSession : IDisposable
 		finally
 		{
 			Marshal.FreeCoTaskMem(dataDir);
+			if (coreDir != IntPtr.Zero)
+			{
+				Marshal.FreeCoTaskMem(coreDir);
+			}
 			if (saveDir != IntPtr.Zero)
 			{
 				Marshal.FreeCoTaskMem(saveDir);
 			}
 		}
+	}
+
+	private static IReadOnlyList<DataProblem> DataProblems()
+	{
+		Native.DataProblems(out IntPtr p, out int count);
+		var list = new List<DataProblem>(count);
+		foreach (PsivProblem d in Native.Span<PsivProblem>(p, count))
+		{
+			list.Add(new DataProblem(Native.Str(d.File), d.Line, Native.Str(d.Entry), Native.Str(d.Key), Native.Strs(d.Params, d.ParamCount), Native.Str(d.Text)));
+		}
+		return list;
 	}
 
 	public void Dispose()
@@ -245,6 +269,16 @@ public sealed unsafe class GameSession : IDisposable
 	public void Update(int dtMs, Direction held = Direction.None) => Must(Native.Update(_handle, dtMs, (int)held));
 	public PsivResult Walk(Direction direction) => Result(Native.Walk(_handle, (int)direction));
 	public PsivResult Face(Direction direction) => Result(Native.Face(_handle, (int)direction));
+
+	// A walk to (x, y) along the shortest path; call WalkStep until it returns anything but Walking, running
+	// events and battles between the calls.
+	public PsivResult WalkTo(int x, int y) => Result(Native.WalkTo(_handle, x, y));
+
+	public WalkStatus WalkStep()
+	{
+		Must(Native.WalkStep(_handle, out int status));
+		return (WalkStatus)status;
+	}
 	public PsivResult Interact() => Result(Native.Interact(_handle));
 	public PsivResult PartyTalk() => Result(Native.PartyTalk(_handle));
 
@@ -312,7 +346,7 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			return null;
 		}
-		return new Line(Native.Str(l.SpeakerId), Native.Str(l.SpeakerName), Native.Str(l.Text), Native.Str(l.Portrait), Native.Str(l.Display));
+		return new Line(Native.Str(l.SpeakerId), Native.Str(l.SpeakerName), Native.Str(l.TextId), Native.Str(l.Text), Native.Str(l.Portrait), Native.Str(l.Display));
 	}
 
 	public PsivResult ConfirmLine() => Result(Native.LineConfirm(_handle));
@@ -390,12 +424,7 @@ public sealed unsafe class GameSession : IDisposable
 	public IReadOnlyList<Notice> DrainNotices()
 	{
 		Must(Native.NoticesDrain(_handle, out IntPtr p, out int count));
-		var list = new List<Notice>(count);
-		foreach (PsivNotice n in Native.Span<PsivNotice>(p, count))
-		{
-			list.Add(new Notice((NoticeKind)n.Kind, Native.Str(n.Key), Native.Strs(n.Params, n.ParamCount), Native.Str(n.Text)));
-		}
-		return list;
+		return Notices(p, count);
 	}
 
 	// Battle
@@ -463,6 +492,65 @@ public sealed unsafe class GameSession : IDisposable
 	}
 
 	public PsivResult FillFromPolicy() => Result(Native.BattleFillFromPolicy(_handle));
+
+	// The round the way auto play fills it; a refusal says auto-battle could not start, and the policy filled the round.
+	public PsivResult FillAutoRound() => Result(Native.BattleFillAutoRound(_handle));
+
+	private static IReadOnlyList<Notice> Notices(IntPtr p, int count)
+	{
+		var list = new List<Notice>(count);
+		foreach (PsivNotice n in Native.Span<PsivNotice>(p, count))
+		{
+			list.Add(new Notice((NoticeKind)n.Kind, Native.Str(n.Key), Native.Strs(n.Params, n.ParamCount), Native.Str(n.Text)));
+		}
+		return list;
+	}
+
+	// Plays the battle to its end with FillAutoRound and ResolveRound.
+	public AutoBattle PlayBattle(int maxRounds = 60)
+	{
+		Result(Native.BattlePlay(_handle, maxRounds, out PsivAutoBattle a)).ThrowIfFailed();
+		var rounds = new List<AutoRound>(a.RoundCount);
+		foreach (PsivAutoRound r in Native.Span<PsivAutoRound>(a.Rounds, a.RoundCount))
+		{
+			rounds.Add(new AutoRound(Notices(r.Notices, r.NoticeCount), Events(r.Events, r.EventCount)));
+		}
+		string key = Native.Str(a.RefusalKey);
+		PsivError? refusal = key.Length == 0 ? null : new PsivError(PsivStatus.Refused, key, Native.Strs(a.RefusalParams, a.RefusalParamCount), Native.Str(a.RefusalText));
+		return new AutoBattle(refusal, rounds, a.Ended != 0);
+	}
+
+	// Null unless an ended battle is kept.
+	public BattleResult? BattleResult()
+	{
+		if (!Read(Native.BattleResultGet(_handle, out PsivBattleResult r)))
+		{
+			return null;
+		}
+		var drops = new Dictionary<string, int>();
+		foreach (PsivItemCount i in Native.Span<PsivItemCount>(r.Drops, r.DropCount))
+		{
+			drops[Native.Str(i.Id)] = i.Count;
+		}
+		var ups = new List<LevelUp>(r.LevelUpCount);
+		foreach (PsivLevelUp u in Native.Span<PsivLevelUp>(r.LevelUps, r.LevelUpCount))
+		{
+			ups.Add(new LevelUp(Native.Str(u.Member), Native.Str(u.Name), u.Level, Native.Strs(u.Learned, u.LearnedCount)));
+		}
+		return new BattleResult(Native.Str(r.Encounter), (BattleSource)r.Source, (Outcome)r.Outcome, r.GameOver != 0, r.Experience, r.Money, drops, ups);
+	}
+
+	public void DismissBattle() => Must(Native.BattleDismiss(_handle));
+
+	// The live or ended battle's record; null with neither.
+	public string? BattleRecord() => Read(Native.BattleRecord(_handle, out IntPtr text)) ? Native.Str(text) : null;
+
+	// Throws PsivException (DataError) for a record that does not parse or replay against this data.
+	public Replay ReplayBattle(string record)
+	{
+		Must(Native.BattleReplay(_handle, record, out IntPtr p, out int count, out IntPtr text));
+		return new Replay(Events(p, count), Native.Str(text));
+	}
 
 	private static IReadOnlyList<BattleEvent> Events(IntPtr p, int count)
 	{
@@ -627,6 +715,29 @@ public sealed unsafe class GameSession : IDisposable
 	{
 		Must(Native.PacingTable(_handle, out IntPtr text));
 		return Native.Str(text);
+	}
+
+	public IReadOnlyList<PacingArea> PacingAreas()
+	{
+		Must(Native.PacingAreas(_handle, out IntPtr p, out int count));
+		var list = new List<PacingArea>(count);
+		foreach (PsivPacingArea a in Native.Span<PsivPacingArea>(p, count))
+		{
+			list.Add(new PacingArea(Native.Str(a.Area), a.Visits, a.Battles, a.Steps, a.FieldMs, a.BattleMs, a.EventMs, a.Experience, a.Money,
+				Native.Span<long>(a.GapMs, a.GapCount).ToArray(), Native.Span<int>(a.GapSteps, a.GapCount).ToArray()));
+		}
+		return list;
+	}
+
+	public IReadOnlyList<PacingBoss> PacingBosses()
+	{
+		Must(Native.PacingBosses(_handle, out IntPtr p, out int count));
+		var list = new List<PacingBoss>(count);
+		foreach (PsivPacingBoss b in Native.Span<PsivPacingBoss>(p, count))
+		{
+			list.Add(new PacingBoss(Native.Str(b.Flag), Native.Str(b.Encounter), Native.Str(b.Area), b.AverageLevelX100, b.DungeonMs));
+		}
+		return list;
 	}
 
 	private string WithParams(string key, IReadOnlyList<string> parameters, bool raw)

@@ -98,7 +98,7 @@ TEST(eventTextIsStable) {
 	damage.amount = 12;
 	damage.element = Element::Shock;
 	damage.effectiveness = Effectiveness::Weak;
-	CHECK_EQ(serializeEvent(damage), std::string("3 DamageDealt target=5 amount=12 element=shock effectiveness=weak"));
+	CHECK_EQ(serializeEvent(damage), std::string("3 damage_dealt target=5 amount=12 element=shock effectiveness=weak"));
 
 	Event combo;
 	combo.type = EventType::ComboTriggered;
@@ -107,7 +107,7 @@ TEST(eventTextIsStable) {
 	combo.ability = "storm spark";
 	combo.combo = "storm_spark";
 	combo.participants = {1, 2};
-	CHECK_EQ(serializeEvent(combo), std::string("1 ComboTriggered actor=1 ability=storm%20spark combo=storm_spark participants=1,2"));
+	CHECK_EQ(serializeEvent(combo), std::string("1 combo_triggered actor=1 ability=storm%20spark combo=storm_spark participants=1,2"));
 }
 
 TEST(aDamagedRecordIsRefused) {
@@ -125,4 +125,15 @@ TEST(aDamagedRecordIsRefused) {
 	std::string swapped = text;
 	swapped.replace(swapped.find("seed 5"), 6, "seed 6");
 	CHECK_EQ(parseRecord(swapped).error, std::string("record checksum does not match: the record is damaged"));
+}
+
+TEST(aChosenNameNamesTheCombatantAndSurvivesTheRecord) {
+	BattleSetup setup = makeSetup(data(), {"gel_mite"}, 3);
+	setup.party[0].name = "Bryn Tidecaller";
+	Battle battle = makeBattle(data(), setup, nullptr);
+	CHECK_EQ(battle.combatant(0).name, std::string("Bryn Tidecaller"));
+	CHECK_EQ(battle.combatant(1).name, data().character(setup.party[1].characterId)->name);
+	const Result<BattleRecord> parsed = parseRecord(serializeRecord(battle.record()));
+	CHECK(parsed.ok() && parsed.value->setup.party[0].name == "Bryn Tidecaller" && parsed.value->setup.party[1].name.empty());
+	CHECK_EQ(battle.partyState()[0].name, std::string("Bryn Tidecaller"));
 }

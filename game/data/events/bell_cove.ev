@@ -1,11 +1,11 @@
 # Bell Cove: the boss guards the bell. Losing sends the party back to the
 # inn, so the fight can be tried again. A campfire by the gate lets the
-# party rest before the fight.
+# party rest and save before the fight.
 
 event cove_bell unskippable
 	lock player
 	narrate @cove.bell.frame
-	say mystic @cove.bell.warden
+	say mystic @cove.bell.warden as mystic_worried
 	set cove.warden_seen
 	music play brass_alarm
 	battle warden
@@ -36,6 +36,8 @@ event cove_campfire unskippable
 	yes
 		rest cove_camp
 		narrate @cove.campfire.rested
+		narrate @cove.campfire.journal
+		save prompt
 	no
 		narrate @cove.campfire.declined
 	end

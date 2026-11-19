@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <deque>
 #include <map>
 #include <sstream>
 
@@ -72,8 +71,8 @@ std::string Runner::prompt() const {
 	return std::string(toString(session_.mode())) + "> ";
 }
 
-void Runner::flushOutput() {
-	for (const Output& o : session_.drainOutput()) {
+void Runner::printOutput(const std::vector<Output>& outputs) {
+	for (const Output& o : outputs) {
 		switch (o.kind) {
 		case OutputKind::Action:
 			print("  (" + o.text + ")");
@@ -89,6 +88,10 @@ void Runner::flushOutput() {
 			break;
 		}
 	}
+}
+
+void Runner::flushOutput() {
+	printOutput(session_.drainOutput());
 }
 
 std::string Runner::battleName(int index) const {
@@ -216,14 +219,10 @@ void Runner::settle() {
 			session_.confirmLine();
 			continue;
 		}
-		if (const events::ChoiceRequest* c = session_.choice()) {
-			std::string text = c->prompt.value.empty() ? "Choose:" : session_.scriptText(c->prompt);
-			if (c->yes_no) {
-				text += " [0] yes [1] no";
-			} else {
-				for (std::size_t i = 0; i < c->options.size(); ++i) {
-					text += " [" + std::to_string(i) + "] " + session_.scriptText(c->options[i]);
-				}
+		if (const std::optional<ChoiceView> c = session_.choiceView()) {
+			std::string text = c->prompt.empty() ? "Choose:" : c->prompt;
+			for (std::size_t i = 0; i < c->options.size(); ++i) {
+				text += " [" + std::to_string(i) + "] " + c->options[i];
 			}
 			print(text);
 			return;
@@ -233,20 +232,14 @@ void Runner::settle() {
 	error("the game did not settle");
 }
 
-// Auto-battle with the save's auto macro when one is set; after a stop rule, or without a macro, the terminal
-// plays on with core's policy.
 void Runner::finishBattleAuto() {
-	if (!session_.world().autoMacro.empty() && session_.battle()->round() == 0 && !session_.autoActive()) {
-		report(session_.startAuto());
+	const AutoBattle played = session_.playBattle();
+	report(played.refusal);
+	for (const AutoRound& round : played.rounds) {
+		printOutput(round.output);
+		printEvents(round.events);
 	}
-	for (int round = 0; round < 60 && session_.mode() == Mode::Battle; ++round) {
-		if (!session_.fillFromAuto()) {
-			session_.fillFromPolicy();
-		}
-		flushOutput();
-		printEvents(session_.resolveRound());
-	}
-	if (session_.mode() == Mode::Battle) {
+	if (!played.ended) {
 		error("the battle did not end in 60 rounds");
 	}
 	flushOutput();
@@ -277,61 +270,21 @@ void Runner::status() {
 	print("  Money " + std::to_string(w.money) + ". Items: " + (items.empty() ? "none" : items) + ".");
 }
 
-bool Runner::walkTo(Cell goal) {
-	for (int guard = 0; guard < 4000; ++guard) {
-		if (session_.mode() != Mode::Field) {
-			return false;
+void Runner::walkTo(Cell goal) {
+	PathWalk walk = session_.beginWalk(goal);
+	for (;;) {
+		const WalkStatus status = session_.walkStep(walk);
+		if (status == WalkStatus::Walking) {
+			settle();
+			continue;
 		}
-		const World& w = session_.world();
-		if (w.position == goal) {
-			return true;
-		}
-		const Area& a = *session_.area();
-		// Breadth-first search over floor; enemies are ignored, so bumping into one starts its battle.
-		std::map<Cell, Cell> from;
-		std::deque<Cell> queue{w.position};
-		from[w.position] = w.position;
-		while (!queue.empty() && !from.count(goal)) {
-			const Cell c = queue.front();
-			queue.pop_front();
-			for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
-				const Cell n = stepFrom(c, f);
-				if (from.count(n) || !a.walkable(n) || (a.exitAt(n) && n != goal)) {
-					continue;
-				}
-				from[n] = c;
-				queue.push_back(n);
-			}
-		}
-		if (!from.count(goal)) {
+		if (status == WalkStatus::NoPath) {
 			error("no path to (" + std::to_string(goal.x) + "," + std::to_string(goal.y) + ")");
-			return false;
+		} else if (status == WalkStatus::TooLong) {
+			error("walking took too long");
 		}
-		Cell next = goal;
-		while (from[next] != w.position) {
-			next = from[next];
-		}
-		Facing dir = Facing::North;
-		for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
-			if (stepFrom(w.position, f) == next) {
-				dir = f;
-			}
-		}
-		const std::string startArea = w.area;
-		if (!session_.walk(dir).empty()) {
-			// A visible enemy in the way during the grace period: let the moment pass.
-			session_.update(session_.data().config.tickMs);
-		}
-		settle();
-		if (session_.mode() != Mode::Field) {
-			return false;
-		}
-		if (session_.world().area != startArea) {
-			return true;
-		}
+		return;
 	}
-	error("walking took too long");
-	return false;
 }
 
 bool Runner::execute(const std::string& rawLine) {
@@ -406,7 +359,7 @@ bool Runner::execute(const std::string& rawLine) {
 			}
 		}
 	} else if (cmd == "face" && w.size() == 2 && parseFacing(w[1], facing)) {
-		session_.world().facing = facing;
+		report(session_.face(facing));
 	} else if (cmd == "walk" && (w.size() == 2 || w.size() == 3)) {
 		const Area* a = session_.area();
 		Cell goal;
@@ -530,12 +483,7 @@ bool Runner::execute(const std::string& rawLine) {
 			}
 			report(session_.setSettings(s));
 		} else if (w[1] == "auto") {
-			const std::vector<rules::Macro>& macros = session_.world().macros;
-			if (w[2] != "-" && std::none_of(macros.begin(), macros.end(), [&](const rules::Macro& m) { return m.name == w[2]; })) {
-				error("no macro named '" + w[2] + "'");
-			} else {
-				session_.world().autoMacro = w[2] == "-" ? "" : w[2];
-			}
+			report(session_.setAutoMacro(w[2] == "-" ? "" : w[2]));
 		} else {
 			static const std::map<std::string, std::string> shortNames = {{"text", "text_speed"}, {"battle", "battle_speed"}, {"shipped", "show_shipped_names"}};
 			auto shortName = shortNames.find(w[1]);

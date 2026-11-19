@@ -169,15 +169,33 @@ struct GameData {
 	const RestPoint* rest(const std::string& id) const;
 };
 
-// Loads game.json from `directory`, then the battle data, text tables, areas, journal, glossary and scripts it
-// names, and checks every cross-reference. The scripts compile against a registry built from the rest, and must
-// pass the strict check: string IDs only, no warnings, tables and glossary consistent.
+struct DataDirectories {
+	// Holds game.json; every file game.json names is relative to it.
+	std::string game;
+	// Core's battle data and text_en.json. Empty: game.json's core_data, relative to `game`.
+	std::string core;
+};
+
+// Loads game.json, then the battle data, text tables, areas, journal, glossary and scripts it names, and checks
+// every cross-reference. The scripts compile against a registry built from the rest, and must pass the strict
+// check: string IDs only, no warnings, tables and glossary consistent. On failure every problem is in
+// `problems` with a text key (problemText() has them in English) and in `error` as English lines.
+rules::Result<GameData> loadGameData(const DataDirectories& directories);
+// The same with game.json's core_data.
 rules::Result<GameData> loadGameData(const std::string& directory);
+
+// The English template of every key a load problem can carry: core's (load.*, json.*, text.*), the events
+// library's (script.*, strings.*, names.*, registry.*, lint.*, timing.*) and the game's own (data.*).
+const rules::TextTable& problemText();
 
 // The registry in the events registry file format, for `event_cli check --registry`.
 std::string registryText(const events::Registry& registry);
 // The game's own string IDs in the events format, for `event_cli check --used`.
 std::string gameStringsText(const events::GameStrings& strings);
+
+// The string IDs of an ask's two answers, in every language's dialogue table.
+inline constexpr const char* kChoiceYes = "choice.yes";
+inline constexpr const char* kChoiceNo = "choice.no";
 
 // Every key of the game's own text table the session can emit.
 const std::vector<std::string>& sessionTextKeys();

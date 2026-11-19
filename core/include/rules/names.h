@@ -13,7 +13,8 @@
 
 namespace rules {
 
-// Each enum has a stable name per value, and parse functions accept exactly those names.
+// Each enum has a stable name per value, lowercase with underscores. Parse functions accept those names, and
+// parseRewardMultiplier and parseEventType also the spellings saves, records and event text used before.
 const char* toString(Element value);
 const char* toString(Stat value);
 const char* toString(Side value);

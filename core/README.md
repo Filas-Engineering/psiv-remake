@@ -14,7 +14,7 @@ A headless battle rules library for a turn-based party RPG. It is plain C++17 an
 
 ## Build and test
 
-Needs `clang++` and GNU Make 3.81 or later. The compile flags are `-std=c++17 -Wall -Wextra -Werror`.
+Needs `clang++` and GNU Make 3.81 or later. The compile flags are `-std=c++17 -Wall -Wextra -Werror -fPIC`; position-independent code lets `build/librules.a` go into a shared library as it is.
 
 ```
 make          # library, CLI and tests in build/
@@ -29,7 +29,7 @@ The CLI:
 ```
 ./build/battle_cli --help
 ./build/battle_cli --seed 1 --auto                                  # plays the "training" encounter, prints the event log
-./build/battle_cli --seed 1 --auto --encounter warden --difficulty hard --reward 1.5
+./build/battle_cli --seed 1 --auto --encounter warden --difficulty hard --reward x1_5
 ./build/battle_cli --seed 1 --auto --macro tempest                  # auto-battle with that macro until a stop rule fires
 ./build/battle_cli --seed 1 --auto --opening enemy_first
 ./build/battle_cli --seed 1 --auto --record build/run.record        # also writes the battle record
@@ -41,7 +41,7 @@ Other options: `--data DIR`, `--level N` (party level, default 1) and `--max-rou
 
 ## How a host drives a battle
 
-1. Load data once: `Result<Database> db = loadDatabaseFromDirectory("data")`, or `loadDatabaseFromTexts` with file contents the engine already read (`dataFileNames()` lists them). On failure, `error` lists every problem, one per line, as `file:line: entry: message`. Load the string table with `loadTextTable("data/text_en.json")` (or `parseTextTable`); it is not part of the `Database` or its content hash.
+1. Load data once: `Result<Database> db = loadDatabaseFromDirectory("data")`, or `loadDatabaseFromTexts` with file contents the engine already read (`dataFileNames()` lists them). On failure, `problems` holds every problem as a `Problem` (`file`, `line`, `entry`, and `message`, a text key with its parameters), and `error` the same in English, one per line, as `file:line: entry: text`. `problemText()` has the English template of every key (`load.*`, `json.*`, `text.*`); `formatProblem(problem, table)` renders one with any table. Load the string table with `loadTextTable("data/text_en.json")` (or `parseTextTable`); it is not part of the `Database` or its content hash.
 2. Keep the party as `std::vector<PartyMember>` between battles, with an `EquipmentBag` of unworn pieces (`db.startingEquipmentBag` to begin). `makePartyMember(db, character, level)` creates one in its starting equipment. `rest(member, db)` restores hit points, technique points and skill uses and cures statuses per data. Change equipment with `equip(member, db, bag, equipmentId)` and `unequip(member, db, bag, slot)`, which move pieces between the bag and the member; `canEquip` checks the category first. `memberStats` and `knownAbilities` give what the member has now. `useItemOutsideBattle` and `useAbilityOutsideBattle` apply field-usable items and techniques to the party through the battle's own effect code. An item used up to its last one leaves the inventory, so no entry with a count of 0 is left behind.
 3. Fill a `BattleSetup`: `party`, `inventory`, the enemy group (`useEncounter(setup, db, encounterId)` fills `enemyGroup`, `enemies` and `flags.escapeAllowed`), `opening` (`openingFromContact` turns a visible-mode contact into one), `flags`, `scriptedEnd`, `difficulty`, `rewardMultiplier` and `seed`. For a vehicle battle set `flags.vehicleBattle` and `vehicle` (see [Vehicle battles](#vehicle-battles)).
 4. Start: `Result<Battle> battle = Battle::create(db, setup, &comboLog)`. Combatant indexes are stable: party members first, in lineup order, then enemies in formation order. The battle keeps its own copy of the data with the difficulty overlay applied. The `ComboLog` must outlive the battle.
@@ -56,7 +56,7 @@ Other options: `--data DIR`, `--level N` (party level, default 1) and `--max-rou
 
 `autoCommand(battle, actor)` is a simple deterministic per-member policy. The CLI and the tests use it.
 
-Player-facing results are `Message` values: a stable key and parameters (ids or numbers), never English. `formatText(table, key, params)` fills a template's `{0}`, `{1}` and so on, and `messageKeys(db)` lists every key core can return or emit with that data, so a build can check a string table covers them. Developer-facing errors (data loading, record parsing, `Battle::create`, `useEncounter`) stay plain English strings.
+Player-facing results are `Message` values: a stable key and parameters (ids or numbers), never English. `formatText(table, key, params)` fills a template's `{0}`, `{1}` and so on, and `messageKeys(db)` lists every key core can return or emit with that data, so a build can check a string table covers them. Data loading problems carry a key and parameters too (`Result::problems`, step 1). Other developer-facing errors (record parsing, `Battle::create`, `useEncounter`) stay plain English strings.
 
 ### Round resolution
 
@@ -302,13 +302,13 @@ With `flags.vehicleBattle` set, `BattleSetup::vehicle` names the vehicle, and `B
 
 ## Battle records
 
-`serializeRecord` writes a line-based text record (format 3): format version, rules version, event schema version, content hash of the loaded data, the full setup (seed, difficulty, reward multiplier, opening, flags, vehicle, scripted end, enemy group and formation, inventory, each member's level, experience, hit points, technique points, skill uses, equipment and carried statuses), the combo log entries already known, and per round the play time, the macro name, the commands the host set and the macro block order. Commands the battle filled in itself are not recorded, because it fills them the same way on replay. Auto-battle commands are set before `resolveRound`, so they are recorded like the host's. Ids are written with letters, digits and `_` kept and every other byte as `%XX`; an empty value is `-`.
+`serializeRecord` writes a line-based text record (format 4): format version, rules version, event schema version, content hash of the loaded data, the full setup (seed, difficulty, reward multiplier, opening, flags, vehicle, scripted end, enemy group and formation, inventory, each member's level, experience, hit points, technique points, skill uses, equipment, carried statuses and chosen name), the combo log entries already known, and per round the play time, the macro name, the commands the host set and the macro block order. Commands the battle filled in itself are not recorded, because it fills them the same way on replay. Auto-battle commands are set before `resolveRound`, so they are recorded like the host's. Ids are written with letters, digits and `_` kept and every other byte as `%XX`; an empty value is `-`.
 
 The last line is `checksum <FNV-1a 64 of everything before it>`. `parseRecord` refuses a record whose checksum is missing or does not match (SAV-014), so a damaged record is never replayed. It is a guard against accidental damage, not tampering.
 
 `replayBattle` refuses a record from another rules version (`kRulesVersion`), event schema (`kEventSchemaVersion`) or data (content hash). Bump `kRulesVersion` whenever a rule, a formula or the order of random draws changes.
 
-`serializeEvents` writes one line per event: the round, the type name, then every field that differs from its default, in declaration order, as `name=value`.
+`serializeEvents` writes one line per event: the round, the type name (`damage_dealt`), then every field that differs from its default, in declaration order, as `name=value`.
 
 ## Events
 
@@ -376,7 +376,16 @@ Every formula is a **placeholder to be tuned**. The math is in `src/formulas.cpp
 
 ## Changes a host must make
 
-This round: rules version 4, event schema 4, record format 3; older records are refused, and the data's content hash changed.
+This round: rules version 4, event schema 5, record format 4. `parseRecord` still reads format 3, but `replayBattle` refuses records of event schema 4, since event type names changed. The data's content hash is unchanged.
+
+* `names.h`: every `toString` name is lowercase with underscores. `EventType` names changed from `DamageDealt` to `damage_dealt` and so on, which changes the text form of `serializeEvents`; `RewardMultiplier` names changed from `1`, `1.5`, `2` to `x1`, `x1_5`, `x2`, which changes records and the battle CLI's printout. `parseEventType` and `parseRewardMultiplier` also accept the old spellings, so older event text, records, saves and `--reward 1.5` still read. Compare names through `toString`, not literals.
+* `result.h`: new `struct Problem { file, line, entry, message }` and `Result::problems`, filled by `loadDatabaseFromTexts`, `loadDatabaseFromDirectory`, `parseJson`, `parseTextTable` and `loadTextTable`; `error` keeps the English lines (a JSON syntax error now reads `file:line: text` instead of `file: line N: text`). New `Result::failure(problems, text)`.
+* `text.h`: new `problemText()`, `formatProblem(problem, table)` and `formatProblems(problems, table)`.
+* `character.h`: `PartyMember::name`, the name the player gave the member; empty keeps the character's data name. `Battle::create` gives the party combatant that name, `partyState()` returns it, and records keep it (`member_name` line).
+* `version.h`: `kEventSchemaVersion` 5, `kRecordFormatVersion` 4.
+* Build: the library is compiled with `-fPIC`.
+
+The previous round: rules version 4, event schema 4, record format 3; older records are refused, and the data's content hash changed.
 
 * `battle.h`: `Rewards` adds `items` (`Inventory`, the drops). `rewards().memberExperience` now has one entry per member of `setup.party` (the same as `partyCount()` except in a vehicle battle). Add `rewards().items` to the party's inventory.
 * `event.h`: `Event` adds `items` (`Inventory`), set on `BattleEnded`; the text form writes it as `items=id:count,...`.

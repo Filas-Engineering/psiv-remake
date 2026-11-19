@@ -147,6 +147,9 @@ std::string describe(const ChoiceRequest& request) {
 
 std::string describe(const BattleRequest& request) {
 	std::string out = "battle " + request.encounter;
+	if (!request.vehicle.empty()) {
+		out += " aboard " + request.vehicle;
+	}
 	out += request.escape_allowed ? " escape" : " no-escape";
 	out += request.defeat_handled ? " defeat-branch" : " defeat-game-over";
 	if (request.opening != BattleOpening::normal) {

@@ -1,8 +1,7 @@
 namespace Psiv.Session;
 
 // One line of plain text per battle event, as the terminal front end phrases them. `labels` are the
-// combatant labels taken when the battle started (Combatant.Label), since the battle is gone by the time
-// the last round's events are shown.
+// combatant labels (Combatant.Label), by combatant index.
 public static class BattleText
 {
 	public static string? Describe(GameSession session, IReadOnlyList<string> labels, BattleEvent e)

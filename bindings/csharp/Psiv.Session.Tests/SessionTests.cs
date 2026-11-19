@@ -140,6 +140,13 @@ public class NativeLayoutTests
 		Same<PsivSettings>("psiv_settings");
 		Same<PsivShopInfo>("psiv_shop_info");
 		Same<PsivWorldInfo>("psiv_world_info");
+		Same<PsivProblem>("psiv_problem");
+		Same<PsivLevelUp>("psiv_level_up");
+		Same<PsivBattleResult>("psiv_battle_result");
+		Same<PsivAutoRound>("psiv_auto_round");
+		Same<PsivAutoBattle>("psiv_auto_battle");
+		Same<PsivPacingArea>("psiv_pacing_area");
+		Same<PsivPacingBoss>("psiv_pacing_boss");
 		Assert.Equal(0u, Native.SizeOf("no_such_struct"));
 	}
 
@@ -147,7 +154,11 @@ public class NativeLayoutTests
 	public void EnumNamesComeFromTheLibrary()
 	{
 		Assert.Equal("field", GameSession.NameOf(NameKind.Mode, (int)Mode.Field));
-		Assert.Equal("BattleEnded", GameSession.NameOf(NameKind.EventType, (int)BattleEventType.BattleEnded));
+		Assert.Equal("battle_ended", GameSession.NameOf(NameKind.EventType, (int)BattleEventType.BattleEnded));
+		Assert.Equal("x1_5", GameSession.NameOf(NameKind.RewardMultiplier, (int)RewardMultiplier.X1_5));
+		Assert.Equal((int)RewardMultiplier.X1_5, GameSession.ParseName(NameKind.RewardMultiplier, "1.5"));
+		Assert.Equal((int)BattleEventType.BattleEnded, GameSession.ParseName(NameKind.EventType, "BattleEnded"));
+		Assert.Null(GameSession.ParseName(NameKind.Outcome, "won"));
 		Assert.Equal("one_fallen_ally", GameSession.NameOf(NameKind.Targeting, (int)Targeting.OneFallenAlly));
 		Assert.Equal("warp", GameSession.NameOf(NameKind.ActionType, (int)ActionType.Warp));
 		Assert.Equal("", GameSession.NameOf(NameKind.Outcome, 99));
@@ -179,12 +190,18 @@ public class SessionTests
 	}
 
 	[Fact]
-	public void ABadDataDirectoryThrowsWithTheLoaderMessage()
+	public void ABadDataDirectoryThrowsWithTheLoaderProblems()
 	{
-		var e = Assert.Throws<PsivException>(() => GameSession.Create(new SessionOptions { DataDirectory = "no/such/dir" }));
+		var e = Assert.Throws<PsivDataException>(() => GameSession.Create(new SessionOptions { DataDirectory = "no/such/dir" }));
 		Assert.Equal(PsivStatus.DataError, e.Error.Status);
 		Assert.Equal("binding.data_error", e.Error.Key);
-		Assert.NotEmpty(e.Error.Text);
+		DataProblem problem = Assert.Single(e.Problems);
+		Assert.Equal("data.cannot_read", problem.Key);
+		Assert.Equal(["no/such/dir/game.json"], problem.Params);
+		var core = Assert.Throws<PsivDataException>(() => GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, CoreDataDirectory = "no/such/core" }));
+		Assert.Equal("load.cannot_open", Assert.Single(core.Problems).Key);
+		using GameSession explicitCore = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, CoreDataDirectory = Path.Combine(Paths.Game, "..", "core", "data") });
+		Assert.Equal(Mode.Title, explicitCore.Mode);
 	}
 
 	[Fact]
@@ -366,5 +383,95 @@ public class SessionTests
 		Assert.True(s.SetProfile(s.Profile() with { TextLanguage = "en" }).Ok);
 		Assert.Equal(log.Objective, s.QuestLog().Objective);
 		Assert.Equal("game.refuse.unknown_language", s.SetProfileValue("text_language", "xx").Error!.Key);
+	}
+
+	private static WalkStatus WalkToMarker(GameSession s, string name)
+	{
+		Marker marker = s.Field()!.Markers.Single(m => m.Name == name);
+		Assert.True(s.WalkTo(marker.X, marker.Y).Ok);
+		WalkStatus status;
+		while ((status = s.WalkStep()) == WalkStatus.Walking)
+		{
+			Settle(s);
+		}
+		return status;
+	}
+
+	[Fact]
+	public void TheGuideGivesLineDataAndANameEntry()
+	{
+		using GameSession s = NewSession();
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "guide_front"));
+		Assert.True(s.Face(Direction.North).Ok);
+		Assert.True(s.Interact().Ok);
+		Line line = s.Line()!;
+		Assert.Equal(("guide", "Harbor Guide", "tidewater.guide.bell", "guide_smile"), (line.SpeakerId, line.SpeakerName, line.TextId, line.Portrait));
+		s.ConfirmLine();
+		Choice ask = s.Choice()!;
+		Assert.True(ask.YesNo);
+		Assert.Equal(["Yes", "No"], ask.Options);
+		Assert.True(s.SetProfileValue("text_language", "ja").Ok);
+		Assert.Equal(["はい", "いいえ"], s.Choice()!.Options);
+		Assert.True(s.SetProfileValue("text_language", "en").Ok);
+		Assert.True(s.Choose(0).Ok);
+		s.ConfirmLine();
+		Assert.Equal(MenuKind.NameEntry, s.MenuKind);
+		Assert.Equal("fighter", s.NameEntryMember);
+		Assert.True(s.EnterName("Bryn").Ok);
+		line = s.Line()!;
+		Assert.Equal(("fighter", "Bryn", ""), (line.SpeakerId, line.SpeakerName, line.Portrait));
+		Assert.Equal("Bryn: Tell the ferry I am staying a while.", line.Display);
+		Settle(s);
+		Assert.Equal(Mode.Field, s.Mode);
+		Assert.True(s.WalkTo(0, 0).Ok);
+		Assert.Equal(WalkStatus.NoPath, s.WalkStep());
+		PacingArea area = Assert.Single(s.PacingAreas());
+		Assert.Equal("tidewater", area.Area);
+		Assert.True(area.Steps > 0);
+		Assert.Empty(s.PacingBosses());
+	}
+
+	[Fact]
+	public void ALostEventBattleStaysReadableReplaysAndRetries()
+	{
+		using GameSession s = NewSession(Paths.FreshDirectory("lost_battle"));
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "hold_front"));
+		Assert.True(s.Face(Direction.North).Ok);
+		Assert.True(s.Interact().Ok);
+		Settle(s);
+		Assert.Equal(Mode.Battle, s.Mode);
+		AutoBattle played = s.PlayBattle();
+		Assert.True(played.Ended);
+		Assert.Null(played.Refusal);
+		Assert.Equal(BattleEventType.BattleStarted, played.Rounds[0].Events[0].Type);
+		Assert.Equal(Mode.Title, s.Mode);
+		BattleInfo info = s.BattleInfo()!;
+		Assert.False(info.Live);
+		Assert.True(info.GameOver);
+		Assert.Equal(Outcome.Defeat, info.Outcome);
+		Assert.False(s.Combatants()[0].Alive);
+		BattleResult result = s.BattleResult()!;
+		Assert.Equal(("training", Outcome.Defeat, true, 0), (result.Encounter, result.Outcome, result.GameOver, result.Experience));
+		Assert.Empty(result.LevelUps);
+
+		string record = s.BattleRecord()!;
+		Replay replay = s.ReplayBattle(record);
+		Assert.Equal(played.Rounds.Sum(r => r.Events.Count), replay.Events.Count);
+		Assert.StartsWith("0 battle_started", replay.EventText);
+		var damaged = Assert.Throws<PsivException>(() => s.ReplayBattle(record.Replace("seed ", "seed 9")));
+		Assert.Equal(PsivStatus.DataError, damaged.Error.Status);
+
+		Assert.True(s.WorldInfo().CanRetry);
+		Assert.True(s.RetryBattle().Ok);
+		Settle(s);
+		Assert.Equal(Mode.Battle, s.Mode);
+		Assert.Null(s.BattleResult());
+		Assert.True(s.PlayBattle().Ended);
+		s.DismissBattle();
+		Assert.Null(s.BattleInfo());
 	}
 }

@@ -89,18 +89,18 @@ bool load_glossary(const std::string& file, const std::string& text, Glossary& g
 			continue;
 		}
 		std::vector<std::string> fields = split_fields(line);
-		std::string problem;
+		DiagnosticMessage problem;
 		if (fields.size() < 3 || fields.size() > 4) {
-			problem = "expected '<id> | <shipped name> | <restored name> [| <reason>]'";
+			problem = {"names.glossary_line_shape", {}};
 		} else if (!is_name(fields[0])) {
-			problem = "'" + fields[0] + "' is not a valid glossary ID";
+			problem = {"names.invalid_glossary_id", {fields[0]}};
 		} else if (fields[1].empty() || fields[2].empty()) {
-			problem = "the shipped and restored names cannot be empty";
+			problem = {"names.empty_glossary_names", {}};
 		} else if (const GlossaryEntry* earlier = result.find(fields[0])) {
-			problem = "duplicate glossary ID '" + fields[0] + "'; it is already defined at line " + std::to_string(earlier->line);
+			problem = {"names.duplicate_glossary_id", {fields[0], std::to_string(earlier->line)}};
 		}
 		if (!problem.empty()) {
-			diagnostics.push_back({Severity::error, file, number, problem});
+			diagnostics.push_back(diagnostic(Severity::error, file, number, problem));
 			ok = false;
 			continue;
 		}
@@ -265,16 +265,13 @@ std::vector<Diagnostic> check_names(const Program& program, const Glossary& glos
 			break;
 		case MentionKind::literal_shipped:
 		case MentionKind::literal_restored:
-			out.push_back({Severity::error, m.file, m.line,
-				"the name \"" + (m.kind == MentionKind::literal_shipped ? entry->shipped : entry->restored) + "\" is typed out" + via + "; write {name:" + m.id +
-					"} so the \"show shipped names\" setting can switch it"});
+			out.push_back(diagnostic(Severity::error, m.file, m.line, "names.name_typed_out_write_name", {std::string((m.kind == MentionKind::literal_shipped ? entry->shipped : entry->restored)), via, m.id}));
 			break;
 		case MentionKind::unknown_token:
-			out.push_back({Severity::error, m.file, m.line,
-				"unknown name token {" + std::string(name_case_word(m.name_case)) + ":" + m.id + "}" + via + ": it is not in " + glossary.file});
+			out.push_back(diagnostic(Severity::error, m.file, m.line, "names.unknown_name_token", {std::string(name_case_word(m.name_case)), m.id, via, glossary.file}));
 			break;
 		case MentionKind::broken_token:
-			out.push_back({Severity::error, m.file, m.line, "broken name token" + via + ": write {" + std::string(name_case_word(m.name_case)) + ":<id>}"});
+			out.push_back(diagnostic(Severity::error, m.file, m.line, "names.broken_name_token_write_id", {via, std::string(name_case_word(m.name_case))}));
 			break;
 		}
 	}

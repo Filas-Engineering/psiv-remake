@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 1
+#define PSIV_ABI_VERSION 2
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -68,7 +68,8 @@ typedef enum psiv_status {
 	PSIV_INVALID_ARGUMENT = 2,
 	/* An id, slot or item that does not exist, or a state that is not there (no battle, no area). */
 	PSIV_NOT_FOUND = 3,
-	/* The data directory could not be loaded. The text lists every problem, one per line. */
+	/* The data could not be loaded. The text lists every problem, one per line; psiv_data_problems gives each
+	 * with its text key. Also a battle record that does not parse or replay. */
 	PSIV_DATA_ERROR = 4,
 	/* Anything unexpected inside the library, such as running out of memory. */
 	PSIV_INTERNAL_ERROR = 5
@@ -85,6 +86,24 @@ typedef struct psiv_error {
 /* The last failure on `session`, or with session NULL the last failure of psiv_session_create on this
  * thread. Returns PSIV_NOT_FOUND and an empty record when there was none. */
 PSIV_API psiv_status psiv_last_error(const psiv_session* session, psiv_error* out);
+
+/* One data load problem: where, and a text key with its parameters (the game's problem table has the English
+ * template of every key; `text` is the problem rendered with it). */
+typedef struct psiv_problem {
+	const char* file;
+	/* 0 when the problem is about the whole file. */
+	int32_t line;
+	/* The entry being read, "error" or "warning" for a script diagnostic, or "". */
+	const char* entry;
+	const char* key;
+	int32_t param_count;
+	const char* const* params;
+	const char* text;
+} psiv_problem;
+
+/* The problems of the last psiv_session_create on this thread that failed with PSIV_DATA_ERROR. Valid until
+ * the next psiv_session_create on this thread. */
+PSIV_API psiv_status psiv_data_problems(const psiv_problem** out, int32_t* count);
 
 /* ------------------------------------------------------------------------------------------------------ */
 /* Enums. Values mirror the C++ libraries; psiv_name_of gives each value's stable name.                   */
@@ -143,7 +162,8 @@ typedef enum psiv_action_type {
 /* A queued presentation record: an action starting, or an action the interpreter abandoned (a skip). */
 typedef enum psiv_action_phase { PSIV_ACTION_BEGIN, PSIV_ACTION_CANCEL } psiv_action_phase;
 /* INSTANT: every action is done when it starts (what the terminal and tests do). WAIT: an action is done
- * when the host calls psiv_action_finish, so the event waits on the engine's animation. */
+ * when the host calls psiv_action_finish, so the event waits on the engine's animation. These are the game's
+ * own Presentation::Instant and Presentation::Queued. */
 typedef enum psiv_presentation { PSIV_PRESENTATION_INSTANT, PSIV_PRESENTATION_WAIT } psiv_presentation;
 /* Cell flags in psiv_field_grid. The low two bits are the terrain. */
 typedef enum psiv_cell { PSIV_CELL_FLOOR = 0, PSIV_CELL_WALL = 1, PSIV_CELL_WATER = 2, PSIV_CELL_TERRAIN_MASK = 3, PSIV_CELL_WALKABLE = 16 } psiv_cell;
@@ -157,9 +177,12 @@ typedef enum psiv_name_kind {
 	PSIV_NAME_ACTION_TYPE
 } psiv_name_kind;
 
-/* The stable name of an enum value as the C++ libraries spell it ("field", "victory", "not_enough_tp",
- * "BattleEnded"), or "" for a value out of range. Static storage. */
+/* The stable name of an enum value as the C++ libraries spell it, lowercase with underscores ("field",
+ * "victory", "not_enough_tp", "battle_ended", "x1_5"), or "" for a value out of range. Static storage. */
 PSIV_API const char* psiv_name_of(int32_t kind, int32_t value);
+/* The value whose name is `text`. Reward multipliers and event types also take the spellings older files use
+ * ("1.5", "BattleEnded"). PSIV_NOT_FOUND for an unknown name. */
+PSIV_API psiv_status psiv_parse_name(int32_t kind, const char* text, int32_t* out);
 
 /* ------------------------------------------------------------------------------------------------------ */
 /* Session                                                                                                */
@@ -167,8 +190,10 @@ PSIV_API const char* psiv_name_of(int32_t kind, int32_t value);
 typedef struct psiv_session_options {
 	/* sizeof(psiv_session_options); psiv_session_options_init sets it. */
 	uint32_t struct_size;
-	/* The game's data directory (the one holding game.json). Its core_data names the battle data. */
+	/* The game's data directory (the one holding game.json). */
 	const char* data_dir;
+	/* Core's battle data. NULL or "": game.json's core_data, relative to data_dir. */
+	const char* core_data_dir;
 	/* Saves, the global profile and the clear-data record. NULL or "" disables writing. */
 	const char* save_dir;
 	uint64_t seed;
@@ -297,8 +322,18 @@ PSIV_API int32_t psiv_flag(const psiv_session* session, const char* name);
 PSIV_API psiv_status psiv_update(psiv_session* session, int32_t dt_ms, int32_t direction);
 /* MUTATES. Holds `direction` until the leader enters the next cell or something stops the field. */
 PSIV_API psiv_status psiv_walk(psiv_session* session, int32_t direction);
-/* MUTATES. Turns the leader without moving (the field's facing is otherwise only set by held input). */
+/* MUTATES. Turns the leader without moving. Refused outside the field or without player control. */
 PSIV_API psiv_status psiv_face(psiv_session* session, int32_t direction);
+
+typedef enum psiv_walk_status { PSIV_WALK_WALKING, PSIV_WALK_ARRIVED, PSIV_WALK_LEFT_AREA, PSIV_WALK_STOPPED, PSIV_WALK_NO_PATH, PSIV_WALK_TOO_LONG } psiv_walk_status;
+/* MUTATES. Starts a walk to (x, y) along the shortest path over walkable cells, avoiding exits other than
+ * the goal; visible enemies are not avoided, so bumping into one starts its battle. Then call psiv_walk_step
+ * until it reports anything but PSIV_WALK_WALKING, running events and battles between the calls: an event
+ * or battle on the way only stops the walk (STOPPED) if the field does not come back. */
+PSIV_API psiv_status psiv_walk_to(psiv_session* session, int32_t x, int32_t y);
+/* MUTATES. One cell of the walk psiv_walk_to started; *status is a psiv_walk_status. PSIV_NOT_FOUND
+ * without one. */
+PSIV_API psiv_status psiv_walk_step(psiv_session* session, int32_t* status);
 /* MUTATES. Interacts with whatever stands in the cell the leader faces. */
 PSIV_API psiv_status psiv_interact(psiv_session* session);
 /* MUTATES. The best party talk set's lines arrive as PSIV_NOTICE_LINE notices. */
@@ -373,8 +408,13 @@ PSIV_API psiv_status psiv_field_points(psiv_session* session, const psiv_point**
 typedef struct psiv_line {
 	/* Character or actor id, "" for narration. */
 	const char* speaker_id;
+	/* The chosen name, the character's name or the actor's speaker string; "" for narration. */
 	const char* speaker_name;
+	/* The string ID of the text, "" for inline text. */
+	const char* text_id;
+	/* In the profile's language, name tokens resolved for its "show shipped names". */
 	const char* text;
+	/* The portrait the line starts with, "" for none. */
 	const char* portrait;
 	/* "Speaker: text", or the text for narration: what the terminal shows. */
 	const char* display;
@@ -384,7 +424,7 @@ typedef struct psiv_choice {
 	/* "" when the script gave no prompt. */
 	const char* prompt;
 	int32_t yes_no;
-	/* For yes/no requests the options are the game's own "yes" and "no" (yes = 0, no = 1). */
+	/* For yes/no requests the options are the string table's choice.yes and choice.no (yes = 0, no = 1). */
 	int32_t option_count;
 	const char* const* options;
 } psiv_choice;
@@ -453,6 +493,11 @@ PSIV_API psiv_status psiv_notices_drain(psiv_session* session, const psiv_notice
 /* ------------------------------------------------------------------------------------------------------ */
 /* Battle                                                                                                 */
 
+typedef struct psiv_item_count {
+	const char* id;
+	int32_t count;
+} psiv_item_count;
+
 typedef struct psiv_active_status {
 	const char* id;
 	const char* name;
@@ -483,7 +528,8 @@ typedef struct psiv_combatant {
 } psiv_combatant;
 
 typedef struct psiv_battle_info {
-	/* 1 while the battle runs; 0 when this describes the battle that ended in the last round resolved. */
+	/* 1 while the battle runs; 0 when this describes the battle that ended, which the game keeps until the
+	 * next battle starts, psiv_battle_dismiss, a new game, a load or the title. */
 	int32_t live;
 	const char* encounter;
 	int32_t source;
@@ -513,11 +559,36 @@ typedef struct psiv_battle_option {
 	int32_t unusable;
 } psiv_battle_option;
 
-/* PSIV_NOT_FOUND when there is neither a battle nor one that just ended. */
+/* PSIV_NOT_FOUND when there is neither a battle nor an ended one. */
 PSIV_API psiv_status psiv_battle_info_get(psiv_session* session, psiv_battle_info* out);
-/* Live state during the battle. After the battle ended inside psiv_battle_resolve_round: the combatants as
- * the last round left them (hit points from its events), until the next battle starts. */
+/* The live combatants during the battle; after it, the final combatants of the ended battle. */
 PSIV_API psiv_status psiv_battle_combatants(psiv_session* session, const psiv_combatant** out, int32_t* count);
+
+typedef struct psiv_level_up {
+	const char* member;
+	const char* name;
+	int32_t level;
+	int32_t learned_count;
+	const char* const* learned;
+} psiv_level_up;
+/* What an ended battle paid out. Experience, money and drops are 0 and empty unless the party won or
+ * reached a scripted end. */
+typedef struct psiv_battle_result {
+	const char* encounter;
+	int32_t source;
+	int32_t outcome;
+	int32_t game_over;
+	int32_t experience;
+	int32_t money;
+	int32_t drop_count;
+	const psiv_item_count* drops;
+	int32_t level_up_count;
+	const psiv_level_up* level_ups;
+} psiv_battle_result;
+/* PSIV_NOT_FOUND unless an ended battle is kept. */
+PSIV_API psiv_status psiv_battle_result_get(psiv_session* session, psiv_battle_result* out);
+/* MUTATES. Forgets the ended battle. */
+PSIV_API psiv_status psiv_battle_dismiss(psiv_session* session);
 /* What `actor` (a party combatant index) can choose this round: known abilities, then the battle's items. */
 PSIV_API psiv_status psiv_battle_options(psiv_session* session, int32_t actor, const psiv_battle_option** out, int32_t* count);
 /* MUTATES. kind is a psiv_command_kind; id the ability or item; target a combatant index or -1 to let the
@@ -544,11 +615,11 @@ PSIV_API psiv_status psiv_battle_cancel_auto(psiv_session* session); /* MUTATES 
 PSIV_API psiv_status psiv_battle_fill_from_auto(psiv_session* session, int32_t* filled);
 /* MUTATES. Core's simple policy for every party member who acts this round. */
 PSIV_API psiv_status psiv_battle_fill_from_policy(psiv_session* session);
+/* MUTATES. Fills the round the way auto play does: on the first round it starts auto-battle with the save's
+ * auto macro when one is set, then fills from auto-battle, or from core's policy once auto-battle is off.
+ * PSIV_REFUSED when auto-battle could not start; the round is filled from the policy anyway. */
+PSIV_API psiv_status psiv_battle_fill_auto_round(psiv_session* session);
 
-typedef struct psiv_item_count {
-	const char* id;
-	int32_t count;
-} psiv_item_count;
 
 typedef struct psiv_recorded_command {
 	int32_t actor;
@@ -615,6 +686,36 @@ typedef struct psiv_battle_event {
 PSIV_API psiv_status psiv_battle_resolve_round(psiv_session* session, const psiv_battle_event** out, int32_t* count);
 /* The events of the last round resolved, again. */
 PSIV_API psiv_status psiv_battle_last_events(psiv_session* session, const psiv_battle_event** out, int32_t* count);
+
+/* One round of psiv_battle_play: the notices from before the round was resolved, then its events. */
+typedef struct psiv_auto_round {
+	int32_t notice_count;
+	const psiv_notice* notices;
+	int32_t event_count;
+	const psiv_battle_event* events;
+} psiv_auto_round;
+typedef struct psiv_auto_battle {
+	/* Why auto-battle with the auto macro did not start, or "" with no parameters. */
+	const char* refusal_key;
+	int32_t refusal_param_count;
+	const char* const* refusal_params;
+	const char* refusal_text;
+	int32_t round_count;
+	const psiv_auto_round* rounds;
+	/* 0 when max_rounds ran out first. */
+	int32_t ended;
+} psiv_auto_battle;
+/* MUTATES. Plays the battle to its end with psiv_battle_fill_auto_round and psiv_battle_resolve_round, at
+ * most max_rounds rounds (60 for 0 or less). Notices after the last round stay for psiv_notices_drain. */
+PSIV_API psiv_status psiv_battle_play(psiv_session* session, int32_t max_rounds, psiv_auto_battle* out);
+
+/* The battle record (core's text format, for bug reports and replays) of the live battle, or of the ended
+ * one. PSIV_NOT_FOUND with neither. */
+PSIV_API psiv_status psiv_battle_record(psiv_session* session, const char** out);
+/* Rebuilds a battle from a record against this session's data and returns its full event stream, typed and
+ * as core's stable text form (one line per event). PSIV_DATA_ERROR for a record that does not parse, or that
+ * is from other rules or data. */
+PSIV_API psiv_status psiv_battle_replay(psiv_session* session, const char* record, const psiv_battle_event** events, int32_t* count, const char** event_text);
 
 /* ------------------------------------------------------------------------------------------------------ */
 /* Party, inventory, menus and shops                                                                      */
@@ -740,6 +841,33 @@ PSIV_API psiv_status psiv_glossary(psiv_session* session, const psiv_glossary_en
 PSIV_API psiv_status psiv_text_log(psiv_session* session, const char* const** out, int32_t* count);
 /* The pacing table as plain text, one row per line. */
 PSIV_API psiv_status psiv_pacing_table(psiv_session* session, const char** out);
+/* The numbers behind the table (encounters.md, "Pacing measurement"), per area in first-visit order. */
+typedef struct psiv_pacing_area {
+	const char* area;
+	int32_t visits;
+	int32_t battles;
+	int32_t steps;
+	int64_t field_ms;
+	int64_t battle_ms;
+	int64_t event_ms;
+	int32_t experience;
+	int32_t money;
+	/* Field time and steps between one battle's end and the next one's start (M2). */
+	int32_t gap_count;
+	const int64_t* gap_ms;
+	const int32_t* gap_steps;
+} psiv_pacing_area;
+typedef struct psiv_pacing_boss {
+	const char* flag;
+	const char* encounter;
+	const char* area;
+	/* Average active party level in hundredths when the boss battle started (M5). */
+	int32_t average_level_x100;
+	/* Dungeon entry to the boss's end (M6), -1 outside a dungeon or before the boss falls. */
+	int64_t dungeon_ms;
+} psiv_pacing_boss;
+PSIV_API psiv_status psiv_pacing_areas(psiv_session* session, const psiv_pacing_area** out, int32_t* count);
+PSIV_API psiv_status psiv_pacing_bosses(psiv_session* session, const psiv_pacing_boss** out, int32_t* count);
 
 /* A key and parameters in the profile's language, parameters shown as display names. */
 PSIV_API psiv_status psiv_render(psiv_session* session, const char* key, const char* const* params, int32_t param_count, const char** out);

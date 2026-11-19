@@ -1,7 +1,9 @@
-# Headless smoke run of the sample's screens: title, dialogue and a choice, walking with held keys, the
-# quest log, the field menu and a manual save, party talk, a shop, the inn, a battle played from the
-# command menu (attack, technique, then auto) and the menu after it. `cmd` lines use game_cli's command
-# language to walk to a marker; everything else is key presses through the same controller as the window.
+# Headless smoke run of the sample's screens: title, the arrival fade played as a timed animation the
+# event waits on, dialogue and a choice, a name entry, walking with held keys, the quest log, the field menu
+# and a manual save, party talk, a shop, the inn, a battle played from the command menu (attack, technique,
+# then auto) and the menu after it. `cmd` lines use game_cli's command language to walk to a marker;
+# everything else is key presses through the same controller as the window. A direction tap is followed by
+# a short wait, since the field plays it at its next tick.
 
 expect screen Title
 press Enter
@@ -12,6 +14,7 @@ dump
 
 cmd walk dock_front
 press Up
+wait 3
 press Enter
 expect screen Dialogue
 pressuntil Enter Field 400
@@ -24,6 +27,7 @@ expect screen Field
 
 cmd walk guide_front
 press Up
+wait 3
 press Enter
 pressuntil Enter Field 400
 press T
@@ -40,6 +44,7 @@ expect screen Field
 
 cmd walk stall_front
 press Up
+wait 3
 press Enter
 expect screen Shop
 press Enter
@@ -51,6 +56,7 @@ expect screen Field
 
 cmd walk inn_front
 press Left
+wait 3
 press Enter
 expect screen Inn
 press Enter
@@ -70,6 +76,7 @@ press Enter
 press Enter
 press Enter
 press Up
+wait 3
 press Enter
 pressuntil Enter Field 4000
 expect mode Field

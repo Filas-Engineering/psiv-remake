@@ -44,6 +44,22 @@ public sealed class SampleController
 {
 	private const int PlaybackLineMs = 350;
 	private const int TickerMs = 4000;
+	// Script actions play for their own length, held between these so the sample stays brisk.
+	private const int ShortestAnimationMs = 150;
+	private const int LongestAnimationMs = 600;
+
+	// A presentation action being played: the session waits on it until FinishAction.
+	private sealed class Animation(PresentationAction action, int lengthMs)
+	{
+		public PresentationAction Action { get; } = action;
+		public int LengthMs { get; } = lengthMs;
+		public int ElapsedMs { get; set; }
+		public float Progress => LengthMs == 0 ? 1f : Math.Clamp(ElapsedMs / (float)LengthMs, 0f, 1f);
+	}
+
+	private readonly List<Animation> _animations = [];
+	// The screen's darkness after the last fade, 0 to 1.
+	private float _darkness;
 
 	private readonly GameSession _s;
 	private readonly Action<string> _log;
@@ -126,15 +142,85 @@ public sealed class SampleController
 				Say(n.Kind == NoticeKind.Action ? "(" + n.Text + ")" : n.Text);
 			}
 		}
-		// Instant presentation needs nothing from the engine; a real renderer would start each animation here.
 		foreach (PresentationAction a in _s.PollActions())
 		{
-			_log("action: " + a.Description);
+			if (a.Phase == ActionPhase.Cancel)
+			{
+				_animations.RemoveAll(x => x.Action.Handle == a.Handle);
+				_log($"action cancelled: {a.Handle}");
+				continue;
+			}
+			_log("action: " + a.Description + (a.Instant ? " (instant)" : ""));
+			if (a.Instant)
+			{
+				EndAnimation(a);
+				continue;
+			}
+			int length = a.Type is ActionType.Move or ActionType.FadeIn or ActionType.FadeOut or ActionType.CameraMove
+				? Math.Clamp((int)(a.Seconds * 1000), ShortestAnimationMs, LongestAnimationMs)
+				: ShortestAnimationMs;
+			_animations.Add(new Animation(a, length));
+		}
+	}
+
+	// The end state of an action, for one that finished or was put up at once.
+	private void EndAnimation(PresentationAction a)
+	{
+		if (a.Type == ActionType.FadeOut)
+		{
+			_darkness = 1f;
+		}
+		else if (a.Type == ActionType.FadeIn)
+		{
+			_darkness = 0f;
+		}
+	}
+
+	private void AdvanceAnimations(int dtMs)
+	{
+		for (int i = 0; i < _animations.Count; i++)
+		{
+			Animation animation = _animations[i];
+			animation.ElapsedMs += dtMs;
+			if (animation.ElapsedMs >= animation.LengthMs)
+			{
+				EndAnimation(animation.Action);
+				_s.FinishAction(animation.Action.Handle);
+				_animations.RemoveAt(i--);
+			}
+		}
+	}
+
+	private void DrawAnimations(IDrawSurface s)
+	{
+		float darkness = _darkness;
+		foreach (Animation a in _animations)
+		{
+			switch (a.Action.Type)
+			{
+			case ActionType.FadeIn:
+				darkness = 1f - a.Progress;
+				break;
+			case ActionType.FadeOut:
+				darkness = a.Progress;
+				break;
+			default:
+				// Anything else, a move included, is a marker sliding across the top of the screen with its subject.
+				int x = 20 + (int)((s.Width - 200) * a.Progress);
+				s.Fill(x, 44, 160, 22, Style.Accent);
+				s.Text(a.Action.Subject.Length > 0 ? a.Action.Subject : a.Action.Description, x + 6, 44, Style.Background, Style.Small);
+				break;
+			}
+		}
+		if (darkness > 0f)
+		{
+			s.Fill(0, 0, s.Width, s.Height, Color.Black * darkness);
 		}
 	}
 
 	public void Update(int dtMs, InputState input)
 	{
+		AdvanceAnimations(dtMs);
 		for (int i = _ticker.Count - 1; i >= 0; i--)
 		{
 			_ticker[i] = (_ticker[i].Text, _ticker[i].MsLeft - dtMs);
@@ -250,14 +336,6 @@ public sealed class SampleController
 
 	private void UpdateField(int dtMs, InputState input)
 	{
-		// A tap turns at once: the field only reads held input every tick, which a short tap can fall between.
-		foreach ((Keys key, Direction direction) in new[] { (Keys.Up, Direction.North), (Keys.Right, Direction.East), (Keys.Down, Direction.South), (Keys.Left, Direction.West) })
-		{
-			if (input.Pressed(key))
-			{
-				_s.Face(direction);
-			}
-		}
 		if (input.Confirm)
 		{
 			Report(_s.Interact());
@@ -1197,5 +1275,6 @@ public sealed class SampleController
 			DrawTextLog(s, 40, 90, s.Height - 150);
 			break;
 		}
+		DrawAnimations(s);
 	}
 }

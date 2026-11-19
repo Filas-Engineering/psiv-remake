@@ -7,7 +7,7 @@ An event scripting format and interpreter for cutscenes and field events. It is 
 ```
 include/events/   public headers
 	compiler.h        compile(sources, options) -> Program + diagnostics
-	diagnostics.h     Diagnostic (file, line, severity, message)
+	diagnostics.h     Diagnostic (file, line, severity, message, text key and parameters), diagnostic_text()
 	glossary.h        name glossary, name tokens, "show shipped names" rendering
 	host.h            Host interface and the values passed to it
 	interpreter.h     Interpreter: start, step, skip, save, restore
@@ -35,7 +35,7 @@ make test     # runs the tests, then every CLI command on the samples
 make clean
 ```
 
-All code builds with `-std=c++17 -Wall -Wextra -Werror`.
+All code builds with `-std=c++17 -Wall -Wextra -Werror -fPIC`, so `build/libevents.a` can go into a shared library as it is.
 
 The CLI:
 
@@ -135,6 +135,7 @@ A `battle` block calls `start_battle` with a `BattleRequest`:
 - `defeat_handled`: true when the script has a `lose` section. When false, a defeat must go to the game's game-over flow, and the host never reports it to the interpreter. Typically the game-over flow loads a save, which throws this interpreter away.
 - `opening`: `normal`, `party_first` or `enemy_first`, from the script's `opening` option.
 - `end`, `end_rounds`, `end_enemy`: the scripted end from the script's `until` option. `BattleEndKind::survive_rounds` ends the battle after `end_rounds` rounds; `enemy_defeated` ends it when the enemy `end_enemy` (its game ID) falls. Report a scripted end as `BattleResult::win`.
+- `vehicle`: empty, or the vehicle the party fights aboard, from the script's `aboard` option.
 
 The host forwards the request to whatever battle rules it uses: look up the encounter, set up the fight with escape on or off and with the scripted end, run it, and when it ends map the outcome to `BattleResult::win`, `lose` or `flee`. The handle is done at that point. The interpreter has no other dependency on the rules. If the host reports `lose` when `defeat_handled` is false, or `flee` when `escape_allowed` is false, the interpreter stops with a runtime error, because the script has no branch for it. Rewards (experience, money, drops) are the rules' business and happen outside the script.
 
@@ -174,7 +175,15 @@ Every CLI command is a library call, so a build pipeline can run them without th
 
 ## Changes a host must make
 
-This round's changes. No save or fingerprint changes: `events-save 3` saves still load, and scripts that do not use the new syntax keep their fingerprint.
+This round's changes. No save changes: `events-save 3` saves still load. Scripts that do not use `aboard` keep their fingerprint.
+
+- `diagnostics.h`: `Diagnostic` adds `key` and `params`, the text key and parameters of the problem; `message` is still the English text, rendered from them (a parser diagnostic's message also starts with its command, as before). New `struct DiagnosticMessage { key, params, empty() }`, `diagnostic_text()` (the English template of every key: `script.*`, `strings.*`, `names.*`, `registry.*`, `lint.*`, `timing.*`), `format_message(table, key, params)`, and `diagnostic(severity, file, line, key, params)` to build one. A host that showed `message` keeps working; one that shows its own language looks `key` up in its table. Aggregate initialization of `Diagnostic` with four fields still compiles and leaves the key empty.
+- `host.h`: `BattleRequest::vehicle`, from `aboard <vehicle>` on `battle`: set the battle up as a vehicle battle with it. `describe(BattleRequest)` writes ` aboard <vehicle>` after the encounter.
+- `registry.h`: `NameKind::vehicle` (appended, keyword `vehicle`); with a registry, an unlisted vehicle is a compile error.
+- Build: the library is compiled with `-fPIC`.
+- Format: `aboard <vehicle>` on `battle`; `vehicle` lines in the registry.
+
+The previous round's changes. No save or fingerprint changes: `events-save 3` saves still load, and scripts that do not use the new syntax keep their fingerprint.
 
 - `host.h`: new `enum class BattleEndKind { none, survive_rounds, enemy_defeated }` and `BattleRequest::end`, `end_rounds` and `end_enemy`, from the script's `until`. Set the battle's scripted end from them and report it as `win`. `describe(BattleRequest)` appends ` until survive <n>` or ` until defeat <enemy>`.
 - `registry.h`: `NameKind::enemy` (appended, keyword `enemy`); `Registry::marker_maps`, `Registry::event_maps`, `add_marker(map, marker)`, `add_event_map(map, event)` and `marker_on(marker, map)`; registry files take `map_markers`, `event_map` and `enemy` lines. A host that builds its registry in code should call `add_marker` for every marker (and `add_event_map` for every event it starts on a known map) so a warp or move to another map's marker fails to compile. A warp to a marker on another map, and a move to one on the map the party is known to be on, are now compile errors.
@@ -182,7 +191,7 @@ This round's changes. No save or fingerprint changes: `events-save 3` saves stil
 - CLI: `check` and `strings check` take `--used FILE`; `strings check` takes `--strict`.
 - Format: `until survive <rounds>` and `until defeat <enemy>` on `battle`; the game strings file.
 
-The previous round changed the public API as follows. Old saves of interpreter state (`events-save 2`) no longer load, and every program's fingerprint changed.
+The round before changed the public API as follows. Old saves of interpreter state (`events-save 2`) no longer load, and every program's fingerprint changed.
 
 Host (`host.h`):
 

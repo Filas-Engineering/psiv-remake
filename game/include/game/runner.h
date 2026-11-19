@@ -8,7 +8,7 @@
 namespace game {
 
 struct RunnerOptions {
-	// Resolve every battle with Session::autoRound as soon as it starts.
+	// Resolve every battle with Session::playBattle as soon as it starts.
 	bool autoBattle = false;
 	// Print each command before running it, so a scripted run reads as a transcript.
 	bool echo = true;
@@ -35,11 +35,12 @@ private:
 	void error(const std::string& text);
 	void report(const std::string& problem);
 	void report(const rules::Message& refusal);
+	void printOutput(const std::vector<Output>& outputs);
 	void flushOutput();
 	void printEvents(const std::vector<rules::Event>& events);
 	void finishBattleAuto();
 	void status();
-	bool walkTo(Cell goal);
+	void walkTo(Cell goal);
 	std::string battleName(int index) const;
 
 	Session& session_;

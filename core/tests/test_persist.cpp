@@ -19,6 +19,9 @@ int checkNames(bool (*parse)(const std::string&, E&)) {
 		if (!parse(name, parsed) || parsed != static_cast<E>(i)) {
 			::test::fail(__FILE__, __LINE__, "name does not round-trip: " + name);
 		}
+		if (name.empty() || name.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_") != std::string::npos || name.front() == '_') {
+			::test::fail(__FILE__, __LINE__, "name is not lowercase with underscores: " + name);
+		}
 		++count;
 	}
 	E parsed{};
@@ -116,7 +119,13 @@ TEST(everyPublicEnumHasAParser) {
 	CHECK_EQ(checkNames(parseEffectiveness), 4);
 	CHECK_EQ(checkNames(parseStatusEnd), 5);
 	CHECK_EQ(checkNames(parseResourceKind), 4);
-	JsonValue::Type type = JsonValue::Type::Null;
-	CHECK(parseJsonType("object", type) && type == JsonValue::Type::Object);
-	CHECK(!parseJsonType("dict", type));
+	EventType type = EventType::BattleStarted;
+	CHECK(parseEventType("DamageDealt", type) && type == EventType::DamageDealt);
+	CHECK_EQ(std::string(toString(EventType::DamageDealt)), std::string("damage_dealt"));
+	RewardMultiplier multiplier = RewardMultiplier::X1;
+	CHECK(parseRewardMultiplier("1.5", multiplier) && multiplier == RewardMultiplier::X1_5);
+	CHECK_EQ(std::string(toString(RewardMultiplier::X1_5)), std::string("x1_5"));
+	JsonValue::Type jsonType = JsonValue::Type::Null;
+	CHECK(parseJsonType("object", jsonType) && jsonType == JsonValue::Type::Object);
+	CHECK(!parseJsonType("dict", jsonType));
 }

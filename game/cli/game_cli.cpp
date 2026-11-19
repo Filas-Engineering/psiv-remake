@@ -13,13 +13,13 @@ namespace {
 void usage() {
 	std::cout << "game_cli: play the placeholder adventure in a terminal\n"
 				 "\n"
-				 "  game_cli [--data DIR] [--seed N] [--saves DIR] [--auto-battle] [--encounters visible|random]\n"
+				 "  game_cli [--data DIR] [--core DIR] [--seed N] [--saves DIR] [--auto-battle] [--encounters visible|random]\n"
 				 "  game_cli --script FILE ...      run the commands in FILE, print the transcript, then exit\n"
 				 "  game_cli --bot [--route FILE]   walk the route in both encounter modes and print pacing tables\n"
 				 "  game_cli --registry             print the registry built from the data, for event_cli check --registry\n"
 				 "  game_cli --used                 print the string IDs the game shows itself, for event_cli check --used\n"
 				 "\n"
-				 "Defaults: --data data, --seed 1, --saves saves, --route DATA/routes/main.route.\n"
+				 "Defaults: --data data, --core game.json's core_data, --seed 1, --saves saves, --route DATA/routes/main.route.\n"
 				 "Type 'help' at the prompt for the command list.\n"
 				 "Exit codes: 0 done, 1 data error, 2 bad arguments, 3 a scripted command failed or the bot did not finish.\n";
 }
@@ -45,6 +45,7 @@ bool parseSeed(const std::string& text, std::uint64_t& out) {
 int main(int argc, char** argv) {
 	std::string dataDir = "data";
 	std::string saves = "saves";
+	std::string coreDir;
 	std::string script;
 	std::string route;
 	std::uint64_t seed = 1;
@@ -67,6 +68,7 @@ int main(int argc, char** argv) {
 			usage();
 			return 0;
 		} else if (arg == "--data" && value(dataDir)) {
+		} else if (arg == "--core" && value(coreDir)) {
 		} else if (arg == "--saves" && value(saves)) {
 		} else if (arg == "--script" && value(script)) {
 		} else if (arg == "--route" && value(route)) {
@@ -92,7 +94,7 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	rules::Result<game::GameData> data = game::loadGameData(dataDir);
+	rules::Result<game::GameData> data = game::loadGameData(game::DataDirectories{dataDir, coreDir});
 	if (!data.ok()) {
 		std::cerr << data.error << "\n";
 		return 1;

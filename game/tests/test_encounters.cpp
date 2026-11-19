@@ -60,7 +60,7 @@ std::string play(std::uint64_t seed, std::optional<EncounterMode> mode, World* o
 	RunnerOptions r;
 	r.autoBattle = true;
 	Runner runner(s, transcript, r);
-	runner.runScript("new\nwalk guide_front\nface north\ntalk\nchoose 0\nwalk 13 4\nwalk 18 4\nwalk 1 4\nwalk 18 2\n");
+	runner.runScript("new\nwalk guide_front\nface north\ntalk\nchoose 0\nname Bryn\nwalk 13 4\nwalk 18 4\nwalk 1 4\nwalk 18 2\n");
 	CHECK_EQ(runner.errors(), 0);
 	if (out) {
 		*out = s.world();

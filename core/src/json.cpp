@@ -1,5 +1,7 @@
 #include "rules/json.h"
 
+#include "rules/text.h"
+
 #include <cstdlib>
 
 namespace rules {
@@ -16,23 +18,26 @@ public:
 		JsonValue root;
 		skipWhitespace();
 		if (!parseValue(root, 0)) {
-			return Result<JsonValue>::failure(error_);
+			return failure();
 		}
 		skipWhitespace();
 		if (pos_ < text_.size()) {
-			fail("unexpected content after the top-level value");
-			return Result<JsonValue>::failure(error_);
+			fail("json.content_after_value", {});
+			return failure();
 		}
 		return Result<JsonValue>::success(std::move(root));
 	}
 
 private:
-	bool fail(const std::string& message) {
-		if (error_.empty()) {
-			error_ = "line " + std::to_string(line_) + ": " + message;
+	bool fail(const char* key, std::vector<std::string> params) {
+		if (!failed_) {
+			failed_ = true;
+			problem_ = {"", line_, "", {key, std::move(params)}};
 		}
 		return false;
 	}
+
+	Result<JsonValue> failure() const { return Result<JsonValue>::failure({problem_}, formatProblem(problem_, problemText())); }
 
 	bool atEnd() const { return pos_ >= text_.size(); }
 	char peek() const { return atEnd() ? '\0' : text_[pos_]; }
@@ -51,7 +56,7 @@ private:
 
 	bool parseValue(JsonValue& out, int depth) {
 		if (depth > kMaxDepth) {
-			return fail("nesting is too deep");
+			return fail("json.nesting_too_deep", {});
 		}
 		out.line = line_;
 		switch (peek()) {
@@ -65,21 +70,21 @@ private:
 		case 'n': return parseLiteral("null", out, JsonValue::Type::Null, false);
 		case '\0':
 			if (atEnd()) {
-				return fail("unexpected end of input");
+				return fail("json.unexpected_end_input", {});
 			}
-			return fail("unexpected character");
+			return fail("json.unexpected_character", {});
 		default:
 			if (peek() == '-' || (peek() >= '0' && peek() <= '9')) {
 				return parseNumber(out);
 			}
-			return fail(std::string("unexpected character '") + peek() + "'");
+			return fail("json.unexpected_character_named", {std::string(1, peek())});
 		}
 	}
 
 	bool parseLiteral(const char* word, JsonValue& out, JsonValue::Type type, bool value) {
 		const std::string w(word);
 		if (text_.compare(pos_, w.size(), w) != 0) {
-			return fail("invalid literal, expected '" + w + "'");
+			return fail("json.invalid_literal", {w});
 		}
 		pos_ += w.size();
 		out.type = type;
@@ -103,12 +108,12 @@ private:
 		if (peek() == '0') {
 			++pos_;
 		} else if (!digits()) {
-			return fail("invalid number");
+			return fail("json.invalid_number", {});
 		}
 		if (peek() == '.') {
 			++pos_;
 			if (!digits()) {
-				return fail("invalid number: expected digits after '.'");
+				return fail("json.invalid_number_fraction", {});
 			}
 		}
 		if (peek() == 'e' || peek() == 'E') {
@@ -117,7 +122,7 @@ private:
 				++pos_;
 			}
 			if (!digits()) {
-				return fail("invalid number: expected exponent digits");
+				return fail("json.invalid_number_exponent", {});
 			}
 		}
 		const std::string literal = text_.substr(start, pos_ - start);
@@ -146,7 +151,7 @@ private:
 
 	bool parseHex4(unsigned& out) {
 		if (pos_ + 4 > text_.size()) {
-			return fail("truncated \\u escape");
+			return fail("json.truncated_u_escape", {});
 		}
 		out = 0;
 		for (int i = 0; i < 4; ++i) {
@@ -159,7 +164,7 @@ private:
 			} else if (c >= 'A' && c <= 'F') {
 				out |= static_cast<unsigned>(c - 'A' + 10);
 			} else {
-				return fail("invalid \\u escape");
+				return fail("json.invalid_u_escape", {});
 			}
 		}
 		return true;
@@ -169,21 +174,21 @@ private:
 		++pos_;
 		while (true) {
 			if (atEnd()) {
-				return fail("unterminated string");
+				return fail("json.unterminated_string", {});
 			}
 			const char c = text_[pos_++];
 			if (c == '"') {
 				return true;
 			}
 			if (static_cast<unsigned char>(c) < 0x20) {
-				return fail("control character in string (strings cannot span lines)");
+				return fail("json.control_character_in_string", {});
 			}
 			if (c != '\\') {
 				out += c;
 				continue;
 			}
 			if (atEnd()) {
-				return fail("unterminated string");
+				return fail("json.unterminated_string", {});
 			}
 			const char e = text_[pos_++];
 			switch (e) {
@@ -203,21 +208,21 @@ private:
 				if (code >= 0xD800 && code <= 0xDBFF) {
 					unsigned low = 0;
 					if (text_.compare(pos_, 2, "\\u") != 0) {
-						return fail("unpaired surrogate in \\u escape");
+						return fail("json.unpaired_surrogate", {});
 					}
 					pos_ += 2;
 					if (!parseHex4(low)) {
 						return false;
 					}
 					if (low < 0xDC00 || low > 0xDFFF) {
-						return fail("invalid surrogate pair in \\u escape");
+						return fail("json.invalid_surrogate_pair", {});
 					}
 					code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00);
 				}
 				appendUtf8(out, code);
 				break;
 			}
-			default: return fail(std::string("invalid escape '\\") + e + "'");
+			default: return fail("json.invalid_escape", {std::string(1, e)});
 			}
 		}
 	}
@@ -246,7 +251,7 @@ private:
 				++pos_;
 				return true;
 			}
-			return fail("expected ',' or ']' in array");
+			return fail("json.expected_array", {});
 		}
 	}
 
@@ -261,18 +266,18 @@ private:
 		while (true) {
 			skipWhitespace();
 			if (peek() != '"') {
-				return fail("expected a quoted key in object");
+				return fail("json.expected_quoted_key", {});
 			}
 			std::string key;
 			if (!parseString(key)) {
 				return false;
 			}
 			if (out.find(key)) {
-				return fail("duplicate key '" + key + "'");
+				return fail("json.duplicate_key", {key});
 			}
 			skipWhitespace();
 			if (peek() != ':') {
-				return fail("expected ':' after key '" + key + "'");
+				return fail("json.expected_after_key", {key});
 			}
 			++pos_;
 			skipWhitespace();
@@ -291,14 +296,15 @@ private:
 				++pos_;
 				return true;
 			}
-			return fail("expected ',' or '}' in object");
+			return fail("json.expected_object", {});
 		}
 	}
 
 	const std::string& text_;
 	std::size_t pos_ = 0;
 	int line_ = 1;
-	std::string error_;
+	bool failed_ = false;
+	Problem problem_;
 };
 
 }

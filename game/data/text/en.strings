@@ -8,6 +8,8 @@ tidewater.guide.bell = You came about the bell? It rings every night at Bell Cov
 tidewater.guide.ask = Will you look into it?
 tidewater.guide.apprentices = Then take my apprentices. One knows a spark or two, the other knows bandages.
 tidewater.guide.later = Come back when you change your mind.
+tidewater.guide.name_ask = Before you go: what should the harbor call you?
+tidewater.guide.name_reply = Tell the ferry I am staying a while.
 tidewater.guide.quiet = Quiet nights again. The whole harbor owes you a supper.
 tidewater.guide.topics = Ask about...
 tidewater.guide.topic_bell = The bell
@@ -23,9 +25,18 @@ tidewater.dockhand.reminder = North side of the path, on the dry patch. You cann
 tidewater.dockhand.found = You found it? Keep the coin, it was yours the moment you got your boots wet. Take these too.
 tidewater.dockhand.thanks_again = Every ferry that docks, I tell them about you.
 
+tidewater.hold.gnawing = Something is gnawing at a crate in the ferry hold. It turns to face you.
+tidewater.hold.cleared = The hold falls quiet. A tonic rolls out from behind the crate.
+tidewater.hold.empty = Only tooth marks are left on the crate.
+
 reed.scout.joins = Heading for the cove? I have mapped these reeds twice over. I am coming along.
 reed.peddler.greeting = Psst. Best prices this side of the marsh, and the only prices.
 reed.peddler.farewell = Mind the wisps. They hum before they bite.
+reed.skimmer.moored = A reed skimmer bobs at its mooring, its boiler still warm.
+reed.skimmer.ask = Take the skimmer out across the marsh?
+reed.skimmer.won = The wisps scatter. This old hull can take a beating.
+reed.skimmer.declined = The skimmer knocks gently against its post.
+reed.skimmer.idle = The skimmer rests at its mooring, steam curling from the vent.
 
 cove.bell.frame = A cracked bell hangs from a driftwood frame. Something stirs beneath it.
 cove.bell.warden = That is no bell keeper. That is a {name:bell_warden}!
@@ -36,8 +47,12 @@ cove.campfire.embers = Someone left a fire banked under the cliff. The embers st
 cove.campfire.ask = Rest by the fire? It costs a little driftwood.
 cove.campfire.rested = The warmth draws the ache out of everyone.
 cove.campfire.declined = The embers settle back into the ash.
+cove.campfire.journal = The firelight is good enough to write by.
 
 # Text the game shows itself, not a script: speaker names, the quest log, the encyclopedia and party talk.
+choice.yes = Yes
+choice.no = No
+
 speaker.dockhand = Dockhand
 speaker.guide = Harbor Guide
 speaker.peddler = Reed Peddler

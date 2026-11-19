@@ -10,7 +10,7 @@
 	],
 	"journal": "journal.json",
 	"actors": ["dockhand", "guide", "peddler"],
-	"presentation": {"audio": ["brass_alarm"]},
+	"presentation": {"audio": ["brass_alarm"], "portraits": ["guide_smile", "mystic_worried", "scout_grin"]},
 	"flags": [
 		"cove.quiet_seen",
 		"cove.warden_beaten",
@@ -19,7 +19,9 @@
 		"job.lost_cache.accepted",
 		"job.lost_cache.done",
 		"reed.scout_joined",
+		"reed.skimmer_cleared",
 		"tidewater.arrived",
+		"tidewater.hold_cleared",
 		"tidewater.met_guide",
 		"tidewater.reported"
 	],
