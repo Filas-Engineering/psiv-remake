@@ -1,0 +1,59 @@
+# A vendor haggles with the traveler. Exercises variables, conditions,
+# loops, labels, calls, localized text and background actions.
+
+event market_haggle unskippable
+	camera cut stall_front
+	sound bell_chime
+	move vendor to 4.0 0.0 -2.5 nowait
+	move traveler to stall_counter nowait
+	sync
+
+	say vendor @market.vendor_greeting as beaming
+	var market.offer = 30
+	var market.rounds = 0
+
+	while market.offer > 18 and market.rounds < 3
+		call market_counter_offer
+	end
+
+	if market.offer <= 18 or market.patience == 0
+		say vendor "Fine, fine. You drive a hard bargain." as defeated
+	else if market.offer < 25
+		say vendor "That is my final price."
+	else
+		say vendor "Prices are prices, friend."
+	end
+
+	if harbor.met_guide and not market.bought_lantern
+		call market_buy_lantern
+	end
+
+	goto farewell
+	say vendor "This line is never reached."
+	label farewell
+	hide vendor
+	narrate @market.closing_narration
+end
+
+event market_counter_offer unskippable
+	say traveler "Surely you can do better than that."
+	var market.offer -= 5
+	var market.rounds += 1
+	anim vendor shrug
+	if market.rounds >= 3
+		var market.patience = 0
+		return
+	end
+	say vendor "Perhaps a little better."
+end
+
+event market_buy_lantern unskippable
+	choice
+	option "Buy the lantern"
+		take coin_pouch
+		give lantern_oil 2
+		set market.bought_lantern
+	option "Not today"
+		say vendor "Come back when the nights get long."
+	end
+end

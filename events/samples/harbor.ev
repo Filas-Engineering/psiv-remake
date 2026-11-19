@@ -1,0 +1,70 @@
+# The traveler steps off the ferry and meets the guide on the pier.
+# Exercises dialogue, choices, panels, camera, actors in parallel and on skip.
+
+event harbor_arrival skippable
+	lock player
+	fade out 0
+	music play tide_theme
+	camera cut pier_wide
+	show traveler
+	fade in 1.5
+
+	panel show p1 camera ferry_ramp layout top_left
+	panel show p2 camera guide_close layout top_right
+	together
+		move traveler to pier_end speed 1.5
+		sequence
+			anim guide wave
+			face guide traveler
+		end
+		camera move pier_follow 2.0
+	end
+	panel clear
+
+	say guide "You made it before the fog. Welcome to the harbor." as cheerful
+	say traveler "The crossing felt longer than the map promised."
+	narrate "Gulls circle the masts, waiting for scraps."
+
+	ask "Will you let the guide carry your satchel?"
+	yes
+		say guide "Light as a feather. Mostly." as strained
+		set harbor.satchel_carried
+	no
+		say guide "Suit yourself, but the hill is steep." as amused
+	end
+
+	choice "Where to first?"
+	option "The market"
+		say guide "Follow the smell of roasted nuts."
+		var harbor.first_stop = 1
+	option "The lighthouse"
+		say guide "Brave choice. The keeper is in a mood today."
+		var harbor.first_stop = 2
+	option @harbor.option_rest
+		say guide "The inn has a room facing the water."
+		var harbor.first_stop = 3
+	end
+
+	if not harbor.met_guide
+		give harbor_map
+		party add guide
+		set harbor.met_guide
+	end
+	unlock player
+on skip
+	if not harbor.met_guide
+		give harbor_map
+		party add guide
+		set harbor.met_guide
+	end
+	if harbor.first_stop == 0
+		var harbor.first_stop = 1
+	end
+	panel clear
+	music play tide_theme
+	camera cut pier_wide
+	show traveler
+	move traveler to pier_end
+	fade in 0
+	unlock player
+end
