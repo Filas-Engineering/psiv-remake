@@ -1,5 +1,6 @@
 # The traveler steps off the ferry and meets the guide on the pier.
-# Exercises dialogue, choices, panels, camera, actors in parallel and on skip.
+# Exercises dialogue, choices, panels, camera, actors in parallel, on skip
+# and a name token.
 
 event harbor_arrival skippable
 	lock player
@@ -38,7 +39,7 @@ event harbor_arrival skippable
 		say guide "Follow the smell of roasted nuts."
 		var harbor.first_stop = 1
 	option "The lighthouse"
-		say guide "Brave choice. The keeper is in a mood today."
+		say guide "Brave choice. Bring a {name:tide_lamp}, the keeper is in a mood today."
 		var harbor.first_stop = 2
 	option @harbor.option_rest
 		say guide "The inn has a room facing the water."

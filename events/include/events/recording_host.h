@@ -29,6 +29,8 @@ public:
 	void set_duration(ActionType type, double seconds);
 	void set_subject_duration(ActionType type, const std::string& subject, double seconds);
 	void set_line_duration(double seconds);
+	void set_choice_duration(double seconds);
+	void set_battle_duration(double seconds);
 	// Answers are used in order; an empty queue picks option 0 / win.
 	void queue_choices(const std::vector<int>& picks);
 	void queue_battle_results(const std::vector<BattleResult>& results);
@@ -43,6 +45,7 @@ public:
 	Handle start_action(const Action& action) override;
 	Handle show_line(const Line& line) override;
 	Handle present_choice(const ChoiceRequest& request) override;
+	Handle start_battle(const BattleRequest& request) override;
 	bool is_done(Handle handle) override;
 	int result(Handle handle) override;
 	void cancel(Handle handle) override;
@@ -57,6 +60,15 @@ public:
 	void add_party_member(const std::string& member) override;
 	void remove_party_member(const std::string& member) override;
 	void set_player_control(bool enabled) override;
+	std::string snapshot_world() override;
+	bool restore_world(const std::string& snapshot) override;
+
+protected:
+	// Hooks for hosts built on this one (TimingHost). The defaults use the
+	// fixed line duration and the queued answers.
+	virtual double line_seconds(const Line& line);
+	virtual int pick_choice(const ChoiceRequest& request);
+	virtual BattleResult pick_battle(const BattleRequest& request);
 
 private:
 	struct Pending {
@@ -72,6 +84,8 @@ private:
 	std::map<ActionType, double> durations_;
 	std::map<std::pair<ActionType, std::string>, double> subject_durations_;
 	double line_duration_ = 0;
+	double choice_duration_ = 0;
+	double battle_duration_ = 0;
 	std::deque<int> choices_;
 	std::deque<BattleResult> battles_;
 };

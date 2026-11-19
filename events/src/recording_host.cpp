@@ -1,23 +1,9 @@
 #include "events/recording_host.h"
 
 #include <algorithm>
+#include <sstream>
 
 namespace events {
-
-namespace {
-
-const char* battle_name(int result) {
-	switch (result) {
-	case 0:
-		return "win";
-	case 1:
-		return "lose";
-	default:
-		return "flee";
-	}
-}
-
-}
 
 void RecordingHost::set_duration(ActionType type, double seconds) {
 	durations_[type] = seconds;
@@ -29,6 +15,14 @@ void RecordingHost::set_subject_duration(ActionType type, const std::string& sub
 
 void RecordingHost::set_line_duration(double seconds) {
 	line_duration_ = seconds;
+}
+
+void RecordingHost::set_choice_duration(double seconds) {
+	choice_duration_ = seconds;
+}
+
+void RecordingHost::set_battle_duration(double seconds) {
+	battle_duration_ = seconds;
 }
 
 void RecordingHost::queue_choices(const std::vector<int>& picks) {
@@ -78,34 +72,50 @@ Handle RecordingHost::start_action(const Action& action) {
 		seconds = by_subject->second;
 	}
 	std::string description = describe(action);
-	int result = 0;
-	if (action.type == ActionType::battle) {
-		if (!battles_.empty()) {
-			result = static_cast<int>(battles_.front());
-			battles_.pop_front();
-		}
-		trace.push_back("action " + description + " -> " + battle_name(result));
-	} else {
-		trace.push_back("action " + description);
-	}
-	return open(seconds, result, description);
+	trace.push_back("action " + description);
+	return open(seconds, 0, description);
 }
 
 Handle RecordingHost::show_line(const Line& line) {
 	std::string description = describe(line);
 	trace.push_back(description);
-	return open(line_duration_, 0, description);
+	return open(line_seconds(line), 0, description);
 }
 
 Handle RecordingHost::present_choice(const ChoiceRequest& request) {
+	int pick = pick_choice(request);
+	std::string description = describe(request);
+	trace.push_back(description + " -> " + std::to_string(pick));
+	return open(choice_duration_, pick, description);
+}
+
+Handle RecordingHost::start_battle(const BattleRequest& request) {
+	BattleResult result = pick_battle(request);
+	std::string description = describe(request);
+	trace.push_back(description + " -> " + battle_result_name(result));
+	return open(battle_duration_, static_cast<int>(result), description);
+}
+
+double RecordingHost::line_seconds(const Line&) {
+	return line_duration_;
+}
+
+int RecordingHost::pick_choice(const ChoiceRequest&) {
 	int pick = 0;
 	if (!choices_.empty()) {
 		pick = choices_.front();
 		choices_.pop_front();
 	}
-	std::string description = describe(request);
-	trace.push_back(description + " -> " + std::to_string(pick));
-	return open(0, pick, description);
+	return pick;
+}
+
+BattleResult RecordingHost::pick_battle(const BattleRequest&) {
+	BattleResult result = BattleResult::win;
+	if (!battles_.empty()) {
+		result = battles_.front();
+		battles_.pop_front();
+	}
+	return result;
 }
 
 bool RecordingHost::is_done(Handle handle) {
@@ -195,6 +205,81 @@ void RecordingHost::remove_party_member(const std::string& member) {
 void RecordingHost::set_player_control(bool enabled) {
 	trace.push_back(std::string("player_control ") + (enabled ? "on" : "off"));
 	player_control = enabled;
+}
+
+// One record per line: "flag name 0|1", "var name n", "item name n",
+// "party name", "control 0|1". Names never hold spaces.
+std::string RecordingHost::snapshot_world() {
+	std::ostringstream out;
+	for (const auto& f : flags) {
+		out << "flag " << f.first << ' ' << (f.second ? 1 : 0) << '\n';
+	}
+	for (const auto& v : vars) {
+		out << "var " << v.first << ' ' << v.second << '\n';
+	}
+	for (const auto& it : items) {
+		out << "item " << it.first << ' ' << it.second << '\n';
+	}
+	for (const std::string& member : party) {
+		out << "party " << member << '\n';
+	}
+	out << "control " << (player_control ? 1 : 0) << '\n';
+	return out.str();
+}
+
+bool RecordingHost::restore_world(const std::string& snapshot) {
+	std::map<std::string, bool> new_flags;
+	std::map<std::string, std::int64_t> new_vars;
+	std::map<std::string, int> new_items;
+	std::vector<std::string> new_party;
+	bool control = true;
+	std::istringstream in(snapshot);
+	std::string record;
+	while (std::getline(in, record)) {
+		std::istringstream fields(record);
+		std::string kind;
+		std::string name;
+		fields >> kind;
+		if (kind == "flag") {
+			int value = 0;
+			if (!(fields >> name >> value)) {
+				return false;
+			}
+			new_flags[name] = value != 0;
+		} else if (kind == "var") {
+			std::int64_t value = 0;
+			if (!(fields >> name >> value)) {
+				return false;
+			}
+			new_vars[name] = value;
+		} else if (kind == "item") {
+			int value = 0;
+			if (!(fields >> name >> value)) {
+				return false;
+			}
+			new_items[name] = value;
+		} else if (kind == "party") {
+			if (!(fields >> name)) {
+				return false;
+			}
+			new_party.push_back(name);
+		} else if (kind == "control") {
+			int value = 0;
+			if (!(fields >> value)) {
+				return false;
+			}
+			control = value != 0;
+		} else {
+			return false;
+		}
+	}
+	trace.push_back("restore_world");
+	flags = new_flags;
+	vars = new_vars;
+	items = new_items;
+	party = new_party;
+	player_control = control;
+	return true;
 }
 
 }

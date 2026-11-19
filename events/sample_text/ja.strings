@@ -1,0 +1,6 @@
+# Japanese string table for the samples. Placeholder translations.
+language ja
+
+harbor.option_rest = 宿へ。少し休みたい
+market.vendor_greeting = ランタン！油！勇敢な人には{name:tide_lamp}を！
+market.closing_narration = 夕方の鐘が鳴り、屋台のシャッターが下りる。\n広場から人が消えていく。

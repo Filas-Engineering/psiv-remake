@@ -1,5 +1,7 @@
 #include "events/interpreter.h"
 
+#include <algorithm>
+
 namespace events {
 
 namespace {
@@ -28,6 +30,10 @@ bool Interpreter::start(const std::string& event) {
 	main_.pc = program_.events[index].entry;
 	children_.clear();
 	background_.clear();
+	applied_.clear();
+	skip_credit_.clear();
+	start_world_ = host_.snapshot_world();
+	restarted_ = false;
 	return true;
 }
 
@@ -102,11 +108,19 @@ bool Interpreter::resolve_wait(Thread& thread) {
 		int next = thread.pc + 1;
 		if (ins.op == Op::choice || ins.op == Op::battle) {
 			int picked = host_.result(thread.handle);
+			std::string refused;
 			if (picked < 0 || picked >= static_cast<int>(ins.targets.size())) {
+				refused = "the host returned result " + std::to_string(picked) + ", but only " + std::to_string(ins.targets.size()) + " are possible";
+			} else if (ins.op == Op::battle && picked == static_cast<int>(BattleResult::lose) && !ins.battle.defeat_handled) {
+				refused = "the host reported a defeat in battle '" + ins.battle.encounter + "', which has no 'lose' section; the host must run the game-over flow instead";
+			} else if (ins.op == Op::battle && picked == static_cast<int>(BattleResult::flee) && !ins.battle.escape_allowed) {
+				refused = "the host reported an escape from battle '" + ins.battle.encounter + "', which has no 'flee' section, so escape was not allowed";
+			}
+			if (!refused.empty()) {
 				host_.release(thread.handle);
 				thread.handle = 0;
 				thread.wait = WaitKind::none;
-				fail(thread.pc, "the host returned result " + std::to_string(picked) + ", but only " + std::to_string(ins.targets.size()) + " are possible");
+				fail(thread.pc, refused);
 				return false;
 			}
 			next = ins.targets[picked];
@@ -165,7 +179,7 @@ void Interpreter::execute(Thread& thread) {
 		break;
 	}
 	case Op::battle:
-		thread.handle = host_.start_action(ins.action);
+		thread.handle = host_.start_battle(ins.battle);
 		thread.wait = WaitKind::handle;
 		return;
 	case Op::wait:
@@ -206,8 +220,13 @@ void Interpreter::execute(Thread& thread) {
 	case Op::ret: {
 		Frame top = frames_.back();
 		frames_.pop_back();
-		if (skip_depth_ >= static_cast<int>(frames_.size())) {
+		int depth = static_cast<int>(frames_.size());
+		if (skip_depth_ >= depth) {
 			skip_depth_ = -1;
+			skip_credit_.clear();
+		}
+		if (depth > 0) {
+			merge_changes(depth, depth - 1);
 		}
 		if (frames_.empty()) {
 			// Let actors started with `nowait` arrive before the event ends.
@@ -227,13 +246,13 @@ void Interpreter::execute(Thread& thread) {
 		host_.set_var(ins.name, ins.number);
 		break;
 	case Op::var_add:
-		host_.set_var(ins.name, host_.get_var(ins.name) + ins.number);
+		apply_change(ChangeKind::var, ins.name, ins.number);
 		break;
 	case Op::give:
-		host_.give_item(ins.name, static_cast<int>(ins.number));
+		apply_change(ChangeKind::item, ins.name, ins.number);
 		break;
 	case Op::take:
-		host_.take_item(ins.name, static_cast<int>(ins.number));
+		apply_change(ChangeKind::item, ins.name, -ins.number);
 		break;
 	case Op::party_add:
 		host_.add_party_member(ins.name);
@@ -249,6 +268,55 @@ void Interpreter::execute(Thread& thread) {
 		break;
 	}
 	thread.pc++;
+}
+
+void Interpreter::apply_change(ChangeKind kind, const std::string& name, std::int64_t amount) {
+	std::int64_t rest = amount;
+	if (skip_depth_ >= 0) {
+		for (Change& credit : skip_credit_) {
+			if (credit.kind == kind && credit.name == name && ((credit.amount > 0 && amount > 0) || (credit.amount < 0 && amount < 0))) {
+				std::int64_t used = amount > 0 ? std::min(amount, credit.amount) : std::max(amount, credit.amount);
+				credit.amount -= used;
+				rest -= used;
+				break;
+			}
+		}
+	}
+	if (rest == 0) {
+		return;
+	}
+	int depth = static_cast<int>(frames_.size()) - 1;
+	auto found = std::find_if(applied_.begin(), applied_.end(),
+		[&](const Change& c) { return c.kind == kind && c.name == name && c.depth == depth; });
+	if (found == applied_.end()) {
+		applied_.push_back({kind, name, depth, rest});
+	} else {
+		found->amount += rest;
+	}
+	if (kind == ChangeKind::var) {
+		host_.set_var(name, host_.get_var(name) + rest);
+	} else if (rest > 0) {
+		host_.give_item(name, static_cast<int>(rest));
+	} else {
+		host_.take_item(name, static_cast<int>(-rest));
+	}
+}
+
+void Interpreter::merge_changes(int from_depth, int into_depth) {
+	std::vector<Change> merged;
+	for (Change c : applied_) {
+		if (c.depth == from_depth) {
+			c.depth = into_depth;
+		}
+		auto found = std::find_if(merged.begin(), merged.end(),
+			[&](const Change& m) { return m.kind == c.kind && m.name == c.name && m.depth == c.depth; });
+		if (found == merged.end()) {
+			merged.push_back(c);
+		} else {
+			found->amount += c.amount;
+		}
+	}
+	applied_.swap(merged);
 }
 
 bool Interpreter::evaluate(const Condition& condition) {
@@ -317,8 +385,17 @@ bool Interpreter::skip() {
 		--depth;
 	}
 	cancel_from(depth);
+	for (int d = static_cast<int>(frames_.size()) - 1; d > depth; --d) {
+		merge_changes(d, depth);
+	}
 	frames_.resize(depth + 1);
 	skip_depth_ = depth;
+	skip_credit_.clear();
+	for (const Change& c : applied_) {
+		if (c.depth == depth && c.amount != 0) {
+			skip_credit_.push_back(c);
+		}
+	}
 	main_ = Thread();
 	main_.pc = program_.events[frames_.back().event].skip_entry;
 	return true;
@@ -360,6 +437,10 @@ void Interpreter::fail(int pc, const std::string& message) {
 SaveState Interpreter::save() const {
 	SaveState state;
 	state.fingerprint = program_.fingerprint;
+	if (!frames_.empty()) {
+		state.event = program_.events[frames_.front().event].name;
+	}
+	state.start_world = start_world_;
 	state.status = status_;
 	state.skip_depth = skip_depth_;
 	for (const Frame& f : frames_) {
@@ -374,13 +455,30 @@ SaveState Interpreter::save() const {
 	for (const Background& b : background_) {
 		state.background.push_back({b.pc, b.depth});
 	}
+	for (const Change& c : applied_) {
+		state.applied.push_back({c.kind, c.name, c.depth, c.amount});
+	}
+	for (const Change& c : skip_credit_) {
+		state.skip_credit.push_back({c.kind, c.name, c.depth, c.amount});
+	}
 	return state;
 }
 
 bool Interpreter::restore(const SaveState& state, std::string& error) {
-	if (state.fingerprint != program_.fingerprint) {
-		error = "the save was made with different event scripts";
-		return false;
+	restarted_ = false;
+	if (state.fingerprint != program_.fingerprint && state.status == Status::running) {
+		// The saved positions mean nothing in the new program (EVT-052).
+		if (program_.find_event(state.event) < 0) {
+			error = "the save was made with different event scripts, and its event '" + state.event + "' no longer exists";
+			return false;
+		}
+		if (!host_.restore_world(state.start_world)) {
+			error = "the save was made with different event scripts, and the host could not restore the world from the start of '" + state.event + "'";
+			return false;
+		}
+		start(state.event);
+		restarted_ = true;
+		return true;
 	}
 	int code_size = static_cast<int>(program_.code.size());
 	int event_count = static_cast<int>(program_.events.size());
@@ -427,6 +525,15 @@ bool Interpreter::restore(const SaveState& state, std::string& error) {
 	for (const SavedBackground& b : state.background) {
 		background_.push_back({0, b.pc, b.depth});
 	}
+	applied_.clear();
+	for (const SavedChange& c : state.applied) {
+		applied_.push_back({c.kind, c.name, c.depth, c.amount});
+	}
+	skip_credit_.clear();
+	for (const SavedChange& c : state.skip_credit) {
+		skip_credit_.push_back({c.kind, c.name, c.depth, c.amount});
+	}
+	start_world_ = state.start_world;
 	return true;
 }
 

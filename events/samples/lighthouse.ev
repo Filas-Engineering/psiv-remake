@@ -39,7 +39,7 @@ event lighthouse_alarm skippable
 	shake 0.8 strength 0.4
 	sound glass_crack
 	panel hide p1
-	say keeper "Something is nesting in the lamp room!" as alarmed
+	say keeper "A {name:moth_swarm} is nesting in the lamp room!" as alarmed
 	music fade 1.0
 on skip
 	warp lighthouse_base door_inside

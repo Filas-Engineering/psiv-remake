@@ -320,7 +320,7 @@ TEST(restore_at_every_step_finishes_with_the_same_world) {
 	CHECK(saw_background);
 }
 
-TEST(restore_rejects_saves_from_other_scripts_or_corrupt_text) {
+TEST(restore_rejects_corrupt_saves) {
 	Program p = test::compile_ok(save_scene);
 	RecordingHost host;
 	Interpreter it(p, host);
@@ -328,13 +328,8 @@ TEST(restore_rejects_saves_from_other_scripts_or_corrupt_text) {
 	it.step(0.1);
 	SaveState saved = it.save();
 
-	Program edited = test::compile_ok(std::string(save_scene) + "\n# edited\n");
 	RecordingHost other_host;
-	Interpreter other(edited, other_host);
 	std::string error;
-	CHECK(!other.restore(saved, error));
-	CHECK(error.find("different event scripts") != std::string::npos);
-
 	SaveState broken = saved;
 	broken.main.pc = 100000;
 	Interpreter same(p, other_host);
@@ -345,4 +340,277 @@ TEST(restore_rejects_saves_from_other_scripts_or_corrupt_text) {
 	CHECK(!events::save_state_from_text("events-save 1 12 1", parsed));
 	CHECK(!events::save_state_from_text(events::save_state_to_text(saved) + " extra", parsed));
 	CHECK(!events::save_state_from_text("other-format 1", parsed));
+}
+
+TEST(fingerprint_ignores_comments_blank_lines_and_indentation) {
+	const std::string base = "event a unskippable\n\tsay guide \"Hi.\"\n\twait 1\nend\n";
+	const std::string cosmetic = "# A new header comment.\n\nevent a unskippable   # trailing note\n\n    say guide \"Hi.\"\n wait 1\n\n\nend\n";
+	const std::string changed = "event a unskippable\n\tsay guide \"Hello.\"\n\twait 1\nend\n";
+	const std::string hash_in_text = "event a unskippable\n\tsay guide \"Hi. # not a comment\"\n\twait 1\nend\n";
+	Program p = test::compile_ok(base);
+	CHECK_EQ(test::compile_ok(cosmetic).fingerprint, p.fingerprint);
+	CHECK(test::compile_ok(changed).fingerprint != p.fingerprint);
+	CHECK(test::compile_ok(hash_in_text).fingerprint != p.fingerprint);
+	events::CompileResult renamed = events::compile({{"other.ev", base}});
+	CHECK(renamed.program.fingerprint != p.fingerprint);
+}
+
+TEST(restore_after_a_comment_only_edit_resumes_in_place) {
+	Program p = test::compile_ok(save_scene);
+	Run original = play_through(p);
+	const int k = 4;
+	RecordingHost host;
+	configure_save(host);
+	Interpreter it(p, host);
+	it.start("scene");
+	for (int i = 0; i < k; ++i) {
+		host.advance(0.1);
+		it.step(0.1);
+	}
+	SaveState saved = it.save();
+
+	Program edited = test::compile_ok("# Reworded notes only.\n\n" + std::string(save_scene) + "\n# edited\n");
+	RecordingHost resumed_host = host.reloaded();
+	Interpreter resumed(edited, resumed_host);
+	std::string error;
+	CHECK(resumed.restore(saved, error));
+	CHECK(!resumed.restarted());
+	test::run(resumed, resumed_host);
+	CHECK(resumed_host.trace == suffix(original.trace, original.trace_size_after_step[k]));
+}
+
+namespace {
+
+const char* const reward_scene = R"(event reward unskippable
+	give shell 2
+	say guide "Two shells for you."
+	var tides += 1
+	say guide "And a third."
+	give shell
+end
+)";
+
+const char* const reward_scene_v2 = R"(event reward unskippable
+	give shell 2
+	say guide "Two shells for you, traveler."
+	var tides += 1
+	say guide "And a third."
+	give shell
+	set reward.reworded
+end
+)";
+
+}
+
+TEST(restore_after_a_script_change_restarts_the_event_from_its_start_state) {
+	Program p = test::compile_ok(reward_scene);
+	RecordingHost host;
+	host.items["shell"] = 1;
+	host.vars["tides"] = 5;
+	host.set_line_duration(0.3);
+	Interpreter it(p, host);
+	it.start("reward");
+	// Into the second line: the first give and the += have been applied.
+	for (int i = 0; i < 5; ++i) {
+		host.advance(0.1);
+		it.step(0.1);
+	}
+	CHECK_EQ(host.items["shell"], 3);
+	CHECK_EQ(host.vars["tides"], 6);
+	SaveState loaded;
+	CHECK(events::save_state_from_text(events::save_state_to_text(it.save()), loaded));
+	CHECK_EQ(loaded.event, std::string("reward"));
+
+	Program changed = test::compile_ok(reward_scene_v2);
+	CHECK(changed.fingerprint != p.fingerprint);
+	RecordingHost resumed_host = host.reloaded();
+	Interpreter resumed(changed, resumed_host);
+	std::string error;
+	CHECK(resumed.restore(loaded, error));
+	CHECK(resumed.restarted());
+	// The world is back to how it was when the event started.
+	CHECK_EQ(resumed_host.items["shell"], 1);
+	CHECK_EQ(resumed_host.vars["tides"], 5);
+	test::run(resumed, resumed_host);
+	CHECK(resumed.status() == Status::finished);
+	CHECK_EQ(resumed_host.items["shell"], 4);
+	CHECK_EQ(resumed_host.vars["tides"], 6);
+	CHECK(resumed_host.flags["reward.reworded"]);
+	CHECK(contains(resumed_host.trace, "say guide \"Two shells for you, traveler.\""));
+
+	// A restarted event saves its own start state again.
+	SaveState again = resumed.save();
+	CHECK_EQ(again.start_world, loaded.start_world);
+}
+
+TEST(restore_after_a_script_change_fails_when_the_event_is_gone) {
+	Program p = test::compile_ok(reward_scene);
+	RecordingHost host;
+	host.set_line_duration(1);
+	Interpreter it(p, host);
+	it.start("reward");
+	it.step(0.1);
+	SaveState saved = it.save();
+	CHECK(saved.status == Status::running);
+	Program other = test::compile_ok("event something_else unskippable\n\twait 1\nend\n");
+	RecordingHost other_host = host.reloaded();
+	Interpreter restored(other, other_host);
+	std::string error;
+	CHECK(!restored.restore(saved, error));
+	CHECK(error.find("'reward' no longer exists") != std::string::npos);
+}
+
+namespace {
+
+// The `on skip` gives and adds without any guard. The played part gives the
+// shells before it sets anything a guard could test.
+const char* const unguarded_scene = R"(event haul skippable
+	lock player
+	give shell 2
+	say guide "Take these."
+	call helper
+	var tides += 3
+	say guide "Mind the current."
+	take coin
+	give shell
+	unlock player
+on skip
+	give shell 3
+	give net
+	var tides += 3
+	take coin
+	unlock player
+end
+event helper unskippable
+	give net
+	wait 0.4
+end
+)";
+
+void configure_haul(RecordingHost& host) {
+	host.items["coin"] = 4;
+	host.items["shell"] = 1;
+	host.vars["tides"] = 10;
+	host.set_line_duration(0.3);
+}
+
+}
+
+TEST(on_skip_never_reapplies_what_the_played_part_already_gave_took_or_added) {
+	Program p = test::compile_ok(unguarded_scene);
+	RecordingHost played;
+	configure_haul(played);
+	Interpreter full(p, played);
+	full.start("haul");
+	int total = test::run(full, played);
+	CHECK(full.status() == Status::finished);
+	CHECK_EQ(played.items["shell"], 4);
+	CHECK_EQ(played.items["net"], 1);
+	CHECK_EQ(played.items["coin"], 3);
+	CHECK_EQ(played.vars["tides"], 13);
+
+	for (int k = 0; k < total; ++k) {
+		RecordingHost host;
+		configure_haul(host);
+		Interpreter it(p, host);
+		it.start("haul");
+		for (int i = 0; i < k; ++i) {
+			host.advance(0.1);
+			it.step(0.1);
+		}
+		if (!it.skip()) {
+			continue;
+		}
+		test::run(it, host);
+		CHECK(it.status() == Status::finished);
+		CHECK(host.same_world(played));
+		CHECK(host.errors.empty());
+	}
+}
+
+TEST(a_save_inside_on_skip_keeps_what_is_left_to_apply) {
+	Program p = test::compile_ok(R"(event haul skippable
+	give shell 2
+	say guide "Take these."
+	give shell
+on skip
+	wait 0.5
+	give shell 3
+end
+)");
+	RecordingHost played;
+	played.set_line_duration(0.3);
+	Interpreter full(p, played);
+	full.start("haul");
+	test::run(full, played);
+
+	RecordingHost host;
+	host.set_line_duration(0.3);
+	Interpreter it(p, host);
+	it.start("haul");
+	host.advance(0.1);
+	it.step(0.1);
+	CHECK(it.skip());
+	host.advance(0.1);
+	it.step(0.1);
+	SaveState loaded;
+	CHECK(events::save_state_from_text(events::save_state_to_text(it.save()), loaded));
+	CHECK_EQ(loaded.skip_credit.size(), 1u);
+
+	RecordingHost resumed_host = host.reloaded();
+	Interpreter resumed(p, resumed_host);
+	std::string error;
+	CHECK(resumed.restore(loaded, error));
+	CHECK(!resumed.can_skip());
+	test::run(resumed, resumed_host);
+	CHECK(resumed.status() == Status::finished);
+	CHECK_EQ(resumed_host.items["shell"], 3);
+	CHECK(resumed_host.same_world(played));
+}
+
+TEST(a_nested_skip_counts_toward_an_outer_skippable_event) {
+	// outer (skippable) calls middle (unskippable) calls inner (skippable).
+	// Skipping inner applies its rest; skipping outer later must count both
+	// the played gives and what inner's skip applied.
+	Program p = test::compile_ok(R"(event outer skippable
+	call middle
+	say guide "Back outside."
+	give shell
+on skip
+	give shell 4
+end
+event middle unskippable
+	call inner
+	say guide "In the middle."
+end
+event inner skippable
+	give shell
+	say guide "Inside."
+	give shell 2
+on skip
+	give shell 3
+end
+)");
+	RecordingHost host;
+	host.set_line_duration(0.3);
+	Interpreter it(p, host);
+	it.start("outer");
+	host.advance(0.1);
+	it.step(0.1);
+	CHECK_EQ(host.items["shell"], 1);
+	CHECK(it.skip());
+	host.advance(0.1);
+	it.step(0.1);
+	CHECK_EQ(host.items["shell"], 3);
+	// Now in middle's line, which is unskippable.
+	CHECK(!it.can_skip());
+	for (int i = 0; i < 5 && !it.can_skip(); ++i) {
+		host.advance(0.1);
+		it.step(0.1);
+	}
+	CHECK(it.can_skip());
+	CHECK(it.skip());
+	test::run(it, host);
+	CHECK(it.status() == Status::finished);
+	CHECK_EQ(host.items["shell"], 4);
 }

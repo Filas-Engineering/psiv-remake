@@ -312,7 +312,7 @@ end
 	const BattleResult results[] = {BattleResult::win, BattleResult::lose, BattleResult::flee};
 	for (BattleResult r : results) {
 		RecordingHost host;
-		host.queue_battle_results({r, BattleResult::flee});
+		host.queue_battle_results({r, BattleResult::win});
 		Interpreter it(p, host);
 		it.start("a");
 		test::run(it, host);
@@ -324,8 +324,7 @@ end
 			warped = warped || line == "action warp shore landing";
 		}
 		CHECK_EQ(warped, r == BattleResult::lose);
-		// The second battle has no flee branch, so fleeing carries on after it.
-		CHECK(spoken(host) == std::vector<std::string>{"say guide \"after\""});
+		CHECK(spoken(host) == (std::vector<std::string>{"say guide \"again\"", "say guide \"after\""}));
 		check_clean(host);
 	}
 }

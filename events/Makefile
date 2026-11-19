@@ -18,10 +18,18 @@ all: $(CLI) $(TESTS)
 
 test: $(TESTS) $(CLI)
 	./$(TESTS)
-	./$(CLI) check samples/*.ev
+	$(MAKE) check-samples
 
+# Every tool on the samples. Tables, glossary and timing data live in
+# sample_text/ so that samples/* holds scripts only.
 check-samples: $(CLI)
 	./$(CLI) check samples/*.ev
+	./$(CLI) lint --entries sample_text/entries.txt samples/*.ev
+	./$(CLI) strings check --table sample_text/en.strings --table sample_text/ja.strings samples/*.ev
+	./$(CLI) strings extract samples/*.ev > /dev/null
+	./$(CLI) names sample_text/glossary.txt --table sample_text/en.strings --table sample_text/ja.strings samples/*.ev
+	./$(CLI) time --config sample_text/timing.cfg --table sample_text/en.strings samples/harbor.ev harbor_arrival > /dev/null
+	./$(CLI) run samples/market.ev samples/harbor.ev market_haggle > /dev/null
 
 $(LIB): $(LIB_OBJECTS)
 	ar rcs $@ $^

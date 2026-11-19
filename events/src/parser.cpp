@@ -511,12 +511,16 @@ private:
 	void parse_battle(const Context& ctx, std::vector<Stmt>& out) {
 		Stmt s = simple(Op::battle);
 		s.kind = StmtKind::battle;
-		s.ins.action.type = ActionType::battle;
 		Args a = args();
-		a.name(s.ins.action.subject, "an encounter name");
+		a.name(s.ins.battle.encounter, "an encounter name");
 		a.finish();
 		++pos_;
 		parse_sections(ctx, s, {"win", "lose", "flee"}, "battle");
+		if (!s.branches[0].present) {
+			error(s.line, "battle: needs a 'win' section");
+		}
+		s.ins.battle.defeat_handled = s.branches[1].present;
+		s.ins.battle.escape_allowed = s.branches[2].present;
 		out.push_back(std::move(s));
 	}
 

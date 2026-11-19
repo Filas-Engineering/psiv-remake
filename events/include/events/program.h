@@ -67,6 +67,7 @@ struct Instruction {
 	ChoiceRequest choice;
 	Condition condition;
 	Action action;
+	BattleRequest battle;
 	bool wait = true;
 	// jump/jump_unless: destination pc. fork: join pc. call: callee event index.
 	int target = -1;
@@ -87,7 +88,9 @@ struct Program {
 	std::vector<std::string> files;
 	std::vector<EventInfo> events;
 	std::vector<Instruction> code;
-	// Hash of every source; saved states only restore into the same program.
+	// Hash of every source's file name and tokens, so comments, blank lines
+	// and indentation do not change it. A save whose fingerprint differs
+	// restarts its event instead of resuming (see Interpreter::restore).
 	std::uint64_t fingerprint = 0;
 
 	int find_event(const std::string& name) const;

@@ -1,0 +1,4 @@
+# Name glossary for the samples. See FORMAT.md, "Name glossary".
+# id | shipped name | restored name | reason
+tide_lamp | Tidlamp | Tide Lantern | cut by the item name length limit
+moth_swarm | MothSwm | Moth Swarm | cut by the enemy name length limit

@@ -49,7 +49,6 @@ enum class ActionType {
 	music_fade,
 	sound,
 	warp,
-	battle,
 };
 
 struct Vec3 {
@@ -74,6 +73,18 @@ struct Action {
 
 enum class BattleResult : int { win = 0, lose = 1, flee = 2 };
 
+// What a `battle` block asks of the host's battle rules. Both options follow
+// from which sections the script wrote (see README.md, "Battles").
+struct BattleRequest {
+	std::string encounter;
+	// The script has a `flee` section. When false the battle must not offer
+	// escape, and the host must never report BattleResult::flee.
+	bool escape_allowed = false;
+	// The script has a `lose` section. When false a defeat goes to the game's
+	// game-over flow and the host must never report BattleResult::lose.
+	bool defeat_handled = false;
+};
+
 class Host {
 public:
 	virtual ~Host() = default;
@@ -81,6 +92,8 @@ public:
 	virtual Handle start_action(const Action& action) = 0;
 	virtual Handle show_line(const Line& line) = 0;
 	virtual Handle present_choice(const ChoiceRequest& request) = 0;
+	// Done when the battle is over; result() is then a BattleResult.
+	virtual Handle start_battle(const BattleRequest& request) = 0;
 	virtual bool is_done(Handle handle) = 0;
 	// Only read once is_done() is true. Choice: the picked option index
 	// (yes = 0, no = 1). Battle: a BattleResult value.
@@ -97,6 +110,14 @@ public:
 	virtual void add_party_member(const std::string& member) = 0;
 	virtual void remove_party_member(const std::string& member) = 0;
 	virtual void set_player_control(bool enabled) = 0;
+
+	// The game state (flags, variables, items, party, player control and
+	// whatever else the game saves) as an opaque blob. The interpreter takes
+	// one when an event starts and keeps it in SaveState::start_world.
+	virtual std::string snapshot_world() = 0;
+	// Puts back a blob from snapshot_world(). Called only when a save made
+	// with different scripts is restored; returns false if it cannot.
+	virtual bool restore_world(const std::string& snapshot) = 0;
 };
 
 const char* action_type_name(ActionType type);
@@ -105,5 +126,7 @@ std::string describe(const Text& text);
 std::string describe(const Action& action);
 std::string describe(const Line& line);
 std::string describe(const ChoiceRequest& request);
+std::string describe(const BattleRequest& request);
+const char* battle_result_name(BattleResult result);
 
 }

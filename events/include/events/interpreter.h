@@ -25,7 +25,12 @@ public:
 	// `on skip` block, then returns to its caller as if it had finished.
 	bool skip();
 	SaveState save() const;
+	// With the same program, resumes where the save was made. When the
+	// program's fingerprint differs (the scripts changed), puts the world
+	// back with Host::restore_world(state.start_world) and starts the saved
+	// event again from its first command; restarted() is then true.
 	bool restore(const SaveState& state, std::string& error);
+	bool restarted() const { return restarted_; }
 
 	Status status() const { return status_; }
 	const std::string& error() const { return error_; }
@@ -51,7 +56,19 @@ private:
 		int depth = 0;
 	};
 
+	struct Change {
+		ChangeKind kind = ChangeKind::item;
+		std::string name;
+		int depth = 0;
+		std::int64_t amount = 0;
+	};
+
 	bool run_thread(Thread& thread);
+	// Applies a give/take (item) or `+=` (var). Outside `on skip` it adds to
+	// the totals for the current depth; inside, it first uses up what the
+	// played part already applied in the same direction.
+	void apply_change(ChangeKind kind, const std::string& name, std::int64_t amount);
+	void merge_changes(int from_depth, int into_depth);
 	bool resolve_wait(Thread& thread);
 	void execute(Thread& thread);
 	bool evaluate(const Condition& condition);
@@ -69,6 +86,10 @@ private:
 	Thread main_;
 	std::vector<Thread> children_;
 	std::vector<Background> background_;
+	std::vector<Change> applied_;
+	std::vector<Change> skip_credit_;
+	std::string start_world_;
+	bool restarted_ = false;
 	long budget_ = 0;
 };
 

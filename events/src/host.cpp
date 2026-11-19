@@ -52,8 +52,6 @@ const char* action_type_name(ActionType type) {
 		return "sound";
 	case ActionType::warp:
 		return "warp";
-	case ActionType::battle:
-		return "battle";
 	}
 	return "unknown";
 }
@@ -95,7 +93,6 @@ std::string describe(const Action& action) {
 	case ActionType::camera_cut:
 	case ActionType::music_play:
 	case ActionType::sound:
-	case ActionType::battle:
 		out += " " + action.subject;
 		break;
 	case ActionType::camera_move:
@@ -140,6 +137,25 @@ std::string describe(const ChoiceRequest& request) {
 		out += "]";
 	}
 	return out;
+}
+
+std::string describe(const BattleRequest& request) {
+	std::string out = "battle " + request.encounter;
+	out += request.escape_allowed ? " escape" : " no-escape";
+	out += request.defeat_handled ? " defeat-branch" : " defeat-game-over";
+	return out;
+}
+
+const char* battle_result_name(BattleResult result) {
+	switch (result) {
+	case BattleResult::win:
+		return "win";
+	case BattleResult::lose:
+		return "lose";
+	case BattleResult::flee:
+		return "flee";
+	}
+	return "unknown";
 }
 
 }

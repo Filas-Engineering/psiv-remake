@@ -29,8 +29,16 @@ CompileResult compile(const std::vector<Source>& sources) {
 	for (std::size_t i = 0; i < sources.size(); ++i) {
 		const Source& source = sources[i];
 		result.program.files.push_back(source.file);
-		hash = fnv1a(fnv1a(hash, source.file), source.text);
+		hash = fnv1a(hash, source.file);
 		std::vector<SourceLine> lines = tokenize(source.file, source.text, result.diagnostics);
+		// Tokens rather than text, so edits to comments, blank lines and
+		// indentation keep old saves resumable.
+		for (const SourceLine& line : lines) {
+			for (const Token& token : line.tokens) {
+				hash = fnv1a(hash, std::string(1, static_cast<char>('0' + static_cast<int>(token.kind))) + token.text);
+			}
+			hash = fnv1a(hash, "\n");
+		}
 		std::vector<EventDecl> parsed = parse(source.file, static_cast<int>(i), lines, result.diagnostics);
 		for (EventDecl& ev : parsed) {
 			events.push_back(std::move(ev));

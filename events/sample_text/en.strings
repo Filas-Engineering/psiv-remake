@@ -1,0 +1,6 @@
+# English string table for the samples. See FORMAT.md, "String tables".
+language en
+
+harbor.option_rest = The inn, I need a rest
+market.vendor_greeting = Lanterns! Oil! A {name:tide_lamp} for every brave soul!
+market.closing_narration = The stall shutters rattle down as the evening bell rings.\nThe square empties.

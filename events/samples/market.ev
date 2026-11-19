@@ -28,8 +28,10 @@ event market_haggle unskippable
 		call market_buy_lantern
 	end
 
-	goto farewell
-	say vendor "This line is never reached."
+	if market.bought_lantern
+		goto farewell
+	end
+	say vendor "Mind the crates on your way out."
 	label farewell
 	hide vendor
 	narrate @market.closing_narration
