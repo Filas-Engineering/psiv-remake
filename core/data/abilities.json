@@ -1,0 +1,90 @@
+{
+	"abilities": [
+		{"id": "strike", "name": "Strike", "kind": "attack", "target": "one_enemy", "effects": [
+			{"type": "physical_damage", "power": 100}
+		]},
+		{"id": "bite", "name": "Bite", "kind": "attack", "target": "one_enemy", "effects": [
+			{"type": "physical_damage", "power": 100}
+		]},
+
+		{"id": "spark", "name": "Spark", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
+			{"type": "elemental_damage", "power": 26, "element": "shock"}
+		]},
+		{"id": "ember", "name": "Ember Fan", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
+			{"type": "elemental_damage", "power": 20, "element": "heat"}
+		]},
+		{"id": "frostbite", "name": "Frost Pane", "kind": "technique", "cost": 6, "target": "all_enemies", "effects": [
+			{"type": "elemental_damage", "power": 16, "element": "chill"}
+		]},
+		{"id": "hush", "name": "Hush", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
+			{"type": "apply_status", "status": "silence", "chance": 70}
+		]},
+		{"id": "gust", "name": "Gust", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
+			{"type": "elemental_damage", "power": 24, "element": "gale"}
+		]},
+		{"id": "weaken", "name": "Soften", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
+			{"type": "modify_stat", "stat": "defense", "percent": -30, "duration": 3}
+		]},
+		{"id": "mend", "name": "Mend", "kind": "technique", "cost": 3, "target": "one_ally", "effects": [
+			{"type": "heal", "power": 28}
+		]},
+		{"id": "wide_mend", "name": "Wide Mend", "kind": "technique", "cost": 8, "target": "all_allies", "effects": [
+			{"type": "heal", "power": 18}
+		]},
+		{"id": "purge", "name": "Purge", "kind": "technique", "cost": 2, "target": "one_ally", "effects": [
+			{"type": "cure_status", "status": "poison"}
+		]},
+		{"id": "rekindle", "name": "Rekindle", "kind": "technique", "cost": 10, "target": "one_ally", "effects": [
+			{"type": "revive", "power": 50}
+		]},
+		{"id": "rally", "name": "Rally Cry", "kind": "technique", "cost": 4, "target": "all_allies", "effects": [
+			{"type": "modify_stat", "stat": "strength", "percent": 30, "duration": 3}
+		]},
+		{"id": "drowse", "name": "Drowse", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
+			{"type": "apply_status", "status": "sleep", "chance": 60}
+		]},
+
+		{"id": "focus_shot", "name": "Focus Shot", "kind": "skill", "uses": 3, "target": "one_enemy", "effects": [
+			{"type": "physical_damage", "power": 180}
+		]},
+		{"id": "overclock", "name": "Overclock", "kind": "skill", "uses": 2, "target": "self", "effects": [
+			{"type": "modify_stat", "stat": "agility", "percent": 50, "duration": 3}
+		]},
+		{"id": "flare_burst", "name": "Flare Burst", "kind": "skill", "uses": 1, "target": "all_enemies", "effects": [
+			{"type": "elemental_damage", "power": 45, "element": "heat"}
+		]},
+
+		{"id": "storm_spark", "name": "Storm Spark", "kind": "combo", "target": "one_enemy", "effects": [
+			{"type": "elemental_damage", "power": 80, "element": "shock"}
+		]},
+		{"id": "tempest_flare", "name": "Tempest Flare", "kind": "combo", "target": "all_enemies", "effects": [
+			{"type": "elemental_damage", "power": 70, "element": "heat"},
+			{"type": "modify_stat", "stat": "agility", "percent": -30, "duration": 2}
+		]},
+		{"id": "mending_chorus", "name": "Mending Chorus", "kind": "combo", "target": "all_allies", "effects": [
+			{"type": "heal", "power": 30},
+			{"type": "modify_stat", "stat": "strength", "percent": 40, "duration": 3}
+		]},
+
+		{"id": "venom_spit", "name": "Venom Spit", "kind": "technique", "cost": 2, "target": "one_enemy", "effects": [
+			{"type": "physical_damage", "power": 70},
+			{"type": "apply_status", "status": "poison", "chance": 70}
+		]},
+		{"id": "lullaby", "name": "Drone Hum", "kind": "technique", "cost": 4, "target": "all_enemies", "effects": [
+			{"type": "apply_status", "status": "sleep", "chance": 35}
+		]},
+		{"id": "patch", "name": "Patch Up", "kind": "technique", "cost": 3, "target": "one_ally", "effects": [
+			{"type": "heal", "power": 20}
+		]},
+		{"id": "numbing_sting", "name": "Numbing Sting", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
+			{"type": "physical_damage", "power": 60},
+			{"type": "apply_status", "status": "paralysis", "chance": 40}
+		]},
+		{"id": "gear_slam", "name": "Gear Slam", "kind": "technique", "cost": 5, "target": "one_enemy", "effects": [
+			{"type": "physical_damage", "power": 160}
+		]},
+		{"id": "rouse", "name": "Rouse", "kind": "technique", "cost": 8, "target": "one_ally", "effects": [
+			{"type": "revive", "power": 40}
+		]}
+	]
+}

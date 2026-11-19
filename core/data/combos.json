@@ -1,0 +1,7 @@
+{
+	"combos": [
+		{"id": "storm_spark", "abilities": ["spark", "gust"], "result": "storm_spark"},
+		{"id": "tempest_flare", "abilities": ["spark", "gust", "flare_burst"], "result": "tempest_flare"},
+		{"id": "mending_chorus", "abilities": ["mend", "rally"], "result": "mending_chorus"}
+	]
+}

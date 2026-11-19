@@ -1,0 +1,9 @@
+{
+	"statuses": [
+		{"id": "poison", "name": "Poison", "tick_damage_percent": 8, "duration": 4},
+		{"id": "sleep", "name": "Sleep", "skips_turn": true, "wakes_on_damage": true, "duration": 3},
+		{"id": "paralysis", "name": "Paralysis", "skips_turn": true, "recover_chance": 30, "duration": 3},
+		{"id": "silence", "name": "Silence", "blocks_techniques": true, "duration": 3},
+		{"id": "defeated", "name": "Defeated"}
+	]
+}

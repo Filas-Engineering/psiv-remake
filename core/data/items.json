@@ -1,0 +1,20 @@
+{
+	"items": [
+		{"id": "tonic", "name": "Tonic", "target": "one_ally", "effects": [
+			{"type": "heal", "power": 30}
+		]},
+		{"id": "clear_gel", "name": "Clear Gel", "target": "one_ally", "effects": [
+			{"type": "cure_status", "status": "poison"}
+		]},
+		{"id": "wake_chime", "name": "Wake Chime", "target": "all_allies", "effects": [
+			{"type": "cure_status", "status": "sleep"},
+			{"type": "cure_status", "status": "paralysis"}
+		]},
+		{"id": "second_wind", "name": "Second Wind", "target": "one_ally", "effects": [
+			{"type": "revive", "power": 30}
+		]},
+		{"id": "spark_flask", "name": "Spark Flask", "target": "one_enemy", "effects": [
+			{"type": "elemental_damage", "power": 25, "element": "shock"}
+		]}
+	]
+}

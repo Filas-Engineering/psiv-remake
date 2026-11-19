@@ -1,0 +1,69 @@
+{
+	"enemies": [
+		{
+			"id": "gel_mite",
+			"name": "Gel Mite",
+			"stats": {"hp": 60, "tp": 0, "strength": 11, "mental": 3, "agility": 5, "dexterity": 8, "defense": 3, "level": 1},
+			"basic_attack": "bite",
+			"affinities": {"heat": 150, "chill": 50},
+			"ai": [
+				{"ability": "bite", "weight": 1}
+			],
+			"experience": 6,
+			"currency": 4
+		},
+		{
+			"id": "rust_hound",
+			"name": "Rust Hound",
+			"stats": {"hp": 90, "tp": 8, "strength": 14, "mental": 4, "agility": 11, "dexterity": 10, "defense": 6, "level": 2},
+			"basic_attack": "bite",
+			"abilities": ["venom_spit"],
+			"affinities": {"shock": 150},
+			"ai": [
+				{"ability": "bite", "weight": 3},
+				{"ability": "venom_spit", "weight": 2},
+				{"ability": "venom_spit", "weight": 4, "when": {"type": "self_hp_below", "value": 50}}
+			],
+			"experience": 10,
+			"currency": 7
+		},
+		{
+			"id": "bog_wisp",
+			"name": "Bog Wisp",
+			"stats": {"hp": 70, "tp": 20, "strength": 8, "mental": 12, "agility": 9, "dexterity": 9, "defense": 4, "level": 2},
+			"basic_attack": "bite",
+			"abilities": ["lullaby", "patch", "numbing_sting"],
+			"affinities": {"shock": 0, "gale": 150},
+			"ai": [
+				{"ability": "patch", "weight": 6, "when": {"type": "ally_hp_below", "value": 50}},
+				{"ability": "lullaby", "weight": 2},
+				{"ability": "numbing_sting", "weight": 3},
+				{"ability": "numbing_sting", "weight": 3, "when": {"type": "foe_has_status", "status": "sleep"}},
+				{"ability": "bite", "weight": 2}
+			],
+			"experience": 12,
+			"currency": 9
+		},
+		{
+			"id": "brass_warden",
+			"name": "Brass Warden",
+			"stats": {"hp": 280, "tp": 30, "strength": 18, "mental": 10, "agility": 7, "dexterity": 12, "defense": 12, "level": 6},
+			"basic_attack": "bite",
+			"abilities": ["gear_slam", "rouse"],
+			"affinities": {"heat": 50, "chill": 150},
+			"ai": [
+				{"ability": "rouse", "weight": 8, "when": {"type": "ally_defeated"}},
+				{"ability": "gear_slam", "weight": 6, "when": {"type": "self_hp_below", "value": 50}},
+				{"ability": "gear_slam", "weight": 1},
+				{"ability": "bite", "weight": 3}
+			],
+			"experience": 60,
+			"currency": 50
+		}
+	],
+	"encounters": [
+		{"id": "training", "enemies": ["gel_mite", "gel_mite", "rust_hound"]},
+		{"id": "marsh", "enemies": ["bog_wisp", "bog_wisp", "gel_mite"]},
+		{"id": "warden", "enemies": ["brass_warden", "bog_wisp"]}
+	]
+}
