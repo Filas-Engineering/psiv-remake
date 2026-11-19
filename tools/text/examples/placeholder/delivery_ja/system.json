@@ -1,0 +1,50 @@
+[
+	{
+		"tree": "menu",
+		"index": 0,
+		"speaker": null,
+		"text": "捨てる",
+		"codes": [],
+		"branches": [],
+		"map": null,
+		"trigger": null,
+		"kind": "system"
+	},
+	{
+		"tree": "menu",
+		"index": 1,
+		"speaker": null,
+		"text": "使う",
+		"codes": [],
+		"branches": [],
+		"map": null,
+		"trigger": null,
+		"kind": "system"
+	},
+	{
+		"tree": "item_desc",
+		"index": 0,
+		"speaker": null,
+		"text": "トニック：体力を{br}少し回復する。",
+		"codes": [
+			"br"
+		],
+		"branches": [],
+		"map": null,
+		"trigger": null,
+		"kind": "system"
+	},
+	{
+		"tree": "battle",
+		"index": 0,
+		"speaker": null,
+		"text": "{var:target}は眠ってしまった。",
+		"codes": [
+			"var:target"
+		],
+		"branches": [],
+		"map": null,
+		"trigger": "status_sleep",
+		"kind": "system"
+	}
+]

@@ -3,11 +3,11 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import codes, mentions
+from . import codes, mentions, names
 
 COLUMNS = (
 	"change_id", "kind", "message_id", "speaker", "map", "start", "old", "new",
-	"before", "after", "reason", "note", "base", "approve",
+	"before", "after", "after_shipped", "after_restored", "reason", "note", "base", "approve",
 )
 KINDS = ("rename", "typo")
 APPROVE_VALUES = {"": False, "no": False, "yes": True}
@@ -28,8 +28,16 @@ class Row:
 	map: str = ""
 	before: str = ""
 	after: str = ""
+	after_shipped: str = ""
+	after_restored: str = ""
 	note: str = ""
 	line: int = 0
+
+	def show_names(self, by_id):
+		"""Fill the two views of the line: with shipped names and with restored names."""
+		line = self.after or self.before
+		self.after_shipped = names.render(line, by_id, "shipped")[0]
+		self.after_restored = names.render(line, by_id, "restored")[0]
 
 
 class SheetError(Exception):
@@ -73,7 +81,8 @@ def write(path, rows):
 		for r in rows:
 			writer.writerow([
 				r.change_id, r.kind, r.message_id, r.speaker, r.map, r.start, r.old, r.new,
-				r.before, r.after, r.reason, r.note, r.base, "yes" if r.approved else "",
+				r.before, r.after, r.after_shipped, r.after_restored, r.reason, r.note, r.base,
+				"yes" if r.approved else "",
 			])
 
 
@@ -124,6 +133,8 @@ def read(path):
 				map=raw["map"],
 				before=raw["before"],
 				after=raw["after"],
+				after_shipped=raw["after_shipped"],
+				after_restored=raw["after_restored"],
 				note=raw["note"],
 				line=reader.line_num,
 			))

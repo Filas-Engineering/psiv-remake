@@ -35,7 +35,7 @@
 		"map": null,
 		"trigger": null,
 		"kind": "system",
-		"limit": 24,
+		"limit": 23,
 		"context": "Item description"
 	},
 	{

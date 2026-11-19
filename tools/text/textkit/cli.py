@@ -3,7 +3,7 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-from . import codes, db, delivery, diff, glossary, l10n, outputs, rename, review, sheet, stats, typos
+from . import codes, db, delivery, diff, eventfmt, glossary, l10n, names, outputs, rename, review, sheet, stats, typos, workload
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -64,10 +64,18 @@ def cmd_import(args):
 	registry = load_registry(args.codes)
 	messages = load_delivery(args.delivery, registry)
 	print(f"{args.delivery}: {len(messages)} messages, valid")
+	reference = None
+	if args.reference:
+		ref_messages = load_delivery(args.reference, registry)
+		print(f"{args.reference}: {len(ref_messages)} {args.reference_lang} messages, valid")
+		missing, extra = db.compare_ids(messages, ref_messages)
+		print(f"  in the delivery, not in {args.reference_lang}: {len(missing)}{': ' + ', '.join(missing) if missing else ''}")
+		print(f"  in {args.reference_lang}, not in the delivery: {len(extra)}{': ' + ', '.join(extra) if extra else ''}")
+		reference = (args.reference_lang, ref_messages, Path(args.reference).name)
 	if args.check:
 		return EXIT_OK
 	path = outputs.check(args.db, args.force)
-	with closing(db.create(path, messages, registry, Path(args.delivery).name)):
+	with closing(db.create(path, messages, registry, Path(args.delivery).name, reference)):
 		pass
 	print(f"wrote {path}")
 	return EXIT_OK
@@ -114,12 +122,50 @@ def cmd_glossary_validate(args):
 	return EXIT_FAIL if errors else EXIT_OK
 
 
+def cmd_glossary_export_events(args):
+	entries = load_glossary(args.glossary)
+	path = outputs.check(args.out, args.force, [args.glossary])
+	try:
+		count = eventfmt.write_glossary(path, entries, Path(args.glossary).name)
+	except eventfmt.FormatError as e:
+		raise Failure("glossary not exported", e.problems)
+	print(f"wrote {count} renamed names to {path} ({len(entries) - count} kept-as-shipped or menu entries are CSV-only)")
+	unsigned = [e.id for e in eventfmt.shared(entries) if not e.signoff.strip()]
+	if unsigned:
+		print(f"warning: not signed off, so the rename pass will not write their tokens yet: {', '.join(unsigned)}")
+	return EXIT_OK
+
+
+def cmd_glossary_import_events(args):
+	base = load_glossary(args.glossary, strict=False) if args.glossary else []
+	try:
+		imported = eventfmt.read_glossary(args.events)
+	except eventfmt.FormatError as e:
+		raise Failure(f"{args.events}: cannot read event glossary", e.problems)
+	entries, notes, problems = eventfmt.merge(base, imported, args.category, args.drop_missing)
+	if problems:
+		raise Failure("glossary not written", problems)
+	errors, warnings = glossary.validate(entries)
+	if errors:
+		raise Failure("glossary not written: the result would be invalid", errors)
+	path = outputs.check(args.out, args.force, [args.events, *([args.glossary] if args.glossary else [])])
+	glossary.save(path, entries)
+	for n in notes:
+		print(n)
+	for w in warnings:
+		print(f"warning: {w}")
+	print(f"wrote {len(entries)} entries to {path}")
+	return EXIT_OK
+
+
 def cmd_glossary_mentions(args):
 	entries = load_glossary(args.glossary)
 	with closing(open_db(args.db)) as conn:
 		if args.out is None:
 			for message, m in rename.all_mentions(conn, entries):
-				flags = ", ".join(f for f in (m.case if m.case != "exact" else "", "split" if m.split else "") if f)
+				flags = ", ".join(f for f in (
+					m.case if m.case != "exact" else "", "split" if m.split else "", "broken" if m.broken else "",
+				) if f)
 				print(f"{message['id']}\t{m.text!r}\t{m.entry.id} {m.entry.shipped} -> {m.entry.restored}"
 					f"{'  [' + flags + ']' if flags else ''}")
 			return EXIT_OK
@@ -194,6 +240,78 @@ def cmd_verify(args):
 	return EXIT_OK if verdict.ok else EXIT_FAIL
 
 
+def cmd_render(args):
+	entries = load_glossary(args.glossary)
+	by_id = {e.id: e for e in entries}
+	modes = names.MODES if args.names == "both" else (args.names,)
+	wanted = set(args.id or [])
+	out = []
+	unknown = set()
+	with closing(open_db(args.db)) as conn:
+		messages = db.messages(conn)
+		missing = sorted(wanted - {m["id"] for m in messages})
+		if missing:
+			raise Failure(f"no such message: {', '.join(missing)}")
+		for m in messages:
+			if wanted and m["id"] not in wanted:
+				continue
+			if args.tokens_only and not names.ids_in(m["current"]):
+				continue
+			views = []
+			for mode in modes:
+				text, bad = names.render(m["current"], by_id, mode)
+				unknown.update(bad)
+				views.append((mode, text))
+			if len(views) == 1:
+				out.append(f"{m['id']}\t{views[0][1]}")
+			else:
+				out.append(m["id"])
+				out.extend(f"  {mode + ':':<10}{text}" for mode, text in views)
+	if unknown:
+		raise Failure(f"name tokens not in the glossary: {', '.join(sorted(unknown))}")
+	emit("\n".join(out) + "\n", args.out, args.force, [args.db, args.glossary])
+	return EXIT_OK
+
+
+def cmd_workload(args):
+	entries = load_glossary(args.glossary)
+	for lang in args.target or []:
+		if not l10n.LANG_RE.match(lang):
+			raise Failure(f"target {lang!r} is not a language code such as fr or pt-BR")
+	with closing(open_db(args.db)) as conn:
+		report = workload.collect(conn, entries, args.target or [])
+	emit(workload.render(report, args.format), args.out, args.force, [args.db, args.glossary])
+	return EXIT_FAIL if report["unknown_name_ids"] else EXIT_OK
+
+
+def cmd_export_strings(args):
+	with closing(open_db(args.db)) as conn:
+		registry = db.registry(conn)
+		messages = [m for m in db.messages(conn) if args.kind == "all" or m["kind"] == args.kind]
+		if args.lang == workload.SOURCE_LANG:
+			texts = {m["id"]: m["current"] for m in messages}
+		elif args.lang == db.reference_lang(conn):
+			texts = db.reference(conn)
+		elif args.lang in db.translation_langs(conn):
+			texts = db.translations(conn, args.lang)
+		else:
+			raise Failure(f"the database has no {args.lang} text (English, the reference language or a stored translation)")
+		items = [(m["id"], texts[m["id"]]) for m in messages if m["id"] in texts]
+		missing = [m["id"] for m in messages if m["id"] not in texts]
+		path = outputs.check(args.out, args.force, [args.db])
+		try:
+			undefined = eventfmt.write_strings(path, args.lang, items, registry, Path(args.db).name, args.prefix)
+		except eventfmt.FormatError as e:
+			raise Failure("string table not written", e.problems)
+	print(f"wrote {len(items)} {args.lang} strings to {path}")
+	if missing:
+		print(f"  no {args.lang} text for {len(missing)} message(s): {', '.join(missing)}")
+	if undefined:
+		listed = ", ".join(f"{name} {n}" for name, n in sorted(undefined.items()))
+		print(f"  kept as written, not defined by the event string table format: {listed}")
+	return EXIT_OK
+
+
 def cmd_export(args):
 	with closing(open_db(args.db)) as conn:
 		path = outputs.check(args.out, args.force, [args.db])
@@ -245,8 +363,10 @@ def parser():
 	c.add_argument("--db", help="SQLite database to create")
 	c.add_argument("--codes", help="JSON control code registry replacing the built-in one")
 	c.add_argument("--check", action="store_true", help="validate only, write nothing")
+	c.add_argument("--reference", help="second-language delivery keyed by the same message IDs (TXT-032)")
+	c.add_argument("--reference-lang", help="language code of --reference, for example ja")
 
-	c = command("stats", cmd_stats, "Workload report: counts per speaker, tree, map and control code.")
+	c = command("stats", cmd_stats, "Counts per kind, speaker, tree, map and control code.")
 	c.add_argument("--db", required=True)
 	c.add_argument("--out", help="report path (default: stdout)")
 	c.add_argument("--format", choices=("text", "json"), default="text")
@@ -270,6 +390,16 @@ def parser():
 	c.add_argument("--max-length", type=int, default=glossary.DEFAULT_MAX_LENGTH,
 		help="warn when a restored name is longer than this")
 	c.add_argument("--out", help="report path (default: stdout)")
+	c = command("export-events", cmd_glossary_export_events, "Write the renamed names as an event script glossary.", gsub)
+	c.add_argument("--glossary", required=True)
+	c.add_argument("--out", required=True, help="event glossary file to write, for example glossary.txt")
+	c = command("import-events", cmd_glossary_import_events, "Fold an event script glossary into a CSV glossary.", gsub)
+	c.add_argument("--events", required=True, help="event glossary file to read")
+	c.add_argument("--glossary", help="CSV glossary to start from (default: none)")
+	c.add_argument("--out", required=True, help="CSV glossary to write")
+	c.add_argument("--category", choices=glossary.CATEGORIES, help="category for entries the CSV glossary lacks")
+	c.add_argument("--drop-missing", action="store_true",
+		help="remove renamed CSV entries the event glossary no longer lists")
 	c = command("mentions", cmd_glossary_mentions, "List every line that mentions a shipped name.", gsub)
 	c.add_argument("--glossary", required=True)
 	c.add_argument("--db", required=True)
@@ -300,6 +430,28 @@ def parser():
 	c.add_argument("--out", help="report path (default: stdout)")
 	c.add_argument("--change-list", help="write the dialogue change list CSV here")
 
+	c = command("render", cmd_render, "Print the text with name tokens shown as shipped or restored names.")
+	c.add_argument("--db", required=True)
+	c.add_argument("--glossary", required=True)
+	c.add_argument("--names", choices=(*names.MODES, "both"), default="both")
+	c.add_argument("--id", action="append", help="only this message; repeat for several")
+	c.add_argument("--tokens-only", action="store_true", help="only messages that hold a name token")
+	c.add_argument("--out", help="output path (default: stdout)")
+
+	c = command("workload", cmd_workload, "Localization planning: counts per language pair, tokens, and limits after restoration.")
+	c.add_argument("--db", required=True)
+	c.add_argument("--glossary", required=True)
+	c.add_argument("--target", action="append", help="target language to plan for; repeat for several")
+	c.add_argument("--out", help="report path (default: stdout)")
+	c.add_argument("--format", choices=("text", "json"), default="text")
+
+	c = command("export-strings", cmd_export_strings, "Write one language as an event script string table.")
+	c.add_argument("--db", required=True)
+	c.add_argument("--out", required=True, help="string table to write, for example en.strings")
+	c.add_argument("--lang", default="en", help="en (the current text), the reference language, or a stored translation")
+	c.add_argument("--prefix", default="", help="put before every string ID, for example script.")
+	c.add_argument("--kind", choices=("all", "dialogue", "system"), default="all")
+
 	c = command("export", cmd_export, "Write the localization table keyed by message ID.")
 	c.add_argument("--db", required=True)
 	c.add_argument("--out", required=True)
@@ -328,6 +480,14 @@ def main(argv=None):
 	if args.command == "import" and not args.check and not args.db:
 		print("error: import needs --db unless --check is given", file=sys.stderr)
 		return EXIT_USAGE
+	if args.command == "import" and bool(args.reference) != bool(args.reference_lang):
+		print("error: --reference and --reference-lang go together", file=sys.stderr)
+		return EXIT_USAGE
+	if args.command == "import" and args.reference_lang and (
+		not l10n.LANG_RE.match(args.reference_lang) or args.reference_lang == workload.SOURCE_LANG
+	):
+		print(f"error: --reference-lang {args.reference_lang!r} must be a language code other than en", file=sys.stderr)
+		return EXIT_USAGE
 	try:
 		return args.func(args)
 	except Failure as e:
@@ -335,7 +495,7 @@ def main(argv=None):
 		for detail in e.details:
 			print(f"  {detail}", file=sys.stderr)
 		return EXIT_FAIL
-	except (outputs.OutputError, db.DatabaseError, glossary.GlossaryError, sheet.SheetError) as e:
+	except (outputs.OutputError, db.DatabaseError, glossary.GlossaryError, sheet.SheetError, eventfmt.FormatError) as e:
 		print(f"error: {e}", file=sys.stderr)
 		for detail in getattr(e, "problems", []):
 			print(f"  {detail}", file=sys.stderr)

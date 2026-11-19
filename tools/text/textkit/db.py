@@ -4,7 +4,7 @@ from pathlib import Path
 
 from .codes import Registry
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 
 SCHEMA = """
 CREATE TABLE meta (
@@ -57,6 +57,17 @@ CREATE TABLE translations (
 	text TEXT NOT NULL,
 	PRIMARY KEY (lang, message_id)
 );
+-- The second-language delivery (TXT-032), keyed by the same message IDs.
+-- It may hold IDs the English delivery lacks, so there is no foreign key.
+CREATE TABLE reference (
+	message_id TEXT PRIMARY KEY,
+	text TEXT NOT NULL,
+	source_file TEXT NOT NULL
+);
+CREATE TRIGGER reference_locked BEFORE UPDATE ON reference
+BEGIN
+	SELECT RAISE(ABORT, 'reference text is locked');
+END;
 -- The shipped text is locked. Edits go to current, through approved sheets.
 CREATE TRIGGER original_locked BEFORE UPDATE OF original ON messages
 BEGIN
@@ -73,7 +84,8 @@ def now():
 	return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def create(path, messages, registry, delivery_name):
+def create(path, messages, registry, delivery_name, reference=None):
+	"""reference is None or (lang, messages, delivery name) for the second-language delivery."""
 	path = Path(path)
 	if path.exists():
 		raise DatabaseError(f"{path} already exists (use --force to replace it)")
@@ -102,6 +114,16 @@ def create(path, messages, registry, delivery_name):
 				"INSERT INTO branches (message_id, position, target) VALUES (?, ?, ?)",
 				[(m.id, i, t) for m in messages for i, t in enumerate(m.branches)],
 			)
+			if reference is not None:
+				lang, ref_messages, ref_name = reference
+				conn.executemany(
+					"INSERT INTO meta (key, value) VALUES (?, ?)",
+					[("reference_lang", lang), ("reference_delivery", ref_name)],
+				)
+				conn.executemany(
+					"INSERT INTO reference (message_id, text, source_file) VALUES (?, ?, ?)",
+					[(m.id, m.text, m.source) for m in ref_messages],
+				)
 	except BaseException:
 		conn.close()
 		path.unlink(missing_ok=True)
@@ -122,7 +144,7 @@ def connect(path):
 		raise DatabaseError(f"{path}: not a line database ({e})") from e
 	if not version or version[0] != SCHEMA_VERSION:
 		conn.close()
-		raise DatabaseError(f"{path}: unsupported schema version")
+		raise DatabaseError(f"{path}: unsupported schema version (import the delivery again)")
 	return conn
 
 
@@ -153,3 +175,27 @@ def branches(conn):
 
 def applied_sheets(conn):
 	return conn.execute("SELECT * FROM applied_sheets ORDER BY seq").fetchall()
+
+
+def reference_lang(conn):
+	row = conn.execute("SELECT value FROM meta WHERE key = 'reference_lang'").fetchone()
+	return row[0] if row else None
+
+
+def reference(conn):
+	return dict(conn.execute("SELECT message_id, text FROM reference ORDER BY message_id").fetchall())
+
+
+def translation_langs(conn):
+	return [r[0] for r in conn.execute("SELECT DISTINCT lang FROM translations ORDER BY lang")]
+
+
+def translations(conn, lang):
+	return dict(conn.execute("SELECT message_id, text FROM translations WHERE lang = ?", (lang,)).fetchall())
+
+
+def compare_ids(messages, reference_messages):
+	"""(IDs only in the English delivery, IDs only in the reference delivery), in delivery order."""
+	ours = {m.id for m in messages}
+	theirs = {m.id for m in reference_messages}
+	return [m.id for m in messages if m.id not in theirs], [m.id for m in reference_messages if m.id not in ours]

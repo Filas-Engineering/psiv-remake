@@ -6,13 +6,14 @@ from pathlib import Path
 
 from . import codes, db
 
-TABLE_COLUMNS = ("id", "kind", "speaker", "map", "trigger", "context", "branches", "char_limit", "codes", "source", "target")
+TABLE_COLUMNS = ("id", "kind", "speaker", "map", "trigger", "context", "branches", "char_limit", "codes", "source", "reference", "target")
 LANG_RE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*\Z")
 
 
 def export(conn, path, kind="all"):
 	branches = db.branches(conn)
 	registry = db.registry(conn)
+	reference = db.reference(conn)
 	count = 0
 	with Path(path).open("w", encoding="utf-8", newline="") as f:
 		writer = csv.writer(f, lineterminator="\n")
@@ -25,7 +26,7 @@ def export(conn, path, kind="all"):
 				m["context"] or "", " ".join(branches.get(m["id"], [])),
 				m["char_limit"] if m["char_limit"] is not None else "",
 				" ".join(codes.strict_sequence(m["current"], registry)),
-				m["current"], "",
+				m["current"], reference.get(m["id"], ""), "",
 			))
 			count += 1
 	return count
@@ -112,8 +113,8 @@ def _target_problems(message, target, registry):
 	_, problems = codes.problems_in(target, registry)
 	if problems:
 		return problems
-	expected = codes.strict_sequence(message["current"], registry)
-	found = codes.strict_sequence(target, registry)
+	expected = _case_neutral(codes.strict_sequence(message["current"], registry))
+	found = _case_neutral(codes.strict_sequence(target, registry))
 	if found != expected:
 		removed = list((Counter(expected) - Counter(found)).elements())
 		added = list((Counter(found) - Counter(expected)).elements())
@@ -135,6 +136,12 @@ def _target_problems(message, target, registry):
 			if length > limit:
 				problems.append(f"line {line!r} is {length} characters, over the limit of {limit}")
 	return problems
+
+
+def _case_neutral(sequence):
+	# A translation keeps every name token but may change its case variant:
+	# capitalization rules differ between languages.
+	return [re.sub(r"\Aname_(?:upper|lower):", "name:", c) for c in sequence]
 
 
 def store(conn, report, out_path):

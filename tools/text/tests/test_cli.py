@@ -71,11 +71,52 @@ class CliWorkflowTest(TempCase):
 		self.assertIn("PASS", out)
 		with (t / "changes.csv").open(encoding="utf-8", newline="") as f:
 			[change] = list(csv.DictReader(f))
-		self.assertEqual(("guide:0", "Tonc", "Tonic"), (change["message_id"], change["old"], change["new"]))
+		self.assertEqual(("guide:0", "Tonc", "{name:I1}"), (change["message_id"], change["old"], change["new"]))
 
 		code, out, _ = self.run_cli("verify", "--db", t / "b.db", "--glossary", t / "g.csv")
 		self.assertEqual(1, code)
 		self.assertIn("FAIL", out)
+
+		code, out, err = self.run_cli("render", "--db", t / "b.db", "--glossary", t / "g.csv", "--tokens-only")
+		self.assertEqual(0, code, err)
+		self.assertEqual(
+			"guide:0\n  shipped:  {portrait:GUIDE}Buy a Tonc.{br}Or two.\n  restored: {portrait:GUIDE}Buy a Tonic.{br}Or two.\n",
+			out,
+		)
+		code, out, _ = self.run_cli("render", "--db", t / "b.db", "--glossary", t / "g.csv", "--names", "restored", "--id", "guide:1")
+		self.assertEqual("guide:1\t{portrait:GUIDE}Safe  travels.\n", out)
+
+		# The event glossary goes out and comes back as the same CSV glossary.
+		self.assertEqual(0, self.run_cli("glossary", "export-events", "--glossary", t / "g.csv", "--out", t / "g.txt")[0])
+		code, _, err = self.run_cli("glossary", "import-events", "--events", t / "g.txt", "--glossary", t / "g.csv", "--out", t / "g2.csv")
+		self.assertEqual(0, code, err)
+		self.assertEqual((t / "g.csv").read_text(encoding="utf-8"), (t / "g2.csv").read_text(encoding="utf-8"))
+
+	def test_reference_delivery_and_string_tables(self):
+		t = self.tmp
+		japanese = [
+			record("guide", 0, "{portrait:GUIDE}トニックをどうぞ。{br}二つでも。", branches=[1]),
+			record("guide", 1, "{portrait:GUIDE}よい旅を。"),
+			record("guide", 2, "{portrait:GUIDE}またね。"),
+		]
+		ja = self.write_delivery(japanese, folder="ja")
+		code, _, err = self.run_cli("import", "--delivery", self.write_delivery(RECORDS), "--db", t / "a.db", "--reference", ja)
+		self.assertEqual(2, code)
+		self.assertIn("go together", err)
+		code, out, err = self.run_cli(
+			"import", "--delivery", self.write_delivery(RECORDS), "--db", t / "a.db", "--reference", ja, "--reference-lang", "ja",
+		)
+		self.assertEqual(0, code, err)
+		self.assertIn("in the delivery, not in ja: 0", out)
+		self.assertIn("in ja, not in the delivery: 1: guide:2", out)
+
+		code, out, err = self.run_cli("export-strings", "--db", t / "a.db", "--lang", "ja", "--out", t / "ja.strings")
+		self.assertEqual(0, code, err)
+		self.assertIn("kept as written, not defined by the event string table format: portrait 2", out)
+		self.assertIn("guide.0 = {portrait:GUIDE}トニックをどうぞ。\\n二つでも。", (t / "ja.strings").read_text(encoding="utf-8"))
+		code, _, err = self.run_cli("export-strings", "--db", t / "a.db", "--lang", "fr", "--out", t / "fr.strings")
+		self.assertEqual(1, code)
+		self.assertIn("has no fr text", err)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,58 @@
+[
+	{
+		"tree": "traveler_osk",
+		"index": 0,
+		"speaker": "OSK",
+		"text": "{portrait:OSK}{var:hero}、船旅は初めてじゃなさそうだね。",
+		"codes": [
+			"portrait:OSK",
+			"var:hero"
+		],
+		"branches": [
+			1
+		],
+		"map": "saltmere_inn",
+		"trigger": "talk_osk"
+	},
+	{
+		"tree": "traveler_osk",
+		"index": 1,
+		"speaker": "OSK",
+		"text": "{portrait:OSK}カモメの羽の市を目当てにソルトミアへ来たんだ。{br}見かけたかい？",
+		"codes": [
+			"portrait:OSK",
+			"br"
+		],
+		"branches": [
+			2,
+			3
+		],
+		"map": "saltmere_inn",
+		"trigger": "talk_osk"
+	},
+	{
+		"tree": "traveler_osk",
+		"index": 2,
+		"speaker": "OSK",
+		"text": "{portrait:OSK}羽を丸ごと一枚？ 運がいいね！",
+		"codes": [
+			"portrait:OSK"
+		],
+		"branches": [],
+		"map": "saltmere_inn",
+		"trigger": "talk_osk"
+	},
+	{
+		"tree": "traveler_osk",
+		"index": 3,
+		"speaker": "OSK",
+		"text": "{portrait:OSK}僕のタイドコールは潮を呼べるけど、{br}ネットスローのほうが速いんだ。",
+		"codes": [
+			"portrait:OSK",
+			"br"
+		],
+		"branches": [],
+		"map": "saltmere_inn",
+		"trigger": "talk_osk"
+	}
+]

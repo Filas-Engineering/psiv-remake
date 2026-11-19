@@ -3,6 +3,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .codes import NAME_ID_RE
+
 COLUMNS = ("id", "category", "shipped", "restored", "reason", "pronunciation", "signoff")
 CATEGORIES = ("enemy", "item", "location", "menu", "skill", "technique")
 # The shipped name tables cap names at 10 characters (scope, "Working with a cartridge dump").
@@ -83,6 +85,11 @@ def validate(entries, max_length=DEFAULT_MAX_LENGTH):
 	for e in entries:
 		if not e.id.strip():
 			errors.append(f"{where(e)}: id is empty")
+		elif not NAME_ID_RE.match(e.id):
+			errors.append(
+				f"{where(e)}: id {e.id!r} must be letters, digits, '_' and '.', not starting with a digit,"
+				" so it can be a name token and an event script glossary ID"
+			)
 		elif e.id in ids:
 			errors.append(f"{where(e)}: duplicate id {e.id} (also line {ids[e.id].line})")
 		else:

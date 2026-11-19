@@ -1,0 +1,87 @@
+[
+	{
+		"tree": "harbor_guide",
+		"index": 0,
+		"speaker": "FINCH",
+		"text": "{portrait:FINCH}ソルトミアへようこそ！{br}港の案内係、フィンチです。{page}何でも聞いてください。",
+		"codes": [
+			"portrait:FINCH",
+			"br",
+			"page"
+		],
+		"branches": [
+			1,
+			2
+		],
+		"map": "saltmere_docks",
+		"trigger": "talk_finch"
+	},
+	{
+		"tree": "harbor_guide",
+		"index": 1,
+		"speaker": "FINCH",
+		"text": "{portrait:FINCH}渡し船は夕暮れに出ます。{br}船旅にはトニックをどうぞ。",
+		"codes": [
+			"portrait:FINCH",
+			"br"
+		],
+		"branches": [
+			3
+		],
+		"map": "saltmere_docks",
+		"trigger": "talk_finch"
+	},
+	{
+		"tree": "harbor_guide",
+		"index": 2,
+		"speaker": "FINCH",
+		"text": "{portrait:FINCH}船酔いですか？ 塩水ポーションが{br}効きますよ。{page}店は船のそば、赤い扉の店です。",
+		"codes": [
+			"portrait:FINCH",
+			"br",
+			"page"
+		],
+		"branches": [
+			3
+		],
+		"map": "saltmere_docks",
+		"trigger": "talk_finch"
+	},
+	{
+		"tree": "harbor_guide",
+		"index": 3,
+		"speaker": "FINCH",
+		"text": "{portrait:FINCH}北の桟橋のリーフクローラーの巣に気をつけて。{wait:20}かみつきますよ！",
+		"codes": [
+			"portrait:FINCH",
+			"wait:20"
+		],
+		"branches": [],
+		"map": "saltmere_docks",
+		"trigger": "talk_finch"
+	},
+	{
+		"tree": "harbor_guide",
+		"index": 4,
+		"speaker": "FINCH",
+		"text": "{portrait:FINCH}トニック！ トニック！ トニックはいかが！",
+		"codes": [
+			"portrait:FINCH"
+		],
+		"branches": [],
+		"map": "saltmere_market",
+		"trigger": "talk_finch_market"
+	},
+	{
+		"tree": "harbor_guide",
+		"index": 5,
+		"speaker": "FINCH",
+		"text": "{portrait:FINCH}よい旅を！",
+		"codes": [
+			"portrait:FINCH"
+		],
+		"branches": [],
+		"map": "saltmere_docks",
+		"trigger": "talk_finch_farewell"
+	}
+]

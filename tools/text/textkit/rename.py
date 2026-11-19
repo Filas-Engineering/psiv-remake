@@ -3,7 +3,7 @@ from pathlib import Path
 
 from . import db, mentions, sheet
 
-MENTION_COLUMNS = ("message_id", "kind", "speaker", "map", "start", "end", "mention", "glossary_id", "shipped", "restored", "case", "split", "line")
+MENTION_COLUMNS = ("message_id", "kind", "speaker", "map", "start", "end", "mention", "glossary_id", "shipped", "restored", "case", "split", "broken", "line")
 
 
 def all_mentions(conn, entries):
@@ -23,13 +23,14 @@ def write_mentions(path, conn, entries):
 			writer.writerow([
 				message["id"], message["kind"], message["speaker"] or "", message["map"] or "",
 				m.start, m.end, m.text, m.entry.id, m.entry.shipped, m.entry.restored,
-				m.case, "yes" if m.split else "", message["current"],
+				m.case, "yes" if m.split else "", "yes" if m.broken else "", message["current"],
 			])
 			count += 1
 	return count
 
 
 def propose(conn, entries):
+	by_id = {e.id: e for e in entries}
 	rows = []
 	for message, m in all_mentions(conn, entries):
 		if not m.entry.renamed:
@@ -41,7 +42,9 @@ def propose(conn, entries):
 		reason = f"glossary {m.entry.id}: {m.entry.shipped} -> {m.entry.restored}"
 		if m.entry.reason:
 			reason += f" ({m.entry.reason})"
-		rows.append(sheet.proposal(
+		row = sheet.proposal(
 			f"R{len(rows) + 1:04d}", "rename", message, m.start, m.text, new or "", reason, "; ".join(notes),
-		))
+		)
+		row.show_names(by_id)
+		rows.append(row)
 	return rows

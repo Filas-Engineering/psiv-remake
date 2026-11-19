@@ -67,9 +67,12 @@ def candidates(conn, words=None, entries=()):
 		add(message, start, old, new, reason)
 
 	found.sort(key=lambda f: (f[0], f[1]))
+	by_id = {e.id: e for e in entries}
 	rows = []
 	for i, (_, _, row) in enumerate(found, 1):
 		row.change_id = f"T{i:04d}"
+		if by_id:
+			row.show_names(by_id)
 		rows.append(row)
 	return rows
 

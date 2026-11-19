@@ -14,6 +14,13 @@ SHOWS = ("", "newline", "page", "placeholder")
 PLACEHOLDER = ""
 VISIBLE = {"": "", "newline": "\n", "page": "\f", "placeholder": PLACEHOLDER}
 
+# Name tokens are written by the rename pass, never delivered, and always
+# known whatever the code registry says. The code name keeps the case of the
+# mention it replaced; the argument is a glossary ID, which follows the event
+# script name rules (events/FORMAT.md) so both tools share one glossary.
+NAME_CODES = {"name": "exact", "name_upper": "upper", "name_lower": "lower"}
+NAME_ID_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*\Z")
+
 
 @dataclass(frozen=True)
 class CodeSpec:
@@ -62,6 +69,8 @@ class Registry:
 		for name, body in sorted(data.items()):
 			if not re.fullmatch(r"[a-z][a-z_]*", name):
 				raise ValueError(f"code name {name!r} must be lowercase letters and underscores")
+			if name in NAME_CODES:
+				raise ValueError(f"code name {name!r} is reserved for name tokens")
 			if not isinstance(body, dict) or set(body) - {"arg", "shows", "reflow"}:
 				raise ValueError(f"code {name!r}: expected an object with arg, shows, reflow")
 			arg = body.get("arg", "none")
@@ -88,6 +97,10 @@ class Registry:
 		)
 
 	def check(self, token):
+		if token.name in NAME_CODES:
+			if token.arg is None or not NAME_ID_RE.match(token.arg):
+				return f"name token {{{token.text}}} needs a glossary ID argument"
+			return None
 		spec = self.specs.get(token.name)
 		if spec is None:
 			return f"unknown control code {{{token.text}}}"
@@ -104,6 +117,8 @@ class Registry:
 		return spec is not None and spec.reflow
 
 	def shows(self, name):
+		if name in NAME_CODES:
+			return PLACEHOLDER
 		spec = self.specs.get(name)
 		return VISIBLE[spec.shows] if spec else ""
 
@@ -185,3 +200,7 @@ def strict_sequence(text, registry):
 	"""Code tokens a translation must keep in the same order."""
 	tokens, _ = scan(text)
 	return [t.text for t in tokens if not registry.is_reflow(t.name)]
+
+
+def is_name(token):
+	return token.name in NAME_CODES

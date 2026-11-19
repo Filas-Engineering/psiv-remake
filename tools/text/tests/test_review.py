@@ -47,9 +47,11 @@ class RenameReviewTest(TempCase):
 		rows = {r.change_id: r for r in sheet.read(self.renames)}
 		self.assertEqual(["R0001", "R0002", "R0003"], sorted(rows))
 		r2 = rows["R0002"]
-		self.assertEqual(("Brine{br}Pot", "Brine{br}Potion"), (r2.old, r2.new))
+		self.assertEqual(("Brine{br}Pot", "{br}{name:I2}"), (r2.old, r2.new))
 		self.assertEqual(RECORDS[0]["text"], r2.before)
-		self.assertEqual("{portrait:GUIDE}Take a Tonc.{br}Or a Brine{br}Potion.", r2.after)
+		self.assertEqual("{portrait:GUIDE}Take a Tonc.{br}Or a {br}{name:I2}.", r2.after)
+		self.assertEqual("{portrait:GUIDE}Take a Tonc.{br}Or a {br}Brine Pot.", r2.after_shipped)
+		self.assertEqual("{portrait:GUIDE}Take a Tonc.{br}Or a {br}Brine Potion.", r2.after_restored)
 		self.assertIn("not signed off", rows["R0003"].note)
 		self.assertFalse(any(r.approved for r in rows.values()))
 
@@ -58,7 +60,7 @@ class RenameReviewTest(TempCase):
 		out = self.apply([self.renames])
 		message = out.execute("SELECT original, current FROM messages WHERE id = 'guide:0'").fetchone()
 		self.assertEqual(RECORDS[0]["text"], message["original"])
-		self.assertEqual("{portrait:GUIDE}Take a Tonic.{br}Or a Brine{br}Potion.", message["current"])
+		self.assertEqual("{portrait:GUIDE}Take a {name:I1}.{br}Or a {br}{name:I2}.", message["current"])
 		self.assertEqual(RECORDS[0]["text"], self.conn.execute("SELECT current FROM messages WHERE id = 'guide:0'").fetchone()[0])
 
 		verdict = review.verify(out, [self.renames], ENTRIES, self.write_delivery(RECORDS, folder="again"))
@@ -92,9 +94,18 @@ class RenameReviewTest(TempCase):
 	def test_verify_catches_a_glossary_change_after_apply(self):
 		approve(self.renames, {"R0001": "yes"})
 		out = self.apply([self.renames])
+		new_id = [entry("I9", "Tonc", "Tonic"), *ENTRIES[1:]]
+		problems = review.verify(out, [self.renames], new_id).problems
+		self.assertIn("not the glossary substitution '{name:I9}'", problems[0])
+		unsigned = [entry("I1", "Tonc", "Tonic", signoff=""), *ENTRIES[1:]]
+		self.assertIn("has no sign-off", review.verify(out, [self.renames], unsigned).problems[0])
+
+	def test_a_new_restored_name_needs_no_new_rename_pass(self):
+		# The token holds the glossary ID, so the game picks up the new name.
+		approve(self.renames, {"R0001": "yes"})
+		out = self.apply([self.renames])
 		changed = [entry("I1", "Tonc", "Tonic Water"), *ENTRIES[1:]]
-		problems = review.verify(out, [self.renames], changed).problems
-		self.assertIn("not the glossary substitution 'Tonic Water'", problems[0])
+		self.assertEqual([], review.verify(out, [self.renames], changed).problems)
 
 	def test_the_locked_original_cannot_be_updated(self):
 		with self.assertRaises(sqlite3.IntegrityError):
@@ -112,7 +123,7 @@ class RenameReviewTest(TempCase):
 		with self.assertRaises(review.ApplyError) as caught:
 			self.apply([self.renames])
 		problems = "\n".join(caught.exception.problems)
-		self.assertIn("R0001 (guide:0): new text 'Elixir' is not the glossary substitution 'Tonic'", problems)
+		self.assertIn("R0001 (guide:0): new text 'Elixir' is not the glossary substitution '{name:I1}'", problems)
 		self.assertIn("R0003 (traveler:0): glossary entry S1 ('Net Thrw') has no sign-off", problems)
 		self.assertFalse((self.tmp / "renamed.db").exists())
 

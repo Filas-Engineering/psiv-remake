@@ -123,6 +123,9 @@ def _record(record, where, source, registry, problems):
 		tokens, text_problems = codes.problems_in(text, registry)
 		for p in text_problems:
 			bad(p)
+		for t in tokens:
+			if codes.is_name(t):
+				bad(f"name token {{{t.text}}} in delivered text; a delivery holds the shipped text and the rename pass writes name tokens")
 		shown, _ = codes.visible(text, registry)
 		if not shown.replace(codes.PLACEHOLDER, "x").strip():
 			bad("empty text" if not text else "empty text (only control codes or whitespace)")
