@@ -268,6 +268,8 @@ public sealed class ScriptPlayer
 						(_controller.DrawnActors.ContainsKey(w[2]) ? $" (in {person.Pose}{(person.Marked ? ", marked" : "")})" : " (not drawn)"));
 				}
 				break;
+			case "expect" when w.Length == 4 && w[1] == "apart" && int.TryParse(w[3], CultureInfo.InvariantCulture, out int apartFrames):
+				return Apart(w[2], apartFrames, source).GetEnumerator();
 			case "expect" when w.Length == 3 && w[1] == "label" && w[2] == "none":
 				if (_controller.Labels.Any())
 				{
@@ -303,6 +305,33 @@ public sealed class ScriptPlayer
 			}
 		}
 		return null;
+	}
+
+	// `expect apart ID FRAMES`: the last frame and the next FRAMES frames, played with no keys, draw nobody else
+	// overlapping the person, less than a cell away on both axes.
+	private IEnumerable<Keys[]> Apart(string id, int frames, string source)
+	{
+		for (int i = 0; ; i++)
+		{
+			if (!_controller.DrawnActors.TryGetValue(id, out DrawnPerson at))
+			{
+				_pendingFailure = $"{source}: {id} is not drawn, {i} frames in";
+				yield break;
+			}
+			foreach ((string other, DrawnPerson p) in _controller.DrawnActors)
+			{
+				if (other != id && Math.Abs(p.X - at.X) < 1f && Math.Abs(p.Y - at.Y) < 1f)
+				{
+					_pendingFailure = $"{source}: {other} is drawn at {p.X} {p.Y}, over {id} at {at.X} {at.Y}, {i} frames in";
+					yield break;
+				}
+			}
+			if (i == frames)
+			{
+				yield break;
+			}
+			yield return [];
+		}
 	}
 
 	// `expect actor ID X Y [FACING]`: the last frame drew the person (a script actor or a party member) standing on

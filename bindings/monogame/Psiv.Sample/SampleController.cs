@@ -201,9 +201,13 @@ public sealed class SampleController
 		}
 		_log("action: " + a.Description + (a.Instant ? " (instant)" : ""));
 		bool actor = view?.Actors.Any(x => x.Id == a.Subject) ?? false;
-		// A move always brings an actor into the party's area, so anything else a script moves is a party member, in
-		// the lineup or not.
-		bool member = !actor && (lineup.Contains(a.Subject) || _field.Placed(a.Subject) || a.Type == ActionType.Move);
+		// The script actors in the party's area are all in the view, so any other subject is a party member, in the
+		// lineup or not. One outside it that a turn or pose finds without a cell steps up next to the leader first.
+		bool member = !actor && a.Subject.Length > 0;
+		if (member && view is not null && a.Type is ActionType.Face or ActionType.Animate)
+		{
+			_field.Arrive(a.Subject, lineup, view);
+		}
 		int? spriteMs = view is null ? null : a.Type switch
 		{
 			ActionType.Move or ActionType.Face or ActionType.ShowActor or ActionType.HideActor when actor => ActorAction(a, view),

@@ -123,12 +123,7 @@ public sealed class FieldRenderer
 
 		public void WalkTo(int x, int y, int cellMs)
 		{
-			if (!Walking)
-			{
-				_cells.RemoveRange(0, _cells.Count - 1);
-				_elapsedMs = 0;
-				_cellMs = Math.Max(1, cellMs);
-			}
+			Restart(cellMs);
 			(int cx, int cy) = Target;
 			while (cx != x)
 			{
@@ -141,6 +136,24 @@ public sealed class FieldRenderer
 				_cells.Add((cx, cy));
 			}
 			Place();
+		}
+
+		// Walks the cells in order, each a neighbor of the one before, starting next to the target.
+		public void WalkAlong(IEnumerable<(int X, int Y)> path, int cellMs)
+		{
+			Restart(cellMs);
+			_cells.AddRange(path);
+			Place();
+		}
+
+		private void Restart(int cellMs)
+		{
+			if (!Walking)
+			{
+				_cells.RemoveRange(0, _cells.Count - 1);
+				_elapsedMs = 0;
+				_cellMs = Math.Max(1, cellMs);
+			}
 		}
 
 		public void Advance(int dtMs)
@@ -187,7 +200,7 @@ public sealed class FieldRenderer
 	// Milliseconds per cell for each actor's next walk, from its move's speed.
 	private readonly Dictionary<string, int> _paces = [];
 	// Party members a script moved or turned during the current scene, drawn there instead of in the walking line,
-	// and members outside the lineup a script moved, drawn until the scene ends.
+	// and members outside the lineup a script moved, turned or posed, drawn until the scene ends.
 	private readonly Dictionary<string, MemberPlace> _members = [];
 	// Members a scene left out of the line, walking back to their places in it once the scene is over.
 	private readonly Dictionary<string, ActorWalk> _returns = [];
@@ -213,7 +226,7 @@ public sealed class FieldRenderer
 
 	// Where a party member is drawn or walking to: its scripted cell during a scene, the cell it is walking back to
 	// after one, otherwise its place in the walking line (the leader's cell, or the trail behind it). A member
-	// outside the lineup has none until a script moves it.
+	// outside the lineup has none until a script moves, turns or poses it.
 	public (int X, int Y)? MemberCell(string id, IReadOnlyList<string> lineup)
 	{
 		if (_members.TryGetValue(id, out MemberPlace? m))
@@ -227,9 +240,6 @@ public sealed class FieldRenderer
 		int i = IndexOf(lineup, id);
 		return i < 0 ? null : i > 0 && i - 1 < _followers.Length ? (_followers[i - 1].X, _followers[i - 1].Y) : (_leader.X, _leader.Y);
 	}
-
-	// Whether the current scene has put the member somewhere.
-	public bool Placed(string id) => _members.ContainsKey(id);
 
 	private static int IndexOf(IReadOnlyList<string> lineup, string id)
 	{
@@ -298,6 +308,141 @@ public sealed class FieldRenderer
 		{
 			Place(id, lineup, fx, fy).Facing = Math.Abs(dx) > Math.Abs(dy) ? (dx > 0 ? Direction.East : Direction.West) : (dy > 0 ? Direction.South : Direction.North);
 		}
+	}
+
+	// A member outside the lineup that a scene turns or poses before any move has given it a cell steps up next to
+	// the leader, on the nearest walkable cell nobody drawn stands on: behind the leader first, then on its right and
+	// its left, then in front of it, and further out in the same order when those are all taken.
+	public void Arrive(string id, IReadOnlyList<string> lineup, FieldView view)
+	{
+		if (MemberCell(id, lineup) is not null)
+		{
+			return;
+		}
+		(int X, int Y) leader = LeaderCell(lineup);
+		Direction facing = lineup.Count > 0 && _members.TryGetValue(lineup[0], out MemberPlace? scripted) ? scripted.Facing : _leader.Facing;
+		Direction[] order = [Turn(facing, 2), Turn(facing, 1), Turn(facing, 3), facing];
+		HashSet<(int X, int Y)> taken = Taken(view, lineup, id);
+		var seen = new HashSet<(int X, int Y)> { leader };
+		var queue = new Queue<(int X, int Y)>([leader]);
+		while (queue.Count > 0)
+		{
+			(int x, int y) = queue.Dequeue();
+			foreach (Direction d in order)
+			{
+				(int nx, int ny) = Step(x, y, d);
+				if (!view.Cell(nx, ny).HasFlag(CellFlags.Walkable) || !seen.Add((nx, ny)))
+				{
+					continue;
+				}
+				if (!taken.Contains((nx, ny)))
+				{
+					Place(id, lineup, nx, ny);
+					return;
+				}
+				queue.Enqueue((nx, ny));
+			}
+		}
+		Place(id, lineup, leader.X, leader.Y);
+	}
+
+	private (int X, int Y) LeaderCell(IReadOnlyList<string> lineup) =>
+		lineup.Count > 0 && _members.TryGetValue(lineup[0], out MemberPlace? m) ? m.Walk.Target : (_leader.X, _leader.Y);
+
+	// The direction `quarters` quarter turns clockwise from `d`.
+	private static Direction Turn(Direction d, int quarters) => (Direction)(((int)d + quarters) % 4);
+
+	private static (int X, int Y) Step(int x, int y, Direction d) => d switch
+	{
+		Direction.North => (x, y - 1),
+		Direction.East => (x + 1, y),
+		Direction.South => (x, y + 1),
+		_ => (x - 1, y),
+	};
+
+	// The cells someone other than `self` is drawn on or walking to: the leader, the followers in line and the places
+	// in it, the members a scene placed or that are walking back, and the visible actors.
+	private HashSet<(int X, int Y)> Taken(FieldView view, IReadOnlyList<string> lineup, string self)
+	{
+		var taken = new HashSet<(int X, int Y)>();
+		void Walker(ActorWalk w)
+		{
+			taken.Add(w.Target);
+			taken.Add(((int)MathF.Round(w.PX), (int)MathF.Round(w.PY)));
+		}
+		if (lineup.Count == 0 || lineup[0] != self)
+		{
+			taken.Add(LeaderCell(lineup));
+		}
+		for (int i = 0; i < Math.Min(_followers.Length, lineup.Count - 1); i++)
+		{
+			string id = lineup[i + 1];
+			// The place in the line, where a member walking back is going.
+			if (id != self && !_members.ContainsKey(id))
+			{
+				taken.Add((_followers[i].X, _followers[i].Y));
+			}
+		}
+		foreach ((string id, MemberPlace m) in _members)
+		{
+			if (id != self)
+			{
+				Walker(m.Walk);
+			}
+		}
+		foreach ((string id, ActorWalk w) in _returns)
+		{
+			if (id != self)
+			{
+				Walker(w);
+			}
+		}
+		foreach (FieldActor a in view.Actors)
+		{
+			if (a.Visible && _actors.TryGetValue(a.Id, out ActorWalk? w))
+			{
+				Walker(w);
+			}
+		}
+		return taken;
+	}
+
+	// The shortest way from `from` to `to` over walkable cells nobody else is drawn on or walking to, trying north,
+	// east, south and west from each cell, without the start. Null when there is none within a few cells of the
+	// straight walk.
+	private static List<(int X, int Y)>? PathAround(FieldView view, HashSet<(int X, int Y)> taken, (int X, int Y) from, (int X, int Y) to)
+	{
+		int longest = Math.Abs(to.X - from.X) + Math.Abs(to.Y - from.Y) + 6;
+		var back = new Dictionary<(int X, int Y), (int X, int Y)> { [from] = from };
+		var queue = new Queue<((int X, int Y) Cell, int Length)>([(from, 0)]);
+		while (queue.Count > 0)
+		{
+			((int x, int y), int length) = queue.Dequeue();
+			if ((x, y) == to)
+			{
+				var path = new List<(int X, int Y)>();
+				for ((int X, int Y) c = to; c != from; c = back[c])
+				{
+					path.Add(c);
+				}
+				path.Reverse();
+				return path;
+			}
+			if (length == longest)
+			{
+				continue;
+			}
+			foreach (Direction d in (Direction[])[Direction.North, Direction.East, Direction.South, Direction.West])
+			{
+				(int X, int Y) next = Step(x, y, d);
+				bool open = next == to || (view.Cell(next.X, next.Y).HasFlag(CellFlags.Walkable) && !taken.Contains(next));
+				if (open && back.TryAdd(next, (x, y)))
+				{
+					queue.Enqueue((next, length + 1));
+				}
+			}
+		}
+		return null;
 	}
 
 	// A pose from `startMs` on the controller's clock; a looping one repeats until another pose replaces it.
@@ -420,8 +565,9 @@ public sealed class FieldRenderer
 		{
 			m.Walk.Advance(dt);
 		}
-		// Members walking back after a scene go a cell per step, along x and then y, to the cell their place in the
-		// line holds. If the leader sets off first, the trail takes each of them over from where it is drawn.
+		// Members walking back after a scene go a cell per step to the cell their place in the line holds, around the
+		// people drawn and the cells nobody can stand on, or along x and then y when there is no way round. If the
+		// leader sets off first, the trail takes each of them over from where it is drawn.
 		bool leaderMoved = _leader.X != oldX || _leader.Y != oldY;
 		foreach (string id in _returns.Keys.ToList())
 		{
@@ -447,7 +593,14 @@ public sealed class FieldRenderer
 			}
 			else if (!w.Walking)
 			{
-				w.WalkTo(g.X, g.Y, step);
+				if (PathAround(view, Taken(view, lineup, id), w.Target, (g.X, g.Y)) is { } path)
+				{
+					w.WalkAlong(path, step);
+				}
+				else
+				{
+					w.WalkTo(g.X, g.Y, step);
+				}
 			}
 		}
 

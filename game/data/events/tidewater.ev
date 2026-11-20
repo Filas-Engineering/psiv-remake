@@ -127,9 +127,10 @@ event tidewater_chart skippable
 end
 
 # A board by the inn where travelers offer their company. The scout and an
-# engineer answer the guide's note: they walk in from the road before they are
-# in the party, then join it, so the party is full. Like the tide chart, it is
-# there for the MonoGame sample's party presentation.
+# engineer answer the guide's note before they are in the party, then join it,
+# so the party is full: the engineer walks in from the road, the scout is
+# turned and nods before any move. Like the tide chart, it is there for the
+# MonoGame sample's party presentation.
 event tidewater_board skippable
 	lock player
 	narrate @tidewater.board.read
@@ -138,8 +139,6 @@ event tidewater_board skippable
 	face engineer fighter
 	anim engineer wave
 	say engineer @tidewater.board.engineer
-	move scout to east_gate
-	move scout to board_beside
 	face scout fighter
 	anim scout nod
 	say scout @tidewater.board.scout

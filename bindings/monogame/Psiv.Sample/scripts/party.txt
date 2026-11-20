@@ -1,6 +1,6 @@
-# The board by the inn: a scene that walks two party members in before they are in the lineup, then adds them, so
+# The board by the inn: a scene that brings two party members in before they are in the lineup, then adds them, so
 # the party is full. Both are drawn with their own sprites throughout, never as a label; when the scene ends they
-# walk back to the last two places in the line, and the line then trails all four followers. With --window, the
+# walk back to the last two places in the line, never over the leader, and the line then trails all four followers. With --window, the
 # shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing for them.
 
 expect screen Title
@@ -37,19 +37,21 @@ shot build/shots/full_3_engineer_waves.png
 wait 60
 expect screen Dialogue
 press Enter
-# The scout comes in the same way, to the cell beside the engineer, turns toward the leader and nods.
-wait 60
-expect actor scout walking
+# The scout is turned toward the leader before any move has given it a cell, so it steps up next to the leader on
+# the first free cell: behind it (the mystic stands there), then on its right, north of it. It faces the leader and
+# nods.
+wait 2
+expect actor scout 2 2 south
 expect label none
-wait 110
-expect actor scout 3 4 north
+wait 20
 expect pose scout nod marked
+expect label none
 shot build/shots/full_4_scout_nods.png
 wait 50
 expect screen Dialogue
 press Enter
 # Both join and the scene ends. The leader is the player's at once; the scout walks back to the third place in the
-# line and the engineer to the fourth, a cell per step along x and then y.
+# line and the engineer to the fourth, a cell per step, round the people in the way and never over the leader.
 wait 2
 expect screen Field
 expect toast Test Scout joins
@@ -57,7 +59,7 @@ expect actor fighter 2 3 west
 expect actor scout walking
 expect actor engineer walking
 shot build/shots/full_5_falling_in.png
-wait 90
+expect apart fighter 90
 expect actor mystic 3 3
 expect actor medic 4 3
 expect actor scout 5 3 west

@@ -120,9 +120,9 @@ expect actor fighter 7 5 north
 expect pose dockhand wave
 shot build/shots/party_9_resumed.png
 # The leader steps back to the chart and the scene ends. The leader is the player's again at once, and the
-# apprentices walk back to their places behind it, a cell per step along x and then y: the mystic through the
-# leader's cell and up one, the medic up two. Every script action played on screen, so none shows as a toast; the
-# autosave at the end of the scene does.
+# apprentices walk back to their places behind it, a cell per step and never over the leader: the mystic up and
+# round it, the medic up and across. Every script action played on screen, so none shows as a toast; the autosave
+# at the end of the scene does.
 pressuntil Enter Field 400
 wait 2
 expect actor fighter 7 6 south
@@ -133,11 +133,11 @@ expect toast Autosaved to auto_0 (event end)
 expect notoast (move
 expect notoast (face
 expect notoast (anim
-wait 6
+expect apart fighter 6
 expect actor mystic walking
 expect actor medic walking
 shot build/shots/party_10_returning.png
-wait 44
+expect apart fighter 44
 expect actor fighter 7 6 south
 expect actor mystic 7 5 south
 expect actor medic 7 4 south
