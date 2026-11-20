@@ -342,6 +342,14 @@ public sealed unsafe class GameSession : IDisposable
 		return new FieldView(info, grid, enemies, markers, exits, points, actors);
 	}
 
+	// Every actor id in game.json order, wherever the actor stands. A script subject that is one of these but not in
+	// FieldView.Actors is an actor in another area; any other subject is a character.
+	public IReadOnlyList<string> ActorIds()
+	{
+		Must(Native.ActorIds(_handle, out IntPtr p, out int count));
+		return Native.Strs(p, count);
+	}
+
 	// Events
 
 	public bool LinePending => Native.LinePending(_handle) != 0;

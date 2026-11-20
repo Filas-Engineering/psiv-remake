@@ -129,11 +129,13 @@ end
 # A board by the inn where travelers offer their company. The scout and an
 # engineer answer the guide's note before they are in the party, then join it,
 # so the party is full: the engineer walks in from the road, the scout is
-# turned and nods before any move. Like the tide chart, it is there for the
-# MonoGame sample's party presentation.
+# turned and nods before any move. The peddler waves from the reed path, an
+# actor outside the area that a front end does not draw here. Like the tide
+# chart, it is there for the MonoGame sample's party presentation.
 event tidewater_board skippable
 	lock player
 	narrate @tidewater.board.read
+	anim peddler wave
 	move engineer to east_gate
 	move engineer to board_below
 	face engineer fighter

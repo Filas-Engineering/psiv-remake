@@ -886,6 +886,18 @@ static void testActors(void) {
 	const psiv_actor* actors;
 	int32_t count;
 	CHECK(psiv_field_actors(s, &actors, &count) == PSIV_NOT_FOUND);
+	/* Every actor id, from game.json, already at the title. */
+	const char* const* ids;
+	int32_t idCount;
+	const char* allActors[] = {"dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler"};
+	CHECK(psiv_actor_ids(s, NULL, &idCount) == PSIV_INVALID_ARGUMENT);
+	CHECK(psiv_actor_ids(s, &ids, NULL) == PSIV_INVALID_ARGUMENT);
+	CHECK(psiv_actor_ids(NULL, &ids, &idCount) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_actor_ids(s, &ids, &idCount));
+	CHECK(idCount == 6);
+	for (int32_t i = 0; i < idCount && i < 6; ++i) {
+		CHECK(strcmp(ids[i], allActors[i]) == 0);
+	}
 	CHECK_OK(psiv_new_game(s));
 	CHECK(psiv_field_actors(s, NULL, &count) == PSIV_INVALID_ARGUMENT);
 	CHECK(psiv_field_actors(s, &actors, NULL) == PSIV_INVALID_ARGUMENT);
@@ -940,6 +952,10 @@ static void testActors(void) {
 	CHECK(strcmp(field.area_id, "reed_path") == 0);
 	CHECK_OK(psiv_field_actors(s, &actors, &count));
 	CHECK(count == 1 && strcmp(actors[0].id, "peddler") == 0 && actors[0].x == 10 && actors[0].y == 7 && !actors[0].scripted);
+	/* The dockhand and the guide are actors in another area: in the ids, not among the field's actors. */
+	CHECK_OK(psiv_actor_ids(s, &ids, &idCount));
+	CHECK(idCount == 6 && strcmp(ids[0], "dockhand") == 0 && strcmp(ids[2], "guide") == 0);
+	CHECK(!findActor(actors, count, "dockhand") && !findActor(actors, count, "guide"));
 	psiv_session_destroy(s);
 }
 

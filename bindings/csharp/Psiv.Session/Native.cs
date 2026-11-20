@@ -246,7 +246,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 4;
+	public const uint AbiVersion = 5;
 
 	[LibraryImport(Library, EntryPoint = "psiv_abi_version")] public static partial uint AbiVersionOf();
 	[LibraryImport(Library, EntryPoint = "psiv_version")] public static partial IntPtr Version();
@@ -297,6 +297,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_field_exits")] public static partial int FieldExits(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_field_points")] public static partial int FieldPoints(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_field_actors")] public static partial int FieldActors(SessionHandle s, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_actor_ids")] public static partial int ActorIds(SessionHandle s, out IntPtr ids, out int count);
 
 	[LibraryImport(Library, EntryPoint = "psiv_line_pending")] public static partial int LinePending(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_line_get")] public static partial int LineGet(SessionHandle s, out PsivLine line);

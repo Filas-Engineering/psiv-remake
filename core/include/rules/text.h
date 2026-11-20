@@ -15,6 +15,7 @@ using TextTable = std::map<std::string, std::string>;
 
 // Reads {"text": {"key": "template", ...}}.
 Result<TextTable> parseTextTable(const std::string& json);
+// `path` is UTF-8 on every platform.
 Result<TextTable> loadTextTable(const std::string& path);
 
 // The template with each {N} replaced by params[N]. A missing key gives the key itself.

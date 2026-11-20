@@ -303,3 +303,30 @@ TEST(persistentStatusesAndNamesRoundTrip) {
 	CHECK_EQ(diff, std::string(""));
 	CHECK_EQ(serializeSave(*loaded.value), text);
 }
+
+// Paths are UTF-8, which a narrow path is not on Windows, where it is taken in the ANSI code page.
+TEST(dataAndSavesWorkInDirectoriesWithNonAsciiNames) {
+	namespace fs = std::filesystem;
+	const std::string root = test::freshDirectory("utf8") + "/caf\xc3\xa9";
+	std::error_code failed;
+	fs::create_directories(fs::u8path(root + "/core"), failed);
+	fs::create_directories(fs::u8path(root + "/game"), failed);
+	fs::copy("../core/data", fs::u8path(root + "/core/data"), fs::copy_options::recursive, failed);
+	fs::copy("data", fs::u8path(root + "/game/data"), fs::copy_options::recursive, failed);
+	CHECK(!failed);
+	const rules::Result<GameData> loaded = loadGameData(root + "/game/data");
+	CHECK(loaded.ok());
+	if (!loaded.ok()) {
+		return;
+	}
+	SessionOptions options;
+	options.saveDirectory = root + "/saves";
+	Session s(*loaded.value, options);
+	test::placeParty(s, "tidewater", "guide_front", Facing::North);
+	CHECK(s.openMenu().empty());
+	CHECK(s.saveManual("manual_0").empty());
+	CHECK(fs::is_regular_file(fs::u8path(root + "/saves/manual_0.sav")));
+	Session again(*loaded.value, options);
+	CHECK(again.load("manual_0").empty());
+	CHECK_EQ(again.world().area, std::string("tidewater"));
+}

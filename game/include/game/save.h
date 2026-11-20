@@ -60,6 +60,7 @@ rules::Result<SaveSummary> readSummary(const std::string& text);
 std::string serializeClearRecord(const World& world, std::uint64_t contentHash, std::int64_t writeTime);
 rules::Result<World> parseClearRecord(const std::string& text);
 
+// Paths are UTF-8 on every platform.
 // Writes `path.tmp`, then renames it over `path`, so an interrupted write leaves the old file (SAV-013).
 bool writeFileAtomic(const std::string& path, const std::string& text, std::string& error);
 bool readFile(const std::string& path, std::string& text);

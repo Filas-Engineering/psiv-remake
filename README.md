@@ -36,9 +36,11 @@ Verified with `make test`, `make acceptance` and `make bindings` (C tests, C# te
 * macOS 26.6 on arm64 with Apple clang 21.0.0 and .NET SDK 10.0.403.
 * Ubuntu 24.04.5 on aarch64 and on x86-64 in Docker (image `mcr.microsoft.com/dotnet/sdk:10.0`, .NET SDK 10.0.404, GNU Make 4.3, Python 3.12.3), once with GCC 13.3.0 and once with Ubuntu clang 18.1.3.
 
-Windows: the core, events and game unit tests pass cross-compiled with MinGW-w64 (GCC 14) under Wine 10 (`tools/windows-check.sh`).
+The MonoGame sample's window: on macOS by hand, and in the Linux check on aarch64 and x86-64 on a virtual display (Xvfb with Mesa llvmpipe software rendering), playing `scripts/smoke.txt` with no failed expectation and saving a screenshot of the game.
 
-Not verified: Windows with MSVC, the acceptance suites and bindings on Windows, and the sample's window on Linux (only its headless mode runs in the container).
+Windows, cross-compiled with MinGW-w64 (GCC 14) and run under Wine 10 (`tools/windows-check.sh`): the core, events and game unit tests; the C interface built as `psiv_session.dll`, which exports exactly the header's functions, with the C tests linked against it; and the C playthrough, whose transcript matches `game_cli.exe`'s byte for byte and the golden transcript (line ends aside: standard output writes CR LF on Windows), with identical save files.
+
+Not verified: Windows with MSVC; the acceptance suites, the C# wrapper and the MonoGame sample on Windows; the sample's window in a real desktop session on Linux (a GPU driver, a window manager, Wayland).
 
 To rerun the Linux check (needs Docker):
 
@@ -47,4 +49,4 @@ make linux-check              # or tools/linux-check.sh gcc, tools/linux-check.s
 PSIV_LINUX_PLATFORM=linux/amd64 tools/linux-check.sh   # another architecture
 ```
 
-It builds a small image with g++, clang, make and python3 on top of the .NET SDK image, mounts the repo read-only, copies it inside the container and runs all three targets there, so no Linux build output lands in the working tree.
+It builds a small image with g++, clang, make, python3, Xvfb, Mesa and the X11, SDL2 and OpenAL libraries on top of the .NET SDK image, mounts the repo read-only, copies it inside the container and runs all three targets there, so no Linux build output lands in the working tree. Then it runs the sample in its window under Xvfb on `scripts/smoke.txt` and fails unless the run exits 0 and its final screenshot is a PNG of more than one color (`tools/check_png.py`); the screenshot is the one file written back, to `bindings/build/shots/linux_window.png` (`linux_window_linux_amd64.png` for the other architecture). `PSIV_LINUX_WINDOW=0` skips that step.

@@ -15,6 +15,7 @@ const std::vector<std::string>& dataFileNames();
 // Keys are the file names from dataFileNames().
 Result<Database> loadDatabaseFromTexts(const std::map<std::string, std::string>& files);
 
+// `directory` is UTF-8 on every platform.
 Result<Database> loadDatabaseFromDirectory(const std::string& directory);
 
 }

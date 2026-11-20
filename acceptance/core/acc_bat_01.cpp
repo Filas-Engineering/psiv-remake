@@ -90,14 +90,17 @@ ACC_CHECK(acc_bat_01, "ACC-BAT-01", "BAT-002") {
 			std::istringstream lines(text);
 			std::string line;
 			for (std::size_t number = 0; std::getline(lines, line); ++number) {
-				for (const char* call : {"std::time(", "std::rand(", "srand(", "getenv(", "fopen(", "ifstream", "ofstream", "socket("}) {
+				bool counted = false;
+				for (const char* call : {"std::time(", "std::rand(", "srand(", "getenv(", "fopen(", "ifstream", "ofstream", "std::filesystem", "socket("}) {
 					if (line.find(call) == std::string::npos || line.find("#include") != std::string::npos) {
 						continue;
 					}
 					const std::string& function = functions[number];
-					const bool fileRead = std::string(call) == "ifstream" || std::string(call) == "fopen(";
+					// std::filesystem names the path a load opens (UTF-8 on every platform).
+					const bool fileRead = std::string(call) == "ifstream" || std::string(call) == "fopen(" || std::string(call) == "std::filesystem";
 					if (fileRead && function.rfind("load", 0) == 0) {
-						++hostLoads;
+						hostLoads += counted ? 0 : 1;
+						counted = true;
 						continue;
 					}
 					fileAccessOnlyInLoad = false;
@@ -116,7 +119,7 @@ ACC_CHECK(acc_bat_01, "ACC-BAT-01", "BAT-002") {
 			const std::string target = m[2];
 			if (m[1] == "<") {
 				t.expect(standardHeaders().count(target) == 1, name + " includes <" + target + ">, which is not a standard C++ header");
-				if (!loading && !(target == "fstream" && fileAccessOnlyInLoad)) {
+				if (!loading && !((target == "fstream" || target == "filesystem") && fileAccessOnlyInLoad)) {
 					t.expect(forbiddenInResolution().count(target) == 0, name + " is battle resolution code and includes <" + target + ">");
 				}
 			} else {

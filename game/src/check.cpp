@@ -277,12 +277,12 @@ CheckReport checkData(const DataDirectories& directories) {
 	namespace fs = std::filesystem;
 	std::error_code ignored;
 	for (rules::Problem& p : report.problems) {
-		if (p.file.empty() || fs::is_regular_file(p.file, ignored)) {
+		if (p.file.empty() || fs::is_regular_file(fs::u8path(p.file), ignored)) {
 			continue;
 		}
-		if (fs::is_regular_file(join(directories.game, p.file), ignored)) {
+		if (fs::is_regular_file(fs::u8path(join(directories.game, p.file)), ignored)) {
 			p.file = join(directories.game, p.file);
-		} else if (!coreDirectory.empty() && fs::is_regular_file(join(coreDirectory, p.file), ignored)) {
+		} else if (!coreDirectory.empty() && fs::is_regular_file(fs::u8path(join(coreDirectory, p.file)), ignored)) {
 			p.file = join(coreDirectory, p.file);
 		}
 	}

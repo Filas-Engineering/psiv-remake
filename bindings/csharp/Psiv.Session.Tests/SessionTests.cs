@@ -388,6 +388,9 @@ public class SessionTests
 		Assert.Equal(["dockhand", "guide"], view.Actors.Select(a => a.Id));
 		Assert.Equal(new FieldActor("dockhand", "Dockhand", 10, 2, Direction.South, true, true), view.Actors[0]);
 		Assert.Equal(new FieldActor("guide", "Harbor Guide", 5, 2, Direction.South, true, false), view.Actors[1]);
+		// Every actor is in the ids; those standing on the reed path or in Saltgrass are not in this area's view.
+		Assert.Equal(["dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler"], s.ActorIds());
+		Assert.DoesNotContain(view.Actors, a => a.Id == "peddler");
 		Assert.True(s.OpenMenu().Ok);
 		Member fighter = s.Party().Single();
 		Assert.Equal("fighter", fighter.Id);

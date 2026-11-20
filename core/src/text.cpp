@@ -4,6 +4,7 @@
 #include "rules/json.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -70,7 +71,7 @@ Result<TextTable> parseTextTable(const std::string& json) {
 }
 
 Result<TextTable> loadTextTable(const std::string& path) {
-	std::ifstream in(path, std::ios::binary);
+	std::ifstream in(std::filesystem::u8path(path), std::ios::binary);
 	if (!in) {
 		Problem problem{path, 0, "", {"load.cannot_open", {}}};
 		return Result<TextTable>::failure({problem}, formatProblem(problem, problemText()));

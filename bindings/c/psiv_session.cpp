@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-#define PSIV_BINDING_VERSION "0.3.0"
+#define PSIV_BINDING_VERSION "0.4.0"
 
 static_assert(PSIV_MODE_SHOP == static_cast<int>(game::Mode::Shop), "psiv_mode");
 static_assert(PSIV_MENU_NAME_ENTRY == static_cast<int>(game::MenuKind::NameEntry), "psiv_menu_kind");
@@ -1221,6 +1221,18 @@ psiv_status psiv_field_actors(psiv_session* session, const psiv_actor** out, int
 			list[i] = {arena.str(a.id), arena.str(session->session->displayName(a.id)), a.cell.x, a.cell.y, static_cast<int32_t>(a.facing), a.visible, a.scripted};
 		}
 		*out = list;
+		*count = static_cast<int32_t>(actors.size());
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_actor_ids(psiv_session* session, const char* const** out, int32_t* count) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		const std::vector<std::string>& actors = session->data->config.actors;
+		*out = session->arena.strs(actors);
 		*count = static_cast<int32_t>(actors.size());
 		return PSIV_OK;
 	});

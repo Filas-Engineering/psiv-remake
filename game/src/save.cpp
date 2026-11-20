@@ -995,7 +995,7 @@ rules::Result<World> parseClearRecord(const std::string& text) {
 bool writeFileAtomic(const std::string& path, const std::string& text, std::string& error) {
 	const std::string temp = path + ".tmp";
 	{
-		std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+		std::ofstream out(std::filesystem::u8path(temp), std::ios::binary | std::ios::trunc);
 		if (!out) {
 			error = "cannot open " + temp;
 			return false;
@@ -1009,17 +1009,17 @@ bool writeFileAtomic(const std::string& path, const std::string& text, std::stri
 	}
 	// std::rename does not replace an existing file on Windows.
 	std::error_code failed;
-	std::filesystem::rename(temp, path, failed);
+	std::filesystem::rename(std::filesystem::u8path(temp), std::filesystem::u8path(path), failed);
 	if (failed) {
 		error = "cannot replace " + path;
-		std::remove(temp.c_str());
+		std::filesystem::remove(std::filesystem::u8path(temp), failed);
 		return false;
 	}
 	return true;
 }
 
 bool readFile(const std::string& path, std::string& text) {
-	std::ifstream in(path, std::ios::binary);
+	std::ifstream in(std::filesystem::u8path(path), std::ios::binary);
 	if (!in) {
 		return false;
 	}
@@ -1032,7 +1032,7 @@ bool readFile(const std::string& path, std::string& text) {
 SaveStore::SaveStore(std::string directory, int manualSlots, int autosaveSlots)
 	: directory_(std::move(directory)), manualSlots_(manualSlots), autosaveSlots_(autosaveSlots) {
 	std::error_code ignored;
-	std::filesystem::create_directories(directory_, ignored);
+	std::filesystem::create_directories(std::filesystem::u8path(directory_), ignored);
 }
 
 std::string SaveStore::path(const std::string& slot) const {

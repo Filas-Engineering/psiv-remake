@@ -1,7 +1,8 @@
 # The board by the inn: a scene that brings two party members in before they are in the lineup, then adds them, so
 # the party is full. Both are drawn with their own sprites throughout, never as a label; when the scene ends they
-# walk back to the last two places in the line, never over the leader, and the line then trails all four followers. With --window, the
-# shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing for them.
+# walk back to the last two places in the line, never over the leader, and the line then trails all four followers.
+# The peddler, an actor on the reed path, waves from there and is never drawn. With --window, the shot lines save
+# screenshots under build/shots/ (run from bindings/); headless runs write nothing for them.
 
 expect screen Title
 press Enter
@@ -22,9 +23,13 @@ wait 2
 expect screen Dialogue
 shot build/shots/full_1_board.png
 press Enter
+# The peddler's wave comes first; it stands on the reed path, so nothing of it is drawn here, not even a label.
+wait 2
+expect actor peddler hidden
+expect label none
 # The engineer, not in the lineup, has no place until the scene's first move puts it at the east gate; the second
 # walks it along the row to the cell below the leader.
-wait 60
+wait 58
 expect actor engineer walking
 expect actor scout hidden
 expect label none
@@ -42,6 +47,7 @@ press Enter
 # nods.
 wait 2
 expect actor scout 2 2 south
+expect actor peddler hidden
 expect label none
 wait 20
 expect pose scout nod marked

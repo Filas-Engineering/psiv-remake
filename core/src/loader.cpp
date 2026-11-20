@@ -7,6 +7,7 @@
 #include "rules/text.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <set>
 #include <sstream>
@@ -1180,7 +1181,7 @@ Result<Database> loadDatabaseFromDirectory(const std::string& directory) {
 	std::map<std::string, std::string> files;
 	for (const std::string& name : kFiles) {
 		const std::string path = directory + "/" + name;
-		std::ifstream in(path, std::ios::binary);
+		std::ifstream in(std::filesystem::u8path(path), std::ios::binary);
 		if (!in) {
 			Problem problem{path, 0, "", {"load.cannot_open", {}}};
 			return Result<Database>::failure({problem}, formatProblem(problem, problemText()));

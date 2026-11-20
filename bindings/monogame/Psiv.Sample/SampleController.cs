@@ -67,6 +67,8 @@ public sealed class SampleController
 
 	private readonly GameSession _s;
 	private readonly Action<string> _log;
+	// Every script actor, wherever it stands, to tell one outside the party's area from a party member.
+	private readonly HashSet<string> _actorIds;
 	private readonly FieldRenderer _field = new();
 	private Art? _art;
 	// Milliseconds of frame time seen, for animations; advances only with the frame times Update gets.
@@ -86,6 +88,7 @@ public sealed class SampleController
 	{
 		_s = session;
 		_log = log ?? (_ => { });
+		_actorIds = [.. session.ActorIds()];
 	}
 
 	public bool QuitRequested { get; private set; }
@@ -201,8 +204,17 @@ public sealed class SampleController
 		}
 		_log("action: " + a.Description + (a.Instant ? " (instant)" : ""));
 		bool actor = view?.Actors.Any(x => x.Id == a.Subject) ?? false;
-		// The script actors in the party's area are all in the view, so any other subject is a party member, in the
-		// lineup or not. One outside it that a turn or pose finds without a cell steps up next to the leader first.
+		// An actor outside the party's area has nothing here to show, so its action is done at once.
+		if (!actor && _actorIds.Contains(a.Subject))
+		{
+			if (!a.Instant)
+			{
+				_s.FinishAction(a.Handle);
+			}
+			return;
+		}
+		// Any other subject is a party member, in the lineup or not. One outside it that a turn or pose finds without a
+		// cell steps up next to the leader first.
 		bool member = !actor && a.Subject.Length > 0;
 		if (member && view is not null && a.Type is ActionType.Face or ActionType.Animate)
 		{

@@ -18,12 +18,12 @@ Planning documents, engine-neutral C++17 libraries and tooling for a 3D remake o
 | `docs/research/original-battle-rules.md` | The original's battle rules as read from the disassembly: AI, targeting, combinations, rewards, statuses, end conditions, vehicles |
 | `core/` | Battle rules library (`librules.a`), placeholder data, `battle_cli`, 179 tests |
 | `events/` | Event script format, compiler and resumable interpreter, `event_cli`, 92 tests |
-| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles. `game_cli` (play, bot, `--check` for data), 79 tests |
+| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles. `game_cli` (play, bot, `--check` for data), 80 tests |
 | `tools/text/` | Line database, glossary, rename review and localization export (Python, 98 tests) |
 | `tools/maps/` | Tiled maps to area files and back (Python, 46 tests) |
 | `acceptance/` | The spec's automatable checks, run against the libraries. `report.md` maps every requirement to a status |
 | `bindings/` | C API over the session, C# wrapper, MonoGame sample |
-| `tools/linux-check.sh`, `tools/windows-check.sh` | Platform checks in Docker |
+| `tools/linux-check.sh`, `tools/windows-check.sh` | Platform checks in Docker; `tools/check_png.py` checks the Linux window screenshot |
 
 Each library has a README that documents its data formats, API and rules. Start with `core/README.md`.
 
@@ -35,8 +35,8 @@ Needs a C++17 compiler, GNU Make and Python 3. The .NET SDK is optional and expe
 make test          # core, events, game, text and map tooling
 make acceptance    # spec checks and report
 make bindings      # C tests, C# tests, MonoGame sample headless runs
-make linux-check   # all three in Docker with gcc and clang
-tools/windows-check.sh   # unit tests cross-compiled for Windows, run under Wine
+make linux-check   # all three in Docker with gcc and clang, then the sample's window under Xvfb
+tools/windows-check.sh   # unit tests, the C library and its tests cross-compiled for Windows, run under Wine
 ```
 
 Other compilers: `make CXX=g++ CC=gcc test`. Flags are `-std=c++17 -Wall -Wextra -Werror`, standard library only.
@@ -59,21 +59,21 @@ Bringing in real data: [`data-import.md`](data-import.md).
 | --- | --- |
 | core | 179 tests pass |
 | events | 92 tests pass |
-| game | 79 tests pass, data check passes, area files match their Tiled sources, scripted playthrough matches its expected transcript, bot finishes both encounter modes on the main route and the kiln route |
+| game | 80 tests pass, data check passes, area files match their Tiled sources, scripted playthrough matches its expected transcript, bot finishes both encounter modes on the main route and the kiln route |
 | text tooling | 98 tests pass |
 | map tooling | 46 tests pass |
 | acceptance | PASS 26, FAIL 0, NOT IMPLEMENTED 12, NOT AUTOMATABLE 26 |
-| C API | 712 checks pass |
+| C API | 726 checks pass |
 | C# | 13 tests pass |
 | MonoGame sample | four headless runs (smoke 2000 frames, large areas 1600, scripted actors and the tide chart scene 1300, the board scene with a full party 1100), 0 failures |
 
-Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch64 and Linux x86-64 (GCC 13.3 and clang 18.1, Ubuntu 24.04 in Docker). Windows: the core, events and game unit tests pass when cross-compiled with MinGW-w64 (GCC 14) and run under Wine 10 (`tools/windows-check.sh`). That check does not cover MSVC, the acceptance suites or the bindings.
+Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch64 and Linux x86-64 (GCC 13.3 and clang 18.1, Ubuntu 24.04 in Docker). The Linux check also runs the sample's window on a virtual display (Xvfb, Mesa llvmpipe) through `scripts/smoke.txt` and checks its screenshot. Windows, cross-compiled with MinGW-w64 (GCC 14) and run under Wine 10 (`tools/windows-check.sh`): the core, events and game unit tests, the C API as a DLL with its 726 checks, and the C playthrough against `game_cli.exe` and the golden transcript, saves included. That check does not cover MSVC, the acceptance suites, the C# wrapper or the sample.
 
 ## Versions
 
 * Rules version 9 and event schema 6 (`core/include/rules/version.h`). Bump the rules version whenever a rule, a formula or the order of random draws changes. `replayBattle` refuses records from another rules version or event schema.
 * Battle record format 5. `parseRecord` still reads 3 and 4.
-* C API `PSIV_ABI_VERSION` 4.
+* C API `PSIV_ABI_VERSION` 5 (library version 0.4.0).
 * Save schema 3 (`PSR-SAVE 3`). Schemas 1 and 2 migrate when they load.
 * Everything is deterministic from the seed: the same setup, data and commands give the same event stream on every platform and optimization level. ACC-BAT-15 checks this.
 
@@ -138,9 +138,9 @@ The scripted playthrough needs the first battle lost twice and then won. After a
 
 **Measurements.** Per-action presentation times (BAT-102), encounter pacing baselines (ENC-036), walk speeds and step distance (FLD-022, ENC-041).
 
-**Engine.** Nothing is integrated with Unreal yet. The contract is the event stream (`core/README.md`, "Events") and the C API in `bindings/c`. The MonoGame sample shows the full loop with generated pictures and text, script actors included, and plays party members' scripted moves and turns and every `anim` as procedural poses. Where a scene puts party members is presentation by design (the game keeps only the leader's cell); an engine follows those actions itself, as the sample does (`bindings/README.md`, "The sample").
+**Engine.** Nothing is integrated with Unreal yet. The contract is the event stream (`core/README.md`, "Events") and the C API in `bindings/c`. The MonoGame sample shows the full loop with generated pictures and text, script actors included, and plays party members' scripted moves and turns and every `anim` as procedural poses. Where a scene puts party members is presentation by design (the game keeps only the leader's cell); an engine follows those actions itself, as the sample does (`bindings/README.md`, "The sample"), and draws nothing for an action of an actor outside the party's area (in `psiv_actor_ids`, not in `psiv_field_actors`).
 
-**Platforms.** MSVC has not been tried, and the acceptance suites and bindings have not run on Windows. The MonoGame sample's window has only run on macOS.
+**Platforms.** MSVC has not been tried. On Windows the acceptance suites, the C# wrapper and the MonoGame sample have not run (the C library and its tests have, under Wine). The sample's window has run on macOS and under Xvfb with software rendering on Linux, not in a real Linux desktop session.
 
 ## Working conventions
 

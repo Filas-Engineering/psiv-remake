@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 4
+#define PSIV_ABI_VERSION 5
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -418,6 +418,10 @@ PSIV_API psiv_status psiv_field_points(psiv_session* session, const psiv_point**
  * the talk point named after it, visible and facing south. Scripts move, turn, show and hide actors in the party's
  * area; an actor keeps its place when the party leaves, and its state is saved, mid-event saves included. */
 PSIV_API psiv_status psiv_field_actors(psiv_session* session, const psiv_actor** out, int32_t* count);
+/* Every actor id in game.json order, wherever the actor stands. A script subject that is one of these but not in
+ * psiv_field_actors is an actor outside the party's area, which a front end does not draw; any other subject is a
+ * character. Works at the title too. */
+PSIV_API psiv_status psiv_actor_ids(psiv_session* session, const char* const** out, int32_t* count);
 
 /* ------------------------------------------------------------------------------------------------------ */
 /* Events                                                                                                 */
