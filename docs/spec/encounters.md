@@ -35,7 +35,7 @@ How battles start in the field: visible enemies, the random-battle fallback, bat
 |---|---|---|---|
 | ENC-020 | Visible mode: if the leader touches an enemy from inside the rear 90-degree arc of that enemy's facing while it is not chasing, the opening is Party first | Proposed (spec) | S-SYS-ENC |
 | ENC-021 | Visible mode: if a chasing enemy touches the leader from inside the rear 90-degree arc of the leader's facing, the opening is Enemy first. Every other contact is Normal | Proposed (spec) | S-SYS-ENC |
-| ENC-022 | Random mode: the opening is drawn with the original's probabilities from ENC-024 | Proposed (spec) | S-GOALS |
+| ENC-022 | Random mode: the opening is drawn with the original's probabilities from ENC-024. The community disassembly shows the original's rule ([published-mechanics.md](../research/published-mechanics.md)): a chance score of the party's highest agility against a number stored with each enemy formation, Enemy first at 12 or below and Party first above 116. Until the formation numbers are known, `game/` draws from per-zone percentages in data | Proposed (spec) | S-GOALS |
 | ENC-023 | Across a full playthrough, the share of Party first and Enemy first openings in visible mode is within 5 percentage points of the original's shares | Proposed (spec) | S-GOALS |
 | ENC-024 | To measure: whether the original has preemptive or ambush openings, their probabilities, what affects them, and their exact effect on the first round. Method: rights holder data; cross-check over the encounters recorded for ENC-005. Feeds ENC-020 to ENC-023 and BAT-004 | To measure | S-GOALS |
 
