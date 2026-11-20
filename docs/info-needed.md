@@ -12,11 +12,11 @@ Deliver answers to `source-material/`, which git ignores. Nothing extracted from
 
 ## Published sources
 
-[research/published-mechanics.md](research/published-mechanics.md) lists what fan sources have already published for each of the 42 items, with links and a confidence rating. It is unconfirmed community work: use it to plan and to cross-check, not as the answer.
+[research/published-mechanics.md](research/published-mechanics.md) lists what fan sources have already published for each of the 40 items, and for turn order (BAT-033) and macros (BAT-057), which were measured from the disassembly and are no longer on this list, with links and a confidence rating. It is unconfirmed community work: use it to plan and to cross-check, not as the answer.
 
 | Confidence | Items |
 |---|---|
-| High (10) | BAT-033, BAT-043, BAT-057, ENC-024, ENC-035, SAV-004, SAV-032, SAV-038, FLD-052, FLOW-012 |
+| High (8) | BAT-043, ENC-024, ENC-035, SAV-004, SAV-032, SAV-038, FLD-052, FLOW-012 |
 | Medium (9) | BAT-023, BAT-046, BAT-063, BAT-082, ENC-005, FLD-035, FLD-062, TXT-026, UI-016 |
 | Low (10) | BAT-014, BAT-016, BAT-072, BAT-093, BAT-105, BAT-141, SAV-035, SAV-036, FLD-074, FLOW-041 |
 | Nothing published (12) | BAT-005, BAT-102, ENC-036, ENC-041, FLD-022, FLD-041, FLD-043, FLOW-006, FLOW-033, EVT-007, EVT-061, TXT-006 |
@@ -53,13 +53,11 @@ One record per message for all dialogue and system text: tree ID, message index,
 | [BAT-014](spec/battle.md) | Which party states count toward Defeat in the original (HP zero only, or also statuses that prevent acting), and whether enemy group defeat ignores enemies that cannot act | Rights holder data; cross-check by applying each disabling status to the whole party in the reference build | BAT-013 |
 | [BAT-016](spec/battle.md) | When status effects tick and durations count down in the original (round end, or the affected combatant's own action), and what happens to an action whose target fell earlier in the round | Rights holder data; cross-check in the reference build by targeting an enemy that a faster ally defeats first | BAT-010, BAT-015 and BAT-071 |
 | [BAT-023](spec/battle.md) | The original's full battle command set per party member, what each does, and whether item use and equipment-granted abilities are separate commands | Rights holder data and a reference build session | BAT-020 |
-| [BAT-033](spec/battle.md) | The original's initiative formula, including the size and shape of the random factor and any modifiers from statuses or equipment, and whether the order is shown | Rights holder formulas; cross-check by logging the order of at least 500 rounds with known agility values in the reference build and fitting the distribution | BAT-030 to BAT-032 |
 | [BAT-043](spec/battle.md) | Every battle formula (damage, healing, hit, evasion, critical, resistance, status success), per-ability numbers, and per-enemy stats | Rights holder data. Cross-check 20 samples per formula against the reference build by recording damage numbers | BAT-042 |
 | [BAT-046](spec/battle.md) | Which technique misbehaves in the original, how, and its intended behavior | Get the community bug fix change list in phase 0 (S-FAN-DEFECTS), then confirm intent against the rights holder's Japanese data | BAT-045 |
 | [BAT-072](spec/battle.md) | The original's targeting modes per ability and its retarget behavior | Rights holder data; cross-check in the reference build | BAT-070 and BAT-071 |
 | [BAT-082](spec/battle.md) | The original's full status list and each status's duration, persistence after battle, tick effect, cures and action rule | Rights holder data; cross-check by inflicting each status in the reference build | BAT-081 |
 | [BAT-093](spec/battle.md) | Each enemy's action selection in the original: which abilities, how often, under what conditions, and how it picks targets | Rights holder data; cross-check by observing at least 50 rounds for each of 15 sampled enemies including every boss in the vertical slice | BAT-092 |
-| [BAT-057](spec/battle.md) | How the original exposes macros: slot count, name rules, menu depth, what a macro can contain, and whether it guarantees that party actions run back to back with no enemy action between them | Rights holder data and a reference build session, including 50 rounds that use a macro against fast enemies | BAT-052 and BAT-055 |
 | [BAT-063](spec/battle.md) | The original's combination trigger rules: whether order matters, whether enemy actions or cancelled actions break it, whether components' own effects also apply, whether it can span rounds, and how costs are paid | Rights holder data; cross-check by attempting each of the 15 combinations with and without an enemy acting between components in the reference build | BAT-061 and BAT-062 |
 | [BAT-102](spec/battle.md) | Per-action presentation time in the reference build for basic attacks, techniques, enemy actions and each combination, plus whole-battle time for normal encounters in five areas | Frame counting on captures, at least 20 samples per kind | BAT-101 |
 | [BAT-105](spec/battle.md) | Whether the original has any repeat or automatic battle command, and its rules | Rights holder data and a reference build session | BAT-103 and BAT-104 |

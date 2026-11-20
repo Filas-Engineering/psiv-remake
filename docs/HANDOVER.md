@@ -12,7 +12,7 @@ Planning documents, engine-neutral C++17 libraries and tooling for a 3D remake o
 | --- | --- |
 | `docs/scope.md` | What the remake is, phases, open questions |
 | `docs/spec/` | 300 numbered requirements per system (`BAT-`, `ENC-`, `FLD-`, `SAV-`, `EVT-`, `TXT-`, `UI-`, `FLOW-`) |
-| `docs/info-needed.md` | The 42 facts about the original still to confirm, and the data tables to deliver |
+| `docs/info-needed.md` | The 40 facts about the original still to confirm, and the data tables to deliver |
 | `docs/research/published-mechanics.md` | What is known about each of those facts, with sources and confidence |
 | `docs/research/original-battle-rules.md` | The original's battle rules as read from the disassembly: AI, targeting, combinations, rewards, statuses, end conditions, vehicles |
 | `core/` | Battle rules library (`librules.a`), placeholder data, `battle_cli`, 179 tests |
@@ -55,7 +55,7 @@ cd game && ./build/game_cli --bot --seed 2
 | events | 92 tests pass |
 | game | 70 tests pass, scripted playthrough matches its expected transcript, bot finishes both encounter modes |
 | text tooling | 98 tests pass |
-| acceptance | PASS 24, FAIL 0, NOT IMPLEMENTED 14, NOT AUTOMATABLE 26 |
+| acceptance | PASS 26, FAIL 0, NOT IMPLEMENTED 12, NOT AUTOMATABLE 26 |
 | C API | 641 checks pass |
 | C# | 13 tests pass |
 | MonoGame sample | headless run, 2000 frames, 0 failures |
@@ -120,10 +120,10 @@ The scripted playthrough needs the first battle lost twice and then won. After a
 
 **Content.** The libraries are built to take the real game as data: abilities, enemies, encounters, statuses, items, equipment, areas, events and text. None of it is loaded yet. The scope counts 128 event hooks, 211 chests and 50 shops against the placeholder's 10, 3 and 2. `docs/info-needed.md` lists every table to deliver and its format.
 
-**Facts still to confirm.** Of the 42 "to measure" items: 10 are known with high confidence, 9 medium, 10 low, 12 unknown, 1 split. The tally and the per-item notes are in `docs/info-needed.md` and `docs/research/published-mechanics.md`.
+**Facts still to confirm.** Of the 40 "to measure" items: 8 are known with high confidence, 9 medium, 10 low, 12 unknown, 1 split. The tally and the per-item notes are in `docs/info-needed.md` and `docs/research/published-mechanics.md`.
 
 **Acceptance checks.**
-* 14 are NOT IMPLEMENTED because their baseline fact is still marked "to measure". Five of them (ACC-BAT-05 turn order, ACC-BAT-06 formulas, ACC-BAT-09 enemy AI, ACC-BAT-10 macros, ACC-ENC-04 escape) already check the disassembly-read rule; flipping them to PASS is a decision about whether the disassembly counts as the baseline, and ACC-BAT-09 also needs the real enemy data.
+* 12 are NOT IMPLEMENTED because their baseline fact is still marked "to measure". Turn order and macros (ACC-BAT-05, ACC-BAT-10) pass: their baselines were measured from the disassembly. ACC-BAT-06 (formulas), ACC-BAT-09 (enemy AI) and ACC-ENC-04 (escape) check the disassembly-read rule too, but stay open because they also depend on per-ability, per-enemy and per-encounter numbers.
 * 26 are NOT AUTOMATABLE here: they need the renderer, captures or playtests.
 
 **Rules read but not built.** The original's AI conditions on particular enemy kinds, spawning beside an enemy and an ambush reaction; vehicle skill uses carried between battles; android recovery and the experience of characters outside the party (see `docs/research/original-battle-rules.md`).

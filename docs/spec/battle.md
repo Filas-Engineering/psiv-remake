@@ -42,7 +42,7 @@ The scope says battle is the largest systems task and the original's battle logi
 | BAT-030 | After commands are locked, each combatant that can act gets an initiative: its battle agility plus a random whole number from 0 to just under half the highest battle agility among them, drawn from the battle seed. A combatant with 0 agility gets no random part. Actions execute in descending initiative. Ties go to the party side, then to the lower combatant index. Read from the community disassembly ([published-mechanics.md](../research/published-mechanics.md)); BAT-033 confirms it against the reference build | Proposed (spec) | L-CORE |
 | BAT-031 | Initiative is computed once per round. Agility changes during a round take effect next round | Proposed (spec) | L-CORE |
 | BAT-032 | The execution order is not shown to the player before execution | Proposed (spec) | S-GOALS |
-| BAT-033 | To measure: the original's initiative formula, including the size and shape of the random factor and any modifiers from statuses or equipment, and whether the order is shown. Method: rights holder formulas; cross-check by logging the order of at least 500 rounds with known agility values in the reference build and fitting the distribution. Feeds BAT-030 to BAT-032 | To measure | S-ENGINE |
+| BAT-033 | Measured from the community disassembly ([published-mechanics.md](../research/published-mechanics.md)): the original's initiative is battle agility plus a random whole number from 0 to just under half the highest battle agility, with no roll at 0 agility, ties to the party and then the lower slot, and fallen, paralyzed and sleeping combatants left out. No order display was found. To be confirmed against the rights holder's data when it arrives. Feeds BAT-030 to BAT-032 | Proposed (spec) | S-ENGINE |
 
 ## Abilities
 
@@ -97,7 +97,7 @@ The scope makes macros a first-class feature (S-PILLAR-1) but does not define ho
 | BAT-054 | Macros store no single-target choice. Each round a single-enemy action is retargeted by BAT-071; a heal goes to the member missing the most hit points, a cure to the first member it would cure (else the actor), and a revive to the first defeated member, as in the original ([original-battle-rules.md](../research/original-battle-rules.md)) | Proposed (spec) | L-CORE |
 | BAT-055 | The number of macro slots is at least the original's (BAT-057) and at least 8 | Proposed (spec) | S-PILLAR-1 |
 | BAT-056 | After any round, the player can save that round's commands as a new macro from the battle menu | Proposed (spec) | S-PILLAR-1 |
-| BAT-057 | To measure: how the original exposes macros: slot count, name rules, menu depth, what a macro can contain, and whether it guarantees that party actions run back to back with no enemy action between them. Method: rights holder data and a reference build session, including 50 rounds that use a macro against fast enemies. Feeds BAT-052 and BAT-055 | To measure | S-PILLAR-1 |
+| BAT-057 | Measured from published sources and the community disassembly ([published-mechanics.md](../research/published-mechanics.md)): the original has eight macros, set up outside battle, each a fixed set of actions for the whole party. A macro does not guarantee back-to-back party actions: it only delays a member who would act before the member listed ahead of it, and there is no reordering in vehicle battles. To be confirmed against the rights holder's data when it arrives. Feeds BAT-052 and BAT-055 | Proposed (spec) | S-PILLAR-1 |
 
 ## Combination attacks and the combo log
 

@@ -58,12 +58,12 @@ Testable checks for each system. Each check names the requirements it verifies a
 | ACC-BAT-02 | Round phase order: a test ability set logs each phase; events appear in the BAT-010 order, and end conditions are checked after each action | BAT-010, BAT-013 | core (baseline BAT-014, BAT-016) |
 | ACC-BAT-03 | AI isolation: run the same round with two different party command sets; enemy commands are identical | BAT-011 | core |
 | ACC-BAT-04 | Execution-time validation: target falls before the action, cost drained before the action, actor disabled before the action; each produces the specified retarget or cancel event | BAT-015, BAT-071 | core (baseline BAT-016, BAT-072) |
-| ACC-BAT-05 | Order: over 100,000 seeded rounds, the order distribution matches the measured formula; ties resolve per BAT-030; an agility change mid-round does not reorder | BAT-030, BAT-031 | core (baseline BAT-033) |
+| ACC-BAT-05 | Order: over 100,000 seeded rounds, the order distribution matches the measured formula; ties resolve per BAT-030; an agility change mid-round does not reorder | BAT-030, BAT-031 | core |
 | ACC-BAT-06 | Formula samples: each measured sample from BAT-043 reproduces exactly at Original difficulty | BAT-042 | core (baseline BAT-043) |
 | ACC-BAT-07 | Status table tests: each status applies, ticks, blocks or forces commands, and cures per its data | BAT-081 | core (baseline BAT-082) |
 | ACC-BAT-08 | Every status application, resistance and removal emits an event with a message key that exists in the string table | BAT-083 | core |
 | ACC-BAT-09 | AI: for each sampled enemy, 10,000 seeded rounds give action frequencies within 2 percentage points of the measured ones | BAT-090, BAT-092 | core (baseline BAT-093) |
-| ACC-BAT-10 | Macro fill and order: a macro fills the round; party actions run in macro order; enemy positions match a run without the macro; absent and unaffordable entries skip or cancel as specified | BAT-051 to BAT-054 | core (baseline BAT-057) |
+| ACC-BAT-10 | Macro fill and order: a macro fills the round; party actions run in macro order; enemy positions match a run without the macro; absent and unaffordable entries skip or cancel as specified | BAT-051 to BAT-054 | core |
 | ACC-BAT-11 | Combination: each of the 15 definitions triggers when components run back to back; inserting an enemy action or a cancelled action between them prevents it; component effects are replaced; costs are paid | BAT-060 to BAT-062 | core (baseline BAT-063) |
 | ACC-BAT-12 | Combo log: first trigger adds an entry and emits ComboDiscovered; a second trigger does not; auto-battle triggers count | BAT-064 | core |
 | ACC-BAT-13 | Event sourcing: for 1,000 seeded random battles, applying the event stream to the start snapshot equals the end state | BAT-110, BAT-111, BAT-115 | core |
