@@ -7,8 +7,9 @@ A headless game session library that joins the battle rules (`../core`, namespac
 | Path | Contents |
 | --- | --- |
 | `include/game/world.h` | `World`: flags, variables, roster and lineup, chosen names, items, equipment bag, money, macros, combo log, area and position, visible enemies, encounter stream, job states, encyclopedia unlocks, play time, per-save settings |
-| `include/game/area.h` | `Area` data (grid, markers, exits, hooks, shops, rest points, chests, encounter zones) and its JSON reader |
+| `include/game/area.h` | `Area` data (grid, markers, exits, hooks, shops, rest points, chests, encounter zones, and the file and line each came from) and its JSON reader |
 | `include/game/data.h` | `GameConfig` (`game.json`), `Journal` (`journal.json`), `LanguageTables`, `DataDirectories` and `loadGameData`, which loads everything, builds the script registry and the list of string IDs the game shows itself, compiles the scripts against them and checks every cross-reference; `problemText()`, the English template of every load problem key |
+| `include/game/check.h` | `checkData` and `crossCheck`: the data check behind `game_cli --check` (see [Checking data](#checking-data)) |
 | `include/game/modes.h` | `Mode` and `ModeMachine`: the transition table of `docs/spec/game-flow.md` |
 | `include/game/encounters.h` | Visible enemies (spawn, detection, chase, leash, contact openings) and the random-battle counter |
 | `include/game/save.h` | The chunked save format, migrations, the clear-data record, atomic writes and `SaveStore` (manual and rotating autosave slots) |
@@ -18,8 +19,8 @@ A headless game session library that joins the battle rules (`../core`, namespac
 | `include/game/runner.h` | The terminal command language shared by `game_cli` and the pacing bot |
 | `src/` | Library sources, built into `build/libgame.a` |
 | `cli/game_cli.cpp` | Terminal front end, scripted runs and the pacing bot |
-| `tests/` | One test executable with a minimal assert helper (`tests/test.h`); `tests/expected/playthrough.txt` is the golden transcript |
-| `data/` | The placeholder adventure: `game.json`, `journal.json`, `areas/`, `events/`, per language `text/<code>.strings` (dialogue, speaker names, journal text) and `text/<code>.json` (the game's own text) for `en` and the placeholder `ja`, `text/glossary.txt`, `text/glyphs_<code>.txt` (placeholder font glyph lists for `tools/text glyphs`), `scripts/playthrough.txt`, `routes/main.route` |
+| `tests/` | One test executable with a minimal assert helper (`tests/test.h`); `tests/expected/playthrough.txt` is the golden transcript; `tests/fixtures/check/` holds broken areas for the data check's tests |
+| `data/` | The placeholder adventure: `game.json`, `journal.json`, `areas/`, `events/`, per language `text/<code>.strings` (dialogue, speaker names, journal text) and `text/<code>.json` (the game's own text) for `en` and the placeholder `ja`, `text/glossary.txt`, `text/glyphs_<code>.txt` (placeholder font glyph lists for `tools/text glyphs`), `scripts/playthrough.txt`, `routes/main.route` and `routes/kiln.route`, and `maps/` (Tiled sources of the areas drawn there, with the cell tileset `cells.tsj` and its image) |
 
 Battle data (characters, enemies, encounters, items, equipment, vehicles) and core's English text table are read from `../core/data` through `core_data` in `game.json`, or from the directory `DataDirectories::core` (`game_cli --core DIR`) names; the adventure adds no battle content of its own.
 
@@ -27,8 +28,11 @@ Battle data (characters, enemies, encounters, items, equipment, vehicles) and co
 
 ```
 make          # builds ../core and ../events libraries if needed, then build/libgame.a (with -fPIC), build/game_cli, build/game_tests
-make test     # unit tests, event_cli check --strict on the scripts with the registry, the game's string IDs and both languages, the scripted
-              # playthrough compared byte for byte with tests/expected/playthrough.txt, then the bot
+make test     # area files against their Tiled sources, the data check, unit tests, event_cli check --strict on the scripts with the
+              # registry, the game's string IDs and both languages, the scripted playthrough compared byte for byte with
+              # tests/expected/playthrough.txt, then the bot on the main route and on the kiln route
+make maps     # regenerates data/areas/NAME.json from each data/maps/NAME.tmj (../tools/maps/tiled_to_area.py)
+make expected # re-records tests/expected/playthrough.txt after a deliberate change
 make clean
 ```
 
@@ -40,11 +44,13 @@ Run tests from `game/`, because they load `data/`. One test by name: `./build/ga
 ./build/game_cli --seed 6 --auto-battle --script data/scripts/playthrough.txt --saves build/cli_saves
 ./build/game_cli --bot --seed 2                     # pacing tables for visible and random encounters
 ./build/game_cli --bot --seed 2 --encounters random --route data/routes/main.route
+./build/game_cli --bot --seed 2 --route data/routes/kiln.route --goal saltgrass.kiln_done   # finished when that flag is set, not the bosses
+./build/game_cli --check data                       # load the data, print every problem with file and line, and what loaded
 ./build/game_cli --registry                         # the registry built from the data, in the events registry format
 ./build/game_cli --used                             # the string IDs the game shows itself, for event_cli --used
 ```
 
-A scripted run writes autosaves, the profile and the clear-data record, so start it with an empty `--saves` directory to get the same transcript (`make test` does). Exit codes: 0 done, 1 data error, 2 bad arguments, 3 a scripted command failed or the bot did not finish.
+A scripted run writes autosaves, the profile and the clear-data record, so start it with an empty `--saves` directory to get the same transcript (`make test` does). Exit codes: 0 done, 1 data error (with `--check`: any problem), 2 bad arguments, 3 a scripted command failed or the bot did not finish.
 
 Commands (one per line; `#` starts a comment):
 
@@ -57,6 +63,12 @@ Commands (one per line; `#` starts a comment):
 | Menu | `item ITEM [MEMBER]`, `tech USER ABILITY [MEMBER]`, `equip MEMBER PIECE`, `unequip MEMBER SLOT`, `save manual_N` (field menu or save prompt), `saves`, `close`; name entry: `name TEXT` |
 | Shop, inn | `buy ID [N]`, `sell ID [N]`, `leave`; `rest`, `close` |
 | Any | `set difficulty\|reward\|auto VALUE` (per save), `set text\|battle\|shipped VALUE` or `set PROFILE_KEY VALUE` (profile; `set text_language ja` switches the language), `quests`, `codex`, `log`, `pacing`, `title` |
+
+## Checking data
+
+`game_cli --check DIR [--core DIR]` (`checkData` in `check.h`) loads a data directory the way the game does, with `loadGameDataPartly`, which keeps whatever loaded and goes on reading the game's own files when the battle data has problems. It prints every problem as `file:line: text` (a path you can open; line 0 or none when the problem is about a whole file or a table key), then counts of what loaded (core: statuses, abilities, items, equipment, characters, vehicles, enemies, encounters, combos, difficulties, macros, text keys; game: areas, markers, exits, hooks, shops, rest points, chests, zones, scripts, events, flags, variables, actors, prices and journal entries; per language: game text keys and dialogue strings), and exits 1 on any problem. When problems stop the load before the scripts are compiled, it says which checks did not run.
+
+On top of the loader's own checks, `crossCheck` reports: two solid things (interact hooks, shops, rest points, chests) on one cell; a marker, exit, step hook or spawn point on a solid cell; a hook id or zone id used twice in an area, or a chest id used in two areas; a zone with `from` past `to`, reaching off the map, or overlapping another; a shop with nothing in stock; exits, markers, step hooks and solid things the party cannot walk to (or stand beside) from any marker an exit, a script warp or the start leads to, walking only on floor and never through another exit; an area nothing leads into, or one the start area cannot reach through exits (a script warp's target counts as reached). When the loader did not get as far as its references, `crossCheck` also checks exit targets and every language's `area.<id>`. Area problems from the loader's own reference check also carry the area file and line. [`docs/data-import.md`](../docs/data-import.md) is the guide for a team converting its own data.
 
 ## How an engine drives a frame
 
@@ -132,6 +144,7 @@ Presentation-only script actions (moves, cameras, panels, audio, fades) go to th
 ```
 
 * The display name is the text key `area.<id>`, in every language.
+* Areas can be drawn in Tiled: `data/maps/NAME.tmj` is the source of `data/areas/NAME.json`, regenerated with `make maps` (mapping: [`tools/maps/README.md`](../tools/maps/README.md)). `make test` fails when a generated file is stale. Edit the `.tmj`, not the generated file.
 * Map rows: `.` floor, `#` wall (blocks sight), `~` water. Cells are `[x, y]` from the top left.
 * `kind`: `town` (no random battles), `field` or `dungeon` (M6 runs from entry to the boss's end).
 * `encounter_mode` (ENC-002): `visible` or `random`; `SessionOptions::encounterMode` overrides it for every area, which is how the bot compares the two.
@@ -218,8 +231,13 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * The placeholder adventure has a fight in the ferry hold (`tidewater_hold`, no `lose` section, so the fighter alone loses it, and Retry sets it up again), a name entry for the fighter in the guide's scene, portraits on the guide's, the scout's and the mystic's first lines, a battle aboard the reed skimmer (`reed_path_skimmer`), and a save prompt after the campfire rest. The scripted playthrough and the bot route walk them; `tests/expected/playthrough.txt` is re-recorded.
 * Builds against core rules version 9 (enemy action and target choice, retargeting, combinations, experience, drops, statuses, stat changes and vehicle battles follow the original). The terminal no longer prints status ticks or expiring stat changes, which core no longer has. Experience is now split among the members not defeated, level-ups no longer heal, poison no longer hurts in battle and no longer runs out, and a drop comes from the encounter; `tests/expected/playthrough.txt` is re-recorded. The playthrough seed (6) and the bot seed (2) are unchanged.
 
+* Data import: `game_cli --check` and `check.h` (see [Checking data](#checking-data)); `loadGameDataPartly`; area entries remember their file and line, and the loader's reference problems for areas name them; an exit to an area that does not exist has its own message (`data.exit_leads_unknown_area`).
+* The bot takes a goal flag (`runBot(..., goalFlag)`, `game_cli --bot --goal FLAG`).
+* The placeholder adventure has three areas drawn in Tiled (`data/maps/`): Saltgrass Market, a 48 by 36 canal town up a cliff stair from Bell Cove's new north exit, with a general store, a smithy, an inn, two chests and three people to talk to; and the Drowned Kiln, two 40 by 40 floors with encounter zones (visible above, random below), four chests and the kilnwright's errand (`events/saltgrass.ev`, `events/kiln.ev`, dialogue in `en` and `ja`), plus party talk in the market and on the firing floor. `routes/kiln.route` walks it in both encounter modes. The scripted playthrough does not go there, so its transcript and seeds are unchanged.
+
 ### Changes a host must make
 
+* `area.h`: `Exit`, `Hook`, `Shop`, `RestPoint`, `Chest` and `Zone` gain `line`, `Area` gains `file` and `markerLines`; all default to empty, so code that builds areas by hand is unaffected. `runner.h`: `runBot` takes an optional goal flag. `data.h`: new `loadGameDataPartly`. New `check.h`.
 * `Session`: new `line()`, `choiceView()`, `face()`, `beginWalk()`, `walkStep()`, `fillAutoRound()`, `playBattle()`, `endedBattle()`, `dismissBattle()`, `setAutoMacro()`, `pollActions()`, `finishAction()`. Replace any write to `world().facing` with `face()` and to `world().autoMacro` with `setAutoMacro()`; replace a hand-made walk or auto loop with the session's. Read a line from `line()` instead of splitting `lineText()`, and an ask's answers from `choiceView()`.
 * `session.h`: new `LineView`, `ChoiceView`, `Presentation`, `ActionPhase`, `PresentedAction`, `LevelUpView`, `EndedBattle`, `AutoRound`, `AutoBattle`, `WalkStatus`, `PathWalk`, and `toString` for `OutputKind`, `MenuKind` and `BattleSource`. `SessionOptions` adds `presentation` and `onAction`; `presenter` now replaces the session's own queue, and without one actions are recorded for `pollActions()`.
 * `FieldInput`: a held direction now also counts at the next tick if it was released before one passed. A host that sent a direction for one frame expecting nothing to happen will see the leader turn.

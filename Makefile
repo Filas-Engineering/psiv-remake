@@ -10,6 +10,7 @@ test:
 	$(MAKE) -C events $@
 	$(MAKE) -C game $@
 	python3 -I -m unittest discover -s tools/text/tests
+	python3 -I -m unittest discover -s tools/maps/tests
 
 acceptance:
 	$(MAKE) -C acceptance test

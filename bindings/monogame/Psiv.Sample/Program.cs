@@ -17,7 +17,8 @@ public static class Program
 		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N]   headless, no window\n" +
 		"\n" +
 		"Headless script lines: press KEY [COUNT] | hold KEY FRAMES | wait FRAMES | pressuntil KEY SCREEN MAXFRAMES |\n" +
-		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | dump | # comment. Keys are MonoGame Keys names.\n" +
+		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | dump | shot FILE.png (window only) | # comment.\n" +
+		"Keys are MonoGame Keys names.\n" +
 		"Exit codes: 0 done, 1 a failure, 2 bad arguments.\n";
 
 	public static int Main(string[] args)
@@ -130,14 +131,17 @@ public sealed class ScriptPlayer
 	private readonly StringWriter _commandOutput = new();
 	private readonly Func<IReadOnlyList<string>> _frameText;
 	private readonly Func<int> _frame;
+	private readonly Action<string>? _shot;
 	private readonly string _name;
 	private readonly string[] _lines;
 	private int _next;
 	private IEnumerator<Keys[]>? _action;
 	private string? _pendingFailure;
 
-	public ScriptPlayer(GameSession session, SampleController controller, string path, Func<IReadOnlyList<string>> frameText, Func<int> frame)
+	// `shot` saves the next drawn frame to a file; null (headless) skips shot lines.
+	public ScriptPlayer(GameSession session, SampleController controller, string path, Func<IReadOnlyList<string>> frameText, Func<int> frame, Action<string>? shot = null)
 	{
+		_shot = shot;
 		_session = session;
 		_controller = controller;
 		_runner = new ScriptRunner(session, _commandOutput, autoBattle: false);
@@ -173,6 +177,13 @@ public sealed class ScriptPlayer
 		{
 			yield return keys;
 		}
+	}
+
+	// One frame with no keys, so the frame drawn is the one the script reached.
+	private IEnumerable<Keys[]> Shot(string path)
+	{
+		_shot?.Invoke(path);
+		yield return [];
 	}
 
 	private IEnumerable<Keys[]> PressUntil(Keys key, Screen screen, int max, string source)
@@ -241,6 +252,8 @@ public sealed class ScriptPlayer
 					Fail($"{source}: expected mode {w[2]}, in {_session.Mode}");
 				}
 				break;
+			case "shot" when w.Length == 2:
+				return Shot(w[1]).GetEnumerator();
 			case "dump":
 				foreach (string text in _frameText())
 				{
@@ -321,7 +334,7 @@ public static class Headless
 		}
 		WorldInfo world = session.WorldInfo();
 		Console.WriteLine($"headless: {frame} frames, screen {controller.Screen}, mode {session.Mode}, money {world.Money}, play time {world.PlayTimeMs} ms, " +
-			$"{surface.Rects} rects and {surface.Texts} texts drawn, {failures} failures");
+			$"{surface.Rects} rects, {surface.Images} images and {surface.Texts} texts drawn, {failures} failures");
 		return failures == 0 ? 0 : 1;
 	}
 }

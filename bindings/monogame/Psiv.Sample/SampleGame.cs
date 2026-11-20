@@ -21,6 +21,7 @@ public sealed class SampleGame : Game
 	private readonly string? _scriptPath;
 	private readonly string? _screenshot;
 	private ScriptPlayer? _player;
+	private readonly List<string> _shots = [];
 	private int _frame;
 	private SpriteBatch? _batch;
 	private MonoGameSurface? _surface;
@@ -50,7 +51,7 @@ public sealed class SampleGame : Game
 		_surface = new MonoGameSurface(GraphicsDevice, _batch, _fonts);
 		if (_scriptPath is not null)
 		{
-			_player = new ScriptPlayer(_session, _controller, _scriptPath, () => [], () => _frame);
+			_player = new ScriptPlayer(_session, _controller, _scriptPath, () => [], () => _frame, _shots.Add);
 		}
 	}
 
@@ -58,6 +59,12 @@ public sealed class SampleGame : Game
 
 	protected override void Update(GameTime gameTime)
 	{
+		// A requested shot is of the frame the script asked for, so nothing moves until it is drawn.
+		if (_shots.Count > 0)
+		{
+			base.Update(gameTime);
+			return;
+		}
 		_input.Set(_player is not null ? _player.Next() : Keyboard.GetState().GetPressedKeys());
 		_frame++;
 		// The session takes whole milliseconds; the remainder carries into the next frame.
@@ -80,6 +87,11 @@ public sealed class SampleGame : Game
 		_batch!.Begin(samplerState: SamplerState.PointClamp);
 		_controller.Draw(_surface!);
 		_batch.End();
+		foreach (string shot in _shots)
+		{
+			SaveScreenshot(shot);
+		}
+		_shots.Clear();
 		if (_exiting && !_finished)
 		{
 			_finished = true;
@@ -101,6 +113,10 @@ public sealed class SampleGame : Game
 		GraphicsDevice.GetBackBufferData(pixels);
 		using var texture = new Texture2D(GraphicsDevice, w, h);
 		texture.SetData(pixels);
+		if (Path.GetDirectoryName(Path.GetFullPath(path)) is { } dir)
+		{
+			Directory.CreateDirectory(dir);
+		}
 		using FileStream file = File.Create(path);
 		texture.SaveAsPng(file, w, h);
 		Console.WriteLine($"screenshot: {path} ({w}x{h})");
@@ -108,6 +124,7 @@ public sealed class SampleGame : Game
 
 	protected override void UnloadContent()
 	{
+		_surface?.Dispose();
 		_fonts?.Dispose();
 		_batch?.Dispose();
 		base.UnloadContent();

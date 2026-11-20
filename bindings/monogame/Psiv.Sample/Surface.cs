@@ -5,8 +5,9 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace Psiv.Sample;
 
-// Everything the sample draws goes through this: flat rectangles and text. Replace it to put real
-// rendering behind the same screens, or replace the screens and keep only the session calls.
+// Everything the sample draws goes through this: flat rectangles, pictures and text. Pictures are pixel
+// arrays the sample generates itself (Art.cs), handed over once and drawn scaled by handle. Replace it to
+// put real rendering behind the same screens, or replace the screens and keep only the session calls.
 public interface IDrawSurface
 {
 	int Width { get; }
@@ -14,6 +15,9 @@ public interface IDrawSurface
 	void Fill(int x, int y, int w, int h, Color color);
 	void Text(string text, int x, int y, Color color, int size = Style.Body);
 	int Measure(string text, int size = Style.Body);
+	// Takes width * height pixels, row-major; returns the handle Image draws.
+	int CreateImage(int width, int height, Color[] pixels);
+	void Image(int image, int x, int y, int w, int h, Color tint);
 }
 
 public static class Style
@@ -23,42 +27,121 @@ public static class Style
 	public const int Title = 28;
 	public const int LineHeight = 26;
 
-	public static readonly Color Background = new(16, 18, 24);
-	public static readonly Color Panel = new(30, 34, 46);
-	public static readonly Color PanelEdge = new(90, 100, 130);
-	public static readonly Color Text = new(230, 230, 220);
-	public static readonly Color Dim = new(140, 140, 150);
-	public static readonly Color Accent = new(250, 210, 90);
-	public static readonly Color Bad = new(230, 90, 80);
-	public static readonly Color Good = new(110, 210, 120);
+	public static readonly Color Background = new(14, 16, 26);
+	public static readonly Color Panel = new(22, 28, 52);
+	public static readonly Color PanelTop = new(34, 44, 78);
+	public static readonly Color PanelEdge = new(196, 206, 232);
+	public static readonly Color PanelShadow = new(6, 8, 16);
+	public static readonly Color Row = new(64, 84, 140);
+	public static readonly Color Text = new(236, 236, 226);
+	public static readonly Color Dim = new(146, 152, 172);
+	public static readonly Color Accent = new(252, 214, 96);
+	public static readonly Color Bad = new(236, 96, 84);
+	public static readonly Color Good = new(112, 214, 124);
+	public static readonly Color Tp = new(96, 168, 248);
+	public static readonly Color Track = new(10, 12, 22);
 
-	public static readonly Color Wall = new(60, 60, 70);
-	public static readonly Color Floor = new(150, 130, 100);
-	public static readonly Color Water = new(50, 90, 170);
-	public static readonly Color Exit = new(80, 200, 110);
-	public static readonly Color Talk = new(210, 90, 200);
-	public static readonly Color Step = new(190, 170, 220);
-	public static readonly Color Chest = new(230, 190, 40);
-	public static readonly Color ChestOpen = new(120, 100, 50);
-	public static readonly Color Shop = new(60, 200, 220);
-	public static readonly Color Rest = new(140, 100, 230);
-	public static readonly Color Enemy = new(220, 60, 50);
-	public static readonly Color EnemyChasing = new(255, 140, 30);
-	public static readonly Color Leader = new(255, 255, 255);
-
-	public static void Box(IDrawSurface s, int x, int y, int w, int h)
+	// A window: drop shadow, a light border with clipped corners, a dark body with a lighter top band.
+	public static void Box(IDrawSurface s, int x, int y, int w, int h, float opacity = 1f)
 	{
-		s.Fill(x, y, w, h, PanelEdge);
-		s.Fill(x + 2, y + 2, w - 4, h - 4, Panel);
+		s.Fill(x + 4, y + 4, w, h, PanelShadow * (0.6f * opacity));
+		s.Fill(x + 2, y, w - 4, h, PanelEdge * opacity);
+		s.Fill(x, y + 2, w, h - 4, PanelEdge * opacity);
+		s.Fill(x + 3, y + 3, w - 6, h - 6, PanelShadow * opacity);
+		s.Fill(x + 4, y + 4, w - 8, h - 8, Panel * opacity);
+		s.Fill(x + 4, y + 4, w - 8, Math.Min(24, (h - 8) / 3), PanelTop * opacity);
+	}
+
+	// A box with a title tab sitting on its top edge.
+	public static void Window(IDrawSurface s, int x, int y, int w, int h, string title, float opacity = 1f)
+	{
+		Box(s, x, y, w, h, opacity);
+		if (title.Length > 0)
+		{
+			Plate(s, title, x + 16, y - 14, Accent);
+		}
+	}
+
+	// A small framed label, for speaker names and window titles.
+	public static void Plate(IDrawSurface s, string text, int x, int y, Color color, int size = Small)
+	{
+		int w = s.Measure(text, size) + 24;
+		int h = size + 12;
+		s.Fill(x + 1, y, w - 2, h, PanelEdge);
+		s.Fill(x, y + 1, w, h - 2, PanelEdge);
+		s.Fill(x + 2, y + 2, w - 4, h - 4, PanelTop);
+		s.Text(text, x + 12, y + 5, color, size);
 	}
 
 	public static void Bar(IDrawSurface s, int x, int y, int w, int h, int value, int max, Color color)
 	{
-		s.Fill(x, y, w, h, Wall);
+		s.Fill(x - 1, y - 1, w + 2, h + 2, PanelShadow);
+		s.Fill(x, y, w, h, Track);
 		if (max > 0 && value > 0)
 		{
-			s.Fill(x, y, Math.Max(1, w * Math.Min(value, max) / max), h, color);
+			int filled = Math.Max(1, w * Math.Min(value, max) / max);
+			s.Fill(x, y, filled, h, color);
+			s.Fill(x, y, filled, Math.Max(1, h / 3), Color.Lerp(color, Color.White, 0.45f));
 		}
+	}
+
+	// A right-pointing cursor, `size` pixels tall, its tip at (x + size / 2, y + size / 2).
+	public static void Pointer(IDrawSurface s, int x, int y, Color color, int size = 12)
+	{
+		for (int i = 0; i < size; i++)
+		{
+			int len = Math.Max(1, size / 2 - Math.Abs(i - size / 2));
+			s.Fill(x, y + i, len, 1, color);
+		}
+	}
+
+	// One menu row: a highlight bar and pointer under the selected row.
+	public static void ListRow(IDrawSurface s, string text, int x, int y, int width, bool selected, bool enabled = true, int size = Body)
+	{
+		if (selected)
+		{
+			s.Fill(x - 6, y - 3, width, size + 8, Row);
+			Pointer(s, x - 4, y + size / 2 - 6, Accent);
+		}
+		s.Text(text, x + 14, y, !enabled ? Dim : selected ? Accent : Text, size);
+	}
+
+	public static void Frame(IDrawSurface s, int x, int y, int w, int h, Color c, int t = 2)
+	{
+		s.Fill(x, y, w, t, c);
+		s.Fill(x, y + h - t, w, t, c);
+		s.Fill(x, y, t, h, c);
+		s.Fill(x + w - t, y, t, h, c);
+	}
+
+	// Pills for a row of tabs, the selected one underlined.
+	public static void Tabs(IDrawSurface s, int x, int y, IReadOnlyList<string> tabs, int selected)
+	{
+		for (int i = 0; i < tabs.Count; i++)
+		{
+			int w = s.Measure(tabs[i]) + 28;
+			if (i == selected)
+			{
+				s.Fill(x, y, w, 32, Row);
+				s.Fill(x, y + 30, w, 2, Accent);
+			}
+			s.Text(tabs[i], x + 14, y + 5, i == selected ? Accent : Dim);
+			x += w + 8;
+		}
+	}
+
+	// The text cut to fit `width`, with an ellipsis when cut.
+	public static string Fit(IDrawSurface s, string text, int width, int size = Body)
+	{
+		if (s.Measure(text, size) <= width)
+		{
+			return text;
+		}
+		while (text.Length > 0 && s.Measure(text + "...", size) > width)
+		{
+			text = text[..^1];
+		}
+		return text + "...";
 	}
 
 	public static List<string> Wrap(IDrawSurface s, string text, int width, int size = Body)
@@ -86,9 +169,10 @@ public static class Style
 	}
 }
 
-public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, FontSystem fonts) : IDrawSurface
+public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, FontSystem fonts) : IDrawSurface, IDisposable
 {
 	private readonly Texture2D _pixel = CreatePixel(device);
+	private readonly List<Texture2D> _images = [];
 
 	private static Texture2D CreatePixel(GraphicsDevice device)
 	{
@@ -105,6 +189,26 @@ public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, Fo
 	public void Text(string text, int x, int y, Color color, int size = Style.Body) => fonts.GetFont(size).DrawText(batch, text, new Vector2(x, y), color);
 
 	public int Measure(string text, int size = Style.Body) => (int)fonts.GetFont(size).MeasureString(text).X;
+
+	public int CreateImage(int width, int height, Color[] pixels)
+	{
+		var texture = new Texture2D(device, width, height);
+		texture.SetData(pixels);
+		_images.Add(texture);
+		return _images.Count - 1;
+	}
+
+	public void Image(int image, int x, int y, int w, int h, Color tint) => batch.Draw(_images[image], new Rectangle(x, y, w, h), tint);
+
+	public void Dispose()
+	{
+		foreach (Texture2D texture in _images)
+		{
+			texture.Dispose();
+		}
+		_images.Clear();
+		_pixel.Dispose();
+	}
 }
 
 // Headless: draws nothing, keeps the last frame's text so a script can print it, and counts calls.
@@ -114,6 +218,8 @@ public sealed class RecordingSurface : IDrawSurface
 	public int Height => 720;
 	public int Rects { get; private set; }
 	public int Texts { get; private set; }
+	public int Images { get; private set; }
+	private int _created;
 	public List<string> FrameText { get; } = [];
 
 	public void BeginFrame() => FrameText.Clear();
@@ -127,6 +233,24 @@ public sealed class RecordingSurface : IDrawSurface
 	}
 
 	public int Measure(string text, int size = Style.Body) => text.Length * size * 11 / 20;
+
+	public int CreateImage(int width, int height, Color[] pixels)
+	{
+		if (pixels.Length != width * height)
+		{
+			throw new ArgumentException($"{pixels.Length} pixels for a {width}x{height} image");
+		}
+		return _created++;
+	}
+
+	public void Image(int image, int x, int y, int w, int h, Color tint)
+	{
+		if (image < 0 || image >= _created)
+		{
+			throw new ArgumentOutOfRangeException(nameof(image));
+		}
+		Images++;
+	}
 }
 
 public static class Fonts

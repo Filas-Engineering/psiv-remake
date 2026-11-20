@@ -1,0 +1,6 @@
+{
+	"id": "rock",
+	"map": ["...."],
+	"markers": {"top": [0, 0]},
+	"exits": [{"at": [3, 0], "to": "islet", "marker": "dock"}]
+}

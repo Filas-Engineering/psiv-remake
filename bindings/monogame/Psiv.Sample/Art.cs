@@ -1,0 +1,932 @@
+using Microsoft.Xna.Framework;
+
+using Psiv.Session;
+
+namespace Psiv.Sample;
+
+public enum Theme { Town, Field, Dungeon }
+
+// Deterministic hashing, so a cell's floor variant or an NPC's colors never change between frames or runs.
+public static class Noise
+{
+	public static uint Hash(int a, int b = 0, int c = 0)
+	{
+		uint h = 2166136261u;
+		foreach (int v in (ReadOnlySpan<int>)[a, b, c])
+		{
+			h ^= (uint)v;
+			h *= 16777619u;
+			h ^= h >> 13;
+			h *= 0x5bd1e995u;
+			h ^= h >> 15;
+		}
+		h ^= h >> 16;
+		h *= 0x85ebca6bu;
+		h ^= h >> 13;
+		h *= 0xc2b2ae35u;
+		h ^= h >> 16;
+		return h;
+	}
+
+	public static uint Hash(string text)
+	{
+		uint h = 2166136261u;
+		foreach (char ch in text)
+		{
+			h = (h ^ ch) * 16777619u;
+		}
+		return Hash((int)h);
+	}
+}
+
+// A small xorshift generator for building pixels.
+public struct Rng(uint seed)
+{
+	private uint _state = seed == 0 ? 0x9e3779b9u : seed;
+
+	public uint Next()
+	{
+		_state ^= _state << 13;
+		_state ^= _state >> 17;
+		_state ^= _state << 5;
+		return _state;
+	}
+
+	public int Range(int n) => (int)(Next() % (uint)n);
+	public bool Chance(int percent) => Range(100) < percent;
+}
+
+// A square pixel buffer; colors are premultiplied, as SpriteBatch's default blending expects.
+public sealed class Pixels
+{
+	public const int Size = 16;
+	public Color[] Data { get; } = new Color[Size * Size];
+
+	public Color this[int x, int y]
+	{
+		get => x is >= 0 and < Size && y is >= 0 and < Size ? Data[y * Size + x] : Color.Transparent;
+		set
+		{
+			if (x is >= 0 and < Size && y is >= 0 and < Size)
+			{
+				Data[y * Size + x] = value;
+			}
+		}
+	}
+
+	public Pixels Fill(Color c)
+	{
+		Array.Fill(Data, c);
+		return this;
+	}
+
+	public Pixels Rect(int x, int y, int w, int h, Color c)
+	{
+		for (int j = y; j < y + h; j++)
+		{
+			for (int i = x; i < x + w; i++)
+			{
+				this[i, j] = c;
+			}
+		}
+		return this;
+	}
+
+	public Pixels MirrorX()
+	{
+		var p = new Pixels();
+		for (int y = 0; y < Size; y++)
+		{
+			for (int x = 0; x < Size; x++)
+			{
+				p[Size - 1 - x, y] = this[x, y];
+			}
+		}
+		return p;
+	}
+
+	// A quarter turn clockwise.
+	public Pixels Rotate()
+	{
+		var p = new Pixels();
+		for (int y = 0; y < Size; y++)
+		{
+			for (int x = 0; x < Size; x++)
+			{
+				p[Size - 1 - y, x] = this[x, y];
+			}
+		}
+		return p;
+	}
+
+	public Pixels Shift(int dy)
+	{
+		var p = new Pixels();
+		for (int y = 0; y < Size; y++)
+		{
+			for (int x = 0; x < Size; x++)
+			{
+				p[x, y] = this[x, y - dy];
+			}
+		}
+		return p;
+	}
+
+	public static Pixels FromTemplate(string[] rows, Func<char, Color> palette)
+	{
+		if (rows.Length != Size || rows.Any(r => r.Length != Size))
+		{
+			throw new ArgumentException("a template is 16 rows of 16 characters");
+		}
+		var p = new Pixels();
+		for (int y = 0; y < Size; y++)
+		{
+			for (int x = 0; x < Size; x++)
+			{
+				p[x, y] = rows[y][x] == '.' ? Color.Transparent : palette(rows[y][x]);
+			}
+		}
+		return p;
+	}
+
+	// Scatters `count` pixels of `c` over the buffer.
+	public Pixels Speckle(ref Rng rng, int count, Color c)
+	{
+		for (int i = 0; i < count; i++)
+		{
+			this[rng.Range(Size), rng.Range(Size)] = c;
+		}
+		return this;
+	}
+}
+
+public sealed record ActorLook(Color Hair, Color Skin, Color Coat, Color Scarf);
+
+// Every picture the sample draws, generated at startup from code (no files), and handed to the surface once.
+// Actors and creatures are built on first use per look.
+public sealed class Art
+{
+	public const int Scale = 3;
+	public const int Tile = Pixels.Size * Scale;
+	public const int WaterFrames = 4;
+
+	public sealed class TileSet
+	{
+		public required int[] Floor { get; init; }
+		public required int[] Decor { get; init; }
+		public required int[] WallTop { get; init; }
+		public required int[] WallFace { get; init; }
+		public required int[] Water { get; init; }
+		public required Color Edge { get; init; }
+		public required Color Bank { get; init; }
+	}
+
+	private static readonly Color Outline = new(26, 20, 32);
+
+	public static readonly ActorLook Hero = new(new Color(206, 122, 58), new Color(242, 204, 164), new Color(58, 142, 172), new Color(232, 92, 72));
+
+	private static readonly ActorLook[] Companions =
+	[
+		new(new Color(62, 50, 76), new Color(226, 182, 140), new Color(150, 82, 170), new Color(240, 200, 90)),
+		new(new Color(232, 222, 200), new Color(244, 214, 182), new Color(82, 150, 84), new Color(92, 140, 230)),
+		new(new Color(44, 32, 30), new Color(170, 118, 84), new Color(190, 112, 62), new Color(112, 220, 200)),
+	];
+
+	private readonly IDrawSurface _s;
+	private readonly Dictionary<Theme, TileSet> _tiles = [];
+	private readonly Dictionary<ActorLook, int[]> _actors = [];
+	private readonly Dictionary<(uint, int), int> _creatures = [];
+
+	public Art(IDrawSurface surface)
+	{
+		_s = surface;
+		foreach (Theme theme in Enum.GetValues<Theme>())
+		{
+			_tiles[theme] = BuildTiles(theme);
+		}
+		Pixels arrow = Arrow();
+		ExitArrow = [Add(arrow.Rotate().Rotate().Rotate()), Add(arrow), Add(arrow.Rotate()), Add(arrow.Rotate().Rotate())];
+		Door = Add(BuildDoor());
+		ChestClosed = Add(BuildChest(open: false));
+		ChestOpen = Add(BuildChest(open: true));
+		Stall = Add(BuildStall());
+		Bed = Add(BuildBed());
+		Rune = Add(BuildRune());
+		Bubble = Add(BuildBubble());
+		Alert = Add(BuildAlert());
+		Shadow = Add(BuildShadow());
+		Pointer = Add(BuildPointer());
+	}
+
+	public static Theme ThemeOf(AreaKind kind) => kind switch
+	{
+		AreaKind.Town => Theme.Town,
+		AreaKind.Dungeon => Theme.Dungeon,
+		_ => Theme.Field,
+	};
+
+	public TileSet Tiles(Theme theme) => _tiles[theme];
+
+	// North, east, south, west.
+	public int[] ExitArrow { get; }
+	public int Door { get; }
+	public int ChestClosed { get; }
+	public int ChestOpen { get; }
+	public int Stall { get; }
+	public int Bed { get; }
+	public int Rune { get; }
+	public int Bubble { get; }
+	public int Alert { get; }
+	public int Shadow { get; }
+	// A downward pointer, for battle targets.
+	public int Pointer { get; }
+
+	private int Add(Pixels p) => _s.CreateImage(Pixels.Size, Pixels.Size, p.Data);
+
+	private static Color Shade(Color c, float f) => new((int)Math.Clamp(c.R * f, 0, 255), (int)Math.Clamp(c.G * f, 0, 255), (int)Math.Clamp(c.B * f, 0, 255));
+
+	public static Color FromHsv(float h, float s, float v)
+	{
+		h = (h % 1f + 1f) % 1f * 6f;
+		int i = (int)h;
+		float f = h - i, p = v * (1 - s), q = v * (1 - s * f), t = v * (1 - s * (1 - f));
+		(float r, float g, float b) = i switch { 0 => (v, t, p), 1 => (q, v, p), 2 => (p, v, t), 3 => (p, q, v), 4 => (t, p, v), _ => (v, p, q) };
+		return new Color(r, g, b);
+	}
+
+	// Party members after the leader take fixed looks; anyone else gets colors from their id.
+	public static ActorLook Companion(int index) => Companions[index % Companions.Length];
+
+	public static ActorLook LookFor(string id)
+	{
+		uint h = Noise.Hash(id);
+		Color[] hair = [new(52, 40, 34), new(120, 76, 44), new(216, 190, 120), new(150, 150, 160), new(170, 60, 50), new(40, 40, 60)];
+		Color[] skin = [new(242, 204, 164), new(214, 164, 120), new(164, 112, 78), new(250, 220, 190)];
+		float hue = (h & 0xff) / 255f;
+		return new ActorLook(hair[(h >> 8) % (uint)hair.Length], skin[(h >> 12) % (uint)skin.Length], FromHsv(hue, 0.5f, 0.72f), FromHsv(hue + 0.45f, 0.55f, 0.9f));
+	}
+
+	// Actors: four facings (north, east, south, west) times stand, walk A, walk B.
+	private static readonly string[] FrontRows =
+	[
+		"................",
+		".....oooooo.....",
+		"....ohhhhhho....",
+		"...ohhhhhhhho...",
+		"...ohhhhhhhho...",
+		"...ohssssssho...",
+		"...osossssoso...",
+		"....osssssso....",
+		"....oaaaaaao....",
+		"...occcaaccco...",
+		"..oscccaacccso..",
+		"..osdccccccdso..",
+		"...obbbbbbbbo...",
+		"....obo..obo....",
+		"...okko..okko...",
+		"...oooo..oooo...",
+	];
+
+	private static readonly string[] BackRows =
+	[
+		"................",
+		".....oooooo.....",
+		"....ohhhhhho....",
+		"...ohhhhhhhho...",
+		"...ohhhhhhhho...",
+		"...ohhhhhhhho...",
+		"...ohhhhhhhho...",
+		"....ohhhhhho....",
+		"....oaaaaaao....",
+		"...occcccccco...",
+		"..osccccccccso..",
+		"..osdccccccdso..",
+		"...obbbbbbbbo...",
+		"....obo..obo....",
+		"...okko..okko...",
+		"...oooo..oooo...",
+	];
+
+	private static readonly string[] SideRows =
+	[
+		"................",
+		".....ooooo......",
+		"....ohhhhho.....",
+		"...ohhhhhhho....",
+		"...ohhhhhhho....",
+		"...ohhhsssso....",
+		"...ohhhssoso....",
+		"....ohsssso.....",
+		"...aoaaaaao.....",
+		"..aaoccccco.....",
+		"....occcsco.....",
+		"....odcccdo.....",
+		"....obbbbbo.....",
+		".....obbo.......",
+		".....okkko......",
+		".....ooooo......",
+	];
+
+	private static string[] Legs(string[] rows, params string[] last3) => [.. rows[..13], .. last3];
+
+	public int[] Actor(ActorLook look)
+	{
+		if (_actors.TryGetValue(look, out int[]? frames))
+		{
+			return frames;
+		}
+		Color Palette(char c) => c switch
+		{
+			'o' => Outline,
+			'h' => look.Hair,
+			's' => look.Skin,
+			'c' => look.Coat,
+			'd' => Shade(look.Coat, 0.68f),
+			'a' => look.Scarf,
+			'b' => new Color(60, 58, 84),
+			'k' => new Color(74, 46, 32),
+			_ => Color.Magenta,
+		};
+		string[] backRows = BackRows;
+		string[][] front =
+		[
+			FrontRows,
+			Legs(FrontRows, "....obo..okko...", "...okko..oooo...", "...oooo........."),
+			Legs(FrontRows, "...okko..obo....", "...oooo..okko...", ".........oooo..."),
+		];
+		string[][] back =
+		[
+			backRows,
+			Legs(backRows, "....obo..okko...", "...okko..oooo...", "...oooo........."),
+			Legs(backRows, "...okko..obo....", "...oooo..okko...", ".........oooo..."),
+		];
+		string[] stride = Legs(SideRows, "....obo.obo.....", "...okko.okko....", "...oooo.oooo....");
+		string[][] side = [SideRows, stride, SideRows];
+		frames = new int[12];
+		for (int f = 0; f < 3; f++)
+		{
+			Pixels east = Pixels.FromTemplate(side[f], Palette);
+			frames[0 * 3 + f] = Add(Pixels.FromTemplate(back[f], Palette));
+			frames[1 * 3 + f] = Add(east);
+			frames[2 * 3 + f] = Add(Pixels.FromTemplate(front[f], Palette));
+			frames[3 * 3 + f] = Add(east.MirrorX());
+		}
+		_actors[look] = frames;
+		return frames;
+	}
+
+	public int ActorFrame(ActorLook look, Direction facing, int frame) => Actor(look)[(facing == Direction.None ? 2 : (int)facing) * 3 + frame];
+
+	private static readonly string[] CreatureRows =
+	[
+		"................",
+		"................",
+		"................",
+		"......oooo......",
+		"....oommmmoo....",
+		"...ommmmmmmmo...",
+		"..ommlmmmmmmmo..",
+		"..omllmmmmmmmo..",
+		".ommmwommwommmo.",
+		".ommmoommoommmo.",
+		".ommmmmmmmmmmmo.",
+		".ommmmmmmmmmmmo.",
+		"..oddmmmmmmddo..",
+		"...oddddddddo...",
+		"....oooooooo....",
+		"................",
+	];
+
+	// A field or battle creature; its colors and horns come from `seed` (the encounter or enemy id), frame 0 or 1 bobs.
+	public int Creature(uint seed, int frame)
+	{
+		if (_creatures.TryGetValue((seed, frame), out int image))
+		{
+			return image;
+		}
+		Color body = FromHsv((seed & 0xff) / 255f, 0.55f, 0.82f);
+		Color Palette(char c) => c switch
+		{
+			'o' => Outline,
+			'm' => body,
+			'l' => Color.Lerp(body, Color.White, 0.55f),
+			'd' => Shade(body, 0.62f),
+			'w' => new Color(250, 248, 236),
+			_ => Color.Magenta,
+		};
+		Pixels p = Pixels.FromTemplate(CreatureRows, Palette);
+		if ((seed & 0x100) != 0)
+		{
+			Color horn = new(236, 226, 196);
+			foreach ((int x, int y) in new[] { (4, 2), (4, 3), (11, 2), (11, 3) })
+			{
+				p[x, y] = horn;
+				p[x, y - 1] = Outline;
+			}
+		}
+		if ((seed & 0x200) != 0)
+		{
+			p.Rect(6, 11, 4, 1, Outline);
+			p[7, 12] = new Color(250, 248, 236);
+		}
+		if (frame == 1)
+		{
+			p = p.Shift(1);
+			p.Rect(1, 14, 14, 1, Outline);
+			p.Rect(2, 13, 12, 1, Shade(body, 0.62f));
+		}
+		image = Add(p);
+		_creatures[(seed, frame)] = image;
+		return image;
+	}
+
+	private TileSet BuildTiles(Theme theme)
+	{
+		int seed = (int)theme * 1000;
+		return theme switch
+		{
+			Theme.Field => new TileSet
+			{
+				Floor = [.. Enumerable.Range(0, 4).Select(i => Add(Grass(seed + i)))],
+				Decor = [Add(Flowers(seed + 10, new Color(250, 240, 230))), Add(Flowers(seed + 11, new Color(240, 130, 170))), Add(Pebble(Grass(seed + 12), seed + 12)), Add(Tuft(seed + 13))],
+				WallTop = [Add(Canopy(seed + 20)), Add(Canopy(seed + 21))],
+				WallFace = [Add(HedgeFace(seed + 30)), Add(HedgeFace(seed + 31))],
+				Water = [.. Enumerable.Range(0, WaterFrames).Select(f => Add(Water(f, new Color(56, 120, 196))))],
+				Edge = new Color(20, 52, 30),
+				Bank = new Color(120, 98, 62),
+			},
+			Theme.Town => new TileSet
+			{
+				Floor = [.. Enumerable.Range(0, 4).Select(i => Add(Cobbles(seed + i)))],
+				Decor = [Add(Crack(Cobbles(seed + 10), seed + 10)), Add(Moss(Cobbles(seed + 11), seed + 11)), Add(Grate(Cobbles(seed + 12))), Add(Pebble(Cobbles(seed + 13), seed + 13)),
+					Add(Crack(Cobbles(seed + 14), seed + 14)), Add(Moss(Cobbles(seed + 15), seed + 15))],
+				WallTop = [Add(Roof(seed + 20)), Add(Roof(seed + 21))],
+				WallFace = [Add(Plaster(seed + 30, window: false)), Add(Plaster(seed + 31, window: true))],
+				Water = [.. Enumerable.Range(0, WaterFrames).Select(f => Add(Water(f, new Color(48, 108, 180))))],
+				Edge = new Color(40, 36, 70),
+				Bank = new Color(110, 104, 98),
+			},
+			_ => new TileSet
+			{
+				Floor = [.. Enumerable.Range(0, 4).Select(i => Add(Flagstones(seed + i)))],
+				Decor = [Add(Crack(Flagstones(seed + 10), seed + 10)), Add(Moss(Flagstones(seed + 11), seed + 11)), Add(Pebble(Flagstones(seed + 12), seed + 12)), Add(Pebble(Flagstones(seed + 13), seed + 14))],
+				WallTop = [Add(Rock(seed + 20)), Add(Rock(seed + 21))],
+				WallFace = [Add(Bricks(seed + 30)), Add(Bricks(seed + 31))],
+				Water = [.. Enumerable.Range(0, WaterFrames).Select(f => Add(Water(f, new Color(36, 82, 142))))],
+				Edge = new Color(18, 16, 24),
+				Bank = new Color(58, 54, 66),
+			},
+		};
+	}
+
+	private static Pixels Grass(int seed)
+	{
+		var rng = new Rng(Noise.Hash(seed, 1));
+		Color base_ = new(80, 152, 74);
+		var p = new Pixels().Fill(base_);
+		p.Speckle(ref rng, 26, new Color(66, 132, 62)).Speckle(ref rng, 14, new Color(100, 176, 88));
+		for (int i = 0; i < 4; i++)
+		{
+			int x = rng.Range(15), y = 2 + rng.Range(13);
+			p[x, y] = new Color(118, 192, 98);
+			p[x, y - 1] = new Color(118, 192, 98);
+			p[x + 1, y] = new Color(58, 118, 56);
+		}
+		return p;
+	}
+
+	private static Pixels Flowers(int seed, Color petal)
+	{
+		Pixels p = Grass(seed);
+		var rng = new Rng(Noise.Hash(seed, 2));
+		for (int i = 0; i < 3; i++)
+		{
+			int x = 2 + rng.Range(12), y = 2 + rng.Range(12);
+			p[x - 1, y] = petal;
+			p[x + 1, y] = petal;
+			p[x, y - 1] = petal;
+			p[x, y + 1] = petal;
+			p[x, y] = new Color(250, 210, 70);
+		}
+		return p;
+	}
+
+	private static Pixels Tuft(int seed)
+	{
+		Pixels p = Grass(seed);
+		Color dark = new(46, 104, 50), light = new(124, 196, 100);
+		for (int x = 4; x < 12; x += 2)
+		{
+			int h = 3 + (x * 7 + seed) % 3;
+			for (int y = 0; y < h; y++)
+			{
+				p[x + (y > 2 ? 0 : (x - 8) / 4), 12 - y] = y == h - 1 ? light : dark;
+			}
+		}
+		return p;
+	}
+
+	private static Pixels Pebble(Pixels p, int seed)
+	{
+		var rng = new Rng(Noise.Hash(seed, 3));
+		int cx = 4 + rng.Range(7), cy = 5 + rng.Range(6);
+		p.Rect(cx, cy, 4, 3, new Color(150, 146, 150));
+		p.Rect(cx + 1, cy - 1, 2, 1, new Color(150, 146, 150));
+		p.Rect(cx, cy + 3, 4, 1, new Color(70, 66, 74));
+		p[cx + 1, cy] = new Color(204, 200, 204);
+		return p;
+	}
+
+	private static Pixels Cobbles(int seed)
+	{
+		var rng = new Rng(Noise.Hash(seed, 4));
+		var p = new Pixels().Fill(new Color(116, 108, 102));
+		Color[] tones = [new(170, 160, 146), new(158, 150, 138), new(180, 172, 156), new(150, 140, 130)];
+		for (int row = 0; row < 4; row++)
+		{
+			int offset = row % 2 == 0 ? 0 : 2 + rng.Range(2);
+			for (int x = -offset; x < 16; x += 5 + rng.Range(2))
+			{
+				int w = 4 + rng.Range(1);
+				Color c = tones[rng.Range(tones.Length)];
+				p.Rect(x + 1, row * 4 + 1, w - 1, 2, c);
+				p.Rect(x + 1, row * 4 + 3, w - 1, 1, Shade(c, 0.78f));
+				p[x + 1, row * 4 + 1] = Color.Lerp(c, Color.White, 0.3f);
+			}
+		}
+		return p;
+	}
+
+	private static Pixels Flagstones(int seed)
+	{
+		var rng = new Rng(Noise.Hash(seed, 5));
+		var p = new Pixels().Fill(new Color(58, 54, 66));
+		for (int sy = 0; sy < 2; sy++)
+		{
+			for (int sx = 0; sx < 2; sx++)
+			{
+				int tone = 80 + rng.Range(16);
+				Color c = new(tone, tone - 4, tone + 10);
+				p.Rect(sx * 8 + 1, sy * 8 + 1, 7, 7, c);
+				p.Rect(sx * 8 + 1, sy * 8 + 1, 7, 1, Shade(c, 1.18f));
+				p.Speckle(ref rng, 3, Shade(c, 0.86f));
+			}
+		}
+		return p;
+	}
+
+	private static Pixels Crack(Pixels p, int seed)
+	{
+		var rng = new Rng(Noise.Hash(seed, 6));
+		int x = 3 + rng.Range(5), y = 3 + rng.Range(4);
+		Color dark = new(40, 36, 44);
+		for (int i = 0; i < 9; i++)
+		{
+			p[x, y] = dark;
+			x += rng.Range(3) - (i % 2 == 0 ? 0 : 1);
+			y += 1;
+		}
+		return p;
+	}
+
+	private static Pixels Moss(Pixels p, int seed)
+	{
+		var rng = new Rng(Noise.Hash(seed, 7));
+		int cx = 3 + rng.Range(8), cy = 3 + rng.Range(8);
+		for (int i = 0; i < 18; i++)
+		{
+			p[cx + rng.Range(5) - 2, cy + rng.Range(5) - 2] = i % 3 == 0 ? new Color(110, 150, 84) : new Color(78, 118, 66);
+		}
+		return p;
+	}
+
+	private static Pixels Grate(Pixels p)
+	{
+		p.Rect(4, 4, 8, 8, new Color(46, 44, 50));
+		for (int x = 5; x < 12; x += 2)
+		{
+			p.Rect(x, 5, 1, 6, new Color(20, 20, 26));
+		}
+		p.Rect(4, 4, 8, 1, new Color(120, 118, 126));
+		return p;
+	}
+
+	private static Pixels Canopy(int seed)
+	{
+		var rng = new Rng(Noise.Hash(seed, 8));
+		var p = new Pixels().Fill(new Color(38, 96, 52));
+		for (int i = 0; i < 7; i++)
+		{
+			int cx = rng.Range(16), cy = rng.Range(16);
+			for (int y = -2; y <= 2; y++)
+			{
+				for (int x = -2; x <= 2; x++)
+				{
+					if (x * x + y * y <= 5)
+					{
+						p[(cx + x + 16) % 16, (cy + y + 16) % 16] = y < 0 ? new Color(70, 140, 70) : new Color(54, 120, 62);
+					}
+				}
+			}
+		}
+		p.Speckle(ref rng, 12, new Color(26, 72, 40));
+		return p;
+	}
+
+	private static Pixels HedgeFace(int seed)
+	{
+		var rng = new Rng(Noise.Hash(seed, 9));
+		var p = new Pixels().Fill(new Color(36, 88, 46));
+		p.Rect(0, 0, 16, 5, new Color(54, 120, 62));
+		p.Rect(0, 0, 16, 1, new Color(84, 156, 80));
+		for (int x = 0; x < 16; x++)
+		{
+			int len = 2 + rng.Range(4);
+			for (int y = 5; y < 5 + len; y++)
+			{
+				p[x, y] = (x + y) % 3 == 0 ? new Color(48, 108, 56) : p[x, y];
+			}
+		}
+		p.Rect(0, 12, 16, 4, new Color(26, 62, 34));
+		p.Rect(0, 15, 16, 1, new Color(16, 40, 22));
+		p.Speckle(ref rng, 6, new Color(24, 60, 32));
+		return p;
+	}
+
+	private static Pixels Roof(int seed)
+	{
+		var rng = new Rng(Noise.Hash(seed, 10));
+		var p = new Pixels().Fill(new Color(86, 88, 142));
+		for (int row = 0; row < 4; row++)
+		{
+			p.Rect(0, row * 4 + 3, 16, 1, new Color(56, 56, 100));
+			int offset = row % 2 == 0 ? 0 : 3;
+			for (int x = offset; x < 16; x += 6)
+			{
+				p.Rect(x, row * 4, 1, 3, new Color(64, 64, 112));
+				p[x + 1, row * 4] = new Color(116, 120, 176);
+			}
+		}
+		p.Speckle(ref rng, 5, new Color(100, 104, 160));
+		return p;
+	}
+
+	private static Pixels Plaster(int seed, bool window)
+	{
+		var rng = new Rng(Noise.Hash(seed, 11));
+		var p = new Pixels().Fill(new Color(226, 212, 182));
+		p.Speckle(ref rng, 10, new Color(212, 196, 166));
+		Color timber = new(112, 78, 54);
+		p.Rect(0, 0, 16, 2, timber);
+		p.Rect(0, 0, 1, 13, timber);
+		p.Rect(0, 13, 16, 3, new Color(138, 128, 120));
+		p.Rect(0, 15, 16, 1, new Color(92, 86, 82));
+		if (window)
+		{
+			p.Rect(5, 4, 6, 6, timber);
+			p.Rect(6, 5, 4, 4, new Color(56, 80, 124));
+			p.Rect(6, 5, 2, 1, new Color(140, 176, 220));
+			p.Rect(7, 5, 1, 4, timber);
+			p.Rect(4, 10, 8, 1, timber);
+		}
+		return p;
+	}
+
+	private static Pixels Rock(int seed)
+	{
+		var rng = new Rng(Noise.Hash(seed, 12));
+		var p = new Pixels().Fill(new Color(52, 48, 62));
+		p.Speckle(ref rng, 22, new Color(66, 62, 78)).Speckle(ref rng, 16, new Color(40, 36, 48));
+		for (int i = 0; i < 3; i++)
+		{
+			int x = rng.Range(14), y = rng.Range(14);
+			p.Rect(x, y, 3, 2, new Color(72, 68, 84));
+			p[x, y] = new Color(92, 88, 104);
+		}
+		return p;
+	}
+
+	private static Pixels Bricks(int seed)
+	{
+		var rng = new Rng(Noise.Hash(seed, 13));
+		var p = new Pixels().Fill(new Color(62, 56, 70));
+		for (int row = 0; row < 4; row++)
+		{
+			int offset = row % 2 == 0 ? 0 : 4;
+			for (int x = -offset; x < 16; x += 8)
+			{
+				int tone = 96 + rng.Range(18);
+				Color c = new(tone + 4, tone - 4, tone + 12);
+				p.Rect(x + 1, row * 4, 7, 3, c);
+				p.Rect(x + 1, row * 4, 7, 1, Shade(c, 1.15f));
+			}
+		}
+		p.Rect(0, 0, 16, 1, new Color(140, 134, 150));
+		p.Rect(0, 14, 16, 2, new Color(36, 32, 42));
+		return p;
+	}
+
+	private static Pixels Water(int frame, Color deep)
+	{
+		var p = new Pixels().Fill(deep);
+		Color light = Color.Lerp(deep, Color.White, 0.55f);
+		Color mid = Color.Lerp(deep, Color.White, 0.22f);
+		Color dark = Shade(deep, 0.82f);
+		for (int y = 0; y < 16; y++)
+		{
+			float phase = y / 4 * 1.7f;
+			for (int x = 0; x < 16; x++)
+			{
+				double v = Math.Sin((x + frame * 4) / 16.0 * Math.PI * 2 + phase);
+				if (y % 4 == 1 && v > 0.8)
+				{
+					p[x, y] = light;
+				}
+				else if (y % 4 == 2 && v > 0.45)
+				{
+					p[x, y] = mid;
+				}
+				else if (y % 4 == 3 && v < -0.6)
+				{
+					p[x, y] = dark;
+				}
+			}
+		}
+		return p;
+	}
+
+	private static Pixels Arrow()
+	{
+		var p = new Pixels();
+		Color body = new(150, 250, 176), edge = new(30, 96, 60);
+		foreach (int start in new[] { 3, 8 })
+		{
+			for (int i = 0; i < 5; i++)
+			{
+				p.Rect(start + i - 1, 3 + i, 3, 1, edge);
+				p.Rect(start + i - 1, 12 - i, 3, 1, edge);
+				p.Rect(start + i, 3 + i, 1, 1, body);
+				p.Rect(start + i, 12 - i, 1, 1, body);
+			}
+			p.Rect(start + 4, 7, 2, 2, body);
+		}
+		return p;
+	}
+
+	private static Pixels BuildDoor()
+	{
+		var p = new Pixels();
+		p.Rect(2, 1, 12, 15, new Color(84, 78, 92));
+		p.Rect(3, 2, 10, 14, Outline);
+		p.Rect(4, 3, 8, 13, new Color(16, 12, 20));
+		for (int i = 0; i < 3; i++)
+		{
+			p.Rect(4, 9 + i * 2, 8, 1, new Color(60, 54, 70));
+		}
+		return p;
+	}
+
+	private static Pixels BuildChest(bool open)
+	{
+		var p = new Pixels();
+		Color wood = new(150, 92, 46), lid = new(180, 114, 58), light = new(214, 152, 82), metal = new(226, 190, 92);
+		if (open)
+		{
+			p.Rect(2, 2, 12, 4, Outline);
+			p.Rect(3, 3, 10, 2, lid);
+			p.Rect(2, 6, 12, 3, Outline);
+			p.Rect(3, 6, 10, 3, new Color(64, 36, 22));
+			p[7, 7] = new Color(252, 236, 150);
+		}
+		else
+		{
+			p.Rect(2, 4, 12, 5, Outline);
+			p.Rect(3, 5, 10, 3, lid);
+			p.Rect(3, 5, 10, 1, light);
+		}
+		p.Rect(2, 8, 12, 7, Outline);
+		p.Rect(3, 9, 10, 5, wood);
+		p.Rect(3, 9, 10, 1, metal);
+		p.Rect(4, 9, 1, 5, Shade(wood, 0.8f));
+		p.Rect(11, 9, 1, 5, Shade(wood, 0.8f));
+		if (!open)
+		{
+			p.Rect(7, 7, 2, 4, Outline);
+			p.Rect(7, 8, 2, 2, metal);
+		}
+		p.Rect(3, 15, 10, 1, new Color(0, 0, 0) * 0.35f);
+		return p;
+	}
+
+	private static Pixels BuildStall()
+	{
+		var p = new Pixels();
+		Color a = new(226, 96, 84), b = new(246, 236, 220), post = new(120, 84, 56), counter = new(152, 104, 64);
+		for (int x = 1; x < 15; x++)
+		{
+			p.Rect(x, 1, 1, 5, (x / 2) % 2 == 0 ? a : b);
+			if (x % 2 == 1)
+			{
+				p[x, 6] = (x / 2) % 2 == 0 ? a : b;
+			}
+		}
+		p.Rect(1, 0, 14, 1, Outline);
+		p.Rect(2, 6, 1, 4, post);
+		p.Rect(13, 6, 1, 4, post);
+		p.Rect(1, 9, 14, 6, Outline);
+		p.Rect(2, 10, 12, 4, counter);
+		p.Rect(2, 10, 12, 1, new Color(192, 142, 92));
+		p.Rect(5, 8, 2, 2, new Color(250, 214, 80));
+		p.Rect(9, 8, 2, 2, new Color(250, 214, 80));
+		p[5, 8] = new Color(255, 246, 190);
+		p[9, 8] = new Color(255, 246, 190);
+		return p;
+	}
+
+	private static Pixels BuildBed()
+	{
+		var p = new Pixels();
+		p.Rect(2, 1, 12, 15, Outline);
+		p.Rect(3, 2, 10, 13, new Color(122, 82, 52));
+		p.Rect(4, 2, 8, 4, new Color(240, 240, 232));
+		p.Rect(4, 5, 8, 1, new Color(200, 200, 196));
+		p.Rect(3, 6, 10, 8, new Color(92, 112, 204));
+		p.Rect(3, 6, 10, 2, new Color(146, 164, 232));
+		p.Rect(3, 13, 10, 1, new Color(64, 78, 150));
+		return p;
+	}
+
+	private static Pixels BuildRune()
+	{
+		var p = new Pixels();
+		Color c = new Color(190, 226, 255) * 0.85f;
+		for (int i = 0; i < 6; i++)
+		{
+			p[8 + i, 2 + i] = c;
+			p[8 - i, 2 + i] = c;
+			p[8 + i, 13 - i] = c;
+			p[8 - i, 13 - i] = c;
+		}
+		p.Rect(7, 7, 2, 2, c);
+		return p;
+	}
+
+	private static Pixels BuildBubble()
+	{
+		var p = new Pixels();
+		p.Rect(2, 2, 12, 9, Outline);
+		p.Rect(1, 3, 14, 7, Outline);
+		p.Rect(2, 3, 12, 7, new Color(250, 250, 244));
+		p.Rect(3, 2, 10, 1, new Color(250, 250, 244));
+		p.Rect(3, 10, 10, 1, new Color(250, 250, 244));
+		p.Rect(5, 11, 3, 1, Outline);
+		p.Rect(6, 12, 2, 1, Outline);
+		p[6, 11] = new Color(250, 250, 244);
+		foreach (int x in new[] { 4, 7, 10 })
+		{
+			p.Rect(x, 6, 2, 2, new Color(60, 60, 80));
+		}
+		return p;
+	}
+
+	private static Pixels BuildAlert()
+	{
+		var p = new Pixels();
+		p.Rect(5, 1, 6, 14, Outline);
+		p.Rect(6, 2, 4, 8, new Color(255, 214, 70));
+		p.Rect(6, 11, 4, 3, new Color(255, 214, 70));
+		return p;
+	}
+
+	private static Pixels BuildShadow()
+	{
+		var p = new Pixels();
+		for (int y = 11; y < 16; y++)
+		{
+			float dy = (y - 13.5f) / 2.5f;
+			for (int x = 0; x < 16; x++)
+			{
+				float dx = (x - 7.5f) / 6.5f;
+				if (dx * dx + dy * dy <= 1f)
+				{
+					p[x, y] = Color.Black * 0.32f;
+				}
+			}
+		}
+		return p;
+	}
+
+	private static Pixels BuildPointer()
+	{
+		var p = new Pixels();
+		for (int i = 0; i < 7; i++)
+		{
+			p.Rect(2 + i, 4 + i, 12 - 2 * i, 1, Outline);
+			if (i < 6)
+			{
+				p.Rect(3 + i, 4 + i, 10 - 2 * i, 1, new Color(255, 220, 96));
+			}
+		}
+		return p;
+	}
+}

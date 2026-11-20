@@ -1,7 +1,10 @@
 {
 	"text": {
 		"area.bell_cove": "Bell Cove",
+		"area.kiln_lower": "Drowned Kiln, Firing Floor",
+		"area.kiln_upper": "Drowned Kiln, Upper Gallery",
 		"area.reed_path": "Reed Path",
+		"area.saltgrass": "Saltgrass Market",
 		"area.tidewater": "Tidewater Landing",
 
 		"game.arrive": "You arrive at {0}.",

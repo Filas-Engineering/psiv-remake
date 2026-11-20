@@ -14,11 +14,13 @@ Planning documents, engine-neutral C++17 libraries and tooling for a 3D remake o
 | `docs/spec/` | 300 numbered requirements per system (`BAT-`, `ENC-`, `FLD-`, `SAV-`, `EVT-`, `TXT-`, `UI-`, `FLOW-`) |
 | `docs/info-needed.md` | The 40 facts about the original still to confirm, and the data tables to deliver |
 | `docs/research/published-mechanics.md` | What is known about each of those facts, with sources and confidence |
+| `docs/data-import.md` | How a team brings its own data into these formats: what each file holds, the order, the checks, common mistakes |
 | `docs/research/original-battle-rules.md` | The original's battle rules as read from the disassembly: AI, targeting, combinations, rewards, statuses, end conditions, vehicles |
 | `core/` | Battle rules library (`librules.a`), placeholder data, `battle_cli`, 179 tests |
 | `events/` | Event script format, compiler and resumable interpreter, `event_cli`, 92 tests |
-| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles. `game_cli`, 70 tests |
+| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles. `game_cli` (play, bot, `--check` for data), 75 tests |
 | `tools/text/` | Line database, glossary, rename review and localization export (Python, 98 tests) |
+| `tools/maps/` | Tiled maps to area files and back (Python, 46 tests) |
 | `acceptance/` | The spec's automatable checks, run against the libraries. `report.md` maps every requirement to a status |
 | `bindings/` | C API over the session, C# wrapper, MonoGame sample |
 | `tools/linux-check.sh`, `tools/windows-check.sh` | Platform checks in Docker |
@@ -30,7 +32,7 @@ Each library has a README that documents its data formats, API and rules. Start 
 Needs a C++17 compiler, GNU Make and Python 3. The .NET SDK is optional and expected at `~/.dotnet`.
 
 ```bash
-make test          # core, events, game, text tooling
+make test          # core, events, game, text and map tooling
 make acceptance    # spec checks and report
 make bindings      # C tests, C# tests, MonoGame sample headless run
 make linux-check   # all three in Docker with gcc and clang
@@ -45,7 +47,11 @@ Try it by hand:
 cd core && ./build/battle_cli --seed 1 --auto
 cd game && ./build/game_cli --seed 6 --auto-battle --script data/scripts/playthrough.txt --saves build/cli_saves
 cd game && ./build/game_cli --bot --seed 2
+cd game && ./build/game_cli --check data     # every data problem with file and line, and what loaded
+cd game && make maps                         # area files from the Tiled sources in data/maps
 ```
+
+Bringing in real data: [`data-import.md`](data-import.md).
 
 ## Current results
 
@@ -53,8 +59,9 @@ cd game && ./build/game_cli --bot --seed 2
 | --- | --- |
 | core | 179 tests pass |
 | events | 92 tests pass |
-| game | 70 tests pass, scripted playthrough matches its expected transcript, bot finishes both encounter modes |
+| game | 75 tests pass, data check passes, area files match their Tiled sources, scripted playthrough matches its expected transcript, bot finishes both encounter modes on the main route and the kiln route |
 | text tooling | 98 tests pass |
+| map tooling | 46 tests pass |
 | acceptance | PASS 26, FAIL 0, NOT IMPLEMENTED 12, NOT AUTOMATABLE 26 |
 | C API | 641 checks pass |
 | C# | 13 tests pass |
@@ -111,14 +118,14 @@ The seeded tests are tuned to the placeholder balance. Any rule or data change s
 | --- | --- | --- |
 | Scripted playthrough | 6 | `game/Makefile`, `game/tests/test_playthrough.cpp`, `acceptance/game/support.cpp`, `bindings/Makefile`, C# `SessionTests` |
 | Binding session tests | 285 | `bindings/c/tests/test_api.c`, C# `SessionTests.NewSession` |
-| Bot run | 2 | `game/Makefile`, `game/tests/test_playthrough.cpp` |
+| Bot run (main route and kiln route) | 2 | `game/Makefile`, `game/tests/test_playthrough.cpp` |
 | Hard-difficulty record golden | 11 | `core/Makefile`, `core/tests/test_battle.cpp` |
 
 The scripted playthrough needs the first battle lost twice and then won. After a change, scan seeds until the script's expectations hold, update every place above, and regenerate `game/tests/expected/playthrough.txt` and `acceptance/report.md` with their Makefile targets.
 
 ## Open work
 
-**Content.** The libraries are built to take the real game as data: abilities, enemies, encounters, statuses, items, equipment, areas, events and text. None of it is loaded yet. The scope counts 128 event hooks, 211 chests and 50 shops against the placeholder's 10, 3 and 2. `docs/info-needed.md` lists every table to deliver and its format.
+**Content.** The libraries are built to take the real game as data: abilities, enemies, encounters, statuses, items, equipment, areas, events and text. None of it is loaded yet. The scope counts 128 event hooks, 211 chests and 50 shops against the placeholder's 16, 9 and 4. `docs/info-needed.md` lists every table to deliver and its format, and [`data-import.md`](data-import.md) how to bring it in: `game_cli --check` validates a data directory and `tools/maps` converts Tiled maps. Three of the placeholder's six areas (Saltgrass Market and the two floors of the Drowned Kiln) are drawn in Tiled as an example.
 
 **Facts still to confirm.** Of the 40 "to measure" items: 8 are known with high confidence, 9 medium, 10 low, 12 unknown, 1 split. The tally and the per-item notes are in `docs/info-needed.md` and `docs/research/published-mechanics.md`.
 

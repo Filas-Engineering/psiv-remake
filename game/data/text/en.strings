@@ -49,12 +49,37 @@ cove.campfire.rested = The warmth draws the ache out of everyone.
 cove.campfire.declined = The embers settle back into the ash.
 cove.campfire.journal = The firelight is good enough to write by.
 
+saltgrass.kilnwright.story = The old kiln down the east stair fired every pot in this market. Then the sea came in and drowned it.
+saltgrass.kilnwright.ask = Its heart-stone still holds an ember. Will you carry it up to me?
+saltgrass.kilnwright.accepted = Take the east gate and go down past the galleries. The heart-stone sits in the firing pit, lowest floor.
+saltgrass.kilnwright.declined = Then I will keep my hands warm on cold tea a little longer.
+saltgrass.kilnwright.reminder = The firing pit, lowest floor. Mind the steam on the stairs.
+saltgrass.kilnwright.ember = You brought the ember. Look at it, still breathing. Take these, and come back when the first new pots are fired.
+saltgrass.kilnwright.thanks = The new kiln draws well. Every pot in the market carries your thumbprint now, in a way.
+saltgrass.lamplighter.greeting = Evening already? I light this square before anyone else is awake.
+saltgrass.lamplighter.topics = Ask about...
+saltgrass.lamplighter.topic_kiln = The kiln
+saltgrass.lamplighter.topic_canal = The canal
+saltgrass.lamplighter.about_kiln = Steam still comes up the east stair on still nights. Things nest in warm places.
+saltgrass.lamplighter.about_canal = Three bridges, and a different stubborn family rebuilt each one.
+saltgrass.ferrywoman.cold = No boats run on the canal while the kiln is cold. There is nothing to carry.
+saltgrass.ferrywoman.warm = The kilnwright is firing again. I will have crates to row by morning.
+
+kiln.upper.arrival = Warm fog rolls along the galleries. Shelves of half-fired pots stand in the shallow water.
+kiln.lower.draft = A hot draft breathes up from somewhere ahead. The firing pit is close.
+kiln.lower.heart_unknown = A round stone sits in the pit, faintly warm. It does not seem to want anything from you.
+kiln.lower.heart_glow = The heart-stone pulses at your touch. A single ember lifts free and settles in a clay cup.
+kiln.lower.heart_dark = The heart-stone is cool now. Its ember has gone up to the market.
+
 # Text the game shows itself, not a script: speaker names, the quest log, the encyclopedia and party talk.
 choice.yes = Yes
 choice.no = No
 
 speaker.dockhand = Dockhand
+speaker.ferrywoman = Canal Ferrywoman
 speaker.guide = Harbor Guide
+speaker.kilnwright = Kilnwright
+speaker.lamplighter = Lamplighter
 speaker.peddler = Reed Peddler
 
 objective.meet_guide = Find the harbor guide by the noticeboard.
@@ -73,3 +98,7 @@ talk.reeds.1 = Every step out here squelches. I am counting them.
 talk.reeds.2 = Count the bites instead. I am the one who has to dress them.
 talk.chapter_one.1 = A bell that rings by itself. I would like to meet whoever pulls the rope.
 talk.after_bell.1 = Supper at the harbor, then. I hear the guide promised.
+talk.market.1 = A town that smells of salt and clay. I could get used to this.
+talk.market.2 = Get used to it after we rest. My feet are done.
+talk.kiln.1 = Watch the water. Some of those pots are not pots.
+talk.kiln.2 = It is warmer down here than it has any right to be.

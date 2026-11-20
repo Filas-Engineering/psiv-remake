@@ -75,3 +75,18 @@ TEST(botFinishesTheRouteInBothModes) {
 	const BotResult again = runBot(test::data(), 2, EncounterMode::Visible, route);
 	CHECK_EQ(again.table, visible.table);
 }
+
+TEST(botWalksTheKilnRouteThroughTheImportedAreas) {
+	std::string route;
+	CHECK(readFile("data/routes/kiln.route", route));
+	for (EncounterMode mode : {EncounterMode::Visible, EncounterMode::Random}) {
+		const BotResult r = runBot(test::data(), 2, mode, route, "saltgrass.kiln_done");
+		CHECK(r.finished);
+		CHECK_EQ(r.errors, 0);
+		for (const char* area : {"saltgrass ", "kiln_upper ", "kiln_lower "}) {
+			CHECK(r.table.find(area) != std::string::npos);
+		}
+	}
+	// Without the goal the route does not count as finished: it never fights the boss.
+	CHECK(!runBot(test::data(), 2, EncounterMode::Visible, route).finished);
+}

@@ -55,10 +55,11 @@ struct BotResult {
 	std::string table;
 	int battles = 0;
 	int errors = 0;
+	// Every boss flag is set, or the goal flag when one was given.
 	bool finished = false;
 	std::int64_t playTimeMs = 0;
 };
 
-BotResult runBot(const GameData& data, std::uint64_t seed, std::optional<EncounterMode> mode, const std::string& route);
+BotResult runBot(const GameData& data, std::uint64_t seed, std::optional<EncounterMode> mode, const std::string& route, const std::string& goalFlag = "");
 
 }

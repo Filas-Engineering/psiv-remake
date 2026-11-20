@@ -1,0 +1,22 @@
+{
+	"id": "maze",
+	"kind": "town",
+	"map": [
+		"#########",
+		"#...#...#",
+		"#...#...#",
+		"#...#....",
+		"#########"
+	],
+	"markers": {"start": [1, 1], "far": [6, 1]},
+	"exits": [
+		{"at": [8, 3], "to": "tidewater", "marker": "start"}
+	],
+	"hooks": [
+		{"id": "plate", "at": [6, 2], "trigger": "step", "event": "cove_quiet"}
+	],
+	"chests": [
+		{"id": "maze_box", "at": [7, 1], "flag": "chest.maze_box", "money": 5},
+		{"id": "maze_near", "at": [3, 3], "flag": "chest.maze_near", "money": 5}
+	]
+}

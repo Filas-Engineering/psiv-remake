@@ -104,6 +104,7 @@ public:
 	}
 
 	bool empty() const { return list_.empty(); }
+	const std::vector<rules::Problem>& list() const { return list_; }
 
 	rules::Result<GameData> failure() const {
 		std::string text;
@@ -428,44 +429,53 @@ void checkReferences(const GameData& data, Problems& problems) {
 		}
 		stringExists("game.json actor", "speaker." + actor);
 	}
-	for (const auto& [areaId, area] : data.areas) {
-		const std::string where = "area " + areaId;
-		textExists(where, "area." + areaId);
+	for (const auto& [areaId, areaData] : data.areas) {
+		const Area& area = areaData;
+		auto at = [&](int line, const char* key, std::vector<std::string> params) { problems.add({area.file, line, "", {key, std::move(params)}}); };
+		auto flagAt = [&](int line, const std::string& flag) {
+			const events::Declaration* d = data.registry.find(flag);
+			if (!flag.empty() && (!d || !d->is_flag)) {
+				at(line, "data.flag_not_declared", {flag});
+			}
+		};
+		textExists(c.languages.front().text, "area." + areaId);
 		for (const Exit& e : area.exits) {
-			if (!markerExists(e.toArea, e.toMarker)) {
-				problems.add(where, "data.exit_leads_missing_marker", {e.toArea, e.toMarker});
+			if (!data.area(e.toArea)) {
+				at(e.line, "data.exit_leads_unknown_area", {e.toArea});
+			} else if (!markerExists(e.toArea, e.toMarker)) {
+				at(e.line, "data.exit_leads_missing_marker", {e.toArea, e.toMarker});
 			}
 		}
 		for (const Hook& h : area.hooks) {
 			if (data.program.find_event(h.event) < 0) {
-				problems.add(where, "data.hook_runs_unknown_event", {h.id, h.event});
+				at(h.line, "data.hook_runs_unknown_event", {h.id, h.event});
 			}
-			flagDeclared(where + " hook '" + h.id + "'", h.requireFlag);
-			flagDeclared(where + " hook '" + h.id + "'", h.blockFlag);
+			flagAt(h.line, h.requireFlag);
+			flagAt(h.line, h.blockFlag);
 		}
 		for (const Shop& s : area.shops) {
 			for (const std::string& id : s.stock) {
 				if (!knownThing(db, id) || data.price(id) < 0) {
-					problems.add(where, "data.shop_stock_unknown", {s.id, id});
+					at(s.line, "data.shop_stock_unknown", {s.id, id});
 				}
 			}
 		}
 		for (const Chest& ch : area.chests) {
 			for (const auto& [id, n] : ch.items) {
 				if (!db.item(id)) {
-					problems.add(where, "data.chest_holds_unknown_item", {ch.id, id});
+					at(ch.line, "data.chest_holds_unknown_item", {ch.id, id});
 				}
 			}
 			for (const auto& [id, n] : ch.equipment) {
 				if (!db.equipmentPiece(id)) {
-					problems.add(where, "data.chest_holds_unknown_equipment", {ch.id, id});
+					at(ch.line, "data.chest_holds_unknown_equipment", {ch.id, id});
 				}
 			}
 		}
 		for (const Zone& z : area.zones) {
 			for (const TableEntry& t : z.table) {
 				if (!db.encounter(t.encounter)) {
-					problems.add(where, "data.zone_lists_unknown_encounter", {z.id, t.encounter});
+					at(z.line, "data.zone_lists_unknown_encounter", {z.id, t.encounter});
 				}
 			}
 		}
@@ -517,48 +527,45 @@ void checkReferences(const GameData& data, Problems& problems) {
 	}
 }
 
-}
-
-rules::Result<GameData> loadGameData(const std::string& directory) {
-	return loadGameData(DataDirectories{directory, ""});
-}
-
-rules::Result<GameData> loadGameData(const DataDirectories& directories) {
+// Loads into `data` as far as it can. A game.json problem stops at once; a battle data problem skips core's
+// text table but still reads the game's own files, so one run reports as much as it can. The scripts are
+// compiled, and the cross-references checked, only when everything before them loaded.
+void loadInto(const DataDirectories& directories, GameData& data, Problems& problems, bool& referencesChecked) {
+	referencesChecked = false;
 	const std::string& directory = directories.game;
-	GameData data;
-	Problems problems;
 	std::string text;
 	const std::string configPath = join(directory, "game.json");
 	if (!readFile(configPath, text)) {
 		problems.add("", "data.cannot_read", {configPath});
-		return problems.failure();
+		return;
 	}
 	rules::Result<JsonValue> json = rules::parseJson(text);
 	if (!json.ok()) {
 		problems.add(json.problems, configPath);
-		return problems.failure();
+		return;
 	}
 	JsonReader reader(configPath);
 	readConfig(reader, *json.value, data.config);
 	if (!reader.ok()) {
 		problems.add(reader.problems());
-		return problems.failure();
+		return;
 	}
 	std::uint64_t hash = fnv(1469598103934665603ULL, text);
 
 	const std::string coreDirectory = directories.core.empty() ? join(directory, data.config.coreData) : directories.core;
 	rules::Result<rules::Database> db = rules::loadDatabaseFromDirectory(coreDirectory);
-	if (!db.ok()) {
+	const bool coreLoaded = db.ok();
+	if (!coreLoaded) {
 		problems.add(db.problems);
-		return problems.failure();
+	} else {
+		data.db = std::move(*db.value);
 	}
-	data.db = std::move(*db.value);
 
 	rules::TextTable coreTable;
-	rules::Result<rules::TextTable> coreText = rules::loadTextTable(join(coreDirectory, "text_en.json"));
+	rules::Result<rules::TextTable> coreText = coreLoaded ? rules::loadTextTable(join(coreDirectory, "text_en.json")) : rules::Result<rules::TextTable>::success({});
 	if (!coreText.ok()) {
 		problems.add(coreText.problems);
-	} else {
+	} else if (coreLoaded) {
 		coreTable = std::move(*coreText.value);
 		for (const std::string& key : rules::messageKeys(data.db)) {
 			if (!coreTable.count(key)) {
@@ -657,7 +664,7 @@ rules::Result<GameData> loadGameData(const DataDirectories& directories) {
 	}
 	problems.add(diagnostics);
 	if (!problems.empty()) {
-		return problems.failure();
+		return;
 	}
 
 	data.registry = buildRegistry(data, problems);
@@ -689,14 +696,39 @@ rules::Result<GameData> loadGameData(const DataDirectories& directories) {
 
 	if (problems.empty()) {
 		checkReferences(data, problems);
-	}
-	if (!problems.empty()) {
-		return problems.failure();
+		referencesChecked = true;
 	}
 	hash ^= data.db.contentHash;
 	hash = hash * 1099511628211ULL ^ data.program.fingerprint;
 	data.contentHash = hash;
+}
+
+}
+
+rules::Result<GameData> loadGameData(const std::string& directory) {
+	return loadGameData(DataDirectories{directory, ""});
+}
+
+rules::Result<GameData> loadGameData(const DataDirectories& directories) {
+	GameData data;
+	Problems problems;
+	bool referencesChecked = false;
+	loadInto(directories, data, problems, referencesChecked);
+	if (!problems.empty()) {
+		return problems.failure();
+	}
 	return rules::Result<GameData>::success(std::move(data));
+}
+
+std::vector<rules::Problem> loadGameDataPartly(const DataDirectories& directories, GameData& out, bool* referencesChecked) {
+	out = GameData();
+	Problems problems;
+	bool checked = false;
+	loadInto(directories, out, problems, checked);
+	if (referencesChecked) {
+		*referencesChecked = checked;
+	}
+	return problems.list();
 }
 
 std::string registryText(const events::Registry& registry) {

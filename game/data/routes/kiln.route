@@ -1,0 +1,53 @@
+# The kiln side story for the pacing bot: through the reeds to Bell Cove, up
+# the cliff stair to Saltgrass Market, both floors of the Drowned Kiln with
+# their chests, and back to the kilnwright. Run with --goal saltgrass.kiln_done.
+new
+walk guide_front
+face north
+talk
+choose 0
+name Bryn
+walk 13 4
+walk 10 4
+walk 19 4
+walk 6 0
+walk kilnwright_front
+face south
+talk
+choose 0
+walk goods_front
+face north
+talk
+buy tonic 3
+leave
+walk inn_front
+face north
+talk
+rest
+walk 47 12
+walk 2 36
+face south
+talk
+walk 37 3
+face north
+talk
+walk 37 37
+walk 1 37
+face south
+talk
+walk 20 7
+walk heart_front
+face north
+talk
+walk 26 14
+face north
+talk
+chat
+walk 37 37
+walk 0 20
+walk kilnwright_front
+face south
+talk
+walk ferrywoman_front
+face south
+talk

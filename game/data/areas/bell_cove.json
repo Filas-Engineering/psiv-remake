@@ -4,7 +4,7 @@
 	"encounter_mode": "visible",
 	"step_ms": 250,
 	"map": [
-		"############",
+		"######.#####",
 		"#..........#",
 		"#..~~......#",
 		"#..~~......#",
@@ -18,9 +18,13 @@
 		"west_gate": [1, 4],
 		"bell_front": [8, 4],
 		"box_front": [9, 6],
-		"camp_front": [2, 2]
+		"camp_front": [2, 2],
+		"north_stair": [6, 1]
 	},
-	"exits": [{"at": [0, 4], "to": "reed_path", "marker": "east_gate"}],
+	"exits": [
+		{"at": [0, 4], "to": "reed_path", "marker": "east_gate"},
+		{"at": [6, 0], "to": "saltgrass", "marker": "south_gate"}
+	],
 	"hooks": [
 		{"id": "bell", "at": [9, 4], "event": "cove_bell", "block_flag": "cove.warden_beaten"},
 		{"id": "quiet", "trigger": "flag", "event": "cove_quiet", "require_flag": "cove.warden_beaten", "block_flag": "cove.quiet_seen"},

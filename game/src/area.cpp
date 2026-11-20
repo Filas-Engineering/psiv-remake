@@ -146,6 +146,7 @@ const JsonValue* array(JsonReader& reader, const JsonValue& object, const char* 
 
 void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 	reader.only(z, {"id", "from", "to", "table", "visible", "random"});
+	zone.line = z.line;
 	reader.text(z, "id", zone.id, true);
 	reader.cellField(z, "from", zone.from, true);
 	reader.cellField(z, "to", zone.to, true);
@@ -210,6 +211,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	const JsonValue& json = *parsed.value;
 	JsonReader reader(file);
 	Area area;
+	area.file = file;
 	if (!json.is(JsonValue::Type::Object)) {
 		reader.fail(json, "data.area_object", {});
 		return rules::Result<Area>::failure(reader.problems(), reader.errors());
@@ -253,6 +255,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			Cell c;
 			if (reader.cell(markers->values[i], c)) {
 				area.markers[markers->keys[i]] = c;
+				area.markerLines[markers->keys[i]] = markers->values[i].line;
 				checkCell(markers->values[i], c, "marker '" + markers->keys[i] + "'");
 			}
 		}
@@ -261,6 +264,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		for (const JsonValue& e : exits->items) {
 			reader.only(e, {"at", "to", "marker"});
 			Exit exit;
+			exit.line = e.line;
 			reader.cellField(e, "at", exit.at, true);
 			reader.text(e, "to", exit.toArea, true);
 			reader.text(e, "marker", exit.toMarker, true);
@@ -272,6 +276,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		for (const JsonValue& h : hooks->items) {
 			reader.only(h, {"id", "at", "trigger", "event", "require_flag", "block_flag"});
 			Hook hook;
+			hook.line = h.line;
 			reader.text(h, "id", hook.id, true);
 			reader.text(h, "event", hook.event, true);
 			reader.text(h, "require_flag", hook.requireFlag, false);
@@ -301,6 +306,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		for (const JsonValue& s : shops->items) {
 			reader.only(s, {"id", "at", "stock", "sell_percent"});
 			Shop shop;
+			shop.line = s.line;
 			reader.text(s, "id", shop.id, true);
 			if (s.is(JsonValue::Type::Object) && reader.field(s, "at", JsonValue::Type::Array, false)) {
 				shop.at.emplace();
@@ -316,6 +322,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		for (const JsonValue& r : rests->items) {
 			reader.only(r, {"id", "at", "cost"});
 			RestPoint rest;
+			rest.line = r.line;
 			reader.text(r, "id", rest.id, true);
 			if (r.is(JsonValue::Type::Object) && reader.field(r, "at", JsonValue::Type::Array, false)) {
 				rest.at.emplace();
@@ -330,6 +337,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		for (const JsonValue& c : chests->items) {
 			reader.only(c, {"id", "at", "flag", "items", "equipment", "money"});
 			Chest chest;
+			chest.line = c.line;
 			reader.text(c, "id", chest.id, true);
 			reader.cellField(c, "at", chest.at, true);
 			reader.text(c, "flag", chest.flag, true);

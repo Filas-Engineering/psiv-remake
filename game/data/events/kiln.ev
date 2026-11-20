@@ -1,0 +1,28 @@
+# The Drowned Kiln: the market's old kiln, taken by the sea. The upper
+# gallery still steams; the firing floor below holds the heart-stone the
+# kilnwright asked for.
+
+event kiln_upper_arrival skippable
+	lock player
+	narrate @kiln.upper.arrival
+	set kiln.upper_seen
+	unlock player
+end
+
+event kiln_lower_draft skippable
+	narrate @kiln.lower.draft
+	set kiln.draft_felt
+end
+
+event kiln_lower_heart unskippable
+	lock player
+	if kiln.ember_taken
+		narrate @kiln.lower.heart_dark
+	else if saltgrass.kiln_asked
+		narrate @kiln.lower.heart_glow
+		set kiln.ember_taken
+	else
+		narrate @kiln.lower.heart_unknown
+	end
+	unlock player
+end

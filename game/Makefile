@@ -12,7 +12,10 @@ LIB_OBJS = $(patsubst src/%.cpp,$(BUILD)/src/%.o,$(wildcard src/*.cpp))
 TEST_OBJS = $(patsubst tests/%.cpp,$(BUILD)/tests/%.o,$(wildcard tests/*.cpp))
 CLI_OBJS = $(BUILD)/cli/game_cli.o
 
-.PHONY: all test clean deps
+.PHONY: all test clean deps maps maps-check expected
+
+PYTHON = python3 -I
+MAP_SOURCES = $(wildcard data/maps/*.tmj)
 
 all: $(LIB) $(CLI) $(TESTS)
 
@@ -23,7 +26,27 @@ deps:
 
 $(CORE_LIB) $(EVENTS_LIB): deps
 
-test: all
+# Areas drawn in Tiled: data/maps/NAME.tmj is the source of data/areas/NAME.json.
+maps:
+	@for m in $(MAP_SOURCES); do \
+		echo "$$m -> data/areas/$$(basename $$m .tmj).json"; \
+		$(PYTHON) ../tools/maps/tiled_to_area.py $$m -o data/areas/$$(basename $$m .tmj).json || exit 1; \
+	done
+
+maps-check:
+	@for m in $(MAP_SOURCES); do \
+		$(PYTHON) ../tools/maps/tiled_to_area.py $$m --check data/areas/$$(basename $$m .tmj).json || exit 1; \
+	done
+	@echo "data/areas matches data/maps ($(words $(MAP_SOURCES)) maps)"
+
+# Re-records the scripted playthrough's golden transcript after a deliberate change.
+expected: all
+	rm -rf $(BUILD)/cli_saves
+	./$(CLI) --seed 6 --auto-battle --script data/scripts/playthrough.txt --saves $(BUILD)/cli_saves > tests/expected/playthrough.txt
+
+test: all maps-check
+	./$(CLI) --check data > $(BUILD)/check.log || (cat $(BUILD)/check.log; exit 1)
+	@tail -n 1 $(BUILD)/check.log
 	./$(TESTS)
 	$(MAKE) -C ../events build/event_cli
 	./$(CLI) --registry > $(BUILD)/registry.txt
@@ -36,6 +59,8 @@ test: all
 	@echo "scripted playthrough matches tests/expected/playthrough.txt"
 	./$(CLI) --bot --seed 2 > $(BUILD)/bot.log
 	@cat $(BUILD)/bot.log
+	./$(CLI) --bot --seed 2 --route data/routes/kiln.route --goal saltgrass.kiln_done > $(BUILD)/bot_kiln.log
+	@cat $(BUILD)/bot_kiln.log
 
 clean:
 	rm -rf $(BUILD)

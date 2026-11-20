@@ -1,0 +1,32 @@
+{
+	"id": "islet",
+	"kind": "field",
+	"map": [
+		"##########",
+		"#........#",
+		"#.####...#",
+		"#.#..#...#",
+		"#.####...#",
+		"##########"
+	],
+	"markers": {"dock": [1, 1], "on_chest": [7, 1]},
+	"exits": [
+		{"at": [8, 4], "to": "nowhere", "marker": "dock"}
+	],
+	"hooks": [
+		{"id": "sign", "at": [3, 1], "event": "cove_quiet"},
+		{"id": "sign", "at": [8, 2], "trigger": "step", "event": "cove_quiet"}
+	],
+	"shops": [
+		{"id": "islet_stall", "at": [8, 2], "stock": []}
+	],
+	"chests": [
+		{"id": "tidewater_crate", "at": [7, 1], "flag": "chest.islet_a", "items": {"tonic": 1}},
+		{"id": "islet_b", "at": [3, 1], "flag": "chest.islet_b", "money": 5}
+	],
+	"zones": [
+		{"id": "shore", "from": [6, 1], "to": [8, 4], "table": [{"encounter": "training"}]},
+		{"id": "shore", "from": [7, 3], "to": [12, 4], "table": [{"encounter": "training"}]},
+		{"id": "flipped", "from": [5, 4], "to": [1, 1], "table": [{"encounter": "training"}]}
+	]
+}

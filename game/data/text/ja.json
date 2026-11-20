@@ -1,7 +1,10 @@
 {
 	"text": {
 		"area.bell_cove": "鐘の入り江",
+		"area.kiln_lower": "沈んだ窯・焼き床",
+		"area.kiln_upper": "沈んだ窯・上の回廊",
 		"area.reed_path": "葦の小道",
+		"area.saltgrass": "塩草の市場",
 		"area.tidewater": "潮見の船着き場",
 
 		"game.arrive": "{0}に着いた。",

@@ -38,8 +38,9 @@ public sealed class InputState
 		Down(Keys.Up) ? Direction.North : Down(Keys.Right) ? Direction.East : Down(Keys.Down) ? Direction.South : Down(Keys.Left) ? Direction.West : Direction.None;
 }
 
-// The sample's screens: reads the session after each update and draws it with flat rectangles and text.
-// Holds no game state of its own beyond cursors and the battle playback queue.
+// The sample's screens: reads the session after each update and draws it through the surface with the
+// sample's own generated pictures (Art), rectangles and text. Holds no game state of its own beyond cursors,
+// the battle playback queue and what the drawing needs to animate (a clock, the field's glides).
 public sealed class SampleController
 {
 	private const int PlaybackLineMs = 350;
@@ -63,6 +64,10 @@ public sealed class SampleController
 
 	private readonly GameSession _s;
 	private readonly Action<string> _log;
+	private readonly FieldRenderer _field = new();
+	private Art? _art;
+	// Milliseconds of frame time seen, for animations; advances only with the frame times Update gets.
+	private int _clockMs;
 	private readonly List<(string Text, int MsLeft)> _ticker = [];
 	private Screen _lastScreen = (Screen)(-1);
 	private string _lastLine = "";
@@ -205,10 +210,10 @@ public sealed class SampleController
 				darkness = a.Progress;
 				break;
 			default:
-				// Anything else, a move included, is a marker sliding across the top of the screen with its subject.
-				int x = 20 + (int)((s.Width - 200) * a.Progress);
-				s.Fill(x, 44, 160, 22, Style.Accent);
-				s.Text(a.Action.Subject.Length > 0 ? a.Action.Subject : a.Action.Description, x + 6, 44, Style.Background, Style.Small);
+				// Anything else, a move included, is a label sliding across the top of the screen with its subject.
+				string label = a.Action.Subject.Length > 0 ? a.Action.Subject : a.Action.Description;
+				int x = 20 + (int)((s.Width - s.Measure(label, Style.Small) - 64) * a.Progress);
+				Style.Plate(s, label, x, 52, Style.Accent);
 				break;
 			}
 		}
@@ -220,6 +225,7 @@ public sealed class SampleController
 
 	public void Update(int dtMs, InputState input)
 	{
+		_clockMs += dtMs;
 		AdvanceAnimations(dtMs);
 		for (int i = _ticker.Count - 1; i >= 0; i--)
 		{
@@ -316,20 +322,43 @@ public sealed class SampleController
 		}
 	}
 
-	private void DrawTitle(IDrawSurface s)
+	private void DrawTitle(IDrawSurface s, Art art)
 	{
-		s.Text(_s.GameInfo().Title, 80, 80, Style.Accent, Style.Title);
-		s.Text("A placeholder adventure played through libpsiv_session", 80, 124, Style.Dim, Style.Small);
+		Art.TileSet tiles = art.Tiles(Theme.Field);
+		static CellFlags Terrain(int x, int y) => y <= 1 ? CellFlags.Wall : y is 11 or 12 ? CellFlags.Water : CellFlags.Floor;
+		int frame = _clockMs / 220 % Art.WaterFrames;
+		for (int y = 0; y * Art.Tile < s.Height; y++)
+		{
+			for (int x = 0; x * Art.Tile < s.Width; x++)
+			{
+				FieldRenderer.DrawCell(s, tiles, Terrain, x, y, x * Art.Tile, y * Art.Tile, Noise.Hash(x, y, 7), frame);
+			}
+		}
+		s.Fill(0, 0, s.Width, s.Height, Style.Background * 0.35f);
+
+		var options = TitleOptions();
+		int w = 600;
+		int h = 176 + options.Count * 32;
+		int bx = (s.Width - w) / 2;
+		int by = (s.Height - h) / 2;
+		Style.Box(s, bx, by, w, h);
+		string title = _s.GameInfo().Title;
+		s.Text(title, (s.Width - s.Measure(title, Style.Title)) / 2, by + 26, Style.Accent, Style.Title);
+		const string subtitle = "A placeholder adventure played through libpsiv_session";
+		s.Text(subtitle, (s.Width - s.Measure(subtitle, Style.Small)) / 2, by + 66, Style.Dim, Style.Small);
+		int walk = 1 + _clockMs / 260 % 2;
+		s.Image(art.ActorFrame(Art.Hero, Direction.East, walk == 1 ? 1 : 0), bx + 28, by + 18, 64, 64, Color.White);
+		s.Image(art.Creature(Noise.Hash("title"), _clockMs / 400 % 2), bx + w - 92, by + 18, 64, 64, Color.White);
 		if (_s.WorldInfo().GameOver)
 		{
-			s.Text("The party has fallen.", 80, 160, Style.Bad);
+			const string fallen = "The party has fallen.";
+			s.Text(fallen, (s.Width - s.Measure(fallen)) / 2, by + 96, Style.Bad);
 		}
-		var options = TitleOptions();
 		for (int i = 0; i < options.Count; i++)
 		{
-			s.Text((i == _cursor ? "> " : "  ") + options[i].Label, 100, 220 + i * Style.LineHeight, i == _cursor ? Style.Accent : Style.Text);
+			Style.ListRow(s, options[i].Label, bx + 80, by + 132 + i * 32, w - 140, i == _cursor);
 		}
-		s.Text("Up/Down choose   Enter confirm", 80, s.Height - 60, Style.Dim, Style.Small);
+		DrawHint(s, "Up/Down choose   Enter confirm");
 	}
 
 	// Field
@@ -359,65 +388,59 @@ public sealed class SampleController
 		_s.Update(dtMs, input.Held);
 	}
 
-	private void DrawField(IDrawSurface s, int bottomReserved)
+	private bool DrawField(IDrawSurface s, Art art)
 	{
 		FieldView? view = _s.Field();
 		if (view is null)
 		{
-			return;
+			return false;
 		}
-		FieldInfo f = view.Info;
-		int cell = Math.Clamp(Math.Min((s.Width - 40) / Math.Max(1, f.Width), (s.Height - 80 - bottomReserved) / Math.Max(1, f.Height)), 8, 48);
-		int ox = (s.Width - cell * f.Width) / 2;
-		int oy = 50;
-		for (int y = 0; y < f.Height; y++)
-		{
-			for (int x = 0; x < f.Width; x++)
-			{
-				CellFlags c = view.Cell(x, y) & CellFlags.TerrainMask;
-				s.Fill(ox + x * cell, oy + y * cell, cell - 1, cell - 1, c == CellFlags.Wall ? Style.Wall : c == CellFlags.Water ? Style.Water : Style.Floor);
-			}
-		}
-		foreach (FieldExit e in view.Exits)
-		{
-			s.Fill(ox + e.X * cell, oy + e.Y * cell, cell - 1, cell - 1, Style.Exit);
-		}
-		foreach (FieldPoint p in view.Points)
-		{
-			Color color = p.Kind switch
-			{
-				PointKind.Talk => Style.Talk,
-				PointKind.Step => Style.Step,
-				PointKind.Chest => p.Active ? Style.Chest : Style.ChestOpen,
-				PointKind.Shop => Style.Shop,
-				_ => Style.Rest,
-			};
-			int inset = p.Kind == PointKind.Step ? cell / 3 : cell / 8;
-			if (p.Kind != PointKind.Step || p.Active)
-			{
-				s.Fill(ox + p.X * cell + inset, oy + p.Y * cell + inset, cell - 1 - 2 * inset, cell - 1 - 2 * inset, color);
-			}
-		}
-		foreach (FieldEnemy e in view.Enemies)
-		{
-			s.Fill(ox + e.X * cell + cell / 6, oy + e.Y * cell + cell / 6, cell * 2 / 3, cell * 2 / 3, e.State == EnemyState.Chasing ? Style.EnemyChasing : Style.Enemy);
-		}
-		int lx = ox + f.LeaderX * cell;
-		int ly = oy + f.LeaderY * cell;
-		s.Fill(lx + cell / 6, ly + cell / 6, cell * 2 / 3, cell * 2 / 3, Style.Leader);
-		(int dx, int dy) = f.Facing switch { Direction.North => (0, -1), Direction.East => (1, 0), Direction.South => (0, 1), _ => (-1, 0) };
-		s.Fill(lx + cell / 2 - 3 + dx * cell / 3, ly + cell / 2 - 3 + dy * cell / 3, 6, 6, Style.Bad);
-
-		WorldInfo w = _s.WorldInfo();
-		long seconds = w.PlayTimeMs / 1000;
-		s.Text($"{f.AreaName}    Money {w.Money}    {seconds / 3600}:{seconds / 60 % 60:00}:{seconds % 60:00}", 20, 14, Style.Text);
+		List<string> lineup = _s.Party().Where(m => m.InLineup).Select(m => m.Id).ToList();
+		_field.Draw(s, art, view, _clockMs, lineup);
+		return true;
 	}
 
-	private void DrawTicker(IDrawSurface s, int y)
+	private void DrawHud(IDrawSurface s)
 	{
-		for (int i = 0; i < _ticker.Count; i++)
+		FieldInfo? f = _s.FieldInfo();
+		if (f is null)
 		{
-			s.Text(_ticker[i].Text, 24, y + i * 22, Style.Text, Style.Small);
+			return;
+		}
+		WorldInfo w = _s.WorldInfo();
+		long seconds = w.PlayTimeMs / 1000;
+		Style.Plate(s, f.AreaName, 16, 12, Style.Accent);
+		string status = $"Money {w.Money}    {seconds / 3600}:{seconds / 60 % 60:00}:{seconds % 60:00}";
+		Style.Plate(s, status, s.Width - s.Measure(status, Style.Small) - 40, 12, Style.Text);
+	}
+
+	private static void DrawHint(IDrawSurface s, string hint)
+	{
+		s.Fill(0, s.Height - 30, s.Width, 30, Color.Black * 0.6f);
+		s.Text(hint, (s.Width - s.Measure(hint, Style.Small)) / 2, s.Height - 25, Style.Dim, Style.Small);
+	}
+
+	// The field menu, shop, logs, save prompt and name entry share this: the field dimmed behind a window.
+	private void DrawBackdrop(IDrawSurface s, Art art)
+	{
+		if (DrawField(s, art))
+		{
+			s.Fill(0, 0, s.Width, s.Height, Color.Black * 0.55f);
+		}
+	}
+
+	// The newest notices as small boxes stacked up from `bottom`, newest lowest, fading as they expire.
+	private void DrawToasts(IDrawSurface s, int x, int bottom, int most = 4)
+	{
+		int y = bottom;
+		for (int i = _ticker.Count - 1; i >= Math.Max(0, _ticker.Count - most); i--)
+		{
+			(string text, int msLeft) = _ticker[i];
+			float alpha = Math.Clamp(msLeft / 400f, 0f, 1f);
+			string shown = Style.Fit(s, text, s.Width - 2 * x - 28, Style.Small);
+			y -= 38;
+			Style.Box(s, x, y, s.Measure(shown, Style.Small) + 28, 32, alpha * 0.95f);
+			s.Text(shown, x + 14, y + 7, Style.Text * alpha, Style.Small);
 		}
 	}
 
@@ -458,32 +481,64 @@ public sealed class SampleController
 		_s.Update(dtMs);
 	}
 
-	private void DrawDialogue(IDrawSurface s)
+	private const int DialogueHeight = 176;
+
+	// The box sits at the bottom of the screen, or at the top when the leader stands where it would cover them.
+	private int DialogueTop(IDrawSurface s, bool field)
 	{
-		int boxH = 200;
-		DrawField(s, boxH);
-		int y = s.Height - boxH - 10;
-		Style.Box(s, 20, y, s.Width - 40, boxH);
+		int bottom = s.Height - DialogueHeight - 16;
+		return field && _field.LeaderScreenY + Art.Tile > bottom - 8 ? 36 : bottom;
+	}
+
+	private ActorLook LookOf(string id)
+	{
+		List<Member> lineup = _s.Party().Where(m => m.InLineup).ToList();
+		int index = lineup.FindIndex(m => m.Id == id);
+		return index == 0 ? Art.Hero : index > 0 ? Art.Companion(index - 1) : Art.LookFor(id);
+	}
+
+	private void DrawDialogue(IDrawSurface s, Art art)
+	{
+		bool field = DrawField(s, art);
+		int y = DialogueTop(s, field);
+		if (y > s.Height / 2)
+		{
+			_field.DrawBanner(s);
+		}
+		int x = 24;
+		int w = s.Width - 48;
+		Style.Box(s, x, y, w, DialogueHeight);
 		if (_s.Line() is { } line)
 		{
+			int tx = x + 26;
 			if (line.SpeakerName.Length > 0)
 			{
-				s.Text(line.SpeakerName, 40, y + 14, Style.Accent);
+				Style.Plate(s, line.SpeakerName, x + 18, y - 16, Style.Accent, Style.Body);
+				int px = x + 22;
+				int py = y + 34;
+				s.Fill(px - 2, py - 2, 100, 100, Style.PanelEdge);
+				s.Fill(px, py, 96, 96, Style.Track);
+				s.Fill(px, py + 56, 96, 40, Style.PanelTop);
+				ActorLook look = LookOf(line.SpeakerId.Length > 0 ? line.SpeakerId : line.SpeakerName);
+				s.Image(art.ActorFrame(look, Direction.South, 0), px + 8, py + 8, 80, 80, Color.White);
+				tx = px + 122;
 			}
-			int ty = y + 46;
-			foreach (string l in Style.Wrap(s, line.Text, s.Width - 100))
+			int ty = y + 30;
+			foreach (string l in Style.Wrap(s, line.Text, x + w - tx - 30))
 			{
-				s.Text(l, 40, ty, Style.Text);
+				s.Text(l, tx, ty, Style.Text);
 				ty += Style.LineHeight;
 			}
-			s.Text("Enter: next" + (_s.CanSkip ? "   Tab: skip" : ""), s.Width - 260, y + boxH - 30, Style.Dim, Style.Small);
+			string hint = "Enter next" + (_s.CanSkip ? "   Tab skip" : "");
+			s.Text(hint, x + w - s.Measure(hint, Style.Small) - 58, y + DialogueHeight - 32, Style.Dim, Style.Small);
+			s.Image(art.Pointer, x + w - 48, y + DialogueHeight - 40 + _clockMs / 260 % 2 * 3, 24, 24, Color.White);
 		}
 		else if (_s.Choice() is { } choice)
 		{
-			s.Text(choice.Prompt.Length == 0 ? "Choose:" : choice.Prompt, 40, y + 14, Style.Accent);
+			s.Text(choice.Prompt.Length == 0 ? "Choose:" : choice.Prompt, x + 26, y + 22, Style.Accent);
 			for (int i = 0; i < choice.Options.Count; i++)
 			{
-				s.Text((i == _cursor ? "> " : "  ") + choice.Options[i], 60, y + 50 + i * Style.LineHeight, i == _cursor ? Style.Accent : Style.Text);
+				Style.ListRow(s, choice.Options[i], x + 44, y + 62 + i * 30, 420, i == _cursor);
 			}
 		}
 	}
@@ -757,82 +812,220 @@ public sealed class SampleController
 		}
 	}
 
-	private void DrawBattle(IDrawSurface s)
+	private const int BattleGroundY = 300;
+	private const int BattleFootY = 366;
+	private const int BattlePanelTop = 420;
+	private const int BattleMenuWidth = 300;
+	private const int BattleLogLines = 5;
+
+	private static void DrawBattleBackdrop(IDrawSurface s, Art art, Theme theme)
+	{
+		(Color top, Color bottom, Color far) = theme switch
+		{
+			Theme.Town => (new Color(48, 54, 112), new Color(226, 160, 136), new Color(60, 54, 96)),
+			Theme.Dungeon => (new Color(12, 10, 18), new Color(54, 46, 68), new Color(30, 26, 40)),
+			_ => (new Color(92, 156, 222), new Color(204, 230, 242), new Color(70, 128, 90)),
+		};
+		const int bands = 20;
+		for (int i = 0; i < bands; i++)
+		{
+			s.Fill(0, i * BattleGroundY / bands, s.Width, BattleGroundY / bands + 1, Color.Lerp(top, bottom, i / (bands - 1f)));
+		}
+		for (int x = 0; x < s.Width; x += 8)
+		{
+			switch (theme)
+			{
+			case Theme.Town:
+				int roof = 50 + (int)(Noise.Hash(x / 72, 3) % 5) * 22;
+				s.Fill(x, BattleGroundY - roof, 8, roof, far);
+				if (x % 72 == 24 && Noise.Hash(x, 4) % 3 != 0)
+				{
+					s.Fill(x, BattleGroundY - roof + 16, 10, 10, new Color(250, 214, 120));
+				}
+				break;
+			case Theme.Dungeon:
+				int span = (int)(Noise.Hash(x / 48, 5) % 90) + 20;
+				int hang = span * (24 - Math.Abs(x % 48 - 24)) / 24;
+				s.Fill(x, 0, 8, hang, far);
+				int ridge = 26 + (int)(16 * MathF.Sin(x / 60f)) + (int)(Noise.Hash(x / 16, 9) % 10);
+				s.Fill(x, BattleGroundY - ridge, 8, ridge, far);
+				break;
+			default:
+				int hill = 44 + (int)(26 * MathF.Sin(x / 110f) + 14 * MathF.Sin(x / 41f + 1.3f));
+				s.Fill(x, BattleGroundY - hill, 8, hill, far);
+				break;
+			}
+		}
+		Art.TileSet tiles = art.Tiles(theme);
+		for (int y = BattleGroundY; y < s.Height; y += Art.Tile)
+		{
+			for (int x = 0; x < s.Width; x += Art.Tile)
+			{
+				s.Image(tiles.Floor[Noise.Hash(x, y) % (uint)tiles.Floor.Length], x, y, Art.Tile, Art.Tile, Color.White);
+			}
+		}
+		s.Fill(0, BattleGroundY, s.Width, 18, Color.Black * 0.3f);
+	}
+
+	private static string OutcomeText(Outcome outcome) => outcome switch
+	{
+		Outcome.Victory => "Victory!",
+		Outcome.Defeat => "Defeated...",
+		Outcome.Escaped => "Got away.",
+		Outcome.ScriptedEnd => "The battle ends.",
+		_ => "",
+	};
+
+	private void DrawBattle(IDrawSurface s, Art art)
 	{
 		BattleUi b = _battle;
 		IReadOnlyList<Combatant> all = _s.Combatants();
-		int half = s.Width / 2;
-		Style.Box(s, 20, 20, half - 30, 300);
-		Style.Box(s, half + 10, 20, half - 30, 300);
-		s.Text("Party", 36, 30, Style.Accent);
-		s.Text("Enemies", half + 26, 30, Style.Accent);
-		int py = 64;
-		int ey = 64;
-		foreach (Combatant c in all)
+		DrawBattleBackdrop(s, art, Art.ThemeOf(_s.FieldInfo()?.AreaKind ?? AreaKind.Field));
+		bool commanding = b.Phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro;
+		int target = b.Phase == BattlePhase.Target && b.Targets.Count > 0 ? b.Targets[Math.Clamp(_cursor, 0, b.Targets.Count - 1)] : -1;
+		float pulse = 0.5f + 0.5f * MathF.Sin(_clockMs / 140f);
+		static string Statuses(Combatant c) => string.Join(" ", c.Statuses.Where(st => st.Id != "defeated").Select(st => st.Name));
+
+		// Enemies stand on the ground, spread across the screen; a fallen one leaves its place empty.
+		var enemies = all.Where(c => c.Side == Side.Enemy).ToList();
+		int size = enemies.Count <= 4 ? 112 : 96;
+		int spacing = Math.Min(240, (s.Width - 80) / Math.Max(1, enemies.Count));
+		for (int i = 0; i < enemies.Count; i++)
 		{
-			bool party = c.Side == Side.Party;
-			int x = party ? 36 : half + 26;
-			int y = party ? py : ey;
-			bool acting = b.Phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro && c.Index == b.Actor;
-			bool targeted = b.Phase == BattlePhase.Target && b.Targets.Count > 0 && b.Targets[Math.Clamp(_cursor, 0, b.Targets.Count - 1)] == c.Index;
-			Color color = !c.Alive ? Style.Dim : targeted ? Style.Accent : acting ? Style.Good : Style.Text;
-			string label = (targeted ? "> " : "") + (party ? c.Name : c.Label);
-			s.Text(label, x, y, color);
-			string statuses = string.Join(" ", c.Statuses.Where(st => st.Id != "defeated").Select(st => st.Name));
-			s.Text($"HP {c.Hp}/{c.MaxHp}" + (party ? $"  TP {c.Tp}/{c.MaxTp}" : "") + (statuses.Length > 0 ? "  " + statuses : ""), x + 200, y + 2, Style.Dim, Style.Small);
-			Style.Bar(s, x, y + 24, 180, 5, c.Hp, c.MaxHp, Style.Good);
-			if (party)
+			Combatant e = enemies[i];
+			if (!e.Alive)
 			{
-				py += 46;
+				continue;
 			}
-			else
+			int cx = s.Width / 2 + (int)((i - (enemies.Count - 1) / 2f) * spacing);
+			int top = BattleFootY - size;
+			s.Image(art.Shadow, cx - size / 2, top + 10, size, size, Color.White);
+			s.Image(art.Creature(Noise.Hash(e.Id), (_clockMs / 400 + i) % 2), cx - size / 2, top, size, size, Color.White);
+			bool targeted = e.Index == target;
+			if (targeted)
 			{
-				ey += 46;
+				s.Image(art.Pointer, cx - 18, top - 40 + (int)(5 * pulse), 36, 36, Color.White);
+			}
+			string statuses = Statuses(e);
+			string label = Style.Fit(s, e.Label + (statuses.Length > 0 ? "  " + statuses : ""), spacing - 24, Style.Small);
+			int lw = s.Measure(label, Style.Small);
+			s.Fill(cx - lw / 2 - 8, BattleFootY + 4, lw + 16, 24, Color.Black * 0.6f);
+			s.Text(label, cx - lw / 2, BattleFootY + 7, targeted ? Style.Accent : Style.Text, Style.Small);
+			Style.Bar(s, cx - 50, BattleFootY + 34, 100, 6, e.Hp, e.MaxHp, Style.Bad);
+		}
+
+		// The event log across the top: the newest entry bright, the ones before it dimmer.
+		Style.Box(s, 16, 12, s.Width - 32, BattleLogLines * 22 + 24, 0.94f);
+		var wrapped = new List<(string Text, bool Newest)>();
+		for (int i = Math.Max(0, b.Log.Count - BattleLogLines); i < b.Log.Count; i++)
+		{
+			foreach (string l in Style.Wrap(s, b.Log[i], s.Width - 80, Style.Small))
+			{
+				wrapped.Add((l, i == b.Log.Count - 1));
+			}
+		}
+		var shown = wrapped.Skip(Math.Max(0, wrapped.Count - BattleLogLines)).ToList();
+		for (int i = 0; i < shown.Count; i++)
+		{
+			s.Text(shown[i].Text, 36, 24 + i * 22, shown[i].Newest ? Style.Text : Style.Dim, Style.Small);
+		}
+
+		// The party, one column each: portrait, name, statuses, HP and TP bars, the command already chosen.
+		var party = all.Where(c => c.Side == Side.Party).ToList();
+		int panelW = s.Width - 32 - BattleMenuWidth - 12;
+		int panelH = s.Height - BattlePanelTop - 16;
+		Style.Box(s, 16, BattlePanelTop, panelW, panelH);
+		int colW = (panelW - 16) / Math.Max(1, party.Count);
+		for (int i = 0; i < party.Count; i++)
+		{
+			Combatant c = party[i];
+			int cx = 24 + i * colW;
+			int cy = BattlePanelTop + 10;
+			int cw = colW - 8;
+			int ch = panelH - 20;
+			bool acting = commanding && c.Index == b.Actor;
+			bool targeted = c.Index == target;
+			if (acting)
+			{
+				s.Fill(cx, cy, cw, ch, Style.Row);
+			}
+			if (acting || targeted)
+			{
+				Style.Frame(s, cx, cy, cw, ch, targeted ? Style.Accent * (0.4f + 0.6f * pulse) : Style.Accent);
+			}
+			ActorLook look = i == 0 ? Art.Hero : Art.Companion(i - 1);
+			int frame = acting ? 1 + _clockMs / 260 % 2 : 0;
+			s.Image(art.ActorFrame(look, Direction.South, frame), cx + 8, cy + 8, 64, 64, c.Alive ? Color.White : new Color(80, 80, 92));
+			s.Text(Style.Fit(s, c.Name, cw - 90), cx + 80, cy + 12, !c.Alive ? Style.Dim : acting ? Style.Accent : Style.Text);
+			string state = !c.Alive ? "Fallen" : ((c.Defending ? "Defending " : "") + Statuses(c)).Trim();
+			if (state.Length > 0)
+			{
+				s.Text(Style.Fit(s, state, cw - 90, Style.Small), cx + 80, cy + 42, c.Alive ? Style.Dim : Style.Bad, Style.Small);
+			}
+			int bw = cw - 24;
+			void Gauge(string name, int value, int max, int y, Color color)
+			{
+				string numbers = $"{value}/{max}";
+				s.Text(name, cx + 12, y, Style.Dim, Style.Small);
+				s.Text(numbers, cx + 12 + bw - s.Measure(numbers, Style.Small), y, Style.Text, Style.Small);
+				Style.Bar(s, cx + 12, y + 22, bw, 10, value, max, color);
+			}
+			Gauge("HP", c.Hp, c.MaxHp, cy + 86, c.Hp * 4 <= c.MaxHp ? Style.Bad : Style.Good);
+			Gauge("TP", c.Tp, c.MaxTp, cy + 130, Style.Tp);
+			if (c.CommandKind != CommandKind.None)
+			{
+				string command = c.CommandId.Length > 0 ? _s.DisplayName(c.CommandId) : GameSession.NameOf(NameKind.CommandKind, (int)c.CommandKind);
+				s.Text(Style.Fit(s, "Next: " + command, bw, Style.Small), cx + 12, cy + 180, Style.Dim, Style.Small);
 			}
 		}
 
-		int logTop = 336;
-		int logHeight = s.Height - logTop - 20;
-		int menuWidth = 300;
-		Style.Box(s, 20, logTop, s.Width - menuWidth - 50, logHeight);
-		int lines = Math.Max(1, (logHeight - 20) / 22);
-		var visible = b.Log.Skip(Math.Max(0, b.Log.Count - lines)).ToList();
-		for (int i = 0; i < visible.Count; i++)
-		{
-			s.Text(visible[i], 36, logTop + 10 + i * 22, Style.Text, Style.Small);
-		}
-
-		int mx = s.Width - menuWidth - 20;
-		Style.Box(s, mx, logTop, menuWidth, logHeight);
-		void Menu(string title, IReadOnlyList<string> items, IReadOnlyList<bool>? usable = null)
-		{
-			s.Text(title, mx + 16, logTop + 10, Style.Accent);
-			for (int i = 0; i < items.Count; i++)
-			{
-				bool ok = usable is null || usable[i];
-				s.Text((i == _cursor ? "> " : "  ") + items[i], mx + 16, logTop + 44 + i * 24, !ok ? Style.Dim : i == _cursor ? Style.Accent : Style.Text, Style.Small);
-			}
-		}
+		int mx = s.Width - 16 - BattleMenuWidth;
 		string actor = b.Actor < all.Count ? all[b.Actor].Name : "";
+		string title = b.Phase switch
+		{
+			BattlePhase.Command => actor,
+			BattlePhase.Option => b.MenuChoice,
+			BattlePhase.Target => "Target",
+			BattlePhase.Macro => "Macro",
+			BattlePhase.Ended => "Battle over",
+			_ => "Battle",
+		};
+		Style.Window(s, mx, BattlePanelTop, BattleMenuWidth, panelH, title);
+		void Menu(IReadOnlyList<string> items, IReadOnlyList<bool>? usable = null)
+		{
+			int rows = (panelH - 44) / 28;
+			int first = Math.Clamp(_cursor - rows + 1, 0, Math.Max(0, items.Count - rows));
+			for (int i = first; i < Math.Min(items.Count, first + rows); i++)
+			{
+				Style.ListRow(s, Style.Fit(s, items[i], BattleMenuWidth - 70, Style.Small), mx + 24, BattlePanelTop + 30 + (i - first) * 28,
+					BattleMenuWidth - 36, i == _cursor, usable is null || usable[i], Style.Small);
+			}
+		}
 		switch (b.Phase)
 		{
 		case BattlePhase.Command:
-			Menu(actor, CommandMenu);
+			Menu(CommandMenu);
 			break;
 		case BattlePhase.Option:
-			Menu(b.MenuChoice, b.Options.Select(o => o.Name + (o.Cost > 0 ? $" ({o.Cost} TP)" : "") + (o.Uses >= 0 ? $" x{o.Uses}" : "")).ToList(), b.Options.Select(o => o.Usable).ToList());
+			Menu(b.Options.Select(o => o.Name + (o.Cost > 0 ? $" ({o.Cost} TP)" : "") + (o.Uses >= 0 ? $" x{o.Uses}" : "")).ToList(), b.Options.Select(o => o.Usable).ToList());
 			break;
 		case BattlePhase.Target:
-			Menu("Target", b.Targets.Select(t => t < all.Count ? (all[t].Side == Side.Party ? all[t].Name : all[t].Label) : "?").ToList());
+			Menu(b.Targets.Select(t => t < all.Count ? (all[t].Side == Side.Party ? all[t].Name : all[t].Label) : "?").ToList());
 			break;
 		case BattlePhase.Macro:
-			Menu("Macro", _s.Macros());
+			Menu(_s.Macros());
 			break;
 		case BattlePhase.Playback:
-			s.Text(b.Auto ? "Auto-battle (Esc stops)" : "...", mx + 16, logTop + 10, Style.Dim, Style.Small);
+			s.Text(b.Auto ? "Auto-battle" : "...", mx + 24, BattlePanelTop + 34, Style.Text);
+			if (b.Auto)
+			{
+				s.Text("Esc stops after this round", mx + 24, BattlePanelTop + 64, Style.Dim, Style.Small);
+			}
+			s.Text("Enter hurries", mx + 24, BattlePanelTop + panelH - 34, Style.Dim, Style.Small);
 			break;
 		case BattlePhase.Ended:
-			s.Text("Enter: continue", mx + 16, logTop + 10, Style.Accent);
+			s.Text(OutcomeText(_s.BattleInfo()?.Outcome ?? Outcome.Ongoing), mx + 24, BattlePanelTop + 34, Style.Accent, Style.Title);
+			s.Text("Enter: continue", mx + 24, BattlePanelTop + 84, Style.Text);
 			break;
 		}
 	}
@@ -995,98 +1188,95 @@ public sealed class SampleController
 		return choices;
 	}
 
-	private void DrawList(IDrawSurface s, int x, int y, IReadOnlyList<string> items, bool cursor = true)
+	private void DrawList(IDrawSurface s, int x, int y, IReadOnlyList<string> items, bool cursor = true, int width = 0)
 	{
+		width = width > 0 ? width : s.Width - x - 70;
 		for (int i = 0; i < items.Count; i++)
 		{
-			bool on = cursor && i == _cursor;
-			s.Text((on ? "> " : "  ") + items[i], x, y + i * Style.LineHeight, on ? Style.Accent : Style.Text);
+			Style.ListRow(s, Style.Fit(s, items[i], width - 30), x, y + i * 30, width, cursor && i == _cursor);
 		}
 	}
 
-	private void DrawMenu(IDrawSurface s)
+	private void DrawMenu(IDrawSurface s, Art art)
 	{
-		Style.Box(s, 20, 20, s.Width - 40, s.Height - 40);
-		int tx = 40;
-		for (int i = 0; i < MenuTabs.Length; i++)
-		{
-			s.Text(MenuTabs[i], tx, 36, i == _tab ? Style.Accent : Style.Dim);
-			tx += s.Measure(MenuTabs[i]) + 30;
-		}
-		s.Text($"Money {_s.WorldInfo().Money}", s.Width - 220, 36, Style.Text);
+		DrawBackdrop(s, art);
+		Style.Window(s, 24, 56, s.Width - 48, s.Height - 72, "Menu");
+		Style.Tabs(s, 48, 64, MenuTabs, _tab);
+		string money = $"Money {_s.WorldInfo().Money}";
+		s.Text(money, s.Width - 64 - s.Measure(money), 69, Style.Text);
 		List<Member> lineup = _s.Party().Where(m => m.InLineup).ToList();
-		int y = 90;
+		int y = 124;
 		switch (MenuTabs[_tab])
 		{
 		case "Party":
 			if (_pickMember is null || _pickAction is not null)
 			{
-				DrawList(s, 40, y, lineup.Select(m => $"{m.Name}  Lv{m.Level}  HP {m.Hp}/{m.MaxHp}  TP {m.Tp}/{m.MaxTp}  EXP {m.Experience}" +
+				DrawList(s, 56, y, lineup.Select(m => $"{m.Name}  Lv{m.Level}  HP {m.Hp}/{m.MaxHp}  TP {m.Tp}/{m.MaxTp}  EXP {m.Experience}" +
 					string.Concat(m.Statuses.Select(st => $" [{st.Name}]"))).ToList());
 				if (_pickAction is not null)
 				{
-					s.Text($"Use {_s.DisplayName(_pickAction)} on whom?", 40, s.Height - 80, Style.Accent);
+					s.Text($"Use {_s.DisplayName(_pickAction)} on whom?", 56, s.Height - 104, Style.Accent);
 				}
 			}
 			else
 			{
 				Member m = lineup.First(x => x.Id == _pickMember);
-				s.Text($"{m.Name}: STR {m.Strength}  MEN {m.Mental}  AGI {m.Agility}  DEX {m.Dexterity}  DEF {m.Defense}", 40, y, Style.Text);
-				s.Text("Equipment: " + string.Join(", ", m.EquipmentNames.Where(n => n.Length > 0)), 40, y + 30, Style.Dim, Style.Small);
+				s.Text($"{m.Name}: STR {m.Strength}  MEN {m.Mental}  AGI {m.Agility}  DEX {m.Dexterity}  DEF {m.Defense}", 56, y, Style.Text);
+				s.Text("Equipment: " + string.Join(", ", m.EquipmentNames.Where(n => n.Length > 0)), 56, y + 30, Style.Dim, Style.Small);
 				var techniques = _s.MemberAbilities(_pickMember).Where(a => a.Field).ToList();
-				s.Text(techniques.Count == 0 ? "No techniques to use here." : "Use a technique:", 40, y + 70, Style.Accent);
-				DrawList(s, 40, y + 100, techniques.Select(a => $"{a.Name} ({a.Cost} TP)").ToList());
+				s.Text(techniques.Count == 0 ? "No techniques to use here." : "Use a technique:", 56, y + 70, Style.Accent);
+				DrawList(s, 56, y + 100, techniques.Select(a => $"{a.Name} ({a.Cost} TP)").ToList());
 			}
 			break;
 		case "Items":
 			var items = _s.Inventory().Where(i => !i.IsEquipment).ToList();
-			DrawList(s, 40, y, items.Select(i => $"{i.Name} x{i.Count}" + (i.Field ? "" : "  (battle only)")).ToList(), _pickAction is null);
+			DrawList(s, 56, y, items.Select(i => $"{i.Name} x{i.Count}" + (i.Field ? "" : "  (battle only)")).ToList(), _pickAction is null, _pickAction is null ? 0 : 520);
 			if (_pickAction is not null)
 			{
-				DrawList(s, 600, y, lineup.Select(m => $"{m.Name}  HP {m.Hp}/{m.MaxHp}").ToList());
+				DrawList(s, 620, y, lineup.Select(m => $"{m.Name}  HP {m.Hp}/{m.MaxHp}").ToList());
 			}
 			break;
 		case "Equip":
 			if (_pickMember is null)
 			{
-				DrawList(s, 40, y, lineup.Select(m => m.Name + ": " + string.Join(", ", m.EquipmentNames.Where(n => n.Length > 0))).ToList());
+				DrawList(s, 56, y, lineup.Select(m => m.Name + ": " + string.Join(", ", m.EquipmentNames.Where(n => n.Length > 0))).ToList());
 			}
 			else
 			{
-				DrawList(s, 40, y, EquipChoices(_pickMember).Select(c => c.Label).ToList());
+				DrawList(s, 56, y, EquipChoices(_pickMember).Select(c => c.Label).ToList());
 			}
 			break;
 		case "Save":
 			var saves = _s.Saves() ?? [];
 			int slots = _s.GameInfo().ManualSlots;
-			DrawList(s, 40, y, Enumerable.Range(0, slots).Select(i =>
+			DrawList(s, 56, y, Enumerable.Range(0, slots).Select(i =>
 			{
 				SaveSummary? existing = saves.FirstOrDefault(x => x.Slot == $"manual_{i}");
 				return $"manual_{i}  " + (existing is null ? "(empty)" : existing.Damaged ? "(damaged)" : $"{existing.Area} {string.Join(" ", existing.Party)}");
 			}).ToList());
 			break;
 		case "Quests":
-			DrawQuestLog(s, 40, y);
+			DrawQuestLog(s, 56, y);
 			break;
 		case "Codex":
 			int cy = y;
 			foreach (CodexEntry entry in _s.Encyclopedia())
 			{
-				s.Text(entry.Title, 40, cy, Style.Accent);
+				s.Text(entry.Title, 56, cy, Style.Accent);
 				cy += Style.LineHeight;
-				foreach (string l in Style.Wrap(s, entry.Text, s.Width - 120, Style.Small))
+				foreach (string l in Style.Wrap(s, entry.Text, s.Width - 150, Style.Small))
 				{
-					s.Text(l, 60, cy, Style.Text, Style.Small);
+					s.Text(l, 76, cy, Style.Text, Style.Small);
 					cy += 22;
 				}
 				cy += 10;
 			}
 			break;
 		case "Log":
-			DrawTextLog(s, 40, y, s.Height - y - 60);
+			DrawTextLog(s, 56, y, s.Height - y - 100);
 			break;
 		}
-		s.Text("Left/Right tab   Up/Down choose   Enter use   Esc back", 40, s.Height - 50, Style.Dim, Style.Small);
+		s.Text("Left/Right tab   Up/Down choose   Enter use   Esc back", 56, s.Height - 66, Style.Dim, Style.Small);
 	}
 
 	private void DrawQuestLog(IDrawSurface s, int x, int y)
@@ -1139,27 +1329,43 @@ public sealed class SampleController
 		}
 	}
 
-	private void DrawShop(IDrawSurface s)
+	private void DrawShop(IDrawSurface s, Art art)
 	{
-		Style.Box(s, 20, 20, s.Width - 40, s.Height - 40);
+		DrawBackdrop(s, art);
+		int x = 80;
+		int w = s.Width - 160;
+		Style.Window(s, x, 50, w, s.Height - 100, "Shop");
 		ShopInfo? shop = _s.Shop();
 		if (shop is null)
 		{
 			return;
 		}
-		s.Text("Buy", 40, 36, _tab == 0 ? Style.Accent : Style.Dim);
-		s.Text("Sell", 120, 36, _tab == 1 ? Style.Accent : Style.Dim);
-		s.Text($"Money {_s.WorldInfo().Money}", s.Width - 220, 36, Style.Text);
-		if (_tab == 0)
+		Style.Tabs(s, x + 24, 76, ["Buy", "Sell"], _tab);
+		string money = $"Money {_s.WorldInfo().Money}";
+		s.Text(money, x + w - 40 - s.Measure(money), 81, Style.Text);
+		s.Image(art.Stall, x + w - 120, 120, 80, 80, Color.White);
+		int priceX = x + 560;
+		int countX = x + 680;
+		s.Text(_tab == 0 ? "Price" : "Each", priceX, 128, Style.Dim, Style.Small);
+		s.Text("Have", countX, 128, Style.Dim, Style.Small);
+		IReadOnlyList<(string Name, int Price, int Count)> rows = _tab == 0
+			? shop.Stock.Select(i => (i.Name, i.Price, i.Count)).ToList()
+			: _s.Inventory().Where(i => i.Price >= 0).Select(i => (i.Name, i.Price * shop.SellPercent / 100, i.Count)).ToList();
+		for (int i = 0; i < rows.Count; i++)
 		{
-			DrawList(s, 40, 90, shop.Stock.Select(i => $"{i.Name}  {i.Price}  (have {i.Count})").ToList());
+			int y = 156 + i * 30;
+			bool on = i == _cursor;
+			Style.ListRow(s, rows[i].Name, x + 40, y, countX + 60 - x - 40, on);
+			string price = rows[i].Price.ToString(System.Globalization.CultureInfo.InvariantCulture);
+			s.Text(price, priceX + 40 - s.Measure(price), y, on ? Style.Accent : Style.Text);
+			s.Text($"x{rows[i].Count}", countX, y, Style.Dim);
 		}
-		else
+		if (rows.Count == 0)
 		{
-			DrawList(s, 40, 90, _s.Inventory().Where(i => i.Price >= 0).Select(i => $"{i.Name} x{i.Count}  {i.Price * shop.SellPercent / 100} each").ToList());
+			s.Text(_tab == 0 ? "Nothing for sale." : "Nothing to sell.", x + 54, 156, Style.Dim);
 		}
-		DrawTicker(s, s.Height - 200);
-		s.Text("Left/Right buy or sell   Enter one   Esc leave", 40, s.Height - 50, Style.Dim, Style.Small);
+		DrawToasts(s, x + 24, s.Height - 92);
+		s.Text("Left/Right buy or sell   Enter one   Esc leave", x + 24, s.Height - 86, Style.Dim, Style.Small);
 	}
 
 	private void UpdateInn(InputState input)
@@ -1175,13 +1381,16 @@ public sealed class SampleController
 		}
 	}
 
-	private void DrawInn(IDrawSurface s)
+	private void DrawInn(IDrawSurface s, Art art)
 	{
-		DrawField(s, 200);
-		Style.Box(s, 20, s.Height - 210, s.Width - 40, 200);
+		bool field = DrawField(s, art);
+		int y = DialogueTop(s, field);
+		Style.Box(s, 24, y, s.Width - 48, DialogueHeight);
+		Style.Plate(s, "Inn", 42, y - 16, Style.Accent, Style.Body);
+		s.Image(art.Bed, 48, y + 34, 96, 96, Color.White);
 		InnInfo? inn = _s.Inn();
-		s.Text($"A night's rest costs {inn?.Cost ?? 0}. You have {_s.WorldInfo().Money}.", 40, s.Height - 196, Style.Text);
-		DrawList(s, 60, s.Height - 150, ["Rest", "Leave"]);
+		s.Text($"A night's rest costs {inn?.Cost ?? 0}. You have {_s.WorldInfo().Money}.", 170, y + 30, Style.Text);
+		DrawList(s, 186, y + 74, ["Rest", "Leave"], width: 300);
 	}
 
 	private void UpdateSavePrompt(InputState input)
@@ -1203,12 +1412,17 @@ public sealed class SampleController
 		}
 	}
 
-	private void DrawSavePrompt(IDrawSurface s)
+	private void DrawSavePrompt(IDrawSurface s, Art art)
 	{
-		Style.Box(s, 20, 20, s.Width - 40, s.Height - 40);
-		s.Text("Save your progress?", 40, 36, Style.Accent);
+		DrawBackdrop(s, art);
 		int slots = _s.GameInfo().ManualSlots;
-		DrawList(s, 40, 90, Enumerable.Range(0, slots).Select(i => $"manual_{i}").Append("Don't save").ToList());
+		int w = 560;
+		int h = 110 + (slots + 1) * 30;
+		int x = (s.Width - w) / 2;
+		int y = (s.Height - h) / 2;
+		Style.Window(s, x, y, w, h, "Save");
+		s.Text("Save your progress?", x + 28, y + 28, Style.Accent);
+		DrawList(s, x + 40, y + 72, Enumerable.Range(0, slots).Select(i => $"manual_{i}").Append("Don't save").ToList(), width: w - 80);
 	}
 
 	private void UpdateNameEntry(InputState input)
@@ -1235,44 +1449,56 @@ public sealed class SampleController
 		}
 	}
 
-	private void DrawNameEntry(IDrawSurface s)
+	private void DrawNameEntry(IDrawSurface s, Art art)
 	{
-		Style.Box(s, 20, 20, s.Width - 40, 200);
-		s.Text($"A name for {_s.DisplayName(_s.NameEntryMember)}:", 40, 40, Style.Accent);
-		s.Text(_nameBuffer + "_", 60, 90, Style.Text, Style.Title);
-		s.Text("Type letters   Backspace erase   Enter confirm (empty keeps the name)", 40, 180, Style.Dim, Style.Small);
+		DrawBackdrop(s, art);
+		int w = 760;
+		int x = (s.Width - w) / 2;
+		int y = 180;
+		Style.Window(s, x, y, w, 220, "Name");
+		string member = _s.NameEntryMember;
+		s.Image(art.ActorFrame(LookOf(member), Direction.South, 0), x + 28, y + 40, 96, 96, Color.White);
+		s.Text($"A name for {_s.DisplayName(member)}:", x + 150, y + 36, Style.Accent);
+		s.Fill(x + 150, y + 80, 420, 50, Style.Track);
+		Style.Frame(s, x + 150, y + 80, 420, 50, Style.PanelEdge);
+		string cursor = _clockMs / 400 % 2 == 0 ? "_" : " ";
+		s.Text(_nameBuffer + cursor, x + 166, y + 88, Style.Text, Style.Title);
+		s.Text("Type letters   Backspace erase   Enter confirm (empty keeps the name)", x + 28, y + 176, Style.Dim, Style.Small);
 	}
 
 	public void Draw(IDrawSurface s)
 	{
+		Art art = _art ??= new Art(s);
 		s.Fill(0, 0, s.Width, s.Height, Style.Background);
 		switch (Screen)
 		{
-		case Screen.Title: DrawTitle(s); break;
+		case Screen.Title: DrawTitle(s, art); break;
 		case Screen.Field:
-			DrawField(s, 140);
-			DrawTicker(s, s.Height - 150);
-			s.Text("Arrows walk   Enter talk   M menu   Q quests   T party talk   L log", 20, s.Height - 30, Style.Dim, Style.Small);
+			DrawField(s, art);
+			DrawHud(s);
+			_field.DrawBanner(s);
+			DrawToasts(s, 16, s.Height - 40);
+			DrawHint(s, "Arrows walk   Enter talk   M menu   Q quests   T party talk   L log");
 			break;
-		case Screen.Dialogue: DrawDialogue(s); break;
-		case Screen.Battle: DrawBattle(s); break;
+		case Screen.Dialogue: DrawDialogue(s, art); break;
+		case Screen.Battle: DrawBattle(s, art); break;
 		case Screen.Menu:
-			DrawMenu(s);
-			DrawTicker(s, s.Height - 200);
+			DrawMenu(s, art);
+			DrawToasts(s, 48, s.Height - 92);
 			break;
-		case Screen.Shop: DrawShop(s); break;
-		case Screen.Inn: DrawInn(s); break;
-		case Screen.SavePrompt: DrawSavePrompt(s); break;
-		case Screen.NameEntry: DrawNameEntry(s); break;
+		case Screen.Shop: DrawShop(s, art); break;
+		case Screen.Inn: DrawInn(s, art); break;
+		case Screen.SavePrompt: DrawSavePrompt(s, art); break;
+		case Screen.NameEntry: DrawNameEntry(s, art); break;
 		case Screen.QuestLog:
-			Style.Box(s, 20, 20, s.Width - 40, s.Height - 40);
-			s.Text("Quest log", 40, 36, Style.Accent, Style.Title);
-			DrawQuestLog(s, 40, 90);
+			DrawBackdrop(s, art);
+			Style.Window(s, 24, 40, s.Width - 48, s.Height - 72, "Quest log");
+			DrawQuestLog(s, 56, 80);
 			break;
 		case Screen.TextLog:
-			Style.Box(s, 20, 20, s.Width - 40, s.Height - 40);
-			s.Text("Text log", 40, 36, Style.Accent, Style.Title);
-			DrawTextLog(s, 40, 90, s.Height - 150);
+			DrawBackdrop(s, art);
+			Style.Window(s, 24, 40, s.Width - 48, s.Height - 72, "Text log");
+			DrawTextLog(s, 56, 72, s.Height - 140);
 			break;
 		}
 		DrawAnimations(s);

@@ -1,0 +1,42 @@
+# The field camera on areas larger than the window: from the start through Reed Path and Bell Cove to
+# Saltgrass Market (48x36) and the Drowned Kiln's upper gallery (40x40), walking with held keys so the view
+# scrolls and the party trails the leader. A battle on the way is fought with Enter until the field is back.
+# With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs
+# write nothing for them.
+
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+
+cmd walk 13 4
+cmd walk 19 4
+pressuntil Enter Field 4000
+cmd walk 19 4
+pressuntil Enter Field 400
+expect screen Field
+cmd walk 6 0
+wait 30
+expect screen Field
+shot build/shots/large_saltgrass_arrival.png
+hold Up 60
+hold Right 120
+shot build/shots/large_saltgrass_walk.png
+hold Up 120
+hold Left 200
+shot build/shots/large_saltgrass_north.png
+dump
+
+cmd walk 47 12
+pressuntil Enter Field 400
+wait 30
+expect screen Field
+shot build/shots/large_kiln_arrival.png
+hold Right 100
+hold Down 120
+shot build/shots/large_kiln_walk.png
+dump

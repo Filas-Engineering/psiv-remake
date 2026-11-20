@@ -17,6 +17,14 @@
 			{"speaker": "mystic", "text": "talk.reeds.1"},
 			{"speaker": "medic", "text": "talk.reeds.2"}
 		]},
+		{"id": "market", "area": "saltgrass", "after": "tidewater.met_guide", "lines": [
+			{"speaker": "mystic", "text": "talk.market.1"},
+			{"speaker": "medic", "text": "talk.market.2"}
+		]},
+		{"id": "kiln", "area": "kiln_lower", "after": "tidewater.met_guide", "lines": [
+			{"speaker": "scout", "text": "talk.kiln.1"},
+			{"speaker": "mystic", "text": "talk.kiln.2"}
+		]},
 		{"id": "chapter_one", "after": "tidewater.met_guide", "until": "cove.warden_beaten", "lines": [
 			{"speaker": "mystic", "text": "talk.chapter_one.1"}
 		]},

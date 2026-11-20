@@ -534,7 +534,7 @@ bool Runner::runScript(const std::string& text) {
 	return true;
 }
 
-BotResult runBot(const GameData& data, std::uint64_t seed, std::optional<EncounterMode> mode, const std::string& route) {
+BotResult runBot(const GameData& data, std::uint64_t seed, std::optional<EncounterMode> mode, const std::string& route, const std::string& goalFlag) {
 	SessionOptions options;
 	options.seed = seed;
 	options.encounterMode = mode;
@@ -550,6 +550,10 @@ BotResult runBot(const GameData& data, std::uint64_t seed, std::optional<Encount
 	result.battles = session.pacing().totalBattles();
 	result.errors = runner.errors();
 	result.playTimeMs = session.world().playTimeMs;
+	if (!goalFlag.empty()) {
+		result.finished = session.world().flag(goalFlag);
+		return result;
+	}
 	result.finished = !data.config.bosses.empty();
 	for (const Boss& b : data.config.bosses) {
 		result.finished = result.finished && session.world().flag(b.flag);

@@ -49,12 +49,37 @@ cove.campfire.rested = 暖かさがみんなの痛みを引き出していく。
 cove.campfire.declined = 燃えさしは灰の中に沈んでいった。
 cove.campfire.journal = この火明かりなら日誌が書ける。
 
+saltgrass.kilnwright.story = 東の階段の下の古い窯が、この市場の壺を全部焼いてきた。だが海が入ってきて沈めてしまった。
+saltgrass.kilnwright.ask = 窯の心石にはまだ燃えさしが残っている。上まで運んでくれないか？
+saltgrass.kilnwright.accepted = 東の門から回廊を下りていってくれ。心石はいちばん下の焼き床の窯穴にある。
+saltgrass.kilnwright.declined = なら、もうしばらく冷めた茶で手を温めておくよ。
+saltgrass.kilnwright.reminder = いちばん下の焼き床の窯穴だ。階段の湯気に気をつけて。
+saltgrass.kilnwright.ember = 燃えさしを持ってきてくれたのか。見ろ、まだ息をしている。これを持っていってくれ。新しい壺が焼けたらまた来てくれ。
+saltgrass.kilnwright.thanks = 新しい窯はよく火が回る。市場の壺には、ある意味みんな君の指の跡がついているよ。
+saltgrass.lamplighter.greeting = もう夕方かい？この広場は誰より先に灯すんだ。
+saltgrass.lamplighter.topics = 何について聞く？
+saltgrass.lamplighter.topic_kiln = 窯
+saltgrass.lamplighter.topic_canal = 運河
+saltgrass.lamplighter.about_kiln = 風のない夜には、今でも東の階段から湯気が上がってくる。暖かい所には何かが住みつくものさ。
+saltgrass.lamplighter.about_canal = 橋は三つ。どれも別の頑固な一家が建て直したんだ。
+saltgrass.ferrywoman.cold = 窯が冷えている間は、運河に船は出ないよ。運ぶものがないからね。
+saltgrass.ferrywoman.warm = 窯師がまた火を入れた。朝までに漕いで運ぶ荷箱ができるよ。
+
+kiln.upper.arrival = 暖かい霧が回廊を流れていく。浅い水の中に、焼きかけの壺の棚が立っている。
+kiln.lower.draft = 前のどこかから熱い風が吹き上がってくる。窯穴は近い。
+kiln.lower.heart_unknown = 窯穴に丸い石がある。かすかに温かい。こちらに何かを求めている様子はない。
+kiln.lower.heart_glow = 触れると心石が脈打った。燃えさしが一つ浮かび上がり、土の杯に収まる。
+kiln.lower.heart_dark = 心石はもう冷たい。燃えさしは市場へ上っていった。
+
 # Text the game shows itself, not a script: speaker names, the quest log, the encyclopedia and party talk.
 choice.yes = はい
 choice.no = いいえ
 
 speaker.dockhand = 港の荷役
+speaker.ferrywoman = 運河の渡し守
 speaker.guide = 港の案内人
+speaker.kilnwright = 窯師
+speaker.lamplighter = 点灯夫
 speaker.peddler = 葦の行商人
 
 objective.meet_guide = 掲示板のそばにいる港の案内人を探す。
@@ -73,3 +98,7 @@ talk.reeds.1 = ここでは一歩ごとにぐちゃっと鳴る。数えてる�
 talk.reeds.2 = 噛まれた数を数えなさい。手当てするのは私なんだから。
 talk.chapter_one.1 = ひとりでに鳴る鐘か。綱を引いている誰かに会ってみたいな。
 talk.after_bell.1 = じゃあ港で夕飯だね。案内人が約束したって聞いたよ。
+talk.market.1 = 塩と土のにおいがする町だ。慣れてしまいそう。
+talk.market.2 = 慣れるのは休んでからにして。足がもう限界。
+talk.kiln.1 = 水に気をつけて。あの壺のいくつかは壺じゃない。
+talk.kiln.2 = ここは、ありえないくらい暖かい。

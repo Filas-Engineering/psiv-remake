@@ -183,6 +183,11 @@ struct DataDirectories {
 rules::Result<GameData> loadGameData(const DataDirectories& directories);
 // The same with game.json's core_data.
 rules::Result<GameData> loadGameData(const std::string& directory);
+// Loads like loadGameData but keeps in `out` whatever loaded, and returns every problem (none when the data
+// loaded). A battle data problem does not stop the game's own files from being read; the scripts are compiled
+// and the cross-references checked only when everything before them loaded; `referencesChecked` says whether
+// the load got that far. The data check (check.h) uses it.
+std::vector<rules::Problem> loadGameDataPartly(const DataDirectories& directories, GameData& out, bool* referencesChecked = nullptr);
 
 // The English template of every key a load problem can carry: core's (load.*, json.*, text.*), the events
 // library's (script.*, strings.*, names.*, registry.*, lint.*, timing.*) and the game's own (data.*).

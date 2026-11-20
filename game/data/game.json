@@ -1,15 +1,15 @@
 {
 	"title": "The Bell at Tidewater",
 	"core_data": "../../core/data",
-	"areas": ["areas/tidewater.json", "areas/reed_path.json", "areas/bell_cove.json"],
-	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev"],
+	"areas": ["areas/tidewater.json", "areas/reed_path.json", "areas/bell_cove.json", "areas/saltgrass.json", "areas/kiln_upper.json", "areas/kiln_lower.json"],
+	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev", "events/saltgrass.ev", "events/kiln.ev"],
 	"glossary": "text/glossary.txt",
 	"languages": [
 		{"code": "en", "strings": "text/en.strings", "text": "text/en.json"},
 		{"code": "ja", "strings": "text/ja.strings", "text": "text/ja.json"}
 	],
 	"journal": "journal.json",
-	"actors": ["dockhand", "guide", "peddler"],
+	"actors": ["dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler"],
 	"presentation": {"audio": ["brass_alarm"], "portraits": ["guide_smile", "mystic_worried", "scout_grin"]},
 	"flags": [
 		"cove.quiet_seen",
@@ -18,8 +18,13 @@
 		"cove.warden_seen",
 		"job.lost_cache.accepted",
 		"job.lost_cache.done",
+		"kiln.draft_felt",
+		"kiln.ember_taken",
+		"kiln.upper_seen",
 		"reed.scout_joined",
 		"reed.skimmer_cleared",
+		"saltgrass.kiln_asked",
+		"saltgrass.kiln_done",
 		"tidewater.arrived",
 		"tidewater.hold_cleared",
 		"tidewater.met_guide",
@@ -45,7 +50,11 @@
 		"loosen_oil": 20,
 		"grip_bands": 40,
 		"rivet_plate": 60,
-		"drift_feather": 50
+		"drift_feather": 50,
+		"jolt_pod": 25,
+		"tin_cap": 35,
+		"padded_coat": 45,
+		"calm_charm": 70
 	},
 	"item_cap": 99,
 	"money_cap": 999999,

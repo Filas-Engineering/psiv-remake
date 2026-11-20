@@ -1,3 +1,4 @@
+#include "game/check.h"
 #include "game/data.h"
 #include "game/runner.h"
 #include "game/save.h"
@@ -15,13 +16,15 @@ void usage() {
 				 "\n"
 				 "  game_cli [--data DIR] [--core DIR] [--seed N] [--saves DIR] [--auto-battle] [--encounters visible|random]\n"
 				 "  game_cli --script FILE ...      run the commands in FILE, print the transcript, then exit\n"
-				 "  game_cli --bot [--route FILE]   walk the route in both encounter modes and print pacing tables\n"
+				 "  game_cli --bot [--route FILE] [--goal FLAG]  walk the route in both encounter modes and print pacing tables;\n"
+				 "                                  it finishes when every boss flag (or FLAG) is set\n"
 				 "  game_cli --registry             print the registry built from the data, for event_cli check --registry\n"
 				 "  game_cli --used                 print the string IDs the game shows itself, for event_cli check --used\n"
+				 "  game_cli --check DIR [--core DIR]  load a data directory, print every problem and what loaded\n"
 				 "\n"
 				 "Defaults: --data data, --core game.json's core_data, --seed 1, --saves saves, --route DATA/routes/main.route.\n"
 				 "Type 'help' at the prompt for the command list.\n"
-				 "Exit codes: 0 done, 1 data error, 2 bad arguments, 3 a scripted command failed or the bot did not finish.\n";
+				 "Exit codes: 0 done, 1 data error (for --check: any problem), 2 bad arguments, 3 a scripted command failed or the bot did not finish.\n";
 }
 
 void commands() {
@@ -48,10 +51,12 @@ int main(int argc, char** argv) {
 	std::string coreDir;
 	std::string script;
 	std::string route;
+	std::string goal;
 	std::uint64_t seed = 1;
 	bool bot = false;
 	bool registry = false;
 	bool used = false;
+	bool check = false;
 	bool autoBattle = false;
 	std::optional<game::EncounterMode> mode;
 	for (int i = 1; i < argc; ++i) {
@@ -68,10 +73,13 @@ int main(int argc, char** argv) {
 			usage();
 			return 0;
 		} else if (arg == "--data" && value(dataDir)) {
+		} else if (arg == "--check" && value(dataDir)) {
+			check = true;
 		} else if (arg == "--core" && value(coreDir)) {
 		} else if (arg == "--saves" && value(saves)) {
 		} else if (arg == "--script" && value(script)) {
 		} else if (arg == "--route" && value(route)) {
+		} else if (arg == "--goal" && value(goal)) {
 		} else if (arg == "--seed" && value(text) && parseSeed(text, seed)) {
 		} else if (arg == "--encounters" && value(text)) {
 			game::EncounterMode m;
@@ -92,6 +100,12 @@ int main(int argc, char** argv) {
 			std::cerr << "bad argument '" << arg << "' (try --help)\n";
 			return 2;
 		}
+	}
+
+	if (check) {
+		const game::CheckReport report = game::checkData(game::DataDirectories{dataDir, coreDir});
+		std::cout << "Checking " << dataDir << (coreDir.empty() ? "" : " with core data " + coreDir) << "\n" << game::formatCheckReport(report);
+		return report.ok() ? 0 : 1;
 	}
 
 	rules::Result<game::GameData> data = game::loadGameData(game::DataDirectories{dataDir, coreDir});
@@ -126,7 +140,7 @@ int main(int argc, char** argv) {
 			modes = {game::EncounterMode::Visible, game::EncounterMode::Random};
 		}
 		for (game::EncounterMode m : modes) {
-			const game::BotResult result = game::runBot(*data.value, seed, m, text);
+			const game::BotResult result = game::runBot(*data.value, seed, m, text, goal);
 			std::cout << "== " << game::toString(m) << " encounters, seed " << seed << ": " << result.battles << " battles, "
 					  << result.playTimeMs / 1000 << " s, " << (result.finished ? "finished" : "did not finish") << " ==\n"
 					  << result.table;

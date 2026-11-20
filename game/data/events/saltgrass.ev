@@ -1,0 +1,48 @@
+# Saltgrass Market: a canal town up the cliff stair from Bell Cove. Its
+# kilnwright wants the ember from the drowned kiln's heart-stone before the
+# sea puts it out.
+
+event saltgrass_kilnwright unskippable
+	lock player
+	if saltgrass.kiln_done
+		say kilnwright @saltgrass.kilnwright.thanks
+	else if kiln.ember_taken
+		say kilnwright @saltgrass.kilnwright.ember
+		give second_wind 1
+		give jolt_pod 1
+		set saltgrass.kiln_done
+	else if saltgrass.kiln_asked
+		say kilnwright @saltgrass.kilnwright.reminder
+	else
+		say kilnwright @saltgrass.kilnwright.story
+		ask @saltgrass.kilnwright.ask into saltgrass.kiln_asked
+		yes
+			say kilnwright @saltgrass.kilnwright.accepted
+		no
+			say kilnwright @saltgrass.kilnwright.declined
+		end
+	end
+	unlock player
+end
+
+event saltgrass_lamplighter unskippable
+	lock player
+	say lamplighter @saltgrass.lamplighter.greeting
+	choice @saltgrass.lamplighter.topics
+	option @saltgrass.lamplighter.topic_kiln
+		say lamplighter @saltgrass.lamplighter.about_kiln
+	option @saltgrass.lamplighter.topic_canal
+		say lamplighter @saltgrass.lamplighter.about_canal
+	end
+	unlock player
+end
+
+event saltgrass_ferrywoman unskippable
+	lock player
+	if saltgrass.kiln_done
+		say ferrywoman @saltgrass.ferrywoman.warm
+	else
+		say ferrywoman @saltgrass.ferrywoman.cold
+	end
+	unlock player
+end

@@ -24,6 +24,8 @@ struct Exit {
 	Cell at;
 	std::string toArea;
 	std::string toMarker;
+	// Line in the area file, for problem reports; 0 when not read from a file.
+	int line = 0;
 };
 
 // A field hook (FLD-023): runs one event script when it fires and its flag conditions hold. A Flag hook fires
@@ -35,6 +37,7 @@ struct Hook {
 	std::string event;
 	std::string requireFlag;
 	std::string blockFlag;
+	int line = 0;
 };
 
 // A shop or rest point without a cell is reached only from a script.
@@ -44,12 +47,14 @@ struct Shop {
 	// Item or equipment ids; prices come from the game's price table.
 	std::vector<std::string> stock;
 	int sellPercent = 50;
+	int line = 0;
 };
 
 struct RestPoint {
 	std::string id;
 	std::optional<Cell> at;
 	int cost = 0;
+	int line = 0;
 };
 
 struct Chest {
@@ -60,6 +65,7 @@ struct Chest {
 	rules::Inventory items;
 	std::map<std::string, int> equipment;
 	int money = 0;
+	int line = 0;
 };
 
 struct TableEntry {
@@ -95,6 +101,7 @@ struct Zone {
 	std::vector<TableEntry> table;
 	VisibleRules visible;
 	RandomRules random;
+	int line = 0;
 
 	bool contains(Cell cell) const;
 };
@@ -114,6 +121,9 @@ struct Area {
 	std::vector<RestPoint> rests;
 	std::vector<Chest> chests;
 	std::vector<Zone> zones;
+	// The file game.json names for the area, and the line of each marker, for problem reports.
+	std::string file;
+	std::map<std::string, int> markerLines;
 
 	int width() const;
 	int height() const;
