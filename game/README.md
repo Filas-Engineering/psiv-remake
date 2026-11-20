@@ -102,6 +102,8 @@ The session follows the end state of every script `move`, `face`, `show` and `hi
 
 The state changes when the action starts, so a renderer with Queued presentation animates from where it last drew the actor to the cell `actorsHere()` reports, and finishes the action when it arrives. Skips and restores reach the same state through the interpreter's instant actions. Actors are presentation: they do not block walking, talking still goes through the hook's cell, and `anim` and characters named as subjects are left to the front end.
 
+Party members are not tracked. The world keeps one place for the party, the leader's cell (`World::position`), which only the player's walking and warps change; a script's `move` or `face` of a character changes nothing in the world (a `face` toward a character turns toward the leader's cell, above). Where a scene puts party members is therefore the front end's presentation, like the formation behind the leader, and lasts until the event ends, when the party stands at the leader's cell again. A front end that shows it follows the actions as they start, and after a skip or a restore it gets them back from the interpreter's instant rebuild, which issues each subject's last move, then its facing if a `face` came after that move, and its looping animation (`events/README.md`, the save contract). As for an actor, a facing that only a move's last leg set is not in the rebuild, so after a skip or a restore it follows from where the member stood when the rebuild ran; a scene that ends a move with a `face` comes back exactly. The MonoGame sample does this (`../bindings/README.md`, "The sample").
+
 ## Data formats
 
 ### game.json
@@ -232,6 +234,11 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 
 ## Changes in this round
 
+* The placeholder adventure has a tide chart on a post in Tidewater Landing (`tidewater_chart`, hook `chart`, open once the guide's apprentices have joined): the apprentices walk up to it and turn, the leader steps back and turns, people nod, shake their heads, startle, wave (looping), bow, jump and shrug, and a crab comes out for an event battle with a `lose` section. `game.json` lists those animations in `presentation.animations` and the flag `tidewater.chart_read`; tidewater gains the markers `chart_front`, `chart_left`, `chart_right` and `chart_back`; the dialogue is in `en` and `ja` (five more kanji in `glyphs_ja.txt`). It is there for the MonoGame sample's party and pose presentation; the scripted playthrough does not read the chart, so its transcript changes only in the `look` map of tidewater, and the seeds stay.
+* Party members a script moves or turns stay presentation (see [Actors](#actors)); no API or save change.
+
+## Changes in the previous round
+
 * Script actors are game state: the session follows the end state of every `move`, `face`, `show` and `hide` of a `game.json` actor (see [Actors](#actors)), `actorsHere()` lists the actors in the party's area, and an actor no script touched stands at the talk point named after it.
 * Save schema 3 adds the `actors` chunk; schema 2 saves migrate with every actor at its talk point.
 * The placeholder adventure's arrival walks the dockhand from its talk point to the leader and back (`greet_spot`, a new tidewater marker). The scripted playthrough's transcript gains those six actions; nothing else in it changes, and the seeds stay.
@@ -242,7 +249,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Saves are written as schema 3 (`PSR-SAVE 3`, `kSaveSchemaVersion` 3) with the `actors` chunk, which a schema 3 save must have. Older builds refuse them as from a newer build. `serializeWorldChunks` (the event-start snapshot) includes it.
 * A renderer that drew talk points as people can draw the actors from `actorsHere()` instead, and should move them when a script does.
 
-## Changes in the previous round
+## Changes two rounds ago
 
 * Front ends stop touching the world: `face()` and `setAutoMacro()` replace writing `World::facing` and `World::autoMacro`, and the terminal front end uses them.
 * Structured event text: `line()` gives the pending line as data and `choiceView()` the pending choice, with an ask's answers from the dialogue tables (`choice.yes`, `choice.no`, in `en` and `ja`).
@@ -279,7 +286,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Several languages: `game.json` takes `languages` instead of `strings` and `text`; a placeholder Japanese pair (`text/ja.strings`, `text/ja.json`) is added; the profile's text language picks the tables.
 * Speaker names and journal text moved from the text table to the dialogue tables. Area display names moved from the area files to `area.<id>` text keys (areas no longer take `name`). `Session` refusals are text keys.
 
-### Changes a host had to make two rounds ago
+### Changes a host had to make three rounds ago
 
 * `Session`: `setProfile`, `newGame`, `continueGame`, `load`, `retryBattle`, `walk`, `interact`, `partyTalk`, `choose`, `setCommand`, `applyMacro`, `startAuto`, `openMenu`, `closeMenu`, `buy`, `sell`, `rest`, `useItem`, `useAbility`, `equip`, `unequip`, `saveManual`, `enterName` and `setSettings` return `rules::Message` instead of `std::string`; `.empty()` still means it ran. Show a refusal with `render()`. New `language()` (the profile's tables) and `stringText(id)`.
 * `data.h`: `GameConfig::stringsFile` and `textFile` are replaced by `languages` (`LanguageFiles { code, strings, text }`); `GameConfig::scriptedEnds` is removed. `GameData::text` and `strings` are replaced by `languages` (`LanguageTables { code, text, strings }`) and `language(code)`. New `GameData::gameStrings` and `gameStringsText()`. `Journal` texts are string IDs.

@@ -89,3 +89,39 @@ event tidewater_hold unskippable
 	end
 	unlock player
 end
+
+# A tide chart nailed to a post by the water stairs. The apprentices step up to
+# read it two ways, the dockhand shouts a warning, and a crab climbs out from
+# under the post. Party members walk and turn here only as presentation; the
+# leader's cell stays where the party stands.
+event tidewater_chart skippable
+	lock player
+	narrate @tidewater.chart.read
+	move mystic to chart_left
+	face mystic chart_front
+	anim mystic nod
+	say mystic @tidewater.chart.mystic
+	move medic to chart_right
+	face medic chart_front
+	anim medic shake
+	say medic @tidewater.chart.medic
+	anim dockhand startle
+	say dockhand @tidewater.chart.warning
+	move fighter to chart_back
+	face fighter dockhand
+	anim dockhand wave loop
+	anim fighter bow
+	anim mystic jump
+	anim medic shrug
+	narrate @tidewater.chart.crab
+	battle training until survive 1
+	win
+		narrate @tidewater.chart.crab_gone
+		give tonic 1
+	lose
+		narrate @tidewater.chart.crab_won
+	end
+	move fighter to chart_front
+	set tidewater.chart_read
+	unlock player
+end

@@ -65,7 +65,7 @@ Bringing in real data: [`data-import.md`](data-import.md).
 | acceptance | PASS 26, FAIL 0, NOT IMPLEMENTED 12, NOT AUTOMATABLE 26 |
 | C API | 712 checks pass |
 | C# | 13 tests pass |
-| MonoGame sample | three headless runs (smoke 2000 frames, large areas 1600, scripted actor walk 800), 0 failures |
+| MonoGame sample | three headless runs (smoke 2000 frames, large areas 1600, scripted actors and the tide chart scene 1300), 0 failures |
 
 Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch64 and Linux x86-64 (GCC 13.3 and clang 18.1, Ubuntu 24.04 in Docker). Windows: the core, events and game unit tests pass when cross-compiled with MinGW-w64 (GCC 14) and run under Wine 10 (`tools/windows-check.sh`). That check does not cover MSVC, the acceptance suites or the bindings.
 
@@ -126,7 +126,7 @@ The scripted playthrough needs the first battle lost twice and then won. After a
 
 ## Open work
 
-**Content.** The libraries are built to take the real game as data: abilities, enemies, encounters, statuses, items, equipment, areas, events and text. None of it is loaded yet. The scope counts 128 event hooks, 211 chests and 50 shops against the placeholder's 16, 9 and 4. `docs/info-needed.md` lists every table to deliver and its format, and [`data-import.md`](data-import.md) how to bring it in: `game_cli --check` validates a data directory and `tools/maps` converts Tiled maps. Three of the placeholder's six areas (Saltgrass Market and the two floors of the Drowned Kiln) are drawn in Tiled as an example.
+**Content.** The libraries are built to take the real game as data: abilities, enemies, encounters, statuses, items, equipment, areas, events and text. None of it is loaded yet. The scope counts 128 event hooks, 211 chests and 50 shops against the placeholder's 17, 9 and 4. `docs/info-needed.md` lists every table to deliver and its format, and [`data-import.md`](data-import.md) how to bring it in: `game_cli --check` validates a data directory and `tools/maps` converts Tiled maps. Three of the placeholder's six areas (Saltgrass Market and the two floors of the Drowned Kiln) are drawn in Tiled as an example.
 
 **Facts still to confirm.** Of the 40 "to measure" items: 8 are known with high confidence, 9 medium, 10 low, 12 unknown, 1 split. The tally and the per-item notes are in `docs/info-needed.md` and `docs/research/published-mechanics.md`.
 
@@ -138,7 +138,7 @@ The scripted playthrough needs the first battle lost twice and then won. After a
 
 **Measurements.** Per-action presentation times (BAT-102), encounter pacing baselines (ENC-036), walk speeds and step distance (FLD-022, ENC-041).
 
-**Engine.** Nothing is integrated with Unreal yet. The contract is the event stream (`core/README.md`, "Events") and the C API in `bindings/c`. The MonoGame sample shows the full loop with generated pictures and text, script actors included.
+**Engine.** Nothing is integrated with Unreal yet. The contract is the event stream (`core/README.md`, "Events") and the C API in `bindings/c`. The MonoGame sample shows the full loop with generated pictures and text, script actors included, and plays party members' scripted moves and turns and every `anim` as procedural poses. Where a scene puts party members is presentation by design (the game keeps only the leader's cell); an engine follows those actions itself, as the sample does (`bindings/README.md`, "The sample").
 
 **Platforms.** MSVC has not been tried, and the acceptance suites and bindings have not run on Windows. The MonoGame sample's window has only run on macOS.
 

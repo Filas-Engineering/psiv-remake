@@ -10,7 +10,7 @@
 	],
 	"journal": "journal.json",
 	"actors": ["dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler"],
-	"presentation": {"audio": ["brass_alarm"], "portraits": ["guide_smile", "mystic_worried", "scout_grin"]},
+	"presentation": {"animations": ["bow", "jump", "nod", "shake", "shrug", "startle", "wave"], "audio": ["brass_alarm"], "portraits": ["guide_smile", "mystic_worried", "scout_grin"]},
 	"flags": [
 		"cove.quiet_seen",
 		"cove.warden_beaten",
@@ -26,6 +26,7 @@
 		"saltgrass.kiln_asked",
 		"saltgrass.kiln_done",
 		"tidewater.arrived",
+		"tidewater.chart_read",
 		"tidewater.hold_cleared",
 		"tidewater.met_guide",
 		"tidewater.reported"

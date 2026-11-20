@@ -29,6 +29,14 @@ tidewater.hold.gnawing = Something is gnawing at a crate in the ferry hold. It t
 tidewater.hold.cleared = The hold falls quiet. A tonic rolls out from behind the crate.
 tidewater.hold.empty = Only tooth marks are left on the crate.
 
+tidewater.chart.read = A tide chart is nailed to the post by the water stairs. Someone has circled tonight's low water in red.
+tidewater.chart.mystic = Low water at dusk. Leave now and we cross the reeds with dry boots.
+tidewater.chart.medic = That circle is a thumbprint. Low water is at midnight, and midnight is when the bell rings.
+tidewater.chart.warning = Mind that post! Something lives under it!
+tidewater.chart.crab = A crab as wide as a cart wheel climbs out from under the post, claws raised.
+tidewater.chart.crab_gone = The crab scuttles back under the stairs. A tonic is wedged between the planks.
+tidewater.chart.crab_won = The crab clacks once, satisfied, and slides back under the post.
+
 reed.scout.joins = Heading for the cove? I have mapped these reeds twice over. I am coming along.
 reed.peddler.greeting = Psst. Best prices this side of the marsh, and the only prices.
 reed.peddler.farewell = Mind the wisps. They hum before they bite.

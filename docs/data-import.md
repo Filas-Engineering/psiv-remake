@@ -90,7 +90,7 @@ One JSON file per area: the cell grid, markers, exits, hooks, shops, rest points
 
 ### Events
 
-Event scripts (`.ev`): dialogue, choices, flags, battles, warps, shops and rests, compiled against a registry the game builds from the rest of the data. Reference: [Event scripts and text](../game/README.md#event-scripts-and-text) and the script format, [events/FORMAT.md](../events/FORMAT.md).
+Event scripts (`.ev`): dialogue, choices, flags, battles, warps, shops and rests, compiled against a registry the game builds from the rest of the data. Reference: [Event scripts and text](../game/README.md#event-scripts-and-text) and the script format, [events/FORMAT.md](../events/FORMAT.md). Every animation an `anim` names must be listed in `game.json`'s `presentation.animations`. The game follows the moves, turns, shows and hides of `game.json`'s actors; a script that moves, turns or animates a party member, and every `anim`, is presentation the engine shows on its own (see [Actors](../game/README.md#actors)).
 
 ### Routes
 

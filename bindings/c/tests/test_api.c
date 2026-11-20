@@ -652,7 +652,7 @@ static void testFieldAndMenus(void) {
 	CHECK_OK(psiv_field_exits(s, &exits, &count));
 	CHECK(count == 1 && exits[0].x == 13 && strcmp(exits[0].to_area, "reed_path") == 0);
 	CHECK_OK(psiv_field_markers(s, &markers, &count));
-	CHECK(count == 9);
+	CHECK(count == 13);
 	CHECK_OK(psiv_field_points(s, &points, &count));
 	int talk = 0;
 	int shop = 0;
@@ -664,7 +664,7 @@ static void testFieldAndMenus(void) {
 		rest += points[i].kind == PSIV_POINT_REST;
 		chest += points[i].kind == PSIV_POINT_CHEST;
 	}
-	CHECK(talk == 3 && shop == 1 && rest == 1 && chest == 1);
+	CHECK(talk == 4 && shop == 1 && rest == 1 && chest == 1);
 
 	/* Shop at the stall (8,2) from stall_front (8,3). */
 	for (int i = 0; i < 5; ++i) {

@@ -39,3 +39,122 @@ expect actor guide 5 2
 pressuntil Enter Field 400
 expect actor guide 5 2
 expect actor dockhand 10 2
+
+# The tide chart: a scene that walks and turns party members and plays poses. The game keeps only the leader's
+# cell, which a script does not move, so where a scene puts party members is the sample's own, rebuilt from the
+# session's instant actions after a skip or a load. From the guide down to the chart with held keys, so the two
+# apprentices trail the leader.
+cmd walk 7 4
+hold Down 60
+expect actor fighter 7 6 south
+expect actor mystic 7 5
+expect actor medic 7 4
+cmd menu
+cmd save manual_0
+cmd close
+press Enter
+wait 2
+expect screen Dialogue
+shot build/shots/party_1_chart.png
+press Enter
+# The mystic walks from the trail to the chart's left (left a cell, down a cell), turns toward the leader and nods.
+wait 12
+expect actor mystic walking
+shot build/shots/party_2_mystic_walking.png
+wait 50
+expect actor mystic 6 6 east
+expect pose mystic nod
+shot build/shots/party_3_nod.png
+wait 40
+expect pose mystic none
+expect screen Dialogue
+press Enter
+# The medic walks round to the chart's right, turns toward the leader and shakes its head.
+wait 80
+expect actor medic 8 6 west
+expect pose medic shake
+shot build/shots/party_4_shake.png
+wait 40
+press Enter
+# The dockhand, at its talk point by the dock, startles.
+wait 10
+expect pose dockhand startle
+shot build/shots/party_5_startle.png
+wait 40
+press Enter
+# The leader steps back a cell and turns toward the dockhand, who waves (a looping pose the event does not wait
+# for); then the leader bows, the mystic jumps and the medic plays a pose the sample has no name for.
+wait 34
+expect actor fighter 7 5 north
+expect pose dockhand wave
+expect pose fighter bow
+shot build/shots/party_6_bow.png
+wait 60
+expect pose mystic jump
+shot build/shots/party_7_jump.png
+wait 30
+expect pose medic other
+expect pose dockhand wave
+shot build/shots/party_8_other.png
+wait 40
+expect screen Dialogue
+press Enter
+wait 2
+expect screen Battle
+# Back to the title and into the autosave written as the battle began: the event resumes with the battle, and the
+# session's instant actions rebuild the scene first, so after the battle the party stands as it was left and the
+# dockhand is still waving.
+cmd title
+wait 2
+expect screen Title
+cmd load auto_2
+wait 2
+expect screen Battle
+pressuntil Enter Dialogue 600
+wait 2
+expect actor mystic 6 6 east
+expect actor medic 8 6 west
+expect actor fighter 7 5 north
+expect pose dockhand wave
+shot build/shots/party_9_resumed.png
+# The leader steps back to the chart, the scene ends, and the apprentices fall in behind the leader again. Every
+# script action played on screen, so none shows as a toast; the autosave at the end of the scene does.
+pressuntil Enter Field 400
+wait 2
+expect actor fighter 7 6 south
+expect actor mystic 7 5
+expect actor medic 7 4
+expect pose dockhand none
+expect toast Autosaved to auto_0 (event end)
+expect notoast (move
+expect notoast (face
+expect notoast (anim
+shot build/shots/party_10_after.png
+# Again from the save before the chart, skipped as the mystic starts walking: the skip stops at the battle, and the
+# rebuild puts everyone where watching left them.
+cmd title
+cmd load manual_0
+wait 2
+expect screen Field
+press Enter
+wait 2
+press Enter
+wait 10
+expect actor mystic walking
+press Tab
+wait 4
+expect screen Battle
+pressuntil Enter Dialogue 600
+wait 2
+expect actor mystic 6 6 east
+expect actor medic 8 6 west
+expect actor fighter 7 5 north
+expect pose dockhand wave
+shot build/shots/party_11_skipped.png
+pressuntil Enter Field 400
+wait 2
+expect actor mystic 7 5
+expect actor medic 7 4
+expect notoast (move
+expect notoast (face
+expect notoast (anim

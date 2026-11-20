@@ -40,7 +40,8 @@ public sealed class InputState
 
 // The sample's screens: reads the session after each update and draws it through the surface with the
 // sample's own generated pictures (Art), rectangles and text. Holds no game state of its own beyond cursors,
-// the battle playback queue and what the drawing needs to animate (a clock, the field's glides).
+// the battle playback queue and what the drawing needs to animate (a clock, the field's glides, and where a
+// scene has put party members, which the game leaves to the front end).
 public sealed class SampleController
 {
 	private const int PlaybackLineMs = 350;
@@ -50,7 +51,7 @@ public sealed class SampleController
 	private const int LongestAnimationMs = 600;
 
 	// A presentation action being played: the session waits on it until FinishAction.
-	// An actor action on an actor in view plays on its sprite instead of as a label.
+	// A move, turn, show, hide or pose of a person in view plays on its sprite instead of as a label.
 	private sealed class Animation(PresentationAction action, int lengthMs, bool onSprite = false)
 	{
 		public PresentationAction Action { get; } = action;
@@ -89,8 +90,11 @@ public sealed class SampleController
 
 	public bool QuitRequested { get; private set; }
 
-	// The script actors drawn in the last field frame, for headless expectations.
-	public IReadOnlyDictionary<string, (float X, float Y, bool Walking)> DrawnActors => _field.DrawnActors;
+	// The people drawn in the last field frame (script actors and party members), for headless expectations.
+	public IReadOnlyDictionary<string, DrawnPerson> DrawnActors => _field.DrawnActors;
+
+	// The notices on screen (or waiting to be, on a screen without them), oldest first.
+	public IEnumerable<string> Toasts => _ticker.Select(t => t.Text);
 
 	public Screen Screen
 	{
@@ -147,49 +151,129 @@ public sealed class SampleController
 			{
 				_battle.Queue.Enqueue(n.Text);
 			}
+			else if (n.Kind == NoticeKind.Action)
+			{
+				// Every script action plays on screen (on a sprite, as a fade or as a label), so it stays out of the
+				// toasts and only reaches the log.
+				_log("notice: (" + n.Text + ")");
+			}
 			else
 			{
-				Say(n.Kind == NoticeKind.Action ? "(" + n.Text + ")" : n.Text);
+				Say(n.Text);
 			}
 		}
-		foreach (PresentationAction a in _s.PollActions())
+		IReadOnlyList<PresentationAction> actions = _s.PollActions();
+		if (actions.Count > 0)
 		{
-			if (a.Phase == ActionPhase.Cancel)
+			FieldView? view = _s.Field();
+			List<string> lineup = _s.Party().Where(m => m.InLineup).Select(m => m.Id).ToList();
+			foreach (PresentationAction a in actions)
 			{
-				_animations.RemoveAll(x => x.Action.Handle == a.Handle);
-				_log($"action cancelled: {a.Handle}");
-				continue;
+				Present(a, view, lineup);
 			}
-			_log("action: " + a.Description + (a.Instant ? " (instant)" : ""));
-			FieldActor? actor = a.Type is ActionType.Move or ActionType.Face or ActionType.ShowActor or ActionType.HideActor
-				? _s.Field()?.Actors.FirstOrDefault(x => x.Id == a.Subject)
-				: null;
-			(int X, int Y)? drawnAt = actor is null ? null : _field.ActorCell(actor.Id);
-			if (a.Instant)
-			{
-				EndAnimation(a);
-				continue;
-			}
-			if (actor is not null && drawnAt is { } from)
-			{
-				int length = ShortestAnimationMs;
-				if (a.Type == ActionType.Move)
-				{
-					// The sprite walks there a cell per step time (faster or slower with the move's speed); the event
-					// waits until it arrives.
-					int cellMs = (int)(Math.Max(1, _s.FieldInfo()!.StepMs) / (a.Speed > 0 ? a.Speed : 1.0));
-					_field.Pace(actor.Id, cellMs);
-					int cells = Math.Abs(actor.X - from.X) + Math.Abs(actor.Y - from.Y);
-					length = cells > 0 ? cells * cellMs : ShortestAnimationMs;
-				}
-				_animations.Add(new Animation(a, length, onSprite: true));
-				continue;
-			}
-			int labelLength = a.Type is ActionType.Move or ActionType.FadeIn or ActionType.FadeOut or ActionType.CameraMove
-				? Math.Clamp((int)(a.Seconds * 1000), ShortestAnimationMs, LongestAnimationMs)
-				: ShortestAnimationMs;
-			_animations.Add(new Animation(a, labelLength));
 		}
+		// Outside an event nothing is scripted: party members walk in line again and poses stop.
+		if (_s.Mode is Mode.Field or Mode.Title)
+		{
+			_field.EndScene();
+		}
+	}
+
+	private void Present(PresentationAction a, FieldView? view, List<string> lineup)
+	{
+		if (a.Phase == ActionPhase.Cancel)
+		{
+			_animations.RemoveAll(x => x.Action.Handle == a.Handle);
+			_field.StopPose(a.Handle);
+			_log($"action cancelled: {a.Handle}");
+			return;
+		}
+		_log("action: " + a.Description + (a.Instant ? " (instant)" : ""));
+		bool member = lineup.IndexOf(a.Subject) is >= 0 and < FieldRenderer.DrawnMembers;
+		int? spriteMs = view is null ? null : a.Type switch
+		{
+			ActionType.Move or ActionType.Face or ActionType.ShowActor or ActionType.HideActor when view.Actors.Any(x => x.Id == a.Subject) => ActorAction(a, view),
+			ActionType.Move or ActionType.Face when member => MemberAction(a, view, lineup),
+			ActionType.Animate when member || view.Actors.Any(x => x.Id == a.Subject) => PoseAction(a),
+			_ => null,
+		};
+		if (a.Instant)
+		{
+			EndAnimation(a);
+			return;
+		}
+		if (spriteMs == 0)
+		{
+			_s.FinishAction(a.Handle);
+			return;
+		}
+		if (spriteMs is { } length)
+		{
+			_animations.Add(new Animation(a, length, onSprite: true));
+			return;
+		}
+		int labelLength = a.Type is ActionType.Move or ActionType.FadeIn or ActionType.FadeOut or ActionType.CameraMove
+			? Math.Clamp((int)(a.Seconds * 1000), ShortestAnimationMs, LongestAnimationMs)
+			: ShortestAnimationMs;
+		_animations.Add(new Animation(a, labelLength));
+	}
+
+	// Milliseconds per cell of a scripted walk: the area's step time, faster or slower with the move's speed.
+	private int CellMs(PresentationAction a) => (int)(Math.Max(1, _s.FieldInfo()!.StepMs) / (a.Speed > 0 ? a.Speed : 1.0));
+
+	// A script actor's move or turn plays on its sprite: the session already reports where it ends, and the sprite
+	// walks there from where it was drawn. Null when the actor has not been drawn yet.
+	private int? ActorAction(PresentationAction a, FieldView view)
+	{
+		FieldActor actor = view.Actors.First(x => x.Id == a.Subject);
+		if (_field.ActorCell(actor.Id) is not { } from)
+		{
+			return null;
+		}
+		if (a.Type != ActionType.Move || a.Instant)
+		{
+			return ShortestAnimationMs;
+		}
+		// The sprite walks there a cell per step time; the event waits until it arrives.
+		int cellMs = CellMs(a);
+		_field.Pace(actor.Id, cellMs);
+		int cells = Math.Abs(actor.X - from.X) + Math.Abs(actor.Y - from.Y);
+		return cells > 0 ? cells * cellMs : ShortestAnimationMs;
+	}
+
+	// A party member's move or turn is presentation the game does not keep (it keeps only the leader's cell, which a
+	// script does not move), so the sample follows it: a move walks the member to the marker or position, a turn faces
+	// it toward a marker, actor or member. Instant records (the rebuild after a skip or a restore) put the end state
+	// up at once. Null when the target is not in the area.
+	private int? MemberAction(PresentationAction a, FieldView view, List<string> lineup)
+	{
+		(int X, int Y)? target = a.Type == ActionType.Move && a.HasPosition
+			? ((int)Math.Round(a.X, MidpointRounding.AwayFromZero), (int)Math.Round(a.Z, MidpointRounding.AwayFromZero))
+			: view.Markers.FirstOrDefault(m => m.Name == a.Target) is { } marker ? (marker.X, marker.Y)
+			: a.Type == ActionType.Face && view.Actors.FirstOrDefault(x => x.Id == a.Target) is { } actor ? _field.ActorCell(actor.Id) ?? (actor.X, actor.Y)
+			: a.Type == ActionType.Face && lineup.Contains(a.Target) ? _field.MemberCell(a.Target, lineup)
+			: null;
+		if (target is not { } cell)
+		{
+			return null;
+		}
+		if (a.Type == ActionType.Face)
+		{
+			_field.FaceMember(a.Subject, lineup, cell.X, cell.Y);
+			return ShortestAnimationMs;
+		}
+		int cellMs = a.Instant ? 0 : CellMs(a);
+		int cells = _field.MoveMember(a.Subject, lineup, cell.X, cell.Y, cellMs);
+		return cells > 0 ? cells * cellMs : ShortestAnimationMs;
+	}
+
+	// An `anim` plays a pose on the person. A looping one repeats until another pose replaces it or the scene ends,
+	// and is done as soon as it starts, as the script format says; the event waits for one play of any other.
+	private int PoseAction(PresentationAction a)
+	{
+		Pose pose = Art.PoseFor(a.Target);
+		_field.StartPose(a.Subject, pose, a.Handle, _clockMs, a.Loop);
+		return a.Loop ? 0 : Art.PoseLengthMs(pose);
 	}
 
 	// The end state of an action, for one that finished or was put up at once.
@@ -260,6 +344,11 @@ public sealed class SampleController
 			{
 				_ticker.RemoveAt(i);
 			}
+		}
+		if (_battle.Active && _s.Mode == Mode.Title && _s.BattleInfo() is null)
+		{
+			// Quitting to the title drops the battle (after a game over the ended battle stays up until confirmed).
+			_battle.Active = false;
 		}
 		if (_s.Mode == Mode.Battle && !_battle.Active)
 		{

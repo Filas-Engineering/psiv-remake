@@ -4,6 +4,9 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
+// A person as the last field frame drew it, in cells.
+public readonly record struct DrawnPerson(float X, float Y, bool Walking, Direction Facing, Pose Pose);
+
 // Draws a FieldView: a camera that follows the leader, tiles chosen from neighbors and cell coordinates,
 // and actors that glide between cells. The game moves everyone a whole cell at a time; the glides only
 // change what is drawn between those moves, over the area's step time, so game timing is untouched.
@@ -13,6 +16,8 @@ public sealed class FieldRenderer
 	private const int BannerMs = 2600;
 	private const int WaterFrameMs = 220;
 	private const int Followers = 3;
+	// The leader and the followers drawn behind it.
+	public const int DrawnMembers = 1 + Followers;
 
 	// A position that slides from where it was drawn to the cell the game reports.
 	private sealed class Glide
@@ -149,6 +154,14 @@ public sealed class FieldRenderer
 		}
 	}
 
+	private sealed class MemberPlace(int x, int y, Direction facing)
+	{
+		public ActorWalk Walk { get; set; } = new(x, y);
+		public Direction Facing { get; set; } = facing;
+	}
+
+	private sealed record PoseRun(Pose Pose, ulong Handle, int StartMs, bool Loop);
+
 	private string _area = "";
 	private int _lastClock = -1;
 	private readonly Glide _leader = new();
@@ -158,6 +171,10 @@ public sealed class FieldRenderer
 	private readonly Dictionary<string, ActorWalk> _actors = [];
 	// Milliseconds per cell for each actor's next walk, from its move's speed.
 	private readonly Dictionary<string, int> _paces = [];
+	// Party members a script moved or turned during the current scene, drawn there instead of in the walking line.
+	private readonly Dictionary<string, MemberPlace> _members = [];
+	// The pose each person is playing, from a script's `anim`.
+	private readonly Dictionary<string, PoseRun> _poseRuns = [];
 	private int _bannerLeftMs;
 	private string _bannerTitle = "";
 	private string _bannerKind = "";
@@ -167,14 +184,117 @@ public sealed class FieldRenderer
 	// Where the leader was last drawn, in screen pixels (its top edge).
 	public int LeaderScreenY { get; private set; }
 
-	// The actors drawn in the last frame: where, and whether they were between cells.
-	public Dictionary<string, (float X, float Y, bool Walking)> DrawnActors { get; } = [];
+	// The people drawn in the last frame, actors and party members, by id: where, whether between cells, facing, pose.
+	public Dictionary<string, DrawnPerson> DrawnActors { get; } = [];
 
 	// The cell an actor is drawn at or walking to, if it is on screen in this area.
 	public (int X, int Y)? ActorCell(string id) => _actors.TryGetValue(id, out ActorWalk? w) ? w.Target : null;
 
 	// The time per cell of the actor's next walk; without one the actor is put at its new cell at once.
 	public void Pace(string id, int cellMs) => _paces[id] = cellMs;
+
+	// Where a party member is drawn or walking to: its scripted cell during a scene, otherwise its place in the
+	// walking line (the leader's cell, or the trail behind it).
+	public (int X, int Y) MemberCell(string id, IReadOnlyList<string> lineup)
+	{
+		if (_members.TryGetValue(id, out MemberPlace? m))
+		{
+			return m.Walk.Target;
+		}
+		int i = IndexOf(lineup, id);
+		return i > 0 && i - 1 < _followers.Length ? (_followers[i - 1].X, _followers[i - 1].Y) : (_leader.X, _leader.Y);
+	}
+
+	private static int IndexOf(IReadOnlyList<string> lineup, string id)
+	{
+		for (int i = 0; i < lineup.Count; i++)
+		{
+			if (lineup[i] == id)
+			{
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	private MemberPlace Place(string id, IReadOnlyList<string> lineup)
+	{
+		if (!_members.TryGetValue(id, out MemberPlace? m))
+		{
+			int i = IndexOf(lineup, id);
+			Direction facing = i > 0 && i - 1 < _followers.Length ? _followers[i - 1].Facing : _leader.Facing;
+			(int x, int y) = MemberCell(id, lineup);
+			_members[id] = m = new MemberPlace(x, y, facing);
+		}
+		return m;
+	}
+
+	// A script moves a party member: it walks there along x, then along y, a cell per `cellMs` (0 puts it there at
+	// once), and ends facing its last leg, as the game does for actors. Returns the cells walked.
+	public int MoveMember(string id, IReadOnlyList<string> lineup, int x, int y, int cellMs)
+	{
+		(int fx, int fy) = MemberCell(id, lineup);
+		MemberPlace m = Place(id, lineup);
+		if ((x, y) != (fx, fy))
+		{
+			m.Facing = y != fy ? (y > fy ? Direction.South : Direction.North) : (x > fx ? Direction.East : Direction.West);
+		}
+		if (cellMs > 0)
+		{
+			m.Walk.WalkTo(x, y, cellMs);
+		}
+		else
+		{
+			m.Walk = new ActorWalk(x, y);
+		}
+		return Math.Abs(x - fx) + Math.Abs(y - fy);
+	}
+
+	// A script turns a party member toward a cell, along the longer axis (a tie turns it north or south), as the
+	// game turns actors. Nothing happens when the cell is its own.
+	public void FaceMember(string id, IReadOnlyList<string> lineup, int x, int y)
+	{
+		(int fx, int fy) = MemberCell(id, lineup);
+		int dx = x - fx, dy = y - fy;
+		if (dx != 0 || dy != 0)
+		{
+			Place(id, lineup).Facing = Math.Abs(dx) > Math.Abs(dy) ? (dx > 0 ? Direction.East : Direction.West) : (dy > 0 ? Direction.South : Direction.North);
+		}
+	}
+
+	// A pose from `startMs` on the controller's clock; a looping one repeats until another pose replaces it.
+	public void StartPose(string id, Pose pose, ulong handle, int startMs, bool loop) => _poseRuns[id] = new PoseRun(pose, handle, startMs, loop);
+
+	// A skip abandoned the animation: its pose stops.
+	public void StopPose(ulong handle)
+	{
+		foreach (string id in _poseRuns.Where(x => x.Value.Handle == handle).Select(x => x.Key).ToList())
+		{
+			_poseRuns.Remove(id);
+		}
+	}
+
+	// The scene is over: party members go back into the walking line and every pose stops.
+	public void EndScene()
+	{
+		_members.Clear();
+		_poseRuns.Clear();
+	}
+
+	private (Pose Pose, float T)? PoseAt(string id, int clockMs)
+	{
+		if (!_poseRuns.TryGetValue(id, out PoseRun? run))
+		{
+			return null;
+		}
+		int length = Art.PoseLengthMs(run.Pose);
+		int elapsed = Math.Max(0, clockMs - run.StartMs);
+		if (run.Loop)
+		{
+			return (run.Pose, elapsed % length / (float)length);
+		}
+		return elapsed < length ? (run.Pose, elapsed / (float)length) : null;
+	}
 
 	public static string KindName(AreaKind kind) => kind switch { AreaKind.Town => "Town", AreaKind.Dungeon => "Dungeon", _ => "Field" };
 
@@ -198,6 +318,7 @@ public sealed class FieldRenderer
 			}
 			_enemies.Clear();
 			_actors.Clear();
+			EndScene();
 			_bannerLeftMs = BannerMs;
 			_bannerTitle = f.AreaName;
 			_bannerKind = KindName(f.AreaKind);
@@ -235,6 +356,11 @@ public sealed class FieldRenderer
 				continue;
 			}
 			g.Go(tx, ty, step);
+		}
+
+		foreach (MemberPlace m in _members.Values)
+		{
+			m.Walk.Advance(dt);
 		}
 
 		var seen = new HashSet<int>();
@@ -304,8 +430,10 @@ public sealed class FieldRenderer
 		Track(view, clockMs, lineup);
 		FieldInfo f = view.Info;
 		Art.TileSet tiles = art.Tiles(Art.ThemeOf(f.AreaKind));
-		CameraX = Axis(_leader.PX, f.Width * Tile, s.Width);
-		CameraY = Axis(_leader.PY, f.Height * Tile, s.Height);
+		MemberPlace? scriptedLeader = lineup.Count > 0 ? _members.GetValueOrDefault(lineup[0]) : null;
+		float leaderX = scriptedLeader?.Walk.PX ?? _leader.PX, leaderY = scriptedLeader?.Walk.PY ?? _leader.PY;
+		CameraX = Axis(leaderX, f.Width * Tile, s.Width);
+		CameraY = Axis(leaderY, f.Height * Tile, s.Height);
 		int x0 = Math.Max(0, CameraX / Tile - 1), x1 = Math.Min(f.Width - 1, (CameraX + s.Width) / Tile + 1);
 		int y0 = Math.Max(0, CameraY / Tile - 1), y1 = Math.Min(f.Height - 1, (CameraY + s.Height) / Tile + 1);
 		int waterFrame = clockMs / WaterFrameMs % Art.WaterFrames;
@@ -343,13 +471,38 @@ public sealed class FieldRenderer
 		var talkers = new HashSet<string>();
 		// A bubble sits on the cell above its talker, so it is left out while the leader stands there.
 		bool BubbleFree(int x, int y) => _leader.X != x || _leader.Y != y - 1;
-		void Put(float cx, float cy, Action<int, int> draw)
+		void Put(float cx, float cy, Action<int, int> draw, float sortBias = 0f)
 		{
 			int sx = (int)MathF.Round(cx * Tile) - CameraX, sy = (int)MathF.Round(cy * Tile) - CameraY;
 			if (sx > -Tile * 2 && sy > -Tile * 2 && sx < s.Width + Tile && sy < s.Height + Tile)
 			{
-				sprites.Add((cy, () => draw(sx, sy)));
+				sprites.Add((cy + sortBias, () => draw(sx, sy)));
 			}
+		}
+		// A person, actor or party member, in its pose if it is playing one: the shadow stays on the ground while a
+		// pose lifts the body. `extra` draws on top, given the body's screen position.
+		void Person(string id, ActorLook look, float px, float py, Direction facing, int frame, bool walking, float sortBias = 0f, Action<int, int>? extra = null)
+		{
+			int image = art.ActorFrame(look, facing, frame);
+			int lift = 0;
+			bool alert = false;
+			Pose pose = Pose.None;
+			if (PoseAt(id, clockMs) is { } run)
+			{
+				(image, lift, alert) = art.PoseFrame(look, facing, run.Pose, run.T);
+				pose = run.Pose;
+			}
+			DrawnActors[id] = new DrawnPerson(px, py, walking, facing, pose);
+			Put(px, py, (sx, sy) =>
+			{
+				s.Image(art.Shadow, sx, sy + 3, Tile, Tile, Color.White);
+				s.Image(image, sx, sy - lift, Tile, Tile, Color.White);
+				if (alert)
+				{
+					overlays.Add(() => s.Image(art.Alert, sx + Tile / 4, sy - lift - Tile / 2 - 8, Tile / 2, Tile / 2 + 8, Color.White));
+				}
+				extra?.Invoke(sx, sy - lift);
+			}, sortBias);
 		}
 		foreach (FieldPoint p in view.Points)
 		{
@@ -399,21 +552,12 @@ public sealed class FieldRenderer
 			{
 				continue;
 			}
-			ActorLook look = Art.LookFor(a.Id);
-			Direction facing = w.Facing;
-			int frame = w.Frame;
-			bool talks = talkers.Contains(a.Id) && BubbleFree(a.X, a.Y);
-			DrawnActors[a.Id] = (w.PX, w.PY, w.Walking);
-			Put(w.PX, w.PY, (sx, sy) =>
-			{
-				s.Image(art.Shadow, sx, sy + 3, Tile, Tile, Color.White);
-				s.Image(art.ActorFrame(look, facing, frame), sx, sy, Tile, Tile, Color.White);
-				if (talks)
-				{
-					int bob = (int)(2 * MathF.Sin(clockMs / 300f + a.X));
-					overlays.Add(() => s.Image(art.Bubble, sx + Tile / 2, sy - Tile / 2 + bob, Tile / 2 + 8, Tile / 2 + 8, Color.White));
-				}
-			});
+			// A pose has the person's attention, so the bubble waits until it ends.
+			bool talks = talkers.Contains(a.Id) && BubbleFree(a.X, a.Y) && PoseAt(a.Id, clockMs) is null;
+			int bob = (int)(2 * MathF.Sin(clockMs / 300f + a.X));
+			Person(a.Id, Art.LookFor(a.Id), w.PX, w.PY, w.Facing, w.Frame, w.Walking, extra: talks
+				? (sx, sy) => overlays.Add(() => s.Image(art.Bubble, sx + Tile / 2, sy - Tile / 2 + bob, Tile / 2 + 8, Tile / 2 + 8, Color.White))
+				: null);
 		}
 		foreach (FieldEnemy e in view.Enemies)
 		{
@@ -436,30 +580,31 @@ public sealed class FieldRenderer
 		}
 		for (int i = Math.Min(_followers.Length, lineup.Count - 1) - 1; i >= 0; i--)
 		{
+			string id = lineup[i + 1];
+			// A follower sorts just above anyone on its own row, so the leader stays in front.
+			if (_members.TryGetValue(id, out MemberPlace? m))
+			{
+				Person(id, Art.LookFor(id), m.Walk.PX, m.Walk.PY, m.Walk.Walking ? m.Walk.Facing : m.Facing, m.Walk.Frame, m.Walk.Walking, -0.01f);
+				continue;
+			}
 			Glide g = _followers[i];
 			if (g.X == _leader.X && g.Y == _leader.Y)
 			{
 				continue;
 			}
-			ActorLook look = Art.LookFor(lineup[i + 1]);
-			Direction facing = g.Facing;
-			int frame = g.Frame;
-			// A follower sorts just above anyone on its own row, so the leader stays in front.
-			Put(g.PX, g.PY - 0.01f, (sx, sy) =>
-			{
-				s.Image(art.Shadow, sx, sy + 3, Tile, Tile, Color.White);
-				s.Image(art.ActorFrame(look, facing, frame), sx, sy, Tile, Tile, Color.White);
-			});
+			Person(id, Art.LookFor(id), g.PX, g.PY, g.Facing, g.Frame, g.Progress < 1f, -0.01f);
 		}
-		Direction leaderFacing = _leader.Facing;
-		int leaderFrame = _leader.Frame;
-		ActorLook leaderLook = lineup.Count > 0 ? Art.LookFor(lineup[0]) : Art.Hero;
-		Put(_leader.PX, _leader.PY, (sx, sy) =>
+		string leaderId = lineup.Count > 0 ? lineup[0] : "";
+		ActorLook leaderLook = lineup.Count > 0 ? Art.LookFor(leaderId) : Art.Hero;
+		if (scriptedLeader is { } sl)
 		{
-			s.Image(art.Shadow, sx, sy + 3, Tile, Tile, Color.White);
-			s.Image(art.ActorFrame(leaderLook, leaderFacing, leaderFrame), sx, sy, Tile, Tile, Color.White);
-		});
-		LeaderScreenY = (int)MathF.Round(_leader.PY * Tile) - CameraY;
+			Person(leaderId, leaderLook, sl.Walk.PX, sl.Walk.PY, sl.Walk.Walking ? sl.Walk.Facing : sl.Facing, sl.Walk.Frame, sl.Walk.Walking);
+		}
+		else
+		{
+			Person(leaderId, leaderLook, _leader.PX, _leader.PY, _leader.Facing, _leader.Frame, _leader.Progress < 1f);
+		}
+		LeaderScreenY = (int)MathF.Round(leaderY * Tile) - CameraY;
 		foreach ((float _, Action draw) in sprites.OrderBy(x => x.Y))
 		{
 			draw();

@@ -29,6 +29,14 @@ tidewater.hold.gnawing = フェリーの船倉で何かが荷箱をかじって�
 tidewater.hold.cleared = 船倉が静かになった。荷箱の陰から傷薬が転がり出る。
 tidewater.hold.empty = 荷箱には歯の跡だけが残っている。
 
+tidewater.chart.read = 水辺の階段のそばの杭に潮の表が打ちつけてある。今夜の引き潮に赤い丸がついている。
+tidewater.chart.mystic = 夕方に引き潮。今出れば、葦の中を足をぬらさずに行ける。
+tidewater.chart.medic = その丸は指の跡だよ。引き潮は真夜中。鐘が鳴るのも真夜中。
+tidewater.chart.warning = その杭に気をつけて！下に何かいる！
+tidewater.chart.crab = 荷車の車輪ほどもあるカニが、はさみを上げて杭の下から出てくる。
+tidewater.chart.crab_gone = カニは階段の下へ逃げていった。板の間に傷薬がはさまっている。
+tidewater.chart.crab_won = カニは満足げに一度はさみを鳴らし、杭の下へもどっていく。
+
 reed.scout.joins = 入り江へ行くのかい？この葦原は二度も地図にした。ついて行くよ。
 reed.peddler.greeting = おい。沼のこっち側で一番安い店だよ。というか、ここしかない。
 reed.peddler.farewell = ウィスプに気をつけな。噛む前に羽音がするから。

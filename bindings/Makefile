@@ -121,7 +121,7 @@ dotnet-test: dotnet
 		|| (cat $(BUILD)/sample_large_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_large_headless.txt
 	rm -rf $(BUILD)/sample_actors_saves
-	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_actors_saves --script $(SAMPLE_ACTORS_SCRIPT) --frames 800 > $(BUILD)/sample_actors_headless.txt \
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_actors_saves --script $(SAMPLE_ACTORS_SCRIPT) --frames 1300 > $(BUILD)/sample_actors_headless.txt \
 		|| (cat $(BUILD)/sample_actors_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_actors_headless.txt
 

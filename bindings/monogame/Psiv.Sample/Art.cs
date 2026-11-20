@@ -6,6 +6,9 @@ namespace Psiv.Sample;
 
 public enum Theme { Town, Field, Dungeon }
 
+// The procedural poses a script's `anim` plays on a person (Art.PoseFor maps the names).
+public enum Pose { None, Nod, Shake, Jump, Startle, Bow, Wave, Other }
+
 // Deterministic hashing, so a cell's floor variant or an NPC's colors never change between frames or runs.
 public static class Noise
 {
@@ -428,28 +431,30 @@ public sealed class Art
 		return g.Select(r => new string(r)).ToArray();
 	}
 
+	private static Func<char, Color> ActorPalette(ActorLook look) => c => c switch
+	{
+		'o' => Outline,
+		'h' => look.Hair,
+		's' => look.Skin,
+		'c' => look.Coat,
+		'd' => Shade(look.Coat, 0.68f),
+		'a' => look.Scarf,
+		'b' => new Color(60, 58, 84),
+		'k' => new Color(74, 46, 32),
+		'p' => look.Hat,
+		'q' => Shade(look.Hat, 0.7f),
+		'w' => new Color(236, 230, 214),
+		'y' => new Color(232, 196, 92),
+		_ => Color.Magenta,
+	};
+
 	public int[] Actor(ActorLook look)
 	{
 		if (_actors.TryGetValue(look, out int[]? frames))
 		{
 			return frames;
 		}
-		Color Palette(char c) => c switch
-		{
-			'o' => Outline,
-			'h' => look.Hair,
-			's' => look.Skin,
-			'c' => look.Coat,
-			'd' => Shade(look.Coat, 0.68f),
-			'a' => look.Scarf,
-			'b' => new Color(60, 58, 84),
-			'k' => new Color(74, 46, 32),
-			'p' => look.Hat,
-			'q' => Shade(look.Hat, 0.7f),
-			'w' => new Color(236, 230, 214),
-			'y' => new Color(232, 196, 92),
-			_ => Color.Magenta,
-		};
+		Func<char, Color> palette = ActorPalette(look);
 		string[] backRows = BackRows;
 		string[][] front =
 		[
@@ -468,10 +473,10 @@ public sealed class Art
 		frames = new int[12];
 		for (int f = 0; f < 3; f++)
 		{
-			Pixels east = Pixels.FromTemplate(Dress(side[f], look, View.Side), Palette);
-			frames[0 * 3 + f] = Add(Pixels.FromTemplate(Dress(back[f], look, View.Back), Palette));
+			Pixels east = Pixels.FromTemplate(Dress(side[f], look, View.Side), palette);
+			frames[0 * 3 + f] = Add(Pixels.FromTemplate(Dress(back[f], look, View.Back), palette));
 			frames[1 * 3 + f] = Add(east);
-			frames[2 * 3 + f] = Add(Pixels.FromTemplate(Dress(front[f], look, View.Front), Palette));
+			frames[2 * 3 + f] = Add(Pixels.FromTemplate(Dress(front[f], look, View.Front), palette));
 			frames[3 * 3 + f] = Add(east.MirrorX());
 		}
 		_actors[look] = frames;
@@ -479,6 +484,181 @@ public sealed class Art
 	}
 
 	public int ActorFrame(ActorLook look, Direction facing, int frame) => Actor(look)[(facing == Direction.None ? 2 : (int)facing) * 3 + frame];
+
+	// Script animation names the sample knows, and the pose each plays. Any other name plays Pose.Other.
+	private static readonly Dictionary<string, Pose> PoseNames = new()
+	{
+		["bow"] = Pose.Bow,
+		["jump"] = Pose.Jump,
+		["nod"] = Pose.Nod,
+		["shake"] = Pose.Shake,
+		["startle"] = Pose.Startle,
+		["wave"] = Pose.Wave,
+	};
+
+	public static Pose PoseFor(string animation) => PoseNames.GetValueOrDefault(animation, Pose.Other);
+
+	// One play of a pose; a looping animation repeats it.
+	public static int PoseLengthMs(Pose pose) => pose switch
+	{
+		Pose.Nod => 640,
+		Pose.Shake => 600,
+		Pose.Jump => 480,
+		Pose.Startle => 560,
+		Pose.Bow => 900,
+		Pose.Wave => 840,
+		_ => 520,
+	};
+
+	// A person in a pose at `t` (0 to 1 through one play): the picture, a lift in screen pixels, and whether a
+	// startled mark shows above the head. Poses keep the person's facing and only move the head, arms or body.
+	public (int Image, int Lift, bool Alert) PoseFrame(ActorLook look, Direction facing, Pose pose, float t)
+	{
+		static int Hop(float t, float height) => (int)MathF.Round(MathF.Sin(MathF.PI * Math.Clamp(t, 0f, 1f)) * height);
+		return pose switch
+		{
+			// Two dips of the head.
+			Pose.Nod => (PoseImage(look, facing, pose, (int)(t * 4) % 2), 0, false),
+			// The head turns side to side three times.
+			Pose.Shake => (PoseImage(look, facing, pose, t >= 1f ? 0 : 1 + (int)(t * 6) % 2), 0, false),
+			// One hop, standing straight.
+			Pose.Jump => (ActorFrame(look, facing, 0), Hop(t, 15), false),
+			// A quick hop with both arms up, and the mark above the head.
+			Pose.Startle => (PoseImage(look, facing, pose, 1), Hop(t * 3.5f, 9), true),
+			// Down, held, and up again.
+			Pose.Bow => (PoseImage(look, facing, pose, t is > 0.15f and < 0.85f ? 2 : t is > 0.05f and < 0.95f ? 1 : 0), 0, false),
+			// An arm up, the hand swinging.
+			Pose.Wave => (PoseImage(look, facing, pose, 1 + (int)(t * 6) % 2), 0, false),
+			// Anything else: two small bounces.
+			_ => (ActorFrame(look, facing, 0), Hop(t * 2f % 1f, 5), false),
+		};
+	}
+
+	private readonly Dictionary<(ActorLook, Direction, Pose, int), int> _poses = [];
+
+	// Phase 0 is always the standing frame.
+	private int PoseImage(ActorLook look, Direction facing, Pose pose, int phase)
+	{
+		facing = facing == Direction.None ? Direction.South : facing;
+		if (phase == 0)
+		{
+			return ActorFrame(look, facing, 0);
+		}
+		if (_poses.TryGetValue((look, facing, pose, phase), out int image))
+		{
+			return image;
+		}
+		View view = facing switch { Direction.North => View.Back, Direction.South => View.Front, _ => View.Side };
+		char[][] g = Dress(view switch { View.Back => BackRows, View.Front => FrontRows, _ => SideRows }, look, view).Select(r => r.ToCharArray()).ToArray();
+		switch (pose)
+		{
+		case Pose.Nod:
+			g = ShiftRows(g, 1, 7, 0, 1);
+			break;
+		case Pose.Shake:
+			g = ShiftRows(g, 1, 7, phase == 1 ? -1 : 1, 0);
+			break;
+		case Pose.Bow:
+			if (view == View.Front && phase == 2)
+			{
+				// Bent right over, the face turns away and the top of the head shows.
+				foreach (int y in new[] { 5, 6 })
+				{
+					int left = Array.IndexOf(g[y], 'o'), right = Array.LastIndexOf(g[y], 'o');
+					for (int x = left + 1; x < right; x++)
+					{
+						g[y][x] = 'h';
+					}
+				}
+			}
+			g = ShiftRows(ShiftRows(g, 8, 11, 0, phase - 1), 1, 7, 0, phase);
+			break;
+		case Pose.Startle:
+			if (view == View.Side)
+			{
+				RaiseArm(g, 12, 10, 8, false);
+			}
+			else
+			{
+				RaiseArm(g, 13, 10, 12, false);
+				RaiseArm(g, 2, 10, 3, false);
+			}
+			break;
+		case Pose.Wave:
+			if (view == View.Side)
+			{
+				RaiseArm(g, 12, 10, 8, phase == 2);
+			}
+			else
+			{
+				RaiseArm(g, 13, 10, 12, phase == 2);
+			}
+			break;
+		}
+		Pixels p = Pixels.FromTemplate(g.Select(r => new string(r)).ToArray(), ActorPalette(look));
+		image = Add(facing == Direction.West ? p.MirrorX() : p);
+		_poses[(look, facing, pose, phase)] = image;
+		return image;
+	}
+
+	// Rows y0 to y1 moved by (dx, dy): their old places cleared, the moved pixels drawn over whatever is there.
+	private static char[][] ShiftRows(char[][] g, int y0, int y1, int dx, int dy)
+	{
+		char[][] o = g.Select(r => (char[])r.Clone()).ToArray();
+		for (int y = y0; y <= y1; y++)
+		{
+			Array.Fill(o[y], '.');
+		}
+		for (int y = y0; y <= y1; y++)
+		{
+			for (int x = 0; x < Pixels.Size; x++)
+			{
+				int nx = x + dx, ny = y + dy;
+				if (g[y][x] != '.' && nx is >= 0 and < Pixels.Size && ny is >= 0 and < Pixels.Size)
+				{
+					o[ny][nx] = g[y][x];
+				}
+			}
+		}
+		return o;
+	}
+
+	// An arm raised from the shoulder in column x, its hanging hand (column `hand`, from row `handY`) covered by the
+	// coat; `tilt` swings the hand out one pixel.
+	private static void RaiseArm(char[][] g, int x, int handY, int hand, bool tilt)
+	{
+		g[handY][hand] = 'd';
+		g[handY + 1][hand] = g[handY + 1][hand] == 's' ? 'd' : g[handY + 1][hand];
+		void Put(int px, int py, char c)
+		{
+			if (px is >= 0 and < Pixels.Size && py is >= 0 and < Pixels.Size)
+			{
+				g[py][px] = c;
+			}
+		}
+		void Edge(int px, int py)
+		{
+			if (px is >= 0 and < Pixels.Size && py is >= 0 and < Pixels.Size && g[py][px] == '.')
+			{
+				g[py][px] = 'o';
+			}
+		}
+		int side = x < Pixels.Size / 2 ? -1 : 1;
+		for (int y = 5; y <= 9; y++)
+		{
+			Put(x, y, 'c');
+			Edge(x - 1, y);
+			Edge(x + 1, y);
+		}
+		int hx = tilt ? x + side : x;
+		Put(hx, 3, 's');
+		Put(hx, 4, 's');
+		Edge(hx, 2);
+		Edge(hx - 1, 3);
+		Edge(hx + 1, 3);
+		Edge(hx - 1, 4);
+		Edge(hx + 1, 4);
+	}
 
 	private static readonly string[] CreatureRows =
 	[

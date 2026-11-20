@@ -196,7 +196,7 @@ field> look
   #............>
   #............#
   #.R..........#
-  #..........C.#
+  #......N...C.#
   ##############
 field> walk stall_front
 field> face north

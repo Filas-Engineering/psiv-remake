@@ -17,7 +17,8 @@ public static class Program
 		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N]   headless, no window\n" +
 		"\n" +
 		"Headless script lines: press KEY [COUNT] | hold KEY FRAMES | wait FRAMES | pressuntil KEY SCREEN MAXFRAMES |\n" +
-		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | expect actor ID X Y|walking|hidden | dump | shot FILE.png (window only) | # comment.\n" +
+		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | expect actor ID X Y [FACING]|walking|hidden | expect pose ID POSE |\n" +
+		"expect toast none|TEXT | expect notoast TEXT | dump | shot FILE.png (window only) | # comment.\n" +
 		"Keys are MonoGame Keys names.\n" +
 		"Exit codes: 0 done, 1 a failure, 2 bad arguments.\n";
 
@@ -255,6 +256,32 @@ public sealed class ScriptPlayer
 			case "expect" when w.Length >= 3 && w[1] == "actor":
 				ExpectActor(w, source);
 				break;
+			case "expect" when w.Length == 4 && w[1] == "pose":
+				_controller.DrawnActors.TryGetValue(w[2], out DrawnPerson person);
+				if (!Enum.TryParse(w[3], true, out Pose pose))
+				{
+					Fail($"{source}: no pose named {w[3]}");
+				}
+				else if (!_controller.DrawnActors.ContainsKey(w[2]) || person.Pose != pose)
+				{
+					Fail($"{source}: {w[2]} is not drawn in pose {w[3]}" + (_controller.DrawnActors.ContainsKey(w[2]) ? $" (in {person.Pose})" : " (not drawn)"));
+				}
+				break;
+			case "expect" when w.Length >= 3 && w[1] == "notoast":
+				string unwanted = string.Join(" ", w[2..]);
+				if (_controller.Toasts.FirstOrDefault(t => t.Contains(unwanted, StringComparison.Ordinal)) is { } shown)
+				{
+					Fail($"{source}: a toast shows {unwanted}: {shown}");
+				}
+				break;
+			case "expect" when w.Length >= 3 && w[1] == "toast":
+				string wanted = string.Join(" ", w[2..]);
+				List<string> toasts = _controller.Toasts.ToList();
+				if (wanted == "none" ? toasts.Count > 0 : !toasts.Any(t => t.Contains(wanted, StringComparison.Ordinal)))
+				{
+					Fail($"{source}: expected toast {wanted}, showing [{string.Join(" | ", toasts)}]");
+				}
+				break;
 			case "shot" when w.Length == 2:
 				return Shot(w[1]).GetEnumerator();
 			case "dump":
@@ -271,11 +298,12 @@ public sealed class ScriptPlayer
 		return null;
 	}
 
-	// `expect actor ID X Y`: the last frame drew the actor standing on that cell. `expect actor ID walking`: it drew
-	// the actor between cells. `expect actor ID hidden`: it did not draw the actor.
+	// `expect actor ID X Y [FACING]`: the last frame drew the person (a script actor or a party member) standing on
+	// that cell, facing that way if given. `expect actor ID walking`: it drew the person between cells. `expect actor
+	// ID hidden`: it did not draw the person.
 	private void ExpectActor(string[] w, string source)
 	{
-		bool drawn = _controller.DrawnActors.TryGetValue(w[2], out var at);
+		bool drawn = _controller.DrawnActors.TryGetValue(w[2], out DrawnPerson at);
 		if (w.Length == 4 && w[3] == "walking")
 		{
 			if (!drawn || !at.Walking)
@@ -290,11 +318,18 @@ public sealed class ScriptPlayer
 				Fail($"{source}: {w[2]} is drawn at {at.X} {at.Y}");
 			}
 		}
-		else if (w.Length == 5 && int.TryParse(w[3], CultureInfo.InvariantCulture, out int x) && int.TryParse(w[4], CultureInfo.InvariantCulture, out int y))
+		else if (w.Length is 5 or 6 && int.TryParse(w[3], CultureInfo.InvariantCulture, out int x) && int.TryParse(w[4], CultureInfo.InvariantCulture, out int y))
 		{
-			if (!drawn || at.Walking || at.X != x || at.Y != y)
+			Direction facing = Direction.None;
+			if (w.Length == 6 && !Enum.TryParse(w[5], true, out facing))
 			{
-				Fail($"{source}: {w[2]} is not drawn standing at {x} {y}" + (drawn ? $" (at {at.X} {at.Y}{(at.Walking ? ", walking" : "")})" : ""));
+				Fail($"{source}: no facing named {w[5]}");
+				return;
+			}
+			if (!drawn || at.Walking || at.X != x || at.Y != y || (facing != Direction.None && at.Facing != facing))
+			{
+				Fail($"{source}: {w[2]} is not drawn standing at {x} {y}" + (facing != Direction.None ? $" facing {w[5]}" : "") +
+					(drawn ? $" (at {at.X} {at.Y} facing {at.Facing}{(at.Walking ? ", walking" : "")})" : ""));
 			}
 		}
 		else
