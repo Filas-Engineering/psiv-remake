@@ -67,9 +67,11 @@ ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
 	Database db = support::data(t);
 	const int first = 5;
 
-	// Target falls before the action: one enemy moves to the next living enemy by formation position.
+	// Target falls before the action: an action that is not plain damage moves to the living enemy missing the fewest
+	// hit points.
 	{
 		Battle battle = support::create(db, support::setup(db, {"gel_mite", "gel_mite", "rust_hound"}, 21));
+		battle.combatant(first).hp -= 5;
 		battle.combatant(first + 1).hp = 1;
 		support::sturdy(battle, first + 2);
 		actInOrder(battle, {1, 2});
@@ -78,38 +80,60 @@ ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
 		support::othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
 		const std::string problem = retargetProblem(events, 2, first + 1, first + 2);
-		t.expect(problem.empty(), "a single-enemy action whose target fell did not move to the next living enemy by formation position: " + problem);
+		t.expect(problem.empty(), "a non-damage single-enemy action whose target fell did not move to the living enemy missing the fewest hit points: " + problem);
 	}
 
-	// Wrap-around: the fallen target was the last in formation, so the action moves to the first living enemy.
+	// Plain damage, a basic attack here, moves to the living enemy missing the most.
 	{
-		Battle battle = support::create(db, support::setup(db, {"rust_hound", "gel_mite"}, 22));
+		Battle battle = support::create(db, support::setup(db, {"rust_hound", "gel_mite", "gel_mite"}, 22));
 		support::sturdy(battle, first);
+		battle.combatant(first).hp -= 100;
 		battle.combatant(first + 1).hp = 1;
-		actInOrder(battle, {1, 2});
+		support::sturdy(battle, first + 2);
+		battle.combatant(0).stats.dexterity = 5000;
+		actInOrder(battle, {1, 0});
 		battle.setCommand(1, Command::ability("spark", first + 1));
-		battle.setCommand(2, Command::ability("weaken", first + 1));
+		battle.setCommand(0, Command::attack(first + 1));
 		support::othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
-		const std::string problem = retargetProblem(events, 2, first + 1, first);
-		t.expect(problem.empty(), "retarget past the last formation position did not wrap to the first living enemy: " + problem);
+		const std::string problem = retargetProblem(events, 0, first + 1, first);
+		t.expect(problem.empty(), "a basic attack whose target fell did not move to the living enemy missing the most hit points: " + problem);
 	}
 
-	// One ally whose target fell moves to the actor.
+	// A one-ally heal whose target fell is not moved: it does nothing, and its points are spent.
 	{
 		Battle battle = support::create(db, support::setup(db, {"brass_warden"}, 23));
 		support::sturdy(battle, first);
 		battle.combatant(first).stats.dexterity = 5000;
 		battle.combatant(0).hp = 1;
 		battle.combatant(3).hp = 10;
+		const int tp = battle.combatant(3).tp;
 		actInOrder(battle, {first, 3});
 		battle.setCommand(first, Command::attack(0));
 		battle.setCommand(3, Command::ability("mend", 0));
 		support::othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
 		t.expect(!battle.combatant(0).alive(), "setup: the healer's target did not fall first");
-		const std::string problem = retargetProblem(events, 3, 0, 3);
-		t.expect(problem.empty(), "a one-ally heal whose target fell did not move to the actor: " + problem);
+		const Event* started = find(events, EventType::ActionStarted, 3);
+		t.expect(!find(events, EventType::Retargeted, 3) && started && started->target == 0 && support::countType(events, EventType::Healed) == 0,
+			"a one-ally heal whose target fell was moved or healed someone");
+		t.expect(battle.combatant(3).tp == tp - db.ability("mend")->cost, "a one-ally heal whose target fell did not spend its points");
+	}
+
+	// A blocked technique spends its points, then fails.
+	{
+		Battle battle = support::create(db, support::setup(db, {"brass_warden"}, 29));
+		support::sturdy(battle, first);
+		battle.combatant(1).statuses.push_back({"silence", 0});
+		const int tp = battle.combatant(1).tp;
+		battle.setCommand(1, Command::ability("spark", first));
+		support::othersDefend(battle);
+		const std::vector<Event> events = battle.resolveRound();
+		const Event* spent = find(events, EventType::ResourceSpent, 1);
+		const Event* cancelled = find(events, EventType::ActionCancelled, 1);
+		t.expect(spent && cancelled && cancelled->cancel == CancelReason::Silenced && position(events, spent) < position(events, cancelled) && !find(events, EventType::ActionStarted, 1),
+			"a blocked technique did not spend its points and then cancel as silenced");
+		t.expect(battle.combatant(1).tp == tp - db.ability("spark")->cost, "a blocked technique did not cost its points");
 	}
 
 	// One fallen ally that recovered before the action: the revive is cancelled with a reason.
@@ -195,5 +219,5 @@ ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
 		t.expect(problem.empty(), "an actor defeated earlier in the round was not cancelled as unable to act: " + problem);
 	}
 
-	t.note("Retargeted to the next living enemy (with wrap) and from a fallen ally to the actor, each before ActionStarted; a recovered revive cancelled with no_target; item and technique costs re-checked at execution and cancelled with no_item and not_enough_tp; a sleeping or fallen actor cancelled with actor_unable and the cause");
+	t.note("Retargeted before ActionStarted to the living enemy missing the most hit points for plain damage and the fewest otherwise; a heal on a fallen ally kept its target, healed nobody and spent its points; a blocked technique spent its points and cancelled as silenced; a recovered revive cancelled with no_target; item and technique costs re-checked at execution and cancelled with no_item and not_enough_tp; a sleeping or fallen actor cancelled with actor_unable and the cause");
 }

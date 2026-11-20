@@ -62,10 +62,9 @@
 			"name": "Reed Skimmer",
 			"stats": {"hp": 220, "tp": 20, "strength": 20, "mental": 8, "agility": 6, "dexterity": 10, "defense": 14},
 			"basic_attack": "ram",
-			"abilities": ["steam_vent", "patch"],
+			"abilities": ["hull_vent", "hull_patch"],
 			"affinities": {"shock": 150},
-			"status_resist": {"paralysis": 100},
-			"crew_damage_percent": 25
+			"status_resist": {"paralysis": 100}
 		}
 	],
 	"lineup": ["fighter", "mystic", "scout", "medic", "engineer"],

@@ -53,8 +53,11 @@ Database applyDifficulty(const Database& db, const DifficultyDef& difficulty) {
 				enemy.abilities.push_back(id);
 			}
 		}
-		if (overlay.ai) {
-			enemy.ai = *overlay.ai;
+		if (overlay.slots) {
+			enemy.slots = *overlay.slots;
+		}
+		if (overlay.overrides) {
+			enemy.overrides = *overlay.overrides;
 		}
 		for (const auto& [status, percent] : overlay.statusResist) {
 			enemy.statusResist[status] = percent;

@@ -39,10 +39,8 @@ int criticalBonus(int attack);
 int damage(int attack, int defense, int bonus, int affinity, int spread);
 int healAmount(int power, int mental, int spread);
 int reviveHp(int maxHp, int percent);
-int statusTick(int maxHp, int percent);
 // A status is resisted when the score is at or below the effect's threshold.
 int statusScore(int roll, int actorMental, int targetMental, int resistance);
-int modifiedStat(int base, int percentTotal);
 int experienceToNextLevel(int level);
 
 }

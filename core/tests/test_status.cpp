@@ -9,40 +9,42 @@
 using namespace rules;
 using namespace fixtures;
 
-TEST(poisonTicksEachRoundThenExpires) {
+// Poison does nothing in battle and does not wear off; it only lasts beyond it.
+TEST(poisonHasNoEffectInBattle) {
 	Battle battle = makeBattle(data(), {"gel_mite"}, 1);
-	addStatus(battle, kFighter, "poison", 4);
-	const int maxHp = battle.combatant(kFighter).stats.maxHp;
-	const int tick = formulas::statusTick(maxHp, 8);
+	addStatus(battle, kFighter, "poison", 0);
+	const int hp = battle.combatant(kFighter).hp;
 	for (int round = 1; round <= 5; ++round) {
 		othersDefend(battle);
-		const std::vector<Event> events = battle.resolveRound();
-		const std::vector<Event> ticks = ofType(events, EventType::StatusTicked);
-		const std::vector<Event> expired = ofType(events, EventType::StatusRemoved);
-		if (round <= 4) {
-			CHECK_EQ(ticks.size(), std::size_t(1));
-			CHECK(!ticks.empty() && ticks[0].target == kFighter && ticks[0].amount == tick);
-		} else {
-			CHECK(ticks.empty());
-		}
-		CHECK_EQ(expired.size(), std::size_t(round == 4 ? 1 : 0));
+		CHECK(ofType(battle.resolveRound(), EventType::StatusRemoved).empty());
 	}
-	CHECK_EQ(battle.combatant(kFighter).hp, maxHp - 4 * tick);
-	CHECK(!battle.combatant(kFighter).hasStatus("poison"));
+	CHECK_EQ(battle.combatant(kFighter).hp, hp);
+	CHECK(battle.combatant(kFighter).hasStatus("poison"));
+	CHECK(battle.partyState()[kFighter].statuses.size() == 1);
 }
 
-TEST(poisonCanDefeat) {
-	Battle battle = makeBattle(data(), {"gel_mite"}, 1);
+// The fall clears every status except one that survives it, which stays through a revive.
+TEST(defeatKeepsOnlyStatusesThatSurviveIt) {
+	Database db = data();
+	db.enemies["gel_mite"].stats.strength = 400;
+	db.enemies["gel_mite"].stats.dexterity = 400;
+	Battle battle = makeBattle(db, {"gel_mite"}, 1);
 	battle.combatant(kFighter).hp = 2;
-	addStatus(battle, kFighter, "poison", 4);
-	addStatus(battle, kFighter, "silence", 3);
+	addStatus(battle, kFighter, "poison", 0);
+	addStatus(battle, kFighter, "silence", 0);
+	battle.setCommand(kFirstEnemy, Command::attack(kFighter));
 	othersDefend(battle);
 	const std::vector<Event> events = battle.resolveRound();
-	CHECK_EQ(ofType(events, EventType::StatusTicked).at(0).amount, 2);
 	CHECK_EQ(ofType(events, EventType::CombatantDefeated).at(0).target, kFighter);
-	const Combatant& fighter = battle.combatant(kFighter);
-	CHECK_EQ(fighter.statuses.size(), std::size_t(1));
-	CHECK(fighter.hasStatus(kDefeatedStatus));
+	const std::vector<Event> removed = ofType(events, EventType::StatusRemoved);
+	CHECK(removed.size() == 1 && removed[0].status == "poison" && removed[0].statusEnd == StatusEnd::Defeated);
+	CHECK(battle.combatant(kFighter).hasStatus("silence") && battle.combatant(kFighter).hasStatus(kDefeatedStatus));
+
+	battle.setCommand(kMedic, Command::ability("rekindle", kFighter));
+	othersDefend(battle);
+	battle.resolveRound();
+	CHECK(battle.combatant(kFighter).alive());
+	CHECK(battle.combatant(kFighter).statuses.size() == 1 && battle.combatant(kFighter).hasStatus("silence"));
 }
 
 TEST(sleepSkipsTurnsUntilItWearsOff) {
@@ -89,19 +91,18 @@ TEST(recoveryIsRolledAtTheEndOfTheRound) {
 	db.statuses["sleep"].recoverChance = 100;
 	Battle battle = makeBattle(db, {"brass_warden"}, 1);
 	addStatus(battle, kFighter, "sleep", 0);
-	addStatus(battle, kFighter, "poison", 2);
 	battle.setCommand(kFighter, Command::attack(kFirstEnemy));
 	othersDefend(battle);
 	const std::vector<Event> events = battle.resolveRound();
-	// The sleeper still loses this round's turn; the roll comes after the status ticks.
+	// The sleeper still loses this round's turn; the roll comes after every action.
 	CHECK(firstBy(events, EventType::ActionCancelled, kFighter).has_value());
 	std::vector<EventType> tail;
 	for (const Event& e : events) {
-		if (e.type == EventType::StatusTicked || e.type == EventType::StatusRemoved || e.type == EventType::RoundEnded) {
+		if (e.type == EventType::ActionStarted || e.type == EventType::StatusRemoved || e.type == EventType::RoundEnded) {
 			tail.push_back(e.type);
 		}
 	}
-	CHECK_EQ(tail, (std::vector<EventType>{EventType::StatusTicked, EventType::StatusRemoved, EventType::RoundEnded}));
+	CHECK(tail.size() >= 2 && tail[tail.size() - 2] == EventType::StatusRemoved && tail.back() == EventType::RoundEnded);
 	const std::vector<Event> removed = ofType(events, EventType::StatusRemoved);
 	CHECK(removed.size() == 1 && removed[0].status == "sleep" && removed[0].statusEnd == StatusEnd::Recovered && removed[0].target == kFighter);
 	battle.setCommand(kFighter, Command::attack(kFirstEnemy));
@@ -117,18 +118,28 @@ TEST(recoveryIsRolledAtTheEndOfTheRound) {
 	}
 }
 
+// A blocked technique costs its points and fails; skills still work. Without the points it fails for free.
 TEST(silenceBlocksTechniquesButNotSkills) {
 	Battle battle = makeBattle(data(), {"brass_warden"}, 1);
-	addStatus(battle, kMystic, "silence", 3);
-	addStatus(battle, kFighter, "silence", 3);
+	addStatus(battle, kMystic, "silence", 0);
+	addStatus(battle, kFighter, "silence", 0);
+	addStatus(battle, kMedic, "silence", 0);
+	battle.combatant(kMedic).tp = 2;
 	const int tp = battle.combatant(kMystic).tp;
 	battle.setCommand(kMystic, Command::ability("spark", kFirstEnemy));
 	battle.setCommand(kFighter, Command::ability("focus_shot", kFirstEnemy));
+	battle.setCommand(kMedic, Command::ability("mend", kMedic));
 	othersDefend(battle);
 	const std::vector<Event> events = battle.resolveRound();
 	const std::optional<Event> failed = firstBy(events, EventType::ActionCancelled, kMystic);
+	const std::optional<Event> spent = firstBy(events, EventType::ResourceSpent, kMystic);
 	CHECK(failed && failed->cancel == CancelReason::Silenced);
-	CHECK_EQ(battle.combatant(kMystic).tp, tp);
+	CHECK(spent && spent->amount == 3);
+	CHECK(!firstBy(events, EventType::ActionStarted, kMystic).has_value());
+	CHECK_EQ(battle.combatant(kMystic).tp, tp - 3);
+	const std::optional<Event> broke = firstBy(events, EventType::ActionCancelled, kMedic);
+	CHECK(broke && broke->cancel == CancelReason::NotEnoughTp);
+	CHECK_EQ(battle.combatant(kMedic).tp, 2);
 	CHECK(firstBy(events, EventType::ActionStarted, kFighter).has_value());
 	CHECK_EQ(battle.combatant(kFighter).skillUses.at("focus_shot"), 2);
 }
@@ -250,6 +261,8 @@ TEST(stackingRuleDecidesWhatAReapplicationDoes) {
 	{
 		// Extend: two silences in one round add up.
 		Database db = withInflictingAttack("silence");
+		db.statuses["silence"].duration = 3;
+		db.statuses["silence"].stacking = StatusStacking::Extend;
 		Battle battle = makeBattle(db, {"rust_hound"}, 1);
 		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
 		battle.setCommand(kScout, Command::attack(kFirstEnemy));
@@ -261,6 +274,7 @@ TEST(stackingRuleDecidesWhatAReapplicationDoes) {
 	{
 		// Refresh: the second application resets the count.
 		Database db = withInflictingAttack("silence");
+		db.statuses["silence"].duration = 3;
 		db.statuses["silence"].stacking = StatusStacking::Refresh;
 		Battle battle = makeBattle(db, {"rust_hound"}, 1);
 		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
@@ -296,22 +310,77 @@ TEST(statusesThatCountTowardDefeatDecideTheBattle) {
 		CHECK(!locked.isParty(e.actor));
 	}
 
-	// One locked enemy left standing is a victory, and pays its rewards.
-	Battle win = makeBattle(data(), {"rust_hound"}, 1);
-	addStatus(win, kFirstEnemy, "gear_lock", 0);
-	partyDefends(win);
-	win.resolveRound();
-	CHECK(win.outcome() == Outcome::Victory);
-	CHECK_EQ(win.rewards().experience, 10);
-	CHECK(win.combatant(kFirstEnemy).alive());
-
-	// A plain cannot-act status does not.
-	Battle asleep = makeBattle(data(), {"gel_mite"}, 1);
-	for (int i = 0; i < asleep.partyCount(); ++i) {
-		addStatus(asleep, i, "sleep", 3);
+	// Paralysis counts too, alone or with the fallen.
+	Battle stiff = makeBattle(data(), {"gel_mite"}, 1);
+	for (int i = 0; i < stiff.partyCount(); ++i) {
+		addStatus(stiff, i, "paralysis", 0);
 	}
-	asleep.resolveRound();
-	CHECK(asleep.outcome() == Outcome::Ongoing);
+	stiff.combatant(kMedic).hp = 0;
+	stiff.resolveRound();
+	CHECK(stiff.outcome() == Outcome::Defeat);
+
+	// On an enemy it does not: only defeat takes an enemy out.
+	Battle held = makeBattle(data(), {"rust_hound"}, 1);
+	addStatus(held, kFirstEnemy, "gear_lock", 0);
+	partyDefends(held);
+	held.resolveRound();
+	CHECK(held.outcome() == Outcome::Ongoing);
+
+	// A sleeping party plays on: only the enemies act.
+	Database db = data();
+	db.statuses["sleep"].recoverChance = 0;
+	Battle asleep = makeBattle(db, {"gel_mite"}, 1);
+	for (int i = 0; i < asleep.partyCount(); ++i) {
+		asleep.combatant(i).stats.maxHp = 999;
+		asleep.combatant(i).hp = 999;
+		addStatus(asleep, i, "sleep", 0);
+	}
+	for (int round = 0; round < 3; ++round) {
+		const std::vector<Event> events = asleep.resolveRound();
+		CHECK(asleep.outcome() == Outcome::Ongoing);
+		for (const Event& e : ofType(events, EventType::ActionStarted)) {
+			CHECK(!asleep.isParty(e.actor));
+		}
+		CHECK(!ofType(events, EventType::ActionStarted).empty());
+	}
+}
+
+// Sleep holds agility at 1 and paralysis agility and dexterity, until cured or recovered.
+TEST(statusesHoldStatsAtOneWhileTheyLast) {
+	Database db = data();
+	db.statuses["sleep"].recoverChance = 0;
+	Battle battle = makeBattle(db, {"brass_warden"}, 1);
+	Combatant& mystic = battle.combatant(kMystic);
+	const int agility = mystic.stats.agility;
+	const int dexterity = mystic.stats.dexterity;
+	addStatus(battle, kMystic, "sleep", 0);
+	addStatus(battle, kScout, "paralysis", 0);
+	othersDefend(battle);
+	battle.resolveRound();
+	CHECK_EQ(mystic.effective(Stat::Agility), 1);
+	CHECK_EQ(mystic.effective(Stat::Dexterity), dexterity);
+	CHECK_EQ(battle.combatant(kScout).effective(Stat::Agility), 1);
+	CHECK_EQ(battle.combatant(kScout).effective(Stat::Dexterity), 1);
+
+	battle.setCommand(kFighter, Command::item("wake_chime", -1));
+	othersDefend(battle);
+	battle.resolveRound();
+	CHECK_EQ(mystic.effective(Stat::Agility), agility);
+	CHECK_EQ(battle.combatant(kScout).effective(Stat::Dexterity), battle.combatant(kScout).stats.dexterity);
+}
+
+TEST(receivingParalysisRemovesSleep) {
+	Database db = withInflictingAttack("paralysis");
+	Battle battle = makeBattle(db, {"rust_hound"}, 1);
+	addStatus(battle, kFirstEnemy, "sleep", 0);
+	battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	const std::vector<Event> removed = ofType(events, EventType::StatusRemoved);
+	CHECK(!removed.empty() && removed[0].status == "sleep" && removed[0].statusEnd == StatusEnd::Cured && removed[0].target == kFirstEnemy);
+	const std::vector<Event> applied = ofType(events, EventType::StatusApplied);
+	CHECK(applied.size() == 1 && applied[0].status == "paralysis");
+	CHECK(!battle.combatant(kFirstEnemy).hasStatus("sleep"));
 }
 
 TEST(restCuresByDataAndRevivesByRule) {
@@ -350,6 +419,14 @@ TEST(enemyDurationReplacesDurationOnEnemiesOnly) {
 	CHECK(firstBy(events, EventType::ActionCancelled, kFirstEnemy).has_value());
 	const std::vector<Event> removed = ofType(events, EventType::StatusRemoved);
 	CHECK(removed.size() == 1 && removed[0].target == kFirstEnemy && removed[0].statusEnd == StatusEnd::Duration);
+	// Running out leaves agility and dexterity at 1 for the rest of the battle, as in the original.
+	CHECK_EQ(ofType(events, EventType::StatModified).size(), std::size_t(2));
+	for (int round = 0; round < 2; ++round) {
+		othersDefend(battle);
+		battle.resolveRound();
+	}
+	CHECK_EQ(battle.combatant(kFirstEnemy).effective(Stat::Agility), 1);
+	CHECK_EQ(battle.combatant(kFirstEnemy).effective(Stat::Dexterity), 1);
 
 	// On a party member it lasts until cured.
 	battle.setCommand(kFirstEnemy, Command::attack(kScout));

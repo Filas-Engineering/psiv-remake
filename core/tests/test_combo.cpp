@@ -110,20 +110,31 @@ TEST(sleepingParticipantBreaksTheCombo) {
 	CHECK(cancelled && cancelled->cancel == CancelReason::ActorUnable && cancelled->status == "sleep");
 }
 
-TEST(longestRecipeWinsInsideAMacro) {
-	ComboLog log;
-	Battle battle = makeBattle(data(), {"brass_warden"}, 9, &log);
-	battle.applyMacro(*data().macro("tempest"));
-	battle.setCommand(kFirstEnemy, Command::defend());
-	const std::vector<Event> combos = ofType(battle.resolveRound(), EventType::ComboTriggered);
-	CHECK_EQ(combos.size(), std::size_t(1));
-	if (!combos.empty()) {
-		CHECK_EQ(combos[0].ability, std::string("tempest_flare"));
-		CHECK_EQ(combos[0].participants, (std::vector<int>{kMystic, kScout, kEngineer}));
+// Recipes are compared in data order and the first match wins, so a longer recipe listed after a shorter one that
+// matches its first components never fires.
+TEST(theFirstRecipeInDataOrderWins) {
+	for (bool shortFirst : {false, true}) {
+		Database db = data();
+		if (shortFirst) {
+			std::rotate(db.combos.begin(), db.combos.begin() + 2, db.combos.begin() + 3);
+		}
+		CHECK_EQ(db.combos[shortFirst ? 0 : 2].id, std::string("storm_spark"));
+		ComboLog log;
+		Battle battle = makeBattle(db, {"brass_warden"}, 9, &log);
+		battle.applyMacro(*db.macro("tempest"));
+		battle.setCommand(kFirstEnemy, Command::defend());
+		const std::vector<Event> combos = ofType(battle.resolveRound(), EventType::ComboTriggered);
+		CHECK_EQ(combos.size(), std::size_t(1));
+		if (!combos.empty() && !shortFirst) {
+			CHECK_EQ(combos[0].ability, std::string("tempest_flare"));
+			CHECK_EQ(combos[0].participants, (std::vector<int>{kMystic, kScout, kEngineer}));
+			CHECK_EQ(battle.combatant(kEngineer).skillUses.at("flare_burst"), 0);
+		}
+		if (!combos.empty() && shortFirst) {
+			CHECK_EQ(combos[0].ability, std::string("storm_spark"));
+			CHECK_EQ(combos[0].participants, (std::vector<int>{kMystic, kScout}));
+		}
 	}
-	CHECK_EQ(battle.combatant(kEngineer).skillUses.at("flare_burst"), 0);
-	CHECK(log.isDiscovered("tempest_flare"));
-	CHECK(!log.isDiscovered("storm_spark"));
 }
 
 TEST(macroComboFiresWhenNoEnemyActsBetweenItsSteps) {
@@ -163,7 +174,9 @@ TEST(anEnemyTurnBetweenMacroStepsBreaksTheCombo) {
 	CHECK(broken > 0);
 }
 
-TEST(comboAveragesEveryParticipantsStats) {
+// Damage takes the sum of each participant's stat for its component (mental for a technique) as the attack and the
+// sum of the components' damage powers as the bonus; the recipe gives the element and the defense stat.
+TEST(comboDamageSumsTheParticipants) {
 	Database db = orderedData("");
 	db.characters["scout"].base.mental = 200;
 	for (std::uint64_t seed = 1; seed <= 5; ++seed) {
@@ -171,9 +184,11 @@ TEST(comboAveragesEveryParticipantsStats) {
 		battle.combatant(kFirstEnemy).hp = 2000;
 		const std::vector<Event> events = sparkThenGust(battle);
 		CHECK_EQ(ofType(events, EventType::ComboTriggered).size(), std::size_t(1));
-		const int mental = (battle.combatant(kMystic).stats.mental + battle.combatant(kScout).stats.mental) / 2;
-		const int low = formulas::damage(mental, 10, 40, 100, formulas::kSpreadMin);
-		const int high = formulas::damage(mental, 10, 40, 100, formulas::kSpreadMax);
+		const int attack = battle.combatant(kMystic).effective(Stat::Mental) + battle.combatant(kScout).effective(Stat::Mental);
+		const int bonus = db.abilities.at("spark").effects[0].power + db.abilities.at("gust").effects[0].power;
+		const Combatant& warden = battle.combatant(kFirstEnemy);
+		const int low = formulas::damage(attack, warden.effective(Stat::Mental), bonus, warden.affinity(Element::Shock), formulas::kSpreadMin);
+		const int high = formulas::damage(attack, warden.effective(Stat::Mental), bonus, warden.affinity(Element::Shock), formulas::kSpreadMax);
 		bool found = false;
 		for (const Event& e : ofType(events, EventType::DamageDealt)) {
 			if (e.target == kFirstEnemy && e.element == Element::Shock) {
@@ -182,7 +197,105 @@ TEST(comboAveragesEveryParticipantsStats) {
 			}
 		}
 		CHECK(found);
+		CHECK(ofType(events, EventType::Missed).empty());
 	}
+}
+
+// A skill component adds its user's strength; one without damage adds no power.
+TEST(comboDamageTakesStrengthForSkills) {
+	Database db = orderedData("");
+	db.characters["scout"].base.agility = 400;
+	db.characters["mystic"].base.agility = 0;
+	db.characters["fighter"].base.agility = 200;
+	db.characters["scout"].base.mental = 500;
+	Battle battle = makeBattle(db, {"brass_warden"}, 4);
+	battle.combatant(kFirstEnemy).hp = 3000;
+	battle.setCommand(kScout, Command::ability("weaken", kFirstEnemy));
+	battle.setCommand(kFighter, Command::ability("focus_shot", kFirstEnemy));
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	const std::vector<Event> combos = ofType(events, EventType::ComboTriggered);
+	CHECK(combos.size() == 1 && combos[0].combo == "pinpoint_rend");
+	const int attack = battle.combatant(kScout).effective(Stat::Mental) + battle.combatant(kFighter).effective(Stat::Strength);
+	const int bonus = db.abilities.at("focus_shot").effects[0].power;
+	const Combatant& warden = battle.combatant(kFirstEnemy);
+	const std::vector<Event> damage = ofType(events, EventType::DamageDealt);
+	CHECK(damage.size() == 1);
+	if (!damage.empty()) {
+		// The warden defends, which quarters a physical hit.
+		CHECK(damage[0].amount >= formulas::damage(attack, warden.effective(Stat::Defense), bonus, 25, formulas::kSpreadMin));
+		CHECK(damage[0].amount <= formulas::damage(attack, warden.effective(Stat::Defense), bonus, 25, formulas::kSpreadMax));
+	}
+}
+
+// Detection stops at a member who cannot pay; only the first collected turns are compared with a recipe.
+TEST(comboDetectionStopsAtAMemberWhoCannotPay) {
+	const Database db = orderedData("");
+	Battle broke = makeBattle(db, {"brass_warden"}, 3);
+	broke.combatant(kScout).tp = 0;
+	const std::vector<Event> events = sparkThenGust(broke);
+	CHECK(ofType(events, EventType::ComboTriggered).empty());
+	const std::optional<Event> cancelled = firstBy(events, EventType::ActionCancelled, kScout);
+	CHECK(cancelled && cancelled->cancel == CancelReason::NotEnoughTp);
+
+	// A third member after the pair does not stop the pair from firing.
+	Database three = orderedData("");
+	three.characters["fighter"].base.agility = 100;
+	Battle battle = makeBattle(three, {"brass_warden"}, 3);
+	battle.combatant(kFirstEnemy).hp = 3000;
+	battle.setCommand(kMystic, Command::ability("spark", kFirstEnemy));
+	battle.setCommand(kScout, Command::ability("gust", kFirstEnemy));
+	battle.setCommand(kFighter, Command::ability("focus_shot", kFirstEnemy));
+	othersDefend(battle);
+	const std::vector<Event> fired = ofType(battle.resolveRound(), EventType::ComboTriggered);
+	CHECK(fired.size() == 1 && fired[0].combo == "storm_spark");
+}
+
+// Four-member recipes always need their listed order, whatever their flag says. A macro sets the order.
+TEST(aFourMemberRecipeNeedsItsOrder) {
+	for (bool listed : {true, false}) {
+		Database db = data();
+		db.enemies["brass_warden"].stats.agility = 0;
+		db.combos.insert(db.combos.begin(), ComboRecipe{"quartet", {"spark", "gust", "focus_shot", "mend"}, "kiln_roar", {"", "", "", ""}, false});
+		Battle battle = makeBattle(db, {"brass_warden"}, 2);
+		battle.combatant(kFirstEnemy).hp = 3000;
+		Macro macro;
+		macro.name = "quartet";
+		macro.steps = {{"mystic", CommandKind::Ability, "spark", {}}, {"scout", CommandKind::Ability, "gust", {}},
+			{"fighter", CommandKind::Ability, "focus_shot", {}}, {"medic", CommandKind::Ability, "mend", {}}, {"engineer", CommandKind::Defend, "", {}}};
+		if (!listed) {
+			std::swap(macro.steps[0], macro.steps[1]);
+		}
+		battle.applyMacro(macro);
+		othersDefend(battle);
+		const std::vector<Event> fired = ofType(battle.resolveRound(), EventType::ComboTriggered);
+		const std::vector<int> order(battle.lastTurnOrder().begin(), battle.lastTurnOrder().begin() + 4);
+		CHECK_EQ(order, listed ? (std::vector<int>{kMystic, kScout, kFighter, kMedic}) : (std::vector<int>{kScout, kMystic, kFighter, kMedic}));
+		if (listed) {
+			CHECK(fired.size() == 1 && fired[0].combo == "quartet" && fired[0].participants == order);
+		} else {
+			// The scout and mystic pair still makes the two-member recipe.
+			CHECK(!fired.empty() && fired[0].combo == "storm_spark");
+		}
+	}
+}
+
+// The combo aims at the first participant's target, replaced by its own rule if that one fell.
+TEST(aComboAimsAtTheLeadsRetargetedFoe) {
+	const Database db = orderedData("");
+	Battle battle = makeBattle(db, {"gel_mite", "gel_mite", "gel_mite"}, 3);
+	for (int i = kFirstEnemy; i < kFirstEnemy + 3; ++i) {
+		battle.combatant(i).stats.maxHp = 900;
+		battle.combatant(i).hp = 900;
+	}
+	battle.combatant(kFirstEnemy).hp = 0;
+	battle.combatant(kFirstEnemy).statuses = {{kDefeatedStatus, 0}};
+	battle.combatant(kFirstEnemy + 2).hp = 600;
+	const std::vector<Event> events = sparkThenGust(battle);
+	const std::vector<Event> combos = ofType(events, EventType::ComboTriggered);
+	CHECK(combos.size() == 1 && combos[0].target == kFirstEnemy + 2);
+	const std::optional<Event> turned = firstBy(events, EventType::Retargeted, kMystic);
+	CHECK(turned && turned->previousTarget == kFirstEnemy && turned->target == kFirstEnemy + 2);
 }
 
 namespace {

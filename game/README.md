@@ -216,6 +216,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Vehicle battles from scripts (`battle <encounter> aboard <vehicle>`).
 * The library builds with `-fPIC`.
 * The placeholder adventure has a fight in the ferry hold (`tidewater_hold`, no `lose` section, so the fighter alone loses it, and Retry sets it up again), a name entry for the fighter in the guide's scene, portraits on the guide's, the scout's and the mystic's first lines, a battle aboard the reed skimmer (`reed_path_skimmer`), and a save prompt after the campfire rest. The scripted playthrough and the bot route walk them; `tests/expected/playthrough.txt` is re-recorded.
+* Builds against core rules version 9 (enemy action and target choice, retargeting, combinations, experience, drops, statuses, stat changes and vehicle battles follow the original). The terminal no longer prints status ticks or expiring stat changes, which core no longer has. Experience is now split among the members not defeated, level-ups no longer heal, poison no longer hurts in battle and no longer runs out, and a drop comes from the encounter; `tests/expected/playthrough.txt` is re-recorded. The playthrough seed (6) and the bot seed (2) are unchanged.
 
 ### Changes a host must make
 

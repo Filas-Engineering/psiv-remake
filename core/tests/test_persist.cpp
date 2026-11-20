@@ -101,11 +101,10 @@ TEST(everyPublicEnumHasAParser) {
 	CHECK_EQ(checkNames(parseEquipSlot), 5);
 	CHECK_EQ(checkNames(parseOpening), 3);
 	CHECK_EQ(checkNames(parseRewardMultiplier), 3);
-	CHECK_EQ(checkNames(parseExperienceSplit), 3);
 	CHECK_EQ(checkNames(parseStatusAction), 3);
 	CHECK_EQ(checkNames(parseForcedTarget), 3);
 	CHECK_EQ(checkNames(parseStatusStacking), 3);
-	CHECK_EQ(checkNames(parseAiConditionKind), 6);
+	CHECK_EQ(checkNames(parseAiConditionKind), 8);
 	CHECK_EQ(checkNames(parseAiTargetRule), 7);
 	CHECK_EQ(checkNames(parseCommandKind), 6);
 	CHECK_EQ(checkNames(parseMacroTargetKind), 5);
@@ -113,7 +112,7 @@ TEST(everyPublicEnumHasAParser) {
 	CHECK_EQ(checkNames(parseMacroIssue), 14);
 	CHECK_EQ(checkNames(parseScriptedEndKind), 3);
 	CHECK_EQ(checkNames(parseAutoStop), 5);
-	CHECK_EQ(checkNames(parseEventType), 28);
+	CHECK_EQ(checkNames(parseEventType), 26);
 	CHECK_EQ(checkNames(parseOutcome), 5);
 	CHECK_EQ(checkNames(parseCancelReason), 7);
 	CHECK_EQ(checkNames(parseEffectiveness), 4);

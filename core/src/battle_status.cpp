@@ -1,9 +1,5 @@
 #include "rules/battle.h"
 
-#include "rules/formulas.h"
-
-#include <algorithm>
-
 namespace rules {
 
 const StatusDef* Battle::statusWith(int actor, StatusAction action) const {
@@ -22,33 +18,6 @@ void Battle::endOfRound(std::vector<Event>& out) {
 		if (!c.alive() || c.aboard) {
 			continue;
 		}
-		const std::vector<ActiveStatus> before = c.statuses;
-		for (const ActiveStatus& active : before) {
-			const StatusDef* def = db_->status(active.id);
-			if (!def || def->tickDamagePercent <= 0) {
-				continue;
-			}
-			const int damage = std::min(c.hp, formulas::statusTick(c.stats.maxHp, def->tickDamagePercent));
-			c.hp -= damage;
-			Event& e = emit(out, EventType::StatusTicked);
-			e.target = i;
-			e.status = def->id;
-			e.amount = damage;
-			e.hp = c.hp;
-			if (!c.alive()) {
-				defeat(i, out);
-			}
-			if (i == vehicleIndex_) {
-				passDamageToCrew(-1, damage, out);
-			}
-			if (!c.alive()) {
-				break;
-			}
-		}
-		if (!c.alive()) {
-			continue;
-		}
-
 		const std::vector<ActiveStatus> held = c.statuses;
 		for (const ActiveStatus& active : held) {
 			const StatusDef* def = db_->status(active.id);
@@ -64,22 +33,16 @@ void Battle::endOfRound(std::vector<Event>& out) {
 			}
 		}
 		for (const std::string& id : expired) {
-			emitStatusRemoved(-1, i, id, StatusEnd::Duration, out);
-		}
-
-		std::vector<Stat> worn;
-		for (ActiveModifier& modifier : c.modifiers) {
-			if (--modifier.remaining <= 0) {
-				worn.push_back(modifier.stat);
+			// As in the original, a status that runs out leaves the stats it held at 1 for the rest of the battle;
+			// only a cure or a recovery gives them back.
+			for (Stat stat : db_->status(id)->statsToOne) {
+				c.setModifier(stat, 1 - c.base(stat));
+				Event& e = emit(out, EventType::StatModified);
+				e.target = i;
+				e.stat = stat;
+				e.amount = 1 - c.base(stat);
 			}
-		}
-		c.modifiers.erase(std::remove_if(c.modifiers.begin(), c.modifiers.end(), [](const ActiveModifier& m) {
-			return m.remaining <= 0;
-		}), c.modifiers.end());
-		for (Stat stat : worn) {
-			Event& e = emit(out, EventType::StatModifierExpired);
-			e.target = i;
-			e.stat = stat;
+			emitStatusRemoved(-1, i, id, StatusEnd::Duration, out);
 		}
 	}
 	updateOutcome();

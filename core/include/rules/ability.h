@@ -9,15 +9,15 @@ namespace rules {
 
 struct Effect {
 	EffectKind kind = EffectKind::PhysicalDamage;
-	// Damage and heal strength; for Revive, the percent of max hit points restored.
+	// Damage and heal strength; for Revive, the percent of max hit points restored; for an item's ModifyStat, the amount.
 	int power = 0;
 	Element element = Element::None;
 	std::string status;
-	// ApplyStatus: the target resists when the status score is at or below this.
+	// ApplyStatus and a lowering ModifyStat: the target resists when the status score is at or below this.
 	int threshold = 0;
 	Stat stat = Stat::Strength;
-	int percent = 0;
-	int duration = 0;
+	// ModifyStat: raises the stat rather than lowering it.
+	bool raises = false;
 };
 
 struct AbilityDef {

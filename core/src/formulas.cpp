@@ -36,17 +36,8 @@ int reviveHp(int maxHp, int percent) {
 	return std::max(1, maxHp * percent / 100);
 }
 
-int statusTick(int maxHp, int percent) {
-	return std::max(1, maxHp * percent / 100);
-}
-
 int statusScore(int roll, int actorMental, int targetMental, int resistance) {
 	return (roll + actorMental - targetMental) * ((100 - resistance) * 4 / 100);
-}
-
-int modifiedStat(int base, int percentTotal) {
-	const int percent = std::clamp(percentTotal, -50, 100);
-	return std::max(1, base * (100 + percent) / 100);
 }
 
 int experienceToNextLevel(int level) {

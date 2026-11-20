@@ -3,10 +3,10 @@
 namespace rules {
 
 // Changes whenever a rule, a formula or the order of random draws changes, so old battle records are refused.
-inline constexpr int kRulesVersion = 8;
+inline constexpr int kRulesVersion = 9;
 
 // Changes whenever an event type or field changes.
-inline constexpr int kEventSchemaVersion = 5;
+inline constexpr int kEventSchemaVersion = 6;
 
 inline constexpr int kRecordFormatVersion = 5;
 

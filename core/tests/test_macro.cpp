@@ -247,3 +247,66 @@ TEST(roundCanBeSavedAsAMacro) {
 	}
 	CHECK_EQ(block, partyOrder);
 }
+
+// In a macro round a single-enemy action ignores its stored target and picks by hit points missing every time.
+TEST(macroFoeTargetsArePickedAfreshEachRound) {
+	Database db = data();
+	db.characters["fighter"].base.dexterity = 500;
+	Battle battle = makeBattle(db, {"gel_mite", "gel_mite", "gel_mite"}, 2);
+	for (int i = kFirstEnemy; i < kFirstEnemy + 3; ++i) {
+		battle.combatant(i).stats.maxHp = 900;
+		battle.combatant(i).hp = 900;
+	}
+	battle.combatant(kFirstEnemy + 1).hp = 700;
+	Macro macro;
+	macro.name = "focus";
+	macro.steps = {step("fighter", CommandKind::Attack, "", MacroTargetKind::Enemy, "", 0)};
+	battle.applyMacro(macro);
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	const std::optional<Event> attack = firstBy(events, EventType::ActionStarted, kFighter);
+	CHECK(attack && attack->target == kFirstEnemy + 1);
+	const std::optional<Event> turned = firstBy(events, EventType::Retargeted, kFighter);
+	CHECK(turned && turned->previousTarget == kFirstEnemy && turned->target == kFirstEnemy + 1);
+}
+
+// One-ally actions in a macro: a heal takes the member missing the most hit points (ties to the later member), a
+// cure the first member with a status it cures, a revive the first fallen member.
+TEST(macroAllyActionsPickTheirOwnTargets) {
+	Database db = data();
+	db.combos.clear();
+	Battle battle = makeBattle(db, {"brass_warden"}, 3);
+	battle.combatant(kFighter).hp -= 20;
+	battle.combatant(kEngineer).hp -= 20;
+	addStatus(battle, kMystic, "poison", 0);
+	addStatus(battle, kScout, "poison", 0);
+	battle.combatant(kScout).hp = 0;
+	battle.combatant(kScout).statuses = {{kDefeatedStatus, 0}};
+	battle.setCommand(kFirstEnemy, Command::defend());
+	Macro macro;
+	macro.name = "care";
+	macro.steps = {step("medic", CommandKind::Ability, "mend", MacroTargetKind::Self), step("mystic", CommandKind::Item, "clear_gel", MacroTargetKind::Self),
+		step("engineer", CommandKind::Item, "second_wind", MacroTargetKind::Member, "fighter")};
+	battle.applyMacro(macro);
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	const std::optional<Event> mend = firstBy(events, EventType::ActionStarted, kMedic);
+	CHECK(mend && mend->target == kEngineer);
+	const std::optional<Event> gel = firstBy(events, EventType::ActionStarted, kMystic);
+	CHECK(gel && gel->target == kMystic);
+	const std::optional<Event> wind = firstBy(events, EventType::ActionStarted, kEngineer);
+	CHECK(wind && wind->target == kScout);
+
+	// Nobody to cure: the actor. Nobody fallen: the revive falls back to the heal pick and has no target.
+	Battle calm = makeBattle(db, {"brass_warden"}, 3);
+	calm.combatant(kMystic).hp -= 5;
+	calm.setCommand(kFirstEnemy, Command::defend());
+	macro.steps = {step("medic", CommandKind::Ability, "purge", MacroTargetKind::Member, "fighter"), step("engineer", CommandKind::Item, "second_wind")};
+	calm.applyMacro(macro);
+	othersDefend(calm);
+	const std::vector<Event> quiet = calm.resolveRound();
+	const std::optional<Event> purge = firstBy(quiet, EventType::ActionStarted, kMedic);
+	CHECK(purge && purge->target == kMedic);
+	const std::optional<Event> none = firstBy(quiet, EventType::ActionCancelled, kEngineer);
+	CHECK(none && none->cancel == CancelReason::NoTarget);
+}

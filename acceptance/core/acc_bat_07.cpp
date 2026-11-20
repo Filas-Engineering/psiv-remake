@@ -166,8 +166,14 @@ ACC_CHECK(acc_bat_07, "ACC-BAT-07", "BAT-081") {
 			t.expect(forcedRounds > 0 && inPoolCount == forcedRounds, id + ": " + std::to_string(forcedRounds - inPoolCount) + " of " + std::to_string(forcedRounds) + " forced attacks hit a target outside the " + toString(status.forcedTarget) + " pool");
 		}
 
-		// Ticks each round end, and counts down to expiry after its duration; no duration lasts until cured.
-		const int tick = formulas::statusTick(battle.combatant(kFirst).stats.maxHp, status.tickDamagePercent);
+		// Holds its stats at 1 while it lasts.
+		for (Stat stat : status.statsToOne) {
+			const bool held = !battle.combatant(kFirst).hasStatus(id) || battle.combatant(kFirst).effective(stat) == 1;
+			t.expect(held, id + ": " + toString(stat) + " is not held at 1 while the status lasts");
+			++rules["stats to one"];
+		}
+
+		// Counts down to expiry after its duration; no duration lasts until cured. Stats it held stay at 1 after it runs out.
 		int expiredRound = 0;
 		for (int round = 1; round <= 8 && battle.outcome() == Outcome::Ongoing; ++round) {
 			if (round > 1) {
@@ -175,16 +181,11 @@ ACC_CHECK(acc_bat_07, "ACC-BAT-07", "BAT-081") {
 				events = battle.resolveRound();
 				recovered = recovered || find(events, EventType::StatusRemoved, id, kFirst);
 			}
-			const Event* ticked = find(events, EventType::StatusTicked, id, kFirst);
 			if (const Event* removed = find(events, EventType::StatusRemoved, id, kFirst); removed && removed->statusEnd == StatusEnd::Duration) {
 				expiredRound = round;
-			}
-			const bool active = battle.combatant(kFirst).hasStatus(id) || expiredRound == round;
-			if (status.tickDamagePercent > 0 && active) {
-				t.expect(ticked && ticked->amount == tick, id + ": no tick of " + std::to_string(tick) + " at the end of round " + std::to_string(round));
-			}
-			if (status.tickDamagePercent == 0) {
-				t.expect(!ticked, id + ": ticked although its data has no tick");
+				for (Stat stat : status.statsToOne) {
+					t.expect(battle.combatant(kFirst).effective(stat) == 1, id + ": " + toString(stat) + " came back when the status ran out");
+				}
 			}
 			if (!battle.combatant(kFirst).hasStatus(id)) {
 				break;
@@ -194,11 +195,39 @@ ACC_CHECK(acc_bat_07, "ACC-BAT-07", "BAT-081") {
 			t.expect(expiredRound == duration, id + ": expired after " + std::to_string(expiredRound) + " rounds, data says " + std::to_string(duration));
 		} else if (duration > 0) {
 			t.expect(recovered, id + ": never expired although its data lasts " + std::to_string(duration) + " rounds");
-		} else if (status.recoverChance == 0 && !status.wakesOnDamage && status.tickDamagePercent == 0) {
+		} else if (status.recoverChance == 0 && !status.wakesOnDamage) {
 			t.expect(battle.combatant(kFirst).hasStatus(id), id + ": a status with no round limit wore off by itself");
 		}
 
-		// Recovery: rolled at the end of each round, after the round's actions and ticks. Nobody's action draws here, so
+		// Receiving it removes the statuses its data lists.
+		for (const std::string& removed : status.removes) {
+			Battle both = support::create(db, support::setup(db, {"rust_hound"}, 6));
+			both.combatant(0).basicAttack = "acc_inflict";
+			support::sturdy(both, kFirst);
+			actFirst(both, 0);
+			both.combatant(kFirst).statuses.push_back({removed, 0});
+			both.setCommand(0, Command::attack(kFirst));
+			support::othersDefend(both);
+			const Event* gone = find(both.resolveRound(), EventType::StatusRemoved, removed, kFirst);
+			t.expect(gone && gone->statusEnd == StatusEnd::Cured && !both.combatant(kFirst).hasStatus(removed), id + ": receiving it did not remove " + removed);
+			++rules["removes"];
+		}
+
+		// Survives defeat, per data.
+		{
+			Battle felled = support::create(db, support::setup(db, {"rust_hound"}, 5));
+			felled.combatant(0).hp = 1;
+			felled.combatant(0).statuses.push_back({id, 0});
+			felled.combatant(kFirst).stats.strength = 400;
+			felled.combatant(kFirst).stats.dexterity = 400;
+			felled.setCommand(kFirst, Command::attack(0));
+			support::othersDefend(felled);
+			felled.resolveRound();
+			t.expect(!felled.combatant(0).alive(), id + ": setup: the member did not fall");
+			t.expect(felled.combatant(0).hasStatus(id) == status.survivesDefeat, id + (status.survivesDefeat ? ": the status did not survive defeat" : ": the status survived defeat"));
+		}
+
+		// Recovery: rolled at the end of each round, after the round's actions. Nobody's action draws here, so
 		// the roll follows the initiative rolls.
 		if (status.recoverChance > 0) {
 			++rules["recover chance"];
@@ -295,18 +324,25 @@ ACC_CHECK(acc_bat_07, "ACC-BAT-07", "BAT-081") {
 			++rules[std::string("stacking ") + toString(status.stacking)];
 		}
 
-		// Counts toward Defeat: a lone enemy held by it counts as down.
+		// Counts toward Defeat: a party all held by it counts as down. An enemy is down only when defeated.
 		{
 			Battle held = support::create(db, support::setup(db, {"rust_hound"}, 10));
 			support::sturdy(held, kFirst);
 			for (int i = 0; i < held.partyCount(); ++i) {
 				support::sturdy(held, i);
+				held.combatant(i).statuses.push_back({id, 0});
 			}
-			held.combatant(kFirst).statuses.push_back({id, 0});
-			support::othersDefend(held);
+			held.setCommand(kFirst, Command::defend());
 			held.resolveRound();
-			const bool ended = held.outcome() == Outcome::Victory;
-			t.expect(ended == status.countsTowardDefeat, id + (status.countsTowardDefeat ? ": a lone enemy held by a status that counts toward Defeat did not end the battle" : ": a status that does not count toward Defeat ended the battle"));
+			const bool lost = held.outcome() == Outcome::Defeat;
+			t.expect(lost == status.countsTowardDefeat, id + (status.countsTowardDefeat ? ": a party all held by a status that counts toward Defeat did not lose" : ": a status that does not count toward Defeat lost the battle"));
+
+			Battle lone = support::create(db, support::setup(db, {"rust_hound"}, 10));
+			support::sturdy(lone, kFirst);
+			lone.combatant(kFirst).statuses.push_back({id, 0});
+			support::othersDefend(lone);
+			lone.resolveRound();
+			t.expect(lone.outcome() == Outcome::Ongoing, id + ": a lone enemy held by the status ended the battle");
 		}
 
 		// Duration rule across battles: only a persisting status leaves the battle on the party, and comes back in.
@@ -356,5 +392,5 @@ ACC_CHECK(acc_bat_07, "ACC-BAT-07", "BAT-081") {
 	for (const auto& [rule, count] : rules) {
 		covered += (covered.empty() ? "" : ", ") + rule + " " + std::to_string(count);
 	}
-	t.note(std::to_string(tested) + " statuses from core/data apply with their duration, act per their action rule, tick, expire, recover, wake, cure, stack, count toward Defeat and persist across battles exactly per their data (" + covered + ")");
+	t.note(std::to_string(tested) + " statuses from core/data apply with their duration, act per their action rule, hold stats at 1, expire, recover, wake, cure, remove others, stack, survive defeat, count toward Defeat for the party only and persist across battles exactly per their data (" + covered + ")");
 }

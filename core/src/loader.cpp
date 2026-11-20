@@ -127,7 +127,15 @@ void parseStatusResist(Reader& reader, const Database& db, const JsonValue& obje
 	}
 }
 
-void parseEffects(Reader& reader, const Database& db, const JsonValue& object, std::vector<Effect>& out) {
+void rejectComboPower(Reader& reader, const JsonValue& entry) {
+	if (const JsonValue* power = entry.find("power")) {
+		reader.fail(*power, "load.combo_damage_has_no_power", {});
+	}
+}
+
+// Items give a stat change its amount in `power`; abilities take it from the user. A combo's damage takes its power
+// from the participants' components, so it has none of its own.
+void parseEffects(Reader& reader, const Database& db, const JsonValue& object, bool item, bool combo, std::vector<Effect>& out) {
 	const std::vector<const JsonValue*> entries = reader.objects(object, "effects", true);
 	if (entries.empty() && object.find("effects")) {
 		reader.fail(*object.find("effects"), "load.needs_at_least_one_effect", {});
@@ -145,7 +153,11 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, s
 		switch (effect.kind) {
 		case EffectKind::PhysicalDamage:
 			reader.rejectUnknownKeys(*entry, {"type", "power"});
-			reader.integer(*entry, "power", effect.power, true, 0, 9999);
+			if (combo) {
+				rejectComboPower(reader, *entry);
+			} else {
+				reader.integer(*entry, "power", effect.power, true, 0, 9999);
+			}
 			break;
 		case EffectKind::Heal:
 			reader.rejectUnknownKeys(*entry, {"type", "power"});
@@ -153,7 +165,11 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, s
 			break;
 		case EffectKind::ElementalDamage: {
 			reader.rejectUnknownKeys(*entry, {"type", "power", "element"});
-			reader.integer(*entry, "power", effect.power, true, 1, 9999);
+			if (combo) {
+				rejectComboPower(reader, *entry);
+			} else {
+				reader.integer(*entry, "power", effect.power, true, 1, 9999);
+			}
 			std::string element;
 			if (reader.string(*entry, "element", element) && (!parseElement(element, effect.element) || effect.element == Element::None)) {
 				reader.fail(*entry->find("element"), "load.unknown_element", {element});
@@ -170,15 +186,25 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, s
 			readStatusRef(reader, db, *entry, "status", effect.status, true);
 			break;
 		case EffectKind::ModifyStat: {
-			reader.rejectUnknownKeys(*entry, {"type", "stat", "percent", "duration"});
-			std::string stat;
-			if (reader.string(*entry, "stat", stat) && !parseStat(stat, effect.stat)) {
-				reader.fail(*entry->find("stat"), "load.unknown_stat", {stat});
+			if (item) {
+				reader.rejectUnknownKeys(*entry, {"type", "stat", "direction", "threshold", "power"});
+				reader.integer(*entry, "power", effect.power, true, 1, 999);
+			} else {
+				reader.rejectUnknownKeys(*entry, {"type", "stat", "direction", "threshold"});
 			}
-			if (reader.integer(*entry, "percent", effect.percent, true, -90, 200) && effect.percent == 0) {
-				reader.fail(*entry->find("percent"), "load.percent_cannot_be_0", {});
+			std::string text;
+			if (reader.string(*entry, "stat", text) && !parseStat(text, effect.stat)) {
+				reader.fail(*entry->find("stat"), "load.unknown_stat", {text});
 			}
-			reader.integer(*entry, "duration", effect.duration, true, 1, 99);
+			if (reader.string(*entry, "direction", text)) {
+				if (text != "up" && text != "down") {
+					reader.fail(*entry->find("direction"), "load.unknown_direction", {text});
+				}
+				effect.raises = text == "up";
+			}
+			if (reader.integer(*entry, "threshold", effect.threshold, false, 0, 255) && effect.raises) {
+				reader.fail(*entry->find("threshold"), "load.only_lowering_has_threshold", {});
+			}
 			break;
 		}
 		case EffectKind::Revive:
@@ -231,27 +257,24 @@ void readFieldFlag(Reader& reader, const JsonValue& entry, Targeting targeting, 
 
 void parseRules(Reader& reader, const JsonValue& root, Database& db) {
 	BattleRules& rules = db.battleRules;
-	reader.rejectUnknownKeys(root, {"surprise_rounds", "experience_split", "rest_revives"});
+	reader.rejectUnknownKeys(root, {"surprise_rounds", "rest_revives"});
 	reader.integer(root, "surprise_rounds", rules.surpriseRounds, true, 0, 9);
 	if (reader.get(root, "rest_revives", Type::Bool, true)) {
 		reader.boolean(root, "rest_revives", rules.restRevives);
-	}
-	std::string split;
-	if (reader.string(root, "experience_split", split) && !parseExperienceSplit(split, rules.experienceSplit)) {
-		reader.fail(*root.find("experience_split"), "load.unknown_experience_split", {split});
 	}
 }
 
 void parseStatuses(Reader& reader, const JsonValue& root, Database& db) {
 	reader.rejectUnknownKeys(root, {"statuses"});
+	std::vector<std::pair<std::string, const JsonValue*>> removals;
 	for (const JsonValue* entry : reader.objects(root, "statuses", true)) {
 		StatusDef status;
 		if (!reader.string(*entry, "id", status.id)) {
 			continue;
 		}
 		reader.setContext("status '" + status.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "action", "forced_target", "blocks_techniques", "wakes_on_damage", "tick_damage_percent", "duration",
-			"enemy_duration", "recover_chance", "stacking", "persists_outside_battle", "counts_toward_defeat", "rest_cures"});
+		reader.rejectUnknownKeys(*entry, {"id", "name", "action", "forced_target", "blocks_techniques", "wakes_on_damage", "stats_to_one", "removes",
+			"duration", "enemy_duration", "recover_chance", "stacking", "persists_outside_battle", "counts_toward_defeat", "survives_defeat", "rest_cures"});
 		reader.string(*entry, "name", status.name);
 		std::string text;
 		if (reader.string(*entry, "action", text, false) && !parseStatusAction(text, status.action)) {
@@ -269,10 +292,22 @@ void parseStatuses(Reader& reader, const JsonValue& root, Database& db) {
 		}
 		reader.boolean(*entry, "persists_outside_battle", status.persistsOutsideBattle);
 		reader.boolean(*entry, "counts_toward_defeat", status.countsTowardDefeat);
+		reader.boolean(*entry, "survives_defeat", status.survivesDefeat);
 		reader.boolean(*entry, "rest_cures", status.restCures);
 		reader.boolean(*entry, "blocks_techniques", status.blocksTechniques);
 		reader.boolean(*entry, "wakes_on_damage", status.wakesOnDamage);
-		reader.integer(*entry, "tick_damage_percent", status.tickDamagePercent, false, 0, 100);
+		for (const std::string& name : reader.strings(*entry, "stats_to_one", false)) {
+			Stat stat = Stat::Strength;
+			if (!parseStat(name, stat) || (stat != Stat::Agility && stat != Stat::Dexterity)) {
+				reader.fail(*entry->find("stats_to_one"), "load.stats_to_one_agility_dexterity", {name});
+			} else if (std::find(status.statsToOne.begin(), status.statsToOne.end(), stat) == status.statsToOne.end()) {
+				status.statsToOne.push_back(stat);
+			}
+		}
+		status.removes = reader.strings(*entry, "removes", false);
+		if (!status.removes.empty() && !db.status(status.id)) {
+			removals.emplace_back(status.id, entry->find("removes"));
+		}
 		reader.integer(*entry, "duration", status.duration, false, 0, 99);
 		reader.integer(*entry, "enemy_duration", status.enemyDuration, false, 0, 99);
 		reader.integer(*entry, "recover_chance", status.recoverChance, false, 0, 100);
@@ -287,6 +322,16 @@ void parseStatuses(Reader& reader, const JsonValue& root, Database& db) {
 	}
 	if (!db.status(kDefeatedStatus)) {
 		reader.fail(root, "load.defeated_status_required", {kDefeatedStatus});
+	}
+	// A status may remove one listed after it, so the names are checked once every status is known.
+	for (const auto& [id, at] : removals) {
+		reader.setContext("status '" + id + "'");
+		for (const std::string& removed : db.statuses.at(id).removes) {
+			if (!db.status(removed) || removed == kDefeatedStatus || removed == id) {
+				reader.fail(*at, "load.removes_names_missing_status", {removed});
+			}
+		}
+		reader.setContext("");
 	}
 }
 
@@ -315,7 +360,7 @@ void parseAbilities(Reader& reader, const JsonValue& root, Database& db) {
 			reader.fail(*entry->find("uses"), "load.only_skills_have_uses", {});
 		}
 		readTargeting(reader, *entry, ability.targeting);
-		parseEffects(reader, db, *entry, ability.effects);
+		parseEffects(reader, db, *entry, false, ability.kind == AbilityKind::Combo, ability.effects);
 		checkReviveTargeting(reader, *entry, ability.targeting, ability.effects);
 		readFieldFlag(reader, *entry, ability.targeting, ability.effects, ability.field);
 		if (ability.field && ability.kind != AbilityKind::Technique && ability.kind != AbilityKind::Skill) {
@@ -337,7 +382,7 @@ void parseItems(Reader& reader, const JsonValue& root, Database& db) {
 		reader.rejectUnknownKeys(*entry, {"id", "name", "target", "effects", "field"});
 		reader.string(*entry, "name", item.name);
 		readTargeting(reader, *entry, item.targeting);
-		parseEffects(reader, db, *entry, item.effects);
+		parseEffects(reader, db, *entry, true, false, item.effects);
 		checkReviveTargeting(reader, *entry, item.targeting, item.effects);
 		readFieldFlag(reader, *entry, item.targeting, item.effects, item.field);
 		insertUnique(db.items, item.id, item, reader, *entry);
@@ -528,14 +573,19 @@ void parseVehicles(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("vehicle '" + vehicle.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "stats", "basic_attack", "abilities", "affinities", "status_resist", "crew_damage_percent"});
+		reader.rejectUnknownKeys(*entry, {"id", "name", "stats", "basic_attack", "abilities", "affinities", "status_resist"});
 		reader.string(*entry, "name", vehicle.name);
 		parseStats(reader, *entry, "stats", vehicle.stats, false);
 		readBasicAttack(reader, db, *entry, vehicle.basicAttack);
 		readAbilityList(reader, db, *entry, vehicle.abilities, false);
+		for (const std::string& id : vehicle.abilities) {
+			const AbilityDef* ability = db.ability(id);
+			if (ability && ability->kind != AbilityKind::Skill) {
+				reader.fail(*entry->find("abilities"), "load.vehicle_abilities_skills", {id});
+			}
+		}
 		parseAffinities(reader, *entry, vehicle.affinities);
 		parseStatusResist(reader, db, *entry, vehicle.statusResist);
-		reader.integer(*entry, "crew_damage_percent", vehicle.crewDamagePercent, false, 0, 100);
 		if (db.character(vehicle.id)) {
 			reader.fail(*entry, "load.vehicle_id_also_character_id", {vehicle.id});
 		}
@@ -724,77 +774,75 @@ void parseParty(Reader& reader, const JsonValue& root, Database& db) {
 	}
 }
 
-void parseAiTarget(Reader& reader, const Database& db, const JsonValue& entry, AiRule& rule) {
+bool enemyKnows(const EnemyDef& enemy, const std::string& ability) {
+	return ability == enemy.basicAttack || contains(enemy.abilities, ability);
+}
+
+void parseAiSlots(Reader& reader, const EnemyDef& enemy, const JsonValue& entry, std::vector<std::string>& out) {
+	out = reader.strings(entry, "slots", true);
+	const JsonValue* list = entry.find("slots");
+	if (list && out.size() != static_cast<std::size_t>(kAiSlots)) {
+		reader.fail(*list, "load.needs_slots", {std::to_string(kAiSlots)});
+	}
+	std::set<std::string> unknown;
+	for (const std::string& id : out) {
+		if (!enemyKnows(enemy, id) && unknown.insert(id).second) {
+			reader.fail(*list, "load.ai_ability_not_in_enemy", {id});
+		}
+	}
+}
+
+void parseAiOverride(Reader& reader, const Database& db, const EnemyDef& enemy, const JsonValue& entry, AiOverride& out) {
+	reader.rejectUnknownKeys(entry, {"when", "ability", "target", "target_status"});
 	std::string text;
+	if (reader.string(entry, "when", text) && !parseAiConditionKind(text, out.when)) {
+		reader.fail(*entry.find("when"), "load.unknown_ai_condition", {text});
+	}
+	if (reader.string(entry, "ability", out.ability) && !enemyKnows(enemy, out.ability)) {
+		reader.fail(*entry.find("ability"), "load.ai_ability_not_in_enemy", {out.ability});
+	}
 	if (!reader.string(entry, "target", text, false)) {
 		if (entry.find("target_status")) {
 			reader.fail(*entry.find("target_status"), "load.target_status_needs_status_rule", {});
 		}
 		return;
 	}
-	if (!parseAiTargetRule(text, rule.target.rule)) {
+	if (!parseAiTargetRule(text, out.target.rule)) {
 		reader.fail(*entry.find("target"), "load.unknown_ai_target_rule", {text});
 		return;
 	}
-	const bool needsStatus = rule.target.rule == AiTargetRule::HasStatus || rule.target.rule == AiTargetRule::LacksStatus;
+	const bool needsStatus = out.target.rule == AiTargetRule::HasStatus || out.target.rule == AiTargetRule::LacksStatus;
 	if (needsStatus) {
-		if (reader.string(entry, "target_status", rule.target.status) && !db.status(rule.target.status)) {
-			reader.fail(*entry.find("target_status"), "load.ai_target_names_missing_status", {rule.target.status});
+		if (reader.string(entry, "target_status", out.target.status) && !db.status(out.target.status)) {
+			reader.fail(*entry.find("target_status"), "load.ai_target_names_missing_status", {out.target.status});
 		}
 	} else if (entry.find("target_status")) {
 		reader.fail(*entry.find("target_status"), "load.target_status_needs_status_rule", {});
 	}
-	const AbilityDef* ability = db.ability(rule.ability);
-	if (!ability || rule.target.rule == AiTargetRule::Default) {
+	const AbilityDef* ability = db.ability(out.ability);
+	if (!ability || out.target.rule == AiTargetRule::Default) {
 		return;
 	}
 	const bool foe = ability->targeting == Targeting::OneEnemy || ability->targeting == Targeting::EnemyGroup;
 	const bool ally = ability->targeting == Targeting::OneAlly || ability->targeting == Targeting::OneFallenAlly;
 	if (!foe && !ally) {
 		reader.fail(*entry.find("target"), "load.ai_target_rule_needs_single_target", {std::string(toString(ability->targeting))});
-	} else if (rule.target.rule == AiTargetRule::LastAttacker && !foe) {
+	} else if (out.target.rule == AiTargetRule::LastAttacker && !foe) {
 		reader.fail(*entry.find("target"), "load.last_attacker_needs_foe_ability", {});
 	}
 }
 
-void parseAiRule(Reader& reader, const Database& db, const EnemyDef& enemy, const JsonValue& entry, AiRule& rule) {
-	reader.rejectUnknownKeys(entry, {"ability", "weight", "when", "target", "target_status"});
-	if (reader.string(entry, "ability", rule.ability)) {
-		const bool known = rule.ability == enemy.basicAttack
-			|| std::find(enemy.abilities.begin(), enemy.abilities.end(), rule.ability) != enemy.abilities.end();
-		if (!db.ability(rule.ability)) {
-			reader.fail(*entry.find("ability"), "load.ai_names_missing_ability", {rule.ability});
-		} else if (!known) {
-			reader.fail(*entry.find("ability"), "load.ai_ability_not_in_enemy", {rule.ability});
-		}
+std::vector<AiOverride> parseAiOverrides(Reader& reader, const Database& db, const EnemyDef& enemy, const JsonValue& entry) {
+	std::vector<AiOverride> overrides;
+	for (const JsonValue* overrideEntry : reader.objects(entry, "overrides", false)) {
+		AiOverride override;
+		parseAiOverride(reader, db, enemy, *overrideEntry, override);
+		overrides.push_back(override);
 	}
-	reader.integer(entry, "weight", rule.weight, false, 1, 1000);
-	parseAiTarget(reader, db, entry, rule);
-	const JsonValue* when = reader.get(entry, "when", Type::Object, false);
-	if (!when) {
-		return;
+	if (overrides.size() > static_cast<std::size_t>(kMaxAiOverrides)) {
+		reader.fail(*entry.find("overrides"), "load.too_many_overrides", {std::to_string(kMaxAiOverrides)});
 	}
-	reader.rejectUnknownKeys(*when, {"type", "value", "status"});
-	std::string type;
-	if (reader.string(*when, "type", type) && !parseAiConditionKind(type, rule.condition.kind)) {
-		reader.fail(*when->find("type"), "load.unknown_ai_condition", {type});
-		return;
-	}
-	switch (rule.condition.kind) {
-	case AiConditionKind::SelfHpBelow:
-	case AiConditionKind::AllyHpBelow:
-		reader.integer(*when, "value", rule.condition.value, true, 1, 100);
-		break;
-	case AiConditionKind::SelfHasStatus:
-	case AiConditionKind::FoeHasStatus:
-		if (reader.string(*when, "status", rule.condition.status) && !db.status(rule.condition.status)) {
-			reader.fail(*when->find("status"), "load.ai_condition_names_missing_status", {rule.condition.status});
-		}
-		break;
-	case AiConditionKind::Always:
-	case AiConditionKind::AllyDefeated:
-		break;
-	}
+	return overrides;
 }
 
 void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
@@ -805,30 +853,17 @@ void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("enemy '" + enemy.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "stats", "basic_attack", "abilities", "affinities", "status_resist", "ai", "experience", "currency", "drops"});
+		reader.rejectUnknownKeys(*entry, {"id", "name", "stats", "basic_attack", "abilities", "affinities", "status_resist", "slots", "overrides", "experience", "currency"});
 		reader.string(*entry, "name", enemy.name);
 		parseStats(reader, *entry, "stats", enemy.stats, false);
 		readBasicAttack(reader, db, *entry, enemy.basicAttack);
 		readAbilityList(reader, db, *entry, enemy.abilities, false);
 		parseAffinities(reader, *entry, enemy.affinities);
 		parseStatusResist(reader, db, *entry, enemy.statusResist);
-		for (const JsonValue* ruleEntry : reader.objects(*entry, "ai", false)) {
-			AiRule rule;
-			parseAiRule(reader, db, enemy, *ruleEntry, rule);
-			enemy.ai.push_back(rule);
-		}
+		parseAiSlots(reader, enemy, *entry, enemy.slots);
+		enemy.overrides = parseAiOverrides(reader, db, enemy, *entry);
 		reader.integer(*entry, "experience", enemy.experience, true, 0, 999999);
 		reader.integer(*entry, "currency", enemy.currency, true, 0, 999999);
-		for (const JsonValue* dropEntry : reader.objects(*entry, "drops", false)) {
-			ItemDrop drop;
-			reader.rejectUnknownKeys(*dropEntry, {"item", "chance", "count"});
-			if (reader.string(*dropEntry, "item", drop.item) && !db.item(drop.item)) {
-				reader.fail(*dropEntry->find("item"), "load.drops_missing_item", {drop.item});
-			}
-			reader.integer(*dropEntry, "chance", drop.chance, true, 1, 100);
-			reader.integer(*dropEntry, "count", drop.count, false, 1, 99);
-			enemy.drops.push_back(drop);
-		}
 		insertUnique(db.enemies, enemy.id, enemy, reader, *entry);
 		reader.setContext("");
 	}
@@ -838,8 +873,15 @@ void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("encounter '" + encounter.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "enemies", "escape", "awareness", "escape_rating"});
+		reader.rejectUnknownKeys(*entry, {"id", "enemies", "escape", "awareness", "escape_rating", "drop"});
 		reader.boolean(*entry, "escape", encounter.escapeAllowed);
+		if (const JsonValue* drop = reader.get(*entry, "drop", Type::Object, false)) {
+			reader.rejectUnknownKeys(*drop, {"item", "rate"});
+			if (reader.string(*drop, "item", encounter.drop.item) && !db.item(encounter.drop.item)) {
+				reader.fail(*drop->find("item"), "load.drop_missing_item", {encounter.drop.item});
+			}
+			reader.integer(*drop, "rate", encounter.drop.rate, true, 0, 127);
+		}
 		const bool awarenessGiven = reader.integer(*entry, "awareness", encounter.awareness, false, 0, 255);
 		const bool escapeRatingGiven = reader.integer(*entry, "escape_rating", encounter.escapeRating, false, 0, 255);
 		const JsonValue* list = reader.get(*entry, "enemies", Type::Array, true);
@@ -922,8 +964,8 @@ void parseComboComponents(Reader& reader, const Database& db, const JsonValue& e
 		combo.abilities.push_back(ability);
 		combo.characters.push_back(character);
 	}
-	if (combo.abilities.size() < 2 || combo.abilities.size() > static_cast<std::size_t>(kMaxPartySize)) {
-		reader.fail(*list, "load.needs_2_abilities", {std::to_string(kMaxPartySize)});
+	if (combo.abilities.size() < 2 || combo.abilities.size() > static_cast<std::size_t>(kMaxComboParticipants)) {
+		reader.fail(*list, "load.needs_2_abilities", {std::to_string(kMaxComboParticipants)});
 	}
 	std::set<std::string> tied;
 	for (const std::string& character : combo.characters) {
@@ -990,7 +1032,7 @@ void parseCombos(Reader& reader, const JsonValue& root, Database& db) {
 }
 
 void parseEnemyOverlay(Reader& reader, const Database& db, const JsonValue& entry, EnemyOverlay& overlay) {
-	reader.rejectUnknownKeys(entry, {"id", "stats_percent", "add_abilities", "ai", "status_resist"});
+	reader.rejectUnknownKeys(entry, {"id", "stats_percent", "add_abilities", "slots", "overrides", "status_resist"});
 	if (!reader.string(entry, "id", overlay.enemy)) {
 		return;
 	}
@@ -1020,14 +1062,12 @@ void parseEnemyOverlay(Reader& reader, const Database& db, const JsonValue& entr
 			overlaid.abilities.push_back(id);
 		}
 	}
-	if (reader.get(entry, "ai", Type::Array, false)) {
-		std::vector<AiRule> rules;
-		for (const JsonValue* ruleEntry : reader.objects(entry, "ai", false)) {
-			AiRule rule;
-			parseAiRule(reader, db, overlaid, *ruleEntry, rule);
-			rules.push_back(rule);
-		}
-		overlay.ai = rules;
+	if (entry.find("slots")) {
+		overlay.slots.emplace();
+		parseAiSlots(reader, overlaid, entry, *overlay.slots);
+	}
+	if (entry.find("overrides")) {
+		overlay.overrides = parseAiOverrides(reader, db, overlaid, entry);
 	}
 	parseStatusResist(reader, db, entry, overlay.statusResist);
 }

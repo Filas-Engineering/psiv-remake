@@ -6,8 +6,8 @@ namespace rules {
 
 namespace {
 
-bool hpBelow(const Combatant& c, int percent) {
-	return c.hp * 100 < c.stats.maxHp * percent;
+bool atMostPercent(const Combatant& c, int percent) {
+	return c.hp * 100 <= c.stats.maxHp * percent;
 }
 
 bool lowerHpShare(const Combatant& a, const Combatant& b) {
@@ -16,27 +16,37 @@ bool lowerHpShare(const Combatant& a, const Combatant& b) {
 
 }
 
-bool Battle::conditionHolds(const AiCondition& condition, int actor) const {
+bool Battle::overrideHolds(AiConditionKind when, int actor) const {
 	const Combatant& self = combatants_[actor];
-	switch (condition.kind) {
-	case AiConditionKind::Always:
-		return true;
-	case AiConditionKind::SelfHpBelow:
-		return hpBelow(self, condition.value);
-	case AiConditionKind::SelfHasStatus:
-		return self.hasStatus(condition.status);
-	case AiConditionKind::AllyHpBelow:
-	case AiConditionKind::AllyDefeated:
+	switch (when) {
+	case AiConditionKind::SelfHpHalf:
+		return atMostPercent(self, 50);
+	case AiConditionKind::SelfHpQuarterOnce:
+		return !quarterOverrideUsed_ && atMostPercent(self, 25);
+	case AiConditionKind::AnyAllyHpHalf:
 		for (int ally : allies(actor)) {
-			const Combatant& c = combatants_[ally];
-			if (condition.kind == AiConditionKind::AllyDefeated ? ally != actor && !c.alive() : c.alive() && hpBelow(c, condition.value)) {
+			if (combatants_[ally].alive() && atMostPercent(combatants_[ally], 50)) {
 				return true;
 			}
 		}
 		return false;
-	case AiConditionKind::FoeHasStatus:
-		for (int foe : livingFoes(actor)) {
-			if (combatants_[foe].hasStatus(condition.status)) {
+	case AiConditionKind::LastStanding:
+		for (int ally : allies(actor)) {
+			if (ally != actor && combatants_[ally].alive()) {
+				return false;
+			}
+		}
+		return true;
+	case AiConditionKind::HitByAttack:
+		return self.hitByAttack;
+	case AiConditionKind::HitByAbility:
+		return self.hitByAbility;
+	case AiConditionKind::HitByTechnique:
+		return self.hitByTechnique;
+	case AiConditionKind::TechniquesBlocked:
+		for (const ActiveStatus& active : self.statuses) {
+			const StatusDef* def = db_->status(active.id);
+			if (def && def->blocksTechniques) {
 				return true;
 			}
 		}
@@ -45,24 +55,13 @@ bool Battle::conditionHolds(const AiCondition& condition, int actor) const {
 	return false;
 }
 
-// The combatants an entry may aim at. Empty means the entry has no target and does not qualify.
-std::vector<int> Battle::aiCandidates(int actor, const AbilityDef& ability, const AiRule& rule) const {
+// The combatants an action may aim at. Empty means it has no target.
+std::vector<int> Battle::aiCandidates(int actor, const AbilityDef& ability, const AiTarget& target) const {
 	std::vector<int> pool;
 	switch (ability.targeting) {
 	case Targeting::OneEnemy:
 	case Targeting::EnemyGroup:
 		pool = livingFoes(actor);
-		if (rule.target.rule == AiTargetRule::Default && rule.condition.kind == AiConditionKind::FoeHasStatus) {
-			std::vector<int> marked;
-			for (int foe : pool) {
-				if (combatants_[foe].hasStatus(rule.condition.status)) {
-					marked.push_back(foe);
-				}
-			}
-			if (!marked.empty()) {
-				pool = marked;
-			}
-		}
 		break;
 	case Targeting::OneAlly:
 		for (int ally : allies(actor)) {
@@ -86,8 +85,8 @@ std::vector<int> Battle::aiCandidates(int actor, const AbilityDef& ability, cons
 	}
 	std::vector<int> kept;
 	for (int candidate : pool) {
-		const bool has = combatants_[candidate].hasStatus(rule.target.status);
-		switch (rule.target.rule) {
+		const bool has = combatants_[candidate].hasStatus(target.status);
+		switch (target.rule) {
 		case AiTargetRule::HasStatus:
 			if (has) {
 				kept.push_back(candidate);
@@ -114,11 +113,8 @@ std::vector<int> Battle::aiCandidates(int actor, const AbilityDef& ability, cons
 	return kept;
 }
 
-int Battle::aiTarget(int actor, const AbilityDef& ability, const AiRule& rule) {
-	const std::vector<int> candidates = aiCandidates(actor, ability, rule);
-	if (candidates.empty()) {
-		return -1;
-	}
+int Battle::aiTarget(int actor, const AbilityDef& ability, const AiTarget& target) {
+	const std::vector<int> candidates = aiCandidates(actor, ability, target);
 	switch (ability.targeting) {
 	case Targeting::AllEnemies:
 	case Targeting::AllAllies:
@@ -134,7 +130,7 @@ int Battle::aiTarget(int actor, const AbilityDef& ability, const AiRule& rule) {
 	auto byHp = [this](int a, int b) {
 		return combatants_[a].hp != combatants_[b].hp ? combatants_[a].hp < combatants_[b].hp : a < b;
 	};
-	switch (rule.target.rule) {
+	switch (target.rule) {
 	case AiTargetRule::LowestHp:
 		return *std::min_element(candidates.begin(), candidates.end(), byHp);
 	case AiTargetRule::HighestHp:
@@ -151,7 +147,7 @@ int Battle::aiTarget(int actor, const AbilityDef& ability, const AiRule& rule) {
 		break;
 	}
 	if (ability.targeting == Targeting::OneEnemy || ability.targeting == Targeting::EnemyGroup) {
-		return candidates[rng_.range(0, static_cast<int>(candidates.size()) - 1)];
+		return commands_[actor].target;
 	}
 	if (ability.targeting == Targeting::OneFallenAlly) {
 		return candidates.front();
@@ -175,43 +171,64 @@ int Battle::aiTarget(int actor, const AbilityDef& ability, const AiRule& rule) {
 	return best;
 }
 
-Command Battle::chooseEnemyCommand(int actor) {
-	const Combatant& self = combatants_[actor];
-	const EnemyDef* def = db_->enemy(self.defId);
-	std::vector<const AiRule*> options;
-	int total = 0;
-	if (def) {
-		for (const AiRule& rule : def->ai) {
-			const AbilityDef* ability = db_->ability(rule.ability);
-			if (!ability || !conditionHolds(rule.condition, actor) || checkUsable(actor, *ability) != CancelReason::None) {
-				continue;
-			}
-			if (aiCandidates(actor, *ability, rule).empty()) {
-				continue;
-			}
-			options.push_back(&rule);
-			total += rule.weight;
+// At the start of the enemy's turn (BAT-091): re-draw a fallen foe, draw one of the eight slots (never the index
+// any enemy drew last), then let the first override whose condition holds and that has a target replace it. An
+// action the enemy cannot pay for, or that finds no target, becomes the basic attack on the drawn foe.
+void Battle::chooseEnemyAction(int actor, std::vector<Event>& out) {
+	Command& command = commands_[actor];
+	if (command.target >= 0 && !combatants_[command.target].alive()) {
+		Event& e = emit(out, EventType::Retargeted);
+		e.actor = actor;
+		e.previousTarget = command.target;
+		command.target = drawFoeByPartyOrder(actor);
+		e.target = command.target;
+	}
+	const EnemyDef* def = db_->enemy(combatants_[actor].defId);
+	if (!def || def->slots.empty()) {
+		return;
+	}
+	int slot = 0;
+	if (previousSlot_ < 0) {
+		slot = rng_.range(0, kAiSlots - 1);
+	} else {
+		slot = rng_.range(0, kAiSlots - 2);
+		slot += slot >= previousSlot_ ? 1 : 0;
+	}
+	previousSlot_ = slot;
+	const AbilityDef* chosen = db_->ability(def->slots[static_cast<std::size_t>(slot)]);
+	AiTarget rule;
+	for (const AiOverride& entry : def->overrides) {
+		const AbilityDef* ability = db_->ability(entry.ability);
+		if (!ability || !overrideHolds(entry.when, actor) || aiCandidates(actor, *ability, entry.target).empty()) {
+			continue;
 		}
-	}
-	if (options.empty()) {
-		const std::vector<int> foes = livingFoes(actor);
-		return Command::attack(foes.empty() ? -1 : foes[rng_.range(0, static_cast<int>(foes.size()) - 1)]);
-	}
-	int roll = rng_.range(1, total);
-	const AiRule* chosen = options.back();
-	for (const AiRule* rule : options) {
-		roll -= rule->weight;
-		if (roll <= 0) {
-			chosen = rule;
+		Combatant& self = combatants_[actor];
+		switch (entry.when) {
+		case AiConditionKind::SelfHpQuarterOnce:
+			quarterOverrideUsed_ = true;
+			break;
+		case AiConditionKind::HitByAttack:
+		case AiConditionKind::HitByAbility:
+		case AiConditionKind::HitByTechnique:
+			self.hitByAttack = self.hitByAbility = self.hitByTechnique = false;
+			break;
+		case AiConditionKind::SelfHpHalf:
+		case AiConditionKind::AnyAllyHpHalf:
+		case AiConditionKind::LastStanding:
+		case AiConditionKind::TechniquesBlocked:
 			break;
 		}
+		chosen = ability;
+		rule = entry.target;
+		break;
 	}
-	const AbilityDef& ability = *db_->ability(chosen->ability);
-	const int target = aiTarget(actor, ability, *chosen);
-	if (ability.id == self.basicAttack) {
-		return Command::attack(target);
+	const CancelReason why = chosen ? checkUsable(actor, *chosen) : CancelReason::None;
+	if (!chosen || why == CancelReason::NotEnoughTp || why == CancelReason::NoUsesLeft || aiCandidates(actor, *chosen, rule).empty()) {
+		command = Command::attack(command.target);
+		return;
 	}
-	return Command::ability(ability.id, target);
+	const int target = aiTarget(actor, *chosen, rule);
+	command = chosen->id == combatants_[actor].basicAttack ? Command::attack(target) : Command::ability(chosen->id, target);
 }
 
 }

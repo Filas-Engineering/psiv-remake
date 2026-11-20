@@ -1,5 +1,7 @@
 #include "support.h"
 
+#include "rules/formulas.h"
+
 #include <cstdlib>
 
 using namespace rules;
@@ -11,40 +13,42 @@ constexpr int kRounds = 10000;
 
 struct Configuration {
 	std::string enemy;
-	// Hit points as a percent of the maximum, so self_hp_below rules switch on.
+	// Hit points as a percent of the maximum, so the hit point overrides switch on.
 	int hpPercent;
 };
 
-// Expected share of each ability from the AI profile: entries whose conditions hold for a lone enemy at the
-// given hit points, facing a healthy party with no statuses, weighted.
+// Expected share of each ability in a lone enemy's first turn, facing a healthy party: the first override whose
+// condition holds, otherwise one of the eight slots, each 1 in 8 since no slot was drawn before. A slot the enemy
+// cannot pay for or aim (a revive with nobody fallen) is the basic attack.
 std::map<std::string, double> expectedShares(const Database& db, const EnemyDef& enemy, int hpPercent) {
-	std::map<std::string, int> weights;
-	int total = 0;
-	for (const AiRule& rule : enemy.ai) {
+	for (const AiOverride& entry : enemy.overrides) {
 		bool holds = false;
-		switch (rule.condition.kind) {
-		case AiConditionKind::Always:
+		switch (entry.when) {
+		case AiConditionKind::SelfHpHalf:
+		case AiConditionKind::AnyAllyHpHalf:
+			holds = hpPercent <= 50;
+			break;
+		case AiConditionKind::SelfHpQuarterOnce:
+			holds = hpPercent <= 25;
+			break;
+		case AiConditionKind::LastStanding:
 			holds = true;
 			break;
-		case AiConditionKind::SelfHpBelow:
-		case AiConditionKind::AllyHpBelow:
-			holds = hpPercent < rule.condition.value;
-			break;
-		case AiConditionKind::AllyDefeated:
-		case AiConditionKind::SelfHasStatus:
-		case AiConditionKind::FoeHasStatus:
-			holds = false;
+		case AiConditionKind::HitByAttack:
+		case AiConditionKind::HitByAbility:
+		case AiConditionKind::HitByTechnique:
+		case AiConditionKind::TechniquesBlocked:
 			break;
 		}
-		const AbilityDef* ability = db.ability(rule.ability);
-		if (holds && ability && (ability->kind != AbilityKind::Technique || ability->cost <= enemy.stats.maxTp)) {
-			weights[rule.ability] += rule.weight;
-			total += rule.weight;
+		if (holds) {
+			return {{entry.ability, 100.0}};
 		}
 	}
 	std::map<std::string, double> shares;
-	for (const auto& [ability, weight] : weights) {
-		shares[ability] = 100.0 * weight / total;
+	for (const std::string& id : enemy.slots) {
+		const AbilityDef* ability = db.ability(id);
+		const bool usable = ability && ability->targeting != Targeting::OneFallenAlly && (ability->kind != AbilityKind::Technique || ability->cost <= enemy.stats.maxTp);
+		shares[usable ? id : enemy.basicAttack] += 100.0 / kAiSlots;
 	}
 	return shares;
 }
@@ -104,23 +108,75 @@ ACC_CHECK(acc_bat_09, "ACC-BAT-09", "BAT-090, BAT-092") {
 		}
 		for (const auto& [ability, share] : expected) {
 			const double observed = 100.0 * seen[ability] / kRounds;
-			t.expect(std::abs(observed - share) <= 2.0, c.enemy + " at " + std::to_string(c.hpPercent) + "% hp: " + ability + " chosen " + std::to_string(observed) + "%, profile weights give " + std::to_string(share) + "%");
+			t.expect(std::abs(observed - share) <= 2.0, c.enemy + " at " + std::to_string(c.hpPercent) + "% hp: " + ability + " chosen " + std::to_string(observed) + "%, the slots and overrides give " + std::to_string(share) + "%");
 		}
 		for (const auto& [ability, count] : seen) {
-			t.expect(expected.count(ability) == 1, c.enemy + " chose " + ability + " " + std::to_string(count) + " times, which no applicable profile entry allows");
+			t.expect(expected.count(ability) == 1, c.enemy + " chose " + ability + " " + std::to_string(count) + " times, which no slot or holding override allows");
 		}
 		summary += (summary.empty() ? "" : ", ") + c.enemy + "@" + std::to_string(c.hpPercent) + "%";
 	}
 
-	// Each entry's target rule, on a lone enemy whose profile is one bite.
+	// The draws replayed exactly: after the initiative rolls, the enemy's foe (one roll over the weights 5:4:3:2:1), then
+	// at its turn the slot (0 to 7, as no slot was drawn before). The party defends, which draws nothing.
+	int mirrored = 0;
+	{
+		const EnemyDef& hound = *db.enemy("rust_hound");
+		for (std::uint64_t seed = 1; seed <= 2000; ++seed) {
+			Battle battle = targetBattle(db, seed);
+			partyDefends(battle);
+			Rng rng(seed);
+			int highest = 0;
+			for (const Combatant& c : battle.combatants()) {
+				highest = std::max(highest, c.effective(Stat::Agility));
+			}
+			for (std::size_t i = 0; i < battle.combatants().size(); ++i) {
+				rng.range(0, formulas::initiativeSpread(highest));
+			}
+			int roll = rng.range(0, 14);
+			int foe = 0;
+			while (roll >= 5 - foe) {
+				roll -= 5 - foe;
+				++foe;
+			}
+			const std::string& slot = hound.slots[static_cast<std::size_t>(rng.range(0, kAiSlots - 1))];
+			std::string ability;
+			int target = -1;
+			for (const Event& e : battle.resolveRound()) {
+				if (e.type == EventType::ActionStarted && e.actor == kFirst) {
+					ability = e.ability;
+					target = e.target;
+				}
+			}
+			mirrored += ability == slot && target == foe ? 1 : 0;
+		}
+		t.expect(mirrored == 2000, std::to_string(2000 - mirrored) + " of 2000 first turns disagree with the replayed foe and slot draws");
+	}
+
+	// The default target: party members not defeated, in party order, weighted 5:4:3:2:1.
+	{
+		Database plain = db;
+		plain.enemies["rust_hound"].slots.assign(kAiSlots, "bite");
+		plain.enemies["rust_hound"].overrides.clear();
+		std::map<int, int> seen;
+		const int trials = 6000;
+		for (std::uint64_t seed = 1; seed <= static_cast<std::uint64_t>(trials); ++seed) {
+			Battle battle = targetBattle(plain, seed);
+			partyDefends(battle);
+			++seen[pickedTarget(battle.resolveRound())];
+		}
+		bool weighted = true;
+		for (int i = 0; i < 5; ++i) {
+			weighted = weighted && std::abs(100.0 * seen[i] / trials - 100.0 * (5 - i) / 15) <= 2.5;
+		}
+		t.expect(weighted, "the default target rule did not pick party members 5:4:3:2:1 by party order");
+	}
+
+	// Each override's target rule, on a lone enemy whose slots are all bites and whose one override always holds.
 	{
 		Database ruled = db;
 		auto onlyRule = [&](AiTargetRule rule, const std::string& status) {
-			AiRule entry;
-			entry.ability = "bite";
-			entry.target.rule = rule;
-			entry.target.status = status;
-			ruled.enemies["rust_hound"].ai = {entry};
+			ruled.enemies["rust_hound"].slots.assign(kAiSlots, "bite");
+			ruled.enemies["rust_hound"].overrides = {{AiConditionKind::LastStanding, "bite", {rule, status}}};
 		};
 		auto oneRound = [&](std::uint64_t seed, void (*prepare)(Battle&)) {
 			Battle battle = targetBattle(ruled, seed);
@@ -166,10 +222,10 @@ ACC_CHECK(acc_bat_09, "ACC-BAT-09", "BAT-090, BAT-092") {
 		}
 		t.expect(spread, "the random target rule did not pick evenly among the living foes");
 
-		// A rule that finds no target does not qualify that round: the enemy falls back to its basic attack on a random foe.
+		// An override whose rule finds no target does not fire: the slot's bite stands.
 		onlyRule(AiTargetRule::HasStatus, "sleep");
-		t.expect(oneRound(6, [](Battle&) {}) >= 0, "an enemy whose only entry found no target did not act at all");
+		t.expect(oneRound(6, [](Battle&) {}) >= 0, "an enemy whose only override found no target did not act at all");
 	}
 
-	t.note(std::to_string(kRounds) + " seeded rounds each for " + summary + ": action frequencies within 2 points of the profile weights; lowest_hp, highest_hp, has_status, lacks_status, last_attacker and random target rules each pick the specified target");
+	t.note(std::to_string(kRounds) + " seeded first turns each for " + summary + ": action frequencies within 2 points of the slots (1 in 8 each before any draw) or the override that holds; " + std::to_string(mirrored) + " first turns match the replayed foe and slot draws exactly; the default target follows party order 5:4:3:2:1; lowest_hp, highest_hp, has_status, lacks_status, last_attacker and random override target rules each pick the specified target");
 }

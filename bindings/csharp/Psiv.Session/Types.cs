@@ -27,8 +27,7 @@ public enum BattleEventType
 {
 	BattleStarted, RoundStarted, CommandsLocked, OrderResolved, Retargeted, ActionStarted, ActionCancelled, ComboTriggered,
 	ComboDiscovered, ResourceSpent, ItemHadNoEffect, Hit, Missed, Critical, DamageDealt, Healed, Revived, StatusApplied,
-	StatusResisted, StatusRemoved, StatusTicked, StatModified, StatModifierExpired, CombatantDefeated, EscapeAttempted, Message,
-	RoundEnded, BattleEnded,
+	StatusResisted, StatusRemoved, StatModified, CombatantDefeated, EscapeAttempted, Message, RoundEnded, BattleEnded,
 }
 
 public enum CancelReason { None, ActorUnable, Silenced, NotEnoughTp, NoUsesLeft, NoItem, NoTarget }

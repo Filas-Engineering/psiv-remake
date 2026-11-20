@@ -167,7 +167,8 @@ TEST(statusThresholdDecidesTheOutcome) {
 
 TEST(equipmentResistanceProtectsTheWearer) {
 	Database db = data();
-	db.enemies["bog_wisp"].ai = {{"lullaby", 1, {}}};
+	db.enemies["bog_wisp"].slots.assign(static_cast<std::size_t>(kAiSlots), "lullaby");
+	db.enemies["bog_wisp"].overrides.clear();
 	db.abilities["lullaby"].effects[0].threshold = std::numeric_limits<int>::min();
 	Battle battle = makeBattle(db, {"bog_wisp"}, 1);
 	partyDefends(battle);

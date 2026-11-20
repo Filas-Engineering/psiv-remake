@@ -37,7 +37,7 @@ State capture(const Battle& battle) {
 		s.statuses.push_back(ids);
 		std::map<Stat, int> mods;
 		for (const ActiveModifier& m : c.modifiers) {
-			mods[m.stat] = m.percent;
+			mods[m.stat] = m.amount;
 		}
 		s.modifiers.push_back(mods);
 	}
@@ -59,7 +59,6 @@ std::string apply(State& s, const Event& e) {
 		}
 		return "";
 	case EventType::DamageDealt:
-	case EventType::StatusTicked:
 		if (s.hp[e.target] - e.amount != e.hp) {
 			return std::string(toString(e.type)) + " hp does not follow from the amount";
 		}
@@ -83,15 +82,14 @@ std::string apply(State& s, const Event& e) {
 	case EventType::StatModified:
 		s.modifiers[e.target][e.stat] = e.amount;
 		return "";
-	case EventType::StatModifierExpired:
-		return s.modifiers[e.target].erase(e.stat) ? "" : "StatModifierExpired for a modifier the target lacks";
 	case EventType::CombatantDefeated:
-		if (!s.statuses[e.target].empty()) {
-			return "CombatantDefeated while statuses remain without a removal event";
+		for (const std::string& id : s.statuses[e.target]) {
+			if (!data().status(id)->survivesDefeat) {
+				return "CombatantDefeated while statuses remain without a removal event";
+			}
 		}
 		s.hp[e.target] = 0;
-		s.statuses[e.target] = {kDefeatedStatus};
-		s.modifiers[e.target].clear();
+		s.statuses[e.target].insert(kDefeatedStatus);
 		return "";
 	case EventType::BattleEnded:
 		s.outcome = e.outcome;
@@ -147,6 +145,8 @@ TEST(retargetIsAnEventBeforeTheAction) {
 	db.characters["scout"].base.agility = 200;
 	Battle battle = makeBattle(db, {"gel_mite", "gel_mite", "rust_hound"}, 21);
 	battle.combatant(kFirstEnemy + 1).hp = 1;
+	// Weaken is not plain damage, so it turns to the living enemy missing the fewest hit points.
+	battle.combatant(kFirstEnemy).hp -= 10;
 	battle.setCommand(kMystic, Command::ability("spark", kFirstEnemy + 1));
 	battle.setCommand(kScout, Command::ability("weaken", kFirstEnemy + 1));
 	othersDefend(battle);
@@ -164,6 +164,7 @@ TEST(hitsAndResultsCarryTheResultingHitPoints) {
 	Database db = data();
 	db.characters["fighter"].base.dexterity = 500;
 	db.characters["fighter"].base.critical = 100;
+	db.characters["scout"].base.mental = 500;
 	Battle battle = makeBattle(db, {"gel_mite"}, 2);
 	battle.combatant(kFirstEnemy).hp = 500;
 	battle.combatant(kMystic).hp = 10;
@@ -184,7 +185,8 @@ TEST(hitsAndResultsCarryTheResultingHitPoints) {
 	const std::vector<Event> heals = ofType(events, EventType::Healed);
 	CHECK(heals.size() == 1 && heals[0].hp == 10 + heals[0].amount && heals[0].hp == battle.combatant(kMystic).hp);
 	const std::vector<Event> modified = ofType(events, EventType::StatModified);
-	CHECK(modified.size() == 1 && modified[0].duration == 3 && modified[0].amount == -30);
+	// Defense 3 less the scout's mental, floored at 0.
+	CHECK(modified.size() == 1 && modified[0].stat == Stat::Defense && modified[0].amount == -3);
 }
 
 TEST(battleEndedCarriesTheRewards) {
@@ -217,21 +219,25 @@ TEST(anActorThatFellBeforeItsTurnIsCancelled) {
 }
 
 TEST(defeatRemovesEveryStatusWithAnEvent) {
-	Battle battle = makeBattle(data(), {"gel_mite"}, 1);
+	Database db = data();
+	db.enemies["gel_mite"].stats.strength = 400;
+	db.enemies["gel_mite"].stats.dexterity = 400;
+	Battle battle = makeBattle(db, {"gel_mite"}, 1);
 	battle.combatant(kFighter).hp = 2;
-	addStatus(battle, kFighter, "poison", 4);
-	addStatus(battle, kFighter, "silence", 3);
+	addStatus(battle, kFighter, "poison", 0);
+	addStatus(battle, kFighter, "jumble", 2);
+	battle.setCommand(kFirstEnemy, Command::attack(kFighter));
 	othersDefend(battle);
 	const std::vector<Event> events = battle.resolveRound();
 	std::vector<EventType> tail;
 	std::vector<std::string> removed;
-	bool ticked = false;
+	bool hit = false;
 	for (const Event& e : events) {
 		if (e.target != kFighter) {
 			continue;
 		}
-		ticked = ticked || e.type == EventType::StatusTicked;
-		if (ticked) {
+		hit = hit || e.type == EventType::DamageDealt;
+		if (hit) {
 			tail.push_back(e.type);
 		}
 		if (e.type == EventType::StatusRemoved) {
@@ -240,8 +246,8 @@ TEST(defeatRemovesEveryStatusWithAnEvent) {
 			removed.push_back(e.status);
 		}
 	}
-	CHECK_EQ(tail, (std::vector<EventType>{EventType::StatusTicked, EventType::StatusRemoved, EventType::StatusRemoved, EventType::CombatantDefeated}));
-	CHECK_EQ(removed, (std::vector<std::string>{"poison", "silence"}));
+	CHECK_EQ(tail, (std::vector<EventType>{EventType::DamageDealt, EventType::StatusRemoved, EventType::StatusRemoved, EventType::CombatantDefeated}));
+	CHECK_EQ(removed, (std::vector<std::string>{"poison", "jumble"}));
 }
 
 TEST(statusEventsCarryMessageKeys) {

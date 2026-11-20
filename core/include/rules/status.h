@@ -1,6 +1,9 @@
 #pragma once
 
+#include "rules/types.h"
+
 #include <string>
+#include <vector>
 
 namespace rules {
 
@@ -22,7 +25,10 @@ struct StatusDef {
 	ForcedTarget forcedTarget = ForcedTarget::RandomAny;
 	bool blocksTechniques = false;
 	bool wakesOnDamage = false;
-	int tickDamagePercent = 0;
+	// Held at 1 while the status lasts.
+	std::vector<Stat> statsToOne;
+	// Statuses that receiving this one removes.
+	std::vector<std::string> removes;
 	// Rounds before it wears off; 0 lasts until cured or, unless it persists, until the battle ends.
 	int duration = 0;
 	// Replaces duration on an enemy when nonzero.
@@ -31,8 +37,10 @@ struct StatusDef {
 	int recoverChance = 0;
 	StatusStacking stacking = StatusStacking::Refresh;
 	bool persistsOutsideBattle = false;
-	// A combatant with such a status counts as down when the battle checks for Victory and Defeat.
+	// A party member with such a status counts as down when the battle checks for Defeat.
 	bool countsTowardDefeat = false;
+	// Kept when its holder is defeated, and so after a revive.
+	bool survivesDefeat = false;
 	bool restCures = true;
 };
 

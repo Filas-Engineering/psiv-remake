@@ -14,8 +14,11 @@ ACC_CHECK(acc_sav_05, "ACC-SAV-05", "SAV-022, SAV-030, SAV-033") {
 		for (int level = 1; level < formulas::kMaxLevel; ++level) {
 			const int needed = formulas::experienceToNextLevel(level);
 			t.expect(grantExperience(member, db, needed - 1).levelsGained == 0, id + ": levelled up one point short of level " + std::to_string(level + 1));
+			const int hp = member.hp;
+			const int tp = member.tp;
 			const LevelUp up = grantExperience(member, db, 1);
 			t.expect(up.levelsGained == 1 && member.level == level + 1, id + ": did not reach level " + std::to_string(level + 1) + " with exactly the curve's experience");
+			t.expect(member.hp == hp && member.tp == tp, id + ": reaching level " + std::to_string(level + 1) + " changed current hit points or technique points");
 			// Stat growth: base plus growth per level, with nothing dropped at any level.
 			const Stats s = statsAtLevel(character, member.level);
 			t.expect(s.maxHp == character.base.maxHp + character.growth.maxHp * (member.level - 1) && s.strength == character.base.strength + character.growth.strength * (member.level - 1) &&
@@ -31,12 +34,14 @@ ACC_CHECK(acc_sav_05, "ACC-SAV-05", "SAV-022, SAV-030, SAV-033") {
 			id + ": stats at the cap are not applied as the growth data intends");
 	}
 
-	// Battle rewards and the experience split at Original difficulty.
+	// Battle rewards and the experience split at Original difficulty: an even share, rounded down, for each member
+	// not defeated, an asleep one included.
 	BattleSetup s = support::setup(db, {"gel_mite", "rust_hound"}, 3, 20);
 	s.difficulty = "original";
 	Battle battle = support::create(db, s);
 	battle.combatant(2).hp = 0;
 	battle.combatant(2).statuses = {{kDefeatedStatus, 0}};
+	battle.combatant(4).statuses = {{"sleep", 0}};
 	for (int e = 5; e < 7; ++e) {
 		battle.combatant(e).hp = 1;
 	}
@@ -51,22 +56,11 @@ ACC_CHECK(acc_sav_05, "ACC-SAV-05", "SAV-022, SAV-030, SAV-033") {
 	for (int i = 0; i < battle.partyCount(); ++i) {
 		living += battle.combatant(i).alive() ? 1 : 0;
 	}
+	t.expect(living == 4, "setup: four members should stand, one of them asleep");
 	for (int i = 0; i < battle.partyCount(); ++i) {
-		const bool alive = battle.combatant(i).alive();
-		int share = 0;
-		switch (db.battleRules.experienceSplit) {
-		case ExperienceSplit::EachLiving:
-			share = alive ? experience : 0;
-			break;
-		case ExperienceSplit::SplitLiving:
-			share = alive ? experience / living : 0;
-			break;
-		case ExperienceSplit::EachMember:
-			share = experience;
-			break;
-		}
-		t.expect(rewards.memberExperience[i] == share, "member " + std::to_string(i) + " got " + std::to_string(rewards.memberExperience[i]) + " experience, the split rule in rules.json gives " + std::to_string(share));
+		const int share = battle.combatant(i).alive() ? experience / living : 0;
+		t.expect(rewards.memberExperience[i] == share, "member " + std::to_string(i) + " got " + std::to_string(rewards.memberExperience[i]) + " experience, an even share among those not defeated gives " + std::to_string(share));
 	}
 
-	t.note("every character levels exactly on the core curve to the cap, stats are base plus growth at every level including the cap, rewards and the experience split follow rules.json");
+	t.note("every character levels exactly on the core curve to the cap without a level-up changing current hit points or technique points, stats are base plus growth at every level including the cap, battle experience is the defeated enemies' total split evenly among the members not defeated");
 }

@@ -2,6 +2,7 @@
 	"text": {
 		"battle.opening.enemy_first": "The enemies catch the party off guard!",
 		"battle.opening.party_first": "The party catches the enemies off guard!",
+		"battle.stat_resisted": "{0} holds steady.",
 
 		"command.aboard": "{0} is aboard and cannot act.",
 		"command.actor_defeated": "{0} is down and cannot act.",
@@ -13,6 +14,7 @@
 		"command.no_combatant": "Nobody stands at position {0}.",
 		"command.unknown_ability": "{0} does not know {1}.",
 		"command.unknown_item": "There is no such item as {0}.",
+		"command.vehicle_cannot": "{0} has no {1} command.",
 
 		"equip.not_in_bag": "No spare {0} in the bag.",
 		"equip.unknown_character": "Nobody called {0} is in the roster.",
@@ -53,6 +55,7 @@
 		"status.silence.immune": "{0} cannot be silenced.",
 		"status.silence.removed": "{0} can use techniques again.",
 		"status.silence.resisted": "{0} resists the silence.",
+		"status.silence.unchanged": "{0} is already silenced.",
 		"status.sleep.applied": "{0} falls asleep!",
 		"status.sleep.immune": "{0} cannot be put to sleep.",
 		"status.sleep.removed": "{0} wakes up.",

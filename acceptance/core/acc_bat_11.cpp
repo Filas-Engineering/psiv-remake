@@ -208,7 +208,7 @@ ACC_CHECK(acc_bat_11, "ACC-BAT-11", "BAT-060, BAT-061, BAT-062") {
 	}
 
 	// An enemy action between the components prevents it; adjacency decides, over many orders.
-	const ComboRecipe& pair = db.combos.front();
+	const ComboRecipe& pair = *std::find_if(db.combos.begin(), db.combos.end(), [](const ComboRecipe& r) { return r.abilities.size() == 2; });
 	int adjacent = 0;
 	int split = 0;
 	for (std::uint64_t seed = 1; seed <= 3000; ++seed) {

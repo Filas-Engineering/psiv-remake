@@ -1,6 +1,7 @@
 #include "rules/battle.h"
 
 #include "rules/formulas.h"
+#include "rules/names.h"
 #include "rules/progression.h"
 
 #include <algorithm>
@@ -181,7 +182,6 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 	}
 	if (const VehicleDef* vehicle = setup.flags.vehicleBattle ? rulesDb.vehicle(setup.vehicle) : nullptr) {
 		battle.vehicleIndex_ = static_cast<int>(battle.combatants_.size());
-		battle.crewDamagePercent_ = vehicle->crewDamagePercent;
 		battle.combatants_.push_back(fromVehicle(rulesDb, *vehicle));
 	}
 	for (const FormationSlot& slot : setup.enemies) {
@@ -201,14 +201,10 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 	battle.commands_.resize(battle.combatants_.size());
 	battle.lastCommands_.resize(battle.combatants_.size());
 	battle.forced_.assign(battle.combatants_.size(), false);
-
-	for (const ComboRecipe& recipe : rulesDb.combos) {
-		battle.combosLongestFirst_.push_back(&recipe);
+	battle.aiTurn_.assign(battle.combatants_.size(), false);
+	for (int i = 0; i < static_cast<int>(battle.combatants_.size()); ++i) {
+		battle.syncPins(i);
 	}
-	std::stable_sort(battle.combosLongestFirst_.begin(), battle.combosLongestFirst_.end(), [](const ComboRecipe* a, const ComboRecipe* b) {
-		return a->abilities.size() > b->abilities.size();
-	});
-
 	battle.updateOutcome();
 	return Result<Battle>::success(std::move(battle));
 }
@@ -223,6 +219,7 @@ Battle Battle::partyOnly(const Database& db, const std::vector<PartyMember>& par
 	}
 	battle.commands_.resize(battle.combatants_.size());
 	battle.forced_.assign(battle.combatants_.size(), false);
+	battle.aiTurn_.assign(battle.combatants_.size(), false);
 	return battle;
 }
 
@@ -273,6 +270,9 @@ Message Battle::setCommand(int actor, const Command& command) {
 		if (!db_->item(command.id)) {
 			return {"command.unknown_item", {command.id}};
 		}
+		if (actor == vehicleIndex_) {
+			return {"command.vehicle_cannot", {c.defId, toString(command.kind)}};
+		}
 		break;
 	case CommandKind::Escape:
 		if (!isParty(actor)) {
@@ -282,9 +282,13 @@ Message Battle::setCommand(int actor, const Command& command) {
 			return {"command.escape_forbidden", {}};
 		}
 		break;
+	case CommandKind::Defend:
+		if (actor == vehicleIndex_) {
+			return {"command.vehicle_cannot", {c.defId, toString(command.kind)}};
+		}
+		break;
 	case CommandKind::None:
 	case CommandKind::Attack:
-	case CommandKind::Defend:
 		break;
 	}
 	commands_[actor] = command;
@@ -339,6 +343,7 @@ bool Battle::fillFromAuto() {
 void Battle::fillMissingCommands() {
 	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
 		forced_[i] = false;
+		aiTurn_[i] = false;
 		if (!combatants_[i].alive() || combatants_[i].aboard || surprised(combatants_[i].side, round_)) {
 			continue;
 		}
@@ -349,7 +354,8 @@ void Battle::fillMissingCommands() {
 			continue;
 		}
 		if (commands_[i].kind == CommandKind::None) {
-			commands_[i] = isParty(i) ? Command::attack(-1) : chooseEnemyCommand(i);
+			commands_[i] = Command::attack(-1);
+			aiTurn_[i] = !isParty(i);
 		}
 	}
 }
@@ -404,6 +410,10 @@ std::vector<Event> Battle::resolveRound() {
 	}
 	++round_;
 	emit(out, EventType::RoundStarted);
+	// The host may have changed statuses between rounds.
+	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
+		syncPins(i);
+	}
 	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
 		if (surprised(combatants_[i].side, round_)) {
 			commands_[i] = Command();
@@ -425,6 +435,12 @@ std::vector<Event> Battle::resolveRound() {
 	const std::vector<int> order = computeTurnOrder();
 	lastTurnOrder_ = order;
 	emit(out, EventType::OrderResolved).order = order;
+	// Every enemy the AI drives draws its foe now, in index order; its action waits for its turn (BAT-090).
+	for (int i = partyCount_; i < static_cast<int>(combatants_.size()); ++i) {
+		if (aiTurn_[i] && std::find(order.begin(), order.end(), i) != order.end()) {
+			commands_[i].target = drawFoeByPartyOrder(i);
+		}
+	}
 	for (std::size_t i = 0; i < order.size() && outcome_ == Outcome::Ongoing;) {
 		const int consumed = tryCombo(order, i, out);
 		if (consumed > 0) {
@@ -463,10 +479,14 @@ std::vector<Event> Battle::resolveRound() {
 	return out;
 }
 
+// An enemy is down only when defeated; a party member also while a status that counts toward defeat holds it.
 bool Battle::countsAsDown(int index) const {
 	const Combatant& c = combatants_[index];
 	if (!c.alive()) {
 		return true;
+	}
+	if (!isParty(index)) {
+		return false;
 	}
 	for (const ActiveStatus& active : c.statuses) {
 		const StatusDef* def = db_->status(active.id);
@@ -516,26 +536,20 @@ Battle::Attacker Battle::attackerOf(int actor) const {
 	return a;
 }
 
-// Enemies in formation order, then each enemy's drop table in data order. A chance of 100 draws nothing.
+// One roll of 0 to 127 for the encounter's drop, only after a Victory (SAV-031).
 void Battle::drawDrops() {
-	if (outcome_ != Outcome::Victory && outcome_ != Outcome::ScriptedEnd) {
+	const Encounter* encounter = db_->encounter(record_.setup.enemyGroup);
+	if (outcome_ != Outcome::Victory || !encounter || encounter->drop.item.empty()) {
 		return;
 	}
-	for (int i = partyCount_; i < static_cast<int>(combatants_.size()); ++i) {
-		const EnemyDef* def = db_->enemy(combatants_[i].defId);
-		if (!def || (outcome_ == Outcome::ScriptedEnd && combatants_[i].alive())) {
-			continue;
-		}
-		for (const ItemDrop& drop : def->drops) {
-			if (drop.chance >= 100 || rng_.chance(drop.chance)) {
-				drops_[drop.item] += drop.count;
-			}
-		}
+	if (rng_.range(0, 127) < encounter->drop.rate) {
+		++drops_[encounter->drop.item];
 	}
 }
 
-// Totals are scaled once and rounded down, so a 1.5x multiplier never loses more than one point.
-// In a vehicle battle the members aboard share the experience; the vehicle gets none.
+// Totals are scaled once and rounded down, so a 1.5x multiplier never loses more than one point. A vehicle battle
+// halves the experience. Each party member who is not defeated gets an even share, rounded down; in a vehicle
+// battle those are the members aboard, and the vehicle gets none.
 Rewards Battle::rewards() const {
 	Rewards rewards;
 	const int members = static_cast<int>(record_.setup.party.size());
@@ -554,7 +568,7 @@ Rewards Battle::rewards() const {
 		}
 	}
 	const long long scale = static_cast<long long>(rewardPercent_) * rewardMultiplierPercent(record_.setup.rewardMultiplier);
-	rewards.experience = static_cast<int>(experience * scale / 10000);
+	rewards.experience = static_cast<int>(experience * scale / 10000) / (vehicleIndex_ >= 0 ? 2 : 1);
 	rewards.currency = static_cast<int>(currency * scale / 10000);
 
 	int living = 0;
@@ -562,18 +576,7 @@ Rewards Battle::rewards() const {
 		living += combatants_[i].alive() ? 1 : 0;
 	}
 	for (int i = 0; i < members; ++i) {
-		const bool alive = combatants_[i].alive();
-		switch (db_->battleRules.experienceSplit) {
-		case ExperienceSplit::EachLiving:
-			rewards.memberExperience[i] = alive ? rewards.experience : 0;
-			break;
-		case ExperienceSplit::SplitLiving:
-			rewards.memberExperience[i] = alive ? rewards.experience / std::max(1, living) : 0;
-			break;
-		case ExperienceSplit::EachMember:
-			rewards.memberExperience[i] = rewards.experience;
-			break;
-		}
+		rewards.memberExperience[i] = combatants_[i].alive() ? rewards.experience / std::max(1, living) : 0;
 	}
 	return rewards;
 }

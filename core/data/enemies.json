@@ -7,12 +7,9 @@
 			"basic_attack": "bite",
 			"affinities": {"heat": 150, "chill": 50},
 			"status_resist": {"poison": 100},
-			"ai": [
-				{"ability": "bite", "weight": 1}
-			],
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
 			"experience": 6,
-			"currency": 4,
-			"drops": [{"item": "tonic", "chance": 20}]
+			"currency": 4
 		},
 		{
 			"id": "rust_hound",
@@ -21,14 +18,12 @@
 			"basic_attack": "bite",
 			"abilities": ["venom_spit"],
 			"affinities": {"shock": 150},
-			"ai": [
-				{"ability": "bite", "weight": 3},
-				{"ability": "venom_spit", "weight": 2},
-				{"ability": "venom_spit", "weight": 4, "when": {"type": "self_hp_below", "value": 50}}
+			"slots": ["bite", "venom_spit", "bite", "bite", "venom_spit", "bite", "bite", "venom_spit"],
+			"overrides": [
+				{"when": "self_hp_half", "ability": "venom_spit"}
 			],
 			"experience": 10,
-			"currency": 7,
-			"drops": [{"item": "clear_gel", "chance": 15}]
+			"currency": 7
 		},
 		{
 			"id": "bog_wisp",
@@ -37,16 +32,12 @@
 			"basic_attack": "bite",
 			"abilities": ["lullaby", "patch", "numbing_sting"],
 			"affinities": {"shock": 0, "gale": 150},
-			"ai": [
-				{"ability": "patch", "weight": 6, "when": {"type": "ally_hp_below", "value": 50}},
-				{"ability": "lullaby", "weight": 2},
-				{"ability": "numbing_sting", "weight": 3},
-				{"ability": "numbing_sting", "weight": 3, "when": {"type": "foe_has_status", "status": "sleep"}},
-				{"ability": "bite", "weight": 2}
+			"slots": ["lullaby", "numbing_sting", "bite", "numbing_sting", "lullaby", "bite", "numbing_sting", "bite"],
+			"overrides": [
+				{"when": "any_ally_hp_half", "ability": "patch"}
 			],
 			"experience": 12,
-			"currency": 9,
-			"drops": [{"item": "wake_chime", "chance": 10}]
+			"currency": 9
 		},
 		{
 			"id": "brass_warden",
@@ -56,25 +47,21 @@
 			"abilities": ["gear_slam", "rouse", "steam_vent"],
 			"affinities": {"heat": 50, "chill": 150},
 			"status_resist": {"sleep": 100, "silence": 50},
-			"ai": [
-				{"ability": "rouse", "weight": 8, "when": {"type": "ally_defeated"}},
-				{"ability": "gear_slam", "weight": 6, "when": {"type": "self_hp_below", "value": 50}},
-				{"ability": "gear_slam", "weight": 1},
-				{"ability": "steam_vent", "weight": 2},
-				{"ability": "bite", "weight": 3}
+			"slots": ["bite", "steam_vent", "bite", "gear_slam", "bite", "rouse", "steam_vent", "bite"],
+			"overrides": [
+				{"when": "self_hp_half", "ability": "gear_slam"}
 			],
 			"experience": 60,
-			"currency": 50,
-			"drops": [{"item": "loosen_oil", "chance": 100}, {"item": "jolt_pod", "chance": 50, "count": 2}]
+			"currency": 50
 		}
 	],
 	"encounters": [
-		{"id": "training", "enemies": ["gel_mite", "gel_mite", "rust_hound"]},
+		{"id": "training", "enemies": ["gel_mite", "gel_mite", "rust_hound"], "drop": {"item": "tonic", "rate": 58}},
 		{"id": "marsh", "enemies": [
 			{"enemy": "bog_wisp", "group": "wisps"},
 			{"enemy": "bog_wisp", "group": "wisps"},
 			"gel_mite"
-		]},
-		{"id": "warden", "enemies": ["brass_warden", "bog_wisp"], "escape": false}
+		], "drop": {"item": "wake_chime", "rate": 45}},
+		{"id": "warden", "enemies": ["brass_warden", "bog_wisp"], "escape": false, "drop": {"item": "loosen_oil", "rate": 127}}
 	]
 }

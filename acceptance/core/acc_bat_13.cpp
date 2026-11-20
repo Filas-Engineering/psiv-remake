@@ -13,14 +13,13 @@ ACC_CHECK(acc_bat_13, "ACC-BAT-13", "BAT-110, BAT-111, BAT-115") {
 	int events = 0;
 	int ended = 0;
 	int withDrops = 0;
-	int dropsChecked = 0;
 	for (std::uint64_t seed = 1; seed <= 1000; ++seed) {
 		const support::PlayedBattle played = support::playRandomBattle(db, seed, log);
 		support::BattleState state = played.start;
 		std::string problem;
 		for (const Event& e : played.events) {
 			seen.insert(e.type);
-			problem = support::apply(state, e, static_cast<int>(played.setup.party.size()));
+			problem = support::apply(db, state, e, static_cast<int>(played.setup.party.size()));
 			if (!problem.empty()) {
 				break;
 			}
@@ -47,7 +46,7 @@ ACC_CHECK(acc_bat_13, "ACC-BAT-13", "BAT-110, BAT-111, BAT-115") {
 		}
 		for (const Event& e : played.events) {
 			if (e.type == EventType::StatModified) {
-				t.expect(e.duration > 0, "battle " + std::to_string(seed) + ": StatModified carries no duration");
+				t.expect(e.duration == 0, "battle " + std::to_string(seed) + ": StatModified carries a duration, though stat changes last until the battle ends");
 			}
 			if (e.type == EventType::BattleEnded) {
 				++ended;
@@ -56,27 +55,10 @@ ACC_CHECK(acc_bat_13, "ACC-BAT-13", "BAT-110, BAT-111, BAT-115") {
 					std::to_string(played.rewards.experience) + "/" + std::to_string(played.rewards.currency));
 				t.expect(e.items == played.rewards.items, "battle " + std::to_string(seed) + ": BattleEnded carries other item drops than rewards() pays");
 				withDrops += e.items.empty() ? 0 : 1;
-				// Every drop comes from the drop table of an enemy that paid out, and a 100% entry always drops.
-				Inventory possible;
-				Inventory certain;
-				const bool paid = e.outcome == Outcome::Victory || e.outcome == Outcome::ScriptedEnd;
-				for (std::size_t i = 0; paid && i < played.setup.enemies.size(); ++i) {
-					const bool fell = played.end.combatants[played.setup.party.size() + i].hp <= 0;
-					if (e.outcome == Outcome::ScriptedEnd && !fell) {
-						continue;
-					}
-					for (const ItemDrop& drop : db.enemy(played.setup.enemies[i].enemy)->drops) {
-						possible[drop.item] += drop.count;
-						certain[drop.item] += drop.chance >= 100 ? drop.count : 0;
-					}
-				}
-				for (const auto& [id, count] : e.items) {
-					++dropsChecked;
-					t.expect(possible.count(id) && count <= possible[id], "battle " + std::to_string(seed) + ": dropped " + std::to_string(count) + " " + id + ", more than the paying enemies' drop tables hold");
-				}
-				for (const auto& [id, count] : certain) {
-					t.expect(count == 0 || (e.items.count(id) && e.items.at(id) >= count), "battle " + std::to_string(seed) + ": a drop with chance 100 did not drop: " + id);
-				}
+				// A drop is one of the encounter's item, and only after a Victory.
+				const ItemDrop& drop = db.encounter(played.setup.enemyGroup)->drop;
+				const bool allowed = e.items.empty() || (e.outcome == Outcome::Victory && e.items == Inventory{{drop.item, 1}});
+				t.expect(allowed, "battle " + std::to_string(seed) + ": dropped something other than one of the encounter's item after a Victory");
 			}
 		}
 	}
@@ -100,7 +82,7 @@ ACC_CHECK(acc_bat_13, "ACC-BAT-13", "BAT-110, BAT-111, BAT-115") {
 
 	const std::vector<EventType> required = {EventType::BattleStarted, EventType::RoundStarted, EventType::CommandsLocked, EventType::OrderResolved, EventType::ActionStarted, EventType::ActionCancelled,
 		EventType::Retargeted, EventType::ResourceSpent, EventType::Hit, EventType::Missed, EventType::Critical, EventType::DamageDealt, EventType::Healed, EventType::StatusApplied,
-		EventType::StatusResisted, EventType::StatusRemoved, EventType::StatusTicked, EventType::StatModified, EventType::CombatantDefeated, EventType::Revived, EventType::ComboTriggered,
+		EventType::StatusResisted, EventType::StatusRemoved, EventType::StatModified, EventType::CombatantDefeated, EventType::Revived, EventType::ComboTriggered,
 		EventType::ComboDiscovered, EventType::EscapeAttempted, EventType::Message, EventType::RoundEnded, EventType::BattleEnded};
 	std::string unseen;
 	for (EventType type : required) {
@@ -120,7 +102,6 @@ ACC_CHECK(acc_bat_13, "ACC-BAT-13", "BAT-110, BAT-111, BAT-115") {
 	}
 	t.expect(withDrops > 0, "no random battle dropped an item, so BattleEnded's item rewards were never seen");
 	t.note("1000 random battles (" + std::to_string(events) + " events, " + std::to_string(seen.size()) + " event types, " + std::to_string(ended) +
-		" ended): the start snapshot plus the stream reproduces hit points (each Damaged, Healed, tick and revive carries the resulting hit points), technique points, skill uses, statuses, modifiers, inventory and outcome exactly; BattleStarted carries the combatants, formation, opening and flags; BattleEnded the rewards paid, item drops included (" + std::to_string(withDrops) + " battles dropped " + std::to_string(dropsChecked) +
-		" kinds of item, each within the paying enemies' drop tables, every 100% entry present, the same on replay); CommandsLocked the macro" +
+		" ended): the start snapshot plus the stream reproduces hit points (each Damaged, Healed and revive carries the resulting hit points), technique points, skill uses, statuses, modifiers, inventory and outcome exactly; BattleStarted carries the combatants, formation, opening and flags; BattleEnded the rewards paid, item drops included (" + std::to_string(withDrops) + " battles dropped one of the encounter's item, each after a Victory, the same on replay); CommandsLocked the macro" +
 		(unseen.empty() ? "; every BAT-115 event type occurred" : "; BAT-115 types never produced by the random battles: " + unseen));
 }

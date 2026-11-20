@@ -151,14 +151,8 @@ void Runner::printEvents(const std::vector<rules::Event>& events) {
 		case rules::EventType::StatusRemoved:
 			print("  " + rules::formatText(text, e.message, {battleName(e.target), name(e.status)}));
 			break;
-		case rules::EventType::StatusTicked:
-			print("  " + battleName(e.target) + " suffers " + std::to_string(e.amount) + " from " + name(e.status) + ".");
-			break;
 		case rules::EventType::StatModified:
 			print("  " + battleName(e.target) + "'s " + rules::toString(e.stat) + (e.amount > 0 ? " rises." : " falls."));
-			break;
-		case rules::EventType::StatModifierExpired:
-			print("  " + battleName(e.target) + "'s " + rules::toString(e.stat) + " returns to normal.");
 			break;
 		case rules::EventType::CombatantDefeated:
 			print("  " + battleName(e.target) + " falls.");

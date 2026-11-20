@@ -36,8 +36,9 @@ TEST(hardOverlayChangesDataOnly) {
 	CHECK_EQ(hard.abilities.at("mend").effects[0].power, 28 * 80 / 100);
 	const std::vector<std::string>& abilities = hard.enemies.at("brass_warden").abilities;
 	CHECK(std::find(abilities.begin(), abilities.end(), "numbing_sting") != abilities.end());
-	CHECK_EQ(hard.enemies.at("brass_warden").ai.size(), std::size_t(7));
-	CHECK(hard.enemies.at("brass_warden").ai[1].target.rule == AiTargetRule::LastAttacker);
+	CHECK_EQ(hard.enemies.at("brass_warden").slots.size(), std::size_t(kAiSlots));
+	CHECK_EQ(hard.enemies.at("brass_warden").slots.front(), std::string("lock_bolt"));
+	CHECK(hard.enemies.at("brass_warden").overrides.size() == 1 && hard.enemies.at("brass_warden").overrides[0].target.rule == AiTargetRule::LastAttacker);
 	CHECK_EQ(hard.enemies.at("rust_hound").statusResist.at("sleep"), 50);
 	CHECK_EQ(hard.enemies.at("gel_mite").stats.maxHp, 60);
 }
@@ -86,22 +87,27 @@ TEST(rewardsScaleAndRoundDown) {
 	CHECK_EQ(quickWin(db, setup).rewards().experience, 12);
 }
 
-TEST(experienceSplitIsData) {
+// Experience is split evenly, rounded down, among the members who are not defeated; asleep and paralyzed members
+// take a share, a defeated one none (SAV-031).
+TEST(experienceIsSplitAmongMembersNotDefeated) {
 	Database db = data();
 	db.characters["fighter"].base.dexterity = 500;
 	BattleSetup setup = makeSetup(db, {"rust_hound", "gel_mite"}, 1);
 	setup.party[kMedic].hp = 0;
-	const std::vector<std::pair<ExperienceSplit, std::vector<int>>> cases = {
-		{ExperienceSplit::EachLiving, {16, 16, 16, 0, 16}},
-		{ExperienceSplit::SplitLiving, {4, 4, 4, 0, 4}},
-		{ExperienceSplit::EachMember, {16, 16, 16, 16, 16}},
-	};
-	for (const auto& [split, expected] : cases) {
-		db.battleRules.experienceSplit = split;
-		const Battle battle = quickWin(db, setup);
-		CHECK(battle.outcome() == Outcome::Victory);
-		CHECK_EQ(battle.rewards().memberExperience, expected);
+	Battle battle = makeBattle(db, setup);
+	addStatus(battle, kScout, "sleep", 0);
+	addStatus(battle, kEngineer, "paralysis", 0);
+	for (int i = kFirstEnemy; i < static_cast<int>(battle.combatants().size()); ++i) {
+		battle.combatant(i).hp = 1;
 	}
+	for (int round = 0; round < 10 && battle.outcome() == Outcome::Ongoing; ++round) {
+		battle.setCommand(kFighter, Command::attack(-1));
+		battle.setCommand(kMystic, Command::attack(-1));
+		battle.resolveRound();
+	}
+	CHECK(battle.outcome() == Outcome::Victory);
+	CHECK_EQ(battle.rewards().experience, 16);
+	CHECK_EQ(battle.rewards().memberExperience, (std::vector<int>{4, 4, 4, 0, 4}));
 }
 
 TEST(loaderKeepsHardWithinTheSpecLimits) {

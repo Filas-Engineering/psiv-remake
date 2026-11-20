@@ -19,11 +19,11 @@ TEST(seededBattleHasAFixedOutcome) {
 	for (int i = 0; i < battle.partyCount(); ++i) {
 		hp.push_back(battle.combatant(i).hp);
 	}
-	CHECK_EQ(hp, (std::vector<int>{70, 38, 45, 42, 54}));
+	CHECK_EQ(hp, (std::vector<int>{29, 38, 0, 42, 75}));
 	CHECK_EQ(battle.rewards().experience, 72);
 	CHECK_EQ(battle.rewards().currency, 59);
 	CHECK(log.isDiscovered("storm_spark"));
-	CHECK_EQ(ofType(events, EventType::Revived).size(), std::size_t(1));
+	CHECK(ofType(events, EventType::Revived).empty());
 	CHECK(events.back().type == EventType::BattleEnded && events.back().outcome == Outcome::Victory);
 	CHECK(battle.resolveRound().empty());
 }
@@ -166,8 +166,9 @@ TEST(experienceLevelsUpWithGrowth) {
 	CHECK_EQ(levelUp.learned, (std::vector<std::string>{"cleave"}));
 	CHECK_EQ(member.level, 3);
 	CHECK_EQ(member.experience, 5);
-	// Base 60, padded coat 10, two levels of growth 8.
-	CHECK_EQ(member.hp, 60 + 10 + 2 * 8);
+	// Base 60 and padded coat 10: the levels raise the maximum by two growths of 8 but do not heal.
+	CHECK_EQ(member.hp, 60 + 10);
+	CHECK_EQ(memberStats(db, member).maxHp, 60 + 10 + 2 * 8);
 	CHECK_EQ(statsAtLevel(fighter, 3).strength, 18);
 	CHECK_EQ(statsAtLevel(fighter, 3).level, 3);
 	CHECK_EQ(statsAtLevel(fighter, 500).level, formulas::kMaxLevel);
@@ -291,7 +292,7 @@ TEST(hardSeededBattleHasAFixedOutcome) {
 	Battle battle = makeBattle(data(), setup, &log);
 	playToEnd(battle, 50);
 	CHECK(battle.outcome() == Outcome::Victory);
-	CHECK_EQ(battle.round(), 5);
+	CHECK_EQ(battle.round(), 4);
 	CHECK(!battle.gameOver());
 	CHECK(log.isDiscovered("storm_spark"));
 }

@@ -31,9 +31,7 @@ enum class EventType {
 	StatusApplied,
 	StatusResisted,
 	StatusRemoved,
-	StatusTicked,
 	StatModified,
-	StatModifierExpired,
 	CombatantDefeated,
 	EscapeAttempted,
 	Message,
@@ -69,7 +67,7 @@ struct Event {
 	int amount = 0;
 	// Hit points after the change.
 	int hp = -1;
-	// StatusApplied and StatModified: rounds it lasts, 0 for no round limit.
+	// StatusApplied: rounds it lasts, 0 for no round limit.
 	int duration = 0;
 	CommandKind command = CommandKind::None;
 	Element element = Element::None;

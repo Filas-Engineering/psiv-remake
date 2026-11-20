@@ -168,7 +168,7 @@ public class NativeLayoutTests
 public class SessionTests
 {
 	private static GameSession NewSession(string? saves = null, EncounterMode? mode = null, Presentation presentation = Presentation.Instant) =>
-		GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = saves, Seed = 96, EncounterMode = mode, Presentation = presentation });
+		GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = saves, Seed = 285, EncounterMode = mode, Presentation = presentation });
 
 	private static void Settle(GameSession s)
 	{
@@ -310,7 +310,7 @@ public class SessionTests
 		Assert.Equal(BattleEventType.BattleEnded, end.Type);
 		Assert.Equal(Outcome.Victory, end.Outcome);
 		Assert.True(end.Experience > 0);
-		foreach (BattleEvent e in events.Where(e => e.Type is BattleEventType.DamageDealt or BattleEventType.Healed or BattleEventType.StatusTicked))
+		foreach (BattleEvent e in events.Where(e => e.Type is BattleEventType.DamageDealt or BattleEventType.Healed))
 		{
 			hp[e.Target] = e.Hp;
 		}

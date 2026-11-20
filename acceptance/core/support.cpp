@@ -168,7 +168,7 @@ BattleState capture(const Battle& battle) {
 			s.statuses.insert(status.id);
 		}
 		for (const ActiveModifier& modifier : c.modifiers) {
-			s.modifiers[modifier.stat] = modifier.percent;
+			s.modifiers[modifier.stat] = modifier.amount;
 		}
 		state.combatants.push_back(s);
 	}
@@ -177,7 +177,7 @@ BattleState capture(const Battle& battle) {
 	return state;
 }
 
-std::string apply(BattleState& state, const Event& e, int partyCount) {
+std::string apply(const Database& db, BattleState& state, const Event& e, int partyCount) {
 	const int count = static_cast<int>(state.combatants.size());
 	auto at = [&](int index) -> CombatantState* {
 		return index >= 0 && index < count ? &state.combatants[index] : nullptr;
@@ -185,7 +185,7 @@ std::string apply(BattleState& state, const Event& e, int partyCount) {
 	CombatantState* target = at(e.target);
 	CombatantState* actor = at(e.actor);
 	const std::string type = toString(e.type);
-	// BAT-115: Damaged, Healed, ticks and revives carry the resulting hit points.
+	// BAT-115: Damaged, Healed and revives carry the resulting hit points.
 	auto resulting = [&](const CombatantState& c) -> std::string {
 		if (e.hp != c.hp) {
 			return type + " says the target has " + std::to_string(e.hp) + " hp, applying the stream gives " + std::to_string(c.hp);
@@ -228,7 +228,6 @@ std::string apply(BattleState& state, const Event& e, int partyCount) {
 		}
 		return "";
 	case EventType::DamageDealt:
-	case EventType::StatusTicked:
 		if (!target) {
 			return type + " without a target";
 		}
@@ -264,21 +263,18 @@ std::string apply(BattleState& state, const Event& e, int partyCount) {
 		}
 		target->modifiers[e.stat] = e.amount;
 		return "";
-	case EventType::StatModifierExpired:
-		if (!target || !target->modifiers.erase(e.stat)) {
-			return type + " removes a modifier the target does not have";
-		}
-		return "";
 	case EventType::CombatantDefeated:
 		if (!target) {
 			return type + " without a target";
 		}
 		target->hp = 0;
 		target->statuses.insert(kDefeatedStatus);
-		if (target->statuses.size() != 1) {
-			return type + " clears a status that got no StatusRemoved event";
+		for (const std::string& id : target->statuses) {
+			const StatusDef* def = db.status(id);
+			if (id != kDefeatedStatus && !(def && def->survivesDefeat)) {
+				return type + " clears a status that got no StatusRemoved event";
+			}
 		}
-		target->modifiers.clear();
 		return "";
 	case EventType::EscapeAttempted:
 		if (e.succeeded) {

@@ -38,7 +38,7 @@ ACC_CHECK(acc_bat_08, "ACC-BAT-08", "BAT-083") {
 		support::BattleState state = played.start;
 		for (const Event& e : played.events) {
 			const support::BattleState before = state;
-			support::apply(state, e, static_cast<int>(played.setup.party.size()));
+			support::apply(db, state, e, static_cast<int>(played.setup.party.size()));
 			applied += e.type == EventType::StatusApplied ? 1 : 0;
 			resisted += e.type == EventType::StatusResisted ? 1 : 0;
 			removed += e.type == EventType::StatusRemoved ? 1 : 0;

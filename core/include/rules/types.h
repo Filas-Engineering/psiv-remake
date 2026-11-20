@@ -23,8 +23,6 @@ enum class Opening { Normal, PartyFirst, EnemyFirst };
 
 enum class RewardMultiplier { X1, X1_5, X2 };
 
-enum class ExperienceSplit { EachLiving, SplitLiving, EachMember };
-
 struct BattleFlags {
 	bool escapeAllowed = true;
 	// Without a defeat branch, Defeat is a game over (FLOW-040).

@@ -190,14 +190,8 @@ static void printEvents(const psiv_battle_event* events, int32_t count) {
 		case PSIV_EVENT_STATUS_REMOVED:
 			print("  %s", e->text);
 			break;
-		case PSIV_EVENT_STATUS_TICKED:
-			print("  %s suffers %d from %s.", battleName(e->target), e->amount, displayName(e->status));
-			break;
 		case PSIV_EVENT_STAT_MODIFIED:
 			print("  %s's %s %s", battleName(e->target), psiv_name_of(PSIV_NAME_STAT, e->stat), e->amount > 0 ? "rises." : "falls.");
-			break;
-		case PSIV_EVENT_STAT_MODIFIER_EXPIRED:
-			print("  %s's %s returns to normal.", battleName(e->target), psiv_name_of(PSIV_NAME_STAT, e->stat));
 			break;
 		case PSIV_EVENT_COMBATANT_DEFEATED:
 			print("  %s falls.", battleName(e->target));

@@ -29,7 +29,7 @@
 			{"type": "elemental_damage", "power": 12, "element": "gale"}
 		]},
 		{"id": "weaken", "name": "Soften", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
-			{"type": "modify_stat", "stat": "defense", "percent": -30, "duration": 3}
+			{"type": "modify_stat", "stat": "defense", "direction": "down", "threshold": 40}
 		]},
 		{"id": "mend", "name": "Mend", "kind": "technique", "cost": 3, "target": "one_ally", "field": true, "effects": [
 			{"type": "heal", "power": 28}
@@ -44,7 +44,7 @@
 			{"type": "revive", "power": 50}
 		]},
 		{"id": "rally", "name": "Rally Cry", "kind": "technique", "cost": 4, "target": "all_allies", "effects": [
-			{"type": "modify_stat", "stat": "strength", "percent": 30, "duration": 3}
+			{"type": "modify_stat", "stat": "strength", "direction": "up"}
 		]},
 		{"id": "drowse", "name": "Drowse", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
 			{"type": "apply_status", "status": "sleep", "threshold": 98}
@@ -63,63 +63,69 @@
 			{"type": "physical_damage", "power": 11}
 		]},
 		{"id": "overclock", "name": "Overclock", "kind": "skill", "uses": 2, "target": "self", "effects": [
-			{"type": "modify_stat", "stat": "agility", "percent": 50, "duration": 3}
+			{"type": "modify_stat", "stat": "agility", "direction": "up"}
 		]},
 		{"id": "flare_burst", "name": "Flare Burst", "kind": "skill", "uses": 1, "target": "all_enemies", "effects": [
 			{"type": "elemental_damage", "power": 22, "element": "heat"}
 		]},
+		{"id": "hull_vent", "name": "Hull Vent", "kind": "skill", "uses": 3, "target": "enemy_group", "effects": [
+			{"type": "elemental_damage", "power": 11, "element": "heat"}
+		]},
+		{"id": "hull_patch", "name": "Hull Patch", "kind": "skill", "uses": 2, "target": "self", "effects": [
+			{"type": "heal", "power": 20}
+		]},
 
 		{"id": "storm_spark", "name": "Storm Spark", "kind": "combo", "target": "one_enemy", "effects": [
-			{"type": "elemental_damage", "power": 40, "element": "shock"}
+			{"type": "elemental_damage", "element": "shock"}
 		]},
 		{"id": "tempest_flare", "name": "Tempest Flare", "kind": "combo", "target": "all_enemies", "effects": [
-			{"type": "elemental_damage", "power": 35, "element": "heat"},
-			{"type": "modify_stat", "stat": "agility", "percent": -30, "duration": 2}
+			{"type": "elemental_damage", "element": "heat"},
+			{"type": "modify_stat", "stat": "agility", "direction": "down", "threshold": 40}
 		]},
 		{"id": "mending_chorus", "name": "Mending Chorus", "kind": "combo", "target": "all_allies", "effects": [
 			{"type": "heal", "power": 30},
-			{"type": "modify_stat", "stat": "strength", "percent": 40, "duration": 3}
+			{"type": "modify_stat", "stat": "strength", "direction": "up"}
 		]},
 		{"id": "cinder_gale", "name": "Cinder Gale", "kind": "combo", "target": "enemy_group", "effects": [
-			{"type": "elemental_damage", "power": 29, "element": "heat"}
+			{"type": "elemental_damage", "element": "heat"}
 		]},
 		{"id": "brittle_frost", "name": "Brittle Frost", "kind": "combo", "target": "all_enemies", "effects": [
-			{"type": "elemental_damage", "power": 19, "element": "chill"},
-			{"type": "modify_stat", "stat": "defense", "percent": -30, "duration": 2}
+			{"type": "elemental_damage", "element": "chill"},
+			{"type": "modify_stat", "stat": "defense", "direction": "down", "threshold": 40}
 		]},
 		{"id": "quiet_hour", "name": "Quiet Hour", "kind": "combo", "target": "enemy_group", "effects": [
 			{"type": "apply_status", "status": "sleep", "threshold": 47},
 			{"type": "apply_status", "status": "silence", "threshold": 47}
 		]},
 		{"id": "sundering_cleave", "name": "Sundering Cleave", "kind": "combo", "target": "enemy_group", "effects": [
-			{"type": "physical_damage", "power": 7}
+			{"type": "physical_damage"}
 		]},
 		{"id": "twin_arc", "name": "Twin Arc", "kind": "combo", "target": "one_enemy", "effects": [
-			{"type": "elemental_damage", "power": 33, "element": "shock"}
+			{"type": "elemental_damage", "element": "shock"}
 		]},
 		{"id": "pinpoint_rend", "name": "Pinpoint Rend", "kind": "combo", "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 21}
+			{"type": "physical_damage"}
 		]},
 		{"id": "clean_slate", "name": "Clean Slate", "kind": "combo", "target": "all_allies", "effects": [
 			{"type": "cure_status", "status": "poison"},
 			{"type": "heal", "power": 16}
 		]},
 		{"id": "surge_step", "name": "Surge Step", "kind": "combo", "target": "all_allies", "effects": [
-			{"type": "modify_stat", "stat": "agility", "percent": 40, "duration": 3}
+			{"type": "modify_stat", "stat": "agility", "direction": "up"}
 		]},
 		{"id": "dawn_call", "name": "Dawn Call", "kind": "combo", "target": "all_allies", "effects": [
 			{"type": "revive", "power": 30},
 			{"type": "heal", "power": 12}
 		]},
 		{"id": "kiln_roar", "name": "Kiln Roar", "kind": "combo", "target": "all_enemies", "effects": [
-			{"type": "elemental_damage", "power": 42, "element": "heat"}
+			{"type": "elemental_damage", "element": "heat"}
 		]},
 		{"id": "hailstorm", "name": "Hailstorm", "kind": "combo", "target": "all_enemies", "effects": [
-			{"type": "elemental_damage", "power": 22, "element": "chill"},
-			{"type": "elemental_damage", "power": 14, "element": "shock"}
+			{"type": "elemental_damage", "element": "chill"},
+			{"type": "elemental_damage", "element": "shock"}
 		]},
 		{"id": "dream_lance", "name": "Dream Lance", "kind": "combo", "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 15}
+			{"type": "physical_damage"}
 		]},
 
 		{"id": "venom_spit", "name": "Venom Spit", "kind": "technique", "cost": 2, "target": "one_enemy", "effects": [

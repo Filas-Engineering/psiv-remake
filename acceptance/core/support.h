@@ -59,8 +59,9 @@ struct BattleState {
 };
 
 BattleState capture(const rules::Battle& battle);
-// Applies one event to the state. Returns an empty string, or why the event cannot apply.
-std::string apply(BattleState& state, const rules::Event& event, int partyCount);
+// Applies one event to the state. Returns an empty string, or why the event cannot apply. `db` says which statuses
+// survive defeat.
+std::string apply(const rules::Database& db, BattleState& state, const rules::Event& event, int partyCount);
 std::string difference(const BattleState& a, const BattleState& b);
 
 // A random but reproducible battle: encounter, difficulty, opening, multiplier, flags, scripted end and carried

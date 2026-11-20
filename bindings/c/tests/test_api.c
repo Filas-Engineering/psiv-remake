@@ -66,7 +66,7 @@ static psiv_session* create(const char* saves, int encounterMode, int presentati
 	psiv_session_options_init(&options);
 	options.data_dir = dataDir;
 	options.save_dir = saves;
-	options.seed = 96;
+	options.seed = 285;
 	options.encounter_mode = encounterMode;
 	options.presentation = presentation;
 	if (psiv_session_create(&options, &s) != PSIV_OK) {
@@ -487,7 +487,6 @@ static void testBattleStream(void) {
 				hp[e->target] = e->hp;
 				break;
 			case PSIV_EVENT_HEALED:
-			case PSIV_EVENT_STATUS_TICKED:
 				hp[e->target] = e->hp;
 				break;
 			case PSIV_EVENT_STATUS_APPLIED:

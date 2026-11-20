@@ -251,14 +251,8 @@ std::string describe(const Battle& battle, const TextTable& text, const Event& e
 	case EventType::StatusRemoved:
 		s << formatText(text, e.message, {target, statusName(battle, e.status)});
 		break;
-	case EventType::StatusTicked:
-		s << target << " loses " << e.amount << " HP to " << statusName(battle, e.status) << ".";
-		break;
 	case EventType::StatModified:
-		s << target << "'s " << toString(e.stat) << (e.amount > 0 ? " rises" : " falls") << " by " << (e.amount > 0 ? e.amount : -e.amount) << "%.";
-		break;
-	case EventType::StatModifierExpired:
-		s << target << "'s " << toString(e.stat) << " returns to normal.";
+		s << target << "'s " << toString(e.stat) << " is now " << (e.amount < 0 ? "" : "+") << e.amount << " from its base.";
 		break;
 	case EventType::CombatantDefeated:
 		s << target << " is defeated.";

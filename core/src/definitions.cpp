@@ -2,7 +2,8 @@
 #include "rules/combatant.h"
 #include "rules/combo.h"
 #include "rules/database.h"
-#include "rules/formulas.h"
+
+#include <algorithm>
 
 namespace rules {
 
@@ -59,22 +60,37 @@ bool Combatant::hasStatus(const std::string& statusId) const {
 	return false;
 }
 
-int Combatant::effective(Stat stat) const {
-	int base = 0;
+int Combatant::base(Stat stat) const {
 	switch (stat) {
-	case Stat::Strength: base = stats.strength; break;
-	case Stat::Mental: base = stats.mental; break;
-	case Stat::Agility: base = stats.agility; break;
-	case Stat::Dexterity: base = stats.dexterity; break;
-	case Stat::Defense: base = stats.defense; break;
+	case Stat::Strength: return stats.strength;
+	case Stat::Mental: return stats.mental;
+	case Stat::Agility: return stats.agility;
+	case Stat::Dexterity: return stats.dexterity;
+	case Stat::Defense: return stats.defense;
 	}
-	int percent = 0;
+	return 0;
+}
+
+int Combatant::effective(Stat stat) const {
+	if (std::find(pinned.begin(), pinned.end(), stat) != pinned.end()) {
+		return 1;
+	}
 	for (const ActiveModifier& modifier : modifiers) {
 		if (modifier.stat == stat) {
-			percent += modifier.percent;
+			return base(stat) + modifier.amount;
 		}
 	}
-	return percent == 0 ? base : formulas::modifiedStat(base, percent);
+	return base(stat);
+}
+
+void Combatant::setModifier(Stat stat, int amount) {
+	for (ActiveModifier& modifier : modifiers) {
+		if (modifier.stat == stat) {
+			modifier.amount = amount;
+			return;
+		}
+	}
+	modifiers.push_back({stat, amount});
 }
 
 int Combatant::affinity(Element element) const {

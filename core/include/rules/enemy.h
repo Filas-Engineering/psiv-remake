@@ -8,18 +8,25 @@
 
 namespace rules {
 
-enum class AiConditionKind { Always, SelfHpBelow, AllyHpBelow, AllyDefeated, SelfHasStatus, FoeHasStatus };
+// An enemy draws one of its eight action slots each turn, then the first override whose condition holds replaces it.
+inline constexpr int kAiSlots = 8;
+inline constexpr int kMaxAiOverrides = 4;
 
-struct AiCondition {
-	AiConditionKind kind = AiConditionKind::Always;
-	// Percent of max hit points for the HpBelow kinds.
-	int value = 0;
-	std::string status;
+enum class AiConditionKind {
+	SelfHpHalf,
+	// Fires once per battle, whichever enemy it fires for.
+	SelfHpQuarterOnce,
+	AnyAllyHpHalf,
+	LastStanding,
+	HitByAttack,
+	HitByAbility,
+	HitByTechnique,
+	TechniquesBlocked,
 };
 
-// How an entry picks its single target. Default keeps the per-ability rule: a random foe (among those with the
-// condition's status for foe_has_status), the ally with the lowest hit point share for heals, an ally with the
-// status for cures, the first fallen ally for revives.
+// How an action picks its single target. Default: a foe drawn by party order when the round's order is resolved,
+// the ally with the lowest hit point share for heals, an ally with the status for cures, the first fallen ally for
+// revives.
 enum class AiTargetRule { Default, Random, LowestHp, HighestHp, HasStatus, LacksStatus, LastAttacker };
 
 struct AiTarget {
@@ -28,18 +35,16 @@ struct AiTarget {
 	std::string status;
 };
 
-struct AiRule {
+struct AiOverride {
+	AiConditionKind when = AiConditionKind::SelfHpHalf;
 	std::string ability;
-	int weight = 1;
-	AiCondition condition;
 	AiTarget target = {};
 };
 
-// One entry of an enemy's drop table (SAV-031). Chance is percent; 100 always drops and draws nothing.
+// An encounter's item drop: one roll of 0 to 127 per won battle must come out below the rate.
 struct ItemDrop {
 	std::string item;
-	int chance = 100;
-	int count = 1;
+	int rate = 0;
 };
 
 struct EnemyDef {
@@ -50,10 +55,11 @@ struct EnemyDef {
 	std::vector<std::string> abilities;
 	Affinities affinities;
 	StatusResists statusResist;
-	std::vector<AiRule> ai;
+	// The basic attack or one of the abilities, kAiSlots of them.
+	std::vector<std::string> slots;
+	std::vector<AiOverride> overrides;
 	int experience = 0;
 	int currency = 0;
-	std::vector<ItemDrop> drops;
 };
 
 // One position in an enemy group's formation. Group targeting hits every living enemy with the same group.
@@ -71,6 +77,8 @@ struct Encounter {
 	// out; the loader then uses the highest agility among the enemies.
 	int awareness = 0;
 	int escapeRating = 0;
+	// No item when empty.
+	ItemDrop drop;
 };
 
 }

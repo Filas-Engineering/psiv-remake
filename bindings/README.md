@@ -154,7 +154,13 @@ The sample keeps the game out of its drawing code: `SampleController` reads the 
 
 ## Changes a host must make
 
-This round: `PSIV_ABI_VERSION` 2. The binding now calls the game for everything it used to work around (line data, turning, the auto macro, the ended battle, yes and no, presentation, walking, auto play).
+This round: `PSIV_ABI_VERSION` 3. Core's rules version 9 removed two battle event types.
+
+* `psiv_event_type`: `PSIV_EVENT_STATUS_TICKED` and `PSIV_EVENT_STAT_MODIFIER_EXPIRED` are gone, and every later value moved down (`PSIV_EVENT_STAT_MODIFIED` is now right after `PSIV_EVENT_STATUS_REMOVED`). A `PSIV_EVENT_STAT_MODIFIED` `amount` is the stat's change from its base, and there is no expiry. C#: `BattleEventType.StatusTicked` and `StatModifierExpired` are gone; `Native.AbiVersion` is 3.
+* `psiv_battle_set_command` refuses Defend and items for a vehicle (key `command.vehicle_cannot`).
+* The session tests now use seed 285 (`bindings/c/tests/test_api.c`, C# `SessionTests.NewSession`).
+
+The round before: `PSIV_ABI_VERSION` 2. The binding now calls the game for everything it used to work around (line data, turning, the auto macro, the ended battle, yes and no, presentation, walking, auto play).
 
 * Struct layouts: `psiv_session_options` adds `core_data_dir` after `data_dir`; `psiv_line` adds `text_id` after `speaker_name`. Call `psiv_session_options_init` and rebuild foreign mirrors (the C# wrapper's are updated).
 * Names: `psiv_name_of` returns event types as `battle_started` ... `battle_ended` and reward multipliers as `x1`, `x1_5`, `x2`. Use `psiv_parse_name` to read a name back; it also takes `BattleEnded` and `1.5`.

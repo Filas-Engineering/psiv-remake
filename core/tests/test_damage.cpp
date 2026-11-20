@@ -36,8 +36,6 @@ TEST(affinityAndHealingMath) {
 	CHECK_EQ(formulas::healAmount(28, 12, formulas::kSpreadMin), 34);
 	CHECK_EQ(formulas::healAmount(28, 12, formulas::kSpreadMax), 45);
 	CHECK_EQ(formulas::reviveHp(42, 50), 21);
-	CHECK_EQ(formulas::modifiedStat(14, 30), 18);
-	CHECK_EQ(formulas::modifiedStat(10, -300), 5);
 }
 
 TEST(battleAppliesWeaknessResistanceAndImmunity) {
@@ -148,22 +146,80 @@ TEST(defendQuartersOnlyPhysicalDamageWithoutAWeaponElement) {
 	}
 }
 
-TEST(statModifiersChangeEffectiveStatsAndExpire) {
-	Battle battle = makeBattle(data(), {"brass_warden"}, 3);
-	const int base = battle.combatant(kMystic).stats.strength;
+// A stat change sets the battle value to base plus or minus the user's stat: mental for a technique, strength for a
+// skill, the power for an item. The latest change replaces the earlier one, and it lasts until the battle ends.
+TEST(statChangesMoveFromBaseByTheUsersStat) {
+	Database db = data();
+	ItemDef draught;
+	draught.id = "draught";
+	draught.targeting = Targeting::OneAlly;
+	draught.effects = {{EffectKind::ModifyStat, 7, Element::None, "", 0, Stat::Strength, true}};
+	db.items["draught"] = draught;
+	Battle battle = makeBattle(db, {"brass_warden"}, 3, Inventory{{"draught", 1}});
+	const int strength = battle.combatant(kMystic).stats.strength;
+	const int agility = battle.combatant(kScout).stats.agility;
 	battle.setCommand(kFighter, Command::ability("rally", -1));
 	othersDefend(battle);
-	const std::vector<Event> first = battle.resolveRound();
-	CHECK_EQ(ofType(first, EventType::StatModified).size(), std::size_t(5));
-	CHECK_EQ(battle.combatant(kMystic).effective(Stat::Strength), formulas::modifiedStat(base, 30));
+	CHECK_EQ(ofType(battle.resolveRound(), EventType::StatModified).size(), std::size_t(5));
+	const int fighterMental = battle.combatant(kFighter).effective(Stat::Mental);
+	CHECK_EQ(battle.combatant(kMystic).effective(Stat::Strength), strength + fighterMental);
+	// A skill moves the stat by the user's strength, the rally included.
+	battle.setCommand(kScout, Command::ability("overclock", kScout));
+	othersDefend(battle);
+	battle.resolveRound();
+	CHECK_EQ(battle.combatant(kScout).effective(Stat::Agility), agility + battle.combatant(kScout).effective(Stat::Strength));
 
-	std::vector<Event> later;
-	for (int round = 0; round < 2; ++round) {
+	for (int round = 0; round < 6; ++round) {
+		othersDefend(battle);
+		battle.resolveRound();
+	}
+	CHECK_EQ(battle.combatant(kMystic).effective(Stat::Strength), strength + fighterMental);
+
+	// The item's power replaces the rally's amount rather than adding to it.
+	battle.setCommand(kMedic, Command::item("draught", kMystic));
+	othersDefend(battle);
+	battle.resolveRound();
+	CHECK_EQ(battle.combatant(kMystic).effective(Stat::Strength), strength + 7);
+}
+
+TEST(loweringFloorsAtOneForAgilityAndDexterityAndZeroOtherwise) {
+	Database db = data();
+	db.characters["scout"].base.mental = 500;
+	AbilityDef& weaken = db.abilities["weaken"];
+	weaken.effects = {{EffectKind::ModifyStat, 0, Element::None, "", 0, Stat::Defense, false}, {EffectKind::ModifyStat, 0, Element::None, "", 0, Stat::Agility, false}};
+	Battle battle = makeBattle(db, {"brass_warden"}, 3);
+	battle.combatant(kFirstEnemy).hp = 3000;
+	battle.setCommand(kScout, Command::ability("weaken", kFirstEnemy));
+	othersDefend(battle);
+	battle.resolveRound();
+	CHECK_EQ(battle.combatant(kFirstEnemy).effective(Stat::Defense), 0);
+	CHECK_EQ(battle.combatant(kFirstEnemy).effective(Stat::Agility), 1);
+}
+
+// Lowering a foe rolls like a status against the effect's threshold; raising never rolls.
+TEST(loweringAFoeRollsLikeAStatus) {
+	const Database& db = data();
+	int landed = 0;
+	int expected = 0;
+	const int trials = 3000;
+	for (int seed = 1; seed <= trials; ++seed) {
+		Battle battle = makeBattle(db, {"brass_warden"}, static_cast<std::uint64_t>(seed));
+		battle.combatant(kFirstEnemy).hp = 3000;
+		battle.setCommand(kScout, Command::ability("weaken", kFirstEnemy));
 		othersDefend(battle);
 		const std::vector<Event> events = battle.resolveRound();
-		later.insert(later.end(), events.begin(), events.end());
+		landed += ofType(events, EventType::StatModified).size() == 1 ? 1 : 0;
+		for (const Event& e : ofType(events, EventType::StatusResisted)) {
+			CHECK(e.stat == Stat::Defense && e.message == "battle.stat_resisted" && e.status.empty());
+		}
 	}
-	const std::vector<Event> expired = ofType(later, EventType::StatModifierExpired);
-	CHECK(!expired.empty() && expired.front().round == 3);
-	CHECK_EQ(battle.combatant(kMystic).effective(Stat::Strength), base);
+	const int mental = makeBattle(db, {"brass_warden"}, 1).combatant(kScout).effective(Stat::Mental);
+	const int targetMental = db.enemies.at("brass_warden").stats.mental;
+	for (int roll = 0; roll <= formulas::kChanceRollMax; ++roll) {
+		expected += formulas::statusScore(roll, mental, targetMental, 0) > db.abilities.at("weaken").effects[0].threshold ? 1 : 0;
+	}
+	const double rate = 100.0 * landed / trials;
+	const double chance = 100.0 * expected / (formulas::kChanceRollMax + 1);
+	CHECK(rate > chance - 3 && rate < chance + 3);
+	CHECK(chance > 5 && chance < 95);
 }

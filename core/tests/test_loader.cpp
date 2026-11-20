@@ -36,8 +36,9 @@ TEST(loaderReadsShippedData) {
 	CHECK_EQ(db.abilities.at("focus_shot").uses, 3);
 	CHECK(db.abilities.at("ember").targeting == Targeting::EnemyGroup);
 	CHECK_EQ(db.enemies.at("rust_hound").affinities.at(Element::Shock), 150);
-	CHECK(db.enemies.at("rust_hound").ai[2].condition.kind == AiConditionKind::SelfHpBelow);
-	CHECK_EQ(db.enemies.at("rust_hound").ai[2].condition.value, 50);
+	CHECK_EQ(db.enemies.at("rust_hound").slots.size(), std::size_t(kAiSlots));
+	CHECK(db.enemies.at("rust_hound").overrides.at(0).when == AiConditionKind::SelfHpHalf);
+	CHECK_EQ(db.enemies.at("rust_hound").overrides.at(0).ability, std::string("venom_spit"));
 	CHECK(db.statuses.at("paralysis").action == StatusAction::CannotAct);
 	CHECK_EQ(db.startingInventory.at("tonic"), 3);
 	const Macro* opener = db.macro("opener");
@@ -55,13 +56,38 @@ TEST(loaderReadsShippedData) {
 TEST(loaderRejectsEnemyWithMissingAbility) {
 	auto files = fixtures::dataTexts();
 	replaceOnce(files["enemies.json"], "\"abilities\": [\"venom_spit\"]", "\"abilities\": [\"venom_spat\"]");
-	expectError(files, "enemies.json:22: enemy 'rust_hound': names missing ability 'venom_spat'");
+	expectError(files, "enemies.json:19: enemy 'rust_hound': names missing ability 'venom_spat'");
 }
 
-TEST(loaderRejectsAiAbilityTheEnemyDoesNotHave) {
-	auto files = fixtures::dataTexts();
-	replaceOnce(files["enemies.json"], "{\"ability\": \"bite\", \"weight\": 1}", "{\"ability\": \"spark\", \"weight\": 1}");
-	expectError(files, "enemy 'gel_mite': AI uses ability 'spark' that is not in the enemy's abilities");
+TEST(loaderRejectsBadEnemyAi) {
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["enemies.json"], "\"slots\": [\"bite\", \"bite\", \"bite\", \"bite\", \"bite\", \"bite\", \"bite\", \"bite\"]",
+			"\"slots\": [\"spark\", \"bite\", \"bite\", \"bite\", \"bite\", \"bite\", \"bite\", \"bite\"]");
+		expectError(files, "enemy 'gel_mite': AI uses 'spark', which is neither the enemy's basic attack nor one of its abilities");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["enemies.json"], "\"slots\": [\"bite\", \"bite\", \"bite\", \"bite\", \"bite\", \"bite\", \"bite\", \"bite\"]",
+			"\"slots\": [\"bite\", \"bite\", \"bite\", \"bite\", \"bite\", \"bite\", \"bite\"]");
+		expectError(files, "enemy 'gel_mite': needs exactly 8 slots");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["enemies.json"], "{\"when\": \"self_hp_half\", \"ability\": \"venom_spit\"}", "{\"when\": \"ally_defeated\", \"ability\": \"venom_spit\"}");
+		expectError(files, "enemy 'rust_hound': unknown AI condition 'ally_defeated'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		const std::string one = "{\"when\": \"self_hp_half\", \"ability\": \"venom_spit\"}";
+		replaceOnce(files["enemies.json"], one, one + ", " + one + ", " + one + ", " + one + ", " + one);
+		expectError(files, "enemy 'rust_hound': has more than 4 overrides");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["enemies.json"], "\"drop\": {\"item\": \"tonic\", \"rate\": 58}", "\"drops\": [{\"item\": \"tonic\", \"chance\": 20}]");
+		expectError(files, "encounter 'training': unknown field 'drops'");
+	}
 }
 
 TEST(loaderRejectsBadReferencesAcrossFiles) {
@@ -142,7 +168,7 @@ TEST(loaderReadsEquipmentLearningAndGroups) {
 	CHECK_EQ(db.encounter("marsh")->enemies.at(0).group, std::string("wisps"));
 	CHECK_EQ(db.encounter("marsh")->enemies.at(2).group, std::string("gel_mite"));
 	CHECK(!db.encounter("warden")->escapeAllowed);
-	CHECK(db.battleRules.experienceSplit == ExperienceSplit::EachLiving);
+	CHECK(db.encounter("warden")->drop.item == "loosen_oil" && db.encounter("warden")->drop.rate == 127);
 	CHECK(db.contentHash != 0);
 }
 
@@ -177,8 +203,8 @@ TEST(loaderRejectsBadEquipmentAndLearning) {
 	}
 	{
 		auto files = fixtures::dataTexts();
-		replaceOnce(files["rules.json"], "\"each_living\"", "\"winner_takes_all\"");
-		expectError(files, "rules.json:3: unknown experience split 'winner_takes_all'");
+		replaceOnce(files["rules.json"], "\"surprise_rounds\": 1,", "\"surprise_rounds\": 1, \"experience_split\": \"each_living\",");
+		expectError(files, "rules.json:2: unknown field 'experience_split'");
 	}
 	{
 		auto files = fixtures::dataTexts();
@@ -203,6 +229,65 @@ TEST(loaderReadsTheNewRuleFields) {
 	CHECK(!twin.ordered);
 	const ComboRecipe& cinder = *std::find_if(db.combos.begin(), db.combos.end(), [](const ComboRecipe& r) { return r.id == "cinder_gale"; });
 	CHECK(cinder.ordered);
+	const StatusDef& paralysis = db.statuses.at("paralysis");
+	CHECK(paralysis.statsToOne == (std::vector<Stat>{Stat::Agility, Stat::Dexterity}) && paralysis.removes == std::vector<std::string>{"sleep"});
+	CHECK(paralysis.countsTowardDefeat && db.statuses.at("sleep").statsToOne == std::vector<Stat>{Stat::Agility});
+	CHECK(db.statuses.at("silence").survivesDefeat && db.statuses.at("silence").duration == 0);
+	const Effect& lower = db.abilities.at("weaken").effects.at(0);
+	CHECK(lower.kind == EffectKind::ModifyStat && lower.stat == Stat::Defense && !lower.raises && lower.threshold == 40);
+	CHECK(db.abilities.at("rally").effects.at(0).raises);
+}
+
+TEST(loaderRejectsBadStatusAndStatChangeFields) {
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["statuses.json"], "\"stats_to_one\": [\"agility\"]", "\"stats_to_one\": [\"strength\"]");
+		expectError(files, "status 'sleep': stats_to_one takes agility and dexterity, not 'strength'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["statuses.json"], "\"removes\": [\"sleep\"]", "\"removes\": [\"nap\"]");
+		expectError(files, "status 'paralysis': removes names missing status 'nap'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["statuses.json"], "{\"id\": \"poison\", \"name\": \"Poison\",", "{\"id\": \"poison\", \"name\": \"Poison\", \"tick_damage_percent\": 8,");
+		expectError(files, "status 'poison': unknown field 'tick_damage_percent'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["abilities.json"], "\"cost\": 4, \"target\": \"all_allies\", \"effects\": [\n\t\t\t{\"type\": \"modify_stat\", \"stat\": \"strength\", \"direction\": \"up\"}",
+			"\"cost\": 4, \"target\": \"all_allies\", \"effects\": [\n\t\t\t{\"type\": \"modify_stat\", \"stat\": \"strength\", \"direction\": \"up\", \"percent\": 30, \"duration\": 3}");
+		expectError(files, "ability 'rally': unknown field 'percent'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["abilities.json"], "{\"type\": \"modify_stat\", \"stat\": \"agility\", \"direction\": \"up\"}\n\t\t]},\n\t\t{\"id\": \"flare_burst\"",
+			"{\"type\": \"modify_stat\", \"stat\": \"agility\", \"direction\": \"sideways\", \"threshold\": 3}\n\t\t]},\n\t\t{\"id\": \"flare_burst\"");
+		expectError(files, "ability 'overclock': unknown direction 'sideways' (up or down)");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["abilities.json"], "\"cost\": 4, \"target\": \"all_allies\", \"effects\": [\n\t\t\t{\"type\": \"modify_stat\", \"stat\": \"strength\", \"direction\": \"up\"}",
+			"\"cost\": 4, \"target\": \"all_allies\", \"effects\": [\n\t\t\t{\"type\": \"modify_stat\", \"stat\": \"strength\", \"direction\": \"up\", \"threshold\": 10}");
+		expectError(files, "ability 'rally': only a stat change with direction down has a threshold");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["abilities.json"], "{\"type\": \"elemental_damage\", \"element\": \"shock\"}\n\t\t]},\n\t\t{\"id\": \"tempest_flare\"",
+			"{\"type\": \"elemental_damage\", \"power\": 40, \"element\": \"shock\"}\n\t\t]},\n\t\t{\"id\": \"tempest_flare\"");
+		expectError(files, "ability 'storm_spark': a combo's damage takes its power from the participants' abilities, so it has no power");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["combos.json"], "\"abilities\": [\"frostbite\", \"gust\", \"glint\"]", "\"abilities\": [\"frostbite\", \"gust\", \"glint\", \"mend\", \"cleave\"]");
+		expectError(files, "combo 'hailstorm': needs 2 to 4 abilities");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["party.json"], "\"abilities\": [\"hull_vent\", \"hull_patch\"]", "\"abilities\": [\"steam_vent\", \"hull_patch\"]");
+		expectError(files, "vehicle 'reed_skimmer': vehicle ability 'steam_vent' must be a skill");
+	}
 }
 
 TEST(loaderRejectsBadNewRuleFields) {
@@ -213,7 +298,7 @@ TEST(loaderRejectsBadNewRuleFields) {
 	}
 	{
 		auto files = fixtures::dataTexts();
-		replaceOnce(files["statuses.json"], "\"blocks_techniques\": true, \"duration\": 3, \"stacking\": \"extend\"", "\"blocks_techniques\": true, \"duration\": 3, \"stacking\": \"pile\"");
+		replaceOnce(files["statuses.json"], "\"blocks_techniques\": true, \"stacking\": \"keep\"", "\"blocks_techniques\": true, \"stacking\": \"pile\"");
 		expectError(files, "status 'silence': unknown stacking 'pile'");
 	}
 	{
@@ -224,13 +309,13 @@ TEST(loaderRejectsBadNewRuleFields) {
 	}
 	{
 		auto files = fixtures::dataTexts();
-		replaceOnce(files["difficulties.json"], "{\"ability\": \"rouse\", \"weight\": 8, \"when\": {\"type\": \"ally_defeated\"}}",
-			"{\"ability\": \"rouse\", \"weight\": 8, \"when\": {\"type\": \"ally_defeated\"}, \"target\": \"last_attacker\"}");
+		replaceOnce(files["difficulties.json"], "{\"when\": \"any_ally_hp_half\", \"ability\": \"patch\", \"target\": \"lowest_hp\"}",
+			"{\"when\": \"any_ally_hp_half\", \"ability\": \"patch\", \"target\": \"last_attacker\"}");
 		expectError(files, "difficulty 'hard': last_attacker needs an ability aimed at foes");
 	}
 	{
 		auto files = fixtures::dataTexts();
-		replaceOnce(files["difficulties.json"], "{\"ability\": \"steam_vent\", \"weight\": 3}", "{\"ability\": \"steam_vent\", \"weight\": 3, \"target\": \"has_status\", \"target_status\": \"smog\"}");
+		replaceOnce(files["difficulties.json"], "\"ability\": \"numbing_sting\", \"target\": \"highest_hp\"", "\"ability\": \"numbing_sting\", \"target\": \"has_status\", \"target_status\": \"smog\"");
 		expectError(files, "difficulty 'hard': AI target names missing status 'smog'");
 	}
 	{
@@ -256,14 +341,14 @@ TEST(loaderProblemsCarryKeysAndParameters) {
 	files.erase("difficulties.json");
 	const Result<Database> loaded = loadDatabaseFromTexts(files);
 	CHECK(!loaded.ok());
-	// The ability list and the two AI entries that use the ability, then the missing file.
+	// The ability list, the slots and the override that use the ability, then the missing file.
 	CHECK_EQ(loaded.problems.size(), std::size_t(4));
 	if (loaded.problems.size() != 4) {
 		return;
 	}
 	const Problem& missing = loaded.problems[0];
 	CHECK_EQ(missing.file, std::string("enemies.json"));
-	CHECK_EQ(missing.line, 22);
+	CHECK_EQ(missing.line, 19);
 	CHECK_EQ(missing.entry, std::string("enemy 'rust_hound'"));
 	CHECK_EQ(missing.message.key, std::string("load.names_missing_ability"));
 	CHECK(missing.message.params == std::vector<std::string>{"venom_spat"});
@@ -273,7 +358,7 @@ TEST(loaderProblemsCarryKeysAndParameters) {
 	CHECK_EQ(loaded.problems[3].line, 0);
 	CHECK_EQ(loaded.error, formatProblems(loaded.problems, problemText()));
 	CHECK_EQ(formatProblem(missing, {{"load.names_missing_ability", "ability {0} is not defined"}}),
-		std::string("enemies.json:22: enemy 'rust_hound': ability venom_spat is not defined"));
+		std::string("enemies.json:19: enemy 'rust_hound': ability venom_spat is not defined"));
 }
 
 TEST(syntaxErrorsCarryAKeyToo) {
@@ -296,8 +381,7 @@ TEST(loaderReadsStatusThresholdsAndEncounterRatings) {
 	CHECK_EQ(db.statuses.at("sleep").recoverChance, 50);
 
 	auto files = fixtures::dataTexts();
-	replaceOnce(files["enemies.json"], "{\"id\": \"warden\", \"enemies\": [\"brass_warden\", \"bog_wisp\"], \"escape\": false}",
-		"{\"id\": \"warden\", \"enemies\": [\"brass_warden\", \"bog_wisp\"], \"escape\": false, \"awareness\": 0, \"escape_rating\": 240}");
+	replaceOnce(files["enemies.json"], "\"escape\": false,", "\"escape\": false, \"awareness\": 0, \"escape_rating\": 240,");
 	const Result<Database> loaded = loadDatabaseFromTexts(files);
 	CHECK(loaded.ok());
 	if (loaded.ok()) {
@@ -324,12 +408,12 @@ TEST(loaderRejectsBadThresholdsAndRatings) {
 	}
 	{
 		auto files = fixtures::dataTexts();
-		replaceOnce(files["enemies.json"], "\"escape\": false}", "\"escape\": false, \"escape_rating\": 256}");
+		replaceOnce(files["enemies.json"], "\"escape\": false,", "\"escape\": false, \"escape_rating\": 256,");
 		expectError(files, "encounter 'warden': field 'escape_rating' must be between 0 and 255");
 	}
 	{
 		auto files = fixtures::dataTexts();
-		replaceOnce(files["enemies.json"], "\"escape\": false}", "\"escape\": false, \"awareness\": -1}");
+		replaceOnce(files["enemies.json"], "\"escape\": false,", "\"escape\": false, \"awareness\": -1,");
 		expectError(files, "encounter 'warden': field 'awareness' must be between 0 and 255");
 	}
 }

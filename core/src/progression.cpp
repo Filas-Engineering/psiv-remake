@@ -198,7 +198,6 @@ LevelUp grantExperience(PartyMember& member, const Database& db, int experience)
 	}
 	member.experience += std::max(0, experience);
 	const int startLevel = member.level;
-	const Stats before = statsAtLevel(*character, member.level);
 	while (member.level < formulas::kMaxLevel) {
 		const int needed = formulas::experienceToNextLevel(member.level);
 		if (member.experience < needed) {
@@ -211,11 +210,6 @@ LevelUp grantExperience(PartyMember& member, const Database& db, int experience)
 	if (result.levelsGained == 0) {
 		return result;
 	}
-	const Stats after = statsAtLevel(*character, member.level);
-	if (member.hp > 0) {
-		member.hp += after.maxHp - before.maxHp;
-	}
-	member.tp += after.maxTp - before.maxTp;
 	for (const LearnedAbility& learned : character->learns) {
 		if (learned.level > startLevel && learned.level <= member.level) {
 			result.learned.push_back(learned.ability);

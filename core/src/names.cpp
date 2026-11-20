@@ -32,11 +32,12 @@ const char* const kEquipSlots[] = {"weapon", "head", "body", "arms", "accessory"
 const char* const kOpenings[] = {"normal", "party_first", "enemy_first"};
 const char* const kRewardMultipliers[] = {"x1", "x1_5", "x2"};
 const char* const kRewardMultipliersBefore[] = {"1", "1.5", "2"};
-const char* const kExperienceSplits[] = {"each_living", "split_living", "each_member"};
 const char* const kStatusActions[] = {"normal", "cannot_act", "forced"};
 const char* const kForcedTargets[] = {"random_any", "random_ally", "random_foe"};
 const char* const kStatusStackings[] = {"refresh", "extend", "keep"};
-const char* const kAiConditions[] = {"always", "self_hp_below", "ally_hp_below", "ally_defeated", "self_has_status", "foe_has_status"};
+const char* const kAiConditions[] = {
+	"self_hp_half", "self_hp_quarter_once", "any_ally_hp_half", "last_standing", "hit_by_attack", "hit_by_ability", "hit_by_technique",
+	"techniques_blocked"};
 const char* const kAiTargetRules[] = {"default", "random", "lowest_hp", "highest_hp", "has_status", "lacks_status", "last_attacker"};
 const char* const kCommandKinds[] = {"none", "attack", "ability", "item", "defend", "escape"};
 const char* const kMacroTargets[] = {"default", "self", "member", "enemy", "all"};
@@ -50,14 +51,13 @@ const char* const kEventTypes[] = {
 	"battle_started", "round_started", "commands_locked", "order_resolved", "retargeted", "action_started",
 	"action_cancelled", "combo_triggered", "combo_discovered", "resource_spent", "item_had_no_effect", "hit", "missed",
 	"critical", "damage_dealt", "healed", "revived", "status_applied", "status_resisted", "status_removed",
-	"status_ticked", "stat_modified", "stat_modifier_expired", "combatant_defeated", "escape_attempted", "message",
-	"round_ended", "battle_ended"};
+	"stat_modified", "combatant_defeated", "escape_attempted", "message", "round_ended", "battle_ended"};
 // The spellings record and event text files used before the names were unified.
 const char* const kEventTypesBefore[] = {
 	"BattleStarted", "RoundStarted", "CommandsLocked", "OrderResolved", "Retargeted", "ActionStarted", "ActionCancelled",
 	"ComboTriggered", "ComboDiscovered", "ResourceSpent", "ItemHadNoEffect", "Hit", "Missed", "Critical", "DamageDealt",
-	"Healed", "Revived", "StatusApplied", "StatusResisted", "StatusRemoved", "StatusTicked", "StatModified",
-	"StatModifierExpired", "CombatantDefeated", "EscapeAttempted", "Message", "RoundEnded", "BattleEnded"};
+	"Healed", "Revived", "StatusApplied", "StatusResisted", "StatusRemoved", "StatModified", "CombatantDefeated",
+	"EscapeAttempted", "Message", "RoundEnded", "BattleEnded"};
 const char* const kOutcomes[] = {"ongoing", "victory", "defeat", "escaped", "scripted_end"};
 const char* const kCancelReasons[] = {"none", "actor_unable", "silenced", "not_enough_tp", "no_uses_left", "no_item", "no_target"};
 const char* const kEffectiveness[] = {"normal", "weak", "resisted", "immune"};
@@ -75,7 +75,6 @@ const char* toString(EffectKind value) { return nameOf(kEffectKinds, value); }
 const char* toString(EquipSlot value) { return nameOf(kEquipSlots, value); }
 const char* toString(Opening value) { return nameOf(kOpenings, value); }
 const char* toString(RewardMultiplier value) { return nameOf(kRewardMultipliers, value); }
-const char* toString(ExperienceSplit value) { return nameOf(kExperienceSplits, value); }
 const char* toString(StatusAction value) { return nameOf(kStatusActions, value); }
 const char* toString(ForcedTarget value) { return nameOf(kForcedTargets, value); }
 const char* toString(StatusStacking value) { return nameOf(kStatusStackings, value); }
@@ -105,7 +104,6 @@ bool parseOpening(const std::string& text, Opening& out) { return parseName(kOpe
 bool parseRewardMultiplier(const std::string& text, RewardMultiplier& out) {
 	return parseName(kRewardMultipliers, text, out) || parseName(kRewardMultipliersBefore, text, out);
 }
-bool parseExperienceSplit(const std::string& text, ExperienceSplit& out) { return parseName(kExperienceSplits, text, out); }
 bool parseStatusAction(const std::string& text, StatusAction& out) { return parseName(kStatusActions, text, out); }
 bool parseForcedTarget(const std::string& text, ForcedTarget& out) { return parseName(kForcedTargets, text, out); }
 bool parseStatusStacking(const std::string& text, StatusStacking& out) { return parseName(kStatusStackings, text, out); }

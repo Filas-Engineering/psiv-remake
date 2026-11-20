@@ -189,7 +189,8 @@ TEST(escapeEndsTheBattleAtOnce) {
 
 TEST(groupAbilityFromAnEnemyHitsTheWholeParty) {
 	Database db = data();
-	db.enemies["brass_warden"].ai = {{"steam_vent", 1, {}}};
+	db.enemies["brass_warden"].slots.assign(static_cast<std::size_t>(kAiSlots), "steam_vent");
+	db.enemies["brass_warden"].overrides.clear();
 	Battle battle = makeBattle(db, {"brass_warden"}, 4);
 	battle.combatant(kMedic).hp = 0;
 	battle.combatant(kMedic).statuses = {{kDefeatedStatus, 0}};
@@ -217,15 +218,86 @@ TEST(groupAbilityFromThePartyHitsTheFormationGroup) {
 	CHECK_EQ(hit, (std::vector<int>{kFirstEnemy, kFirstEnemy + 1}));
 }
 
-TEST(singleTargetMovesToTheNextFormationPosition) {
+// Plain damage turns to the living enemy missing the most hit points; anything else to the one missing the fewest.
+TEST(aGoneFoeIsReplacedByHitPointsMissing) {
 	Database db = data();
 	db.characters["fighter"].base.dexterity = 500;
+	db.characters["scout"].base.mental = 500;
+	db.combos.clear();
+	for (bool damage : {true, false}) {
+		Battle battle = makeBattle(db, {"gel_mite", "gel_mite", "gel_mite", "gel_mite"}, 1);
+		for (int i = kFirstEnemy; i < kFirstEnemy + 4; ++i) {
+			battle.combatant(i).stats.maxHp = 500;
+			battle.combatant(i).hp = 500;
+		}
+		battle.combatant(kFirstEnemy).hp = 0;
+		battle.combatant(kFirstEnemy).statuses = {{kDefeatedStatus, 0}};
+		battle.combatant(kFirstEnemy + 1).hp = 450;
+		battle.combatant(kFirstEnemy + 2).hp = 300;
+		battle.combatant(kFirstEnemy + 3).hp = 400;
+		const int actor = damage ? kFighter : kScout;
+		battle.setCommand(actor, damage ? Command::attack(kFirstEnemy) : Command::ability("weaken", kFirstEnemy));
+		othersDefend(battle);
+		const std::vector<Event> events = battle.resolveRound();
+		const std::optional<Event> turned = firstBy(events, EventType::Retargeted, actor);
+		const int expected = damage ? kFirstEnemy + 2 : kFirstEnemy + 1;
+		CHECK(turned && turned->previousTarget == kFirstEnemy && turned->target == expected);
+		const std::optional<Event> started = firstBy(events, EventType::ActionStarted, actor);
+		CHECK(started && started->target == expected);
+	}
+	// Outside a battle's turn nothing is drawn: a gone foe resolves to the first living one.
 	Battle battle = makeBattle(db, {"gel_mite", "gel_mite", "gel_mite"}, 1);
 	battle.combatant(kFirstEnemy + 1).hp = 0;
-	CHECK_EQ(battle.resolveTargets(kFighter, Targeting::OneEnemy, kFirstEnemy + 1, false), (std::vector<int>{kFirstEnemy + 2}));
-	battle.combatant(kFirstEnemy + 2).hp = 0;
-	CHECK_EQ(battle.resolveTargets(kFighter, Targeting::OneEnemy, kFirstEnemy + 2, false), (std::vector<int>{kFirstEnemy}));
+	CHECK_EQ(battle.resolveTargets(kFighter, Targeting::OneEnemy, kFirstEnemy + 1, false), (std::vector<int>{kFirstEnemy}));
 	CHECK_EQ(battle.resolveTargets(kFirstEnemy, Targeting::OneEnemy, kMystic, false), (std::vector<int>{kMystic}));
+}
+
+// Each later tied enemy takes the place on a coin flip, so with three tied the last wins half the time.
+TEST(retargetTiesGoByACoinFlipPerLaterCandidate) {
+	Database db = data();
+	db.characters["fighter"].base.dexterity = 500;
+	std::vector<int> picks(3, 0);
+	const int trials = 4000;
+	for (int seed = 1; seed <= trials; ++seed) {
+		Battle battle = makeBattle(db, {"gel_mite", "gel_mite", "gel_mite", "gel_mite"}, static_cast<std::uint64_t>(seed));
+		battle.combatant(kFirstEnemy).hp = 0;
+		battle.combatant(kFirstEnemy).statuses = {{kDefeatedStatus, 0}};
+		for (int i = kFirstEnemy + 1; i < kFirstEnemy + 4; ++i) {
+			battle.combatant(i).hp = 50;
+		}
+		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+		othersDefend(battle);
+		const std::optional<Event> started = firstBy(battle.resolveRound(), EventType::ActionStarted, kFighter);
+		if (started && started->target > kFirstEnemy) {
+			++picks[static_cast<std::size_t>(started->target - kFirstEnemy - 1)];
+		}
+	}
+	const double shares[] = {25, 25, 50};
+	for (int k = 0; k < 3; ++k) {
+		const double share = 100.0 * picks[static_cast<std::size_t>(k)] / trials;
+		CHECK(share > shares[k] - 3 && share < shares[k] + 3);
+	}
+}
+
+// A one-ally action on a fallen ally is not moved: it does nothing, and its cost is still paid.
+TEST(aFallenAllyTargetIsKeptAndTheCostPaid) {
+	Battle battle = makeBattle(data(), {"brass_warden"}, 1);
+	battle.combatant(kFighter).hp = 0;
+	battle.combatant(kFighter).statuses = {{kDefeatedStatus, 0}};
+	const int tp = battle.combatant(kMedic).tp;
+	const int tonics = battle.inventory().at("tonic");
+	battle.setCommand(kMedic, Command::ability("mend", kFighter));
+	battle.setCommand(kScout, Command::item("tonic", kFighter));
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	CHECK(ofType(events, EventType::Retargeted).empty());
+	CHECK(ofType(events, EventType::Healed).empty());
+	const std::optional<Event> mend = firstBy(events, EventType::ActionStarted, kMedic);
+	CHECK(mend && mend->target == kFighter);
+	CHECK_EQ(battle.combatant(kMedic).tp, tp - 3);
+	CHECK_EQ(battle.inventory().at("tonic"), tonics - 1);
+	CHECK(ofType(events, EventType::ItemHadNoEffect).empty());
+	CHECK(!battle.combatant(kFighter).alive());
 }
 
 TEST(oneFallenAllyTargetsTheFallenOnly) {

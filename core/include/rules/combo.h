@@ -9,6 +9,9 @@
 
 namespace rules {
 
+// Combination detection looks at most this many queued turns ahead, the actor's own included.
+inline constexpr int kMaxComboParticipants = 4;
+
 // Fires when party members use these abilities back to back in one round.
 struct ComboRecipe {
 	std::string id;

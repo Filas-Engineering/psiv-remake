@@ -28,7 +28,7 @@ TEST(scriptedPlaythroughReachesItsFixedEnding) {
 	CHECK(text.find("the tide is the only sound") != std::string::npos);
 	CHECK(text.find("Quiet nights again") != std::string::npos);
 	// The poison from the first reed battle is carried out of it and cured by the campfire rest.
-	const std::size_t poisoned = text.find("[Poison 3]");
+	const std::size_t poisoned = text.find("[Poison]");
 	const std::size_t campfire = text.find("The warmth draws the ache out of everyone.");
 	CHECK(poisoned != std::string::npos && campfire != std::string::npos && poisoned < campfire);
 	CHECK(text.find("[Poison", campfire) == std::string::npos);

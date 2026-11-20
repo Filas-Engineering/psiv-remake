@@ -10,7 +10,8 @@ namespace {
 
 // Where each event type sits in BAT-010's phases: 0 before the first round, 1 round start, 2 command
 // selection, 3 order, 4 execution, 5 round end. BattleEnded can follow any action, so it has no phase.
-// A defeat belongs to the phase of the damage that caused it, an action's or a round-end tick's.
+// A defeat belongs to the phase of the action that caused it. A stat change with no actor is a status running out
+// at round end and leaving its stats at 1.
 int phaseOf(const Event& e, bool roundStarted, int last) {
 	if (!roundStarted) {
 		return 0;
@@ -29,8 +30,8 @@ int phaseOf(const Event& e, bool roundStarted, int last) {
 			return last;
 		}
 		return e.statusEnd == StatusEnd::Duration || e.statusEnd == StatusEnd::Recovered ? 5 : 4;
-	case EventType::StatusTicked:
-	case EventType::StatModifierExpired:
+	case EventType::StatModified:
+		return e.actor < 0 ? 5 : 4;
 	case EventType::RoundEnded:
 		return 5;
 	case EventType::BattleEnded:
@@ -83,12 +84,13 @@ void defeat(Battle& battle, int index) {
 ACC_CHECK(acc_bat_02, "ACC-BAT-02", "BAT-010, BAT-013") {
 	const Database& db = support::data(t);
 
-	// A round that exercises every phase: an action that weakens, a timed stat change, a poison tick and a short sleep.
+	// A round that exercises every phase: an action that weakens, a stat change, a short sleep and an enemy paralysis
+	// that runs out at round end.
 	{
 		Battle battle = support::create(db, support::setup(db, {"rust_hound", "gel_mite"}, 11));
 		support::sturdy(battle, 5);
 		support::sturdy(battle, 6);
-		battle.combatant(6).statuses.push_back({"poison", 3});
+		battle.combatant(6).statuses.push_back({"paralysis", 1});
 		battle.combatant(5).statuses.push_back({"sleep", 1});
 		battle.setCommand(2, Command::ability("weaken", 5));
 		battle.setCommand(0, Command::ability("rally", -1));
@@ -97,7 +99,11 @@ ACC_CHECK(acc_bat_02, "ACC-BAT-02", "BAT-010, BAT-013") {
 		const std::string problem = phaseProblem(events);
 		t.expect(problem.empty(), "round events are not in BAT-010 phase order: " + problem);
 		t.expect(!events.empty() && events.back().type == EventType::RoundEnded, "the round did not close with RoundEnded");
-		t.expect(support::countType(events, EventType::StatusTicked) == 1, "the poisoned enemy did not tick at round end");
+		int heldAtOne = 0;
+		for (const Event& e : support::ofType(events, EventType::StatModified)) {
+			heldAtOne += e.actor < 0 && e.target == 6 ? 1 : 0;
+		}
+		t.expect(heldAtOne == 2, "the enemy's paralysis ran out without leaving agility and dexterity at 1 in phase 5");
 		// Sleep's recovery roll comes first and may end it before the count down does.
 		bool expired = false;
 		for (const Event& e : events) {
@@ -176,18 +182,6 @@ ACC_CHECK(acc_bat_02, "ACC-BAT-02", "BAT-010, BAT-013") {
 		t.expect(battle.resolveRound().empty(), "a finished battle resolved another round");
 	}
 
-	// And after phase 5: a poison tick defeats the last enemy.
-	{
-		Battle battle = support::create(db, support::setup(db, {"gel_mite"}, 5));
-		battle.combatant(5).hp = 1;
-		battle.combatant(5).statusResist.clear();
-		battle.combatant(5).statuses.push_back({"poison", 3});
-		support::othersDefend(battle);
-		const std::vector<Event> events = battle.resolveRound();
-		t.expect(battle.outcome() == Outcome::Victory, "a round-end tick that defeats the last enemy did not end the battle");
-		t.expect(support::countType(events, EventType::BattleEnded) == 1, "no BattleEnded after the decisive tick");
-	}
-
 	// Defeat: every party member down.
 	{
 		Battle battle = support::create(db, support::setup(db, {"brass_warden"}, 9));
@@ -263,6 +257,6 @@ ACC_CHECK(acc_bat_02, "ACC-BAT-02", "BAT-010, BAT-013") {
 		t.expect(support::countType(events, EventType::BattleEnded) == 1, "a battle decided by a scripted condition reported other than one result");
 	}
 
-	t.note("phase order 0-1-2-3-4-5 holds in " + std::to_string(rounds) + " played rounds; CommandsLocked covers every living combatant that can act; OrderResolved matches the executed order; end conditions are checked after each action and after round end; " +
+	t.note("phase order 0-1-2-3-4-5 holds in " + std::to_string(rounds) + " played rounds; CommandsLocked covers every living combatant that can act; OrderResolved matches the executed order; end conditions are checked after each action and after round end (survive-rounds); " +
 		std::to_string(decided) + " of 200 random battles ended with exactly one result (" + std::to_string(scripted) + " scripted ends); Defeat, a status that counts toward Defeat, survive-rounds and enemy-defeated scripted ends, and Victory over a simultaneous scripted end all give one result");
 }

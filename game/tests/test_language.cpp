@@ -88,8 +88,7 @@ TEST(everyLanguageHasEveryKey) {
 
 TEST(battleDropsGoToTheInventoryAndAreShown) {
 	GameData d = test::data();
-	d.db.enemies.at("gel_mite").drops = {{"loosen_oil", 100, 2}};
-	d.db.enemies.at("rust_hound").drops = {};
+	d.db.encounters.at("training").drop = {"loosen_oil", 127};
 	Session s(d, SessionOptions());
 	test::placeParty(s, "reed_path", "west_gate", Facing::East);
 	addMember(s, "mystic", 12);
@@ -108,8 +107,8 @@ TEST(battleDropsGoToTheInventoryAndAreShown) {
 		s.resolveRound();
 	}
 	CHECK(s.mode() == Mode::Field);
-	CHECK_EQ(s.world().items["loosen_oil"], 4);
-	CHECK(test::outputHas(s.drainOutput(), "The enemies dropped 4 Loosen Oil."));
+	CHECK_EQ(s.world().items["loosen_oil"], 1);
+	CHECK(test::outputHas(s.drainOutput(), "The enemies dropped 1 Loosen Oil."));
 }
 
 TEST(theRegistryRejectsAWarpOrMoveToAnotherAreasMarker) {

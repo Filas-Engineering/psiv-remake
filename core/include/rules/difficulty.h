@@ -24,7 +24,8 @@ struct EnemyOverlay {
 	std::string enemy;
 	Stats statsPercent = Stats::filled(100);
 	std::vector<std::string> addAbilities;
-	std::optional<std::vector<AiRule>> ai;
+	std::optional<std::vector<std::string>> slots;
+	std::optional<std::vector<AiOverride>> overrides;
 	// Replaces the listed statuses' resistances; others keep the base value.
 	StatusResists statusResist;
 };
