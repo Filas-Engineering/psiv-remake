@@ -34,7 +34,9 @@ Verified with `make test`, `make acceptance` and `make bindings` (C tests, C# te
 * macOS 26.6 on arm64 with Apple clang 21.0.0 and .NET SDK 10.0.403.
 * Ubuntu 24.04.5 on aarch64 and on x86-64 in Docker (image `mcr.microsoft.com/dotnet/sdk:10.0`, .NET SDK 10.0.404, GNU Make 4.3, Python 3.12.3), once with GCC 13.3.0 and once with Ubuntu clang 18.1.3.
 
-Not verified: Windows with MSVC, and the sample's window on Linux (only its headless mode runs in the container).
+Windows: the core, events and game unit tests pass cross-compiled with MinGW-w64 (GCC 14) under Wine 10 (`tools/windows-check.sh`).
+
+Not verified: Windows with MSVC, the acceptance suites and bindings on Windows, and the sample's window on Linux (only its headless mode runs in the container).
 
 To rerun the Linux check (needs Docker):
 

@@ -33,6 +33,7 @@ make test          # core, events, game, text tooling
 make acceptance    # spec checks and report
 make bindings      # C tests, C# tests, MonoGame sample headless run
 make linux-check   # all three in Docker with gcc and clang
+tools/windows-check.sh   # unit tests cross-compiled for Windows, run under Wine
 ```
 
 Other compilers: `make CXX=g++ CC=gcc test`. Flags are `-std=c++17 -Wall -Wextra -Werror`, standard library only.
@@ -58,7 +59,7 @@ cd game && ./build/game_cli --bot --seed 2
 | C# | 13 tests pass |
 | MonoGame sample | headless run, 2000 frames, 0 failures |
 
-Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch64 and Linux x86-64 (GCC 13.3 and clang 18.1, Ubuntu 24.04 in Docker). Windows: see `tools/windows-check.sh` and "Open work".
+Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch64 and Linux x86-64 (GCC 13.3 and clang 18.1, Ubuntu 24.04 in Docker). Windows: the core, events and game unit tests pass when cross-compiled with MinGW-w64 (GCC 14) and run under Wine 10 (`tools/windows-check.sh`). That check does not cover MSVC, the acceptance suites or the bindings.
 
 ## Versions
 
@@ -121,7 +122,7 @@ The scripted playthrough needs the first battle lost twice and then won. After a
 
 **Engine.** Nothing is integrated with Unreal yet. The contract is the event stream (`core/README.md`, "Events") and the C API in `bindings/c`. The MonoGame sample shows the full loop with rectangles and text.
 
-**Platforms.** MSVC has not been tried. The MonoGame sample's window has only run on macOS.
+**Platforms.** MSVC has not been tried, and the acceptance suites and bindings have not run on Windows. The MonoGame sample's window has only run on macOS.
 
 ## Working conventions
 

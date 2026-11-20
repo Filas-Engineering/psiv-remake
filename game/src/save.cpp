@@ -969,7 +969,10 @@ bool writeFileAtomic(const std::string& path, const std::string& text, std::stri
 			return false;
 		}
 	}
-	if (std::rename(temp.c_str(), path.c_str()) != 0) {
+	// std::rename does not replace an existing file on Windows.
+	std::error_code failed;
+	std::filesystem::rename(temp, path, failed);
+	if (failed) {
 		error = "cannot replace " + path;
 		std::remove(temp.c_str());
 		return false;
