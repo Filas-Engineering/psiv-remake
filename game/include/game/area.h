@@ -86,8 +86,6 @@ struct RandomRules {
 	int maxSteps = 24;
 	// Distance units one cell adds to the counter (ENC-041).
 	int stepDistance = 1;
-	int partyFirstPercent = 8;
-	int enemyFirstPercent = 8;
 };
 
 struct Zone {

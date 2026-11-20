@@ -38,13 +38,18 @@ struct BattleSetup {
 	std::string difficulty;
 	RewardMultiplier rewardMultiplier = RewardMultiplier::X1;
 	std::uint64_t seed = 0;
+	// What escape rolls against; 240 or more forbids escape. -1 uses the highest enemy agility at battle start.
+	int escapeRating = -1;
 };
 
-// Fills the enemy group and the escape flag from an encounter. Returns an empty string, or the error.
+// Fills the enemy group, the escape flag and the escape rating from an encounter. Returns an empty string, or the error.
 std::string useEncounter(BattleSetup& setup, const Database& db, const std::string& encounterId);
 
 // The visible-mode opening for a contact between the leader and a visible enemy.
 Opening openingFromContact(bool leaderInEnemyRearArc, bool enemyChasing, bool enemyInLeaderRearArc);
+
+// The random-mode opening (ENC-022): the chance score of the party's highest agility against the encounter's awareness.
+Opening openingFromRoll(int roll, int partyAgility, int awareness);
 
 int rewardMultiplierPercent(RewardMultiplier multiplier);
 

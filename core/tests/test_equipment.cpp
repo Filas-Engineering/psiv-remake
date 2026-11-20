@@ -94,8 +94,8 @@ TEST(weaponElementAppliesTheTargetsAffinity) {
 		CHECK(damage[0].effectiveness == Effectiveness::Weak);
 		const int strength = battle.combatant(kMystic).stats.strength;
 		const int bonus = ofType(events, EventType::Critical).empty() ? 0 : formulas::criticalBonus(strength);
-		const int low = formulas::defended(formulas::damage(strength, 3, bonus, 150, formulas::kSpreadMin));
-		const int high = formulas::defended(formulas::damage(strength, 3, bonus, 150, formulas::kSpreadMax));
+		const int low = formulas::damage(strength, 3, bonus, 150, formulas::kSpreadMin);
+		const int high = formulas::damage(strength, 3, bonus, 150, formulas::kSpreadMax);
 		CHECK(damage[0].amount >= low && damage[0].amount <= high);
 	}
 }

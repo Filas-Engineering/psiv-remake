@@ -161,9 +161,9 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, s
 			break;
 		}
 		case EffectKind::ApplyStatus:
-			reader.rejectUnknownKeys(*entry, {"type", "status", "chance"});
+			reader.rejectUnknownKeys(*entry, {"type", "status", "threshold"});
 			readStatusRef(reader, db, *entry, "status", effect.status, true);
-			reader.integer(*entry, "chance", effect.chance, false, 1, 100);
+			reader.integer(*entry, "threshold", effect.threshold, false, 0, 255);
 			break;
 		case EffectKind::CureStatus:
 			reader.rejectUnknownKeys(*entry, {"type", "status"});
@@ -251,7 +251,7 @@ void parseStatuses(Reader& reader, const JsonValue& root, Database& db) {
 		}
 		reader.setContext("status '" + status.id + "'");
 		reader.rejectUnknownKeys(*entry, {"id", "name", "action", "forced_target", "blocks_techniques", "wakes_on_damage", "tick_damage_percent", "duration",
-			"recover_chance", "stacking", "persists_outside_battle", "counts_toward_defeat", "rest_cures"});
+			"enemy_duration", "recover_chance", "stacking", "persists_outside_battle", "counts_toward_defeat", "rest_cures"});
 		reader.string(*entry, "name", status.name);
 		std::string text;
 		if (reader.string(*entry, "action", text, false) && !parseStatusAction(text, status.action)) {
@@ -274,6 +274,7 @@ void parseStatuses(Reader& reader, const JsonValue& root, Database& db) {
 		reader.boolean(*entry, "wakes_on_damage", status.wakesOnDamage);
 		reader.integer(*entry, "tick_damage_percent", status.tickDamagePercent, false, 0, 100);
 		reader.integer(*entry, "duration", status.duration, false, 0, 99);
+		reader.integer(*entry, "enemy_duration", status.enemyDuration, false, 0, 99);
 		reader.integer(*entry, "recover_chance", status.recoverChance, false, 0, 100);
 		if (status.recoverChance > 0 && status.action != StatusAction::CannotAct) {
 			reader.fail(*entry->find("recover_chance"), "load.only_cannot_act_has_recover_chance", {});
@@ -837,8 +838,10 @@ void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("encounter '" + encounter.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "enemies", "escape"});
+		reader.rejectUnknownKeys(*entry, {"id", "enemies", "escape", "awareness", "escape_rating"});
 		reader.boolean(*entry, "escape", encounter.escapeAllowed);
+		const bool awarenessGiven = reader.integer(*entry, "awareness", encounter.awareness, false, 0, 255);
+		const bool escapeRatingGiven = reader.integer(*entry, "escape_rating", encounter.escapeRating, false, 0, 255);
 		const JsonValue* list = reader.get(*entry, "enemies", Type::Array, true);
 		if (!list) {
 			reader.setContext("");
@@ -866,6 +869,18 @@ void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
 		}
 		if (encounter.enemies.empty() || encounter.enemies.size() > static_cast<std::size_t>(kMaxEnemies)) {
 			reader.fail(*list, "load.needs_1_enemies", {std::to_string(kMaxEnemies)});
+		}
+		int highestAgility = 0;
+		for (const FormationSlot& slot : encounter.enemies) {
+			if (const EnemyDef* enemy = db.enemy(slot.enemy)) {
+				highestAgility = std::max(highestAgility, enemy->stats.agility);
+			}
+		}
+		if (!awarenessGiven) {
+			encounter.awareness = highestAgility;
+		}
+		if (!escapeRatingGiven) {
+			encounter.escapeRating = highestAgility;
 		}
 		insertUnique(db.encounters, encounter.id, encounter, reader, *entry);
 		reader.setContext("");

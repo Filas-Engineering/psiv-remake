@@ -1,6 +1,7 @@
 #include "rules/setup.h"
 
 #include "rules/database.h"
+#include "rules/formulas.h"
 
 namespace rules {
 
@@ -12,6 +13,7 @@ std::string useEncounter(BattleSetup& setup, const Database& db, const std::stri
 	setup.enemyGroup = encounter->id;
 	setup.enemies = encounter->enemies;
 	setup.flags.escapeAllowed = encounter->escapeAllowed;
+	setup.escapeRating = encounter->escapeRating;
 	return "";
 }
 
@@ -23,6 +25,14 @@ Opening openingFromContact(bool leaderInEnemyRearArc, bool enemyChasing, bool en
 		return Opening::EnemyFirst;
 	}
 	return Opening::Normal;
+}
+
+Opening openingFromRoll(int roll, int partyAgility, int awareness) {
+	const int score = formulas::chanceScore(roll, partyAgility, awareness);
+	if (score <= formulas::kEnemyFirstFloor) {
+		return Opening::EnemyFirst;
+	}
+	return score > formulas::kPartyFirstAbove ? Opening::PartyFirst : Opening::Normal;
 }
 
 int rewardMultiplierPercent(RewardMultiplier multiplier) {

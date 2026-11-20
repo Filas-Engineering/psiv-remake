@@ -2,6 +2,8 @@
 
 #include "rules/names.h"
 
+#include <limits>
+
 using namespace rules;
 
 namespace {
@@ -162,7 +164,7 @@ ACC_CHECK(acc_bat_04, "ACC-BAT-04", "BAT-015, BAT-071") {
 		Effect doze;
 		doze.kind = EffectKind::ApplyStatus;
 		doze.status = "sleep";
-		doze.chance = 100;
+		doze.threshold = std::numeric_limits<int>::min();
 		db.abilities["acc_doze"].effects = {doze};
 		db.enemies["rust_hound"].statusResist.clear();
 		Battle battle = support::create(db, support::setup(db, {"rust_hound"}, 27));

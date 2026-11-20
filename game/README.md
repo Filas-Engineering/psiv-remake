@@ -37,7 +37,7 @@ Run tests from `game/`, because they load `data/`. One test by name: `./build/ga
 ```
 ./build/game_cli                                    # interactive; type help
 ./build/game_cli --data data --core ../core/data    # the data directories given explicitly
-./build/game_cli --seed 10 --auto-battle --script data/scripts/playthrough.txt --saves build/cli_saves
+./build/game_cli --seed 6 --auto-battle --script data/scripts/playthrough.txt --saves build/cli_saves
 ./build/game_cli --bot --seed 2                     # pacing tables for visible and random encounters
 ./build/game_cli --bot --seed 2 --encounters random --route data/routes/main.route
 ./build/game_cli --registry                         # the registry built from the data, in the events registry format
@@ -127,7 +127,7 @@ Presentation-only script actions (moves, cameras, panels, audio, fades) go to th
 	"chests": [{"id": "cache", "at": [3, 1], "flag": "chest.cache", "items": {"tonic": 1}, "equipment": {}, "money": 30}],
 	"zones": [{"id": "reeds", "from": [1, 1], "to": [3, 2], "table": [{"encounter": "training", "weight": 1}],
 		"visible": {"spawns": [[2, 1]], "cap": 2, "detection_radius": 3, "leash_radius": 2, "chase_speed_percent": 110, "chase_ms": 6000, "wander_speed_percent": 50, "wander_percent": 50},
-		"random": {"min_steps": 6, "max_steps": 12, "step_distance": 1, "party_first_percent": 8, "enemy_first_percent": 8}}]
+		"random": {"min_steps": 6, "max_steps": 12, "step_distance": 1}}]
 }
 ```
 
@@ -174,7 +174,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Modes: Title, Field, Event (the spec's Cutscene), Battle, Menu, Shop. Shop follows the Menu rows. A Menu or Shop only closes back to the mode that opened it. Quit to Title (FLOW-022) resets the machine instead of using a transition, since the table has no Field to Title row.
 * Grid field: interaction range is the faced cell (FLD-030); contact (ENC-011) is one body trying to step into the other's cell; the rear 90-degree arc is ±45 degrees, inclusive, around the back direction (ENC-020/021).
 * Grace (ENC-015): for `grace_ms` after any battle no enemy chases or starts a battle, and the leader cannot walk through one. An escaped group returns to its leash. Defeated groups come back on area re-entry (ENC-014).
-* Random mode: the counter freezes in towns, during grace and outside zones (ENC-042); openings are drawn from the zone's percents (ENC-022/024 proposed defaults 8 and 8).
+* Random mode: the counter freezes in towns, during grace and outside zones (ENC-042); the opening comes from `rules::openingFromRoll`: the fastest living member's agility against the encounter's awareness (ENC-022).
 * Battle seeds come from the encounter stream; a retry XORs in a retry counter (BAT-134). Retry (FLOW-042) exists only where an autosave before the lost battle exists, which is event battles.
 * Defeat without a defeat branch is a game over (FLOW-041 to measure): back to Title, where Continue loads the newest save. A defeat with a `lose` branch stands fallen members up with 1 hit point before the branch runs.
 * Event battles: escape needs both the script's `flee` section and the encounter's escape flag. The opening comes from the script. The scripted end comes from the script (`until survive N`, `until defeat ENEMY`, using the enemy's first formation position); it pays the fallen enemies' rewards and returns to the `win` branch.
@@ -229,7 +229,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 
 ## Changes in the previous round
 
-* Builds against core rules version 7 (turn order, macro order, hit, damage, healing and escape follow the original; item drops, vehicles in data) and the events marker maps, scripted ends and game strings.
+* Builds against core rules version 8 (turn order, macro order, hit, damage, healing, Defend, status rolls, openings and escape follow the original; item drops, vehicles in data) and the events marker maps, scripted ends and game strings.
 * Battle drops are added to the inventory and shown. Scripted ends come from the script's `until`; `game.json` no longer takes `scripted_ends`. The registry knows each marker's area and each hook event's starting area, so the game's own warp check is gone.
 * Several languages: `game.json` takes `languages` instead of `strings` and `text`; a placeholder Japanese pair (`text/ja.strings`, `text/ja.json`) is added; the profile's text language picks the tables.
 * Speaker names and journal text moved from the text table to the dialogue tables. Area display names moved from the area files to `area.<id>` text keys (areas no longer take `name`). `Session` refusals are text keys.

@@ -1,8 +1,8 @@
 {
 	"statuses": [
 		{"id": "poison", "name": "Poison", "tick_damage_percent": 8, "duration": 4, "persists_outside_battle": true},
-		{"id": "sleep", "name": "Sleep", "action": "cannot_act", "wakes_on_damage": true, "duration": 3},
-		{"id": "paralysis", "name": "Paralysis", "action": "cannot_act", "recover_chance": 30, "duration": 3},
+		{"id": "sleep", "name": "Sleep", "action": "cannot_act", "recover_chance": 50},
+		{"id": "paralysis", "name": "Paralysis", "action": "cannot_act", "enemy_duration": 1},
 		{"id": "silence", "name": "Silence", "blocks_techniques": true, "duration": 3, "stacking": "extend"},
 		{"id": "jumble", "name": "Jumble", "action": "forced", "forced_target": "random_any", "duration": 2, "stacking": "keep"},
 		{"id": "gear_lock", "name": "Gear Lock", "action": "cannot_act", "counts_toward_defeat": true, "persists_outside_battle": true, "stacking": "keep"},

@@ -11,7 +11,7 @@ TEST(scriptedPlaythroughReachesItsFixedEnding) {
 	std::string script;
 	CHECK(readFile("data/scripts/playthrough.txt", script));
 	SessionOptions options;
-	options.seed = 10;
+	options.seed = 6;
 	options.saveDirectory = test::freshDirectory("playthrough");
 	Session s(test::data(), options);
 	std::ostringstream transcript;

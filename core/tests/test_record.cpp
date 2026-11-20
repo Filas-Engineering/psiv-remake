@@ -137,3 +137,16 @@ TEST(aChosenNameNamesTheCombatantAndSurvivesTheRecord) {
 	CHECK(parsed.ok() && parsed.value->setup.party[0].name == "Bryn Tidecaller" && parsed.value->setup.party[1].name.empty());
 	CHECK_EQ(battle.partyState()[0].name, std::string("Bryn Tidecaller"));
 }
+
+TEST(theRecordKeepsTheEscapeRatingTheBattleUsed) {
+	for (int rating : {-1, 240}) {
+		BattleSetup setup = makeSetup(data(), {"gel_mite", "rust_hound"}, 3);
+		setup.escapeRating = rating;
+		const Result<BattleRecord> parsed = parseRecord(serializeRecord(makeBattle(data(), setup).record()));
+		CHECK(parsed.ok());
+		if (parsed.ok()) {
+			CHECK_EQ(parsed.value->setup.escapeRating, rating < 0 ? data().enemy("rust_hound")->stats.agility : rating);
+			CHECK_EQ(parsed.value->setup.flags.escapeAllowed, rating < 0);
+		}
+	}
+}

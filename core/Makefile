@@ -20,7 +20,7 @@ test: $(TESTS) $(CLI)
 	./$(CLI) --seed 1 --auto > $(BUILD)/cli_auto.log
 	grep -q "^Outcome: " $(BUILD)/cli_auto.log
 	@echo "battle_cli --seed 1 --auto completed: $$(grep '^Outcome: ' $(BUILD)/cli_auto.log)"
-	./$(CLI) --seed 7 --auto --encounter warden --difficulty hard --reward 1.5 --record $(BUILD)/warden.record > $(BUILD)/cli_record.log
+	./$(CLI) --seed 11 --auto --encounter warden --difficulty hard --reward 1.5 --record $(BUILD)/warden.record > $(BUILD)/cli_record.log
 	./$(CLI) --replay $(BUILD)/warden.record > $(BUILD)/cli_replay.log
 	cmp $(BUILD)/cli_record.log $(BUILD)/cli_replay.log
 	@echo "battle_cli --replay matches the recorded run"

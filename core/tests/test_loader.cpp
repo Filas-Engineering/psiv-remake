@@ -287,3 +287,49 @@ TEST(syntaxErrorsCarryAKeyToo) {
 		CHECK(problemText().count(loaded.problems[0].message.key) == 1);
 	}
 }
+
+TEST(loaderReadsStatusThresholdsAndEncounterRatings) {
+	const Database& db = fixtures::data();
+	CHECK_EQ(db.abilities.at("hush").effects.at(0).threshold, 73);
+	CHECK_EQ(db.statuses.at("paralysis").enemyDuration, 1);
+	CHECK_EQ(db.statuses.at("paralysis").duration, 0);
+	CHECK_EQ(db.statuses.at("sleep").recoverChance, 50);
+
+	auto files = fixtures::dataTexts();
+	replaceOnce(files["enemies.json"], "{\"id\": \"warden\", \"enemies\": [\"brass_warden\", \"bog_wisp\"], \"escape\": false}",
+		"{\"id\": \"warden\", \"enemies\": [\"brass_warden\", \"bog_wisp\"], \"escape\": false, \"awareness\": 0, \"escape_rating\": 240}");
+	const Result<Database> loaded = loadDatabaseFromTexts(files);
+	CHECK(loaded.ok());
+	if (loaded.ok()) {
+		CHECK_EQ(loaded.value->encounter("warden")->awareness, 0);
+		CHECK_EQ(loaded.value->encounter("warden")->escapeRating, 240);
+	}
+}
+
+TEST(loaderRejectsBadThresholdsAndRatings) {
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["abilities.json"], "\"status\": \"silence\", \"threshold\": 73", "\"status\": \"silence\", \"chance\": 70");
+		expectError(files, "ability 'hush': unknown field 'chance'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["abilities.json"], "\"status\": \"silence\", \"threshold\": 73", "\"status\": \"silence\", \"threshold\": 256");
+		expectError(files, "ability 'hush': field 'threshold' must be between 0 and 255");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["statuses.json"], "\"enemy_duration\": 1", "\"enemy_duration\": 100");
+		expectError(files, "status 'paralysis': field 'enemy_duration' must be between 0 and 99");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["enemies.json"], "\"escape\": false}", "\"escape\": false, \"escape_rating\": 256}");
+		expectError(files, "encounter 'warden': field 'escape_rating' must be between 0 and 255");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["enemies.json"], "\"escape\": false}", "\"escape\": false, \"awareness\": -1}");
+		expectError(files, "encounter 'warden': field 'awareness' must be between 0 and 255");
+	}
+}

@@ -13,7 +13,8 @@ struct Effect {
 	int power = 0;
 	Element element = Element::None;
 	std::string status;
-	int chance = 100;
+	// ApplyStatus: the target resists when the status score is at or below this.
+	int threshold = 0;
 	Stat stat = Stat::Strength;
 	int percent = 0;
 	int duration = 0;

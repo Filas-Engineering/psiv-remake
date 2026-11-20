@@ -1,5 +1,6 @@
 #include "rules/battle.h"
 
+#include "rules/formulas.h"
 #include "rules/progression.h"
 
 #include <algorithm>
@@ -190,6 +191,13 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 		}
 		battle.combatants_.push_back(fromEnemy(rulesDb, *def, slot.group));
 	}
+	BattleSetup& kept = battle.record_.setup;
+	if (kept.escapeRating < 0) {
+		for (int i = battle.partyCount_; i < static_cast<int>(battle.combatants_.size()); ++i) {
+			kept.escapeRating = std::max(kept.escapeRating, battle.combatants_[i].effective(Stat::Agility));
+		}
+	}
+	kept.flags.escapeAllowed = kept.flags.escapeAllowed && kept.escapeRating < formulas::kEscapeForbiddenRating;
 	battle.commands_.resize(battle.combatants_.size());
 	battle.lastCommands_.resize(battle.combatants_.size());
 	battle.forced_.assign(battle.combatants_.size(), false);

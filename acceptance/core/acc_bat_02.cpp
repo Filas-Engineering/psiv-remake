@@ -28,7 +28,7 @@ int phaseOf(const Event& e, bool roundStarted, int last) {
 		if (e.statusEnd == StatusEnd::Defeated) {
 			return last;
 		}
-		return e.statusEnd == StatusEnd::Duration ? 5 : 4;
+		return e.statusEnd == StatusEnd::Duration || e.statusEnd == StatusEnd::Recovered ? 5 : 4;
 	case EventType::StatusTicked:
 	case EventType::StatModifierExpired:
 	case EventType::RoundEnded:
@@ -98,11 +98,12 @@ ACC_CHECK(acc_bat_02, "ACC-BAT-02", "BAT-010, BAT-013") {
 		t.expect(problem.empty(), "round events are not in BAT-010 phase order: " + problem);
 		t.expect(!events.empty() && events.back().type == EventType::RoundEnded, "the round did not close with RoundEnded");
 		t.expect(support::countType(events, EventType::StatusTicked) == 1, "the poisoned enemy did not tick at round end");
+		// Sleep's recovery roll comes first and may end it before the count down does.
 		bool expired = false;
 		for (const Event& e : events) {
-			expired = expired || (e.type == EventType::StatusRemoved && e.status == "sleep" && e.statusEnd == StatusEnd::Duration);
+			expired = expired || (e.type == EventType::StatusRemoved && e.status == "sleep" && (e.statusEnd == StatusEnd::Duration || e.statusEnd == StatusEnd::Recovered));
 		}
-		t.expect(expired, "a one-round sleep did not count down and expire in phase 5");
+		t.expect(expired, "a one-round sleep did not recover or count down and expire in phase 5");
 		const std::vector<Event> order = support::ofType(events, EventType::OrderResolved);
 		t.expect(order.size() == 1 && order[0].order == battle.lastTurnOrder(), "OrderResolved does not list the order the battle resolved");
 		t.expect(support::actingOrder(events) == battle.lastTurnOrder(), "actions did not execute in the order resolved in phase 3");

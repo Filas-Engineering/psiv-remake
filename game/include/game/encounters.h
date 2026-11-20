@@ -3,10 +3,13 @@
 #include "game/area.h"
 #include "game/world.h"
 
+#include "rules/character.h"
+#include "rules/database.h"
 #include "rules/types.h"
 
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -35,8 +38,9 @@ std::optional<EncounterStart> leaderBump(World& world, Cell target);
 std::optional<EncounterStart> tickVisibleEnemies(World& world, const Area& area, int tickMs, int leaderStepMs);
 
 // The leader finished a step onto `cell` in random mode. Returns a battle when the counter passes the
-// threshold (ENC-040). Does nothing during the grace period or outside a zone (ENC-042).
-std::optional<EncounterStart> randomStep(World& world, const Area& area, Cell cell);
+// threshold (ENC-040), with its opening rolled from the party's highest agility against the encounter's awareness
+// (ENC-022). Does nothing during the grace period or outside a zone (ENC-042).
+std::optional<EncounterStart> randomStep(World& world, const Area& area, Cell cell, const rules::Database& db, const std::vector<rules::PartyMember>& party);
 
 // Draws a new random threshold for the zone and clears the counter.
 void resetRandomCounter(World& world, const Zone& zone);

@@ -25,7 +25,9 @@ struct StatusDef {
 	int tickDamagePercent = 0;
 	// Rounds before it wears off; 0 lasts until cured or, unless it persists, until the battle ends.
 	int duration = 0;
-	// Rolled at the start of each turn the status would cancel.
+	// Replaces duration on an enemy when nonzero.
+	int enemyDuration = 0;
+	// Rolled at the end of each round.
 	int recoverChance = 0;
 	StatusStacking stacking = StatusStacking::Refresh;
 	bool persistsOutsideBattle = false;

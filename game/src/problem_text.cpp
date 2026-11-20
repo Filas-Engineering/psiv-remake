@@ -40,7 +40,6 @@ const rules::TextTable& problemText() {
 			{"data.missing_field", "missing field '{0}'"},
 			{"data.missing_message_key", "missing message key '{0}'"},
 			{"data.not_on_floor", "{0} is not on a floor cell"},
-			{"data.opening_percents_over_100", "opening percents add up to more than 100"},
 			{"data.rest_point_id_taken", "rest point id '{0}' is used by another rest point"},
 			{"data.scripted_end_enemy_not_in_group", "the scripted end names enemy '{0}', which is not in encounter '{1}'"},
 			{"data.shop_id_taken", "shop id '{0}' is used by another shop"},

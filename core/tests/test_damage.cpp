@@ -2,6 +2,8 @@
 #include "rules/formulas.h"
 #include "test.h"
 
+#include <algorithm>
+
 using namespace rules;
 using namespace fixtures;
 
@@ -14,7 +16,6 @@ TEST(damageMath) {
 	// Heavy armor still lets one point through, and nothing deals more than 999.
 	CHECK_EQ(formulas::damage(10, 50, 0, 100, formulas::kSpreadMean), 1);
 	CHECK_EQ(formulas::damage(500, 0, 400, 200, formulas::kSpreadMax), 999);
-	CHECK_EQ(formulas::defended(21), 10);
 	CHECK_EQ(formulas::criticalBonus(14), 3);
 	CHECK_EQ(formulas::criticalBonus(3), 0);
 	CHECK_EQ(formulas::chanceScore(10, 14, 20), 8);
@@ -27,6 +28,8 @@ TEST(affinityAndHealingMath) {
 	CHECK_EQ(formulas::damage(26, 4, 13, 100, formulas::kSpreadMean), 74);
 	CHECK_EQ(formulas::damage(26, 4, 13, 150, formulas::kSpreadMean), 113);
 	CHECK_EQ(formulas::damage(26, 4, 13, 50, formulas::kSpreadMean), 35);
+	// Defend's quarter.
+	CHECK_EQ(formulas::damage(26, 4, 13, 25, formulas::kSpreadMean), 15);
 	CHECK_EQ(formulas::damage(26, 4, 13, 0, formulas::kSpreadMean), 0);
 	CHECK_EQ(formulas::damage(26, 4, 13, -50, formulas::kSpreadMean), 0);
 	CHECK_EQ(formulas::healAmount(28, 12, formulas::kSpreadMean), 40);
@@ -92,21 +95,56 @@ TEST(battleAppliesWeaknessResistanceAndImmunity) {
 	}
 }
 
-TEST(defendingHalvesPhysicalDamage) {
+// With attack stats this high the quartered and the full damage ranges do not overlap, so the bounds tell them apart.
+TEST(defendQuartersOnlyPhysicalDamageWithoutAWeaponElement) {
 	Database db = data();
+	db.combos.clear();
+	db.characters["fighter"].base.strength = 200;
 	db.characters["fighter"].base.dexterity = 500;
+	db.characters["mystic"].base.strength = 200;
+	db.characters["mystic"].base.dexterity = 500;
+	db.characters["scout"].base.mental = 200;
+	CHECK(formulas::damage(200, 3, 0, 100, formulas::kSpreadMin) > formulas::damage(200, 3, formulas::criticalBonus(200), 25, formulas::kSpreadMax));
 	for (std::uint64_t seed = 1; seed <= 10; ++seed) {
-		Battle battle = makeBattle(db, {"gel_mite"}, seed);
-		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
-		othersDefend(battle);
-		const std::vector<Event> events = battle.resolveRound();
-		const std::vector<Event> damage = ofType(events, EventType::DamageDealt);
-		CHECK_EQ(damage.size(), std::size_t(1));
-		const int strength = battle.combatant(kFighter).stats.strength;
-		const int bonus = ofType(events, EventType::Critical).empty() ? 0 : formulas::criticalBonus(strength);
-		const int low = formulas::defended(formulas::damage(strength, 3, bonus, 100, formulas::kSpreadMin));
-		const int high = formulas::defended(formulas::damage(strength, 3, bonus, 100, formulas::kSpreadMax));
-		CHECK(!damage.empty() && damage[0].amount >= low && damage[0].amount <= high);
+		for (bool defending : {true, false}) {
+			Battle battle = makeBattle(db, {"gel_mite"}, seed);
+			battle.combatant(kFirstEnemy).hp = 5000;
+			battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+			battle.setCommand(kMystic, Command::attack(kFirstEnemy));
+			battle.setCommand(kScout, Command::ability("gust", kFirstEnemy));
+			battle.setCommand(kFirstEnemy, defending ? Command::defend() : Command::attack(kEngineer));
+			othersDefend(battle);
+			const std::vector<Event> events = battle.resolveRound();
+			const Combatant& target = battle.combatant(kFirstEnemy);
+			int checked = 0;
+			for (const Event& e : ofType(events, EventType::DamageDealt)) {
+				if (e.target != kFirstEnemy) {
+					continue;
+				}
+				++checked;
+				const int strength = battle.combatant(e.actor).stats.strength;
+				const bool critical = std::any_of(events.begin(), events.end(), [&](const Event& c) {
+					return c.type == EventType::Critical && c.actor == e.actor;
+				});
+				const int bonus = critical ? formulas::criticalBonus(strength) : 0;
+				int affinity = defending ? 25 : 100;
+				int attack = strength;
+				int defense = target.effective(Stat::Defense);
+				if (e.actor == kMystic) {
+					CHECK(e.element == Element::Heat);
+					affinity = target.affinity(Element::Heat);
+				} else if (e.actor == kScout) {
+					CHECK(e.element == Element::Gale);
+					affinity = target.affinity(Element::Gale);
+					attack = battle.combatant(kScout).effective(Stat::Mental);
+					defense = target.effective(Stat::Mental);
+				}
+				const int power = e.actor == kScout ? db.ability("gust")->effects[0].power : bonus;
+				CHECK(e.amount >= formulas::damage(attack, defense, power, affinity, formulas::kSpreadMin));
+				CHECK(e.amount <= formulas::damage(attack, defense, power, affinity, formulas::kSpreadMax));
+			}
+			CHECK_EQ(checked, 3);
+		}
 	}
 }
 

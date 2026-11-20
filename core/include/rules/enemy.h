@@ -67,6 +67,10 @@ struct Encounter {
 	std::string id;
 	std::vector<FormationSlot> enemies;
 	bool escapeAllowed = true;
+	// The party's agility rolls against these for a random-mode opening and for escape. Data may leave them
+	// out; the loader then uses the highest agility among the enemies.
+	int awareness = 0;
+	int escapeRating = 0;
 };
 
 }

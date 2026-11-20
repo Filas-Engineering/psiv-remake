@@ -72,10 +72,6 @@ bool Battle::cancelledByStatus(int actor, const Command& command, std::vector<Ev
 		if (!def || def->action != StatusAction::CannotAct) {
 			continue;
 		}
-		if (def->recoverChance > 0 && rng_.chance(def->recoverChance)) {
-			emitStatusRemoved(-1, actor, def->id, StatusEnd::Recovered, out);
-			continue;
-		}
 		cancel(actor, command, CancelReason::ActorUnable, def->id, out);
 		return true;
 	}
@@ -234,7 +230,6 @@ int Battle::rollSpread() {
 
 void Battle::attemptEscape(int actor, std::vector<Event>& out) {
 	int partyAgility = 0;
-	int enemyAgility = 0;
 	bool enemyCanAct = false;
 	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
 		if (!combatants_[i].alive() || combatants_[i].aboard) {
@@ -244,7 +239,6 @@ void Battle::attemptEscape(int actor, std::vector<Event>& out) {
 		if (isParty(i)) {
 			partyAgility = std::max(partyAgility, agility);
 		} else {
-			enemyAgility = std::max(enemyAgility, agility);
 			bool held = false;
 			for (const ActiveStatus& active : combatants_[i].statuses) {
 				const StatusDef* def = db_->status(active.id);
@@ -256,7 +250,7 @@ void Battle::attemptEscape(int actor, std::vector<Event>& out) {
 	Event& e = emit(out, EventType::EscapeAttempted);
 	e.actor = actor;
 	e.command = CommandKind::Escape;
-	e.succeeded = !enemyCanAct || formulas::chanceScore(rng_.range(0, formulas::kChanceRollMax), partyAgility, enemyAgility) > formulas::kEscapeFloor;
+	e.succeeded = !enemyCanAct || formulas::chanceScore(rng_.range(0, formulas::kChanceRollMax), partyAgility, record_.setup.escapeRating) > formulas::kEscapeFloor;
 	if (e.succeeded) {
 		outcome_ = Outcome::Escaped;
 	}
@@ -300,11 +294,8 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 					e.target = target;
 					e.ability = source;
 				}
-				const int affinity = attacker.element != Element::None ? t.affinity(attacker.element) : 100;
-				int damage = formulas::damage(attack, t.effective(Stat::Defense), bonus, affinity, rollSpread());
-				if (t.defending && damage > 0) {
-					damage = formulas::defended(damage);
-				}
+				const int affinity = attacker.element != Element::None ? t.affinity(attacker.element) : (t.defending ? formulas::kDefendedAffinity : 100);
+				const int damage = formulas::damage(attack, t.effective(Stat::Defense), bonus, affinity, rollSpread());
 				const Effectiveness effectiveness = attacker.element != Element::None ? effectivenessOf(affinity) : Effectiveness::Normal;
 				changed = dealDamage(user, target, damage, attacker.element, effectiveness, out) > 0 || changed;
 				break;
@@ -312,10 +303,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 			case EffectKind::ElementalDamage: {
 				const int affinity = t.affinity(effect.element);
 				const int attack = flatPower ? effect.power : attacker.mental;
-				int damage = formulas::damage(attack, t.effective(Stat::Mental), flatPower ? 0 : effect.power, affinity, rollSpread());
-				if (t.defending && damage > 0) {
-					damage = formulas::defended(damage);
-				}
+				const int damage = formulas::damage(attack, t.effective(Stat::Mental), flatPower ? 0 : effect.power, affinity, rollSpread());
 				changed = dealDamage(user, target, damage, effect.element, effectivenessOf(affinity), out) > 0 || changed;
 				break;
 			}
@@ -346,7 +334,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 					break;
 				}
 				const int resistance = t.resistance(effect.status);
-				if (resistance >= 100 || !rng_.chance(formulas::statusChance(effect.chance, resistance))) {
+				if (resistance >= 100 || formulas::statusScore(rng_.range(0, formulas::kChanceRollMax), attacker.mental, t.effective(Stat::Mental), resistance) <= effect.threshold) {
 					Event& e = emit(out, EventType::StatusResisted);
 					e.actor = user;
 					e.target = target;
@@ -355,11 +343,12 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 					e.message = statusMessageKey(effect.status, resistance >= 100 ? "immune" : "resisted");
 					break;
 				}
-				int remaining = def->duration;
+				const int duration = t.side == Side::Enemy && def->enemyDuration > 0 ? def->enemyDuration : def->duration;
+				int remaining = duration;
 				if (had && def->stacking == StatusStacking::Extend) {
 					for (ActiveStatus& active : t.statuses) {
-						if (active.id == effect.status && active.remaining > 0 && def->duration > 0) {
-							active.remaining = std::min(99, active.remaining + def->duration);
+						if (active.id == effect.status && active.remaining > 0 && duration > 0) {
+							active.remaining = std::min(99, active.remaining + duration);
 						}
 						if (active.id == effect.status) {
 							remaining = active.remaining;
@@ -367,7 +356,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 					}
 				} else {
 					removeStatus(target, effect.status);
-					t.statuses.push_back({effect.status, def->duration});
+					t.statuses.push_back({effect.status, duration});
 				}
 				Event& e = emit(out, EventType::StatusApplied);
 				e.actor = user;

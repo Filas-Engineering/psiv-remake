@@ -1,5 +1,7 @@
 #include "game/encounters.h"
 
+#include "rules/formulas.h"
+#include "rules/progression.h"
 #include "rules/setup.h"
 
 #include <algorithm>
@@ -233,7 +235,7 @@ void resetRandomCounter(World& world, const Zone& zone) {
 	world.randomThreshold = world.encounterStream.range(zone.random.minSteps, zone.random.maxSteps) * zone.random.stepDistance;
 }
 
-std::optional<EncounterStart> randomStep(World& world, const Area& area, Cell cell) {
+std::optional<EncounterStart> randomStep(World& world, const Area& area, Cell cell, const rules::Database& db, const std::vector<rules::PartyMember>& party) {
 	if (world.graceMs > 0 || area.kind == AreaKind::Town) {
 		return std::nullopt;
 	}
@@ -250,12 +252,13 @@ std::optional<EncounterStart> randomStep(World& world, const Area& area, Cell ce
 	}
 	EncounterStart start;
 	start.encounter = drawEncounter(world.encounterStream, *zone);
-	const int roll = world.encounterStream.range(1, 100);
-	if (roll <= zone->random.partyFirstPercent) {
-		start.opening = rules::Opening::PartyFirst;
-	} else if (roll <= zone->random.partyFirstPercent + zone->random.enemyFirstPercent) {
-		start.opening = rules::Opening::EnemyFirst;
+	int partyAgility = 0;
+	for (const rules::PartyMember& member : party) {
+		if (member.hp > 0) {
+			partyAgility = std::max(partyAgility, rules::memberStats(db, member).agility);
+		}
 	}
+	start.opening = rules::openingFromRoll(world.encounterStream.range(0, rules::formulas::kChanceRollMax), partyAgility, db.encounter(start.encounter)->awareness);
 	resetRandomCounter(world, *zone);
 	return start;
 }

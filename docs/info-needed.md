@@ -24,7 +24,7 @@ Deliver answers to `source-material/`, which git ignores. Nothing extracted from
 
 Many of the pages could only be read through search excerpts, so even the High rows need a check against the full page and the reference build.
 
-Turn order and macro order (BAT-030, BAT-052), the hit, critical, damage and healing formulas (BAT-042) and the escape roll (ENC-031) were read from the community disassembly and `core/` now follows them. The per-ability, per-enemy and per-formation numbers they use are content and still come from the rights holder. Where the published rule differs from what the spec still proposes, the spec row says so: BAT-013, BAT-020, BAT-103, ENC-030, SAV-002, SAV-003 and UI-003.
+Turn order and macro order (BAT-030, BAT-052), the hit, critical, damage, healing, Defend and status formulas (BAT-042), the opening roll (ENC-022) and the escape roll (ENC-031) were read from the community disassembly and `core/` now follows them. The per-ability, per-enemy and per-formation numbers they use are content and still come from the rights holder. Where the published rule differs from what the spec still proposes, the spec row says so: BAT-013, BAT-020, BAT-103, ENC-030, SAV-002, SAV-003 and UI-003.
 
 ## Data tables
 

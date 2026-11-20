@@ -3,6 +3,11 @@
 #include "game/encounters.h"
 #include "game/runner.h"
 
+#include "rules/progression.h"
+#include "rules/setup.h"
+
+#include <algorithm>
+#include <map>
 #include <sstream>
 
 using namespace game;
@@ -199,24 +204,95 @@ TEST(randomModeIsReproducibleAndCountsSteps) {
 	CHECK(first.find("Battle!") != std::string::npos);
 }
 
+namespace {
+
+std::vector<rules::PartyMember> startingParty(const rules::Database& db) {
+	std::vector<rules::PartyMember> party;
+	for (const std::string& id : db.lineup) {
+		party.push_back(rules::makePartyMember(db, *db.character(id), 1));
+	}
+	return party;
+}
+
+}
+
 TEST(randomCounterWaitsOutGraceAndTowns) {
+	const rules::Database& db = test::data().db;
+	const std::vector<rules::PartyMember> party = startingParty(db);
 	const Area& reeds = *test::data().area("reed_path");
 	const Area& town = *test::data().area("tidewater");
 	World w;
 	w.encounterStream.restore(3);
-	CHECK(!randomStep(w, town, {5, 5}));
+	CHECK(!randomStep(w, town, {5, 5}, db, party));
 	CHECK_EQ(w.randomCounter, 0);
 	w.graceMs = 10;
-	CHECK(!randomStep(w, reeds, {3, 3}));
+	CHECK(!randomStep(w, reeds, {3, 3}, db, party));
 	CHECK_EQ(w.randomCounter, 0);
 	w.graceMs = 0;
 	int steps = 0;
 	std::optional<EncounterStart> start;
 	while (!start && steps < 100) {
-		start = randomStep(w, reeds, {3, 3});
+		start = randomStep(w, reeds, {3, 3}, db, party);
 		++steps;
 	}
 	CHECK(start.has_value());
 	CHECK(steps >= 6 && steps <= 12);
 	CHECK_EQ(start->encounter, std::string("training"));
+}
+
+TEST(randomRulesRefuseTheOldOpeningPercents) {
+	std::string text = kRoom;
+	const std::string visible = "\"visible\": {";
+	text.insert(text.find(visible), "\"random\": {\"min_steps\": 2, \"party_first_percent\": 8}, ");
+	const rules::Result<Area> refused = parseArea("room.json", text);
+	CHECK(!refused.ok() && refused.error.find("party_first_percent") != std::string::npos);
+}
+
+// The stream gives the step threshold, then the encounter, then the opening roll (ENC-022).
+TEST(randomOpeningRollsTheFastestLivingMemberAgainstTheAwareness) {
+	const rules::Database& db = test::data().db;
+	const Area& reeds = *test::data().area("reed_path");
+	std::vector<rules::PartyMember> party = startingParty(db);
+	int fastest = 0;
+	for (std::size_t i = 1; i < party.size(); ++i) {
+		if (rules::memberStats(db, party[i]).agility > rules::memberStats(db, party[fastest]).agility) {
+			fastest = static_cast<int>(i);
+		}
+	}
+	party[fastest].hp = 0;
+	int agility = 0;
+	for (const rules::PartyMember& member : party) {
+		agility = member.hp > 0 ? std::max(agility, rules::memberStats(db, member).agility) : agility;
+	}
+	std::map<rules::Opening, int> seen;
+	for (std::uint64_t seed = 1; seed <= 200; ++seed) {
+		World w;
+		w.encounterStream.restore(seed);
+		rules::Rng mirror(seed);
+		const int threshold = mirror.range(reeds.zones[0].random.minSteps, reeds.zones[0].random.maxSteps);
+		mirror.range(1, 1);
+		const rules::Opening expected = rules::openingFromRoll(mirror.range(0, 63), agility, db.encounter("training")->awareness);
+		std::optional<EncounterStart> start;
+		int steps = 0;
+		while (!start && steps < 100) {
+			start = randomStep(w, reeds, {3, 3}, db, party);
+			++steps;
+		}
+		CHECK_EQ(steps, threshold);
+		CHECK(start && start->opening == expected);
+		++seen[expected];
+	}
+	CHECK(seen[rules::Opening::Normal] > 0 && seen[rules::Opening::PartyFirst] > 0 && seen[rules::Opening::EnemyFirst] > 0);
+
+	rules::Database alert = db;
+	alert.encounters["training"].awareness = 255;
+	for (std::uint64_t seed = 1; seed <= 20; ++seed) {
+		World w;
+		w.encounterStream.restore(seed);
+		std::optional<EncounterStart> start;
+		for (int steps = 0; !start && steps < 100; ++steps) {
+			start = randomStep(w, reeds, {3, 3}, alert, party);
+		}
+		CHECK(start && start->opening == rules::Opening::EnemyFirst);
+	}
 }

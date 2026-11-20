@@ -23,7 +23,7 @@
 			{"type": "elemental_damage", "power": 8, "element": "chill"}
 		]},
 		{"id": "hush", "name": "Hush", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
-			{"type": "apply_status", "status": "silence", "chance": 70}
+			{"type": "apply_status", "status": "silence", "threshold": 73}
 		]},
 		{"id": "gust", "name": "Gust", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
 			{"type": "elemental_damage", "power": 12, "element": "gale"}
@@ -47,7 +47,7 @@
 			{"type": "modify_stat", "stat": "strength", "percent": 30, "duration": 3}
 		]},
 		{"id": "drowse", "name": "Drowse", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
-			{"type": "apply_status", "status": "sleep", "chance": 60}
+			{"type": "apply_status", "status": "sleep", "threshold": 98}
 		]},
 		{"id": "cleave", "name": "Cleave", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
 			{"type": "physical_damage", "power": 0}
@@ -88,8 +88,8 @@
 			{"type": "modify_stat", "stat": "defense", "percent": -30, "duration": 2}
 		]},
 		{"id": "quiet_hour", "name": "Quiet Hour", "kind": "combo", "target": "enemy_group", "effects": [
-			{"type": "apply_status", "status": "sleep", "chance": 80},
-			{"type": "apply_status", "status": "silence", "chance": 80}
+			{"type": "apply_status", "status": "sleep", "threshold": 47},
+			{"type": "apply_status", "status": "silence", "threshold": 47}
 		]},
 		{"id": "sundering_cleave", "name": "Sundering Cleave", "kind": "combo", "target": "enemy_group", "effects": [
 			{"type": "physical_damage", "power": 7}
@@ -124,17 +124,17 @@
 
 		{"id": "venom_spit", "name": "Venom Spit", "kind": "technique", "cost": 2, "target": "one_enemy", "effects": [
 			{"type": "physical_damage", "power": 0},
-			{"type": "apply_status", "status": "poison", "chance": 70}
+			{"type": "apply_status", "status": "poison", "threshold": 73}
 		]},
 		{"id": "lullaby", "name": "Drone Hum", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
-			{"type": "apply_status", "status": "sleep", "chance": 35}
+			{"type": "apply_status", "status": "sleep", "threshold": 162}
 		]},
 		{"id": "patch", "name": "Patch Up", "kind": "technique", "cost": 3, "target": "one_ally", "effects": [
 			{"type": "heal", "power": 20}
 		]},
 		{"id": "numbing_sting", "name": "Numbing Sting", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
 			{"type": "physical_damage", "power": 0},
-			{"type": "apply_status", "status": "paralysis", "chance": 40}
+			{"type": "apply_status", "status": "paralysis", "threshold": 150}
 		]},
 		{"id": "gear_slam", "name": "Gear Slam", "kind": "technique", "cost": 5, "target": "one_enemy", "effects": [
 			{"type": "physical_damage", "power": 8}
@@ -147,10 +147,10 @@
 		]},
 		{"id": "lock_bolt", "name": "Lock Bolt", "kind": "technique", "cost": 5, "target": "one_enemy", "effects": [
 			{"type": "physical_damage", "power": 0},
-			{"type": "apply_status", "status": "gear_lock", "chance": 25}
+			{"type": "apply_status", "status": "gear_lock", "threshold": 188}
 		]},
 		{"id": "muddle_spores", "name": "Muddle Spores", "kind": "technique", "cost": 5, "target": "enemy_group", "effects": [
-			{"type": "apply_status", "status": "jumble", "chance": 40}
+			{"type": "apply_status", "status": "jumble", "threshold": 150}
 		]}
 	]
 }

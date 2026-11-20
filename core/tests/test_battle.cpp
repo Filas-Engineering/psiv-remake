@@ -14,16 +14,16 @@ TEST(seededBattleHasAFixedOutcome) {
 	Battle battle = makeBattle(data(), setup, &log);
 	const std::vector<Event> events = playToEnd(battle, 40);
 	CHECK(battle.outcome() == Outcome::Victory);
-	CHECK_EQ(battle.round(), 7);
+	CHECK_EQ(battle.round(), 3);
 	std::vector<int> hp;
 	for (int i = 0; i < battle.partyCount(); ++i) {
 		hp.push_back(battle.combatant(i).hp);
 	}
-	CHECK_EQ(hp, (std::vector<int>{32, 19, 22, 13, 42}));
+	CHECK_EQ(hp, (std::vector<int>{70, 38, 45, 42, 54}));
 	CHECK_EQ(battle.rewards().experience, 72);
 	CHECK_EQ(battle.rewards().currency, 59);
 	CHECK(log.isDiscovered("storm_spark"));
-	CHECK_EQ(ofType(events, EventType::Revived).size(), std::size_t(4));
+	CHECK_EQ(ofType(events, EventType::Revived).size(), std::size_t(1));
 	CHECK(events.back().type == EventType::BattleEnded && events.back().outcome == Outcome::Victory);
 	CHECK(battle.resolveRound().empty());
 }
@@ -284,7 +284,7 @@ TEST(defeatWithoutABranchIsAGameOver) {
 TEST(hardSeededBattleHasAFixedOutcome) {
 	// Golden values for the Hard overlay's target rules and added abilities; the CLI test plays the same battle.
 	ComboLog log;
-	BattleSetup setup = makeSetup(data(), {}, 7);
+	BattleSetup setup = makeSetup(data(), {}, 11);
 	CHECK(useEncounter(setup, data(), "warden").empty());
 	setup.difficulty = "hard";
 	setup.rewardMultiplier = RewardMultiplier::X1_5;

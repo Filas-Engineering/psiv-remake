@@ -28,10 +28,6 @@ int damage(int attack, int defense, int bonus, int affinity, int spread) {
 	return std::clamp(raw * affinity / 100 - defense, 1, kMaxDamage);
 }
 
-int defended(int damage) {
-	return std::max(1, damage / 2);
-}
-
 int healAmount(int power, int mental, int spread) {
 	return (mental * spread / 64 + mental + power * 2) / 2;
 }
@@ -44,8 +40,8 @@ int statusTick(int maxHp, int percent) {
 	return std::max(1, maxHp * percent / 100);
 }
 
-int statusChance(int chance, int resistance) {
-	return chance * (100 - std::clamp(resistance, 0, 100)) / 100;
+int statusScore(int roll, int actorMental, int targetMental, int resistance) {
+	return (roll + actorMental - targetMental) * ((100 - resistance) * 4 / 100);
 }
 
 int modifiedStat(int base, int percentTotal) {

@@ -49,6 +49,14 @@ void Battle::endOfRound(std::vector<Event>& out) {
 			continue;
 		}
 
+		const std::vector<ActiveStatus> held = c.statuses;
+		for (const ActiveStatus& active : held) {
+			const StatusDef* def = db_->status(active.id);
+			if (def && def->recoverChance > 0 && rng_.chance(def->recoverChance)) {
+				emitStatusRemoved(-1, i, active.id, StatusEnd::Recovered, out);
+			}
+		}
+
 		std::vector<std::string> expired;
 		for (ActiveStatus& active : c.statuses) {
 			if (active.remaining > 0 && --active.remaining == 0) {

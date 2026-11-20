@@ -1,4 +1,5 @@
 #include "fixtures.h"
+#include "rules/formulas.h"
 #include "test.h"
 
 #include <set>
@@ -72,6 +73,79 @@ TEST(openingFollowsContactRules) {
 	CHECK(openingFromContact(false, true, true) == Opening::EnemyFirst);
 	CHECK(openingFromContact(false, false, true) == Opening::Normal);
 	CHECK(openingFromContact(false, true, false) == Opening::Normal);
+}
+
+TEST(openingFromRollFollowsTheChanceScore) {
+	// The score is (roll + party agility - awareness) * 2, so it is always even.
+	CHECK(openingFromRoll(6, 10, 10) == Opening::EnemyFirst);
+	CHECK(openingFromRoll(7, 10, 10) == Opening::Normal);
+	CHECK(openingFromRoll(58, 10, 10) == Opening::Normal);
+	CHECK(openingFromRoll(59, 10, 10) == Opening::PartyFirst);
+	CHECK(openingFromRoll(0, 16, 10) == Opening::EnemyFirst);
+	CHECK(openingFromRoll(0, 17, 10) == Opening::Normal);
+	CHECK(openingFromRoll(63, 5, 10) == Opening::Normal);
+	CHECK(openingFromRoll(63, 6, 10) == Opening::PartyFirst);
+	CHECK(openingFromRoll(0, 5, 30) == Opening::EnemyFirst);
+	CHECK(openingFromRoll(63, 200, 0) == Opening::PartyFirst);
+}
+
+TEST(encountersFallBackToTheirFastestEnemy) {
+	const Database& db = data();
+	CHECK_EQ(db.encounter("training")->awareness, db.enemy("rust_hound")->stats.agility);
+	CHECK_EQ(db.encounter("training")->escapeRating, db.enemy("rust_hound")->stats.agility);
+	CHECK_EQ(db.encounter("warden")->escapeRating, db.enemy("bog_wisp")->stats.agility);
+
+	BattleSetup setup = makeSetup(db, {}, 1);
+	CHECK(useEncounter(setup, db, "training").empty());
+	CHECK_EQ(setup.escapeRating, db.encounter("training")->escapeRating);
+
+	// Without an encounter the battle takes the highest enemy agility at the start, after the difficulty overlay.
+	Database faster = db;
+	faster.enemies["gel_mite"].stats.agility = 40;
+	Battle battle = makeBattle(faster, {"rust_hound", "gel_mite"}, 1);
+	CHECK_EQ(battle.setup().escapeRating, 40);
+	BattleSetup rated = makeSetup(faster, {"rust_hound", "gel_mite"}, 1);
+	rated.escapeRating = 3;
+	CHECK_EQ(makeBattle(faster, rated).setup().escapeRating, 3);
+}
+
+TEST(escapeRollsAgainstTheEscapeRating) {
+	Database db = data();
+	db.characters["scout"].base.agility = 100;
+	for (std::uint64_t seed = 1; seed <= 10; ++seed) {
+		for (int rating : {0, 160}) {
+			BattleSetup setup = makeSetup(db, {"gel_mite"}, seed);
+			setup.escapeRating = rating;
+			Battle battle = makeBattle(db, setup);
+			const int agility = battle.combatant(kScout).effective(Stat::Agility);
+			// These ratings decide the escape whatever the roll.
+			CHECK(formulas::chanceScore(formulas::kChanceRollMax, agility, 160) <= formulas::kEscapeFloor);
+			CHECK(formulas::chanceScore(0, agility, 0) > formulas::kEscapeFloor);
+			battle.setCommand(kScout, Command::escape());
+			othersDefend(battle);
+			const std::optional<Event> attempt = firstBy(battle.resolveRound(), EventType::EscapeAttempted, kScout);
+			CHECK(attempt && attempt->succeeded == (rating == 0));
+		}
+	}
+}
+
+TEST(anEscapeRatingOf240ForbidsEscape) {
+	for (int rating : {239, 240, 255}) {
+		BattleSetup setup = makeSetup(data(), {"gel_mite"}, 1);
+		setup.escapeRating = rating;
+		Battle battle = makeBattle(data(), setup);
+		CHECK_EQ(battle.escapeAllowed(), rating < 240);
+		CHECK_EQ(battle.setCommand(kScout, Command::escape()).key, std::string(rating < 240 ? "" : "command.escape_forbidden"));
+		othersDefend(battle);
+		const std::vector<Event> started = ofType(battle.resolveRound(), EventType::BattleStarted);
+		CHECK(started.size() == 1 && started[0].flags.escapeAllowed == (rating < 240));
+	}
+	// An encounter's rating goes through useEncounter.
+	Database db = data();
+	db.encounters["training"].escapeRating = 240;
+	BattleSetup setup = makeSetup(db, {}, 1);
+	CHECK(useEncounter(setup, db, "training").empty());
+	CHECK(!makeBattle(db, setup).escapeAllowed());
 }
 
 TEST(encounterCanForbidEscape) {

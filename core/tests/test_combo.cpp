@@ -172,8 +172,8 @@ TEST(comboAveragesEveryParticipantsStats) {
 		const std::vector<Event> events = sparkThenGust(battle);
 		CHECK_EQ(ofType(events, EventType::ComboTriggered).size(), std::size_t(1));
 		const int mental = (battle.combatant(kMystic).stats.mental + battle.combatant(kScout).stats.mental) / 2;
-		const int low = formulas::defended(formulas::damage(mental, 10, 40, 100, formulas::kSpreadMin));
-		const int high = formulas::defended(formulas::damage(mental, 10, 40, 100, formulas::kSpreadMax));
+		const int low = formulas::damage(mental, 10, 40, 100, formulas::kSpreadMin);
+		const int high = formulas::damage(mental, 10, 40, 100, formulas::kSpreadMax);
 		bool found = false;
 		for (const Event& e : ofType(events, EventType::DamageDealt)) {
 			if (e.target == kFirstEnemy && e.element == Element::Shock) {

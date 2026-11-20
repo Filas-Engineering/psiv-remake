@@ -954,7 +954,7 @@ void Session::arrive(Cell cell) {
 		}
 	}
 	if (encounterMode() == EncounterMode::Random) {
-		if (std::optional<EncounterStart> start = randomStep(world_, a, cell)) {
+		if (std::optional<EncounterStart> start = randomStep(world_, a, cell, data_.db, activeParty())) {
 			startFieldBattle(*start);
 		}
 	}

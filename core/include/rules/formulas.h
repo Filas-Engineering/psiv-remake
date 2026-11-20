@@ -13,6 +13,11 @@ constexpr int kChanceRollMax = 63;
 constexpr int kHitFloor = 8;
 constexpr int kCriticalAbove = 116;
 constexpr int kEscapeFloor = 40;
+// An escape rating at or above this forbids escape.
+constexpr int kEscapeForbiddenRating = 240;
+// A random-mode opening is Enemy first at or below the floor and Party first above the ceiling.
+constexpr int kEnemyFirstFloor = 12;
+constexpr int kPartyFirstAbove = 116;
 // A spread is 8 plus sixteen rolls of 0 to 7. It scales the attacking stat by spread / 64.
 constexpr int kSpreadRolls = 16;
 constexpr int kSpreadRollMax = 7;
@@ -21,6 +26,8 @@ constexpr int kSpreadMin = kSpreadBase;
 constexpr int kSpreadMean = 64;
 constexpr int kSpreadMax = kSpreadBase + kSpreadRolls * kSpreadRollMax;
 constexpr int kMaxDamage = 999;
+// A defending target takes a physical hit without a weapon element as if its affinity were this.
+constexpr int kDefendedAffinity = 25;
 
 // The largest roll in a round: just under half the highest agility among those acting.
 int initiativeSpread(int highestAgility);
@@ -30,11 +37,11 @@ int chanceScore(int roll, int actorStat, int targetStat);
 int criticalBonus(int attack);
 // The attack scaled by the spread, plus the attack and twice the bonus, scaled by affinity, less defense. 1 to 999; 0 when immune.
 int damage(int attack, int defense, int bonus, int affinity, int spread);
-int defended(int damage);
 int healAmount(int power, int mental, int spread);
 int reviveHp(int maxHp, int percent);
 int statusTick(int maxHp, int percent);
-int statusChance(int chance, int resistance);
+// A status is resisted when the score is at or below the effect's threshold.
+int statusScore(int roll, int actorMental, int targetMental, int resistance);
 int modifiedStat(int base, int percentTotal);
 int experienceToNextLevel(int level);
 

@@ -46,7 +46,7 @@ std::string tempDirectory(const std::string& name) {
 game::SessionOptions options(const std::string& saveDirectory) {
 	game::SessionOptions o;
 	o.saveDirectory = saveDirectory;
-	o.seed = 10;
+	o.seed = 6;
 	return o;
 }
 

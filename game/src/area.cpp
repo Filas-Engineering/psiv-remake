@@ -186,17 +186,12 @@ void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 	}
 	if (const JsonValue* v = reader.field(z, "random", JsonValue::Type::Object, false)) {
 		RandomRules& r = zone.random;
-		reader.only(*v, {"min_steps", "max_steps", "step_distance", "party_first_percent", "enemy_first_percent"});
+		reader.only(*v, {"min_steps", "max_steps", "step_distance"});
 		reader.integer(*v, "min_steps", r.minSteps, false, 1, 1000);
 		reader.integer(*v, "max_steps", r.maxSteps, false, 1, 1000);
 		reader.integer(*v, "step_distance", r.stepDistance, false, 1, 100);
-		reader.integer(*v, "party_first_percent", r.partyFirstPercent, false, 0, 100);
-		reader.integer(*v, "enemy_first_percent", r.enemyFirstPercent, false, 0, 100);
 		if (r.maxSteps < r.minSteps) {
 			reader.fail(*v, "data.max_steps_below_min_steps", {});
-		}
-		if (r.partyFirstPercent + r.enemyFirstPercent > 100) {
-			reader.fail(*v, "data.opening_percents_over_100", {});
 		}
 	}
 }

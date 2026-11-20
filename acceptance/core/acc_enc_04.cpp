@@ -16,6 +16,8 @@ struct Configuration {
 	int level;
 	// Enemies, from the first, put to sleep before the attempt.
 	int asleep;
+	// The setup's escape rating; -1 leaves it to the highest enemy agility at battle start.
+	int rating;
 };
 
 int highestAgility(const Battle& battle, bool party) {
@@ -32,19 +34,21 @@ int highestAgility(const Battle& battle, bool party) {
 
 ACC_CHECK(acc_enc_04, "ACC-ENC-04", "ENC-030, ENC-031") {
 	const Database& db = support::data(t);
-	const std::vector<Configuration> configurations = {{{"gel_mite", "gel_mite"}, 1, 0}, {{"rust_hound", "bog_wisp"}, 1, 0}, {{"gel_mite"}, 12, 0},
-		{{"brass_warden", "bog_wisp"}, 1, 0}, {{"brass_warden", "bog_wisp"}, 1, 1}, {{"rust_hound", "bog_wisp"}, 1, 2}};
+	const std::vector<Configuration> configurations = {{{"gel_mite", "gel_mite"}, 1, 0, -1}, {{"rust_hound", "bog_wisp"}, 1, 0, -1}, {{"gel_mite"}, 12, 0, -1},
+		{{"brass_warden", "bog_wisp"}, 1, 0, -1}, {{"brass_warden", "bog_wisp"}, 1, 1, -1}, {{"rust_hound", "bog_wisp"}, 1, 2, -1},
+		{{"rust_hound", "bog_wisp"}, 1, 0, 0}, {{"gel_mite", "gel_mite"}, 1, 0, 30}};
 	std::string summary;
 	for (const Configuration& c : configurations) {
 		int successes = 0;
 		int mismatches = 0;
 		double chance = 0;
 		// Battle seeds come from a seeded stream, as BAT-134 draws them from the encounter stream.
-		Rng seeds(static_cast<std::uint64_t>(c.level) * 1000 + c.enemies.size() * 10 + c.asleep);
+		Rng seeds(static_cast<std::uint64_t>(c.level) * 1000 + c.enemies.size() * 10 + c.asleep + static_cast<std::uint64_t>(c.rating + 1) * 100000);
 		for (int attempt = 0; attempt < kAttempts; ++attempt) {
 			const std::uint64_t seed = seeds.next();
 			BattleSetup s = support::setup(db, c.enemies, seed, c.level);
 			s.flags.escapeAllowed = true;
+			s.escapeRating = c.rating;
 			Battle battle = support::create(db, s);
 			for (int i = 0; i < static_cast<int>(battle.combatants().size()); ++i) {
 				support::sturdy(battle, i);
@@ -54,7 +58,8 @@ ACC_CHECK(acc_enc_04, "ACC-ENC-04", "ENC-030, ENC-031") {
 			}
 			const bool enemyCanAct = c.asleep < static_cast<int>(c.enemies.size());
 			const int party = highestAgility(battle, true);
-			const int enemy = highestAgility(battle, false);
+			const int enemy = c.rating >= 0 ? c.rating : highestAgility(battle, false);
+			t.expect(battle.setup().escapeRating == enemy, "the battle's escape rating is not the setup's, or without one the highest enemy agility at battle start");
 			// Rolls of 0 to 63 that score above the floor.
 			const int lowestRoll = std::max(0, formulas::kEscapeFloor / 2 + 1 - (party - enemy));
 			chance = enemyCanAct ? 100.0 * std::max(0, formulas::kChanceRollMax + 1 - lowestRoll) / (formulas::kChanceRollMax + 1) : 100.0;
@@ -91,12 +96,16 @@ ACC_CHECK(acc_enc_04, "ACC-ENC-04", "ENC-030, ENC-031") {
 		summary += (summary.empty() ? "" : ", ") + std::to_string(static_cast<int>(chance + 0.5)) + "%";
 	}
 
-	// Disabled escape never succeeds: the command is refused, and a macro step falls back.
-	{
+	// Disabled escape never succeeds: the command is refused, and a macro step falls back. An escape rating of 240 or
+	// more disables it the same way.
+	for (int rating : {-1, 240}) {
 		BattleSetup s = support::setup(db, {}, 1);
-		useEncounter(s, db, "warden");
+		useEncounter(s, db, rating < 0 ? "warden" : "training");
+		if (rating >= 0) {
+			s.escapeRating = rating;
+		}
 		Battle battle = support::create(db, s);
-		t.expect(!battle.escapeAllowed(), "the boss encounter does not disable escape");
+		t.expect(!battle.escapeAllowed(), rating < 0 ? "the boss encounter does not disable escape" : "an escape rating of 240 does not disable escape");
 		t.expect(!battle.setCommand(0, Command::escape()).empty(), "an escape command was accepted in a battle that disables escape");
 		Macro run;
 		run.name = "acc_run";
@@ -111,6 +120,6 @@ ACC_CHECK(acc_enc_04, "ACC-ENC-04", "ENC-030, ENC-031") {
 		}
 	}
 
-	t.note(std::to_string(kAttempts) + " seeded attempts in each of 6 configurations match the replayed escape roll, and the rate is within 1 point of the rule (" + summary +
-		"); with every enemy asleep escape always succeeds; success ends the battle as Escaped, drops later actions and grants no rewards; disabled escape is refused");
+	t.note(std::to_string(kAttempts) + " seeded attempts in each of " + std::to_string(configurations.size()) + " configurations (two with a set escape rating) match the replayed escape roll against the escape rating, and the rate is within 1 point of the rule (" + summary +
+		"); with every enemy asleep escape always succeeds; success ends the battle as Escaped, drops later actions and grants no rewards; escape disabled by the encounter or by a rating of 240 is refused");
 }

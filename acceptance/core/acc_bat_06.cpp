@@ -70,8 +70,9 @@ ACC_CHECK(acc_bat_06, "ACC-BAT-06", "BAT-042") {
 			if (hit) {
 				const int attack = a.effective(Stat::Strength);
 				const int bonus = db.ability(a.basicAttack)->effects[0].power + (critical ? formulas::criticalBonus(attack) : 0);
-				const int affinity = a.attackElement != Element::None ? d.affinity(a.attackElement) : 100;
-				expected = formulas::defended(formulas::damage(attack, d.effective(Stat::Defense), bonus, affinity, spread(rng)));
+				// The target defends, which quarters a hit without a weapon element.
+				const int affinity = a.attackElement != Element::None ? d.affinity(a.attackElement) : 25;
+				expected = formulas::damage(attack, d.effective(Stat::Defense), bonus, affinity, spread(rng));
 			}
 			const std::vector<Event> events = battle.resolveRound();
 			const int dealt = damageTo(events, first);
@@ -95,7 +96,8 @@ ACC_CHECK(acc_bat_06, "ACC-BAT-06", "BAT-042") {
 			support::expectedOrder(battle, rng);
 			const Combatant& a = battle.combatant(1);
 			const Combatant& d = battle.combatant(first);
-			const int expected = formulas::defended(formulas::damage(a.effective(Stat::Mental), d.effective(Stat::Mental), db.ability("spark")->effects[0].power, d.affinity(Element::Shock), spread(rng)));
+			// Defend does nothing against elemental damage.
+			const int expected = formulas::damage(a.effective(Stat::Mental), d.effective(Stat::Mental), db.ability("spark")->effects[0].power, d.affinity(Element::Shock), spread(rng));
 			const int dealt = damageTo(battle.resolveRound(), first);
 			t.expect(dealt == expected, "seed " + std::to_string(seed) + ": elemental damage " + std::to_string(dealt) + ", formula gives " + std::to_string(expected));
 			++samples;

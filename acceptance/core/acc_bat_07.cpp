@@ -6,6 +6,7 @@
 #include "rules/text.h"
 
 #include <cstdlib>
+#include <limits>
 
 using namespace rules;
 
@@ -23,7 +24,7 @@ void addAbility(Database& db, const std::string& id, EffectKind kind, const std:
 	Effect effect;
 	effect.kind = kind;
 	effect.status = status;
-	effect.chance = 100;
+	effect.threshold = std::numeric_limits<int>::min();
 	ability.effects = {effect};
 	db.abilities[id] = ability;
 }
@@ -107,8 +108,10 @@ ACC_CHECK(acc_bat_07, "ACC-BAT-07", "BAT-081") {
 		battle.setCommand(kFirst, Command::ability("venom_spit", 1));
 		support::othersDefend(battle);
 		std::vector<Event> events = battle.resolveRound();
+		// The target is an enemy, so enemy_duration replaces duration when it is set.
+		const int duration = status.enemyDuration > 0 ? status.enemyDuration : status.duration;
 		const Event* applied = find(events, EventType::StatusApplied, id, kFirst);
-		t.expect(applied && applied->duration == status.duration, id + ": a 100% application did not apply with the data's duration");
+		t.expect(applied && applied->duration == duration, id + ": a certain application did not apply with the data's duration for an enemy");
 
 		bool recovered = find(events, EventType::StatusRemoved, id, kFirst) != nullptr;
 		if (status.action == StatusAction::CannotAct) {
@@ -118,7 +121,7 @@ ACC_CHECK(acc_bat_07, "ACC-BAT-07", "BAT-081") {
 					cancelled = &e;
 				}
 			}
-			t.expect((cancelled && cancelled->cancel == CancelReason::ActorUnable && cancelled->status == id) || (status.recoverChance > 0 && recovered),
+			t.expect(cancelled && cancelled->cancel == CancelReason::ActorUnable && cancelled->status == id,
 				id + ": the target was not cancelled as unable to act while the status says cannot_act");
 			++rules["cannot act"];
 		} else if (status.blocksTechniques) {
@@ -187,29 +190,46 @@ ACC_CHECK(acc_bat_07, "ACC-BAT-07", "BAT-081") {
 				break;
 			}
 		}
-		if (status.duration > 0 && expiredRound > 0) {
-			t.expect(expiredRound == status.duration, id + ": expired after " + std::to_string(expiredRound) + " rounds, data says " + std::to_string(status.duration));
-		} else if (status.duration > 0) {
-			t.expect(recovered, id + ": never expired although its data lasts " + std::to_string(status.duration) + " rounds");
+		if (duration > 0 && expiredRound > 0) {
+			t.expect(expiredRound == duration, id + ": expired after " + std::to_string(expiredRound) + " rounds, data says " + std::to_string(duration));
+		} else if (duration > 0) {
+			t.expect(recovered, id + ": never expired although its data lasts " + std::to_string(duration) + " rounds");
 		} else if (status.recoverChance == 0 && !status.wakesOnDamage && status.tickDamagePercent == 0) {
 			t.expect(battle.combatant(kFirst).hasStatus(id), id + ": a status with no round limit wore off by itself");
 		}
 
-		// Recovery: rolled at the start of each turn it would cancel.
-		if (status.action == StatusAction::CannotAct && status.recoverChance > 0) {
+		// Recovery: rolled at the end of each round, after the round's actions and ticks. Nobody's action draws here, so
+		// the roll follows the initiative rolls.
+		if (status.recoverChance > 0) {
 			++rules["recover chance"];
 			int recoveries = 0;
+			int mismatches = 0;
+			int early = 0;
 			const int trials = 4000;
 			for (int seed = 1; seed <= trials; ++seed) {
-				Battle rolled = support::create(db, support::setup(db, {"rust_hound"}, static_cast<std::uint64_t>(seed) * 13 + 1));
+				const std::uint64_t battleSeed = static_cast<std::uint64_t>(seed) * 13 + 1;
+				Battle rolled = support::create(db, support::setup(db, {"rust_hound"}, battleSeed));
 				support::sturdy(rolled, kFirst);
 				rolled.combatant(kFirst).statuses.push_back({id, 0});
 				support::othersDefend(rolled);
-				const Event* removed = find(rolled.resolveRound(), EventType::StatusRemoved, id, kFirst);
-				recoveries += removed && removed->statusEnd == StatusEnd::Recovered ? 1 : 0;
+				Rng rng(battleSeed);
+				support::expectedOrder(rolled, rng);
+				const bool expected = rng.chance(status.recoverChance);
+				const std::vector<Event> round = rolled.resolveRound();
+				const Event* removed = find(round, EventType::StatusRemoved, id, kFirst);
+				const bool recoveredNow = removed && removed->statusEnd == StatusEnd::Recovered;
+				recoveries += recoveredNow ? 1 : 0;
+				mismatches += recoveredNow != expected ? 1 : 0;
+				if (recoveredNow) {
+					for (const Event* e = removed; e != round.data() + round.size(); ++e) {
+						early += e->type == EventType::ActionStarted || e->type == EventType::ActionCancelled ? 1 : 0;
+					}
+				}
 			}
 			const double rate = 100.0 * recoveries / trials;
-			t.expect(std::abs(rate - status.recoverChance) <= 3.0, id + ": recovered in " + std::to_string(rate) + "% of turns, data says " + std::to_string(status.recoverChance) + "%");
+			t.expect(mismatches == 0, id + ": " + std::to_string(mismatches) + " of " + std::to_string(trials) + " recovery rolls disagree with the replayed draw");
+			t.expect(early == 0, id + ": a recovery came before an action of the same round");
+			t.expect(std::abs(rate - status.recoverChance) <= 3.0, id + ": recovered in " + std::to_string(rate) + "% of rounds, data says " + std::to_string(status.recoverChance) + "%");
 		}
 
 		// Wakes on damage, per data.

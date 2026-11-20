@@ -66,7 +66,7 @@ static psiv_session* create(const char* saves, int encounterMode, int presentati
 	psiv_session_options_init(&options);
 	options.data_dir = dataDir;
 	options.save_dir = saves;
-	options.seed = 12;
+	options.seed = 96;
 	options.encounter_mode = encounterMode;
 	options.presentation = presentation;
 	if (psiv_session_create(&options, &s) != PSIV_OK) {

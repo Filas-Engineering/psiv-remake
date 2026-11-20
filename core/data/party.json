@@ -64,6 +64,7 @@
 			"basic_attack": "ram",
 			"abilities": ["steam_vent", "patch"],
 			"affinities": {"shock": 150},
+			"status_resist": {"paralysis": 100},
 			"crew_damage_percent": 25
 		}
 	],
