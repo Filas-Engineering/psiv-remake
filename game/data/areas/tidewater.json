@@ -22,7 +22,8 @@
 		"inn_front": [3, 6],
 		"crate_front": [11, 6],
 		"dock_front": [10, 3],
-		"hold_front": [12, 2]
+		"hold_front": [12, 2],
+		"greet_spot": [5, 4]
 	},
 	"exits": [{"at": [13, 4], "to": "reed_path", "marker": "west_gate"}],
 	"hooks": [

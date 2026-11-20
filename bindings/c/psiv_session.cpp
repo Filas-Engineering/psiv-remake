@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-#define PSIV_BINDING_VERSION "0.2.0"
+#define PSIV_BINDING_VERSION "0.3.0"
 
 static_assert(PSIV_MODE_SHOP == static_cast<int>(game::Mode::Shop), "psiv_mode");
 static_assert(PSIV_MENU_NAME_ENTRY == static_cast<int>(game::MenuKind::NameEntry), "psiv_menu_kind");
@@ -448,7 +448,7 @@ const char* psiv_version(void) {
 uint32_t psiv_sizeof(const char* struct_name) {
 #define PSIV_SIZE(name) {#name, static_cast<uint32_t>(sizeof(name))}
 	static const std::map<std::string, uint32_t> sizes = {
-		PSIV_SIZE(psiv_ability_info), PSIV_SIZE(psiv_action), PSIV_SIZE(psiv_active_status), PSIV_SIZE(psiv_battle_event),
+		PSIV_SIZE(psiv_ability_info), PSIV_SIZE(psiv_action), PSIV_SIZE(psiv_actor), PSIV_SIZE(psiv_active_status), PSIV_SIZE(psiv_battle_event),
 		PSIV_SIZE(psiv_battle_info), PSIV_SIZE(psiv_battle_option), PSIV_SIZE(psiv_choice), PSIV_SIZE(psiv_codex_entry),
 		PSIV_SIZE(psiv_combatant), PSIV_SIZE(psiv_enemy), PSIV_SIZE(psiv_error), PSIV_SIZE(psiv_exit), PSIV_SIZE(psiv_field_info),
 		PSIV_SIZE(psiv_game_info), PSIV_SIZE(psiv_glossary_entry), PSIV_SIZE(psiv_inn_info), PSIV_SIZE(psiv_inventory_entry),
@@ -1201,6 +1201,27 @@ psiv_status psiv_field_points(psiv_session* session, const psiv_point** out, int
 		std::copy(points.begin(), points.end(), list);
 		*out = list;
 		*count = static_cast<int32_t>(points.size());
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_field_actors(psiv_session* session, const psiv_actor** out, int32_t* count) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		if (!currentArea(session)) {
+			return notFound(session, "area");
+		}
+		const std::vector<game::ActorView> actors = session->session->actorsHere();
+		Arena& arena = session->arena;
+		psiv_actor* list = arena.array<psiv_actor>(actors.size());
+		for (std::size_t i = 0; i < actors.size(); ++i) {
+			const game::ActorView& a = actors[i];
+			list[i] = {arena.str(a.id), arena.str(session->session->displayName(a.id)), a.cell.x, a.cell.y, static_cast<int32_t>(a.facing), a.visible, a.scripted};
+		}
+		*out = list;
+		*count = static_cast<int32_t>(actors.size());
 		return PSIV_OK;
 	});
 }

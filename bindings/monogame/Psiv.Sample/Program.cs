@@ -17,7 +17,7 @@ public static class Program
 		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N]   headless, no window\n" +
 		"\n" +
 		"Headless script lines: press KEY [COUNT] | hold KEY FRAMES | wait FRAMES | pressuntil KEY SCREEN MAXFRAMES |\n" +
-		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | dump | shot FILE.png (window only) | # comment.\n" +
+		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | expect actor ID X Y|walking|hidden | dump | shot FILE.png (window only) | # comment.\n" +
 		"Keys are MonoGame Keys names.\n" +
 		"Exit codes: 0 done, 1 a failure, 2 bad arguments.\n";
 
@@ -252,6 +252,9 @@ public sealed class ScriptPlayer
 					Fail($"{source}: expected mode {w[2]}, in {_session.Mode}");
 				}
 				break;
+			case "expect" when w.Length >= 3 && w[1] == "actor":
+				ExpectActor(w, source);
+				break;
 			case "shot" when w.Length == 2:
 				return Shot(w[1]).GetEnumerator();
 			case "dump":
@@ -266,6 +269,38 @@ public sealed class ScriptPlayer
 			}
 		}
 		return null;
+	}
+
+	// `expect actor ID X Y`: the last frame drew the actor standing on that cell. `expect actor ID walking`: it drew
+	// the actor between cells. `expect actor ID hidden`: it did not draw the actor.
+	private void ExpectActor(string[] w, string source)
+	{
+		bool drawn = _controller.DrawnActors.TryGetValue(w[2], out var at);
+		if (w.Length == 4 && w[3] == "walking")
+		{
+			if (!drawn || !at.Walking)
+			{
+				Fail($"{source}: {w[2]} is not drawn walking");
+			}
+		}
+		else if (w.Length == 4 && w[3] == "hidden")
+		{
+			if (drawn)
+			{
+				Fail($"{source}: {w[2]} is drawn at {at.X} {at.Y}");
+			}
+		}
+		else if (w.Length == 5 && int.TryParse(w[3], CultureInfo.InvariantCulture, out int x) && int.TryParse(w[4], CultureInfo.InvariantCulture, out int y))
+		{
+			if (!drawn || at.Walking || at.X != x || at.Y != y)
+			{
+				Fail($"{source}: {w[2]} is not drawn standing at {x} {y}" + (drawn ? $" (at {at.X} {at.Y}{(at.Walking ? ", walking" : "")})" : ""));
+			}
+		}
+		else
+		{
+			Fail($"{source}: cannot read the actor expectation");
+		}
 	}
 
 	// The keys for the next frame; none once the script is done.

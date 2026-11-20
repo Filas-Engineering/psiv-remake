@@ -6,7 +6,7 @@ A headless game session library that joins the battle rules (`../core`, namespac
 
 | Path | Contents |
 | --- | --- |
-| `include/game/world.h` | `World`: flags, variables, roster and lineup, chosen names, items, equipment bag, money, macros, combo log, area and position, visible enemies, encounter stream, job states, encyclopedia unlocks, play time, per-save settings |
+| `include/game/world.h` | `World`: flags, variables, roster and lineup, chosen names, items, equipment bag, money, macros, combo log, area and position, visible enemies, where scripts left actors, encounter stream, job states, encyclopedia unlocks, play time, per-save settings |
 | `include/game/area.h` | `Area` data (grid, markers, exits, hooks, shops, rest points, chests, encounter zones, and the file and line each came from) and its JSON reader |
 | `include/game/data.h` | `GameConfig` (`game.json`), `Journal` (`journal.json`), `LanguageTables`, `DataDirectories` and `loadGameData`, which loads everything, builds the script registry and the list of string IDs the game shows itself, compiles the scripts against them and checks every cross-reference; `problemText()`, the English template of every load problem key |
 | `include/game/check.h` | `checkData` and `crossCheck`: the data check behind `game_cli --check` (see [Checking data](#checking-data)) |
@@ -15,7 +15,7 @@ A headless game session library that joins the battle rules (`../core`, namespac
 | `include/game/save.h` | The chunked save format, migrations, the clear-data record, atomic writes and `SaveStore` (manual and rotating autosave slots) |
 | `include/game/profile.h` | `Profile`: the global settings file (SAV-005) |
 | `include/game/pacing.h` | `PacingRecorder`: the encounter pacing metrics per area and per boss |
-| `include/game/session.h` | `Session`: the game itself, including the `events::Host` implementation, the presentation action queue, battle driving, path walking and auto play |
+| `include/game/session.h` | `Session`: the game itself, including the `events::Host` implementation, the presentation action queue, script actors, battle driving, path walking and auto play |
 | `include/game/runner.h` | The terminal command language shared by `game_cli` and the pacing bot |
 | `src/` | Library sources, built into `build/libgame.a` |
 | `cli/game_cli.cpp` | Terminal front end, scripted runs and the pacing bot |
@@ -76,7 +76,7 @@ The engine owns one `GameData` (loaded once) and one `Session`. Every frame:
 
 1. Call `session.update(dtMs, input)`. In Field, `input` is the held direction; the field runs in fixed ticks (`tick_ms`), moving the leader one cell per `step_ms` of held input, ticking visible enemies, and starting battles and events. A direction pressed and released between two ticks is kept until the next tick, which plays it as held once, so a tap turns the leader. In Event it steps the interpreter. Battle and Title ignore it.
 2. Read `session.mode()` and present that mode:
-   * Field: `world()` (position, facing, `enemies`) and `area()`. Interact with `interact()`, turn in place with `face()`, open the menu with `openMenu()`, party talk with `partyTalk()`. To walk to a cell along the shortest path, `beginWalk(goal)` and then `walkStep(walk)` until it returns anything but `Walking`, running events and battles in between; it stops at the goal, on leaving the area, when the field does not come back, without a path or after 4000 steps.
+   * Field: `world()` (position, facing, `enemies`), `area()` and `actorsHere()` (see [Actors](#actors)). Interact with `interact()`, turn in place with `face()`, open the menu with `openMenu()`, party talk with `partyTalk()`. To walk to a cell along the shortest path, `beginWalk(goal)` and then `walkStep(walk)` until it returns anything but `Walking`, running events and battles in between; it stops at the goal, on leaving the area, when the field does not come back, without a path or after 4000 steps.
    * Event: `line()` is the pending line as data (`LineView`: speaker id, speaker name, text ID, rendered text with name tokens resolved for the profile, portrait), or empty; `lineText()` is the same as "Speaker: text". Call `confirmLine()` on the button. `choiceView()` is the pending choice (`ChoiceView`: rendered prompt and options; an ask's options are the dialogue table's `choice.yes` and `choice.no`); call `choose(index)`. `canSkip()` and `skip()` drive skipping; skipped lines go to `textLog()`.
    * Battle: `battle()` is the live `rules::Battle`. Set commands with `setCommand` (its refusal is core's message) or `applyMacro`. For auto-battle call `startAuto()` once, then `fillFromAuto()` at each command phase until it returns false (the stop reason is in the output). `fillFromPolicy()` is core's simple policy, and `fillAutoRound()` fills a round the way the terminal plays (the save's auto macro from the first round, then the policy). Then `resolveRound()`, which returns the round's core events for playback. `playBattle()` plays a whole battle with `fillAutoRound` and `resolveRound` and returns each round's output and events. The battle ends inside `resolveRound()`: rewards, level-ups, grace period, and the return to Field, Event or (game over) Title happen there. `endedBattle()` then keeps the battle as it ended (final combatants, outcome, record, the rewards paid out, drops and level-ups) until the next battle starts, `dismissBattle()`, a new game, a load or `quitToTitle()`.
    * Menu and Shop: `menuKind()` says field menu, inn, save prompt or name entry. `shop()`, `inn()`, `buy`, `sell`, `rest`, `useItem`, `useAbility`, `equip`, `unequip`, `saveManual`, `enterName`, `closeMenu`. A shop, save prompt or name entry an event opened closes back to the event.
@@ -87,6 +87,20 @@ The engine owns one `GameData` (loaded once) and one `Session`. Every frame:
 Every operation that can refuse (`newGame`, `walk`, `interact`, `buy`, `saveManual`, `setProfile` and the rest) returns a `rules::Message`: empty when it ran, otherwise a text key (`game.refuse.*`, or core's key for a battle command, field use or equipment refusal) and its parameters. `render(message)` shows it in the profile's language.
 
 Presentation-only script actions (moves, cameras, panels, audio, fades) go to the session's own action queue, which `SessionOptions::presentation` sets up. With `Presentation::Instant` (the default) every action is done when it starts, which the terminal and the tests need. With `Presentation::Queued` the event waits on each action until the engine calls `finishAction(handle)`, so a renderer can play animations of real length. Either way `pollActions()` hands out each action once (`PresentedAction`: handle, `Begin` or `Cancel`, the action and its script text; Instant keeps the last 256), and `SessionOptions::onAction` is also called as each is queued. An action with `instant` set (the rebuild after a skip or a restore) is done at once: put its end state up. `Cancel` names an action a skip abandoned. An engine with its own scheduling can pass its own `Presenter` instead. Warps change the world before the queue sees them. The terminal front end is only `Runner` plus `game_cli.cpp`; an engine replaces both and keeps everything else.
+
+## Actors
+
+`game.json` lists the script actors that are not characters (`actors`). An interact hook whose id is an actor's is that actor's talk point: the actor stands there, visible and facing south, until a script moves, turns, shows or hides it. `actorsHere()` gives the actors in the party's area as `ActorView` (id, cell, facing, visible, and whether a script has touched it), hidden ones included, in `game.json` order.
+
+The session follows the end state of every script `move`, `face`, `show` and `hide` of one of these actors in `World::actors`, which the save keeps (the `actors` chunk), mid-event saves included:
+
+* The first command for an actor starts from its talk point in the party's area, if it has one there; otherwise it has no cell until a move gives it one.
+* `move` puts the actor in the party's area, on the marker, or on the cell of a position's x and z, rounded. It walks along x, then along y, so a move that changes the cell leaves it facing its last leg.
+* `face` turns it toward a marker, a character (party members walk with the leader, so the leader's cell) or another actor in the area, along the longer axis; a tie turns it north or south. Nothing happens when the target is on its cell or not in the area.
+* `show` and `hide` set whether it is visible.
+* An actor keeps its place when the party leaves the area, so its talk point elsewhere stands empty until a script moves it back.
+
+The state changes when the action starts, so a renderer with Queued presentation animates from where it last drew the actor to the cell `actorsHere()` reports, and finishes the action when it arrives. Skips and restores reach the same state through the interpreter's instant actions. Actors are presentation: they do not block walking, talking still goes through the hook's cell, and `anim` and characters named as subjects are left to the front end.
 
 ## Data formats
 
@@ -163,18 +177,18 @@ Shop and rest point ids are unique across areas, so a script names them without 
 A text file, platform independent:
 
 ```
-PSR-SAVE 2
+PSR-SAVE 3
 chunk header 1 <payload bytes>
-schema 2
+schema 3
 ...
 chunk location 1 <n>
 ...
 end <FNV-1a 64 of everything before this line, 16 hex digits>
 ```
 
-Chunks and versions: `header` 1 (schema, build, rules version, content hash, write time, sequence, autosave, play time, area, party, difficulty: enough for the slot list), `location` 1, `party` 2 (members with statuses that persist outside battle, chosen names), `inventory` 1, `world` 1 (flags, variables, visited areas, control lock, visible enemies of the current area, grace, random counter, play time), `battle` 2 (the auto macro, then core's `serializeMacros` and `serializeComboLog` blocks), `random` 1 (the encounter stream's `rules::Rng` state), `difficulty` 1, `quests` 1 (job states), `unlocks` 1 (encyclopedia entries), and `midevent` 1 (only in the autosave before an event battle: `events::save_state_to_text`, `events-save 3`). Every known chunk but `midevent` must be present. Values are tokens with letters, digits, `_` and `.` kept and every other byte as `%XX`; empty is `-`. Unknown chunks are kept in `World::unknownChunks` and written back unchanged after the known ones. A known chunk with a higher version, or a higher schema, is refused as "from a newer build". A checksum mismatch is refused as damaged and listed as damaged. Writes go to `slot.sav.tmp` and are renamed over the slot.
+Chunks and versions: `header` 1 (schema, build, rules version, content hash, write time, sequence, autosave, play time, area, party, difficulty: enough for the slot list), `location` 1, `party` 2 (members with statuses that persist outside battle, chosen names), `inventory` 1, `world` 1 (flags, variables, visited areas, control lock, visible enemies of the current area, grace, random counter, play time), `battle` 2 (the auto macro, then core's `serializeMacros` and `serializeComboLog` blocks), `random` 1 (the encounter stream's `rules::Rng` state), `difficulty` 1, `quests` 1 (job states), `unlocks` 1 (encyclopedia entries), `actors` 1 (one `actor` line per actor a script touched: id, area or `-`, x, y, facing, visible), and `midevent` 1 (only in the autosave before an event battle: `events::save_state_to_text`, `events-save 3`). Every known chunk but `midevent` must be present. Values are tokens with letters, digits, `_` and `.` kept and every other byte as `%XX`; empty is `-`. Unknown chunks are kept in `World::unknownChunks` and written back unchanged after the known ones. A known chunk with a higher version, or a higher schema, is refused as "from a newer build". A checksum mismatch is refused as damaged and listed as damaged. Writes go to `slot.sav.tmp` and are renamed over the slot.
 
-Migrations (SAV-021) run in order on the chunk list before it is read. Schema 1 to 2: the battle chunk's own macro and combo lines become core's blocks (combinations found before get play time 0 and no participants), the party chunk moves to version 2 unchanged, empty `quests` and `unlocks` chunks are added and filled from the flags on load, and a `midevent` chunk is dropped, because its `events-save 2` text no longer loads; such a save continues in the field. A test loads a hand-written schema 1 save.
+Migrations (SAV-021) run in order on the chunk list before it is read. Schema 1 to 2: the battle chunk's own macro and combo lines become core's blocks (combinations found before get play time 0 and no participants), the party chunk moves to version 2 unchanged, empty `quests` and `unlocks` chunks are added and filled from the flags on load, and a `midevent` chunk is dropped, because its `events-save 2` text no longer loads; such a save continues in the field. Schema 2 to 3: an empty `actors` chunk is added, so every actor stands at its talk point; a `midevent` chunk stays, and the resumed event rebuilds the actors it had moved. A test loads a hand-written schema 1 save and one written without the `actors` chunk as schema 2.
 
 Slots are `manual_0` .. `manual_9` and `auto_0` .. `auto_2` in the save directory. An autosave writes an empty or damaged autosave slot, otherwise the one with the lowest sequence number. Continue loads the newest undamaged save by write time.
 
@@ -218,6 +232,18 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 
 ## Changes in this round
 
+* Script actors are game state: the session follows the end state of every `move`, `face`, `show` and `hide` of a `game.json` actor (see [Actors](#actors)), `actorsHere()` lists the actors in the party's area, and an actor no script touched stands at the talk point named after it.
+* Save schema 3 adds the `actors` chunk; schema 2 saves migrate with every actor at its talk point.
+* The placeholder adventure's arrival walks the dockhand from its talk point to the leader and back (`greet_spot`, a new tidewater marker). The scripted playthrough's transcript gains those six actions; nothing else in it changes, and the seeds stay.
+
+### Changes a host must make
+
+* `world.h`: new `ActorPlace` and `World::actors`. `session.h`: new `ActorView` and `Session::actorsHere()`. Code that builds a `World` by hand is unaffected; `sameWorld` compares the actors.
+* Saves are written as schema 3 (`PSR-SAVE 3`, `kSaveSchemaVersion` 3) with the `actors` chunk, which a schema 3 save must have. Older builds refuse them as from a newer build. `serializeWorldChunks` (the event-start snapshot) includes it.
+* A renderer that drew talk points as people can draw the actors from `actorsHere()` instead, and should move them when a script does.
+
+## Changes in the previous round
+
 * Front ends stop touching the world: `face()` and `setAutoMacro()` replace writing `World::facing` and `World::autoMacro`, and the terminal front end uses them.
 * Structured event text: `line()` gives the pending line as data and `choiceView()` the pending choice, with an ask's answers from the dialogue tables (`choice.yes`, `choice.no`, in `en` and `ja`).
 * The ended battle is kept (`endedBattle()`, `dismissBattle()`), with the final combatants, outcome, rewards paid out, drops and level-ups.
@@ -246,14 +272,14 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Data: every dialogue table needs `choice.yes` and `choice.no`; `presentation.portraits` lists the portraits scripts use; scripts may write `aboard <vehicle>`. Event type and reward multiplier names from core changed (see `../core/README.md`): saves now write the reward multiplier as `x1`, `x1_5` or `x2` and still read `1`, `1.5` and `2`; `set reward` takes either. Saves stay schema 2.
 * `runner.h`: `Runner::walkTo` returns nothing; `RunnerOptions::autoBattle` plays battles with `Session::playBattle`.
 
-## Changes in the previous round
+## Changes in earlier rounds
 
 * Builds against core rules version 8 (turn order, macro order, hit, damage, healing, Defend, status rolls, openings and escape follow the original; item drops, vehicles in data) and the events marker maps, scripted ends and game strings.
 * Battle drops are added to the inventory and shown. Scripted ends come from the script's `until`; `game.json` no longer takes `scripted_ends`. The registry knows each marker's area and each hook event's starting area, so the game's own warp check is gone.
 * Several languages: `game.json` takes `languages` instead of `strings` and `text`; a placeholder Japanese pair (`text/ja.strings`, `text/ja.json`) is added; the profile's text language picks the tables.
 * Speaker names and journal text moved from the text table to the dialogue tables. Area display names moved from the area files to `area.<id>` text keys (areas no longer take `name`). `Session` refusals are text keys.
 
-### Changes a host must make
+### Changes a host had to make two rounds ago
 
 * `Session`: `setProfile`, `newGame`, `continueGame`, `load`, `retryBattle`, `walk`, `interact`, `partyTalk`, `choose`, `setCommand`, `applyMacro`, `startAuto`, `openMenu`, `closeMenu`, `buy`, `sell`, `rest`, `useItem`, `useAbility`, `equip`, `unequip`, `saveManual`, `enterName` and `setSettings` return `rules::Message` instead of `std::string`; `.empty()` still means it ran. Show a refusal with `render()`. New `language()` (the profile's tables) and `stringText(id)`.
 * `data.h`: `GameConfig::stringsFile` and `textFile` are replaced by `languages` (`LanguageFiles { code, strings, text }`); `GameConfig::scriptedEnds` is removed. `GameData::text` and `strings` are replaced by `languages` (`LanguageTables { code, text, strings }`) and `language(code)`. New `GameData::gameStrings` and `gameStringsText()`. `Journal` texts are string IDs.
@@ -262,7 +288,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Data: `game.json` `languages`; no `scripted_ends`; areas without `name`; `speaker.*`, `objective.*`, `job.*`, `codex.*` and `talk.*` move to `text/<code>.strings`; new keys `area.*`, `game.dropped`, `game.refuse.*`.
 * Saves are unchanged (schema 2); the content hash changed with the data, which only the header records.
 
-## Changes in earlier rounds
+### Before that
 
 * Builds against core rules version 3 and events `events-save 3`: core's event types, `CancelReason`, `Message` returns, `equip`/`unequip` with the bag, the new `ComboLog`; the new Host methods.
 * Dropped the game's own workarounds: the equipment bag bookkeeping (core moves pieces), field item formulas (core's field use, now also techniques), the macro and combo log save lines (core's forms), the encounter stream type (`rules::Rng`), English battle text (core's keys and table), the hand-written auto policy loop (core's auto-battle and stop rules), and the post-compile walk over scripts (the registry, except warps).

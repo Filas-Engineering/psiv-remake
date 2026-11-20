@@ -1,0 +1,41 @@
+# A scripted actor walk: the arrival walks the dockhand from its talk point by the dock over to the leader, turns
+# it to speak, and walks it back. The session reports each move's end cell at once; the sample walks the sprite
+# there a cell per step and holds the move until it arrives, so the event waits on the walk. With --window, the
+# shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing for them.
+
+expect screen Title
+press Enter
+# The fade in, then the ferry narration. The dockhand and the guide stand at their talk points.
+wait 50
+expect screen Dialogue
+expect actor dockhand 10 2
+expect actor guide 5 2
+shot build/shots/actors_1_home.png
+press Enter
+# A cell down from the talk point (250 ms), then along the row toward the leader (six cells, 1500 ms).
+wait 40
+expect actor dockhand walking
+shot build/shots/actors_2_walking.png
+wait 80
+expect actor dockhand 5 4
+expect screen Dialogue
+shot build/shots/actors_3_greeting.png
+press Enter
+# Back along the row, up to the dock and onto the talk point.
+wait 50
+expect actor dockhand walking
+shot build/shots/actors_4_returning.png
+wait 100
+expect screen Field
+expect actor dockhand 10 2
+shot build/shots/actors_5_back.png
+# Talking to the guide turns it toward the leader; the guide already faces south, so it stays put.
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+expect screen Dialogue
+expect actor guide 5 2
+pressuntil Enter Field 400
+expect actor guide 5 2
+expect actor dockhand 10 2

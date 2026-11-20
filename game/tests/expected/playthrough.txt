@@ -3,7 +3,13 @@ title> new
 You arrive at Tidewater Landing.
   (fade in 1)
 The ferry bumps against the pilings of Tidewater Landing.
+  (move dockhand to dock_front)
+  (move dockhand to greet_spot)
+  (face dockhand fighter)
 Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  (move dockhand to dock_front)
+  (move dockhand to 10 0 2)
+  (face dockhand dock_front)
 New job: The dockhand's lost crate.
 New encyclopedia entry: Tidewater Landing.
 [Autosaved to auto_0 (event end).]

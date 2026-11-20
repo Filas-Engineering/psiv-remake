@@ -18,7 +18,7 @@ What a save holds, saving rules, round trip and versioning, and how the party pr
 | Location | Area ID, position, facing, active camera volume, vehicle in use |
 | Party | Roster and active order; per member: level, experience, HP, TP, skill uses left, statuses that persist outside battle, equipment |
 | Inventory | Items and counts, money |
-| World | Global flags, opened chests, visited areas, vehicle positions, visible-enemy defeat state for the current area |
+| World | Global flags, opened chests, visited areas, vehicle positions, visible-enemy defeat state for the current area, where event scripts left their actors |
 | Quests | Guild job states, main objective flag range |
 | Battle-side | Macros, auto-battle macro, combo log |
 | Unlocks | Encyclopedia entries |

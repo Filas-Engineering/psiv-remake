@@ -192,6 +192,14 @@ std::string worldChunk(const World& w) {
 	return o.str();
 }
 
+std::string actorsChunk(const World& w) {
+	Writer o;
+	for (const auto& [id, place] : w.actors) {
+		o.key("actor").text(id).text(place.area).num(place.cell.x).num(place.cell.y).text(toString(place.facing)).num(place.visible ? 1 : 0).end();
+	}
+	return o.str();
+}
+
 // The auto macro, then core's own macro and combo log forms, each of which ends with an "end" line.
 std::string battleChunk(const World& w) {
 	Writer o;
@@ -541,6 +549,27 @@ bool readUnlocks(const std::string& payload, World& w, std::string& error) {
 	return error.empty();
 }
 
+bool readActors(const std::string& payload, World& w, std::string& error) {
+	Lines in("actors", payload);
+	w.actors.clear();
+	for (const auto& l : in.lines()) {
+		if (l[0] == "actor" && in.need(l, 6)) {
+			ActorPlace place;
+			place.area = in.text(l[2]);
+			place.cell = {static_cast<int>(in.num(l[3])), static_cast<int>(in.num(l[4]))};
+			if (!parseFacing(in.text(l[5]), place.facing)) {
+				in.fail("bad actor facing");
+			}
+			place.visible = in.num(l[6]) != 0;
+			w.actors[in.text(l[1])] = place;
+		} else {
+			in.fail("unknown line '" + l[0] + "'");
+		}
+	}
+	error = in.error;
+	return error.empty();
+}
+
 using ChunkReader = bool (*)(const std::string&, World&, std::string&);
 using ChunkWriter = std::string (*)(const World&);
 
@@ -562,6 +591,7 @@ const KnownChunk kWorldChunks[] = {
 	{"difficulty", 1, difficultyChunk, readDifficulty},
 	{"quests", 1, questsChunk, readQuests},
 	{"unlocks", 1, unlocksChunk, readUnlocks},
+	{"actors", 1, actorsChunk, readActors},
 };
 
 // The clear-data record holds these, from the same writers.
@@ -719,6 +749,13 @@ bool migrate1to2(std::vector<Chunk>& chunks, std::string& error) {
 	return true;
 }
 
+// Schema 2 to 3: the actors chunk starts empty, so every actor stands at its talk point. A midevent chunk stays: its
+// interpreter state rebuilds the actors the event had moved when the event resumes.
+bool migrate2to3(std::vector<Chunk>& chunks, std::string&) {
+	chunks.push_back({"actors", 1, ""});
+	return true;
+}
+
 struct Migration {
 	int from;
 	bool (*apply)(std::vector<Chunk>& chunks, std::string& error);
@@ -727,6 +764,7 @@ struct Migration {
 // Ordered: a save of schema N runs every migration from N up.
 const Migration kMigrations[] = {
 	{1, migrate1to2},
+	{2, migrate2to3},
 };
 
 std::string headerChunk(const SaveFile& save) {

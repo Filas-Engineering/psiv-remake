@@ -1,5 +1,7 @@
 #include "game/world.h"
 
+#include <algorithm>
+
 namespace game {
 
 Cell facingVector(Facing facing) {
@@ -173,6 +175,13 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 	if (a.playerControl != b.playerControl) return differs("playerControl");
 	if (!sameList(a.enemies, b.enemies, sameEnemy)) return differs("enemies");
 	if (a.nextEnemyId != b.nextEnemyId) return differs("nextEnemyId");
+	auto sameActors = [](const std::map<std::string, ActorPlace>& x, const std::map<std::string, ActorPlace>& y) {
+		return std::equal(x.begin(), x.end(), y.begin(), y.end(), [](const auto& p, const auto& q) {
+			return p.first == q.first && p.second.area == q.second.area && p.second.cell == q.second.cell &&
+				p.second.facing == q.second.facing && p.second.visible == q.second.visible;
+		});
+	};
+	if (!sameActors(a.actors, b.actors)) return differs("actors");
 	if (a.graceMs != b.graceMs) return differs("graceMs");
 	if (a.randomCounter != b.randomCounter) return differs("randomCounter");
 	if (a.randomThreshold != b.randomThreshold) return differs("randomThreshold");

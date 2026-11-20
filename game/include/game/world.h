@@ -61,6 +61,16 @@ struct VisibleEnemy {
 	int moveProgress = 0;
 };
 
+// Where an event script left one of the game's actors (game.json `actors`). Scripts place actors in the area the
+// party is in; an actor keeps its place when the party leaves.
+struct ActorPlace {
+	// Empty while the actor has no cell: shown or hidden before any move, with no talk point in the party's area.
+	std::string area;
+	Cell cell;
+	Facing facing = Facing::South;
+	bool visible = true;
+};
+
 // A save chunk this build does not know, kept and written back unchanged (SAV-020).
 struct UnknownChunk {
 	std::string type;
@@ -93,6 +103,8 @@ struct World {
 
 	std::vector<VisibleEnemy> enemies;
 	int nextEnemyId = 1;
+	// Actors a script moved, turned, showed or hid, by actor id. The others stand at their talk points.
+	std::map<std::string, ActorPlace> actors;
 	// Time left in the post-battle grace period (ENC-015, ENC-042).
 	int graceMs = 0;
 	// Random mode distance counter and the threshold it is racing (ENC-040).

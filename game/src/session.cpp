@@ -13,6 +13,8 @@
 #include "rules/text.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <deque>
 
 namespace game {
@@ -58,6 +60,32 @@ rules::ScriptedEnd scriptedEnd(const events::BattleRequest& request, const rules
 		}
 	}
 	return end;
+}
+
+// The talk point named after an actor: where the actor stands in that area until a script moves it.
+const Hook* actorHome(const Area* area, const std::string& actor) {
+	if (!area) {
+		return nullptr;
+	}
+	for (const Hook& hook : area->hooks) {
+		if (hook.trigger == HookTrigger::Interact && hook.id == actor) {
+			return &hook;
+		}
+	}
+	return nullptr;
+}
+
+// Toward `to` along the longer axis; a tie turns north or south. Nothing when the cells are the same.
+std::optional<Facing> facingToward(Cell from, Cell to) {
+	const int dx = to.x - from.x;
+	const int dy = to.y - from.y;
+	if (dx == 0 && dy == 0) {
+		return std::nullopt;
+	}
+	if (std::abs(dx) > std::abs(dy)) {
+		return dx > 0 ? Facing::East : Facing::West;
+	}
+	return dy > 0 ? Facing::South : Facing::North;
 }
 
 rules::Opening toOpening(events::BattleOpening opening) {
@@ -258,6 +286,8 @@ public:
 	events::Handle start_action(const events::Action& action) override {
 		if (action.type == events::ActionType::warp) {
 			s_.enterArea(action.subject, action.target);
+		} else {
+			s_.applyActorAction(action);
 		}
 		HandleState state;
 		state.kind = HandleKind::Action;
@@ -514,6 +544,101 @@ void Session::finishAction(std::uint64_t handle) {
 	if (actions_) {
 		actions_->finish(handle);
 	}
+}
+
+std::optional<Cell> Session::actorCell(const std::string& actor) const {
+	auto it = world_.actors.find(actor);
+	if (it != world_.actors.end()) {
+		return it->second.area == world_.area && !world_.area.empty() ? std::optional<Cell>(it->second.cell) : std::nullopt;
+	}
+	const Hook* home = actorHome(area(), actor);
+	return home ? std::optional<Cell>(home->at) : std::nullopt;
+}
+
+// The end state of a move, face, show or hide of one of the game's actors. Party members and anything else a script
+// names are left to the front end. A move walks along x, then along y, so the actor ends facing its last leg.
+void Session::applyActorAction(const events::Action& action) {
+	using events::ActionType;
+	if (action.type != ActionType::move && action.type != ActionType::face && action.type != ActionType::show_actor &&
+		action.type != ActionType::hide_actor) {
+		return;
+	}
+	const std::vector<std::string>& actors = data_.config.actors;
+	if (std::find(actors.begin(), actors.end(), action.subject) == actors.end()) {
+		return;
+	}
+	const Area* here = area();
+	auto it = world_.actors.find(action.subject);
+	if (it == world_.actors.end()) {
+		ActorPlace place;
+		if (const Hook* home = actorHome(here, action.subject)) {
+			place.area = world_.area;
+			place.cell = home->at;
+		}
+		it = world_.actors.emplace(action.subject, place).first;
+	}
+	ActorPlace& place = it->second;
+	switch (action.type) {
+	case ActionType::move: {
+		Cell goal;
+		if (action.has_position) {
+			goal = {static_cast<int>(std::lround(action.position.x)), static_cast<int>(std::lround(action.position.z))};
+		} else {
+			auto marker = here ? here->markers.find(action.target) : std::map<std::string, Cell>::const_iterator();
+			if (!here || marker == here->markers.end()) {
+				return;
+			}
+			goal = marker->second;
+		}
+		if (place.area == world_.area && goal != place.cell) {
+			place.facing = goal.y != place.cell.y ? (goal.y > place.cell.y ? Facing::South : Facing::North)
+				: (goal.x > place.cell.x ? Facing::East : Facing::West);
+		}
+		place.area = world_.area;
+		place.cell = goal;
+		break;
+	}
+	case ActionType::face: {
+		if (place.area.empty() || place.area != world_.area) {
+			return;
+		}
+		std::optional<Cell> target;
+		if (here && here->markers.count(action.target)) {
+			target = here->markers.at(action.target);
+		} else if (data_.db.character(action.target)) {
+			// Party members walk with the leader.
+			target = world_.position;
+		} else if (action.target != action.subject) {
+			target = actorCell(action.target);
+		}
+		if (std::optional<Facing> facing = target ? facingToward(place.cell, *target) : std::nullopt) {
+			place.facing = *facing;
+		}
+		break;
+	}
+	case ActionType::show_actor: place.visible = true; break;
+	case ActionType::hide_actor: place.visible = false; break;
+	default: break;
+	}
+}
+
+std::vector<ActorView> Session::actorsHere() const {
+	std::vector<ActorView> out;
+	const Area* here = area();
+	if (!here) {
+		return out;
+	}
+	for (const std::string& id : data_.config.actors) {
+		auto it = world_.actors.find(id);
+		if (it != world_.actors.end()) {
+			if (it->second.area == world_.area) {
+				out.push_back({id, it->second.cell, it->second.facing, it->second.visible, true});
+			}
+		} else if (const Hook* home = actorHome(here, id)) {
+			out.push_back({id, home->at, Facing::South, true, false});
+		}
+	}
+	return out;
 }
 
 const Area* Session::area() const {

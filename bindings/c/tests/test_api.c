@@ -577,12 +577,37 @@ static void testPresentation(void) {
 	CHECK(strcmp(line.speaker_id, "") == 0);
 	CHECK(strcmp(line.text, line.display) == 0);
 	CHECK_OK(psiv_line_confirm(s));
+	/* The dockhand walks over and turns before speaking; each step waits for the engine, while psiv_field_actors
+	 * already reports where it ends. */
+	const char* expected[] = {"move dockhand to dock_front", "move dockhand to greet_spot", "face dockhand fighter"};
+	const int32_t cells[][3] = {{10, 3, PSIV_DIRECTION_SOUTH}, {5, 4, PSIV_DIRECTION_SOUTH}, {5, 4, PSIV_DIRECTION_WEST}};
+	for (int step = 0; step < 3; ++step) {
+		CHECK_OK(psiv_update(s, 100, PSIV_DIRECTION_NONE));
+		CHECK(!psiv_line_pending(s));
+		CHECK_OK(psiv_actions_poll(s, &actions, &count));
+		CHECK(count == 1 && strcmp(actions[0].description, expected[step]) == 0);
+		const psiv_actor* actors;
+		int32_t actorCount;
+		CHECK_OK(psiv_field_actors(s, &actors, &actorCount));
+		CHECK(actorCount == 2 && strcmp(actors[0].id, "dockhand") == 0 && actors[0].scripted);
+		CHECK(actorCount >= 1 && actors[0].x == cells[step][0] && actors[0].y == cells[step][1] && actors[0].facing == cells[step][2]);
+		if (count == 1) {
+			CHECK_OK(psiv_action_finish(s, actions[0].handle));
+		}
+	}
+	CHECK_OK(psiv_update(s, 100, PSIV_DIRECTION_NONE));
 	CHECK_OK(psiv_line_get(s, &line));
 	CHECK(strcmp(line.speaker_id, "dockhand") == 0);
 	CHECK(strcmp(line.speaker_name, "Dockhand") == 0);
 	CHECK(strncmp(line.display, "Dockhand: ", 10) == 0 && strcmp(line.display + 10, line.text) == 0);
 	CHECK(psiv_line_confirm(s) == PSIV_OK);
-	settle(s);
+	for (int guard = 0; guard < 20 && psiv_mode_get(s) == PSIV_MODE_EVENT; ++guard) {
+		CHECK_OK(psiv_update(s, 100, PSIV_DIRECTION_NONE));
+		CHECK_OK(psiv_actions_poll(s, &actions, &count));
+		for (int32_t i = 0; i < count; ++i) {
+			CHECK_OK(psiv_action_finish(s, actions[i].handle));
+		}
+	}
 	CHECK(psiv_mode_get(s) == PSIV_MODE_FIELD);
 	psiv_session_destroy(s);
 
@@ -627,7 +652,7 @@ static void testFieldAndMenus(void) {
 	CHECK_OK(psiv_field_exits(s, &exits, &count));
 	CHECK(count == 1 && exits[0].x == 13 && strcmp(exits[0].to_area, "reed_path") == 0);
 	CHECK_OK(psiv_field_markers(s, &markers, &count));
-	CHECK(count == 8);
+	CHECK(count == 9);
 	CHECK_OK(psiv_field_points(s, &points, &count));
 	int talk = 0;
 	int shop = 0;
@@ -842,6 +867,82 @@ static void testAdventurePaths(void) {
 	psiv_session_destroy(s);
 }
 
+static const psiv_actor* findActor(const psiv_actor* actors, int32_t count, const char* id) {
+	for (int32_t i = 0; i < count; ++i) {
+		if (strcmp(actors[i].id, id) == 0) {
+			return &actors[i];
+		}
+	}
+	return NULL;
+}
+
+/* Script actors as state: untouched ones at their talk points, the arrival's walk, saves and loads. */
+static void testActors(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/actors", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	const psiv_actor* actors;
+	int32_t count;
+	CHECK(psiv_field_actors(s, &actors, &count) == PSIV_NOT_FOUND);
+	CHECK_OK(psiv_new_game(s));
+	CHECK(psiv_field_actors(s, NULL, &count) == PSIV_INVALID_ARGUMENT);
+	CHECK(psiv_field_actors(s, &actors, NULL) == PSIV_INVALID_ARGUMENT);
+
+	/* At the first line nothing has moved: the dockhand and the guide stand at their talk points. */
+	CHECK(psiv_line_pending(s));
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	CHECK(count == 2);
+	const psiv_actor* dockhand = findActor(actors, count, "dockhand");
+	const psiv_actor* guide = findActor(actors, count, "guide");
+	CHECK(dockhand && dockhand->x == 10 && dockhand->y == 2 && dockhand->facing == PSIV_DIRECTION_SOUTH && dockhand->visible && !dockhand->scripted);
+	CHECK(dockhand && strcmp(dockhand->name, "Dockhand") == 0);
+	CHECK(guide && guide->x == 5 && guide->y == 2 && !guide->scripted);
+
+	CHECK_OK(psiv_line_confirm(s));
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	dockhand = findActor(actors, count, "dockhand");
+	CHECK(dockhand && dockhand->x == 5 && dockhand->y == 4 && dockhand->facing == PSIV_DIRECTION_WEST && dockhand->scripted);
+	settle(s);
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	dockhand = findActor(actors, count, "dockhand");
+	CHECK(dockhand && dockhand->x == 10 && dockhand->y == 2 && dockhand->facing == PSIV_DIRECTION_SOUTH && dockhand->scripted);
+
+	CHECK_OK(psiv_open_menu(s));
+	CHECK_OK(psiv_save_manual(s, "manual_0"));
+	CHECK_OK(psiv_close_menu(s));
+
+	/* Talking to the guide turns it toward the leader below it. */
+	CHECK(walkToMarker(s, "guide_front") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	CHECK(psiv_line_pending(s));
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	guide = findActor(actors, count, "guide");
+	CHECK(guide && guide->x == 5 && guide->y == 2 && guide->facing == PSIV_DIRECTION_SOUTH && guide->scripted);
+
+	/* The save has the dockhand's place and not the guide's turn. */
+	CHECK_OK(psiv_quit_to_title(s));
+	CHECK_OK(psiv_load(s, "manual_0"));
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	dockhand = findActor(actors, count, "dockhand");
+	guide = findActor(actors, count, "guide");
+	CHECK(dockhand && dockhand->scripted && dockhand->x == 10 && dockhand->y == 2);
+	CHECK(guide && !guide->scripted);
+
+	/* No actor stands on the reed path until the peddler's talk point is reached. */
+	CHECK(walkToMarker(s, "east_gate") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_walk(s, PSIV_DIRECTION_EAST));
+	settle(s);
+	psiv_field_info field;
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.area_id, "reed_path") == 0);
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	CHECK(count == 1 && strcmp(actors[0].id, "peddler") == 0 && actors[0].x == 10 && actors[0].y == 7 && !actors[0].scripted);
+	psiv_session_destroy(s);
+}
+
 int main(int argc, char** argv) {
 	for (int i = 1; i + 1 < argc; i += 2) {
 		if (strcmp(argv[i], "--data") == 0) {
@@ -860,6 +961,7 @@ int main(int argc, char** argv) {
 	testPresentation();
 	testFieldAndMenus();
 	testAdventurePaths();
+	testActors();
 	if (failures) {
 		fprintf(stderr, "%d of %d checks failed\n", failures, checks);
 		return 1;

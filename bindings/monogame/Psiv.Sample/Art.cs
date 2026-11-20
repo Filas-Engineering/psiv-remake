@@ -160,7 +160,9 @@ public sealed class Pixels
 	}
 }
 
-public sealed record ActorLook(Color Hair, Color Skin, Color Coat, Color Scarf);
+// Head: 0 bare, 1 cap, 2 hood, 3 long hair, 4 headband. Body: 0 coat, 1 apron, 2 belt. Hat colors the cap, hood
+// and headband.
+public sealed record ActorLook(Color Hair, Color Skin, Color Coat, Color Scarf, int Head = 0, int Body = 0, Color Hat = default);
 
 // Every picture the sample draws, generated at startup from code (no files), and handed to the surface once.
 // Actors and creatures are built on first use per look.
@@ -183,14 +185,8 @@ public sealed class Art
 
 	private static readonly Color Outline = new(26, 20, 32);
 
+	// The title screen's traveler.
 	public static readonly ActorLook Hero = new(new Color(206, 122, 58), new Color(242, 204, 164), new Color(58, 142, 172), new Color(232, 92, 72));
-
-	private static readonly ActorLook[] Companions =
-	[
-		new(new Color(62, 50, 76), new Color(226, 182, 140), new Color(150, 82, 170), new Color(240, 200, 90)),
-		new(new Color(232, 222, 200), new Color(244, 214, 182), new Color(82, 150, 84), new Color(92, 140, 230)),
-		new(new Color(44, 32, 30), new Color(170, 118, 84), new Color(190, 112, 62), new Color(112, 220, 200)),
-	];
 
 	private readonly IDrawSurface _s;
 	private readonly Dictionary<Theme, TileSet> _tiles = [];
@@ -213,6 +209,7 @@ public sealed class Art
 		Bed = Add(BuildBed());
 		Rune = Add(BuildRune());
 		Bubble = Add(BuildBubble());
+		Noticeboard = Add(BuildNoticeboard());
 		Alert = Add(BuildAlert());
 		Shadow = Add(BuildShadow());
 		Pointer = Add(BuildPointer());
@@ -236,6 +233,8 @@ public sealed class Art
 	public int Bed { get; }
 	public int Rune { get; }
 	public int Bubble { get; }
+	// A talk point that is not an actor.
+	public int Noticeboard { get; }
 	public int Alert { get; }
 	public int Shadow { get; }
 	// A downward pointer, for battle targets.
@@ -254,16 +253,17 @@ public sealed class Art
 		return new Color(r, g, b);
 	}
 
-	// Party members after the leader take fixed looks; anyone else gets colors from their id.
-	public static ActorLook Companion(int index) => Companions[index % Companions.Length];
-
+	// Every person in the game, party member or actor, looks the same wherever it is drawn: colors, headwear and
+	// clothes all come from a hash of its id.
 	public static ActorLook LookFor(string id)
 	{
 		uint h = Noise.Hash(id);
 		Color[] hair = [new(52, 40, 34), new(120, 76, 44), new(216, 190, 120), new(150, 150, 160), new(170, 60, 50), new(40, 40, 60)];
 		Color[] skin = [new(242, 204, 164), new(214, 164, 120), new(164, 112, 78), new(250, 220, 190)];
 		float hue = (h & 0xff) / 255f;
-		return new ActorLook(hair[(h >> 8) % (uint)hair.Length], skin[(h >> 12) % (uint)skin.Length], FromHsv(hue, 0.5f, 0.72f), FromHsv(hue + 0.45f, 0.55f, 0.9f));
+		uint g = Noise.Hash((int)h, 1);
+		return new ActorLook(hair[(h >> 8) % (uint)hair.Length], skin[(h >> 12) % (uint)skin.Length], FromHsv(hue, 0.5f, 0.72f), FromHsv(hue + 0.45f, 0.55f, 0.9f),
+			Head: (int)(g % 5), Body: (int)((g >> 8) % 3), Hat: FromHsv(hue + 0.6f + (g >> 16 & 0x3f) / 255f, 0.6f, 0.62f));
 	}
 
 	// Actors: four facings (north, east, south, west) times stand, walk A, walk B.
@@ -329,6 +329,105 @@ public sealed class Art
 
 	private static string[] Legs(string[] rows, params string[] last3) => [.. rows[..13], .. last3];
 
+	private enum View { Back, Side, Front }
+
+	// Puts headwear and clothes over a template. The side view faces east, so its face is on the right.
+	private static string[] Dress(string[] rows, ActorLook look, View view)
+	{
+		char[][] g = rows.Select(r => r.ToCharArray()).ToArray();
+		void Swap(int y, char from, char to, int x0 = 0, int x1 = Pixels.Size - 1)
+		{
+			for (int x = x0; x <= x1; x++)
+			{
+				if (g[y][x] == from)
+				{
+					g[y][x] = to;
+				}
+			}
+		}
+		void Set(int x, int y, char c, string over)
+		{
+			if (over.Contains(g[y][x]))
+			{
+				g[y][x] = c;
+			}
+		}
+		switch (look.Head)
+		{
+		case 1:
+			// A cap over the crown, its brim reaching out past the head (forward only, in the side view).
+			Swap(2, 'h', 'p');
+			Swap(3, 'h', 'p');
+			Swap(4, 'h', 'q');
+			int left = Array.IndexOf(g[4], 'o'), right = Array.LastIndexOf(g[4], 'o');
+			if (view != View.Back)
+			{
+				g[4][right] = 'q';
+				Set(right + 1, 4, 'o', ".");
+				if (view == View.Front)
+				{
+					g[4][left] = 'q';
+					Set(left - 1, 4, 'o', ".");
+				}
+			}
+			break;
+		case 2:
+			// A hood: the hair turns to cloth, down to the shoulders.
+			for (int y = 1; y <= 7; y++)
+			{
+				Swap(y, 'h', 'p');
+			}
+			Swap(8, 'a', 'q');
+			break;
+		case 3:
+			// Hair down past the shoulders, behind the arms.
+			foreach (int y in new[] { 8, 9, 10 })
+			{
+				if (view == View.Side)
+				{
+					Set(3, y, 'h', ".a");
+					Set(2, y, 'o', ".a");
+				}
+				else
+				{
+					Set(3, y, 'h', ".o");
+					Set(12, y, 'h', ".o");
+					Set(2, y, 'o', ".");
+					Set(13, y, 'o', ".");
+				}
+			}
+			break;
+		case 4:
+			Swap(4, 'h', 'p');
+			break;
+		}
+		switch (look.Body)
+		{
+		case 1:
+			// An apron over the front of the coat.
+			if (view != View.Back)
+			{
+				int x0 = view == View.Front ? 5 : 7, x1 = view == View.Front ? 10 : 9;
+				for (int y = 9; y <= 12; y++)
+				{
+					Swap(y, 'c', 'w', x0, x1);
+					Swap(y, 'd', 'w', x0, x1);
+					Swap(y, 'a', 'w', x0, x1);
+				}
+			}
+			break;
+		case 2:
+			Swap(11, 'c', 'k');
+			Swap(11, 'd', 'k');
+			if (view == View.Front)
+			{
+				g[11][7] = g[11][8] = 'y';
+			}
+			break;
+		}
+		return g.Select(r => new string(r)).ToArray();
+	}
+
 	public int[] Actor(ActorLook look)
 	{
 		if (_actors.TryGetValue(look, out int[]? frames))
@@ -345,6 +444,10 @@ public sealed class Art
 			'a' => look.Scarf,
 			'b' => new Color(60, 58, 84),
 			'k' => new Color(74, 46, 32),
+			'p' => look.Hat,
+			'q' => Shade(look.Hat, 0.7f),
+			'w' => new Color(236, 230, 214),
+			'y' => new Color(232, 196, 92),
 			_ => Color.Magenta,
 		};
 		string[] backRows = BackRows;
@@ -365,10 +468,10 @@ public sealed class Art
 		frames = new int[12];
 		for (int f = 0; f < 3; f++)
 		{
-			Pixels east = Pixels.FromTemplate(side[f], Palette);
-			frames[0 * 3 + f] = Add(Pixels.FromTemplate(back[f], Palette));
+			Pixels east = Pixels.FromTemplate(Dress(side[f], look, View.Side), Palette);
+			frames[0 * 3 + f] = Add(Pixels.FromTemplate(Dress(back[f], look, View.Back), Palette));
 			frames[1 * 3 + f] = Add(east);
-			frames[2 * 3 + f] = Add(Pixels.FromTemplate(front[f], Palette));
+			frames[2 * 3 + f] = Add(Pixels.FromTemplate(Dress(front[f], look, View.Front), Palette));
 			frames[3 * 3 + f] = Add(east.MirrorX());
 		}
 		_actors[look] = frames;
@@ -887,6 +990,39 @@ public sealed class Art
 			p.Rect(x, 6, 2, 2, new Color(60, 60, 80));
 		}
 		return p;
+	}
+
+	private static Pixels BuildNoticeboard()
+	{
+		string[] rows =
+		[
+			"................",
+			"................",
+			"..oooooooooooo..",
+			".obbbbbbbbbbbbo.",
+			".obwwwwwwwwwwbo.",
+			".obwkkkwkkkwwbo.",
+			".obwwwwwwwwwwbo.",
+			".obwkkwkkkkwwbo.",
+			".obddddddddddbo.",
+			"..oooooddooooo..",
+			"......oddo......",
+			"......oddo......",
+			"......oddo......",
+			".....oddddo.....",
+			"....oooooooo....",
+			"................",
+		];
+		Color Palette(char c) => c switch
+		{
+			'o' => Outline,
+			'b' => new Color(168, 116, 64),
+			'd' => new Color(112, 74, 42),
+			'w' => new Color(240, 230, 204),
+			'k' => new Color(96, 84, 92),
+			_ => Color.Magenta,
+		};
+		return Pixels.FromTemplate(rows, Palette);
 	}
 
 	private static Pixels BuildAlert()

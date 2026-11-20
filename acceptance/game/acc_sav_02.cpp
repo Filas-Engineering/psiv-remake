@@ -33,7 +33,7 @@ ACC_CHECK(acc_sav_02, "ACC-SAV-02", "SAV-020, SAV-021") {
 	const std::string dir = support::tempDirectory("sav02");
 	std::string error;
 
-	// Migration: the only earlier schema loads, then passes ACC-SAV-01's round trip.
+	// Migration: the oldest schema loads, then passes ACC-SAV-01's round trip.
 	rules::Result<SaveFile> migrated = parseSave(schemaOne());
 	if (t.expect(migrated.ok(), "a schema 1 save does not load: " + (migrated.ok() ? "" : migrated.error))) {
 		const World& w = migrated.value->world;
@@ -41,7 +41,7 @@ ACC_CHECK(acc_sav_02, "ACC-SAV-02", "SAV-020, SAV-021") {
 		t.expect(w.comboLog.entries().size() == 1 && w.comboLog.entries()[0].recipe == "storm_spark", "the schema 1 combo line did not migrate to the combo log");
 		t.expect(migrated.value->midEvent.empty(), "the schema 1 mid-event state, which no build can resume, was kept");
 		const std::string text = serializeSave(*migrated.value);
-		t.expect(text.compare(0, 11, "PSR-SAVE 2\n") == 0, "a migrated save is not written in the current schema");
+		t.expect(text.compare(0, 11, "PSR-SAVE 3\n") == 0, "a migrated save is not written in the current schema");
 		rules::Result<SaveFile> again = parseSave(text);
 		std::string diff;
 		t.expect(again.ok() && serializeSave(*again.value) == text && sameWorld(again.value->world, w, &diff), "a migrated save does not round-trip: " + diff);
@@ -67,12 +67,29 @@ ACC_CHECK(acc_sav_02, "ACC-SAV-02", "SAV-020, SAV-021") {
 	rules::Result<SaveFile> kept = parseSave(written);
 	t.expect(kept.ok() && kept.value->world.unknownChunks.size() == 1 && kept.value->world.unknownChunks[0].version == 4, "the written save does not keep the unknown chunk's type and version");
 
+	// Schema 2: the same save without the actors chunk loads with every actor at its talk point and round-trips.
+	std::string schemaTwo = written;
+	schemaTwo.replace(0, 10, "PSR-SAVE 2");
+	schemaTwo.replace(schemaTwo.find("schema 3\n"), 9, "schema 2\n");
+	const std::size_t actors = schemaTwo.find("chunk actors 1 ");
+	if (t.expect(actors != std::string::npos, "a written save has no actors chunk")) {
+		schemaTwo.erase(actors, schemaTwo.find("chunk ", actors + 1) - actors);
+		rules::Result<SaveFile> two = parseSave(support::resign(schemaTwo));
+		std::string diff;
+		t.expect(two.ok() && two.value->world.actors.empty() && serializeSave(*two.value).compare(0, 11, "PSR-SAVE 3\n") == 0,
+			"a schema 2 save does not migrate: " + (two.ok() ? "" : two.error));
+		if (two.ok()) {
+			rules::Result<SaveFile> again = parseSave(serializeSave(*two.value));
+			t.expect(again.ok() && sameWorld(again.value->world, two.value->world, &diff), "a migrated schema 2 save does not round-trip: " + diff);
+		}
+	}
+
 	// Newer saves are refused with a message, by schema and by chunk version.
 	std::string newerSchema = written;
-	newerSchema.replace(0, 10, "PSR-SAVE 3");
+	newerSchema.replace(0, 10, "PSR-SAVE 4");
 	std::string newerChunk = written;
 	newerChunk.replace(newerChunk.find("chunk party 2"), 13, "chunk party 3");
-	for (const auto& [what, text] : {std::make_pair(std::string("schema 3"), newerSchema), std::make_pair(std::string("a party chunk of version 3"), newerChunk)}) {
+	for (const auto& [what, text] : {std::make_pair(std::string("schema 4"), newerSchema), std::make_pair(std::string("a party chunk of version 3"), newerChunk)}) {
 		rules::Result<SaveFile> refused = parseSave(support::resign(text));
 		t.expect(!refused.ok() && refused.error.find("newer build") != std::string::npos, "a save with " + what + " was not refused as from a newer build");
 	}
@@ -81,7 +98,7 @@ ACC_CHECK(acc_sav_02, "ACC-SAV-02", "SAV-020, SAV-021") {
 	session.quitToTitle();
 	const rules::Message refused = session.load("manual_4");
 	t.expect(refused.key == "game.refuse.save_damaged" && session.render(refused).find("newer build") != std::string::npos, "the game does not tell the player that a newer save cannot load");
-	t.note("schema 1, the only earlier schema (no build is released yet), migrates (macros and combo log to core's forms, quests and unlocks filled from flags, the unresumable mid-event state dropped), loads in the game and then round-trips; an unknown chunk survives a load and a manual save byte for byte; a newer schema and a newer chunk version are refused with a newer-build message the game shows");
+	t.note("schema 1 (no build is released yet) migrates (macros and combo log to core's forms, quests and unlocks filled from flags, the unresumable mid-event state dropped), loads in the game and then round-trips; schema 2 gets an empty actors chunk and round-trips; an unknown chunk survives a load and a manual save byte for byte; a newer schema and a newer chunk version are refused with a newer-build message the game shows");
 	std::error_code ignored;
 	std::filesystem::remove_all(dir, ignored);
 }

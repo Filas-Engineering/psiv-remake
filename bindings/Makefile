@@ -55,6 +55,7 @@ SCRIPT = $(GAME)/data/scripts/playthrough.txt
 SAMPLE = monogame/Psiv.Sample/Psiv.Sample.csproj
 SAMPLE_SCRIPT = monogame/Psiv.Sample/scripts/smoke.txt
 SAMPLE_LARGE_SCRIPT = monogame/Psiv.Sample/scripts/large_areas.txt
+SAMPLE_ACTORS_SCRIPT = monogame/Psiv.Sample/scripts/actors.txt
 
 .PHONY: all test native-test dotnet dotnet-test dotnet-missing clean deps
 
@@ -119,6 +120,10 @@ dotnet-test: dotnet
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_large_saves --script $(SAMPLE_LARGE_SCRIPT) --frames 1600 > $(BUILD)/sample_large_headless.txt \
 		|| (cat $(BUILD)/sample_large_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_large_headless.txt
+	rm -rf $(BUILD)/sample_actors_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_actors_saves --script $(SAMPLE_ACTORS_SCRIPT) --frames 800 > $(BUILD)/sample_actors_headless.txt \
+		|| (cat $(BUILD)/sample_actors_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_actors_headless.txt
 
 dotnet-missing:
 	@echo "no dotnet at $(DOTNET): skipped the C# tests and the sample's headless run"

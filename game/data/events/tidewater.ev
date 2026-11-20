@@ -5,7 +5,14 @@ event tidewater_arrival skippable
 	lock player
 	fade in 1.0
 	narrate @tidewater.arrival.ferry
+	move dockhand to dock_front
+	move dockhand to greet_spot
+	face dockhand fighter
 	say dockhand @tidewater.arrival.ropes
+	move dockhand to dock_front
+	# Back onto the dockhand's talk point, a solid cell no marker may name.
+	move dockhand to 10 0 2
+	face dockhand dock_front
 	set tidewater.arrived
 	unlock player
 end

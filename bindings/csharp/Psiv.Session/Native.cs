@@ -81,6 +81,9 @@ public struct PsivMarker { public IntPtr Name; public int X, Y; }
 public struct PsivExit { public int X, Y; public IntPtr ToArea, ToMarker; }
 
 [StructLayout(LayoutKind.Sequential)]
+public struct PsivActor { public IntPtr Id, Name; public int X, Y, Facing, Visible, Scripted; }
+
+[StructLayout(LayoutKind.Sequential)]
 public struct PsivPoint { public int Kind; public IntPtr Id; public int X, Y; public IntPtr Event; public int Active, Cost; }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -243,7 +246,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 3;
+	public const uint AbiVersion = 4;
 
 	[LibraryImport(Library, EntryPoint = "psiv_abi_version")] public static partial uint AbiVersionOf();
 	[LibraryImport(Library, EntryPoint = "psiv_version")] public static partial IntPtr Version();
@@ -293,6 +296,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_field_markers")] public static partial int FieldMarkers(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_field_exits")] public static partial int FieldExits(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_field_points")] public static partial int FieldPoints(SessionHandle s, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_field_actors")] public static partial int FieldActors(SessionHandle s, out IntPtr list, out int count);
 
 	[LibraryImport(Library, EntryPoint = "psiv_line_pending")] public static partial int LinePending(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_line_get")] public static partial int LineGet(SessionHandle s, out PsivLine line);

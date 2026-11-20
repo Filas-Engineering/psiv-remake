@@ -333,7 +333,13 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			points.Add(new FieldPoint((PointKind)p.Kind, Native.Str(p.Id), p.X, p.Y, Native.Str(p.Event), p.Active != 0, p.Cost));
 		}
-		return new FieldView(info, grid, enemies, markers, exits, points);
+		Must(Native.FieldActors(_handle, out IntPtr ap, out int ac));
+		var actors = new List<FieldActor>(ac);
+		foreach (PsivActor a in Native.Span<PsivActor>(ap, ac))
+		{
+			actors.Add(new FieldActor(Native.Str(a.Id), Native.Str(a.Name), a.X, a.Y, (Direction)a.Facing, a.Visible != 0, a.Scripted != 0));
+		}
+		return new FieldView(info, grid, enemies, markers, exits, points, actors);
 	}
 
 	// Events

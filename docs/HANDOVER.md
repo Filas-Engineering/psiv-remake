@@ -18,7 +18,7 @@ Planning documents, engine-neutral C++17 libraries and tooling for a 3D remake o
 | `docs/research/original-battle-rules.md` | The original's battle rules as read from the disassembly: AI, targeting, combinations, rewards, statuses, end conditions, vehicles |
 | `core/` | Battle rules library (`librules.a`), placeholder data, `battle_cli`, 179 tests |
 | `events/` | Event script format, compiler and resumable interpreter, `event_cli`, 92 tests |
-| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles. `game_cli` (play, bot, `--check` for data), 75 tests |
+| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles. `game_cli` (play, bot, `--check` for data), 79 tests |
 | `tools/text/` | Line database, glossary, rename review and localization export (Python, 98 tests) |
 | `tools/maps/` | Tiled maps to area files and back (Python, 46 tests) |
 | `acceptance/` | The spec's automatable checks, run against the libraries. `report.md` maps every requirement to a status |
@@ -34,7 +34,7 @@ Needs a C++17 compiler, GNU Make and Python 3. The .NET SDK is optional and expe
 ```bash
 make test          # core, events, game, text and map tooling
 make acceptance    # spec checks and report
-make bindings      # C tests, C# tests, MonoGame sample headless run
+make bindings      # C tests, C# tests, MonoGame sample headless runs
 make linux-check   # all three in Docker with gcc and clang
 tools/windows-check.sh   # unit tests cross-compiled for Windows, run under Wine
 ```
@@ -59,13 +59,13 @@ Bringing in real data: [`data-import.md`](data-import.md).
 | --- | --- |
 | core | 179 tests pass |
 | events | 92 tests pass |
-| game | 75 tests pass, data check passes, area files match their Tiled sources, scripted playthrough matches its expected transcript, bot finishes both encounter modes on the main route and the kiln route |
+| game | 79 tests pass, data check passes, area files match their Tiled sources, scripted playthrough matches its expected transcript, bot finishes both encounter modes on the main route and the kiln route |
 | text tooling | 98 tests pass |
 | map tooling | 46 tests pass |
 | acceptance | PASS 26, FAIL 0, NOT IMPLEMENTED 12, NOT AUTOMATABLE 26 |
-| C API | 641 checks pass |
+| C API | 712 checks pass |
 | C# | 13 tests pass |
-| MonoGame sample | headless run, 2000 frames, 0 failures |
+| MonoGame sample | three headless runs (smoke 2000 frames, large areas 1600, scripted actor walk 800), 0 failures |
 
 Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch64 and Linux x86-64 (GCC 13.3 and clang 18.1, Ubuntu 24.04 in Docker). Windows: the core, events and game unit tests pass when cross-compiled with MinGW-w64 (GCC 14) and run under Wine 10 (`tools/windows-check.sh`). That check does not cover MSVC, the acceptance suites or the bindings.
 
@@ -73,7 +73,8 @@ Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch
 
 * Rules version 9 and event schema 6 (`core/include/rules/version.h`). Bump the rules version whenever a rule, a formula or the order of random draws changes. `replayBattle` refuses records from another rules version or event schema.
 * Battle record format 5. `parseRecord` still reads 3 and 4.
-* C API `PSIV_ABI_VERSION` 3.
+* C API `PSIV_ABI_VERSION` 4.
+* Save schema 3 (`PSR-SAVE 3`). Schemas 1 and 2 migrate when they load.
 * Everything is deterministic from the seed: the same setup, data and commands give the same event stream on every platform and optimization level. ACC-BAT-15 checks this.
 
 ## Battle rules that match the original
@@ -137,7 +138,7 @@ The scripted playthrough needs the first battle lost twice and then won. After a
 
 **Measurements.** Per-action presentation times (BAT-102), encounter pacing baselines (ENC-036), walk speeds and step distance (FLD-022, ENC-041).
 
-**Engine.** Nothing is integrated with Unreal yet. The contract is the event stream (`core/README.md`, "Events") and the C API in `bindings/c`. The MonoGame sample shows the full loop with rectangles and text.
+**Engine.** Nothing is integrated with Unreal yet. The contract is the event stream (`core/README.md`, "Events") and the C API in `bindings/c`. The MonoGame sample shows the full loop with generated pictures and text, script actors included.
 
 **Platforms.** MSVC has not been tried, and the acceptance suites and bindings have not run on Windows. The MonoGame sample's window has only run on macOS.
 

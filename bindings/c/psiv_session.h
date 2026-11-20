@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 3
+#define PSIV_ABI_VERSION 4
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -389,6 +389,20 @@ typedef struct psiv_point {
 	int32_t cost;
 } psiv_point;
 
+/* One of the game's actors (game.json "actors") standing in the party's area. */
+typedef struct psiv_actor {
+	const char* id;
+	/* Its speaker name in the profile's language. */
+	const char* name;
+	int32_t x;
+	int32_t y;
+	/* A psiv_direction. */
+	int32_t facing;
+	int32_t visible;
+	/* 1 once a script has moved, turned, shown or hidden it; 0 while it stands untouched at its talk point. */
+	int32_t scripted;
+} psiv_actor;
+
 /* PSIV_NOT_FOUND outside an area (at the title before a game). */
 PSIV_API psiv_status psiv_field_info_get(psiv_session* session, psiv_field_info* out);
 /* width * height bytes, row-major from the top left, each a psiv_cell terrain plus PSIV_CELL_WALKABLE. */
@@ -400,6 +414,10 @@ PSIV_API psiv_status psiv_field_markers(psiv_session* session, const psiv_marker
 PSIV_API psiv_status psiv_field_exits(psiv_session* session, const psiv_exit** out, int32_t* count);
 /* Talk hooks, step hooks, chests, shops and rest points that stand on a cell. */
 PSIV_API psiv_status psiv_field_points(psiv_session* session, const psiv_point** out, int32_t* count);
+/* The actors in the party's area, in game.json order, hidden ones included. An actor no script touched stands at
+ * the talk point named after it, visible and facing south. Scripts move, turn, show and hide actors in the party's
+ * area; an actor keeps its place when the party leaves, and its state is saved, mid-event saves included. */
+PSIV_API psiv_status psiv_field_actors(psiv_session* session, const psiv_actor** out, int32_t* count);
 
 /* ------------------------------------------------------------------------------------------------------ */
 /* Events                                                                                                 */

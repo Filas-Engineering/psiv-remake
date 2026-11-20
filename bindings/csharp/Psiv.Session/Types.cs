@@ -127,9 +127,13 @@ public sealed record FieldExit(int X, int Y, string ToArea, string ToMarker);
 
 public sealed record FieldPoint(PointKind Kind, string Id, int X, int Y, string Event, bool Active, int Cost);
 
+// One of the game's actors in the party's area. Scripted: a script has moved, turned, shown or hidden it; an
+// untouched actor stands at the talk point named after it.
+public sealed record FieldActor(string Id, string Name, int X, int Y, Direction Facing, bool Visible, bool Scripted);
+
 // A snapshot of everything a field renderer draws, read in one go after update.
 public sealed record FieldView(FieldInfo Info, IReadOnlyList<CellFlags> Grid, IReadOnlyList<FieldEnemy> Enemies, IReadOnlyList<Marker> Markers,
-	IReadOnlyList<FieldExit> Exits, IReadOnlyList<FieldPoint> Points)
+	IReadOnlyList<FieldExit> Exits, IReadOnlyList<FieldPoint> Points, IReadOnlyList<FieldActor> Actors)
 {
 	public CellFlags Cell(int x, int y) => x < 0 || y < 0 || x >= Info.Width || y >= Info.Height ? CellFlags.Wall : Grid[y * Info.Width + x];
 }

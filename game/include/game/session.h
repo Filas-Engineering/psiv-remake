@@ -180,6 +180,18 @@ struct AutoBattle {
 	bool ended = false;
 };
 
+// One of the game's actors standing in the party's area, from Session::actorsHere(). An actor no script touched
+// stands at the talk point named after it, visible and facing south; script moves, turns, shows and hides change
+// that (see README.md, "Actors").
+struct ActorView {
+	std::string id;
+	Cell cell;
+	Facing facing = Facing::South;
+	bool visible = true;
+	// A script has moved, turned, shown or hidden it.
+	bool scripted = false;
+};
+
 enum class WalkStatus { Walking, Arrived, LeftArea, Stopped, NoPath, TooLong };
 
 // A walk to a cell along the shortest path, from Session::beginWalk.
@@ -253,6 +265,8 @@ public:
 	// (TooLong).
 	PathWalk beginWalk(Cell goal) const;
 	WalkStatus walkStep(PathWalk& walk);
+	// The actors in the party's area, in game.json order, hidden ones included.
+	std::vector<ActorView> actorsHere() const;
 	// Interacts with whatever stands in the cell the leader faces (FLD-030).
 	rules::Message interact();
 	// Party talk (FLD-070): the lines of the best matching set for this area and the flags, as Line output.
@@ -362,6 +376,8 @@ private:
 	void endEvent();
 	void dropEvent();
 	void openChest(const Chest& chest);
+	void applyActorAction(const events::Action& action);
+	std::optional<Cell> actorCell(const std::string& actor) const;
 	void giveThing(const std::string& id, int count);
 	void reportFieldUse(const std::vector<rules::Event>& events, const std::vector<rules::PartyMember>& party);
 	rules::Message payRest(const RestPoint* point);

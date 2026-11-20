@@ -50,10 +50,12 @@ public sealed class SampleController
 	private const int LongestAnimationMs = 600;
 
 	// A presentation action being played: the session waits on it until FinishAction.
-	private sealed class Animation(PresentationAction action, int lengthMs)
+	// An actor action on an actor in view plays on its sprite instead of as a label.
+	private sealed class Animation(PresentationAction action, int lengthMs, bool onSprite = false)
 	{
 		public PresentationAction Action { get; } = action;
 		public int LengthMs { get; } = lengthMs;
+		public bool OnSprite { get; } = onSprite;
 		public int ElapsedMs { get; set; }
 		public float Progress => LengthMs == 0 ? 1f : Math.Clamp(ElapsedMs / (float)LengthMs, 0f, 1f);
 	}
@@ -86,6 +88,9 @@ public sealed class SampleController
 	}
 
 	public bool QuitRequested { get; private set; }
+
+	// The script actors drawn in the last field frame, for headless expectations.
+	public IReadOnlyDictionary<string, (float X, float Y, bool Walking)> DrawnActors => _field.DrawnActors;
 
 	public Screen Screen
 	{
@@ -156,15 +161,34 @@ public sealed class SampleController
 				continue;
 			}
 			_log("action: " + a.Description + (a.Instant ? " (instant)" : ""));
+			FieldActor? actor = a.Type is ActionType.Move or ActionType.Face or ActionType.ShowActor or ActionType.HideActor
+				? _s.Field()?.Actors.FirstOrDefault(x => x.Id == a.Subject)
+				: null;
+			(int X, int Y)? drawnAt = actor is null ? null : _field.ActorCell(actor.Id);
 			if (a.Instant)
 			{
 				EndAnimation(a);
 				continue;
 			}
-			int length = a.Type is ActionType.Move or ActionType.FadeIn or ActionType.FadeOut or ActionType.CameraMove
+			if (actor is not null && drawnAt is { } from)
+			{
+				int length = ShortestAnimationMs;
+				if (a.Type == ActionType.Move)
+				{
+					// The sprite walks there a cell per step time (faster or slower with the move's speed); the event
+					// waits until it arrives.
+					int cellMs = (int)(Math.Max(1, _s.FieldInfo()!.StepMs) / (a.Speed > 0 ? a.Speed : 1.0));
+					_field.Pace(actor.Id, cellMs);
+					int cells = Math.Abs(actor.X - from.X) + Math.Abs(actor.Y - from.Y);
+					length = cells > 0 ? cells * cellMs : ShortestAnimationMs;
+				}
+				_animations.Add(new Animation(a, length, onSprite: true));
+				continue;
+			}
+			int labelLength = a.Type is ActionType.Move or ActionType.FadeIn or ActionType.FadeOut or ActionType.CameraMove
 				? Math.Clamp((int)(a.Seconds * 1000), ShortestAnimationMs, LongestAnimationMs)
 				: ShortestAnimationMs;
-			_animations.Add(new Animation(a, length));
+			_animations.Add(new Animation(a, labelLength));
 		}
 	}
 
@@ -209,8 +233,10 @@ public sealed class SampleController
 			case ActionType.FadeOut:
 				darkness = a.Progress;
 				break;
+			case var _ when a.OnSprite:
+				break;
 			default:
-				// Anything else, a move included, is a label sliding across the top of the screen with its subject.
+				// Anything else is a label sliding across the top of the screen with its subject.
 				string label = a.Action.Subject.Length > 0 ? a.Action.Subject : a.Action.Description;
 				int x = 20 + (int)((s.Width - s.Measure(label, Style.Small) - 64) * a.Progress);
 				Style.Plate(s, label, x, 52, Style.Accent);
@@ -490,13 +516,6 @@ public sealed class SampleController
 		return field && _field.LeaderScreenY + Art.Tile > bottom - 8 ? 36 : bottom;
 	}
 
-	private ActorLook LookOf(string id)
-	{
-		List<Member> lineup = _s.Party().Where(m => m.InLineup).ToList();
-		int index = lineup.FindIndex(m => m.Id == id);
-		return index == 0 ? Art.Hero : index > 0 ? Art.Companion(index - 1) : Art.LookFor(id);
-	}
-
 	private void DrawDialogue(IDrawSurface s, Art art)
 	{
 		bool field = DrawField(s, art);
@@ -507,6 +526,11 @@ public sealed class SampleController
 		}
 		int x = 24;
 		int w = s.Width - 48;
+		// Between lines (a script actor walking, a fade) the field shows without an empty box.
+		if (!_s.LinePending && _s.Choice() is null)
+		{
+			return;
+		}
 		Style.Box(s, x, y, w, DialogueHeight);
 		if (_s.Line() is { } line)
 		{
@@ -519,7 +543,7 @@ public sealed class SampleController
 				s.Fill(px - 2, py - 2, 100, 100, Style.PanelEdge);
 				s.Fill(px, py, 96, 96, Style.Track);
 				s.Fill(px, py + 56, 96, 40, Style.PanelTop);
-				ActorLook look = LookOf(line.SpeakerId.Length > 0 ? line.SpeakerId : line.SpeakerName);
+				ActorLook look = Art.LookFor(line.SpeakerId.Length > 0 ? line.SpeakerId : line.SpeakerName);
 				s.Image(art.ActorFrame(look, Direction.South, 0), px + 8, py + 8, 80, 80, Color.White);
 				tx = px + 122;
 			}
@@ -953,7 +977,7 @@ public sealed class SampleController
 			{
 				Style.Frame(s, cx, cy, cw, ch, targeted ? Style.Accent * (0.4f + 0.6f * pulse) : Style.Accent);
 			}
-			ActorLook look = i == 0 ? Art.Hero : Art.Companion(i - 1);
+			ActorLook look = Art.LookFor(c.Id);
 			int frame = acting ? 1 + _clockMs / 260 % 2 : 0;
 			s.Image(art.ActorFrame(look, Direction.South, frame), cx + 8, cy + 8, 64, 64, c.Alive ? Color.White : new Color(80, 80, 92));
 			s.Text(Style.Fit(s, c.Name, cw - 90), cx + 80, cy + 12, !c.Alive ? Style.Dim : acting ? Style.Accent : Style.Text);
@@ -1457,7 +1481,7 @@ public sealed class SampleController
 		int y = 180;
 		Style.Window(s, x, y, w, 220, "Name");
 		string member = _s.NameEntryMember;
-		s.Image(art.ActorFrame(LookOf(member), Direction.South, 0), x + 28, y + 40, 96, 96, Color.White);
+		s.Image(art.ActorFrame(Art.LookFor(member), Direction.South, 0), x + 28, y + 40, 96, 96, Color.White);
 		s.Text($"A name for {_s.DisplayName(member)}:", x + 150, y + 36, Style.Accent);
 		s.Fill(x + 150, y + 80, 420, 50, Style.Track);
 		Style.Frame(s, x + 150, y + 80, 420, 50, Style.PanelEdge);

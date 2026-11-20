@@ -86,7 +86,7 @@ Everything about the adventure that is not an area, a script or battle data: the
 
 ### Areas
 
-One JSON file per area: the cell grid, markers, exits, hooks, shops, rest points, chests and encounter zones. Reference: [Areas](../game/README.md#areas). Draw them in Tiled and convert with [tools/maps](../tools/maps/README.md), or write the JSON directly. The display name is the text key `area.<id>`.
+One JSON file per area: the cell grid, markers, exits, hooks, shops, rest points, chests and encounter zones. Reference: [Areas](../game/README.md#areas). Draw them in Tiled and convert with [tools/maps](../tools/maps/README.md), or write the JSON directly. The display name is the text key `area.<id>`. Give a person's interact hook the id of its actor in `game.json`'s `actors`: the actor then stands on that cell until a script moves it (see [Actors](../game/README.md#actors)).
 
 ### Events
 

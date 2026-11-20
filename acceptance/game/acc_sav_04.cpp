@@ -31,10 +31,14 @@ const ContentField kContentFields[] = {
 	{"world", "flag", 1, "flag"}, {"world", "visited", 1, "area"}, {"world", "enemy", 2, "zone"}, {"world", "enemy", 3, "encounter"},
 	{"quests", "job", 1, "job"}, {"unlocks", "entry", 1, "entry"},
 	{"difficulty", "difficulty", 1, "difficulty"},
+	{"actors", "actor", 1, "actor"}, {"actors", "actor", 2, "actor_area"},
 };
 
 bool known(const GameData& d, const std::string& kind, const std::string& id) {
 	if (kind == "area") return d.area(id) != nullptr;
+	// An actor a script showed or hid before giving it a cell has no area, written as "-".
+	if (kind == "actor_area") return id == "-" || d.area(id) != nullptr;
+	if (kind == "actor") return std::find(d.config.actors.begin(), d.config.actors.end(), id) != d.config.actors.end();
 	if (kind == "difficulty") return d.db.difficulty(id) != nullptr;
 	if (kind == "character") return d.db.character(id) != nullptr;
 	if (kind == "ability") return d.db.ability(id) != nullptr;
@@ -156,7 +160,7 @@ ACC_CHECK(acc_sav_04, "ACC-SAV-04", "SAV-012") {
 		keys += (keys.empty() ? "" : ", ") + k;
 	}
 	t.note(std::to_string(saves) + " saves from the playthrough: " + std::to_string(contentValues) +
-		" content references (areas, characters, abilities, equipment, statuses, items, flags, jobs, encyclopedia entries, difficulty) are all string IDs of the loaded data; numbers appear only in " + keys +
+		" content references (areas, characters, actors, abilities, equipment, statuses, items, flags, jobs, encyclopedia entries, difficulty) are all string IDs of the loaded data; numbers appear only in " + keys +
 		" (counts, levels, hit points, cells, times, sequence, encounter stream, and macro steps' formation positions, which are target rules); " + std::to_string(reloaded) +
 		" of them load to the same world against data with a decoy sorted first into every content table and the areas reordered");
 	std::error_code ignored;

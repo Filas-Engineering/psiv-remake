@@ -109,6 +109,7 @@ public class NativeLayoutTests
 		Assert.Contains("psiv-bindings", GameSession.LibraryVersion);
 		Same<PsivAbilityInfo>("psiv_ability_info");
 		Same<PsivAction>("psiv_action");
+		Same<PsivActor>("psiv_actor");
 		Same<PsivActiveStatus>("psiv_active_status");
 		Same<PsivBattleEvent>("psiv_battle_event");
 		Same<PsivBattleInfo>("psiv_battle_info");
@@ -345,6 +346,24 @@ public class SessionTests
 		Line line = s.Line()!;
 		Assert.Equal("", line.SpeakerId);
 		s.ConfirmLine();
+		// The dockhand walks over and turns before it speaks; the field already shows where each step ends.
+		(string Description, int X, int Y, Direction Facing)[] steps =
+		[
+			("move dockhand to dock_front", 10, 3, Direction.South),
+			("move dockhand to greet_spot", 5, 4, Direction.South),
+			("face dockhand fighter", 5, 4, Direction.West),
+		];
+		foreach ((string description, int x, int y, Direction facing) in steps)
+		{
+			s.Update(100);
+			Assert.Null(s.Line());
+			PresentationAction step = Assert.Single(s.PollActions());
+			Assert.Equal(description, step.Description);
+			FieldActor dockhand = s.Field()!.Actors.Single(a => a.Id == "dockhand");
+			Assert.Equal((x, y, facing, true, true), (dockhand.X, dockhand.Y, dockhand.Facing, dockhand.Visible, dockhand.Scripted));
+			s.FinishAction(step.Handle);
+		}
+		s.Update(100);
 		line = s.Line()!;
 		Assert.Equal("dockhand", line.SpeakerId);
 		Assert.Equal("Dockhand", line.SpeakerName);
@@ -365,6 +384,10 @@ public class SessionTests
 		Assert.Equal(CellFlags.Wall, view.Cell(0, 0) & CellFlags.TerrainMask);
 		Assert.Contains(view.Points, p => p.Kind == PointKind.Shop);
 		Assert.Contains(view.Exits, e => e.ToArea == "reed_path");
+		// The arrival walked the dockhand back to its talk point; the guide has not been touched.
+		Assert.Equal(["dockhand", "guide"], view.Actors.Select(a => a.Id));
+		Assert.Equal(new FieldActor("dockhand", "Dockhand", 10, 2, Direction.South, true, true), view.Actors[0]);
+		Assert.Equal(new FieldActor("guide", "Harbor Guide", 5, 2, Direction.South, true, false), view.Actors[1]);
 		Assert.True(s.OpenMenu().Ok);
 		Member fighter = s.Party().Single();
 		Assert.Equal("fighter", fighter.Id);
