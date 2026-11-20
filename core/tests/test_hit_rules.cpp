@@ -5,13 +5,7 @@
 using namespace rules;
 using namespace fixtures;
 
-TEST(criticalAndStatusFormulas) {
-	CHECK_EQ(formulas::criticalChance(8, 20), 28);
-	CHECK_EQ(formulas::criticalChance(90, 20), 100);
-	CHECK_EQ(formulas::criticalDamage(20, 150), 30);
-	CHECK_EQ(formulas::criticalDamage(1, 150), 1);
-	CHECK_EQ(formulas::elementScaled(20, 150), 30);
-	CHECK_EQ(formulas::elementScaled(20, 0), 0);
+TEST(statusFormulas) {
 	CHECK_EQ(formulas::statusChance(70, 50), 35);
 	CHECK_EQ(formulas::statusChance(70, 100), 0);
 }
@@ -20,7 +14,6 @@ TEST(criticalHitsComeFromDataInputs) {
 	Database db = data();
 	db.characters["fighter"].base.dexterity = 500;
 	db.characters["fighter"].base.critical = 100;
-	db.battleRules.criticalDamagePercent = 200;
 	for (std::uint64_t seed = 1; seed <= 10; ++seed) {
 		Battle battle = makeBattle(db, {"gel_mite"}, seed);
 		battle.combatant(kFirstEnemy).hp = 500;
@@ -31,25 +24,29 @@ TEST(criticalHitsComeFromDataInputs) {
 		CHECK(critical && critical->target == kFirstEnemy);
 		const std::vector<Event> damage = ofType(events, EventType::DamageDealt);
 		const int strength = battle.combatant(kFighter).stats.strength;
-		const int low = formulas::defended(formulas::criticalDamage(formulas::physicalDamage(strength, 3, 100, formulas::kVarianceMin), 200));
-		const int high = formulas::defended(formulas::criticalDamage(formulas::physicalDamage(strength, 3, 100, formulas::kVarianceMax), 200));
+		const int low = formulas::defended(formulas::damage(strength, 3, formulas::criticalBonus(strength), 100, formulas::kSpreadMin));
+		const int high = formulas::defended(formulas::damage(strength, 3, formulas::criticalBonus(strength), 100, formulas::kSpreadMax));
 		CHECK(!damage.empty() && damage[0].amount >= low && damage[0].amount <= high);
 	}
 
-	// No critical stat and no effect bonus: never a critical.
-	db.characters["fighter"].base.critical = 0;
-	db.equipment["copper_blade"].bonus.critical = 0;
+	// The same odds never make a critical of an attack on a group or of a skill.
+	db.characters["scout"].base.dexterity = 500;
+	db.characters["scout"].base.critical = 100;
 	for (std::uint64_t seed = 1; seed <= 30; ++seed) {
-		Battle battle = makeBattle(db, {"gel_mite"}, seed);
-		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+		Battle battle = makeBattle(db, {"gel_mite", "gel_mite"}, seed);
+		battle.combatant(kFirstEnemy).hp = 500;
+		battle.combatant(kFirstEnemy + 1).hp = 500;
+		battle.setCommand(kScout, Command::attack(kFirstEnemy));
+		battle.setCommand(kFighter, Command::ability("focus_shot", kFirstEnemy));
 		othersDefend(battle);
-		CHECK(ofType(battle.resolveRound(), EventType::Critical).empty());
+		const std::vector<Event> events = battle.resolveRound();
+		CHECK_EQ(ofType(events, EventType::DamageDealt).size(), std::size_t(3));
+		CHECK(ofType(events, EventType::Critical).empty());
 	}
 }
 
 TEST(evasionTurnsHitsIntoMisses) {
 	Database db = data();
-	db.characters["fighter"].base.dexterity = 500;
 	db.enemies["gel_mite"].stats.evasion = 100;
 	for (std::uint64_t seed = 1; seed <= 10; ++seed) {
 		Battle battle = makeBattle(db, {"gel_mite"}, seed);
@@ -58,6 +55,15 @@ TEST(evasionTurnsHitsIntoMisses) {
 		const std::vector<Event> events = battle.resolveRound();
 		CHECK(firstBy(events, EventType::Missed, kFighter).has_value());
 		CHECK(ofType(events, EventType::DamageDealt).empty());
+
+		// Only basic attacks roll to hit.
+		Battle skill = makeBattle(db, {"gel_mite"}, seed);
+		skill.combatant(kFirstEnemy).hp = 500;
+		skill.setCommand(kFighter, Command::ability("focus_shot", kFirstEnemy));
+		othersDefend(skill);
+		const std::vector<Event> landed = skill.resolveRound();
+		CHECK(ofType(landed, EventType::Missed).empty());
+		CHECK_EQ(ofType(landed, EventType::DamageDealt).size(), std::size_t(1));
 	}
 }
 

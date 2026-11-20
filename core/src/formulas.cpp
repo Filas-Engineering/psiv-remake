@@ -12,45 +12,28 @@ int initiative(int agility, int roll) {
 	return agility > 0 ? agility + roll : 0;
 }
 
-int hitChance(int attackerDexterity, int defenderAgility, int defenderEvasion) {
-	const int base = std::clamp(85 + attackerDexterity - defenderAgility, 40, 100);
-	return base * (100 - std::clamp(defenderEvasion, 0, 100)) / 100;
+int chanceScore(int roll, int actorStat, int targetStat) {
+	return (roll + actorStat - targetStat) * 2;
 }
 
-int criticalChance(int attackerCritical, int effectBonus) {
-	return std::clamp(attackerCritical + effectBonus, 0, 100);
+int criticalBonus(int attack) {
+	return attack / 4;
 }
 
-int criticalDamage(int damage, int criticalDamagePercent) {
-	return std::max(1, damage * criticalDamagePercent / 100);
-}
-
-int physicalDamage(int strength, int defense, int power, int variance) {
-	const int base = std::max(strength * 2 - defense, std::max(1, strength / 4));
-	return std::max(1, base * power / 100 * variance / 100);
-}
-
-int elementalDamage(int power, int mental, int targetMental, int affinity, int variance) {
+int damage(int attack, int defense, int bonus, int affinity, int spread) {
 	if (affinity <= 0) {
 		return 0;
 	}
-	const int base = std::max(power + mental - targetMental / 2, std::max(1, power / 2));
-	return std::max(1, base * variance / 100 * affinity / 100);
-}
-
-int elementScaled(int damage, int affinity) {
-	if (affinity <= 0) {
-		return 0;
-	}
-	return std::max(1, damage * affinity / 100);
+	const int raw = attack * spread / 64 + attack + bonus * 2;
+	return std::clamp(raw * affinity / 100 - defense, 1, kMaxDamage);
 }
 
 int defended(int damage) {
 	return std::max(1, damage / 2);
 }
 
-int healAmount(int power, int mental) {
-	return power + mental / 2;
+int healAmount(int power, int mental, int spread) {
+	return (mental * spread / 64 + mental + power * 2) / 2;
 }
 
 int reviveHp(int maxHp, int percent) {
@@ -63,10 +46,6 @@ int statusTick(int maxHp, int percent) {
 
 int statusChance(int chance, int resistance) {
 	return chance * (100 - std::clamp(resistance, 0, 100)) / 100;
-}
-
-int escapeChance(int partyAverageAgility, int enemyAverageAgility, const EscapeRule& rule) {
-	return std::clamp(rule.baseChance + (partyAverageAgility - enemyAverageAgility) * rule.agilityFactor, rule.minChance, rule.maxChance);
 }
 
 int modifiedStat(int base, int percentTotal) {

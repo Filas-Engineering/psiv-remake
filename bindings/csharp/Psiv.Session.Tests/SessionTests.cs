@@ -48,9 +48,9 @@ public class PlaythroughTests
 {
 	private static string RunScript(string saves)
 	{
-		using GameSession session = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = saves, Seed = 3 });
+		using GameSession session = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = saves, Seed = 10 });
 		var output = new StringWriter();
-		output.Write($"{session.GameInfo().Title} (seed 3)\n");
+		output.Write($"{session.GameInfo().Title} (seed 10)\n");
 		var runner = new ScriptRunner(session, output, autoBattle: true);
 		runner.RunScript(File.ReadAllText(Path.Combine(Paths.GameData, "scripts", "playthrough.txt")));
 		output.Write("End of script.\n");
@@ -78,7 +78,7 @@ public class PlaythroughTests
 			UseShellExecute = false,
 			WorkingDirectory = Paths.Game,
 		};
-		foreach (string arg in new[] { "--data", Paths.GameData, "--seed", "3", "--auto-battle", "--script", Path.Combine(Paths.GameData, "scripts", "playthrough.txt"), "--saves", cppSaves })
+		foreach (string arg in new[] { "--data", Paths.GameData, "--seed", "10", "--auto-battle", "--script", Path.Combine(Paths.GameData, "scripts", "playthrough.txt"), "--saves", cppSaves })
 		{
 			start.ArgumentList.Add(arg);
 		}
@@ -168,7 +168,7 @@ public class NativeLayoutTests
 public class SessionTests
 {
 	private static GameSession NewSession(string? saves = null, EncounterMode? mode = null, Presentation presentation = Presentation.Instant) =>
-		GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = saves, Seed = 112, EncounterMode = mode, Presentation = presentation });
+		GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = saves, Seed = 12, EncounterMode = mode, Presentation = presentation });
 
 	private static void Settle(GameSession s)
 	{

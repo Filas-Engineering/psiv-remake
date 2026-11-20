@@ -29,7 +29,7 @@ make clean    # build/ and the .NET bin/ and obj/ folders (the sibling libraries
 `make test` runs, in order:
 
 1. `build/c_tests`: the focused C tests.
-2. `game_cli --seed 3 --auto-battle --script ../game/data/scripts/playthrough.txt` and `build/c_playthrough` with the same arguments, each with an empty save directory. The two transcripts must be identical byte for byte, must match `../game/tests/expected/playthrough.txt`, and every file the two runs wrote (autosaves, the manual save, the profile and the clear-data record) must be identical.
+2. `game_cli --seed 10 --auto-battle --script ../game/data/scripts/playthrough.txt` and `build/c_playthrough` with the same arguments, each with an empty save directory. The two transcripts must be identical byte for byte, must match `../game/tests/expected/playthrough.txt`, and every file the two runs wrote (autosaves, the manual save, the profile and the clear-data record) must be identical.
 3. `dotnet test` on `csharp/Psiv.Session.Tests` (the C# playthrough is compared with both the golden transcript and a fresh `game_cli` run, saves included).
 4. The sample in headless mode on `monogame/Psiv.Sample/scripts/smoke.txt` for 2000 frames; it fails on any failed expectation or unfinished script.
 

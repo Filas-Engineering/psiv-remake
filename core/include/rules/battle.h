@@ -111,6 +111,10 @@ private:
 		int dexterity = 0;
 		int critical = 0;
 		Element element = Element::None;
+		// Basic attacks roll to hit and can be critical. Every other ability lands.
+		bool rollsToHit = false;
+		// An attack aimed at a group is never critical, however many targets are left.
+		bool singleTarget = false;
 	};
 
 	Battle() : rng_(0) {}
@@ -142,6 +146,7 @@ private:
 	void useAbility(int actor, const AbilityDef& ability, int target, CommandKind kind, std::vector<Event>& out);
 	void useItem(int actor, const Command& command, std::vector<Event>& out);
 	void attemptEscape(int actor, std::vector<Event>& out);
+	int rollSpread();
 	void payCost(int actor, const AbilityDef& ability, std::vector<Event>& out);
 	// Returns whether any effect changed the battle state.
 	bool applyEffects(int user, const Attacker& attacker, const std::string& source, const std::vector<Effect>& effects, const std::vector<int>& targets, bool flatPower, std::vector<Event>& out);

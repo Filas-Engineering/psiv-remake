@@ -91,7 +91,7 @@ TEST(loaderRejectsBadReferencesAcrossFiles) {
 TEST(loaderRejectsSchemaMistakes) {
 	{
 		auto files = fixtures::dataTexts();
-		replaceOnce(files["abilities.json"], "\"power\": 26", "\"pwer\": 26");
+		replaceOnce(files["abilities.json"], "\"power\": 13", "\"pwer\": 13");
 		expectError(files, "ability 'spark': unknown field 'pwer'");
 	}
 	{
@@ -178,7 +178,7 @@ TEST(loaderRejectsBadEquipmentAndLearning) {
 	{
 		auto files = fixtures::dataTexts();
 		replaceOnce(files["rules.json"], "\"each_living\"", "\"winner_takes_all\"");
-		expectError(files, "rules.json:4: unknown experience split 'winner_takes_all'");
+		expectError(files, "rules.json:3: unknown experience split 'winner_takes_all'");
 	}
 	{
 		auto files = fixtures::dataTexts();

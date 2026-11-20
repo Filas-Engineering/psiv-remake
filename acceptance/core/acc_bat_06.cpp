@@ -7,15 +7,13 @@ using namespace rules;
 
 namespace {
 
-// Replays the draws Rng::chance makes: none at 0 or 100 percent and above.
-bool chance(Rng& rng, int percent) {
-	if (percent >= 100) {
-		return true;
+// Replays Battle::rollSpread: the base plus sixteen draws.
+int spread(Rng& rng) {
+	int total = formulas::kSpreadBase;
+	for (int i = 0; i < formulas::kSpreadRolls; ++i) {
+		total += rng.range(0, formulas::kSpreadRollMax);
 	}
-	if (percent <= 0) {
-		return false;
-	}
-	return rng.range(1, 100) <= percent;
+	return total;
 }
 
 int damageTo(const std::vector<Event>& events, int target) {
@@ -49,8 +47,10 @@ ACC_CHECK(acc_bat_06, "ACC-BAT-06", "BAT-042") {
 	t.expect(identity, "the Original difficulty overlay changes base data, so Original is not the unmodified balance");
 
 	int samples = 0;
+	int criticals = 0;
+	int misses = 0;
 	for (std::uint64_t seed = 1; seed <= 500; ++seed) {
-		// Physical: the fighter's basic attack, with the hit, critical and variance draws replayed.
+		// Physical: the fighter's basic attack, with the hit roll (which also decides a critical) and the spread replayed.
 		{
 			BattleSetup s = support::setup(db, {"rust_hound"}, seed);
 			s.difficulty = "original";
@@ -62,24 +62,28 @@ ACC_CHECK(acc_bat_06, "ACC-BAT-06", "BAT-042") {
 			support::expectedOrder(battle, rng);
 			const Combatant& a = battle.combatant(0);
 			const Combatant& d = battle.combatant(first);
-			const bool hit = chance(rng, formulas::hitChance(a.effective(Stat::Dexterity), d.effective(Stat::Agility), d.stats.evasion));
+			const int roll = rng.range(0, formulas::kChanceRollMax);
+			const int dodge = d.effective(Stat::Agility) + d.stats.evasion;
+			const bool hit = formulas::chanceScore(roll, a.effective(Stat::Dexterity), dodge) > formulas::kHitFloor;
+			const bool critical = hit && formulas::chanceScore(roll, a.effective(Stat::Dexterity) + a.stats.critical, dodge) > formulas::kCriticalAbove;
 			int expected = 0;
 			if (hit) {
-				const bool critical = chance(rng, formulas::criticalChance(a.stats.critical, 0));
-				const int variance = rng.range(formulas::kVarianceMin, formulas::kVarianceMax);
-				expected = formulas::physicalDamage(a.effective(Stat::Strength), d.effective(Stat::Defense), 100, variance);
-				if (critical) {
-					expected = formulas::criticalDamage(expected, db.battleRules.criticalDamagePercent);
-				}
-				expected = formulas::defended(expected);
+				const int attack = a.effective(Stat::Strength);
+				const int bonus = db.ability(a.basicAttack)->effects[0].power + (critical ? formulas::criticalBonus(attack) : 0);
+				const int affinity = a.attackElement != Element::None ? d.affinity(a.attackElement) : 100;
+				expected = formulas::defended(formulas::damage(attack, d.effective(Stat::Defense), bonus, affinity, spread(rng)));
 			}
 			const std::vector<Event> events = battle.resolveRound();
 			const int dealt = damageTo(events, first);
 			t.expect(hit ? dealt == expected : dealt == -1 && support::countType(events, EventType::Missed) == 1,
 				"seed " + std::to_string(seed) + ": physical damage " + std::to_string(dealt) + ", formula gives " + std::to_string(hit ? expected : -1));
+			t.expect(support::countType(events, EventType::Critical) == (critical ? 1 : 0),
+				"seed " + std::to_string(seed) + ": the critical roll gives " + (critical ? "a critical" : "no critical") + ", the battle disagrees");
+			criticals += critical ? 1 : 0;
+			misses += hit ? 0 : 1;
 			++samples;
 		}
-		// Elemental: the mystic's technique against a weakness, with the variance draw replayed.
+		// Elemental: the mystic's technique against a weakness, with the spread replayed.
 		{
 			BattleSetup s = support::setup(db, {"rust_hound"}, seed);
 			s.difficulty = "original";
@@ -89,29 +93,32 @@ ACC_CHECK(acc_bat_06, "ACC-BAT-06", "BAT-042") {
 			support::othersDefend(battle);
 			Rng rng(seed);
 			support::expectedOrder(battle, rng);
-			const int variance = rng.range(formulas::kVarianceMin, formulas::kVarianceMax);
 			const Combatant& a = battle.combatant(1);
 			const Combatant& d = battle.combatant(first);
-			const int expected = formulas::defended(formulas::elementalDamage(db.ability("spark")->effects[0].power, a.effective(Stat::Mental), d.effective(Stat::Mental), d.affinity(Element::Shock), variance));
+			const int expected = formulas::defended(formulas::damage(a.effective(Stat::Mental), d.effective(Stat::Mental), db.ability("spark")->effects[0].power, d.affinity(Element::Shock), spread(rng)));
 			const int dealt = damageTo(battle.resolveRound(), first);
 			t.expect(dealt == expected, "seed " + std::to_string(seed) + ": elemental damage " + std::to_string(dealt) + ", formula gives " + std::to_string(expected));
 			++samples;
 		}
-	}
-
-	// Healing has no random draw.
-	{
-		Battle battle = support::create(db, support::setup(db, {"rust_hound"}, 1));
-		battle.combatant(0).hp = 1;
-		battle.setCommand(3, Command::ability("mend", 0));
-		support::othersDefend(battle);
-		int healed = -1;
-		for (const Event& e : battle.resolveRound()) {
-			healed = e.type == EventType::Healed ? e.amount : healed;
+		// Healing in battle, with the spread replayed.
+		{
+			Battle battle = support::create(db, support::setup(db, {"rust_hound"}, seed));
+			battle.combatant(0).hp = 1;
+			battle.setCommand(3, Command::ability("mend", 0));
+			support::othersDefend(battle);
+			Rng rng(seed);
+			support::expectedOrder(battle, rng);
+			const int expected = formulas::healAmount(db.ability("mend")->effects[0].power, battle.combatant(3).effective(Stat::Mental), spread(rng));
+			int healed = -1;
+			for (const Event& e : battle.resolveRound()) {
+				healed = e.type == EventType::Healed ? e.amount : healed;
+			}
+			t.expect(healed == expected, "seed " + std::to_string(seed) + ": healed " + std::to_string(healed) + ", formula gives " + std::to_string(expected));
+			++samples;
 		}
-		t.expect(healed == formulas::healAmount(db.ability("mend")->effects[0].power, battle.combatant(3).effective(Stat::Mental)), "heal amount differs from the heal formula");
-		++samples;
 	}
+	t.expect(criticals > 0 && misses > 0, "500 basic attacks gave " + std::to_string(criticals) + " criticals and " + std::to_string(misses) + " misses; both paths need samples");
 
-	t.note("Original overlay is the unmodified data; " + std::to_string(samples) + " battle results reproduce the core formulas exactly (physical with hit, critical and variance; elemental with affinity; heal)");
+	t.note("Original overlay is the unmodified data; " + std::to_string(samples) + " battle results reproduce the core formulas exactly (physical with the hit roll, "
+		+ std::to_string(misses) + " misses and " + std::to_string(criticals) + " criticals, and the spread; elemental with affinity; heal)");
 }

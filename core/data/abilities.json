@@ -1,32 +1,32 @@
 {
 	"abilities": [
 		{"id": "strike", "name": "Strike", "kind": "attack", "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 100}
+			{"type": "physical_damage", "power": 0}
 		]},
 		{"id": "bite", "name": "Bite", "kind": "attack", "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 100}
+			{"type": "physical_damage", "power": 0}
 		]},
 		{"id": "ram", "name": "Ram", "kind": "attack", "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 120}
+			{"type": "physical_damage", "power": 3}
 		]},
 		{"id": "scatter_shot", "name": "Scatter Shot", "kind": "attack", "target": "enemy_group", "effects": [
-			{"type": "physical_damage", "power": 60}
+			{"type": "physical_damage", "power": 0}
 		]},
 
 		{"id": "spark", "name": "Spark", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
-			{"type": "elemental_damage", "power": 26, "element": "shock"}
+			{"type": "elemental_damage", "power": 13, "element": "shock"}
 		]},
 		{"id": "ember", "name": "Ember Fan", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
-			{"type": "elemental_damage", "power": 20, "element": "heat"}
+			{"type": "elemental_damage", "power": 10, "element": "heat"}
 		]},
 		{"id": "frostbite", "name": "Frost Pane", "kind": "technique", "cost": 6, "target": "all_enemies", "effects": [
-			{"type": "elemental_damage", "power": 16, "element": "chill"}
+			{"type": "elemental_damage", "power": 8, "element": "chill"}
 		]},
 		{"id": "hush", "name": "Hush", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
 			{"type": "apply_status", "status": "silence", "chance": 70}
 		]},
 		{"id": "gust", "name": "Gust", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
-			{"type": "elemental_damage", "power": 24, "element": "gale"}
+			{"type": "elemental_damage", "power": 12, "element": "gale"}
 		]},
 		{"id": "weaken", "name": "Soften", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
 			{"type": "modify_stat", "stat": "defense", "percent": -30, "duration": 3}
@@ -50,30 +50,30 @@
 			{"type": "apply_status", "status": "sleep", "chance": 60}
 		]},
 		{"id": "cleave", "name": "Cleave", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
-			{"type": "physical_damage", "power": 90}
+			{"type": "physical_damage", "power": 0}
 		]},
 		{"id": "renew", "name": "Renew", "kind": "technique", "cost": 6, "target": "one_ally", "field": true, "effects": [
 			{"type": "heal", "power": 45}
 		]},
 		{"id": "glint", "name": "Glint", "kind": "technique", "cost": 2, "target": "one_enemy", "effects": [
-			{"type": "elemental_damage", "power": 18, "element": "shock"}
+			{"type": "elemental_damage", "power": 9, "element": "shock"}
 		]},
 
 		{"id": "focus_shot", "name": "Focus Shot", "kind": "skill", "uses": 3, "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 180, "critical": 20}
+			{"type": "physical_damage", "power": 11}
 		]},
 		{"id": "overclock", "name": "Overclock", "kind": "skill", "uses": 2, "target": "self", "effects": [
 			{"type": "modify_stat", "stat": "agility", "percent": 50, "duration": 3}
 		]},
 		{"id": "flare_burst", "name": "Flare Burst", "kind": "skill", "uses": 1, "target": "all_enemies", "effects": [
-			{"type": "elemental_damage", "power": 45, "element": "heat"}
+			{"type": "elemental_damage", "power": 22, "element": "heat"}
 		]},
 
 		{"id": "storm_spark", "name": "Storm Spark", "kind": "combo", "target": "one_enemy", "effects": [
-			{"type": "elemental_damage", "power": 80, "element": "shock"}
+			{"type": "elemental_damage", "power": 40, "element": "shock"}
 		]},
 		{"id": "tempest_flare", "name": "Tempest Flare", "kind": "combo", "target": "all_enemies", "effects": [
-			{"type": "elemental_damage", "power": 70, "element": "heat"},
+			{"type": "elemental_damage", "power": 35, "element": "heat"},
 			{"type": "modify_stat", "stat": "agility", "percent": -30, "duration": 2}
 		]},
 		{"id": "mending_chorus", "name": "Mending Chorus", "kind": "combo", "target": "all_allies", "effects": [
@@ -81,10 +81,10 @@
 			{"type": "modify_stat", "stat": "strength", "percent": 40, "duration": 3}
 		]},
 		{"id": "cinder_gale", "name": "Cinder Gale", "kind": "combo", "target": "enemy_group", "effects": [
-			{"type": "elemental_damage", "power": 58, "element": "heat"}
+			{"type": "elemental_damage", "power": 29, "element": "heat"}
 		]},
 		{"id": "brittle_frost", "name": "Brittle Frost", "kind": "combo", "target": "all_enemies", "effects": [
-			{"type": "elemental_damage", "power": 38, "element": "chill"},
+			{"type": "elemental_damage", "power": 19, "element": "chill"},
 			{"type": "modify_stat", "stat": "defense", "percent": -30, "duration": 2}
 		]},
 		{"id": "quiet_hour", "name": "Quiet Hour", "kind": "combo", "target": "enemy_group", "effects": [
@@ -92,13 +92,13 @@
 			{"type": "apply_status", "status": "silence", "chance": 80}
 		]},
 		{"id": "sundering_cleave", "name": "Sundering Cleave", "kind": "combo", "target": "enemy_group", "effects": [
-			{"type": "physical_damage", "power": 150}
+			{"type": "physical_damage", "power": 7}
 		]},
 		{"id": "twin_arc", "name": "Twin Arc", "kind": "combo", "target": "one_enemy", "effects": [
-			{"type": "elemental_damage", "power": 66, "element": "shock"}
+			{"type": "elemental_damage", "power": 33, "element": "shock"}
 		]},
 		{"id": "pinpoint_rend", "name": "Pinpoint Rend", "kind": "combo", "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 250, "critical": 30}
+			{"type": "physical_damage", "power": 21}
 		]},
 		{"id": "clean_slate", "name": "Clean Slate", "kind": "combo", "target": "all_allies", "effects": [
 			{"type": "cure_status", "status": "poison"},
@@ -112,18 +112,18 @@
 			{"type": "heal", "power": 12}
 		]},
 		{"id": "kiln_roar", "name": "Kiln Roar", "kind": "combo", "target": "all_enemies", "effects": [
-			{"type": "elemental_damage", "power": 84, "element": "heat"}
+			{"type": "elemental_damage", "power": 42, "element": "heat"}
 		]},
 		{"id": "hailstorm", "name": "Hailstorm", "kind": "combo", "target": "all_enemies", "effects": [
-			{"type": "elemental_damage", "power": 44, "element": "chill"},
-			{"type": "elemental_damage", "power": 28, "element": "shock"}
+			{"type": "elemental_damage", "power": 22, "element": "chill"},
+			{"type": "elemental_damage", "power": 14, "element": "shock"}
 		]},
 		{"id": "dream_lance", "name": "Dream Lance", "kind": "combo", "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 210}
+			{"type": "physical_damage", "power": 15}
 		]},
 
 		{"id": "venom_spit", "name": "Venom Spit", "kind": "technique", "cost": 2, "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 70},
+			{"type": "physical_damage", "power": 0},
 			{"type": "apply_status", "status": "poison", "chance": 70}
 		]},
 		{"id": "lullaby", "name": "Drone Hum", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
@@ -133,20 +133,20 @@
 			{"type": "heal", "power": 20}
 		]},
 		{"id": "numbing_sting", "name": "Numbing Sting", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 60},
+			{"type": "physical_damage", "power": 0},
 			{"type": "apply_status", "status": "paralysis", "chance": 40}
 		]},
 		{"id": "gear_slam", "name": "Gear Slam", "kind": "technique", "cost": 5, "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 160}
+			{"type": "physical_damage", "power": 8}
 		]},
 		{"id": "rouse", "name": "Rouse", "kind": "technique", "cost": 8, "target": "one_fallen_ally", "effects": [
 			{"type": "revive", "power": 40}
 		]},
 		{"id": "steam_vent", "name": "Steam Vent", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
-			{"type": "elemental_damage", "power": 22, "element": "heat"}
+			{"type": "elemental_damage", "power": 11, "element": "heat"}
 		]},
 		{"id": "lock_bolt", "name": "Lock Bolt", "kind": "technique", "cost": 5, "target": "one_enemy", "effects": [
-			{"type": "physical_damage", "power": 50},
+			{"type": "physical_damage", "power": 0},
 			{"type": "apply_status", "status": "gear_lock", "chance": 25}
 		]},
 		{"id": "muddle_spores", "name": "Muddle Spores", "kind": "technique", "cost": 5, "target": "enemy_group", "effects": [

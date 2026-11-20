@@ -5,30 +5,33 @@
 using namespace rules;
 using namespace fixtures;
 
-TEST(physicalDamageMath) {
-	CHECK_EQ(formulas::physicalDamage(14, 8, 100, 100), 20);
-	CHECK_EQ(formulas::physicalDamage(14, 8, 180, 110), 39);
-	CHECK_EQ(formulas::physicalDamage(14, 8, 100, 90), 18);
-	// Heavy armor still lets a quarter of strength through.
-	CHECK_EQ(formulas::physicalDamage(10, 50, 100, 100), 2);
-	CHECK_EQ(formulas::physicalDamage(1, 50, 10, 90), 1);
+TEST(damageMath) {
+	CHECK_EQ(formulas::kSpreadMin, 8);
+	CHECK_EQ(formulas::kSpreadMax, 120);
+	CHECK_EQ(formulas::damage(14, 8, 0, 100, formulas::kSpreadMean), 20);
+	CHECK_EQ(formulas::damage(14, 8, 5, 100, formulas::kSpreadMax), 42);
+	CHECK_EQ(formulas::damage(14, 8, 0, 100, formulas::kSpreadMin), 7);
+	// Heavy armor still lets one point through, and nothing deals more than 999.
+	CHECK_EQ(formulas::damage(10, 50, 0, 100, formulas::kSpreadMean), 1);
+	CHECK_EQ(formulas::damage(500, 0, 400, 200, formulas::kSpreadMax), 999);
 	CHECK_EQ(formulas::defended(21), 10);
-	CHECK_EQ(formulas::hitChance(10, 8, 0), 87);
-	CHECK_EQ(formulas::hitChance(500, 8, 0), 100);
-	CHECK_EQ(formulas::hitChance(1, 300, 0), 40);
-	// Evasion scales whatever chance is left after the clamp.
-	CHECK_EQ(formulas::hitChance(10, 8, 10), 78);
-	CHECK_EQ(formulas::hitChance(500, 8, 100), 0);
+	CHECK_EQ(formulas::criticalBonus(14), 3);
+	CHECK_EQ(formulas::criticalBonus(3), 0);
+	CHECK_EQ(formulas::chanceScore(10, 14, 20), 8);
+	CHECK_EQ(formulas::chanceScore(0, 5, 30), -50);
+	CHECK_EQ(formulas::chanceScore(formulas::kChanceRollMax, 10, 8), 130);
 }
 
-TEST(elementalDamageAndAffinityMath) {
-	CHECK_EQ(formulas::elementalDamage(26, 14, 4, 100, 100), 38);
-	CHECK_EQ(formulas::elementalDamage(26, 14, 4, 150, 100), 57);
-	CHECK_EQ(formulas::elementalDamage(26, 14, 4, 50, 100), 19);
-	CHECK_EQ(formulas::elementalDamage(26, 14, 4, 0, 100), 0);
-	// A resistant, high-mental target still takes half the base power.
-	CHECK_EQ(formulas::elementalDamage(20, 1, 100, 100, 100), 10);
-	CHECK_EQ(formulas::healAmount(28, 12), 34);
+TEST(affinityAndHealingMath) {
+	// Affinity scales the attack before defense comes off.
+	CHECK_EQ(formulas::damage(26, 4, 13, 100, formulas::kSpreadMean), 74);
+	CHECK_EQ(formulas::damage(26, 4, 13, 150, formulas::kSpreadMean), 113);
+	CHECK_EQ(formulas::damage(26, 4, 13, 50, formulas::kSpreadMean), 35);
+	CHECK_EQ(formulas::damage(26, 4, 13, 0, formulas::kSpreadMean), 0);
+	CHECK_EQ(formulas::damage(26, 4, 13, -50, formulas::kSpreadMean), 0);
+	CHECK_EQ(formulas::healAmount(28, 12, formulas::kSpreadMean), 40);
+	CHECK_EQ(formulas::healAmount(28, 12, formulas::kSpreadMin), 34);
+	CHECK_EQ(formulas::healAmount(28, 12, formulas::kSpreadMax), 45);
 	CHECK_EQ(formulas::reviveHp(42, 50), 21);
 	CHECK_EQ(formulas::modifiedStat(14, 30), 18);
 	CHECK_EQ(formulas::modifiedStat(10, -300), 5);
@@ -54,6 +57,7 @@ TEST(battleAppliesWeaknessResistanceAndImmunity) {
 		const std::vector<Event> events = battle.resolveRound();
 
 		const int mental = battle.combatant(kMystic).stats.mental;
+		const int targetMental = battle.combatant(kFirstEnemy).effective(Stat::Mental);
 		bool sawWeak = false;
 		bool sawImmune = false;
 		bool sawResisted = false;
@@ -61,8 +65,8 @@ TEST(battleAppliesWeaknessResistanceAndImmunity) {
 		for (const Event& e : ofType(events, EventType::DamageDealt)) {
 			if (e.element == Element::Shock && e.target == kFirstEnemy) {
 				sawWeak = e.effectiveness == Effectiveness::Weak;
-				CHECK(e.amount >= formulas::elementalDamage(26, mental, 4, 150, formulas::kVarianceMin));
-				CHECK(e.amount <= formulas::elementalDamage(26, mental, 4, 150, formulas::kVarianceMax));
+				CHECK(e.amount >= formulas::damage(mental, targetMental, 13, 150, formulas::kSpreadMin));
+				CHECK(e.amount <= formulas::damage(mental, targetMental, 13, 150, formulas::kSpreadMax));
 			}
 			if (e.element == Element::Gale && e.target == kFirstEnemy + 1) {
 				sawGaleWeak = e.effectiveness == Effectiveness::Weak;
@@ -95,11 +99,13 @@ TEST(defendingHalvesPhysicalDamage) {
 		Battle battle = makeBattle(db, {"gel_mite"}, seed);
 		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
 		othersDefend(battle);
-		const std::vector<Event> damage = ofType(battle.resolveRound(), EventType::DamageDealt);
+		const std::vector<Event> events = battle.resolveRound();
+		const std::vector<Event> damage = ofType(events, EventType::DamageDealt);
 		CHECK_EQ(damage.size(), std::size_t(1));
 		const int strength = battle.combatant(kFighter).stats.strength;
-		const int low = formulas::defended(formulas::physicalDamage(strength, 3, 100, formulas::kVarianceMin));
-		const int high = formulas::defended(formulas::physicalDamage(strength, 3, 100, formulas::kVarianceMax));
+		const int bonus = ofType(events, EventType::Critical).empty() ? 0 : formulas::criticalBonus(strength);
+		const int low = formulas::defended(formulas::damage(strength, 3, bonus, 100, formulas::kSpreadMin));
+		const int high = formulas::defended(formulas::damage(strength, 3, bonus, 100, formulas::kSpreadMax));
 		CHECK(!damage.empty() && damage[0].amount >= low && damage[0].amount <= high);
 	}
 }

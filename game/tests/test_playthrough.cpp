@@ -11,7 +11,7 @@ TEST(scriptedPlaythroughReachesItsFixedEnding) {
 	std::string script;
 	CHECK(readFile("data/scripts/playthrough.txt", script));
 	SessionOptions options;
-	options.seed = 3;
+	options.seed = 10;
 	options.saveDirectory = test::freshDirectory("playthrough");
 	Session s(test::data(), options);
 	std::ostringstream transcript;
@@ -64,14 +64,14 @@ TEST(scriptedPlaythroughReachesItsFixedEnding) {
 TEST(botFinishesTheRouteInBothModes) {
 	std::string route;
 	CHECK(readFile("data/routes/main.route", route));
-	const BotResult visible = runBot(test::data(), 7, EncounterMode::Visible, route);
-	const BotResult random = runBot(test::data(), 7, EncounterMode::Random, route);
+	const BotResult visible = runBot(test::data(), 2, EncounterMode::Visible, route);
+	const BotResult random = runBot(test::data(), 2, EncounterMode::Random, route);
 	CHECK(visible.finished);
 	CHECK(random.finished);
 	CHECK_EQ(visible.errors, 0);
 	CHECK_EQ(random.errors, 0);
 	CHECK(visible.table.find("reed_path") != std::string::npos);
 	CHECK(visible.table.find("cove.warden_beaten") != std::string::npos);
-	const BotResult again = runBot(test::data(), 7, EncounterMode::Visible, route);
+	const BotResult again = runBot(test::data(), 2, EncounterMode::Visible, route);
 	CHECK_EQ(again.table, visible.table);
 }

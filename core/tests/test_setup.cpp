@@ -95,7 +95,6 @@ TEST(encounterCanForbidEscape) {
 
 TEST(escapeEndsTheBattleAtOnce) {
 	Database db = data();
-	db.battleRules.escape = {100, 0, 100, 100};
 	db.characters["scout"].base.agility = 500;
 	Battle battle = makeBattle(db, {"gel_mite", "rust_hound"}, 1);
 	battle.setCommand(kScout, Command::escape());

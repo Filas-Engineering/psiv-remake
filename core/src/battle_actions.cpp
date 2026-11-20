@@ -183,6 +183,8 @@ void Battle::useAbility(int actor, const AbilityDef& ability, int target, Comman
 	e.target = targets.size() == 1 ? targets.front() : -1;
 	payCost(actor, ability, out);
 	Attacker attacker = attackerOf(actor);
+	attacker.rollsToHit = ability.kind == AbilityKind::Attack;
+	attacker.singleTarget = ability.targeting == Targeting::OneEnemy || ability.targeting == Targeting::RandomEnemy;
 	if (kind == CommandKind::Attack) {
 		attacker.element = combatants_[actor].attackElement;
 	}
@@ -222,29 +224,39 @@ void Battle::useItem(int actor, const Command& command, std::vector<Event>& out)
 	spent.amount = 1;
 }
 
+int Battle::rollSpread() {
+	int spread = formulas::kSpreadBase;
+	for (int i = 0; i < formulas::kSpreadRolls; ++i) {
+		spread += rng_.range(0, formulas::kSpreadRollMax);
+	}
+	return spread;
+}
+
 void Battle::attemptEscape(int actor, std::vector<Event>& out) {
 	int partyAgility = 0;
-	int partyCount = 0;
 	int enemyAgility = 0;
-	int enemyCount = 0;
+	bool enemyCanAct = false;
 	for (int i = 0; i < static_cast<int>(combatants_.size()); ++i) {
 		if (!combatants_[i].alive() || combatants_[i].aboard) {
 			continue;
 		}
 		const int agility = combatants_[i].effective(Stat::Agility);
 		if (isParty(i)) {
-			partyAgility += agility;
-			++partyCount;
+			partyAgility = std::max(partyAgility, agility);
 		} else {
-			enemyAgility += agility;
-			++enemyCount;
+			enemyAgility = std::max(enemyAgility, agility);
+			bool held = false;
+			for (const ActiveStatus& active : combatants_[i].statuses) {
+				const StatusDef* def = db_->status(active.id);
+				held = held || (def && def->action == StatusAction::CannotAct);
+			}
+			enemyCanAct = enemyCanAct || !held;
 		}
 	}
-	const int chance = formulas::escapeChance(partyAgility / std::max(1, partyCount), enemyAgility / std::max(1, enemyCount), db_->battleRules.escape);
 	Event& e = emit(out, EventType::EscapeAttempted);
 	e.actor = actor;
 	e.command = CommandKind::Escape;
-	e.succeeded = rng_.chance(chance);
+	e.succeeded = !enemyCanAct || formulas::chanceScore(rng_.range(0, formulas::kChanceRollMax), partyAgility, enemyAgility) > formulas::kEscapeFloor;
 	if (e.succeeded) {
 		outcome_ = Outcome::Escaped;
 	}
@@ -261,48 +273,46 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 			}
 			switch (effect.kind) {
 			case EffectKind::PhysicalDamage: {
-				const int chance = flatPower ? 100 : formulas::hitChance(attacker.dexterity, t.effective(Stat::Agility), t.stats.evasion);
-				if (!rng_.chance(chance)) {
-					Event& e = emit(out, EventType::Missed);
-					e.actor = user;
-					e.target = target;
-					e.ability = source;
-					missed = true;
-					break;
+				bool critical = false;
+				if (attacker.rollsToHit && !flatPower) {
+					const int roll = rng_.range(0, formulas::kChanceRollMax);
+					const int dodge = t.effective(Stat::Agility) + t.stats.evasion;
+					if (formulas::chanceScore(roll, attacker.dexterity, dodge) <= formulas::kHitFloor) {
+						Event& e = emit(out, EventType::Missed);
+						e.actor = user;
+						e.target = target;
+						e.ability = source;
+						missed = true;
+						break;
+					}
+					critical = attacker.singleTarget && formulas::chanceScore(roll, attacker.dexterity + attacker.critical, dodge) > formulas::kCriticalAbove;
 				}
 				Event& hit = emit(out, EventType::Hit);
 				hit.actor = user;
 				hit.target = target;
 				hit.ability = source;
-				const bool critical = !flatPower && rng_.chance(formulas::criticalChance(attacker.critical, effect.critical));
-				const int variance = rng_.range(formulas::kVarianceMin, formulas::kVarianceMax);
-				const int strength = flatPower ? effect.power : attacker.strength;
-				const int power = flatPower ? 100 : effect.power;
-				int damage = formulas::physicalDamage(strength, t.effective(Stat::Defense), power, variance);
+				const int attack = flatPower ? effect.power : attacker.strength;
+				int bonus = flatPower ? 0 : effect.power;
 				if (critical) {
-					damage = formulas::criticalDamage(damage, db_->battleRules.criticalDamagePercent);
+					bonus += formulas::criticalBonus(attack);
 					Event& e = emit(out, EventType::Critical);
 					e.actor = user;
 					e.target = target;
 					e.ability = source;
 				}
-				Effectiveness effectiveness = Effectiveness::Normal;
-				if (attacker.element != Element::None) {
-					const int affinity = t.affinity(attacker.element);
-					damage = formulas::elementScaled(damage, affinity);
-					effectiveness = effectivenessOf(affinity);
-				}
+				const int affinity = attacker.element != Element::None ? t.affinity(attacker.element) : 100;
+				int damage = formulas::damage(attack, t.effective(Stat::Defense), bonus, affinity, rollSpread());
 				if (t.defending && damage > 0) {
 					damage = formulas::defended(damage);
 				}
+				const Effectiveness effectiveness = attacker.element != Element::None ? effectivenessOf(affinity) : Effectiveness::Normal;
 				changed = dealDamage(user, target, damage, attacker.element, effectiveness, out) > 0 || changed;
 				break;
 			}
 			case EffectKind::ElementalDamage: {
 				const int affinity = t.affinity(effect.element);
-				const int variance = rng_.range(formulas::kVarianceMin, formulas::kVarianceMax);
-				const int mental = flatPower ? 0 : attacker.mental;
-				int damage = formulas::elementalDamage(effect.power, mental, t.effective(Stat::Mental), affinity, variance);
+				const int attack = flatPower ? effect.power : attacker.mental;
+				int damage = formulas::damage(attack, t.effective(Stat::Mental), flatPower ? 0 : effect.power, affinity, rollSpread());
 				if (t.defending && damage > 0) {
 					damage = formulas::defended(damage);
 				}
@@ -310,7 +320,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				break;
 			}
 			case EffectKind::Heal: {
-				const int amount = flatPower ? effect.power : formulas::healAmount(effect.power, attacker.mental);
+				const int amount = flatPower ? effect.power : formulas::healAmount(effect.power, attacker.mental, static_cast<int>(combatants_.size()) > partyCount_ ? rollSpread() : formulas::kSpreadMean);
 				const int healed = std::min(amount, t.stats.maxHp - t.hp);
 				t.hp += healed;
 				Event& e = emit(out, EventType::Healed);

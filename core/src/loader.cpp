@@ -144,9 +144,8 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, s
 		}
 		switch (effect.kind) {
 		case EffectKind::PhysicalDamage:
-			reader.rejectUnknownKeys(*entry, {"type", "power", "critical"});
-			reader.integer(*entry, "power", effect.power, true, 1, 9999);
-			reader.integer(*entry, "critical", effect.critical, false, 0, 100);
+			reader.rejectUnknownKeys(*entry, {"type", "power"});
+			reader.integer(*entry, "power", effect.power, true, 0, 9999);
 			break;
 		case EffectKind::Heal:
 			reader.rejectUnknownKeys(*entry, {"type", "power"});
@@ -232,25 +231,14 @@ void readFieldFlag(Reader& reader, const JsonValue& entry, Targeting targeting, 
 
 void parseRules(Reader& reader, const JsonValue& root, Database& db) {
 	BattleRules& rules = db.battleRules;
-	reader.rejectUnknownKeys(root, {"surprise_rounds", "critical_damage_percent", "experience_split", "escape", "rest_revives"});
+	reader.rejectUnknownKeys(root, {"surprise_rounds", "experience_split", "rest_revives"});
 	reader.integer(root, "surprise_rounds", rules.surpriseRounds, true, 0, 9);
-	reader.integer(root, "critical_damage_percent", rules.criticalDamagePercent, true, 100, 400);
 	if (reader.get(root, "rest_revives", Type::Bool, true)) {
 		reader.boolean(root, "rest_revives", rules.restRevives);
 	}
 	std::string split;
 	if (reader.string(root, "experience_split", split) && !parseExperienceSplit(split, rules.experienceSplit)) {
 		reader.fail(*root.find("experience_split"), "load.unknown_experience_split", {split});
-	}
-	if (const JsonValue* escape = reader.get(root, "escape", Type::Object, true)) {
-		reader.rejectUnknownKeys(*escape, {"base_chance", "agility_factor", "min_chance", "max_chance"});
-		reader.integer(*escape, "base_chance", rules.escape.baseChance, true, 0, 100);
-		reader.integer(*escape, "agility_factor", rules.escape.agilityFactor, true, 0, 100);
-		reader.integer(*escape, "min_chance", rules.escape.minChance, true, 0, 100);
-		reader.integer(*escape, "max_chance", rules.escape.maxChance, true, 0, 100);
-		if (rules.escape.minChance > rules.escape.maxChance) {
-			reader.fail(*escape, "load.min_chance_above_max_chance", {});
-		}
 	}
 }
 

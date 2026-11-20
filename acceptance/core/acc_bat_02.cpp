@@ -10,11 +10,14 @@ namespace {
 
 // Where each event type sits in BAT-010's phases: 0 before the first round, 1 round start, 2 command
 // selection, 3 order, 4 execution, 5 round end. BattleEnded can follow any action, so it has no phase.
-int phaseOf(const Event& e, bool roundStarted) {
+// A defeat belongs to the phase of the damage that caused it, an action's or a round-end tick's.
+int phaseOf(const Event& e, bool roundStarted, int last) {
 	if (!roundStarted) {
 		return 0;
 	}
 	switch (e.type) {
+	case EventType::CombatantDefeated:
+		return last;
 	case EventType::RoundStarted:
 		return 1;
 	case EventType::CommandsLocked:
@@ -22,6 +25,9 @@ int phaseOf(const Event& e, bool roundStarted) {
 	case EventType::OrderResolved:
 		return 3;
 	case EventType::StatusRemoved:
+		if (e.statusEnd == StatusEnd::Defeated) {
+			return last;
+		}
 		return e.statusEnd == StatusEnd::Duration ? 5 : 4;
 	case EventType::StatusTicked:
 	case EventType::StatModifierExpired:
@@ -40,7 +46,7 @@ std::string phaseProblem(const std::vector<Event>& events) {
 	bool roundStarted = false;
 	for (const Event& e : events) {
 		roundStarted = roundStarted || e.type == EventType::RoundStarted;
-		const int phase = phaseOf(e, roundStarted);
+		const int phase = phaseOf(e, roundStarted, last);
 		if (phase < 0) {
 			continue;
 		}

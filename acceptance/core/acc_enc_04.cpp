@@ -2,6 +2,7 @@
 
 #include "rules/formulas.h"
 
+#include <algorithm>
 #include <cstdlib>
 
 using namespace rules;
@@ -13,41 +14,56 @@ constexpr int kAttempts = 10000;
 struct Configuration {
 	std::vector<std::string> enemies;
 	int level;
+	// Enemies, from the first, put to sleep before the attempt.
+	int asleep;
 };
 
-int averageAgility(const Battle& battle, bool party) {
-	int total = 0;
-	int count = 0;
+int highestAgility(const Battle& battle, bool party) {
+	int highest = 0;
 	for (int i = 0; i < static_cast<int>(battle.combatants().size()); ++i) {
 		if (battle.isParty(i) == party && battle.combatant(i).alive()) {
-			total += battle.combatant(i).effective(Stat::Agility);
-			++count;
+			highest = std::max(highest, battle.combatant(i).effective(Stat::Agility));
 		}
 	}
-	return total / count;
+	return highest;
 }
 
 }
 
 ACC_CHECK(acc_enc_04, "ACC-ENC-04", "ENC-030, ENC-031") {
 	const Database& db = support::data(t);
-	const std::vector<Configuration> configurations = {{{"gel_mite", "gel_mite"}, 1}, {{"rust_hound", "bog_wisp"}, 1}, {{"gel_mite"}, 12}, {{"brass_warden", "bog_wisp"}, 1}};
+	const std::vector<Configuration> configurations = {{{"gel_mite", "gel_mite"}, 1, 0}, {{"rust_hound", "bog_wisp"}, 1, 0}, {{"gel_mite"}, 12, 0},
+		{{"brass_warden", "bog_wisp"}, 1, 0}, {{"brass_warden", "bog_wisp"}, 1, 1}, {{"rust_hound", "bog_wisp"}, 1, 2}};
 	std::string summary;
 	for (const Configuration& c : configurations) {
 		int successes = 0;
-		int expected = 0;
+		int mismatches = 0;
+		double chance = 0;
 		// Battle seeds come from a seeded stream, as BAT-134 draws them from the encounter stream.
-		Rng seeds(static_cast<std::uint64_t>(c.level) * 1000 + c.enemies.size());
+		Rng seeds(static_cast<std::uint64_t>(c.level) * 1000 + c.enemies.size() * 10 + c.asleep);
 		for (int attempt = 0; attempt < kAttempts; ++attempt) {
-			BattleSetup s = support::setup(db, c.enemies, seeds.next(), c.level);
+			const std::uint64_t seed = seeds.next();
+			BattleSetup s = support::setup(db, c.enemies, seed, c.level);
 			s.flags.escapeAllowed = true;
 			Battle battle = support::create(db, s);
 			for (int i = 0; i < static_cast<int>(battle.combatants().size()); ++i) {
 				support::sturdy(battle, i);
 			}
-			expected = formulas::escapeChance(averageAgility(battle, true), averageAgility(battle, false), db.battleRules.escape);
+			for (int i = 0; i < c.asleep; ++i) {
+				battle.combatant(battle.partyCount() + i).statuses.push_back({"sleep", 3});
+			}
+			const bool enemyCanAct = c.asleep < static_cast<int>(c.enemies.size());
+			const int party = highestAgility(battle, true);
+			const int enemy = highestAgility(battle, false);
+			// Rolls of 0 to 63 that score above the floor.
+			const int lowestRoll = std::max(0, formulas::kEscapeFloor / 2 + 1 - (party - enemy));
+			chance = enemyCanAct ? 100.0 * std::max(0, formulas::kChanceRollMax + 1 - lowestRoll) / (formulas::kChanceRollMax + 1) : 100.0;
 			battle.setCommand(0, Command::escape());
 			support::othersDefend(battle);
+			// The escape is the first draw after initiative, and only when an enemy can act.
+			Rng rng(seed);
+			support::expectedOrder(battle, rng);
+			const bool predicted = !enemyCanAct || formulas::chanceScore(rng.range(0, formulas::kChanceRollMax), party, enemy) > formulas::kEscapeFloor;
 			const std::vector<Event> events = battle.resolveRound();
 			bool escaped = false;
 			bool afterEscape = false;
@@ -57,6 +73,7 @@ ACC_CHECK(acc_enc_04, "ACC-ENC-04", "ENC-030, ENC-031") {
 				}
 				escaped = escaped || (e.type == EventType::EscapeAttempted && e.succeeded);
 			}
+			mismatches += escaped == predicted ? 0 : 1;
 			if (escaped) {
 				++successes;
 				t.expect(battle.outcome() == Outcome::Escaped, "a successful escape did not end the battle as Escaped");
@@ -67,9 +84,11 @@ ACC_CHECK(acc_enc_04, "ACC-ENC-04", "ENC-030, ENC-031") {
 				t.expect(battle.outcome() == Outcome::Ongoing, "a failed escape did not let the round continue");
 			}
 		}
+		const std::string name = std::to_string(c.enemies.size()) + " enemies (" + std::to_string(c.asleep) + " asleep), level " + std::to_string(c.level);
+		t.expect(mismatches == 0, name + ": " + std::to_string(mismatches) + " attempts differ from the replayed escape roll");
 		const double rate = 100.0 * successes / kAttempts;
-		t.expect(std::abs(rate - expected) <= 1.0, std::to_string(c.enemies.size()) + " enemies, level " + std::to_string(c.level) + ": escape rate " + std::to_string(rate) + "%, rule gives " + std::to_string(expected) + "%");
-		summary += (summary.empty() ? "" : ", ") + std::to_string(expected) + "%";
+		t.expect(std::abs(rate - chance) <= 1.0, name + ": escape rate " + std::to_string(rate) + "%, rule gives " + std::to_string(chance) + "%");
+		summary += (summary.empty() ? "" : ", ") + std::to_string(static_cast<int>(chance + 0.5)) + "%";
 	}
 
 	// Disabled escape never succeeds: the command is refused, and a macro step falls back.
@@ -92,6 +111,6 @@ ACC_CHECK(acc_enc_04, "ACC-ENC-04", "ENC-030, ENC-031") {
 		}
 	}
 
-	t.note(std::to_string(kAttempts) + " seeded attempts in each of 4 configurations match the core escape rule within 1 point (" + summary +
-		"); success ends the battle as Escaped, drops later actions and grants no rewards; disabled escape is refused");
+	t.note(std::to_string(kAttempts) + " seeded attempts in each of 6 configurations match the replayed escape roll, and the rate is within 1 point of the rule (" + summary +
+		"); with every enemy asleep escape always succeeds; success ends the battle as Escaped, drops later actions and grants no rewards; disabled escape is refused");
 }

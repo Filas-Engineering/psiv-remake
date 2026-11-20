@@ -48,10 +48,12 @@ TEST(battleReadsTheOverlaidData) {
 	Battle battle = makeBattle(data(), setup);
 	CHECK_EQ(battle.combatant(kFirstEnemy).stats.maxHp, 322);
 	battle.combatant(kFighter).hp = 1;
+	// Low enough that the spread cannot carry the overlaid power into the range of the unscaled one.
+	battle.combatant(kMedic).stats.mental = 2;
 	battle.setCommand(kMedic, Command::ability("mend", kFighter));
 	othersDefend(battle);
 	const std::vector<Event> heals = ofType(battle.resolveRound(), EventType::Healed);
-	CHECK(heals.size() == 1 && heals[0].amount == formulas::healAmount(22, battle.combatant(kMedic).stats.mental));
+	CHECK(heals.size() == 1 && heals[0].amount >= formulas::healAmount(22, 2, formulas::kSpreadMin) && heals[0].amount <= formulas::healAmount(22, 2, formulas::kSpreadMax));
 }
 
 TEST(emptyOverlayPlaysLikeNoOverlay) {

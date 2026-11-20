@@ -57,7 +57,7 @@ TEST(techniquesWorkOutsideBattleAndCostTheirPoints) {
 	const int tp = members[kMedic].tp;
 	FieldUse use = useAbilityOutsideBattle(data(), members, kMedic, "mend", kFighter);
 	CHECK(use.rejection.empty());
-	CHECK_EQ(members[kFighter].hp, 10 + formulas::healAmount(28, memberStats(data(), members[kMedic]).mental));
+	CHECK_EQ(members[kFighter].hp, 10 + formulas::healAmount(28, memberStats(data(), members[kMedic]).mental, formulas::kSpreadMean));
 	CHECK_EQ(members[kMedic].tp, tp - 3);
 	CHECK_EQ(ofType(use.events, EventType::ResourceSpent).size(), std::size_t(1));
 

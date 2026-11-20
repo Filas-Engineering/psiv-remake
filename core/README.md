@@ -76,7 +76,7 @@ Player-facing results are `Message` values: a stable key and parameters (ids or 
 8. The battle ends as soon as one side has nobody standing, the party escapes, or the scripted end condition holds. A combatant counts as down when it has fallen or has a status that `counts_toward_defeat`, on either side. Victory and Defeat take precedence over a scripted end that happens at the same time.
 9. At the end of the round each living combatant takes status damage ticks (which can defeat). Then status and stat modifier durations count down and expire. A `survive_rounds` scripted end is checked last.
 
-The RNG (`Rng`, SplitMix64) belongs to the battle and is seeded from the setup. `state()` and `restore()` save and continue a generator. The same setup, data and commands always give the same event stream. The order of random draws is part of the rules version: forced-command targets and enemy AI choices, in combatant index order; initiative rolls, in combatant index order; then per action: recovery rolls, a `random_enemy` target, and per physical hit: hit, critical (only when the chance is between 1 and 99), variance. When the battle ends in Victory or a scripted end, the drop rolls come last: enemies in formation order (for a scripted end only the fallen ones), each enemy's drop entries in data order, one roll per entry whose chance is below 100.
+The RNG (`Rng`, SplitMix64) belongs to the battle and is seeded from the setup. `state()` and `restore()` save and continue a generator. The same setup, data and commands always give the same event stream. The order of random draws is part of the rules version: forced-command targets and enemy AI choices, in combatant index order; initiative rolls, in combatant index order; then per action: recovery rolls, a `random_enemy` target, and per effect: for a basic attack's physical damage the hit roll, then for any damage or in-battle heal the sixteen spread rolls; for an escape one roll, only when an enemy can act. When the battle ends in Victory or a scripted end, the drop rolls come last: enemies in formation order (for a scripted end only the fallen ones), each enemy's drop entries in data order, one roll per entry whose chance is below 100.
 
 ## Data formats
 
@@ -89,17 +89,13 @@ Rules that wait on measurements of the original game. All fields are required.
 ```json
 {
 	"surprise_rounds": 1,
-	"critical_damage_percent": 150,
 	"experience_split": "each_living",
-	"escape": {"base_chance": 50, "agility_factor": 2, "min_chance": 10, "max_chance": 90},
 	"rest_revives": true
 }
 ```
 
 * `surprise_rounds` (0 to 9): rounds the surprised side loses after a Party first or Enemy first opening.
-* `critical_damage_percent` (100 to 400).
 * `experience_split`: `each_living` (every living member gets the full amount), `split_living` (the amount is divided among living members, rounded down) or `each_member` (fallen members too).
-* `escape`: inputs to the escape formula below.
 * `rest_revives`: whether `rest` stands a fallen member up (FLD-035 is to measure; true keeps the earlier behavior).
 
 ### statuses.json
@@ -142,7 +138,7 @@ A status with id `defeated` is required, with only an id and a name. The battle 
 * `target` is one of `one_enemy`, `enemy_group`, `all_enemies`, `one_ally`, `all_allies`, `self`, `one_fallen_ally` or `random_enemy`.
 * `field` (optional bool): usable outside battle. Only techniques and skills with a party target and only heal, cure_status and revive effects qualify.
 * Effects:
-  * `{"type": "physical_damage", "power": N, "critical": 0-100}`. `critical` is optional and adds to the user's critical chance.
+  * `{"type": "physical_damage", "power": N}`. `power` (0 to 9999) is the bonus in the damage formula; a plain attack has 0.
   * `{"type": "elemental_damage", "power": N, "element": "heat|chill|shock|gale"}`
   * `{"type": "heal", "power": N}`
   * `{"type": "apply_status", "status": ID, "chance": 1-100}`
@@ -182,7 +178,7 @@ Items use the same effects and targets, but their power is flat: user stats do n
 
 * `characters`: each has these fields:
   * `id`, `name`
-  * `base` and `growth` stats: `hp`, `tp`, `strength`, `mental`, `agility`, `dexterity`, `defense`, and optional `critical` and `evasion` (percent). Growth is added per level above 1.
+  * `base` and `growth` stats: `hp`, `tp`, `strength`, `mental`, `agility`, `dexterity`, `defense`, and optional `critical` and `evasion`: points added to the critical and dodge side of the hit roll, which the original does not have; 0 gives the original's roll. Growth is added per level above 1.
   * `basic_attack`: an ability of kind `attack`.
   * `abilities`: techniques and skills known from level 1.
   * `learns` (optional): `[{"level": 3, "ability": "cleave"}]`. Level 2 to 50. An ability can be known or learned only once.
@@ -338,26 +334,26 @@ The last line is `checksum <FNV-1a 64 of everything before it>`. `parseRecord` r
 
 ## Formulas
 
-Every formula is a **placeholder to be tuned**. The math is in `src/formulas.cpp`; the inputs marked (data) come from the data files.
+Initiative, the chance score, hit, critical, damage, healing and escape follow the original as read from the community disassembly. The other rows are **placeholders to be tuned**. The math is in `src/formulas.cpp`; the inputs marked (data) come from the data files.
 
-| What | Formula (placeholder) |
+| What | Formula |
 | --- | --- |
 | Initiative | `agility + roll`, where roll is 0 to `highest agility / 2 - 1`; 0 when agility is 0 |
-| Hit chance (physical) | `clamp(85 + attacker dexterity - target agility, 40, 100) * (100 - target evasion) / 100` percent. Evasion (data) comes from stats and equipment |
-| Critical chance | `clamp(attacker critical + effect critical, 0, 100)` percent. Both inputs are data; items never land a critical |
-| Critical damage | `max(1, damage * critical_damage_percent / 100)` (data, rules.json) |
-| Variance | a random percent from 90 to 110, applied to every damage roll |
-| Physical damage | `max(strength * 2 - defense, max(1, strength / 4)) * power / 100 * variance / 100`, at least 1 |
-| Weapon element | basic attack damage `* affinity / 100`, at least 1, or 0 when the target is immune |
-| Elemental damage | `max(power + mental - target mental / 2, max(1, power / 2)) * variance / 100 * affinity / 100`. 0 when the target is immune, otherwise at least 1 |
+| Chance score | `(roll + actor stat - target stat) * 2`, where roll is 0 to 63 |
+| Hit (basic attacks) | the chance score of attacker dexterity against target agility plus evasion (data). The attack misses at 8 or below. Techniques, skills, combos and items always land |
+| Critical (basic attacks) | the same roll, with the attacker's critical (data) added to dexterity. Critical above 116, and only against a single target |
+| Spread | 8 plus sixteen rolls of 0 to 7: 8 to 120, 64 on average |
+| Damage | `(attack * spread / 64 + attack + bonus * 2) * affinity / 100 - defense`, from 1 to 999, or 0 when the target is immune |
+| Physical damage | attack is strength, defense is the target's defense, bonus is the effect's `power`, plus `attack / 4` on a critical. Affinity applies only when the attack has a weapon element. Items: attack is `power`, no bonus |
+| Elemental damage | attack is mental, defense is the target's mental, bonus is the effect's `power`. Items: attack is `power`, no bonus |
 | Combo stats | the average of every participant's effective strength, mental, dexterity and critical chance |
 | Defending | damage / 2, at least 1 |
-| Heal | `power + mental / 2` (items: `power`) |
+| Heal | `(mental * spread / 64 + mental + power * 2) / 2`. On the field the spread is 64. Items: `power` |
 | Revive | `max(1, max hit points * power / 100)` |
 | Status chance | `chance * (100 - resistance) / 100`. Resistance 100 is immunity, with no roll |
 | Status tick | `max(1, max hit points * tick_damage_percent / 100)` |
 | Stat modifier | `base * (100 + total percent) / 100`, total clamped to -50..+100, at least 1. Only one modifier per stat: a new one replaces the old |
-| Escape chance | `clamp(base_chance + (party average agility - enemy average agility) * agility_factor, min_chance, max_chance)` percent (data, rules.json) |
+| Escape | succeeds when no living enemy can act. Otherwise the chance score of the highest living party agility against the highest living enemy agility must be above 40 |
 | Experience to next level | `15 * level^2 + 10`. Carried-over experience counts toward the next level. Maximum level 50 |
 | Stats at a level | `base + growth * (level - 1)`, plus equipment bonuses |
 | Rewards | Victory: every enemy's experience and currency; scripted end: the fallen enemies' only. Times `reward_percent * multiplier / 10000` (multiplier 100, 150 or 200), rounded down once. Then split per `experience_split` |
@@ -376,7 +372,9 @@ Every formula is a **placeholder to be tuned**. The math is in `src/formulas.cpp
 
 ## Changes a host must make
 
-Latest: rules version 6. Turn order follows the original as read from the community disassembly: the roll is 0 to just under half the highest agility, and a macro only delays a member who would act before the member listed ahead of it. `replayBattle` refuses records of rules versions 4 and 5.
+Latest: rules version 7. Hit, critical, damage, healing and escape follow the original as read from the community disassembly. `rules.json` lost `critical_damage_percent` and `escape`, physical damage effects lost `critical`, and their `power` is now a bonus, not a percent. `replayBattle` refuses records of rules versions 4 to 6.
+
+Before that: rules version 6. Turn order follows the original: the roll is 0 to just under half the highest agility, and a macro only delays a member who would act before the member listed ahead of it.
 
 The round before: rules version 4, event schema 5, record format 4. `parseRecord` still reads format 3, but `replayBattle` refuses records of event schema 4, since event type names changed. The data's content hash is unchanged.
 

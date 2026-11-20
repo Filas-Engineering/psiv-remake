@@ -84,7 +84,8 @@ TEST(weaponElementAppliesTheTargetsAffinity) {
 		battle.combatant(kFirstEnemy).hp = 500;
 		battle.setCommand(kMystic, Command::attack(kFirstEnemy));
 		othersDefend(battle);
-		const std::vector<Event> damage = ofType(battle.resolveRound(), EventType::DamageDealt);
+		const std::vector<Event> events = battle.resolveRound();
+		const std::vector<Event> damage = ofType(events, EventType::DamageDealt);
 		CHECK_EQ(damage.size(), std::size_t(1));
 		if (damage.empty()) {
 			continue;
@@ -92,8 +93,9 @@ TEST(weaponElementAppliesTheTargetsAffinity) {
 		CHECK(damage[0].element == Element::Heat);
 		CHECK(damage[0].effectiveness == Effectiveness::Weak);
 		const int strength = battle.combatant(kMystic).stats.strength;
-		const int low = formulas::defended(formulas::elementScaled(formulas::physicalDamage(strength, 3, 100, formulas::kVarianceMin), 150));
-		const int high = formulas::defended(formulas::elementScaled(formulas::physicalDamage(strength, 3, 100, formulas::kVarianceMax), 150));
+		const int bonus = ofType(events, EventType::Critical).empty() ? 0 : formulas::criticalBonus(strength);
+		const int low = formulas::defended(formulas::damage(strength, 3, bonus, 150, formulas::kSpreadMin));
+		const int high = formulas::defended(formulas::damage(strength, 3, bonus, 150, formulas::kSpreadMax));
 		CHECK(damage[0].amount >= low && damage[0].amount <= high);
 	}
 }

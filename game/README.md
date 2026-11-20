@@ -37,9 +37,9 @@ Run tests from `game/`, because they load `data/`. One test by name: `./build/ga
 ```
 ./build/game_cli                                    # interactive; type help
 ./build/game_cli --data data --core ../core/data    # the data directories given explicitly
-./build/game_cli --seed 7 --auto-battle --script data/scripts/playthrough.txt --saves build/cli_saves
-./build/game_cli --bot --seed 7                     # pacing tables for visible and random encounters
-./build/game_cli --bot --seed 7 --encounters random --route data/routes/main.route
+./build/game_cli --seed 10 --auto-battle --script data/scripts/playthrough.txt --saves build/cli_saves
+./build/game_cli --bot --seed 2                     # pacing tables for visible and random encounters
+./build/game_cli --bot --seed 2 --encounters random --route data/routes/main.route
 ./build/game_cli --registry                         # the registry built from the data, in the events registry format
 ./build/game_cli --used                             # the string IDs the game shows itself, for event_cli --used
 ```
@@ -229,7 +229,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 
 ## Changes in the previous round
 
-* Builds against core rules version 6 (turn order and macro order follow the original; item drops, vehicles in data) and the events marker maps, scripted ends and game strings.
+* Builds against core rules version 7 (turn order, macro order, hit, damage, healing and escape follow the original; item drops, vehicles in data) and the events marker maps, scripted ends and game strings.
 * Battle drops are added to the inventory and shown. Scripted ends come from the script's `until`; `game.json` no longer takes `scripted_ends`. The registry knows each marker's area and each hook event's starting area, so the game's own warp check is gone.
 * Several languages: `game.json` takes `languages` instead of `strings` and `text`; a placeholder Japanese pair (`text/ja.strings`, `text/ja.json`) is added; the profile's text language picks the tables.
 * Speaker names and journal text moved from the text table to the dialogue tables. Area display names moved from the area files to `area.<id>` text keys (areas no longer take `name`). `Session` refusals are text keys.

@@ -24,7 +24,7 @@ Database applyDifficulty(const Database& db, const DifficultyDef& difficulty) {
 		AbilityDef& ability = it->second;
 		for (Effect& effect : ability.effects) {
 			if (effect.kind == EffectKind::PhysicalDamage || effect.kind == EffectKind::ElementalDamage || effect.kind == EffectKind::Heal) {
-				effect.power = scaled(effect.power, overlay.powerPercent, 1);
+				effect.power = scaled(effect.power, overlay.powerPercent, effect.kind == EffectKind::PhysicalDamage ? 0 : 1);
 			}
 		}
 		if (overlay.cost) {
