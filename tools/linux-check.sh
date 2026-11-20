@@ -2,20 +2,22 @@
 # Builds and tests the repo on Linux in Docker, once with g++/gcc and once with clang++/clang.
 # The repo is mounted read-only and copied inside the container, so no Linux build output lands in it.
 # Usage: tools/linux-check.sh [gcc|clang ...]   (default: gcc clang)
+# PSIV_LINUX_PLATFORM picks the architecture, for example linux/amd64 (default: the host's).
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 BASE=${PSIV_LINUX_BASE:-mcr.microsoft.com/dotnet/sdk:10.0}
-IMAGE=psiv-linux-check
+PLATFORM=${PSIV_LINUX_PLATFORM:-}
+IMAGE=psiv-linux-check$(echo "$PLATFORM" | tr -c "a-z0-9\n" "-")
 COMPILERS=${*:-gcc clang}
 
-docker build -q -t "$IMAGE" - >/dev/null <<EOF
+docker build -q ${PLATFORM:+--platform "$PLATFORM"} -t "$IMAGE" - >/dev/null <<EOF
 FROM $BASE
 RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends g++ clang make python3 \
 	&& rm -rf /var/lib/apt/lists/*
 EOF
 
-docker run --rm -v "$ROOT":/src:ro -e COMPILERS="$COMPILERS" "$IMAGE" sh -euc '
+docker run --rm ${PLATFORM:+--platform "$PLATFORM"} -v "$ROOT":/src:ro -e COMPILERS="$COMPILERS" "$IMAGE" sh -euc '
 	. /etc/os-release
 	echo "== $PRETTY_NAME, $(uname -m), dotnet $(dotnet --version), $(make --version | head -n 1), $(python3 --version)"
 	for compiler in $COMPILERS; do
