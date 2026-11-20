@@ -163,6 +163,9 @@ public sealed class Pixels
 	}
 }
 
+// A picture drawn with a person in a pose, offset from the person's own picture by (Dx, Dy) art pixels.
+public readonly record struct MotionMark(int Image, int Dx, int Dy);
+
 // Head: 0 bare, 1 cap, 2 hood, 3 long hair, 4 headband. Body: 0 coat, 1 apron, 2 belt. Hat colors the cap, hood
 // and headband.
 public sealed record ActorLook(Color Hair, Color Skin, Color Coat, Color Scarf, int Head = 0, int Body = 0, Color Hat = default);
@@ -195,6 +198,8 @@ public sealed class Art
 	private readonly Dictionary<Theme, TileSet> _tiles = [];
 	private readonly Dictionary<ActorLook, int[]> _actors = [];
 	private readonly Dictionary<(uint, int), int> _creatures = [];
+	private readonly MotionMark[] _nodMarks;
+	private readonly MotionMark[] _shakeMarks;
 
 	public Art(IDrawSurface surface)
 	{
@@ -216,6 +221,10 @@ public sealed class Art
 		Alert = Add(BuildAlert());
 		Shadow = Add(BuildShadow());
 		Pointer = Add(BuildPointer());
+		Pixels nod = BuildNodMark();
+		_nodMarks = [new MotionMark(Add(nod), -3, -3), new MotionMark(Add(nod.MirrorX()), 3, -3)];
+		Pixels shake = BuildShakeMark();
+		_shakeMarks = [new MotionMark(Add(shake), -2, 0), new MotionMark(Add(shake.MirrorX()), 2, 0)];
 	}
 
 	public static Theme ThemeOf(AreaKind kind) => kind switch
@@ -510,29 +519,33 @@ public sealed class Art
 		_ => 520,
 	};
 
-	// A person in a pose at `t` (0 to 1 through one play): the picture, a lift in screen pixels, and whether a
-	// startled mark shows above the head. Poses keep the person's facing and only move the head, arms or body.
-	public (int Image, int Lift, bool Alert) PoseFrame(ActorLook look, Direction facing, Pose pose, float t)
+	// A person in a pose at `t` (0 to 1 through one play): the picture, a lift in screen pixels, whether a startled
+	// mark shows above the head, and the motion marks drawn around the head. Poses keep the person's facing and only
+	// move the head, arms or body.
+	public (int Image, int Lift, bool Alert, MotionMark[] Marks) PoseFrame(ActorLook look, Direction facing, Pose pose, float t)
 	{
 		static int Hop(float t, float height) => (int)MathF.Round(MathF.Sin(MathF.PI * Math.Clamp(t, 0f, 1f)) * height);
 		return pose switch
 		{
-			// Two dips of the head.
-			Pose.Nod => (PoseImage(look, facing, pose, (int)(t * 4) % 2), 0, false),
-			// The head turns side to side three times.
-			Pose.Shake => (PoseImage(look, facing, pose, t >= 1f ? 0 : 1 + (int)(t * 6) % 2), 0, false),
+			// Two dips of the head, each down halfway, all the way and back, with a stroke beside each side of the crown
+			// the whole time, so a still frame between dips still reads as a nod.
+			Pose.Nod => (PoseImage(look, facing, pose, NodPhases[(int)(t * 8) % 4]), 0, false, _nodMarks),
+			// The head turns to one side and the other three times, with an arc on each side of it.
+			Pose.Shake => (PoseImage(look, facing, pose, t >= 1f ? 0 : 1 + (int)(t * 6) % 2), 0, false, _shakeMarks),
 			// One hop, standing straight.
-			Pose.Jump => (ActorFrame(look, facing, 0), Hop(t, 15), false),
+			Pose.Jump => (ActorFrame(look, facing, 0), Hop(t, 15), false, []),
 			// A quick hop with both arms up, and the mark above the head.
-			Pose.Startle => (PoseImage(look, facing, pose, 1), Hop(t * 3.5f, 9), true),
+			Pose.Startle => (PoseImage(look, facing, pose, 1), Hop(t * 3.5f, 9), true, []),
 			// Down, held, and up again.
-			Pose.Bow => (PoseImage(look, facing, pose, t is > 0.15f and < 0.85f ? 2 : t is > 0.05f and < 0.95f ? 1 : 0), 0, false),
+			Pose.Bow => (PoseImage(look, facing, pose, t is > 0.15f and < 0.85f ? 2 : t is > 0.05f and < 0.95f ? 1 : 0), 0, false, []),
 			// An arm up, the hand swinging.
-			Pose.Wave => (PoseImage(look, facing, pose, 1 + (int)(t * 6) % 2), 0, false),
+			Pose.Wave => (PoseImage(look, facing, pose, 1 + (int)(t * 6) % 2), 0, false, []),
 			// Anything else: two small bounces.
-			_ => (ActorFrame(look, facing, 0), Hop(t * 2f % 1f, 5), false),
+			_ => (ActorFrame(look, facing, 0), Hop(t * 2f % 1f, 5), false, []),
 		};
 	}
+
+	private static readonly int[] NodPhases = [0, 1, 2, 1];
 
 	private readonly Dictionary<(ActorLook, Direction, Pose, int), int> _poses = [];
 
@@ -553,9 +566,36 @@ public sealed class Art
 		switch (pose)
 		{
 		case Pose.Nod:
-			g = ShiftRows(g, 1, 7, 0, 1);
+			if (phase == 2)
+			{
+				// All the way down the head tips forward: from the front the hair comes down over the brow, from the
+				// side the face leans a pixel ahead.
+				if (view == View.Front)
+				{
+					int left = Array.IndexOf(g[5], 'o'), right = Array.LastIndexOf(g[5], 'o');
+					for (int x = left + 1; x < right; x++)
+					{
+						g[5][x] = 'h';
+					}
+				}
+				g = ShiftRows(g, 1, 7, view == View.Side ? 1 : 0, 2);
+			}
+			else
+			{
+				g = ShiftRows(g, 1, 7, 0, 1);
+			}
 			break;
 		case Pose.Shake:
+			// The head turns: from the front or the back it shows its profile to one side and then the other, from the
+			// side it turns to face the viewer and back, and it swings a pixel with each turn.
+			char[][] profile = Dress(SideRows, look, View.Side).Select(r => r.ToCharArray()).ToArray();
+			char[][] head = view == View.Side
+				? (phase == 1 ? Dress(FrontRows, look, View.Front).Select(r => r.ToCharArray()).ToArray() : profile)
+				: phase == 1 ? profile.Select(r => r.Reverse().ToArray()).ToArray() : profile;
+			for (int y = 1; y <= 7; y++)
+			{
+				g[y] = (char[])head[y].Clone();
+			}
 			g = ShiftRows(g, 1, 7, phase == 1 ? -1 : 1, 0);
 			break;
 		case Pose.Bow:
@@ -1213,6 +1253,34 @@ public sealed class Art
 		p.Rect(6, 11, 4, 3, new Color(255, 214, 70));
 		return p;
 	}
+
+	// Light strokes with a dark edge, at (x, y) pairs.
+	private static Pixels Strokes(params (int X, int Y)[] points)
+	{
+		var p = new Pixels();
+		foreach ((int x, int y) in points)
+		{
+			for (int dy = -1; dy <= 1; dy++)
+			{
+				for (int dx = -1; dx <= 1; dx++)
+				{
+					p[x + dx, y + dy] = Outline;
+				}
+			}
+		}
+		foreach ((int x, int y) in points)
+		{
+			p[x, y] = new Color(250, 250, 244);
+		}
+		return p;
+	}
+
+	// The left half of a nod's marks, drawn 3 pixels left of and above the person: an upright stroke beside the
+	// crown, where the head dips from.
+	private static Pixels BuildNodMark() => Strokes((4, 3), (4, 4), (4, 5));
+
+	// The left half of a shake's marks, drawn 2 pixels left of the person: an arc beside the head.
+	private static Pixels BuildShakeMark() => Strokes((2, 3), (1, 4), (1, 5), (2, 6));
 
 	private static Pixels BuildShadow()
 	{

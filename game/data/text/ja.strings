@@ -37,6 +37,10 @@ tidewater.chart.crab = 荷車の車輪ほどもあるカニが、はさみを上
 tidewater.chart.crab_gone = カニは階段の下へ逃げていった。板の間に傷薬がはさまっている。
 tidewater.chart.crab_won = カニは満足げに一度はさみを鳴らし、杭の下へもどっていく。
 
+tidewater.board.read = 宿のそばの板に、書きつけがたくさん打ちつけてある。いちばん新しいのは案内人の字で、入り江へ行く仲間をあと二人さがしている。
+tidewater.board.engineer = その書きつけを見て来たんだ。鐘に歯車があるなら、どれが止まっているか見つけてみせる。
+tidewater.board.scout = この葦原は二度も地図にした。次は門で待っていてくれよ。
+
 reed.scout.joins = 入り江へ行くのかい？この葦原は二度も地図にした。ついて行くよ。
 reed.peddler.greeting = おい。沼のこっち側で一番安い店だよ。というか、ここしかない。
 reed.peddler.farewell = ウィスプに気をつけな。噛む前に羽音がするから。

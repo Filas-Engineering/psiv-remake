@@ -37,6 +37,10 @@ tidewater.chart.crab = A crab as wide as a cart wheel climbs out from under the 
 tidewater.chart.crab_gone = The crab scuttles back under the stairs. A tonic is wedged between the planks.
 tidewater.chart.crab_won = The crab clacks once, satisfied, and slides back under the post.
 
+tidewater.board.read = Notes cover the board by the inn. A fresh one in the guide's hand asks for two more pairs of hands for the cove.
+tidewater.board.engineer = That note is ours. If the bell has gears, I will find out which one sticks.
+tidewater.board.scout = And I have mapped these reeds twice over. Wait for us at the gate next time.
+
 reed.scout.joins = Heading for the cove? I have mapped these reeds twice over. I am coming along.
 reed.peddler.greeting = Psst. Best prices this side of the marsh, and the only prices.
 reed.peddler.farewell = Mind the wisps. They hum before they bite.

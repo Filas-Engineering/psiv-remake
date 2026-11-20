@@ -4,8 +4,8 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-// A person as the last field frame drew it, in cells.
-public readonly record struct DrawnPerson(float X, float Y, bool Walking, Direction Facing, Pose Pose);
+// A person as the last field frame drew it, in cells; `Marked` when its pose drew motion marks.
+public readonly record struct DrawnPerson(float X, float Y, bool Walking, Direction Facing, Pose Pose, bool Marked);
 
 // Draws a FieldView: a camera that follows the leader, tiles chosen from neighbors and cell coordinates,
 // and actors that glide between cells. The game moves everyone a whole cell at a time; the glides only
@@ -15,9 +15,8 @@ public sealed class FieldRenderer
 	private const int Tile = Art.Tile;
 	private const int BannerMs = 2600;
 	private const int WaterFrameMs = 220;
-	private const int Followers = 3;
-	// The leader and the followers drawn behind it.
-	public const int DrawnMembers = 1 + Followers;
+	// Every member of a full lineup (rules::kMaxPartySize, 5) walks behind the leader.
+	private const int Followers = 4;
 
 	// A position that slides from where it was drawn to the cell the game reports.
 	private sealed class Glide
@@ -72,6 +71,22 @@ public sealed class FieldRenderer
 			IdleMs = 0;
 			Steps++;
 			return true;
+		}
+
+		// Takes over a person drawn at (x, y) somewhere else: it walks to the cell it holds, a step time per cell.
+		public void Catch(float x, float y, int stepMs)
+		{
+			float dx = X - x, dy = Y - y;
+			if (dx != 0f || dy != 0f)
+			{
+				Facing = Math.Abs(dx) > Math.Abs(dy) ? (dx > 0 ? Direction.East : Direction.West) : (dy > 0 ? Direction.South : Direction.North);
+			}
+			_fromX = x;
+			_fromY = y;
+			_elapsedMs = 0;
+			_lengthMs = stepMs * Math.Max(1, (int)MathF.Ceiling(Math.Abs(dx) + Math.Abs(dy)));
+			IdleMs = 0;
+			Steps++;
 		}
 
 		public void Advance(int dtMs)
@@ -154,9 +169,9 @@ public sealed class FieldRenderer
 		}
 	}
 
-	private sealed class MemberPlace(int x, int y, Direction facing)
+	private sealed class MemberPlace(ActorWalk walk, Direction facing)
 	{
-		public ActorWalk Walk { get; set; } = new(x, y);
+		public ActorWalk Walk { get; set; } = walk;
 		public Direction Facing { get; set; } = facing;
 	}
 
@@ -165,14 +180,17 @@ public sealed class FieldRenderer
 	private string _area = "";
 	private int _lastClock = -1;
 	private readonly Glide _leader = new();
-	private readonly Glide[] _followers = [new(), new(), new()];
+	private readonly Glide[] _followers = [new(), new(), new(), new()];
 	private readonly List<(int X, int Y)> _trail = [];
 	private readonly Dictionary<int, Glide> _enemies = [];
 	private readonly Dictionary<string, ActorWalk> _actors = [];
 	// Milliseconds per cell for each actor's next walk, from its move's speed.
 	private readonly Dictionary<string, int> _paces = [];
-	// Party members a script moved or turned during the current scene, drawn there instead of in the walking line.
+	// Party members a script moved or turned during the current scene, drawn there instead of in the walking line,
+	// and members outside the lineup a script moved, drawn until the scene ends.
 	private readonly Dictionary<string, MemberPlace> _members = [];
+	// Members a scene left out of the line, walking back to their places in it once the scene is over.
+	private readonly Dictionary<string, ActorWalk> _returns = [];
 	// The pose each person is playing, from a script's `anim`.
 	private readonly Dictionary<string, PoseRun> _poseRuns = [];
 	private int _bannerLeftMs;
@@ -193,17 +211,25 @@ public sealed class FieldRenderer
 	// The time per cell of the actor's next walk; without one the actor is put at its new cell at once.
 	public void Pace(string id, int cellMs) => _paces[id] = cellMs;
 
-	// Where a party member is drawn or walking to: its scripted cell during a scene, otherwise its place in the
-	// walking line (the leader's cell, or the trail behind it).
-	public (int X, int Y) MemberCell(string id, IReadOnlyList<string> lineup)
+	// Where a party member is drawn or walking to: its scripted cell during a scene, the cell it is walking back to
+	// after one, otherwise its place in the walking line (the leader's cell, or the trail behind it). A member
+	// outside the lineup has none until a script moves it.
+	public (int X, int Y)? MemberCell(string id, IReadOnlyList<string> lineup)
 	{
 		if (_members.TryGetValue(id, out MemberPlace? m))
 		{
 			return m.Walk.Target;
 		}
+		if (_returns.TryGetValue(id, out ActorWalk? back))
+		{
+			return back.Target;
+		}
 		int i = IndexOf(lineup, id);
-		return i > 0 && i - 1 < _followers.Length ? (_followers[i - 1].X, _followers[i - 1].Y) : (_leader.X, _leader.Y);
+		return i < 0 ? null : i > 0 && i - 1 < _followers.Length ? (_followers[i - 1].X, _followers[i - 1].Y) : (_leader.X, _leader.Y);
 	}
+
+	// Whether the current scene has put the member somewhere.
+	public bool Placed(string id) => _members.ContainsKey(id);
 
 	private static int IndexOf(IReadOnlyList<string> lineup, string id)
 	{
@@ -217,24 +243,33 @@ public sealed class FieldRenderer
 		return -1;
 	}
 
-	private MemberPlace Place(string id, IReadOnlyList<string> lineup)
+	private MemberPlace Place(string id, IReadOnlyList<string> lineup, int x, int y)
 	{
 		if (!_members.TryGetValue(id, out MemberPlace? m))
 		{
+			if (_returns.Remove(id, out ActorWalk? back))
+			{
+				_members[id] = m = new MemberPlace(back, back.Facing);
+				return m;
+			}
 			int i = IndexOf(lineup, id);
-			Direction facing = i > 0 && i - 1 < _followers.Length ? _followers[i - 1].Facing : _leader.Facing;
-			(int x, int y) = MemberCell(id, lineup);
-			_members[id] = m = new MemberPlace(x, y, facing);
+			Direction facing = i > 0 && i - 1 < _followers.Length ? _followers[i - 1].Facing : i == 0 ? _leader.Facing : Direction.South;
+			_members[id] = m = new MemberPlace(new ActorWalk(x, y), facing);
 		}
 		return m;
 	}
 
 	// A script moves a party member: it walks there along x, then along y, a cell per `cellMs` (0 puts it there at
-	// once), and ends facing its last leg, as the game does for actors. Returns the cells walked.
+	// once), and ends facing its last leg, as the game does for actors. A member outside the lineup that has no cell
+	// yet is put there at once, as the game puts an actor without a talk point. Returns the cells walked.
 	public int MoveMember(string id, IReadOnlyList<string> lineup, int x, int y, int cellMs)
 	{
-		(int fx, int fy) = MemberCell(id, lineup);
-		MemberPlace m = Place(id, lineup);
+		if (MemberCell(id, lineup) is not (int fx, int fy))
+		{
+			Place(id, lineup, x, y);
+			return 0;
+		}
+		MemberPlace m = Place(id, lineup, fx, fy);
 		if ((x, y) != (fx, fy))
 		{
 			m.Facing = y != fy ? (y > fy ? Direction.South : Direction.North) : (x > fx ? Direction.East : Direction.West);
@@ -254,11 +289,14 @@ public sealed class FieldRenderer
 	// game turns actors. Nothing happens when the cell is its own.
 	public void FaceMember(string id, IReadOnlyList<string> lineup, int x, int y)
 	{
-		(int fx, int fy) = MemberCell(id, lineup);
+		if (MemberCell(id, lineup) is not (int fx, int fy))
+		{
+			return;
+		}
 		int dx = x - fx, dy = y - fy;
 		if (dx != 0 || dy != 0)
 		{
-			Place(id, lineup).Facing = Math.Abs(dx) > Math.Abs(dy) ? (dx > 0 ? Direction.East : Direction.West) : (dy > 0 ? Direction.South : Direction.North);
+			Place(id, lineup, fx, fy).Facing = Math.Abs(dx) > Math.Abs(dy) ? (dx > 0 ? Direction.East : Direction.West) : (dy > 0 ? Direction.South : Direction.North);
 		}
 	}
 
@@ -274,10 +312,30 @@ public sealed class FieldRenderer
 		}
 	}
 
-	// The scene is over: party members go back into the walking line and every pose stops.
-	public void EndScene()
+	// The scene is over and every pose stops. The leader is drawn at its cell again at once, since the player has it
+	// back; other lineup members the scene moved walk back to their places in the line; anyone else leaves.
+	public void EndScene(IReadOnlyList<string> lineup)
+	{
+		foreach ((string id, MemberPlace m) in _members)
+		{
+			if (IndexOf(lineup, id) > 0)
+			{
+				if (!m.Walk.Walking)
+				{
+					m.Walk.Facing = m.Facing;
+				}
+				_returns[id] = m.Walk;
+			}
+		}
+		_members.Clear();
+		_poseRuns.Clear();
+	}
+
+	// A new area or the title: nothing a scene did is drawn any more.
+	public void ClearScene()
 	{
 		_members.Clear();
+		_returns.Clear();
 		_poseRuns.Clear();
 	}
 
@@ -318,7 +376,7 @@ public sealed class FieldRenderer
 			}
 			_enemies.Clear();
 			_actors.Clear();
-			EndScene();
+			ClearScene();
 			_bannerLeftMs = BannerMs;
 			_bannerTitle = f.AreaName;
 			_bannerKind = KindName(f.AreaKind);
@@ -361,6 +419,36 @@ public sealed class FieldRenderer
 		foreach (MemberPlace m in _members.Values)
 		{
 			m.Walk.Advance(dt);
+		}
+		// Members walking back after a scene go a cell per step, along x and then y, to the cell their place in the
+		// line holds. If the leader sets off first, the trail takes each of them over from where it is drawn.
+		bool leaderMoved = _leader.X != oldX || _leader.Y != oldY;
+		foreach (string id in _returns.Keys.ToList())
+		{
+			ActorWalk w = _returns[id];
+			w.Advance(dt);
+			int i = IndexOf(lineup, id) - 1;
+			if (i < 0 || i >= _followers.Length)
+			{
+				_returns.Remove(id);
+				continue;
+			}
+			Glide g = _followers[i];
+			if (leaderMoved)
+			{
+				g.Catch(w.PX, w.PY, step);
+				_returns.Remove(id);
+			}
+			else if (!w.Walking && w.Target == (g.X, g.Y))
+			{
+				// Back in line, it turns the way the leader faces.
+				g.Facing = _leader.Facing;
+				_returns.Remove(id);
+			}
+			else if (!w.Walking)
+			{
+				w.WalkTo(g.X, g.Y, step);
+			}
 		}
 
 		var seen = new HashSet<int>();
@@ -486,13 +574,14 @@ public sealed class FieldRenderer
 			int image = art.ActorFrame(look, facing, frame);
 			int lift = 0;
 			bool alert = false;
+			MotionMark[] marks = [];
 			Pose pose = Pose.None;
 			if (PoseAt(id, clockMs) is { } run)
 			{
-				(image, lift, alert) = art.PoseFrame(look, facing, run.Pose, run.T);
+				(image, lift, alert, marks) = art.PoseFrame(look, facing, run.Pose, run.T);
 				pose = run.Pose;
 			}
-			DrawnActors[id] = new DrawnPerson(px, py, walking, facing, pose);
+			DrawnActors[id] = new DrawnPerson(px, py, walking, facing, pose, marks.Length > 0);
 			Put(px, py, (sx, sy) =>
 			{
 				s.Image(art.Shadow, sx, sy + 3, Tile, Tile, Color.White);
@@ -500,6 +589,10 @@ public sealed class FieldRenderer
 				if (alert)
 				{
 					overlays.Add(() => s.Image(art.Alert, sx + Tile / 4, sy - lift - Tile / 2 - 8, Tile / 2, Tile / 2 + 8, Color.White));
+				}
+				foreach (MotionMark mark in marks)
+				{
+					overlays.Add(() => s.Image(mark.Image, sx + mark.Dx * Art.Scale, sy - lift + mark.Dy * Art.Scale, Tile, Tile, Color.White));
 				}
 				extra?.Invoke(sx, sy - lift);
 			}, sortBias);
@@ -587,12 +680,24 @@ public sealed class FieldRenderer
 				Person(id, Art.LookFor(id), m.Walk.PX, m.Walk.PY, m.Walk.Walking ? m.Walk.Facing : m.Facing, m.Walk.Frame, m.Walk.Walking, -0.01f);
 				continue;
 			}
+			if (_returns.TryGetValue(id, out ActorWalk? back))
+			{
+				Person(id, Art.LookFor(id), back.PX, back.PY, back.Facing, back.Frame, back.Walking, -0.01f);
+				continue;
+			}
 			Glide g = _followers[i];
 			if (g.X == _leader.X && g.Y == _leader.Y)
 			{
 				continue;
 			}
 			Person(id, Art.LookFor(id), g.PX, g.PY, g.Facing, g.Frame, g.Progress < 1f, -0.01f);
+		}
+		foreach ((string id, MemberPlace m) in _members)
+		{
+			if (IndexOf(lineup, id) < 0)
+			{
+				Person(id, Art.LookFor(id), m.Walk.PX, m.Walk.PY, m.Walk.Walking ? m.Walk.Facing : m.Facing, m.Walk.Frame, m.Walk.Walking);
+			}
 		}
 		string leaderId = lineup.Count > 0 ? lineup[0] : "";
 		ActorLook leaderLook = lineup.Count > 0 ? Art.LookFor(leaderId) : Art.Hero;

@@ -17,8 +17,8 @@ public static class Program
 		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N]   headless, no window\n" +
 		"\n" +
 		"Headless script lines: press KEY [COUNT] | hold KEY FRAMES | wait FRAMES | pressuntil KEY SCREEN MAXFRAMES |\n" +
-		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | expect actor ID X Y [FACING]|walking|hidden | expect pose ID POSE |\n" +
-		"expect toast none|TEXT | expect notoast TEXT | dump | shot FILE.png (window only) | # comment.\n" +
+		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | expect actor ID X Y [FACING]|walking|hidden | expect pose ID POSE [marked] |\n" +
+		"expect label none | expect toast none|TEXT | expect notoast TEXT | dump | shot FILE.png (window only) | # comment.\n" +
 		"Keys are MonoGame Keys names.\n" +
 		"Exit codes: 0 done, 1 a failure, 2 bad arguments.\n";
 
@@ -256,15 +256,22 @@ public sealed class ScriptPlayer
 			case "expect" when w.Length >= 3 && w[1] == "actor":
 				ExpectActor(w, source);
 				break;
-			case "expect" when w.Length == 4 && w[1] == "pose":
+			case "expect" when (w.Length == 4 || (w.Length == 5 && w[4] == "marked")) && w[1] == "pose":
 				_controller.DrawnActors.TryGetValue(w[2], out DrawnPerson person);
 				if (!Enum.TryParse(w[3], true, out Pose pose))
 				{
 					Fail($"{source}: no pose named {w[3]}");
 				}
-				else if (!_controller.DrawnActors.ContainsKey(w[2]) || person.Pose != pose)
+				else if (!_controller.DrawnActors.ContainsKey(w[2]) || person.Pose != pose || (w.Length == 5 && !person.Marked))
 				{
-					Fail($"{source}: {w[2]} is not drawn in pose {w[3]}" + (_controller.DrawnActors.ContainsKey(w[2]) ? $" (in {person.Pose})" : " (not drawn)"));
+					Fail($"{source}: {w[2]} is not drawn in pose {w[3]}" + (w.Length == 5 ? " with motion marks" : "") +
+						(_controller.DrawnActors.ContainsKey(w[2]) ? $" (in {person.Pose}{(person.Marked ? ", marked" : "")})" : " (not drawn)"));
+				}
+				break;
+			case "expect" when w.Length == 3 && w[1] == "label" && w[2] == "none":
+				if (_controller.Labels.Any())
+				{
+					Fail($"{source}: labels show [{string.Join(" | ", _controller.Labels)}]");
 				}
 				break;
 			case "expect" when w.Length >= 3 && w[1] == "notoast":

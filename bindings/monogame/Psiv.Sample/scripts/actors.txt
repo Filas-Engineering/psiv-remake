@@ -57,22 +57,24 @@ wait 2
 expect screen Dialogue
 shot build/shots/party_1_chart.png
 press Enter
-# The mystic walks from the trail to the chart's left (left a cell, down a cell), turns toward the leader and nods.
+# The mystic walks from the trail to the chart's left (left a cell, down a cell), turns toward the leader and nods:
+# the head dips two pixels with strokes over it, so a still frame reads as a nod too.
 wait 12
 expect actor mystic walking
 shot build/shots/party_2_mystic_walking.png
 wait 50
 expect actor mystic 6 6 east
-expect pose mystic nod
+expect pose mystic nod marked
 shot build/shots/party_3_nod.png
 wait 40
 expect pose mystic none
 expect screen Dialogue
 press Enter
-# The medic walks round to the chart's right, turns toward the leader and shakes its head.
+# The medic walks round to the chart's right, turns toward the leader and shakes its head, two pixels each way with
+# strokes on both sides.
 wait 80
 expect actor medic 8 6 west
-expect pose medic shake
+expect pose medic shake marked
 shot build/shots/party_4_shake.png
 wait 40
 press Enter
@@ -117,19 +119,29 @@ expect actor medic 8 6 west
 expect actor fighter 7 5 north
 expect pose dockhand wave
 shot build/shots/party_9_resumed.png
-# The leader steps back to the chart, the scene ends, and the apprentices fall in behind the leader again. Every
-# script action played on screen, so none shows as a toast; the autosave at the end of the scene does.
+# The leader steps back to the chart and the scene ends. The leader is the player's again at once, and the
+# apprentices walk back to their places behind it, a cell per step along x and then y: the mystic through the
+# leader's cell and up one, the medic up two. Every script action played on screen, so none shows as a toast; the
+# autosave at the end of the scene does.
 pressuntil Enter Field 400
 wait 2
 expect actor fighter 7 6 south
-expect actor mystic 7 5
-expect actor medic 7 4
+expect actor mystic walking
+expect actor medic walking
 expect pose dockhand none
 expect toast Autosaved to auto_0 (event end)
 expect notoast (move
 expect notoast (face
 expect notoast (anim
-shot build/shots/party_10_after.png
+wait 6
+expect actor mystic walking
+expect actor medic walking
+shot build/shots/party_10_returning.png
+wait 44
+expect actor fighter 7 6 south
+expect actor mystic 7 5 south
+expect actor medic 7 4 south
+shot build/shots/party_11_after.png
 # Again from the save before the chart, skipped as the mystic starts walking: the skip stops at the battle, and the
 # rebuild puts everyone where watching left them.
 cmd title
@@ -150,11 +162,21 @@ expect actor mystic 6 6 east
 expect actor medic 8 6 west
 expect actor fighter 7 5 north
 expect pose dockhand wave
-shot build/shots/party_11_skipped.png
+shot build/shots/party_12_skipped.png
+# This time the leader walks off west the moment the scene ends: the apprentices are still on their way back, and
+# the trail takes them over from where they are drawn, into the cells the leader just left.
 pressuntil Enter Field 400
-wait 2
-expect actor mystic 7 5
-expect actor medic 7 4
+hold Left 16
+expect actor fighter walking
+expect actor mystic walking
+expect actor medic walking
+wait 8
+shot build/shots/party_13_handover.png
+wait 22
+expect actor fighter 6 6 west
+expect actor mystic 7 6
+expect actor medic 7 5
+shot build/shots/party_14_trail.png
 expect notoast (move
 expect notoast (face
 expect notoast (anim

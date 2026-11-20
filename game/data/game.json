@@ -26,6 +26,7 @@
 		"saltgrass.kiln_asked",
 		"saltgrass.kiln_done",
 		"tidewater.arrived",
+		"tidewater.board_read",
 		"tidewater.chart_read",
 		"tidewater.hold_cleared",
 		"tidewater.met_guide",

@@ -93,6 +93,11 @@ public sealed class SampleController
 	// The people drawn in the last field frame (script actors and party members), for headless expectations.
 	public IReadOnlyDictionary<string, DrawnPerson> DrawnActors => _field.DrawnActors;
 
+	// The labels sliding across the top, one per playing action that has no picture of its own.
+	public IEnumerable<string> Labels => _animations.Where(a => !a.OnSprite && a.Action.Type is not (ActionType.FadeIn or ActionType.FadeOut)).Select(a => LabelOf(a.Action));
+
+	private static string LabelOf(PresentationAction a) => a.Subject.Length > 0 ? a.Subject : a.Description;
+
 	// The notices on screen (or waiting to be, on a screen without them), oldest first.
 	public IEnumerable<string> Toasts => _ticker.Select(t => t.Text);
 
@@ -166,18 +171,24 @@ public sealed class SampleController
 		if (actions.Count > 0)
 		{
 			FieldView? view = _s.Field();
-			List<string> lineup = _s.Party().Where(m => m.InLineup).Select(m => m.Id).ToList();
+			List<string> lineup = Lineup();
 			foreach (PresentationAction a in actions)
 			{
 				Present(a, view, lineup);
 			}
 		}
-		// Outside an event nothing is scripted: party members walk in line again and poses stop.
-		if (_s.Mode is Mode.Field or Mode.Title)
+		// Outside an event nothing is scripted: party members walk back into line and poses stop.
+		if (_s.Mode == Mode.Field)
 		{
-			_field.EndScene();
+			_field.EndScene(Lineup());
+		}
+		else if (_s.Mode == Mode.Title)
+		{
+			_field.ClearScene();
 		}
 	}
+
+	private List<string> Lineup() => _s.Party().Where(m => m.InLineup).Select(m => m.Id).ToList();
 
 	private void Present(PresentationAction a, FieldView? view, List<string> lineup)
 	{
@@ -189,12 +200,15 @@ public sealed class SampleController
 			return;
 		}
 		_log("action: " + a.Description + (a.Instant ? " (instant)" : ""));
-		bool member = lineup.IndexOf(a.Subject) is >= 0 and < FieldRenderer.DrawnMembers;
+		bool actor = view?.Actors.Any(x => x.Id == a.Subject) ?? false;
+		// A move always brings an actor into the party's area, so anything else a script moves is a party member, in
+		// the lineup or not.
+		bool member = !actor && (lineup.Contains(a.Subject) || _field.Placed(a.Subject) || a.Type == ActionType.Move);
 		int? spriteMs = view is null ? null : a.Type switch
 		{
-			ActionType.Move or ActionType.Face or ActionType.ShowActor or ActionType.HideActor when view.Actors.Any(x => x.Id == a.Subject) => ActorAction(a, view),
+			ActionType.Move or ActionType.Face or ActionType.ShowActor or ActionType.HideActor when actor => ActorAction(a, view),
 			ActionType.Move or ActionType.Face when member => MemberAction(a, view, lineup),
-			ActionType.Animate when member || view.Actors.Any(x => x.Id == a.Subject) => PoseAction(a),
+			ActionType.Animate when member || actor => PoseAction(a),
 			_ => null,
 		};
 		if (a.Instant)
@@ -251,7 +265,7 @@ public sealed class SampleController
 			? ((int)Math.Round(a.X, MidpointRounding.AwayFromZero), (int)Math.Round(a.Z, MidpointRounding.AwayFromZero))
 			: view.Markers.FirstOrDefault(m => m.Name == a.Target) is { } marker ? (marker.X, marker.Y)
 			: a.Type == ActionType.Face && view.Actors.FirstOrDefault(x => x.Id == a.Target) is { } actor ? _field.ActorCell(actor.Id) ?? (actor.X, actor.Y)
-			: a.Type == ActionType.Face && lineup.Contains(a.Target) ? _field.MemberCell(a.Target, lineup)
+			: a.Type == ActionType.Face ? _field.MemberCell(a.Target, lineup)
 			: null;
 		if (target is not { } cell)
 		{
@@ -321,7 +335,7 @@ public sealed class SampleController
 				break;
 			default:
 				// Anything else is a label sliding across the top of the screen with its subject.
-				string label = a.Action.Subject.Length > 0 ? a.Action.Subject : a.Action.Description;
+				string label = LabelOf(a.Action);
 				int x = 20 + (int)((s.Width - s.Measure(label, Style.Small) - 64) * a.Progress);
 				Style.Plate(s, label, x, 52, Style.Accent);
 				break;
@@ -510,8 +524,7 @@ public sealed class SampleController
 		{
 			return false;
 		}
-		List<string> lineup = _s.Party().Where(m => m.InLineup).Select(m => m.Id).ToList();
-		_field.Draw(s, art, view, _clockMs, lineup);
+		_field.Draw(s, art, view, _clockMs, Lineup());
 		return true;
 	}
 
