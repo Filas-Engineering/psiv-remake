@@ -1,0 +1,89 @@
+# Saving and loading through the screens: a manual save from the field menu's Save page and an overwrite that asks
+# first, the pause overlay's quit to the title (refused once at the confirm), the title's Load screen with the
+# autosaves listed after the manual slot and a damaged one refused, then the manual save loaded. Last, the pause
+# overlay over a battle's command menu, which holds the battle until it is resumed.
+# With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing.
+
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk 7 4
+
+# Saved to the second slot, then saved over after a Yes.
+press M
+press Right 3
+expect state tab Save
+press Down
+expect state selected manual_1 empty
+press Enter
+expect toast Saved to manual_1.
+expect state selected manual_1 tidewater
+expect state prompt none
+press Enter
+expect state prompt Overwrite manual_1?
+press Enter
+expect state prompt none
+press Enter
+press Up
+press Enter
+expect state prompt none
+shot build/shots/save_page.png
+press Escape
+expect screen Field
+
+# Quit to the title from the pause overlay: No keeps playing, Yes goes.
+press P
+expect screen Pause
+expect state selected Resume
+shot build/shots/pause_field.png
+press Down 2
+expect state selected Quit to title
+press Enter
+expect state prompt Quit to the title? Play since the last save is lost.
+shot build/shots/pause_quit.png
+press Escape
+expect screen Pause
+press Enter
+press Up
+press Enter
+expect screen Title
+expect mode Title
+
+# The Load screen: the manual slot first, then the autosaves; a damaged autosave stays listed but does not load.
+press Down 2
+expect state selected Load
+press Enter
+expect screen LoadGame
+expect state selected manual_1 tidewater
+press Down
+expect state selected auto_0 tidewater
+savefile damage auto_0
+wait 1
+expect state selected auto_0 damaged
+shot build/shots/load_screen.png
+press Enter
+expect toast auto_0 is damaged and cannot be loaded.
+expect screen LoadGame
+press Escape
+expect screen Title
+expect state selected Load
+press Enter
+press Enter
+expect screen Field
+expect state area Tidewater Landing
+expect actor fighter 7 4
+
+# A battle's command menu pauses too; the battle waits until it is resumed.
+cmd walk 13 4
+cmd walk cache_front
+expect mode Battle
+wait 60
+expect screen Battle
+press P
+expect screen Pause
+shot build/shots/pause_battle.png
+wait 30
+expect screen Pause
+press Escape
+expect screen Battle
+expect mode Battle

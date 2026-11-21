@@ -58,6 +58,11 @@ SAMPLE_LARGE_SCRIPT = monogame/Psiv.Sample/scripts/large_areas.txt
 SAMPLE_ACTORS_SCRIPT = monogame/Psiv.Sample/scripts/actors.txt
 SAMPLE_PARTY_SCRIPT = monogame/Psiv.Sample/scripts/party.txt
 SAMPLE_INPUT_SCRIPT = monogame/Psiv.Sample/scripts/input.txt
+SAMPLE_MENUS_SCRIPT = monogame/Psiv.Sample/scripts/menus.txt
+SAMPLE_MACROS_SCRIPT = monogame/Psiv.Sample/scripts/macros.txt
+SAMPLE_SAVES_SCRIPT = monogame/Psiv.Sample/scripts/saves.txt
+SAMPLE_OPTIONS_SCRIPT = monogame/Psiv.Sample/scripts/options.txt
+SAMPLE_NAME_PAD_SCRIPT = monogame/Psiv.Sample/scripts/name_pad.txt
 
 .PHONY: all test native-test dotnet dotnet-test dotnet-missing clean deps
 
@@ -134,6 +139,26 @@ dotnet-test: dotnet
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_input_saves --script $(SAMPLE_INPUT_SCRIPT) --frames 600 > $(BUILD)/sample_input_headless.txt \
 		|| (cat $(BUILD)/sample_input_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_input_headless.txt
+	rm -rf $(BUILD)/sample_menus_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_menus_saves --script $(SAMPLE_MENUS_SCRIPT) --frames 700 > $(BUILD)/sample_menus_headless.txt \
+		|| (cat $(BUILD)/sample_menus_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_menus_headless.txt
+	rm -rf $(BUILD)/sample_macros_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_macros_saves --script $(SAMPLE_MACROS_SCRIPT) --frames 700 > $(BUILD)/sample_macros_headless.txt \
+		|| (cat $(BUILD)/sample_macros_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_macros_headless.txt
+	rm -rf $(BUILD)/sample_saves_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_saves_saves --script $(SAMPLE_SAVES_SCRIPT) --frames 550 > $(BUILD)/sample_saves_headless.txt \
+		|| (cat $(BUILD)/sample_saves_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_saves_headless.txt
+	rm -rf $(BUILD)/sample_options_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_options_saves --script $(SAMPLE_OPTIONS_SCRIPT) --frames 1200 > $(BUILD)/sample_options_headless.txt \
+		|| (cat $(BUILD)/sample_options_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_options_headless.txt
+	rm -rf $(BUILD)/sample_name_pad_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_name_pad_saves --script $(SAMPLE_NAME_PAD_SCRIPT) --frames 500 > $(BUILD)/sample_name_pad_headless.txt \
+		|| (cat $(BUILD)/sample_name_pad_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_name_pad_headless.txt
 
 dotnet-missing:
 	@echo "no dotnet at $(DOTNET): skipped the C# tests and the sample's headless run"

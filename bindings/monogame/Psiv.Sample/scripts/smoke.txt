@@ -5,6 +5,8 @@
 # everything else is key presses through the same controller as the window. A direction tap is followed by
 # a short wait, since the field plays it at its next tick.
 
+# Dialogue shows at once, as it did before text revealed over time, so each press below lands on the same line.
+cmd set text instant
 expect screen Title
 press Enter
 pressuntil Enter Field 400
@@ -37,8 +39,11 @@ press M
 expect screen Menu
 press Right
 dump
+# The empty slot saves without asking.
 press Right 2
+expect state tab Save
 press Enter
+expect toast Saved to manual_0.
 press Escape
 expect screen Field
 

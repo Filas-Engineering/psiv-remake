@@ -3,6 +3,8 @@
 # bindings saved to controls.json and read back by a new controller, and files that do not read or leave a required
 # action unbound falling back to the defaults.
 
+# Dialogue shows at once, as it did before text revealed over time, so each press below lands on the same line.
+cmd set text instant
 expect screen Title
 pad A
 paduntil A Field 400

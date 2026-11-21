@@ -1,10 +1,12 @@
+using System.Globalization;
+
 using Microsoft.Xna.Framework;
 
 using Psiv.Session;
 
 namespace Psiv.Sample;
 
-public enum Screen { Title, Field, Dialogue, Battle, Menu, Shop, Inn, SavePrompt, NameEntry, QuestLog, TextLog }
+public enum Screen { Title, Field, Dialogue, Battle, Menu, Shop, Inn, SavePrompt, NameEntry, QuestLog, TextLog, Options, Pause, LoadGame }
 
 // The sample's screens: reads the session after each update and draws it through the surface with the
 // sample's own generated pictures (Art), rectangles and text. Holds no game state of its own beyond cursors,
@@ -24,14 +26,25 @@ public sealed partial class SampleController
 	private int _clockMs;
 	private readonly List<(string Text, int MsLeft)> _ticker = [];
 	private Screen _lastScreen = (Screen)(-1);
-	private string _lastLine = "";
+	// The screen an overlay (options, pause, the load list) opened over, which keeps its place for the return.
+	private Screen _beforeOverlay;
 	private bool _questOverlay;
 	private bool _logOverlay;
+	private bool _pause;
+	private bool _optionsOverlay;
+	private bool _loadOverlay;
 	private int _cursor;
 	private int _tab;
 	private string? _pickMember;
 	private string? _pickAction;
-	private string _nameBuffer = "";
+	private readonly ScrollList _list = new();
+	private readonly ScrollList _sub = new();
+	private readonly ConfirmPrompt _confirm = new();
+	// The profile's text size as a factor, read at each draw.
+	private float _scale = 1f;
+	// The row under the cursor of the list that had it in the last frame, and that list's first row shown.
+	private string _probeSelected = "";
+	private int _probeTop;
 
 	// `controlsPath` is where the bindings load from and save to; null keeps the defaults and saves nothing.
 	public SampleController(GameSession session, Action<string>? log = null, string? controlsPath = null)
@@ -55,12 +68,21 @@ public sealed partial class SampleController
 	{
 		get
 		{
+			if (_optionsOverlay)
+			{
+				return Screen.Options;
+			}
+			if (_pause && (_battle.Active || _s.Mode == Mode.Field))
+			{
+				return Screen.Pause;
+			}
 			if (_battle.Active)
 			{
 				return Screen.Battle;
 			}
 			return _s.Mode switch
 			{
+				Mode.Title when _loadOverlay => Screen.LoadGame,
 				Mode.Title => Screen.Title,
 				Mode.Field when _questOverlay => Screen.QuestLog,
 				Mode.Field when _logOverlay => Screen.TextLog,
@@ -79,6 +101,10 @@ public sealed partial class SampleController
 			};
 		}
 	}
+
+	private static bool IsOverlay(Screen screen) => screen is Screen.Options or Screen.Pause or Screen.LoadGame;
+
+	private int Px(int value) => (int)MathF.Round(value * _scale);
 
 	private void Say(string text)
 	{
@@ -140,6 +166,20 @@ public sealed partial class SampleController
 
 	private List<string> Lineup() => _s.Party().Where(m => m.InLineup).Select(m => m.Id).ToList();
 
+	private void ResetUi()
+	{
+		_cursor = 0;
+		_tab = 0;
+		_pickMember = null;
+		_pickAction = null;
+		_list.Reset();
+		_sub.Reset();
+		_confirm.Close();
+		_pause = _optionsOverlay = _loadOverlay = false;
+		ResetMenuPages();
+		_nameEntry.Reset();
+	}
+
 	public void Update(int dtMs, InputState raw)
 	{
 		var input = new ActionInput(raw, _bindings);
@@ -167,16 +207,26 @@ public sealed partial class SampleController
 		if (screen != _lastScreen)
 		{
 			_log($"screen: {screen}");
+			if (IsOverlay(screen))
+			{
+				if (!IsOverlay(_lastScreen))
+				{
+					_beforeOverlay = _lastScreen;
+				}
+			}
+			else if (!IsOverlay(_lastScreen) || screen != _beforeOverlay)
+			{
+				ResetUi();
+			}
 			_lastScreen = screen;
-			_cursor = 0;
-			_tab = 0;
-			_pickMember = null;
-			_pickAction = null;
-			_nameBuffer = "";
 		}
 		if (Capturing is { } capturing)
 		{
 			Capture(capturing, raw);
+		}
+		else if (_confirm.Question is not null)
+		{
+			_confirm.Update(input);
 		}
 		else
 		{
@@ -198,11 +248,22 @@ public sealed partial class SampleController
 		case Screen.Inn: UpdateInn(input); break;
 		case Screen.SavePrompt: UpdateSavePrompt(input); break;
 		case Screen.NameEntry: UpdateNameEntry(input); break;
+		case Screen.Options: UpdateOptions(input); break;
+		case Screen.Pause: UpdatePause(input); break;
+		case Screen.LoadGame: UpdateLoadGame(input); break;
 		case Screen.QuestLog:
 		case Screen.TextLog:
 			if (input.Back || input.Confirm || input.Pressed(GameAction.QuestLog) || input.Pressed(GameAction.TextLog))
 			{
 				_questOverlay = _logOverlay = false;
+			}
+			else if (screen == Screen.TextLog)
+			{
+				ScrollTextLog(input);
+			}
+			else
+			{
+				_list.MoveView(input, QuestRows().Count);
 			}
 			break;
 		}
@@ -225,24 +286,28 @@ public sealed partial class SampleController
 		return _cursor = Math.Clamp(_cursor, 0, count - 1);
 	}
 
-	private static void DrawHint(IDrawSurface s, string hint)
+	private void DrawHint(IDrawSurface s, string hint)
 	{
-		s.Fill(0, s.Height - 30, s.Width, 30, Color.Black * 0.6f);
-		s.Text(hint, (s.Width - s.Measure(hint, Style.Small)) / 2, s.Height - 25, Style.Dim, Style.Small);
+		int h = Px(30);
+		s.Fill(0, s.Height - h, s.Width, h, Color.Black * 0.6f);
+		hint = Style.Fit(s, hint, s.Width - 32, Style.Small);
+		s.Text(hint, (s.Width - s.Measure(hint, Style.Small)) / 2, s.Height - h + Px(5), Style.Dim, Style.Small);
 	}
 
 	// The field menu, shop, logs, save prompt and name entry share this: the field dimmed behind a window.
 	private void DrawBackdrop(IDrawSurface s, Art art)
 	{
-		if (DrawField(s, art))
+		if (DrawField(s is ScaledSurface scaled ? scaled.Inner : s, art))
 		{
 			s.Fill(0, 0, s.Width, s.Height, Color.Black * 0.55f);
 		}
 	}
 
-	// The newest notices as small boxes stacked up from `bottom`, newest lowest, fading as they expire.
-	private void DrawToasts(IDrawSurface s, int x, int bottom, int most = 4)
+	// The newest notices as small boxes stacked up from `bottom`, newest lowest, fading as they expire; with `right`,
+	// `x` is the margin from the right edge, so they stay clear of a menu's lists.
+	private void DrawToasts(IDrawSurface s, int x, int bottom, int most = 4, bool right = false)
 	{
+		s = s is ScaledSurface scaled ? scaled.Inner : s;
 		int y = bottom;
 		for (int i = _ticker.Count - 1; i >= Math.Max(0, _ticker.Count - most); i--)
 		{
@@ -250,56 +315,113 @@ public sealed partial class SampleController
 			float alpha = Math.Clamp(msLeft / 400f, 0f, 1f);
 			string shown = Style.Fit(s, text, s.Width - 2 * x - 28, Style.Small);
 			y -= 38;
-			Style.Box(s, x, y, s.Measure(shown, Style.Small) + 28, 32, alpha * 0.95f);
-			s.Text(shown, x + 14, y + 7, Style.Text * alpha, Style.Small);
+			int boxW = s.Measure(shown, Style.Small) + 28;
+			int bx = right ? s.Width - x - boxW : x;
+			Style.Box(s, bx, y, boxW, 32, alpha * 0.95f);
+			s.Text(shown, bx + 14, y + 7, Style.Text * alpha, Style.Small);
 		}
 	}
 
-	private void DrawList(IDrawSurface s, int x, int y, IReadOnlyList<string> items, bool cursor = true, int width = 0)
+	// Text rows in a box, scrolling when they do not fit; the list with the cursor is the one headless runs probe.
+	private void DrawItems(IDrawSurface s, ScrollList list, int x, int y, int w, int h, IReadOnlyList<string> items, bool active = true,
+		IReadOnlyList<bool>? enabled = null, int size = Style.Body)
 	{
-		width = width > 0 ? width : s.Width - x - 70;
-		for (int i = 0; i < items.Count; i++)
+		int rowH = Px(size + 10);
+		list.Draw(s, x, y, w, h, rowH, items.Count,
+			(i, ry, on) => Style.ListRow(s, Style.Fit(s, items[i], w - 40, size), x, ry, w - 14, on, enabled is null || enabled[i], size, Px(size + 8)), active);
+		if (active)
 		{
-			Style.ListRow(s, Style.Fit(s, items[i], width - 30), x, y + i * 30, width, cursor && i == _cursor);
+			_probeSelected = items.Count > 0 ? items[list.Cursor] : "";
+			_probeTop = list.Top;
 		}
 	}
 
 	public void Draw(IDrawSurface s)
 	{
 		Art art = _art ??= new Art(s);
+		_scale = _s.Profile().TextSizePercent / 100f;
+		IDrawSurface t = _scale == 1f ? s : new ScaledSurface(s, _scale);
+		_probeSelected = "";
+		_probeTop = 0;
 		s.Fill(0, 0, s.Width, s.Height, Style.Background);
 		switch (Screen)
 		{
-		case Screen.Title: DrawTitle(s, art); break;
+		case Screen.Title: DrawTitle(t, art); break;
 		case Screen.Field:
 			DrawField(s, art);
 			DrawHud(s);
 			_field.DrawBanner(s);
 			DrawToasts(s, 16, s.Height - 40);
 			DrawHint(s, $"{Walk()} walk   {Hint(GameAction.Confirm)} talk   {Hint(GameAction.Menu)} menu   {Hint(GameAction.QuestLog)} quests   " +
-				$"{Hint(GameAction.PartyTalk)} party talk   {Hint(GameAction.TextLog)} log");
+				$"{Hint(GameAction.PartyTalk)} party talk   {Hint(GameAction.TextLog)} log   {Hint(GameAction.Pause)} pause");
 			break;
-		case Screen.Dialogue: DrawDialogue(s, art); break;
+		case Screen.Dialogue: DrawDialogue(s, t, art); break;
 		case Screen.Battle: DrawBattle(s, art); break;
 		case Screen.Menu:
-			DrawMenu(s, art);
-			DrawToasts(s, 48, s.Height - 92);
+			DrawMenu(t, art);
+			DrawToasts(s, 48, s.Height - 92, right: true);
 			break;
-		case Screen.Shop: DrawShop(s, art); break;
-		case Screen.Inn: DrawInn(s, art); break;
-		case Screen.SavePrompt: DrawSavePrompt(s, art); break;
-		case Screen.NameEntry: DrawNameEntry(s, art); break;
+		case Screen.Shop: DrawShop(t, art); break;
+		case Screen.Inn: DrawInn(s, t, art); break;
+		case Screen.SavePrompt: DrawSavePrompt(t, art); break;
+		case Screen.NameEntry: DrawNameEntry(t, art); break;
+		case Screen.Options: DrawOptions(t, art); break;
+		case Screen.Pause: DrawPause(s, t, art); break;
+		case Screen.LoadGame: DrawLoadGame(t, art); break;
 		case Screen.QuestLog:
-			DrawBackdrop(s, art);
-			Style.Window(s, 24, 40, s.Width - 48, s.Height - 72, "Quest log");
-			DrawQuestLog(s, 56, 80);
+			DrawBackdrop(t, art);
+			Style.Window(t, 24, 40, s.Width - 48, s.Height - 72, "Quest log");
+			DrawQuestLog(t, 56, 72, s.Width - 112, s.Height - 120);
 			break;
 		case Screen.TextLog:
-			DrawBackdrop(s, art);
-			Style.Window(s, 24, 40, s.Width - 48, s.Height - 72, "Text log");
-			DrawTextLog(s, 56, 72, s.Height - 140);
+			DrawBackdrop(t, art);
+			Style.Window(t, 24, 40, s.Width - 48, s.Height - 72, "Text log");
+			DrawTextLog(t, 56, 72, s.Width - 112, s.Height - 140);
 			break;
 		}
+		_confirm.Draw(t, Px);
 		DrawAnimations(s);
+	}
+
+	// `expect state KEY VALUE` in headless scripts reads these: where the screens stand and what the session holds.
+	public string State(string key)
+	{
+		static string OnOff(bool on) => on ? "on" : "off";
+		Profile p = _s.Profile();
+		Settings settings = _s.Settings();
+		return key switch
+		{
+			"tab" => Screen == Screen.Menu ? MenuTabs[_tab] : "-",
+			"page" => Page(),
+			"selected" => _probeSelected,
+			"top" => _probeTop.ToString(CultureInfo.InvariantCulture),
+			"prompt" => _confirm.Question ?? "none",
+			"buffer" => Screen == Screen.NameEntry ? _nameEntry.Buffer : _macroName.Buffer,
+			"cell" => Screen == Screen.NameEntry ? _nameEntry.Cell : _macroName.Cell,
+			"line" => _s.Line()?.Text ?? "-",
+			"reveal" => _s.Line() is { } line ? $"{Revealed(line.Text)}/{line.Text.Length}" : "-",
+			"playback" => PlaybackLineMs().ToString(CultureInfo.InvariantCulture),
+			"battlelog" => string.Join(" | ", _battle.Log),
+			"battlelines" => _battle.Log.Count.ToString(CultureInfo.InvariantCulture),
+			"party" => string.Join(", ", _s.Party().Where(m => m.InLineup).Select(m => m.Name)),
+			"macros" => string.Join(", ", _s.MacroList().Select(m => $"{m.Name}({m.Steps.Count})" + (m.Name == settings.AutoMacro ? "*" : ""))),
+			"area" => _s.FieldInfo()?.AreaName ?? "-",
+			"text_speed" => GameSession.NameOf(NameKind.TextSpeed, (int)p.TextSpeed),
+			"auto_advance" => OnOff(p.AutoAdvance),
+			"text_size" => p.TextSizePercent.ToString(CultureInfo.InvariantCulture),
+			"battle_speed" => GameSession.NameOf(NameKind.BattleSpeed, (int)p.BattleSpeed),
+			"reduced_flash" => OnOff(p.ReducedFlash),
+			"ambient_talk" => OnOff(p.AmbientTalk),
+			"shipped_names" => OnOff(p.ShowShippedNames),
+			"language" => p.TextLanguage,
+			"volumes" => $"{p.MusicVolume} {p.AmbientVolume} {p.EffectsVolume}",
+			"difficulty" => settings.Difficulty,
+			"reward" => GameSession.NameOf(NameKind.RewardMultiplier, (int)settings.RewardMultiplier),
+			"auto_macro" => settings.AutoMacro.Length == 0 ? "-" : settings.AutoMacro,
+			_ when key.StartsWith("macro.", StringComparison.Ordinal) => _s.MacroList().FirstOrDefault(m => m.Name == key[6..]) is { } macro
+				? string.Join(" / ", macro.Steps.Select(StepText))
+				: "-",
+			_ => "?",
+		};
 	}
 }

@@ -1,0 +1,185 @@
+# Options and what they change. From the title: Slow text, then the arrival's first line reveals a character every
+# 40 ms; Confirm shows the rest, the next Confirm moves on. From the pause overlay: Fast text and auto-advance, so the
+# guide's lines reveal at 100 characters a second and move on by themselves; the largest text size on dialogue and the
+# menu; 2x battle speed, which halves the battle's playback interval; and the Controls page: an action rebound by
+# capture, one cleared, a required one refused, everything reset after a confirm, a rebind saved on leaving the page
+# and read back by a new controller.
+# With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing.
+
+expect screen Title
+press Down 3
+expect state selected Options
+press Enter
+expect screen Options
+shot build/shots/options_title.png
+press Left
+expect state text_speed slow
+press Escape
+expect screen Title
+expect state selected Options
+press Up 3
+press Enter
+
+# Slow: 25 characters a second, so 25 frames (400 ms) show ten more.
+wait 50
+expect screen Dialogue
+expect state line The ferry bumps against the pilings of Tidewater Landing.
+expect state reveal 4/57
+wait 25
+expect state reveal 14/57
+shot build/shots/dialogue_slow.png
+press Enter
+expect state reveal 57/57
+expect state line The ferry bumps against the pilings of Tidewater Landing.
+press Enter
+expect state reveal -
+pressuntil Enter Field 800
+
+# Fast text and auto-advance, from the pause overlay's options.
+press P
+expect screen Pause
+press Down
+press Enter
+expect screen Options
+press Right 2
+expect state text_speed fast
+press Down
+press Enter
+expect state auto_advance on
+press Down
+press Right 5
+expect state text_size 150
+expect state selected Text size: 150%
+shot build/shots/options_150.png
+press Down
+press Right 2
+expect state battle_speed 2x
+expect state playback 175
+press Escape
+expect screen Pause
+shot build/shots/pause_150.png
+press Escape
+expect screen Field
+
+# The guide's first line at 100 characters a second (20 frames, 320 ms, show 32 more), then on to the next by itself
+# 4 seconds (80 characters at 50 ms) after it is all shown.
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+expect screen Dialogue
+wait 12
+expect state line You came about the bell? It rings every night at Bell Cove, east past the reeds.
+wait 20
+expect state reveal 35/80
+wait 20
+expect state reveal 67/80
+shot build/shots/dialogue_150.png
+wait 20
+expect state reveal 80/80
+wait 230
+expect state line You came about the bell? It rings every night at Bell Cove, east past the reeds.
+wait 20
+# A question follows, which waits for an answer whatever the setting.
+expect state line -
+wait 40
+expect state line -
+press Enter
+wait 2
+expect state line Before you go: what should the harbor call you?
+pressuntil Enter NameEntry 600
+shot build/shots/name_150.png
+press Enter
+pressuntil Enter Field 800
+
+# The menu at 150%: the stats page scrolls now, and the tabs that do not fit slide with the selection.
+press M
+press Enter
+expect state page stats
+press Down 3
+expect state top 3
+shot build/shots/menu_stats_150.png
+press Escape
+press Right 5
+expect state tab Macros
+shot build/shots/menu_macros_150.png
+press Escape
+expect screen Field
+
+# 2x battle speed: one playback line every 175 ms instead of 350.
+cmd walk 13 4
+cmd walk cache_front
+expect mode Battle
+expect state playback 175
+wait 2
+expect state battlelines 0
+wait 12
+expect state battlelines 1
+shot build/shots/battle_2x.png
+wait 40
+press Enter
+press Enter
+press Down 7
+press Enter
+pressuntil Enter Field 4000
+
+# Back to 100% and the Controls page.
+press P
+press Down
+press Enter
+press Down 2
+press Left 5
+expect state text_size 100
+press Down 11
+expect state selected Controls
+press Enter
+expect screen Options
+expect state page controls
+expect state selected Up
+press Down 6
+expect state selected Menu
+press Enter
+expect state selected Rebind
+press Enter
+press K
+expect binding Menu K | Start, Y
+shot build/shots/options_controls.png
+press Down 2
+expect state selected PartyTalk
+press Enter
+press Down
+expect state selected Clear
+press Enter
+expect binding PartyTalk - | -
+press Up 4
+expect state selected Confirm
+press Enter
+press Down
+press Enter
+expect toast Confirm is needed to use the menus, so it cannot be left unbound.
+expect binding Confirm Enter, Z, Space | A
+press Up 5
+expect state selected Reset to defaults
+press Enter
+expect state prompt Reset every control to its default?
+press Up
+press Enter
+expect binding Menu M, Esc | Start, Y
+expect binding PartyTalk T | X
+press Down 7
+expect state selected Menu
+press Enter
+press Enter
+press K
+expect binding Menu K | Start, Y
+press Escape
+expect state page options
+expect toast Controls saved.
+press Escape
+press Escape
+expect screen Field
+controls restart
+wait 2
+expect binding Menu K | Start, Y
+press K
+expect screen Menu

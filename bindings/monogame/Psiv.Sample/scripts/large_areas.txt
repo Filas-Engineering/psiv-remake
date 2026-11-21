@@ -4,6 +4,8 @@
 # With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs
 # write nothing for them.
 
+# Dialogue shows at once, as it did before text revealed over time, so each press below lands on the same line.
+cmd set text instant
 expect screen Title
 press Enter
 pressuntil Enter Field 400

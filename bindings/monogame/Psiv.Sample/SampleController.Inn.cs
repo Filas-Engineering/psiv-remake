@@ -19,15 +19,18 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawInn(IDrawSurface s, Art art)
+	private void DrawInn(IDrawSurface s, IDrawSurface t, Art art)
 	{
 		bool field = DrawField(s, art);
 		int y = DialogueTop(s, field);
-		Style.Box(s, 24, y, s.Width - 48, DialogueHeight);
-		Style.Plate(s, "Inn", 42, y - 16, Style.Accent, Style.Body);
-		s.Image(art.Bed, 48, y + 34, 96, 96, Color.White);
+		Style.Box(t, 24, y, s.Width - 48, DialogueHeight);
+		Style.Plate(t, "Inn", 42, y - Px(16), Style.Accent, Style.Body);
+		t.Image(art.Bed, 48, y + 34, 96, 96, Color.White);
 		InnInfo? inn = _s.Inn();
-		s.Text($"A night's rest costs {inn?.Cost ?? 0}. You have {_s.WorldInfo().Money}.", 170, y + 30, Style.Text);
-		DrawList(s, 186, y + 74, ["Rest", "Leave"], width: 300);
+		t.Text($"A night's rest costs {inn?.Cost ?? 0}. You have {_s.WorldInfo().Money}.", 170, y + Px(30), Style.Text);
+		for (int i = 0; i < 2; i++)
+		{
+			Style.ListRow(t, i == 0 ? "Rest" : "Leave", 186, y + Px(74) + i * Px(30), 300, i == _cursor, height: Px(28));
+		}
 	}
 }

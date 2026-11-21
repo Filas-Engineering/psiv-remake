@@ -1,0 +1,61 @@
+# Name entry with a gamepad only, through the on-screen character grid: the D-pad moves over the grid (wrapping at
+# its edges), A types the letter under it or works the Space, Del and OK cells, B erases and does nothing on an
+# empty name, and OK enters the name, which the party then shows.
+# With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing.
+
+expect screen Title
+pad A
+paduntil A Field 800
+cmd walk guide_front
+pad DPadUp
+wait 3
+paduntil A NameEntry 800
+expect screen NameEntry
+expect state cell A
+expect state buffer
+pad B
+expect screen NameEntry
+expect state buffer
+
+# R from the second row's left, then a, e and r from the lower-case rows.
+pad DPadDown
+pad DPadRight 4
+expect state cell R
+pad A
+pad DPadDown
+pad DPadLeft 4
+expect state cell a
+pad A
+pad DPadRight 4
+pad A
+pad DPadDown
+pad A
+expect state buffer Raer
+shot build/shots/name_pad.png
+
+# The bottom row's OK, then Del beside it; B erases too; then a space and a second word from the grid's left edge
+# wrapping round to its right.
+pad DPadDown 2
+expect state cell OK
+pad DPadLeft
+expect state cell Del
+pad A
+expect state buffer Rae
+pad B
+expect state buffer Ra
+pad DPadLeft
+expect state cell Space
+pad A
+pad DPadUp 5
+pad DPadLeft
+expect state cell M
+pad A
+expect state buffer Ra M
+
+# Straight down to the bottom row lands on its last cell, OK.
+pad DPadDown 5
+expect state cell OK
+pad A
+expect screen Dialogue
+paduntil A Field 800
+expect state party Ra M, Test Mystic, Test Medic

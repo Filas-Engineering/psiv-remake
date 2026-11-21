@@ -1,24 +1,67 @@
+using System.Globalization;
+
 using Psiv.Session;
 
 namespace Psiv.Sample;
 
+// The field menu: tabs along the top, one page each. Status, Equip and Macros have their own files.
 public sealed partial class SampleController
 {
-	private static readonly string[] MenuTabs = ["Party", "Items", "Equip", "Save", "Quests", "Codex", "Log"];
+	private static readonly string[] MenuTabs = ["Status", "Items", "Equip", "Save", "Order", "Macros", "Combos", "Quests", "Codex", "Log", "Options"];
+
+	private readonly ScrollList _third = new();
+	// The lineup position picked first on the Order page.
+	private int? _orderFrom;
+
+	private void ResetMenuPages()
+	{
+		_third.Reset();
+		_orderFrom = null;
+		_statusPage = 0;
+		_equipSlot = null;
+		_equipChange = null;
+		_macroStage = MacroStage.List;
+	}
+
+	// Where the page is, for headless expectations.
+	private string Page() => Screen switch
+	{
+		Screen.Menu => MenuTabs[_tab] switch
+		{
+			"Status" => _pickMember is null ? "members" : _pickAction is not null ? "target" : _statusPage == 0 ? "stats" : "abilities",
+			"Items" => _pickAction is null ? "items" : "target",
+			"Equip" => _pickMember is null ? "members" : _equipSlot is null ? "slots" : "pieces",
+			"Order" => _orderFrom is null ? "lineup" : "swap",
+			"Macros" => _macroStage.ToString().ToLowerInvariant(),
+			_ => MenuTabs[_tab].ToLowerInvariant(),
+		},
+		Screen.Options => _controlsPage ? "controls" : "options",
+		_ => Screen.ToString().ToLowerInvariant(),
+	};
+
+	private bool MenuAtTop() => MenuTabs[_tab] switch
+	{
+		"Status" or "Equip" => _pickMember is null,
+		"Items" => _pickAction is null,
+		"Order" => _orderFrom is null,
+		"Macros" => _macroStage == MacroStage.List,
+		_ => true,
+	};
+
+	private List<Member> LineupMembers() => _s.Party().Where(m => m.InLineup).ToList();
 
 	private void UpdateMenu(ActionInput input)
 	{
-		if (_pickMember is null && _pickAction is null)
+		if (MenuAtTop())
 		{
-			if (input.Pressed(GameAction.PagePrev))
+			int step = input.Pressed(GameAction.PagePrev) ? -1 : input.Pressed(GameAction.PageNext) ? 1 : 0;
+			if (step != 0)
 			{
-				_tab = (_tab + MenuTabs.Length - 1) % MenuTabs.Length;
-				_cursor = 0;
-			}
-			if (input.Pressed(GameAction.PageNext))
-			{
-				_tab = (_tab + 1) % MenuTabs.Length;
-				_cursor = 0;
+				_tab = (_tab + MenuTabs.Length + step) % MenuTabs.Length;
+				_list.Reset();
+				_sub.Reset();
+				ResetMenuPages();
+				return;
 			}
 			if (input.Back)
 			{
@@ -26,242 +69,273 @@ public sealed partial class SampleController
 				return;
 			}
 		}
-		else if (input.Back)
-		{
-			_pickMember = null;
-			_pickAction = null;
-			_cursor = 0;
-			return;
-		}
-		List<Member> lineup = _s.Party().Where(m => m.InLineup).ToList();
 		switch (MenuTabs[_tab])
 		{
-		case "Party":
-			if (_pickMember is null)
-			{
-				Move(input, lineup.Count);
-				if (input.Confirm && lineup.Count > 0)
-				{
-					_pickMember = lineup[_cursor].Id;
-					_cursor = 0;
-				}
-			}
-			else if (_pickAction is null)
-			{
-				var techniques = _s.MemberAbilities(_pickMember).Where(a => a.Field).ToList();
-				Move(input, techniques.Count);
-				if (input.Confirm && techniques.Count > 0)
-				{
-					AbilityInfo ability = techniques[_cursor];
-					if (ability.Targeting is Targeting.OneAlly or Targeting.OneFallenAlly)
-					{
-						_pickAction = ability.Id;
-						_cursor = 0;
-					}
-					else
-					{
-						Report(_s.UseAbility(_pickMember, ability.Id));
-					}
-				}
-			}
-			else
-			{
-				Move(input, lineup.Count);
-				if (input.Confirm)
-				{
-					Report(_s.UseAbility(_pickMember, _pickAction, lineup[_cursor].Id));
-					_pickAction = null;
-					_cursor = 0;
-				}
-			}
+		case "Status": UpdateStatus(input); break;
+		case "Items": UpdateItems(input); break;
+		case "Equip": UpdateEquip(input); break;
+		case "Order": UpdateOrder(input); break;
+		case "Macros": UpdateMacros(input); break;
+		case "Combos":
+			ComboLog combos = _s.ComboLog();
+			_list.Move(input, Math.Max(combos.Total, combos.Entries.Count));
 			break;
-		case "Items":
-			var items = _s.Inventory().Where(i => !i.IsEquipment).ToList();
-			if (_pickAction is null)
-			{
-				Move(input, items.Count);
-				if (input.Confirm && items.Count > 0)
-				{
-					InventoryEntry item = items[_cursor];
-					if (item.Targeting is Targeting.OneAlly or Targeting.OneFallenAlly)
-					{
-						_pickAction = item.Id;
-						_cursor = 0;
-					}
-					else
-					{
-						Report(_s.UseItem(item.Id));
-					}
-				}
-			}
-			else
-			{
-				Move(input, lineup.Count);
-				if (input.Confirm)
-				{
-					Report(_s.UseItem(_pickAction, lineup[_cursor].Id));
-					_pickAction = null;
-					_cursor = 0;
-				}
-			}
+		case "Quests":
+			_list.MoveView(input, QuestRows().Count);
 			break;
-		case "Equip":
-			if (_pickMember is null)
-			{
-				Move(input, lineup.Count);
-				if (input.Confirm && lineup.Count > 0)
-				{
-					_pickMember = lineup[_cursor].Id;
-					_cursor = 0;
-				}
-			}
-			else
-			{
-				List<(string Label, Func<PsivResult> Run)> choices = EquipChoices(_pickMember);
-				Move(input, choices.Count);
-				if (input.Confirm && choices.Count > 0)
-				{
-					Report(choices[_cursor].Run());
-					_cursor = 0;
-				}
-			}
+		case "Codex":
+			_list.Move(input, _s.Encyclopedia().Count);
+			break;
+		case "Log":
+			ScrollTextLog(input);
 			break;
 		case "Save":
-			int slots = _s.GameInfo().ManualSlots;
-			Move(input, slots);
+			List<string> slots = ManualSlots();
+			_list.Move(input, slots.Count);
 			if (input.Confirm)
 			{
-				Report(_s.SaveManual($"manual_{_cursor}"));
+				SaveTo(slots[_list.Cursor]);
+			}
+			break;
+		case "Options":
+			if (input.Confirm)
+			{
+				OpenOptions();
 			}
 			break;
 		}
 	}
 
-	private List<(string Label, Func<PsivResult> Run)> EquipChoices(string memberId)
+	private void UpdateItems(ActionInput input)
 	{
-		var choices = new List<(string, Func<PsivResult>)>();
-		Member? member = _s.Party().FirstOrDefault(m => m.Id == memberId);
-		if (member is null)
+		var items = _s.Inventory().Where(i => !i.IsEquipment).ToList();
+		if (_pickAction is null)
 		{
-			return choices;
-		}
-		foreach (InventoryEntry piece in _s.Inventory().Where(i => i.IsEquipment))
-		{
-			choices.Add(($"Equip {piece.Name} ({GameSession.NameOf(NameKind.EquipSlot, (int)piece.Slot)})", () => _s.Equip(memberId, piece.Id)));
-		}
-		for (int slot = 0; slot < member.Equipment.Count; slot++)
-		{
-			if (member.Equipment[slot].Length > 0)
+			_list.Move(input, items.Count);
+			if (input.Confirm && items.Count > 0)
 			{
-				var equipSlot = (EquipSlot)slot;
-				choices.Add(($"Remove {member.EquipmentNames[slot]}", () => _s.Unequip(memberId, equipSlot)));
+				InventoryEntry item = items[_list.Cursor];
+				if (item.Targeting is Targeting.OneAlly or Targeting.OneFallenAlly)
+				{
+					_pickAction = item.Id;
+					_sub.Reset();
+				}
+				else
+				{
+					Report(_s.UseItem(item.Id));
+				}
+			}
+			return;
+		}
+		List<Member> lineup = LineupMembers();
+		_sub.Move(input, lineup.Count);
+		if (input.Back)
+		{
+			_pickAction = null;
+		}
+		else if (input.Confirm && lineup.Count > 0)
+		{
+			Report(_s.UseItem(_pickAction, lineup[_sub.Cursor].Id));
+			_pickAction = null;
+		}
+	}
+
+	private void UpdateOrder(ActionInput input)
+	{
+		List<Member> lineup = LineupMembers();
+		_list.Move(input, lineup.Count);
+		if (input.Back)
+		{
+			_orderFrom = null;
+		}
+		else if (input.Confirm && lineup.Count > 0)
+		{
+			if (_orderFrom is not { } from)
+			{
+				_orderFrom = _list.Cursor;
+			}
+			else
+			{
+				if (from != _list.Cursor)
+				{
+					Report(_s.SwapLineup(from, _list.Cursor));
+				}
+				_orderFrom = null;
 			}
 		}
-		return choices;
 	}
 
 	private void DrawMenu(IDrawSurface s, Art art)
 	{
 		DrawBackdrop(s, art);
 		Style.Window(s, 24, 56, s.Width - 48, s.Height - 72, "Menu");
-		Style.Tabs(s, 48, 64, MenuTabs, _tab);
 		string money = $"Money {_s.WorldInfo().Money}";
-		s.Text(money, s.Width - 64 - s.Measure(money), 69, Style.Text);
-		List<Member> lineup = _s.Party().Where(m => m.InLineup).ToList();
-		int y = 124;
+		int moneyX = s.Width - 64 - s.Measure(money);
+		Widgets.Tabs(s, 48, 64, moneyX - 72, MenuTabs, _tab, Px);
+		s.Text(money, moneyX, 64 + Px(5), Style.Text);
+		int x = 56;
+		int y = 64 + Px(60);
+		int w = s.Width - 112;
+		int h = s.Height - 66 - Px(10) - y;
 		switch (MenuTabs[_tab])
 		{
-		case "Party":
-			if (_pickMember is null || _pickAction is not null)
-			{
-				DrawList(s, 56, y, lineup.Select(m => $"{m.Name}  Lv{m.Level}  HP {m.Hp}/{m.MaxHp}  TP {m.Tp}/{m.MaxTp}  EXP {m.Experience}" +
-					string.Concat(m.Statuses.Select(st => $" [{st.Name}]"))).ToList());
-				if (_pickAction is not null)
-				{
-					s.Text($"Use {_s.DisplayName(_pickAction)} on whom?", 56, s.Height - 104, Style.Accent);
-				}
-			}
-			else
-			{
-				Member m = lineup.First(x => x.Id == _pickMember);
-				s.Text($"{m.Name}: STR {m.Strength}  MEN {m.Mental}  AGI {m.Agility}  DEX {m.Dexterity}  DEF {m.Defense}", 56, y, Style.Text);
-				s.Text("Equipment: " + string.Join(", ", m.EquipmentNames.Where(n => n.Length > 0)), 56, y + 30, Style.Dim, Style.Small);
-				var techniques = _s.MemberAbilities(_pickMember).Where(a => a.Field).ToList();
-				s.Text(techniques.Count == 0 ? "No techniques to use here." : "Use a technique:", 56, y + 70, Style.Accent);
-				DrawList(s, 56, y + 100, techniques.Select(a => $"{a.Name} ({a.Cost} TP)").ToList());
-			}
+		case "Status": DrawStatus(s, art, x, y, w, h); break;
+		case "Items": DrawItemsPage(s, x, y, w, h); break;
+		case "Equip": DrawEquip(s, x, y, w, h); break;
+		case "Order":
+			List<Member> lineup = LineupMembers();
+			DrawItems(s, _list, x, y, w, h, lineup.Select((m, i) => (_orderFrom == i ? "> " : "") +
+				$"{i + 1}. {m.Name}  Lv{m.Level}  HP {m.Hp}/{m.MaxHp}  TP {m.Tp}/{m.MaxTp}" + string.Concat(m.Statuses.Select(st => $" [{st.Name}]"))).ToList());
 			break;
-		case "Items":
-			var items = _s.Inventory().Where(i => !i.IsEquipment).ToList();
-			DrawList(s, 56, y, items.Select(i => $"{i.Name} x{i.Count}" + (i.Field ? "" : "  (battle only)")).ToList(), _pickAction is null, _pickAction is null ? 0 : 520);
-			if (_pickAction is not null)
-			{
-				DrawList(s, 620, y, lineup.Select(m => $"{m.Name}  HP {m.Hp}/{m.MaxHp}").ToList());
-			}
-			break;
-		case "Equip":
-			if (_pickMember is null)
-			{
-				DrawList(s, 56, y, lineup.Select(m => m.Name + ": " + string.Join(", ", m.EquipmentNames.Where(n => n.Length > 0))).ToList());
-			}
-			else
-			{
-				DrawList(s, 56, y, EquipChoices(_pickMember).Select(c => c.Label).ToList());
-			}
-			break;
-		case "Save":
-			var saves = _s.Saves() ?? [];
-			int slots = _s.GameInfo().ManualSlots;
-			DrawList(s, 56, y, Enumerable.Range(0, slots).Select(i =>
-			{
-				SaveSummary? existing = saves.FirstOrDefault(x => x.Slot == $"manual_{i}");
-				return $"manual_{i}  " + (existing is null ? "(empty)" : existing.Damaged ? "(damaged)" : $"{existing.Area} {string.Join(" ", existing.Party)}");
-			}).ToList());
-			break;
-		case "Quests":
-			DrawQuestLog(s, 56, y);
-			break;
-		case "Codex":
-			int cy = y;
-			foreach (CodexEntry entry in _s.Encyclopedia())
-			{
-				s.Text(entry.Title, 56, cy, Style.Accent);
-				cy += Style.LineHeight;
-				foreach (string l in Style.Wrap(s, entry.Text, s.Width - 150, Style.Small))
-				{
-					s.Text(l, 76, cy, Style.Text, Style.Small);
-					cy += 22;
-				}
-				cy += 10;
-			}
-			break;
-		case "Log":
-			DrawTextLog(s, 56, y, s.Height - y - 100);
+		case "Macros": DrawMacros(s, x, y, w, h); break;
+		case "Combos": DrawCombos(s, x, y, w, h); break;
+		case "Quests": DrawQuestLog(s, x, y, w, h); break;
+		case "Codex": DrawCodex(s, x, y, w, h); break;
+		case "Log": DrawTextLog(s, x, y, w, h); break;
+		case "Save": DrawSlots(s, _list, x, y, w, h, ManualSlots(), _s.Saves() ?? []); break;
+		case "Options":
+			s.Text("Text, battle, sound and difficulty settings, and the controls.", x, y, Style.Text);
+			Style.ListRow(s, "Open options", x + 20, y + Px(44), Px(260), true, height: Px(28));
+			_probeSelected = "Open options";
 			break;
 		}
-		s.Text($"{Hint(GameAction.PagePrev)}/{Hint(GameAction.PageNext)} tab   {Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} use   {Hint(GameAction.Back)} back", 56, s.Height - 66, Style.Dim, Style.Small);
+		Widgets.Hints(s, x, s.Height - 66, w, MenuHint());
 	}
 
-	private void DrawQuestLog(IDrawSurface s, int x, int y)
+	private string MenuHint()
+	{
+		string tabs = MenuAtTop() ? $"{Hint(GameAction.PagePrev)}/{Hint(GameAction.PageNext)} tab   " : "";
+		string back = $"{Hint(GameAction.Back)} " + (MenuAtTop() ? "close" : "back");
+		return MenuTabs[_tab] switch
+		{
+			"Status" when _pickMember is not null && _pickAction is null =>
+				$"{Hint(GameAction.PagePrev)}/{Hint(GameAction.PageNext)} stats or abilities   {Hint(GameAction.Up)}/{Hint(GameAction.Down)} " +
+				(_statusPage == 0 ? "scroll" : $"choose   {Hint(GameAction.Confirm)} use") + $"   {back}",
+			"Quests" or "Log" => $"{tabs}{Hint(GameAction.Up)}/{Hint(GameAction.Down)} scroll   {back}",
+			"Order" => $"{tabs}{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} " + (_orderFrom is null ? "pick" : "swap") + $"   {back}",
+			"Macros" when _macroStage == MacroStage.Name => $"{Hint(GameAction.Confirm)} type   Enter or {Hint(GameAction.Menu)} confirm   Esc cancel",
+			_ => $"{tabs}{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} use   {back}",
+		};
+	}
+
+	private void DrawItemsPage(IDrawSurface s, int x, int y, int w, int h)
+	{
+		var items = _s.Inventory().Where(i => !i.IsEquipment).ToList();
+		int listW = _pickAction is null ? w : w / 2 - 20;
+		s.Text($"{items.Count} kinds, {items.Sum(i => i.Count)} in all", x + listW - s.Measure($"{items.Count} kinds, {items.Sum(i => i.Count)} in all", Style.Small) - 20, y - Px(26), Style.Dim, Style.Small);
+		if (items.Count == 0)
+		{
+			s.Text("No items.", x + 14, y, Style.Dim);
+		}
+		DrawItems(s, _list, x, y, listW, h, items.Select(i => $"{i.Name} x{i.Count}" + (i.Field ? "" : "  (battle only)")).ToList(), _pickAction is null);
+		if (_pickAction is not null)
+		{
+			s.Text($"Use {_s.DisplayName(_pickAction)} on whom?", x + w / 2, y, Style.Accent);
+			DrawItems(s, _sub, x + w / 2, y + Px(40), w / 2, h - Px(40), LineupMembers().Select(m => $"{m.Name}  HP {m.Hp}/{m.MaxHp}  TP {m.Tp}/{m.MaxTp}").ToList());
+		}
+	}
+
+	private void DrawCombos(IDrawSurface s, int x, int y, int w, int h)
+	{
+		ComboLog log = _s.ComboLog();
+		int total = Math.Max(log.Total, log.Entries.Count);
+		s.Text($"Discovered {log.Entries.Count} of {log.Total}", x, y, Style.Accent);
+		int detailH = Px(96);
+		var rows = log.Entries.Select(e => $"{e.ResultName}  ({string.Join(" + ", e.ParticipantNames)})")
+			.Concat(Enumerable.Repeat("??? (not discovered yet)", total - log.Entries.Count)).ToList();
+		DrawItems(s, _list, x, y + Px(36), w, h - Px(36) - detailH, rows, enabled: rows.Select((_, i) => i < log.Entries.Count).ToList());
+		int dy = y + h - detailH + Px(8);
+		s.Fill(x, dy - Px(8), w, 1, Style.PanelEdge * 0.4f);
+		if (_list.Cursor < log.Entries.Count)
+		{
+			ComboEntry e = log.Entries[_list.Cursor];
+			s.Text(Style.Fit(s, $"Members: {string.Join(", ", e.ParticipantNames)}", w, Style.Small), x, dy, Style.Text, Style.Small);
+			s.Text(Style.Fit(s, $"Abilities: {string.Join(", ", e.AbilityNames)}", w, Style.Small), x, dy + Px(26), Style.Text, Style.Small);
+			s.Text($"First found at {Clock(e.PlayTimeMs)} of play", x, dy + Px(52), Style.Dim, Style.Small);
+		}
+		else if (total > 0)
+		{
+			s.Text("Not discovered yet: try techniques and skills in a row in battle.", x, dy, Style.Dim, Style.Small);
+		}
+	}
+
+	private void DrawCodex(IDrawSurface s, int x, int y, int w, int h)
+	{
+		IReadOnlyList<CodexEntry> entries = _s.Encyclopedia();
+		int listW = w / 3;
+		if (entries.Count == 0)
+		{
+			s.Text("No entries yet.", x + 14, y, Style.Dim);
+			return;
+		}
+		DrawItems(s, _list, x, y, listW, h, entries.Select(e => e.Title).ToList());
+		CodexEntry entry = entries[Math.Clamp(_list.Cursor, 0, entries.Count - 1)];
+		int tx = x + listW + 24;
+		s.Text(entry.Title, tx, y, Style.Accent);
+		int ty = y + Px(Style.LineHeight) + Px(6);
+		foreach (string l in Style.Wrap(s, entry.Text, w - listW - 24, Style.Small))
+		{
+			if (ty + Px(22) > y + h)
+			{
+				break;
+			}
+			s.Text(l, tx, ty, Style.Text, Style.Small);
+			ty += Px(22);
+		}
+	}
+
+	// The quest log as rows: headings, the objective and each job, with blank rows between the parts.
+	private List<(string Text, bool Heading)> QuestRows()
 	{
 		QuestLog log = _s.QuestLog();
-		s.Text("Objective", x, y, Style.Accent);
-		s.Text(log.Objective.Length == 0 ? "-" : log.Objective, x + 20, y + 30, Style.Text);
-		s.Text("Jobs", x, y + 80, Style.Accent);
-		for (int i = 0; i < log.Jobs.Count; i++)
+		var rows = new List<(string, bool)> { ("Objective", true), (log.Objective.Length == 0 ? "-" : log.Objective, false), ("", false), ("Jobs", true) };
+		rows.AddRange(log.Jobs.Select(j => ($"{j.Title} ({GameSession.NameOf(NameKind.JobState, (int)j.State)})", false)));
+		return rows;
+	}
+
+	private void DrawQuestLog(IDrawSurface s, int x, int y, int w, int h)
+	{
+		List<(string Text, bool Heading)> rows = QuestRows();
+		_list.DrawView(s, x, y, w, h, Px(30), rows.Count, (i, ry, _) =>
 		{
-			s.Text($"{log.Jobs[i].Title} ({GameSession.NameOf(NameKind.JobState, (int)log.Jobs[i].State)})", x + 20, y + 110 + i * Style.LineHeight, Style.Text);
+			if (rows[i].Text.Length > 0)
+			{
+				s.Text(Style.Fit(s, rows[i].Text, w - 40), rows[i].Heading ? x : x + 20, ry, rows[i].Heading ? Style.Accent : Style.Text);
+			}
+		});
+		_probeTop = _list.Top;
+	}
+
+	// The text log opens at its newest lines; Up goes back through older ones.
+	private void ScrollTextLog(ActionInput input)
+	{
+		if (input.Pressed(GameAction.Up))
+		{
+			_list.Cursor++;
+		}
+		if (input.Pressed(GameAction.Down))
+		{
+			_list.Cursor = Math.Max(0, _list.Cursor - 1);
 		}
 	}
 
-	private void DrawTextLog(IDrawSurface s, int x, int y, int height)
+	private void DrawTextLog(IDrawSurface s, int x, int y, int w, int height)
 	{
-		IReadOnlyList<string> pages = _s.TextLog();
-		int lines = Math.Max(1, height / 22);
-		var visible = pages.Skip(Math.Max(0, pages.Count - lines)).ToList();
+		List<string> pages = _s.TextLog().SelectMany(page => Style.Wrap(s, page, w - 20, Style.Small)).ToList();
+		int lineH = Px(22);
+		int lines = Math.Max(1, height / lineH);
+		int back = Math.Clamp(_list.Cursor, 0, Math.Max(0, pages.Count - lines));
+		_list.Cursor = back;
+		int first = Math.Max(0, pages.Count - lines - back);
+		var visible = pages.Skip(first).Take(lines).ToList();
 		for (int i = 0; i < visible.Count; i++)
 		{
-			s.Text(visible[i], x, y + i * 22, Style.Text, Style.Small);
+			s.Text(visible[i], x, y + i * lineH, Style.Text, Style.Small);
 		}
+		if (pages.Count > lines)
+		{
+			Widgets.ScrollBar(s, x + w - 6, y, lines * lineH - 6, first, lines, pages.Count);
+		}
+		_probeTop = first;
 	}
 }

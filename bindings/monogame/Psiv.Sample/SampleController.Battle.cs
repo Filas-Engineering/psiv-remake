@@ -6,7 +6,16 @@ namespace Psiv.Sample;
 
 public sealed partial class SampleController
 {
-	private const int PlaybackLineMs = 350;
+	// The playback interval at 1x battle speed; the profile's speed divides it.
+	private const int PlaybackLineMsAt1x = 350;
+
+	private int PlaybackLineMs() => _s.Profile().BattleSpeed switch
+	{
+		BattleSpeed.X1_5 => PlaybackLineMsAt1x * 2 / 3,
+		BattleSpeed.X2 => PlaybackLineMsAt1x / 2,
+		BattleSpeed.X3 => PlaybackLineMsAt1x / 3,
+		_ => PlaybackLineMsAt1x,
+	};
 
 	private enum BattlePhase { Command, Option, Target, Macro, Playback, Ended }
 
@@ -110,6 +119,12 @@ public sealed partial class SampleController
 	private void UpdateBattle(int dtMs, ActionInput input)
 	{
 		BattleUi b = _battle;
+		if (b.Phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro && input.Pressed(GameAction.Pause))
+		{
+			OpenPause();
+			return;
+		}
+		int lineMs = PlaybackLineMs();
 		switch (b.Phase)
 		{
 		case BattlePhase.Playback:
@@ -120,14 +135,14 @@ public sealed partial class SampleController
 			}
 			b.PlaybackMs += dtMs;
 			bool hurry = input.Confirm;
-			while (b.Queue.Count > 0 && (hurry || b.PlaybackMs >= PlaybackLineMs))
+			while (b.Queue.Count > 0 && (hurry || b.PlaybackMs >= lineMs))
 			{
 				b.PlaybackMs = 0;
 				string line = b.Queue.Dequeue();
 				b.Log.Add(line);
 				_log("battle: " + line);
 			}
-			if (b.Queue.Count == 0 && b.PlaybackMs >= PlaybackLineMs)
+			if (b.Queue.Count == 0 && b.PlaybackMs >= lineMs)
 			{
 				if (_s.Mode != Mode.Battle)
 				{
@@ -426,15 +441,8 @@ public sealed partial class SampleController
 				s.Text(Style.Fit(s, state, cw - 90, Style.Small), cx + 80, cy + 42, c.Alive ? Style.Dim : Style.Bad, Style.Small);
 			}
 			int bw = cw - 24;
-			void Gauge(string name, int value, int max, int y, Color color)
-			{
-				string numbers = $"{value}/{max}";
-				s.Text(name, cx + 12, y, Style.Dim, Style.Small);
-				s.Text(numbers, cx + 12 + bw - s.Measure(numbers, Style.Small), y, Style.Text, Style.Small);
-				Style.Bar(s, cx + 12, y + 22, bw, 10, value, max, color);
-			}
-			Gauge("HP", c.Hp, c.MaxHp, cy + 86, c.Hp * 4 <= c.MaxHp ? Style.Bad : Style.Good);
-			Gauge("TP", c.Tp, c.MaxTp, cy + 130, Style.Tp);
+			Widgets.ValueBar(s, cx + 12, cy + 86, bw, "HP", c.Hp, c.MaxHp, c.Hp * 4 <= c.MaxHp ? Style.Bad : Style.Good);
+			Widgets.ValueBar(s, cx + 12, cy + 130, bw, "TP", c.Tp, c.MaxTp, Style.Tp);
 			if (c.CommandKind != CommandKind.None)
 			{
 				string command = c.CommandId.Length > 0 ? _s.DisplayName(c.CommandId) : GameSession.NameOf(NameKind.CommandKind, (int)c.CommandKind);

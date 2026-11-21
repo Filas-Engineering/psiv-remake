@@ -21,7 +21,8 @@ public static class Program
 		"pad BUTTON [COUNT] | padhold BUTTON FRAMES | paduntil BUTTON SCREEN MAXFRAMES | padstick X Y FRAMES |\n" +
 		"controls list|reset|save|restart | controls capture|clear ACTION | controls write JSON |\n" +
 		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | expect actor ID X Y [FACING]|walking|hidden | expect pose ID POSE [marked] |\n" +
-		"expect label none | expect toast none|TEXT | expect notoast TEXT | expect binding ACTION KEYS \"|\" BUTTONS | dump | shot FILE.png (window only) | # comment.\n" +
+		"expect label none | expect toast none|TEXT | expect notoast TEXT | expect binding ACTION KEYS \"|\" BUTTONS |\n" +
+		"expect state KEY VALUE | expect statehas KEY TEXT | savefile damage SLOT | dump | shot FILE.png (window only) | # comment.\n" +
 		"Keys are MonoGame Keys names, buttons MonoGame Buttons names, actions the sample's GameAction names.\n" +
 		"Exit codes: 0 done, 1 a failure, 2 bad arguments.\n";
 
@@ -143,6 +144,7 @@ public sealed class ScriptPlayer
 	private readonly Func<IReadOnlyList<string>> _frameText;
 	private readonly Func<int> _frame;
 	private readonly Action<string>? _shot;
+	private readonly string? _saves;
 	private readonly string _name;
 	private readonly string[] _lines;
 	private int _next;
@@ -152,9 +154,10 @@ public sealed class ScriptPlayer
 	// `shot` saves the next drawn frame to a file; null (headless) skips shot lines. `restart` makes a new controller
 	// for `controls restart`.
 	public ScriptPlayer(GameSession session, SampleController controller, string path, Func<IReadOnlyList<string>> frameText, Func<int> frame,
-		Action<string>? shot = null, Func<SampleController>? restart = null)
+		Action<string>? shot = null, Func<SampleController>? restart = null, string? saves = null)
 	{
 		_shot = shot;
+		_saves = saves;
 		_restart = restart;
 		_session = session;
 		_controller = controller;
@@ -336,6 +339,22 @@ public sealed class ScriptPlayer
 					Fail($"{source}: expected toast {wanted}, showing [{string.Join(" | ", toasts)}]");
 				}
 				break;
+			case "expect" when w.Length >= 3 && w[1] is "state" or "statehas":
+				// Runs of spaces read as one, as the script's own words do.
+				string value = string.Join(" ", _controller.State(w[2]).Split(' ', StringSplitOptions.RemoveEmptyEntries));
+				string want = string.Join(" ", w[3..]);
+				if (value == "?" || (w[1] == "state" ? value != want : !value.Contains(want, StringComparison.Ordinal)))
+				{
+					Fail($"{source}: {w[2]} is '{value}', expected " + (w[1] == "state" ? "" : "it to hold ") + $"'{want}'");
+				}
+				break;
+			case "savefile" when w.Length == 3 && w[1] == "damage" && _saves is not null:
+				// Flips a byte in the middle of the slot's file, so its checksum no longer matches.
+				string file = Path.Combine(_saves, w[2] + ".sav");
+				byte[] bytes = File.ReadAllBytes(file);
+				bytes[bytes.Length / 2] ^= 0x5a;
+				File.WriteAllBytes(file, bytes);
+				break;
 			case "shot" when w.Length == 2:
 				return Shot(w[1]).GetEnumerator();
 			case "dump":
@@ -507,7 +526,7 @@ public static class Headless
 		var input = new InputState();
 		try
 		{
-			var player = new ScriptPlayer(session, controller, scriptPath, () => surface.FrameText, () => frame, restart: NewController);
+			var player = new ScriptPlayer(session, controller, scriptPath, () => surface.FrameText, () => frame, restart: NewController, saves: saves);
 			while (frame < frames && !controller.QuitRequested)
 			{
 				InputFrame next = player.Next();

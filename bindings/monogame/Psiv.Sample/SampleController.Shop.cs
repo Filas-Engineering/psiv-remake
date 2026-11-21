@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Microsoft.Xna.Framework;
 
 using Psiv.Session;
@@ -11,7 +13,7 @@ public sealed partial class SampleController
 		if (input.Pressed(GameAction.PagePrev) || input.Pressed(GameAction.PageNext))
 		{
 			_tab = 1 - _tab;
-			_cursor = 0;
+			_list.Reset();
 		}
 		if (input.Back)
 		{
@@ -24,10 +26,10 @@ public sealed partial class SampleController
 			return;
 		}
 		var list = _tab == 0 ? shop.Stock.ToList() : _s.Inventory().Where(i => i.Price >= 0).ToList();
-		Move(input, list.Count);
+		_list.Move(input, list.Count);
 		if (input.Confirm && list.Count > 0)
 		{
-			Report(_tab == 0 ? _s.Buy(list[_cursor].Id) : _s.Sell(list[_cursor].Id));
+			Report(_tab == 0 ? _s.Buy(list[_list.Cursor].Id) : _s.Sell(list[_list.Cursor].Id));
 		}
 	}
 
@@ -42,31 +44,37 @@ public sealed partial class SampleController
 		{
 			return;
 		}
-		Style.Tabs(s, x + 24, 76, ["Buy", "Sell"], _tab);
+		Widgets.Tabs(s, x + 24, 76, w - 220, ["Buy", "Sell"], _tab, Px);
 		string money = $"Money {_s.WorldInfo().Money}";
 		s.Text(money, x + w - 40 - s.Measure(money), 81, Style.Text);
 		s.Image(art.Stall, x + w - 120, 120, 80, 80, Color.White);
 		int priceX = x + 560;
 		int countX = x + 680;
-		s.Text(_tab == 0 ? "Price" : "Each", priceX, 128, Style.Dim, Style.Small);
-		s.Text("Have", countX, 128, Style.Dim, Style.Small);
+		int headY = 76 + Px(52);
+		s.Text(_tab == 0 ? "Price" : "Each", priceX, headY, Style.Dim, Style.Small);
+		s.Text("Have", countX, headY, Style.Dim, Style.Small);
 		IReadOnlyList<(string Name, int Price, int Count)> rows = _tab == 0
 			? shop.Stock.Select(i => (i.Name, i.Price, i.Count)).ToList()
 			: _s.Inventory().Where(i => i.Price >= 0).Select(i => (i.Name, i.Price * shop.SellPercent / 100, i.Count)).ToList();
-		for (int i = 0; i < rows.Count; i++)
+		int top = headY + Px(28);
+		int listW = countX + 80 - x - 40;
+		_list.Draw(s, x + 40, top, listW, s.Height - 140 - top, Px(30), rows.Count, (i, y, on) =>
 		{
-			int y = 156 + i * 30;
-			bool on = i == _cursor;
-			Style.ListRow(s, rows[i].Name, x + 40, y, countX + 60 - x - 40, on);
-			string price = rows[i].Price.ToString(System.Globalization.CultureInfo.InvariantCulture);
+			Style.ListRow(s, Style.Fit(s, rows[i].Name, priceX - x - 100), x + 40, y, listW - 20, on, height: Px(28));
+			string price = rows[i].Price.ToString(CultureInfo.InvariantCulture);
 			s.Text(price, priceX + 40 - s.Measure(price), y, on ? Style.Accent : Style.Text);
 			s.Text($"x{rows[i].Count}", countX, y, Style.Dim);
-		}
-		if (rows.Count == 0)
+		});
+		if (rows.Count > 0)
 		{
-			s.Text(_tab == 0 ? "Nothing for sale." : "Nothing to sell.", x + 54, 156, Style.Dim);
+			_probeSelected = rows[_list.Cursor].Name;
 		}
-		DrawToasts(s, x + 24, s.Height - 92);
-		s.Text($"{Hint(GameAction.PagePrev)}/{Hint(GameAction.PageNext)} buy or sell   {Hint(GameAction.Confirm)} one   {Hint(GameAction.Back)} leave", x + 24, s.Height - 86, Style.Dim, Style.Small);
+		else
+		{
+			s.Text(_tab == 0 ? "Nothing for sale." : "Nothing to sell.", x + 54, top, Style.Dim);
+		}
+		DrawToasts(s, x + 24, s.Height - 56 - Px(36));
+		Widgets.Hints(s, x + 24, s.Height - 50 - Px(36), w - 48,
+			$"{Hint(GameAction.PagePrev)}/{Hint(GameAction.PageNext)} buy or sell   {Hint(GameAction.Confirm)} one   {Hint(GameAction.Back)} leave");
 	}
 }

@@ -66,7 +66,7 @@ public static class Style
 	public static void Plate(IDrawSurface s, string text, int x, int y, Color color, int size = Small)
 	{
 		int w = s.Measure(text, size) + 24;
-		int h = size + 12;
+		int h = (s is ScaledSurface scaled ? (int)MathF.Round(size * scaled.Scale) : size) + 12;
 		s.Fill(x + 1, y, w - 2, h, PanelEdge);
 		s.Fill(x, y + 1, w, h - 2, PanelEdge);
 		s.Fill(x + 2, y + 2, w - 4, h - 4, PanelTop);
@@ -96,12 +96,14 @@ public static class Style
 	}
 
 	// One menu row: a highlight bar and pointer under the selected row.
-	public static void ListRow(IDrawSurface s, string text, int x, int y, int width, bool selected, bool enabled = true, int size = Body)
+	// `height` is the highlight's, for text drawn larger than `size` through a ScaledSurface.
+	public static void ListRow(IDrawSurface s, string text, int x, int y, int width, bool selected, bool enabled = true, int size = Body, int height = 0)
 	{
 		if (selected)
 		{
-			s.Fill(x - 6, y - 3, width, size + 8, Row);
-			Pointer(s, x - 4, y + size / 2 - 6, Accent);
+			height = height > 0 ? height : size + 8;
+			s.Fill(x - 6, y - 3, width, height, Row);
+			Pointer(s, x - 4, y + (height - 8) / 2 - 6, Accent);
 		}
 		s.Text(text, x + 14, y, !enabled ? Dim : selected ? Accent : Text, size);
 	}
@@ -167,6 +169,23 @@ public static class Style
 		}
 		return lines;
 	}
+}
+
+// Another surface with every text size scaled, for the profile's text size; the layout scales its own spacing.
+public sealed class ScaledSurface(IDrawSurface inner, float scale) : IDrawSurface
+{
+	private int Size(int size) => (int)MathF.Round(size * scale);
+
+	public IDrawSurface Inner => inner;
+	public float Scale => scale;
+
+	public int Width => inner.Width;
+	public int Height => inner.Height;
+	public void Fill(int x, int y, int w, int h, Color color) => inner.Fill(x, y, w, h, color);
+	public void Text(string text, int x, int y, Color color, int size = Style.Body) => inner.Text(text, x, y, color, Size(size));
+	public int Measure(string text, int size = Style.Body) => inner.Measure(text, Size(size));
+	public int CreateImage(int width, int height, Color[] pixels) => inner.CreateImage(width, height, pixels);
+	public void Image(int image, int x, int y, int w, int h, Color tint) => inner.Image(image, x, y, w, h, tint);
 }
 
 public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, FontSystem fonts) : IDrawSurface, IDisposable

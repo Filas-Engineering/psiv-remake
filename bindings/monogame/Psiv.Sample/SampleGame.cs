@@ -23,6 +23,7 @@ public sealed class SampleGame : Game
 	private readonly string? _scriptPath;
 	private readonly string? _screenshot;
 	private readonly string? _controlsPath;
+	private readonly string? _saves;
 	private ScriptPlayer? _player;
 	private readonly List<string> _shots = [];
 	private int _frame;
@@ -37,6 +38,7 @@ public sealed class SampleGame : Game
 
 	public SampleGame(GameSession session, string? fontPath, int exitAfterMs, string? saves, string? scriptPath = null, string? screenshot = null)
 	{
+		_saves = saves;
 		_controlsPath = saves is null ? null : Path.Combine(saves, ControlsFile);
 		_session = session;
 		_fontPath = fontPath;
@@ -57,7 +59,7 @@ public sealed class SampleGame : Game
 		if (_scriptPath is not null)
 		{
 			_player = new ScriptPlayer(_session, _controller, _scriptPath, () => [], () => _frame, _shots.Add,
-				() => _controller = new SampleController(_session, Console.WriteLine, _controlsPath));
+				() => _controller = new SampleController(_session, Console.WriteLine, _controlsPath), _saves);
 		}
 	}
 

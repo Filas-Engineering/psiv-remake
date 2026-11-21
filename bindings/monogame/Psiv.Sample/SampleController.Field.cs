@@ -6,6 +6,11 @@ public sealed partial class SampleController
 {
 	private void UpdateField(int dtMs, ActionInput input)
 	{
+		if (input.Pressed(GameAction.Pause))
+		{
+			OpenPause();
+			return;
+		}
 		if (input.Confirm)
 		{
 			Report(_s.Interact());

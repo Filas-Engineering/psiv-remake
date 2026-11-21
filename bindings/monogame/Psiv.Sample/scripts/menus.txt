@@ -1,0 +1,216 @@
+# Every page of the field menu and every option, played with the keyboard: the status page's stats and abilities (a
+# field technique used from there on another member), items used on a member, equipment with its comparison and a
+# piece taken off and put back on, the save page, the party order swapped and swapped back, the macro list, the combo
+# log, quests, codex and the text log scrolled, then the options screen with every setting stepped and stepped back.
+# With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing.
+
+expect screen Title
+wait 1
+expect state selected New game
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+press M
+expect screen Menu
+expect state tab Status
+expect state page members
+expect statehas selected Test Fighter
+shot build/shots/menu_status.png
+
+# Status: stats, then abilities; the medic's Mend used on the fighter, who is already at full health.
+press Enter
+expect state page stats
+shot build/shots/menu_stats.png
+press Right
+expect state page abilities
+expect state selected Rally Cry
+press Down
+expect state selected Focus Shot
+shot build/shots/menu_abilities.png
+press Escape
+expect state page members
+press Down 2
+expect statehas selected Test Medic
+press Enter
+press Right
+expect state selected Mend
+press Enter
+expect state page target
+expect statehas selected Test Fighter
+shot build/shots/menu_ability_target.png
+press Enter
+expect state page abilities
+expect toast Test Fighter recovers 0 HP.
+press Escape
+expect state page members
+
+# Items: the tonic needs a member.
+press Right
+expect state tab Items
+expect state selected Tonic x3
+press Enter
+expect state page target
+press Down
+expect statehas selected Test Mystic
+press Escape
+expect state page items
+expect state selected Tonic x3
+
+# Equip: the fighter's weapon slot offers only taking the blade off, which shows what it costs; off and back on.
+press Right
+expect state tab Equip
+press Enter
+expect state page slots
+expect state selected weapon: Copper Blade
+press Enter
+expect state page pieces
+expect state selected Remove Copper Blade
+shot build/shots/menu_equip_remove.png
+press Enter
+expect state page slots
+expect state selected weapon: -
+shot build/shots/menu_equip_change.png
+press Enter
+expect state selected Copper Blade x1
+press Enter
+expect state selected weapon: Copper Blade
+press Escape
+expect state page members
+
+# Save: ten manual slots, scrolling past the last one shown.
+press Right
+expect state tab Save
+expect state selected manual_0 empty
+press Up
+expect state selected manual_9 empty
+expect state top 1
+press Down
+expect state top 0
+shot build/shots/menu_save.png
+
+# Order: the fighter and the mystic swap places and back.
+press Right
+expect state tab Order
+expect state party Test Fighter, Test Mystic, Test Medic
+press Enter
+expect state page swap
+press Down
+press Enter
+expect state party Test Mystic, Test Fighter, Test Medic
+shot build/shots/menu_order.png
+press Enter
+press Up
+press Enter
+expect state party Test Fighter, Test Mystic, Test Medic
+
+# Macros: the three the save starts with; their steps for members not in the party are marked.
+press Right
+expect state tab Macros
+expect state macros opener(5), tempest(5), regroup(5)
+expect statehas macro.opener Test Scout: Gust -> enemy 1 [not in party]
+press Down 3
+expect state selected + New macro
+
+# Combos: fifteen recipes, none found yet; the list scrolls.
+press Right
+expect state tab Combos
+expect state selected ??? (not discovered yet)
+press Up
+expect state top 3
+shot build/shots/menu_combos.png
+
+press Right
+expect state tab Quests
+shot build/shots/menu_quests.png
+press Right
+expect state tab Codex
+expect state selected Tidewater Landing
+shot build/shots/menu_codex.png
+press Right
+expect state tab Log
+expect state top 0
+shot build/shots/menu_log.png
+
+# Options: each setting stepped forward and back, the difficulty shown only, back to the menu.
+press Right
+expect state tab Options
+press Enter
+expect screen Options
+expect state selected Text speed: Normal
+press Right
+expect state text_speed fast
+press Left
+expect state text_speed normal
+press Down
+expect state selected Auto-advance: Off
+press Enter
+expect state auto_advance on
+press Left
+expect state auto_advance off
+press Down
+press Right
+expect state text_size 110
+press Left
+press Left
+expect state text_size 100
+press Down
+press Right 2
+expect state battle_speed 2x
+press Left 2
+expect state battle_speed 1x
+press Down
+press Enter
+expect state reduced_flash on
+press Enter
+expect state reduced_flash off
+press Down
+press Enter
+expect state ambient_talk off
+press Enter
+expect state ambient_talk on
+press Down
+press Enter
+expect state shipped_names on
+expect state selected Names: Shipped
+press Enter
+expect state shipped_names off
+press Down
+expect state selected Text language: en
+press Right
+expect state language ja
+press Left
+expect state language en
+press Down
+press Left 3
+press Down
+press Right
+press Down
+press Left
+expect state volumes 50 90 70
+press Right
+press Up
+press Left
+press Up
+press Right 3
+expect state volumes 80 80 80
+press Down 3
+expect state selected Difficulty: original
+press Right
+expect state difficulty original
+press Down
+press Right
+expect state reward x1_5
+press Left
+expect state reward x1
+press Down
+expect state selected Controls
+shot build/shots/menu_options.png
+press Escape
+expect screen Menu
+expect state tab Options
+press Escape
+expect screen Field
