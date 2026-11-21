@@ -1,0 +1,79 @@
+# Vehicles and travel in the placeholder adventure: through the reeds and Bell
+# Cove to Saltgrass Market, west to the brine flats, the reed skimmer given at
+# its mooring and boarded, the water crossed with a vehicle battle on the way,
+# the islet's crate and beacon, a manual save aboard, the skimmer left outside
+# the market, the ferry to Cinder Quay and back, returns to a town from the
+# field menu (none offered in the town itself), the way out of the Drowned
+# Kiln, a return home to Tidewater, and both saves loaded again. Run with --seed 6 --auto-battle.
+new
+walk guide_front
+face north
+talk
+choose 0
+name Bryn
+walk 13 4
+walk 10 4
+walk 19 4
+walk 6 0
+walk 0 10
+walk post_front
+face east
+talk
+look
+walk 6 4
+face east
+board
+status
+look
+e 12
+disembark
+status
+walk 21 2
+face north
+talk
+walk 22 4
+face east
+talk
+walk 20 4
+face west
+board
+w 11
+menu
+save manual_0
+close
+w 8
+status
+walk pier_front
+face north
+talk
+destinations port
+travel port quay_pier
+status
+menu
+destinations town
+close
+walk 13 4
+menu
+destinations town
+travel town cinder_quay homing_shell
+walk pier_front
+face south
+talk
+travel port saltgrass_pier
+walk 47 12
+menu
+destinations dungeon_exit
+travel dungeon_exit waymark_chalk
+status
+menu
+destinations dungeon_exit
+travel town tidewater homing_shell
+status
+title
+load manual_0
+status
+look
+disembark
+title
+continue
+status

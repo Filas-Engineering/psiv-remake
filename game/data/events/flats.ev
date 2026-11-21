@@ -1,0 +1,34 @@
+# The brine flats west of Saltgrass Market: the reed skimmer at its mooring, and the beacon on the islet across
+# the water that opens the ferry to the isles.
+
+event flats_mooring unskippable
+	lock player
+	if not vehicle reed_skimmer
+		narrate @flats.mooring.note
+		vehicle give reed_skimmer brine_flats mooring
+		narrate @flats.mooring.given
+	else if aboard reed_skimmer
+		narrate @flats.mooring.aboard
+	else
+		ask @flats.mooring.recall
+		yes
+			vehicle place reed_skimmer brine_flats mooring
+			narrate @flats.mooring.recalled
+		no
+			narrate @flats.mooring.left
+		end
+	end
+	unlock player
+end
+
+event flats_beacon unskippable
+	lock player
+	if travel.isles_open
+		narrate @flats.beacon.lit
+	else
+		narrate @flats.beacon.cold
+		set travel.isles_open
+		narrate @flats.beacon.answer
+	end
+	unlock player
+end

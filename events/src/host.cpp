@@ -239,4 +239,18 @@ Handle Host::open_name_entry(const std::string&) {
 
 void Host::log_skipped_line(const Line&) {}
 
+void Host::give_vehicle(const std::string&, const std::string&, const std::string&) {}
+
+void Host::place_vehicle(const std::string&, const std::string&, const std::string&) {}
+
+void Host::remove_vehicle(const std::string&) {}
+
+bool Host::has_vehicle(const std::string&) {
+	return false;
+}
+
+bool Host::aboard_vehicle(const std::string&) {
+	return false;
+}
+
 }

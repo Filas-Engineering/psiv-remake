@@ -1,0 +1,457 @@
+The Bell at Tidewater (seed 6)
+title> new
+You arrive at Tidewater Landing.
+  (fade in 1)
+The ferry bumps against the pilings of Tidewater Landing.
+  (move dockhand to dock_front)
+  (move dockhand to greet_spot)
+  (face dockhand fighter)
+Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  (move dockhand to dock_front)
+  (move dockhand to 10 0 2)
+  (face dockhand dock_front)
+New job: The dockhand's lost crate.
+New encyclopedia entry: Tidewater Landing.
+[Autosaved to auto_0 (event end).]
+field> walk guide_front
+field> face north
+field> talk
+  (face guide fighter)
+Harbor Guide: You came about the bell? It rings every night at Bell Cove, east past the reeds.
+Will you look into it? [0] Yes [1] No
+event> choose 0
+Harbor Guide: Before you go: what should the harbor call you?
+menu> name Bryn
+Test Fighter will be called Bryn.
+Bryn: Tell the ferry I am staying a while.
+Harbor Guide: Then take my apprentices. One knows a spark or two, the other knows bandages.
+Test Mystic joins the party.
+Test Medic joins the party.
+[Autosaved to auto_1 (event end).]
+field> walk 13 4
+You arrive at Reed Path.
+~ Test Mystic: Every step out here squelches. I am counting them.
+~ Test Medic: Count the bites instead. I am the one who has to dress them.
+[Autosaved to auto_2 (area entry).]
+field> walk 10 4
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+-- round 1 --
+Test Mystic uses Spark on Gel Mite A.
+  Gel Mite A takes 60 damage.
+  Gel Mite A falls.
+Bryn turns from Gel Mite A to Rust Hound.
+Bryn uses Focus Shot on Rust Hound.
+  Rust Hound takes 57 damage.
+Rust Hound uses Venom Spit on Test Medic.
+  Test Medic takes 22 damage.
+  Test Medic resists the poison.
+Test Medic turns from Gel Mite A to Rust Hound.
+Test Medic uses Glint on Rust Hound.
+  Rust Hound takes 33 damage.
+  Rust Hound falls.
+Gel Mite A cannot act (Defeated).
+Gel Mite B uses Bite on Test Mystic.
+  Test Mystic takes 16 damage.
+-- round 2 --
+Bryn uses Focus Shot on Gel Mite B.
+  Gel Mite B takes 60 damage.
+  Gel Mite B falls.
+Outcome: victory
+Victory. 22 experience, 15 money.
+Test Scout: Heading for the cove? I have mapped these reeds twice over. I am coming along.
+Test Scout joins the party.
+[Autosaved to auto_0 (event end).]
+field> walk 19 4
+You arrive at Bell Cove.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+[Autosaved to auto_1 (area entry).]
+field> walk 6 0
+You arrive at Saltgrass Market.
+~ Test Mystic: A town that smells of salt and clay. I could get used to this.
+~ Test Medic: Get used to it after we rest. My feet are done.
+[Autosaved to auto_2 (area entry).]
+field> walk 0 10
+You arrive at Brine Flats.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+[Autosaved to auto_0 (area entry).]
+field> walk post_front
+field> face east
+field> talk
+The reed skimmer is tied to the post, with a tag in the owner's hand: "Yours for the bell. Mind the shallows."
+The Reed Skimmer is yours to ride.
+The skimmer rocks as if it knows you. Climb aboard from the shore beside it.
+[Autosaved to auto_1 (after acquiring a vehicle).]
+field> look
+  ########################
+  #......#~~~~~~~~~~~#.C.#
+  #.....@N~~~~~~~~~~~#...#
+  #.......~~~~~~~~~~~....#
+  >......V~~~~~~~~~~~....N
+  #.......~~~~~~~~~~~....#
+  #......#~~~~~~~~~~~#...#
+  #......#~~~~~~~~~~~#...#
+  ########################
+field> walk 6 4
+field> face east
+field> board
+You board the Reed Skimmer.
+field> status
+Mode field, Brine Flats (7,4) facing east, play time 0:00:32.
+  Bryn Lv3 HP 86/86 TP 8/8 EXP 7
+  Test Mystic Lv3 HP 30/46 TP 27/30 EXP 7
+  Test Medic Lv3 HP 30/52 TP 30/32 EXP 7
+  Test Scout Lv4 HP 60/60 TP 18/18 EXP 0
+  Money 65. Items: tonic x3.
+  Aboard the Reed Skimmer.
+field> look
+  ########################
+  #......#~~~~~~~~~~~#.C.#
+  #......N~~~~~~~~~~~#...#
+  #.......~~~~~~~~~~~....#
+  >......@~~~~~~~~~~~....N
+  #.......~~~~~~~~~~~....#
+  #......#~~~~~~~~~~~#...#
+  #......#~~~~~~~~~~~#...#
+  ########################
+field> e 12
+Battle!
+Enemies: Bog Wisp A, Bog Wisp B, Gel Mite.
+The enemies catch the party off guard!
+-- round 1 --
+Bog Wisp B uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 5 damage.
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 6 damage.
+-- round 2 --
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+  Reed Skimmer cannot be paralyzed.
+Bog Wisp A uses Drone Hum on Reed Skimmer.
+  Reed Skimmer stays awake.
+Reed Skimmer uses Hull Vent on Gel Mite.
+  Gel Mite takes 54 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer evades.
+-- round 3 --
+Bog Wisp B uses Patch Up on Gel Mite.
+  Gel Mite recovers 32.
+Bog Wisp A uses Drone Hum on Reed Skimmer.
+  Reed Skimmer falls asleep!
+Reed Skimmer cannot act (Sleep).
+Gel Mite uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 10 damage.
+-- round 4 --
+Bog Wisp A uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer cannot be paralyzed.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 5 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 14 damage.
+Reed Skimmer cannot act (Sleep).
+-- round 5 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer cannot be paralyzed.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 12 damage.
+Reed Skimmer cannot act (Sleep).
+  Reed Skimmer wakes up.
+-- round 6 --
+Bog Wisp A uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer uses Hull Vent on Gel Mite.
+  Gel Mite takes 38 damage.
+  Gel Mite falls.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Gel Mite cannot act (Defeated).
+-- round 7 --
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 3 damage.
+  Reed Skimmer cannot be paralyzed.
+Bog Wisp A uses Drone Hum on Reed Skimmer.
+  Reed Skimmer stays awake.
+Reed Skimmer uses Hull Vent.
+  Bog Wisp A takes 27 damage.
+  Bog Wisp B takes 24 damage.
+-- round 8 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 4 damage.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A evades.
+-- round 9 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 3 damage.
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 3 damage.
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 37 damage.
+-- round 10 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 6 damage.
+Bog Wisp B uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 33.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 39 damage.
+  Bog Wisp A falls.
+-- round 11 --
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 38 damage.
+-- round 12 --
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 8 damage.
+  Bog Wisp B falls.
+Outcome: victory
+Victory. 15 experience, 22 money.
+field> disembark
+You step off the Reed Skimmer.
+field> status
+Mode field, Brine Flats (20,4) facing east, play time 0:01:21.
+  Bryn Lv3 HP 86/86 TP 8/8 EXP 10
+  Test Mystic Lv3 HP 30/46 TP 27/30 EXP 10
+  Test Medic Lv3 HP 30/52 TP 30/32 EXP 10
+  Test Scout Lv4 HP 60/60 TP 18/18 EXP 3
+  Money 87. Items: tonic x3.
+field> walk 21 2
+field> face north
+field> talk
+Found 2 Homing Shell.
+Found 2 Waymark Chalk.
+Found 25 money.
+field> walk 22 4
+field> face east
+field> talk
+A cold beacon stands on the rock. You strike its flint and the oil catches.
+Far to the west a second light answers. By morning the ferry will run to the isles.
+[Autosaved to auto_2 (event end).]
+field> walk 20 4
+field> face west
+field> board
+You board the Reed Skimmer.
+field> w 11
+Battle!
+Enemies: Bog Wisp A, Bog Wisp B, Gel Mite.
+-- round 1 --
+Bog Wisp A uses Drone Hum on Reed Skimmer.
+  Reed Skimmer falls asleep!
+Bog Wisp B uses Drone Hum on Reed Skimmer.
+  Reed Skimmer falls asleep!
+Reed Skimmer cannot act (Sleep).
+Gel Mite uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 12 damage.
+  Reed Skimmer wakes up.
+-- round 2 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Bog Wisp B uses Drone Hum on Reed Skimmer.
+  Reed Skimmer falls asleep!
+Reed Skimmer cannot act (Sleep).
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 5 damage.
+  Reed Skimmer wakes up.
+-- round 3 --
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+  Reed Skimmer cannot be paralyzed.
+Bog Wisp A uses Drone Hum on Reed Skimmer.
+  Reed Skimmer stays awake.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 6 damage.
+Reed Skimmer uses Hull Vent on Gel Mite.
+  Gel Mite takes 52 damage.
+-- round 4 --
+Bog Wisp B uses Patch Up on Gel Mite.
+  Gel Mite recovers 31.
+Bog Wisp A uses Drone Hum on Reed Skimmer.
+  Reed Skimmer stays awake.
+Reed Skimmer uses Hull Vent on Gel Mite.
+  Gel Mite takes 39 damage.
+  Gel Mite falls.
+Gel Mite cannot act (Defeated).
+-- round 5 --
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+  Reed Skimmer cannot be paralyzed.
+Bog Wisp A uses Drone Hum on Reed Skimmer.
+  Reed Skimmer falls asleep!
+Reed Skimmer cannot act (Sleep).
+  Reed Skimmer wakes up.
+-- round 6 --
+Bog Wisp A uses Drone Hum on Reed Skimmer.
+  Reed Skimmer falls asleep!
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Reed Skimmer cannot act (Sleep).
+-- round 7 --
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 3 damage.
+Reed Skimmer cannot act (Sleep).
+  Reed Skimmer wakes up.
+-- round 8 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 3 damage.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Reed Skimmer uses Hull Vent.
+  Bog Wisp A takes 27 damage.
+  Bog Wisp B takes 25 damage.
+-- round 9 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 4 damage.
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 43 damage.
+  Bog Wisp A falls.
+-- round 10 --
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 3 damage.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 45 damage.
+  Bog Wisp B falls.
+Outcome: victory
+Victory. 15 experience, 22 money.
+The enemies dropped 1 Wake Chime.
+field> menu
+menu> save manual_0
+Saved to manual_0.
+menu> close
+field> w 8
+The Reed Skimmer waits outside.
+You arrive at Saltgrass Market.
+[Autosaved to auto_0 (area entry).]
+field> status
+Mode field, Saltgrass Market (1,10) facing west, play time 0:02:06.
+  Bryn Lv3 HP 86/86 TP 8/8 EXP 13
+  Test Mystic Lv3 HP 30/46 TP 27/30 EXP 13
+  Test Medic Lv3 HP 30/52 TP 30/32 EXP 13
+  Test Scout Lv4 HP 60/60 TP 18/18 EXP 6
+  Money 134. Items: homing_shell x2, tonic x3, wake_chime x1, waymark_chalk x2.
+field> walk pier_front
+field> face north
+field> talk
+Where will the ferry take you?
+menu> destinations port
+  quay_pier: Cinder Quay (6,5)
+menu> travel port quay_pier
+You arrive at Cinder Quay.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+[Autosaved to auto_1 (area entry).]
+field> status
+Mode field, Cinder Quay (6,5) facing north, play time 0:02:16.
+  Bryn Lv3 HP 86/86 TP 8/8 EXP 13
+  Test Mystic Lv3 HP 30/46 TP 27/30 EXP 13
+  Test Medic Lv3 HP 30/52 TP 30/32 EXP 13
+  Test Scout Lv4 HP 60/60 TP 18/18 EXP 6
+  Money 134. Items: homing_shell x2, tonic x3, wake_chime x1, waymark_chalk x2.
+field> menu
+menu> destinations town
+menu> close
+field> walk 13 4
+You arrive at Ember Steps.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+[Autosaved to auto_2 (area entry).]
+field> menu
+menu> destinations town
+  cinder_quay: Cinder Quay (6,5)
+menu> travel town cinder_quay homing_shell
+Used Homing Shell.
+You arrive at Cinder Quay.
+[Autosaved to auto_0 (area entry).]
+field> walk pier_front
+field> face south
+field> talk
+Where will the ferry take you?
+menu> travel port saltgrass_pier
+You arrive at Saltgrass Market.
+[Autosaved to auto_1 (area entry).]
+field> walk 47 12
+You arrive at Drowned Kiln, Upper Gallery.
+Warm fog rolls along the galleries. Shelves of half-fired pots stand in the shallow water.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+[Autosaved to auto_2 (event end).]
+field> menu
+menu> destinations dungeon_exit
+  saltgrass: Saltgrass Market (46,12)
+menu> travel dungeon_exit waymark_chalk
+Used Waymark Chalk.
+You arrive at Saltgrass Market.
+[Autosaved to auto_0 (area entry).]
+field> status
+Mode field, Saltgrass Market (46,12) facing east, play time 0:02:24.
+  Bryn Lv3 HP 86/86 TP 8/8 EXP 13
+  Test Mystic Lv3 HP 30/46 TP 27/30 EXP 13
+  Test Medic Lv3 HP 30/52 TP 30/32 EXP 13
+  Test Scout Lv4 HP 60/60 TP 18/18 EXP 6
+  Money 134. Items: homing_shell x1, tonic x3, wake_chime x1, waymark_chalk x1.
+field> menu
+menu> destinations dungeon_exit
+menu> travel town tidewater homing_shell
+Used Homing Shell.
+You arrive at Tidewater Landing.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+[Autosaved to auto_1 (area entry).]
+field> status
+Mode field, Tidewater Landing (3,4) facing east, play time 0:02:24.
+  Bryn Lv3 HP 86/86 TP 8/8 EXP 13
+  Test Mystic Lv3 HP 30/46 TP 27/30 EXP 13
+  Test Medic Lv3 HP 30/52 TP 30/32 EXP 13
+  Test Scout Lv4 HP 60/60 TP 18/18 EXP 6
+  Money 134. Items: tonic x3, wake_chime x1, waymark_chalk x1.
+field> title
+title> load manual_0
+Loaded manual_0.
+field> status
+Mode field, Brine Flats (8,4) facing west, play time 0:02:05.
+  Bryn Lv3 HP 86/86 TP 8/8 EXP 13
+  Test Mystic Lv3 HP 30/46 TP 27/30 EXP 13
+  Test Medic Lv3 HP 30/52 TP 30/32 EXP 13
+  Test Scout Lv4 HP 60/60 TP 18/18 EXP 6
+  Money 134. Items: homing_shell x2, tonic x3, wake_chime x1, waymark_chalk x2.
+  Aboard the Reed Skimmer.
+field> look
+  ########################
+  #......#~~~~~~~~~~~#.c.#
+  #......N~~~~~~~~~~~#...#
+  #.......~~~~~~~~~~~....#
+  >.......@~~~~~~~~~~....N
+  #.......~~~~~~~~~~~....#
+  #......#~~~~~~~~~~~#...#
+  #......#~~~~~~~~~~~#...#
+  ########################
+field> disembark
+You step off the Reed Skimmer.
+field> title
+title> continue
+Loaded auto_1.
+field> status
+Mode field, Tidewater Landing (3,4) facing east, play time 0:02:24.
+  Bryn Lv3 HP 86/86 TP 8/8 EXP 13
+  Test Mystic Lv3 HP 30/46 TP 27/30 EXP 13
+  Test Medic Lv3 HP 30/52 TP 30/32 EXP 13
+  Test Scout Lv4 HP 60/60 TP 18/18 EXP 6
+  Money 134. Items: tonic x3, wake_chime x1, waymark_chalk x1.
+End of script.

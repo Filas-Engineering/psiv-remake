@@ -1,0 +1,21 @@
+{
+	"id": "ember_steps",
+	"kind": "field",
+	"encounter_mode": "visible",
+	"step_ms": 250,
+	"music": "field_ember_steps",
+	"region": "isles",
+	"map": [
+		"##########",
+		"#........#",
+		".........#",
+		"#........#",
+		"##########"
+	],
+	"markers": {
+		"west_gate": [1, 2]
+	},
+	"exits": [
+		{"at": [0, 2], "to": "cinder_quay", "marker": "east_gate"}
+	]
+}

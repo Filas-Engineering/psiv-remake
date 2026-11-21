@@ -150,7 +150,7 @@ The placeholder `poison` has no effect in battle and no round limit; it only per
   * `skill`: needs `uses`, which refill on rest.
   * `combo`: only reachable through a combo recipe.
 * `target` is one of `one_enemy`, `enemy_group`, `all_enemies`, `one_ally`, `all_allies`, `self`, `one_fallen_ally` or `random_enemy`.
-* `field` (optional bool): usable outside battle. Only techniques and skills with a party target and only heal, cure_status and revive effects qualify.
+* `field` (optional bool): usable outside battle. Only techniques and skills with a party target and only heal, cure_status, revive and travel effects qualify.
 * Effects:
   * `{"type": "physical_damage", "power": N}`. `power` (0 to 9999) is the bonus in the damage formula; a plain attack has 0.
   * `{"type": "elemental_damage", "power": N, "element": "heat|chill|shock|gale"}`
@@ -160,6 +160,7 @@ The placeholder `poison` has no effect in battle and no round limit; it only per
   * `{"type": "cure_status", "status": ID}`
   * `{"type": "modify_stat", "stat": "strength|mental|agility|dexterity|defense", "direction": "up|down", "threshold": 0-255}`. The stat's battle value becomes its base plus or minus the user's mental for a technique, or strength for a skill or basic attack (a combo's summed stat). Each change is worked out from the base, so the latest one replaces the earlier. Lowering floors agility and dexterity at 1 and the others at 0. A change lasts until the battle ends. Lowering a foe's stat rolls like a status against the optional `threshold` (`down` only); raising always lands.
   * `{"type": "revive", "power": percent of max hit points}`. The target must be `one_fallen_ally` or `all_allies`, and `one_fallen_ally` needs a revive effect.
+  * `{"type": "travel", "to": "town|dungeon_exit"}` (FLD-051): takes the party back to a town it has visited, or out of the dungeon it is in. It must be the only effect, on a `field` technique, skill or item that targets `all_allies`; enemies, vehicles and combinations cannot have one. Core moves nobody: `travelEffect(effects)` finds it for the host, which checks where the party may go and moves it (`../game`, "Rules this library chose"). In battle `setCommand` refuses it with `command.field_only`; outside battle `useAbilityOutsideBattle` and `useItemOutsideBattle` only take the cost (technique points, a skill use or the item) and report `ResourceSpent`.
 
 ### items.json
 
@@ -372,7 +373,7 @@ Every row follows the original as read from the community disassembly except rev
 
 ## Not built yet
 
-* The original carries a vehicle's skill uses from one battle to the next; here they refill each battle. Vehicle encounter tables (ENC-007) are the host's business.
+* The original carries a vehicle's skill uses from one battle to the next; here they refill each battle. Vehicles in the field and their encounter tables (ENC-007) are the host's business (`../game`).
 * The original's AI conditions on particular other enemy kinds, on a free slot beside the enemy (for spawning) and on an ambush reaction.
 * Presentation keys and type tags on abilities and combinations (BAT-040, BAT-060).
 * Equipment drops: an encounter's drop is an item.
@@ -382,7 +383,14 @@ Every row follows the original as read from the community disassembly except rev
 
 ## Changes a host must make
 
-This round: rules version 9, event schema 6 and record format 5 are unchanged, no rule or data format changed, and battle outcomes and records are the same.
+This round: rules version 10 (a battle now refuses a command whose ability or item travels), event schema 6 and record format 5 unchanged. No battle of the existing data plays differently and no record of it replays differently, but `replayBattle` refuses records of rules version 9, since the version changed.
+
+* `types.h`: `EffectKind::Travel` (appended; name `travel`) and `enum class TravelTarget { Town, DungeonExit }` (names `town`, `dungeon_exit`; `names.h`: `toString(TravelTarget)`, `parseTravelTarget`). `ability.h`: `Effect::travel` and `travelEffect(effects)`. A `switch` over `EffectKind` needs the new case.
+* `Battle::setCommand` refuses an ability or item with a travel effect (`command.field_only`, in `messageKeys` and `text_en.json`). `useItemOutsideBattle` spends a travel item without applying anything; `useAbilityOutsideBattle` pays a travel technique's cost as before.
+* Loader problems `load.unknown_travel_target`, `load.travel_alone`, `load.travel_not_in_combo` and `load.travel_party_only`; `load.field_use_allows_only_heal` now lists travel too.
+* Data: `abilities.json` adds the techniques `homeward` (8 TP, to a town) and `outpath` (4 TP, out of a dungeon); `items.json` adds `homing_shell` (to a town) and `waymark_chalk` (out of a dungeon); in `party.json` the mystic learns Homeward at level 9 and the scout Outpath at level 8, levels no seeded run reaches. The content hash changes with the data.
+
+The round before: rules version 9, event schema 6 and record format 5 are unchanged, no rule or data format changed, and battle outcomes and records are the same.
 
 * `battle.h`: new `memberCombatant(db, member)`, the party combatant `Battle::create` builds for a member (level stats plus equipment, the basic attack a weapon replaces, the weapon's element, known abilities, affinities and status resistances), before any difficulty overlay. `Battle::create` and `Battle::partyOnly` call it, so a status screen or an equipment comparison built on it shows the numbers a battle uses. The character must exist in the data.
 

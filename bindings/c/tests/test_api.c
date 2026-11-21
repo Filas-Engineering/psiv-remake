@@ -1387,6 +1387,214 @@ static void testAmbientTalk(void) {
 	psiv_session_destroy(s);
 }
 
+/* Walks to (x, y) with the game's path walk, running events and playing any battle on the way to its end. */
+static void walkThrough(psiv_session* s, int32_t x, int32_t y) {
+	int32_t status = PSIV_WALK_WALKING;
+	if (psiv_walk_to(s, x, y) != PSIV_OK) {
+		return;
+	}
+	for (int guard = 0; guard < 4000; ++guard) {
+		settle(s);
+		if (psiv_mode_get(s) == PSIV_MODE_BATTLE) {
+			psiv_auto_battle played;
+			psiv_battle_play(s, 0, &played);
+			if (psiv_walk_to(s, x, y) != PSIV_OK) {
+				return;
+			}
+			continue;
+		}
+		if (psiv_walk_step(s, &status) != PSIV_OK || status != PSIV_WALK_WALKING) {
+			return;
+		}
+	}
+}
+
+/* One step at a time in `direction` until the leader's x is `x` or it leaves the area; returns the vehicle battles
+ * fought on the way, each checked to be fought by `vehicle`. */
+static int driveTo(psiv_session* s, int32_t direction, int32_t x, const char* vehicle) {
+	int battles = 0;
+	psiv_field_info field;
+	char area[64];
+	psiv_field_info_get(s, &field);
+	snprintf(area, sizeof area, "%s", field.area_id);
+	for (int guard = 0; guard < 100; ++guard) {
+		if (psiv_field_info_get(s, &field) != PSIV_OK || field.leader_x == x || strcmp(field.area_id, area) != 0) {
+			break;
+		}
+		psiv_walk(s, direction);
+		if (psiv_mode_get(s) == PSIV_MODE_BATTLE) {
+			psiv_battle_info info;
+			psiv_auto_battle played;
+			CHECK(psiv_battle_info_get(s, &info) == PSIV_OK && strcmp(info.vehicle, vehicle) == 0 && info.source == PSIV_BATTLE_RANDOM);
+			battles += strcmp(info.vehicle, vehicle) == 0;
+			psiv_battle_play(s, 0, &played);
+		}
+	}
+	return battles;
+}
+
+/* Vehicles in the field and travel: the skimmer given by a script, boarded, driven over water with vehicle battles,
+ * left on dry ground, saved and loaded aboard, parked outside a town; the ferry between ports, a return to a town of the
+ * region and the way out of a dungeon. */
+static void testVehiclesAndTravel(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/travel", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	psiv_session_options options;
+	psiv_session* s = NULL;
+	psiv_session_options_init(&options);
+	options.data_dir = dataDir;
+	options.save_dir = saves;
+	options.seed = 6;
+	CHECK(psiv_session_create(&options, &s) == PSIV_OK);
+	psiv_field_info field;
+	psiv_error e;
+	const psiv_vehicle* vehicles;
+	const psiv_travel_destination* places;
+	int32_t count = 0;
+
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_TRAVEL_KIND, PSIV_TRAVEL_DUNGEON_EXIT), "dungeon_exit") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_MENU_KIND, PSIV_MENU_PORT), "port") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_POINT_KIND, PSIV_POINT_PORT), "port") == 0);
+	CHECK(psiv_sizeof("psiv_vehicle") == sizeof(psiv_vehicle) && psiv_sizeof("psiv_travel_destination") == sizeof(psiv_travel_destination));
+
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK(walkToMarker(s, "guide_front") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	CHECK_OK(psiv_enter_name(s, "Bryn"));
+	settle(s);
+	walkThrough(s, 13, 4);
+	walkThrough(s, 10, 4);
+	walkThrough(s, 19, 4);
+	walkThrough(s, 6, 0);
+	walkThrough(s, 0, 10);
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.area_id, "brine_flats") == 0 && strcmp(field.region, "coast") == 0 && strcmp(field.aboard, "") == 0);
+	CHECK(field.leader_step_ms == field.step_ms);
+	CHECK_OK(psiv_field_vehicles(s, &vehicles, &count));
+	CHECK(count == 0);
+
+	/* The mooring post's script gives the skimmer. */
+	walkThrough(s, 6, 2);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_EAST));
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	CHECK_OK(psiv_field_vehicles(s, &vehicles, &count));
+	CHECK(count == 1 && strcmp(vehicles[0].id, "reed_skimmer") == 0 && strcmp(vehicles[0].name, "Reed Skimmer") == 0);
+	CHECK(count == 1 && vehicles[0].x == 7 && vehicles[0].y == 4 && !vehicles[0].aboard);
+	CHECK(psiv_leave_vehicle(s) == PSIV_REFUSED && psiv_last_error(s, &e) == PSIV_OK && strcmp(e.key, "game.refuse.not_aboard") == 0);
+
+	walkThrough(s, 6, 4);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_EAST));
+	CHECK_OK(psiv_board(s));
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.aboard, "reed_skimmer") == 0 && field.leader_x == 7 && field.leader_step_ms == field.step_ms / 2);
+	CHECK(psiv_interact(s) == PSIV_REFUSED && psiv_last_error(s, &e) == PSIV_OK && strcmp(e.key, "game.refuse.aboard") == 0);
+	CHECK(driveTo(s, PSIV_DIRECTION_EAST, 19, "reed_skimmer") >= 1);
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(field.leader_x == 19 && field.leader_y == 4);
+	CHECK_OK(psiv_leave_vehicle(s));
+	CHECK_OK(psiv_field_vehicles(s, &vehicles, &count));
+	CHECK(count == 1 && vehicles[0].x == 19 && !vehicles[0].aboard);
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(field.leader_x == 20 && strcmp(field.aboard, "") == 0);
+
+	/* Behind the water: the crate, and the beacon that opens the ferry; then aboard again, a manual save. */
+	walkThrough(s, 21, 2);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	const psiv_inventory_entry* items;
+	int32_t itemCount = 0;
+	int travelling = 0;
+	CHECK_OK(psiv_inventory(s, &items, &itemCount));
+	for (int32_t i = 0; i < itemCount; ++i) {
+		if (strcmp(items[i].id, "homing_shell") == 0) {
+			travelling += items[i].travel == PSIV_TRAVEL_TOWN && items[i].count == 2;
+		} else if (strcmp(items[i].id, "waymark_chalk") == 0) {
+			travelling += items[i].travel == PSIV_TRAVEL_DUNGEON_EXIT;
+		} else {
+			travelling += items[i].travel == -1 ? 0 : 10;
+		}
+	}
+	CHECK(travelling == 2);
+	walkThrough(s, 22, 4);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_EAST));
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	CHECK(psiv_flag(s, "travel.isles_open"));
+	walkThrough(s, 20, 4);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_WEST));
+	CHECK_OK(psiv_interact(s));
+	CHECK_OK(psiv_open_menu(s));
+	CHECK_OK(psiv_save_manual(s, "manual_0"));
+	CHECK_OK(psiv_close_menu(s));
+	CHECK_OK(psiv_quit_to_title(s));
+	CHECK_OK(psiv_load(s, "manual_0"));
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.aboard, "reed_skimmer") == 0 && field.leader_x == 19);
+	CHECK_OK(psiv_field_vehicles(s, &vehicles, &count));
+	CHECK(count == 1 && vehicles[0].aboard && vehicles[0].x == 19);
+
+	/* Driving into the market leaves the skimmer outside. */
+	driveTo(s, PSIV_DIRECTION_WEST, -1, "reed_skimmer");
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.area_id, "saltgrass") == 0 && strcmp(field.aboard, "") == 0);
+	CHECK_OK(psiv_field_vehicles(s, &vehicles, &count));
+	CHECK(count == 0);
+
+	/* The ferry. */
+	CHECK(psiv_travel_destinations(s, 7, &places, &count) == PSIV_INVALID_ARGUMENT);
+	CHECK(psiv_travel(s, PSIV_TRAVEL_PORT, "quay_pier", NULL, NULL) == PSIV_REFUSED && psiv_last_error(s, &e) == PSIV_OK && strcmp(e.key, "game.refuse.no_port") == 0);
+	CHECK(walkToMarker(s, "pier_front") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	CHECK(psiv_menu_kind_get(s) == PSIV_MENU_PORT);
+	CHECK_OK(psiv_travel_destinations(s, PSIV_TRAVEL_PORT, &places, &count));
+	CHECK(count == 1 && strcmp(places[0].id, "quay_pier") == 0 && strcmp(places[0].area_name, "Cinder Quay") == 0 && strcmp(places[0].region, "isles") == 0);
+	CHECK_OK(psiv_travel(s, PSIV_TRAVEL_PORT, "quay_pier", NULL, NULL));
+	CHECK(psiv_mode_get(s) == PSIV_MODE_FIELD);
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.area_id, "cinder_quay") == 0 && strcmp(field.region, "isles") == 0 && field.leader_x == 6 && field.leader_y == 5);
+
+	/* Returns reach visited towns of the region only, never the town the party stands in. */
+	CHECK_OK(psiv_open_menu(s));
+	CHECK_OK(psiv_travel_destinations(s, PSIV_TRAVEL_TOWN, &places, &count));
+	CHECK(count == 0);
+	CHECK(psiv_travel(s, PSIV_TRAVEL_TOWN, "saltgrass", NULL, "homing_shell") == PSIV_REFUSED && psiv_last_error(s, &e) == PSIV_OK &&
+		strcmp(e.key, "game.refuse.no_town") == 0);
+	CHECK(psiv_use_item(s, "homing_shell", NULL) == PSIV_REFUSED && psiv_last_error(s, &e) == PSIV_OK && strcmp(e.key, "game.refuse.travel_item") == 0);
+	CHECK_OK(psiv_close_menu(s));
+	walkThrough(s, 13, 4);
+	CHECK_OK(psiv_open_menu(s));
+	CHECK_OK(psiv_travel_destinations(s, PSIV_TRAVEL_TOWN, &places, &count));
+	CHECK(count == 1 && strcmp(places[0].id, "cinder_quay") == 0 && places[0].x == 6 && places[0].y == 5);
+	CHECK_OK(psiv_travel(s, PSIV_TRAVEL_TOWN, "cinder_quay", NULL, "homing_shell"));
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.area_id, "cinder_quay") == 0);
+
+	/* Back by ferry, then into the kiln and straight out again. */
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_SOUTH));
+	CHECK_OK(psiv_interact(s));
+	CHECK_OK(psiv_travel(s, PSIV_TRAVEL_PORT, "saltgrass_pier", NULL, NULL));
+	walkThrough(s, 47, 12);
+	settle(s);
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.area_id, "kiln_upper") == 0);
+	CHECK_OK(psiv_open_menu(s));
+	CHECK(psiv_travel(s, PSIV_TRAVEL_TOWN, "tidewater", NULL, "homing_shell") == PSIV_REFUSED && psiv_last_error(s, &e) == PSIV_OK &&
+		strcmp(e.key, "game.refuse.in_dungeon") == 0);
+	CHECK_OK(psiv_travel_destinations(s, PSIV_TRAVEL_DUNGEON_EXIT, &places, &count));
+	CHECK(count == 1 && strcmp(places[0].area, "saltgrass") == 0 && places[0].x == 46 && places[0].y == 12);
+	CHECK_OK(psiv_travel(s, PSIV_TRAVEL_DUNGEON_EXIT, NULL, NULL, "waymark_chalk"));
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.area_id, "saltgrass") == 0 && field.leader_x == 46 && field.leader_y == 12);
+	psiv_session_destroy(s);
+}
+
 int main(int argc, char** argv) {
 	for (int i = 1; i + 1 < argc; i += 2) {
 		if (strcmp(argv[i], "--data") == 0) {
@@ -1413,6 +1621,7 @@ int main(int argc, char** argv) {
 	testDifficulties();
 	testCamerasAndMusic();
 	testAmbientTalk();
+	testVehiclesAndTravel();
 	if (failures) {
 		fprintf(stderr, "%d of %d checks failed\n", failures, checks);
 		return 1;

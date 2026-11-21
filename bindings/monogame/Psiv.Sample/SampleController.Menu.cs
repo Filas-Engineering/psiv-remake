@@ -126,7 +126,11 @@ public sealed partial class SampleController
 			if (input.Confirm && items.Count > 0)
 			{
 				InventoryEntry item = items[_list.Cursor];
-				if (item.Targeting is Targeting.OneAlly or Targeting.OneFallenAlly)
+				if (item.Travel is { } kind)
+				{
+					PickTravel(kind, null, item.Id);
+				}
+				else if (item.Targeting is Targeting.OneAlly or Targeting.OneFallenAlly)
 				{
 					_pickAction = item.Id;
 					_sub.Reset();

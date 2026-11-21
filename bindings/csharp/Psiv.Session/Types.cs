@@ -4,14 +4,17 @@ namespace Psiv.Session;
 
 public enum PsivStatus { Ok, Refused, InvalidArgument, NotFound, DataError, InternalError }
 public enum Mode { Title, Field, Event, Battle, Menu, Shop }
-public enum MenuKind { None, Field, Inn, SavePrompt, NameEntry }
+// Port: a port's destinations (TravelDestinations(TravelKind.Port)).
+public enum MenuKind { None, Field, Inn, SavePrompt, NameEntry, Port }
 public enum Direction { None = -1, North, East, South, West }
 // Ambient: a party talk line that came up by itself on arrival; it does not stop play.
 public enum NoticeKind { Line, Choice, Action, Notice, Warning, Autosave, Ambient }
 public enum AreaKind { Town, Field, Dungeon }
 public enum EncounterMode { Visible, Random }
 public enum EnemyState { Idle, Chasing, Returning }
-public enum PointKind { Talk, Step, Chest, Shop, Rest }
+public enum PointKind { Talk, Step, Chest, Shop, Rest, Port }
+// From a port to another open port, back to a visited town of the region, out of a dungeon.
+public enum TravelKind { Port, Town, DungeonExit }
 public enum JobState { Available, Accepted, Completed }
 public enum TextSpeed { Slow, Normal, Fast, Instant }
 public enum BattleSpeed { X1, X1_5, X2, X3 }
@@ -71,7 +74,7 @@ public enum NameKind
 	Mode, MenuKind, Direction, NoticeKind, AreaKind, EncounterMode, EnemyState, PointKind, JobState, TextSpeed, BattleSpeed,
 	RewardMultiplier, BattleSource, Side, CommandKind, AbilityKind, Targeting, EquipSlot, Outcome, EventType, CancelReason,
 	Effectiveness, StatusEnd, ResourceKind, Element, Stat, Opening, AutoStop, MacroStepStatus, MacroIssue, ActionType, MacroTargetKind,
-	DescriptionKind, ItemSort, CameraTarget,
+	DescriptionKind, ItemSort, CameraTarget, TravelKind,
 }
 
 public sealed record PsivError(PsivStatus Status, string Key, IReadOnlyList<string> Params, string Text)
@@ -130,9 +133,10 @@ public sealed record SaveSummary(string Slot, string Area, long PlayTimeMs, IRea
 
 public sealed record WorldInfo(Mode Mode, MenuKind MenuKind, int Money, long PlayTimeMs, int AutosaveCount, bool GameOver, bool CanRetry, bool PlayerControl);
 
-// Music is the area's track, "" when the data names none.
+// Music is the area's track, "" when the data names none. Aboard is the vehicle the party rides, "" on foot; LeaderStepMs
+// the leader's time per cell now, StepMs on foot.
 public sealed record FieldInfo(string AreaId, string AreaName, AreaKind AreaKind, EncounterMode EncounterMode, int Width, int Height, int StepMs,
-	int LeaderX, int LeaderY, Direction Facing, bool PlayerControl, int GraceMs, string Music);
+	int LeaderX, int LeaderY, Direction Facing, bool PlayerControl, int GraceMs, string Music, string Region, string Aboard, int LeaderStepMs);
 
 public sealed record FieldEnemy(int Id, string Encounter, string Zone, int X, int Y, Direction Facing, EnemyState State);
 
@@ -146,9 +150,15 @@ public sealed record FieldPoint(PointKind Kind, string Id, int X, int Y, string 
 // untouched actor stands at the talk point named after it.
 public sealed record FieldActor(string Id, string Name, int X, int Y, Direction Facing, bool Visible, bool Scripted);
 
+// One of the party's vehicles in its area; Aboard: the party rides it, so it stands on the leader's cell.
+public sealed record FieldVehicle(string Id, string Name, int X, int Y, Direction Facing, bool Aboard);
+
+// A place a travel can go now: Id is what Travel takes (a port id, else an area id), X and Y where the party lands.
+public sealed record TravelDestination(string Id, string Area, string AreaName, string Region, int X, int Y);
+
 // A snapshot of everything a field renderer draws, read in one go after update.
 public sealed record FieldView(FieldInfo Info, IReadOnlyList<CellFlags> Grid, IReadOnlyList<FieldEnemy> Enemies, IReadOnlyList<Marker> Markers,
-	IReadOnlyList<FieldExit> Exits, IReadOnlyList<FieldPoint> Points, IReadOnlyList<FieldActor> Actors)
+	IReadOnlyList<FieldExit> Exits, IReadOnlyList<FieldPoint> Points, IReadOnlyList<FieldActor> Actors, IReadOnlyList<FieldVehicle> Vehicles)
 {
 	public CellFlags Cell(int x, int y) => x < 0 || y < 0 || x >= Info.Width || y >= Info.Height ? CellFlags.Wall : Grid[y * Info.Width + x];
 }
@@ -172,9 +182,10 @@ public sealed record ActiveStatus(string Id, string Name, int Remaining);
 public sealed record Combatant(int Index, string Id, string Name, string Label, Side Side, string Group, int Hp, int MaxHp, int Tp, int MaxTp, bool Alive,
 	bool Defending, IReadOnlyList<ActiveStatus> Statuses, CommandKind CommandKind, string CommandId, int CommandTarget);
 
-// Music is the encounter's track from game.json, "" when the data names none.
+// Music is the encounter's track from game.json, "" when the data names none. Vehicle is a vehicle battle's vehicle, the
+// combatant after the members riding it, "" otherwise.
 public sealed record BattleInfo(bool Live, string Encounter, BattleSource Source, int Round, int PartyCount, int CombatantCount, Outcome Outcome,
-	bool EscapeAllowed, bool AutoActive, bool PartyActsNextRound, bool GameOver, string Music);
+	bool EscapeAllowed, bool AutoActive, bool PartyActsNextRound, bool GameOver, string Music, string Vehicle);
 
 public sealed record BattleOption(string Id, string Name, CommandKind Command, AbilityKind? AbilityKind, Targeting Targeting, int Cost, int Uses, CancelReason Unusable)
 {
@@ -196,8 +207,9 @@ public sealed record BattleEvent(
 public sealed record Member(string Id, string Name, bool InLineup, int Level, int Experience, int Hp, int MaxHp, int Tp, int MaxTp, int Strength, int Mental,
 	int Agility, int Dexterity, int Defense, IReadOnlyList<ActiveStatus> Statuses, IReadOnlyList<string> Equipment, IReadOnlyList<string> EquipmentNames);
 
-// Uses and MaxUses: a skill's uses left and after a rest; -1 for other kinds.
-public sealed record AbilityInfo(string Id, string Name, AbilityKind Kind, Targeting Targeting, int Cost, bool Field, int Uses, int MaxUses);
+// Uses and MaxUses: a skill's uses left and after a rest; -1 for other kinds. Travel: the kind Travel takes a travelling
+// technique with, null for others.
+public sealed record AbilityInfo(string Id, string Name, AbilityKind Kind, Targeting Targeting, int Cost, bool Field, int Uses, int MaxUses, TravelKind? Travel);
 
 public sealed record StatBonus(int MaxHp, int MaxTp, int Strength, int Mental, int Agility, int Dexterity, int Defense, int Critical, int Evasion);
 
@@ -231,7 +243,8 @@ public sealed record ComboEntry(string Recipe, string Result, string ResultName,
 // Total counts every recipe, discovered or not.
 public sealed record ComboLog(IReadOnlyList<ComboEntry> Entries, int Total);
 
-public sealed record InventoryEntry(string Id, string Name, int Count, bool IsEquipment, bool Field, int TargetingOrSlot, int Price)
+// Travel: the kind Travel takes a travelling item with, null for others.
+public sealed record InventoryEntry(string Id, string Name, int Count, bool IsEquipment, bool Field, int TargetingOrSlot, int Price, TravelKind? Travel)
 {
 	public Targeting Targeting => (Targeting)TargetingOrSlot;
 	public EquipSlot Slot => (EquipSlot)TargetingOrSlot;

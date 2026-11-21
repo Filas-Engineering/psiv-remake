@@ -269,11 +269,17 @@ Message Battle::setCommand(int actor, const Command& command) {
 		if (ability->kind == AbilityKind::Combo) {
 			return {"command.combo_not_selectable", {command.id}};
 		}
+		if (travelEffect(ability->effects)) {
+			return {"command.field_only", {command.id}};
+		}
 		break;
 	}
 	case CommandKind::Item:
 		if (!db_->item(command.id)) {
 			return {"command.unknown_item", {command.id}};
+		}
+		if (travelEffect(db_->item(command.id)->effects)) {
+			return {"command.field_only", {command.id}};
 		}
 		if (actor == vehicleIndex_) {
 			return {"command.vehicle_cannot", {c.defId, toString(command.kind)}};

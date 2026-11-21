@@ -53,7 +53,7 @@ bool RecordingHost::same_world(const RecordingHost& other) const {
 	std::vector<std::string> b = other.party;
 	std::sort(a.begin(), a.end());
 	std::sort(b.begin(), b.end());
-	return flags == other.flags && vars == other.vars && items == other.items && a == b && player_control == other.player_control;
+	return flags == other.flags && vars == other.vars && items == other.items && a == b && vehicles == other.vehicles && player_control == other.player_control;
 }
 
 Handle RecordingHost::open(double seconds, int result, const std::string& description) {
@@ -181,6 +181,30 @@ void RecordingHost::give_item(const std::string& item, int count) {
 	items[item] += count;
 }
 
+void RecordingHost::give_vehicle(const std::string& vehicle, const std::string& map, const std::string& marker) {
+	trace.push_back("vehicle give " + vehicle + " " + map + " " + marker);
+	vehicles[vehicle] = map + " " + marker;
+}
+
+void RecordingHost::place_vehicle(const std::string& vehicle, const std::string& map, const std::string& marker) {
+	trace.push_back("vehicle place " + vehicle + " " + map + " " + marker);
+	auto it = vehicles.find(vehicle);
+	if (it != vehicles.end()) {
+		it->second = map + " " + marker;
+	}
+}
+
+void RecordingHost::remove_vehicle(const std::string& vehicle) {
+	trace.push_back("vehicle remove " + vehicle);
+	vehicles.erase(vehicle);
+}
+
+bool RecordingHost::has_vehicle(const std::string& vehicle) {
+	const bool held = vehicles.count(vehicle) > 0;
+	trace.push_back("has_vehicle " + vehicle + " -> " + (held ? "true" : "false"));
+	return held;
+}
+
 void RecordingHost::take_item(const std::string& item, int count) {
 	trace.push_back("take " + item + " " + std::to_string(count));
 	int& held = items[item];
@@ -251,6 +275,9 @@ std::string RecordingHost::snapshot_world() {
 	for (const std::string& member : party) {
 		out << "party " << member << '\n';
 	}
+	for (const auto& v : vehicles) {
+		out << "vehicle " << v.first << ' ' << v.second << '\n';
+	}
 	out << "control " << (player_control ? 1 : 0) << '\n';
 	return out.str();
 }
@@ -260,6 +287,7 @@ bool RecordingHost::restore_world(const std::string& snapshot) {
 	std::map<std::string, std::int64_t> new_vars;
 	std::map<std::string, int> new_items;
 	std::vector<std::string> new_party;
+	std::map<std::string, std::string> new_vehicles;
 	bool control = true;
 	std::istringstream in(snapshot);
 	std::string record;
@@ -291,6 +319,13 @@ bool RecordingHost::restore_world(const std::string& snapshot) {
 				return false;
 			}
 			new_party.push_back(name);
+		} else if (kind == "vehicle") {
+			std::string map;
+			std::string marker;
+			if (!(fields >> name >> map >> marker)) {
+				return false;
+			}
+			new_vehicles[name] = map + " " + marker;
 		} else if (kind == "control") {
 			int value = 0;
 			if (!(fields >> value)) {
@@ -306,6 +341,7 @@ bool RecordingHost::restore_world(const std::string& snapshot) {
 	vars = new_vars;
 	items = new_items;
 	party = new_party;
+	vehicles = new_vehicles;
 	player_control = control;
 	return true;
 }

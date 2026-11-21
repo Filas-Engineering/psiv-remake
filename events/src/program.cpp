@@ -23,6 +23,9 @@ std::string describe(const Condition& condition) {
 		if (t.negate) {
 			out += "not ";
 		}
+		if (t.vehicle != VehicleTest::none) {
+			out += t.vehicle == VehicleTest::owns ? "vehicle " : "aboard ";
+		}
 		out += t.name;
 		if (!t.is_flag) {
 			out += std::string(" ") + compares[static_cast<int>(t.compare)] + " " + std::to_string(t.value);
@@ -85,6 +88,12 @@ const char* op_name(Op op) {
 		return "save prompt";
 	case Op::name_entry:
 		return "name entry";
+	case Op::vehicle_give:
+		return "vehicle give";
+	case Op::vehicle_place:
+		return "vehicle place";
+	case Op::vehicle_remove:
+		return "vehicle remove";
 	}
 	return "unknown";
 }

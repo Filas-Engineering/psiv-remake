@@ -349,6 +349,15 @@ void Interpreter::execute(Thread& thread) {
 	case Op::give:
 		host_.give_item(ins.name, static_cast<int>(ins.number));
 		break;
+	case Op::vehicle_give:
+		host_.give_vehicle(ins.name, ins.action.subject, ins.action.target);
+		break;
+	case Op::vehicle_place:
+		host_.place_vehicle(ins.name, ins.action.subject, ins.action.target);
+		break;
+	case Op::vehicle_remove:
+		host_.remove_vehicle(ins.name);
+		break;
 	case Op::take:
 		host_.take_item(ins.name, static_cast<int>(ins.number));
 		break;
@@ -399,7 +408,9 @@ void Interpreter::write_var(const std::string& name, std::int64_t value) {
 bool Interpreter::evaluate(const Condition& condition) {
 	for (const Term& term : condition.terms) {
 		bool value;
-		if (term.is_flag) {
+		if (term.vehicle != VehicleTest::none) {
+			value = term.vehicle == VehicleTest::owns ? host_.has_vehicle(term.name) : host_.aboard_vehicle(term.name);
+		} else if (term.is_flag) {
 			value = read_flag(term.name);
 		} else {
 			std::int64_t v = read_var(term.name);

@@ -15,7 +15,10 @@ enum class Targeting { OneEnemy, EnemyGroup, AllEnemies, OneAlly, AllAllies, Sel
 
 enum class AbilityKind { Attack, Technique, Skill, Combo };
 
-enum class EffectKind { PhysicalDamage, ElementalDamage, Heal, ApplyStatus, CureStatus, ModifyStat, Revive };
+enum class EffectKind { PhysicalDamage, ElementalDamage, Heal, ApplyStatus, CureStatus, ModifyStat, Revive, Travel };
+
+// Where a Travel effect takes the party (FLD-051): a town visited before, or out of the dungeon it is in.
+enum class TravelTarget { Town, DungeonExit };
 
 enum class EquipSlot { Weapon, Head, Body, Arms, Accessory };
 

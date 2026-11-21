@@ -39,10 +39,12 @@ maps-check:
 	done
 	@echo "data/areas matches data/maps ($(words $(MAP_SOURCES)) maps)"
 
-# Re-records the scripted playthrough's golden transcript after a deliberate change.
+# Re-records the golden transcripts of the scripted playthrough and the vehicle and travel script after a deliberate change.
 expected: all
 	rm -rf $(BUILD)/cli_saves
 	./$(CLI) --seed 6 --auto-battle --script data/scripts/playthrough.txt --saves $(BUILD)/cli_saves > tests/expected/playthrough.txt
+	rm -rf $(BUILD)/travel_saves
+	./$(CLI) --seed 6 --auto-battle --script data/scripts/travel.txt --saves $(BUILD)/travel_saves > tests/expected/travel.txt
 
 test: all maps-check
 	./$(CLI) --check data > $(BUILD)/check.log || (cat $(BUILD)/check.log; exit 1)
@@ -57,6 +59,10 @@ test: all maps-check
 	./$(CLI) --seed 6 --auto-battle --script data/scripts/playthrough.txt --saves $(BUILD)/cli_saves > $(BUILD)/playthrough.log
 	cmp $(BUILD)/playthrough.log tests/expected/playthrough.txt
 	@echo "scripted playthrough matches tests/expected/playthrough.txt"
+	rm -rf $(BUILD)/travel_saves
+	./$(CLI) --seed 6 --auto-battle --script data/scripts/travel.txt --saves $(BUILD)/travel_saves > $(BUILD)/travel.log
+	cmp $(BUILD)/travel.log tests/expected/travel.txt
+	@echo "vehicle and travel script matches tests/expected/travel.txt"
 	./$(CLI) --bot --seed 2 > $(BUILD)/bot.log
 	@cat $(BUILD)/bot.log
 	./$(CLI) --bot --seed 2 --route data/routes/kiln.route --goal saltgrass.kiln_done > $(BUILD)/bot_kiln.log

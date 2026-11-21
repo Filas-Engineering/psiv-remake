@@ -2,14 +2,16 @@
 
 import json
 
-TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "zones"]
-LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "zones"]
+TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "ports",
+	"zones"]
+LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "ports", "zones"]
 ENTRY_FIELDS = {
 	"exits": ["at", "to", "marker"],
 	"hooks": ["id", "at", "trigger", "event", "require_flag", "block_flag"],
 	"shops": ["id", "at", "stock", "sell_percent"],
 	"rests": ["id", "at", "cost"],
 	"chests": ["id", "at", "flag", "items", "equipment", "money"],
+	"ports": ["id", "at", "marker", "flag"],
 	"zones": ["id", "from", "to", "table", "visible", "random"],
 }
 TABLE_FIELDS = ["encounter", "weight"]

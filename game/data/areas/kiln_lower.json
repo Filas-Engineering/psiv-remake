@@ -4,6 +4,7 @@
 	"encounter_mode": "random",
 	"step_ms": 250,
 	"music": "dungeon_firing_floor",
+	"region": "coast",
 	"map": [
 		"########################################",
 		"#......................................#",

@@ -236,6 +236,16 @@ std::string talkChunk(const World& w) {
 	return o.str();
 }
 
+std::string travelChunk(const World& w) {
+	Writer o;
+	o.key("aboard").text(w.aboard).end();
+	for (const auto& [id, v] : w.vehicles) {
+		o.key("vehicle").text(id).text(v.area).num(v.cell.x).num(v.cell.y).text(toString(v.facing)).text(v.homeArea).num(v.home.x).num(v.home.y).end();
+	}
+	o.key("dungeon_exit").text(w.dungeonExitArea).num(w.dungeonExitCell.x).num(w.dungeonExitCell.y).end();
+	return o.str();
+}
+
 std::string unlocksChunk(const World& w) {
 	Writer o;
 	for (const std::string& id : w.unlocked) {
@@ -571,6 +581,39 @@ bool readTalk(const std::string& payload, World& w, std::string& error) {
 	return error.empty();
 }
 
+bool readTravel(const std::string& payload, World& w, std::string& error) {
+	Lines in("travel", payload);
+	w.vehicles.clear();
+	w.aboard.clear();
+	w.dungeonExitArea.clear();
+	w.dungeonExitCell = {};
+	for (const auto& l : in.lines()) {
+		if (l[0] == "aboard" && in.need(l, 1)) {
+			w.aboard = in.text(l[1]);
+		} else if (l[0] == "vehicle" && in.need(l, 8)) {
+			VehiclePlace place;
+			place.area = in.text(l[2]);
+			place.cell = {static_cast<int>(in.num(l[3])), static_cast<int>(in.num(l[4]))};
+			if (!parseFacing(in.text(l[5]), place.facing)) {
+				in.fail("bad vehicle facing");
+			}
+			place.homeArea = in.text(l[6]);
+			place.home = {static_cast<int>(in.num(l[7])), static_cast<int>(in.num(l[8]))};
+			w.vehicles[in.text(l[1])] = place;
+		} else if (l[0] == "dungeon_exit" && in.need(l, 3)) {
+			w.dungeonExitArea = in.text(l[1]);
+			w.dungeonExitCell = {static_cast<int>(in.num(l[2])), static_cast<int>(in.num(l[3]))};
+		} else {
+			in.fail("unknown line '" + l[0] + "'");
+		}
+	}
+	if (!w.aboard.empty() && !w.vehicles.count(w.aboard)) {
+		in.fail("the party rides vehicle '" + w.aboard + "', which it does not have");
+	}
+	error = in.error;
+	return error.empty();
+}
+
 bool readActors(const std::string& payload, World& w, std::string& error) {
 	Lines in("actors", payload);
 	w.actors.clear();
@@ -615,6 +658,7 @@ const KnownChunk kWorldChunks[] = {
 	{"unlocks", 1, unlocksChunk, readUnlocks},
 	{"actors", 1, actorsChunk, readActors},
 	{"talk", 1, talkChunk, readTalk},
+	{"travel", 1, travelChunk, readTravel},
 };
 
 // The clear-data record holds these, from the same writers.
@@ -785,6 +829,12 @@ bool migrate3to4(std::vector<Chunk>& chunks, std::string&) {
 	return true;
 }
 
+// Schema 4 to 5: the travel chunk starts empty: no vehicle, on foot, no dungeon's way out known.
+bool migrate4to5(std::vector<Chunk>& chunks, std::string&) {
+	chunks.push_back({"travel", 1, ""});
+	return true;
+}
+
 struct Migration {
 	int from;
 	bool (*apply)(std::vector<Chunk>& chunks, std::string& error);
@@ -795,6 +845,7 @@ const Migration kMigrations[] = {
 	{1, migrate1to2},
 	{2, migrate2to3},
 	{3, migrate3to4},
+	{4, migrate4to5},
 };
 
 std::string headerChunk(const SaveFile& save) {

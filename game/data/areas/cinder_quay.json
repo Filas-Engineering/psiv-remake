@@ -1,0 +1,29 @@
+{
+	"id": "cinder_quay",
+	"kind": "town",
+	"encounter_mode": "visible",
+	"step_ms": 250,
+	"music": "town_cinder_quay",
+	"region": "isles",
+	"arrival": "pier_front",
+	"map": [
+		"##############",
+		"#............#",
+		"#............#",
+		"#............#",
+		"#.............",
+		"#............#",
+		"#~~~~~~~~~~~~#",
+		"##############"
+	],
+	"markers": {
+		"pier_front": [6, 5],
+		"stall_front": [3, 2],
+		"east_gate": [12, 4]
+	},
+	"exits": [
+		{"at": [13, 4], "to": "ember_steps", "marker": "west_gate"}
+	],
+	"shops": [{"id": "quay_stall", "at": [3, 1], "stock": ["homing_shell", "waymark_chalk", "tonic"], "sell_percent": 50}],
+	"ports": [{"id": "quay_pier", "at": [6, 6], "marker": "pier_front", "flag": "travel.isles_open"}]
+}

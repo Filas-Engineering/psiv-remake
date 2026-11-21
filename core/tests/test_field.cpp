@@ -72,3 +72,20 @@ TEST(techniquesWorkOutsideBattleAndCostTheirPoints) {
 	members[kMedic].hp = 0;
 	CHECK_EQ(useAbilityOutsideBattle(data(), members, kMedic, "mend", kFighter).rejection.key, std::string("field.user_down"));
 }
+
+TEST(travelItemsAndTechniquesOnlyTakeTheirCost) {
+	std::vector<PartyMember> members = party();
+	Inventory inventory{{"homing_shell", 2}};
+	FieldUse use = useItemOutsideBattle(data(), members, inventory, "homing_shell", -1);
+	CHECK(use.rejection.empty());
+	CHECK_EQ(inventory.at("homing_shell"), 1);
+	CHECK_EQ(ofType(use.events, EventType::ResourceSpent).size(), std::size_t(1));
+	CHECK(ofType(use.events, EventType::ItemHadNoEffect).empty());
+
+	members[kMystic] = makePartyMember(data(), data().characters.at("mystic"), 9);
+	const int tp = members[kMystic].tp;
+	use = useAbilityOutsideBattle(data(), members, kMystic, "homeward", -1);
+	CHECK(use.rejection.empty());
+	CHECK_EQ(members[kMystic].tp, tp - 8);
+	CHECK_EQ(useAbilityOutsideBattle(data(), members, kScout, "outpath", -1).rejection.key, std::string("field.not_known"));
+}

@@ -74,8 +74,21 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 		return refuse("field.no_target", {itemId});
 	}
 
-	Battle battle = Battle::partyOnly(db, party);
 	FieldUse use;
+	if (travelEffect(item->effects)) {
+		// The game has already moved the party; using the item only spends it.
+		if (--stock->second == 0) {
+			inventory.erase(stock);
+		}
+		Event spent;
+		spent.type = EventType::ResourceSpent;
+		spent.ability = item->id;
+		spent.resource = ResourceKind::Item;
+		spent.amount = 1;
+		use.events.push_back(spent);
+		return use;
+	}
+	Battle battle = Battle::partyOnly(db, party);
 	const int user = chosen ? target : 0;
 	const std::vector<int> targets = battle.resolveTargets(user, item->targeting, target, effectsRevive(item->effects));
 	if (targets.empty()) {

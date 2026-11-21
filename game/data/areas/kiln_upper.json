@@ -4,6 +4,7 @@
 	"encounter_mode": "visible",
 	"step_ms": 250,
 	"music": "dungeon_kiln_halls",
+	"region": "coast",
 	"map": [
 		"########################################",
 		"#............#............#............#",

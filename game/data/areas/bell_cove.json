@@ -4,6 +4,7 @@
 	"encounter_mode": "visible",
 	"step_ms": 250,
 	"music": "field_bell_shore",
+	"region": "coast",
 	"map": [
 		"######.#####",
 		"#..........#",

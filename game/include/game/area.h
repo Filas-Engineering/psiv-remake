@@ -68,6 +68,18 @@ struct Chest {
 	int line = 0;
 };
 
+// A port of the transport between regions (FLD-051, FLD-052): interacting with it lists the other open ports to travel
+// to. Like an interact hook it may stand on any cell and is used from the floor beside it.
+struct Port {
+	std::string id;
+	Cell at;
+	// Where travellers arrive, a marker of the same area.
+	std::string marker;
+	// The port is open, as a place to leave from and to arrive at, once this flag is set; always when empty.
+	std::string flag;
+	int line = 0;
+};
+
 struct TableEntry {
 	std::string encounter;
 	int weight = 1;
@@ -115,6 +127,10 @@ struct Area {
 	int stepMs = 250;
 	// The track for the area outside events and battles, an audio id from game.json; empty when the data names none.
 	std::string music;
+	// The world or region the area belongs to (FLD-050); a return to a town reaches only towns of the same region.
+	std::string region;
+	// A town's marker where a return to it lands (FLD-051); a town without one is no destination.
+	std::string arrival;
 	std::vector<std::string> rows;
 	std::map<std::string, Cell> markers;
 	std::vector<Exit> exits;
@@ -122,6 +138,7 @@ struct Area {
 	std::vector<Shop> shops;
 	std::vector<RestPoint> rests;
 	std::vector<Chest> chests;
+	std::vector<Port> ports;
 	std::vector<Zone> zones;
 	// The file game.json names for the area, and the line of each marker, for problem reports.
 	std::string file;
@@ -139,6 +156,8 @@ struct Area {
 	const Shop* shopAt(Cell cell) const;
 	const RestPoint* restAt(Cell cell) const;
 	const Chest* chestAt(Cell cell) const;
+	const Port* portAt(Cell cell) const;
+	const Port* port(const std::string& id) const;
 	const Shop* shop(const std::string& id) const;
 	const RestPoint* rest(const std::string& id) const;
 };

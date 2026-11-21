@@ -39,7 +39,7 @@ public:
 	bool failed() const { return failed_; }
 	bool done() const { return pos_ >= line_.tokens.size(); }
 
-	const Token* peek() const { return done() ? nullptr : &line_.tokens[pos_]; }
+	const Token* peek(std::size_t ahead = 0) const { return pos_ + ahead >= line_.tokens.size() ? nullptr : &line_.tokens[pos_ + ahead]; }
 
 	// The rendered message starts with the command, so the line's problem reads in context.
 	void error(const char* key, std::vector<std::string> params) {
@@ -305,36 +305,18 @@ private:
 			if (a.keyword("not")) {
 				term.negate = true;
 			}
-			if (!a.name(term.name, "a flag or variable name")) {
-				return false;
-			}
-			if (one_of(term.name, {"and", "or", "not"})) {
-				a.error("script.cannot_used_as_flag_variable", {term.name});
-				return false;
-			}
-			if (a.next_is_op()) {
-				std::string op;
-				a.op(op, "a comparison");
-				term.is_flag = false;
-				if (op == "==") {
-					term.compare = Compare::eq;
-				} else if (op == "!=") {
-					term.compare = Compare::ne;
-				} else if (op == "<") {
-					term.compare = Compare::lt;
-				} else if (op == "<=") {
-					term.compare = Compare::le;
-				} else if (op == ">") {
-					term.compare = Compare::gt;
-				} else if (op == ">=") {
-					term.compare = Compare::ge;
-				} else {
-					a.error("script.comparison_use", {op});
+			// `vehicle` and `aboard` followed by a name test a vehicle; alone they are still flag names.
+			const Token* test = a.peek();
+			const Token* subject = a.peek(1);
+			if (test && subject && test->kind == TokenKind::word && subject->kind == TokenKind::word && (test->text == "vehicle" || test->text == "aboard") &&
+				!one_of(subject->text, {"and", "or"})) {
+				term.vehicle = test->text == "vehicle" ? VehicleTest::owns : VehicleTest::aboard;
+				a.keyword(test->text.c_str());
+				if (!a.name(term.name, "a vehicle name")) {
 					return false;
 				}
-				if (!a.integer(term.value, "an integer to compare with")) {
-					return false;
-				}
+			} else if (!parse_value_test(a, term)) {
+				return false;
 			}
 			cond.terms.push_back(term);
 			if (a.done()) {
@@ -352,6 +334,39 @@ private:
 			joiner = next;
 			cond.join = std::strcmp(next, "and") == 0 ? Join::all : Join::any;
 		}
+	}
+
+	bool parse_value_test(Args& a, Term& term) {
+		if (!a.name(term.name, "a flag or variable name")) {
+			return false;
+		}
+		if (one_of(term.name, {"and", "or", "not"})) {
+			a.error("script.cannot_used_as_flag_variable", {term.name});
+			return false;
+		}
+		if (!a.next_is_op()) {
+			return true;
+		}
+		std::string op;
+		a.op(op, "a comparison");
+		term.is_flag = false;
+		if (op == "==") {
+			term.compare = Compare::eq;
+		} else if (op == "!=") {
+			term.compare = Compare::ne;
+		} else if (op == "<") {
+			term.compare = Compare::lt;
+		} else if (op == "<=") {
+			term.compare = Compare::le;
+		} else if (op == ">") {
+			term.compare = Compare::gt;
+		} else if (op == ">=") {
+			term.compare = Compare::ge;
+		} else {
+			a.error("script.comparison_use", {op});
+			return false;
+		}
+		return a.integer(term.value, "an integer to compare with");
 	}
 
 	void parse_if(const Context& ctx, std::vector<Stmt>& out) {
@@ -679,8 +694,8 @@ private:
 		static const std::initializer_list<const char*> known = {
 			"ambient", "anim", "ask", "battle", "call", "camera", "choice", "clear", "face", "fade", "give", "goto", "hide",
 			"if", "label", "lock", "move", "music", "name", "narrate", "panel", "party", "race", "rest", "return", "save",
-			"say", "sequence", "set", "shake", "shop", "show", "sound", "sync", "take", "together", "unlock", "var", "wait",
-			"warp", "while",
+			"say", "sequence", "set", "shake", "shop", "show", "sound", "sync", "take", "together", "unlock", "var", "vehicle",
+			"wait", "warp", "while",
 		};
 		if (!one_of(cmd, known)) {
 			error(l.number, "script.unknown_command", {cmd});
@@ -932,6 +947,20 @@ private:
 			s = action(ActionType::warp);
 			a.name(s.ins.action.subject, "a map name");
 			a.name(s.ins.action.target, "a marker name");
+		} else if (cmd == "vehicle") {
+			s = simple(Op::vehicle_give);
+			if (a.keyword("place")) {
+				s.ins.op = Op::vehicle_place;
+			} else if (a.keyword("remove")) {
+				s.ins.op = Op::vehicle_remove;
+			} else if (!a.keyword("give")) {
+				a.expected("'give', 'place' or 'remove'");
+			}
+			a.name(s.ins.name, "a vehicle name");
+			if (s.ins.op != Op::vehicle_remove) {
+				a.name(s.ins.action.subject, "a map name");
+				a.name(s.ins.action.target, "a marker name");
+			}
 		}
 		a.finish();
 		if (!a.failed()) {

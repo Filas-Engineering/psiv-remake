@@ -156,8 +156,9 @@ std::optional<EncounterStart> leaderBump(World& world, Cell target) {
 	return std::nullopt;
 }
 
-std::optional<EncounterStart> tickVisibleEnemies(World& world, const Area& area, int tickMs, int leaderStepMs) {
+std::optional<EncounterStart> tickVisibleEnemies(World& world, const Area& area, int tickMs, int leaderStepMs, bool leaderUnseen) {
 	const int cellCost = leaderStepMs * 100;
+	const bool quiet = world.graceMs > 0 || leaderUnseen;
 	for (VisibleEnemy& e : world.enemies) {
 		const Zone* zone = area.zone(e.zone);
 		if (!zone) {
@@ -165,11 +166,11 @@ std::optional<EncounterStart> tickVisibleEnemies(World& world, const Area& area,
 		}
 		const VisibleRules& r = zone->visible;
 		e.stateMs += tickMs;
-		if (world.graceMs > 0 && e.state == EnemyState::Chasing) {
+		if (quiet && e.state == EnemyState::Chasing) {
 			e.state = EnemyState::Returning;
 			e.stateMs = 0;
 		}
-		if (e.state == EnemyState::Idle && world.graceMs == 0 && distance2(e.position, world.position) <= r.detectionRadius * r.detectionRadius &&
+		if (e.state == EnemyState::Idle && !quiet && distance2(e.position, world.position) <= r.detectionRadius * r.detectionRadius &&
 			lineOfSight(area, e.position, world.position)) {
 			e.state = EnemyState::Chasing;
 			e.stateMs = 0;
@@ -233,6 +234,27 @@ std::optional<EncounterStart> tickVisibleEnemies(World& world, const Area& area,
 void resetRandomCounter(World& world, const Zone& zone) {
 	world.randomCounter = 0;
 	world.randomThreshold = world.encounterStream.range(zone.random.minSteps, zone.random.maxSteps) * zone.random.stepDistance;
+}
+
+std::optional<EncounterStart> vehicleStep(World& world, const Area& area, Cell cell, const std::vector<TableEntry>& table, const rules::Database& db, int agility) {
+	const Zone* zone = area.zoneAt(cell);
+	if (world.graceMs > 0 || area.kind == AreaKind::Town || !zone || table.empty()) {
+		return std::nullopt;
+	}
+	if (world.randomThreshold <= 0) {
+		resetRandomCounter(world, *zone);
+	}
+	world.randomCounter += zone->random.stepDistance;
+	if (world.randomCounter < world.randomThreshold) {
+		return std::nullopt;
+	}
+	Zone vehicleZone = *zone;
+	vehicleZone.table = table;
+	EncounterStart start;
+	start.encounter = drawEncounter(world.encounterStream, vehicleZone);
+	start.opening = rules::openingFromRoll(world.encounterStream.range(0, rules::formulas::kChanceRollMax), agility, db.encounter(start.encounter)->awareness);
+	resetRandomCounter(world, *zone);
+	return start;
 }
 
 std::optional<EncounterStart> randomStep(World& world, const Area& area, Cell cell, const rules::Database& db, const std::vector<rules::PartyMember>& party) {

@@ -336,3 +336,33 @@ TEST(registry_problems_carry_keys) {
 		CHECK_EQ(d[1].line, 3);
 	}
 }
+
+TEST(vehicle_commands_and_tests_name_listed_vehicles_and_markers) {
+	Registry r = registry_ok();
+	r.add(NameKind::vehicle, "skiff");
+	r.add(NameKind::map, "harbor");
+	r.add_marker("harbor", "dock");
+	r.add_marker("lighthouse", "pier");
+	auto ok = compile_with(r, R"(event e unskippable
+	vehicle give skiff harbor dock
+	vehicle place skiff lighthouse pier
+	if vehicle skiff and not aboard skiff
+		vehicle remove skiff
+	end
+end
+)");
+	CHECK(ok.empty());
+	auto bad = compile_with(r, R"(event e unskippable
+	vehicle give raft harbor dock
+	vehicle place skiff harbor pier
+	if aboard raft
+		vehicle remove skiff
+	end
+	vehicle sink skiff
+end
+)");
+	CHECK(test::has_diagnostic(bad, 2, "unknown vehicle 'raft'"));
+	CHECK(test::has_diagnostic(bad, 3, "marker 'pier' is not on map 'harbor'"));
+	CHECK(test::has_diagnostic(bad, 4, "unknown vehicle 'raft'"));
+	CHECK(test::has_diagnostic(bad, 7, "expected 'give', 'place' or 'remove'"));
+}

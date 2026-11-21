@@ -18,6 +18,7 @@
 			"growth": {"hp": 4, "tp": 3, "strength": 0, "mental": 2, "agility": 1, "dexterity": 1, "defense": 0},
 			"basic_attack": "strike",
 			"abilities": ["spark", "ember", "frostbite", "hush"],
+			"learns": [{"level": 9, "ability": "homeward"}],
 			"affinities": {"shock": 50},
 			"equip": ["rod", "light_armor", "charm"],
 			"equipment": ["ember_rod", "calm_charm"]
@@ -29,6 +30,7 @@
 			"growth": {"hp": 5, "tp": 2, "strength": 1, "mental": 1, "agility": 2, "dexterity": 2, "defense": 1},
 			"basic_attack": "strike",
 			"abilities": ["gust", "weaken", "overclock"],
+			"learns": [{"level": 8, "ability": "outpath"}],
 			"equip": ["blade", "sling", "light_armor", "charm"],
 			"equipment": ["volley_sling", "grip_bands", "drift_feather"]
 		},

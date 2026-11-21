@@ -167,6 +167,14 @@ public:
 	virtual Handle open_name_entry(const std::string& member);
 	// A line a skip passed over, for the text log (TXT-028).
 	virtual void log_skipped_line(const Line& line);
+	// Vehicles in the field (FLD-060), for the `vehicle` commands and the `vehicle` and `aboard` tests. The changes are
+	// synchronous, like give_item; `give` also counts as acquiring the vehicle. The defaults do nothing and report that
+	// the party has no vehicle and rides none.
+	virtual void give_vehicle(const std::string& vehicle, const std::string& map, const std::string& marker);
+	virtual void place_vehicle(const std::string& vehicle, const std::string& map, const std::string& marker);
+	virtual void remove_vehicle(const std::string& vehicle);
+	virtual bool has_vehicle(const std::string& vehicle);
+	virtual bool aboard_vehicle(const std::string& vehicle);
 };
 
 const char* action_type_name(ActionType type);

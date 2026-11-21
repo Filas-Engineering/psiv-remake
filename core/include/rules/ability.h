@@ -18,6 +18,7 @@ struct Effect {
 	Stat stat = Stat::Strength;
 	// ModifyStat: raises the stat rather than lowering it.
 	bool raises = false;
+	TravelTarget travel = TravelTarget::Town;
 };
 
 struct AbilityDef {
@@ -44,5 +45,8 @@ struct ItemDef {
 };
 
 bool effectsRevive(const std::vector<Effect>& effects);
+// The Travel effect of a field item or technique, or null. The game moves the party; core only takes the cost, and a
+// battle refuses the command.
+const Effect* travelEffect(const std::vector<Effect>& effects);
 
 }

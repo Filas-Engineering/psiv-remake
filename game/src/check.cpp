@@ -30,13 +30,13 @@ private:
 	std::vector<rules::Problem>& out_;
 };
 
-// What stands on a solid cell: interact hooks, shops, rest points and chests with a cell.
+// What stands on a solid cell: interact hooks, shops, rest points, chests with a cell and ports.
 struct Solid {
 	std::string what;
 	int line = 0;
 };
 
-void checkArea(const Area& area, const std::set<std::string>& entrances, Found& found) {
+void checkArea(const Area& area, const std::set<std::string>& entrances, const std::vector<FieldVehicle>& vehicles, Found& found) {
 	const std::string& file = area.file;
 	std::map<Cell, Solid> solids;
 	auto addSolid = [&](Cell c, const std::string& what, int line) {
@@ -69,6 +69,9 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, Found& 
 	}
 	for (const Chest& c : area.chests) {
 		addSolid(c.at, "chest '" + c.id + "'", c.line);
+	}
+	for (const Port& p : area.ports) {
+		addSolid(p.at, "port '" + p.id + "'", p.line);
 	}
 	auto solidAt = [&](Cell c) -> const Solid* {
 		auto it = solids.find(c);
@@ -129,7 +132,16 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, Found& 
 		return;
 	}
 	// The cells the party can walk to from a way in. Exit cells are reached but never walked through, since
-	// stepping on one leaves the area.
+	// stepping on one leaves the area. In a field area a vehicle may carry the party over terrain it crosses.
+	auto crossable = [&](Cell c) {
+		if (area.walkable(c)) {
+			return true;
+		}
+		if (area.kind != AreaKind::Field || !area.inside(c) || solids.count(c)) {
+			return false;
+		}
+		return std::any_of(vehicles.begin(), vehicles.end(), [&](const FieldVehicle& v) { return v.canCross(area.rows[c.y][c.x]); });
+	};
 	std::set<Cell> reached;
 	std::deque<Cell> queue;
 	for (const std::string& marker : entrances) {
@@ -145,7 +157,7 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, Found& 
 			continue;
 		}
 		for (Cell step : {Cell{c.x, c.y - 1}, Cell{c.x + 1, c.y}, Cell{c.x, c.y + 1}, Cell{c.x - 1, c.y}}) {
-			if (area.walkable(step) && reached.insert(step).second) {
+			if (crossable(step) && reached.insert(step).second) {
 				queue.push_back(step);
 			}
 		}
@@ -197,6 +209,17 @@ std::vector<rules::Problem> crossCheck(const GameData& data, bool loaderChecked)
 			warpTargets.insert(in.action.subject);
 		}
 	}
+	// Ports lead to each other, and a return lands at a town's arrival marker.
+	std::set<std::string> portAreas;
+	for (const auto& [id, area] : data.areas) {
+		for (const Port& p : area.ports) {
+			entrances[id].insert(p.marker);
+			portAreas.insert(id);
+		}
+		if (!area.arrival.empty()) {
+			entrances[id].insert(area.arrival);
+		}
+	}
 
 	// In game.json's order, so the first area listed keeps a chest id and a later one is reported.
 	std::vector<const Area*> ordered;
@@ -228,7 +251,7 @@ std::vector<rules::Problem> crossCheck(const GameData& data, bool loaderChecked)
 			}
 		}
 		auto in = entrances.find(id);
-		checkArea(area, in == entrances.end() ? std::set<std::string>() : in->second, found);
+		checkArea(area, in == entrances.end() ? std::set<std::string>() : in->second, c.vehicles, found);
 	}
 
 	// Areas reachable from the start through exits. A script warp can run anywhere, so its target counts as reached.
@@ -246,6 +269,13 @@ std::vector<rules::Problem> crossCheck(const GameData& data, bool loaderChecked)
 		for (const Exit& e : a->exits) {
 			if (data.area(e.toArea) && reached.insert(e.toArea).second) {
 				queue.push_back(e.toArea);
+			}
+		}
+		if (portAreas.count(a->id)) {
+			for (const std::string& other : portAreas) {
+				if (reached.insert(other).second) {
+					queue.push_back(other);
+				}
 			}
 		}
 	}

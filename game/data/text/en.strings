@@ -92,6 +92,16 @@ kiln.lower.heart_unknown = A round stone sits in the pit, faintly warm. It does 
 kiln.lower.heart_glow = The heart-stone pulses at your touch. A single ember lifts free and settles in a clay cup.
 kiln.lower.heart_dark = The heart-stone is cool now. Its ember has gone up to the market.
 
+flats.mooring.note = The reed skimmer is tied to the post, with a tag in the owner's hand: "Yours for the bell. Mind the shallows."
+flats.mooring.given = The skimmer rocks as if it knows you. Climb aboard from the shore beside it.
+flats.mooring.aboard = The empty post creaks against the hull.
+flats.mooring.recall = Pull the skimmer back to its mooring?
+flats.mooring.recalled = A rope, a heave, and the skimmer is home at the post.
+flats.mooring.left = The skimmer stays where you left it.
+flats.beacon.cold = A cold beacon stands on the rock. You strike its flint and the oil catches.
+flats.beacon.answer = Far to the west a second light answers. By morning the ferry will run to the isles.
+flats.beacon.lit = The beacon burns steadily. The ferry to the isles is running.
+
 # Text the game shows itself, not a script: speaker names, the quest log, the encyclopedia and party talk.
 choice.yes = Yes
 choice.no = No

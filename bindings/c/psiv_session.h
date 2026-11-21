@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 7
+#define PSIV_ABI_VERSION 8
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -109,7 +109,8 @@ PSIV_API psiv_status psiv_data_problems(const psiv_problem** out, int32_t* count
 /* Enums. Values mirror the C++ libraries; psiv_name_of gives each value's stable name.                   */
 
 typedef enum psiv_mode { PSIV_MODE_TITLE, PSIV_MODE_FIELD, PSIV_MODE_EVENT, PSIV_MODE_BATTLE, PSIV_MODE_MENU, PSIV_MODE_SHOP } psiv_mode;
-typedef enum psiv_menu_kind { PSIV_MENU_NONE, PSIV_MENU_FIELD, PSIV_MENU_INN, PSIV_MENU_SAVE_PROMPT, PSIV_MENU_NAME_ENTRY } psiv_menu_kind;
+/* PORT: a port's destinations (psiv_travel_destinations with PSIV_TRAVEL_PORT). */
+typedef enum psiv_menu_kind { PSIV_MENU_NONE, PSIV_MENU_FIELD, PSIV_MENU_INN, PSIV_MENU_SAVE_PROMPT, PSIV_MENU_NAME_ENTRY, PSIV_MENU_PORT } psiv_menu_kind;
 /* PSIV_DIRECTION_NONE means no direction held. */
 typedef enum psiv_direction { PSIV_DIRECTION_NONE = -1, PSIV_DIRECTION_NORTH = 0, PSIV_DIRECTION_EAST, PSIV_DIRECTION_SOUTH, PSIV_DIRECTION_WEST } psiv_direction;
 /* PSIV_NOTICE_AMBIENT: a party talk line that came up by itself as the party arrived; show it without stopping play. */
@@ -117,7 +118,9 @@ typedef enum psiv_notice_kind { PSIV_NOTICE_LINE, PSIV_NOTICE_CHOICE, PSIV_NOTIC
 typedef enum psiv_area_kind { PSIV_AREA_TOWN, PSIV_AREA_FIELD, PSIV_AREA_DUNGEON } psiv_area_kind;
 typedef enum psiv_encounter_mode { PSIV_ENCOUNTERS_VISIBLE, PSIV_ENCOUNTERS_RANDOM } psiv_encounter_mode;
 typedef enum psiv_enemy_state { PSIV_ENEMY_IDLE, PSIV_ENEMY_CHASING, PSIV_ENEMY_RETURNING } psiv_enemy_state;
-typedef enum psiv_point_kind { PSIV_POINT_TALK, PSIV_POINT_STEP, PSIV_POINT_CHEST, PSIV_POINT_SHOP, PSIV_POINT_REST } psiv_point_kind;
+typedef enum psiv_point_kind { PSIV_POINT_TALK, PSIV_POINT_STEP, PSIV_POINT_CHEST, PSIV_POINT_SHOP, PSIV_POINT_REST, PSIV_POINT_PORT } psiv_point_kind;
+/* Ways to travel at once: from a port to another open port, back to a visited town of the region, out of a dungeon. */
+typedef enum psiv_travel_kind { PSIV_TRAVEL_PORT, PSIV_TRAVEL_TOWN, PSIV_TRAVEL_DUNGEON_EXIT } psiv_travel_kind;
 typedef enum psiv_job_state { PSIV_JOB_AVAILABLE, PSIV_JOB_ACCEPTED, PSIV_JOB_COMPLETED } psiv_job_state;
 typedef enum psiv_text_speed { PSIV_TEXT_SLOW, PSIV_TEXT_NORMAL, PSIV_TEXT_FAST, PSIV_TEXT_INSTANT } psiv_text_speed;
 typedef enum psiv_battle_speed { PSIV_BATTLE_X1, PSIV_BATTLE_X1_5, PSIV_BATTLE_X2, PSIV_BATTLE_X3 } psiv_battle_speed;
@@ -186,7 +189,8 @@ typedef enum psiv_name_kind {
 	PSIV_NAME_BATTLE_SOURCE, PSIV_NAME_SIDE, PSIV_NAME_COMMAND_KIND, PSIV_NAME_ABILITY_KIND, PSIV_NAME_TARGETING, PSIV_NAME_EQUIP_SLOT,
 	PSIV_NAME_OUTCOME, PSIV_NAME_EVENT_TYPE, PSIV_NAME_CANCEL_REASON, PSIV_NAME_EFFECTIVENESS, PSIV_NAME_STATUS_END, PSIV_NAME_RESOURCE_KIND,
 	PSIV_NAME_ELEMENT, PSIV_NAME_STAT, PSIV_NAME_OPENING, PSIV_NAME_AUTO_STOP, PSIV_NAME_MACRO_STEP_STATUS, PSIV_NAME_MACRO_ISSUE,
-	PSIV_NAME_ACTION_TYPE, PSIV_NAME_MACRO_TARGET_KIND, PSIV_NAME_DESCRIPTION_KIND, PSIV_NAME_ITEM_SORT, PSIV_NAME_CAMERA_TARGET
+	PSIV_NAME_ACTION_TYPE, PSIV_NAME_MACRO_TARGET_KIND, PSIV_NAME_DESCRIPTION_KIND, PSIV_NAME_ITEM_SORT, PSIV_NAME_CAMERA_TARGET,
+	PSIV_NAME_TRAVEL_KIND
 } psiv_name_kind;
 
 /* The stable name of an enum value as the C++ libraries spell it, lowercase with underscores ("field",
@@ -426,8 +430,15 @@ PSIV_API psiv_status psiv_walk_to(psiv_session* session, int32_t x, int32_t y);
 /* MUTATES. One cell of the walk psiv_walk_to started; *status is a psiv_walk_status. PSIV_NOT_FOUND
  * without one. */
 PSIV_API psiv_status psiv_walk_step(psiv_session* session, int32_t* status);
-/* MUTATES. Interacts with whatever stands in the cell the leader faces. */
+/* MUTATES. Interacts with whatever stands in the cell the leader faces: a vehicle of the party is boarded, an open
+ * port shows its destinations (PSIV_MENU_PORT). Refused while the party rides a vehicle. */
 PSIV_API psiv_status psiv_interact(psiv_session* session);
+/* MUTATES. Boards the party's vehicle in the cell the leader faces (psiv_interact does the same). */
+PSIV_API psiv_status psiv_board(psiv_session* session);
+/* MUTATES. Steps off the ridden vehicle onto the faced cell, or else the first of the other neighbors (north, east,
+ * south, west) the party could walk on; the vehicle stays where it is. PSIV_REFUSED when there is none
+ * (game.refuse.nowhere_leave) or the party rides nothing (game.refuse.not_aboard). */
+PSIV_API psiv_status psiv_leave_vehicle(psiv_session* session);
 /* MUTATES. The best party talk set's lines arrive as PSIV_NOTICE_LINE notices. The same set also comes up by itself
  * as PSIV_NOTICE_AMBIENT notices the first time control returns to the field in an area under it, while the profile's
  * ambient_talk is on; saves keep which sets have. */
@@ -448,6 +459,12 @@ typedef struct psiv_field_info {
 	int32_t grace_ms;
 	/* The area's track outside events and battles, an audio id; "" when the data names none. */
 	const char* music;
+	/* The world or region the area belongs to; "" when the data names none. */
+	const char* region;
+	/* The vehicle the party rides, or "". */
+	const char* aboard;
+	/* The leader's time per cell now: step_ms on foot, the vehicle's speed aboard. */
+	int32_t leader_step_ms;
 } psiv_field_info;
 
 typedef struct psiv_enemy {
@@ -486,6 +503,31 @@ typedef struct psiv_point {
 	int32_t cost;
 } psiv_point;
 
+/* One of the party's vehicles in its area. */
+typedef struct psiv_vehicle {
+	const char* id;
+	/* Its name from the battle data. */
+	const char* name;
+	int32_t x;
+	int32_t y;
+	/* A psiv_direction. */
+	int32_t facing;
+	/* 1 when the party rides it; it then stands on the leader's cell. */
+	int32_t aboard;
+} psiv_vehicle;
+
+/* A place a travel can go now. */
+typedef struct psiv_travel_destination {
+	/* A port id for PSIV_TRAVEL_PORT, an area id otherwise; what psiv_travel takes. */
+	const char* id;
+	const char* area;
+	const char* area_name;
+	const char* region;
+	/* Where the party lands. */
+	int32_t x;
+	int32_t y;
+} psiv_travel_destination;
+
 /* One of the game's actors (game.json "actors") standing in the party's area. */
 typedef struct psiv_actor {
 	const char* id;
@@ -509,8 +551,24 @@ PSIV_API psiv_status psiv_field_rows(psiv_session* session, const char* const** 
 PSIV_API psiv_status psiv_field_enemies(psiv_session* session, const psiv_enemy** out, int32_t* count);
 PSIV_API psiv_status psiv_field_markers(psiv_session* session, const psiv_marker** out, int32_t* count);
 PSIV_API psiv_status psiv_field_exits(psiv_session* session, const psiv_exit** out, int32_t* count);
-/* Talk hooks, step hooks, chests, shops and rest points that stand on a cell. */
+/* Talk hooks, step hooks, chests, shops, rest points and ports that stand on a cell. A port's `active` says it is
+ * open. */
 PSIV_API psiv_status psiv_field_points(psiv_session* session, const psiv_point** out, int32_t* count);
+/* The party's vehicles in its area, in id order, the ridden one included. Saves keep where each stands and which one
+ * the party rides. */
+PSIV_API psiv_status psiv_field_vehicles(psiv_session* session, const psiv_vehicle** out, int32_t* count);
+/* Where a travel of `kind` (a psiv_travel_kind) can go now: the other open ports while a port's menu is up, the towns
+ * of the region the party has visited (the one it stands in left out), or the one way out of the dungeon it is in.
+ * An empty list when there is none. */
+PSIV_API psiv_status psiv_travel_destinations(psiv_session* session, int32_t kind, const psiv_travel_destination** out, int32_t* count);
+/* MUTATES. Travels to `destination` (an id from psiv_travel_destinations). PORT: from a port's menu; `user` and `thing`
+ * are ignored. TOWN and DUNGEON_EXIT: from the field menu, through `thing`, an item (`user` NULL or "") or a technique
+ * `user` knows, whose travel effect matches; it is spent as a field use spends it. TOWN is refused inside a dungeon
+ * (game.refuse.in_dungeon), DUNGEON_EXIT outside one (game.refuse.not_dungeon); DUNGEON_EXIT takes NULL or "" as its
+ * destination. A ridden vehicle stays behind, or goes back to its last boarding point when the party could not reach
+ * it. Other refusals: game.refuse.no_port, travel_menu_only, not_travel, no_town, no_way_out, no_destination, and
+ * core's field.* keys for the cost. */
+PSIV_API psiv_status psiv_travel(psiv_session* session, int32_t kind, const char* destination, const char* user, const char* thing);
 /* The actors in the party's area, in game.json order, hidden ones included. An actor no script touched stands at
  * the talk point named after it, visible and facing south. Scripts move, turn, show and hide actors in the party's
  * area; an actor keeps its place when the party leaves, and its state is saved, mid-event saves included. */
@@ -681,6 +739,8 @@ typedef struct psiv_battle_info {
 	int32_t game_over;
 	/* The encounter's track from game.json, an audio id; "" when the data names none. */
 	const char* music;
+	/* A vehicle battle's vehicle, the combatant after the members riding it; "" otherwise. */
+	const char* vehicle;
 } psiv_battle_info;
 
 typedef struct psiv_battle_option {
@@ -896,6 +956,8 @@ typedef struct psiv_ability_info {
 	/* Skills: uses left and uses after a rest. Otherwise -1. */
 	int32_t uses;
 	int32_t max_uses;
+	/* A technique that travels: the psiv_travel_kind psiv_travel takes it with (TOWN or DUNGEON_EXIT); -1 otherwise. */
+	int32_t travel;
 } psiv_ability_info;
 
 PSIV_API psiv_status psiv_member_abilities(psiv_session* session, const char* member, const psiv_ability_info** out, int32_t* count);
@@ -1042,6 +1104,8 @@ typedef struct psiv_inventory_entry {
 	int32_t targeting_or_slot;
 	/* The shop's buy price, -1 when it cannot be bought or sold. */
 	int32_t price;
+	/* An item that travels: the psiv_travel_kind psiv_travel takes it with (TOWN or DUNGEON_EXIT); -1 otherwise. */
+	int32_t travel;
 } psiv_inventory_entry;
 
 /* Items in id order, then unworn equipment in id order. */

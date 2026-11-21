@@ -54,7 +54,7 @@ bool Area::walkable(Cell cell) const {
 	if (!inside(cell) || rows[cell.y][cell.x] != '.') {
 		return false;
 	}
-	return !hookAt(cell, HookTrigger::Interact) && !shopAt(cell) && !restAt(cell) && !chestAt(cell);
+	return !hookAt(cell, HookTrigger::Interact) && !shopAt(cell) && !restAt(cell) && !chestAt(cell) && !portAt(cell);
 }
 
 const Zone* Area::zoneAt(Cell cell) const {
@@ -115,6 +115,24 @@ const Chest* Area::chestAt(Cell cell) const {
 	for (const Chest& c : chests) {
 		if (c.at == cell) {
 			return &c;
+		}
+	}
+	return nullptr;
+}
+
+const Port* Area::portAt(Cell cell) const {
+	for (const Port& p : ports) {
+		if (p.at == cell) {
+			return &p;
+		}
+	}
+	return nullptr;
+}
+
+const Port* Area::port(const std::string& id) const {
+	for (const Port& p : ports) {
+		if (p.id == id) {
+			return &p;
 		}
 	}
 	return nullptr;
@@ -216,9 +234,12 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		reader.fail(json, "data.area_object", {});
 		return rules::Result<Area>::failure(reader.problems(), reader.errors());
 	}
-	reader.only(json, {"id", "kind", "encounter_mode", "step_ms", "music", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "zones"});
+	reader.only(json, {"id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "map", "markers", "exits", "hooks", "shops", "rests",
+		"chests", "ports", "zones"});
 	reader.text(json, "id", area.id, true);
 	reader.text(json, "music", area.music, false);
+	reader.text(json, "region", area.region, false);
+	reader.text(json, "arrival", area.arrival, false);
 	std::string kind = "field";
 	reader.text(json, "kind", kind, false);
 	if (kind == "town") {
@@ -354,6 +375,27 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			reader.integer(c, "money", chest.money, false, 0, 1000000);
 			checkCell(c, chest.at, "chest '" + chest.id + "'");
 			area.chests.push_back(chest);
+		}
+	}
+	if (!area.arrival.empty() && !area.markers.count(area.arrival)) {
+		reader.fail(json, "data.arrival_marker_missing", {area.arrival});
+	}
+	if (const JsonValue* ports = array(reader, json, "ports")) {
+		for (const JsonValue& p : ports->items) {
+			reader.only(p, {"id", "at", "marker", "flag"});
+			Port port;
+			port.line = p.line;
+			reader.text(p, "id", port.id, true);
+			reader.cellField(p, "at", port.at, true);
+			reader.text(p, "marker", port.marker, true);
+			reader.text(p, "flag", port.flag, false);
+			if (!area.inside(port.at)) {
+				reader.fail(p, "data.not_on_map", {"port '" + port.id + "'"});
+			}
+			if (!port.marker.empty() && !area.markers.count(port.marker)) {
+				reader.fail(p, "data.port_marker_missing", {port.id, port.marker});
+			}
+			area.ports.push_back(port);
 		}
 	}
 	if (const JsonValue* zones = array(reader, json, "zones")) {

@@ -212,6 +212,17 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 			reader.rejectUnknownKeys(*entry, {"type", "power"});
 			reader.integer(*entry, "power", effect.power, true, 1, 100);
 			break;
+		case EffectKind::Travel: {
+			reader.rejectUnknownKeys(*entry, {"type", "to"});
+			if (combo) {
+				reader.fail(*entry->find("type"), "load.travel_not_in_combo", {});
+			}
+			std::string to;
+			if (reader.string(*entry, "to", to) && !parseTravelTarget(to, effect.travel)) {
+				reader.fail(*entry->find("to"), "load.unknown_travel_target", {to});
+			}
+			break;
+		}
 		}
 		out.push_back(effect);
 	}
@@ -249,10 +260,21 @@ void readFieldFlag(Reader& reader, const JsonValue& entry, Targeting targeting, 
 		reader.fail(*entry.find("field"), "load.field_use_needs_party_target", {});
 	}
 	for (const Effect& effect : effects) {
-		if (effect.kind != EffectKind::Heal && effect.kind != EffectKind::CureStatus && effect.kind != EffectKind::Revive) {
+		if (effect.kind != EffectKind::Heal && effect.kind != EffectKind::CureStatus && effect.kind != EffectKind::Revive && effect.kind != EffectKind::Travel) {
 			reader.fail(*entry.find("field"), "load.field_use_allows_only_heal", {});
 			return;
 		}
+	}
+}
+
+// A Travel effect moves the whole party outside battle (FLD-051), so it stands alone on a field item or technique that
+// targets every ally.
+void checkTravel(Reader& reader, const JsonValue& entry, Targeting targeting, const std::vector<Effect>& effects, bool field) {
+	if (!travelEffect(effects)) {
+		return;
+	}
+	if (effects.size() != 1 || !field || targeting != Targeting::AllAllies) {
+		reader.fail(entry, "load.travel_alone", {});
 	}
 }
 
@@ -364,6 +386,7 @@ void parseAbilities(Reader& reader, const JsonValue& root, Database& db) {
 		parseEffects(reader, db, *entry, false, ability.kind == AbilityKind::Combo, ability.effects);
 		checkReviveTargeting(reader, *entry, ability.targeting, ability.effects);
 		readFieldFlag(reader, *entry, ability.targeting, ability.effects, ability.field);
+		checkTravel(reader, *entry, ability.targeting, ability.effects, ability.field);
 		if (ability.field && ability.kind != AbilityKind::Technique && ability.kind != AbilityKind::Skill) {
 			reader.fail(*entry->find("field"), "load.only_techniques_skills_field", {});
 		}
@@ -386,6 +409,7 @@ void parseItems(Reader& reader, const JsonValue& root, Database& db) {
 		parseEffects(reader, db, *entry, true, false, item.effects);
 		checkReviveTargeting(reader, *entry, item.targeting, item.effects);
 		readFieldFlag(reader, *entry, item.targeting, item.effects, item.field);
+		checkTravel(reader, *entry, item.targeting, item.effects, item.field);
 		insertUnique(db.items, item.id, item, reader, *entry);
 		reader.setContext("");
 	}
@@ -583,6 +607,9 @@ void parseVehicles(Reader& reader, const JsonValue& root, Database& db) {
 			const AbilityDef* ability = db.ability(id);
 			if (ability && ability->kind != AbilityKind::Skill) {
 				reader.fail(*entry->find("abilities"), "load.vehicle_abilities_skills", {id});
+			}
+			if (ability && travelEffect(ability->effects)) {
+				reader.fail(*entry->find("abilities"), "load.travel_party_only", {id});
 			}
 		}
 		parseAffinities(reader, *entry, vehicle.affinities);
@@ -826,6 +853,12 @@ void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
 		parseStats(reader, *entry, "stats", enemy.stats, false);
 		readBasicAttack(reader, db, *entry, enemy.basicAttack);
 		readAbilityList(reader, db, *entry, enemy.abilities, false);
+		for (const std::string& id : enemy.abilities) {
+			const AbilityDef* ability = db.ability(id);
+			if (ability && travelEffect(ability->effects)) {
+				reader.fail(*entry->find("abilities"), "load.travel_party_only", {id});
+			}
+		}
 		parseAffinities(reader, *entry, enemy.affinities);
 		parseStatusResist(reader, db, *entry, enemy.statusResist);
 		parseAiSlots(reader, enemy, *entry, enemy.slots);

@@ -1,8 +1,9 @@
 {
 	"title": "The Bell at Tidewater",
 	"core_data": "../../core/data",
-	"areas": ["areas/tidewater.json", "areas/reed_path.json", "areas/bell_cove.json", "areas/saltgrass.json", "areas/kiln_upper.json", "areas/kiln_lower.json"],
-	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev", "events/saltgrass.ev", "events/kiln.ev"],
+	"areas": ["areas/tidewater.json", "areas/reed_path.json", "areas/bell_cove.json", "areas/saltgrass.json", "areas/kiln_upper.json", "areas/kiln_lower.json", "areas/brine_flats.json",
+		"areas/cinder_quay.json", "areas/ember_steps.json"],
+	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev", "events/saltgrass.ev", "events/kiln.ev", "events/flats.ev"],
 	"glossary": "text/glossary.txt",
 	"languages": [
 		{"code": "en", "strings": "text/en.strings", "text": "text/en.json"},
@@ -13,8 +14,8 @@
 	"presentation": {
 		"animations": ["bow", "jump", "nod", "shake", "shrug", "startle", "wave"],
 		"audio": ["battle_brass_warden", "battle_marsh_ambush", "brass_alarm", "defeat_low_tide", "dungeon_firing_floor", "dungeon_kiln_halls",
-			"field_bell_shore", "field_marsh_reeds", "lookout_creak", "marsh_wind", "reed_lookout", "title_harbor_dawn", "town_canal_market",
-			"town_tide_bells", "victory_bright_sail"],
+			"field_bell_shore", "field_brine_flats", "field_ember_steps", "field_marsh_reeds", "lookout_creak", "marsh_wind", "reed_lookout",
+			"title_harbor_dawn", "town_canal_market", "town_cinder_quay", "town_tide_bells", "victory_bright_sail"],
 		"cameras": [
 			{"id": "lookout_east", "area": "reed_path", "marker": "lookout_east", "zoom": 1.25},
 			{"id": "lookout_front", "area": "reed_path", "marker": "lookout_front", "zoom": 0.75},
@@ -57,7 +58,8 @@
 		"tidewater.chart_read",
 		"tidewater.hold_cleared",
 		"tidewater.met_guide",
-		"tidewater.reported"
+		"tidewater.reported",
+		"travel.isles_open"
 	],
 	"clear_flag": "cove.quiet_seen",
 	"start": {
@@ -83,7 +85,9 @@
 		"jolt_pod": 25,
 		"tin_cap": 35,
 		"padded_coat": 45,
-		"calm_charm": 70
+		"calm_charm": 70,
+		"homing_shell": 40,
+		"waymark_chalk": 24
 	},
 	"item_cap": 99,
 	"money_cap": 999999,
@@ -92,5 +96,8 @@
 	"round_ms": 4000,
 	"autosave_slots": 3,
 	"manual_slots": 10,
-	"bosses": [{"encounter": "warden", "flag": "cove.warden_beaten"}]
+	"bosses": [{"encounter": "warden", "flag": "cove.warden_beaten"}],
+	"vehicles": [
+		{"id": "reed_skimmer", "crosses": ["floor", "water"], "speed_percent": 200, "encounters": [{"encounter": "marsh", "weight": 1}, {"encounter": "training", "weight": 1}]}
+	]
 }

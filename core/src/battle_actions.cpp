@@ -374,6 +374,8 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				changed = true;
 				break;
 			}
+			case EffectKind::Travel:
+				break;
 			case EffectKind::Revive:
 				if (!t.alive()) {
 					t.hp = formulas::reviveHp(t.stats.maxHp, effect.power);

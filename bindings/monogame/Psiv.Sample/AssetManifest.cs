@@ -52,6 +52,9 @@ public sealed record FigureEntry(string Id, bool Enemy, GridImage Image, FrameRu
 
 public sealed record FieldEnemyEntry(string Encounter, GridImage Image, FrameRun Run);
 
+// A vehicle in the field: per facing a frame run of `Ms` milliseconds a frame, looping (a bob).
+public sealed record VehicleEntry(string Id, GridImage Image, Dictionary<Direction, int[]> Facings, int Ms);
+
 public sealed record BackdropEntry(string? Kind, string? Area, string? Encounter, string Path);
 
 public sealed record EffectEntry(string Id, GridImage Image, FrameRun Run);
@@ -75,7 +78,7 @@ public sealed class AssetManifest
 
 	public static readonly string[] Facings = ["north", "east", "south", "west"];
 	public static readonly string[] ObjectNames = ["door", "chest_closed", "chest_open", "stall", "bed", "sign", "rune", "exit_north", "exit_east", "exit_south", "exit_west"];
-	public static readonly string[] SpriteNames = ["shadow", "bubble", "alert", "pointer"];
+	public static readonly string[] SpriteNames = ["shadow", "bubble", "alert", "pointer", "pier"];
 	public static readonly string[] FigureAnimations = ["attack", "cast", "item", "defend", "hurt", "defeat"];
 
 	public string Directory { get; }
@@ -84,6 +87,7 @@ public sealed class AssetManifest
 	public Dictionary<string, string> Portraits { get; } = [];
 	public List<FigureEntry> Figures { get; } = [];
 	public List<FieldEnemyEntry> FieldEnemies { get; } = [];
+	public List<VehicleEntry> Vehicles { get; } = [];
 	public List<BackdropEntry> Backdrops { get; } = [];
 	public List<EffectEntry> Effects { get; } = [];
 	public Dictionary<string, string> Sprites { get; } = [];
@@ -100,7 +104,7 @@ public sealed class AssetManifest
 	// Every file the manifest names, for change detection on reload.
 	public IEnumerable<string> Files() =>
 		Tilesets.Select(t => t.Image.Path).Concat(Characters.Select(c => c.Image.Path)).Concat(Portraits.Values).Concat(Figures.Select(f => f.Image.Path))
-			.Concat(FieldEnemies.Select(f => f.Image.Path)).Concat(Backdrops.Select(b => b.Path)).Concat(Effects.Select(e => e.Image.Path)).Concat(Sprites.Values)
+			.Concat(FieldEnemies.Select(f => f.Image.Path)).Concat(Vehicles.Select(v => v.Image.Path)).Concat(Backdrops.Select(b => b.Path)).Concat(Effects.Select(e => e.Image.Path)).Concat(Sprites.Values)
 			.Concat(StatusIcons.Values).Concat(Audio.Select(a => a.Path))
 			.Concat(Ui is null ? [] : new[] { Ui.Frame?.Path, Ui.Cursor, Ui.BarTrack, Ui.BarFill }.OfType<string>().Concat(Ui.PanelFrames.Select(p => p.Path)).Concat(Ui.Fonts.Values.Select(f => f.File)))
 			.Concat(BattlePresentation is null ? [] : [BattlePresentation])
@@ -392,8 +396,8 @@ public sealed class AssetManifest
 			{
 				return;
 			}
-			Fields(root, "-", "version", "tilesets", "characters", "portraits", "figures", "field_enemies", "backdrops", "effects", "sprites", "status_icons", "ui", "audio",
-				"battle_presentation");
+			Fields(root, "-", "version", "tilesets", "characters", "portraits", "figures", "field_enemies", "vehicles", "backdrops", "effects", "sprites", "status_icons", "ui",
+				"audio", "battle_presentation");
 			if (Int(root, "version", "-", 0, 0, int.MaxValue) != Version)
 			{
 				Problem("-", $"field 'version' must be {Version}");
@@ -427,6 +431,24 @@ public sealed class AssetManifest
 				if (Run(e, entry, image, 280, inline: true) is { } run && encounter is not null && image is not null && m.Problems.Count == before)
 				{
 					m.FieldEnemies.Add(new FieldEnemyEntry(encounter, image, run));
+				}
+			}
+			foreach ((JsonElement e, string entry) in List(root, "vehicles"))
+			{
+				int before = m.Problems.Count;
+				Fields(e, entry, "id", "image", "frame", "facings", "ms");
+				string? id = Str(e, "id", entry);
+				Known(id, data.FieldVehicles, entry, "vehicle");
+				GridImage? image = Grid(e, entry, Pixels.Size);
+				Dictionary<Direction, int[]> facings = e.TryGetProperty("facings", out JsonElement f) ? Facing(f, entry + ".facings", image, "facings") : [];
+				if (facings.Count != 4 || facings.Values.Any(v => v.Length == 0))
+				{
+					Problem(entry, "'facings' needs north, east, south and west, each at least one frame");
+				}
+				int ms = Int(e, "ms", entry, 240, 1, 60000);
+				if (id is not null && image is not null && m.Problems.Count == before)
+				{
+					m.Vehicles.Add(new VehicleEntry(id, image, facings, ms));
 				}
 			}
 			foreach ((JsonElement e, string entry) in List(root, "backdrops"))
@@ -477,6 +499,7 @@ public sealed class AssetManifest
 			Once(m.Characters, c => c.Id, "characters");
 			Once(m.Figures, f => (f.Enemy ? "enemy " : "party member ") + f.Id, "figures");
 			Once(m.FieldEnemies, f => f.Encounter, "field_enemies");
+			Once(m.Vehicles, v => v.Id, "vehicles");
 			Once(m.Backdrops, b => b.Kind is not null ? "kind " + b.Kind : b.Area is not null ? "area " + b.Area : "encounter " + b.Encounter, "backdrops");
 			Once(m.Effects, e => e.Id, "effects");
 			Once(m.Audio, a => $"{a.Kind.ToString().ToLowerInvariant()} {a.Id}", "audio");

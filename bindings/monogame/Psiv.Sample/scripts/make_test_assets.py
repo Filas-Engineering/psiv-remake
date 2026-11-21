@@ -149,6 +149,9 @@ def main():
 	manifest["audio"].append({"kind": "music", "id": "not_a_track", "file": "audio/music/title.wav"})
 	manifest["backdrops"].append({"area": "atlantis", "image": "backdrops/town.png"})
 	manifest["sprites"]["moon"] = "sprites/shadow.png"
+	skimmer = dict(manifest["vehicles"][0], id="hovercart")
+	skimmer["facings"] = {k: v for k, v in skimmer["facings"].items() if k != "west"}
+	manifest["vehicles"].append(skimmer)
 	(broken / "assets.json").write_text(json.dumps(manifest, indent="\t") + "\n")
 	table = json.loads((broken / "battle_presentation.json").read_text())
 	table["actions"]["strike"] = {"effect": "fireworks", "animation": "moonwalk"}

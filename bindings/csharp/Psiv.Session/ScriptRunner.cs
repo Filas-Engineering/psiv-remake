@@ -171,6 +171,10 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 		}
 		string items = string.Join(", ", session.Inventory().Select(i => $"{i.Id} x{i.Count}"));
 		Print($"  Money {world.Money}. Items: {(items.Length == 0 ? "none" : items)}.");
+		if (field is not null && field.Aboard.Length > 0 && session.FieldVehicles().FirstOrDefault(v => v.Aboard) is { } vehicle)
+		{
+			Print($"  Aboard the {vehicle.Name}.");
+		}
 	}
 
 	private void Look()
@@ -201,7 +205,12 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 			case PointKind.Chest: Put(p.X, p.Y, p.Active ? 'C' : 'c'); break;
 			case PointKind.Shop: Put(p.X, p.Y, '$'); break;
 			case PointKind.Rest: Put(p.X, p.Y, 'R'); break;
+			case PointKind.Port: Put(p.X, p.Y, 'P'); break;
 			}
+		}
+		foreach (FieldVehicle v in view.Vehicles)
+		{
+			Put(v.X, v.Y, 'V');
 		}
 		foreach (FieldEnemy e in view.Enemies)
 		{
@@ -341,6 +350,52 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 		else if (cmd is "talk" or "x" or "interact" && w.Length == 1)
 		{
 			Report(session.Interact());
+		}
+		else if (cmd == "board" && w.Length == 1)
+		{
+			Report(session.Board());
+		}
+		else if (cmd == "disembark" && w.Length == 1)
+		{
+			Report(session.LeaveVehicle());
+		}
+		else if (cmd == "destinations" && w.Length == 2)
+		{
+			if (GameSession.ParseName(NameKind.TravelKind, w[1]) is not { } kind)
+			{
+				Error("destinations port|town|dungeon_exit");
+			}
+			else
+			{
+				foreach (TravelDestination d in session.TravelDestinations((TravelKind)kind))
+				{
+					Print($"  {d.Id}: {d.AreaName} ({d.X},{d.Y})");
+				}
+			}
+		}
+		else if (cmd == "travel" && w.Length is >= 3 and <= 5)
+		{
+			const string usage = "travel port DEST | travel town DEST THING [USER] | travel dungeon_exit THING [USER]";
+			if (GameSession.ParseName(NameKind.TravelKind, w[1]) is not { } kind)
+			{
+				Error(usage);
+			}
+			else if ((TravelKind)kind == TravelKind.Port)
+			{
+				Report(session.Travel(TravelKind.Port, w[2]));
+			}
+			else if ((TravelKind)kind == TravelKind.Town && w.Length >= 4)
+			{
+				Report(session.Travel(TravelKind.Town, w[2], w.Length == 5 ? w[4] : null, w[3]));
+			}
+			else if ((TravelKind)kind == TravelKind.DungeonExit && w.Length <= 4)
+			{
+				Report(session.Travel(TravelKind.DungeonExit, null, w.Length == 4 ? w[3] : null, w[2]));
+			}
+			else
+			{
+				Error(usage);
+			}
 		}
 		else if (cmd == "choose" && w.Length == 2 && ToInt(w[1], out count))
 		{

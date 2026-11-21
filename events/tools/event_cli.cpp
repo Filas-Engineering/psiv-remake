@@ -313,6 +313,9 @@ int run(int argc, char** argv) {
 	for (const std::string& member : host.party) {
 		std::printf("party %s\n", member.c_str());
 	}
+	for (const auto& v : host.vehicles) {
+		std::printf("vehicle %s at %s\n", v.first.c_str(), v.second.c_str());
+	}
 	std::printf("player control %s\n", host.player_control ? "on" : "off");
 	return 0;
 }

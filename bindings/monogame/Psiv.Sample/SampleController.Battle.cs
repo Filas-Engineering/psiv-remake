@@ -85,7 +85,8 @@ public sealed partial class SampleController
 		{
 			for (int i = from; i < info.PartyCount; i++)
 			{
-				if (all[i].Alive)
+				// In a vehicle battle the vehicle takes the commands and the members ride along.
+				if (all[i].Alive && (info.Vehicle.Length == 0 || all[i].Id == info.Vehicle))
 				{
 					_battle.Actor = i;
 					_battle.Phase = BattlePhase.Command;

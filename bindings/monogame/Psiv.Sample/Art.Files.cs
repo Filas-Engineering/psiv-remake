@@ -31,7 +31,7 @@ public sealed partial class Art
 	private readonly string _assetDir = "";
 
 	// Whether the picture for a key (`tileset:town`, `tileset:area:tidewater`, `character:fighter`, `portrait:guide`,
-	// `figure:party:fighter`, `figure:enemy:gel_mite`, `field_enemy:training`, `backdrop:kind:town`, `effect:slash`,
+	// `figure:party:fighter`, `figure:enemy:gel_mite`, `field_enemy:training`, `vehicle:reed_skimmer`, `backdrop:kind:town`, `effect:slash`,
 	// `sprite:shadow`, `status_icon:sleep`, `ui:frame` ...) came from a file.
 	public bool FromFile(string key) => _fromFile.ContainsKey(key);
 
@@ -204,6 +204,7 @@ public sealed partial class Art
 			case "shadow": Shadow = image; break;
 			case "bubble": Bubble = image; break;
 			case "alert": Alert = image; break;
+			case "pier": break;
 			default: Pointer = image; break;
 			}
 			_fromFile["sprite:" + id] = file;
@@ -213,6 +214,7 @@ public sealed partial class Art
 			_statusIcons[id] = Whole(file);
 			_fromFile["status_icon:" + id] = file;
 		}
+		LoadVehicleFiles(m);
 		if (m.Ui is { Enabled: true } ui)
 		{
 			int? Picture(string? file, string key)

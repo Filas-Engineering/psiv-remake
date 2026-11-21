@@ -18,9 +18,11 @@ const game::GameData& data(const acc::Context& t);
 // A new empty folder outside the checkout.
 std::string tempDirectory(const std::string& name);
 
-// The scripted playthrough (game/data/scripts/playthrough.txt) with auto battles and seed 6, writing its saves to
-// `saveDirectory`. `after` runs after every command that the session accepted, with the command line.
-void playThrough(const acc::Context& t, game::Session& session, const std::function<void(const std::string& line)>& after);
+// The scripted playthrough (game/data/scripts/playthrough.txt, or `script` under game/data/scripts) with auto battles
+// and seed 6, writing its saves to the session's directory. `after` runs after every command that the session
+// accepted, with the command line.
+void playThrough(const acc::Context& t, game::Session& session, const std::function<void(const std::string& line)>& after,
+	const std::string& script = "playthrough.txt");
 game::SessionOptions options(const std::string& saveDirectory);
 
 // Replaces a save's checksum trailer so an edited body still passes it.

@@ -27,7 +27,8 @@ const char* const kStats[] = {"strength", "mental", "agility", "dexterity", "def
 const char* const kSides[] = {"party", "enemy"};
 const char* const kTargetings[] = {"one_enemy", "enemy_group", "all_enemies", "one_ally", "all_allies", "self", "one_fallen_ally", "random_enemy"};
 const char* const kAbilityKinds[] = {"attack", "technique", "skill", "combo"};
-const char* const kEffectKinds[] = {"physical_damage", "elemental_damage", "heal", "apply_status", "cure_status", "modify_stat", "revive"};
+const char* const kEffectKinds[] = {"physical_damage", "elemental_damage", "heal", "apply_status", "cure_status", "modify_stat", "revive", "travel"};
+const char* const kTravelTargets[] = {"town", "dungeon_exit"};
 const char* const kEquipSlots[] = {"weapon", "head", "body", "arms", "accessory"};
 const char* const kOpenings[] = {"normal", "party_first", "enemy_first"};
 const char* const kRewardMultipliers[] = {"x1", "x1_5", "x2"};
@@ -72,6 +73,7 @@ const char* toString(Side value) { return nameOf(kSides, value); }
 const char* toString(Targeting value) { return nameOf(kTargetings, value); }
 const char* toString(AbilityKind value) { return nameOf(kAbilityKinds, value); }
 const char* toString(EffectKind value) { return nameOf(kEffectKinds, value); }
+const char* toString(TravelTarget value) { return nameOf(kTravelTargets, value); }
 const char* toString(EquipSlot value) { return nameOf(kEquipSlots, value); }
 const char* toString(Opening value) { return nameOf(kOpenings, value); }
 const char* toString(RewardMultiplier value) { return nameOf(kRewardMultipliers, value); }
@@ -99,6 +101,7 @@ bool parseSide(const std::string& text, Side& out) { return parseName(kSides, te
 bool parseTargeting(const std::string& text, Targeting& out) { return parseName(kTargetings, text, out); }
 bool parseAbilityKind(const std::string& text, AbilityKind& out) { return parseName(kAbilityKinds, text, out); }
 bool parseEffectKind(const std::string& text, EffectKind& out) { return parseName(kEffectKinds, text, out); }
+bool parseTravelTarget(const std::string& text, TravelTarget& out) { return parseName(kTravelTargets, text, out); }
 bool parseEquipSlot(const std::string& text, EquipSlot& out) { return parseName(kEquipSlots, text, out); }
 bool parseOpening(const std::string& text, Opening& out) { return parseName(kOpenings, text, out); }
 bool parseRewardMultiplier(const std::string& text, RewardMultiplier& out) {

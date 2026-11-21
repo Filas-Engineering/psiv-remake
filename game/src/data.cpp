@@ -61,6 +61,27 @@ const RestPoint* GameData::rest(const std::string& id) const {
 	return nullptr;
 }
 
+const Port* GameData::port(const std::string& id, const Area** area) const {
+	for (const auto& [areaId, a] : areas) {
+		if (const Port* p = a.port(id)) {
+			if (area) {
+				*area = &a;
+			}
+			return p;
+		}
+	}
+	return nullptr;
+}
+
+const FieldVehicle* GameData::vehicle(const std::string& id) const {
+	for (const FieldVehicle& v : config.vehicles) {
+		if (v.id == id) {
+			return &v;
+		}
+	}
+	return nullptr;
+}
+
 const char* toString(CameraTarget target) {
 	switch (target) {
 	case CameraTarget::None: return "none";
@@ -239,7 +260,7 @@ void readCameras(JsonReader& reader, const JsonValue& presentation, std::vector<
 void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.only(json, {"title", "core_data", "areas", "events", "glossary", "languages", "journal", "actors", "presentation", "flags",
 		"vars", "clear_flag", "start", "join_levels", "prices", "item_cap", "money_cap", "tick_ms", "grace_ms", "round_ms",
-		"autosave_slots", "manual_slots", "bosses"});
+		"autosave_slots", "manual_slots", "bosses", "vehicles"});
 	reader.text(json, "title", c.title, true);
 	reader.text(json, "core_data", c.coreData, true);
 	reader.texts(json, "areas", c.areaFiles, true);
@@ -343,6 +364,47 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 			reader.text(b, "encounter", boss.encounter, true);
 			reader.text(b, "flag", boss.flag, true);
 			c.bosses.push_back(boss);
+		}
+	}
+	if (const JsonValue* vehicles = reader.field(json, "vehicles", JsonValue::Type::Array, false)) {
+		for (const JsonValue& v : vehicles->items) {
+			reader.only(v, {"id", "crosses", "speed_percent", "encounters"});
+			FieldVehicle vehicle;
+			reader.text(v, "id", vehicle.id, true);
+			std::vector<std::string> terrain;
+			reader.texts(v, "crosses", terrain, true);
+			for (const std::string& t : terrain) {
+				if (t == "floor") {
+					vehicle.crosses += '.';
+				} else if (t == "water") {
+					vehicle.crosses += '~';
+				} else {
+					reader.fail(v, "data.unknown_terrain", {t});
+				}
+			}
+			if (terrain.empty()) {
+				reader.fail(v, "data.vehicle_needs_terrain", {vehicle.id});
+			}
+			reader.integer(v, "speed_percent", vehicle.speedPercent, false, 10, 1000);
+			if (const JsonValue* table = reader.field(v, "encounters", JsonValue::Type::Array, true)) {
+				for (const JsonValue& t : table->items) {
+					if (!t.is(JsonValue::Type::Object)) {
+						reader.fail(t, "data.table_entry_object", {});
+						continue;
+					}
+					reader.only(t, {"encounter", "weight"});
+					TableEntry entry;
+					reader.text(t, "encounter", entry.encounter, true);
+					reader.integer(t, "weight", entry.weight, false, 1, 1000);
+					vehicle.encounters.push_back(entry);
+				}
+			}
+			for (const FieldVehicle& other : c.vehicles) {
+				if (other.id == vehicle.id) {
+					reader.fail(v, "data.vehicle_listed_twice", {vehicle.id});
+				}
+			}
+			c.vehicles.push_back(vehicle);
 		}
 	}
 }
@@ -466,7 +528,13 @@ events::Registry buildRegistry(const GameData& data, Problems& problems) {
 	}
 	std::set<std::string> shops;
 	std::set<std::string> rests;
+	std::set<std::string> ports;
 	for (const auto& [areaId, a] : data.areas) {
+		for (const Port& p : a.ports) {
+			if (!ports.insert(p.id).second) {
+				problems.add({a.file, p.line, "", {"data.port_id_taken", {p.id}}});
+			}
+		}
 		r.add(events::NameKind::map, areaId);
 		for (const auto& [marker, cell] : a.markers) {
 			r.add_marker(areaId, marker);
@@ -574,6 +642,16 @@ void checkReferences(const GameData& data, Problems& problems) {
 		flagDeclared("game.json boss", b.flag);
 	}
 	flagDeclared("game.json clear_flag", c.clearFlag);
+	for (const FieldVehicle& v : c.vehicles) {
+		if (!db.vehicle(v.id)) {
+			problems.add("game.json vehicles", "data.vehicle_unknown", {v.id});
+		}
+		for (const TableEntry& t : v.encounters) {
+			if (!db.encounter(t.encounter)) {
+				problems.add("game.json vehicle '" + v.id + "'", "data.zone_lists_unknown_encounter", {v.id, t.encounter});
+			}
+		}
+	}
 	const PresentationNames& shown = c.presentation;
 	for (const CameraDef& camera : shown.cameras) {
 		if (camera.target == CameraTarget::Marker && !markerExists(camera.area, camera.marker)) {
@@ -657,6 +735,12 @@ void checkReferences(const GameData& data, Problems& problems) {
 				}
 			}
 		}
+		for (const Port& p : area.ports) {
+			flagAt(p.line, p.flag);
+		}
+		if (!area.arrival.empty() && area.kind != AreaKind::Town) {
+			at(0, "data.arrival_not_town", {});
+		}
 	}
 	const Journal& j = data.journal;
 	for (const Objective& o : j.objectives) {
@@ -691,6 +775,17 @@ void checkReferences(const GameData& data, Problems& problems) {
 	}
 	for (const std::string& key : sessionTextKeys()) {
 		textExists("the session", key);
+	}
+	for (const events::Instruction& in : data.program.code) {
+		if (in.op != events::Op::vehicle_give && in.op != events::Op::vehicle_place) {
+			continue;
+		}
+		const Area* where = data.area(in.action.subject);
+		if (!data.vehicle(in.name)) {
+			problems.add({data.program.files[in.file], in.source_line, "", {"data.vehicle_not_field", {in.name}}});
+		} else if (where && where->kind != AreaKind::Field) {
+			problems.add({data.program.files[in.file], in.source_line, "", {"data.vehicle_not_outdoors", {in.name, where->id}}});
+		}
 	}
 	for (const events::Instruction& in : data.program.code) {
 		const events::BattleRequest& b = in.battle;

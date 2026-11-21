@@ -87,7 +87,11 @@ public sealed partial class SampleController
 		if (input.Confirm && abilities.Count > 0)
 		{
 			AbilityInfo ability = abilities[_sub.Cursor];
-			if (ability.Field && ability.Targeting is Targeting.OneAlly or Targeting.OneFallenAlly)
+			if (ability.Travel is { } kind)
+			{
+				PickTravel(kind, _pickMember, ability.Id);
+			}
+			else if (ability.Field && ability.Targeting is Targeting.OneAlly or Targeting.OneFallenAlly)
 			{
 				_pickAction = ability.Id;
 				_third.Reset();

@@ -20,6 +20,8 @@ public:
 	std::map<std::string, std::int64_t> vars;
 	std::map<std::string, int> items;
 	std::vector<std::string> party;
+	// Vehicles the party has, each with "map marker" where a script last put it. Nobody rides one here.
+	std::map<std::string, std::string> vehicles;
 	bool player_control = true;
 	// Misuse such as polling a released handle; tests expect it to stay empty.
 	std::vector<std::string> errors;
@@ -72,6 +74,10 @@ public:
 	Handle open_save_prompt() override;
 	Handle open_name_entry(const std::string& member) override;
 	void log_skipped_line(const Line& line) override;
+	void give_vehicle(const std::string& vehicle, const std::string& map, const std::string& marker) override;
+	void place_vehicle(const std::string& vehicle, const std::string& map, const std::string& marker) override;
+	void remove_vehicle(const std::string& vehicle) override;
+	bool has_vehicle(const std::string& vehicle) override;
 
 protected:
 	// Hooks for hosts built on this one (TimingHost). The defaults use the

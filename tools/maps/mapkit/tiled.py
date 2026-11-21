@@ -12,7 +12,9 @@ KINDS = {"floor": ".", "wall": "#", "water": "~"}
 KIND_OF_CHARACTER = {c: k for k, c in KINDS.items()}
 TILE_IDS = {"floor": 0, "wall": 1, "water": 2}
 FLIP_BITS = 0xF0000000
-MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "int", "music": "string"}
+MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "int", "music": "string", "region": "string", "arrival": "string"}
+# Map properties in the area format's order, as the importer copies them and the exporter writes them.
+AREA_PROPERTIES = ("kind", "encounter_mode", "step_ms", "music", "region", "arrival")
 REQUIRED_MAP_PROPERTIES = ["id"]
 
 # Per object class: property name to type. "json" is a string property holding JSON text of the given shape.
@@ -23,13 +25,14 @@ OBJECT_PROPERTIES = {
 	"shop": {"stock": "json list", "sell_percent": "int", "script_only": "bool"},
 	"rest": {"cost": "int", "script_only": "bool"},
 	"chest": {"flag": "string", "items": "json object", "equipment": "json object", "money": "int"},
+	"port": {"marker": "string", "flag": "string"},
 	"zone": {"table": "json list", "visible": "json object", "random": "json object"},
 }
-REQUIRED_PROPERTIES = {"exit": ["to", "marker"], "hook": ["event"], "shop": ["stock"], "chest": ["flag"], "zone": ["table"]}
-NAMED_CLASSES = {"marker", "hook", "shop", "rest", "chest", "zone"}
+REQUIRED_PROPERTIES = {"exit": ["to", "marker"], "hook": ["event"], "shop": ["stock"], "chest": ["flag"], "port": ["marker"], "zone": ["table"]}
+NAMED_CLASSES = {"marker", "hook", "shop", "rest", "chest", "port", "zone"}
 # Hooks with these triggers have no cell; their object's position is ignored.
 CELL_FREE_TRIGGERS = {"load", "flag"}
-CLASS_OF_LIST = {"exits": "exit", "hooks": "hook", "shops": "shop", "rests": "rest", "chests": "chest", "zones": "zone"}
+CLASS_OF_LIST = {"exits": "exit", "hooks": "hook", "shops": "shop", "rests": "rest", "chests": "chest", "ports": "port", "zones": "zone"}
 TILED_VERSION = "1.10.2"
 FORMAT_VERSION = "1.10"
 
@@ -254,7 +257,7 @@ def tmj_to_area(tmj, base_dir="."):
 				rows = _rows(gids, width, sets, problems)
 
 	area = {"id": map_props.get("id", "")}
-	for name in ("kind", "encounter_mode", "step_ms", "music"):
+	for name in AREA_PROPERTIES:
 		if name in map_props:
 			area[name] = map_props[name]
 	area["map"] = rows
@@ -381,6 +384,10 @@ def _read_object(obj, tw, th, area, lists, problems):
 		chest = {"id": name, "at": cell}
 		chest.update(props)
 		lists["chests"].append(chest)
+	elif cls == "port":
+		port = {"id": name, "at": cell}
+		port.update(props)
+		lists["ports"].append(port)
 
 
 def load_tmj(path):
@@ -477,6 +484,8 @@ def area_to_tmj(area, tileset_ref, tile_size=16):
 				add(CLASS_OF_LIST[field], s.get("id", ""), props)
 	for i, c in enumerate(area.get("chests", [])):
 		add("chest", c.get("id", ""), {k: v for k, v in c.items() if k not in ("id", "at")}, cell=cell_of(c, f"chests[{i}]"))
+	for i, p in enumerate(area.get("ports", [])):
+		add("port", p.get("id", ""), {k: v for k, v in p.items() if k not in ("id", "at")}, cell=cell_of(p, f"ports[{i}]"))
 	for i, z in enumerate(area.get("zones", [])):
 		corners = [z.get("from"), z.get("to")]
 		if not all(isinstance(v, list) and len(v) == 2 and all(isinstance(n, int) for n in v) for v in corners):
@@ -486,7 +495,7 @@ def area_to_tmj(area, tileset_ref, tile_size=16):
 	if problems:
 		raise areajson.AreaError(problems)
 
-	props = [_prop(k, area[k]) for k in ("id", "kind", "encounter_mode", "step_ms", "music") if k in area]
+	props = [_prop(k, area[k]) for k in ("id",) + AREA_PROPERTIES if k in area]
 	if isinstance(tileset_ref, dict):
 		tilesets = [dict(tileset_ref, firstgid=1)]
 		tilesets[0].pop("type", None)

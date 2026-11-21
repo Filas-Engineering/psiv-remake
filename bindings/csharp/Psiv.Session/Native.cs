@@ -72,7 +72,8 @@ public struct PsivFieldInfo
 {
 	public IntPtr AreaId, AreaName;
 	public int AreaKind, EncounterMode, Width, Height, StepMs, LeaderX, LeaderY, Facing, PlayerControl, GraceMs;
-	public IntPtr Music;
+	public IntPtr Music, Region, Aboard;
+	public int LeaderStepMs;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -89,6 +90,12 @@ public struct PsivActor { public IntPtr Id, Name; public int X, Y, Facing, Visib
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivPoint { public int Kind; public IntPtr Id; public int X, Y; public IntPtr Event; public int Active, Cost; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivVehicle { public IntPtr Id, Name; public int X, Y, Facing, Aboard; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivTravelDestination { public IntPtr Id, Area, AreaName, Region; public int X, Y; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivLine { public IntPtr SpeakerId, SpeakerName, TextId, Text, Portrait, Display; }
@@ -138,7 +145,7 @@ public struct PsivBattleInfo
 	public int Live;
 	public IntPtr Encounter;
 	public int Source, Round, PartyCount, CombatantCount, Outcome, EscapeAllowed, AutoActive, PartyActsNextRound, GameOver;
-	public IntPtr Music;
+	public IntPtr Music, Vehicle;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -186,7 +193,7 @@ public struct PsivMember
 }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivAbilityInfo { public IntPtr Id, Name; public int Kind, Targeting, Cost, Field, Uses, MaxUses; }
+public struct PsivAbilityInfo { public IntPtr Id, Name; public int Kind, Targeting, Cost, Field, Uses, MaxUses, Travel; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivMacroStep
@@ -269,7 +276,7 @@ public struct PsivComboEntry
 }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivInventoryEntry { public IntPtr Id, Name; public int Count, Equipment, Field, TargetingOrSlot, Price; }
+public struct PsivInventoryEntry { public IntPtr Id, Name; public int Count, Equipment, Field, TargetingOrSlot, Price, Travel; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivShopInfo { public IntPtr Id; public int SellPercent, StockCount; public IntPtr Stock; }
@@ -335,7 +342,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 7;
+	public const uint AbiVersion = 8;
 
 	[LibraryImport(Library, EntryPoint = "psiv_abi_version")] public static partial uint AbiVersionOf();
 	[LibraryImport(Library, EntryPoint = "psiv_version")] public static partial IntPtr Version();
@@ -388,6 +395,12 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_walk_step")] public static partial int WalkStep(SessionHandle s, out int status);
 	[LibraryImport(Library, EntryPoint = "psiv_interact")] public static partial int Interact(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_party_talk")] public static partial int PartyTalk(SessionHandle s);
+	[LibraryImport(Library, EntryPoint = "psiv_board")] public static partial int Board(SessionHandle s);
+	[LibraryImport(Library, EntryPoint = "psiv_leave_vehicle")] public static partial int LeaveVehicle(SessionHandle s);
+	[LibraryImport(Library, EntryPoint = "psiv_field_vehicles")] public static partial int FieldVehicles(SessionHandle s, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_travel_destinations")] public static partial int TravelDestinations(SessionHandle s, int kind, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_travel", StringMarshalling = StringMarshalling.Utf8)]
+	public static partial int Travel(SessionHandle s, int kind, string? destination, string? user, string? thing);
 	[LibraryImport(Library, EntryPoint = "psiv_field_info_get")] public static partial int FieldInfoGet(SessionHandle s, out PsivFieldInfo info);
 	[LibraryImport(Library, EntryPoint = "psiv_field_grid")] public static partial int FieldGrid(SessionHandle s, out IntPtr cells, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_field_rows")] public static partial int FieldRows(SessionHandle s, out IntPtr rows, out int count);

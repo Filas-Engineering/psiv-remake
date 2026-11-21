@@ -123,7 +123,7 @@ class MapRejectionTest(TempCase):
 		self.rejects(tmj, "the map needs a string property 'id'")
 		tmj = sample_tmj()
 		tmj["properties"].append({"name": "weather", "type": "string", "value": "rain"})
-		self.rejects(tmj, "the map: unknown property 'weather' (allowed: encounter_mode, id, kind, music, step_ms)")
+		self.rejects(tmj, "the map: unknown property 'weather' (allowed: arrival, encounter_mode, id, kind, music, region, step_ms)")
 		tmj = sample_tmj()
 		next(p for p in tmj["properties"] if p["name"] == "step_ms").update({"type": "string", "value": "250"})
 		self.rejects(tmj, "the map: property 'step_ms' must be an int property")
@@ -133,7 +133,7 @@ class ObjectRejectionTest(TempCase):
 	def test_unknown_class(self):
 		tmj = sample_tmj()
 		obj(tmj, "door")["type"] = "npc"
-		self.rejects(tmj, "object 1 ('door') has class 'npc'; use one of marker, exit, hook, shop, rest, chest, zone")
+		self.rejects(tmj, "object 1 ('door') has class 'npc'; use one of marker, exit, hook, shop, rest, chest, port, zone")
 
 	def test_class_field_of_newer_tiled_is_read(self):
 		tmj = sample_tmj()

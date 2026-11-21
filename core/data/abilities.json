@@ -58,6 +58,12 @@
 		{"id": "glint", "name": "Glint", "kind": "technique", "cost": 2, "target": "one_enemy", "effects": [
 			{"type": "elemental_damage", "power": 9, "element": "shock"}
 		]},
+		{"id": "homeward", "name": "Homeward", "kind": "technique", "cost": 8, "target": "all_allies", "field": true, "effects": [
+			{"type": "travel", "to": "town"}
+		]},
+		{"id": "outpath", "name": "Outpath", "kind": "technique", "cost": 4, "target": "all_allies", "field": true, "effects": [
+			{"type": "travel", "to": "dungeon_exit"}
+		]},
 
 		{"id": "focus_shot", "name": "Focus Shot", "kind": "skill", "uses": 3, "target": "one_enemy", "effects": [
 			{"type": "physical_damage", "power": 11}

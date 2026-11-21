@@ -14,7 +14,7 @@ game/build/game_cli --check game/data            # the game data; battle data fr
 game/build/game_cli --check my/game --core my/core   # your own directories
 ```
 
-It exits 0 with `OK: no problems.` or 1 with `FAILED: N problems.` It runs the same loader the game uses (core's battle data, text tables, areas, journal, glossary and scripts, compiled and checked strictly, then the references between them) and adds checks the loader does not make: two things on one cell, a marker, exit, step hook or spawn on a solid cell, duplicate hook, zone and chest ids, zones reversed, off the map or overlapping, shops with nothing in stock, exits, markers, hooks, chests, shops and inns the party cannot walk to from any way into the area, and areas that no exit, script warp or start position leads to or that the start cannot reach. A problem in the battle data does not stop the game's own files from being read, so one run reports as much as it can; when problems stop the load early, the report says which checks did not run. The function behind it is `game::checkData` (`game/include/game/check.h`).
+It exits 0 with `OK: no problems.` or 1 with `FAILED: N problems.` It runs the same loader the game uses (core's battle data, text tables, areas, journal, glossary and scripts, compiled and checked strictly, then the references between them) and adds checks the loader does not make: two things on one cell, a marker, exit, step hook or spawn on a solid cell, duplicate hook, zone and chest ids, zones reversed, off the map or overlapping, shops with nothing in stock, exits, markers, hooks, chests, shops, inns and ports the party cannot walk to from any way into the area (in a field area a vehicle of `game.json` may carry it over the terrain it crosses), and areas that no exit, script warp or start position leads to or that the start cannot reach. A problem in the battle data does not stop the game's own files from being read, so one run reports as much as it can; when problems stop the load early, the report says which checks did not run. The function behind it is `game::checkData` (`game/include/game/check.h`).
 
 **The map importer** converts Tiled maps to area files and back: `python3 -I tools/maps/tiled_to_area.py MAP.tmj -o AREA.json` and `tools/maps/area_to_tiled.py`. See [tools/maps/README.md](../tools/maps/README.md) for the mapping from Tiled layers, classes and properties to the area format.
 
@@ -23,7 +23,7 @@ It exits 0 with `OK: no problems.` or 1 with `FAILED: N problems.` It runs the s
 Start from a copy of the placeholder data, which passes the check, and replace one file at a time in this order, running the check after each. Each step only refers to files brought in before it, so every problem the check prints is about the file you just changed.
 
 1. Core battle data, in the loader's order: `rules.json`, `statuses.json`, `abilities.json`, `items.json`, `equipment.json`, `party.json`, `enemies.json` (enemies, then encounters), `combos.json`, `difficulties.json`, then `text_en.json`. Each core file may refer only to the files before it.
-2. `game.json`'s lists that point at core data: `start.lineup`, `start.items`, `join_levels`, `prices`, `bosses`.
+2. `game.json`'s lists that point at core data: `start.lineup`, `start.items`, `join_levels`, `prices`, `bosses`, `vehicles` (each names a vehicle of `party.json`).
 3. Text tables, the source language first: `text/<code>.json` (area names and the game's own messages) and `text/<code>.strings` (dialogue, speaker names, journal text). Then every other language with the same keys.
 4. Areas: one file per area, listed in `game.json`'s `areas`. Bring in an area together with the areas its exits lead to, or point its exits at an area that already exists.
 5. `journal.json`: objectives, jobs, encyclopedia entries, party talk.
@@ -51,6 +51,8 @@ Basic attacks, techniques, skills and combo results, each with its target rule a
 ### items.json
 
 Consumables, using the same targets and effects as abilities with flat power. Reference: [items.json](../core/README.md#itemsjson).
+
+Fast travel the original has (FLD-051, FLD-052) is an effect: `{"type": "travel", "to": "town"}` (back to a visited town of the region, outside dungeons) or `{"type": "travel", "to": "dungeon_exit"}` (out of the dungeon the party is in), alone on a `field` technique or item that targets `all_allies`. The game decides where the party may go; core takes only the cost and refuses it in battle.
 
 ### equipment.json
 
@@ -82,7 +84,13 @@ All in `game/data/` (or the directory `--check` names). Full reference: [game/RE
 
 ### game.json
 
-Everything about the adventure that is not an area, a script or battle data: the file lists, languages, actors, presentation names and data, every flag and variable, the start, join levels, prices, caps and timings, and the bosses. Reference: [game.json](../game/README.md#gamejson).
+Everything about the adventure that is not an area, a script or battle data: the file lists, languages, actors, presentation names and data, every flag and variable, the start, join levels, prices, caps and timings, the bosses, and the field rules of vehicles. Reference: [game.json](../game/README.md#gamejson).
+
+Vehicles in the field (FLD-060 to FLD-062): one `vehicles` entry per vehicle of `party.json` that moves in the field, with the terrain it crosses (`floor`, `water`), its speed against walking and the encounter table of battles while riding it. When the real traversal rules arrive (FLD-062), they go here as data:
+
+```json
+"vehicles": [{"id": "reed_skimmer", "crosses": ["floor", "water"], "speed_percent": 200, "encounters": [{"encounter": "marsh", "weight": 1}]}]
+```
 
 Optional presentation data, none of which is part of the content hash, so it can be filled in or changed without touching saves or records:
 
@@ -113,9 +121,11 @@ Optional presentation data, none of which is part of the content hash, so it can
 
 One JSON file per area: the cell grid, markers, exits, hooks, shops, rest points, chests and encounter zones, and an optional `music` track (`"music": "town_tide_bells"`, an id from `presentation.audio`; the Tiled map property of the same name). Reference: [Areas](../game/README.md#areas). Draw them in Tiled and convert with [tools/maps](../tools/maps/README.md), or write the JSON directly. The display name is the text key `area.<id>`. An interact hook may stand on a wall or water cell (a sign, a ladder): the party uses it from a floor cell beside it, which the check makes sure it can reach. Give a person's interact hook the id of its actor in `game.json`'s `actors`: the actor then stands on that cell until a script moves it (see [Actors](../game/README.md#actors)).
 
+Travel data lives in areas too: `region` groups areas into a world or region (a return to a town reaches the visited towns of the party's region), a town's `arrival` names the marker a return lands on, and `ports` are the transport between regions (a port stands on any cell like an interact hook, lands travellers on its `marker`, and opens once its `flag` is set). The Tiled converter carries `region` and `arrival` as map properties and ports as objects of class `port`.
+
 ### Events
 
-Event scripts (`.ev`): dialogue, choices, flags, battles, warps, shops and rests, compiled against a registry the game builds from the rest of the data. Reference: [Event scripts and text](../game/README.md#event-scripts-and-text) and the script format, [events/FORMAT.md](../events/FORMAT.md). Every animation an `anim` names must be listed in `game.json`'s `presentation.animations`. The game follows the moves, turns, shows and hides of `game.json`'s actors; a script that moves, turns or animates a party member, and every `anim`, is presentation the engine shows on its own (see [Actors](../game/README.md#actors)).
+Event scripts (`.ev`): dialogue, choices, flags, battles, warps, shops and rests, vehicles given, placed and removed (only in field areas, and only vehicles with field rules in `game.json`), compiled against a registry the game builds from the rest of the data. Reference: [Event scripts and text](../game/README.md#event-scripts-and-text) and the script format, [events/FORMAT.md](../events/FORMAT.md). Every animation an `anim` names must be listed in `game.json`'s `presentation.animations`. The game follows the moves, turns, shows and hides of `game.json`'s actors; a script that moves, turns or animates a party member, and every `anim`, is presentation the engine shows on its own (see [Actors](../game/README.md#actors)).
 
 ### Routes
 
@@ -155,6 +165,8 @@ These are the messages a converter usually trips first. The line number points a
 * `music 'cave_theme' is not one of game.json's presentation audio ids`, `music is given for encounter 'bats', which the battle data does not have`: list every track in `presentation.audio`, and give music only to encounters that exist.
 * `unknown action 'panel show'`: durations write actions with underscores (`panel_show`), as timing files do.
 * `hook 'door' runs unknown event 'cave_door'`, `zone 'hall' lists unknown encounter 'bats'`: a name the scripts or the battle data do not define.
+* `vehicle 'raft' is not one of the battle data's vehicles`, `vehicle 'skiff' has no field rules in game.json's vehicles, so a script cannot give or place it`, `vehicle 'skiff' is put in area 'town', which is not a field area`: field vehicles name a vehicle of `party.json`, and scripts put them only in field areas.
+* `port 'pier' lands at marker 'dock', which does not exist in this area`, `only a town has an arrival marker`: travel data names markers of its own area.
 * `inline text in say in event 'cave_door': player-facing text must be a string ID (@id) from the string tables` and `the name "Bell Warden" is typed out`: the scripts' strict check. Every line is a string ID, and glossary names are written as name tokens.
 * `string ID 'cave.old_line' is not used by any script or by the game`: a dialogue string left over, or one language has a key another lacks. The strict check treats warnings as problems.
 

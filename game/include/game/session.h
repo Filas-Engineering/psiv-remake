@@ -67,8 +67,8 @@ struct EncyclopediaView {
 // Macro slots per save: the original's eight (BAT-055, BAT-057).
 inline constexpr int kMaxMacros = 8;
 
-// What the Menu mode is showing. Shop has its own mode.
-enum class MenuKind { None, Field, Inn, SavePrompt, NameEntry };
+// What the Menu mode is showing. Shop has its own mode. Port: the destinations of the port the party is at.
+enum class MenuKind { None, Field, Inn, SavePrompt, NameEntry, Port };
 
 const char* toString(MenuKind kind);
 
@@ -292,6 +292,31 @@ struct ActorView {
 	bool scripted = false;
 };
 
+// One of the party's vehicles in the party's area, from Session::vehiclesHere() (FLD-060).
+struct VehicleView {
+	std::string id;
+	Cell cell;
+	Facing facing = Facing::South;
+	// The party rides it, so it stands on the leader's cell.
+	bool aboard = false;
+};
+
+// Ways to travel at once (FLD-051): from a port to another open port, back to a town visited before in the region the
+// party is in, or out of the dungeon the party is in to where it stood before going in.
+enum class TravelKind { Port, Town, DungeonExit };
+
+const char* toString(TravelKind kind);
+bool parseTravelKind(const std::string& text, TravelKind& out);
+
+struct TravelDestination {
+	// A port id for Port, an area id for Town and DungeonExit.
+	std::string id;
+	std::string area;
+	// Where the party lands.
+	Cell cell;
+	std::string region;
+};
+
 enum class WalkStatus { Walking, Arrived, LeftArea, Stopped, NoPath, TooLong };
 
 // A walk to a cell along the shortest path, from Session::beginWalk.
@@ -370,8 +395,29 @@ public:
 	WalkStatus walkStep(PathWalk& walk);
 	// The actors in the party's area, in game.json order, hidden ones included.
 	std::vector<ActorView> actorsHere() const;
-	// Interacts with whatever stands in the cell the leader faces (FLD-030).
+	// Interacts with whatever stands in the cell the leader faces (FLD-030): a vehicle is boarded, a port opens its
+	// destinations. Refused while the party rides a vehicle.
 	rules::Message interact();
+	// The party's vehicles in its area, in id order, the one it rides included.
+	std::vector<VehicleView> vehiclesHere() const;
+	// The field rules of the vehicle the party rides, or null on foot.
+	const FieldVehicle* riding() const;
+	// Boards the vehicle in the cell the leader faces (FLD-061); interact() does the same.
+	rules::Message board();
+	// Steps off the vehicle onto the cell the leader faces, or else the first of the other neighbors (north, east, south,
+	// west) the party could walk on; the vehicle stays where it is. Refused when none is.
+	rules::Message leaveVehicle();
+	// The port whose destinations the Port menu shows, or null.
+	const Port* port() const;
+	// Where a travel of `kind` can go now: the other open ports while a port's menu is up, the towns of the region the
+	// party has visited that have an arrival marker (the area it is in left out), or the one way out of the dungeon it is
+	// in. Empty when there is none.
+	std::vector<TravelDestination> travelDestinations(TravelKind kind) const;
+	// Travels to `destination`. Port: from a port's menu. Town and DungeonExit: from the field menu with `thing`, an item,
+	// or a technique that `user` (a lineup member) knows, whose travel effect matches; it is spent as core's field use
+	// spends it. Town is refused inside a dungeon, DungeonExit outside one; DungeonExit takes an empty destination. A
+	// vehicle the party rides stays behind (FLD-063).
+	rules::Message travel(TravelKind kind, const std::string& destination, const std::string& user = "", const std::string& thing = "");
 	// Party talk (FLD-070): the lines of the best matching set for this area and the flags, as Line output. The same set
 	// also comes up by itself, as Ambient output, the first time control returns to the field in an area under it while
 	// the profile's ambient talk is on (FLD-073); World::ambientHeard keeps which ones have.
@@ -506,7 +552,20 @@ private:
 	std::string text(const std::string& key, std::vector<std::string> params = {}) const;
 	void addTime(int ms);
 	void tickField(const FieldInput& input);
-	void enterArea(const std::string& areaId, const std::string& marker);
+	void enterArea(const std::string& areaId, const std::string& marker, std::optional<Cell> standing = std::nullopt);
+	// `standing` is where the party stood before, when it is not World::position (an exit cell it stepped onto).
+	void enterAreaAt(const std::string& areaId, Cell cell, std::optional<Cell> standing = std::nullopt);
+	// Whether the leader can move onto `cell`: on foot floor that nothing stands on, including the party's vehicles;
+	// aboard, terrain the vehicle crosses that nothing stands on.
+	bool canEnter(const Area& area, Cell cell) const;
+	// The id of a vehicle of the party standing on `cell` of the party's area, the ridden one left out.
+	std::string vehicleAt(Cell cell) const;
+	// Leaves the ridden vehicle where it stands without stepping off, when a warp or a travel takes the party away.
+	void leaveVehicleBehind();
+	// Puts a vehicle down, or back at its last boarding point when the party could not reach it there (FLD-063).
+	void parkVehicle(const std::string& id, const std::string& area, Cell cell);
+	// Off the ridden vehicle onto its cell, or the nearest cell the party can walk on.
+	void dismount();
 	void arrive(Cell cell);
 	void settleField();
 	const TalkSet* talkSet() const;
@@ -529,7 +588,7 @@ private:
 	void writeClearRecord();
 	std::string startBattle(const std::string& encounter, rules::Opening opening, bool escapeAllowed, bool defeatHasBranch, const rules::ScriptedEnd& end,
 		const std::string& vehicle = "");
-	void startFieldBattle(const EncounterStart& start);
+	void startFieldBattle(const EncounterStart& start, const std::string& vehicle = "");
 	void finishBattle();
 	void enterGameOver();
 	void autosave(std::string reason);
@@ -565,6 +624,7 @@ private:
 	MenuKind menuKind_ = MenuKind::None;
 	std::string shopId_;
 	std::string innId_;
+	std::string portId_;
 	std::string nameMember_;
 	// The open shop, save prompt or name entry an event is waiting on.
 	events::Handle menuHandle_ = 0;

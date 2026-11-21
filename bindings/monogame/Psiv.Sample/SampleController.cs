@@ -6,7 +6,7 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-public enum Screen { Title, Field, Dialogue, Battle, Menu, Shop, Inn, SavePrompt, NameEntry, QuestLog, TextLog, Options, Pause, LoadGame }
+public enum Screen { Title, Field, Dialogue, Battle, Menu, Shop, Inn, SavePrompt, NameEntry, QuestLog, TextLog, Options, Pause, LoadGame, Travel }
 
 // The sample's screens: reads the session after each update and draws it through the surface with the
 // sample's own generated pictures (Art), rectangles and text. Holds no game state of its own beyond cursors,
@@ -159,6 +159,8 @@ public sealed partial class SampleController
 					MenuKind.Inn => Screen.Inn,
 					MenuKind.SavePrompt => Screen.SavePrompt,
 					MenuKind.NameEntry => Screen.NameEntry,
+					MenuKind.Port => Screen.Travel,
+					MenuKind.Field when _travelPick is not null => Screen.Travel,
 					_ => Screen.Menu,
 				},
 				_ => Screen.Title,
@@ -343,6 +345,7 @@ public sealed partial class SampleController
 		case Screen.Options: UpdateOptions(input); break;
 		case Screen.Pause: UpdatePause(input); break;
 		case Screen.LoadGame: UpdateLoadGame(input); break;
+		case Screen.Travel: UpdateTravel(input); break;
 		case Screen.QuestLog:
 		case Screen.TextLog:
 			if (input.Back || input.Confirm || input.Pressed(GameAction.QuestLog) || input.Pressed(GameAction.TextLog))
@@ -481,7 +484,7 @@ public sealed partial class SampleController
 			DrawHud(s);
 			_field.DrawBanner(s);
 			DrawToasts(s, 16, s.Height - 40);
-			DrawHint(s, $"{Walk()} walk   {Hint(GameAction.Confirm)} talk   {Hint(GameAction.Menu)} menu   {Hint(GameAction.QuestLog)} quests   " +
+			DrawHint(s, $"{Walk()} {(_s.FieldInfo()?.Aboard.Length > 0 ? "drive" : "walk")}   {Hint(GameAction.Confirm)} {(_s.FieldInfo()?.Aboard.Length > 0 ? "step off" : "talk")}   {Hint(GameAction.Menu)} menu   {Hint(GameAction.QuestLog)} quests   " +
 				$"{Hint(GameAction.PartyTalk)} party talk   {Hint(GameAction.TextLog)} log   {Hint(GameAction.Pause)} pause");
 			break;
 		case Screen.Dialogue: DrawDialogue(s, t, art); break;
@@ -497,6 +500,10 @@ public sealed partial class SampleController
 		case Screen.Options: DrawOptions(t, art); break;
 		case Screen.Pause: DrawPause(s, t, art); break;
 		case Screen.LoadGame: DrawLoadGame(t, art); break;
+		case Screen.Travel:
+			DrawTravel(t, art);
+			DrawToasts(s, 48, s.Height - 92, right: true);
+			break;
 		case Screen.QuestLog:
 			DrawBackdrop(t, art);
 			Style.Window(t, 24, 40, s.Width - 48, s.Height - 72, "Quest log");
@@ -536,6 +543,9 @@ public sealed partial class SampleController
 			"party" => string.Join(", ", _s.Party().Where(m => m.InLineup).Select(m => m.Name)),
 			"macros" => string.Join(", ", _s.MacroList().Select(m => $"{m.Name}({m.Steps.Count})" + (m.Name == settings.AutoMacro ? "*" : ""))),
 			"area" => _s.FieldInfo()?.AreaName ?? "-",
+			"aboard" => _s.FieldInfo() is { Aboard.Length: > 0 } aboard ? aboard.Aboard : "-",
+			"vehicles" => _field.DrawnVehicles.Count == 0 ? "none" : string.Join(", ", _field.DrawnVehicles.Select(v => $"{v.Key} {v.Value}")),
+			"destinations" => TravelProbe(),
 			"panels" => _panels.Count == 0 ? "none" : string.Join(", ", _panels.Select(x => $"{x.Id} {x.Slot} {x.Camera}" + (x.Transition is null ? "" : "~"))),
 			"camera" => (_camera ?? "-") + (_cameraMove is null ? "" : "~"),
 			"paneltiles" => _panels.Count == 0 ? "none" : string.Join(", ", _panels.Select(x => $"{x.Id} {PanelTileSize(x)}")),

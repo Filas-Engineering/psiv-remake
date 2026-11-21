@@ -108,6 +108,7 @@ int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const
 	case EffectKind::ElementalDamage:
 	case EffectKind::ApplyStatus:
 	case EffectKind::ModifyStat:
+	case EffectKind::Travel:
 		return requested;
 	}
 	int best = -1;

@@ -21,6 +21,8 @@ public sealed partial class GameData
 	public HashSet<string> Actors { get; } = [];
 	public HashSet<string> Characters { get; } = [];
 	public HashSet<string> Vehicles { get; } = [];
+	// The vehicles game.json gives field rules, which the field draws.
+	public HashSet<string> FieldVehicles { get; } = [];
 	public HashSet<string> Enemies { get; } = [];
 	public HashSet<string> Encounters { get; } = [];
 	public HashSet<string> Statuses { get; } = [];
@@ -57,6 +59,7 @@ public sealed partial class GameData
 			d.Music.Add($"{FieldRenderer.KindName(kind).ToLowerInvariant()}_{id}");
 		}
 		d.Music.UnionWith(["title", "battle_town", "battle_field", "battle_dungeon", "battle_scripted"]);
+		d.FieldVehicles.UnionWith(Array(root, "vehicles").Select(v => v.GetProperty("id").GetString()!));
 		var scripted = new Dictionary<string, string>();
 		foreach (JsonElement script in root.GetProperty("events").EnumerateArray())
 		{

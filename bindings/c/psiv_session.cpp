@@ -25,10 +25,11 @@
 #include <utility>
 #include <vector>
 
-#define PSIV_BINDING_VERSION "0.6.0"
+#define PSIV_BINDING_VERSION "0.7.0"
 
 static_assert(PSIV_MODE_SHOP == static_cast<int>(game::Mode::Shop), "psiv_mode");
-static_assert(PSIV_MENU_NAME_ENTRY == static_cast<int>(game::MenuKind::NameEntry), "psiv_menu_kind");
+static_assert(PSIV_MENU_PORT == static_cast<int>(game::MenuKind::Port), "psiv_menu_kind");
+static_assert(PSIV_TRAVEL_DUNGEON_EXIT == static_cast<int>(game::TravelKind::DungeonExit), "psiv_travel_kind");
 static_assert(PSIV_DIRECTION_WEST == static_cast<int>(game::Facing::West), "psiv_direction");
 static_assert(PSIV_NOTICE_AMBIENT == static_cast<int>(game::OutputKind::Ambient), "psiv_notice_kind");
 static_assert(PSIV_AREA_DUNGEON == static_cast<int>(game::AreaKind::Dungeon), "psiv_area_kind");
@@ -419,6 +420,15 @@ const char* fromList(const char* const* names, int count, int32_t value) {
 
 namespace {
 
+// The travel kind a travel effect's target goes with, or -1.
+int32_t travelKind(const std::vector<rules::Effect>& effects) {
+	const rules::Effect* travel = rules::travelEffect(effects);
+	if (!travel) {
+		return -1;
+	}
+	return travel->travel == rules::TravelTarget::Town ? PSIV_TRAVEL_TOWN : PSIV_TRAVEL_DUNGEON_EXIT;
+}
+
 psiv_inventory_entry entryFor(Session& s, const std::string& id, int count) {
 	const rules::Database& db = s.data->db;
 	psiv_inventory_entry e = {};
@@ -434,6 +444,7 @@ psiv_inventory_entry entryFor(Session& s, const std::string& id, int count) {
 		e.targeting_or_slot = static_cast<int32_t>(piece->slot);
 	}
 	e.price = s.data->price(id);
+	e.travel = db.item(id) ? travelKind(db.item(id)->effects) : -1;
 	return e;
 }
 
@@ -464,6 +475,7 @@ uint32_t psiv_sizeof(const char* struct_name) {
 		PSIV_SIZE(psiv_auto_round), PSIV_SIZE(psiv_auto_battle), PSIV_SIZE(psiv_pacing_area), PSIV_SIZE(psiv_pacing_boss),
 		PSIV_SIZE(psiv_macro_step), PSIV_SIZE(psiv_macro), PSIV_SIZE(psiv_stat_bonus), PSIV_SIZE(psiv_affinity), PSIV_SIZE(psiv_status_resist),
 		PSIV_SIZE(psiv_member_detail), PSIV_SIZE(psiv_combo_entry), PSIV_SIZE(psiv_combat_view), PSIV_SIZE(psiv_equip_preview), PSIV_SIZE(psiv_difficulty), PSIV_SIZE(psiv_camera),
+		PSIV_SIZE(psiv_vehicle), PSIV_SIZE(psiv_travel_destination),
 	};
 #undef PSIV_SIZE
 	if (!struct_name) {
@@ -487,12 +499,12 @@ psiv_status psiv_last_error(const psiv_session* session, psiv_error* out) {
 }
 
 const char* psiv_name_of(int32_t kind, int32_t value) {
-	static const char* const pointKinds[] = {"talk", "step", "chest", "shop", "rest"};
+	static const char* const pointKinds[] = {"talk", "step", "chest", "shop", "rest", "port"};
 	switch (kind) {
 	case PSIV_NAME_MODE:
 		return value >= 0 && value <= PSIV_MODE_SHOP ? game::toString(static_cast<game::Mode>(value)) : "";
 	case PSIV_NAME_MENU_KIND:
-		return value >= 0 && value <= PSIV_MENU_NAME_ENTRY ? game::toString(static_cast<game::MenuKind>(value)) : "";
+		return value >= 0 && value <= PSIV_MENU_PORT ? game::toString(static_cast<game::MenuKind>(value)) : "";
 	case PSIV_NAME_DIRECTION:
 		return value == PSIV_DIRECTION_NONE ? "none" : value >= 0 && value <= PSIV_DIRECTION_WEST ? game::toString(static_cast<game::Facing>(value)) : "";
 	case PSIV_NAME_NOTICE_KIND:
@@ -504,7 +516,7 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 	case PSIV_NAME_ENEMY_STATE:
 		return value >= 0 && value <= PSIV_ENEMY_RETURNING ? game::toString(static_cast<game::EnemyState>(value)) : "";
 	case PSIV_NAME_POINT_KIND:
-		return fromList(pointKinds, 5, value);
+		return fromList(pointKinds, 6, value);
 	case PSIV_NAME_JOB_STATE:
 		return value >= 0 && value <= PSIV_JOB_COMPLETED ? game::toString(static_cast<game::JobState>(value)) : "";
 	case PSIV_NAME_TEXT_SPEED:
@@ -559,6 +571,8 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 		return value >= 0 && value <= PSIV_SORT_COUNT ? game::toString(static_cast<game::ItemSort>(value)) : "";
 	case PSIV_NAME_DESCRIPTION_KIND:
 		return value >= 0 && value <= PSIV_DESCRIPTION_DIFFICULTY ? game::toString(static_cast<game::DescriptionKind>(value)) : "";
+	case PSIV_NAME_TRAVEL_KIND:
+		return value >= 0 && value <= PSIV_TRAVEL_DUNGEON_EXIT ? game::toString(static_cast<game::TravelKind>(value)) : "";
 	default:
 		return "";
 	}
@@ -1192,6 +1206,14 @@ psiv_status psiv_interact(psiv_session* session) {
 	return guard(session, true, [&] { return refused(session, session->session->interact()); });
 }
 
+psiv_status psiv_board(psiv_session* session) {
+	return guard(session, true, [&] { return refused(session, session->session->board()); });
+}
+
+psiv_status psiv_leave_vehicle(psiv_session* session) {
+	return guard(session, true, [&] { return refused(session, session->session->leaveVehicle()); });
+}
+
 psiv_status psiv_party_talk(psiv_session* session) {
 	return guard(session, true, [&] { return refused(session, session->session->partyTalk()); });
 }
@@ -1220,6 +1242,10 @@ psiv_status psiv_field_info_get(psiv_session* session, psiv_field_info* out) {
 		out->player_control = w.playerControl;
 		out->grace_ms = w.graceMs;
 		out->music = session->arena.str(a->music);
+		out->region = session->arena.str(a->region);
+		out->aboard = session->arena.str(w.aboard);
+		const game::FieldVehicle* vehicle = session->session->riding();
+		out->leader_step_ms = vehicle ? std::max(1, a->stepMs * 100 / vehicle->speedPercent) : a->stepMs;
 		return PSIV_OK;
 	});
 }
@@ -1367,11 +1393,69 @@ psiv_status psiv_field_points(psiv_session* session, const psiv_point** out, int
 				points.push_back({PSIV_POINT_REST, arena.str(r.id), r.at->x, r.at->y, "", 1, r.cost});
 			}
 		}
+		for (const game::Port& p : a->ports) {
+			points.push_back({PSIV_POINT_PORT, arena.str(p.id), p.at.x, p.at.y, "", p.flag.empty() || w.flag(p.flag), 0});
+		}
 		psiv_point* list = arena.array<psiv_point>(points.size());
 		std::copy(points.begin(), points.end(), list);
 		*out = list;
 		*count = static_cast<int32_t>(points.size());
 		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_field_vehicles(psiv_session* session, const psiv_vehicle** out, int32_t* count) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		if (!currentArea(session)) {
+			return notFound(session, "area");
+		}
+		const std::vector<game::VehicleView> vehicles = session->session->vehiclesHere();
+		Arena& arena = session->arena;
+		psiv_vehicle* list = arena.array<psiv_vehicle>(vehicles.size());
+		for (std::size_t i = 0; i < vehicles.size(); ++i) {
+			const game::VehicleView& v = vehicles[i];
+			list[i] = {arena.str(v.id), arena.str(session->session->displayName(v.id)), v.cell.x, v.cell.y, static_cast<int32_t>(v.facing), v.aboard};
+		}
+		*out = list;
+		*count = static_cast<int32_t>(vehicles.size());
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_travel_destinations(psiv_session* session, int32_t kind, const psiv_travel_destination** out, int32_t* count) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		if (kind < PSIV_TRAVEL_PORT || kind > PSIV_TRAVEL_DUNGEON_EXIT) {
+			return outOfRange(session, "kind", kind);
+		}
+		const std::vector<game::TravelDestination> places = session->session->travelDestinations(static_cast<game::TravelKind>(kind));
+		Arena& arena = session->arena;
+		psiv_travel_destination* list = arena.array<psiv_travel_destination>(places.size());
+		for (std::size_t i = 0; i < places.size(); ++i) {
+			const game::TravelDestination& d = places[i];
+			list[i] = {arena.str(d.id), arena.str(d.area), arena.str(session->session->displayName(d.area)), arena.str(d.region), d.cell.x, d.cell.y};
+		}
+		*out = list;
+		*count = static_cast<int32_t>(places.size());
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_travel(psiv_session* session, int32_t kind, const char* destination, const char* user, const char* thing) {
+	const std::string to = str(destination);
+	const std::string who = str(user);
+	const std::string what = str(thing);
+	return guard(session, true, [&] {
+		if (kind < PSIV_TRAVEL_PORT || kind > PSIV_TRAVEL_DUNGEON_EXIT) {
+			return outOfRange(session, "kind", kind);
+		}
+		session->walk.reset();
+		return refused(session, session->session->travel(static_cast<game::TravelKind>(kind), to, who, what));
 	});
 }
 
@@ -1574,6 +1658,7 @@ psiv_status psiv_battle_info_get(psiv_session* session, psiv_battle_info* out) {
 		const std::map<std::string, std::string>& tracks = session->data->config.presentation.music.encounters;
 		auto track = tracks.find(ended ? ended->encounter : g.battleEncounter());
 		out->music = session->arena.str(track == tracks.end() ? std::string() : track->second);
+		out->vehicle = session->arena.str(b->setup().flags.vehicleBattle ? b->setup().vehicle : std::string());
 		return PSIV_OK;
 	});
 }
@@ -1997,7 +2082,7 @@ psiv_status psiv_member_abilities(psiv_session* session, const char* member, con
 				maxUses = def->uses;
 			}
 			abilities.push_back({a.str(abilityId), a.str(def->name), static_cast<int32_t>(def->kind), static_cast<int32_t>(def->targeting), def->cost, def->field,
-				uses, maxUses});
+				uses, maxUses, travelKind(def->effects)});
 		}
 		psiv_ability_info* list = a.array<psiv_ability_info>(abilities.size());
 		std::copy(abilities.begin(), abilities.end(), list);

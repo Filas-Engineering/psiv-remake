@@ -131,6 +131,20 @@ struct LanguageFiles {
 	std::string text;
 };
 
+// How a vehicle moves in the field (FLD-061). Its battle stats, attack and skills are core's vehicle of the same id,
+// which fights its vehicle battles (BAT-140).
+struct FieldVehicle {
+	std::string id;
+	// Map characters it crosses: '.' floor, '~' water. Walls stop every vehicle.
+	std::string crosses;
+	// Its speed against walking: 200 crosses a cell in half the area's step time.
+	int speedPercent = 100;
+	// The encounter table of battles while riding it (ENC-007).
+	std::vector<TableEntry> encounters;
+
+	bool canCross(char terrain) const { return crosses.find(terrain) != std::string::npos; }
+};
+
 // game.json: everything about the adventure that is not an area, a script or battle data.
 struct GameConfig {
 	std::string title;
@@ -173,6 +187,7 @@ struct GameConfig {
 	int autosaveSlots = 3;
 	int manualSlots = 10;
 	std::vector<Boss> bosses;
+	std::vector<FieldVehicle> vehicles;
 };
 
 struct LanguageTables {
@@ -205,6 +220,9 @@ struct GameData {
 	// Shop and rest point ids are unique across areas, so scripts can name them without an area.
 	const Shop* shop(const std::string& id) const;
 	const RestPoint* rest(const std::string& id) const;
+	// Port ids are unique across areas too. `area` is set to the port's area.
+	const Port* port(const std::string& id, const Area** area = nullptr) const;
+	const FieldVehicle* vehicle(const std::string& id) const;
 };
 
 struct DataDirectories {

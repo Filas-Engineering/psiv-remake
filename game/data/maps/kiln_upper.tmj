@@ -17,7 +17,8 @@
 		{"name":"kind","type":"string","value":"dungeon"},
 		{"name":"encounter_mode","type":"string","value":"visible"},
 		{"name":"step_ms","type":"int","value":250},
-		{"name":"music","type":"string","value":"dungeon_kiln_halls"}
+		{"name":"music","type":"string","value":"dungeon_kiln_halls"},
+		{"name":"region","type":"string","value":"coast"}
 	],
 	"tilesets": [
 		{"firstgid":1,"source":"cells.tsj"}

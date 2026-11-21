@@ -97,7 +97,11 @@ private:
 
 	void condition(const Condition& c, int line) {
 		for (const Term& t : c.terms) {
-			declared(t.name, t.is_flag, line);
+			if (t.vehicle != VehicleTest::none) {
+				name(NameKind::vehicle, t.name, line);
+			} else {
+				declared(t.name, t.is_flag, line);
+			}
 		}
 	}
 
@@ -219,6 +223,16 @@ private:
 			break;
 		case Op::shop:
 			name(NameKind::shop, ins.name, s.line);
+			break;
+		case Op::vehicle_give:
+		case Op::vehicle_place:
+			name(NameKind::vehicle, ins.name, s.line);
+			name(NameKind::map, ins.action.subject, s.line);
+			name(NameKind::marker, ins.action.target, s.line);
+			on_map(ins.action.target, ins.action.subject, s.line, "");
+			break;
+		case Op::vehicle_remove:
+			name(NameKind::vehicle, ins.name, s.line);
 			break;
 		case Op::rest:
 			name(NameKind::rest_point, ins.name, s.line);

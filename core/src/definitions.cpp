@@ -26,6 +26,15 @@ bool effectsRevive(const std::vector<Effect>& effects) {
 	return false;
 }
 
+const Effect* travelEffect(const std::vector<Effect>& effects) {
+	for (const Effect& effect : effects) {
+		if (effect.kind == EffectKind::Travel) {
+			return &effect;
+		}
+	}
+	return nullptr;
+}
+
 bool AbilityDef::revives() const {
 	return effectsRevive(effects);
 }

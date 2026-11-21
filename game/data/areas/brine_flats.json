@@ -1,0 +1,46 @@
+{
+	"id": "brine_flats",
+	"kind": "field",
+	"encounter_mode": "visible",
+	"step_ms": 250,
+	"music": "field_brine_flats",
+	"region": "coast",
+	"map": [
+		"########################",
+		"#......#~~~~~~~~~~~#...#",
+		"#......#~~~~~~~~~~~#...#",
+		"#.......~~~~~~~~~~~....#",
+		"........~~~~~~~~~~~....#",
+		"#.......~~~~~~~~~~~....#",
+		"#......#~~~~~~~~~~~#...#",
+		"#......#~~~~~~~~~~~#...#",
+		"########################"
+	],
+	"markers": {
+		"east_gate": [1, 4],
+		"post_front": [6, 2],
+		"mooring": [7, 4],
+		"islet_shore": [20, 4],
+		"beacon_front": [22, 4]
+	},
+	"exits": [
+		{"at": [0, 4], "to": "saltgrass", "marker": "west_gate"}
+	],
+	"hooks": [
+		{"id": "mooring_post", "at": [7, 2], "event": "flats_mooring"},
+		{"id": "beacon", "at": [23, 4], "event": "flats_beacon"}
+	],
+	"chests": [
+		{"id": "flats_crate", "at": [21, 1], "flag": "chest.flats_crate", "items": {"homing_shell": 2, "waymark_chalk": 2}, "money": 25}
+	],
+	"zones": [
+		{
+			"id": "flats",
+			"from": [1, 1],
+			"to": [22, 7],
+			"table": [{"encounter": "training", "weight": 1}],
+			"visible": {"spawns": [[3, 6]], "cap": 0},
+			"random": {"min_steps": 3, "max_steps": 5}
+		}
+	]
+}

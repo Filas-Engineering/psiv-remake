@@ -1,5 +1,7 @@
 #include "check.h"
 
+#include <algorithm>
+
 using events::ActionType;
 using events::BattleResult;
 using events::Interpreter;
@@ -506,5 +508,43 @@ end
 		"say keeper \"{portrait:keeper_tired}Again, {var:leader}?{wait:30}{page}The {name_upper:moth_swarm}.\" as cheerful",
 		"narrate \"Gone.{wait:10}\"",
 	}));
+	check_clean(host);
+}
+
+TEST(vehicle_commands_reach_the_host_and_vehicle_tests_read_it) {
+	Program p = test::compile_ok(R"(event a skippable
+	if not vehicle skiff
+		vehicle give skiff harbor dock
+	end
+	say guide "aboard?"
+	if vehicle skiff and not aboard skiff
+		vehicle place skiff harbor pier
+	end
+	if aboard skiff or vehicle raft
+		say guide "never"
+	end
+	vehicle remove raft
+end
+)");
+	RecordingHost host;
+	Interpreter it(p, host);
+	CHECK(it.start("a"));
+	test::run(it, host);
+	CHECK(it.status() == Status::finished);
+	CHECK_EQ(host.vehicles.size(), std::size_t(1));
+	CHECK_EQ(host.vehicles.at("skiff"), std::string("harbor pier"));
+	CHECK_EQ(spoken(host).size(), 1u);
+	CHECK(std::find(host.trace.begin(), host.trace.end(), "vehicle give skiff harbor dock") != host.trace.end());
+	CHECK(std::find(host.trace.begin(), host.trace.end(), "vehicle remove raft") != host.trace.end());
+
+	// A skip applies the vehicle changes in order, as watching does.
+	RecordingHost skipped;
+	Interpreter again(p, skipped);
+	CHECK(again.start("a"));
+	CHECK(again.skip());
+	test::run(again, skipped);
+	CHECK(again.status() == Status::finished);
+	CHECK(skipped.same_world(host));
+	CHECK_EQ(events::describe(p.code[0].condition), std::string("not vehicle skiff"));
 	check_clean(host);
 }

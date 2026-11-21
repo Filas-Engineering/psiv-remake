@@ -38,6 +38,8 @@ Every problem in a map is printed as `MAP.tmj: text`, all of them in one run, an
 | `encounter_mode` | string | `encounter_mode` (`visible`, `random`) |
 | `step_ms` | int | `step_ms` |
 | `music` | string | `music` (an audio id from `game.json`) |
+| `region` | string | `region` (the world or region the area belongs to) |
+| `arrival` | string | `arrival` (a town's marker where a return to it lands) |
 
 A property left out is left out of the area, so the game's default applies. Any other map property is refused.
 
@@ -57,6 +59,7 @@ An object layer. Each object's class (Tiled's Class field, `type` in older versi
 | `shop` | the shop id | `stock` (JSON list), optional `sell_percent` (int), `script_only` (bool) | `shops[]` |
 | `rest` | the rest point id | optional `cost` (int), `script_only` (bool) | `rests[]` |
 | `chest` | the chest id | `flag` (string), optional `items` and `equipment` (JSON objects), `money` (int) | `chests[]` |
+| `port` | the port id | `marker` (string), optional `flag` (string) | `ports[]` |
 | `zone` | the zone id | `table` (JSON list), optional `visible`, `random` (JSON objects) | `zones[]` |
 
 * "JSON" properties are string properties holding JSON text in the area format, for example a shop's stock `["tonic", "clear_gel"]`, a chest's items `{"tonic": 2}` or a zone's table `[{"encounter": "training", "weight": 2}]`. Spawn points inside `visible` are cells, `[[4, 2], [8, 6]]`.

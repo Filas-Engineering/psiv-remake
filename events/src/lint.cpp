@@ -84,7 +84,9 @@ private:
 
 	void read(const Condition& condition, const Instruction& at) {
 		for (const Term& t : condition.terms) {
-			note(t.is_flag ? flag_reads_ : var_reads_, t.name, at);
+			if (t.vehicle == VehicleTest::none) {
+				note(t.is_flag ? flag_reads_ : var_reads_, t.name, at);
+			}
 		}
 	}
 

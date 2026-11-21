@@ -117,7 +117,7 @@ TEST(theRegistryRejectsAWarpOrMoveToAnotherAreasMarker) {
 	const events::CompileResult wrong = events::compile({{"x.ev", "event tidewater_guide unskippable\n\tmove guide to camp_front\n\twarp tidewater west_gate\nend\n"}}, options);
 	CHECK_EQ(wrong.diagnostics.size(), 2u);
 	CHECK(events::format_diagnostic(wrong.diagnostics[0]).find("marker 'camp_front' is not on map 'tidewater'") != std::string::npos);
-	CHECK(events::format_diagnostic(wrong.diagnostics[1]).find("marker 'west_gate' is not on map 'tidewater'; it is on bell_cove, reed_path") != std::string::npos);
+	CHECK(events::format_diagnostic(wrong.diagnostics[1]).find("marker 'west_gate' is not on map 'tidewater'; it is on bell_cove, ember_steps, reed_path, saltgrass") != std::string::npos);
 	const events::CompileResult right = events::compile({{"x.ev", "event x unskippable\n\twarp reed_path west_gate\nend\n"}}, options);
 	CHECK(right.diagnostics.empty());
 }

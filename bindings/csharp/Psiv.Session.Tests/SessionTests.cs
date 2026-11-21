@@ -46,13 +46,13 @@ internal static class Paths
 
 public class PlaythroughTests
 {
-	private static string RunScript(string saves)
+	private static string RunScript(string saves, string script = "playthrough.txt")
 	{
 		using GameSession session = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = saves, Seed = 6 });
 		var output = new StringWriter();
 		output.Write($"{session.GameInfo().Title} (seed 6)\n");
 		var runner = new ScriptRunner(session, output, autoBattle: true);
-		runner.RunScript(File.ReadAllText(Path.Combine(Paths.GameData, "scripts", "playthrough.txt")));
+		runner.RunScript(File.ReadAllText(Path.Combine(Paths.GameData, "scripts", script)));
 		output.Write("End of script.\n");
 		Assert.Equal(0, runner.Errors);
 		return output.ToString();
@@ -63,6 +63,14 @@ public class PlaythroughTests
 	{
 		string transcript = RunScript(Paths.FreshDirectory("playthrough"));
 		string expected = File.ReadAllText(Path.Combine(Paths.Game, "tests", "expected", "playthrough.txt"));
+		Assert.Equal(expected, transcript);
+	}
+
+	[Fact]
+	public void VehicleAndTravelScriptMatchesItsGoldenTranscript()
+	{
+		string transcript = RunScript(Paths.FreshDirectory("travel"), "travel.txt");
+		string expected = File.ReadAllText(Path.Combine(Paths.Game, "tests", "expected", "travel.txt"));
 		Assert.Equal(expected, transcript);
 	}
 
@@ -159,6 +167,8 @@ public class NativeLayoutTests
 		Same<PsivEquipPreview>("psiv_equip_preview");
 		Same<PsivDifficulty>("psiv_difficulty");
 		Same<PsivCamera>("psiv_camera");
+		Same<PsivVehicle>("psiv_vehicle");
+		Same<PsivTravelDestination>("psiv_travel_destination");
 		Assert.Equal(0u, Native.SizeOf("no_such_struct"));
 	}
 
@@ -748,5 +758,75 @@ public class SessionTests
 		Assert.StartsWith("Test Mystic: ", ambient[0].Text);
 		Assert.Equal(Mode.Field, s.Mode);
 		Assert.Equal("ambient", GameSession.NameOf(NameKind.NoticeKind, (int)NoticeKind.Ambient));
+	}
+
+	// The skimmer from the brine flats' mooring, driven over water through a vehicle battle, left on the islet; the ferry
+	// to Cinder Quay, a return to a town of the isles and the way out of the Drowned Kiln, all through the wrapper.
+	[Fact]
+	public void VehiclesAndTravelWorkThroughTheWrapper()
+	{
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = Paths.FreshDirectory("vehicles"), Seed = 6 });
+		Assert.Equal("dungeon_exit", GameSession.NameOf(NameKind.TravelKind, (int)TravelKind.DungeonExit));
+		Assert.Equal("port", GameSession.NameOf(NameKind.MenuKind, (int)MenuKind.Port));
+		var output = new StringWriter();
+		var runner = new ScriptRunner(s, output, autoBattle: true);
+		runner.RunScript("new\nwalk guide_front\nface north\ntalk\nchoose 0\nname Bryn\nwalk 13 4\nwalk 10 4\nwalk 19 4\nwalk 6 0\nwalk 0 10\n" +
+			"walk post_front\nface east\ntalk\nwalk 6 4\nface east\n");
+		Assert.Equal(0, runner.Errors);
+		FieldView field = s.Field()!;
+		Assert.Equal("coast", field.Info.Region);
+		Assert.Equal("", field.Info.Aboard);
+		FieldVehicle skimmer = Assert.Single(field.Vehicles);
+		Assert.Equal(("reed_skimmer", "Reed Skimmer", 7, 4, false), (skimmer.Id, skimmer.Name, skimmer.X, skimmer.Y, skimmer.Aboard));
+		Assert.True(s.Board().Ok);
+		field = s.Field()!;
+		Assert.Equal("reed_skimmer", field.Info.Aboard);
+		Assert.Equal(field.Info.StepMs / 2, field.Info.LeaderStepMs);
+		Assert.True(Assert.Single(field.Vehicles).Aboard);
+		Assert.Equal("game.refuse.aboard", s.Interact().Error!.Key);
+		int vehicleBattles = 0;
+		for (int i = 0; i < 60 && s.FieldInfo()!.LeaderX < 19; ++i)
+		{
+			s.Walk(Direction.East);
+			if (s.Mode == Mode.Battle)
+			{
+				Assert.Equal("reed_skimmer", s.BattleInfo()!.Vehicle);
+				++vehicleBattles;
+				s.PlayBattle();
+			}
+		}
+		Assert.True(vehicleBattles >= 1);
+		Assert.Equal(19, s.FieldInfo()!.LeaderX);
+		Assert.True(s.LeaveVehicle().Ok);
+		Assert.Equal(("", 20), (s.FieldInfo()!.Aboard, s.FieldInfo()!.LeaderX));
+		Assert.Equal("game.refuse.not_aboard", s.LeaveVehicle().Error!.Key);
+		Assert.Equal((19, 4), (s.FieldVehicles()[0].X, s.FieldVehicles()[0].Y));
+
+		runner.RunScript("walk 21 2\nface north\ntalk\nwalk 22 4\nface east\ntalk\nwalk 20 4\nface west\nboard\nw 11\nw 8\nwalk pier_front\nface north\ntalk\n");
+		Assert.Equal(0, runner.Errors);
+		Assert.Equal(MenuKind.Port, s.MenuKind);
+		Assert.Equal(TravelKind.Town, s.Inventory().Single(i => i.Id == "homing_shell").Travel);
+		Assert.Equal(TravelKind.DungeonExit, s.Inventory().Single(i => i.Id == "waymark_chalk").Travel);
+		Assert.Null(s.Inventory().Single(i => i.Id == "tonic").Travel);
+		TravelDestination quay = Assert.Single(s.TravelDestinations(TravelKind.Port));
+		Assert.Equal(("quay_pier", "Cinder Quay", "isles"), (quay.Id, quay.AreaName, quay.Region));
+		Assert.True(s.Travel(TravelKind.Port, "quay_pier").Ok);
+		Assert.Equal("cinder_quay", s.FieldInfo()!.AreaId);
+		Assert.Contains(s.Field()!.Points, p => p.Kind == PointKind.Port && p.Id == "quay_pier" && p.Active);
+		Assert.True(s.OpenMenu().Ok);
+		Assert.Empty(s.TravelDestinations(TravelKind.Town));
+		Assert.Equal("game.refuse.no_town", s.Travel(TravelKind.Town, "saltgrass", null, "homing_shell").Error!.Key);
+		Assert.True(s.CloseMenu().Ok);
+		runner.RunScript("walk 13 4\nmenu\n");
+		TravelDestination town = Assert.Single(s.TravelDestinations(TravelKind.Town));
+		Assert.Equal("cinder_quay", town.Id);
+		Assert.True(s.Travel(TravelKind.Town, "cinder_quay", null, "homing_shell").Ok);
+		runner.RunScript("face south\ntalk\ntravel port saltgrass_pier\nwalk 47 12\nmenu\n");
+		Assert.Equal(0, runner.Errors);
+		Assert.Equal("kiln_upper", s.FieldInfo()!.AreaId);
+		TravelDestination way = Assert.Single(s.TravelDestinations(TravelKind.DungeonExit));
+		Assert.Equal(("saltgrass", 46, 12), (way.Area, way.X, way.Y));
+		Assert.True(s.Travel(TravelKind.DungeonExit, null, null, "waymark_chalk").Ok);
+		Assert.Equal(("saltgrass", 46, 12), (s.FieldInfo()!.AreaId, s.FieldInfo()!.LeaderX, s.FieldInfo()!.LeaderY));
 	}
 }

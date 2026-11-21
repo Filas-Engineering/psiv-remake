@@ -331,6 +331,15 @@ static void status(void) {
 		badd(&list, "%s%s x%d", list.length ? ", " : "", items[i].id, items[i].count);
 	}
 	print("  Money %d. Items: %s.", world.money, list.length ? list.text : "none");
+	const psiv_vehicle* vehicles;
+	int32_t vehicleCount = 0;
+	if (hasArea && field.aboard[0] && psiv_field_vehicles(S, &vehicles, &vehicleCount) == PSIV_OK) {
+		for (int32_t i = 0; i < vehicleCount; ++i) {
+			if (vehicles[i].aboard) {
+				print("  Aboard the %s.", vehicles[i].name);
+			}
+		}
+	}
 }
 
 static void look(void) {
@@ -379,9 +388,18 @@ static void look(void) {
 		case PSIV_POINT_REST:
 			PUT(points[i].x, points[i].y, 'R');
 			break;
+		case PSIV_POINT_PORT:
+			PUT(points[i].x, points[i].y, 'P');
+			break;
 		default:
 			break;
 		}
+	}
+	const psiv_vehicle* vehicles;
+	int32_t vehicleCount = 0;
+	psiv_field_vehicles(S, &vehicles, &vehicleCount);
+	for (int32_t i = 0; i < vehicleCount; ++i) {
+		PUT(vehicles[i].x, vehicles[i].y, 'V');
 	}
 	for (int32_t i = 0; i < enemyCount; ++i) {
 		PUT(enemies[i].x, enemies[i].y, enemies[i].state == PSIV_ENEMY_CHASING ? '!' : 'E');
@@ -539,6 +557,35 @@ static int execute(const char* rawLine) {
 		walkTo(x, y);
 	} else if ((strcmp(cmd, "talk") == 0 || strcmp(cmd, "x") == 0 || strcmp(cmd, "interact") == 0) && wordCount == 1) {
 		report(psiv_interact(S));
+	} else if (strcmp(cmd, "board") == 0 && wordCount == 1) {
+		report(psiv_board(S));
+	} else if (strcmp(cmd, "disembark") == 0 && wordCount == 1) {
+		report(psiv_leave_vehicle(S));
+	} else if (strcmp(cmd, "destinations") == 0 && wordCount == 2) {
+		int32_t kind = 0;
+		const psiv_travel_destination* places;
+		int32_t placeCount = 0;
+		if (psiv_parse_name(PSIV_NAME_TRAVEL_KIND, words[1], &kind) != PSIV_OK) {
+			error("destinations port|town|dungeon_exit");
+		} else if (psiv_travel_destinations(S, kind, &places, &placeCount) == PSIV_OK) {
+			for (int32_t i = 0; i < placeCount; ++i) {
+				print("  %s: %s (%d,%d)", places[i].id, places[i].area_name, places[i].x, places[i].y);
+			}
+		}
+	} else if (strcmp(cmd, "travel") == 0 && wordCount >= 3 && wordCount <= 5) {
+		int32_t kind = 0;
+		const char* usage = "travel port DEST | travel town DEST THING [USER] | travel dungeon_exit THING [USER]";
+		if (psiv_parse_name(PSIV_NAME_TRAVEL_KIND, words[1], &kind) != PSIV_OK) {
+			error(usage);
+		} else if (kind == PSIV_TRAVEL_PORT) {
+			report(psiv_travel(S, kind, words[2], NULL, NULL));
+		} else if (kind == PSIV_TRAVEL_TOWN && wordCount >= 4) {
+			report(psiv_travel(S, kind, words[2], wordCount == 5 ? words[4] : NULL, words[3]));
+		} else if (kind == PSIV_TRAVEL_DUNGEON_EXIT && wordCount <= 4) {
+			report(psiv_travel(S, kind, NULL, wordCount == 4 ? words[3] : NULL, words[2]));
+		} else {
+			error(usage);
+		}
 	} else if (strcmp(cmd, "choose") == 0 && wordCount == 2 && toInt(words[1], &count)) {
 		report(psiv_choose(S, count));
 	} else if (strcmp(cmd, "skip") == 0) {

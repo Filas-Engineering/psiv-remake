@@ -4,6 +4,8 @@
 	"encounter_mode": "visible",
 	"step_ms": 250,
 	"music": "town_canal_market",
+	"region": "coast",
+	"arrival": "south_gate",
 	"map": [
 		"################################################",
 		"#..............................................#",
@@ -15,7 +17,7 @@
 		"#...#........#...#........#....#..........#....#",
 		"#...####.#####...####.#####....#..........#....#",
 		"#..............................#####.######....#",
-		"#..............................................#",
+		"...............................................#",
 		"#..............................................#",
 		"#...................~~..........................",
 		"#...................~~.........................#",
@@ -50,11 +52,14 @@
 		"inn_front": [36, 5],
 		"kilnwright_front": [9, 25],
 		"lamplighter_front": [30, 15],
-		"ferrywoman_front": [24, 20]
+		"ferrywoman_front": [24, 20],
+		"west_gate": [1, 10],
+		"pier_front": [30, 19]
 	},
 	"exits": [
 		{"at": [24, 35], "to": "bell_cove", "marker": "north_stair"},
-		{"at": [47, 12], "to": "kiln_upper", "marker": "west_stair"}
+		{"at": [47, 12], "to": "kiln_upper", "marker": "west_stair"},
+		{"at": [0, 10], "to": "brine_flats", "marker": "east_gate"}
 	],
 	"hooks": [
 		{"id": "kilnwright", "at": [9, 26], "event": "saltgrass_kilnwright"},
@@ -71,5 +76,8 @@
 	"chests": [
 		{"id": "saltgrass_barrel", "at": [45, 33], "flag": "chest.saltgrass_barrel", "items": {"tonic": 2}},
 		{"id": "saltgrass_cellar", "at": [40, 27], "flag": "chest.saltgrass_cellar", "equipment": {"tin_cap": 1}, "money": 40}
+	],
+	"ports": [
+		{"id": "saltgrass_pier", "at": [30, 18], "marker": "pier_front", "flag": "travel.isles_open"}
 	]
 }

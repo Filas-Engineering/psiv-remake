@@ -220,6 +220,8 @@ public sealed class FieldRenderer
 
 	// The people drawn in the last frame, actors and party members, by id: where, whether between cells, facing, pose.
 	public Dictionary<string, DrawnPerson> DrawnActors { get; } = [];
+	// The vehicles the last frame drew, by id: "X Y" of the cell under each, with " aboard" for the one the party rides.
+	public Dictionary<string, string> DrawnVehicles { get; } = [];
 
 	// The cell an actor is drawn at or walking to, if it is on screen in this area.
 	public (int X, int Y)? ActorCell(string id) => _actors.TryGetValue(id, out ActorWalk? w) ? w.Target : null;
@@ -506,7 +508,8 @@ public sealed class FieldRenderer
 		int dt = _lastClock < 0 ? 0 : Math.Max(0, clockMs - _lastClock);
 		_lastClock = clockMs;
 		FieldInfo f = view.Info;
-		int step = Math.Max(1, f.StepMs);
+		int step = Math.Max(1, f.LeaderStepMs);
+		bool aboard = f.Aboard.Length > 0;
 		if (f.AreaId != _area)
 		{
 			_area = f.AreaId;
@@ -542,6 +545,11 @@ public sealed class FieldRenderer
 			_trail.Clear();
 		}
 		_leader.Facing = f.Facing;
+		// The members ride along aboard a vehicle, so they leave the trail and stand with the leader.
+		if (aboard)
+		{
+			_trail.Clear();
+		}
 		for (int i = 0; i < _followers.Length; i++)
 		{
 			Glide g = _followers[i];
@@ -742,7 +750,8 @@ public sealed class FieldRenderer
 		// A person, actor or party member, in its pose if it is playing one: the shadow stays on the ground while a
 		// pose lifts the body. `extra` draws on top, given the body's screen position. `look` stands in for a person
 		// with no id.
-		void Person(string id, float px, float py, Direction facing, int frame, bool walking, float sortBias = 0f, Action<int, int>? extra = null, ActorLook? look = null)
+		void Person(string id, float px, float py, Direction facing, int frame, bool walking, float sortBias = 0f, Action<int, int>? extra = null, ActorLook? look = null,
+			int raise = 0)
 		{
 			int image = look is null ? art.PersonFrame(id, facing, frame) : art.ActorFrame(look, facing, frame);
 			int lift = 0;
@@ -758,7 +767,7 @@ public sealed class FieldRenderer
 			{
 				DrawnActors[id] = new DrawnPerson(px, py, walking, facing, pose, marks.Length > 0);
 			}
-			lift = Px(lift);
+			lift = Px(lift + raise);
 			Put(px, py, (sx, sy) =>
 			{
 				s.Image(art.Shadow, sx, sy + Px(3), tile, tile, Color.White);
@@ -794,6 +803,9 @@ public sealed class FieldRenderer
 			case PointKind.Rest:
 				Put(p.X, p.Y, (sx, sy) => s.Image(tiles.Bed, sx, sy, tile, tile, Color.White));
 				break;
+			case PointKind.Port:
+				Put(p.X, p.Y, (sx, sy) => s.Image(art.Pier, sx, sy, tile, tile, p.Active ? Color.White : Color.Gray));
+				break;
 			case PointKind.Talk:
 				FieldActor? actor = view.Actors.FirstOrDefault(a => a.Id == p.Id);
 				if (actor is null)
@@ -819,6 +831,23 @@ public sealed class FieldRenderer
 		if (record)
 		{
 			DrawnActors.Clear();
+			DrawnVehicles.Clear();
+		}
+		foreach (FieldVehicle v in view.Vehicles)
+		{
+			// The ridden vehicle glides with the leader and is drawn over it, the leader raised to sit in the hull.
+			(float vx, float vy, Direction facing) = v.Aboard ? (_leader.PX, _leader.PY, f.Facing) : (v.X, v.Y, v.Facing);
+			int image = art.VehicleFrame(v.Id, facing, clockMs);
+			Put(vx, vy, (sx, sy) =>
+			{
+				s.Image(art.Shadow, sx, sy + Px(3), tile, tile, Color.White);
+				Rectangle body = art.Stand(image, sx, sy, tile);
+				s.Image(image, body.X, body.Y, body.Width, body.Height, Color.White);
+			}, v.Aboard ? 0.02f : 0f);
+			if (record)
+			{
+				DrawnVehicles[v.Id] = $"{v.X} {v.Y}" + (v.Aboard ? " aboard" : "");
+			}
 		}
 		foreach (FieldActor a in view.Actors)
 		{
@@ -888,7 +917,7 @@ public sealed class FieldRenderer
 		}
 		else
 		{
-			Person(leaderId, _leader.PX, _leader.PY, _leader.Facing, _leader.Frame, _leader.Progress < 1f, look: noLeader);
+			Person(leaderId, _leader.PX, _leader.PY, _leader.Facing, _leader.Frame, _leader.Progress < 1f, look: noLeader, raise: f.Aboard.Length > 0 ? 5 : 0);
 		}
 		if (record)
 		{

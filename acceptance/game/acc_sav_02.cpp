@@ -1,6 +1,8 @@
 #include "support.h"
 
 #include <filesystem>
+#include <initializer_list>
+#include <string>
 
 using namespace game;
 
@@ -41,7 +43,7 @@ ACC_CHECK(acc_sav_02, "ACC-SAV-02", "SAV-020, SAV-021") {
 		t.expect(w.comboLog.entries().size() == 1 && w.comboLog.entries()[0].recipe == "storm_spark", "the schema 1 combo line did not migrate to the combo log");
 		t.expect(migrated.value->midEvent.empty(), "the schema 1 mid-event state, which no build can resume, was kept");
 		const std::string text = serializeSave(*migrated.value);
-		t.expect(text.compare(0, 11, "PSR-SAVE 4\n") == 0, "a migrated save is not written in the current schema");
+		t.expect(text.compare(0, 11, "PSR-SAVE 5\n") == 0, "a migrated save is not written in the current schema");
 		rules::Result<SaveFile> again = parseSave(text);
 		std::string diff;
 		t.expect(again.ok() && serializeSave(*again.value) == text && sameWorld(again.value->world, w, &diff), "a migrated save does not round-trip: " + diff);
@@ -67,49 +69,44 @@ ACC_CHECK(acc_sav_02, "ACC-SAV-02", "SAV-020, SAV-021") {
 	rules::Result<SaveFile> kept = parseSave(written);
 	t.expect(kept.ok() && kept.value->world.unknownChunks.size() == 1 && kept.value->world.unknownChunks[0].version == 4, "the written save does not keep the unknown chunk's type and version");
 
-	// Schema 3: the same save without the talk chunk loads with no party talk heard yet and round-trips.
-	std::string schemaThree = written;
-	schemaThree.replace(0, 10, "PSR-SAVE 3");
-	schemaThree.replace(schemaThree.find("schema 4\n"), 9, "schema 3\n");
-	const std::size_t talk = schemaThree.find("chunk talk 1 ");
-	if (t.expect(talk != std::string::npos, "a written save has no talk chunk")) {
-		schemaThree.erase(talk, schemaThree.find("chunk ", talk + 1) - talk);
-		rules::Result<SaveFile> three = parseSave(support::resign(schemaThree));
-		std::string diff;
-		t.expect(three.ok() && three.value->world.ambientHeard.empty() && serializeSave(*three.value).compare(0, 11, "PSR-SAVE 4\n") == 0,
-			"a schema 3 save does not migrate: " + (three.ok() ? "" : three.error));
-		if (three.ok()) {
-			rules::Result<SaveFile> again = parseSave(serializeSave(*three.value));
-			t.expect(again.ok() && sameWorld(again.value->world, three.value->world, &diff), "a migrated schema 3 save does not round-trip: " + diff);
+	// Each older schema is the same save without the chunks later schemas added; each loads with those parts empty and
+	// round-trips.
+	auto older = [&](int schema, std::initializer_list<const char*> dropped) {
+		std::string text = written;
+		text.replace(0, 10, "PSR-SAVE " + std::to_string(schema));
+		text.replace(text.find("schema 5\n"), 9, "schema " + std::to_string(schema) + "\n");
+		for (const char* type : dropped) {
+			const std::size_t at = text.find(std::string("chunk ") + type + " 1 ");
+			if (!t.expect(at != std::string::npos, std::string("a written save has no ") + type + " chunk")) {
+				return rules::Result<SaveFile>::failure("setup");
+			}
+			const std::size_t next = text.find("chunk ", at + 1);
+			text.erase(at, (next == std::string::npos ? text.rfind("\nend ") + 1 : next) - at);
 		}
-	}
-
-	// Schema 2: the same save without the actors and talk chunks loads with every actor at its talk point and round-trips.
-	std::string schemaTwo = written;
-	schemaTwo.replace(0, 10, "PSR-SAVE 2");
-	schemaTwo.replace(schemaTwo.find("schema 4\n"), 9, "schema 2\n");
-	if (const std::size_t at = schemaTwo.find("chunk talk 1 "); at != std::string::npos) {
-		schemaTwo.erase(at, schemaTwo.find("chunk ", at + 1) - at);
-	}
-	const std::size_t actors = schemaTwo.find("chunk actors 1 ");
-	if (t.expect(actors != std::string::npos, "a written save has no actors chunk")) {
-		schemaTwo.erase(actors, schemaTwo.find("chunk ", actors + 1) - actors);
-		rules::Result<SaveFile> two = parseSave(support::resign(schemaTwo));
-		std::string diff;
-		t.expect(two.ok() && two.value->world.actors.empty() && serializeSave(*two.value).compare(0, 11, "PSR-SAVE 4\n") == 0,
-			"a schema 2 save does not migrate: " + (two.ok() ? "" : two.error));
-		if (two.ok()) {
-			rules::Result<SaveFile> again = parseSave(serializeSave(*two.value));
-			t.expect(again.ok() && sameWorld(again.value->world, two.value->world, &diff), "a migrated schema 2 save does not round-trip: " + diff);
+		rules::Result<SaveFile> migrated = parseSave(support::resign(text));
+		const std::string name = "a schema " + std::to_string(schema) + " save";
+		t.expect(migrated.ok() && serializeSave(*migrated.value).compare(0, 11, "PSR-SAVE 5\n") == 0, name + " does not migrate: " + (migrated.ok() ? "" : migrated.error));
+		if (migrated.ok()) {
+			std::string diff;
+			rules::Result<SaveFile> again = parseSave(serializeSave(*migrated.value));
+			t.expect(again.ok() && sameWorld(again.value->world, migrated.value->world, &diff), name + " does not round-trip after migrating: " + diff);
 		}
-	}
+		return migrated;
+	};
+	rules::Result<SaveFile> four = older(4, {"travel"});
+	t.expect(!four.ok() || (four.value->world.vehicles.empty() && four.value->world.aboard.empty() && four.value->world.dungeonExitArea.empty()),
+		"a schema 4 save does not load on foot with no vehicles and no dungeon exit");
+	rules::Result<SaveFile> three = older(3, {"talk", "travel"});
+	t.expect(!three.ok() || three.value->world.ambientHeard.empty(), "a schema 3 save does not load with no party talk heard yet");
+	rules::Result<SaveFile> two = older(2, {"actors", "talk", "travel"});
+	t.expect(!two.ok() || two.value->world.actors.empty(), "a schema 2 save does not load with every actor at its talk point");
 
 	// Newer saves are refused with a message, by schema and by chunk version.
 	std::string newerSchema = written;
-	newerSchema.replace(0, 10, "PSR-SAVE 5");
+	newerSchema.replace(0, 10, "PSR-SAVE 6");
 	std::string newerChunk = written;
 	newerChunk.replace(newerChunk.find("chunk party 2"), 13, "chunk party 3");
-	for (const auto& [what, text] : {std::make_pair(std::string("schema 5"), newerSchema), std::make_pair(std::string("a party chunk of version 3"), newerChunk)}) {
+	for (const auto& [what, text] : {std::make_pair(std::string("schema 6"), newerSchema), std::make_pair(std::string("a party chunk of version 3"), newerChunk)}) {
 		rules::Result<SaveFile> refused = parseSave(support::resign(text));
 		t.expect(!refused.ok() && refused.error.find("newer build") != std::string::npos, "a save with " + what + " was not refused as from a newer build");
 	}
@@ -118,7 +115,7 @@ ACC_CHECK(acc_sav_02, "ACC-SAV-02", "SAV-020, SAV-021") {
 	session.quitToTitle();
 	const rules::Message refused = session.load("manual_4");
 	t.expect(refused.key == "game.refuse.save_damaged" && session.render(refused).find("newer build") != std::string::npos, "the game does not tell the player that a newer save cannot load");
-	t.note("schema 1 (no build is released yet) migrates (macros and combo log to core's forms, quests and unlocks filled from flags, the unresumable mid-event state dropped), loads in the game and then round-trips; schema 2 gets empty actors and talk chunks and schema 3 an empty talk chunk, each round-tripping; an unknown chunk survives a load and a manual save byte for byte; a newer schema and a newer chunk version are refused with a newer-build message the game shows");
+	t.note("schema 1 (no build is released yet) migrates (macros and combo log to core's forms, quests and unlocks filled from flags, the unresumable mid-event state dropped), loads in the game and then round-trips; schema 2 gets empty actors, talk and travel chunks, schema 3 empty talk and travel chunks and schema 4 an empty travel chunk (no vehicles, on foot), each round-tripping; an unknown chunk survives a load and a manual save byte for byte; a newer schema and a newer chunk version are refused with a newer-build message the game shows");
 	std::error_code ignored;
 	std::filesystem::remove_all(dir, ignored);
 }

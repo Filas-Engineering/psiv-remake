@@ -265,6 +265,9 @@ void Runner::status() {
 		items += (items.empty() ? "" : ", ") + id + " x" + std::to_string(n);
 	}
 	print("  Money " + std::to_string(w.money) + ". Items: " + (items.empty() ? "none" : items) + ".");
+	if (!w.aboard.empty()) {
+		print("  Aboard the " + session_.displayName(w.aboard) + ".");
+	}
 }
 
 void Runner::walkTo(Cell goal) {
@@ -373,6 +376,32 @@ bool Runner::execute(const std::string& rawLine) {
 		walkTo(goal);
 	} else if ((cmd == "talk" || cmd == "x" || cmd == "interact") && w.size() == 1) {
 		report(session_.interact());
+	} else if (cmd == "board" && w.size() == 1) {
+		report(session_.board());
+	} else if (cmd == "disembark" && w.size() == 1) {
+		report(session_.leaveVehicle());
+	} else if (cmd == "destinations" && w.size() == 2) {
+		TravelKind kind = TravelKind::Port;
+		if (!parseTravelKind(w[1], kind)) {
+			error("destinations port|town|dungeon_exit");
+		} else {
+			for (const TravelDestination& d : session_.travelDestinations(kind)) {
+				print("  " + d.id + ": " + session_.displayName(d.area) + " (" + std::to_string(d.cell.x) + "," + std::to_string(d.cell.y) + ")");
+			}
+		}
+	} else if (cmd == "travel" && w.size() >= 3 && w.size() <= 5) {
+		TravelKind kind = TravelKind::Port;
+		if (!parseTravelKind(w[1], kind)) {
+			error("travel port DEST | travel town DEST THING [USER] | travel dungeon_exit THING [USER]");
+		} else if (kind == TravelKind::Port) {
+			report(session_.travel(kind, w[2]));
+		} else if (kind == TravelKind::Town && w.size() >= 4) {
+			report(session_.travel(kind, w[2], w.size() == 5 ? w[4] : "", w[3]));
+		} else if (kind == TravelKind::DungeonExit && w.size() <= 4) {
+			report(session_.travel(kind, "", w.size() == 4 ? w[3] : "", w[2]));
+		} else {
+			error("travel port DEST | travel town DEST THING [USER] | travel dungeon_exit THING [USER]");
+		}
 	} else if (cmd == "choose" && w.size() == 2 && toInt(w[1], count)) {
 		report(session_.choose(count));
 	} else if (cmd == "skip") {
@@ -510,6 +539,8 @@ bool Runner::execute(const std::string& rawLine) {
 			for (const Chest& c : a->chests) put(c.at, session_.world().flag(c.flag) ? 'c' : 'C');
 			for (const Shop& s : a->shops) if (s.at) put(*s.at, '$');
 			for (const RestPoint& r : a->rests) if (r.at) put(*r.at, 'R');
+			for (const Port& p : a->ports) put(p.at, 'P');
+			for (const VehicleView& v : session_.vehiclesHere()) put(v.cell, 'V');
 			for (const VisibleEnemy& e : session_.world().enemies) put(e.position, e.state == EnemyState::Chasing ? '!' : 'E');
 			put(session_.world().position, '@');
 			for (const std::string& r : rows) {

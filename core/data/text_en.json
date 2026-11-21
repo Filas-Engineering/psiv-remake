@@ -10,6 +10,7 @@
 		"command.combo_not_selectable": "{0} only happens as a combination.",
 		"command.enemy_cannot_escape": "{0} cannot escape.",
 		"command.escape_forbidden": "There is no escaping this battle.",
+		"command.field_only": "{0} works only outside battle.",
 		"command.forced_by_status": "{0} cannot be given orders while under {1}.",
 		"command.no_combatant": "Nobody stands at position {0}.",
 		"command.unknown_ability": "{0} does not know {1}.",

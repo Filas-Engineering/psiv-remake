@@ -52,6 +52,7 @@ PLAYTHROUGH_OBJS = $(BUILD)/c/tests/playthrough.o
 TEST_OBJS = $(BUILD)/c/tests/test_api.o
 
 SCRIPT = $(GAME)/data/scripts/playthrough.txt
+TRAVEL_SCRIPT = $(GAME)/data/scripts/travel.txt
 SAMPLE = monogame/Psiv.Sample/Psiv.Sample.csproj
 SAMPLE_SCRIPT = monogame/Psiv.Sample/scripts/smoke.txt
 SAMPLE_LARGE_SCRIPT = monogame/Psiv.Sample/scripts/large_areas.txt
@@ -67,6 +68,7 @@ SAMPLE_PANELS_SCRIPT = monogame/Psiv.Sample/scripts/panels.txt
 SAMPLE_AUDIO_SCRIPT = monogame/Psiv.Sample/scripts/audio.txt
 SAMPLE_WINDOW_SCRIPT = monogame/Psiv.Sample/scripts/window.txt
 SAMPLE_BATTLE_SCRIPT = monogame/Psiv.Sample/scripts/battle.txt
+SAMPLE_VEHICLES_SCRIPT = monogame/Psiv.Sample/scripts/vehicles.txt
 SAMPLE_ASSETS_SCRIPT = monogame/Psiv.Sample/scripts/assets.txt
 SAMPLE_RELOAD_SCRIPT = monogame/Psiv.Sample/scripts/hot_reload.txt
 SAMPLE_SCRIPTS = monogame/Psiv.Sample/scripts
@@ -131,6 +133,13 @@ native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI)
 	cmp $(BUILD)/playthrough_c.txt $(GAME)/tests/expected/playthrough.txt
 	diff -r $(BUILD)/saves_c $(BUILD)/saves_cpp
 	@echo "C playthrough matches the C++ session: transcript and every save file"
+	rm -rf $(BUILD)/travel_saves_cpp $(BUILD)/travel_saves_c
+	$(GAME_CLI) --data $(GAME)/data --seed 6 --auto-battle --script $(TRAVEL_SCRIPT) --saves $(BUILD)/travel_saves_cpp > $(BUILD)/travel_cpp.txt
+	./$(PLAYTHROUGH) --data $(GAME)/data --seed 6 --auto-battle --script $(TRAVEL_SCRIPT) --saves $(BUILD)/travel_saves_c > $(BUILD)/travel_c.txt
+	cmp $(BUILD)/travel_c.txt $(BUILD)/travel_cpp.txt
+	cmp $(BUILD)/travel_c.txt $(GAME)/tests/expected/travel.txt
+	diff -r $(BUILD)/travel_saves_c $(BUILD)/travel_saves_cpp
+	@echo "C vehicle and travel script matches the C++ session: transcript and every save file"
 
 dotnet: $(LIB)
 	$(DOTNET) build csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj -nologo -v q -warnaserror
@@ -194,6 +203,10 @@ dotnet-test: dotnet
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_battle_saves --script $(SAMPLE_BATTLE_SCRIPT) --frames 5200 --frame-digests $(BUILD)/digests_battle.txt > $(BUILD)/sample_battle_headless.txt \
 		|| (cat $(BUILD)/sample_battle_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_battle_headless.txt
+	rm -rf $(BUILD)/sample_vehicles_saves
+	$(SAMPLE_RUN) --saves $(BUILD)/sample_vehicles_saves --script $(SAMPLE_VEHICLES_SCRIPT) --frames 3200 --frame-digests $(BUILD)/digests_vehicles.txt > $(BUILD)/sample_vehicles_headless.txt \
+		|| (cat $(BUILD)/sample_vehicles_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_vehicles_headless.txt
 	rm -rf $(BUILD)/export
 	$(SAMPLE_RUN) --export-placeholders $(BUILD)/export
 	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/export
@@ -201,7 +214,8 @@ dotnet-test: dotnet
 	$(call round_trip,actors,sample_actors_headless,$(SAMPLE_ACTORS_SCRIPT),1300)
 	$(call round_trip,panels,sample_panels_headless,$(SAMPLE_PANELS_SCRIPT),1200)
 	$(call round_trip,battle,sample_battle_headless,$(SAMPLE_BATTLE_SCRIPT),5200)
-	@echo "the exported placeholders draw every frame of the smoke, actors, panels and battle runs as the generated ones do"
+	$(call round_trip,vehicles,sample_vehicles_headless,$(SAMPLE_VEHICLES_SCRIPT),3200)
+	@echo "the exported placeholders draw every frame of the smoke, actors, panels, battle and vehicles runs as the generated ones do"
 	python3 -I $(SAMPLE_SCRIPTS)/make_test_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/broken_assets
 	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/test_assets
 	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/broken_assets > $(BUILD)/check_assets_broken.txt

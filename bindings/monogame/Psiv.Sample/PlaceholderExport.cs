@@ -128,7 +128,7 @@ public static class PlaceholderExport
 		foreach ((string id, bool enemy) in data.Characters.Concat(data.Vehicles).Order(StringComparer.Ordinal).Select(id => (id, false))
 			.Concat(data.Enemies.Order(StringComparer.Ordinal).Select(id => (id, true))))
 		{
-			Figure f = art.BattleFigure(id, enemy);
+			Figure f = !enemy && data.FieldVehicles.Contains(id) ? art.VehicleFigure(id) : art.BattleFigure(id, enemy);
 			figures.Add(new JsonObject
 			{
 				["id"] = id, ["side"] = enemy ? "enemy" : "party", ["image"] = Sheet($"figures/{(enemy ? "enemy" : "party")}_{id}.png", f.Images),
@@ -150,6 +150,25 @@ public static class PlaceholderExport
 		}
 		manifest["field_enemies"] = fieldEnemies;
 
+		var vehicles = new JsonArray();
+		foreach (string id in data.FieldVehicles.Order(StringComparer.Ordinal))
+		{
+			var images = new List<int>();
+			var facings = new JsonObject();
+			foreach (Direction facing in Art.VehicleFacings)
+			{
+				facings[facing.ToString().ToLowerInvariant()] = Ints([images.Count, images.Count + 1]);
+				images.Add(art.GeneratedVehicle(id, facing, 0));
+				images.Add(art.GeneratedVehicle(id, facing, 1));
+			}
+			vehicles.Add(new JsonObject
+			{
+				["id"] = id, ["image"] = Sheet($"vehicles/{id}.png", images), ["frame"] = Ints([Pixels.Size, Pixels.Size]), ["facings"] = facings,
+				["ms"] = Art.VehicleFrameMs,
+			});
+		}
+		manifest["vehicles"] = vehicles;
+
 		manifest["backdrops"] = new JsonArray([.. Enum.GetValues<Theme>().Select(theme =>
 		{
 			string kind = theme.ToString().ToLowerInvariant();
@@ -170,6 +189,7 @@ public static class PlaceholderExport
 		{
 			["shadow"] = Single("sprites/shadow.png", art.Shadow), ["bubble"] = Single("sprites/bubble.png", art.Bubble),
 			["alert"] = Single("sprites/alert.png", art.Alert), ["pointer"] = Single("sprites/pointer.png", art.Pointer),
+			["pier"] = Single("sprites/pier.png", art.Pier),
 		};
 		manifest["status_icons"] = new JsonObject(data.Statuses.Where(s => s != "defeated").Order(StringComparer.Ordinal)
 			.Select(s => KeyValuePair.Create(s, (JsonNode?)Single($"status_icons/{s}.png", art.StatusIcon(s)))));

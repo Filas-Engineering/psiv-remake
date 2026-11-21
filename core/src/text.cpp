@@ -23,6 +23,7 @@ const char* const kFixedKeys[] = {
 	"command.combo_not_selectable",
 	"command.enemy_cannot_escape",
 	"command.escape_forbidden",
+	"command.field_only",
 	"command.forced_by_status",
 	"command.no_combatant",
 	"command.unknown_ability",

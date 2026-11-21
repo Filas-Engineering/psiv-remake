@@ -32,7 +32,7 @@ struct CheckReport {
 CheckReport checkData(const DataDirectories& directories);
 
 // Problems loadGameData does not look for, found on whatever loaded: two things on one cell; a marker, exit,
-// step hook or spawn point on a solid cell; hook ids taken twice in an area, zone ids twice in an area, chest ids
+// step hook or spawn point on a solid cell (interact hooks, shops, rest points, chests and ports are solid); hook ids taken twice in an area, zone ids twice in an area, chest ids
 // twice across areas; zones reversed, off the map or overlapping; shops with nothing in stock; exits, markers,
 // hooks and interactables the party cannot walk to from any way into the area; areas no exit, script warp or
 // start position leads into, or that cannot be reached from the start area. `loaderChecked` says the loader

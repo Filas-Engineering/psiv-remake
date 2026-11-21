@@ -7,8 +7,6 @@ using namespace game;
 
 ACC_CHECK(acc_sav_01, "ACC-SAV-01", "SAV-010, SAV-011") {
 	const GameData& data = support::data(t);
-	const std::string dir = support::tempDirectory("sav01");
-	Session session(data, support::options(dir));
 	int points = 0;
 	int files = 0;
 	int midEvent = 0;
@@ -29,30 +27,38 @@ ACC_CHECK(acc_sav_01, "ACC-SAV-01", "SAV-010, SAV-011") {
 		}
 		midEvent += loaded.value->midEvent.empty() ? 0 : 1;
 	};
-	support::playThrough(t, session, [&](const std::string& line) {
-		if (session.mode() == Mode::Title) {
-			return;
-		}
-		++points;
-		roundTrip(serializeSave(session.makeSave(false)), "after '" + line + "'", &session.world());
-		for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-			if (entry.path().extension() != ".sav" || entry.path().filename() == "clear.sav") {
-				continue;
+	int aboardPoints = 0;
+	for (const char* script : {"playthrough.txt", "travel.txt"}) {
+		const std::string dir = support::tempDirectory(std::string("sav01_") + script);
+		Session session(data, support::options(dir));
+		support::playThrough(t, session, [&](const std::string& line) {
+			if (session.mode() == Mode::Title) {
+				return;
 			}
-			std::string text;
-			readFile(entry.path().string(), text);
-			std::string& seen = checkedFiles[entry.path().filename().string()];
-			if (seen != text) {
-				seen = text;
-				++files;
-				roundTrip(text, entry.path().filename().string() + " written before '" + line + "'", nullptr);
+			aboardPoints += session.world().aboard.empty() ? 0 : 1;
+			++points;
+			roundTrip(serializeSave(session.makeSave(false)), "after '" + line + "'", &session.world());
+			for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+				if (entry.path().extension() != ".sav" || entry.path().filename() == "clear.sav") {
+					continue;
+				}
+				std::string text;
+				readFile(entry.path().string(), text);
+				std::string& seen = checkedFiles[entry.path().filename().string()];
+				if (seen != text) {
+					seen = text;
+					++files;
+					roundTrip(text, entry.path().filename().string() + " written before '" + line + "'", nullptr);
+				}
 			}
-		}
-	});
+		}, script);
+		std::error_code ignored;
+		std::filesystem::remove_all(dir, ignored);
+	}
 	t.expect(points + files >= 50, "only " + std::to_string(points + files) + " save points were taken; the check needs 50");
 	t.expect(midEvent > 0, "the playthrough wrote no autosave with mid-event state, so that chunk was not round-tripped");
-	t.note(std::to_string(points) + " saves taken after each command of game/data/scripts/playthrough.txt and " + std::to_string(files) +
-		" save files the game wrote on the way (" + std::to_string(midEvent) + " with mid-event state) load and save again byte-identically; a new write time changes only the header's write time and the checksum; every SAV-001 field compares equal field by field (sameWorld) to the live world; camera volume and vehicle round-trip empty, since the adventure has no camera volumes and no vehicle in the field (its skimmer fights only in an event battle)");
-	std::error_code ignored;
-	std::filesystem::remove_all(dir, ignored);
+	t.expect(aboardPoints > 0, "the travel script took no save point aboard a vehicle, so the vehicle in use was not round-tripped");
+	t.note(std::to_string(points) + " saves taken after each command of game/data/scripts/playthrough.txt and travel.txt (" + std::to_string(aboardPoints) +
+		" of them aboard the reed skimmer) and " + std::to_string(files) +
+		" save files the game wrote on the way (" + std::to_string(midEvent) + " with mid-event state) load and save again byte-identically; a new write time changes only the header's write time and the checksum; every SAV-001 field compares equal field by field (sameWorld) to the live world, the vehicle in use, the vehicles' positions and the way out of a dungeon included; camera volumes round-trip empty, since the adventure has none");
 }

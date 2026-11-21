@@ -71,6 +71,17 @@ struct ActorPlace {
 	bool visible = true;
 };
 
+// A vehicle the party has (FLD-060). While the party rides it, `area` and `cell` follow the party.
+struct VehiclePlace {
+	std::string area;
+	Cell cell;
+	Facing facing = Facing::South;
+	// Where it was last boarded or put by a script. It goes back there when it would be left where the party cannot
+	// reach it (FLD-063).
+	std::string homeArea;
+	Cell home;
+};
+
 // A save chunk this build does not know, kept and written back unchanged (SAV-020).
 struct UnknownChunk {
 	std::string type;
@@ -105,6 +116,13 @@ struct World {
 	int nextEnemyId = 1;
 	// Actors a script moved, turned, showed or hid, by actor id. The others stand at their talk points.
 	std::map<std::string, ActorPlace> actors;
+	// The vehicles the party has, by vehicle id, and the one it rides (empty for none).
+	std::map<std::string, VehiclePlace> vehicles;
+	std::string aboard;
+	// Where the party stood outside the dungeon it is in, which leaving the dungeon at once returns to (FLD-051); the
+	// area is empty when the party is not in a dungeon or came in by a script's warp from another dungeon.
+	std::string dungeonExitArea;
+	Cell dungeonExitCell;
 	// Time left in the post-battle grace period (ENC-015, ENC-042).
 	int graceMs = 0;
 	// Random mode distance counter and the threshold it is racing (ENC-040).

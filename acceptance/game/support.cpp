@@ -50,9 +50,9 @@ game::SessionOptions options(const std::string& saveDirectory) {
 	return o;
 }
 
-void playThrough(const acc::Context& t, game::Session& session, const std::function<void(const std::string& line)>& after) {
+void playThrough(const acc::Context& t, game::Session& session, const std::function<void(const std::string& line)>& after, const std::string& file) {
 	std::string script;
-	game::readFile(t.path("game/data/scripts/playthrough.txt"), script);
+	game::readFile(t.path("game/data/scripts/" + file), script);
 	std::ostringstream transcript;
 	game::RunnerOptions r;
 	r.autoBattle = true;

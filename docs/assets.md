@@ -12,7 +12,7 @@ dotnet run --project monogame/Psiv.Sample -- --assets my_assets                 
 dotnet run --project monogame/Psiv.Sample -- --assets my_assets --watch-assets  # reloads by itself when a file changes
 ```
 
-The export writes each generated picture into sheets (`tilesets/`, `characters/`, `portraits/`, `figures/`, `field_enemies/`, `backdrops/`, `effects/`, `sprites/`, `status_icons/`, `ui/`), every sound the game can ask for as 16-bit mono WAV at 22050 Hz (`audio/music/`, `audio/ambient/`, `audio/cue/`), the built-in battle presentation table (`battle_presentation.json`) and `assets.json`. It reads every file back and compares it with what it generated, then checks the directory. Run with that directory, the sample draws every frame exactly as it does without one (see [Round trip](#round-trip)); replace one sheet at a time, keeping its layout, or rewrite its entry.
+The export writes each generated picture into sheets (`tilesets/`, `characters/`, `portraits/`, `figures/`, `field_enemies/`, `vehicles/`, `backdrops/`, `effects/`, `sprites/`, `status_icons/`, `ui/`), every sound the game can ask for as 16-bit mono WAV at 22050 Hz (`audio/music/`, `audio/ambient/`, `audio/cue/`), the built-in battle presentation table (`battle_presentation.json`) and `assets.json`. It reads every file back and compares it with what it generated, then checks the directory. Run with that directory, the sample draws every frame exactly as it does without one (see [Round trip](#round-trip)); replace one sheet at a time, keeping its layout, or rewrite its entry.
 
 Without `--assets` the sample uses `assets/` beside the data directory (`game/assets` for the placeholder data) when there is one.
 
@@ -37,6 +37,7 @@ Every field is checked: unknown fields, wrong types, unknown ids and files that 
 	"portraits": {},
 	"figures": [],
 	"field_enemies": [],
+	"vehicles": [],
 	"backdrops": [],
 	"effects": [],
 	"sprites": {},
@@ -100,7 +101,7 @@ By the line's portrait id (`game.json`'s `presentation.portraits`), else by the 
 
 ### figures
 
-Battle figures, by character or vehicle id (`"side": "party"`) or enemy id (`"side": "enemy"`).
+Battle figures, by character or vehicle id (`"side": "party"`) or enemy id (`"side": "enemy"`). In a vehicle battle only the vehicle's figure stands on the field (the members ride inside; their panels stay); without a file a vehicle's figure is its west-facing field frames, bobbing.
 
 ```json
 {"id": "fighter", "side": "party", "image": "figures/party_fighter.png", "frame": [16, 16],
@@ -113,6 +114,17 @@ Battle figures, by character or vehicle id (`"side": "party"`) or enemy id (`"si
 ### field_enemies
 
 Visible enemies in the field, by encounter id: `{"encounter": "training", "image": "field_enemies/training.png", "frames": [0, 1], "ms": 280}` (`ms` a number for every frame or a list).
+
+### vehicles
+
+A vehicle in the field, by the id of one of `game.json`'s `vehicles`: per facing a run of frames, looping at `ms` a frame (default 240).
+
+```json
+{"id": "reed_skimmer", "image": "vehicles/reed_skimmer.png", "frame": [16, 16],
+	"facings": {"north": [0, 1], "east": [2, 3], "south": [4, 5], "west": [6, 7]}, "ms": 240}
+```
+
+Every facing needs at least one frame. The field draws the vehicle where it stands, or under the leader while the party rides it (the leader sits a few pixels up, in the hull), and the battle panel shows its south frame. The generated look is a hull colored from the vehicle's id that bobs a pixel, with spray on the first frame.
 
 ### backdrops
 
@@ -131,11 +143,11 @@ Frame runs drawn over each target of an action, at 3x, centered on its figure: `
 ### sprites and status_icons
 
 ```json
-"sprites": {"shadow": "sprites/shadow.png", "bubble": "sprites/bubble.png", "alert": "sprites/alert.png", "pointer": "sprites/pointer.png"},
+"sprites": {"shadow": "sprites/shadow.png", "bubble": "sprites/bubble.png", "alert": "sprites/alert.png", "pointer": "sprites/pointer.png", "pier": "sprites/pier.png"},
 "status_icons": {"sleep": "status_icons/sleep.png", "poison": "status_icons/poison.png"}
 ```
 
-The shadow under everyone, the speech bubble over talk points, the `!` over chasing enemies and startled people, the pointer over targets and finished dialogue lines; and an icon per status id (from core's `statuses.json`), drawn in the battle's panels and under the enemies, growing in when a status lands and blinking out when it ends.
+The shadow under everyone, the speech bubble over talk points, the `!` over chasing enemies and startled people, the pointer over targets and finished dialogue lines, the pier a port stands on (greyed while the port is closed); and an icon per status id (from core's `statuses.json`), drawn in the battle's panels and under the enemies, growing in when a status lands and blinking out when it ends.
 
 ### ui
 
@@ -197,7 +209,7 @@ F5 in the window (and `--watch-assets`, a moment after files stop changing) load
 
 ## Round trip
 
-The exported directory reproduces the generated look exactly. `make bindings` checks it: the smoke, actors, panels and battle headless runs are played again with the export as `--assets`, and every frame's draws (each picture by a hash of its pixels, rectangles, text, clips) and the whole transcript must be identical to the generated run's. Every exported sound is read back and compared sample for sample with the generated one.
+The exported directory reproduces the generated look exactly. `make bindings` checks it: the smoke, actors, panels, battle and vehicles headless runs are played again with the export as `--assets`, and every frame's draws (each picture by a hash of its pixels, rectangles, text, clips) and the whole transcript must be identical to the generated run's. Every exported sound is read back and compared sample for sample with the generated one.
 
 Two things are not part of it. The UI skin's frame, panel border, cursor and bars are drawn with rectangles, and a window's top band and drop shadow depend on its size, which a nine-slice cannot reproduce at every size; the export writes pictures of them as a starting point with `"enabled": false`. Fonts are system files, so the export names none.
 

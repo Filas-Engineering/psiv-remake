@@ -417,3 +417,36 @@ TEST(loaderRejectsBadThresholdsAndRatings) {
 		expectError(files, "encounter 'warden': field 'awareness' must be between 0 and 255");
 	}
 }
+
+TEST(loaderChecksTravelEffects) {
+	const Result<Database> shipped = loadDatabaseFromTexts(fixtures::dataTexts());
+	CHECK(shipped.ok());
+	if (shipped.ok()) {
+		const Effect* travel = travelEffect(shipped.value->item("homing_shell")->effects);
+		CHECK(travel && travel->travel == TravelTarget::Town);
+		travel = travelEffect(shipped.value->ability("outpath")->effects);
+		CHECK(travel && travel->travel == TravelTarget::DungeonExit);
+		CHECK(!travelEffect(shipped.value->item("tonic")->effects));
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["items.json"], "{\"type\": \"travel\", \"to\": \"town\"}", "{\"type\": \"travel\", \"to\": \"moon\"}");
+		expectError(files, "item 'homing_shell': unknown travel target 'moon'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["items.json"], "{\"id\": \"homing_shell\", \"name\": \"Homing Shell\", \"target\": \"all_allies\", \"field\": true,",
+			"{\"id\": \"homing_shell\", \"name\": \"Homing Shell\", \"target\": \"all_allies\",");
+		expectError(files, "item 'homing_shell': a travel effect must be the only effect");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["abilities.json"], "{\"type\": \"travel\", \"to\": \"dungeon_exit\"}", "{\"type\": \"travel\", \"to\": \"dungeon_exit\"}, {\"type\": \"heal\", \"power\": 5}");
+		expectError(files, "ability 'outpath': a travel effect must be the only effect");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["party.json"], "\"abilities\": [\"hull_vent\", \"hull_patch\"]", "\"abilities\": [\"hull_vent\", \"outpath\"]");
+		expectError(files, "ability 'outpath' has a travel effect, which only party members use");
+	}
+}

@@ -92,6 +92,16 @@ kiln.lower.heart_unknown = 窯穴に丸い石がある。かすかに温かい�
 kiln.lower.heart_glow = 触れると心石が脈打った。燃えさしが一つ浮かび上がり、土の杯に収まる。
 kiln.lower.heart_dark = 心石はもう冷たい。燃えさしは市場へ上っていった。
 
+flats.mooring.note = 葦の滑走艇が杭につながれている。持ち主の字で札がある。「鐘のお礼にどうぞ。浅瀬に気をつけて」
+flats.mooring.given = 滑走艇がなじむように揺れた。そばの岸から乗りこもう。
+flats.mooring.aboard = 空いた杭が船体にこすれてきしむ。
+flats.mooring.recall = 滑走艇を杭まで引きもどす？
+flats.mooring.recalled = ロープをたぐると、滑走艇は杭のところへもどった。
+flats.mooring.left = 滑走艇は置いた場所にそのままだ。
+flats.beacon.cold = 岩の上に冷えた灯台がある。火打ち石を打つと油に火がついた。
+flats.beacon.answer = はるか西で二つ目の灯がこたえた。朝には島へのフェリーが出る。
+flats.beacon.lit = 灯台はしっかり燃えている。島へのフェリーが出ている。
+
 # Text the game shows itself, not a script: speaker names, the quest log, the encyclopedia and party talk.
 choice.yes = はい
 choice.no = いいえ

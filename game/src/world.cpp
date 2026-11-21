@@ -182,6 +182,16 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 		});
 	};
 	if (!sameActors(a.actors, b.actors)) return differs("actors");
+	auto sameVehicles = [](const std::map<std::string, VehiclePlace>& x, const std::map<std::string, VehiclePlace>& y) {
+		return std::equal(x.begin(), x.end(), y.begin(), y.end(), [](const auto& p, const auto& q) {
+			return p.first == q.first && p.second.area == q.second.area && p.second.cell == q.second.cell && p.second.facing == q.second.facing &&
+				p.second.homeArea == q.second.homeArea && p.second.home == q.second.home;
+		});
+	};
+	if (!sameVehicles(a.vehicles, b.vehicles)) return differs("vehicles");
+	if (a.aboard != b.aboard) return differs("aboard");
+	if (a.dungeonExitArea != b.dungeonExitArea) return differs("dungeonExitArea");
+	if (a.dungeonExitCell != b.dungeonExitCell) return differs("dungeonExitCell");
 	if (a.graceMs != b.graceMs) return differs("graceMs");
 	if (a.randomCounter != b.randomCounter) return differs("randomCounter");
 	if (a.randomThreshold != b.randomThreshold) return differs("randomThreshold");

@@ -10,10 +10,16 @@ namespace events {
 
 enum class Compare { eq, ne, lt, le, gt, ge };
 
+// A term that tests a vehicle instead of a flag or variable: `vehicle <id>` (the party has it) or `aboard <id>` (the
+// party rides it).
+enum class VehicleTest { none, owns, aboard };
+
 struct Term {
 	bool negate = false;
 	// A flag test when true, otherwise `name compare value` on a variable.
 	bool is_flag = true;
+	// Set for a vehicle test; `name` is then the vehicle.
+	VehicleTest vehicle = VehicleTest::none;
 	std::string name;
 	Compare compare = Compare::eq;
 	std::int64_t value = 0;
@@ -56,6 +62,9 @@ enum class Op {
 	rest,
 	save_prompt,
 	name_entry,
+	vehicle_give,
+	vehicle_place,
+	vehicle_remove,
 };
 
 const char* op_name(Op op);
@@ -66,6 +75,8 @@ struct Instruction {
 	int source_line = 0;
 	// choice: the variable (choice) or flag (ask) the answer is written to,
 	// if any. shop, rest, name_entry: the shop, rest point or party member.
+	// vehicle_*: the vehicle; vehicle_give and vehicle_place keep the map in
+	// action.subject and the marker in action.target.
 	std::string name;
 	// fork: 1 for a `race`, which ends when its first branch does.
 	std::int64_t number = 0;

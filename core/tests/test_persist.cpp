@@ -97,7 +97,8 @@ TEST(everyPublicEnumHasAParser) {
 	CHECK_EQ(checkNames(parseSide), 2);
 	CHECK_EQ(checkNames(parseTargeting), 8);
 	CHECK_EQ(checkNames(parseAbilityKind), 4);
-	CHECK_EQ(checkNames(parseEffectKind), 7);
+	CHECK_EQ(checkNames(parseEffectKind), 8);
+	CHECK_EQ(checkNames(parseTravelTarget), 2);
 	CHECK_EQ(checkNames(parseEquipSlot), 5);
 	CHECK_EQ(checkNames(parseOpening), 3);
 	CHECK_EQ(checkNames(parseRewardMultiplier), 3);

@@ -76,12 +76,18 @@ public sealed partial class SampleController
 		// Each figure's picture, offset and tint for the step playing, drawn back to front.
 		var bodies = new Dictionary<int, Rectangle>();
 		var order = Enumerable.Range(0, Math.Min(all.Count, shown.Count)).OrderBy(i => Place(i, partyCount, enemyCount).Foot).ToList();
+		string vehicle = info?.Vehicle ?? "";
 		foreach (int i in order)
 		{
 			Combatant c = all[i];
 			ShownCombatant sc = shown[i];
 			bool enemy = c.Side == Side.Enemy;
-			(int x, int foot, int size) = Place(i, partyCount, enemyCount);
+			// In a vehicle battle the members ride inside it: only the vehicle stands on the field, at the party's middle.
+			if (vehicle.Length > 0 && !enemy && c.Id != vehicle)
+			{
+				continue;
+			}
+			(int x, int foot, int size) = vehicle.Length > 0 && c.Id == vehicle ? (1012, 336, 128) : Place(i, partyCount, enemyCount);
 			float alpha = 1f;
 			bool fading = sc.AliveStep is not null && sc.AliveStep == step;
 			if (!sc.Alive)
@@ -141,7 +147,7 @@ public sealed partial class SampleController
 				animation = "defeat";
 				tint = new Color(150, 150, 170);
 			}
-			Figure figure = art.BattleFigure(c.Id, enemy);
+			Figure figure = !enemy && c.Id == vehicle ? art.VehicleFigure(c.Id) : art.BattleFigure(c.Id, enemy);
 			FrameRun run = figure.Animations.GetValueOrDefault(animation) ?? figure.Idle;
 			bool idle = run == figure.Idle;
 			int image = figure.Images[run.FrameAt(idle ? _clockMs + i * 137 : _timeline.ElapsedMs, loop: idle)];
@@ -265,7 +271,8 @@ public sealed partial class SampleController
 			{
 				Style.Frame(s, cx, cy, cw, ch, targeted ? Style.Accent * (0.4f + 0.6f * pulse) : Style.Accent);
 			}
-			s.Image(art.Portrait("", c.Id), cx + 8, cy + 8, 64, 64, sc.Alive ? Color.White : new Color(80, 80, 92));
+			int portrait = c.Id == (info?.Vehicle ?? "") ? art.VehicleFrame(c.Id, Direction.South, 0) : art.Portrait("", c.Id);
+			s.Image(portrait, cx + 8, cy + 8, 64, 64, sc.Alive ? Color.White : new Color(80, 80, 92));
 			s.Text(Style.Fit(s, c.Name, cw - 90), cx + 80, cy + 12, !sc.Alive ? Style.Dim : acting ? Style.Accent : Style.Text);
 			string state = !sc.Alive ? "Fallen" : ((c.Defending ? "Defending " : "") + string.Join(" ", sc.Statuses.Select(_s.DisplayName))).Trim();
 			DrawIcons(s, art, sc, step, p, cx + 80, cy + 38);

@@ -21,6 +21,12 @@
 		]},
 		{"id": "jolt_pod", "name": "Jolt Pod", "target": "random_enemy", "effects": [
 			{"type": "elemental_damage", "power": 34, "element": "shock"}
+		]},
+		{"id": "homing_shell", "name": "Homing Shell", "target": "all_allies", "field": true, "effects": [
+			{"type": "travel", "to": "town"}
+		]},
+		{"id": "waymark_chalk", "name": "Waymark Chalk", "target": "all_allies", "field": true, "effects": [
+			{"type": "travel", "to": "dungeon_exit"}
 		]}
 	]
 }

@@ -328,6 +328,39 @@ public sealed unsafe class GameSession : IDisposable
 	}
 	public PsivResult Interact() => Result(Native.Interact(_handle));
 	public PsivResult PartyTalk() => Result(Native.PartyTalk(_handle));
+	// Boards the party's vehicle in the faced cell (Interact does the same); LeaveVehicle steps off onto dry ground.
+	public PsivResult Board() => Result(Native.Board(_handle));
+	public PsivResult LeaveVehicle() => Result(Native.LeaveVehicle(_handle));
+
+	public IReadOnlyList<FieldVehicle> FieldVehicles()
+	{
+		if (!Read(Native.FieldVehicles(_handle, out IntPtr p, out int count)))
+		{
+			return [];
+		}
+		var list = new List<FieldVehicle>(count);
+		foreach (PsivVehicle v in Native.Span<PsivVehicle>(p, count))
+		{
+			list.Add(new FieldVehicle(Native.Str(v.Id), Native.Str(v.Name), v.X, v.Y, (Direction)v.Facing, v.Aboard != 0));
+		}
+		return list;
+	}
+
+	public IReadOnlyList<TravelDestination> TravelDestinations(TravelKind kind)
+	{
+		Must(Native.TravelDestinations(_handle, (int)kind, out IntPtr p, out int count));
+		var list = new List<TravelDestination>(count);
+		foreach (PsivTravelDestination d in Native.Span<PsivTravelDestination>(p, count))
+		{
+			list.Add(new TravelDestination(Native.Str(d.Id), Native.Str(d.Area), Native.Str(d.AreaName), Native.Str(d.Region), d.X, d.Y));
+		}
+		return list;
+	}
+
+	// Port: from a port's menu. Town and DungeonExit: from the field menu through `thing`, an item (user null) or a technique
+	// `user` knows; DungeonExit takes a null destination.
+	public PsivResult Travel(TravelKind kind, string? destination, string? user = null, string? thing = null) =>
+		Result(Native.Travel(_handle, (int)kind, destination, user, thing));
 
 	public FieldInfo? FieldInfo()
 	{
@@ -336,7 +369,7 @@ public sealed unsafe class GameSession : IDisposable
 			return null;
 		}
 		return new FieldInfo(Native.Str(f.AreaId), Native.Str(f.AreaName), (AreaKind)f.AreaKind, (EncounterMode)f.EncounterMode, f.Width, f.Height, f.StepMs,
-			f.LeaderX, f.LeaderY, (Direction)f.Facing, f.PlayerControl != 0, f.GraceMs, Native.Str(f.Music));
+			f.LeaderX, f.LeaderY, (Direction)f.Facing, f.PlayerControl != 0, f.GraceMs, Native.Str(f.Music), Native.Str(f.Region), Native.Str(f.Aboard), f.LeaderStepMs);
 	}
 
 	public IReadOnlyList<string> FieldRows()
@@ -386,7 +419,7 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			actors.Add(new FieldActor(Native.Str(a.Id), Native.Str(a.Name), a.X, a.Y, (Direction)a.Facing, a.Visible != 0, a.Scripted != 0));
 		}
-		return new FieldView(info, grid, enemies, markers, exits, points, actors);
+		return new FieldView(info, grid, enemies, markers, exits, points, actors, FieldVehicles());
 	}
 
 	// Every actor id in game.json order, wherever the actor stands. A script subject that is one of these but not in
@@ -508,7 +541,7 @@ public sealed unsafe class GameSession : IDisposable
 			return null;
 		}
 		return new BattleInfo(b.Live != 0, Native.Str(b.Encounter), (BattleSource)b.Source, b.Round, b.PartyCount, b.CombatantCount, (Outcome)b.Outcome,
-			b.EscapeAllowed != 0, b.AutoActive != 0, b.PartyActsNextRound != 0, b.GameOver != 0, Native.Str(b.Music));
+			b.EscapeAllowed != 0, b.AutoActive != 0, b.PartyActsNextRound != 0, b.GameOver != 0, Native.Str(b.Music), Native.Str(b.Vehicle));
 	}
 
 	public IReadOnlyList<Combatant> Combatants()
@@ -695,7 +728,8 @@ public sealed unsafe class GameSession : IDisposable
 		var list = new List<AbilityInfo>(count);
 		foreach (PsivAbilityInfo a in Native.Span<PsivAbilityInfo>(p, count))
 		{
-			list.Add(new AbilityInfo(Native.Str(a.Id), Native.Str(a.Name), (AbilityKind)a.Kind, (Targeting)a.Targeting, a.Cost, a.Field != 0, a.Uses, a.MaxUses));
+			list.Add(new AbilityInfo(Native.Str(a.Id), Native.Str(a.Name), (AbilityKind)a.Kind, (Targeting)a.Targeting, a.Cost, a.Field != 0, a.Uses, a.MaxUses,
+				a.Travel < 0 ? null : (TravelKind)a.Travel));
 		}
 		return list;
 	}
@@ -772,7 +806,7 @@ public sealed unsafe class GameSession : IDisposable
 	}
 
 	private static InventoryEntry ToEntry(in PsivInventoryEntry e) =>
-		new(Native.Str(e.Id), Native.Str(e.Name), e.Count, e.Equipment != 0, e.Field != 0, e.TargetingOrSlot, e.Price);
+		new(Native.Str(e.Id), Native.Str(e.Name), e.Count, e.Equipment != 0, e.Field != 0, e.TargetingOrSlot, e.Price, e.Travel < 0 ? null : (TravelKind)e.Travel);
 
 	// Items in id order, then unworn pieces in id order; another ItemSort lists them as one sorted list.
 	public IReadOnlyList<InventoryEntry> Inventory(ItemSort order = ItemSort.Id)

@@ -11,13 +11,15 @@
 	"tilewidth": 16,
 	"tileheight": 16,
 	"nextlayerid": 3,
-	"nextobjectid": 19,
+	"nextobjectid": 23,
 	"properties": [
 		{"name":"id","type":"string","value":"saltgrass"},
 		{"name":"kind","type":"string","value":"town"},
 		{"name":"encounter_mode","type":"string","value":"visible"},
 		{"name":"step_ms","type":"int","value":250},
-		{"name":"music","type":"string","value":"town_canal_market"}
+		{"name":"music","type":"string","value":"town_canal_market"},
+		{"name":"region","type":"string","value":"coast"},
+		{"name":"arrival","type":"string","value":"south_gate"}
 	],
 	"tilesets": [
 		{"firstgid":1,"source":"cells.tsj"}
@@ -44,7 +46,7 @@
 				2,1,1,1,2,1,1,1,1,1,1,1,1,2,1,1,1,2,1,1,1,1,1,1,1,1,2,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,2,
 				2,1,1,1,2,2,2,2,1,2,2,2,2,2,1,1,1,2,2,2,2,1,2,2,2,2,2,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,2,
 				2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,1,2,2,2,2,2,2,1,1,1,1,2,
-				2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,
+				1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,
 				2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,
 				2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
 				2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,
@@ -90,8 +92,11 @@
 				{"id":6,"name":"kilnwright_front","type":"marker","point":true,"x":152,"y":408,"width":0,"height":0,"rotation":0,"visible":true},
 				{"id":7,"name":"lamplighter_front","type":"marker","point":true,"x":488,"y":248,"width":0,"height":0,"rotation":0,"visible":true},
 				{"id":8,"name":"ferrywoman_front","type":"marker","point":true,"x":392,"y":328,"width":0,"height":0,"rotation":0,"visible":true},
+				{"id":19,"name":"west_gate","type":"marker","point":true,"x":24,"y":168,"width":0,"height":0,"rotation":0,"visible":true},
+				{"id":20,"name":"pier_front","type":"marker","point":true,"x":488,"y":312,"width":0,"height":0,"rotation":0,"visible":true},
 				{"id":9,"name":"","type":"exit","point":true,"x":392,"y":568,"width":0,"height":0,"rotation":0,"visible":true,"properties":[{"name":"to","type":"string","value":"bell_cove"},{"name":"marker","type":"string","value":"north_stair"}]},
 				{"id":10,"name":"","type":"exit","point":true,"x":760,"y":200,"width":0,"height":0,"rotation":0,"visible":true,"properties":[{"name":"to","type":"string","value":"kiln_upper"},{"name":"marker","type":"string","value":"west_stair"}]},
+				{"id":21,"name":"","type":"exit","point":true,"x":8,"y":168,"width":0,"height":0,"rotation":0,"visible":true,"properties":[{"name":"to","type":"string","value":"brine_flats"},{"name":"marker","type":"string","value":"east_gate"}]},
 				{"id":11,"name":"kilnwright","type":"hook","point":true,"x":152,"y":424,"width":0,"height":0,"rotation":0,"visible":true,"properties":[{"name":"event","type":"string","value":"saltgrass_kilnwright"}]},
 				{"id":12,"name":"lamplighter","type":"hook","point":true,"x":488,"y":232,"width":0,"height":0,"rotation":0,"visible":true,"properties":[{"name":"event","type":"string","value":"saltgrass_lamplighter"}]},
 				{"id":13,"name":"ferrywoman","type":"hook","point":true,"x":392,"y":344,"width":0,"height":0,"rotation":0,"visible":true,"properties":[{"name":"event","type":"string","value":"saltgrass_ferrywoman"}]},
@@ -99,7 +104,8 @@
 				{"id":15,"name":"saltgrass_smithy","type":"shop","point":true,"x":344,"y":72,"width":0,"height":0,"rotation":0,"visible":true,"properties":[{"name":"stock","type":"string","value":"[\"tin_cap\", \"padded_coat\", \"grip_bands\", \"calm_charm\", \"drift_feather\"]"},{"name":"sell_percent","type":"int","value":40}]},
 				{"id":16,"name":"saltgrass_inn","type":"rest","point":true,"x":584,"y":72,"width":0,"height":0,"rotation":0,"visible":true,"properties":[{"name":"cost","type":"int","value":12}]},
 				{"id":17,"name":"saltgrass_barrel","type":"chest","point":true,"x":728,"y":536,"width":0,"height":0,"rotation":0,"visible":true,"properties":[{"name":"flag","type":"string","value":"chest.saltgrass_barrel"},{"name":"items","type":"string","value":"{\"tonic\": 2}"}]},
-				{"id":18,"name":"saltgrass_cellar","type":"chest","point":true,"x":648,"y":440,"width":0,"height":0,"rotation":0,"visible":true,"properties":[{"name":"flag","type":"string","value":"chest.saltgrass_cellar"},{"name":"equipment","type":"string","value":"{\"tin_cap\": 1}"},{"name":"money","type":"int","value":40}]}
+				{"id":18,"name":"saltgrass_cellar","type":"chest","point":true,"x":648,"y":440,"width":0,"height":0,"rotation":0,"visible":true,"properties":[{"name":"flag","type":"string","value":"chest.saltgrass_cellar"},{"name":"equipment","type":"string","value":"{\"tin_cap\": 1}"},{"name":"money","type":"int","value":40}]},
+				{"id":22,"name":"saltgrass_pier","type":"port","point":true,"x":488,"y":296,"width":0,"height":0,"rotation":0,"visible":true,"properties":[{"name":"marker","type":"string","value":"pier_front"},{"name":"flag","type":"string","value":"travel.isles_open"}]}
 			]
 		}
 	]

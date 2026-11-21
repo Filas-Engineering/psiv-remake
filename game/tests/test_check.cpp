@@ -248,3 +248,38 @@ TEST(anInteractHookMayStandOnAWallTheFloorBesideItReaches) {
 	const rules::Problem* cut = find(r, "check.object_not_reached");
 	CHECK(cut && cut->message.params[0] == "hook 'lookout'");
 }
+
+TEST(vehiclesPortsAndArrivalsAreChecked) {
+	// The islet of the brine flats is reached only across water, which the skimmer crosses, so nothing there is reported.
+	CHECK(checkData(DataDirectories{"data", ""}).ok());
+
+	std::string dir = copyData("vehicles", {});
+	replaceIn(dir + "/events/flats.ev", "vehicle give reed_skimmer brine_flats mooring", "vehicle give reed_skimmer saltgrass west_gate");
+	replaceIn(dir + "/events/flats.ev", "vehicle place reed_skimmer brine_flats mooring", "vehicle place reed_skimmer brine_flats islet_shore");
+	replaceIn(dir + "/game.json", "\"crosses\": [\"floor\", \"water\"]", "\"crosses\": [\"floor\", \"lava\"]");
+	CheckReport r = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(find(r, "data.unknown_terrain"));
+
+	dir = copyData("vehicles_outdoors", {});
+	replaceIn(dir + "/events/flats.ev", "vehicle give reed_skimmer brine_flats mooring", "vehicle give reed_skimmer saltgrass west_gate");
+	r = checkData(DataDirectories{dir, "../core/data"});
+	const rules::Problem* indoors = find(r, "data.vehicle_not_outdoors");
+	CHECK(indoors && indoors->message.params[1] == "saltgrass" && ends(indoors->file, "flats.ev"));
+
+	// Without a vehicle that crosses water, the islet's crate and beacon cannot be reached.
+	dir = copyData("vehicles_water", {});
+	replaceIn(dir + "/game.json", "\"crosses\": [\"floor\", \"water\"]", "\"crosses\": [\"floor\"]");
+	r = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(std::any_of(r.problems.begin(), r.problems.end(),
+		[](const rules::Problem& p) { return p.message.key == "check.object_not_reached" && p.message.params[0] == "chest 'flats_crate'"; }));
+
+	// A port's marker and a town's arrival marker must exist, and only towns have one.
+	dir = copyData("ports", {});
+	replaceIn(dir + "/areas/cinder_quay.json", "\"marker\": \"pier_front\", \"flag\"", "\"marker\": \"nowhere\", \"flag\"");
+	r = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(find(r, "data.port_marker_missing"));
+	dir = copyData("arrival", {});
+	replaceIn(dir + "/areas/ember_steps.json", "\"region\": \"isles\",", "\"region\": \"isles\",\n\t\"arrival\": \"west_gate\",");
+	r = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(find(r, "data.arrival_not_town"));
+}

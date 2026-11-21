@@ -296,3 +296,12 @@ TEST(hardSeededBattleHasAFixedOutcome) {
 	CHECK(!battle.gameOver());
 	CHECK(log.isDiscovered("storm_spark"));
 }
+
+TEST(travelItemsAndTechniquesAreRefusedInBattle) {
+	BattleSetup setup = makeSetup(data(), {"gel_mite"}, 3);
+	setup.inventory["homing_shell"] = 1;
+	setup.party[kMystic] = makePartyMember(data(), data().characters.at("mystic"), 9);
+	Battle battle = makeBattle(data(), setup);
+	CHECK_EQ(battle.setCommand(kFighter, Command::item("homing_shell", -1)).key, std::string("command.field_only"));
+	CHECK_EQ(battle.setCommand(kMystic, Command::ability("homeward", -1)).key, std::string("command.field_only"));
+}

@@ -1,0 +1,194 @@
+# Vehicles and travel: through the reeds and Bell Cove to Saltgrass Market and west to the brine flats; the reed
+# skimmer given at its mooring and boarded with Confirm; the water crossed by click-walk aboard, which no walk on foot
+# can, with a vehicle battle on the way played through the battle presentation; Confirm aboard stepping off onto the
+# islet; the crate and the beacon behind the water; saves aboard and on foot, each loaded again; the skimmer left
+# outside the market; the ferry's destination screen to Cinder Quay; a Homing Shell from the Items page back to the
+# quay from Ember Steps; and a Waymark Chalk out of the Drowned Kiln.
+# With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+cmd walk 13 4
+cmd walk 19 4
+pressuntil Enter Field 4000
+cmd walk 19 4
+pressuntil Enter Field 400
+cmd walk 6 0
+wait 30
+cmd walk 0 10
+wait 40
+expect screen Field
+expect state area Brine Flats
+expect state vehicles none
+
+# The mooring post gives the skimmer.
+cmd walk post_front
+press Right
+wait 3
+press Enter
+pressuntil Enter Field 200
+expect state vehicles reed_skimmer 7 4
+shot build/shots/vehicle_moored.png
+
+# On foot the water stops the leader; facing the skimmer, Confirm boards it.
+cmd walk 6 4
+press Right
+wait 3
+press Enter
+wait 4
+expect state aboard reed_skimmer
+expect state vehicles reed_skimmer 7 4 aboard
+shot build/shots/vehicle_aboard.png
+
+# Across the water by click-walk; the first battle on the way is a vehicle battle.
+clickcell 19 4
+waitstate 600 walk -
+expect mode Battle
+waitstate 1200 battlephase Command
+expect statehas shown Reed Skimmer
+shot build/shots/vehicle_battle.png
+pressuntil Enter Field 4000
+expect state aboard reed_skimmer
+clickcell 19 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+clickcell 19 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+clickcell 19 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+expect state vehicles reed_skimmer 19 4 aboard
+wait 20
+shot build/shots/vehicle_crossed.png
+
+# Confirm aboard steps off onto the faced cell; the skimmer stays at the shore.
+press Enter
+wait 20
+expect state aboard -
+expect state vehicles reed_skimmer 19 4
+cmd walk 21 2
+press Up
+wait 3
+press Enter
+wait 4
+cmd walk 22 4
+press Right
+wait 3
+press Enter
+pressuntil Enter Field 200
+shot build/shots/vehicle_islet.png
+cmd menu
+cmd save manual_1
+cmd close
+
+# Aboard again and saved there; both saves load back as they were.
+cmd walk 20 4
+press Left
+wait 3
+press Enter
+wait 4
+expect state aboard reed_skimmer
+cmd menu
+cmd save manual_0
+cmd close
+cmd title
+cmd load manual_1
+wait 10
+expect state aboard -
+expect state vehicles reed_skimmer 19 4
+cmd title
+cmd load manual_0
+wait 10
+expect state aboard reed_skimmer
+expect state vehicles reed_skimmer 19 4 aboard
+
+# Back west and through the exit: the skimmer waits outside the market.
+clickcell 1 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+clickcell 1 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+clickcell 1 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+clickcell 1 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+hold Left 12
+wait 40
+expect state area Saltgrass Market
+expect state aboard -
+expect state vehicles none
+expect toast The Reed Skimmer waits outside.
+
+# The ferry's destination screen.
+cmd walk pier_front
+press Up
+wait 3
+press Enter
+wait 4
+expect screen Travel
+expect state destinations cinder_quay
+expect state selected Cinder Quay   (isles)
+shot build/shots/travel_ferry.png
+press Enter
+wait 40
+expect screen Field
+expect state area Cinder Quay
+
+# A Homing Shell from the Items page, at Ember Steps: the quay is the one town of the isles visited.
+cmd walk 13 4
+wait 40
+expect state area Ember Steps
+press M
+press Right
+expect state tab Items
+expect state selected Homing Shell x2
+press Enter
+wait 4
+expect screen Travel
+expect state destinations cinder_quay
+shot build/shots/travel_return.png
+press Enter
+wait 40
+expect screen Field
+expect state area Cinder Quay
+
+# The ferry back, into the kiln and out with a Waymark Chalk.
+cmd walk pier_front
+press Down
+wait 3
+press Enter
+wait 4
+expect screen Travel
+expect state destinations saltgrass
+press Enter
+wait 40
+expect state area Saltgrass Market
+cmd walk 47 12
+pressuntil Enter Field 400
+wait 40
+expect state area Drowned Kiln, Upper Gallery
+press M
+press Right
+expect state tab Items
+press Up
+expect state selected Waymark Chalk x2
+press Enter
+wait 4
+expect screen Travel
+expect state destinations saltgrass
+shot build/shots/travel_dungeon_exit.png
+press Enter
+wait 40
+expect screen Field
+expect state area Saltgrass Market

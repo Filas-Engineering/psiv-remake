@@ -28,7 +28,7 @@ public sealed partial class SampleController
 			Report(started);
 			_clickWalk = started.Ok ? (x, y) : null;
 			// The first step goes at once.
-			_clickWalkMs = field.StepMs;
+			_clickWalkMs = field.LeaderStepMs;
 		}
 		if (_clickWalk is null)
 		{
@@ -39,7 +39,7 @@ public sealed partial class SampleController
 			_clickWalk = null;
 			return false;
 		}
-		int stepMs = _s.FieldInfo()?.StepMs ?? 250;
+		int stepMs = _s.FieldInfo()?.LeaderStepMs ?? 250;
 		while (_clickWalk is not null && _clickWalkMs >= stepMs)
 		{
 			_clickWalkMs -= stepMs;
@@ -74,7 +74,8 @@ public sealed partial class SampleController
 		}
 		if (input.Confirm)
 		{
-			Report(_s.Interact());
+			// Aboard, Confirm steps off; on foot it talks, opens, boards the vehicle ahead or opens a port.
+			Report(_s.FieldInfo() is { Aboard.Length: > 0 } ? _s.LeaveVehicle() : _s.Interact());
 		}
 		else if (input.Pressed(GameAction.Menu))
 		{
