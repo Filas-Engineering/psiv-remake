@@ -93,8 +93,29 @@ public sealed partial class SampleController
 			DifficultyRow(settings),
 			new(T("ui.options.reward"), RewardName(settings.RewardMultiplier), T("ui.options.reward_help"),
 				_s.Difficulties().CanChange ? by => _s.SetSettings(settings.Difficulty, Step(settings.RewardMultiplier, by)) : null),
+			.. RealtimeFieldRows(),
 			new(ControlsRow, "", T("ui.options.controls_help"), null),
 		];
+	}
+
+	// Only while the real-time field input is on, since nothing else reads them.
+	private IEnumerable<OptionRow> RealtimeFieldRows()
+	{
+		if (!_realtimeField)
+		{
+			yield break;
+		}
+		yield return new(FieldText("ui.options.always_run"), OnOffText(_bindings.AlwaysRun), FieldText("ui.options.always_run_help"),
+			_ => { _bindings.AlwaysRun = !_bindings.AlwaysRun; return SaveFieldOptions(); });
+		yield return new(FieldText("ui.options.interact_prompt"), OnOffText(_bindings.InteractPrompt), FieldText("ui.options.interact_prompt_help"),
+			_ => { _bindings.InteractPrompt = !_bindings.InteractPrompt; return SaveFieldOptions(); });
+	}
+
+	// The two options live in controls.json beside the bindings, saved at once like the profile's settings.
+	private PsivResult SaveFieldOptions()
+	{
+		SaveControls();
+		return PsivResult.Success;
 	}
 
 	private void UpdateOptions(ActionInput input)
@@ -127,7 +148,7 @@ public sealed partial class SampleController
 
 	private void UpdateControlsPage(ActionInput input)
 	{
-		GameAction[] actions = Enum.GetValues<GameAction>();
+		GameAction[] actions = ControlActions();
 		if (_optAction is { } action)
 		{
 			_optList.Move(input, 2);
@@ -174,8 +195,8 @@ public sealed partial class SampleController
 	{
 		UiContext data = UiData()
 			.Set("title_mode", _s.Mode == Mode.Title)
-			.Set("scene", (UiSlot)((_, _, _, _) => DrawTitleScene(t, art)))
-			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+			.Set("scene", (UiSlot)((x, y, w, h) => DrawTitleScene(t, art, x, y, w, h)))
+			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "options")))
 			.Set("title", T(_controlsPage ? "ui.options.controls" : "ui.options.title"))
 			.Set("on_controls", _controlsPage)
 			.Set("controls", (UiSlot)((x, y, w, h) => DrawControlsPage(s, t, x, y, w, h)))
@@ -200,7 +221,7 @@ public sealed partial class SampleController
 
 	private void DrawControlsPage(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{
-		GameAction[] actions = Enum.GetValues<GameAction>();
+		GameAction[] actions = ControlActions();
 		string resetRow = T("ui.options.reset");
 		UiContext data = UiArea(x, y, w, h);
 		Ui.Draw("controls", s, t, data

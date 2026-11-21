@@ -1,0 +1,21 @@
+# The interaction prompt in the example layout set (scripts/make_layout_assets.py, 640x480), whose field layout places
+# it as a card beside the target from the `prompt_x` and `prompt_y` fields, and whose styles run at 250%. With
+# --window the shot lines save screenshots under build/shots/field/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+fieldinput realtime
+cmd walk 7 2
+cmd face west
+wait 2
+expect state interactprompt shop at 8 2
+expect statehas window.prompt field/prompt
+expect state overlaps none
+shot build/shots/field/prompt_layout_set.png
+cmd walk 2 5
+wait 2
+hold LeftShift+Right 2
+expect state walkstep east 3 5 32/100 250%
+wait 20

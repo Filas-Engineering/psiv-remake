@@ -1,0 +1,134 @@
+# Run with --dev and --assets on a copy of build/test_assets (make_test_assets.py), since the run swaps files there: the
+# battle's own window frame, extra poses and the party slots' status looks. The tide chart's scene: the fighter bows by
+# its sheet's pose of that name alone, and the medic's sheet has no shrug, so it stands still and the transcript says so
+# once. The scene's battle in the front layout: the fighter's Focus Shot plays the flourish pose of its back figure, a
+# gel mite's attack its wobble, and the battle's windows take the rust brown battle frame while the dialogue keeps the menu
+# frame. With the battle layouts swapped for ones with a statuses table: the side layout, where the fighter's side
+# figure has no flourish (a transcript line, and its attack plays) and the hound's venom tints its name green; then the
+# marsh in the front layout, where sleep tints the medic's name blue and shows no icon while the poisoned fighter's
+# stays green. Last, the battle frame replaced by the menu's on the fly. With --window, the shot lines save screenshots
+# under build/shots/assets_battle/ (run from bindings/); headless runs write nothing.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+expect asset ui:frame file
+expect asset ui:battle_frame file
+expect asset character:medic file
+expect state assetfile.ui:battle_frame ui/battle_frame.png e99fdb49
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+
+# The tide chart, as in actors.txt.
+cmd walk 7 4
+hold Down 60
+press Enter
+wait 2
+expect screen Dialogue
+shot build/shots/assets_battle/chart_dialogue.png
+press Enter
+wait 102
+press Enter
+wait 120
+press Enter
+wait 50
+press Enter
+wait 34
+expect pose fighter bow
+expect state sheetpose.fighter bow
+shot build/shots/assets_battle/chart_bow.png
+wait 60
+expect pose mystic jump
+expect state sheetpose.mystic -
+wait 30
+expect pose medic other
+expect state sheetpose.medic -
+shot build/shots/assets_battle/chart_no_shrug.png
+wait 40
+expect screen Dialogue
+press Enter
+wait 2
+expect screen Battle
+
+# The scene's battle: Focus Shot, an attack, Defend.
+waitstate 300 battlephase Command
+expect state figureposes none
+shot build/shots/assets_battle/front_frame.png
+press Down 2
+press Enter
+expect statehas battlemenu Focus Shot
+press Enter
+press Enter
+press Enter
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 step animate Test Fighter attack
+wait 4
+expect state figureposes Test Fighter flourish
+shot build/shots/assets_battle/front_flourish.png
+waitstatehas 900 step animate Gel Mite B attack
+wait 4
+expect state figureposes Gel Mite B wobble
+shot build/shots/assets_battle/front_wobble.png
+waitstate 900 battlephase Ended
+expect statehas battlesync all match
+press Enter
+pressuntil Enter Field 600
+
+# The status looks, and a battle in the side layout.
+dev encounters off
+assets swap ui/battle_front.json alt/battle_front_status.json
+assets swap ui/battle_side.json alt/battle_side_status.json
+battlelayout side
+dev battle training
+waitstate 300 battlephase Command
+expect state partystatus Test Fighter: - none, Test Mystic: - none, Test Medic: - none
+press Down 2
+press Enter
+press Enter
+press Enter
+press Enter
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 step result Test Fighter -11, Test Fighter +poison
+wait 10
+expect state partystatus Test Fighter: good poison, Test Mystic: - none, Test Medic: - none
+shot build/shots/assets_battle/side_poison.png
+waitstatehas 600 step animate Test Fighter attack
+wait 4
+expect state figureposes Test Fighter attack
+waitstatehas 900 step animate Gel Mite B attack
+wait 4
+expect state figureposes Gel Mite B wobble
+dev win
+waitstate 900 battlephase Ended
+press Enter
+pressuntil Enter Field 600
+
+# The marsh in the front layout, on auto: sleep on the fighter, still poisoned, and on the medic.
+battlelayout front
+dev battle marsh
+waitstate 300 battlephase Command
+press Down 7
+press Enter
+waitstatehas 2400 step result Test Fighter +sleep
+wait 10
+expect state partystatus Test Fighter: good poison, Test Mystic: - none, Test Medic: tp none
+shot build/shots/assets_battle/front_sleep.png
+
+# The battle frame swapped for the menu's.
+assets swap ui/battle_frame.png ui/frame.png
+wait 2
+expect asset ui:battle_frame file
+expect state assetfile.ui:battle_frame ui/battle_frame.png b5089c35
+shot build/shots/assets_battle/front_swapped_frame.png
+dev win
+waitstate 900 battlephase Ended
+press Enter
+pressuntil Enter Field 600

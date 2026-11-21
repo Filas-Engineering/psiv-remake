@@ -203,6 +203,24 @@ public static class PlaceholderExport
 		};
 		manifest["status_icons"] = new JsonObject(data.Statuses.Where(s => s != "defeated").Order(StringComparer.Ordinal)
 			.Select(s => KeyValuePair.Create(s, (JsonNode?)Single($"status_icons/{s}.png", art.StatusIcon(s)))));
+		// The generated pictures of the commands a member chose, which no built-in layout draws.
+		manifest["command_icons"] = new JsonObject(AssetManifest.CommandNames
+			.Select(c => KeyValuePair.Create(c, (JsonNode?)Single($"command_icons/{c}.png", art.CommandIcon(c)))));
+
+		// The title's traveler and creature, in the order the title steps through them.
+		uint creature = Noise.Hash("title");
+		manifest["title_art"] = new JsonObject
+		{
+			["traveler"] = new JsonObject
+			{
+				["image"] = Sheet("title/traveler.png", [art.ActorFrame(Art.Hero, Direction.East, 0), art.ActorFrame(Art.Hero, Direction.East, 1)]),
+				["frames"] = Ints([1, 0]), ["ms"] = 260,
+			},
+			["creature"] = new JsonObject
+			{
+				["image"] = Sheet("title/creature.png", [art.Creature(creature, 0), art.Creature(creature, 1)]), ["frames"] = Ints([0, 1]), ["ms"] = 400,
+			},
+		};
 
 		// The generated window, panel border, cursor and bar drawn once into pictures.
 		Color[] Draw(int w, int h, Action<IDrawSurface> draw)
@@ -215,6 +233,7 @@ public static class PlaceholderExport
 		{
 			["enabled"] = false,
 			["frame"] = new JsonObject { ["image"] = Picture("ui/frame.png", 24, 24, Draw(24, 24, c => Style.Box(c, 0, 0, 24, 24))), ["border"] = 8 },
+			["battle_frame"] = new JsonObject { ["image"] = Picture("ui/battle_frame.png", 24, 24, Draw(24, 24, c => Style.Box(c, 0, 0, 24, 24))), ["border"] = 8 },
 			["panel_frames"] = new JsonArray(new JsonObject
 			{
 				["image"] = Picture("ui/panel_frame.png", 12, 12, Draw(12, 12, c =>

@@ -21,16 +21,18 @@ wait 180
 press M
 expect screen Menu
 expect state tab Status
-expect state windows menu/backdrop 0 0 640x480, menu/nav 8 46 136x402, menu/box 152 46 480x402, menu_status/members 166 60 452x376, menu/hint 0 464 640x16, menu/toasts 0 0 640x480
+expect state windows menu/backdrop 0 0 640x480, menu/nav 8 46 136x402, menu/box 152 46 480x402, menu_status/members 166 60 452x300, menu/hint 0 464 640x16, menu/toasts 0 0 640x480
+# The field behind the menu is dimmed less than the built-in set does; the party stands under the tabs.
+expect state backdropdim 0.3
 shot menu_status.png
 press Enter
 expect state page stats
-expect state windows menu/backdrop 0 0 640x480, menu/nav 8 46 136x402, menu/box 152 46 480x402, menu_status/header 166 60 452x376, menu_status/stats 166 124 452x312, menu/hint 0 464 640x16, menu/toasts 0 0 640x480
+expect state windows menu/backdrop 0 0 640x480, menu/nav 8 46 136x402, menu/box 152 46 480x402, menu_status/header 166 60 452x300, menu_status/stats 166 124 452x236, menu/hint 0 464 640x16, menu/toasts 0 0 640x480
 shot menu_stats.png
 press Right
 expect state page abilities
 expect state selected Rally Cry
-expect state window.abilities menu_status/abilities 166 124 452x312
+expect state window.abilities menu_status/abilities 166 124 452x236
 shot menu_abilities.png
 press Escape
 
@@ -40,7 +42,7 @@ expect state tab Items
 expect state selected Tonic x3
 press Enter
 expect state page target
-expect state window.page menu_items/page 166 60 452x376
+expect state window.page menu_items/page 166 60 452x300
 shot menu_items_target.png
 press Escape
 
@@ -50,13 +52,13 @@ expect state tab Equip
 press Enter
 press Enter
 expect state selected Remove Copper Blade
-expect state window.piece menu_equip/piece 389 60 229x376
+expect state window.piece menu_equip/piece 389 60 229x300
 shot menu_equip_remove.png
 press Enter
 press Enter
 expect state selected Copper Blade x1
 expect statehas compare Strength
-expect state windows menu/backdrop 0 0 640x480, menu/nav 8 46 136x402, menu/box 152 46 480x402, menu_equip/page 166 60 207x376, menu_equip/piece 389 60 229x376, menu/hint 0 464 640x16, menu/toasts 0 0 640x480
+expect state windows menu/backdrop 0 0 640x480, menu/nav 8 46 136x402, menu/box 152 46 480x402, menu_equip/page 166 60 207x300, menu_equip/piece 389 60 229x300, menu/hint 0 464 640x16, menu/toasts 0 0 640x480
 shot menu_equip_compare.png
 press Enter
 expect state selected right hand: Copper Blade
@@ -69,7 +71,9 @@ expect state tab Save
 expect state selected manual_0 empty
 press Enter
 expect toast Saved to manual_0.
-expect state windows menu/backdrop 0 0 640x480, menu/nav 8 46 136x402, menu/box 152 46 480x402, save_slots/slots 166 60 452x376, menu/hint 0 464 640x16, menu/toasts 0 0 640x480
+expect state windows menu/backdrop 0 0 640x480, menu/nav 8 46 136x402, menu/box 152 46 480x402, save_slots/slots 166 60 452x300, menu/hint 0 464 640x16, menu/toasts 0 0 640x480
+# The three notices stand under the page, in the room the box leaves them.
+expect state overlaps none
 shot menu_save.png
 # The notices go before the other pages.
 wait 160
@@ -77,15 +81,15 @@ wait 160
 # The other pages, then the options and their controls page.
 press Right
 expect state tab Order
-expect state window.page menu_order/page 166 60 452x376
+expect state window.page menu_order/page 166 60 452x300
 shot menu_order.png
 press Right
 expect state tab Macros
-expect state window.detail menu_macros/detail 354 60 264x376
+expect state window.detail menu_macros/detail 354 60 264x300
 shot menu_macros.png
 press Right
 expect state tab Combos
-expect state window.page menu_combos/page 166 60 452x376
+expect state window.page menu_combos/page 166 60 452x300
 shot menu_combos.png
 press Right
 expect state tab Quests
@@ -93,11 +97,11 @@ shot menu_quests.png
 press Right
 expect state tab Codex
 expect state selected Tidewater Landing
-expect state window.page menu_codex/page 166 60 452x376
+expect state window.page menu_codex/page 166 60 452x300
 shot menu_codex.png
 press Right
 expect state tab Log
-expect state window.page menu_log/page 166 60 452x376
+expect state window.page menu_log/page 166 60 452x300
 shot menu_log.png
 press Right
 expect state tab Options
@@ -134,6 +138,12 @@ press P
 press Down 2
 press Enter
 expect state prompt Quit to the title? Play since the last save is lost.
+# The confirm box grows downward in whole 8-pixel steps, centered where it ends.
+expect state window.confirm/box confirm/box 154 216 332x8
+wait 4
+expect state window.confirm/box confirm/box 154 200 332x40
+shot confirm_opening.png
+wait 8
 expect state windows pause/scene 0 0 640x480, pause/hud 6 6 126x34, pause/dim 0 0 640x480, pause/box 432 192 180x96, pause/hint 0 464 640x16, confirm/dim 0 0 640x480, confirm/box 154 176 332x88
 shot confirm.png
 press Up

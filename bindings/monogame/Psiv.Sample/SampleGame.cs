@@ -21,6 +21,7 @@ public sealed class SampleGame : Game
 	private SampleController _controller;
 	private readonly RecordingAudio _audio;
 	private readonly InputState _input = new();
+	private readonly StickSnap _snap = new();
 	private readonly string? _fontPath;
 	private readonly int _exitAfterMs;
 	private readonly string? _scriptPath;
@@ -48,15 +49,25 @@ public sealed class SampleGame : Game
 	private readonly string? _dataDir;
 	private readonly BattleLayout? _battleLayout;
 	private readonly FileSystemWatcher? _watcher;
+	// The real-time field input with the window's own clock: always without a script, with one only on --realtime.
+	private readonly bool _realtime;
+	// With --pacing-log, one line per drawn frame: the wall milliseconds since the last draw, the frame time the
+	// controller got, and the leader's drawn position in field pixels.
+	private readonly StreamWriter? _pacing;
+	private readonly System.Diagnostics.Stopwatch _wall = System.Diagnostics.Stopwatch.StartNew();
+	private long _lastDrawTicks;
+	private int _lastDt;
 	// When the watcher last saw a change in the asset directory; the reload waits for a quiet moment after it.
 	private long _assetChangeTicks;
 	private const int WatchQuietMs = 300;
 
 	public SampleGame(GameSession session, GameData data, string? fontPath, int exitAfterMs, string? saves, string? scriptPath = null, string? screenshot = null, bool mute = false,
 		(int Width, int Height)? windowSize = null, bool fullscreen = false, string? assets = null, bool watchAssets = false, bool dev = false, string? dataDir = null,
-		BattleLayout? battleLayout = null)
+		BattleLayout? battleLayout = null, bool realtime = false, string? pacingLog = null)
 	{
 		_dev = dev;
+		_realtime = realtime || scriptPath is null;
+		_pacing = pacingLog is null ? null : new StreamWriter(pacingLog);
 		_battleLayout = battleLayout;
 		_dataDir = dataDir;
 		_data = data;
@@ -78,7 +89,7 @@ public sealed class SampleGame : Game
 		_scriptPath = scriptPath;
 		_screenshot = screenshot;
 		_audio = MonoGameAudio.Create(mute, Console.WriteLine);
-		_controller = new SampleController(session, data, Console.WriteLine, _controlsPath, _audio, assets, dev, dataDir, battleLayout);
+		_controller = new SampleController(session, data, Console.WriteLine, _controlsPath, _audio, assets, dev, dataDir, battleLayout) { RealtimeField = _realtime };
 		_graphics = new GraphicsDeviceManager(this)
 		{
 			PreferredBackBufferWidth = windowSize?.Width ?? Letterbox.BaseWidth,
@@ -159,7 +170,7 @@ public sealed class SampleGame : Game
 			bool mouseDown = mouse.LeftButton == ButtonState.Pressed && IsActive;
 			(int X, int Y)? click = mouseDown && !_mouseWasDown ? _box.ToBase(mouse.X, mouse.Y) : null;
 			_mouseWasDown = mouseDown;
-			_input.Set(keys.GetPressedKeys(), Pad.ButtonsDown(pad), _padConnected, click);
+			_input.Set(keys.GetPressedKeys(), Pad.ButtonsDown(pad, _snap), _padConnected, click);
 		}
 		long changedAt = Interlocked.Read(ref _assetChangeTicks);
 		if (changedAt != 0 && (DateTime.UtcNow.Ticks - changedAt) / TimeSpan.TicksPerMillisecond >= WatchQuietMs)
@@ -171,8 +182,10 @@ public sealed class SampleGame : Game
 		// The session takes whole milliseconds; the remainder carries into the next frame. A script's frames take the
 		// headless frame time, so its screenshots show the moments the headless run of the same script checks.
 		_carryMs += gameTime.ElapsedGameTime.TotalMilliseconds;
-		int dt = _player is not null ? Headless.FrameMs : (int)_carryMs;
-		_carryMs -= _player is not null ? _carryMs : dt;
+		bool fixedFrames = _player is not null && !_realtime;
+		int dt = fixedFrames ? Headless.FrameMs : (int)_carryMs;
+		_carryMs -= fixedFrames ? _carryMs : dt;
+		_lastDt = dt;
 		_controller.Update(dt, _input);
 		_elapsedMs += gameTime.ElapsedGameTime.TotalMilliseconds;
 		bool scriptDone = _player is not null && _player.Done && _exitAfterMs == 0;
@@ -207,6 +220,12 @@ public sealed class SampleGame : Game
 		_batch.Begin(samplerState: point ? SamplerState.PointClamp : SamplerState.LinearClamp);
 		_batch.Draw(_target, new Rectangle(_box.X, _box.Y, _box.Width, _box.Height), Color.White);
 		_batch.End();
+		if (_pacing is not null)
+		{
+			long now = _wall.ElapsedTicks;
+			_pacing.WriteLine(FormattableString.Invariant($"{_frame} {(now - _lastDrawTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency:0.00} {_lastDt} {_controller.State("leaderpos")}"));
+			_lastDrawTicks = now;
+		}
 		foreach (string shot in _shots)
 		{
 			SaveScreenshot(shot);
@@ -245,6 +264,7 @@ public sealed class SampleGame : Game
 	protected override void UnloadContent()
 	{
 		_watcher?.Dispose();
+		_pacing?.Dispose();
 		_surface?.Dispose();
 		_target?.Dispose();
 		(_audio as IDisposable)?.Dispose();

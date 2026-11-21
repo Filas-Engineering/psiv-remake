@@ -38,9 +38,10 @@ Screen keys: `title`, `sound_test`, `load_game`, `options`, `controls`, `confirm
 	"colors": {"text": "#ecece2", "accent": "#fcd660"},
 	"sizes": {"small": 16, "body": 20, "title": 28, "line": 26},
 	"text_styles": {"small_dim": {"size": "size_small", "color": "dim"}, "hint": {"size": "size_small", "color": "dim", "role": "hint"}},
-	"frames": {"panel": {"type": "generated"}, "none": {"type": "none"}, "parchment": {"type": "nine_slice", "image": "ui/parchment.png", "border": 6, "scale": 2}},
+	"frames": {"panel": {"type": "generated"}, "battle": {"type": "generated", "skin": "battle"}, "none": {"type": "none"}, "parchment": {"type": "nine_slice", "image": "ui/parchment.png", "border": 6, "scale": 2}},
 	"cursors": {"pointer": {"type": "generated", "size": 12, "color": "accent"}},
-	"timings": {"text_speed": {"slow": 25, "normal": 50, "fast": 100}, "punctuation_pauses": {".": 120}, "toast_ms": 4000}
+	"timings": {"text_speed": {"slow": 25, "normal": 50, "fast": 100}, "punctuation_pauses": {".": 120}, "toast_ms": 4000},
+	"params": {"toast_h": 32, "toast_gap": 6, "toast_pad": 14, "toast_text_y": 7}
 }
 ```
 
@@ -53,6 +54,7 @@ Screen keys: `title`, `sound_test`, `load_game`, `options`, `controls`, `confirm
 * Mouse clicks go back through the same box into logical pixels, so click-to-walk follows the laid-out frame; a click inside a window whose layout sets `blocks_clicks` does not walk.
 * Text size option: the profile's text size scales every text size (the surface's `t`, as before), and `t(n)` in an expression scales a length with it (`t(30)` is 30 at 100% and 45 at 150%). Lengths written without `t()` stay. The built-in layouts use `t()` exactly where the old code scaled its spacing. An element with `"scaled": false` draws its text at 100% whatever the option (the field HUD, the toasts, the battle). Bitmap fonts snap their factor from the scaled size ([`assets.md`](assets.md), bitmap_fonts).
 * Natural-size battle figures take the logical height over `battle_figures.reference_height`.
+* What the code draws itself takes its sizes from the layouts: the field's cell, its shake and the notices' boxes from the styles' `params` (below), the dialogue box's place from the dialogue file's `params`, the comic panels' margins from the panels file's `params`, the battle stage's enemy labels, bars, status icons, target pointer, floating numbers, effects, front backdrop, figure motion and the developer badge from the battle files' `params`. The built-in values are the 1280x720 look; another resolution sets its own (the small example set below runs 320x224 at 16 pixels a cell).
 
 ### Colors, sizes, text styles
 
@@ -63,6 +65,7 @@ Screen keys: `title`, `sound_test`, `load_game`, `options`, `controls`, `confirm
 ### Frames and cursors
 
 * `frames`: name to a frame style, which a window's `frame` or a `box` element names. `type`: `generated` (the sample's window: shadow, light border with clipped corners, dark body, lighter top band; the asset directory's UI skin frame when one is on, [`assets.md`](assets.md), ui), `nine_slice` (`image` a PNG in the asset directory, `border` pixels square corners drawn at `scale`, edges and middle stretched; the generated frame while the picture cannot be read), `fill` (`color`), `outline` (`color`, `thickness`), `none`. `panel` and `none` must exist.
+* `skin` (generated frames only): which UI skin frame stands in for the generated window, `menu` (the default: `ui.frame`) or `battle` (`ui.battle_frame`, else `ui.frame`; [`assets.md`](assets.md), ui). The built-in styles have `"battle": {"type": "generated", "skin": "battle"}`, which the built-in battle layouts' windows and boxes name; a styles file that leaves `battle` out gets that one. Without a skin both draw the generated window, so the battle looks as before; with `ui.battle_frame` the battle's windows take it and every other screen keeps `ui.frame`. A battle layout can as well name any frame of its own, a `nine_slice` included.
 * `cursors`: name to `{type: generated|image, image, size, color, blink_ms}`, used by `pointer` elements and list rows (`cursor`). An image cursor draws the PNG `size` square; `blink_ms` above 0 hides it every other period.
 
 ### Timings
@@ -82,6 +85,26 @@ Milliseconds unless said. Defaults are the sample's values.
 | `toast_ms`, `toast_fade_ms` | 4000, 400 | how long a notice stays, and its fade at the end |
 | `panel_transition_ms` | 350 | a comic panel's slide when its action names no duration |
 | `list_repeat_delay_ms`, `list_repeat_ms` | 0, 0 | a held direction repeats in every screen but the field and dialogue after the delay, then every `list_repeat_ms` (0: no repeat) |
+| `run_speed_percent` | 200 | the real-time field input's run: a step takes the area's (or vehicle's) step time times 100 over this, 100 at least (`"timings": {"run_speed_percent": 250}`) |
+
+### Params
+
+Numbers the code's own drawing reads, in whole logical pixels; a key left out takes the default, the sample's value. Several screens draw the notices through their `toasts` slot (title, Load, options, the field menu, shop, travel); the field draws them from its own layout.
+
+| Key | Default | What |
+| --- | --- | --- |
+| `field_cell` | 48 | the field's cell in logical pixels, 8 to 256: tiles, people, objects, whole-area pictures, overlays, the camera, click-to-walk, the real-time glide, the interaction prompt's `prompt_x`/`prompt_y` and pointer, the title's field scene and every comic panel (its camera's zoom times this) follow it. A multiple of 16 keeps the generated 16-pixel pictures whole; sheets with a `scale` snap to it ([`assets.md`](assets.md), "How big pictures are drawn") and a scaled tileset must fill it exactly |
+| `field_shake` | 10 | pixels a scene's shake of strength 1 moves the field and its panels |
+| `toast_h` | 32 | a notice's box height |
+| `toast_gap` | 6 | the gap between two stacked boxes |
+| `toast_pad` | 14 | the text's inset from the box's left edge; a box is the text's width plus twice this, and the text is cut to the room between the margins less twice this |
+| `toast_text_y` | 7 | the text's top below the box's |
+
+```json
+"params": {"field_cell": 16, "field_shake": 3, "toast_h": 14, "toast_gap": 2, "toast_pad": 4, "toast_text_y": 2}
+```
+
+The field's other small touches (wall edges, foam, shadows, bubbles, the click marker and the pointer's bob) are drawn at 48-pixel sizes scaled to the cell. The probe `leaderpos` reads the leader in pixels of the cell drawn (`48 64` at 16 pixels for cell 3, 4); `paneltiles` reads each panel's cell.
 
 The profile's options still apply on top: the text speed picks the row of `text_speed`, auto-advance switches auto-advance, the battle speed makes window transitions in battle that much faster (and drives the battle playback as before), reduced flash damps the battle's flash and shake as before.
 
@@ -117,7 +140,7 @@ Drawn in `z` order (default 0; equal `z` in file order), each as its frame, its 
 | `title` | a text key, or a `plate` element (`key`/`value`, `x` default 16, `y` default -14, relative to the window, `size` default small, `color` default accent) |
 | `padding` | `[left, top, right, bottom]` expressions: the elements' origin and the content size `cw`, `ch` |
 | `visible` | a condition (below); a hidden window draws nothing |
-| `open`, `close` | transitions: `{"kind": "none|fade|grow|slide", "ms": 200, "from": "left|right|top|bottom"}`. Open plays when the window becomes visible, or when its screen comes up; close plays the frame only, going the way it came. In battle, the battle speed shortens them |
+| `open`, `close` | transitions: `{"kind": "none|fade|grow|grow_x|grow_y|slide", "ms": 200, "from": "left|right|top|bottom", "step": 0}`. Open plays when the window becomes visible, or when its screen comes up; close plays the frame only, going the way it came. `grow` grows both sides from the middle, `grow_x` only the width and `grow_y` only the height; a growing window shows its frame only, its title and elements once it has its size. `step` (grow kinds only, 0 to 1024 logical pixels, default 0: smoothly) grows by whole steps, at least one step, never past the window's size. In battle, the battle speed shortens them |
 | `blocks_clicks` | true: a mouse click inside it does not reach click-to-walk |
 | `elements` | the list below |
 
@@ -128,7 +151,7 @@ Every geometric property, `visible`, `opacity`, `alpha` and most numbers are exp
 Names an expression may read, checked when the file loads:
 
 * the screen's fields (each screen below), and on every screen `clock_ms` (the animation clock), `text_scale` (the text size option in percent), `dev` (the developer tools are on), `gamepad` (the last input was the gamepad);
-* `W`, `H`: the logical frame; `pw`, `ph`: the window's parent's size (window rectangles); `w`, `h`: the window's own size (in its `x` and `y`); `cw`, `ch`: the window's content size; `tw`: a text element's measured width (in its own `x`);
+* `W`, `H`: the logical frame (in a screen's params too); `pw`, `ph`: the window's parent's size (window rectangles); `w`, `h`: the window's own size (in its `x` and `y`); `cw`, `ch`: the window's content size; `tw`: a text element's measured width (in its own `x`);
 * another window's edges: `NAME.x`, `NAME.y`, `NAME.w`, `NAME.h`, `NAME.right`, `NAME.bottom` (absolute logical pixels);
 * `size_NAME` for each of the styles' `sizes`;
 * inside a `list`'s `row`, a `rows` or `list`'s `text` and `enabled`, and a `repeater`'s `template`, `empty` and `slots`: the item's fields, `i` (its index), `count`, `selected`, `row_y` (a list row's absolute y), `col`, `row` (a repeater's grid cell), `item` and `text` (a string item).
@@ -160,15 +183,37 @@ Common to every element: `type` (required), `name` (optional; the overlay and pr
 
 Row highlight style (`rows` and `list`): `highlight` (the bar's color, `row`), `cursor` (a cursor style), `cursor_dx`, `cursor_dy` (the cursor's offset), `selected_color` (accent), `text_color` (text), `disabled_color` (dim). Without any of them a row is the sample's standard row.
 
+```json
+"open": {"kind": "grow_y", "ms": 160, "step": 8}, "close": {"kind": "fade", "ms": 120}
+```
+
 ### Params
 
 Some screens' code reads numbers that are not elements (the battle stage's placement rules, the log's wrap width): they are the file's `params`, an object of expressions, listed per screen. A param a file leaves out takes the built-in file's value.
 
+### Dimming behind a screen
+
+Where the screens dim what lies behind them:
+
+* `backdrop_dim` (param; menu, the field menu's frame; shop; travel; save_prompt; name_entry; quest_log; text_log; options, away from the title): the opacity, 0 to 1, of the black the `backdrop` slot draws over the field (0.55 when the files leave it out, as the built-in ones do; 0 draws none). Its expression reads the names every screen has, not the screen's fields.
+* pause (`dim` window), confirm (`dim` window), sound_test, load_game and options from the title (the `scene` window's second element): `fill` elements in the files, 0.55, 0.4 and 0.5 in the built-in ones; change their `alpha`.
+* panels: the field's `dim` (0.45 times the most shown panel), which the built-in `panels` file's `fill` reads as its `alpha`.
+* The title's generated field scene is tinted in code under the title, Load, Options and the sound test; `title_art.background` replaces the scene and its tint ([`assets.md`](assets.md), "title_art").
+* The inn, the dialogue and the field HUD draw over the field undimmed; the battle has no dimming.
+
+```json
+{"version": 1, "params": {"backdrop_dim": 0.3}, "windows": [...]}
+```
+
+The state probe `backdropdim` reads the opacity the last frame dimmed with (`0.3`), `-` when no `backdrop` slot drew the field.
+
 ## Probes, the overlay and the example set
 
 * `expect state windows`: every window the last frame drew, as `SCREEN/NAME X Y WxH`, joined by `, ` (`none`); `expect state window.NAME` (or `window.SCREEN/NAME`): one of them, `-` when not drawn.
-* With `--dev`, F1 or `overlay windows [on|off]` outlines every window drawn with its screen and name over the frame (`overlay all` and `overlay none` leave it as it is; `overlay.windows` reads how many it outlined).
-* `scripts/make_layout_assets.py` writes a second, deliberately different layout set (below, "An example layout set"); `make bindings` checks it and plays it.
+* With `--dev`, F1 or `overlay windows [on|off]` outlines every window drawn with its screen and name over the frame (`overlay all` and `overlay none` leave it as it is; `overlay.windows` reads how many it outlined; the console's `help overlays` lists it).
+* `expect state overlaps`: off the battle, each window of the last frame that a notice's box covers part of, as `toast over SCREEN/NAME`, joined by `, ` (`none`). A window that holds the whole box (the screen-wide ones, the one the box stands in) does not count; a notice over the field menu's page or a field window does. In the battle it is the front layout's probe (below).
+* `expect state uiframes`: each frame style the layouts drew in the last frame as `NAME HOW COUNT`, by name: `HOW` is `generated`, `skin` (a generated or unreadable nine-slice frame drawn with the asset directory's UI skin frame), `nine_slice` (the picture), `fill` or `outline` (`none`).
+* `scripts/make_layout_assets.py` writes a second, deliberately different layout set (below, "An example layout set"), and with `--small` a third at 320x224 (below, "A small example set"); `make bindings` checks both and plays them.
 * `scripts/make_test_assets.py` breaks the export's layouts in the broken copy (a file that does not parse, one with every kind of problem, a missing file with the entry on, broken styles, a file of no screen, and a hostile but valid pause layout with negative sizes, cycles, division by zero and huge counts); `--check-assets` must print `scripts/check_assets_broken.expected`, and the saves run passes on that directory.
 
 # The screens
@@ -177,9 +222,26 @@ Each screen's file, its windows, the fields it exposes, item fields, slots and p
 
 ## Title (`ui/title.json`)
 
-Windows: `scene` (the title's field scene, slot `scene`), `box` (the title, subtitle, the traveler and creature, the game over line, the options), `corner` (the version stamp at the top right and the toasts, slot `toasts`), `hint` (the keys' bar).
+Windows: `scene` (the title's field scene, slot `scene`: the title art's background and layers when the assets give them, `assets.md`, "title_art"), `box` (the title, or the logo in its place, the subtitle, the traveler and creature, the game over line, the options), `corner` (the version stamp at the top right and the toasts, slot `toasts`), `hint` (the keys' bar).
 
-Fields: `title` (string, the game's title), `subtitle` (string), `hero_frame`, `creature_frame` (images, animated by the clock), `game_over` (bool, the last game ended in defeat), `options` (list of strings), `cursor` (int), `version` (string, the library version), `hint` (string).
+Fields: `title` (string, the game's title), `subtitle` (string), `hero_frame`, `creature_frame` (images, animated by the clock; the title art's traveler and creature when given), `hero_w`, `hero_h`, `creature_w`, `creature_h` (int: the sizes to draw them at, 64 by 64 unless the title art gives a reference height, then their frames' size times `art_scale`), `logo` (image, the title art's logo, -1 without one), `logo_w`, `logo_h` (int, its size in pixels times `art_scale` when there is one, 0 without a logo), `art_scale` (int, the title art's natural multiple, 0 without a reference height), `game_over` (bool, the last game ended in defeat), `options` (list of strings), `cursor` (int), `version` (string, the library version), `hint` (string).
+
+The `scene` slot's rectangle is where the scene goes: the title art's background is stretched over it, each layer's `at` counts from its top left and its scrolling repeats across it, the generated field scene fills it, and what reaches outside it is clipped (the built-in files give the whole screen). The same holds for the `scene` slots of the sound test, the Load screen and the options from the title.
+
+The built-in box draws the logo at its size, centered on the title's line, and the title's text only without a logo:
+
+```json
+{"type": "text", "value": "title", "visible": "logo < 0", "x": "-box.x", "w": "W", "align": "center", "y": "t(26)", "style": "title"},
+{"type": "image", "image": "logo", "x": "(cw - logo_w) / 2", "y": "t(42) - logo_h / 2", "w": "logo_w", "h": "logo_h"}
+```
+
+The traveler and the creature stand on the bottom of today's 64-pixel squares, so larger natural sizes rise out of them:
+
+```json
+{"type": "image", "image": "hero_frame", "x": "28 + (64 - hero_w) / 2", "y": "82 - hero_h", "w": "hero_w", "h": "hero_h"}
+```
+
+The state probe `titlesizes` reads what the last title frame gave the layout: `logo 480x80 traveler 32x32 creature 32x32 scale 2`.
 
 ## Sound test (`ui/sound_test.json`)
 
@@ -191,7 +253,9 @@ Fields: `tracks` (list of strings, every audio id's name), `list` (the list's sc
 
 The map draws first, in code. Window: `box` (the bed, the cost and money line, Rest and Leave).
 
-Fields: `top` (int, the box's top as the dialogue box would sit), `bed` (image, the area tileset's bed), `cost`, `money` (int), `options` (list of strings), `cursor` (int).
+Fields: `top` (int, the box's top as the dialogue box would sit), `bed` (image, the area tileset's bed), `cost`, `money` (int), `options` (list of strings), `cursor` (int), `keeper` (image: the portrait the assets' `keepers` give the rest point, -1 without one; [`assets.md`](assets.md), "keepers"; the built-in file does not draw it).
+
+The state probe `keeper` reads the keeper's portrait id the last shop or inn frame gave its layout, `-` for none.
 
 ## Save prompt (`ui/save_prompt.json`)
 
@@ -215,6 +279,8 @@ Windows:
 * `hud`: the area plate at the top left and the money and play time plate at the top right, both on the unscaled surface.
 * `banner`: the area banner, centered, sized by its two texts at 100% text size, faded and dropped by its fields.
 * `toasts`: the newest notices stacked up from the bottom left, newest lowest.
+* `prompt`: the interaction prompt, a plate with the key and a word centered above the hint bar, sized by its text
+  (`visible` is `prompt_visible`).
 * `hint`: the keys' hint bar across the bottom, on the unscaled surface.
 
 Fields:
@@ -231,9 +297,32 @@ Fields:
 * `banner_left_ms` (int): milliseconds until it goes (2600 in all).
 * `toasts` (items): the newest four notices, newest first.
 * `hint` (string): the keys' hint.
+* `prompt_visible` (bool): the real-time field input is on, its `Interaction prompt` option is on (the default), the
+  leader stands (no step under way) and Confirm would act on something from where it stands. Always false with the
+  classic field input, so no existing run draws the window.
+* `prompt_key` (string): Confirm's first binding on the device last used (`Enter`, `A`), empty without a prompt.
+* `prompt_text` (string): what Confirm would do: `talk` (`ui.hint.talk`), `open`, `board`, `shop`, `rest` or `travel`
+  (`ui.prompt.*` keys, English built-ins while the text tables lack them), empty without a prompt.
+* `prompt_x`, `prompt_y` (int): the screen pixel at the center of the target cell, as the last frame drew the map.
+
+The built-in prompt:
+
+```json
+{"name": "prompt", "visible": "prompt_visible", "x": "(W - w) / 2", "y": "H - t(30) - 46", "w": "measure_unscaled(prompt_key + '  ' + prompt_text, size_small) + 24",
+	"h": 28, "elements": [
+	{"type": "plate", "value": "prompt_key + '  ' + prompt_text", "color": "accent", "scaled": false}
+]}
+```
+
+The map also draws the `pointer` sprite bobbing over the target cell while the prompt shows (left out, like a speech
+bubble, while the leader stands on the cell above the target); the asset manifest's `sprites.pointer` replaces it
+([`assets.md`](assets.md)). A layout file without a `prompt` window shows only the pointer. The example set puts the
+prompt as a card under the target's right edge from `prompt_x` and `prompt_y`.
 
 Item fields of `toasts`: `text` (the notice cut to the width between 16-pixel margins), `alpha` (its opacity as it
-expires), `box_alpha` (its box's opacity, `alpha` times 0.95), `width` (its box's width: the text's plus 28).
+expires), `box_alpha` (its box's opacity, `alpha` times 0.95), `width` (its box's width: the text's plus twice the
+styles' `toast_pad`). The built-in file names each notice's `box` element `toast`, which the `overlaps` probe reads as a
+notice's box.
 
 Click-to-walk ignores a click inside a window drawn last frame whose layout sets `blocks_clicks` (none does by default).
 
@@ -269,6 +358,24 @@ Fields:
 * `prompt` (string): the choice's prompt, or the default one.
 * `options` (list of strings): the choice's options.
 * `cursor` (int): the option under the cursor.
+* `picture` (image): the still picture the `picture` tags show (below, "The `tags` table"), -1 for none. `picture_w`,
+  `picture_h` (int): its size in pixels, 0 for none.
+
+Params (the code's, with these defaults; the built-in file leaves them out): `box_h` (176, the box's height at 100% text size, scaled with the text size option), `box_margin` (16, from the screen's bottom edge to the box at the bottom), `box_top` (36, the box's top while the leader would be covered). `top` is the screen's height less the scaled `box_h` and `box_margin`, or `box_top`; the inn's `top` and the comic panels' room at the bottom (below) follow them. Expressions of the common names (`W`, `H`, `dev`...).
+
+```json
+"params": {"box_h": 70, "box_margin": 14, "box_top": "dev ? 42 : 4"}
+```
+
+The built-in file draws the picture at its size in a framed window `picture` that fades in and out, centered in the room
+the box leaves above it (box at the bottom) or under it (box at the top):
+
+```json
+{"name": "picture", "visible": "picture >= 0", "anchor": "top", "y": "top > H / 2 ? max(16, (top - h) / 2) : top + t(176) + max(16, (H - top - t(176) - h) / 2)",
+	"w": "picture_w + 16", "h": "picture_h + 16", "frame": "panel", "open": {"kind": "fade", "ms": 200}, "close": {"kind": "fade", "ms": 200}, "elements": [
+	{"type": "image", "name": "picture", "image": "picture", "x": 8, "y": 8, "w": "picture_w", "h": "picture_h"}
+]}
+```
 
 The probe `wrapped` reads the line's `text` element as drawn: the renderer reports the line count and then each line's
 width through `Probe` (`wrapped`, then `wrapped_width` per line) while the dialogue role is active. `dialogue` (top or
@@ -333,7 +440,12 @@ Windows:
 Fields: `title` (string); `open` (bool) a shop is open; `tab` (int) 0 buy, 1 sell; `tabs` (list of strings); `money`
 (string, formatted); `stall` (image); `rows` (items); `list` (scroll list); `description` (string) and
 `description_missing` (bool) as on the travel screen; `compare` (string) the equipment comparison and wearers, empty
-when not equipment; `hint` (string).
+when not equipment; `hint` (string); `money_value` (int, the money as a number); `keeper` (image, the shop's keeper as on
+the inn, -1 without one or without a shop; not drawn by the built-in file).
+
+```json
+{"type": "group", "visible": "keeper >= 0", "x": 480, "elements": [{"type": "image", "image": "keeper", "w": 64, "h": 64}]}
+```
 
 Item fields of `rows`: `text` (the name; the list's row text), `price` (int: the price, or the sell price on the sell
 tab), `have` (int: how many the party has). `count` is not used for it: inside a list row it names the row count.
@@ -359,6 +471,12 @@ Item fields of `panels`: `left`, `top`, `width`, `height` (int: the panel's rect
 
 Slots (per item): `frame` (the skin's frame drawn over the slot's rectangle), `scene`.
 
+Params (the code's, with these defaults; the built-in file leaves them out): `margin` (24, the panels' slots stand this far in from the screen's edges), `gutter` (16, between two slots), `slide` (64, how far a panel slides in from the nearest edge), `bottom` (the band the slots leave free at the bottom for the dialogue box: the dialogue file's `box_h` and `box_margin` and `gutter`, 208 by default). A panel's cell is the styles' `field_cell` times its camera's zoom, and a third more while its camera is the scene's (the reed path's lookout: 16, 20 and 24, the pushed-in east panel 27, at a 16-pixel cell).
+
+```json
+{"version": 1, "params": {"margin": 6, "gutter": 4, "slide": 16}, "windows": [...]}
+```
+
 ## The field menu, the logs, the Load screen and the options
 
 Every element of these layouts draws on the text-size surface (`scaled` is never false). Several are drawn into a rectangle that another layout's `slot` gives: those layouts read the rectangle from the area fields and place a window on it.
@@ -379,7 +497,17 @@ Fields:
 - `tabs` (list of strings): the tab names.
 - `tab` (int): the selected tab.
 - `money` (string): the money, formatted.
+- `money_value` (int): the money as a number (a `text` element's `format` can group it, `N0`).
 - `hint` (string): the key hints for the page.
+- `party` (list of items): the lineup in marching order; item fields `name` (string), `level`, `hp`, `max_hp`, `tp`, `max_tp` (int), `portrait` (image), `alive` (bool, HP above 0). The built-in file draws neither of the last two fields.
+
+```json
+{"type": "repeater", "items": "party", "y": 240, "dy": "t(28)", "template": [
+	{"type": "text", "value": "name", "style": "small"},
+	{"type": "text", "key": "ui.common.level_short", "args": ["level"], "w": "cw", "align": "right", "style": "small_dim"},
+	{"type": "bar", "y": "t(13)", "w": "cw", "h": 3, "value": "hp", "max": "max_hp"}
+]}
+```
 
 Slots: `backdrop`, `page` (draws the selected tab's page layout into its rectangle), `toasts`.
 
@@ -538,7 +666,7 @@ Fields:
 - `title_mode` (bool): opened from the title.
 - `title` (string): the panel's title.
 - `on_controls` (bool): the Controls page is up.
-- `rows` (list of items): item fields `text` (the probe, `LABEL: VALUE`), `label`, `value` (string, empty for none), `changeable` (bool: shown as `<  VALUE  >` when selected), `enabled` (bool).
+- `rows` (list of items): item fields `text` (the probe, `LABEL: VALUE`), `label`, `value` (string, empty for none), `changeable` (bool: shown as `<  VALUE  >` when selected), `enabled` (bool). With the real-time field input on, `Always run` and `Interaction prompt` come before `Controls`.
 - `list` (scroll list).
 - `description` (string): the selected setting's help, two lines at most.
 - `hint` (string).
@@ -551,7 +679,7 @@ Windows: `page` (the area: column heads and one row per action, then reset), `ac
 
 Fields:
 - area fields.
-- `actions` (list of items): item fields `label`, `keys`, `buttons` (strings), `reset` (bool: the reset row, which has no bindings).
+- `actions` (list of items): item fields `label`, `keys`, `buttons` (strings), `reset` (bool: the reset row, which has no bindings). With the real-time field input on, `Interact`, `Run` and `RunToggle` come after `FastForward`, before the reset row; with it off they are left out, so the page is as it was.
 - `list` (scroll list), `active` (bool).
 - `picking` (bool), `action_name` (string), `choices` (list of strings), `choice` (int): the `action` box.
 - `capturing` (bool), `ask` (string): the `capture` box.
@@ -584,7 +712,7 @@ Window order is draw order. The stage is code drawn into two slots: `stage` (the
 
 `battle_side`: `stage`, `effects`, `log`, `banner` (as above, without the plate), `party` (one column per party member: portrait, name, icons, state, HP and TP value bars, next command; a repeater over `party`, row layout), `menu` (the command window at the right, its rows scrolling with the cursor), `description`, `status` (in the menu's rectangle: `ui.battle.playing` or `ui.battle.auto` and the playback's key hints, or the outcome and `ui.battle.hint.continue`), `result`.
 
-Windows the code places by (`Ui.WindowRect`): front `command` (its width for the members' step aside, and with its title plate's 14 pixels for the `overlaps` probe), `description`, `keys`, `name_plate` (the `overlaps` probe), `strip` (its top for the `overlaps` probe), `log` (both files: the log's wrap width).
+Windows the code places by (`Ui.WindowRect`): front `command` (its width for the members' step aside, and with its title plate's 14 pixels for the `overlaps` probe), `description`, `keys`, `name_plate` (the `overlaps` probe), `strip` (the `overlaps` probe: a party figure counts as far as it is on the screen and, where the strip stands across its lower part, above the strip's top), `log` (both files: the log's wrap width).
 
 ### Fields
 
@@ -605,10 +733,46 @@ Windows the code places by (`Ui.WindowRect`): front `command` (its width for the
 * `target_pulse` number: a targeted highlight's pulsing alpha. `hit_flash` bool: a hit slot flashes now (not with reduced flash). `hit_fade` number: the hit flash's fade.
 * `command_center` int: where the command window's middle goes after the members made room, -1 when they did not. `actor_left`, `actor_right`, `actor_center` int: the acting figure's box.
 * `enemy_count` int, `enemy_back` bool: only while the `enemy_size` param is read (the formation's size, the enemy stands in the back rank).
+* `enemy_groups` items: the enemies standing as the playback shows them, one item per name in the order the names first stand, with item fields `name`, `number` (how many share it) and `text` (`Gel Mite x2`, or the name alone). The built-in files do not draw it; with the stage's labels hidden (`enemy_labels`, below) a window can name the enemies instead.
 
-Item fields (`party`, `members`, `vehicle`): `name`, `alive`, `acting`, `targeted`, `hit` (damaged this step), `hp`, `max_hp`, `hp_low` (at most a quarter), `tp`, `max_tp`, `state` (fallen, defending, statuses), `next` (the command already chosen, as `ui.battle.next`, or `''`), `icon_count` (status icons shown, for their width), `portrait` (image), and the item slots `icons` (the status icons at x, y) and `anchor` (records where effects land on that member). `menu_items`: `text`, `usable`. `log_lines`: `text`, `newest`. `result_lines`: `kind`, `text`.
+```json
+{"name": "enemies", "visible": "len(enemy_groups) > 0", "x": 8, "y": 176, "w": 140, "h": "len(enemy_groups) * 13 + 26", "frame": "panel", "elements": [
+	{"type": "repeater", "items": "enemy_groups", "y": 17, "dy": 13, "template": [
+		{"type": "text", "value": "name", "style": "small"},
+		{"type": "text", "value": "number > 1 ? 'x' + number : ''", "w": "cw", "align": "right", "style": "small_dim"}
+	]}
+]}
+```
+
+Item fields (`party`, `members`, `vehicle`): `name`, `level` (the member's level, 0 for the vehicle), `alive`, `acting`, `targeted`, `hit` (damaged this step), `hp`, `max_hp`, `hp_low` (at most a quarter), `tp`, `max_tp`, `state` (fallen, defending, statuses), `next` (the command already chosen, as `ui.battle.next`, or `''`), `icon_count` (status icons shown, for their width), `portrait` (image), and the item slots `icons` (the status icons at x, y) and `anchor` (records where effects land on that member). `menu_items`: `text`, `usable`, `name` (an option's name without its cost and uses, else the row's text), `cost` (int, an option's TP cost, 0 for none), `uses` (int, a skill's uses left, -1 for none); a row also reads the screen's fields (`cursor`, `phase`), so a repeater over `menu_items` can draw a column of costs beside a `rows` element's page. `log_lines`: `text`, `newest`. `result_lines`: `kind`, `text`.
+
+Item fields `command` and `command_icon` (`party`, `members`, `vehicle`): what the combatant chose for the round as one of `attack`, `technique`, `skill`, `combo`, `item`, `defend`, `escape`, or `''` before it chooses; and its picture, from the assets' `command_icons` or generated ([`assets.md`](assets.md), "command_icons"), -1 before it chooses. The built-in files draw neither. The state probe `commands` reads them: `Test Fighter attack, Test Mystic -`.
+
+```json
+{"type": "image", "visible": "alive && command_icon >= 0", "image": "command_icon", "x": 120, "y": 35, "w": 12, "h": 12}
+```
+
+The state probe `enemygroups` reads `enemy_groups` as `Gel Mite x2, Rust Hound` (`none`).
+
+Item field `status_color` (`party`, `members`, `vehicle`): the color the `statuses` table (below) gives the highest-priority status the combatant has, `''` when none has one. The built-in slots' name reads `!alive ? 'dim' : acting ? 'accent' : status_color != '' ? status_color : 'text'`.
 
 Slots: `stage`, `effects`, `target_pointer` (a party member being targeted gets its cursor over the command window), item slots `icons`, `anchor`.
+
+The windows and the slots' boxes of both built-in files draw with the frame style `battle` (styles, "Frames and cursors"), so an asset directory's `ui.battle_frame` skins the battle apart from the menus.
+
+### Status looks (`statuses`)
+
+A battle file may have a `statuses` object (only `battle_front` and `battle_side` read one; elsewhere it is a problem): how each status shows on the party's slots, by status id (core's `statuses.json`, not `defeated`). Each value: `color` (a color name of the styles, `#rrggbb` or `#rrggbbaa`; the `status_color` field, for the name), `icon` (`picture`, the default: the status's icon from `status_icons` or the generated one; `none`: no icon) and `priority` (a whole number, 0 to 100, default 0). The color shown is that of the highest-priority status the member has that gives one (the earlier status on a tie); the icons in the `icons` slot leave out those with `"icon": "none"`, stand in priority order (highest first, then as before) and `icon_count` counts only them. A status the table leaves out has no color, its icon and priority 0, so a file without a table looks as before. The enemies' icons under their labels do not change. An unknown status id, a bad color, an icon not `picture` or `none`, a priority out of range or an unknown field is a problem, and the built-in file stands in.
+
+```json
+"statuses": {
+	"jumble": {"color": "#f0a0f0", "priority": 3},
+	"poison": {"color": "good", "priority": 2},
+	"sleep": {"color": "tp", "icon": "none", "priority": 1}
+}
+```
+
+Probe: `partystatus` reads each party combatant as `NAME: COLOR ICONS` (`-` for no color, `none` for no icon), joined by `, `: `Test Fighter: good poison, Test Medic: tp none`.
 
 ### Params
 
@@ -621,7 +785,46 @@ The stage's placement; a param a file leaves out takes the built-in file's value
 * `enemy_x`: the enemies' middle. Up to `enemy_row_max` enemies stand in one row, `min(enemy_row_spacing_max, enemy_row_span / n)` apart, feet at `enemy_row_foot` less `enemy_row_stagger` for each odd position. From one more on, two ranks (the first `(n + 1) / 2` positions in front, feet at `enemy_front_foot`; the rest at `enemy_back_foot`): with `enemy_ranks_interleaved` 1 the ranks interleave over `enemy_rank_span`, else each rank spreads `min(enemy_rank_spacing_max, enemy_rank_span / m)` apart and the back one shifts half a place.
 * `enemy_size`: an expression of `enemy_count` and `enemy_back`, the enemy's square size.
 * `enemy_slot_N_x`, `enemy_slot_N_foot` (N 0 to 7): formation position N's place, overriding the computed one; absent or -1 keeps it.
+* `party_slot_N_x`, `party_slot_N_foot` (N 0 to 4): the member at marching place N stands centered at this x, feet at this y, in place of `party_x + N * party_dx` and `party_foot + N * party_dy`; absent or -1 keeps the computed one. In the front layout the members still step aside for the command window from these places. The state probe `partyplaces` reads each party figure drawn as `NAME X FOOT`.
+* `enemy_labels`, `enemy_bars`: 0 leaves out the code-drawn enemies' labels (the dark box and the name), or their HP bars; the status icons stay. Absent, 1, both show. Expressions of the fields, so `"enemy_labels": "len(members) >= 5"` brings the labels back when a window that names the enemies has no room. The front layout's `overlaps` probe then reads an enemy's mark as what is drawn of it (its bar and icons); the state probe `enemymarks` reads what the last frame drew, `labels 0 bars 3`.
+
+```json
+"params": {"enemy_labels": 0, "enemy_bars": 1, "party_slot_0_x": 560, "party_slot_0_foot": 170, "party_slot_1_x": 488, "party_slot_1_foot": 200}
+```
 * `log_rows`: the log's lines; `log_wrap_margin`: the log window's width less this is the wrap width.
+* `backdrop_h`, `ground_h` (front): the backdrop is drawn `backdrop_h` tall from 8 above the screen, and under it, down to the screen's bottom, its ground (below 62% of its height) again `ground_h` tall.
+* `label_max_width`, `label_y`, `label_h`, `label_pad`, `label_text_y`: each enemy's label, cut to `label_max_width`, on a dark box `label_h` high at `label_y` under its feet, `label_pad` wider than the text on each side, the text `label_text_y` into it.
+* `enemy_bar_y`, `enemy_bar_w`, `enemy_bar_h`, `enemy_icons_y`: the enemy's HP bar and status icons under its feet, centered on it.
+* `icon_size`, `icon_gap`: every status icon (enemies' and the `icons` slots'), and the gap between two.
+* `pointer_size`, `pointer_y`, `pointer_member_y`, `pointer_bob`: the target cursor, `pointer_y` over an enemy's figure bobbing `pointer_bob`, `pointer_member_y` over a member seen from behind (front).
+* `number_size`, `number_critical_size`, `number_tp_size`, `number_word_size`: the floating numbers' text sizes (damage, healing and felled; a critical hit's; technique points restored; words such as misses and statuses).
+* `number_y`, `number_member_y`, `number_rise`, `number_gap`: a number starts `number_y` over an enemy's figure, or `number_member_y` down a member seen from behind (front), rises `number_rise`, and the next on the same target stands its size and `number_gap` higher.
+* `effect_scale`, `effect_scale_large`: the effects' factor: `effect_scale` on targets in the side layout and on members in the front one, `effect_scale_large` on enemies in the front layout, for formation changes and for the instant defeat's mark.
+* `dev_badge_y`: with `--dev`, the developer badge's top, at the screen's right (the front layout's badge moves to the top while a preview plays).
+* `motion_percent` (default 100, not in the built-in files): the figures' motion in percent of the 1280x720 distances: a step toward the foe and back, the chooser's rise, an attack's lunge, a hit's shake, a joining enemy's rise, a flier's bob, and the screen's shake (`battleshake` reads it scaled). The backdrop, overlay and flash take the screen's width and `stage_bottom`; figure sizes are `party_size`, `vehicle_size` and `enemy_size`.
+
+```json
+"params": {"stage_bottom": 180, "party_size": 48, "vehicle_size": 64, "motion_percent": 25}
+```
+
+The built-in values, which both files share but for the front-only ones (`side` has no `backdrop_h`, `ground_h`, `pointer_member_y`, `number_member_y`, and its `dev_badge_y` is 376, over its party panels):
+
+```json
+"backdrop_h": 488, "ground_h": 640,
+"label_max_width": 190, "label_y": 6, "label_h": 24, "label_pad": 8, "label_text_y": 3,
+"enemy_bar_y": 34, "enemy_bar_w": 100, "enemy_bar_h": 6, "enemy_icons_y": 44, "icon_size": 20, "icon_gap": 2,
+"pointer_size": 36, "pointer_y": 40, "pointer_member_y": 8, "pointer_bob": 5,
+"number_size": 28, "number_critical_size": 36, "number_tp_size": 24, "number_word_size": 20,
+"number_y": 26, "number_member_y": 36, "number_rise": 30, "number_gap": 6,
+"effect_scale": 3, "effect_scale_large": 4,
+"dev_badge_y": "H - 29"
+```
+
+## Fields the session cannot give yet
+
+Fields a layout might want that the C# `GameSession` does not expose, so no screen offers them: the actor who keeps a
+shop or rest point (`FieldPoint` and `ShopInfo` name none; the assets' `keepers` map points to portraits instead), and
+an enemy's level (`Combatant` has none; enemies have no portraits in the data either).
 
 ## Dialogue control tags (`ui/dialogue.json`, `SampleController.Dialogue.cs`)
 
@@ -636,7 +839,9 @@ The session hands the sample each line with name tokens resolved and control tag
   auto-advance. Instant text and Confirm-hurry skip waits. N not a whole number: a problem, no wait.
 * `{portrait:ID}`: the portrait from that point on (the line starts with `say ... as`'s portrait). An ID that is not in
   `game.json`'s `presentation.portraits`, an actor, a character or the assets' `portraits` is a problem (the speaker's
-  own picture stands in, as for any portrait without a picture).
+  own picture stands in, as for any portrait without a picture). `ID` is `PORTRAIT` or `PORTRAIT:EXPRESSION`
+  (`{portrait:guide:smile}`), an expression of the assets' portrait entry (`assets.md`, "portraits"). An expression the
+  entry lacks shows what `{portrait:PORTRAIT}` shows and is a problem once per `ID` per run, not once per line.
 * `{var:ID}`: replaced, when the line comes up, by `money` (the party's money), `leader` (the first lineup member's
   name) or the name the session gives the ID (`DisplayName`: a member's chosen name, a character, an item, an ability,
   an enemy, an area...). An ID it cannot name shows as written and is a problem.
@@ -664,7 +869,7 @@ cue plays on every box change; the `text` cue ticks while a box reveals. The arr
 
 A screen file may have a `tags` object (only the dialogue screen reads one; elsewhere it is a problem): each key a tag
 name (letters, digits, `_`, not starting with a digit; not `page`, `wait`, `portrait`, `var` or the name tokens), each
-value `{"action": ACTION, "id": ID, "slot": SLOT}`:
+value `{"action": ACTION, "id": ID, "slot": SLOT, "values": {VALUE: ID, ...}, "default": ID}`:
 
 | action | does | id |
 | --- | --- | --- |
@@ -674,19 +879,31 @@ value `{"action": ACTION, "id": ID, "slot": SLOT}`:
 | `panel_show` | shows a live panel at once, named and filmed by the id (a camera, actor or character), on `slot` (default `center`) | the tag's value, or `id` |
 | `panel_hide` | takes the panel away at once | the tag's value, or `id` |
 | `panel_clear` | takes every panel away at once | - |
+| `picture` | shows the assets' still picture of that name ([`assets.md`](assets.md), "pictures") in the layout's picture window, in place of the one up | the tag's value, or `id` |
+| `picture_hide` | takes the picture away when it is the one up | the tag's value, or `id` |
+| `picture_clear` | takes the picture away | - |
 | `portrait_off` | takes the portrait away for the rest of the line | - |
 | `log` | only the transcript line | - |
 
-An id the game does not have (a cue or music no data or sample sound plays, no such camera or person, no such panel up)
-is a problem, not a crash. A file's table falls back to the built-in one name by name, as params do. Built in:
-`sound` (cue), `music` (music), `music_stop`, `panel` (panel_show, center), `panel_hide`, `panels_clear`
-(panel_clear), `portrait_off`.
+`values` maps the tag's values to ids, and `default` gives the id for a value `values` leaves out (without it, the value
+itself): `{bell:1}` and `{bell:2}` below play two cues and `{bell:9}` the default. Both are for the actions that take an
+id and do not go with `id`, which ignores the value. A value that is not a non-empty string is a problem.
+
+```json
+"tags": {"bell": {"action": "cue", "values": {"1": "lookout_creak", "2": "cursor"}, "default": "confirm"}}
+```
+
+An id the game does not have (a cue or music no data or sample sound plays, no such camera or person, no such panel up,
+no such picture in the assets, a hide of a picture that is not up) is a problem, not a crash. A shown picture stays,
+between lines too, until a hide or clear or the end of the scene. A file's table falls back to the built-in one name by
+name, as params do. Built in: `sound` (cue), `music` (music), `music_stop`, `panel` (panel_show, center), `panel_hide`,
+`panels_clear` (panel_clear), `picture`, `picture_hide`, `pictures_clear` (picture_clear), `portrait_off`.
 
 ### Transcript lines
 
 * `tag: NAME VALUE` (or `tag: NAME`): a tag no table maps, once per line.
 * `tag problem: NAME:VALUE: REASON`: a tag the sample could not act on (an unknown id, a wait that is not a whole
-  number, a `var` without a value), once per line.
+  number, a `var` without a value), once per line; a portrait's unknown expression once per run.
 
 ### Probes (`expect state KEY VALUE`)
 
@@ -695,9 +912,12 @@ is a problem, not a crash. A file's table falls back to the built-in one name by
 * `pagetext`: the text the box holds (tags out, values in).
 * `dialoguepage`: the box among the line's boxes, `N/TOTAL`.
 * `lineportrait`: the portrait id shown, `off` after `portrait_off`, `-` for the speaker's own.
+* `shownportrait`: the key of the picture shown: `portrait:ID`, `portrait:ID:EXPRESSION` (from the assets) or
+  `person:ID` (the person's sheet or generated look); `off` after `portrait_off`.
 * `reveal`: characters shown of the line's, tags left out and earlier boxes counted (`SHOWN/TOTAL`).
 * `fontmissing`: as before, over the line's shown text.
 * `wrapped`: the lines the box shows (at most `lines`) and their widths.
+* `picture`: the still picture shown (`chart`), `-` for none.
 * `dialogueoverlaps`: the box's named elements (`line`, `hint`, `arrow`, `portrait`) that reach outside the frame's
   inside (the window less the frame's border: 4 for the generated frame, a nine-slice's border times its scale), and the
   hint over the line, the arrow or the portrait: `hint frame`, `hint line`... or `none`; `-` without a box.
@@ -737,6 +957,13 @@ styles.json gains the text style `hint` (`size_small`, `dim`, role `hint`) and t
   `build/shots/dialogue_tags/` with `--window` (run from `bindings/`). Headless runs and the window differ in text
   widths, so the window run reports failures where boxes break elsewhere (`reveal` at a box end, `dialoguepage`).
 
+* `scripts/dialogue_pictures.txt` (run with `--dev` and `--assets build/pictures_assets`, a copy of `build/test_assets`
+  with `alt/assets_more.json` as its manifest): the event `dialogue_pictures` shows the assets' chart, then the bell
+  tower in its place, names a picture the assets lack and hides the chart when the tower is up (two problem lines),
+  hides the tower and clears; with `alt/dialogue_pictures.json` swapped in as the dialogue layout, `{bell:1}` and
+  `{bell:2}` play the cues their values map to and `{bell:9}` the default. Screenshots under
+  `build/shots/dialogue_pictures/` with `--window`.
+
 Run, from `bindings/`:
 
 ```
@@ -754,8 +981,11 @@ placed by the asset directory's `ui/` files alone.
 
 `bindings/monogame/Psiv.Sample/scripts/make_layout_assets.py EXPORT FONTS OUT` copies FONTS (the bitmap font directory
 of `make_test_assets.py`) to OUT, sets each font's `scale` (0.6, the battle numbers' 0.8), adds
-`"ui_layout": {"enabled": true}` to the manifest and writes `OUT/ui/styles.json` and one file per screen. The styles
-start from the export's built-in `ui/styles.json`; every screen file is written from the script's own window lists,
+`"ui_layout": {"enabled": true}` to the manifest and writes `OUT/ui/styles.json`, one file per screen and the
+alternates a script swaps in: `alt/styles.json` (the styles as written), `alt/styles_nine_slice.json` (the `panel`
+frame the nine-slice picture `frames/nine_slice.png`, 24 pixels with an 8-pixel border) and `alt/assets_skin.json` (the
+manifest with a UI skin whose `frame` is `frames/skin.png`, 12 pixels with a 4-pixel border), both pictures generated
+by the script. The styles start from the export's built-in `ui/styles.json`; every screen file is written from the script's own window lists,
 except `panels.json`, copied from the export (every rectangle comes from the screen). `make_test_assets.py` takes an
 optional fifth argument, LAYOUT, and runs `make_layout_assets.py EXPORT FONTS LAYOUT` after the other directories.
 `--check-assets --assets OUT` reports `32 layout files (640x480)` and no problems.
@@ -764,47 +994,126 @@ optional fifth argument, LAYOUT, and runs `make_layout_assets.py EXPORT FONTS LA
 
 * Styles: resolution 640x480, `"scaling": {"mode": "integer", "filter": "point"}`; the built-in colors plus `card` and
   `teal`; text style `label` (small, teal); frames `card` (a fill) and `edge` (a 1-pixel outline); `sizes.line` 14;
-  `timings.toast_ms` 2500. With the fonts' scale, small and body text draw at one file pixel a screen pixel (10-pixel
-  lines) and titles at two; the code's own text (hints, enemy labels, toasts) gets the same font.
+  `timings.toast_ms` 2500; `params` for notices 16 high, 3 apart, the text 6 in. With the fonts' scale, small and
+  body text draw at one file pixel a screen pixel (10-pixel lines) and titles at two; the code's own text (hints, enemy
+  labels, toasts) gets the same font, and the battle's numbers draw at two (`number_size` 20).
 * No title plates: a window's name is its first line in the accent color over a rule.
 * With `--dev` the windows near the top middle start 46 pixels down (`dev ? 46 : 8`), under the developer badge; the
-  front battle's keys line leaves the badge's end of the line free.
+  front battle's keys line leaves the badge's end of the line free (`dev_badge_y` puts it there).
 * Title: a narrow window at the left, the hero and a creature in a card beside the options.
-* Field: area, money and play time in a dark card at the top left; notices from the top right down; the arrival banner
-  over the hint line at the bottom; the hint line left-aligned with an accent mark.
+* Field: area, money and play time in a dark card at the top left; notices from the top right down, under the
+  developer badge's line; the arrival banner over the hint line at the bottom; the hint line left-aligned with an
+  accent mark.
 * Dialogue and inn: a box at the top, 40 pixels in from the sides, portrait 48 pixels in a frame, lines `line_step + 4`
-  apart, at most four; a choice's box is only as tall as its options.
-* Pause at the right edge; confirm centered.
+  apart, at most four; a choice's box is only as tall as its options; a still picture under the box, growing in by
+  16-pixel steps; the inn's keeper at the box's right.
+* Pause at the right edge, growing sideways in 12-pixel steps (`grow_x`); confirm centered, growing downward in 8-pixel
+  steps (`grow_y`).
 * Field menu: the tabs drawn as a vertical `rows` list in a column at the left (display only; Left and Right still turn
-  them), money at its bottom, the page in a panel at the right (452x376 with `--dev`). Lists show fewer, shorter rows
-  (`t(17)`/`t(18)`, items 9 rows, abilities 8, save slots 7 at `t(32)`); descriptions in `card` boxes.
-* Shop: tabs as text with an underline beside the title, the stock list at the left (10 rows), the stall picture, the
-  description and the comparison in a column at the right.
+  them), the party under them (name, level, HP and TP with bars, from `party`), the money at its bottom as a number
+  (`money_value`), the field behind dimmed at 0.3 (`backdrop_dim`), the page in a panel at the right (452x300 with `--dev`), which leaves the panel's bottom
+  76 pixels to four notices. Lists show fewer, shorter rows (`t(17)`/`t(18)`, items 9 rows, abilities 8, save slots 7
+  at `t(32)`); descriptions in `card` boxes.
+* Shop: tabs as text with an underline beside the title, the stock list at the left (10 rows), the stall picture and the
+  keeper's portrait (the manifest's `keepers` give the dockhand to Tidewater's stall and the lodgekeeper to its inn), the
+  description and the comparison in a column at the right, over the field dimmed at 0.75.
 * Load and sound test at the right of the screen; save prompt, quest log, text log, travel and name entry centered at
   the top.
 * Battle, front: `strip` is a column of five cards (140x52, 4 apart) at the left edge, with empty frames for free places;
-  each card's `anchor` slot is a 96-pixel square on it, so effects on a member without a figure land on its card. The
+  each card's `anchor` slot is a 96-pixel square on it, so effects on a member without a figure land on its card, and
+  the picture of the command chosen stands at its bottom right. The window `enemies` lists `enemy_groups` over the free
+  places under the members' cards, with the stage's labels left out (`"enemy_labels": "len(members) >= 5"`: a full
+  party leaves the window no room and brings them back). The technique list shows each option's cost or uses at the
+  right, a repeater over `menu_items` beside the `rows` page. The
   vehicle's card stands under the column. The command window is one column of four rows that scrolls with the cursor,
   with a `cursor/count` line, beside the member choosing above the party's figures. Log, description and name plate
-  over the stage right of the column; the result window low on the stage, above the party. Params fit the stage:
-  members 84 pixels from x 196, 92 apart, feet at 492; enemies around x 392, up to four in a row (104 or 96 pixels),
-  six in two interleaved ranks (72 in front at feet 228, 56 behind at feet 100).
-* Battle, side: stage bottom 324; the party as one line per member (portrait, name, icons, HP and TP numbers and bars)
-  in a panel at the bottom left, the commands at the bottom right; members 56 pixels in a diagonal at the right,
-  enemies 72 to 56 pixels around x 210.
+  over the stage right of the column; the result window low on the stage, above the party; the keys' line 30 high at the
+  bottom, the developer badge at its right end. Params fit the stage: the backdrop 328 high with its ground 432 under
+  it; members 84 pixels from x 196, 92 apart, feet at 448 just over the keys' line, whole on the screen; enemies around
+  x 392, up to four in a row (104 or 96 pixels, feet at 200), six in two interleaved ranks (72 in front at feet 216, 56
+  behind at feet 100); labels 14 high, bars 56 by 3, status icons 16, the pointer 20, numbers at size 20 rising 16,
+  effects at twice their size.
+* Battle, side: stage bottom 324; the party as one line per member (portrait, name and level, icons, HP and TP numbers
+  and bars) in a panel at the bottom left, the commands at the bottom right; members 56 pixels in two staggered pairs at
+  the right (`party_slot_N_x`, `party_slot_N_foot`), no HP bars under the enemies (`"enemy_bars": 0`),
+  enemies 72 to 56 pixels around x 210; the stage's labels, icons, pointer, numbers and effects as in the front layout,
+  the developer badge at 290, over the party panel.
 
 ### The scripts
 
 `make bindings` runs each with `--dev` on its own copy of the set (the front battle on the six-enemy data copy) and
-checks window rectangles with `expect state windows` and `expect state window.NAME` at each moment, with a `shot`.
+checks window rectangles with `expect state windows` and `expect state window.NAME` at each moment, with a `shot`, and
+with `expect state overlaps none` that notices and the battle's windows cover no content.
 
 * `layout_field.txt`: title; the arrival's narration and a speaker's line with the banner; field; the guide's line with
-  a portrait, the yes/no choice, the name entry; the shop's buy and sell tabs; the inn; pause; the reed path's banner.
-* `layout_menus.txt`: status members, stats and abilities; items with the target list; equip removing and comparing; a
-  manual save; order, macros, combos, quests, codex, log; options and the controls page; quest log and text log; the
-  quit confirm; the Load screen loading the save; Bell Cove's save prompt.
-* `layout_battle_front.txt` (front data): the cache battle's command, target and technique windows (`overlaps none`), a
-  member hit, the sweep's name plate, the log, the result window; a party of five against six enemies in two ranks
-  (`ranks 3+3`), auto, and the result with two level-ups.
-* `layout_battle_side.txt`: a side battle's command, technique description, playback hints and result; the reed
+  a portrait, the yes/no choice, the name entry; the guide's scene's four notices; the shop's buy and sell tabs with
+  its keeper (`keeper`) and dimming (`backdropdim`); the inn with its keeper; pause, its box checked twice while it grows;
+  the reed path's banner.
+* `layout_menus.txt`: status members (with `backdropdim 0.3`), stats and abilities; items with the target list; equip removing and comparing; a
+  manual save with three notices under the page; order, macros, combos, quests, codex, log; options and the controls
+  page; quest log and text log; the quit confirm, its box checked twice while it grows; the Load screen loading the save; Bell Cove's save prompt.
+* `layout_battle_front.txt` (front data): the cache battle's command, target and technique windows (`overlaps none`),
+  `enemygroups`, `enemymarks` with the labels left out, `commands` before and after the fighter chooses, a member hit, the sweep's name plate, the log, the result window; a party of five against six enemies in two ranks
+  (`ranks 3+3`) with the labels back, auto, the pointer moving to a new target, sleep icons and words on three enemies, and the result with
+  two level-ups.
+* `layout_battle_side.txt`: a side battle's command (`partyplaces`, `enemymarks` without bars), technique description, playback hints and result; the reed
   skimmer's battles in the front layout (its card, hit) and the side layout (its menu); a defeat's result.
+* `layout_frames.txt` (on saves with a cleared story, which the Makefile writes with `game_cli` first, so the title
+  offers the sound test): the sound test and a ferry's travel screen with the generated frames, with the nine-slice
+  `panel` (`assets swap ui/styles.json alt/styles_nine_slice.json`) and with the UI skin (`assets swap assets.json
+  alt/assets_skin.json`, the styles swapped back), each checked with `uiframes`; then the console's `help overlays` and
+  the windows overlay over the travel screen.
+
+## A small example set (`make_layout_assets.py --small`)
+
+A 320x224 set at 16 pixels a field cell, played at whole-number scales (3x in a 960x672 window, 4x in 1280x896), that
+shows the field, the panels and the battle following the layouts' sizes.
+
+### How it is made
+
+`make_layout_assets.py --small EXPORT FONTS TEST OUT` copies TEST (`build/test_assets`: its tilesets, sheets, whole-area
+pictures, objects, figures and backdrops) to OUT without its UI skin, adds FONTS' bitmap fonts at the 640x480 set's
+scale (small and body text 10 pixels tall at one file pixel a pixel, titles at two) and writes `ui/styles.json` and the
+files of `title`, `field`, `dialogue`, `confirm`, `pause`, `menu`, `menu_status`, `menu_items`, `panels`,
+`battle_front` and `battle_side`. The manifest has no `ui_layout` entry, so the other screens keep the built-in files
+(drawn for 1280x720; the runs do not show them). It also writes `alt/styles_cell20.json`, the styles at a 20-pixel
+cell. `--check-assets --assets OUT` reports `12 layout files (320x224)` and no problems; with the alternate styles it
+reports the test assets' tileset of 48-pixel tiles at scale 3, which draws 24 pixels a 20-pixel cell.
+
+### What it sets
+
+* Styles: 320x224, `integer`, `point`; `"params": {"field_cell": 16, "field_shake": 3, "toast_h": 14, "toast_gap": 2,
+  "toast_pad": 4, "toast_text_y": 2}`; `sizes.line` 12. The test assets' field sheets and tileset at scale 3
+  draw their 48-pixel frames on the 16-pixel cell (a third, snapped), the reed path's 16-pixel picture at one file
+  pixel a pixel, Ashfall Market's 32-pixel picture at half.
+* With `--dev` the windows near the top start 42 pixels down (`dev ? 42 : 4`), under the developer badge.
+* Field: area and money in a card at the top left, the arrival banner under the badge's line, notices stacked up from
+  the hint line at the right, the prompt as a card under the target cell (`prompt_y + 9`).
+* Dialogue: `"params": {"box_h": 70, "box_margin": 14, "box_top": "dev ? 42 : 4"}`; the box at `top`, a 32-pixel
+  portrait, two lines a box with a speaker and three without (longer lines go on in more boxes).
+* Panels: the built-in windows with `"params": {"margin": 6, "gutter": 4, "slide": 16}`.
+* Menu: the pages down a 66-pixel column, the page in the panel at the right; status and items with 11-pixel rows.
+  Choosing whom an item is for, the bag shrinks to three rows and the members' list takes the page's width under it.
+* Battle, front: `stage_bottom` 180, a strip of five 62x32 cards along the bottom over a 12-pixel keys line, members
+  48 pixels (the test assets' 48-pixel back sheets at one pixel a pixel) at x 33 and 64 apart, enemies 32 pixels
+  around x 160 with feet at 74 (the target pointer 11 over them stays under the two-line description at the top),
+  labels 12 high, icons 8, the pointer 12, numbers at 16 (critical 28), effects at their file size,
+  `"motion_percent": 25`, the developer badge at 104 in the stage's free band at the right. Side: `stage_bottom` 140,
+  the party panel and the menu under the stage, members 32 pixels on a diagonal from (232, 76), the badge at 112 under
+  the members' feet.
+
+### The scripts
+
+Each runs with `--dev` on its own copy of the set (`make bindings`), checks window rectangles with `expect state
+windows` at each moment and saves its `shot` lines under `build/shots/small/` with `--window` (run from `bindings/`,
+`--window-size 1280x896`).
+
+* `small_field.txt`: the title; the narration and a speaker's line in the box at the bottom (`dialogueoverlaps none`);
+  the field (`overlaps none`); the real-time glide (`leaderpos 48 64` to `64 64`); the prompt's card at the stall;
+  click-to-walk to a cell; the reed path's picture (`fieldpicture`); the lookout's panels (`paneltiles west 16, east
+  20`, then the cart's 24, then the east panel pushed in to 27) and a line in two boxes (`dialoguepage`); Ember Steps'
+  objects (`objects`).
+* `small_menus.txt`: the menu's status members, stats and abilities, the items with the target list, the pause box and
+  the quit confirm.
+* `small_battle.txt`: the front layout's command, technique description, target (`overlaps none`, `partyplaces`),
+  playback and result; the side layout's command, description, playback and result.

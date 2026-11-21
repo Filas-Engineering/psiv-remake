@@ -166,8 +166,24 @@ public sealed partial class SampleController
 	// and is done as soon as it starts, as the script format says; the event waits for one play of any other.
 	private int PoseAction(PresentationAction a)
 	{
+		if (_art is not null && _art.FromFile("character:" + a.Subject) && _art.SheetPose(a.Subject, a.Target) is null)
+		{
+			MissingPose("character:" + a.Subject, a.Target, "the standing frame plays");
+		}
 		_field.StartPose(a.Subject, a.Target, a.Handle, _clockMs, a.Loop);
 		return a.Loop ? 0 : _art?.PoseLengthMs(a.Subject, a.Target) ?? Art.PoseLengthMs(Art.PoseFor(a.Target));
+	}
+
+	// A pose a sheet or figure from the asset directory lacks, which the check cannot know before it plays: one transcript
+	// line per picture and pose.
+	private readonly HashSet<string> _missingPoses = [];
+
+	private void MissingPose(string key, string pose, string instead)
+	{
+		if (_missingPoses.Add($"{key} {pose}"))
+		{
+			_log($"pose: {key} has no pose '{pose}': {instead}");
+		}
 	}
 
 	// The end state of an action, for one that finished or was put up at once.

@@ -16,6 +16,8 @@ public static class Program
 		"  Psiv.Sample [--data DIR] [--saves DIR] [--seed N] [--font FILE] [--exit-after-ms N] [--screenshot FILE.png] [--mute] [--window-size WxH] [--fullscreen]\n" +
 		"              [--assets DIR] [--watch-assets] [--dev] [--battle-layout front|side] [--language CODE]\n" +
 		"  Psiv.Sample --window --script FILE ...   the window, with keys from the script instead of the keyboard\n" +
+		"              [--realtime]   the real-time field input and the window's own clock instead of 16 ms frames\n" +
+		"              [--pacing-log FILE]   each drawn frame's wall time and the leader's drawn position, for frame pacing\n" +
 		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N] [--assets DIR] [--frame-digests FILE] [--language CODE] [--strict-text]\n" +
 		"              headless, no window, no sound\n" +
 		"  Psiv.Sample --dump-audio DIR   writes a generated track and three cues as WAV files and checks every generated sound\n" +
@@ -30,6 +32,7 @@ public static class Program
 		"\n" +
 		"Headless script lines: press KEY [COUNT] | hold KEY FRAMES | wait FRAMES | pressuntil KEY SCREEN MAXFRAMES |\n" +
 		"pad BUTTON [COUNT] | padhold BUTTON FRAMES | paduntil BUTTON SCREEN MAXFRAMES | padstick X Y FRAMES |\n" +
+		"hold KEY+KEY FRAMES | padhold BUTTON+BUTTON FRAMES | fieldinput realtime|classic | trace PROBE[,PROBE]|off |\n" +
 		"controls list|reset|save|restart | controls capture|clear ACTION | controls write JSON |\n" +
 		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | expect actor ID X Y [FACING]|walking|hidden | expect pose ID POSE [marked] |\n" +
 		"expect label none | expect toast none|TEXT | expect notoast TEXT | expect binding ACTION KEYS \"|\" BUTTONS |\n" +
@@ -63,6 +66,8 @@ public static class Program
 		bool checkAssets = false;
 		bool watchAssets = false;
 		bool dev = false;
+		bool realtime = false;
+		string? pacingLog = null;
 		BattleLayout? battleLayout = null;
 		string? language = null;
 		bool strictText = false;
@@ -86,6 +91,8 @@ public static class Program
 			case "--check-assets": checkAssets = true; break;
 			case "--watch-assets": watchAssets = true; break;
 			case "--dev": dev = true; break;
+			case "--realtime": realtime = true; break;
+			case "--pacing-log": pacingLog = Next(); break;
 			case "--battle-layout" when BattlePresentation.ParseLayout(Next()) is { } layout: battleLayout = layout; break;
 			case "--language": language = Next(); break;
 			case "--strict-text": strictText = true; break;
@@ -177,7 +184,8 @@ public static class Program
 			}
 			try
 			{
-				using var game = new SampleGame(session, gameData, font, exitAfterMs, saves, script, screenshot, mute, windowSize, fullscreen, assets, watchAssets, dev, data, battleLayout);
+				using var game = new SampleGame(session, gameData, font, exitAfterMs, saves, script, screenshot, mute, windowSize, fullscreen, assets, watchAssets, dev, data, battleLayout,
+					realtime, pacingLog);
 				game.Run();
 				return game.Failures == 0 ? 0 : 1;
 			}
@@ -204,6 +212,9 @@ public static class Program
 			$"{(m.BattlePresentation is null ? "the built-in battle presentation" : "a battle presentation table")}, " +
 			$"{(m.MapsEnabled ? $"{m.Maps.Count} area pictures" : "area pictures turned off")}, {m.Objects.Count} objects, {m.VehicleOverlays.Count} vehicle overlays" +
 			(m.BitmapFontsEnabled switch { true => $", {m.BitmapFonts.Count} bitmap fonts", false => ", bitmap fonts turned off", null => "" }) +
+			(m.BackdropMaps.Count > 0 ? $", {m.BackdropMaps.Count} backdrop maps" : "") + (m.TitleArt is null ? "" : ", title art") +
+			(m.CommandIcons.Count > 0 ? $", {m.CommandIcons.Count} command icons" : "") + (m.Pictures.Count > 0 ? $", {m.Pictures.Count} pictures" : "") +
+			(m.Keepers.Count > 0 ? $", {m.Keepers.Count} keepers" : "") +
 			(assets.Layout.IsDefault ? m.UiLayoutEnabled == false ? ", layouts turned off" : "" : $", {assets.Layout.FromFiles.Count} layout files ({assets.Layout.Styles.Width}x{assets.Layout.Styles.Height})"));
 		Console.WriteLine(assets.Problems.Count == 0 ? "OK: no problems." : $"FAILED: {assets.Problems.Count} problems.");
 		return assets.Problems.Count == 0 ? 0 : 1;
@@ -289,6 +300,9 @@ public sealed class ScriptPlayer
 	private string? _pendingFailure;
 	private int _audioMark;
 	private int _presentMark;
+	// Probes printed after every frame (`trace`), and the field input a restarted controller keeps.
+	private string[] _trace = [];
+	private bool _realtimeField;
 
 	// `shot` saves the next drawn frame to a file; null (headless) skips shot lines. `restart` makes a new controller
 	// for `controls restart`.
@@ -306,6 +320,7 @@ public sealed class ScriptPlayer
 		_frame = frame;
 		_name = Path.GetFileName(path);
 		_lines = File.ReadAllLines(path);
+		_realtimeField = controller.RealtimeField;
 		_action = NextAction();
 	}
 
@@ -340,8 +355,26 @@ public sealed class ScriptPlayer
 
 	// The buttons a connected pad reports with its left stick at x, y (each -1 to 1, y up), through the same dead zone
 	// as a real pad.
-	private static InputFrame Stick(float x, float y) =>
-		new([], [.. Pad.ButtonsDown(new GamePadState(new GamePadThumbSticks(new Vector2(x, y), Vector2.Zero), new GamePadTriggers(), new GamePadButtons(), new GamePadDPad()))]);
+	// With the real-time field input the stick goes through the window's hysteresis, kept from one `padstick` to the next.
+	private static InputFrame Stick(float x, float y, StickSnap? snap) =>
+		new([], [.. Pad.ButtonsDown(new GamePadState(new GamePadThumbSticks(new Vector2(x, y), Vector2.Zero), new GamePadTriggers(), new GamePadButtons(), new GamePadDPad()), snap)]);
+
+	private readonly StickSnap _snap = new();
+
+	// `A+B`: keys or buttons held together, each by its MonoGame name.
+	private static T[]? Several<T>(string names) where T : struct, Enum
+	{
+		var all = new List<T>();
+		foreach (string name in names.Split('+'))
+		{
+			if (!Enum.TryParse(name, ignoreCase: true, out T value) || !Enum.IsDefined(value))
+			{
+				return null;
+			}
+			all.Add(value);
+		}
+		return [.. all];
+	}
 
 	// One frame with no keys, so the frame drawn is the one the script reached.
 	private IEnumerable<InputFrame> Shot(string path)
@@ -389,6 +422,16 @@ public sealed class ScriptPlayer
 			{
 			case "press" when keyOk:
 				return Press(new([key], []), w.Length > 2 ? int.Parse(w[2], CultureInfo.InvariantCulture) : 1).GetEnumerator();
+			case "hold" when w.Length == 3 && w[1].Contains('+') && Several<Keys>(w[1]) is { } keys:
+				return Repeat(new(keys, []), int.Parse(w[2], CultureInfo.InvariantCulture)).GetEnumerator();
+			case "padhold" when w.Length == 3 && w[1].Contains('+') && Several<Buttons>(w[1]) is { } buttons:
+				return Repeat(new([], buttons), int.Parse(w[2], CultureInfo.InvariantCulture)).GetEnumerator();
+			case "fieldinput" when w.Length == 2 && w[1] is "realtime" or "classic":
+				_controller.RealtimeField = _realtimeField = w[1] == "realtime";
+				break;
+			case "trace" when w.Length == 2:
+				_trace = w[1] == "off" ? [] : w[1].Split(',');
+				break;
 			case "hold" when keyOk && w.Length == 3:
 				return Repeat(new([key], []), int.Parse(w[2], CultureInfo.InvariantCulture)).GetEnumerator();
 			case "wait" when w.Length == 2:
@@ -403,7 +446,7 @@ public sealed class ScriptPlayer
 				return PressUntil(new([], [button]), padScreen, int.Parse(w[3], CultureInfo.InvariantCulture), source).GetEnumerator();
 			case "padstick" when w.Length == 4 && float.TryParse(w[1], CultureInfo.InvariantCulture, out float stickX) &&
 				float.TryParse(w[2], CultureInfo.InvariantCulture, out float stickY):
-				return Repeat(Stick(stickX, stickY), int.Parse(w[3], CultureInfo.InvariantCulture)).GetEnumerator();
+				return Repeat(Stick(stickX, stickY, _realtimeField ? _snap : null), int.Parse(w[3], CultureInfo.InvariantCulture)).GetEnumerator();
 			case "click" when w.Length == 3 && int.TryParse(w[1], CultureInfo.InvariantCulture, out int clickX) &&
 				int.TryParse(w[2], CultureInfo.InvariantCulture, out int clickY):
 				return Press(new([], [], (clickX, clickY)), 1).GetEnumerator();
@@ -629,6 +672,7 @@ public sealed class ScriptPlayer
 			break;
 		case "restart" when w.Length == 2 && _restart is not null:
 			_controller = _restart();
+			_controller.RealtimeField = _realtimeField;
 			Console.WriteLine($"[{_frame()}] controls| restarted the controller");
 			break;
 		default:
@@ -726,6 +770,10 @@ public sealed class ScriptPlayer
 	// The keys and buttons for the next frame; none once the script is done.
 	public InputFrame Next()
 	{
+		if (_trace.Length > 0)
+		{
+			Console.WriteLine($"[{_frame()}] trace| " + string.Join("  ", _trace.Select(k => $"{k}={_controller.State(k)}")));
+		}
 		while (_action is not null)
 		{
 			if (_action.MoveNext())

@@ -3,10 +3,11 @@
 	"windows": [
 		{"name": "scene", "elements": [{"type": "slot", "slot": "scene"}]},
 		{"name": "box", "anchor": "center", "w": 600, "h": "t(132) + t(44) + len(options) * t(32)", "frame": "panel", "elements": [
-			{"type": "text", "value": "title", "x": "-box.x", "w": "W", "align": "center", "y": "t(26)", "style": "title"},
+			{"type": "text", "value": "title", "visible": "logo < 0", "x": "-box.x", "w": "W", "align": "center", "y": "t(26)", "style": "title"},
+			{"type": "image", "image": "logo", "x": "(cw - logo_w) / 2", "y": "t(42) - logo_h / 2", "w": "logo_w", "h": "logo_h"},
 			{"type": "text", "value": "subtitle", "x": "-box.x", "w": "W", "align": "center", "y": "t(66)", "style": "small_dim"},
-			{"type": "image", "image": "hero_frame", "x": 28, "y": 18, "w": 64, "h": 64},
-			{"type": "image", "image": "creature_frame", "x": "cw - 92", "y": 18, "w": 64, "h": 64},
+			{"type": "image", "image": "hero_frame", "x": "28 + (64 - hero_w) / 2", "y": "82 - hero_h", "w": "hero_w", "h": "hero_h"},
+			{"type": "image", "image": "creature_frame", "x": "cw - 92 + (64 - creature_w) / 2", "y": "82 - creature_h", "w": "creature_w", "h": "creature_h"},
 			{"type": "text", "visible": "game_over", "key": "ui.title.fallen", "x": "-box.x", "w": "W", "align": "center", "y": "t(96)", "color": "bad"},
 			{"type": "rows", "items": "options", "selected": "cursor", "x": 80, "y": "t(132)", "w": "cw - 140", "row_height": "t(32)", "height": "t(28)"}
 		]},

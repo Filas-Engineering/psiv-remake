@@ -62,7 +62,7 @@ public sealed partial class SampleController
 		_travelList.Cursor = Math.Clamp(_travelList.Cursor, 0, rows.Count);
 		string detail = _travelList.Cursor < rows.Count ? T("ui.travel.arrive", rows[_travelList.Cursor].AreaName) : T(port ? "ui.travel.stay" : "ui.travel.keep_menu");
 		Ui.Draw("travel", s, t, SetDescription(UiData(), detail)
-			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "travel")))
 			.Set("title", helm ? T("ui.travel.ship") : port ? T("ui.travel.ferry") : _travelPick is { } pick ? _s.DisplayName(pick.Thing) : T("ui.travel.title"))
 			.Set("question", T(helm ? "ui.travel.ship_question" : port ? "ui.travel.ferry_question" : _travelPick?.Kind == TravelKind.DungeonExit ? "ui.travel.exit_question" : "ui.travel.town_question"))
 			.Set("labels", rows.Select(d => d.AreaName + (d.Region.Length > 0 ? "   " + T("ui.travel.region", d.Region) : "")).Append(T(port ? "ui.travel.leave" : "ui.travel.cancel")).ToList())

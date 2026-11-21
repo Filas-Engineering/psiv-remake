@@ -1,0 +1,161 @@
+# Run with --dev on build/more_assets: a copy of build/test_assets with alt/assets_more.json as its manifest
+# (make_test_assets.py), since the run swaps a file there. The title's own background, logo, drifting clouds, flapping
+# birds, traveler and creature, then the same art at its natural size placed by a title layout of its own; the guide's sheet with two facings, facing east until a script turns it, then west drawn
+# as east flipped and north drawn from its fallback, south; battle backdrops by Tidewater Landing's regions, by the reed
+# path's picture of colors, by the ash storm's flag on the reed path only, by the kind where neither gives one, and the
+# reed path's picture swapped and reloaded. With --window the shot lines save screenshots under build/shots/assets_more/
+# (run from bindings/); headless runs write nothing for them.
+
+cmd set text instant
+expect screen Title
+waitstate 30 titleart background logo layers 2 traveler creature
+expect asset title:background file
+expect asset title:logo file
+expect asset title:layer:0 file
+expect asset title:layer:1 file
+expect asset title:traveler file
+expect asset title:creature file
+expect state titlesizes logo 240x40 traveler 64x64 creature 64x64 scale 0
+shot build/shots/assets_more/title.png
+wait 60
+shot build/shots/assets_more/title_later.png
+# Drawn for a screen 360 high, the logo, traveler and creature take twice their pixels; the swapped-in title layout puts
+# the scene in a band with them on it and the options under it, the layers' places counted from the band's corner.
+assets swap assets.json alt/assets_more_natural.json
+assets swap ui/title.json alt/title_natural.json
+wait 2
+expect state titlesizes logo 480x80 traveler 32x32 creature 32x32 scale 2
+expect state window.title/scene title/scene 0 40 1280x260
+shot build/shots/assets_more/title_natural.png
+assets swap assets.json alt/assets_more.json
+assets swap ui/title.json alt/title_builtin.json
+wait 2
+expect state titlesizes logo 240x40 traveler 64x64 creature 64x64 scale 0
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+
+# The guide stands facing east, as its sheet says, until the fighter talks to it from the west, then from the north.
+expect asset character:guide file
+expect actor guide 5 2 east
+expect state sheet.guide east: east 3 4 5
+shot build/shots/assets_more/guide_start.png
+dev warp tidewater 4 2
+wait 2
+press Right
+wait 3
+press Enter
+wait 4
+expect actor guide 5 2 west
+expect state sheet.guide west: east mirrored 3 4 5
+shot build/shots/assets_more/guide_west.png
+pressuntil Enter Field 400
+expect actor guide 5 2 west
+dev warp tidewater 5 1
+wait 2
+press Down
+wait 3
+press Enter
+wait 4
+expect actor guide 5 2 north
+expect state sheet.guide north: south 0 1 2
+shot build/shots/assets_more/guide_north.png
+pressuntil Enter Field 400
+
+# Tidewater Landing's regions: the square, the quay, and a cell in neither, where the town has no backdrop of its own.
+dev warp tidewater 3 4
+wait 2
+dev battle training
+expect mode Battle
+waitstate 120 battlephase Command
+expect state backdrop region:tidewater:square
+expect asset backdrop:id:reeds file
+shot build/shots/assets_more/backdrop_square.png
+dev win
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+dev warp tidewater 10 3
+wait 2
+dev battle training
+waitstate 120 battlephase Command
+expect state backdrop region:tidewater:quay
+shot build/shots/assets_more/backdrop_quay.png
+dev win
+hold F 60
+press Enter
+expect screen Field
+dev warp tidewater 11 6
+wait 2
+dev battle training
+waitstate 120 battlephase Command
+expect state backdrop generated
+dev win
+hold F 60
+press Enter
+expect screen Field
+
+# The reed path's picture: reeds on the west, dunes on the east, and between them the field kind's backdrop.
+dev warp reed_path west_gate
+wait 2
+dev battle marsh
+waitstate 120 battlephase Command
+expect state backdrop map:reed_path:reeds
+shot build/shots/assets_more/backdrop_map_reeds.png
+dev win
+hold F 60
+press Enter
+expect screen Field
+dev warp reed_path lookout_east
+wait 2
+dev battle marsh
+waitstate 120 battlephase Command
+expect state backdrop map:reed_path:dunes
+shot build/shots/assets_more/backdrop_map_dunes.png
+dev win
+hold F 60
+press Enter
+expect screen Field
+dev warp reed_path cache_front
+wait 2
+dev battle marsh
+waitstate 120 battlephase Command
+expect state backdrop kind:field
+dev win
+hold F 60
+press Enter
+expect screen Field
+
+# The ash storm's flag: its backdrop on the reed path over the picture, not in Tidewater Landing.
+dev flag fells.ash_storm on
+dev battle marsh
+waitstate 120 battlephase Command
+expect state backdrop flag:fells.ash_storm@reed_path
+shot build/shots/assets_more/backdrop_flag.png
+dev win
+hold F 60
+press Enter
+expect screen Field
+dev warp tidewater 3 4
+wait 2
+dev battle training
+waitstate 120 battlephase Command
+expect state backdrop region:tidewater:square
+dev win
+hold F 60
+press Enter
+expect screen Field
+dev flag fells.ash_storm off
+
+# The reed path's picture swapped for one of dunes only, and reloaded.
+assets swap backdrop_maps/reed_path.png alt/reed_path_dunes.png
+dev warp reed_path west_gate
+wait 2
+dev battle marsh
+waitstate 120 battlephase Command
+expect state backdrop map:reed_path:dunes
+dev win
+hold F 60
+press Enter
+expect screen Field

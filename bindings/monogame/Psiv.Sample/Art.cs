@@ -7,7 +7,7 @@ namespace Psiv.Sample;
 public enum Theme { Town, Field, Dungeon }
 
 // The procedural poses a script's `anim` plays on a person (Art.PoseFor maps the names).
-public enum Pose { None, Nod, Shake, Jump, Startle, Bow, Wave, Other }
+public enum Pose { None, Nod, Shake, Jump, Startle, Bow, Wave, Other, FadeIn, FadeOut, Dissolve, BlinkOut, Tremble }
 
 // Deterministic hashing, so a cell's floor variant or an NPC's colors never change between frames or runs.
 public static class Noise
@@ -528,11 +528,17 @@ public sealed partial class Art
 	// Script animation names the sample knows, and the pose each plays. Any other name plays Pose.Other.
 	private static readonly Dictionary<string, Pose> PoseNames = new()
 	{
+		["blink_out"] = Pose.BlinkOut,
 		["bow"] = Pose.Bow,
+		["dissolve"] = Pose.Dissolve,
+		["fade_in"] = Pose.FadeIn,
+		["fade_out"] = Pose.FadeOut,
+		["hop"] = Pose.Jump,
 		["jump"] = Pose.Jump,
 		["nod"] = Pose.Nod,
 		["shake"] = Pose.Shake,
 		["startle"] = Pose.Startle,
+		["tremble"] = Pose.Tremble,
 		["wave"] = Pose.Wave,
 	};
 
@@ -547,8 +553,30 @@ public sealed partial class Art
 		Pose.Startle => 560,
 		Pose.Bow => 900,
 		Pose.Wave => 840,
+		Pose.FadeIn => 400,
+		Pose.FadeOut => 500,
+		Pose.Dissolve => 700,
+		Pose.BlinkOut => 640,
+		Pose.Tremble => 600,
 		_ => 520,
 	};
+
+	// The poses that change how the whole sprite shows rather than how the person stands, at `t` (0 to 1 through one
+	// play): its opacity, a sideways shift in field pixels, and how far it has broken up into rising motes (0 to 1). The
+	// ones that end out of sight leave the sprite undrawn once played, until the scene ends or another pose starts.
+	public static (float Alpha, int Dx, float Scatter) SpriteLook(Pose pose, float t) => pose switch
+	{
+		Pose.FadeIn => (Math.Clamp(t, 0f, 1f), 0, 0f),
+		Pose.FadeOut => (1f - Math.Clamp(t, 0f, 1f), 0, 0f),
+		Pose.Dissolve => (1f - Math.Clamp(t, 0f, 1f), 0, Math.Clamp(t, 0f, 1f)),
+		// On and off, faster and faster.
+		Pose.BlinkOut => (t >= 1f || (int)(t * t * 14) % 2 == 1 ? 0f : 1f, 0, 0f),
+		// Side to side, easing off.
+		Pose.Tremble => (1f, (int)MathF.Round(MathF.Sin(t * MathF.PI * 16) * 3 * (1f - 0.5f * t)), 0f),
+		_ => (1f, 0, 0f),
+	};
+
+	public static bool Vanishes(Pose pose) => pose is Pose.FadeOut or Pose.Dissolve or Pose.BlinkOut;
 
 	// A person in a pose at `t` (0 to 1 through one play): the picture, a lift in screen pixels, whether a startled
 	// mark shows above the head, and the motion marks drawn around the head. Poses keep the person's facing and only
@@ -571,6 +599,8 @@ public sealed partial class Art
 			Pose.Bow => (PoseImage(look, facing, pose, t is > 0.15f and < 0.85f ? 2 : t is > 0.05f and < 0.95f ? 1 : 0), 0, false, []),
 			// An arm up, the hand swinging.
 			Pose.Wave => (PoseImage(look, facing, pose, 1 + (int)(t * 6) % 2), 0, false, []),
+			// The sprite's own looks (SpriteLook) stand still.
+			Pose.FadeIn or Pose.FadeOut or Pose.Dissolve or Pose.BlinkOut or Pose.Tremble => (ActorFrame(look, facing, 0), 0, false, []),
 			// Anything else: two small bounces.
 			_ => (ActorFrame(look, facing, 0), Hop(t * 2f % 1f, 5), false, []),
 		};

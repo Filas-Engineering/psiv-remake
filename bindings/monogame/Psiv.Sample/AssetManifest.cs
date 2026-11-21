@@ -79,9 +79,13 @@ public sealed record OverlayEntry(string? Vehicle, string Path);
 // Motion: whether the animation's generated motion (a hop, a startled mark, strokes beside the head) plays over the frames.
 public sealed record PoseEntry(Dictionary<Direction, int[]> Frames, int[] Ms, bool Motion);
 
+// How a sheet faces: Mirror draws a facing its walk lacks as another one flipped, Fallback draws any other facing it
+// lacks, Start is how an actor stands until a script turns or moves it.
+public sealed record SheetFacing(Dictionary<Direction, Direction> Mirror, Direction? Fallback, Direction? Start);
+
 // Shadow: whether the generated ground shadow is drawn under the person (null: drawn).
 public sealed record CharacterEntry(string Id, GridImage Image, Dictionary<Direction, int[]> Walk, Dictionary<string, PoseEntry> Poses, Dictionary<string, string> Animations,
-	bool? Shadow = null);
+	bool? Shadow = null, SheetFacing? Facing = null);
 
 // Back: the party member or vehicle seen from behind, as the front battle layout draws it.
 // Shadow: whether the generated ground shadow is drawn under it (null: battle_figures.shadows).
@@ -94,10 +98,27 @@ public sealed record FieldEnemyEntry(string Encounter, GridImage Image, FrameRun
 // A vehicle in the field: per facing a frame run of `Ms` milliseconds a frame, looping (a bob).
 public sealed record VehicleEntry(string Id, GridImage Image, Dictionary<Direction, int[]> Facings, int Ms);
 
-public sealed record BackdropEntry(string? Kind, string? Area, string? Encounter, string? Terrain, string Path)
+// Id: the name backdrop maps give it; an entry with only an id serves the maps alone. Flag: the entry serves while the
+// flag is set, in Area only when it names one.
+public sealed record BackdropEntry(string? Kind, string? Area, string? Encounter, string? Terrain, string Path, string? Id = null, string? Flag = null)
 {
-	public string Key => Kind is not null ? "kind:" + Kind : Area is not null ? "area:" + Area : Encounter is not null ? "encounter:" + Encounter : "terrain:" + Terrain;
+	public string Key => Flag is not null ? "flag:" + Flag + (Area is null ? "" : "@" + Area) : Kind is not null ? "kind:" + Kind : Area is not null ? "area:" + Area
+		: Encounter is not null ? "encounter:" + Encounter : Terrain is not null ? "terrain:" + Terrain : "id:" + Id;
 }
+
+// A backdrop per cell of an area, from a picture's colors (Image) or from named rectangles: each cell's backdrop id and
+// the key the `backdrop` probe reports (`map:AREA:ID`, `region:AREA:NAME`), null where the map gives none.
+public sealed record BackdropMap(string Area, string? Image, int Width, int Height, (string Backdrop, string Key)?[] Cells);
+
+// A frame run drawn over the title's background at X, Y, Scale screen pixels a file pixel, moving ScrollX and ScrollY
+// pixels a second and repeated across the screen along each axis it moves on.
+public sealed record TitleLayer(GridImage Image, FrameRun Run, int X, int Y, int Scale, float ScrollX, float ScrollY);
+
+// The title screen's own pictures: a background in place of the field scene, a logo in place of the title's text, layers
+// over the background, and the traveler and the creature beside the title. ReferenceHeight: the logical screen height the
+// logo, traveler and creature were drawn for, which draws them at a whole multiple of their pixels (null: as before).
+public sealed record TitleArtEntry(string? Background, string? Logo, List<TitleLayer> Layers, (GridImage Image, FrameRun Run)? Traveler, (GridImage Image, FrameRun Run)? Creature,
+	int? ReferenceHeight = null);
 
 public sealed record EffectEntry(string Id, GridImage Image, FrameRun Run);
 
@@ -105,7 +126,9 @@ public sealed record NineSlice(string? Camera, string Path, int Border, int Scal
 
 public sealed record FontEntry(string File, float Scale);
 
-public sealed record UiEntry(bool Enabled, NineSlice? Frame, List<NineSlice> PanelFrames, string? Cursor, string? BarTrack, string? BarFill, Dictionary<string, FontEntry> Fonts);
+// BattleFrame: the battle's windows, in place of Frame there.
+public sealed record UiEntry(bool Enabled, NineSlice? Frame, List<NineSlice> PanelFrames, string? Cursor, string? BarTrack, string? BarFill, Dictionary<string, FontEntry> Fonts,
+	NineSlice? BattleFrame = null);
 
 public sealed record AudioEntry(SoundKind Kind, string Id, string Path, int LoopStart, int LoopEnd, float Gain);
 
@@ -124,10 +147,16 @@ public sealed class AssetManifest
 	public static readonly string[] Facings = ["north", "east", "south", "west"];
 	public static readonly string[] ObjectNames = ["door", "chest_closed", "chest_open", "stall", "bed", "sign", "rune", "exit_north", "exit_east", "exit_south", "exit_west"];
 	public static readonly string[] SpriteNames = ["shadow", "bubble", "alert", "pointer", "pier"];
+	// The poses every figure has, its own frames or `idle`'s; a figure may name more (IsPoseName) for the presentation table.
 	public static readonly string[] FigureAnimations = ["attack", "cast", "item", "defend", "hurt", "defeat"];
 	// The terrain under the party, as a battle backdrop's scope: floor, water and soft ground.
 	public static readonly string[] TerrainNames = ["floor", "water", "soft"];
 	public static readonly string[] RoleNames = ["menu", "dialogue", "battle_numbers", "hint"];
+	// What a member chose for the round, as the battle layouts' `command` field and the `command_icons` entry name it.
+	public static readonly string[] CommandNames = ["attack", "technique", "skill", "combo", "item", "defend", "escape"];
+
+	public static bool IsPoseName(string name) =>
+		name.Length > 0 && char.IsAsciiLetterLower(name[0]) && name.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c == '_') && name != "idle";
 
 	public string Directory { get; }
 	public List<TilesetEntry> Tilesets { get; } = [];
@@ -137,9 +166,16 @@ public sealed class AssetManifest
 	public List<FieldEnemyEntry> FieldEnemies { get; } = [];
 	public List<VehicleEntry> Vehicles { get; } = [];
 	public List<BackdropEntry> Backdrops { get; } = [];
+	public List<BackdropMap> BackdropMaps { get; } = [];
+	public TitleArtEntry? TitleArt { get; private set; }
 	public List<EffectEntry> Effects { get; } = [];
 	public Dictionary<string, string> Sprites { get; } = [];
 	public Dictionary<string, string> StatusIcons { get; } = [];
+	public Dictionary<string, string> CommandIcons { get; } = [];
+	// Still pictures by name, which the dialogue's `picture` tags show.
+	public Dictionary<string, string> Pictures { get; } = [];
+	// A shop's or rest point's id to the portrait id its screen shows as the keeper.
+	public Dictionary<string, string> Keepers { get; } = [];
 	public UiEntry? Ui { get; private set; }
 	public List<AudioEntry> Audio { get; } = [];
 	public string? BattlePresentation { get; private set; }
@@ -172,19 +208,22 @@ public sealed class AssetManifest
 	public IEnumerable<string> Files() =>
 		Tilesets.Select(t => t.Image.Path).Concat(Characters.Select(c => c.Image.Path)).Concat(Portraits.Values).Concat(Figures.Select(f => f.Image.Path))
 			.Concat(FieldEnemies.Select(f => f.Image.Path)).Concat(Vehicles.Select(v => v.Image.Path)).Concat(Backdrops.Select(b => b.Path)).Concat(Effects.Select(e => e.Image.Path)).Concat(Sprites.Values)
-			.Concat(StatusIcons.Values).Concat(Audio.Select(a => a.Path))
+			.Concat(StatusIcons.Values).Concat(CommandIcons.Values).Concat(Pictures.Values).Concat(Audio.Select(a => a.Path))
 			.Concat(Maps.SelectMany(a => new[] { a.Ground, a.Above }.OfType<string>().Concat(a.Patches.Select(p => p.Path))))
 			.Concat(Objects.SelectMany(o => new[] { o.Closed?.Image.Path, o.Open?.Image.Path }).OfType<string>()).Concat(VehicleOverlays.Select(o => o.Path))
 			.Concat(new[] { ConveyorOverlay?.Image.Path, TileHookOverlay?.Image.Path }.OfType<string>())
 			.Concat(BitmapFonts.SelectMany(f => new[] { f.Image, f.MetricsFile }))
-			.Concat(Ui is null ? [] : new[] { Ui.Frame?.Path, Ui.Cursor, Ui.BarTrack, Ui.BarFill }.OfType<string>().Concat(Ui.PanelFrames.Select(p => p.Path)).Concat(Ui.Fonts.Values.Select(f => f.File)))
+			.Concat(BackdropMaps.Select(b => b.Image).OfType<string>())
+			.Concat(TitleArt is not { } title ? [] : new[] { title.Background, title.Logo, title.Traveler?.Image.Path, title.Creature?.Image.Path }.OfType<string>()
+				.Concat(title.Layers.Select(l => l.Image.Path)))
+			.Concat(Ui is null ? [] : new[] { Ui.Frame?.Path, Ui.BattleFrame?.Path, Ui.Cursor, Ui.BarTrack, Ui.BarFill }.OfType<string>().Concat(Ui.PanelFrames.Select(p => p.Path)).Concat(Ui.Fonts.Values.Select(f => f.File)))
 			.Concat(BattlePresentation is null ? [] : [BattlePresentation])
 			.Concat(UiLayoutEnabled == false ? [] : UiLayoutSet.FilesIn(Directory))
 			.Distinct();
 
-	// Reads DIR/assets.json against the session's data. A directory without a manifest is a problem too, since the
-	// caller named it.
-	public static AssetManifest Load(string directory, GameData data)
+	// Reads DIR/assets.json against the session's data, scaled tilesets against the field's `cell` (the layouts'
+	// `field_cell`). A directory without a manifest is a problem too, since the caller named it.
+	public static AssetManifest Load(string directory, GameData data, int cell = Art.Tile)
 	{
 		var m = new AssetManifest(Path.GetFullPath(directory));
 		string path = Path.Combine(directory, FileName);
@@ -196,7 +235,7 @@ public sealed class AssetManifest
 		try
 		{
 			using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(path), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip });
-			new Reader(m, data).Root(doc.RootElement);
+			new Reader(m, data, cell).Root(doc.RootElement);
 		}
 		catch (JsonException e)
 		{
@@ -206,7 +245,7 @@ public sealed class AssetManifest
 	}
 
 	// Walks the JSON, reporting unknown fields, wrong types, unknown ids and files that do not fit their entries.
-	private sealed class Reader(AssetManifest m, GameData data)
+	private sealed class Reader(AssetManifest m, GameData data, int cell)
 	{
 		// Figures that ask for their natural size, checked once battle_figures is read.
 		private readonly List<(string Entry, FigureEntry Figure)> _natural = [];
@@ -494,18 +533,22 @@ public sealed class AssetManifest
 			}
 		}
 
-		// The scope fields of a tileset or backdrop: exactly one of the area kind, the area id or (backdrops) the encounter or
-		// the terrain under the party.
-		private (string? Kind, string? Area, string? Encounter, string? Terrain) Scope(JsonElement e, string entry, bool backdrop)
+		// The scope fields of a tileset or backdrop: exactly one of the area kind, the area id or (backdrops) the encounter, the
+		// terrain under the party or a flag, which may add an area; a backdrop with an id may have none.
+		private (string? Kind, string? Area, string? Encounter, string? Terrain, string? Flag) Scope(JsonElement e, string entry, bool backdrop)
 		{
 			string? kind = Str(e, "kind", entry, required: false);
 			string? area = Str(e, "area", entry, required: false);
 			string? enc = backdrop ? Str(e, "encounter", entry, required: false) : null;
 			string? terrain = backdrop ? Str(e, "terrain", entry, required: false) : null;
-			if (new[] { kind, area, enc, terrain }.Count(v => v is not null) != 1)
+			string? flag = backdrop ? Str(e, "flag", entry, required: false) : null;
+			int scopes = new[] { kind, area, enc, terrain }.Count(v => v is not null);
+			if (flag is not null ? kind is not null || enc is not null || terrain is not null : scopes != 1 && !(backdrop && scopes == 0 && e.TryGetProperty("id", out _)))
 			{
-				Problem(entry, backdrop ? "needs exactly one of 'kind', 'area', 'encounter' and 'terrain'" : "needs exactly one of 'kind' and 'area'");
+				Problem(entry, backdrop ? "needs exactly one of 'kind', 'area', 'encounter', 'terrain' and 'flag' (a flag may add 'area'), or only an 'id' for the backdrop maps"
+					: "needs exactly one of 'kind' and 'area'");
 			}
+			Known(flag, data.Flags, entry, "flag");
 			if (kind is not null && kind is not ("town" or "field" or "dungeon"))
 			{
 				Problem(entry, $"unknown area kind '{kind}': town, field or dungeon");
@@ -516,7 +559,7 @@ public sealed class AssetManifest
 			}
 			Known(area, data.Areas, entry, "area");
 			Known(enc, data.Encounters, entry, "encounter");
-			return (kind, area, enc, terrain);
+			return (kind, area, enc, terrain, flag);
 		}
 
 		public void Root(JsonElement root)
@@ -526,7 +569,8 @@ public sealed class AssetManifest
 				return;
 			}
 			Fields(root, "-", "version", "tilesets", "characters", "portraits", "figures", "field_enemies", "vehicles", "backdrops", "effects", "sprites", "status_icons", "ui",
-				"audio", "battle_presentation", "maps", "objects", "field", "vehicle_overlays", "battle_figures", "bitmap_fonts", "ui_layout");
+				"audio", "battle_presentation", "maps", "objects", "field", "vehicle_overlays", "battle_figures", "bitmap_fonts", "ui_layout", "backdrop_maps", "title_art",
+				"command_icons", "pictures", "keepers");
 			if (Int(root, "version", "-", 0, 0, int.MaxValue) != Version)
 			{
 				Problem("-", $"field 'version' must be {Version}");
@@ -539,13 +583,7 @@ public sealed class AssetManifest
 			{
 				Character(e, entry);
 			}
-			Named(root, "portraits", (id, entry) =>
-			{
-				if (!data.Portraits.Contains(id) && !data.Characters.Contains(id) && !data.Actors.Contains(id))
-				{
-					Problem(entry, $"unknown portrait '{id}': not a portrait, character or actor in the game data");
-				}
-			}, m.Portraits);
+			Portraits(root);
 			foreach ((JsonElement e, string entry) in List(root, "figures"))
 			{
 				Figure(e, entry);
@@ -583,12 +621,17 @@ public sealed class AssetManifest
 			foreach ((JsonElement e, string entry) in List(root, "backdrops"))
 			{
 				int before = m.Problems.Count;
-				Fields(e, entry, "kind", "area", "encounter", "terrain", "image");
-				(string? kind, string? area, string? encounter, string? terrain) = Scope(e, entry, backdrop: true);
+				Fields(e, entry, "id", "kind", "area", "encounter", "terrain", "flag", "image");
+				(string? kind, string? area, string? encounter, string? terrain, string? flag) = Scope(e, entry, backdrop: true);
+				string? id = Str(e, "id", entry, required: false);
 				if (Picture(e, "image", entry) is { } file && m.Problems.Count == before)
 				{
-					m.Backdrops.Add(new BackdropEntry(kind, area, encounter, terrain, file));
+					m.Backdrops.Add(new BackdropEntry(kind, area, encounter, terrain, file, id, flag));
 				}
+			}
+			foreach ((JsonElement e, string entry) in List(root, "backdrop_maps"))
+			{
+				BackdropMapEntry(e, entry);
 			}
 			foreach ((JsonElement e, string entry) in List(root, "effects"))
 			{
@@ -609,6 +652,42 @@ public sealed class AssetManifest
 				}
 			}, m.Sprites);
 			Named(root, "status_icons", (id, entry) => Known(id, data.Statuses, entry, "status"), m.StatusIcons);
+			Named(root, "command_icons", (id, entry) =>
+			{
+				if (!CommandNames.Contains(id))
+				{
+					Problem(entry, $"unknown command '{id}': {string.Join(", ", CommandNames)}");
+				}
+			}, m.CommandIcons);
+			Named(root, "pictures", (id, entry) =>
+			{
+				if (!id.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
+				{
+					Problem(entry, "a picture's name is letters, digits and '_'");
+				}
+			}, m.Pictures);
+			if (root.TryGetProperty("keepers", out JsonElement keepers) && IsObject(keepers, "keepers"))
+			{
+				foreach (JsonProperty k in keepers.EnumerateObject())
+				{
+					string entry = "keepers." + k.Name;
+					int before = m.Problems.Count;
+					Known(k.Name, data.Keepers, entry, "shop or rest point");
+					string? portrait = k.Value.ValueKind == JsonValueKind.String ? k.Value.GetString() : null;
+					if (portrait is not { Length: > 0 })
+					{
+						Problem(entry, "must be a portrait id");
+					}
+					else if (!data.Portraits.Contains(portrait) && !data.Characters.Contains(portrait) && !data.Actors.Contains(portrait))
+					{
+						Problem(entry, $"unknown portrait '{portrait}': not a portrait, character or actor in the game data");
+					}
+					if (m.Problems.Count == before)
+					{
+						m.Keepers[k.Name] = portrait!;
+					}
+				}
+			}
 			if (root.TryGetProperty("ui", out JsonElement ui))
 			{
 				Ui(ui);
@@ -639,6 +718,10 @@ public sealed class AssetManifest
 				BitmapFonts(fonts);
 			}
 			Maps(root);
+			if (root.TryGetProperty("title_art", out JsonElement title))
+			{
+				TitleArt(title);
+			}
 			foreach ((JsonElement e, string entry) in List(root, "objects"))
 			{
 				Object(e, entry);
@@ -673,7 +756,9 @@ public sealed class AssetManifest
 			Once(m.Figures, f => (f.Enemy ? "enemy " : f.Back ? "party member from behind " : "party member ") + f.Id, "figures");
 			Once(m.FieldEnemies, f => f.Encounter, "field_enemies");
 			Once(m.Vehicles, v => v.Id, "vehicles");
-			Once(m.Backdrops, b => b.Key.Replace(':', ' '), "backdrops");
+			Once(m.Backdrops.Where(b => b.Key != "id:" + b.Id), b => b.Key.Replace(':', ' '), "backdrops");
+			Once(m.Backdrops.Where(b => b.Id is not null), b => "id " + b.Id, "backdrops");
+			Once(m.BackdropMaps, b => b.Area, "backdrop_maps");
 			Once(m.Effects, e => e.Id, "effects");
 			Once(m.Audio, a => $"{a.Kind.ToString().ToLowerInvariant()} {a.Id}", "audio");
 			Once(m.Objects, o => o.Key, "objects");
@@ -715,6 +800,255 @@ public sealed class AssetManifest
 				{
 					into[p.Name] = p.Value.GetString()!;
 				}
+			}
+		}
+
+		// Portraits by id: a file, or an object of a default `image` and named `expressions` (shown by
+		// `{portrait:ID:EXPRESSION}`), each kept as `ID:EXPRESSION`.
+		private void Portraits(JsonElement root)
+		{
+			if (!root.TryGetProperty("portraits", out JsonElement map) || !IsObject(map, "portraits"))
+			{
+				return;
+			}
+			foreach (JsonProperty p in map.EnumerateObject())
+			{
+				string entry = "portraits." + p.Name;
+				int before = m.Problems.Count;
+				if (!data.Portraits.Contains(p.Name) && !data.Characters.Contains(p.Name) && !data.Actors.Contains(p.Name))
+				{
+					Problem(entry, $"unknown portrait '{p.Name}': not a portrait, character or actor in the game data");
+				}
+				var files = new Dictionary<string, string>();
+				if (p.Value.ValueKind == JsonValueKind.String)
+				{
+					if (Header(p.Value.GetString()!, entry) is not null)
+					{
+						files[p.Name] = p.Value.GetString()!;
+					}
+				}
+				else if (p.Value.ValueKind == JsonValueKind.Object)
+				{
+					Fields(p.Value, entry, "image", "expressions");
+					if (Picture(p.Value, "image", entry, required: false) is { } image)
+					{
+						files[p.Name] = image;
+					}
+					if (p.Value.TryGetProperty("expressions", out JsonElement expressions) && IsObject(expressions, entry + ".expressions"))
+					{
+						foreach (JsonProperty x in expressions.EnumerateObject())
+						{
+							string xEntry = $"{entry}.expressions.{x.Name}";
+							if (x.Name.Length == 0 || !x.Name.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
+							{
+								Problem(xEntry, "an expression's name is letters, digits and '_'");
+							}
+							else if (x.Value.ValueKind != JsonValueKind.String)
+							{
+								Problem(xEntry, "must be an image file name");
+							}
+							else if (Header(x.Value.GetString()!, xEntry) is not null)
+							{
+								files[$"{p.Name}:{x.Name}"] = x.Value.GetString()!;
+							}
+						}
+					}
+					if (!p.Value.TryGetProperty("image", out _) && !p.Value.TryGetProperty("expressions", out _))
+					{
+						Problem(entry, "needs 'image', 'expressions' or both");
+					}
+				}
+				else
+				{
+					Problem(entry, "must be an image file name, or an object with 'image' and 'expressions'");
+				}
+				if (m.Problems.Count == before)
+				{
+					foreach ((string id, string file) in files)
+					{
+						m.Portraits[id] = file;
+					}
+				}
+			}
+		}
+
+		// A backdrop per cell of an area: a picture of one pixel a cell whose colors `colors` maps to backdrop ids
+		// (transparent pixels give none), or named rectangles of cells, inside the area and not overlapping.
+		private void BackdropMapEntry(JsonElement e, string entry)
+		{
+			int before = m.Problems.Count;
+			Fields(e, entry, "area", "image", "colors", "regions");
+			string? area = Str(e, "area", entry);
+			Known(area, data.Areas, entry, "area");
+			AreaMap? map = area is null ? null : data.Maps.GetValueOrDefault(area);
+			HashSet<string> ids = [.. m.Backdrops.Select(b => b.Id).OfType<string>()];
+			string? file = Str(e, "image", entry, required: false);
+			if (e.TryGetProperty("image", out _) == e.TryGetProperty("regions", out _))
+			{
+				Problem(entry, "needs exactly one of 'image' (with 'colors') and 'regions'");
+			}
+			string? Backdrop(JsonElement value, string where)
+			{
+				if (value.ValueKind == JsonValueKind.String && ids.Contains(value.GetString()!))
+				{
+					return value.GetString();
+				}
+				Problem(where, $"names no backdrop: {value} is not the 'id' of a backdrop entry");
+				return null;
+			}
+			var cells = new (string Backdrop, string Key)?[map is null ? 0 : map.Width * map.Height];
+			// Each color the entry names, with its backdrop (null when that names none).
+			var colors = new Dictionary<Color, string?>();
+			if (e.TryGetProperty("colors", out JsonElement cs) && IsObject(cs, entry + ".colors"))
+			{
+				foreach (JsonProperty c in cs.EnumerateObject())
+				{
+					string cEntry = $"{entry}.colors.{c.Name}";
+					if (c.Name.Length != 7 || c.Name[0] != '#' || !uint.TryParse(c.Name[1..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint rgb))
+					{
+						Problem(cEntry, "a color is #rrggbb");
+						continue;
+					}
+					colors[new Color((int)(rgb >> 16) & 255, (int)(rgb >> 8) & 255, (int)rgb & 255)] = Backdrop(c.Value, cEntry);
+				}
+			}
+			else if (file is not null)
+			{
+				Problem(entry, "an 'image' needs 'colors': each of its colors to the id of a backdrop");
+			}
+			if (file is not null && map is not null && Header(file, entry) is { } header)
+			{
+				if (header.Width != map.Width || header.Height != map.Height)
+				{
+					Problem(entry, $"{header.Width}x{header.Height} is not the area's {map.Width}x{map.Height} cells at one pixel a cell", file);
+				}
+				else
+				{
+					Color[] pixels = Png.Read(m.Full(file), out _, out _);
+					var unnamed = new SortedSet<string>(StringComparer.Ordinal);
+					int partial = 0;
+					for (int i = 0; i < pixels.Length; i++)
+					{
+						Color c = pixels[i];
+						if (c.A is > 0 and < 255)
+						{
+							partial++;
+						}
+						else if (c.A == 255 && !colors.TryGetValue(c, out string? id))
+						{
+							unnamed.Add($"#{c.R:x2}{c.G:x2}{c.B:x2}");
+						}
+						else if (c.A == 255 && colors[c] is { } named)
+						{
+							cells[i] = (named, $"map:{area}:{named}");
+						}
+					}
+					if (unnamed.Count > 0)
+					{
+						Problem(entry, $"colors 'colors' does not name: {string.Join(", ", unnamed.Take(8))}{(unnamed.Count > 8 ? $" and {unnamed.Count - 8} more" : "")}", file);
+					}
+					if (partial > 0)
+					{
+						Problem(entry, $"{partial} pixels are neither transparent nor opaque", file);
+					}
+				}
+			}
+			var regions = new List<(string Name, Rectangle Cells)>();
+			if (e.TryGetProperty("regions", out JsonElement rs) && IsObject(rs, entry + ".regions"))
+			{
+				foreach (JsonProperty r in rs.EnumerateObject())
+				{
+					string rEntry = $"{entry}.regions.{r.Name}";
+					if (!IsObject(r.Value, rEntry))
+					{
+						continue;
+					}
+					Fields(r.Value, rEntry, "rect", "backdrop");
+					int[] rect = Ints(r.Value, "rect", rEntry, required: true);
+					string? id = r.Value.TryGetProperty("backdrop", out JsonElement b) ? Backdrop(b, rEntry) : Str(r.Value, "backdrop", rEntry);
+					if (rect.Length != 4 || rect[2] == 0 || rect[3] == 0)
+					{
+						Problem(rEntry, "field 'rect' must be [x, y, width, height] in cells, the width and height at least 1");
+						continue;
+					}
+					var region = new Rectangle(rect[0], rect[1], rect[2], rect[3]);
+					if (map is not null && (region.Right > map.Width || region.Bottom > map.Height))
+					{
+						Problem(rEntry, $"[{string.Join(", ", rect)}] reaches past the area's {map.Width}x{map.Height} cells");
+						continue;
+					}
+					foreach ((string other, _) in regions.Where(o => o.Cells.Intersects(region)))
+					{
+						Problem(rEntry, $"overlaps region '{other}'");
+					}
+					regions.Add((r.Name, region));
+					for (int y = region.Top; id is not null && map is not null && y < region.Bottom; y++)
+					{
+						for (int x = region.Left; x < region.Right; x++)
+						{
+							cells[y * map.Width + x] = (id, $"region:{area}:{r.Name}");
+						}
+					}
+				}
+			}
+			if (area is not null && map is not null && m.Problems.Count == before)
+			{
+				m.BackdropMaps.Add(new BackdropMap(area, file, map.Width, map.Height, cells));
+			}
+		}
+
+		private void TitleArt(JsonElement e)
+		{
+			if (!IsObject(e, "title_art"))
+			{
+				return;
+			}
+			int before = m.Problems.Count;
+			Fields(e, "title_art", "background", "logo", "layers", "traveler", "creature", "reference_height");
+			(float X, float Y) Signed(JsonElement owner, string name, string entry)
+			{
+				if (!owner.TryGetProperty(name, out JsonElement v))
+				{
+					return (0, 0);
+				}
+				if (v.ValueKind != JsonValueKind.Array || v.GetArrayLength() != 2 || v.EnumerateArray().Any(n => n.ValueKind != JsonValueKind.Number || MathF.Abs(n.GetSingle()) > 4096))
+				{
+					Problem(entry, $"field '{name}' must be [x, y], each a number from -4096 to 4096");
+					return (0, 0);
+				}
+				return (v[0].GetSingle(), v[1].GetSingle());
+			}
+			(GridImage, FrameRun)? Sprite(string name, int defaultMs)
+			{
+				string entry = "title_art." + name;
+				if (!e.TryGetProperty(name, out JsonElement f) || !IsObject(f, entry))
+				{
+					return null;
+				}
+				Fields(f, entry, "image", "frame", "frames", "ms");
+				GridImage? image = Grid(f, entry, Pixels.Size);
+				return Run(f, entry, image, defaultMs, inline: true) is { } run && image is not null ? (image, run) : null;
+			}
+			var layers = new List<TitleLayer>();
+			foreach ((JsonElement l, string listEntry) in List(e, "layers"))
+			{
+				string entry = "title_art." + listEntry;
+				Fields(l, entry, "image", "frame", "frames", "ms", "at", "scale", "scroll");
+				GridImage? image = Grid(l, entry, Pixels.Size);
+				FrameRun? run = Run(l, entry, image, 200, inline: true);
+				(float x, float y) = Signed(l, "at", entry);
+				(float dx, float dy) = Signed(l, "scroll", entry);
+				int scale = Int(l, "scale", entry, 1, 1, 16);
+				if (image is not null && run is not null)
+				{
+					layers.Add(new TitleLayer(image, run, (int)MathF.Round(x), (int)MathF.Round(y), scale, dx, dy));
+				}
+			}
+			var title = new TitleArtEntry(Picture(e, "background", "title_art", required: false), Picture(e, "logo", "title_art", required: false), layers,
+				Sprite("traveler", 260), Sprite("creature", 400), e.TryGetProperty("reference_height", out _) ? Int(e, "reference_height", "title_art", 0, 1, 4320) : null);
+			if (m.Problems.Count == before)
+			{
+				m.TitleArt = title;
 			}
 		}
 
@@ -1052,13 +1386,16 @@ public sealed class AssetManifest
 			int before = m.Problems.Count;
 			Fields(e, entry, "kind", "area", "image", "tile", "scale", "floor", "decor", "decor_one_in", "wall_top", "wall_top_alt_one_in", "wall_face",
 				"wall_face_alt_one_in", "water", "water_frame_ms", "edge", "bank", "objects", "animated");
-			(string? kind, string? area, _, _) = Scope(e, entry, backdrop: false);
+			(string? kind, string? area, _, _, _) = Scope(e, entry, backdrop: false);
 			GridImage? image = Grid(e, entry, Pixels.Size, scaled: true, footed: false);
-			// Tiles lie edge to edge, so a scaled tile must come out exactly a cell wide at its snapped factor.
-			if (image is { Scale: float scale } && image.FrameWidth * Art.Snap((float)Art.Scale / scale) is var drawn && MathF.Abs(drawn - Art.Tile) > 0.01f)
+			// Tiles lie edge to edge, so a scaled tile must come out exactly a cell wide at its snapped factor: the cell's
+			// factor (the field's cell over 16) over the scale.
+			float factor = cell / (float)Pixels.Size;
+			if (image is { Scale: float scale } && image.FrameWidth * Art.Snap(factor / scale) is var drawn && MathF.Abs(drawn - cell) > 0.01f)
 			{
-				Problem(entry, $"a {image.FrameWidth}-pixel tile at scale {scale.ToString(CultureInfo.InvariantCulture)} draws {drawn.ToString(CultureInfo.InvariantCulture)} screen " +
-					$"pixels a cell, not the field's {Art.Tile}: a tile is 16 x scale pixels, with 3 / scale a whole number or one over a whole number (24 at 1.5, 48 at 3, 96 at 6)");
+				string F(float x) => x.ToString(CultureInfo.InvariantCulture);
+				Problem(entry, $"a {image.FrameWidth}-pixel tile at scale {F(scale)} draws {F(drawn)} screen pixels a cell, not the field's {cell}: a tile is 16 x scale pixels, " +
+					$"with {F(factor)} / scale a whole number or one over a whole number ({cell / 2} at {F(factor / 2)}, {cell} at {F(factor)}, {cell * 2} at {F(factor * 2)})");
 			}
 			int[] Group(string name, int least)
 			{
@@ -1119,7 +1456,7 @@ public sealed class AssetManifest
 		private void Character(JsonElement e, string entry)
 		{
 			int before = m.Problems.Count;
-			Fields(e, entry, "id", "image", "frame", "scale", "foot", "shadow", "walk", "poses", "animations");
+			Fields(e, entry, "id", "image", "frame", "scale", "foot", "shadow", "walk", "poses", "animations", "facing");
 			string? id = Str(e, "id", entry);
 			if (id is not null && !data.Characters.Contains(id) && !data.Actors.Contains(id))
 			{
@@ -1127,9 +1464,60 @@ public sealed class AssetManifest
 			}
 			GridImage? image = Grid(e, entry, Pixels.Size, scaled: true);
 			Dictionary<Direction, int[]> walk = e.TryGetProperty("walk", out JsonElement w) ? Facing(w, entry + ".walk", image, "walk") : [];
-			if (walk.Count != 4 || walk.Values.Any(v => v.Length != 3))
+			SheetFacing? facing = null;
+			if (e.TryGetProperty("facing", out JsonElement fa) && IsObject(fa, entry + ".facing"))
 			{
-				Problem(entry, "'walk' needs north, east, south and west, each three frames: standing, walk A, walk B");
+				string faEntry = entry + ".facing";
+				Fields(fa, faEntry, "mirror", "fallback", "start");
+				Direction? Named(string? name, string field)
+				{
+					int index = name is null ? -1 : Array.IndexOf(Facings, name);
+					if (name is not null && index < 0)
+					{
+						Problem(faEntry, $"unknown facing '{name}' in '{field}': {string.Join(", ", Facings)}");
+					}
+					return index < 0 ? null : (Direction)index;
+				}
+				var mirror = new Dictionary<Direction, Direction>();
+				if (fa.TryGetProperty("mirror", out JsonElement mi) && IsObject(mi, faEntry + ".mirror"))
+				{
+					foreach (JsonProperty mp in mi.EnumerateObject())
+					{
+						if (Named(mp.Name, "mirror") is not { } to || Named(mp.Value.ValueKind == JsonValueKind.String ? mp.Value.GetString() : mp.Value.ToString(), "mirror") is not { } from)
+						{
+							continue;
+						}
+						if (walk.ContainsKey(to))
+						{
+							Problem(faEntry, $"'mirror' draws {mp.Name}, which 'walk' gives already");
+						}
+						else if (!walk.ContainsKey(from))
+						{
+							Problem(faEntry, $"'mirror' draws {mp.Name} from {Facings[(int)from]}, which 'walk' does not give");
+						}
+						else
+						{
+							mirror[to] = from;
+						}
+					}
+				}
+				Direction? fallback = Named(Str(fa, "fallback", faEntry, required: false), "fallback");
+				if (fallback is { } back && !walk.ContainsKey(back))
+				{
+					Problem(faEntry, $"'fallback' {Facings[(int)back]} is not a facing 'walk' gives");
+				}
+				Direction? start = Named(Str(fa, "start", faEntry, required: false), "start");
+				if (start is not null && id is not null && !data.Actors.Contains(id))
+				{
+					Problem(faEntry, $"'start' is for script actors: {id} is a party member, who faces where the party goes");
+				}
+				facing = new SheetFacing(mirror, fallback, start);
+			}
+			bool lacking = Enum.GetValues<Direction>().Any(d => d != Direction.None && !walk.ContainsKey(d) && facing?.Mirror.ContainsKey(d) != true);
+			if (walk.Count == 0 || walk.Values.Any(v => v.Length != 3) || lacking && facing?.Fallback is null)
+			{
+				Problem(entry, facing is null ? "'walk' needs north, east, south and west, each three frames: standing, walk A, walk B"
+					: "'walk' needs three frames (standing, walk A, walk B) for each facing it gives, and every facing it lacks needs 'facing.mirror' or 'facing.fallback'");
 			}
 			var poses = new Dictionary<string, PoseEntry>();
 			if (e.TryGetProperty("poses", out JsonElement p) && IsObject(p, entry + ".poses"))
@@ -1175,13 +1563,13 @@ public sealed class AssetManifest
 					animations[anim.Name] = anim.Value.GetString()!;
 				}
 			}
-			foreach (string unused in poses.Keys.Where(k => !animations.ContainsValue(k)))
+			foreach (string unused in poses.Keys.Where(k => !animations.ContainsValue(k) && !data.Animations.Contains(k)))
 			{
-				Problem($"{entry}.poses.{unused}", "no animation plays this pose: map script animation names to it in 'animations'");
+				Problem($"{entry}.poses.{unused}", "no animation plays this pose: name it after one of game.json's presentation animations, or map one to it in 'animations'");
 			}
 			if (id is not null && image is not null && m.Problems.Count == before)
 			{
-				m.Characters.Add(new CharacterEntry(id, image, walk, poses, animations, e.TryGetProperty("shadow", out _) ? Bool(e, "shadow", entry, true) : null));
+				m.Characters.Add(new CharacterEntry(id, image, walk, poses, animations, e.TryGetProperty("shadow", out _) ? Bool(e, "shadow", entry, true) : null, facing));
 			}
 		}
 
@@ -1224,9 +1612,9 @@ public sealed class AssetManifest
 				foreach (JsonProperty anim in a.EnumerateObject())
 				{
 					string animEntry = $"{entry}.animations.{anim.Name}";
-					if (!FigureAnimations.Contains(anim.Name))
+					if (!IsPoseName(anim.Name))
 					{
-						Problem(animEntry, $"unknown animation '{anim.Name}': {string.Join(", ", FigureAnimations)}");
+						Problem(animEntry, $"a pose's name is lower-case letters, digits and '_', starting with a letter, and not 'idle': '{anim.Name}'");
 					}
 					else if (Run(anim.Value, animEntry, image, 120) is { } run)
 					{
@@ -1281,13 +1669,14 @@ public sealed class AssetManifest
 			{
 				return;
 			}
-			Fields(e, "ui", "enabled", "frame", "panel_frames", "cursor", "bar_track", "bar_fill", "fonts");
+			Fields(e, "ui", "enabled", "frame", "battle_frame", "panel_frames", "cursor", "bar_track", "bar_fill", "fonts");
 			bool enabled = !e.TryGetProperty("enabled", out JsonElement en) || en.ValueKind != JsonValueKind.False;
 			if (e.TryGetProperty("enabled", out en) && en.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
 			{
 				Problem("ui", "field 'enabled' must be true or false");
 			}
 			NineSlice? frame = e.TryGetProperty("frame", out JsonElement f) ? Slice(f, "ui.frame", camera: false) : null;
+			NineSlice? battleFrame = e.TryGetProperty("battle_frame", out JsonElement bf) ? Slice(bf, "ui.battle_frame", camera: false) : null;
 			var panels = new List<NineSlice>();
 			foreach ((JsonElement p, string entry) in List(e, "panel_frames"))
 			{
@@ -1321,7 +1710,7 @@ public sealed class AssetManifest
 				}
 			}
 			m.Ui = new UiEntry(enabled, frame, panels, Picture(e, "cursor", "ui", required: false), Picture(e, "bar_track", "ui", required: false),
-				Picture(e, "bar_fill", "ui", required: false), fonts);
+				Picture(e, "bar_fill", "ui", required: false), fonts, battleFrame);
 		}
 
 		private void Audio(JsonElement e, string entry)

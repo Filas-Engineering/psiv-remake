@@ -1,0 +1,37 @@
+# Run with --dev and --assets build/more_assets on the copy scripts/make_tag_data.py writes: the guide's portrait by
+# expression. Its line starts with its default portrait, smiles, frowns, then names `grin`, which the assets lack, so its
+# default portrait stands in and the transcript gets one `tag problem:` line; the next line names `grin` again without a
+# second one, then switches back to the default. With --window the shot lines save screenshots under
+# build/shots/assets_portraits/ (run from bindings/).
+
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev event portrait_expressions
+wait 2
+expect screen Dialogue
+expect asset portrait:guide file
+expect asset portrait:guide:smile file
+expect asset portrait:guide:frown file
+waitstate 10 lineportrait guide:smile
+expect state shownportrait portrait:guide:smile
+shot build/shots/assets_portraits/smile.png
+waitstate 100 lineportrait guide:frown
+expect state shownportrait portrait:guide:frown
+shot build/shots/assets_portraits/frown.png
+waitstate 100 lineportrait guide:grin
+expect state shownportrait portrait:guide
+expect state tags portrait:guide:smile, portrait:guide:frown, portrait:guide:grin
+shot build/shots/assets_portraits/grin_missing.png
+waitstate 100 reveal 67/67
+press Enter
+wait 2
+waitstate 10 lineportrait guide:grin
+expect state shownportrait portrait:guide
+waitstate 100 lineportrait guide
+expect state shownportrait portrait:guide
+expect state tags portrait:guide:grin, portrait:guide
+press Enter
+press Enter
+wait 10
+expect screen Field

@@ -1,0 +1,115 @@
+# The real-time field input's interaction on the shipped data: Confirm, and the Interact key, act on the faced cell, or
+# else on a neighboring cell that answers (the sides before the back), turning the leader to it first; the prompt (the
+# key and a word in the field layout's `prompt` window, and the pointer bobbing over the target) shows while the leader
+# stands, not while it walks, and goes when the option is turned off; the options page has the two real-time options
+# and the Controls page the three real-time actions, rebound like the others. With --window the shot lines save
+# screenshots under build/shots/field/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+fieldinput realtime
+expect state interact_prompt on
+
+# Beside the stall, facing away from it: the prompt names it, and Confirm turns the leader and opens the shop.
+cmd walk 7 2
+cmd face west
+wait 2
+expect state interacttarget shop at 8 2 facing east
+expect state interactprompt shop at 8 2
+expect state window.prompt field/prompt 580 644 120x28
+shot build/shots/field/interact_prompt_shop.png
+press Enter
+wait 2
+expect screen Shop
+expect actor fighter 7 2 east
+pressuntil Escape Field 20
+
+# Below the stall, facing east: the side is taken before the back, and Interact (E) works as Confirm does.
+cmd walk 8 3
+cmd face east
+wait 2
+expect state interacttarget shop at 8 2 facing north
+press E
+wait 2
+expect screen Shop
+pressuntil Escape Field 20
+
+# Walking into the crate stops at it; Confirm opens it without lining up.
+cmd walk 11 5
+wait 2
+hold Down 24
+wait 10
+expect actor fighter 11 6 south
+expect state interactprompt open at 11 7
+press Enter
+wait 4
+expect toast Tonic
+wait 4
+expect state interactprompt none
+shot build/shots/field/interact_crate_open.png
+
+# Nothing to act on: no prompt, and Confirm says so.
+cmd walk 6 4
+wait 2
+expect state interacttarget none
+expect state window.prompt -
+press Enter
+wait 2
+expect toast There is nothing there
+
+# The prompt waits while the leader walks.
+cmd walk 7 2
+wait 2
+expect state interactprompt shop at 8 2
+hold Down 3
+expect state interactprompt none
+wait 20
+
+# The options: the two real-time rows, before Controls; the prompt turned off and on again.
+press P
+expect screen Pause
+press Down
+press Enter
+expect screen Options
+press Up 2
+expect state selected Interaction prompt: On
+shot build/shots/field/interact_options.png
+press Enter
+expect state interact_prompt off
+press Up
+expect state selected Always run: Off
+
+# The Controls page lists Interact, Run and RunToggle with their keys; Run rebound to the right Shift and back.
+press Down 2
+expect state selected Controls
+press Enter
+expect state page controls
+press Up 2
+expect state selected RunToggle
+press Up
+expect state selected Run
+shot build/shots/field/interact_controls.png
+expect binding Interact E | -
+expect binding Run LeftShift | LB
+expect binding RunToggle CapsLock | L3
+press Enter
+press Enter
+press RightShift
+expect binding Run RightShift | LB
+controls list
+controls reset
+expect binding Run LeftShift | LB
+press Escape
+expect toast Controls saved.
+press Escape
+press Escape
+expect screen Field
+cmd walk 7 2
+wait 2
+expect state interactprompt none
+expect state window.prompt -
+controls restart
+wait 2
+expect state interact_prompt off

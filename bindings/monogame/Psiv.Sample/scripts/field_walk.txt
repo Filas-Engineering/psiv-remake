@@ -1,0 +1,144 @@
+# The real-time field input's walking, with --dev on the shipped data: a tap walks exactly one cell and the glide
+# starts on the frame of the press; a held direction glides cell after cell at a steady 48 pixels per step time with
+# no stop between cells (the trace lines print the leader's drawn position each frame); a direction tapped during a
+# step goes next and the held one carries on after it; of two held, the latest pressed wins and letting it go falls
+# back to the other; Run held, and Always run toggled by RunToggle, walk at the layouts' run speed; the D-pad and the
+# stick, whose hysteresis keeps a direction held near a diagonal; a wall only turns the leader; aboard the skimmer the
+# steps take the vehicle's own time, and a belt's carry glides over the belt's own time. Then `fieldinput classic`
+# gives back the old field, where a tap only turns the leader. With --window the shot lines save screenshots under
+# build/shots/field/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+dev encounters off
+fieldinput realtime
+expect state fieldinput realtime
+cmd walk 3 4
+wait 2
+expect state leaderpos 144 192
+
+# A tap: the step starts on the press and the leader stands on the next cell one step time later.
+trace leaderpos,walkstep
+press Right
+expect state walkstep east 4 4 32/250 100%
+expect state leaderpos 150.1 192
+wait 15
+trace off
+expect actor fighter 4 4 east
+expect state walkstep -
+
+# Held: three cells at 250 ms each, the glide never stopping between them.
+trace leaderpos,walkstep,held
+hold Right 46
+trace off
+wait 16
+expect actor fighter 7 4 east
+shot build/shots/field/walk_held.png
+
+# Down tapped during a step to the right goes next; Right, still held, carries on after it.
+hold Right 4
+hold Right+Down 1
+expect state walkbuffer south
+expect state held east south
+hold Right 40
+wait 20
+expect actor fighter 9 5 east
+
+# Of two held the latest pressed wins; letting it go falls back to the other.
+cmd walk 4 2
+wait 2
+trace leaderpos,walkstep,held
+hold Down 8
+hold Down+Left 24
+expect state held south west
+hold Down 30
+trace off
+wait 20
+expect actor fighter 2 4 south
+
+# A wall only turns the leader.
+cmd walk 1 5
+wait 2
+press Left
+wait 20
+expect actor fighter 1 5 west
+expect state walkstep -
+
+# Run held: half the step time at the layouts' 200%; RunToggle keeps it running without Run, and toggles back.
+cmd walk 2 5
+wait 2
+hold LeftShift+Right 2
+expect state walkstep east 3 5 32/125 200%
+hold LeftShift+Right 58
+wait 20
+expect actor fighter 10 5 east
+press CapsLock
+expect state always_run on
+cmd walk 2 5
+wait 2
+hold Right 2
+expect statehas walkstep /125 200%
+hold Right 10
+hold LeftShift+Right 2
+wait 40
+expect statehas walkstep -
+press CapsLock
+expect state always_run off
+
+# The D-pad, and the stick through its hysteresis: near the diagonal it keeps the axis it took first, and inside the
+# smaller dead zone it lets go.
+cmd walk 3 4
+wait 2
+padhold DPadRight 10
+expect state held east
+wait 20
+padstick 0.7 0.6 4
+expect state held east
+padstick 0.6 0.7 4
+expect state held east
+padstick 0.3 0.3 2
+expect state held -
+padstick 0.2 0.9 2
+expect state held north
+wait 30
+
+# Aboard the skimmer a step takes the vehicle's own time.
+dev vehicle reed_skimmer brine_flats mooring
+dev warp brine_flats 6 4
+wait 4
+press Right
+wait 2
+press Enter
+wait 2
+expect state aboard reed_skimmer
+hold Right 2
+expect statehas walkstep east 8 4 32/125 100%
+hold Right 30
+wait 20
+expect state vehicles reed_skimmer 11 4 aboard
+shot build/shots/field/walk_aboard.png
+press Enter
+wait 4
+
+# A belt carries the party a cell per its own 200 ms, which the glide takes too.
+dev warp cogway 2 3
+trace leaderpos,walkstep
+wait 30
+trace off
+expect statehas walkstep carried
+wait 40
+expect state leader cogway 6 3
+
+# The classic field: a tap only turns the leader, a hold walks as before.
+fieldinput classic
+expect state fieldinput classic
+dev warp tidewater start
+wait 10
+press Right
+wait 20
+expect actor fighter 3 4 east
+hold Down 20
+wait 20
+expect actor fighter 3 5 south

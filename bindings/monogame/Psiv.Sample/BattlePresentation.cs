@@ -4,8 +4,10 @@ using System.Text.Json.Nodes;
 namespace Psiv.Sample;
 
 // How one action looks in battle: the user's figure animation, the effect drawn on the targets, a cue played with the
-// effect, the two steps' lengths at 1x battle speed, how far the screen shakes and whether it flashes.
-public sealed record ActionLook(string Animation, string Effect, string Cue, int AnimateMs, int EffectMs, int Shake, bool Flash);
+// effect, the two steps' lengths at 1x battle speed, how far the screen shakes and whether it flashes. Pose: a figure
+// pose of the table's own naming played in place of the animation's frames by a figure that has it; the animation's
+// motion stays, and a figure without it plays the animation.
+public sealed record ActionLook(string Animation, string Effect, string Cue, int AnimateMs, int EffectMs, int Shake, bool Flash, string? Pose = null);
 
 // How the battle stage is arranged: the party seen from behind along the bottom facing the enemies, or the two sides
 // facing each other across the screen.
@@ -275,6 +277,31 @@ public sealed class BattlePresentation
 		return p;
 	}
 
+	// A pose an action names that no figure can play (no figure of `figures` has it and generated figures have only the
+	// standard ones) is a problem, as is one an enemy's own entry names that its figure lacks; their animation stands in.
+	public void CheckPoses(IReadOnlyList<FigureEntry> figures, string display, List<AssetProblem> problems)
+	{
+		var any = new HashSet<string>(figures.SelectMany(f => f.Animations.Keys).Concat(AssetManifest.FigureAnimations));
+		foreach ((Dictionary<string, ActionLook> looks, string section) in new[] { (Fallbacks, "fallbacks"), (Actions, "actions") })
+		{
+			foreach ((string key, ActionLook look) in looks.Where(l => l.Value.Pose is { } pose && !any.Contains(pose)).ToList())
+			{
+				problems.Add(new AssetProblem(display, $"{section}.{key}", $"no figure has a pose '{look.Pose}': the {look.Animation} animation plays"));
+				looks[key] = look with { Pose = null };
+			}
+		}
+		foreach ((string key, ActionLook look) in EnemyLooks.Where(l => l.Value.Pose is not null).ToList())
+		{
+			string enemy = key[..key.IndexOf('.')];
+			IEnumerable<string> poses = figures.FirstOrDefault(f => f.Enemy && f.Id == enemy)?.Animations.Keys ?? AssetManifest.FigureAnimations.AsEnumerable();
+			if (!poses.Contains(look.Pose))
+			{
+				problems.Add(new AssetProblem(display, $"enemies.{key}", $"the figure of {enemy} has no pose '{look.Pose}': the {look.Animation} animation plays"));
+				EnemyLooks[key] = look with { Pose = null };
+			}
+		}
+	}
+
 	private static int? Number(JsonNode? node, int min, int max) =>
 		node is JsonValue v && v.TryGetValue(out int n) && n >= min && n <= max ? n : null;
 
@@ -292,10 +319,13 @@ public sealed class BattlePresentation
 			switch (field)
 			{
 			case "animation" when Animations.Contains(text):
-				look = look with { Animation = text };
+				look = look with { Animation = text, Pose = null };
+				break;
+			case "animation" when AssetManifest.IsPoseName(text):
+				look = look with { Pose = text };
 				break;
 			case "animation":
-				problem(entry, $"unknown animation '{text}': {string.Join(", ", Animations)}");
+				problem(entry, $"unknown animation '{text}': {string.Join(", ", Animations)}, or a figure pose's name (lower-case letters, digits and '_')");
 				break;
 			case "effect" when effects.Contains(text):
 				look = look with { Effect = text };
@@ -334,7 +364,7 @@ public sealed class BattlePresentation
 	{
 		static JsonObject Look(ActionLook l) => new()
 		{
-			["animation"] = l.Animation, ["effect"] = l.Effect, ["cue"] = l.Cue, ["animate_ms"] = l.AnimateMs, ["effect_ms"] = l.EffectMs, ["shake"] = l.Shake, ["flash"] = l.Flash,
+			["animation"] = l.Pose ?? l.Animation, ["effect"] = l.Effect, ["cue"] = l.Cue, ["animate_ms"] = l.AnimateMs, ["effect_ms"] = l.EffectMs, ["shake"] = l.Shake, ["flash"] = l.Flash,
 		};
 		var root = new JsonObject
 		{

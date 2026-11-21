@@ -1,0 +1,81 @@
+# The small example layout set's battles (make_layout_assets.py --small, 320x224, on a copy of the test assets' figures
+# and backdrops): the front layout's strip of five cards along the bottom, the members seen from behind stepping aside
+# for the command window, the description, the target, the playback and the result; then the side layout's party and
+# menu panels under the stage. The figures move a quarter of the built-in distances (`motion_percent`). Each moment
+# checks where the windows went. With --window the shot lines save screenshots under build/shots/small/ (run from
+# bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev encounters off
+
+# The front layout, by the script's override.
+battlelayout front
+dev battle training
+expect mode Battle
+waitstate 300 battlephase Command
+expect state battlelayout front
+expect state windows battle_front/stage 0 0 320x224, battle_front/strip 1 180 318x32, battle_front/effects 0 0 320x224, battle_front/command 61 115 96x64, battle_front/keys 0 212 320x12
+expect state overlaps none
+expect state partyplaces Test Fighter 33 188, Test Mystic 185 188, Test Medic 237 188
+expect state enemymarks labels 3 bars 3
+shot build/shots/small/front_command.png
+press Down
+press Enter
+expect state battlephase Option
+expect state windows battle_front/stage 0 0 320x224, battle_front/strip 1 180 318x32, battle_front/effects 0 0 320x224, battle_front/command 61 115 96x64, battle_front/description 4 2 312x26, battle_front/keys 0 212 320x12
+shot build/shots/small/front_options.png
+press Escape
+press Enter
+expect state battlephase Target
+expect state overlaps none
+shot build/shots/small/front_target.png
+press Escape
+press Down 7
+press Enter
+waitstatehas 900 step effect
+wait 6
+shot build/shots/small/front_playback.png
+hold F 60
+waitstate 300 battlephase Ended
+expect statehas battlesync all match
+expect state windows battle_front/stage 0 0 320x224, battle_front/strip 1 180 318x32, battle_front/effects 0 0 320x224, battle_front/keys 0 212 320x12, battle_front/result 60 54 200x58
+shot build/shots/small/front_result.png
+press Enter
+expect screen Field
+
+# The side layout.
+battlelayout side
+dev battle training
+expect mode Battle
+waitstate 300 battlephase Command
+expect state battlelayout side
+expect state windows battle_side/stage 0 0 320x224, battle_side/effects 0 0 320x224, battle_side/party 2 142 202x80, battle_side/menu 206 142 112x80, battle_side/status 206 142 112x80
+expect state partyplaces Test Fighter 232 76, Test Mystic 248 94, Test Medic 264 112
+expect state enemymarks labels 3 bars 3
+shot build/shots/small/side_command.png
+press Down
+press Enter
+expect state battlephase Option
+expect state window.description battle_side/description 4 2 312x26
+shot build/shots/small/side_options.png
+press Escape
+press Down 7
+press Enter
+waitstatehas 900 step effect
+wait 6
+expect state window.status battle_side/status 206 142 112x80
+shot build/shots/small/side_playback.png
+hold F 60
+waitstate 300 battlephase Ended
+expect state windows battle_side/stage 0 0 320x224, battle_side/effects 0 0 320x224, battle_side/party 2 142 202x80, battle_side/menu 206 142 112x80, battle_side/status 206 142 112x80, battle_side/result 60 54 200x58
+shot build/shots/small/side_result.png
+press Enter
+expect screen Field

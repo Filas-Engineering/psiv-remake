@@ -8,19 +8,27 @@
 		"enemy_x": 640, "enemy_row_max": 4, "enemy_row_span": 1040, "enemy_row_spacing_max": 280, "enemy_row_foot": 356, "enemy_row_stagger": 0,
 		"enemy_ranks_interleaved": 1, "enemy_rank_span": 1100, "enemy_front_foot": 360, "enemy_back_foot": 282,
 		"enemy_size": "enemy_count <= 3 ? 176 : enemy_count <= 4 ? 160 : enemy_back ? 112 : 136",
-		"log_rows": 5, "log_wrap_margin": 48
+		"log_rows": 5, "log_wrap_margin": 48,
+		"backdrop_h": 488, "ground_h": 640,
+		"label_max_width": 190, "label_y": 6, "label_h": 24, "label_pad": 8, "label_text_y": 3,
+		"enemy_bar_y": 34, "enemy_bar_w": 100, "enemy_bar_h": 6, "enemy_icons_y": 44, "icon_size": 20, "icon_gap": 2,
+		"pointer_size": 36, "pointer_y": 40, "pointer_member_y": 8, "pointer_bob": 5,
+		"number_size": 28, "number_critical_size": 36, "number_tp_size": 24, "number_word_size": 20,
+		"number_y": 26, "number_member_y": 36, "number_rise": 30, "number_gap": 6,
+		"effect_scale": 3, "effect_scale_large": 4,
+		"dev_badge_y": "H - 29"
 	},
 	"windows": [
 		{"name": "stage", "elements": [{"type": "slot", "slot": "stage"}]},
 		{"name": "strip", "x": 16, "y": 580, "w": "5 * 252 - 12", "h": 106, "elements": [
 			{"type": "repeater", "items": "members", "count": 5, "layout": "row", "dx": 252, "template": [
-				{"type": "box", "w": 240, "h": 106},
+				{"type": "box", "frame": "battle", "w": 240, "h": 106},
 				{"type": "fill", "visible": "acting", "x": 4, "y": 4, "w": 232, "h": 98, "color": "row"},
 				{"type": "group", "visible": "hit && hit_flash", "alpha": "hit_fade", "elements": [
 					{"type": "fill", "x": 4, "y": 4, "w": 232, "h": 98, "color": "bad", "alpha": 0.55}
 				]},
 				{"type": "outline", "visible": "acting || targeted || hit", "w": 240, "h": 106, "color": "hit ? 'bad' : 'accent'", "alpha": "!hit && targeted ? target_pulse : 1"},
-				{"type": "text", "value": "name", "x": 12, "y": 9, "max_width": "216 - icon_count * 22", "color": "!alive ? 'dim' : acting ? 'accent' : 'text'"},
+				{"type": "text", "value": "name", "x": 12, "y": 9, "max_width": "216 - icon_count * 22", "color": "!alive ? 'dim' : acting ? 'accent' : status_color != '' ? status_color : 'text'"},
 				{"type": "slot", "slot": "icons", "x": "230 - icon_count * 22", "y": 10},
 				{"type": "text", "key": "ui.battle.hp", "x": 12, "y": 38, "style": "small_dim"},
 				{"type": "text", "value": "hp + '/' + max_hp", "x": 12, "w": 216, "align": "right", "y": 38, "style": "small"},
@@ -37,7 +45,7 @@
 		]},
 		{"name": "vehicle", "visible": "len(vehicle) > 0", "x": "W - 16 - w", "y": "strip.y - h - 8", "w": 320, "h": 64, "elements": [
 			{"type": "repeater", "items": "vehicle", "template": [
-				{"type": "box", "w": 320, "h": 64},
+				{"type": "box", "frame": "battle", "w": 320, "h": 64},
 				{"type": "fill", "visible": "acting", "x": 4, "y": 4, "w": 312, "h": 56, "color": "row"},
 				{"type": "group", "visible": "hit && hit_flash", "alpha": "hit_fade", "elements": [
 					{"type": "fill", "x": 4, "y": 4, "w": 312, "h": 56, "color": "bad", "alpha": 0.55}
@@ -55,13 +63,13 @@
 		{"name": "name_plate", "visible": "banner != '' && banner_plate", "x": "(W - w) / 2", "y": "log_shown ? log.bottom + 12 : 20",
 			"w": "measure(fit(banner, W - 160, banner_big ? size_title : size_body), banner_big ? size_title : size_body) + 48", "h": "(banner_big ? size_title : size_body) + 22", "elements": [
 			{"type": "group", "alpha": "banner_alpha", "elements": [
-				{"type": "box", "w": "cw", "h": "ch", "opacity": 0.95},
+				{"type": "box", "frame": "battle", "w": "cw", "h": "ch", "opacity": 0.95},
 				{"type": "outline", "x": 6, "y": 6, "w": "cw - 12", "h": "ch - 12", "color": "accent", "alpha": 0.5, "thickness": 1},
 				{"type": "text", "value": "banner", "max_width": "W - 160", "x": 24, "y": 10, "size": "banner_big ? size_title : size_body", "color": "banner_cancel ? 'bad' : 'accent'"}
 			]}
 		]},
 		{"name": "effects", "elements": [{"type": "slot", "slot": "effects"}]},
-		{"name": "log", "visible": "log_shown", "x": 16, "y": 12, "w": "W - 32", "h": "5 * 22 + 24", "frame": "panel", "opacity": 0.94, "elements": [
+		{"name": "log", "visible": "log_shown", "x": 16, "y": 12, "w": "W - 32", "h": "5 * 22 + 24", "frame": "battle", "opacity": 0.94, "elements": [
 			{"type": "repeater", "items": "log_lines", "x": 20, "y": 12, "dy": 22, "template": [
 				{"type": "text", "value": "text", "size": "size_small", "color": "newest ? 'text' : 'dim'"}
 			]}
@@ -69,18 +77,18 @@
 		{"name": "banner", "visible": "banner != '' && !banner_plate", "x": "(W - w) / 2", "y": "log_shown ? log.bottom + 12 : 20",
 			"w": "measure(fit(banner, W - 160, banner_big ? size_title : size_body), banner_big ? size_title : size_body) + 48", "h": "(banner_big ? size_title : size_body) + 22", "elements": [
 			{"type": "group", "alpha": "banner_alpha", "elements": [
-				{"type": "box", "w": "cw", "h": "ch", "opacity": 0.95},
+				{"type": "box", "frame": "battle", "w": "cw", "h": "ch", "opacity": 0.95},
 				{"type": "text", "value": "banner", "max_width": "W - 160", "x": 24, "y": 10, "size": "banner_big ? size_title : size_body", "color": "banner_cancel ? 'bad' : 'accent'"}
 			]}
 		]},
-		{"name": "command", "visible": "menu_shown", "w": 360, "h": 114, "y": "strip.y - h - 4", "frame": "panel", "title": {"value": "menu_title"},
+		{"name": "command", "visible": "menu_shown", "w": 360, "h": 114, "y": "strip.y - h - 4", "frame": "battle", "title": {"value": "menu_title"},
 			"x": "command_center >= 0 ? command_center - w / 2 : clamp(actor_center <= W / 2 ? actor_right + 8 : actor_left - 8 - w, 16, W - 16 - w)", "elements": [
 			{"type": "rows", "items": "menu_items", "selected": "cursor", "text": "fit(text, 140, size_small)", "enabled": "usable", "x": 22, "y": 18, "w": 160,
 				"size": "size_small", "row_height": 22, "height": 22, "first": "cursor / 8 * 8", "most": 8, "per_column": 4, "column_w": 164},
 			{"type": "text", "visible": "len(menu_items) > 8", "key": "ui.battle.pages", "args": ["cursor / 8 + 1", "(len(menu_items) + 7) / 8"], "w": "cw - 14", "align": "right", "y": 4, "style": "small_dim"},
 			{"type": "slot", "slot": "target_pointer"}
 		]},
-		{"name": "description", "visible": "description_shown", "x": 16, "y": "log_shown ? log.bottom + 12 : 16", "w": "W - 32", "h": "t(22) * 2 + 16", "frame": "panel", "opacity": 0.9, "elements": [
+		{"name": "description", "visible": "description_shown", "x": 16, "y": "log_shown ? log.bottom + 12 : 16", "w": "W - 32", "h": "t(22) * 2 + 16", "frame": "battle", "opacity": 0.9, "elements": [
 			{"type": "text", "visible": "description != ''", "value": "description", "x": 16, "y": 8, "wrap": true, "max_width": "cw - 32", "lines": 2, "line_height": "t(22)", "style": "small"},
 			{"type": "text", "visible": "description == ''", "key": "ui.common.no_description", "x": 16, "y": 8, "wrap": true, "max_width": "cw - 32", "lines": 2, "line_height": "t(22)", "style": "small_dim"}
 		]},
@@ -88,7 +96,7 @@
 			{"type": "fill", "w": "W", "h": 30, "color": "black", "alpha": 0.6},
 			{"type": "text", "value": "hint", "max_width": "W - 32", "w": "W", "align": "center", "y": 6, "style": "small_dim"}
 		]},
-		{"name": "result", "visible": "phase == 'ended'", "x": "(W - w) / 2", "y": "max(24, (strip.y - h) / 2)", "w": 640, "h": "84 + len(result_lines) * 30", "frame": "panel",
+		{"name": "result", "visible": "phase == 'ended'", "x": "(W - w) / 2", "y": "max(24, (strip.y - h) / 2)", "w": 640, "h": "84 + len(result_lines) * 30", "frame": "battle",
 			"title": "ui.battle.result.title", "elements": [
 			{"type": "text", "value": "outcome", "w": "cw", "align": "center", "y": 22, "style": "title"},
 			{"type": "repeater", "items": "result_lines", "x": 32, "y": 70, "dy": 30, "template": [

@@ -1,0 +1,105 @@
+# The small example layout set (make_layout_assets.py --small: 320x224, 16-pixel field cells, integer scaling, the bitmap
+# font, on a copy of the test assets): the title; the arrival's narration and a speaker's line in the box the code puts
+# at the bottom (the dialogue file's `box_h`, `box_margin` and `box_top`); the field's HUD card and hint line; the
+# real-time glide in 16-pixel cells; the interaction prompt as a card under the target; click-to-walk to a cell; the
+# reed path's whole-area picture; the lookout's comic panels in smaller margins (the panels file's params), each
+# camera's cells 16 pixels times its zoom; Ember Steps' objects with pictures of their own. With --window the shot lines
+# save screenshots under build/shots/small/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 2
+expect state windows title/scene 0 0 320x224, title/box 12 52 184x108, title/corner 0 0 320x224, title/hint 0 212 320x12
+shot build/shots/small/title.png
+press Enter
+waitstatehas 200 line The ferry bumps
+expect state windows dialogue/banner 48 68 224x36, dialogue/box 4 140 312x70
+expect state dialogue bottom
+shot build/shots/small/dialogue_narration.png
+press Enter
+waitstatehas 300 line Mind the ropes
+expect state windows dialogue/banner 48 54 224x36, dialogue/box 4 140 312x70
+expect state dialogueoverlaps none
+shot build/shots/small/dialogue_speaker.png
+pressuntil Enter Field 400
+dev encounters off
+wait 20
+expect state windows field/hud 2 2 116x24, field/toasts 0 0 320x224, field/hint 0 212 320x12
+expect state overlaps none
+shot build/shots/small/field.png
+
+# The glide: 16 pixels a cell, at the same pace as at 48.
+fieldinput realtime
+cmd walk 3 4
+wait 2
+expect state leaderpos 48 64
+press Right
+expect state walkstep east 4 4 32/250 100%
+expect state leaderpos 50 64
+wait 15
+expect state leaderpos 64 64
+
+# The prompt's card under the stall, from the cell's center as the 16-pixel map drew it.
+cmd walk 7 2
+cmd face west
+wait 2
+expect state interactprompt shop at 8 2
+expect state windows field/hud 2 2 116x24, field/toasts 0 0 320x224, field/prompt 149 89 70x14, field/hint 0 212 320x12
+expect state overlaps none
+shot build/shots/small/prompt.png
+
+# A click on a cell walks there: the click goes through the 16-pixel cells.
+clickcell 3 5
+wait 4
+shot build/shots/small/click.png
+wait 140
+expect actor fighter 3 5
+fieldinput classic
+
+# The reed path's picture by the maps/ convention, 16 pixels a cell on a 16-pixel field.
+cmd walk 13 4
+wait 2
+expect state area Reed Path
+expect state fieldpicture reed_path above patched 0 tiled 0
+shot build/shots/small/reed_path.png
+
+# The lookout: two panels, then the peddler's along the bottom, then the east one pushed in.
+cmd walk lookout_front
+wait 2
+press Enter
+wait 2
+press Enter
+wait 24
+expect state panels west top_left lookout_west, east top_right lookout_east
+expect state paneltiles west 16, east 20
+expect state windows panels/panels 0 0 320x224, dialogue/box 4 140 312x70
+shot build/shots/small/panels_two.png
+waitstatehas 60 line Tidewater's lamps
+# Two lines to a box at this size: the line goes on in a second box.
+expect state dialoguepage 1/2
+press Enter
+wait 2
+expect state dialoguepage 2/2
+shot build/shots/small/dialogue_page.png
+press Enter
+waitstatehas 120 line Wave all you like
+expect state panels west top_left lookout_west, east top_right lookout_east, cart wide_bottom peddler
+expect state paneltiles west 16, east 20, cart 24
+expect state dialogue bottom
+shot build/shots/small/panels_three.png
+press Enter
+wait 2
+press Enter
+waitstatehas 240 line The skimmer's boiler
+expect state paneltiles west 16, east 27
+shot build/shots/small/panels_pushed.png
+
+# Ember Steps' objects: a cell wide and two tall, two wide, two square, a person.
+cmd title
+wait 2
+cmd load auto_0
+wait 2
+dev warp ember_steps west_gate
+wait 2
+waitstate 60 objects ember_steps:steps_board closed 2x1 frame 0, ember_steps:steps_console closed 1x2 frame 0, ember_steps:steps_spring closed 2x2 frame 0, ember_steps:steps_tinker mystic east
+shot build/shots/small/objects.png

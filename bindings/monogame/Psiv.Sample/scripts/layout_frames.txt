@@ -1,0 +1,61 @@
+# The example layout set's window frames (make_layout_assets.py), run with --dev on saves holding a cleared story, so the
+# title offers the sound test: the sound test and a ferry's travel screen in the set's generated panels, then with
+# styles.json's `panel` frame a nine-slice picture (`assets swap` the alternate styles in), then with the manifest's UI
+# skin, whose window frame is another picture, drawing the generated frames. `uiframes` reads how each frame style drew.
+# Last, the console's overlay help and the layout windows overlay. With --window the shot lines save screenshots in the
+# working directory; headless runs write nothing.
+
+cmd set text instant
+expect screen Title
+press Down 3
+expect state selected Sound test
+press Enter
+expect screen SoundTest
+wait 1
+expect state windows sound_test/scene 0 0 640x480, sound_test/box 264 46 360x402, sound_test/hint 0 464 640x16
+expect state uiframes panel generated 1
+shot sound_test.png
+assets swap ui/styles.json alt/styles_nine_slice.json
+wait 1
+expect state uiframes panel nine_slice 1
+expect state windows sound_test/scene 0 0 640x480, sound_test/box 264 46 360x402, sound_test/hint 0 464 640x16
+shot sound_test_nine_slice.png
+
+# A new game, then the ferry's destinations at Saltgrass Market's pier.
+press Escape
+expect screen Title
+press Up 3
+press Enter
+pressuntil Enter Field 400
+dev encounters off
+dev flag travel.isles_open on
+dev warp saltgrass pier_front
+press Up
+wait 3
+press Enter
+wait 4
+expect screen Travel
+expect state destinations cinder_quay
+expect state uiframes card fill 1, panel nine_slice 1
+shot travel_nine_slice.png
+assets swap ui/styles.json alt/styles.json
+wait 1
+expect state uiframes card fill 1, panel generated 1
+# The notices stack up at the bottom right, clear of the destinations' box.
+expect state overlaps none
+shot travel.png
+assets swap assets.json alt/assets_skin.json
+wait 1
+expect asset ui:frame file
+expect state uiframes card fill 1, panel skin 1
+shot travel_skin.png
+
+# The overlays' help names the layout windows overlay and its key; the overlay outlines the travel screen's windows.
+dev help overlays
+expect statehas consolelast every overlay but windows
+dev overlay windows on
+wait 1
+expect state overlay.windows 4
+shot travel_windows.png
+press Escape
+expect screen Field

@@ -16,7 +16,20 @@ battles on water, an overlay for the reed skimmer's battles and an enemy's own a
 picture with pictures for its conveyor belts and its tile step hooks' cells (alt/assets_drawn.json is the same manifest
 with both turned off and a picture that has them painted in, for a run that swaps it in), the slash effect drawn larger with a scale, Saltgrass Market's
 tileset at three times the size with a scale, the brine jelly and the fuse beetle's figures (one with a scale, one at
-its natural size on its foot row), and the medic's back figure kept at its slot's size with `natural: false`.
+its natural size on its foot row), and the medic's back figure kept at its slot's size with `natural: false`. Then the
+battle's own window frame (recolored rust brown), the fighter bowing by its pose's name alone, the medic's sheet without the
+shrug the chart scene asks of it, a flourish pose on the fighter's back figure for its Focus Shot and a wobble on the gel
+mites' for their attack; alt/battle_front_status.json and alt/battle_side_status.json are the built-in battle layouts
+with a statuses table, for a run that swaps them in.
+alt/assets_more.json is the same manifest with entries no other run should see: backdrops by cell (a picture for the
+reed path, named regions for Tidewater Landing) and by a flag, the guide's sheet with two facings (west mirrored from
+east, north from its fallback, facing east until a script turns it), the guide's portraits by expression, and title art
+(a background, a logo, two layers, the traveler and the creature), still pictures for the dialogue's `picture` tags (a
+chart and a bell tower), the shop's and inn's keepers at Tidewater Landing, and the commands' pictures recolored. Beside it in alt/:
+assets_more_natural.json (the title art drawn at its natural size for a screen 360 high), title_natural.json (a title
+layout placing it: the scene in a band, the logo, traveler and creature at their sizes), title_builtin.json (the built-in
+title layout, to swap back) and dialogue_pictures.json (the built-in dialogue layout with a `bell` tag whose values map to
+cues).
 
 BROKEN: a copy of the export with one problem of each kind the asset check reports.
 
@@ -180,6 +193,8 @@ def main():
 		"battle_presentation": "battle.json",
 	}, indent="\t") + "\n")
 	newer(export, override, manifest)
+	looks(export, override, manifest)
+	more(export, override)
 
 	shutil.rmtree(broken, ignore_errors=True)
 	shutil.copytree(export, broken)
@@ -210,7 +225,9 @@ def main():
 	table["enemies"] = {"nobody": {}, "gel_mite": {"juggle": {}}}
 	(broken / "battle_presentation.json").write_text(json.dumps(table, indent="\t") + "\n")
 	newer_broken(broken)
+	more_broken(broken)
 	broken_layouts(broken)
+	looks_broken(broken)
 	bitmap_fonts(export, fonts)
 	if len(sys.argv) > 5:
 		subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("make_layout_assets.py")), str(export), str(fonts), sys.argv[5]], check=True)
@@ -407,6 +424,67 @@ def newer(export, override, manifest):
 	(override / "battle.json").write_text(json.dumps(table, indent="\t") + "\n")
 
 
+def looks(export, override, manifest):
+	"""Adds the battle's own window frame, extra poses and the party slots' status looks to OVERRIDE (see the module's
+	description)."""
+	recolor(export / manifest["ui"]["battle_frame"]["image"], override / "ui/battle_frame.png", (2, 1, 0))
+	medic = json.loads(json.dumps(next(c for c in manifest["characters"] if c["id"] == "medic")))
+	recolor(export / medic["image"], override / "characters/medic.png", (1, 2, 0))
+	medic["image"] = "characters/medic.png"
+	del medic["poses"]["shrug"]
+	del medic["animations"]["shrug"]
+	# In both manifests, since the Cogway's run swaps in the second with the same battle table.
+	for name in ("assets.json", "alt/assets_drawn.json"):
+		m = json.loads((override / name).read_text())
+		m["ui"]["battle_frame"] = {"image": "ui/battle_frame.png", "border": 8}
+		# The fighter bows by its pose's name alone; the medic's sheet has no shrug, which the chart scene asks of it.
+		fighter = next(c for c in m["characters"] if c["id"] == "fighter")
+		del fighter["animations"]["bow"]
+		m["characters"].append(medic)
+		# Battle poses beyond the standard ones: the fighter's back figure flourishes its Focus Shot, the gel mites wobble as
+		# they attack.
+		back = next(f for f in m["figures"] if f["id"] == "fighter" and f.get("view") == "back")
+		back["animations"]["flourish"] = {"frames": [2, 1, 2], "ms": [90, 90, 100]}
+		mite = next(f for f in m["figures"] if f["id"] == "gel_mite")
+		mite["animations"]["wobble"] = {"frames": [1, 0, 1], "ms": [90, 90, 100]}
+		(override / name).write_text(json.dumps(m, indent="\t") + "\n")
+	table = json.loads((override / "battle.json").read_text())
+	table["actions"]["focus_shot"] = {"animation": "flourish"}
+	table["enemies"]["gel_mite"] = {"attack": {"animation": "wobble"}}
+	(override / "battle.json").write_text(json.dumps(table, indent="\t") + "\n")
+	# The battle layouts with a statuses table, for a run that swaps them in: jumble tints the name pink over the others and
+	# its icon comes first, sleep tints it blue and shows no icon, poison tints it green over sleep.
+	statuses = {"jumble": {"color": "#f0a0f0", "priority": 3}, "poison": {"color": "good", "priority": 2}, "sleep": {"color": "tp", "icon": "none", "priority": 1}}
+	for screen in ("battle_front", "battle_side"):
+		layout = json.loads((export / f"ui/{screen}.json").read_text())
+		layout["statuses"] = statuses
+		(override / f"alt/{screen}_status.json").write_text(json.dumps(layout, indent="\t") + "\n")
+
+
+def looks_broken(broken):
+	"""One problem of each kind the battle frame, the poses and the status looks can have, in BROKEN."""
+	m = json.loads((broken / "assets.json").read_text())
+	m["ui"]["battle_frame"] = {"image": "ui/no_battle_frame.png", "border": 8}
+	m["figures"][0]["animations"]["Big Jump"] = {"frames": [0], "ms": [100]}
+	m["characters"][2]["poses"]["cartwheel"] = m["characters"][2]["poses"]["nod"]
+	(broken / "assets.json").write_text(json.dumps(m, indent="\t") + "\n")
+	table = json.loads((broken / "battle_presentation.json").read_text())
+	table["enemies"]["rust_hound"] = {"attack": {"animation": "pounce"}}
+	table["actions"]["tonic"] = {"animation": "Raise Bottle"}
+	(broken / "battle_presentation.json").write_text(json.dumps(table, indent="\t") + "\n")
+	ui = broken / "ui"
+	side = json.loads((ui / "battle_side.json").read_text())
+	side["statuses"] = {"nausea": {"color": "bad"}, "poison": {"color": "mud", "icon": "maybe", "priority": 500, "glow": True}}
+	(ui / "battle_side.json").write_text(json.dumps(side, indent="\t") + "\n")
+	inn = json.loads((ui / "inn.json").read_text())
+	inn["statuses"] = {"poison": {"color": "bad"}}
+	(ui / "inn.json").write_text(json.dumps(inn, indent="\t") + "\n")
+	styles = json.loads((ui / "styles.json").read_text())
+	styles["frames"]["battle"]["skin"] = "arena"
+	styles["frames"]["ink"] = {"type": "outline", "skin": "battle"}
+	(ui / "styles.json").write_text(json.dumps(styles, indent="\t") + "\n")
+
+
 def newer_broken(broken):
 	"""One problem of each kind the newer entries can have, in BROKEN."""
 	m = json.loads((broken / "assets.json").read_text())
@@ -450,6 +528,151 @@ def newer_broken(broken):
 	(broken / "assets.json").write_text(json.dumps(m, indent="\t") + "\n")
 
 
+def more(export, override):
+	"""Writes OVERRIDE's alt/assets_more.json (see the module's description)."""
+	m = json.loads((override / "assets.json").read_text())
+	blue, green = (2, 0, 1), (0, 2, 1)
+
+	# Named backdrops for the maps, and one for the reed path while the ash storm's flag is set.
+	synth(override / "backdrops/reeds.png", 320, 105,
+		lambda x, y: (150, 200, 220, 255) if y < 50 else (40, 110 + (x * 7 % 30), 50, 255) if (x * 5 + y) % 9 < 6 else (90, 150, 70, 255))
+	synth(override / "backdrops/dunes.png", 320, 105,
+		lambda x, y: (230, 190, 120, 255) if y < 50 else (210, 170 - abs((x % 64) - 32), 100, 255))
+	synth(override / "backdrops/ash_storm.png", 320, 105, lambda x, y: (70 + (x * 3 + y * 7) % 40, 64, 70, 255))
+	m["backdrops"] += [
+		{"id": "reeds", "image": "backdrops/reeds.png"},
+		{"id": "dunes", "image": "backdrops/dunes.png"},
+		{"flag": "fells.ash_storm", "area": "reed_path", "image": "backdrops/ash_storm.png"},
+	]
+	# The reed path, 20 by 9 cells: reeds on its west part, dunes on its east part, nothing between.
+	synth(override / "backdrop_maps/reed_path.png", 20, 9,
+		lambda x, y: (64, 160, 80, 255) if x < 9 else (208, 176, 112, 255) if x >= 13 else (0, 0, 0, 0))
+	synth(override / "alt/reed_path_dunes.png", 20, 9, lambda x, y: (208, 176, 112, 255))
+	m["backdrop_maps"] = [
+		{"area": "reed_path", "image": "backdrop_maps/reed_path.png", "colors": {"#40a050": "reeds", "#d0b070": "dunes"}},
+		{"area": "tidewater", "regions": {"square": {"rect": [1, 1, 5, 4], "backdrop": "reeds"}, "quay": {"rect": [8, 3, 6, 3], "backdrop": "dunes"}}},
+	]
+
+	# The guide's south and east frames, recolored, a yellow mark on the east frames' right; west is east flipped, north
+	# falls back to south, and it faces east until a script turns it.
+	width, height, rows = read_png(export / "characters/guide.png")
+	def frame(i):
+		cx, cy = i % (width // 16) * 16, i // (width // 16) * 16
+		return [bytearray(rows[cy + y][cx * 4:(cx + 16) * 4]) for y in range(16)]
+	frames = [frame(i) for i in (6, 7, 8, 3, 4, 5)]
+	for f in frames[3:]:
+		for y in (4, 5):
+			f[y][13 * 4:15 * 4] = bytes((250, 220, 40, 255)) * 2
+	write_png(override / "characters/guide_two.png", 96, 16, [b"".join(f[y] for f in frames) for y in range(16)])
+	recolor(override / "characters/guide_two.png", override / "characters/guide_two.png", green)
+	m["characters"].append({"id": "guide", "image": "characters/guide_two.png", "walk": {"south": [0, 1, 2], "east": [3, 4, 5]},
+		"facing": {"mirror": {"west": "east"}, "fallback": "south", "start": "east"}})
+
+	# The guide's portrait smiling and frowning; {portrait:guide:grin} names an expression it lacks.
+	recolor(export / "portraits/guide.png", override / "portraits/guide_smile.png", green)
+	recolor(export / "portraits/guide.png", override / "portraits/guide_frown.png", blue)
+	m["portraits"]["guide"] = {"image": "portraits/guide.png", "expressions": {"smile": "portraits/guide_smile.png", "frown": "portraits/guide_frown.png"}}
+
+	# Title art: a dusk sky with hills, a plaque for the logo, clouds drifting left and two birds flapping, and the
+	# traveler and the creature recolored.
+	def sky(x, y):
+		hill = 130 + int(12 * ((x * 37 % 101) / 101.0)) - (x % 60 > 30) * 6
+		if y >= hill:
+			return (40, 70 + y % 7, 50, 255)
+		return (40 + y, 50 + y // 2, 120 - y // 3, 255)
+	synth(override / "title/sky.png", 320, 180, sky)
+	def plaque(x, y):
+		if x < 3 or y < 3 or x >= 237 or y >= 37:
+			return (200, 160, 60, 255)
+		return (240, 230, 200, 255) if 12 <= y < 28 and (x - 12) % 24 < 16 and 12 <= x < 228 else (60, 40, 30, 255)
+	synth(override / "title/logo.png", 240, 40, plaque)
+	synth(override / "title/clouds.png", 160, 20,
+		lambda x, y: (250, 250, 255, 230) if ((x % 80) - 40 + (x // 80) * 6) ** 2 / 4 + (y - 12) ** 2 * 3 < 300 else (0, 0, 0, 0))
+	synth(override / "title/birds.png", 24, 8,
+		lambda x, y: (30, 30, 40, 255) if (y == 4 - abs((x % 12) - 6) // 2 if x // 12 == 0 else y == 2 + abs((x % 12) - 6) // 2) and x % 12 != 0 else (0, 0, 0, 0))
+	recolor(export / "title/traveler.png", override / "title/traveler.png", green)
+	recolor(export / "title/creature.png", override / "title/creature.png", blue)
+	m["title_art"] = {
+		"background": "title/sky.png",
+		"logo": "title/logo.png",
+		"layers": [
+			{"image": "title/clouds.png", "frame": [80, 20], "frames": [0, 1], "ms": 900, "at": [0, 60], "scale": 4, "scroll": [-30, 0]},
+			{"image": "title/birds.png", "frame": [12, 8], "frames": [0, 1], "ms": 250, "at": [960, 150], "scale": 4},
+		],
+		"traveler": {"image": "title/traveler.png", "frames": [1, 0], "ms": 260},
+		"creature": {"image": "title/creature.png", "frames": [0, 1], "ms": 400},
+	}
+
+	# A chart of the cove and a bell tower for the dialogue's pictures, keepers for Tidewater's stall and inn, and the
+	# commands' pictures recolored.
+	synth(override / "pictures/chart.png", 240, 150, lambda x, y: (60, 40, 30, 255) if x < 4 or y < 4 or x >= 236 or y >= 146
+		else (40, 90, 160, 255) if (x - 150) ** 2 + (y - 80) ** 2 * 2 < 2500 else (220, 200, 150, 255) if (x + y) % 16 else (170, 140, 90, 255))
+	synth(override / "pictures/tower.png", 120, 160, lambda x, y: (200, 170, 70, 255) if (x - 60) ** 2 + (y - 40) ** 2 < 220
+		else (120, 110, 100, 255) if 35 <= x < 85 and y >= 20 else (150, 190, 230, 255))
+	m["pictures"] = {"chart": "pictures/chart.png", "tower": "pictures/tower.png"}
+	m["keepers"] = {"tidewater_inn": "guide", "tidewater_stall": "dockhand"}
+	m["command_icons"] = {}
+	for command in ("attack", "defend", "item", "technique"):
+		recolor(export / f"command_icons/{command}.png", override / f"command_icons/{command}.png", green)
+		m["command_icons"][command] = f"command_icons/{command}.png"
+	(override / "alt/assets_more.json").write_text(json.dumps(m, indent="\t") + "\n")
+	m["title_art"]["reference_height"] = 360
+	(override / "alt/assets_more_natural.json").write_text(json.dumps(m, indent="\t") + "\n")
+	title = json.loads((export / "ui/title.json").read_text())
+	(override / "alt/title_builtin.json").write_text(json.dumps(title, indent="\t") + "\n")
+	scene, box = title["windows"][0], title["windows"][1]
+	# The art's scene in a band across the top, the logo over it and the traveler and creature standing on its bottom.
+	scene["y"], scene["h"] = 40, 260
+	box["anchor"], box["y"] = "bottom", 40
+	scene["elements"] += [
+		{"type": "image", "image": "logo", "x": "(W - logo_w) / 2", "y": 24, "w": "logo_w", "h": "logo_h"},
+		{"type": "image", "image": "hero_frame", "x": 200, "y": "260 - hero_h - 8", "w": "hero_w", "h": "hero_h"},
+		{"type": "image", "image": "creature_frame", "x": "W - 200 - creature_w", "y": "260 - creature_h - 8", "w": "creature_w", "h": "creature_h"},
+	]
+	box["elements"] = [e for e in box["elements"] if e.get("image") not in ("logo", "hero_frame", "creature_frame")]
+	(override / "alt/title_natural.json").write_text(json.dumps(title, indent="\t") + "\n")
+	dialogue = json.loads((export / "ui/dialogue.json").read_text())
+	dialogue["tags"]["bell"] = {"action": "cue", "values": {"1": "lookout_creak", "2": "cursor"}, "default": "confirm"}
+	(override / "alt/dialogue_pictures.json").write_text(json.dumps(dialogue, indent="\t") + "\n")
+
+
+def more_broken(broken):
+	"""One problem of each kind the backdrop maps, flag backdrops, sheet facings, portrait expressions and title art can
+	have, in BROKEN."""
+	m = json.loads((broken / "assets.json").read_text())
+	m["backdrops"] += [
+		{"id": "reeds", "image": "backdrops/town.png"},
+		{"flag": "no.such_flag", "image": "backdrops/town.png"},
+		{"flag": "fells.ash_storm", "kind": "town", "image": "backdrops/town.png"},
+		{"image": "backdrops/town.png"},
+	]
+	write_png(broken / "backdrop_maps/small.png", 16, 16, [bytearray((64, 160, 80, 255) * 16)] * 16)
+	write_png(broken / "backdrop_maps/tidewater.png", 14, 9, [bytearray((64, 160, 80, 255) * 13 + (18, 52, 86, 255))] * 8 + [bytearray((9, 9, 9, 128) * 14)])
+	m["backdrop_maps"] = [
+		{"area": "atlantis", "regions": {}},
+		{"area": "reed_path", "image": "backdrop_maps/small.png", "colors": {"#40a050": "reeds"}},
+		{"area": "tidewater", "image": "backdrop_maps/tidewater.png", "colors": {"#40a050": "lagoon", "red": "reeds"}},
+		{"area": "saltgrass", "regions": {"a": {"rect": [0, 0, 4, 4], "backdrop": "reeds"}, "b": {"rect": [2, 2, 4, 4], "backdrop": "reeds"},
+			"c": {"rect": [0, 0, 999, 1], "backdrop": "reeds"}, "d": {"rect": [0, 8, 1, 1], "backdrop": "lagoon"}}},
+		{"area": "reed_path", "image": "backdrop_maps/small.png", "regions": {}},
+	]
+	dockhand = next(c for c in m["characters"] if c["id"] == "dockhand")
+	dockhand["walk"] = {k: v for k, v in dockhand["walk"].items() if k in ("east", "south")}
+	dockhand["facing"] = {"mirror": {"west": "north", "east": "south"}, "fallback": "up"}
+	next(c for c in m["characters"] if c["id"] == "medic")["facing"] = {"fallback": "south", "start": "east"}
+	m["portraits"]["guide_smile"] = {"expressions": {"wink face": "portraits/guide.png", "sad": 3}}
+	m["portraits"]["mystic_worried"] = {}
+	m["portraits"]["scout_grin"] = {"image": "portraits/scout.png", "expressions": {"ok": "portraits/scout_ok.png"}}
+	title = m["title_art"]
+	title.update(background="title/missing.png", sparkle=True)
+	title["layers"] = [{"image": "title/traveler.png", "frames": [9], "at": [0], "scroll": [99999, 0], "scale": 0}]
+	title["reference_height"] = 0
+	m["command_icons"] = {"attack": "command_icons/missing.png", "dance": "command_icons/defend.png"}
+	m["pictures"] = {"bell tower": "title/traveler.png", "chart": 5}
+	m["keepers"] = {"no_such_shop": "guide", "tidewater_inn": "nobody", "tidewater_stall": 3}
+	(broken / "assets.json").write_text(json.dumps(m, indent="\t") + "\n")
+
+
 def broken_layouts(broken):
 	"""Layout files that fail each way, in BROKEN's ui/: each screen with a problem falls back to the built-in one, and
 	the hostile but valid pause layout must draw without stopping the sample."""
@@ -471,6 +694,9 @@ def broken_layouts(broken):
 	styles = json.loads((ui / "styles.json").read_text())
 	styles["resolution"]["width"] = 50
 	styles["colors"]["mud"] = "brown"
+	styles["params"]["toast_size"] = 3
+	styles["params"]["toast_h"] = "tall"
+	styles["params"]["field_cell"] = 4
 	(ui / "styles.json").write_text(json.dumps(styles, indent="\t") + "\n")
 	pause = json.loads((ui / "pause.json").read_text())
 	pause["windows"] += [
@@ -481,6 +707,26 @@ def broken_layouts(broken):
 		{"name": "loop_b", "relative_to": "loop_a", "x": 2147483647, "y": "-2147483647 * 4", "w": 99999, "h": 99999, "frame": "panel"},
 	]
 	(ui / "pause.json").write_text(json.dumps(pause, indent="\t") + "\n")
+	dialogue = json.loads((ui / "dialogue.json").read_text())
+	dialogue["tags"]["bell"] = {"action": "cue", "id": "confirm", "values": {"1": "", "2": 3}, "default": "cursor"}
+	dialogue["tags"]["clear_all"] = {"action": "picture_clear", "default": "chart"}
+	picture = next(w for w in dialogue["windows"] if w["name"] == "picture")
+	picture["open"] = {"kind": "fade", "step": 8}
+	picture["close"] = {"kind": "shrink", "step": -1}
+	dialogue["params"] = {"box_h": "(70", "box_width": 300}
+	(ui / "dialogue.json").write_text(json.dumps(dialogue, indent="\t") + "\n")
+	confirm = json.loads((ui / "confirm.json").read_text())
+	confirm["params"] = {"backdrop_dim": 0.3}
+	(ui / "confirm.json").write_text(json.dumps(confirm, indent="\t") + "\n")
+	front = json.loads((ui / "battle_front.json").read_text())
+	front["params"]["party_slot_5_x"] = 100
+	(ui / "battle_front.json").write_text(json.dumps(front, indent="\t") + "\n")
+	side = json.loads((ui / "battle_side.json").read_text())
+	side["params"]["motion_percent"] = "speed * 2"
+	(ui / "battle_side.json").write_text(json.dumps(side, indent="\t") + "\n")
+	panels = json.loads((ui / "panels.json").read_text())
+	panels["params"] = {"margin": 6, "zoom": 2}
+	(ui / "panels.json").write_text(json.dumps(panels, indent="\t") + "\n")
 
 
 if __name__ == "__main__":

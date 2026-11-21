@@ -3,10 +3,19 @@ assets: assets.json: tilesets[1]: a 16-pixel tile at scale 2 draws 32 screen pix
 assets: tilesets/dungeon.png: tilesets[2]: 17x17 does not divide into 16x16 frames
 assets: assets.json: characters[0].animations.dance: unknown animation 'dance': not in game.json's presentation animations
 assets: assets.json: characters[1].animations.nod: unknown pose 'twirl': not one of this character's poses
-assets: assets.json: characters[1].poses.nod: no animation plays this pose: map script animation names to it in 'animations'
+assets: assets.json: characters[2].poses.cartwheel: no animation plays this pose: name it after one of game.json's presentation animations, or map one to it in 'animations'
+assets: assets.json: characters[4].facing: 'mirror' draws west from north, which 'walk' does not give
+assets: assets.json: characters[4].facing: 'mirror' draws east, which 'walk' gives already
+assets: assets.json: characters[4].facing: unknown facing 'up' in 'fallback': north, east, south, west
+assets: assets.json: characters[4]: 'walk' needs three frames (standing, walk A, walk B) for each facing it gives, and every facing it lacks needs 'facing.mirror' or 'facing.fallback'
+assets: assets.json: characters[14].facing: 'start' is for script actors: medic is a party member, who faces where the party goes
 assets: assets.json: characters[19]: unknown character 'nobody': not a party member or actor in the game data
 assets: portraits/guide.png: portraits.guide: missing file
-assets: assets.json: figures[0].animations.juggle: unknown animation 'juggle': attack, cast, item, defend, hurt, defeat
+assets: assets.json: portraits.guide_smile.expressions.wink face: an expression's name is letters, digits and '_'
+assets: assets.json: portraits.guide_smile.expressions.sad: must be an image file name
+assets: assets.json: portraits.mystic_worried: needs 'image', 'expressions' or both
+assets: portraits/scout_ok.png: portraits.scout_grin.expressions.ok: missing file
+assets: assets.json: figures[0].animations.Big Jump: a pose's name is lower-case letters, digits and '_', starting with a letter, and not 'idle': 'Big Jump'
 assets: assets.json: figures[1]: field 'scale' must be a number above 0, at most 64
 assets: assets.json: figures[2]: field 'foot' must be a whole number from 1 to 16
 assets: assets.json: figures[4]: 'natural': true and 'scale' do not go together: the scale sets the size
@@ -15,8 +24,31 @@ assets: assets.json: vehicles[3]: unknown vehicle 'hovercart': not in the game d
 assets: assets.json: vehicles[3]: 'facings' needs north, east, south and west, each at least one frame
 assets: assets.json: backdrops[3]: unknown area 'atlantis': not in the game data
 assets: assets.json: backdrops[4]: unknown terrain 'lava': floor, water, soft
+assets: assets.json: backdrops[6]: unknown flag 'no.such_flag': not in the game data
+assets: assets.json: backdrops[7]: needs exactly one of 'kind', 'area', 'encounter', 'terrain' and 'flag' (a flag may add 'area'), or only an 'id' for the backdrop maps
+assets: assets.json: backdrops[8]: needs exactly one of 'kind', 'area', 'encounter', 'terrain' and 'flag' (a flag may add 'area'), or only an 'id' for the backdrop maps
+assets: assets.json: backdrop_maps[0]: unknown area 'atlantis': not in the game data
+assets: backdrop_maps/small.png: backdrop_maps[1]: 16x16 is not the area's 20x9 cells at one pixel a cell
+assets: assets.json: backdrop_maps[2].colors.#40a050: names no backdrop: lagoon is not the 'id' of a backdrop entry
+assets: assets.json: backdrop_maps[2].colors.red: a color is #rrggbb
+assets: backdrop_maps/tidewater.png: backdrop_maps[2]: colors 'colors' does not name: #123456
+assets: backdrop_maps/tidewater.png: backdrop_maps[2]: 14 pixels are neither transparent nor opaque
+assets: assets.json: backdrop_maps[3].regions.b: overlaps region 'a'
+assets: assets.json: backdrop_maps[3].regions.c: [0, 0, 999, 1] reaches past the area's 48x36 cells
+assets: assets.json: backdrop_maps[3].regions.d: names no backdrop: lagoon is not the 'id' of a backdrop entry
+assets: assets.json: backdrop_maps[4]: needs exactly one of 'image' (with 'colors') and 'regions'
+assets: assets.json: backdrop_maps[4]: an 'image' needs 'colors': each of its colors to the id of a backdrop
+assets: backdrop_maps/small.png: backdrop_maps[4]: 16x16 is not the area's 20x9 cells at one pixel a cell
 assets: assets.json: effects[1]: field 'scale' must be a number above 0, at most 64
 assets: assets.json: sprites.moon: unknown sprite 'moon': shadow, bubble, alert, pointer, pier
+assets: command_icons/missing.png: command_icons.attack: missing file
+assets: assets.json: command_icons.dance: unknown command 'dance': attack, technique, skill, combo, item, defend, escape
+assets: assets.json: pictures.bell tower: a picture's name is letters, digits and '_'
+assets: assets.json: pictures.chart: must be an image file name
+assets: assets.json: keepers.no_such_shop: unknown shop or rest point 'no_such_shop': not in the game data
+assets: assets.json: keepers.tidewater_inn: unknown portrait 'nobody': not a portrait, character or actor in the game data
+assets: assets.json: keepers.tidewater_stall: must be a portrait id
+assets: ui/no_battle_frame.png: ui.battle_frame: missing file
 assets: audio/music/battle_brass_warden.wav: audio[0]: bad loop points 0 to 99999999: the file has 280320 frames, and the start must come before the end
 assets: audio/ambient/marsh_wind.wav: audio[33]: bad loop points 2 to 1: the file has 88200 frames, and the start must come before the end
 assets: assets.json: audio[55]: unknown music 'not_a_track': not an id the game or the sample plays as music
@@ -32,6 +64,13 @@ assets: fonts/ja_bad.json: bitmap_fonts.fonts[5]: kerning.AZ: a pair is two char
 assets: maps/ashfall_market.png: maps.areas[0]: 16x16 is not the area's 16x9 cells at 16 pixels a cell (256x144)
 assets: assets.json: maps.areas[1]: unknown change flag 'no.such_flag': not a flag of the area's changes (it has none)
 assets: maps/atlantis.png: maps: names no area: maps/AREA.png, maps/AREA_above.png or maps/AREA@FLAG.png, with an area of the game data and a flag of its changes
+assets: assets.json: title_art: unknown field 'sparkle'
+assets: title/traveler.png: title_art.layers[0]: 'frames' names frame 9, but the image has 2 frames of 16x16
+assets: assets.json: title_art.layers[0]: field 'at' must be [x, y], each a number from -4096 to 4096
+assets: assets.json: title_art.layers[0]: field 'scroll' must be [x, y], each a number from -4096 to 4096
+assets: assets.json: title_art.layers[0]: field 'scale' must be a whole number from 1 to 16
+assets: title/missing.png: title_art: missing file
+assets: assets.json: title_art: field 'reference_height' must be a whole number from 1 to 4320
 assets: assets.json: objects[0]: unknown point 'nowhere': not a hook, chest, shop, rest point, port or helm of tidewater
 assets: assets.json: objects[1]: point 'guide' is where the actor stands: give the actor a 'characters' entry instead
 assets: assets.json: objects[2]: 'open' needs a chest point or an 'open_flag'
@@ -44,16 +83,46 @@ assets: assets.json: vehicle_overlays[0]: unknown vehicle 'hovercart': not a veh
 assets: battle_presentation.json: layout: must be front or side
 assets: battle_presentation.json: layouts.encounter:nowhere: unknown key: encounter:ID or area:ID, with an encounter or area of the game data
 assets: battle_presentation.json: actions.strike: unknown effect 'fireworks': not a generated effect, an effect in assets.json or none
-assets: battle_presentation.json: actions.strike: unknown animation 'moonwalk': none, attack, cast, item, defend
 assets: battle_presentation.json: actions.unknown_move: unknown ability or item 'unknown_move': not in the game data
+assets: battle_presentation.json: actions.tonic: unknown animation 'Raise Bottle': none, attack, cast, item, defend, or a figure pose's name (lower-case letters, digits and '_')
 assets: battle_presentation.json: enemies.nobody: unknown enemy 'nobody': not in the game data
 assets: battle_presentation.json: enemies.gel_mite.juggle: unknown action 'juggle': attack, defend or an ability of the game data
 assets: battle_presentation.json: changes.transform: unknown effect 'smoke': not a generated effect, an effect in assets.json or none
 assets: battle_presentation.json: changes.join.nobody: unknown change: join, merge, transform, instant_defeat, each alone or with .ENEMY for an enemy of the game data
+assets: battle_presentation.json: actions.strike: no figure has a pose 'moonwalk': the attack animation plays
+assets: battle_presentation.json: enemies.rust_hound.attack: the figure of rust_hound has no pose 'pounce': the attack animation plays
 assets: ui/menu.json: -: missing file: the built-in layout stands in
 assets: ui/styles.json: resolution: field 'width' must be a whole number from 160 to 7680
 assets: ui/styles.json: colors.mud: must be #rrggbb or #rrggbbaa
+assets: ui/styles.json: frames.battle: field 'skin' must be one of menu, battle
+assets: ui/styles.json: frames.ink: 'skin' is for a generated frame only
+assets: ui/styles.json: params: unknown field 'toast_size'
+assets: ui/styles.json: params: field 'toast_h' must be a whole number from 0 to 4096
+assets: ui/styles.json: params: field 'field_cell' must be a whole number from 8 to 256
 assets: ui/styles.json: -: the built-in styles stand in
+assets: ui/battle_front.json: params.party_slot_5_x: unknown param: backdrop_h, dev_badge_y, effect_scale, effect_scale_large, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_x, ground_h, icon_gap, icon_size, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, stage_bottom, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
+assets: ui/battle_front.json: -: the built-in layout of this screen stands in
+assets: ui/battle_side.json: params.motion_percent: field 'motion_percent' reads 'speed', which is not a field of the battle_side screen, a window or a variable
+assets: ui/battle_side.json: statuses.nausea: unknown status 'nausea': not a status of the game data the party's slots show
+assets: ui/battle_side.json: statuses.poison: unknown field 'glow'
+assets: ui/battle_side.json: statuses.poison: field 'color' must be a color name of the styles, #rrggbb or #rrggbbaa: 'mud'
+assets: ui/battle_side.json: statuses.poison: field 'icon' must be one of picture, none
+assets: ui/battle_side.json: statuses.poison: field 'priority' must be a whole number from 0 to 100
+assets: ui/battle_side.json: -: the built-in layout of this screen stands in
+assets: ui/confirm.json: params.backdrop_dim: the screen takes no params
+assets: ui/confirm.json: -: the built-in layout of this screen stands in
+assets: ui/dialogue.json: params.box_h: field 'box_h': expected ')' at character 4 of '(70'
+assets: ui/dialogue.json: params.box_width: unknown param: box_h, box_margin, box_top
+assets: ui/dialogue.json: tags.bell.values.1: must be a non-empty string: the id the tag's value stands for
+assets: ui/dialogue.json: tags.bell.values.2: must be a non-empty string: the id the tag's value stands for
+assets: ui/dialogue.json: tags.bell: field 'id' leaves the tag's value unread: give 'values' and 'default' without it
+assets: ui/dialogue.json: tags.clear_all: fields 'values' and 'default' are for an action that takes an id, not picture_clear
+assets: ui/dialogue.json: windows.picture.open: field 'step' is for grow, grow_x and grow_y only
+assets: ui/dialogue.json: windows.picture.close: field 'kind' must be one of none, fade, grow, grow_x, grow_y, slide
+assets: ui/dialogue.json: windows.picture.close: field 'step' must be a whole number from 0 to 1024
+assets: ui/dialogue.json: windows.picture.close: field 'step' is for grow, grow_x and grow_y only
+assets: ui/dialogue.json: -: the built-in layout of this screen stands in
+assets: ui/inn.json: statuses: the screen takes no statuses table
 assets: ui/inn.json: windows.box: unknown field 'colour'
 assets: ui/inn.json: windows.box.elements[3]: unknown element type 'sparkle': fill, outline, box, plate, text, bar, value_bar, image, pointer, rows, list, hints, tabs, scroll_bar, repeater, group, slot, role
 assets: ui/inn.json: windows.box.elements[4]: field 'value' reads 'no_such_field', which is not a field of the inn screen, a window or a variable
@@ -65,7 +134,9 @@ assets: ui/inn.json: windows.box.elements[6]: the inn screen has no slots
 assets: ui/inn.json: windows.box: field 'relative_to' names no window of this screen: 'missing'
 assets: ui/inn.json: -: the built-in layout of this screen stands in
 assets: ui/nonsense.json: -: unknown screen 'nonsense': battle_front, battle_side, confirm, controls, dialogue, field, inn, load_game, menu, menu_codex, menu_combos, menu_equip, menu_items, menu_log, menu_macros, menu_options, menu_order, menu_quests, menu_status, name_entry, options, panels, pause, quest_log, save_prompt, save_slots, shop, sound_test, text_log, title, travel or styles
+assets: ui/panels.json: params.zoom: unknown param: bottom, gutter, margin, slide
+assets: ui/panels.json: -: the built-in layout of this screen stands in
 assets: ui/title.json: -: not valid JSON: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 27.
 assets: ui/title.json: -: the built-in layout of this screen stands in
-assets: 0 tilesets, 17 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 3 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 28 layout files (1280x720)
-FAILED: 69 problems.
+assets: 0 tilesets, 14 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 4 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 23 layout files (1280x720)
+FAILED: 140 problems.

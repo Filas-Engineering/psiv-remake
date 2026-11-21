@@ -3,12 +3,18 @@
 `dialogue_tags`, whose lines use every control tag the sample acts on (events/FORMAT.md "Control tags"), in English and
 Japanese: a portrait switch and a page break, three waits and three values, a narration longer than the dialogue box,
 and two tags of the sample's own: `sound`, which the dialogue layout's tags table maps to an audio cue (once with a cue
-the game has, once with one it lacks), and `shake`, which no table maps, so it is only logged; then `portrait_off`.
+the game has, once with one it lacks), and `shake`, which no table maps, so it is only logged; then `portrait_off`. A
+second event, `portrait_expressions`, switches the guide's portrait by expression (`{portrait:guide:smile}`) for
+scripts/assets_portraits.txt, naming one expression the test assets lack in both of its lines. A third,
+`dialogue_pictures`, for scripts/dialogue_pictures.txt, shows the test assets' still pictures with the `picture` tags (a
+chart, then a bell tower in its place, one the assets lack, a hide naming the picture that is not up, then a clear) and
+rings a `bell` tag whose values a swapped-in dialogue layout maps to cues (two values it maps, one it leaves to its
+default).
 
 Usage: make_tag_data.py GAME_DATA CORE_DATA OUT
 
-OUT gets game/data and core/data side by side, where game.json's core_data looks. The event is on no hook: the scripts
-start it with the `dev event` command.
+OUT gets game/data and core/data side by side, where game.json's core_data looks. The events are on no hook: the scripts
+start them with the `dev event` command.
 """
 
 import json
@@ -23,6 +29,19 @@ event dialogue_tags skippable
 	say guide @tags.wait
 	narrate @tags.long
 	say dockhand @tags.hooks
+end
+
+# Test-only (scripts/make_tag_data.py): the guide's portrait by expression.
+event portrait_expressions skippable
+	say guide @tags.expressions
+	say guide @tags.expressions_again
+end
+
+# Test-only (scripts/make_tag_data.py): still pictures and a tag whose values map to cues.
+event dialogue_pictures skippable
+	say guide @pictures.show
+	say guide @pictures.swap
+	narrate @pictures.hide
 end
 """
 
@@ -40,6 +59,12 @@ STRINGS = {
 			"rings once, far away, and the whole town pretends not to hear it. Nobody says the word cove out loud before noon.",
 		"tags.hooks": "{sound:lookout_creak}Did you hear that creak?{shake:2} The whole pier is trembling!{sound:foghorn} "
 			"{portrait_off}I am not staying to find out.",
+		"tags.expressions": "{portrait:guide:smile}Good to see you again.{portrait:guide:frown} That bell still worries me."
+			"{portrait:guide:grin} Chin up, though.",
+		"tags.expressions_again": "{portrait:guide:grin}Off you go.{portrait:guide} Mind the tide.",
+		"pictures.show": "{picture:chart}Here is the cove on the old chart.{bell:1} Hear the pier answer?",
+		"pictures.swap": "{picture:tower}And this is the bell tower.{bell:2} It rang again.{bell:9}{picture:lantern}",
+		"pictures.hide": "{picture_hide:chart}That is all I know.{picture_hide:tower} Off you go.{pictures_clear}",
 	},
 	"ja": {
 		"tags.portrait": "もう戻ったのかい？{portrait:guide}なら、これを聞いておくといい。{page}"
@@ -56,6 +81,11 @@ STRINGS = {
 			"誰もが首を横に振ったが、その目は揃って入り江のほうを見ていた。港の朝は、いつもと同じように見えて、どこか少しだけ違っていた。",
 		"tags.hooks": "{sound:lookout_creak}今のきしみ、聞こえた？{shake:2}桟橋じゅうが揺れている！{sound:foghorn}"
 			"{portrait_off}確かめに残る気はないよ。",
+		"tags.expressions": "{portrait:guide:smile}また会えてうれしいよ。{portrait:guide:frown}あの鐘がまだ気がかりだ。{portrait:guide:grin}でも、元気を出して。",
+		"tags.expressions_again": "{portrait:guide:grin}さあ、行っておいで。{portrait:guide}潮に気をつけて。",
+		"pictures.show": "{picture:chart}古い海図の入り江だ。{bell:1}桟橋が応えたのが聞こえる？",
+		"pictures.swap": "{picture:tower}これが鐘楼だ。{bell:2}また鳴った。{bell:9}{picture:lantern}",
+		"pictures.hide": "{picture_hide:chart}知っているのはこれだけ。{picture_hide:tower}さあ、行っておいで。{pictures_clear}",
 	},
 }
 

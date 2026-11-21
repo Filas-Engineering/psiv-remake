@@ -33,10 +33,12 @@ public sealed partial class SampleController
 	{
 		ShopInfo? shop = _s.Shop();
 		UiContext ctx = UiData()
-			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "shop")))
 			.Set("title", shop is { } open ? T(NameKind.ShopKind, (int)open.Kind) : T("ui.shop.title"))
 			.Set("open", shop is not null)
-			.Set("tab", _tab);
+			.Set("tab", _tab)
+			.Set("money_value", _s.WorldInfo().Money)
+			.Set("keeper", shop is null ? -1 : Keeper(art, shop.Id));
 		List<InventoryEntry> entries = shop is null ? [] : _tab == 0 ? shop.Stock.ToList() : _s.Inventory().Where(i => i.Price >= 0).ToList();
 		if (shop is not null)
 		{
@@ -64,6 +66,17 @@ public sealed partial class SampleController
 			_probeSelected = entries[_list.Cursor].Name;
 		}
 	}
+
+	// The portrait the assets' `keepers` give a shop or rest point, -1 without one.
+	private int Keeper(Art art, string point)
+	{
+		string? keeper = _assets?.Manifest.Keepers.GetValueOrDefault(point);
+		_probeKeeper = keeper ?? "-";
+		return keeper is null ? -1 : art.Portrait(keeper, keeper);
+	}
+
+	// The keeper the last shop or inn frame showed, `-` for none.
+	private string _probeKeeper = "-";
 
 	// The description fields of a highlighted row, at most two small lines; the session gives "" when the data has none.
 	private UiContext SetDescription(UiContext ctx, string? text)

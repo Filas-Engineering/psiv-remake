@@ -24,6 +24,9 @@ waitstate 300 battlephase Command
 expect state battlelayout side
 expect state strip -
 expect state windows battle_side/stage 0 0 640x480, battle_side/effects 0 0 640x480, battle_side/party 8 332 416x140, battle_side/menu 432 332 200x140, battle_side/status 432 332 200x140
+# The members stand at the layout's own places, and the enemies have labels but no bars.
+expect state partyplaces Test Fighter 560 170, Test Mystic 488 200, Test Medic 584 240
+expect state enemymarks labels 3 bars 0
 shot side_command.png
 press Down
 press Enter
@@ -64,7 +67,7 @@ waitstate 300 battlephase Command
 expect state figures reed_skimmer vehicle back
 expect statehas strip vehicle Reed Skimmer acting
 expect state overlaps none
-expect state windows battle_front/stage 0 0 640x480, battle_front/strip 8 8 140x276, battle_front/vehicle 8 292 140x52, battle_front/effects 0 0 640x480, battle_front/command 366 308 156x94, battle_front/keys 0 464 640x16
+expect state windows battle_front/stage 0 0 640x480, battle_front/strip 8 8 140x276, battle_front/vehicle 8 292 140x52, battle_front/enemies 8 176 140x52, battle_front/effects 0 0 640x480, battle_front/command 366 270 156x94, battle_front/keys 0 450 640x30
 shot front_vehicle.png
 present mark
 press Enter
@@ -106,7 +109,7 @@ waitstate 300 battlephase Command
 dev lose
 waitstate 900 battlephase Ended
 expect state victory Defeated... / The party has fallen.
-expect state window.result battle_front/result 204 330 380x66
+expect state window.result battle_front/result 204 292 380x66
 shot front_defeat.png
 press Enter
 expect screen Title

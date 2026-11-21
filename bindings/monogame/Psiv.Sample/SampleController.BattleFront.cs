@@ -10,7 +10,6 @@ public sealed partial class SampleController
 {
 	// The status strip's slots the `strip` probe reports, one per member of the largest party.
 	private const int StripSlots = 5;
-	private const int HintBarHeight = 30;
 
 	private string _probeStrip = "-";
 	private string _probeRanks = "-";
@@ -27,7 +26,7 @@ public sealed partial class SampleController
 		out int windowX)
 	{
 		var members = all.Where(c => c.Side == Side.Party && c.Id != vehicle).Select(c => c.Index).ToList();
-		Dictionary<int, int> centers = members.Select((index, slot) => (index, slot)).ToDictionary(m => m.index, m => rules.PartyX + m.slot * rules.PartyDx);
+		Dictionary<int, int> centers = members.Select((index, slot) => (index, slot)).ToDictionary(m => m.index, m => rules.MemberX(m.slot));
 		windowX = -1;
 		if (!centers.ContainsKey(actor))
 		{
@@ -64,13 +63,11 @@ public sealed partial class SampleController
 		return centers;
 	}
 
-	// The backdrop over the stage, its ground (below 62% of its height, past the generated horizon's shadow) drawn again,
-	// taller, under it down to the screen's bottom, so the members stand on ground.
-	private static void DrawFrontBackdrop(IDrawSurface s, int backdrop, Point jolt)
+	// The backdrop over the stage, `height` tall, its ground (below 62% of its height, past the generated horizon's shadow)
+	// drawn again, `ground` tall, under it down to the screen's bottom, so the members stand on ground.
+	private static void DrawFrontBackdrop(IDrawSurface s, int backdrop, Point jolt, int height, int ground)
 	{
-		const int height = 488;
 		s.Image(backdrop, jolt.X - 8, jolt.Y - 8, s.Width + 16, height, Color.White);
-		const int ground = 640;
 		int bottom = height - 8;
 		// A logical screen no taller than the backdrop has no ground left to draw under it.
 		if (s.Height <= bottom)
@@ -89,8 +86,8 @@ public sealed partial class SampleController
 		return string.Join(" | ", Enumerable.Range(0, StripSlots).Select(slot => slot < members.Count ? Marked(members[slot]) : "-").Concat(ride.Select(m => "vehicle " + Marked(m))));
 	}
 
-	// What covers the enemies' labels or a party figure as far as it shows above the strip: the command window with its
-	// title plate, the description, the keys' line and the action's name plate, as the layout placed them.
+	// What covers the enemies' labels or the visible part of a party figure: the command window with its title plate, the
+	// description, the keys' line and the action's name plate, as the layout placed them.
 	private void FrontProbes(IDrawSurface s, IReadOnlyList<Combatant> all, Dictionary<int, Rectangle> bodies, Dictionary<string, Rectangle> labels, string screen, UiContext ui)
 	{
 		var covers = new List<(string Name, Rectangle Box)>();
@@ -107,12 +104,17 @@ public sealed partial class SampleController
 		{
 			covers.Add(("keys", keys));
 		}
-		int stripTop = Ui.WindowRect(screen, "strip", s, ui)?.Y ?? s.Height;
+		Rectangle? strip = Ui.WindowRect(screen, "strip", s, ui);
 		var targets = labels.Select(l => (Name: l.Key + " label", Box: l.Value)).ToList();
 		foreach (int i in bodies.Keys.Where(i => i < all.Count && all[i].Side == Side.Party).Order())
 		{
-			Rectangle r = bodies[i];
-			targets.Add((all[i].Name, new Rectangle(r.X, r.Y, r.Width, Math.Max(0, stripTop - r.Y))));
+			// The figure as far as it is on the screen and, where the strip stands across its lower part, above the strip.
+			Rectangle shows = Rectangle.Intersect(bodies[i], new Rectangle(0, 0, s.Width, s.Height));
+			if (strip is { } st && st.Intersects(shows) && st.Bottom >= shows.Bottom)
+			{
+				shows.Height = Math.Max(0, st.Y - shows.Y);
+			}
+			targets.Add((all[i].Name, shows));
 		}
 		if (Ui.WindowRect(screen, "name_plate", s, ui) is { } plate)
 		{

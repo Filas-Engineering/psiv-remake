@@ -14,15 +14,7 @@ namespace Psiv.Sample;
 // data. All of it lasts until the event ends.
 public sealed partial class SampleController
 {
-	private const int PanelSlide = 64;
-	private const int PanelMargin = 24;
-	private const int PanelGutter = 16;
-	private const int PanelTile = Art.Tile;
-	// Pixels a shake of strength 1 moves the view; the profile's reduced flash damps it to a quarter.
-	private const int ShakePixels = 10;
 	private const string DefaultSlot = "center";
-	// The dialogue box at 100% text size with its margin and a gutter: the band at the bottom the slots leave free.
-	private const int DialogueSpace = DialogueBoxHeight + 16 + PanelGutter;
 
 	private sealed class Panel(string id, string camera, string slot)
 	{
@@ -44,14 +36,19 @@ public sealed partial class SampleController
 	private Animation? _cameraMove;
 	private Animation? _shake;
 
+	// The panels file's param, else `fallback`.
+	private int PanelParam(string name, int fallback) => Ui.Param("panels", name, UiData(), fallback);
+
 	// Every slot in the screen's own pixels, inside the margins, with gutters between neighbors; null for a name that
-	// is not a slot. Slots tile the screen above the dialogue box's place at the bottom, so lines read below the panels
-	// as captions do.
-	private static Rectangle? SlotRect(string slot, int width, int height)
+	// is not a slot. Slots tile the screen above the band `bottom` leaves free for the dialogue box (by default its
+	// height at 100% text size, its margin and a gutter), so lines read below the panels as captions do.
+	private Rectangle? SlotRect(string slot, int width, int height)
 	{
-		int x = PanelMargin, y = PanelMargin, w = width - 2 * PanelMargin, h = height - PanelMargin - DialogueSpace;
-		int halfW = (w - PanelGutter) / 2, halfH = (h - PanelGutter) / 2;
-		int thirdW = (w - 2 * PanelGutter) / 3, thirdH = (h - 2 * PanelGutter) / 3;
+		int margin = PanelParam("margin", 24), gutter = PanelParam("gutter", 16);
+		int bottom = PanelParam("bottom", DialogueParam("box_h", DialogueBoxHeight) + DialogueParam("box_margin", 16) + gutter);
+		int x = margin, y = margin, w = width - 2 * margin, h = height - margin - bottom;
+		int halfW = (w - gutter) / 2, halfH = (h - gutter) / 2;
+		int thirdW = (w - 2 * gutter) / 3, thirdH = (h - 2 * gutter) / 3;
 		return slot switch
 		{
 			"full" => new(x, y, w, h),
@@ -246,7 +243,7 @@ public sealed partial class SampleController
 		{
 			zoom *= _cameraMove is null ? 4f / 3f : 1f + Ease(_cameraMove.Progress) / 3f;
 		}
-		return Math.Max(4, (int)MathF.Round(PanelTile * zoom));
+		return Math.Max(4, (int)MathF.Round(Layout.Styles.Param("field_cell") * zoom));
 	}
 
 	private int ShakeAmplitude()
@@ -255,7 +252,8 @@ public sealed partial class SampleController
 		{
 			return 0;
 		}
-		float pixels = ShakePixels * (float)Math.Max(0.0, _shake.Action.Strength) * (1f - _shake.Progress);
+		// The styles' `field_shake`: pixels a shake of strength 1 moves the view; the profile's reduced flash damps it to a quarter.
+		float pixels = Layout.Styles.Param("field_shake") * (float)Math.Max(0.0, _shake.Action.Strength) * (1f - _shake.Progress);
 		return (int)MathF.Round(_s.Profile().ReducedFlash ? pixels / 4 : pixels);
 	}
 
@@ -266,10 +264,10 @@ public sealed partial class SampleController
 	}
 
 	// Where a panel sits as it slides in from the nearest edge of the screen, or out to it.
-	private static Rectangle PanelRect(Panel p, int width, int height)
+	private Rectangle PanelRect(Panel p, int width, int height)
 	{
 		Rectangle r = SlotRect(p.Slot, width, height)!.Value;
-		float off = (1f - Ease(p.Shown)) * PanelSlide;
+		float off = (1f - Ease(p.Shown)) * PanelParam("slide", 64);
 		int left = r.Left, right = width - r.Right, top = r.Top, bottom = height - r.Bottom;
 		int nearest = Math.Min(Math.Min(left, right), Math.Min(top, bottom));
 		Point d = nearest == left ? new(-1, 0) : nearest == right ? new(1, 0) : nearest == top ? new(0, -1) : new(0, 1);

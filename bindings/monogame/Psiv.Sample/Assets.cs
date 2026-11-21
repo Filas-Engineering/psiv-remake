@@ -26,11 +26,21 @@ public sealed class Assets
 	public static Assets Load(string directory, GameData data)
 	{
 		AssetManifest manifest = AssetManifest.Load(directory, data);
+		var layoutProblems = new List<AssetProblem>();
+		UiLayoutSet layout = manifest.UiLayoutEnabled == false ? UiLayoutSet.Defaults : UiLayoutSet.Load(manifest.Directory, manifest.UiLayoutEnabled == true, layoutProblems, data.Statuses);
+		// Scaled tilesets must fill the field's cell, so styles with a cell of their own read the manifest again against it.
+		if (layout.Styles.Param("field_cell") is var cell && cell != Art.Tile)
+		{
+			manifest = AssetManifest.Load(directory, data, cell);
+		}
 		var problems = new List<AssetProblem>(manifest.Problems);
-		BattlePresentation battle = manifest.BattlePresentation is { } table
-			? BattlePresentation.Load(manifest.Full(table), table, data, manifest.Effects.Select(e => e.Id), problems)
-			: BattlePresentation.Defaults();
-		UiLayoutSet layout = manifest.UiLayoutEnabled == false ? UiLayoutSet.Defaults : UiLayoutSet.Load(manifest.Directory, manifest.UiLayoutEnabled == true, problems);
+		BattlePresentation battle = BattlePresentation.Defaults();
+		if (manifest.BattlePresentation is { } table)
+		{
+			battle = BattlePresentation.Load(manifest.Full(table), table, data, manifest.Effects.Select(e => e.Id), problems);
+			battle.CheckPoses(manifest.Figures, table, problems);
+		}
+		problems.AddRange(layoutProblems);
 		return new Assets(manifest, battle, layout, problems);
 	}
 

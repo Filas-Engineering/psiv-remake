@@ -69,7 +69,28 @@ public sealed partial class SampleController
 
 	private string ButtonText(Buttons button) => T("ui.button." + Snake(button.ToString()));
 
-	private string ActionText(GameAction action) => T("ui.action." + Snake(action.ToString()));
+	private string ActionText(GameAction action) =>
+		Bindings.FieldActions.Contains(action) ? FieldText("ui.action." + Snake(action.ToString())) : T("ui.action." + Snake(action.ToString()));
+
+	// Words of the real-time field input, which the game's text tables do not carry yet: a table's own text for the key
+	// when it has one, else this English, without counting the key as missing.
+	private static readonly Dictionary<string, string> FieldWords = new()
+	{
+		["ui.action.interact"] = "Interact",
+		["ui.action.run"] = "Run",
+		["ui.action.run_toggle"] = "RunToggle",
+		["ui.options.always_run"] = "Always run",
+		["ui.options.always_run_help"] = "Walk at running pace without holding Run; holding Run then walks.",
+		["ui.options.interact_prompt"] = "Interaction prompt",
+		["ui.options.interact_prompt_help"] = "Shows the key and a mark over what the leader can talk to, open or board.",
+		["ui.prompt.board"] = "board",
+		["ui.prompt.open"] = "open",
+		["ui.prompt.rest"] = "rest",
+		["ui.prompt.shop"] = "shop",
+		["ui.prompt.travel"] = "travel",
+	};
+
+	private string FieldText(string key) => _s.FormatText(key, []) is var text && text != key ? text : FieldWords[key];
 
 	private string AreaKindText(AreaKind kind) => T(NameKind.AreaKind, (int)kind);
 

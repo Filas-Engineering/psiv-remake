@@ -11,6 +11,8 @@ namespace Psiv.Sample;
 public sealed partial class SampleController
 {
 	private UiRenderer? _uiRenderer;
+	// The notices' boxes the code drew this frame through the screens' `toasts` slots.
+	private readonly List<Rectangle> _toastBoxes = [];
 
 	private UiRenderer Ui => _uiRenderer ??= new UiRenderer
 	{
@@ -50,6 +52,7 @@ public sealed partial class SampleController
 		ui.SliceImage = (file, border, scale) => _art?.LayoutSlice(file, border, scale);
 		ui.Picture = file => _art?.LayoutPicture(file) ?? -1;
 		ui.BeginFrame();
+		_toastBoxes.Clear();
 		int blink = Timing("cursor_blink_ms");
 		Style.PointerHidden = blink > 0 && _clockMs / blink % 2 == 1;
 	}
@@ -60,6 +63,20 @@ public sealed partial class SampleController
 	private static string DrawnText(UiDrawn d) => $"{d.Screen}/{d.Window} {d.Rect.X} {d.Rect.Y} {d.Rect.Width}x{d.Rect.Height}";
 
 	private string WindowProbe(string name) => Ui.Drawn.LastOrDefault(d => d.Window == name || $"{d.Screen}/{d.Window}" == name) is { Screen: not null } d ? DrawnText(d) : "-";
+
+	// `overlaps` off the battle: each window of the last frame a notice's box covers part of, as `toast over SCREEN/NAME`.
+	// A window holding the whole box (the screen-wide ones, the one the box stands in) is not covered by it. The field's
+	// boxes are its layout's `box` elements named `toast`.
+	private string ToastOverlaps()
+	{
+		IEnumerable<Rectangle> boxes = _toastBoxes.Concat(Ui.DrawnElements.Where(e => e.Element == "toast").Select(e => e.Rect));
+		List<string> covered = [.. boxes.SelectMany(b => Ui.Drawn.Where(d => d.Rect.Intersects(b) && !d.Rect.Contains(b)).Select(d => $"toast over {d.Screen}/{d.Window}")).Distinct()];
+		return covered.Count == 0 ? "none" : string.Join(", ", covered);
+	}
+
+	// `uiframes`: each frame style the layouts drew in the last frame as `NAME HOW COUNT`, by name.
+	private string FramesProbe() => Ui.FramesDrawn.Count == 0 ? "none"
+		: string.Join(", ", Ui.FramesDrawn.OrderBy(f => f.Key, StringComparer.Ordinal).Select(f => $"{f.Key} {f.Value.How} {f.Value.Count}"));
 
 	// The developer overlay `windows`: every window drawn this frame outlined, with its screen and name.
 	private void DrawWindowOverlay(IDrawSurface s)

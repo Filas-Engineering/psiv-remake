@@ -7,7 +7,7 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-public enum GameAction { Up, Down, Left, Right, Confirm, Back, Menu, QuestLog, PartyTalk, TextLog, Skip, PagePrev, PageNext, Pause, FastForward }
+public enum GameAction { Up, Down, Left, Right, Confirm, Back, Menu, QuestLog, PartyTalk, TextLog, Skip, PagePrev, PageNext, Pause, FastForward, Interact, Run, RunToggle }
 
 // Keys and gamepad buttons down this frame and the ones that went down since the last frame.
 public sealed class InputState
@@ -105,6 +105,37 @@ public readonly struct ActionInput(InputState raw, Bindings bindings)
 		Down(GameAction.Up) ? Direction.North : Down(GameAction.Right) ? Direction.East : Down(GameAction.Down) ? Direction.South : Down(GameAction.Left) ? Direction.West : Direction.None;
 }
 
+// The left stick as one of four directions for the real-time field input, with hysteresis: a direction holds until the
+// stick falls back inside a smaller dead zone, and the other axis takes over only once it leads clearly, so a stick
+// held near a diagonal or near the dead zone's edge does not flicker.
+public sealed class StickSnap
+{
+	private const float Enter = 0.5f;
+	private const float Leave = 0.35f;
+	private const float AxisLead = 1.3f;
+
+	private Buttons? _held;
+
+	public Buttons? Snap(float x, float y)
+	{
+		float ax = Math.Abs(x), ay = Math.Abs(y);
+		bool horizontal = _held is Buttons.LeftThumbstickLeft or Buttons.LeftThumbstickRight;
+		if (_held is null ? Math.Max(ax, ay) < Enter : Math.Max(ax, ay) < Leave)
+		{
+			_held = null;
+		}
+		else if (_held is null ? ax > ay : horizontal ? ay <= ax * AxisLead : ax > ay * AxisLead)
+		{
+			_held = x > 0 ? Buttons.LeftThumbstickRight : Buttons.LeftThumbstickLeft;
+		}
+		else
+		{
+			_held = y > 0 ? Buttons.LeftThumbstickUp : Buttons.LeftThumbstickDown;
+		}
+		return _held;
+	}
+}
+
 public static class Pad
 {
 	// Past this the stick counts as the direction of its stronger axis only, so a diagonal does not flicker between two.
@@ -116,7 +147,8 @@ public static class Pad
 		Buttons.LeftTrigger, Buttons.RightTrigger, Buttons.LeftStick, Buttons.RightStick, Buttons.DPadUp, Buttons.DPadDown, Buttons.DPadLeft, Buttons.DPadRight,
 	];
 
-	public static IEnumerable<Buttons> ButtonsDown(GamePadState state)
+	// With `snap`, the stick goes through its hysteresis instead of the plain dead zone.
+	public static IEnumerable<Buttons> ButtonsDown(GamePadState state, StickSnap? snap = null)
 	{
 		if (!state.IsConnected)
 		{
@@ -131,6 +163,14 @@ public static class Pad
 		}
 		float x = state.ThumbSticks.Left.X;
 		float y = state.ThumbSticks.Left.Y;
+		if (snap is not null)
+		{
+			if (snap.Snap(x, y) is { } stick)
+			{
+				yield return stick;
+			}
+			yield break;
+		}
 		if (Math.Max(Math.Abs(x), Math.Abs(y)) < DeadZone)
 		{
 			yield break;
@@ -148,6 +188,12 @@ public sealed class Bindings
 {
 	// Without these the menus cannot be used, so a file never leaves them unbound.
 	public static readonly GameAction[] Required = [GameAction.Up, GameAction.Down, GameAction.Left, GameAction.Right, GameAction.Confirm, GameAction.Back];
+	// Read only by the real-time field input, so the Controls page and `controls list` show them only while it is on.
+	public static readonly GameAction[] FieldActions = [GameAction.Interact, GameAction.Run, GameAction.RunToggle];
+
+	// The real-time field's two options, kept beside the bindings: run without holding Run, and the interaction prompt.
+	public bool AlwaysRun { get; set; }
+	public bool InteractPrompt { get; set; } = true;
 
 	private readonly Dictionary<GameAction, List<Keys>> _keys = [];
 	private readonly Dictionary<GameAction, List<Buttons>> _buttons = [];
@@ -173,6 +219,11 @@ public sealed class Bindings
 		GameAction.Pause => ([Keys.P], [Buttons.Back]),
 		// Held during a battle's playback; the shoulder button is PageNext only in menus.
 		GameAction.FastForward => ([Keys.F], [Buttons.RightShoulder]),
+		// Confirm interacts as well; this key only interacts.
+		GameAction.Interact => ([Keys.E], []),
+		// The shoulder buttons are PagePrev and PageNext only in menus.
+		GameAction.Run => ([Keys.LeftShift], [Buttons.LeftShoulder]),
+		GameAction.RunToggle => ([Keys.CapsLock], [Buttons.LeftStick]),
 		_ => ([], []),
 	};
 
@@ -253,6 +304,12 @@ public sealed class Bindings
 			}
 			foreach ((string name, JsonNode? entry) in root)
 			{
+				if (name == "field" && entry is JsonObject options)
+				{
+					bindings.AlwaysRun = options["always_run"]?.GetValue<bool>() ?? false;
+					bindings.InteractPrompt = options["interact_prompt"]?.GetValue<bool>() ?? true;
+					continue;
+				}
 				if (!TryName(name, out GameAction action) || entry is not JsonObject fields)
 				{
 					throw new FormatException($"cannot read the entry {name}");
@@ -323,6 +380,10 @@ public sealed class Bindings
 				json.WriteEndArray();
 				json.WriteEndObject();
 			}
+			json.WriteStartObject("field");
+			json.WriteBoolean("always_run", AlwaysRun);
+			json.WriteBoolean("interact_prompt", InteractPrompt);
+			json.WriteEndObject();
 			json.WriteEndObject();
 		}
 		stream.WriteByte((byte)'\n');

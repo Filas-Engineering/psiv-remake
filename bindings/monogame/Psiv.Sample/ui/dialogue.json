@@ -6,6 +6,9 @@
 		"panel": {"action": "panel_show", "slot": "center"},
 		"panel_hide": {"action": "panel_hide"},
 		"panels_clear": {"action": "panel_clear"},
+		"picture": {"action": "picture"},
+		"picture_hide": {"action": "picture_hide"},
+		"pictures_clear": {"action": "picture_clear"},
 		"portrait_off": {"action": "portrait_off"},
 		"sound": {"action": "cue"}
 	},
@@ -14,6 +17,10 @@
 			"w": "max(measure_unscaled(banner_title, size_title), measure_unscaled(banner_kind, size_small)) + 80", "elements": [
 			{"type": "text", "value": "banner_kind", "x": "-banner.x", "w": "W", "align": "center", "y": 14, "style": "small_dim", "alpha": "banner_alpha", "scaled": false},
 			{"type": "text", "value": "banner_title", "x": "-banner.x", "w": "W", "align": "center", "y": 38, "style": "title", "alpha": "banner_alpha", "scaled": false}
+		]},
+		{"name": "picture", "visible": "picture >= 0", "anchor": "top", "y": "top > H / 2 ? max(16, (top - h) / 2) : top + t(176) + max(16, (H - top - t(176) - h) / 2)",
+			"w": "picture_w + 16", "h": "picture_h + 16", "frame": "panel", "open": {"kind": "fade", "ms": 200}, "close": {"kind": "fade", "ms": 200}, "elements": [
+			{"type": "image", "name": "picture", "image": "picture", "x": 8, "y": 8, "w": "picture_w", "h": "picture_h"}
 		]},
 		{"name": "box", "visible": "box_visible", "x": 24, "y": "top", "w": "W - 48", "h": "t(176)", "frame": "panel", "elements": [
 			{"type": "role", "role": "dialogue"},

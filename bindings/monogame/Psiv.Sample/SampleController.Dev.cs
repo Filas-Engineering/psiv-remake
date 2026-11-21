@@ -294,6 +294,11 @@ public sealed partial class SampleController
 		}
 		switch (w[0])
 		{
+		// `help` keeps its lines, which transcripts hold; the overlays, the layout windows' among them, have their own.
+		case "help" when w is [_, "overlays"]:
+			DevLog("overlay NAME [on|off]   " + string.Join("  ", OverlayKeys.Prepend((Name: WindowsOverlay, Key: Keys.F1)).Select(o => $"{o.Name} ({o.Key})")));
+			DevLog("overlay all|none   every overlay but windows");
+			return true;
 		case "help":
 			foreach (string h in Help)
 			{
@@ -897,13 +902,14 @@ public sealed partial class SampleController
 		string badge = T(marked ? "ui.dev.badge_marked" : "ui.dev.badge") + (_preview is { } p
 			? "   " + T("ui.dev.badge_event", p.Id, p.Controller._panelShows)
 			: _stageEntry is { } entry ? "   " + T("ui.dev.badge_battle", entry) : "");
-		// The battle's banners take the top middle, so there the badge sits at the right: in the side layout just above the
-		// party panels (the layout's stage bottom), in the front one in the keys' line under the strip, or at the top while a
-		// preview's long badge would run into the keys.
+		// The battle's banners take the top middle, so there the badge sits at the right, at the battle layout's `dev_badge_y`
+		// (built in: just above the side layout's party panels, in the front one's keys' line under the strip), or in the
+		// front layout at the top while a preview's long badge would run into the keys.
 		bool battle = Screen == Screen.Battle;
 		int x = battle ? s.Width - s.Measure(badge, Style.Small) - 40 : (s.Width - s.Measure(badge, Style.Small)) / 2 - 12;
 		bool previewing = _preview is not null || _stageEntry is not null;
-		int y = !battle ? 12 : _stageLayout == BattleLayout.Side ? Ui.Param("battle_side", "stage_bottom", UiData(), 0) - 44 : previewing ? 12 : s.Height - HintBarHeight + 1;
+		bool side = _stageLayout == BattleLayout.Side;
+		int y = !battle || (!side && previewing) ? 12 : Ui.Param(side ? "battle_side" : "battle_front", "dev_badge_y", UiData(), 0);
 		Style.Plate(s, badge, x, y, marked ? Style.Bad : previewing ? Style.Accent : Style.Dim);
 		if (_paused || Speed != 1f)
 		{
@@ -921,7 +927,7 @@ public sealed partial class SampleController
 		{
 			return;
 		}
-		int tile = Art.Tile;
+		int tile = _field.Cell;
 		int x0 = Math.Max(0, _field.CameraX / tile), y0 = Math.Max(0, _field.CameraY / tile);
 		int x1 = Math.Min(view.Info.Width - 1, (_field.CameraX + s.Width) / tile), y1 = Math.Min(view.Info.Height - 1, (_field.CameraY + s.Height) / tile);
 		(int X, int Y) Corner(int x, int y) => (x * tile - _field.CameraX, y * tile - _field.CameraY);

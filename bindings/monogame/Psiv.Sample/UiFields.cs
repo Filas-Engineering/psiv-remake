@@ -6,7 +6,7 @@ namespace Psiv.Sample;
 public static class UiFields
 {
 	public sealed class ScreenFields(string screen, string[] fields, string[]? itemFields = null, string[]? slots = null, string[]? windows = null, string[]? parameters = null,
-		bool tags = false)
+		bool tags = false, bool statuses = false)
 	{
 		public string Screen => screen;
 		public HashSet<string> Fields { get; } = [.. fields, .. Common];
@@ -16,6 +16,8 @@ public static class UiFields
 		public HashSet<string> Params { get; } = [.. parameters ?? []];
 		// The screen reads a `tags` table: what each control tag of a line does.
 		public bool Tags => tags;
+		// The screen reads a `statuses` table: how each status shows on the party's slots.
+		public bool Statuses => statuses;
 
 		public bool Has(string name) => Fields.Contains(name);
 	}
@@ -50,12 +52,26 @@ public static class UiFields
 		["wait_unit_ms"] = 16,
 		["list_repeat_delay_ms"] = 0,
 		["list_repeat_ms"] = 0,
+		["run_speed_percent"] = 200,
+	};
+
+	// Numbers the code's own drawing reads (styles.json `params`), with the sample's values as defaults: the field's cell
+	// and its shake, and the notices' boxes, which several screens draw through their `toasts` slot.
+	public static readonly Dictionary<string, int> StyleParams = new()
+	{
+		["field_cell"] = Art.Tile,
+		["field_shake"] = 10,
+		["toast_gap"] = 6,
+		["toast_h"] = 32,
+		["toast_pad"] = 14,
+		["toast_text_y"] = 7,
 	};
 
 	// What a `tags` table may map a control tag to: an audio cue or a music track by id (the tag's value, or the entry's
 	// `id`), the music stopped, a live panel shown (on the entry's `slot`), hidden or all cleared, the speaker's portrait
 	// taken away, or only a transcript line.
-	public static readonly string[] TagActions = ["cue", "music", "music_stop", "panel_show", "panel_hide", "panel_clear", "portrait_off", "log"];
+	public static readonly string[] TagActions = ["cue", "music", "music_stop", "panel_show", "panel_hide", "panel_clear", "picture", "picture_hide", "picture_clear",
+		"portrait_off", "log"];
 
 	// The tags a line's host acts on itself (events/FORMAT.md "Control tags") and the name tokens the session resolves,
 	// which a `tags` table cannot map.
@@ -68,68 +84,87 @@ public static class UiFields
 		["punctuation_pauses"] = [],
 	};
 
+	// The opacity of the black over the field that a `backdrop` slot draws, 0 to 1 (0.55 when the files leave it out).
+	public const string BackdropDim = "backdrop_dim";
+
 	// The battle's two layouts (the presentation table's `front` and `side`) read the same fields and params.
 	private static readonly string[] BattleData = ["actor_center", "actor_left", "actor_right", "auto", "banner", "banner_alpha", "banner_big",
-		"banner_cancel", "banner_plate", "command_center", "cursor", "description", "description_shown", "enemy_back", "enemy_count", "hint", "hit_fade",
+		"banner_cancel", "banner_plate", "command_center", "cursor", "description", "description_shown", "enemy_back", "enemy_count", "enemy_groups", "hint", "hit_fade",
 		"hit_flash", "key_back", "key_confirm", "key_fast_forward", "key_text_log", "log_lines", "log_shown", "members", "menu_items", "menu_shown",
 		"menu_title", "outcome", "party", "phase", "result_lines", "target_pulse", "vehicle"];
 
-	private static readonly string[] BattleItems = ["acting", "alive", "hit", "hp", "hp_low", "icon_count", "kind", "max_hp", "max_tp", "name", "newest",
-		"next", "portrait", "state", "targeted", "tp", "usable"];
+	private static readonly string[] BattleItems = ["acting", "alive", "command", "command_icon", "cost", "hit", "hp", "hp_low", "icon_count", "kind", "level",
+		"max_hp", "max_tp", "name", "newest", "next", "number", "portrait", "state", "status_color", "targeted", "tp", "usable", "uses"];
 
 	private static readonly string[] BattleSlots = ["anchor", "effects", "icons", "stage", "target_pointer"];
 
-	private static readonly string[] BattleParams = ["enemy_back_foot", "enemy_front_foot", "enemy_rank_spacing_max", "enemy_rank_span",
-		"enemy_ranks_interleaved", "enemy_row_foot", "enemy_row_max", "enemy_row_spacing_max", "enemy_row_span", "enemy_row_stagger", "enemy_size",
+	private static readonly string[] BattleParams = ["backdrop_h", "dev_badge_y", "effect_scale", "effect_scale_large", "enemy_back_foot", "enemy_bar_h",
+		"enemy_bar_w", "enemy_bar_y", "enemy_bars", "enemy_front_foot", "enemy_icons_y", "enemy_labels", "enemy_rank_spacing_max", "enemy_rank_span", "enemy_ranks_interleaved",
+		"enemy_row_foot", "enemy_row_max", "enemy_row_spacing_max", "enemy_row_span", "enemy_row_stagger", "enemy_size",
 		.. Enumerable.Range(0, 8).SelectMany(n => new[] { $"enemy_slot_{n}_foot", $"enemy_slot_{n}_x" }),
-		"enemy_x", "log_rows", "log_wrap_margin", "party_dx", "party_dy", "party_foot", "party_size", "party_x", "stage_bottom", "step_gap", "step_margin",
-		"vehicle_foot", "vehicle_size", "vehicle_x"];
+		"enemy_x", "ground_h", "icon_gap", "icon_size", "label_h", "label_max_width", "label_pad", "label_text_y", "label_y", "log_rows", "log_wrap_margin",
+		"motion_percent", "number_critical_size", "number_gap", "number_member_y", "number_rise", "number_size", "number_tp_size", "number_word_size", "number_y", "party_dx",
+		"party_dy", "party_foot", "party_size",
+		.. Enumerable.Range(0, 5).SelectMany(n => new[] { $"party_slot_{n}_foot", $"party_slot_{n}_x" }),
+		"party_x", "pointer_bob", "pointer_member_y", "pointer_size", "pointer_y", "stage_bottom", "step_gap",
+		"step_margin", "vehicle_foot", "vehicle_size", "vehicle_x"];
 
 	public static readonly Dictionary<string, ScreenFields> Screens = new()
 	{
 		["battle_front"] = new("battle_front", BattleData, BattleItems, BattleSlots,
-			["command", "description", "keys", "log", "name_plate", "strip"], BattleParams),
-		["battle_side"] = new("battle_side", BattleData, BattleItems, BattleSlots, ["log"], BattleParams),
+			["command", "description", "keys", "log", "name_plate", "strip"], BattleParams, statuses: true),
+		["battle_side"] = new("battle_side", BattleData, BattleItems, BattleSlots, ["log"], BattleParams, statuses: true),
 		["title"] = new("title",
-			["title", "subtitle", "game_over", "options", "cursor", "version", "hint", "hero_frame", "creature_frame"],
+			["title", "subtitle", "game_over", "options", "cursor", "version", "hint", "hero_frame", "creature_frame", "logo", "logo_w", "logo_h", "hero_w", "hero_h",
+				"creature_w", "creature_h", "art_scale"],
 			slots: ["scene", "toasts"]),
 		["sound_test"] = new("sound_test",
 			["tracks", "list", "playing", "hint"],
 			slots: ["scene"]),
 		["inn"] = new("inn",
-			["cost", "money", "cursor", "bed", "top", "options"]),
+			["cost", "money", "cursor", "bed", "top", "options", "keeper"]),
 		["save_prompt"] = new("save_prompt",
 			["leave", "leave_selected"],
-			slots: ["backdrop", "slot_list"]),
+			slots: ["backdrop", "slot_list"],
+			parameters: [BackdropDim]),
 		["confirm"] = new("confirm",
 			["question", "on_yes", "options"]),
 		["field"] = new("field",
-			["hud", "area", "status", "banner_visible", "banner_title", "banner_kind", "banner_alpha", "banner_drop", "banner_ms", "banner_left_ms", "toasts", "hint"],
+			["hud", "area", "status", "banner_visible", "banner_title", "banner_kind", "banner_alpha", "banner_drop", "banner_ms", "banner_left_ms", "toasts", "hint",
+				"prompt_visible", "prompt_key", "prompt_text", "prompt_x", "prompt_y"],
 			itemFields: ["text", "alpha", "box_alpha", "width"]),
 		["dialogue"] = new("dialogue",
 			["banner_visible", "banner_title", "banner_kind", "banner_alpha", "banner_drop", "banner_ms", "banner_left_ms", "top", "box_visible", "has_line", "speaker",
-				"portrait", "line", "revealed", "all_shown", "line_step", "hint", "next_arrow_ms", "arrow", "has_choice", "prompt", "options", "cursor"],
+				"portrait", "line", "revealed", "all_shown", "line_step", "hint", "next_arrow_ms", "arrow", "has_choice", "prompt", "options", "cursor", "picture",
+				"picture_w", "picture_h"],
+			parameters: ["box_h", "box_margin", "box_top"],
 			tags: true),
 		["pause"] = new("pause",
 			["hud", "area", "status", "rows", "cursor", "hint"],
 			slots: ["scene"]),
 		["travel"] = new("travel",
 			["title", "question", "labels", "list", "description", "description_missing", "hint"],
-			slots: ["backdrop", "toasts"]),
+			slots: ["backdrop", "toasts"],
+			parameters: [BackdropDim]),
 		["shop"] = new("shop",
-			["title", "open", "tab", "tabs", "money", "stall", "rows", "list", "description", "description_missing", "compare", "hint"],
+			["title", "open", "tab", "tabs", "money", "stall", "rows", "list", "description", "description_missing", "compare", "hint", "money_value", "keeper"],
 			itemFields: ["text", "price", "have"],
-			slots: ["backdrop", "toasts"]),
+			slots: ["backdrop", "toasts"],
+			parameters: [BackdropDim]),
 		["name_entry"] = new("name_entry",
 			["portrait", "member_name", "entry_h", "hint"],
-			slots: ["backdrop", "entry"]),
+			slots: ["backdrop", "entry"],
+			parameters: [BackdropDim]),
 		["panels"] = new("panels",
 			["dim", "panels"],
 			itemFields: ["left", "top", "width", "height", "shown", "shadow_alpha", "skinned"],
-			slots: ["frame", "scene"]),
+			slots: ["frame", "scene"],
+			parameters: ["bottom", "gutter", "margin", "slide"]),
 		["menu"] = new("menu",
-			["tabs", "tab", "money", "hint"],
-			slots: ["backdrop", "page", "toasts"]),
+			["tabs", "tab", "money", "hint", "money_value", "party"],
+			itemFields: ["name", "level", "hp", "max_hp", "tp", "max_tp", "portrait", "alive"],
+			slots: ["backdrop", "page", "toasts"],
+			parameters: [BackdropDim]),
 		["menu_status"] = new("menu_status",
 			[.. Area, "view", "members", "list", "portrait", "name", "level", "experience", "experience_next", "hp", "max_hp", "tp", "max_tp", "pages", "page",
 				"sub_list", "stat_rows", "picking", "abilities", "description", "target_name", "targets", "target_list"],
@@ -167,17 +202,20 @@ public static class UiFields
 			[.. Area, "options"]),
 		["quest_log"] = new("quest_log",
 			[],
-			slots: ["backdrop", "quests"]),
+			slots: ["backdrop", "quests"],
+			parameters: [BackdropDim]),
 		["text_log"] = new("text_log",
 			[],
-			slots: ["backdrop", "log"]),
+			slots: ["backdrop", "log"],
+			parameters: [BackdropDim]),
 		["load_game"] = new("load_game",
 			["has_saves", "hint"],
 			slots: ["scene", "slot_list", "toasts"]),
 		["options"] = new("options",
 			["title_mode", "title", "on_controls", "rows", "list", "description", "hint"],
 			itemFields: ["label", "value", "changeable", "enabled"],
-			slots: ["scene", "backdrop", "controls", "toasts"]),
+			slots: ["scene", "backdrop", "controls", "toasts"],
+			parameters: [BackdropDim]),
 		["controls"] = new("controls",
 			[.. Area, "actions", "list", "active", "picking", "action_name", "choices", "choice", "capturing", "ask"],
 			itemFields: ["label", "keys", "buttons", "reset"]),

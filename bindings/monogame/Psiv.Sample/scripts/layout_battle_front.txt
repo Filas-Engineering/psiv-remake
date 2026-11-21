@@ -27,7 +27,11 @@ expect state battlelayout front
 expect state ranks 3
 expect state strip Test Fighter acting | Test Mystic | Test Medic | - | -
 expect state overlaps none
-expect state windows battle_front/stage 0 0 640x480, battle_front/strip 8 8 140x276, battle_front/effects 0 0 640x480, battle_front/command 244 308 156x94, battle_front/keys 0 464 640x16
+expect state windows battle_front/stage 0 0 640x480, battle_front/strip 8 8 140x276, battle_front/enemies 8 176 140x52, battle_front/effects 0 0 640x480, battle_front/command 244 270 156x94, battle_front/keys 0 450 640x30
+# The enemies' names stand in the window under the column, not under their figures; the members have chosen nothing yet.
+expect state enemygroups Gel Mite x2, Rust Hound
+expect state enemymarks labels 0 bars 3
+expect state commands Test Fighter -, Test Mystic -, Test Medic -
 shot front_command.png
 press Enter
 expect state battlephase Target
@@ -41,7 +45,9 @@ press Down 2
 expect state battlephase Option
 expect state description A sheet of frost settles on every foe.
 expect state battlemenu Spark (3 TP) | Ember Fan (4 TP) | [Frost Pane (6 TP)] | Hush (3 TP)
-expect state window.command battle_front/command 336 308 156x94
+expect state window.command battle_front/command 336 270 156x94
+# The fighter's card shows the attack's picture; each technique's cost stands at the right of its row.
+expect state commands Test Fighter attack, Test Mystic -, Test Medic -
 shot front_options.png
 press Enter
 press Down 4
@@ -70,7 +76,7 @@ press Up
 press Enter
 waitstate 1200 battlephase Ended
 expect statehas battlesync all match
-expect state window.result battle_front/result 204 324 380x80
+expect state window.result battle_front/result 204 278 380x80
 shot front_result.png
 press Enter
 expect screen Field
@@ -92,13 +98,24 @@ waitstate 300 battlephase Command
 expect state ranks 3+3
 expect state strip Test Fighter acting | Test Mystic | Test Medic | Test Scout | Test Engineer
 expect state overlaps none
-expect state windows battle_front/stage 0 0 640x480, battle_front/strip 8 8 140x276, battle_front/effects 0 0 640x480, battle_front/command 112 308 156x94, battle_front/keys 0 464 640x16
+expect state windows battle_front/stage 0 0 640x480, battle_front/strip 8 8 140x276, battle_front/effects 0 0 640x480, battle_front/command 112 270 156x94, battle_front/keys 0 450 640x30
+# Five members leave the column no room for the enemies' names: the stage's labels are back.
+expect state enemygroups Gel Mite x3, Rust Hound x2, Brass Warden
+expect state enemymarks labels 6 bars 6
 shot front_ranks.png
 press Down 7
 expect state battlemenu Attack | Technique | Skill | Item | Defend | Escape | Macro | [Auto]
-expect state window.command battle_front/command 112 308 156x94
+expect state window.command battle_front/command 112 270 156x94
 shot front_ranks_auto.png
 press Enter
+# Auto's first round: the pointer moving to a new target, the sleep icons and words on three enemies.
+waitstatehas 900 step retarget Test Mystic
+wait 6
+shot front_retarget.png
+waitstatehas 1200 step result Gel Mite A +sleep
+wait 12
+expect state overlaps none
+shot front_status.png
 hold F 60
 waitstate 300 battlephase Command
 dev win
@@ -107,7 +124,7 @@ hold F 60
 expect state battlephase Ended
 expect statehas battlesync all match
 expect state victory Victory! / Experience 235 / Money 182 / Test Scout reached level 2! / Test Engineer reached level 2!
-expect state window.result battle_front/result 204 296 380x108
+expect state window.result battle_front/result 204 250 380x108
 shot front_levelup.png
 press Enter
 expect screen Field

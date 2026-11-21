@@ -1,0 +1,53 @@
+# The small example layout set's field menu, pause and confirm (make_layout_assets.py --small, 320x224): the pages
+# listed down a narrow column at the left, the status page's members, stats and abilities, the items with a target,
+# the pause box and the quit confirm. Each moment checks where the windows went. With --window the shot lines save
+# screenshots under build/shots/small/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+# The notices of the guide's scene go before the menu opens.
+wait 180
+press M
+expect screen Menu
+expect state tab Status
+expect state windows menu/backdrop 0 0 320x224, menu/nav 2 42 66x166, menu/box 70 42 248x166, menu_status/members 78 48 232x124, menu/hint 0 212 320x12, menu/toasts 0 0 320x224
+expect state backdropdim 0.3
+shot build/shots/small/menu_status.png
+press Enter
+expect state page stats
+expect state windows menu/backdrop 0 0 320x224, menu/nav 2 42 66x166, menu/box 70 42 248x166, menu_status/header 78 48 232x124, menu_status/stats 78 86 232x86, menu/hint 0 212 320x12, menu/toasts 0 0 320x224
+shot build/shots/small/menu_stats.png
+press Right
+expect state page abilities
+expect state selected Rally Cry
+expect state window.abilities menu_status/abilities 78 86 232x86
+shot build/shots/small/menu_abilities.png
+press Escape
+press Right
+expect state tab Items
+expect state selected Tonic x3
+expect state windows menu/backdrop 0 0 320x224, menu/nav 2 42 66x166, menu/box 70 42 248x166, menu_items/page 78 48 232x124, menu/hint 0 212 320x12, menu/toasts 0 0 320x224
+shot build/shots/small/menu_items.png
+press Enter
+expect state page target
+shot build/shots/small/menu_items_target.png
+pressuntil Escape Field 10
+press P
+wait 20
+expect state windows pause/scene 0 0 320x224, pause/hud 2 2 116x24, pause/dim 0 0 320x224, pause/box 202 80 110x64, pause/hint 0 212 320x12
+shot build/shots/small/pause.png
+press Down 2
+press Enter
+wait 20
+expect state windows pause/scene 0 0 320x224, pause/hud 2 2 116x24, pause/dim 0 0 320x224, pause/box 202 80 110x64, pause/hint 0 212 320x12, confirm/dim 0 0 320x224, confirm/box 8 81 304x62
+shot build/shots/small/confirm.png
+press Enter
+expect screen Pause

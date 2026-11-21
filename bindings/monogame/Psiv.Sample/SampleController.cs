@@ -76,6 +76,8 @@ public sealed partial class SampleController
 		_bindings = Bindings.Load(controlsPath, _log);
 		_field.Flag = session.Flag;
 		_field.MapOf = area => _data.Maps.GetValueOrDefault(area);
+		// An actor named after an encounter is that encounter's field enemy, unless the asset directory gives it a sheet.
+		_field.CreatureLook = id => _data.Encounters.Contains(id) && _art?.FromFile("character:" + id) != true;
 		_assetDir = assetDir;
 		if (assetDir is not null)
 		{
@@ -244,6 +246,7 @@ public sealed partial class SampleController
 		if (_s.Mode is Mode.Field or Mode.Title)
 		{
 			_panels.Clear();
+			_picture = "";
 			_camera = null;
 			_cameraMove = null;
 			_shake = null;
@@ -401,27 +404,39 @@ public sealed partial class SampleController
 		return _cursor = Math.Clamp(_cursor, 0, count - 1);
 	}
 
-	// The field menu, shop, logs, save prompt and name entry share this: the field dimmed behind a window.
-	private void DrawBackdrop(IDrawSurface s, Art art)
+	// The field menu, shop, logs, save prompt and name entry share this: the field dimmed behind a window, as much as the
+	// screen's `backdrop_dim` param says.
+	private void DrawBackdrop(IDrawSurface s, Art art, string screen)
 	{
 		if (DrawField(s is ScaledSurface scaled ? scaled.Inner : s, art))
 		{
-			s.Fill(0, 0, s.Width, s.Height, Color.Black * 0.55f);
+			float dim = Math.Clamp((float)Ui.ParamNumber(screen, UiFields.BackdropDim, UiData(), 0.55), 0f, 1f);
+			_probeBackdropDim = dim.ToString("0.###", CultureInfo.InvariantCulture);
+			if (dim > 0f)
+			{
+				s.Fill(0, 0, s.Width, s.Height, Color.Black * dim);
+			}
 		}
 	}
+
+	// The opacity of the last frame's backdrop dimming, `-` when no backdrop slot drew the field.
+	private string _probeBackdropDim = "-";
 
 	// The newest notices as small boxes stacked up from `bottom`, newest lowest, fading as they expire; with `right`,
 	// `x` is the margin from the right edge, so they stay clear of a menu's lists.
 	private void DrawToasts(IDrawSurface s, int x, int bottom, int most = 4, bool right = false)
 	{
 		s = s is ScaledSurface scaled ? scaled.Inner : s;
+		UiStyles st = Layout.Styles;
+		int h = st.Param("toast_h");
 		int y = bottom;
 		foreach ((string shown, float alpha, int boxW) in ToastRows(s, x, most))
 		{
-			y -= 38;
+			y -= h + st.Param("toast_gap");
 			int bx = right ? s.Width - x - boxW : x;
-			Style.Box(s, bx, y, boxW, 32, alpha * 0.95f);
-			s.Text(shown, bx + 14, y + 7, Style.Text * alpha, Style.Small);
+			Style.Box(s, bx, y, boxW, h, alpha * 0.95f);
+			s.Text(shown, bx + st.Param("toast_pad"), y + st.Param("toast_text_y"), Style.Text * alpha, Style.Small);
+			_toastBoxes.Add(new Rectangle(bx, y, boxW, h));
 		}
 	}
 
@@ -432,8 +447,9 @@ public sealed partial class SampleController
 		{
 			(string text, int msLeft) = _ticker[i];
 			float alpha = Math.Clamp(msLeft / (float)Math.Max(1, Timing("toast_fade_ms")), 0f, 1f);
-			string shown = Style.Fit(s, text, s.Width - 2 * x - 28, Style.Small);
-			yield return (shown, alpha, s.Measure(shown, Style.Small) + 28);
+			int pad = 2 * Layout.Styles.Param("toast_pad");
+			string shown = Style.Fit(s, text, s.Width - 2 * x - pad, Style.Small);
+			yield return (shown, alpha, s.Measure(shown, Style.Small) + pad);
 		}
 	}
 
@@ -498,6 +514,8 @@ public sealed partial class SampleController
 		_probeDescription = "-";
 		_dialogueAt = "-";
 		_probeWrapped = "-";
+		_probeBackdropDim = "-";
+		_probeKeeper = "-";
 		_overlayDrawn.Clear();
 		BeginUiFrame(s);
 		s.Fill(0, 0, s.Width, s.Height, Style.Background);
@@ -519,12 +537,12 @@ public sealed partial class SampleController
 		case Screen.Travel: DrawTravel(s, t, art); break;
 		case Screen.QuestLog:
 			Ui.Draw("quest_log", s, t, UiData()
-				.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+				.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "quest_log")))
 				.Set("quests", (UiSlot)((x, y, w, h) => DrawQuestLog(s, t, x, y, w, h))));
 			break;
 		case Screen.TextLog:
 			Ui.Draw("text_log", s, t, UiData()
-				.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+				.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "text_log")))
 				.Set("log", (UiSlot)((x, y, w, h) => DrawTextLog(s, t, x, y, w, h))));
 			break;
 		}
@@ -550,6 +568,7 @@ public sealed partial class SampleController
 			"top" => _probeTop.ToString(CultureInfo.InvariantCulture),
 			"compare" => _probeCompare,
 			"walk" => _clickWalk is { } walkGoal ? $"{walkGoal.X} {walkGoal.Y}" : "-",
+			"fieldinput" or "leaderpos" or "walkstep" or "walkbuffer" or "held" or "interactprompt" or "interacttarget" or "always_run" or "interact_prompt" => FieldState(key),
 			"itemsort" => GameSession.NameOf(NameKind.ItemSort, (int)_itemSort),
 			"description" => _probeDescription,
 			"prompt" => _confirm.Question ?? "none",
@@ -565,10 +584,21 @@ public sealed partial class SampleController
 				: "-",
 			"bitmapfonts" => BitmapFontProbe(),
 			"windows" => WindowsProbe(),
+			"overlaps" when Screen != Screen.Battle => ToastOverlaps(),
+			"uiframes" => FramesProbe(),
+			"backdropdim" => _probeBackdropDim,
+			"keeper" => _probeKeeper,
+			"titlesizes" => _probeTitleSizes,
 			_ when key.StartsWith("window.", StringComparison.Ordinal) => WindowProbe(key["window.".Length..]),
 			"wrapped" => _probeWrapped,
 			// The characters of the line on screen that the dialogue's bitmap font draws in the fallback font.
-			"fontmissing" or "reveal" or "tags" or "pagetext" or "dialoguepage" or "lineportrait" or "dialogueoverlaps" => DialogueState(key),
+			"fontmissing" or "reveal" or "tags" or "pagetext" or "dialoguepage" or "lineportrait" or "shownportrait" or "dialogueoverlaps" or "picture" => DialogueState(key),
+			// How a person's sheet draws the facing it was last drawn in: `west: east mirrored 3 4 5`, or `generated`.
+			_ when key.StartsWith("sheet.", StringComparison.Ordinal) => _art is not null && _field.DrawnActors.TryGetValue(key["sheet.".Length..], out DrawnPerson drawn)
+				? _art.SheetProbe(key["sheet.".Length..], drawn.Facing) : "-",
+			// The title's pictures from the asset directory, or `-`.
+			"titleart" => _art?.Title is not { } title ? "-" : string.Join(" ", new[] { title.Background is null ? null : "background", title.Logo is null ? null : "logo",
+				title.Layers.Count == 0 ? null : $"layers {title.Layers.Count}", title.Traveler is null ? null : "traveler", title.Creature is null ? null : "creature" }.OfType<string>()),
 			"party" => string.Join(", ", _s.Party().Where(m => m.InLineup).Select(m => m.Name)),
 			"macros" => string.Join(", ", _s.MacroList().Select(m => $"{m.Name}({m.Steps.Count})" + (m.Name == settings.AutoMacro ? "*" : ""))),
 			"area" => _s.FieldInfo()?.AreaName ?? "-",
@@ -602,6 +632,8 @@ public sealed partial class SampleController
 			"difficulty" => settings.Difficulty,
 			"reward" => GameSession.NameOf(NameKind.RewardMultiplier, (int)settings.RewardMultiplier),
 			"auto_macro" => settings.AutoMacro.Length == 0 ? "-" : settings.AutoMacro,
+			// The pose the last frame drew the person in from its asset sheet, `-` for none.
+			_ when key.StartsWith("sheetpose.", StringComparison.Ordinal) => _field.DrawnSheetPoses.GetValueOrDefault(key["sheetpose.".Length..]) ?? "-",
 			_ when key.StartsWith("assetfile.", StringComparison.Ordinal) => _art?.FileOf(key["assetfile.".Length..]) ?? "-",
 			_ when key.StartsWith("macro.", StringComparison.Ordinal) => _s.MacroList().FirstOrDefault(m => m.Name == key[6..]) is { } macro
 				? string.Join(" / ", macro.Steps.Select(StepText))

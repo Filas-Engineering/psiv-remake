@@ -12,7 +12,10 @@ public sealed partial class SampleController
 	// The action whose next key or button becomes its binding; the screens get no input until then.
 	public GameAction? Capturing { get; private set; }
 
-	public IReadOnlyList<ControlBinding> Controls() => Enum.GetValues<GameAction>().Select(_bindings.Describe).ToList();
+	public IReadOnlyList<ControlBinding> Controls() => ControlActions().Select(_bindings.Describe).ToList();
+
+	// The actions the Controls page lists: the real-time field input's own only while it is on.
+	private GameAction[] ControlActions() => [.. Enum.GetValues<GameAction>().Where(a => _realtimeField || !Bindings.FieldActions.Contains(a))];
 
 	public void BeginCapture(GameAction action) => Capturing = action;
 

@@ -1,0 +1,49 @@
+# Run with --dev and --assets build/pictures_assets (a copy of build/test_assets with alt/assets_more.json as its manifest)
+# on the copy scripts/make_tag_data.py writes: the guide's lines show the test assets' still pictures through the
+# `picture` tags in the dialogue layout's picture window (a chart, then a bell tower in its place, then one the assets
+# lack, which leaves the tower up), a hide naming the picture that is not up, a hide and a clear; and a `bell` tag whose
+# values the swapped-in dialogue layout maps to cues (1 and 2), leaving a third value to its default. With --window the
+# shot lines save screenshots under build/shots/dialogue_pictures/ (run from bindings/).
+
+expect screen Title
+assets swap ui/dialogue.json alt/dialogue_pictures.json
+press Enter
+pressuntil Enter Field 800
+audio mark
+dev event dialogue_pictures
+wait 2
+expect screen Dialogue
+expect asset picture:chart file
+expect asset picture:tower file
+expect state picture chart
+# The window fades in over the field, above the box at the bottom.
+waitstate 10 window.dialogue/picture dialogue/picture 512 181 256x166
+wait 12
+shot build/shots/dialogue_pictures/chart.png
+waitstatehas 200 tags bell:1
+expect audio cue lookout_creak
+expect noaudio cue confirm
+waitstate 200 reveal 56/56
+press Enter
+wait 2
+expect state picture tower
+waitstate 10 window.dialogue/picture dialogue/picture 572 176 136x176
+shot build/shots/dialogue_pictures/tower.png
+waitstate 200 tags picture:tower, bell:2, bell:9, picture:lantern
+expect audio cue cursor
+expect audio cue confirm
+expect state picture tower
+waitstate 200 reveal 42/42
+press Enter
+wait 2
+waitstatehas 10 tags picture_hide:chart
+expect state picture tower
+waitstatehas 200 tags picture_hide:tower
+expect state picture -
+shot build/shots/dialogue_pictures/hidden.png
+waitstate 200 tags picture_hide:chart, picture_hide:tower, pictures_clear
+expect state window.dialogue/picture -
+press Enter
+wait 10
+expect screen Field
+expect state picture -

@@ -40,7 +40,7 @@ public sealed class UiContext(UiContext? parent = null)
 
 public readonly record struct UiDrawn(string Screen, string Window, Rectangle Rect);
 
-// A named text or image element as drawn: a text's rectangle is its measured lines at the text size, a wrapped text's
+// A named text, image or box element as drawn: a text's rectangle is its measured lines at the text size, a wrapped text's
 // every line it shows, whatever has been revealed.
 public readonly record struct UiDrawnElement(string Screen, string Window, string Element, Rectangle Rect);
 
@@ -66,6 +66,8 @@ public sealed class UiRenderer
 	public int TimeScale { get; set; } = 100;
 	public List<UiDrawn> Drawn { get; } = [];
 	public List<UiDrawnElement> DrawnElements { get; } = [];
+	// Each frame style drawn this frame: how it drew (`generated`, `skin`, `nine_slice`, `fill`, `outline`) and how often.
+	public Dictionary<string, (string How, int Count)> FramesDrawn { get; } = [];
 
 	public UiStyles Styles => Set.Styles;
 
@@ -74,6 +76,7 @@ public sealed class UiRenderer
 		_frame++;
 		Drawn.Clear();
 		DrawnElements.Clear();
+		FramesDrawn.Clear();
 	}
 
 	public Color ColorOf(string name) => Styles.Colors.TryGetValue(name, out Color c) ? c : name.StartsWith('#') ? UiReader.ParseHex(name) : Color.Magenta;
@@ -85,6 +88,13 @@ public sealed class UiRenderer
 	{
 		UiExpr? e = Set.Screen(screen).Params.GetValueOrDefault(name) ?? UiLayoutSet.Defaults.Screen(screen).Params.GetValueOrDefault(name);
 		return e is null ? fallback : (int)e.Eval(new Scope(this, ctx, null, null)).Int;
+	}
+
+	// A screen's param as a number with a fraction (an opacity, say): the file's, else the built-in layout's, else `fallback`.
+	public double ParamNumber(string screen, string name, UiContext ctx, double fallback)
+	{
+		UiExpr? e = Set.Screen(screen).Params.GetValueOrDefault(name) ?? UiLayoutSet.Defaults.Screen(screen).Params.GetValueOrDefault(name);
+		return e is null ? fallback : e.Eval(new Scope(this, ctx, null, null)).Number;
 	}
 
 	// Where a window of the screen lies for this context, null when it is hidden; for code that places by a window.
@@ -157,9 +167,10 @@ public sealed class UiRenderer
 				value = new UiValue((long)size);
 				return true;
 			}
-			if (run is not null && name is "W" or "H")
+			// A param, read outside a drawing run, takes the layout set's logical frame.
+			if (name is "W" or "H")
 			{
-				value = new UiValue((long)(name == "W" ? run.S.Width : run.S.Height));
+				value = new UiValue((long)(name == "W" ? run?.S.Width ?? r.Styles.Width : run?.S.Height ?? r.Styles.Height));
 				return true;
 			}
 			value = UiValue.Zero;
@@ -228,6 +239,7 @@ public sealed class UiRenderer
 				bool visible = w.Visible is null || w.Visible.Eval(Root()).Truth;
 				string key = layout.Name + "/" + w.Name;
 				float fade = 1f;
+				bool growing = false;
 				Rectangle rect = visible ? RectOf(w) : Rectangle.Empty;
 				if (w.Open is not null || w.Close is not null)
 				{
@@ -258,6 +270,7 @@ public sealed class UiRenderer
 					if (p < 1f && tr is not null)
 					{
 						Transform(tr, p, rect, out rect, out fade);
+						growing = tr.Kind.StartsWith("grow", StringComparison.Ordinal);
 					}
 				}
 				else if (!visible)
@@ -266,6 +279,11 @@ public sealed class UiRenderer
 				}
 				r.Drawn.Add(new UiDrawn(layout.Name, w.Name, rect));
 				Frame(w, rect, fade);
+				// A growing window shows its frame only, its title and elements once it has its size.
+				if (growing)
+				{
+					continue;
+				}
 				if (w.Title is { } title && Str(title, Root()) is { Length: > 0 } text)
 				{
 					Plate(title, text, rect.X, rect.Y, 16, -14, fade, Root());
@@ -332,8 +350,14 @@ public sealed class UiRenderer
 			case "fade":
 				fade = p;
 				break;
-			case "grow":
-				int gw = Math.Max(1, (int)(rect.Width * p)), gh = Math.Max(1, (int)(rect.Height * p));
+			case "grow" or "grow_x" or "grow_y":
+				int gw = tr.Kind == "grow_y" ? rect.Width : Math.Max(1, (int)(rect.Width * p)), gh = tr.Kind == "grow_x" ? rect.Height : Math.Max(1, (int)(rect.Height * p));
+				if (tr.Step > 0)
+				{
+					// Whole steps only, at least one, the full size never past.
+					gw = tr.Kind == "grow_y" ? gw : Math.Min(rect.Width, Math.Max(tr.Step, gw / tr.Step * tr.Step));
+					gh = tr.Kind == "grow_x" ? gh : Math.Min(rect.Height, Math.Max(tr.Step, gh / tr.Step * tr.Step));
+				}
 				shown = new Rectangle(rect.X + (rect.Width - gw) / 2, rect.Y + (rect.Height - gh) / 2, gw, gh);
 				break;
 			case "slide":
@@ -361,8 +385,17 @@ public sealed class UiRenderer
 			{
 				return;
 			}
+			NineSliceImage? slice = f.Type == "nine_slice" ? r.SliceImage?.Invoke(f.Image!, f.Border, f.Scale) : null;
+			if (f.Type != "none")
+			{
+				string how = f.Type is "generated" or "nine_slice" && slice is null ? Style.Skin?.Frame is null ? "generated" : "skin" : f.Type;
+				r.FramesDrawn[name] = (how, r.FramesDrawn.GetValueOrDefault(name).Count + 1);
+			}
 			switch (f.Type)
 			{
+			case "generated" when f.Skin == "battle" && Style.Skin?.BattleFrame is { } battle:
+				Style.NineSlice(surface, battle, rect.X, rect.Y, rect.Width, rect.Height, Color.White * opacity);
+				break;
 			case "generated":
 				if (opacity == 1f)
 				{
@@ -373,7 +406,7 @@ public sealed class UiRenderer
 					Style.Box(surface, rect.X, rect.Y, rect.Width, rect.Height, opacity);
 				}
 				break;
-			case "nine_slice" when r.SliceImage?.Invoke(f.Image!, f.Border, f.Scale) is { } slice:
+			case "nine_slice" when slice is not null:
 				Style.NineSlice(surface, slice, rect.X, rect.Y, rect.Width, rect.Height, Color.White * opacity);
 				break;
 			case "nine_slice":
@@ -504,7 +537,9 @@ public sealed class UiRenderer
 				Style.Frame(surface, X(), Y(), Wd(), Ht(), C("color", "panel_edge"), e.E("thickness")?.Int(scope) ?? 2);
 				break;
 			case "box":
-				FrameStyle(e.S("frame") ?? "panel", surface, new Rectangle(X(), Y(), Wd(), Ht()), (float)(e.E("opacity")?.Eval(scope).Number ?? 1.0) * fade);
+				var box = new Rectangle(X(), Y(), Wd(), Ht());
+				FrameStyle(e.S("frame") ?? "panel", surface, box, (float)(e.E("opacity")?.Eval(scope).Number ?? 1.0) * fade);
+				Record(e, box);
 				break;
 			case "plate":
 				if (Str(e, scope) is { } plate)

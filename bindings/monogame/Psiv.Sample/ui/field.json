@@ -12,9 +12,13 @@
 		]},
 		{"name": "toasts", "elements": [
 			{"type": "repeater", "items": "toasts", "x": 16, "y": "H - 40 - 38", "dy": -38, "template": [
-				{"type": "box", "w": "width", "h": 32, "opacity": "box_alpha", "scaled": false},
+				{"type": "box", "name": "toast", "w": "width", "h": 32, "opacity": "box_alpha", "scaled": false},
 				{"type": "text", "value": "text", "x": 14, "y": 7, "style": "small", "alpha": "alpha", "scaled": false}
 			]}
+		]},
+		{"name": "prompt", "visible": "prompt_visible", "x": "(W - w) / 2", "y": "H - t(30) - 46", "w": "measure_unscaled(prompt_key + '  ' + prompt_text, size_small) + 24",
+			"h": 28, "elements": [
+			{"type": "plate", "value": "prompt_key + '  ' + prompt_text", "color": "accent", "scaled": false}
 		]},
 		{"name": "hint", "x": 0, "y": "H - t(30)", "h": "t(30)", "elements": [
 			{"type": "fill", "w": "W", "h": "t(30)", "color": "black", "alpha": 0.6, "scaled": false},

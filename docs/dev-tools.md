@@ -53,6 +53,7 @@ Opened with the backquote key. Type a command and press Enter; Up and Down recal
 | Command | What it does |
 | --- | --- |
 | `help` | Lists the commands |
+| `help overlays` | Lists every overlay with its key, the layout windows overlay (F1) first, and what `overlay all` and `overlay none` cover |
 | `list KIND` | The ids of `areas`, `markers` (as `area:marker`), `flags`, `items`, `equipment`, `abilities`, `enemies`, `encounters`, `events`, `vehicles` (those with field rules) or `characters` |
 | `warp AREA MARKER` | From the field, to a marker of any area (`warp reed_path west_gate`). A vehicle ridden stays where it was. The arrival works as a warp does: load hooks, the area-entry autosave, ambient talk |
 | `warp AREA X Y` | The same to a walkable cell (`warp brine_flats 20 4`) |
@@ -103,7 +104,7 @@ Each is toggled by its key or `overlay NAME`. The field overlays draw over the m
 * `actors` (F7): the id over every person drawn (party members and script actors) and `encounter#id` over visible enemies.
 * `camera` (F8): a cross on what the field's camera follows, the leader or the scene's camera, with its name.
 * `fps` (F9): frames per second and frame time, averaged over the last 30 frames of the time the window gives, the speed and whether paused (headless runs read `62.5 fps 16.0 ms x1`).
-* `windows` (F1): every window the screen's layout drew this frame outlined, with its screen and name (`title/box`), on every screen including the battle and the menus ([`ui-layout.md`](ui-layout.md)). `overlay windows [on|off]` toggles it; `overlay all` and `overlay none` leave it as it is, and `help` does not list it. `overlay.windows` reads how many windows it outlined.
+* `windows` (F1): every window the screen's layout drew this frame outlined, with its screen and name (`title/box`), on every screen including the battle and the menus ([`ui-layout.md`](ui-layout.md)). `overlay windows [on|off]` toggles it; `overlay all` and `overlay none` leave it as it is. `help overlays` lists it with its key; `help` keeps its six lines without it, because `scripts/dev_console.txt` prints them into its transcript and the console draws each line, so another line would change that transcript and its draw counts. `overlay.windows` reads how many windows it outlined.
 * `event` (F10): the running event and the source line of the instruction its interpreter is at, `event reed_path_lookout events/reed_path.ev:62` (`psiv_event_position_get`: the innermost event a `call` runs, and while it waits on a `together` or `race` block, the first live branch's line).
 
 ## Previewer

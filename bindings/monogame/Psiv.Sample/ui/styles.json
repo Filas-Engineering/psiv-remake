@@ -29,6 +29,7 @@
 	},
 	"frames": {
 		"panel": {"type": "generated"},
+		"battle": {"type": "generated", "skin": "battle"},
 		"none": {"type": "none"}
 	},
 	"cursors": {
@@ -49,5 +50,6 @@
 		"wait_unit_ms": 16,
 		"list_repeat_delay_ms": 0,
 		"list_repeat_ms": 0
-	}
+	},
+	"params": {"toast_h": 32, "toast_gap": 6, "toast_pad": 14, "toast_text_y": 7}
 }

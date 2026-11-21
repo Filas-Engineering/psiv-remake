@@ -22,7 +22,7 @@ public sealed partial class SampleController
 	{
 		List<string> slots = ManualSlots();
 		Ui.Draw("save_prompt", s, t, UiData()
-			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "save_prompt")))
 			.Set("slot_list", (UiSlot)((x, y, w, h) => DrawSlots(t, _list, x, y, w, h, slots, _s.Saves() ?? [], _list.Cursor < slots.Count)))
 			.Set("leave", new List<string> { T("ui.save_prompt.dont_save") })
 			.Set("leave_selected", _list.Cursor == slots.Count));

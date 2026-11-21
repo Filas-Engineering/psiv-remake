@@ -17,8 +17,14 @@ public sealed record AreaPicture(int Ground, int? Above, int Cell, int Width, in
 // An object loaded: its entry and the images each state's frame run indexes (none for a person's standing frame).
 public sealed record LoadedObject(ObjectEntry Entry, int[] Closed, int[] Open);
 
+// The title art loaded: the background and logo images, each layer's frames, and the traveler's and creature's. Multiple:
+// the logical pixels a file pixel of the logo, traveler and creature at their natural size, 0 without a reference height.
+public sealed record TitlePictures(int? Background, int? Logo, IReadOnlyList<(TitleLayer Layer, int[] Images)> Layers, Figure? Traveler, Figure? Creature,
+	int Multiple = 0);
+
 // The UI skin from the asset directory: any part left out keeps the generated look, drawn with rectangles.
-public sealed record UiSkin(NineSliceImage? Frame, NineSliceImage? PanelFrame, IReadOnlyDictionary<string, NineSliceImage> CameraFrames, int? Cursor, int? BarTrack, int? BarFill);
+public sealed record UiSkin(NineSliceImage? Frame, NineSliceImage? PanelFrame, IReadOnlyDictionary<string, NineSliceImage> CameraFrames, int? Cursor, int? BarTrack, int? BarFill,
+	NineSliceImage? BattleFrame = null);
 
 // The pictures the asset directory's manifest names, cut into the same images the generated ones are, so every screen
 // draws them the same way. Loaded once when the art is built; FromFile says which ids they replaced.
@@ -27,13 +33,21 @@ public sealed partial class Art
 	private readonly Dictionary<string, (int W, int H, Color[] Pixels)> _files = [];
 	private readonly Dictionary<string, TileSet> _areaTiles = [];
 	private readonly Dictionary<string, (CharacterEntry Entry, int[] Images)> _people = [];
+	// Every frame of a sheet that mirrors a facing, flipped.
+	private readonly Dictionary<string, int[]> _mirroredPeople = [];
 	private readonly Dictionary<string, int> _portraits = [];
 	private readonly Dictionary<(string, bool), Figure> _figures = [];
 	private readonly Dictionary<string, Figure> _backFigures = [];
 	private readonly Dictionary<string, Figure> _fieldEnemies = [];
 	private readonly Dictionary<string, int> _backdrops = [];
+	private readonly Dictionary<string, int> _namedBackdrops = [];
+	// The backdrops chosen by a flag, in the manifest's order: the flag, the area it is limited to, and the key.
+	private readonly List<(string Flag, string? Area, string Key)> _flagBackdrops = [];
+	private readonly Dictionary<string, BackdropMap> _backdropMaps = [];
 	private readonly Dictionary<string, Figure> _effects = [];
 	private readonly Dictionary<string, int> _statusIcons = [];
+	private readonly Dictionary<string, int> _commandIcons = [];
+	private readonly Dictionary<string, int> _pictures = [];
 	private readonly Dictionary<string, AreaPicture> _areaPictures = [];
 	private readonly Dictionary<string, List<LoadedObject>> _objects = [];
 	private readonly Dictionary<string, int> _vehicleOverlays = [];
@@ -77,6 +91,8 @@ public sealed partial class Art
 	}
 
 	public UiSkin? Skin { get; private set; }
+
+	public TitlePictures? Title { get; private set; }
 
 	// The picture's size in pixels; generated pictures are 16x16.
 	public (int W, int H) SizeOf(int image) => _sizes.GetValueOrDefault(image, (Pixels.Size, Pixels.Size));
@@ -155,7 +171,8 @@ public sealed partial class Art
 
 	// `natural`: a battle figure, which stands at the natural multiple when battle_figures gives a reference height and
 	// the entry no scale.
-	private int[] Cut(GridImage grid, bool natural = false)
+	// `mirrored`: each frame flipped left to right.
+	private int[] Cut(GridImage grid, bool natural = false, bool mirrored = false)
 	{
 		(int w, _, Color[] pixels) = File(grid.Path);
 		var images = new int[grid.Cells];
@@ -166,6 +183,10 @@ public sealed partial class Art
 			for (int y = 0; y < grid.FrameHeight; y++)
 			{
 				Array.Copy(pixels, (cy + y) * w + cx, frame, y * grid.FrameWidth, grid.FrameWidth);
+				if (mirrored)
+				{
+					Array.Reverse(frame, y * grid.FrameWidth, grid.FrameWidth);
+				}
 			}
 			images[cell] = _s.CreateImage(grid.FrameWidth, grid.FrameHeight, frame);
 			_sizes[images[cell]] = (grid.FrameWidth, grid.FrameHeight);
@@ -276,6 +297,10 @@ public sealed partial class Art
 		foreach (CharacterEntry c in m.Characters)
 		{
 			_people[c.Id] = (c, Cut(c.Image));
+			if (c.Facing?.Mirror.Count > 0)
+			{
+				_mirroredPeople[c.Id] = Cut(c.Image, mirrored: true);
+			}
 			_fromFile["character:" + c.Id] = c.Image.Path;
 		}
 		foreach ((string id, string file) in m.Portraits)
@@ -305,6 +330,18 @@ public sealed partial class Art
 		{
 			_backdrops[b.Key] = Whole(b.Path);
 			_fromFile["backdrop:" + b.Key] = b.Path;
+			if (b.Id is not null)
+			{
+				_namedBackdrops[b.Id] = _backdrops[b.Key];
+			}
+			if (b.Flag is not null)
+			{
+				_flagBackdrops.Add((b.Flag, b.Area, b.Key));
+			}
+		}
+		foreach (BackdropMap b in m.BackdropMaps)
+		{
+			_backdropMaps[b.Area] = b;
 		}
 		foreach (EffectEntry e in m.Effects)
 		{
@@ -337,6 +374,16 @@ public sealed partial class Art
 		{
 			_statusIcons[id] = Whole(file);
 			_fromFile["status_icon:" + id] = file;
+		}
+		foreach ((string id, string file) in m.CommandIcons)
+		{
+			_commandIcons[id] = Whole(file);
+			_fromFile["command_icon:" + id] = file;
+		}
+		foreach ((string id, string file) in m.Pictures)
+		{
+			_pictures[id] = Whole(file);
+			_fromFile["picture:" + id] = file;
 		}
 		LoadVehicleFiles(m);
 		foreach (MapEntry a in m.Maps)
@@ -413,6 +460,34 @@ public sealed partial class Art
 				_fromFile[$"bitmap_font:{f.Language}{(f.Role is { } role ? ":" + AssetManifest.RoleNames[(int)role] : "")}"] = f.Image;
 			}
 		}
+		if (m.TitleArt is { } title)
+		{
+			int? Picture(string? file, string key)
+			{
+				if (file is null)
+				{
+					return null;
+				}
+				_fromFile["title:" + key] = file;
+				return Whole(file);
+			}
+			Figure? Run((GridImage Image, FrameRun Run)? sprite, string key)
+			{
+				if (sprite is not { } s)
+				{
+					return null;
+				}
+				_fromFile["title:" + key] = s.Image.Path;
+				return new Figure(Cut(s.Image), s.Run, new Dictionary<string, FrameRun>());
+			}
+			Title = new TitlePictures(Picture(title.Background, "background"), Picture(title.Logo, "logo"),
+				[.. title.Layers.Select((l, i) =>
+				{
+					_fromFile["title:layer:" + i] = l.Image.Path;
+					return (l, Cut(l.Image));
+				})],
+				Run(title.Traveler, "traveler"), Run(title.Creature, "creature"), title.ReferenceHeight is int titleHeight ? Math.Max(1, _s.Height / titleHeight) : 0);
+		}
 		_fieldLook = m.Field;
 		foreach ((string area, FieldLook look) in m.FieldAreas)
 		{
@@ -432,10 +507,14 @@ public sealed partial class Art
 			NineSliceImage? frame = ui.Frame is null ? null : Slice(ui.Frame);
 			NineSliceImage? panel = ui.PanelFrames.FirstOrDefault(p => p.Camera is null) is { } any ? Slice(any) : null;
 			Skin = new UiSkin(frame, panel, ui.PanelFrames.Where(p => p.Camera is not null).ToDictionary(p => p.Camera!, Slice),
-				Picture(ui.Cursor, "cursor"), Picture(ui.BarTrack, "bar_track"), Picture(ui.BarFill, "bar_fill"));
+				Picture(ui.Cursor, "cursor"), Picture(ui.BarTrack, "bar_track"), Picture(ui.BarFill, "bar_fill"), ui.BattleFrame is null ? null : Slice(ui.BattleFrame));
 			if (frame is not null)
 			{
 				_fromFile["ui:frame"] = ui.Frame!.Path;
+			}
+			if (ui.BattleFrame is not null)
+			{
+				_fromFile["ui:battle_frame"] = ui.BattleFrame.Path;
 			}
 			foreach (NineSlice p in ui.PanelFrames)
 			{
@@ -445,13 +524,52 @@ public sealed partial class Art
 	}
 
 	// The person's own sheet when the manifest gives one, else the generated look from its id.
-	public int PersonFrame(string id, Direction facing, int frame) =>
-		_people.TryGetValue(id, out var sheet) ? sheet.Images[sheet.Entry.Walk[facing == Direction.None ? Direction.South : facing][frame]] : ActorFrame(LookFor(id), facing, frame);
+	public int PersonFrame(string id, Direction facing, int frame)
+	{
+		if (!_people.TryGetValue(id, out var sheet))
+		{
+			return ActorFrame(LookFor(id), facing, frame);
+		}
+		(Direction from, bool mirrored) = SheetFacingOf(sheet.Entry, facing);
+		int cell = sheet.Entry.Walk[from][frame];
+		return mirrored ? _mirroredPeople[id][cell] : sheet.Images[cell];
+	}
 
-	// One play of the person's pose for a script animation: the sheet's own frames when it maps that animation; else the
+	// The facing of a sheet's walk frames drawn for `facing` (none is south): its own, the one its facing mirrors, flipped,
+	// else its fallback.
+	private static (Direction From, bool Mirrored) SheetFacingOf(CharacterEntry sheet, Direction facing)
+	{
+		facing = facing == Direction.None ? Direction.South : facing;
+		return sheet.Walk.ContainsKey(facing) ? (facing, false) : sheet.Facing!.Mirror.TryGetValue(facing, out Direction from) ? (from, true) : (sheet.Facing.Fallback!.Value, false);
+	}
+
+	// How a person's sheet draws a facing: `west: east mirrored 3 4 5` (the facing, the one its frames come from, and its
+	// walk frames), or `generated`.
+	public string SheetProbe(string id, Direction facing)
+	{
+		if (!_people.TryGetValue(id, out var sheet))
+		{
+			return "generated";
+		}
+		(Direction from, bool mirrored) = SheetFacingOf(sheet.Entry, facing);
+		string Name(Direction d) => d.ToString().ToLowerInvariant();
+		return $"{Name(facing == Direction.None ? Direction.South : facing)}: {Name(from)}{(mirrored ? " mirrored" : "")} {string.Join(' ', sheet.Entry.Walk[from])}";
+	}
+
+	// How an actor stands until a script turns or moves it, when its sheet says.
+	public Direction? StartFacing(string id) => _people.TryGetValue(id, out var sheet) ? sheet.Entry.Facing?.Start : null;
+
+	// The sheet's pose a script animation plays: the one its `animations` maps the name to, else the pose of that name;
+	// null without a sheet or such a pose.
+	public string? SheetPose(string id, string animation) =>
+		!_people.TryGetValue(id, out var sheet) ? null
+		: sheet.Entry.Animations.TryGetValue(animation, out string? pose) ? pose
+		: sheet.Entry.Poses.ContainsKey(animation) ? animation : null;
+
+	// One play of the person's pose for a script animation: the sheet's own frames when it has that pose; else the
 	// generated pose, which on a person with a sheet keeps its standing frame and adds only the lift and marks.
 	public int PoseLengthMs(string id, string animation) =>
-		_people.TryGetValue(id, out var sheet) && sheet.Entry.Animations.TryGetValue(animation, out string? pose) ? sheet.Entry.Poses[pose].Ms.Sum() : PoseLengthMs(PoseFor(animation));
+		SheetPose(id, animation) is { } pose ? _people[id].Entry.Poses[pose].Ms.Sum() : PoseLengthMs(PoseFor(animation));
 
 	public (int Image, int Lift, bool Alert, MotionMark[] Marks) PoseFrame(string id, Direction facing, string animation, int elapsedMs, bool loop)
 	{
@@ -459,11 +577,15 @@ public sealed partial class Art
 		int length = PoseLengthMs(p);
 		float t = loop ? elapsedMs % length / (float)length : elapsedMs / (float)length;
 		(int image, int lift, bool alert, MotionMark[] marks) = PoseFrame(LookFor(id), facing, p, t);
-		if (_people.TryGetValue(id, out var sheet) && sheet.Entry.Animations.TryGetValue(animation, out string? name))
+		if (_people.TryGetValue(id, out var sheet) && SheetPose(id, animation) is { } name)
 		{
 			PoseEntry pose = sheet.Entry.Poses[name];
-			int[] frames = pose.Frames.GetValueOrDefault(facing == Direction.None ? Direction.South : facing) ?? pose.Frames.GetValueOrDefault(Direction.South) ?? pose.Frames.Values.First();
-			int frame = sheet.Images[new FrameRun(frames, pose.Ms).FrameAt(elapsedMs, loop)];
+			Direction to = facing == Direction.None ? Direction.South : facing;
+			// A facing the pose leaves out that the sheet mirrors plays the mirrored facing's frames, flipped.
+			Direction? flipped = !pose.Frames.ContainsKey(to) && sheet.Entry.Facing?.Mirror.TryGetValue(to, out Direction from) == true && pose.Frames.ContainsKey(from) ? from : null;
+			int[] frames = pose.Frames.GetValueOrDefault(flipped ?? to) ?? pose.Frames.GetValueOrDefault(Direction.South) ?? pose.Frames.Values.First();
+			int cell = new FrameRun(frames, pose.Ms).FrameAt(elapsedMs, loop);
+			int frame = flipped is null ? sheet.Images[cell] : _mirroredPeople[id][cell];
 			return pose.Motion ? (frame, lift, alert, marks) : (frame, 0, false, []);
 		}
 		return (_people.ContainsKey(id) ? PersonFrame(id, facing, 0) : image, lift, alert, marks);
@@ -471,8 +593,14 @@ public sealed partial class Art
 
 	// A speaker's or member's portrait: the manifest's picture for the line's portrait id, else for the person, else the
 	// front of the person's sheet or generated look.
-	public int Portrait(string portrait, string person) =>
-		_portraits.TryGetValue(portrait, out int image) || _portraits.TryGetValue(person, out image) ? image : PersonFrame(person, Direction.South, 0);
+	public int Portrait(string portrait, string person) => PortraitOf(portrait, person).Image;
+
+	// The portrait and the key it came by: `portrait:ID`, `portrait:ID:EXPRESSION` or `person:ID`. An expression the
+	// manifest lacks shows its portrait id's picture.
+	public (int Image, string Key) PortraitOf(string portrait, string person) =>
+		!_portraits.ContainsKey(portrait) && portrait.IndexOf(':') is int colon and > 0 ? PortraitOf(portrait[..colon], person)
+		: _portraits.TryGetValue(portrait, out int image) ? (image, "portrait:" + portrait)
+		: _portraits.TryGetValue(person, out image) ? (image, "portrait:" + person) : (PersonFrame(person, Direction.South, 0), "person:" + person);
 
 	// A visible enemy in the field, by its encounter; `offsetMs` keeps neighbors out of step.
 	public int FieldEnemy(string encounter, int clockMs, int offset)
@@ -483,6 +611,9 @@ public sealed partial class Art
 		}
 		return Creature(Noise.Hash(encounter), (clockMs / 280 + offset) % 2);
 	}
+
+	// A still picture of the manifest's `pictures`, by name; null without one.
+	public int? NamedPicture(string name) => _pictures.TryGetValue(name, out int image) ? image : null;
 
 	public AreaPicture? AreaPictureOf(string area) => _areaPictures.GetValueOrDefault(area);
 

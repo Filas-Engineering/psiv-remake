@@ -43,6 +43,11 @@ public sealed partial class SampleController
 	private readonly HashSet<string> _tagsLogged = [];
 	private string _portraitId = "";
 	private bool _portraitOff;
+	// The still picture the dialogue's `picture` tags show (a name of the assets' `pictures`), "" for none, until hidden or
+	// the scene ends.
+	private string _picture = "";
+	// The `{portrait:ID:EXPRESSION}` ids already reported as lacking their expression, once a run.
+	private readonly HashSet<string> _portraitProblems = [];
 	// The surface the last frame drew on, which measures the box's text between frames, and the box it last fitted.
 	private IDrawSurface? _measure;
 	private (string Text, int End, int Next) _fit = ("", 0, -1);
@@ -273,14 +278,21 @@ public sealed partial class SampleController
 		case "portrait":
 			_portraitId = tag.Value;
 			_portraitOff = false;
-			if (!KnownPortrait(tag.Value))
+			if (tag.Value.IndexOf(':') is int colon and > 0 && KnownPortrait(tag.Value[..colon]) && !KnownPortrait(tag.Value))
+			{
+				if (_portraitProblems.Add(tag.Value))
+				{
+					_log($"tag problem: {tag}: no expression '{tag.Value[(colon + 1)..]}' of portrait '{tag.Value[..colon]}' in the assets: its portrait stands in");
+				}
+			}
+			else if (!KnownPortrait(tag.Value))
 			{
 				TagProblem(tag, $"no portrait '{tag.Value}' in game.json's presentation portraits, the people or the assets");
 			}
 			return;
 		}
 		UiTag? hook = Layout.Screen("dialogue").Tags.GetValueOrDefault(tag.Name) ?? UiLayoutSet.Defaults.Screen("dialogue").Tags.GetValueOrDefault(tag.Name);
-		string id = hook?.Id ?? tag.Value;
+		string id = hook?.Values?.GetValueOrDefault(tag.Value) ?? hook?.Default ?? hook?.Id ?? tag.Value;
 		switch (hook?.Action)
 		{
 		case "cue" when _data.Cues.Contains(id):
@@ -315,6 +327,21 @@ public sealed partial class SampleController
 			break;
 		case "panel_clear":
 			_panels.Clear();
+			break;
+		case "picture" when _assets?.Manifest.Pictures.ContainsKey(id) == true:
+			_picture = id;
+			break;
+		case "picture":
+			TagProblem(tag, $"no picture '{id}' in the assets' pictures");
+			break;
+		case "picture_hide" when _picture == id:
+			_picture = "";
+			break;
+		case "picture_hide":
+			TagProblem(tag, $"no picture '{id}' is up");
+			break;
+		case "picture_clear":
+			_picture = "";
 			break;
 		case "portrait_off":
 			_portraitOff = true;
@@ -429,22 +456,25 @@ public sealed partial class SampleController
 
 	private const int DialogueBoxHeight = 176;
 
-	private int DialogueHeight => Px(DialogueBoxHeight);
+	// The dialogue file's param, else `fallback`.
+	private int DialogueParam(string name, int fallback) => Ui.Param("dialogue", name, UiData(), fallback);
+
+	private int DialogueHeight => Px(DialogueParam("box_h", DialogueBoxHeight));
 
 	// Where the dialogue box was last drawn, for headless expectations: top, bottom or - without one.
 	private string _dialogueAt = "-";
 
-	// The box sits at the bottom of the screen, or at the top when the leader stands where it would cover them; over
-	// panels, where it covers the fewest of them.
+	// The box sits at the bottom of the screen, `box_margin` over its edge, or at `box_top` when the leader stands where
+	// it would cover them; over panels, where it covers the fewest of them.
 	private int DialogueTop(IDrawSurface s, bool field)
 	{
-		int bottom = s.Height - DialogueHeight - 16;
-		const int top = 36;
+		int bottom = s.Height - DialogueHeight - DialogueParam("box_margin", 16);
+		int top = DialogueParam("box_top", 36);
 		if (_panels.Count > 0)
 		{
 			return DialogueOnTop(s, bottom, top) ? top : bottom;
 		}
-		return field && _field.LeaderScreenY + Art.Tile > bottom - 8 ? top : bottom;
+		return field && _field.LeaderScreenY + _field.Cell > bottom - 8 ? top : bottom;
 	}
 
 	// `s` draws the field and `t` the box, with the profile's text size.
@@ -479,6 +509,10 @@ public sealed partial class SampleController
 			.Set("prompt", choice is null ? "" : choice.Prompt.Length == 0 ? T("ui.dialogue.choose") : choice.Prompt)
 			.Set("options", choice?.Options.ToList() ?? [])
 			.Set("cursor", _cursor);
+		int picture = _picture.Length > 0 ? art.NamedPicture(_picture) ?? -1 : -1;
+		ctx.Set("picture", picture)
+			.Set("picture_w", picture >= 0 ? art.SizeOf(picture).W : 0)
+			.Set("picture_h", picture >= 0 ? art.SizeOf(picture).H : 0);
 		// The wrapped line's probe, measured while the dialogue's font draws it: the line count, then each line's width.
 		var widths = new List<int>();
 		int count = -1;
@@ -504,14 +538,18 @@ public sealed partial class SampleController
 
 	// The dialogue's state probes: `reveal` (characters shown of the line's, tags left out), `fontmissing`, `tags` (each
 	// tag the line acted on, as written), `pagetext` (what the box holds), `dialoguepage` (the box among the line's
-	// boxes), `lineportrait` (the portrait id shown, `off`) and `dialogueoverlaps` (named box elements over the frame or
-	// each other, or `none`).
+	// boxes), `lineportrait` (the portrait id shown, `off`), `shownportrait` (the key the shown portrait came by, `off`)
+	// and `dialogueoverlaps` (named box elements over the frame or each other, or `none`).
 	private string DialogueState(string key)
 	{
 		Line? line = _s.Line();
 		if (key == "dialogueoverlaps")
 		{
 			return DialogueOverlaps();
+		}
+		if (key == "picture")
+		{
+			return _picture.Length > 0 ? _picture : "-";
 		}
 		if (line is null)
 		{
@@ -534,6 +572,9 @@ public sealed partial class SampleController
 			return box.Text[..box.End];
 		case "lineportrait":
 			return !started ? (line.Portrait.Length > 0 ? line.Portrait : "-") : _portraitOff ? "off" : _portraitId.Length > 0 ? _portraitId : "-";
+		case "shownportrait":
+			return started && _portraitOff ? "off"
+				: _art?.PortraitOf(started ? _portraitId : line.Portrait, line.SpeakerId.Length > 0 ? line.SpeakerId : line.SpeakerName).Key ?? "-";
 		case "dialoguepage":
 			// Boxes before this one: every box of the earlier pages, and this page's up to its start, fitted afresh.
 			int Boxes(string text, int upTo)

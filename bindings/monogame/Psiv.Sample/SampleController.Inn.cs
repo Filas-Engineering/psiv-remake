@@ -27,6 +27,7 @@ public sealed partial class SampleController
 			.Set("cost", inn?.Cost ?? 0)
 			.Set("money", _s.WorldInfo().Money)
 			.Set("options", new List<string> { T("ui.inn.rest"), T("ui.inn.leave") })
-			.Set("cursor", _cursor));
+			.Set("cursor", _cursor)
+			.Set("keeper", inn is null ? -1 : Keeper(art, inn.Id)));
 	}
 }

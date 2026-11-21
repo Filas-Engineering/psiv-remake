@@ -49,8 +49,8 @@ public sealed class FieldRenderer
 			IdleMs = 1000;
 		}
 
-		// Returns true when it started a one-cell move.
-		public bool Go(int x, int y, int lengthMs)
+		// Returns true when it started a one-cell move, `elapsedMs` of it already gone.
+		public bool Go(int x, int y, int lengthMs, int elapsedMs = 0)
 		{
 			if (x == X && y == Y)
 			{
@@ -66,7 +66,7 @@ public sealed class FieldRenderer
 			_fromY = PY;
 			X = x;
 			Y = y;
-			_elapsedMs = 0;
+			_elapsedMs = elapsedMs;
 			_lengthMs = lengthMs;
 			IdleMs = 0;
 			Steps++;
@@ -226,6 +226,8 @@ public sealed class FieldRenderer
 
 	public int CameraX { get; private set; }
 	public int CameraY { get; private set; }
+	// The cell size the last frame drew the field at, in screen pixels.
+	public int Cell { get; private set; } = Tile;
 	// Where the leader was last drawn, in screen pixels (its top edge).
 	public int LeaderScreenY { get; private set; }
 
@@ -235,6 +237,8 @@ public sealed class FieldRenderer
 
 	// The people drawn in the last frame, actors and party members, by id: where, whether between cells, facing, pose.
 	public Dictionary<string, DrawnPerson> DrawnActors { get; } = [];
+	// The sheet pose each person posing in the last frame drew from its asset sheet, by id.
+	public Dictionary<string, string> DrawnSheetPoses { get; } = [];
 	// The vehicles the last frame drew, by id: "X Y" of the cell under each, with " aboard" for the one the party rides.
 	public Dictionary<string, string> DrawnVehicles { get; } = [];
 	// Conveyor cells drawn in the last frame, running or still, for the headless probe.
@@ -243,6 +247,13 @@ public sealed class FieldRenderer
 	// Cells of tile step hooks in the last frame's area, and those of hooks whose flags hold, drawn with a rune.
 	public int DrawnTileHooks { get; private set; }
 	public int ActiveTileHooks { get; private set; }
+
+	// With the real-time field input the controller leads the leader's glide: the cell it walks to, the step's length
+	// and how much of it has gone, from the moment the step starts rather than from the session's report of the new cell.
+	public (int X, int Y, int LengthMs, int ElapsedMs)? LeaderStep { get; set; }
+
+	// Actors whose id names an encounter, drawn as its field enemy rather than as a person.
+	public Func<string, bool> CreatureLook { get; set; } = _ => false;
 
 	// The cell an actor is drawn at or walking to, if it is on screen in this area.
 	public (int X, int Y)? ActorCell(string id) => _actors.TryGetValue(id, out ActorWalk? w) ? w.Target : null;
@@ -517,7 +528,7 @@ public sealed class FieldRenderer
 			return null;
 		}
 		int elapsed = Math.Max(0, clockMs - run.StartMs);
-		return run.Loop || elapsed < art.PoseLengthMs(id, run.Animation) ? (run.Animation, elapsed, run.Loop) : null;
+		return run.Loop || elapsed < art.PoseLengthMs(id, run.Animation) || Art.Vanishes(Art.PoseFor(run.Animation)) ? (run.Animation, elapsed, run.Loop) : null;
 	}
 
 	public static string KindName(AreaKind kind) => kind switch { AreaKind.Town => "Town", AreaKind.Dungeon => "Dungeon", _ => "Field" };
@@ -553,7 +564,8 @@ public sealed class FieldRenderer
 
 		int oldX = _leader.X, oldY = _leader.Y;
 		_leader.Advance(dt);
-		if (_leader.Go(f.LeaderX, f.LeaderY, step))
+		(int leaderX, int leaderY, int glideMs, int glideGone) = LeaderStep ?? (f.LeaderX, f.LeaderY, step, 0);
+		if (_leader.Go(leaderX, leaderY, glideMs, glideGone))
 		{
 			_trail.Insert(0, (oldX, oldY));
 			if (_trail.Count > Followers)
@@ -585,7 +597,7 @@ public sealed class FieldRenderer
 				}
 				continue;
 			}
-			g.Go(tx, ty, step);
+			g.Go(tx, ty, glideMs, glideGone);
 		}
 
 		foreach (MemberPlace m in _members.Values)
@@ -694,10 +706,11 @@ public sealed class FieldRenderer
 	}
 
 	// The field as the window shows it, after Track: the whole surface around `focus` (in cells; the leader when null),
-	// moved by `shake` pixels. The people drawn are what headless expectations read.
-	public void Draw(IDrawSurface s, Art art, FieldView view, int clockMs, IReadOnlyList<string> lineup, (float X, float Y)? focus, Point shake)
+	// `cell` pixels a cell, moved by `shake` pixels. The people drawn are what headless expectations read.
+	public void Draw(IDrawSurface s, Art art, FieldView view, int clockMs, IReadOnlyList<string> lineup, (float X, float Y)? focus, Point shake, int cell)
 	{
-		Render(s, art, view, clockMs, lineup, new Rectangle(0, 0, s.Width, s.Height), focus ?? Leader(lineup), Tile, shake, record: true);
+		Cell = cell;
+		Render(s, art, view, clockMs, lineup, new Rectangle(0, 0, s.Width, s.Height), focus ?? Leader(lineup), cell, shake, record: true);
 	}
 
 	// The same live scene inside `viewport`, `tile` pixels a cell, around `focus`: what a panel's camera sees. Nothing
@@ -833,15 +846,29 @@ public sealed class FieldRenderer
 		void Person(string id, float px, float py, Direction facing, int frame, bool walking, float sortBias = 0f, Action<int, int>? extra = null, ActorLook? look = null,
 			int raise = 0)
 		{
-			int image = look is null ? art.PersonFrame(id, facing, frame) : art.ActorFrame(look, facing, frame);
+			bool creature = look is null && CreatureLook(id);
+			int image = creature ? art.FieldEnemy(id, clockMs, 0) : look is null ? art.PersonFrame(id, facing, frame) : art.ActorFrame(look, facing, frame);
 			int lift = 0;
 			bool alert = false;
 			MotionMark[] marks = [];
 			Pose pose = Pose.None;
+			(float alpha, int dx, float scatter) = (1f, 0, 0f);
 			if (look is null && PoseAt(id, clockMs, art) is { } run)
 			{
-				(image, lift, alert, marks) = art.PoseFrame(id, facing, run.Animation, run.ElapsedMs, run.Loop);
 				pose = Art.PoseFor(run.Animation);
+				int length = art.PoseLengthMs(id, run.Animation);
+				if (Art.Vanishes(pose) && !run.Loop && run.ElapsedMs >= length)
+				{
+					return;
+				}
+				(int posed, lift, alert, marks) = art.PoseFrame(id, facing, run.Animation, run.ElapsedMs, run.Loop);
+				// A creature keeps its own picture; the pose lifts it.
+				image = creature ? image : posed;
+				(alpha, dx, scatter) = Art.SpriteLook(pose, (run.Loop ? run.ElapsedMs % length : run.ElapsedMs) / (float)Math.Max(1, length));
+				if (record && art.SheetPose(id, run.Animation) is { } sheetPose)
+				{
+					DrawnSheetPoses[id] = sheetPose;
+				}
 			}
 			if (record)
 			{
@@ -850,12 +877,19 @@ public sealed class FieldRenderer
 			lift = Px(lift + raise);
 			Put(px, py, (sx, sy) =>
 			{
-				if (look is not null || art.PersonShadow(id))
+				if (look is not null || creature || art.PersonShadow(id))
 				{
-					s.Image(art.Shadow, sx, sy + Px(3), tile, tile, Color.White);
+					s.Image(art.Shadow, sx, sy + Px(3), tile, tile, Color.White * alpha);
 				}
-				Rectangle body = art.Stand(image, sx, sy - lift, tile);
-				s.Image(image, body.X, body.Y, body.Width, body.Height, Color.White);
+				Rectangle body = art.Stand(image, sx + Px(dx), sy - lift, tile);
+				s.Image(image, body.X, body.Y, body.Width, body.Height, Color.White * alpha);
+				// Dissolving, the body breaks into motes that rise and fade as it does.
+				for (int i = 0; scatter > 0f && i < 10; i++)
+				{
+					int mx = body.X + body.Width * (i * 37 % 100) / 100;
+					int my = body.Bottom - body.Height * (i * 53 % 100) / 100 - (int)(scatter * tile * (0.5f + i % 3 * 0.25f));
+					s.Fill(mx, my, Px(3), Px(3), new Color(236, 240, 255) * (1f - scatter));
+				}
 				if (alert)
 				{
 					overlays.Add(() => s.Image(art.Alert, sx + tile / 4, sy - lift - tile / 2 - Px(8), tile / 2, tile / 2 + Px(8), Color.White));
@@ -1023,6 +1057,7 @@ public sealed class FieldRenderer
 		if (record)
 		{
 			DrawnActors.Clear();
+			DrawnSheetPoses.Clear();
 			DrawnVehicles.Clear();
 		}
 		foreach (FieldVehicle v in view.Vehicles)
@@ -1050,7 +1085,8 @@ public sealed class FieldRenderer
 			// A pose has the person's attention, so the bubble waits until it ends.
 			bool talks = talkers.Contains(a.Id) && BubbleFree(a.X, a.Y) && PoseAt(a.Id, clockMs, art) is null;
 			int bob = (int)(2 * MathF.Sin(clockMs / 300f + a.X));
-			Person(a.Id, w.PX, w.PY, w.Facing, w.Frame, w.Walking, extra: talks
+			// The game stands an actor no script has turned facing south; its sheet may say otherwise.
+			Person(a.Id, w.PX, w.PY, !a.Scripted && art.StartFacing(a.Id) is { } start ? start : w.Facing, w.Frame, w.Walking, extra: talks
 				? (sx, sy) => overlays.Add(() => s.Image(art.Bubble, sx + tile / 2, sy - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8), Color.White))
 				: null);
 		}
@@ -1113,7 +1149,7 @@ public sealed class FieldRenderer
 		}
 		if (record)
 		{
-			LeaderScreenY = (int)MathF.Round(leaderY * Tile) - CameraY;
+			LeaderScreenY = (int)MathF.Round(leaderY * tile) - CameraY;
 		}
 		foreach ((float _, Action draw) in sprites.OrderBy(x => x.Y))
 		{

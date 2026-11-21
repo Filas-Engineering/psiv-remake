@@ -47,6 +47,10 @@ public sealed partial class GameData
 	public HashSet<string> Vehicles { get; } = [];
 	// The vehicles game.json gives field rules, which the field draws.
 	public HashSet<string> FieldVehicles { get; } = [];
+	// What each of those crosses (`crosses`, and `barrier` when it `breaks` barriers), and each area's conveyor cells
+	// with their time per cell: where the real-time field input expects the leader's next step to go, and how fast.
+	public Dictionary<string, HashSet<string>> VehicleCrosses { get; } = [];
+	public Dictionary<string, Dictionary<(int X, int Y), int>> BeltMs { get; } = [];
 	public HashSet<string> Enemies { get; } = [];
 	public HashSet<string> Encounters { get; } = [];
 	public HashSet<string> Statuses { get; } = [];
@@ -67,6 +71,8 @@ public sealed partial class GameData
 	public Dictionary<string, List<string>> EnemyStatuses { get; } = [];
 	// Where each event a hook starts begins: the hook's area and cell, for the event previewer.
 	public Dictionary<string, (string Area, int X, int Y)> EventStarts { get; } = [];
+	// The shops' and rest points' ids, which the assets' keepers give a portrait.
+	public HashSet<string> Keepers { get; } = [];
 	// Per language the text tables' lines: each key and text, and whether it came from the dialogue's string table.
 	public Dictionary<string, List<(string Key, string Text, bool Dialogue)>> TextTables { get; } = [];
 
@@ -103,6 +109,7 @@ public sealed partial class GameData
 				.Select(c => (c.GetProperty("flag").GetString()!, Array(c, "cells").Select(at => (at[0].GetInt32(), at[1].GetInt32())).ToArray())).ToList();
 			var points = new HashSet<string>(new[] { "hooks", "chests", "shops", "rests", "ports", "helms" }
 				.SelectMany(list => Array(doc.RootElement, list)).Select(p => p.GetProperty("id").GetString()!));
+			d.Keepers.UnionWith(new[] { "shops", "rests" }.SelectMany(list => Array(doc.RootElement, list)).Select(p => p.GetProperty("id").GetString()!));
 			string Flag(JsonElement hook, string name) => hook.TryGetProperty(name, out JsonElement f) ? f.GetString()! : "";
 			var tileHooks = Array(doc.RootElement, "hooks").Where(h => h.TryGetProperty("tile", out _)).Select(h =>
 			{
@@ -112,6 +119,9 @@ public sealed partial class GameData
 			}).ToList();
 			var whileActive = new HashSet<string>(Array(doc.RootElement, "hooks")
 				.Where(h => h.TryGetProperty("solid", out JsonElement solid) && solid.GetString() == "while_active").Select(h => h.GetProperty("id").GetString()!));
+			d.BeltMs[id] = Array(doc.RootElement, "conveyors")
+				.SelectMany(c => Array(c, "cells").Select(at => ((at[0].GetInt32(), at[1].GetInt32()), c.TryGetProperty("step_ms", out JsonElement ms) ? ms.GetInt32() : 250)))
+				.ToDictionary(x => x.Item1, x => x.Item2);
 			d.Maps[id] = new AreaMap(width, rows.Length, [.. rows.SelectMany(r => r.PadRight(width).Select(AreaMap.Terrain))], changes, points,
 				[.. Array(doc.RootElement, "chests").Select(c => c.GetProperty("id").GetString()!)], tileHooks, whileActive);
 		}
@@ -139,6 +149,10 @@ public sealed partial class GameData
 		d.Flags.UnionWith(Array(root, "flags").Select(f => f.GetString()!));
 		d.Music.UnionWith(["title", "battle_town", "battle_field", "battle_dungeon", "battle_scripted"]);
 		d.FieldVehicles.UnionWith(Array(root, "vehicles").Select(v => v.GetProperty("id").GetString()!));
+		foreach (JsonElement v in Array(root, "vehicles"))
+		{
+			d.VehicleCrosses[v.GetProperty("id").GetString()!] = [.. Array(v, "crosses").Concat(Array(v, "breaks")).Select(t => t.GetString()!)];
+		}
 		var scripted = new Dictionary<string, string>();
 		foreach (JsonElement script in root.GetProperty("events").EnumerateArray())
 		{

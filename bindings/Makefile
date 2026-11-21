@@ -101,6 +101,16 @@ define layout_run
 	@tail -n 1 $(BUILD)/sample_$(1)_headless.txt
 endef
 
+# A run of the small example layout set with --dev, on its own copy of the directory: $(1) the script's name, $(2) the
+# frames.
+define small_run
+	rm -rf $(BUILD)/sample_$(1)_saves $(BUILD)/$(1)_assets
+	cp -R $(BUILD)/small_assets $(BUILD)/$(1)_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --dev --saves $(BUILD)/sample_$(1)_saves --assets $(BUILD)/$(1)_assets \
+		--script $(SAMPLE_SCRIPTS)/$(1).txt --frames $(2) > $(BUILD)/sample_$(1)_headless.txt || (cat $(BUILD)/sample_$(1)_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_$(1)_headless.txt
+endef
+
 # A run of the control tags scene with --dev: $(1) the script's name, $(2) more options.
 define tag_run
 	rm -rf $(BUILD)/sample_$(1)_saves
@@ -295,12 +305,50 @@ dotnet-test: dotnet
 	# The example layout set (make_layout_assets.py: 640x480, integer scaling, the bitmap font, other places and list sizes).
 	$(call layout_run,layout_field,$(GAME)/data,900)
 	$(call layout_run,layout_menus,$(GAME)/data,1800)
-	$(call layout_run,layout_battle_front,$(BUILD)/front_data/game/data,2600)
+	$(call layout_run,layout_battle_front,$(BUILD)/front_data/game/data,3600)
 	$(call layout_run,layout_battle_side,$(GAME)/data,1800)
+	# The set's window frames as a nine-slice picture and through the UI skin, on saves with a cleared story (the sound test).
+	rm -rf $(BUILD)/sample_layout_frames_saves $(BUILD)/layout_frames_assets
+	cp -R $(BUILD)/layout_assets $(BUILD)/layout_frames_assets
+	$(GAME_CLI) --data $(GAME)/data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/sample_layout_frames_saves > /dev/null
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_layout_frames_saves --assets $(BUILD)/layout_frames_assets --script $(SAMPLE_SCRIPTS)/layout_frames.txt --frames 900 \
+		> $(BUILD)/sample_layout_frames_headless.txt || (cat $(BUILD)/sample_layout_frames_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_layout_frames_headless.txt
+	# The small example set (make_layout_assets.py --small: 320x224 at 16 pixels a field cell, on a copy of the test assets).
+	python3 -I $(SAMPLE_SCRIPTS)/make_layout_assets.py --small $(BUILD)/export $(BUILD)/font_assets $(BUILD)/test_assets $(BUILD)/small_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/small_assets
+	# At a 20-pixel cell the test assets' tileset of 48-pixel tiles at scale 3 draws 24 pixels a cell: a problem.
+	rm -rf $(BUILD)/small_cell20_assets
+	cp -R $(BUILD)/small_assets $(BUILD)/small_cell20_assets
+	cp $(BUILD)/small_cell20_assets/alt/styles_cell20.json $(BUILD)/small_cell20_assets/ui/styles.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/small_cell20_assets > $(BUILD)/check_assets_cell20.txt
+	grep -q "draws 24 screen pixels a cell, not the field's 20" $(BUILD)/check_assets_cell20.txt
+	$(call small_run,small_field,1100)
+	$(call small_run,small_menus,700)
+	$(call small_run,small_battle,1100)
 	# The dialogue's control tags in English and Japanese, on a data copy with a scene that uses every one.
 	python3 -I $(SAMPLE_SCRIPTS)/make_tag_data.py $(GAME)/data $(CORE)/data $(BUILD)/tag_data
 	$(call tag_run,dialogue_tags,)
 	$(call tag_run,dialogue_tags_ja,--language ja --strict-text)
+	# The real-time field input (fieldinput realtime): walking, run and the stick with --dev, interaction and its prompt,
+	# the prompt in the example layout set, and script actors through the built-in animations on a data copy with an
+	# actor named after an encounter.
+	rm -rf $(BUILD)/sample_field_walk_saves $(BUILD)/sample_field_interact_saves $(BUILD)/sample_field_prompt_saves $(BUILD)/field_prompt_assets \
+		$(BUILD)/sample_field_actors_saves
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_field_walk_saves --script $(SAMPLE_SCRIPTS)/field_walk.txt --frames 1100 > $(BUILD)/sample_field_walk_headless.txt \
+		|| (cat $(BUILD)/sample_field_walk_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_field_walk_headless.txt
+	$(SAMPLE_RUN) --saves $(BUILD)/sample_field_interact_saves --script $(SAMPLE_SCRIPTS)/field_interact.txt --frames 700 > $(BUILD)/sample_field_interact_headless.txt \
+		|| (cat $(BUILD)/sample_field_interact_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_field_interact_headless.txt
+	cp -R $(BUILD)/layout_assets $(BUILD)/field_prompt_assets
+	$(SAMPLE_RUN) --saves $(BUILD)/sample_field_prompt_saves --assets $(BUILD)/field_prompt_assets --script $(SAMPLE_SCRIPTS)/field_prompt.txt --frames 400 \
+		> $(BUILD)/sample_field_prompt_headless.txt || (cat $(BUILD)/sample_field_prompt_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_field_prompt_headless.txt
+	python3 -I $(SAMPLE_SCRIPTS)/make_field_data.py $(GAME)/data $(CORE)/data $(BUILD)/field_data
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/field_data/game/data --saves $(BUILD)/sample_field_actors_saves \
+		--script $(SAMPLE_SCRIPTS)/field_actors.txt --frames 900 > $(BUILD)/sample_field_actors_headless.txt || (cat $(BUILD)/sample_field_actors_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_field_actors_headless.txt
 	rm -rf $(BUILD)/sample_assets_saves
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_assets_saves --assets $(BUILD)/test_assets --script $(SAMPLE_ASSETS_SCRIPT) --frames 2000 > $(BUILD)/sample_assets_headless.txt \
 		|| (cat $(BUILD)/sample_assets_headless.txt; exit 1)
@@ -326,12 +374,42 @@ dotnet-test: dotnet
 		--assets $(BUILD)/cogway_assets --script $(SAMPLE_SCRIPTS)/assets_cogway.txt --frames 2600 > $(BUILD)/sample_assets_cogway_headless.txt \
 		|| (cat $(BUILD)/sample_assets_cogway_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_assets_cogway_headless.txt
+	# The battle's own window frame, extra poses on sheets and figures, and the party slots' status looks, on a copy of the
+	# override directory, since the run swaps files there, with --dev for the battles.
+	rm -rf $(BUILD)/sample_assets_battle_saves $(BUILD)/battle_assets
+	cp -R $(BUILD)/test_assets $(BUILD)/battle_assets
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_assets_battle_saves --assets $(BUILD)/battle_assets --script $(SAMPLE_SCRIPTS)/assets_battle.txt --frames 5000 \
+		> $(BUILD)/sample_assets_battle_headless.txt || (cat $(BUILD)/sample_assets_battle_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_assets_battle_headless.txt
 	# The bitmap fonts in English and Japanese, on a copy of the font directory, since the run swaps a metrics file.
 	rm -rf $(BUILD)/sample_assets_font_saves $(BUILD)/font_run_assets
 	cp -R $(BUILD)/font_assets $(BUILD)/font_run_assets
 	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_assets_font_saves --assets $(BUILD)/font_run_assets --script $(SAMPLE_SCRIPTS)/assets_font.txt --frames 2000 \
 		> $(BUILD)/sample_assets_font_headless.txt || (cat $(BUILD)/sample_assets_font_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_assets_font_headless.txt
+	# Backdrops by cell and by flag, the guide's sheet with two facings and its portraits by expression, and the title art (also at its natural size),
+	# on a copy of the override directory with alt/assets_more.json as its manifest, since the run swaps a file there; the
+	# portraits on the control tags data copy.
+	rm -rf $(BUILD)/sample_assets_more_saves $(BUILD)/sample_assets_portraits_saves $(BUILD)/more_assets
+	cp -R $(BUILD)/test_assets $(BUILD)/more_assets
+	cp $(BUILD)/more_assets/alt/assets_more.json $(BUILD)/more_assets/assets.json
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/more_assets
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_assets_more_saves --assets $(BUILD)/more_assets --script $(SAMPLE_SCRIPTS)/assets_more.txt --frames 1800 \
+		> $(BUILD)/sample_assets_more_headless.txt || (cat $(BUILD)/sample_assets_more_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_assets_more_headless.txt
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/tag_data/game/data --dev --saves $(BUILD)/sample_assets_portraits_saves \
+		--assets $(BUILD)/more_assets --script $(SAMPLE_SCRIPTS)/assets_portraits.txt --frames 700 > $(BUILD)/sample_assets_portraits_headless.txt \
+		|| (cat $(BUILD)/sample_assets_portraits_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_assets_portraits_headless.txt
+	# The dialogue's still pictures and a tag's values mapped to cues, on the control tags data copy with a copy of the
+	# override directory and alt/assets_more.json as its manifest, since the run swaps in a dialogue layout.
+	rm -rf $(BUILD)/sample_dialogue_pictures_saves $(BUILD)/pictures_assets
+	cp -R $(BUILD)/test_assets $(BUILD)/pictures_assets
+	cp $(BUILD)/pictures_assets/alt/assets_more.json $(BUILD)/pictures_assets/assets.json
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/tag_data/game/data --dev --saves $(BUILD)/sample_dialogue_pictures_saves \
+		--assets $(BUILD)/pictures_assets --script $(SAMPLE_SCRIPTS)/dialogue_pictures.txt --frames 1200 > $(BUILD)/sample_dialogue_pictures_headless.txt \
+		|| (cat $(BUILD)/sample_dialogue_pictures_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_dialogue_pictures_headless.txt
 	@for run in $(SAMPLE_DEV_SCRIPTS); do \
 		rm -rf $(BUILD)/sample_$${run}_saves; \
 		$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_$${run}_saves --script $(SAMPLE_SCRIPTS)/$$run.txt --frames 1500 > $(BUILD)/sample_$${run}_headless.txt \

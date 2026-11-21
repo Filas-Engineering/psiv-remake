@@ -7,12 +7,19 @@
 		"enemy_x": 420, "enemy_row_max": 4, "enemy_row_span": 640, "enemy_row_spacing_max": 200, "enemy_row_foot": 352, "enemy_row_stagger": 28,
 		"enemy_ranks_interleaved": 0, "enemy_rank_span": 640, "enemy_rank_spacing_max": 170, "enemy_front_foot": 376, "enemy_back_foot": 292,
 		"enemy_size": "enemy_count <= 3 ? 112 : enemy_count <= 5 ? 96 : 80",
-		"log_rows": 5, "log_wrap_margin": 48
+		"log_rows": 5, "log_wrap_margin": 48,
+		"label_max_width": 190, "label_y": 6, "label_h": 24, "label_pad": 8, "label_text_y": 3,
+		"enemy_bar_y": 34, "enemy_bar_w": 100, "enemy_bar_h": 6, "enemy_icons_y": 44, "icon_size": 20, "icon_gap": 2,
+		"pointer_size": 36, "pointer_y": 40, "pointer_bob": 5,
+		"number_size": 28, "number_critical_size": 36, "number_tp_size": 24, "number_word_size": 20,
+		"number_y": 26, "number_rise": 30, "number_gap": 6,
+		"effect_scale": 3, "effect_scale_large": 4,
+		"dev_badge_y": 376
 	},
 	"windows": [
 		{"name": "stage", "elements": [{"type": "slot", "slot": "stage"}]},
 		{"name": "effects", "elements": [{"type": "slot", "slot": "effects"}]},
-		{"name": "log", "visible": "log_shown", "x": 16, "y": 12, "w": "W - 32", "h": "5 * 22 + 24", "frame": "panel", "opacity": 0.94, "elements": [
+		{"name": "log", "visible": "log_shown", "x": 16, "y": 12, "w": "W - 32", "h": "5 * 22 + 24", "frame": "battle", "opacity": 0.94, "elements": [
 			{"type": "repeater", "items": "log_lines", "x": 20, "y": 12, "dy": 22, "template": [
 				{"type": "text", "value": "text", "size": "size_small", "color": "newest ? 'text' : 'dim'"}
 			]}
@@ -20,16 +27,16 @@
 		{"name": "banner", "visible": "banner != ''", "x": "(W - w) / 2", "y": "log_shown ? log.bottom + 12 : 20",
 			"w": "measure(fit(banner, W - 160, banner_big ? size_title : size_body), banner_big ? size_title : size_body) + 48", "h": "(banner_big ? size_title : size_body) + 22", "elements": [
 			{"type": "group", "alpha": "banner_alpha", "elements": [
-				{"type": "box", "w": "cw", "h": "ch", "opacity": 0.95},
+				{"type": "box", "frame": "battle", "w": "cw", "h": "ch", "opacity": 0.95},
 				{"type": "text", "value": "banner", "max_width": "W - 160", "x": 24, "y": 10, "size": "banner_big ? size_title : size_body", "color": "banner_cancel ? 'bad' : 'accent'"}
 			]}
 		]},
-		{"name": "party", "x": 16, "y": 420, "w": "W - 32 - 300 - 12", "h": "H - 420 - 16", "frame": "panel", "elements": [
+		{"name": "party", "x": 16, "y": 420, "w": "W - 32 - 300 - 12", "h": "H - 420 - 16", "frame": "battle", "elements": [
 			{"type": "repeater", "items": "party", "layout": "row", "x": 8, "y": 10, "dx": "(cw - 16) / max(1, len(party))", "template": [
 				{"type": "fill", "visible": "acting", "w": "(cw - 16) / max(1, len(party)) - 8", "h": "ch - 20", "color": "row"},
 				{"type": "outline", "visible": "acting || targeted", "w": "(cw - 16) / max(1, len(party)) - 8", "h": "ch - 20", "color": "accent", "alpha": "targeted ? target_pulse : 1"},
 				{"type": "image", "image": "portrait", "x": 8, "y": 8, "w": 64, "h": 64, "tint": "alive ? 'white' : '#50505c'"},
-				{"type": "text", "value": "name", "x": 80, "y": 12, "max_width": "(cw - 16) / max(1, len(party)) - 98", "color": "!alive ? 'dim' : acting ? 'accent' : 'text'"},
+				{"type": "text", "value": "name", "x": 80, "y": 12, "max_width": "(cw - 16) / max(1, len(party)) - 98", "color": "!alive ? 'dim' : acting ? 'accent' : status_color != '' ? status_color : 'text'"},
 				{"type": "slot", "slot": "icons", "x": 80, "y": 38},
 				{"type": "text", "visible": "state != ''", "value": "state", "x": 80, "y": 60, "max_width": "(cw - 16) / max(1, len(party)) - 98", "size": "size_small", "color": "alive ? 'dim' : 'bad'"},
 				{"type": "value_bar", "key": "ui.battle.hp", "value": "hp", "max": "max_hp", "x": 12, "y": 86, "w": "(cw - 16) / max(1, len(party)) - 32", "color": "hp_low ? 'bad' : 'good'"},
@@ -37,11 +44,11 @@
 				{"type": "text", "visible": "next != ''", "value": "next", "x": 12, "y": 180, "max_width": "(cw - 16) / max(1, len(party)) - 32", "style": "small_dim"}
 			]}
 		]},
-		{"name": "menu", "x": "W - 16 - w", "y": 420, "w": 300, "h": "H - 420 - 16", "frame": "panel", "title": {"value": "menu_title"}, "elements": [
+		{"name": "menu", "x": "W - 16 - w", "y": 420, "w": 300, "h": "H - 420 - 16", "frame": "battle", "title": {"value": "menu_title"}, "elements": [
 			{"type": "rows", "visible": "menu_shown", "items": "menu_items", "selected": "cursor", "text": "fit(text, 230, size_small)", "enabled": "usable", "x": 24, "y": 30, "w": 264,
 				"size": "size_small", "row_height": 28, "first": "clamp(cursor - (ch - 44) / 28 + 1, 0, max(0, len(menu_items) - (ch - 44) / 28))", "most": "(ch - 44) / 28"}
 		]},
-		{"name": "description", "visible": "description_shown", "x": 16, "y": "log_shown ? log.bottom + 12 : 16", "w": "W - 32", "h": "t(22) * 2 + 16", "frame": "panel", "opacity": 0.9, "elements": [
+		{"name": "description", "visible": "description_shown", "x": 16, "y": "log_shown ? log.bottom + 12 : 16", "w": "W - 32", "h": "t(22) * 2 + 16", "frame": "battle", "opacity": 0.9, "elements": [
 			{"type": "text", "visible": "description != ''", "value": "description", "x": 16, "y": 8, "wrap": true, "max_width": "cw - 32", "lines": 2, "line_height": "t(22)", "style": "small"},
 			{"type": "text", "visible": "description == ''", "key": "ui.common.no_description", "x": 16, "y": 8, "wrap": true, "max_width": "cw - 32", "lines": 2, "line_height": "t(22)", "style": "small_dim"}
 		]},
@@ -55,7 +62,7 @@
 			{"type": "text", "visible": "phase == 'ended'", "value": "outcome", "x": 24, "y": 34, "style": "title"},
 			{"type": "text", "visible": "phase == 'ended'", "key": "ui.battle.hint.continue", "args": ["key_confirm"], "x": 24, "y": 84}
 		]},
-		{"name": "result", "visible": "phase == 'ended'", "x": "(W - w) / 2", "y": "max(24, (party.y - h) / 2)", "w": 640, "h": "84 + len(result_lines) * 30", "frame": "panel",
+		{"name": "result", "visible": "phase == 'ended'", "x": "(W - w) / 2", "y": "max(24, (party.y - h) / 2)", "w": 640, "h": "84 + len(result_lines) * 30", "frame": "battle",
 			"title": "ui.battle.result.title", "elements": [
 			{"type": "text", "value": "outcome", "w": "cw", "align": "center", "y": 22, "style": "title"},
 			{"type": "repeater", "items": "result_lines", "x": 32, "y": 70, "dy": 30, "template": [

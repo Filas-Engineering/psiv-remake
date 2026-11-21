@@ -105,7 +105,7 @@ public sealed partial class SampleController
 	{
 		List<SaveSummary> saves = LoadableSaves();
 		Ui.Draw("load_game", s, t, UiData()
-			.Set("scene", (UiSlot)((_, _, _, _) => DrawTitleScene(t, art)))
+			.Set("scene", (UiSlot)((x, y, w, h) => DrawTitleScene(t, art, x, y, w, h)))
 			.Set("has_saves", saves.Count > 0)
 			.Set("slot_list", (UiSlot)((x, y, w, h) => DrawSlots(t, _list, x, y, w, h, saves.Select(v => v.Slot).ToList(), saves)))
 			.Set("toasts", (UiSlot)((x, y, w, h) => DrawToasts(t, t.Width - x - w, y + h, right: true)))

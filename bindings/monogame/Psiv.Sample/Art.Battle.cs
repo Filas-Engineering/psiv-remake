@@ -17,12 +17,29 @@ public sealed partial class Art
 
 	private readonly Dictionary<Theme, int> _generatedBackdrops = [];
 	private readonly Dictionary<string, int> _generatedIcons = [];
+	private readonly Dictionary<string, int> _generatedCommandIcons = [];
 
-	// The encounter's backdrop, else the terrain's under the party, else the area's, else the area kind's, with the key it
-	// came by ("generated" for none).
-	public (int Image, string Key) Backdrop(AreaKind kind, string area, string encounter, string terrain = "")
+	// The encounter's backdrop, else the first whose flag is set, else the area's backdrop map's at the party's cell, else
+	// the terrain's under the party, else the area's, else the area kind's, with the key it came by ("generated" for none).
+	public (int Image, string Key) Backdrop(AreaKind kind, string area, string encounter, string terrain, (int X, int Y) cell, Func<string, bool> flagSet)
 	{
-		foreach (string key in new[] { "encounter:" + encounter, "terrain:" + terrain, "area:" + area, "kind:" + FieldRenderer.KindName(kind).ToLowerInvariant() })
+		if (_backdrops.TryGetValue("encounter:" + encounter, out int byEncounter))
+		{
+			return (byEncounter, "encounter:" + encounter);
+		}
+		foreach ((string flag, string? only, string key) in _flagBackdrops)
+		{
+			if ((only is null || only == area) && flagSet(flag))
+			{
+				return (_backdrops[key], key);
+			}
+		}
+		if (_backdropMaps.TryGetValue(area, out BackdropMap? map) && cell.X >= 0 && cell.Y >= 0 && cell.X < map.Width && cell.Y < map.Height
+			&& map.Cells[cell.Y * map.Width + cell.X] is { } mapped)
+		{
+			return (_namedBackdrops[mapped.Backdrop], mapped.Key);
+		}
+		foreach (string key in new[] { "terrain:" + terrain, "area:" + area, "kind:" + FieldRenderer.KindName(kind).ToLowerInvariant() })
 		{
 			if (_backdrops.TryGetValue(key, out int found))
 			{
@@ -476,6 +493,56 @@ public sealed partial class Art
 		image = Add(StatusIconPixels(id));
 		_generatedIcons[id] = image;
 		return image;
+	}
+
+	// The picture of a command a member chose (AssetManifest.CommandNames): the manifest's, else a square in the command's
+	// color with its mark: a blade, a spark, a ring, two discs, a flask, a shield or an arrow.
+	public int CommandIcon(string command)
+	{
+		if (_commandIcons.TryGetValue(command, out int image) || _generatedCommandIcons.TryGetValue(command, out image))
+		{
+			return image;
+		}
+		image = Add(CommandIconPixels(command));
+		_generatedCommandIcons[command] = image;
+		return image;
+	}
+
+	public static Pixels CommandIconPixels(string command)
+	{
+		int kind = Array.IndexOf(AssetManifest.CommandNames, command);
+		Color body = FromHsv(kind / 7f, 0.55f, 0.6f), mark = new(250, 250, 244);
+		var p = new Pixels().Rect(1, 1, 14, 14, Outline).Rect(2, 2, 12, 12, body);
+		switch (command)
+		{
+		case "attack":
+			for (int i = 4; i <= 11; i++)
+			{
+				p[i, 15 - i] = mark;
+				p[i + 1, 15 - i] = mark;
+			}
+			p.Rect(4, 9, 3, 1, mark).Rect(6, 9, 1, 3, mark);
+			break;
+		case "technique":
+			p.Rect(7, 4, 2, 8, mark).Rect(4, 7, 8, 2, mark).Rect(5, 5, 1, 1, mark).Rect(10, 5, 1, 1, mark).Rect(5, 10, 1, 1, mark).Rect(10, 10, 1, 1, mark);
+			break;
+		case "skill":
+			p.Rect(5, 4, 6, 1, mark).Rect(5, 11, 6, 1, mark).Rect(4, 5, 1, 6, mark).Rect(11, 5, 1, 6, mark);
+			break;
+		case "combo":
+			p.Rect(4, 5, 4, 4, mark).Rect(8, 7, 4, 4, mark);
+			break;
+		case "item":
+			p.Rect(7, 3, 2, 3, mark).Rect(5, 6, 6, 6, mark);
+			break;
+		case "defend":
+			p.Rect(4, 4, 8, 5, mark).Rect(5, 9, 6, 1, mark).Rect(6, 10, 4, 1, mark).Rect(7, 11, 2, 1, mark);
+			break;
+		default:
+			p.Rect(4, 7, 7, 2, mark).Rect(9, 5, 1, 6, mark).Rect(10, 6, 1, 4, mark).Rect(11, 7, 1, 2, mark);
+			break;
+		}
+		return p;
 	}
 
 	public static Pixels StatusIconPixels(string id)

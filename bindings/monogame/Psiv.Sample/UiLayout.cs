@@ -25,7 +25,8 @@ public sealed class UiElement
 	public List<UiElement> C(string name) => Children.GetValueOrDefault(name) ?? [];
 }
 
-public sealed record UiTransition(string Kind, int Ms, string From);
+// Step: a growing window's size changes in whole multiples of this many logical pixels (0: smoothly).
+public sealed record UiTransition(string Kind, int Ms, string From, int Step = 0);
 
 public sealed class UiWindow
 {
@@ -57,15 +58,22 @@ public sealed class UiScreenLayout
 	public Dictionary<string, UiExpr> Params { get; } = [];
 	// What each control tag of a line does (`tags` in the file), by the tag's name.
 	public Dictionary<string, UiTag> Tags { get; } = [];
+	// How a status shows on the party's slots (`statuses` in the file), by status id; one left out keeps the plain look.
+	public Dictionary<string, UiStatusLook> Statuses { get; } = [];
 }
 
 // One entry of a `tags` table: the action (UiFields.TagActions), the id it uses instead of the tag's value, and the slot
-// a shown panel takes.
-public sealed record UiTag(string Action, string? Id, string? Slot);
+// a shown panel takes. Values: the id for each tag value, and Default the id for a value it leaves out.
+public sealed record UiTag(string Action, string? Id, string? Slot, IReadOnlyDictionary<string, string>? Values = null, string? Default = null);
+
+// A status on a party slot: the name's color while it is the highest-priority status with one (null: none), its icon
+// shown or not, and its priority, which also orders the icons.
+public sealed record UiStatusLook(string? Color, bool Icon, int Priority);
 
 public sealed record UiTextStyle(UiExpr? Size, string? Color, TextRole? Role);
 
-public sealed record UiFrameStyle(string Type, string? Image, int Border, int Scale, string? Color, int Thickness);
+// Skin: which of the UI skin's frames a generated frame takes, `menu` (ui.frame) or `battle` (ui.battle_frame, else ui.frame).
+public sealed record UiFrameStyle(string Type, string? Image, int Border, int Scale, string? Color, int Thickness, string Skin = "menu");
 
 public sealed record UiCursorStyle(string Type, string? Image, int Size, string Color, int BlinkMs);
 
@@ -84,8 +92,11 @@ public sealed class UiStyles
 	public Dictionary<string, UiCursorStyle> Cursors { get; } = [];
 	public Dictionary<string, int> Timings { get; } = [];
 	public Dictionary<string, Dictionary<string, int>> TimingTables { get; } = [];
+	public Dictionary<string, int> Params { get; } = [];
 
 	public int Timing(string key, int fallback) => Timings.TryGetValue(key, out int v) ? v : fallback;
+
+	public int Param(string key) => Params.TryGetValue(key, out int v) ? v : UiFields.StyleParams[key];
 }
 
 // A complete set of layouts: the styles and one layout per screen. The built-in set is the sample's own look; an asset
@@ -138,7 +149,7 @@ public sealed class UiLayoutSet
 
 	// The layouts of an asset directory: `files` maps each file name (without .json) present to its text; `required`
 	// when the manifest names the directory, so a missing screen file is a problem.
-	public static UiLayoutSet Load(string dir, bool required, List<AssetProblem> problems)
+	public static UiLayoutSet Load(string dir, bool required, List<AssetProblem> problems, IReadOnlySet<string>? statuses = null)
 	{
 		var texts = new Dictionary<string, string>();
 		string folder = Path.Combine(dir, Directory);
@@ -156,7 +167,7 @@ public sealed class UiLayoutSet
 				problems.Add(new AssetProblem($"{Directory}/{name}.json", "-", "missing file: the built-in layout stands in"));
 			}
 		}
-		return Parse(texts, Defaults, problems, builtIn: false);
+		return Parse(texts, Defaults, problems, builtIn: false, statuses);
 	}
 
 	public static IEnumerable<string> FilesIn(string dir)
@@ -165,7 +176,7 @@ public sealed class UiLayoutSet
 		return System.IO.Directory.Exists(folder) ? System.IO.Directory.GetFiles(folder, "*.json").Select(f => Path.Combine(Directory, Path.GetFileName(f))) : [];
 	}
 
-	private static UiLayoutSet Parse(Dictionary<string, string> texts, UiLayoutSet? fallback, List<AssetProblem> problems, bool builtIn)
+	private static UiLayoutSet Parse(Dictionary<string, string> texts, UiLayoutSet? fallback, List<AssetProblem> problems, bool builtIn, IReadOnlySet<string>? statuses = null)
 	{
 		UiStyles styles = fallback?.Styles ?? new UiStyles();
 		bool stylesFromFile = false;
@@ -198,7 +209,7 @@ public sealed class UiLayoutSet
 				continue;
 			}
 			int before = problems.Count;
-			var reader = new UiReader(file, problems, styles, fields);
+			var reader = new UiReader(file, problems, styles, fields, statuses);
 			UiScreenLayout? screen = reader.Read(text, root => reader.Screen(root, name, file));
 			if (screen is not null && problems.Count == before)
 			{
@@ -224,11 +235,12 @@ public sealed class UiLayoutSet
 	}
 }
 
-// Reads one layout file, reporting each problem as the manifest's reader does: file, entry, reason.
-internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyles? styles, UiFields.ScreenFields? fields)
+// Reads one layout file, reporting each problem as the manifest's reader does: file, entry, reason. `statuses` are the
+// game's status ids a `statuses` table may name; null skips that check (the built-in files).
+internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyles? styles, UiFields.ScreenFields? fields, IReadOnlySet<string>? statuses = null)
 {
 	private static readonly string[] Anchors = ["top_left", "top", "top_right", "left", "center", "right", "bottom_left", "bottom", "bottom_right"];
-	private static readonly string[] TransitionKinds = ["none", "fade", "grow", "slide"];
+	private static readonly string[] TransitionKinds = ["none", "fade", "grow", "grow_x", "grow_y", "slide"];
 	private static readonly string[] Edges = ["left", "right", "top", "bottom"];
 	private static readonly string[] Modes = ["fit", "integer", "stretch"];
 	private static readonly string[] Filters = ["auto", "point", "linear"];
@@ -426,7 +438,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		{
 			return null;
 		}
-		Known(root, "-", ["version", "resolution", "scaling", "colors", "sizes", "text_styles", "frames", "cursors", "timings"]);
+		Known(root, "-", ["version", "resolution", "scaling", "colors", "sizes", "text_styles", "frames", "cursors", "timings", "params"]);
 		Version(root);
 		var st = new UiStyles();
 		if (root.TryGetProperty("resolution", out JsonElement res) && Object(res, "resolution"))
@@ -497,17 +509,25 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 				{
 					continue;
 				}
-				Known(p.Value, entry, ["type", "image", "border", "scale", "color", "thickness"]);
+				Known(p.Value, entry, ["type", "image", "border", "scale", "color", "thickness", "skin"]);
 				string type = Str(p.Value, "type", entry, FrameTypes) ?? "generated";
 				string? image = Str(p.Value, "image", entry);
 				if (type == "nine_slice" && image is null)
 				{
 					Problem(entry, "a nine_slice frame needs 'image'");
 				}
+				string? skin = Str(p.Value, "skin", entry, ["menu", "battle"]);
+				if (skin is not null && type != "generated")
+				{
+					Problem(entry, "'skin' is for a generated frame only");
+				}
 				string? color = p.Value.TryGetProperty("color", out JsonElement cv) ? reader.Color(cv, entry, "color", out _) : null;
-				st.Frames[p.Name] = new UiFrameStyle(type, image, Int(p.Value, "border", entry, 4, 1, 256), Int(p.Value, "scale", entry, 1, 1, 16), color, Int(p.Value, "thickness", entry, 2, 1, 64));
+				st.Frames[p.Name] = new UiFrameStyle(type, image, Int(p.Value, "border", entry, 4, 1, 256), Int(p.Value, "scale", entry, 1, 1, 16), color, Int(p.Value, "thickness", entry, 2, 1, 64),
+					skin ?? "menu");
 			}
 		}
+		// The built-in battle layouts name it, so a styles file that leaves it out still draws their windows.
+		st.Frames.TryAdd("battle", new UiFrameStyle("generated", null, 4, 1, null, 2, "battle"));
 		if (root.TryGetProperty("cursors", out JsonElement cursors) && Object(cursors, "cursors"))
 		{
 			foreach (JsonProperty p in cursors.EnumerateObject())
@@ -562,6 +582,15 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 				}
 			}
 		}
+		if (root.TryGetProperty("params", out JsonElement ps) && Object(ps, "params"))
+		{
+			Known(ps, "params", UiFields.StyleParams.Keys);
+			foreach (JsonProperty p in ps.EnumerateObject().Where(p => UiFields.StyleParams.ContainsKey(p.Name)))
+			{
+				// The field's cell divides every field position.
+				st.Params[p.Name] = p.Name == "field_cell" ? Int(ps, p.Name, "params", Art.Tile, 8, 256) : Int(ps, p.Name, "params", 0, 0, 4096);
+			}
+		}
 		foreach (string needed in new[] { "panel", "none" }.Where(n => !st.Frames.ContainsKey(n)))
 		{
 			Problem("frames", $"needs a frame named '{needed}'");
@@ -575,7 +604,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		{
 			return null;
 		}
-		Known(root, "-", ["version", "windows", "params", "tags"]);
+		Known(root, "-", ["version", "windows", "params", "tags", "statuses"]);
 		Version(root);
 		var screen = new UiScreenLayout { Name = name, Source = source };
 		if (!root.TryGetProperty("windows", out JsonElement windows) || windows.ValueKind != JsonValueKind.Array)
@@ -619,6 +648,17 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 				Tags(tags, screen);
 			}
 		}
+		if (root.TryGetProperty("statuses", out JsonElement looks) && Object(looks, "statuses"))
+		{
+			if (!fields.Statuses)
+			{
+				Problem("statuses", "the screen takes no statuses table");
+			}
+			else
+			{
+				Statuses(looks, screen);
+			}
+		}
 		int index = 0;
 		foreach (JsonElement w in windows.EnumerateArray())
 		{
@@ -653,7 +693,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 			{
 				continue;
 			}
-			Known(p.Value, entry, ["action", "id", "slot"]);
+			Known(p.Value, entry, ["action", "id", "slot", "values", "default"]);
 			string? action = Str(p.Value, "action", entry, UiFields.TagActions);
 			if (action is null)
 			{
@@ -668,7 +708,56 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 			{
 				Problem(entry, "field 'slot' is for panel_show only");
 			}
-			screen.Tags[p.Name] = new UiTag(action, Str(p.Value, "id", entry), slot);
+			string? id = Str(p.Value, "id", entry);
+			Dictionary<string, string>? values = null;
+			if (p.Value.TryGetProperty("values", out JsonElement vs) && Object(vs, entry + ".values"))
+			{
+				values = [];
+				foreach (JsonProperty v in vs.EnumerateObject())
+				{
+					if (v.Value.ValueKind != JsonValueKind.String || v.Value.GetString()!.Length == 0)
+					{
+						Problem($"{entry}.values.{v.Name}", "must be a non-empty string: the id the tag's value stands for");
+						continue;
+					}
+					values[v.Name] = v.Value.GetString()!;
+				}
+			}
+			string? fallback = Str(p.Value, "default", entry);
+			if ((values is not null || fallback is not null) && action is "music_stop" or "panel_clear" or "picture_clear" or "portrait_off" or "log")
+			{
+				Problem(entry, $"fields 'values' and 'default' are for an action that takes an id, not {action}");
+			}
+			if (id is not null && (values is not null || fallback is not null))
+			{
+				Problem(entry, "field 'id' leaves the tag's value unread: give 'values' and 'default' without it");
+			}
+			screen.Tags[p.Name] = new UiTag(action, id, slot, values, fallback);
+		}
+	}
+
+	private void Statuses(JsonElement looks, UiScreenLayout screen)
+	{
+		foreach (JsonProperty p in looks.EnumerateObject())
+		{
+			string entry = $"statuses.{p.Name}";
+			if (statuses is not null && (!statuses.Contains(p.Name) || p.Name == "defeated"))
+			{
+				Problem(entry, $"unknown status '{p.Name}': not a status of the game data the party's slots show");
+				continue;
+			}
+			if (!Object(p.Value, entry))
+			{
+				continue;
+			}
+			Known(p.Value, entry, ["color", "icon", "priority"]);
+			string? color = Str(p.Value, "color", entry);
+			if (color is not null && !IsColorLiteral(color) && !(styles?.Colors.ContainsKey(color) ?? false))
+			{
+				Problem(entry, $"field 'color' must be a color name of the styles, #rrggbb or #rrggbbaa: '{color}'");
+			}
+			string icon = Str(p.Value, "icon", entry, ["picture", "none"]) ?? "picture";
+			screen.Statuses[p.Name] = new UiStatusLook(color, icon == "picture", Int(p.Value, "priority", entry, 0, 0, 100));
 		}
 	}
 
@@ -683,8 +772,14 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		{
 			return null;
 		}
-		Known(t, tEntry, ["kind", "ms", "from"]);
-		return new UiTransition(Str(t, "kind", tEntry, TransitionKinds) ?? "none", Int(t, "ms", tEntry, 200, 0, 10000), Str(t, "from", tEntry, Edges) ?? "bottom");
+		Known(t, tEntry, ["kind", "ms", "from", "step"]);
+		string kind = Str(t, "kind", tEntry, TransitionKinds) ?? "none";
+		int step = Int(t, "step", tEntry, 0, 0, 1024);
+		if (t.TryGetProperty("step", out _) && !kind.StartsWith("grow", StringComparison.Ordinal))
+		{
+			Problem(tEntry, "field 'step' is for grow, grow_x and grow_y only");
+		}
+		return new UiTransition(kind, Int(t, "ms", tEntry, 200, 0, 10000), Str(t, "from", tEntry, Edges) ?? "bottom", step);
 	}
 
 	private UiWindow? Window(JsonElement w, string entry)

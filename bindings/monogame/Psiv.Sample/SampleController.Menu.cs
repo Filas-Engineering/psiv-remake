@@ -183,13 +183,16 @@ public sealed partial class SampleController
 	private void DrawMenu(IDrawSurface s, IDrawSurface t, Art art)
 	{
 		Ui.Draw("menu", s, t, UiData()
-			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "menu")))
 			.Set("tabs", MenuTabs.Select(tab => T("ui.menu.tab." + tab.ToLowerInvariant())).ToList())
 			.Set("tab", _tab)
 			.Set("money", T("ui.common.money", _s.WorldInfo().Money))
 			.Set("page", (UiSlot)((x, y, w, h) => DrawMenuPage(s, t, art, x, y, w, h)))
 			.Set("hint", MenuHint())
-			.Set("toasts", (UiSlot)((x, y, w, h) => DrawToasts(s, s.Width - x - w, y + h, right: true))));
+			.Set("toasts", (UiSlot)((x, y, w, h) => DrawToasts(s, s.Width - x - w, y + h, right: true)))
+			.Set("money_value", _s.WorldInfo().Money)
+			.Set("party", LineupMembers().Select(m => new UiContext().Set("name", m.Name).Set("level", m.Level).Set("hp", m.Hp).Set("max_hp", m.MaxHp)
+				.Set("tp", m.Tp).Set("max_tp", m.MaxTp).Set("portrait", art.Portrait("", m.Id)).Set("alive", m.Hp > 0)).ToList()));
 	}
 
 	// The data of a layout drawn into the rectangle another layout's slot gave it.

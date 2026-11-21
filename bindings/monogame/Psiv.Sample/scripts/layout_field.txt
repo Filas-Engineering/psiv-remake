@@ -47,8 +47,13 @@ expect screen NameEntry
 expect state windows name_entry/backdrop 0 0 640x480, name_entry/box 40 46 560x384
 shot name_entry.png
 pressuntil Enter Field 400
-# The notices of the guide's scene go before the stall opens.
-wait 180
+# The guide's scene's notices at the top right, clear of the HUD card.
+wait 2
+expect toast Test Medic joins the party.
+expect state overlaps none
+shot field_toasts.png
+# The notices go before the stall opens.
+wait 178
 
 # The stall: the stock, the stall picture, the description and the comparison at the right.
 cmd walk stall_front
@@ -58,6 +63,9 @@ press Enter
 expect screen Shop
 expect state selected Tonic
 expect state windows shop/backdrop 0 0 640x480, shop/box 16 46 608x426
+# The stall's keeper from the manifest's keepers, over a field dimmed more than the built-in set does.
+expect state keeper dockhand
+expect state backdropdim 0.75
 shot shop_buy.png
 press Right
 expect state windows shop/backdrop 0 0 640x480, shop/box 16 46 608x426
@@ -72,11 +80,18 @@ wait 3
 press Enter
 expect screen Inn
 expect state windows inn/box 40 46 560x92
+expect state keeper lodgekeeper
 shot inn.png
 press Escape
 expect screen Field
 press P
 expect screen Pause
+# The pause box opens sideways in whole 12-pixel steps, centered where it ends.
+expect state window.pause/box pause/box 516 192 12x96
+wait 5
+expect state window.pause/box pause/box 480 192 84x96
+shot pause_opening.png
+wait 8
 expect state windows pause/scene 0 0 640x480, pause/hud 6 6 126x34, pause/dim 0 0 640x480, pause/box 432 192 180x96, pause/hint 0 464 640x16
 shot pause.png
 press Escape

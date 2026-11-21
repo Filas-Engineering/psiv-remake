@@ -38,9 +38,16 @@ public sealed partial class SampleController
 	private readonly BattleShow _show = new();
 	// The terrain of the cell the party stood on when the battle began (floor, water, soft), for the backdrop.
 	private string _battleTerrain = "";
+	// The cell the party stood on when the battle began, for the area's backdrop map.
+	private (int X, int Y) _battleCell = (-1, -1);
 	// Rounds whose playback was compared with the session as it ended, and what differed.
 	private int _syncChecks;
 	private readonly List<string> _syncProblems = [];
+
+	private string _probeEnemyGroups = "none";
+	private string _probeCommands = "-";
+	private string _probeEnemyMarks = "-";
+	private string _probePlaces = "none";
 
 	// Every presentation step started, by its description, for headless expectations.
 	public List<string> PresentedSteps { get; } = [];
@@ -105,6 +112,7 @@ public sealed partial class SampleController
 			CellFlags.Floor => "floor",
 			_ => "",
 		} : "";
+		_battleCell = _s.Field() is { } at ? (at.Info.LeaderX, at.Info.LeaderY) : (-1, -1);
 		string enemies = ListText(_s.Combatants().Where(c => c.Side == Side.Enemy).Select(c => c.Label));
 		BattleStep intro = Context().Step(StepKind.Intro, enemies, "intro " + enemies, []);
 		intro.Lines.Add(T("ui.battle.log.enemies", enemies));
@@ -413,6 +421,9 @@ public sealed partial class SampleController
 		}
 	}
 
+	private string _probePartyStatus = "-";
+	private string _probeFigurePoses = "none";
+
 	// The battle probes `expect state` reads.
 	private string BattleState(string key) => key switch
 	{
@@ -436,6 +447,18 @@ public sealed partial class SampleController
 		// The command menu's rows for the phase, the one under the cursor in brackets.
 		"battlemenu" => _battle.Active && MenuRows(StageCombatants()) is { } menu
 			? string.Join(" | ", menu.Items.Select((item, i) => i == _cursor ? $"[{item}]" : item)) : "-",
+		// Each party combatant as its slot shows its statuses: the name's color from the layout's statuses table and the icons.
+		"partystatus" => _probePartyStatus,
+		// Each figure the last frame drew in a pose other than idle, by label: `Gel Mite A attack, Test Fighter flourish`.
+		"figureposes" => _probeFigurePoses,
+		// The enemies standing as the layouts' `enemy_groups` lists them: `Gel Mite x2, Rust Hound`.
+		"enemygroups" => _probeEnemyGroups,
+		// Each party combatant's chosen command as the `command` field names it, `-` for none.
+		"commands" => _probeCommands,
+		// What the last frame drew under the enemies: `labels N bars N`.
+		"enemymarks" => _probeEnemyMarks,
+		// Each party figure drawn: its name, the middle x and the feet's y.
+		"partyplaces" => _probePlaces,
 		_ => FrontState(key),
 	};
 }
