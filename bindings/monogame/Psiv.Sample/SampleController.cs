@@ -61,10 +61,11 @@ public sealed partial class SampleController
 	// `controlsPath` is where the bindings load from and save to; null keeps the defaults and saves nothing. Without
 	// `audio` nothing plays and the calls are only recorded. `assetDir` is the asset directory, whose files replace the
 	// generated pictures and sounds they name; problems in it are logged and the generated ones stand in. `dev` turns the
-	// developer tools on; they reload and preview from `dataDir`.
+	// developer tools on; they reload and preview from `dataDir`. `battleLayout` overrides the presentation table's.
 	public SampleController(GameSession session, GameData data, Action<string>? log = null, string? controlsPath = null, IAudioOut? audio = null, string? assetDir = null,
-		bool dev = false, string? dataDir = null)
+		bool dev = false, string? dataDir = null, BattleLayout? battleLayout = null)
 	{
+		_layoutOverride = battleLayout;
 		_s = session;
 		_dev = dev;
 		_dataDir = dataDir;

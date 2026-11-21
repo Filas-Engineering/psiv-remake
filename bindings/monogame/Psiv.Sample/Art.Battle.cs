@@ -123,6 +123,188 @@ public sealed partial class Art
 		return figure;
 	}
 
+	// The back poses, in the order of a generated back figure's frames.
+	private enum BackPose { Idle, Attack, Cast, Item, Defend, Hurt, Defeat }
+
+	// A party member seen from behind for the front layout: the manifest's back figure, else the person's look as head and
+	// shoulders (standing, an arm raised to strike, both arms up to cast, a hand up with an item, braced, knocked aside
+	// when hurt, slumped when fallen).
+	public Figure BackFigure(string id)
+	{
+		if (_backFigures.TryGetValue(id, out Figure? figure))
+		{
+			return figure;
+		}
+		ActorLook look = LookFor(id);
+		figure = new Figure([.. Enum.GetValues<BackPose>().Select(pose => Add(BackPixels(look, pose)))], new FrameRun([0], [400]), new Dictionary<string, FrameRun>
+		{
+			["attack"] = new([1, 0], [140, 140]),
+			["cast"] = new([2], [280]),
+			["item"] = new([3], [280]),
+			["defend"] = new([4], [400]),
+			["hurt"] = new([5], [300]),
+			["defeat"] = new([6], [400]),
+		});
+		_backFigures[id] = figure;
+		return figure;
+	}
+
+	// A vehicle seen from behind: the manifest's back figure for its id, else its north frames bobbing.
+	public Figure VehicleBackFigure(string id)
+	{
+		if (!_backFigures.TryGetValue(id, out Figure? figure))
+		{
+			figure = new Figure([GeneratedVehicle(id, Direction.North, 0), GeneratedVehicle(id, Direction.North, 1)], new FrameRun([0, 1], [VehicleFrameMs, VehicleFrameMs]),
+				new Dictionary<string, FrameRun> { ["attack"] = new([1, 0], [140, 140]) });
+			_backFigures[id] = figure;
+		}
+		return figure;
+	}
+
+	private static readonly string[] BackBustRows =
+	[
+		"................",
+		"................",
+		"................",
+		".....oooooo.....",
+		"....ohhhhhho....",
+		"...ohhhhhhhho...",
+		"...ohhhhhhhho...",
+		"...ohhhhhhhho...",
+		"...ohhhhhhhho...",
+		"....ohhhhhho....",
+		"...ooaaaaaaoo...",
+		".oocccaaaacccoo.",
+		"odccccccccccccdo",
+		"odccccccccccccdo",
+		"odccccccccccccdo",
+		"odccccccccccccdo",
+	];
+
+	private static Pixels BackPixels(ActorLook look, BackPose pose)
+	{
+		char[][] g = BackBustRows.Select(r => r.ToCharArray()).ToArray();
+		void Swap(int y, char from, char to, int x0 = 0, int x1 = Pixels.Size - 1)
+		{
+			for (int x = x0; x <= x1; x++)
+			{
+				if (g[y][x] == from)
+				{
+					g[y][x] = to;
+				}
+			}
+		}
+		switch (look.Head)
+		{
+		case 1:
+			Swap(4, 'h', 'p');
+			Swap(5, 'h', 'p');
+			Swap(6, 'h', 'q');
+			break;
+		case 2:
+			for (int y = 4; y <= 9; y++)
+			{
+				Swap(y, 'h', 'p');
+			}
+			Swap(10, 'a', 'q');
+			break;
+		case 3:
+			// Hair down the back, over the scarf and the coat.
+			for (int y = 10; y <= 13; y++)
+			{
+				Swap(y, 'a', 'h', 5, 10);
+				Swap(y, 'c', 'h', 5, 10);
+			}
+			break;
+		case 4:
+			Swap(6, 'h', 'p');
+			break;
+		}
+		// The hair's lower rows in shade, the ears at its sides and the nape under it, so the back of the head has shape;
+		// a hood or long hair covers ears and nape.
+		Swap(8, 'h', 'g', 5, 10);
+		Swap(9, 'h', 'g');
+		if (look.Head is not (2 or 3))
+		{
+			g[6][2] = g[7][2] = g[6][13] = g[7][13] = 's';
+			g[6][1] = g[7][1] = g[6][14] = g[7][14] = 'o';
+			g[5][2] = g[5][13] = g[8][2] = g[8][13] = 'o';
+			Swap(9, 'g', 's', 6, 9);
+		}
+		switch (look.Body)
+		{
+		case 1:
+			// The apron's strings across the back.
+			Swap(14, 'c', 'w', 2, 13);
+			break;
+		case 2:
+			Swap(15, 'c', 'k');
+			Swap(15, 'd', 'k');
+			break;
+		}
+		switch (pose)
+		{
+		case BackPose.Attack:
+			ArmUp(g, 13, 0, null);
+			break;
+		case BackPose.Cast:
+			ArmUp(g, 13, 1, null);
+			ArmUp(g, 1, 1, null);
+			break;
+		case BackPose.Item:
+			ArmUp(g, 13, 4, 'w');
+			break;
+		case BackPose.Defend:
+			g = ShiftRows(g, 3, 9, 0, 1);
+			break;
+		case BackPose.Hurt:
+			g = ShiftRows(g, 3, 9, 1, 0);
+			break;
+		case BackPose.Defeat:
+			g = ShiftRows(g, 3, 9, 0, 3);
+			break;
+		}
+		return Pixels.FromTemplate(g.Select(r => new string(r)).ToArray(), ActorPalette(look));
+	}
+
+	// An arm two columns wide (from column x) raised from the shoulder, its hand at row `top`; `held` puts a thing of that
+	// color in the hand.
+	private static void ArmUp(char[][] g, int x, int top, char? held)
+	{
+		void Edge(int px, int py)
+		{
+			if (px is >= 0 and < Pixels.Size && py is >= 0 and < Pixels.Size && g[py][px] == '.')
+			{
+				g[py][px] = 'o';
+			}
+		}
+		int outer = x < Pixels.Size / 2 ? x : x + 1;
+		for (int y = top; y <= 11; y++)
+		{
+			char c = y < top + 2 ? 's' : 'c';
+			g[y][x] = c;
+			g[y][x + 1] = y >= top + 2 && x + 1 == outer ? 'd' : c;
+			if (y >= top + 2 && x == outer)
+			{
+				g[y][x] = 'd';
+			}
+			Edge(x - 1, y);
+			Edge(x + 2, y);
+		}
+		Edge(x, top - 1);
+		Edge(x + 1, top - 1);
+		if (held is { } thing && top >= 3)
+		{
+			g[top - 2][x] = g[top - 2][x + 1] = g[top - 1][x] = g[top - 1][x + 1] = thing;
+			Edge(x, top - 3);
+			Edge(x + 1, top - 3);
+			Edge(x - 1, top - 2);
+			Edge(x + 2, top - 2);
+			Edge(x - 1, top - 1);
+			Edge(x + 2, top - 1);
+		}
+	}
+
 	// The person seen from the front, turned on its side and lying on the ground.
 	private static Pixels Lying(ActorLook look)
 	{

@@ -48,7 +48,8 @@ public sealed record PoseEntry(Dictionary<Direction, int[]> Frames, int[] Ms, bo
 
 public sealed record CharacterEntry(string Id, GridImage Image, Dictionary<Direction, int[]> Walk, Dictionary<string, PoseEntry> Poses, Dictionary<string, string> Animations);
 
-public sealed record FigureEntry(string Id, bool Enemy, GridImage Image, FrameRun Idle, Dictionary<string, FrameRun> Animations);
+// Back: the party member or vehicle seen from behind, as the front battle layout draws it.
+public sealed record FigureEntry(string Id, bool Enemy, GridImage Image, FrameRun Idle, Dictionary<string, FrameRun> Animations, bool Back);
 
 public sealed record FieldEnemyEntry(string Encounter, GridImage Image, FrameRun Run);
 
@@ -497,7 +498,7 @@ public sealed class AssetManifest
 			}
 			Once(m.Tilesets, t => t.Kind is null ? "area " + t.Area : "kind " + t.Kind, "tilesets");
 			Once(m.Characters, c => c.Id, "characters");
-			Once(m.Figures, f => (f.Enemy ? "enemy " : "party member ") + f.Id, "figures");
+			Once(m.Figures, f => (f.Enemy ? "enemy " : f.Back ? "party member from behind " : "party member ") + f.Id, "figures");
 			Once(m.FieldEnemies, f => f.Encounter, "field_enemies");
 			Once(m.Vehicles, v => v.Id, "vehicles");
 			Once(m.Backdrops, b => b.Kind is not null ? "kind " + b.Kind : b.Area is not null ? "area " + b.Area : "encounter " + b.Encounter, "backdrops");
@@ -655,12 +656,21 @@ public sealed class AssetManifest
 		private void Figure(JsonElement e, string entry)
 		{
 			int before = m.Problems.Count;
-			Fields(e, entry, "id", "side", "image", "frame", "idle", "animations");
+			Fields(e, entry, "id", "side", "view", "image", "frame", "idle", "animations");
 			string? id = Str(e, "id", entry);
 			string? side = Str(e, "side", entry);
+			string view = Str(e, "view", entry, required: false) ?? "side";
 			if (side is not null && side is not ("party" or "enemy"))
 			{
 				Problem(entry, $"unknown side '{side}': party or enemy");
+			}
+			if (view is not ("side" or "back"))
+			{
+				Problem(entry, $"unknown view '{view}': side or back");
+			}
+			else if (view == "back" && side == "enemy")
+			{
+				Problem(entry, "view 'back' is for party members and vehicles only");
 			}
 			if (id is not null && side == "party" && !data.Characters.Contains(id) && !data.Vehicles.Contains(id))
 			{
@@ -694,7 +704,7 @@ public sealed class AssetManifest
 			}
 			if (id is not null && image is not null && idle is not null && side is "party" or "enemy" && m.Problems.Count == before)
 			{
-				m.Figures.Add(new FigureEntry(id, side == "enemy", image, idle, animations));
+				m.Figures.Add(new FigureEntry(id, side == "enemy", image, idle, animations, view == "back"));
 			}
 		}
 

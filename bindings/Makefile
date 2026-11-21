@@ -68,6 +68,7 @@ SAMPLE_PANELS_SCRIPT = monogame/Psiv.Sample/scripts/panels.txt
 SAMPLE_AUDIO_SCRIPT = monogame/Psiv.Sample/scripts/audio.txt
 SAMPLE_WINDOW_SCRIPT = monogame/Psiv.Sample/scripts/window.txt
 SAMPLE_BATTLE_SCRIPT = monogame/Psiv.Sample/scripts/battle.txt
+SAMPLE_BATTLE_FRONT_SCRIPT = monogame/Psiv.Sample/scripts/battle_front.txt
 SAMPLE_VEHICLES_SCRIPT = monogame/Psiv.Sample/scripts/vehicles.txt
 SAMPLE_ASSETS_SCRIPT = monogame/Psiv.Sample/scripts/assets.txt
 SAMPLE_RELOAD_SCRIPT = monogame/Psiv.Sample/scripts/hot_reload.txt
@@ -204,6 +205,13 @@ dotnet-test: dotnet
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_battle_saves --script $(SAMPLE_BATTLE_SCRIPT) --frames 5200 --frame-digests $(BUILD)/digests_battle.txt > $(BUILD)/sample_battle_headless.txt \
 		|| (cat $(BUILD)/sample_battle_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_battle_headless.txt
+	# The front layout's run needs an encounter of six enemies, so it plays a copy of the data with one added, and --dev
+	# for the commands that reach its moments.
+	rm -rf $(BUILD)/sample_battle_front_saves
+	python3 -I $(SAMPLE_SCRIPTS)/make_front_data.py $(GAME)/data $(CORE)/data $(BUILD)/front_data
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_battle_front_saves \
+		--script $(SAMPLE_BATTLE_FRONT_SCRIPT) --frames 5600 > $(BUILD)/sample_battle_front_headless.txt || (cat $(BUILD)/sample_battle_front_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_battle_front_headless.txt
 	rm -rf $(BUILD)/sample_vehicles_saves
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_vehicles_saves --script $(SAMPLE_VEHICLES_SCRIPT) --frames 3200 --frame-digests $(BUILD)/digests_vehicles.txt > $(BUILD)/sample_vehicles_headless.txt \
 		|| (cat $(BUILD)/sample_vehicles_headless.txt; exit 1)

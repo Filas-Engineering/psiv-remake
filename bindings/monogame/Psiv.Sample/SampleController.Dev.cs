@@ -562,7 +562,7 @@ public sealed partial class SampleController
 			DevLog("refused: " + error.Text);
 			return false;
 		}
-		var controller = new SampleController(scratch, _data, _log, null, new RecordingAudio(), _assetDir);
+		var controller = new SampleController(scratch, _data, _log, null, new RecordingAudio(), _assetDir, battleLayout: _layoutOverride);
 		_preview = new EventPreview(id, scratch, controller);
 		DevLog($"previewing event {id}: PageDown next panel, PageUp previous, End stop");
 		return true;
@@ -880,11 +880,13 @@ public sealed partial class SampleController
 		string badge = (marked ? "DEV  marked" : "DEV") + (_preview is { } p
 			? $"   preview: event {p.Id}, panels shown {p.Controller._panelShows}   PgDn next panel   PgUp previous   End stop"
 			: _stageEntry is { } entry ? $"   preview: battle presentation {entry}   PgDn play again   End stop" : "");
-		// The battle's banners take the top middle and the enemies the left, so there the badge sits at the right, just above
-		// the party panels.
+		// The battle's banners take the top middle, so there the badge sits at the right: in the side layout just above the
+		// party panels, in the front one in the keys' line under the strip, or at the top while a preview's long badge
+		// would run into the keys.
 		bool battle = Screen == Screen.Battle;
 		int x = battle ? s.Width - s.Measure(badge, Style.Small) - 40 : (s.Width - s.Measure(badge, Style.Small)) / 2 - 12;
-		Style.Plate(s, badge, x, battle ? BattlePanelTop - 44 : 12, marked ? Style.Bad : badge.Length > 12 ? Style.Accent : Style.Dim);
+		int y = !battle ? 12 : _stageLayout == BattleLayout.Side ? BattlePanelTop - 44 : badge.Length > 12 ? 12 : s.Height - HintBarHeight + 1;
+		Style.Plate(s, badge, x, y, marked ? Style.Bad : badge.Length > 12 ? Style.Accent : Style.Dim);
 		if (_paused || Speed != 1f)
 		{
 			string speed = _paused ? $"PAUSED   {Key(StepKey)} step   {Key(PauseKey)} resume" : $"speed x{Speed.ToString(CultureInfo.InvariantCulture)}";

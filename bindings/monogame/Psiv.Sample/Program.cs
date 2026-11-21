@@ -35,6 +35,7 @@ public static class Program
 		"savefile damage SLOT | click X Y | clickcell X Y | expect letterbox W H X Y WIDTH HEIGHT PERCENT | window W H | window fullscreen |\n" +
 		"assets reload | assets swap FILE WITH | expect asset KEY file|generated | present mark | expect present STEP \"|\" ... | expect presenthas TEXT |\n" +
 		"waitstate MAXFRAMES KEY VALUE | waitstatehas MAXFRAMES KEY TEXT | dev CONSOLE_COMMAND | devrefused CONSOLE_COMMAND | datafile swap FILE WITH |\n" +
+			"battlelayout front|side|data |\n" +
 		"dump | shot FILE.png (window only) | # comment.\n" +
 		"Keys are MonoGame Keys names, buttons MonoGame Buttons names, actions the sample's GameAction names.\n" +
 		"Exit codes: 0 done, 1 a failure, 2 bad arguments.\n";
@@ -60,6 +61,7 @@ public static class Program
 		bool checkAssets = false;
 		bool watchAssets = false;
 		bool dev = false;
+		BattleLayout? battleLayout = null;
 		for (int i = 0; i < args.Length; i++)
 		{
 			string? Next() => i + 1 < args.Length ? args[++i] : null;
@@ -80,6 +82,7 @@ public static class Program
 			case "--check-assets": checkAssets = true; break;
 			case "--watch-assets": watchAssets = true; break;
 			case "--dev": dev = true; break;
+			case "--battle-layout" when BattlePresentation.ParseLayout(Next()) is { } layout: battleLayout = layout; break;
 			case "--export-placeholders": export = Next(); break;
 			case "--frame-digests": digests = Next(); break;
 			case "--screenshot": screenshot = Next(); break;
@@ -151,11 +154,11 @@ public static class Program
 			}
 			if (script is not null && !window)
 			{
-				return Headless.Run(session, gameData, script, frames, saves, assets, digests, dev, data);
+				return Headless.Run(session, gameData, script, frames, saves, assets, digests, dev, data, battleLayout);
 			}
 			try
 			{
-				using var game = new SampleGame(session, gameData, font, exitAfterMs, saves, script, screenshot, mute, windowSize, fullscreen, assets, watchAssets, dev, data);
+				using var game = new SampleGame(session, gameData, font, exitAfterMs, saves, script, screenshot, mute, windowSize, fullscreen, assets, watchAssets, dev, data, battleLayout);
 				game.Run();
 				return game.Failures == 0 ? 0 : 1;
 			}
@@ -550,6 +553,13 @@ public sealed class ScriptPlayer
 					Fail($"{source}: the dev command was {(accepted ? "accepted" : "refused")}");
 				}
 				break;
+			case "battlelayout" when w.Length == 2:
+				// The flag's override from here on; `data` goes back to the battle presentation table's layout.
+				if (!_controller.SetBattleLayout(w[1]))
+				{
+					Fail($"{source}: no battle layout named {w[1]}: front, side or data");
+				}
+				break;
 			case "shot" when w.Length == 2:
 				return Shot(w[1]).GetEnumerator();
 			case "dump":
@@ -727,17 +737,17 @@ public sealed class ScriptPlayer
 // presses and a drawing surface that only records.
 public static class Headless
 {
-	private const int FrameMs = 16;
+	public const int FrameMs = 16;
 
 	public static int Run(GameSession session, GameData data, string scriptPath, int frames, string? saves, string? assets, string? digests, bool dev = false,
-		string? dataDir = null)
+		string? dataDir = null, BattleLayout? battleLayout = null)
 	{
 		int frame = 0;
 		int failures = 0;
 		var surface = new RecordingSurface();
 		string? controls = saves is null ? null : Path.Combine(saves, SampleGame.ControlsFile);
 		var audio = new RecordingAudio();
-		SampleController NewController() => new(session, data, line => Console.WriteLine($"[{frame}] {line}"), controls, audio, assets, dev, dataDir);
+		SampleController NewController() => new(session, data, line => Console.WriteLine($"[{frame}] {line}"), controls, audio, assets, dev, dataDir, battleLayout);
 		SampleController controller = NewController();
 		var input = new InputState();
 		try

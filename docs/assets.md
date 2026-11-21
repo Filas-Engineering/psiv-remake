@@ -12,7 +12,7 @@ dotnet run --project monogame/Psiv.Sample -- --assets my_assets                 
 dotnet run --project monogame/Psiv.Sample -- --assets my_assets --watch-assets  # reloads by itself when a file changes
 ```
 
-The export writes each generated picture into sheets (`tilesets/`, `characters/`, `portraits/`, `figures/`, `field_enemies/`, `vehicles/`, `backdrops/`, `effects/`, `sprites/`, `status_icons/`, `ui/`), every sound the game can ask for as 16-bit mono WAV at 22050 Hz (`audio/music/`, `audio/ambient/`, `audio/cue/`), the built-in battle presentation table (`battle_presentation.json`) and `assets.json`. It reads every file back and compares it with what it generated, then checks the directory. Run with that directory, the sample draws every frame exactly as it does without one (see [Round trip](#round-trip)); replace one sheet at a time, keeping its layout, or rewrite its entry.
+The export writes each generated picture into sheets (`tilesets/`, `characters/`, `portraits/`, `figures/` (with `party_back_ID.png`, the back figures), `field_enemies/`, `vehicles/`, `backdrops/`, `effects/`, `sprites/`, `status_icons/`, `ui/`), every sound the game can ask for as 16-bit mono WAV at 22050 Hz (`audio/music/`, `audio/ambient/`, `audio/cue/`), the built-in battle presentation table (`battle_presentation.json`) and `assets.json`. It reads every file back and compares it with what it generated, then checks the directory. Run with that directory, the sample draws every frame exactly as it does without one (see [Round trip](#round-trip)); replace one sheet at a time, keeping its layout, or rewrite its entry.
 
 Without `--assets` the sample uses `assets/` beside the data directory (`game/assets` for the placeholder data) when there is one.
 
@@ -111,6 +111,8 @@ Battle figures, by character or vehicle id (`"side": "party"`) or enemy id (`"si
 
 `idle` loops. The named animations are `attack`, `cast`, `item` and `defend` (as the presentation table's `animation` names them), `hurt` (a hit) and `defeat` (a fallen party member); each plays once and holds its last frame, and one left out plays `idle`. The battle adds its own motion on top, the same for files and generated pictures: stepping forward and back, a lunge with `attack`, a glow with `cast` and `item`, a shake and a red flash when hurt, a fade when an enemy falls. The party faces west, toward the enemies on the left.
 
+`"view": "back"` (default `"side"`) makes an entry the party member or vehicle seen from behind, which the front battle layout draws (below, [The battle presentation table](#the-battle-presentation-table)); the side layout keeps using the `"side"` entry, so an id can have both. A back figure takes the same animations; the generated set is the person's look as head and shoulders, 16 by 16 drawn at 9x: `idle`, `attack` (the right arm raised), `cast` (both arms up), `item` (a hand up holding a pale bottle), `defend` (the head lowered, braced), `hurt` (the head knocked aside) and `defeat` (slumped, the head sunk between the shoulders), one frame each in that order (`attack` plays frames 1 then 0). A vehicle's generated back figure is its north field frames, bobbing. The front layout's motion: a member rises out of the line instead of stepping sideways (the member choosing a command already a little), an enemy comes toward the camera. A back figure's key is `figure:back:ID`.
+
 ### field_enemies
 
 Visible enemies in the field, by encounter id: `{"encounter": "training", "image": "field_enemies/training.png", "frames": [0, 1], "ms": 280}` (`ms` a number for every frame or a list).
@@ -134,11 +136,11 @@ Every facing needs at least one frame. The field draws the vehicle where it stan
 {"encounter": "warden", "image": "backdrops/warden.png"}
 ```
 
-The encounter's, else the area's, else the area kind's. Drawn over the battlefield above the party panels, 1280 by 420 (the generated ones are 320 by 105, at 4x), any size stretched to it.
+The encounter's, else the area's, else the area kind's. In the side layout drawn over the battlefield above the party panels, 1280 by 420 (the generated ones are 320 by 105, at 4x), any size stretched to it. In the front layout drawn at 1280 by 480 over the stage, and its part below 62% of its height (the generated ground, under the horizon's shadow) drawn again, taller, from there to the bottom of the screen, behind the members and the status strip.
 
 ### effects
 
-Frame runs drawn over each target of an action, at 3x, centered on its figure: `{"id": "spark_bolt", "image": "effects/spark_bolt.png", "frame": [32, 32], "frames": [0, 1, 2, 3], "ms": 60}`. The presentation table names effects by id; an id here replaces the generated effect of that id or adds a new one. The generated effects are `slash`, `burst` and `nova` with the suffixes `_heat`, `_chill`, `_shock` and `_gale` (or none), and `ring_status`, `ring_stat`, `ring_cure`, `motes_heal`, `motes_revive`, `motes_item` and `shield`.
+Frame runs drawn over each target of an action, at 3x (4x on enemies in the front layout), centered on its figure (on the head of a member seen from behind, and on its status slot in a vehicle battle, where members have no figure; in the front layout an effect on several targets starts on each a moment after the one to its left, sweeping along them): `{"id": "spark_bolt", "image": "effects/spark_bolt.png", "frame": [32, 32], "frames": [0, 1, 2, 3], "ms": 60}`. The presentation table names effects by id; an id here replaces the generated effect of that id or adds a new one. The generated effects are `slash`, `burst` and `nova` with the suffixes `_heat`, `_chill`, `_shock` and `_gale` (or none), and `ring_status`, `ring_stat`, `ring_cure`, `motes_heal`, `motes_revive`, `motes_item` and `shield`.
 
 ### sprites and status_icons
 
@@ -185,6 +187,8 @@ The shadow under everyone, the speech bubble over talk points, the `!` over chas
 
 ```json
 {
+	"layout": "front",
+	"layouts": {"encounter:warden": "side", "area:kiln_lower": "side"},
 	"timings": {"intro": 900, "opening": 1000, "round": 480, "forward": 180, "retarget": 320, "banner": 420, "animate": 280,
 		"effect": 360, "result": 560, "back": 160, "cancel": 640, "roundend": 440, "notice": 700, "outcome": 900},
 	"fallbacks": {
@@ -198,6 +202,7 @@ The shadow under everyone, the speech bubble over talk points, the `!` over chas
 }
 ```
 
+* `layout`: how the stage is arranged, `front` (the default) or `side`. `front`: the backdrop fills the stage, the enemies stand in a row across the middle facing the camera (from five on in two ranks, the first ones in front and the rest smaller, further back in the gaps), the members are seen from behind along the bottom in marching order, partly behind a status strip of five equal slots (name, status icons, HP and TP numbers and bars, the command chosen or the state; an empty frame for a slot without a member), and the command window opens beside the member choosing. `side`: the enemies on the left, the party in a diagonal on the right, a panel per member and the command menu at the right. `layouts` overrides it per encounter (`encounter:ID`) or per area (`area:ID`), the encounter's first; the sample's `--battle-layout` flag and the `battlelayout` script verb override both. Steps, timings and log lines are the same in both layouts.
 * `timings`: each step's milliseconds at 1x battle speed (see "Battle" in `bindings/README.md` for the steps).
 * `actions`: by ability or item id (core's `abilities.json` and `items.json`; enemy techniques and skills are abilities too): `animation` (`attack`, `cast`, `item`, `defend` or `none`), `effect` (an effect id or `none`), `cue` (a sound played as the effect starts, any cue id), `animate_ms` and `effect_ms` (those two steps' lengths), `shake` (pixels, easing off over the effect) and `flash` (a white flash at the effect's start). An entry gives only the fields it changes; the rest come from its fallback.
 * `fallbacks`: an id without an entry takes the most specific of `KIND.EFFECT.ELEMENT`, `KIND.EFFECT` and `KIND`. KIND is the ability's kind (`attack`, `technique`, `skill`, `combo`) or `item`, and `defend` for Defend; EFFECT is its first effect (`damage`, `heal`, `revive`, `status`, `cure`, `stat`, `other`); ELEMENT is the damage's element (`none`, `heat`, `chill`, `shock`, `gale`; a basic attack takes its weapon's element from the hit). The built-in table has every key: attacks slash, damaging techniques and items burst in their element's color, combinations nova and flash, heals and revives rise in motes, statuses and stat changes ring, Defend raises a shield. Override any of them.
@@ -205,7 +210,7 @@ The shadow under everyone, the speech bubble over talk points, the `!` over chas
 
 ## Hot reload
 
-F5 in the window (and `--watch-assets`, a moment after files stop changing) loads `assets.json` and every file again, keeps the session and the screens where they are, and logs what changed (`assets: reloaded, changed: tilesets/town.png`) and any new problem. Pictures change at the next frame; a sound that changed plays from its new file the next time it starts; the battle presentation table applies to the next round.
+F5 in the window (and `--watch-assets`, a moment after files stop changing) loads `assets.json` and every file again, keeps the session and the screens where they are, and logs what changed (`assets: reloaded, changed: tilesets/town.png`) and any new problem. Pictures change at the next frame; a sound that changed plays from its new file the next time it starts; the battle presentation table applies to the next round, its layout at the next frame.
 
 ## Round trip
 

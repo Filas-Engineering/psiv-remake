@@ -4,9 +4,10 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-// The battle drawn: the backdrop, the enemies on the left and the party on the right as figures, the playback's steps
-// on them (stepping forward, banners, animations, effects, hit reactions, floating numbers, bars, status icons, falls),
-// the party's panels and the command menu, the log when it is shown, and the result screen.
+// The battle drawn in either layout (the presentation table's, SampleController.BattleFront.cs for the front one's own
+// parts): the backdrop, the figures, the playback's steps on them (stepping forward, banners, animations, effects, hit
+// reactions, floating numbers, bars, status icons, falls), the party's panels or status strip and the command menu, the
+// log when it is shown, and the result screen.
 public sealed partial class SampleController
 {
 	private const int BattlePanelTop = 420;
@@ -17,9 +18,30 @@ public sealed partial class SampleController
 	private int _probeShake;
 	private bool _probeFlash;
 	private string _probeVictory = "-";
+	private BattleLayout? _layoutOverride;
+	// The layout the last battle frame was drawn in.
+	private BattleLayout _stageLayout = BattleLayout.Front;
 
-	// Where a combatant stands: its center x, the y of its feet and its size. Enemies fill the left in one row, or in
-	// two ranks from five on, the first ones in front; the party stands in a diagonal on the right.
+	// The flag's or script's layout over the presentation table's; "data" goes back to the table's.
+	public bool SetBattleLayout(string name)
+	{
+		if (name == "data")
+		{
+			_layoutOverride = null;
+			return true;
+		}
+		if (BattlePresentation.ParseLayout(name) is not { } layout)
+		{
+			return false;
+		}
+		_layoutOverride = layout;
+		return true;
+	}
+
+	private BattleLayout StageLayout() => _layoutOverride ?? PresentationTable.LayoutFor(StageInfo()?.Encounter ?? "", _s.FieldInfo()?.AreaId ?? "");
+
+	// Where a combatant stands in the side layout: its center x, the y of its feet and its size. Enemies fill the left in
+	// one row, or in two ranks from five on, the first ones in front; the party stands in a diagonal on the right.
 	private static (int X, int Foot, int Size) Place(int index, int partyCount, int enemyCount)
 	{
 		if (index < partyCount)
@@ -55,6 +77,9 @@ public sealed partial class SampleController
 		BattleTurn? turn = step?.Turn;
 		bool reduced = _s.Profile().ReducedFlash;
 		List<ShownCombatant> shown = _show.All;
+		_stageLayout = StageLayout();
+		bool front = _stageLayout == BattleLayout.Front;
+		int stageBottom = front ? StripTop : BattlePanelTop;
 
 		// The screen shakes with a heavy effect and with a critical hit, easing off over the step; reduced flash damps it.
 		float shake = step switch
@@ -71,12 +96,25 @@ public sealed partial class SampleController
 		var jolt = new Point((int)MathF.Round(shake * MathF.Sin(_clockMs * 0.09f)), (int)MathF.Round(shake * MathF.Cos(_clockMs * 0.13f)));
 
 		FieldInfo? field = _s.FieldInfo();
-		s.Image(art.Backdrop(field?.AreaKind ?? AreaKind.Field, field?.AreaId ?? "", info?.Encounter ?? ""), jolt.X - 8, jolt.Y - 8, s.Width + 16, BattlePanelTop + 8, Color.White);
+		int backdrop = art.Backdrop(field?.AreaKind ?? AreaKind.Field, field?.AreaId ?? "", info?.Encounter ?? "");
+		if (front)
+		{
+			DrawFrontBackdrop(s, backdrop, jolt);
+		}
+		else
+		{
+			s.Image(backdrop, jolt.X - 8, jolt.Y - 8, s.Width + 16, BattlePanelTop + 8, Color.White);
+		}
 
-		// Each figure's picture, offset and tint for the step playing, drawn back to front.
-		var bodies = new Dictionary<int, Rectangle>();
-		var order = Enumerable.Range(0, Math.Min(all.Count, shown.Count)).OrderBy(i => Place(i, partyCount, enemyCount).Foot).ToList();
+		// Each figure's picture, offset and tint for the step playing, drawn back to front. In the front layout a vehicle
+		// stands left of the middle, clear of the action's name plate.
 		string vehicle = info?.Vehicle ?? "";
+		(int X, int Foot, int Size) Where(int i) => vehicle.Length > 0 && all[i].Id == vehicle
+			? (front ? (SlotX(1) + SlotWidth / 2, StripTop + 8, 160) : (1012, 336, 128))
+			: front ? PlaceFront(i, partyCount, enemyCount) : Place(i, partyCount, enemyCount);
+		var bodies = new Dictionary<int, Rectangle>();
+		var figures = new List<string>();
+		var order = Enumerable.Range(0, Math.Min(all.Count, shown.Count)).OrderBy(i => Where(i).Foot).ToList();
 		foreach (int i in order)
 		{
 			Combatant c = all[i];
@@ -87,7 +125,7 @@ public sealed partial class SampleController
 			{
 				continue;
 			}
-			(int x, int foot, int size) = vehicle.Length > 0 && c.Id == vehicle ? (1012, 336, 128) : Place(i, partyCount, enemyCount);
+			(int x, int foot, int size) = Where(i);
 			float alpha = 1f;
 			bool fading = sc.AliveStep is not null && sc.AliveStep == step;
 			if (!sc.Alive)
@@ -105,25 +143,27 @@ public sealed partial class SampleController
 			{
 				alpha = p;
 			}
+			// In the side layout a figure steps toward the other side; in the front one an enemy comes toward the camera
+			// and a member rises out of the line, the member choosing a command already a little.
 			int toward = enemy ? 1 : -1;
-			int reach = enemy ? 24 : 44;
-			float dx = 0;
+			float reach = front ? (enemy ? 20 : c.Id == vehicle ? 12 : 24) : enemy ? 24 : 44;
+			float move = front && !enemy && commanding && i == b.Actor ? 12 : 0;
 			string animation = "idle";
 			Color tint = Color.White;
 			if (turn is not null && turn.Actors.Contains(i))
 			{
-				dx = step!.Kind switch
+				move = reach * step!.Kind switch
 				{
-					StepKind.Forward => toward * reach * Ease(p),
-					StepKind.Back => toward * reach * (1f - Ease(p)),
-					_ => toward * reach,
+					StepKind.Forward => Ease(p),
+					StepKind.Back => 1f - Ease(p),
+					_ => 1f,
 				};
 				if (step.Kind == StepKind.Animate && turn.Look is { } look)
 				{
 					animation = look.Animation;
 					if (look.Animation == "attack")
 					{
-						dx += toward * 16 * MathF.Sin(MathF.PI * p);
+						move += (front ? 10 : 16) * MathF.Sin(MathF.PI * p);
 					}
 					else if (look.Animation is "cast" or "item")
 					{
@@ -132,6 +172,7 @@ public sealed partial class SampleController
 					}
 				}
 			}
+			float dx = front ? 0 : toward * move, dy = front ? toward * move : 0;
 			bool hurt = step is { Kind: StepKind.Result } && step.Events.Any(e => e.Type == BattleEventType.DamageDealt && e.Target == i);
 			if (hurt)
 			{
@@ -147,33 +188,72 @@ public sealed partial class SampleController
 				animation = "defeat";
 				tint = new Color(150, 150, 170);
 			}
-			Figure figure = !enemy && c.Id == vehicle ? art.VehicleFigure(c.Id) : art.BattleFigure(c.Id, enemy);
+			Figure figure = enemy ? art.BattleFigure(c.Id, true)
+				: c.Id == vehicle ? (front ? art.VehicleBackFigure(c.Id) : art.VehicleFigure(c.Id))
+				: front ? art.BackFigure(c.Id) : art.BattleFigure(c.Id, false);
+			if (!enemy)
+			{
+				figures.Add($"{c.Id} {(c.Id == vehicle ? "vehicle " : "")}{(front ? "back" : "side")}");
+			}
 			FrameRun run = figure.Animations.GetValueOrDefault(animation) ?? figure.Idle;
 			bool idle = run == figure.Idle;
 			int image = figure.Images[run.FrameAt(idle ? _clockMs + i * 137 : _timeline.ElapsedMs, loop: idle)];
-			int left = x - size / 2 + (int)MathF.Round(dx) + jolt.X, top = foot - size + jolt.Y;
+			int left = x - size / 2 + (int)MathF.Round(dx) + jolt.X, top = foot - size + (int)MathF.Round(dy) + jolt.Y;
 			Rectangle body = art.Stand(image, left, top, size);
 			bodies[i] = body;
-			s.Image(art.Shadow, left, top + size / 6, size, size, Color.White * alpha);
+			// The members seen from behind stand in the strip's shadow, so only the others cast one.
+			if (!front || enemy)
+			{
+				s.Image(art.Shadow, left, top + size / 6, size, size, Color.White * alpha);
+			}
 			s.Image(image, body.X, body.Y, body.Width, body.Height, tint * alpha);
 		}
+		_probeFigures = figures.Count == 0 ? "none" : string.Join(", ", figures);
 
-		// The effect on each target, centered on its body.
+		// Where effects and numbers land: on each figure, and in the front layout on the slot of a member with none.
+		var anchors = new Dictionary<int, Rectangle>(bodies);
+		var stage = new FrontStage();
+		if (front)
+		{
+			stage = DrawFrontStrip(s, art, all, vehicle, commanding, target, step, p, pulse, reduced);
+			foreach ((int index, Rectangle slot) in stage.Slots.Where(x => !anchors.ContainsKey(x.Key)))
+			{
+				anchors[index] = slot;
+			}
+			stage.Banner = DrawBanner(s, step, p, 0, front, aboveStrip: true);
+		}
+		bool Behind(int i) => front && i < partyCount;
+
+		// The effect on each target, centered on its body (on a member seen from behind, its head); in the front layout an
+		// effect on several targets sweeps along them.
 		if (step is { Kind: StepKind.Effect, Turn.Look: { } fx } && art.Effect(fx.Effect) is { } effect)
 		{
-			int frame = effect.Images[effect.Idle.FrameAt(_timeline.ElapsedMs, loop: false)];
-			(int ew, int eh) = art.SizeOf(frame);
-			foreach (int t in turn!.Targets.Where(bodies.ContainsKey))
+			List<int> hit = [.. turn!.Targets.Where(anchors.ContainsKey)];
+			if (front)
 			{
-				Rectangle r = bodies[t];
-				s.Image(frame, r.Center.X - ew * EffectScale / 2, r.Center.Y - eh * EffectScale / 2, ew * EffectScale, eh * EffectScale, Color.White);
+				hit = [.. hit.OrderBy(t => anchors[t].Center.X)];
+			}
+			int stagger = front && hit.Count > 1 ? Math.Min(90, fx.EffectMs / (2 * hit.Count)) : 0;
+			for (int k = 0; k < hit.Count; k++)
+			{
+				int ms = _timeline.ElapsedMs - k * stagger;
+				if (ms < 0)
+				{
+					continue;
+				}
+				int frame = effect.Images[effect.Idle.FrameAt(ms, loop: false)];
+				(int ew, int eh) = art.SizeOf(frame);
+				int scale = front && !Behind(hit[k]) ? EffectScale + 1 : EffectScale;
+				Rectangle r = anchors[hit[k]];
+				int cy = Behind(hit[k]) ? r.Y + r.Height * 3 / 8 : r.Center.Y;
+				s.Image(frame, r.Center.X - ew * scale / 2, cy - eh * scale / 2, ew * scale, eh * scale, Color.White);
 			}
 		}
 
 		// Labels, statuses and HP bars under the enemies, as before: one per enemy, its group's name and number.
 		foreach (int i in order.Where(i => all[i].Side == Side.Enemy && (shown[i].Alive || (shown[i].AliveStep is not null && shown[i].AliveStep == step))))
 		{
-			(int x, int foot, _) = Place(i, partyCount, enemyCount);
+			(int x, int foot, _) = Where(i);
 			bool targeted = i == target;
 			string label = Style.Fit(s, all[i].Label, 190, Style.Small);
 			int lw = s.Measure(label, Style.Small);
@@ -181,21 +261,26 @@ public sealed partial class SampleController
 			s.Text(label, x - lw / 2, foot + 9, targeted ? Style.Accent : Style.Text, Style.Small);
 			Style.Bar(s, x - 50, foot + 34, 100, 6, Shown(shown[i], step, p).Hp, shown[i].MaxHp, Style.Bad);
 			DrawIcons(s, art, shown[i], step, p, x - 50, foot + 44);
+			int lx = Math.Min(x - lw / 2 - 8, x - 50);
+			stage.Labels[all[i].Label] = new Rectangle(lx, foot + 6, Math.Max(x - lx, lw / 2 + 8) * 2, 58);
 		}
 
-		// The target cursor over the figure being chosen, and over the retarget step's new target as it moves there.
-		if (target >= 0 && bodies.TryGetValue(target, out Rectangle aim))
+		// The target cursor over the figure being chosen (a member seen from behind gets it over the command window), and
+		// over the retarget step's new target as it moves there.
+		int PointerY(int i, Rectangle r) => Behind(i) ? r.Y - 8 : r.Y - 40;
+		if (target >= 0 && !Behind(target) && bodies.TryGetValue(target, out Rectangle aim))
 		{
-			s.Image(art.Pointer, aim.Center.X - 18, aim.Y - 40 + (int)(5 * pulse), 36, 36, Color.White);
+			s.Image(art.Pointer, aim.Center.X - 18, PointerY(target, aim) + (int)(5 * pulse), 36, 36, Color.White);
 		}
 		if (step is { Kind: StepKind.Retarget } && bodies.TryGetValue(step.To, out Rectangle to))
 		{
 			Rectangle from = bodies.GetValueOrDefault(step.From, to);
 			float e = Ease(p);
-			s.Image(art.Pointer, (int)MathHelper.Lerp(from.Center.X, to.Center.X, e) - 18, (int)MathHelper.Lerp(from.Y, to.Y, e) - 40, 36, 36, Color.White);
+			s.Image(art.Pointer, (int)MathHelper.Lerp(from.Center.X, to.Center.X, e) - 18, (int)MathHelper.Lerp(PointerY(step.From, from), PointerY(step.To, to), e), 36, 36, Color.White);
 		}
 
 		// Floating numbers and words over each target: damage, critical, misses, weak and resisted hits, healing, statuses.
+		// Over a member seen from behind they rise from its head, clear of the enemies' labels.
 		if (step is { Kind: StepKind.Result or StepKind.RoundEnd })
 		{
 			var stacked = new Dictionary<int, int>();
@@ -203,7 +288,7 @@ public sealed partial class SampleController
 			foreach (BattleEvent e in step.Events)
 			{
 				int t = e.Type == BattleEventType.ItemHadNoEffect ? e.Actor : e.Target;
-				if (!bodies.TryGetValue(t, out Rectangle r) || Floating(e, previous) is not { } floating)
+				if (!anchors.TryGetValue(t, out Rectangle r) || Floating(e, previous) is not { } floating)
 				{
 					previous = e;
 					continue;
@@ -214,7 +299,7 @@ public sealed partial class SampleController
 				float fade = p < 0.7f ? 1f : (1f - p) / 0.3f;
 				int rise = (int)(30 * Ease(Math.Min(1f, p * 2f)));
 				int w = s.Measure(floating.Text, floating.Size);
-				int fy = r.Y - 26 - rise - n * (floating.Size + 6);
+				int fy = (Behind(t) ? r.Y + 36 : r.Y - 26) - rise - n * (floating.Size + 6);
 				s.Text(floating.Text, r.Center.X - w / 2 + 2, fy + 2, Color.Black * (0.8f * fade), floating.Size);
 				s.Text(floating.Text, r.Center.X - w / 2, fy, floating.Color * fade, floating.Size);
 			}
@@ -225,7 +310,7 @@ public sealed partial class SampleController
 		if (step is { Kind: StepKind.Effect, Turn.Look.Flash: true } && !reduced && p < 0.25f)
 		{
 			_probeFlash = true;
-			s.Fill(0, 0, s.Width, BattlePanelTop, Color.White * (0.55f * (1f - p * 4f)));
+			s.Fill(0, 0, s.Width, stageBottom, Color.White * (0.55f * (1f - p * 4f)));
 		}
 
 		if (b.LogShown)
@@ -245,7 +330,12 @@ public sealed partial class SampleController
 				s.Text(lines[i].Text, 36, 24 + i * 22, lines[i].Newest ? Style.Text : Style.Dim, Style.Small);
 			}
 		}
-		DrawBanner(s, step, p, b.LogShown ? BattleLogLines * 22 + 48 : 20);
+		DrawBanner(s, step, p, b.LogShown ? BattleLogLines * 22 + 48 : 20, front);
+		if (front)
+		{
+			DrawFrontMenus(s, all, info, bodies, target, stage);
+			return;
+		}
 
 		// The party, one column each: portrait, name, status icons and names, HP and TP bars, the command already chosen.
 		var party = all.Where(c => c.Side == Side.Party).ToList();
@@ -271,10 +361,10 @@ public sealed partial class SampleController
 			{
 				Style.Frame(s, cx, cy, cw, ch, targeted ? Style.Accent * (0.4f + 0.6f * pulse) : Style.Accent);
 			}
-			int portrait = c.Id == (info?.Vehicle ?? "") ? art.VehicleFrame(c.Id, Direction.South, 0) : art.Portrait("", c.Id);
+			int portrait = c.Id == vehicle ? art.VehicleFrame(c.Id, Direction.South, 0) : art.Portrait("", c.Id);
 			s.Image(portrait, cx + 8, cy + 8, 64, 64, sc.Alive ? Color.White : new Color(80, 80, 92));
 			s.Text(Style.Fit(s, c.Name, cw - 90), cx + 80, cy + 12, !sc.Alive ? Style.Dim : acting ? Style.Accent : Style.Text);
-			string state = !sc.Alive ? "Fallen" : ((c.Defending ? "Defending " : "") + string.Join(" ", sc.Statuses.Select(_s.DisplayName))).Trim();
+			string state = MemberState(c, sc);
 			DrawIcons(s, art, sc, step, p, cx + 80, cy + 38);
 			if (state.Length > 0)
 			{
@@ -284,58 +374,27 @@ public sealed partial class SampleController
 			int bw = cw - 24;
 			Widgets.ValueBar(s, cx + 12, cy + 86, bw, "HP", hp, sc.MaxHp, hp * 4 <= sc.MaxHp ? Style.Bad : Style.Good);
 			Widgets.ValueBar(s, cx + 12, cy + 130, bw, "TP", tp, sc.MaxTp, Style.Tp);
-			if (c.CommandKind != CommandKind.None)
+			if (NextCommand(c) is { } command)
 			{
-				string command = c.CommandId.Length > 0 ? _s.DisplayName(c.CommandId) : GameSession.NameOf(NameKind.CommandKind, (int)c.CommandKind);
 				s.Text(Style.Fit(s, "Next: " + command, bw, Style.Small), cx + 12, cy + 180, Style.Dim, Style.Small);
 			}
 		}
 
 		int mx = s.Width - 16 - BattleMenuWidth;
-		string actor = b.Actor < all.Count ? all[b.Actor].Name : "";
-		string title = b.Phase switch
-		{
-			BattlePhase.Command => actor,
-			BattlePhase.Option => b.MenuChoice,
-			BattlePhase.Target => "Target",
-			BattlePhase.Macro => "Macro",
-			BattlePhase.Ended => "Battle over",
-			_ => "Battle",
-		};
-		Style.Window(s, mx, BattlePanelTop, BattleMenuWidth, panelH, title);
-		void Menu(IReadOnlyList<string> items, IReadOnlyList<bool>? usable = null)
+		Style.Window(s, mx, BattlePanelTop, BattleMenuWidth, panelH, MenuTitle(all));
+		if (MenuRows(all) is { } menu)
 		{
 			int rows = (panelH - 44) / 28;
-			int first = Math.Clamp(_cursor - rows + 1, 0, Math.Max(0, items.Count - rows));
-			for (int i = first; i < Math.Min(items.Count, first + rows); i++)
+			int first = Math.Clamp(_cursor - rows + 1, 0, Math.Max(0, menu.Items.Count - rows));
+			for (int i = first; i < Math.Min(menu.Items.Count, first + rows); i++)
 			{
-				Style.ListRow(s, Style.Fit(s, items[i], BattleMenuWidth - 70, Style.Small), mx + 24, BattlePanelTop + 30 + (i - first) * 28,
-					BattleMenuWidth - 36, i == _cursor, usable is null || usable[i], Style.Small);
+				Style.ListRow(s, Style.Fit(s, menu.Items[i], BattleMenuWidth - 70, Style.Small), mx + 24, BattlePanelTop + 30 + (i - first) * 28,
+					BattleMenuWidth - 36, i == _cursor, menu.Usable is null || menu.Usable[i], Style.Small);
 			}
 		}
+		MenuDescription(s, all, target);
 		switch (b.Phase)
 		{
-		case BattlePhase.Command:
-			Menu(CommandMenu);
-			break;
-		case BattlePhase.Option:
-			Menu(b.Options.Select(o => o.Name + (o.Cost > 0 ? $" ({o.Cost} TP)" : "") + (o.Uses >= 0 ? $" x{o.Uses}" : "")).ToList(), b.Options.Select(o => o.Usable).ToList());
-			if (b.Options.Count > 0)
-			{
-				BattleOption option = b.Options[Math.Clamp(_cursor, 0, b.Options.Count - 1)];
-				BattleDescription(s, _s.Description(option.Command == CommandKind.Item ? DescriptionKind.Item : DescriptionKind.Ability, option.Id));
-			}
-			break;
-		case BattlePhase.Target:
-			Menu(b.Targets.Select(t => t < all.Count ? (all[t].Side == Side.Party ? all[t].Name : all[t].Label) : "?").ToList());
-			if (target >= 0 && target < all.Count && all[target].Side == Side.Enemy)
-			{
-				BattleDescription(s, _s.Description(DescriptionKind.Enemy, all[target].Id));
-			}
-			break;
-		case BattlePhase.Macro:
-			Menu(_s.Macros());
-			break;
 		case BattlePhase.Playback:
 			s.Text(b.Auto ? "Auto-battle" : "...", mx + 24, BattlePanelTop + 34, Style.Text);
 			if (b.Auto)
@@ -349,10 +408,58 @@ public sealed partial class SampleController
 		case BattlePhase.Ended:
 			s.Text(BattleTimeline.OutcomeText(info?.Outcome ?? Outcome.Ongoing), mx + 24, BattlePanelTop + 34, Style.Accent, Style.Title);
 			s.Text($"{Hint(GameAction.Confirm)}: continue", mx + 24, BattlePanelTop + 84, Style.Text);
-			DrawResult(s, info);
+			DrawResult(s, info, BattlePanelTop);
 			break;
 		}
 	}
+
+	// A member's state under its name: fallen, defending and its statuses.
+	private string MemberState(Combatant c, ShownCombatant sc) =>
+		!sc.Alive ? "Fallen" : ((c.Defending ? "Defending " : "") + string.Join(" ", sc.Statuses.Select(_s.DisplayName))).Trim();
+
+	private string? NextCommand(Combatant c) => c.CommandKind == CommandKind.None ? null
+		: c.CommandId.Length > 0 ? _s.DisplayName(c.CommandId) : GameSession.NameOf(NameKind.CommandKind, (int)c.CommandKind);
+
+	private string MenuTitle(IReadOnlyList<Combatant> all) => _battle.Phase switch
+	{
+		BattlePhase.Command => _battle.Actor < all.Count ? all[_battle.Actor].Name : "",
+		BattlePhase.Option => _battle.MenuChoice,
+		BattlePhase.Target => "Target",
+		BattlePhase.Macro => "Macro",
+		BattlePhase.Ended => "Battle over",
+		_ => "Battle",
+	};
+
+	// The command menu's rows for the phase, and which can be chosen; null outside the menus.
+	private (List<string> Items, List<bool>? Usable)? MenuRows(IReadOnlyList<Combatant> all)
+	{
+		BattleUi b = _battle;
+		return b.Phase switch
+		{
+			BattlePhase.Command => ([.. CommandMenu], null),
+			BattlePhase.Option => (b.Options.Select(o => o.Name + (o.Cost > 0 ? $" ({o.Cost} TP)" : "") + (o.Uses >= 0 ? $" x{o.Uses}" : "")).ToList(), b.Options.Select(o => o.Usable).ToList()),
+			BattlePhase.Target => (b.Targets.Select(t => t < all.Count ? (all[t].Side == Side.Party ? all[t].Name : all[t].Label) : "?").ToList(), null),
+			BattlePhase.Macro => ([.. _s.Macros()], null),
+			_ => null,
+		};
+	}
+
+	// The highlighted option's or targeted enemy's description strip; its box, or an empty one when none shows.
+	private Rectangle MenuDescription(IDrawSurface s, IReadOnlyList<Combatant> all, int target)
+	{
+		BattleUi b = _battle;
+		if (b.Phase == BattlePhase.Option && b.Options.Count > 0)
+		{
+			BattleOption option = b.Options[Math.Clamp(_cursor, 0, b.Options.Count - 1)];
+			return BattleDescription(s, _s.Description(option.Command == CommandKind.Item ? DescriptionKind.Item : DescriptionKind.Ability, option.Id));
+		}
+		if (b.Phase == BattlePhase.Target && target >= 0 && target < all.Count && all[target].Side == Side.Enemy)
+		{
+			return BattleDescription(s, _s.Description(DescriptionKind.Enemy, all[target].Id));
+		}
+		return Rectangle.Empty;
+	}
+
 
 	// A bar's numbers while the step that changed them plays, else where it left them.
 	private static (int Hp, int Tp) Shown(ShownCombatant c, BattleStep? step, float p) => c.BarStep is not null && c.BarStep == step
@@ -408,18 +515,23 @@ public sealed partial class SampleController
 	}
 
 	// The step's words: the action's name over its whole turn, and the opening, the round, a cancel, a notice or the
-	// outcome on their own, fading in and out.
-	private void DrawBanner(IDrawSurface s, BattleStep? step, float p, int y)
+	// outcome on their own, fading in and out. In the front layout the action's name and a cancel are a framed name plate
+	// just above the status strip (`aboveStrip`), the rest stays at `y`. Returns the box drawn.
+	private Rectangle DrawBanner(IDrawSurface s, BattleStep? step, float p, int y, bool front, bool aboveStrip = false)
 	{
 		if (step is null)
 		{
-			return;
+			return Rectangle.Empty;
 		}
 		bool turnName = step.Kind is StepKind.Banner or StepKind.Animate or StepKind.Effect or StepKind.Result or StepKind.Retarget;
+		if (front && (turnName || step.Kind == StepKind.Cancel) != aboveStrip)
+		{
+			return Rectangle.Empty;
+		}
 		string text = turnName ? BannerOf(step) : step.Text;
 		if (text.Length == 0 || step.Kind is StepKind.Forward or StepKind.Back)
 		{
-			return;
+			return Rectangle.Empty;
 		}
 		float alpha = turnName ? 1f : Math.Clamp(Math.Min(p * 6f, (1f - p) * 6f), 0f, 1f);
 		int size = step.Kind is StepKind.Outcome or StepKind.Opening or StepKind.Round ? Style.Title : Style.Body;
@@ -427,14 +539,23 @@ public sealed partial class SampleController
 		int w = s.Measure(text, size) + 48;
 		int h = size + 22;
 		int x = (s.Width - w) / 2;
+		if (aboveStrip)
+		{
+			y = StripTop - h - 6;
+		}
 		Style.Box(s, x, y, w, h, 0.95f * alpha);
+		if (aboveStrip)
+		{
+			Style.Frame(s, x + 6, y + 6, w - 12, h - 12, Style.Accent * (0.5f * alpha), 1);
+		}
 		s.Text(text, x + 24, y + 10, (step.Kind == StepKind.Cancel ? Style.Bad : Style.Accent) * alpha, size);
+		return new Rectangle(x, y, w, h);
 	}
 
 	private static string BannerOf(BattleStep step) => step.Kind == StepKind.Banner ? step.Text : step.Turn?.Name ?? "";
 
 	// The result screen over the battlefield: experience, money, drops, and each level-up with what it taught.
-	private void DrawResult(IDrawSurface s, BattleInfo? info)
+	private void DrawResult(IDrawSurface s, BattleInfo? info, int stageBottom)
 	{
 		BattleResult? result = _s.BattleResult();
 		var lines = new List<(string Text, Color Color)>();
@@ -462,7 +583,7 @@ public sealed partial class SampleController
 		string heading = BattleTimeline.OutcomeText(info?.Outcome ?? Outcome.Ongoing);
 		_probeVictory = string.Join(" / ", lines.Select(l => l.Text.Trim()).Prepend(heading));
 		int w = 640, h = 84 + lines.Count * 30;
-		int x = (s.Width - w) / 2, y = Math.Max(24, (BattlePanelTop - h) / 2);
+		int x = (s.Width - w) / 2, y = Math.Max(24, (stageBottom - h) / 2);
 		Style.Window(s, x, y, w, h, "Result");
 		s.Text(heading, x + (w - s.Measure(heading, Style.Title)) / 2, y + 22, Style.Accent, Style.Title);
 		for (int i = 0; i < lines.Count; i++)
@@ -473,11 +594,12 @@ public sealed partial class SampleController
 
 	// A strip at the top of the battlefield, under the log when it shows, with the highlighted option's or targeted
 	// enemy's description, clear of the figures and their labels.
-	private void BattleDescription(IDrawSurface s, string? text)
+	private Rectangle BattleDescription(IDrawSurface s, string? text)
 	{
 		int h = Px(22) * 2 + 16;
 		int y = _battle.LogShown ? BattleLogLines * 22 + 48 : 16;
 		Style.Box(s, 16, y, s.Width - 32, h, 0.9f);
 		DrawDescription(s, text, 32, y + 8, s.Width - 64);
+		return new Rectangle(16, y, s.Width - 32, h);
 	}
 }

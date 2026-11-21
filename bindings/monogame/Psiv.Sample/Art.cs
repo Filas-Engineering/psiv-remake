@@ -469,6 +469,7 @@ public sealed partial class Art
 	{
 		'o' => Outline,
 		'h' => look.Hair,
+		'g' => Shade(look.Hair, 0.78f),
 		's' => look.Skin,
 		'c' => look.Coat,
 		'd' => Shade(look.Coat, 0.68f),

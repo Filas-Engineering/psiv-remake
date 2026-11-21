@@ -5,6 +5,7 @@ assets: assets.json: characters[1].poses.nod: no animation plays this pose: map 
 assets: assets.json: characters[11]: unknown character 'nobody': not a party member or actor in the game data
 assets: portraits/guide.png: portraits.guide: missing file
 assets: assets.json: figures[0].animations.juggle: unknown animation 'juggle': attack, cast, item, defend, hurt, defeat
+assets: assets.json: figures[6]: view 'back' is for party members and vehicles only
 assets: assets.json: vehicles[1]: unknown vehicle 'hovercart': not in the game data
 assets: assets.json: vehicles[1]: 'facings' needs north, east, south and west, each at least one frame
 assets: assets.json: backdrops[3]: unknown area 'atlantis': not in the game data
@@ -12,8 +13,10 @@ assets: assets.json: sprites.moon: unknown sprite 'moon': shadow, bubble, alert,
 assets: audio/music/battle_brass_warden.wav: audio[0]: bad loop points 0 to 99999999: the file has 280320 frames, and the start must come before the end
 assets: audio/ambient/marsh_wind.wav: audio[27]: bad loop points 2 to 1: the file has 88200 frames, and the start must come before the end
 assets: assets.json: audio[49]: unknown music 'not_a_track': not an id the game or the sample plays as music
+assets: battle_presentation.json: layout: must be front or side
+assets: battle_presentation.json: layouts.encounter:nowhere: unknown key: encounter:ID or area:ID, with an encounter or area of the game data
 assets: battle_presentation.json: actions.strike: unknown effect 'fireworks': not a generated effect, an effect in assets.json or none
 assets: battle_presentation.json: actions.strike: unknown animation 'moonwalk': none, attack, cast, item, defend
 assets: battle_presentation.json: actions.unknown_move: unknown ability or item 'unknown_move': not in the game data
-assets: 2 tilesets, 9 characters, 10 portraits, 9 figures, 3 field enemies, 1 vehicles, 3 backdrops, 22 effects, 5 sprites, 6 status icons, a UI skin turned off, 47 sounds, a battle presentation table
-FAILED: 17 problems.
+assets: 2 tilesets, 9 characters, 10 portraits, 14 figures, 3 field enemies, 1 vehicles, 3 backdrops, 22 effects, 5 sprites, 6 status icons, a UI skin turned off, 47 sounds, a battle presentation table
+FAILED: 20 problems.

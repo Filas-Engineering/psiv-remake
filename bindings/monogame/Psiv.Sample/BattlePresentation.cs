@@ -7,10 +7,15 @@ namespace Psiv.Sample;
 // effect, the two steps' lengths at 1x battle speed, how far the screen shakes and whether it flashes.
 public sealed record ActionLook(string Animation, string Effect, string Cue, int AnimateMs, int EffectMs, int Shake, bool Flash);
 
-// The battle presentation table: step lengths, and a look per ability or item id. An id the table does not name takes
-// the fallback for its kind, effect and element (`technique.damage.shock`, then `technique.damage`, then `technique`),
-// so every action looks reasonable with nothing authored. The built-in defaults cover every fallback key; the asset
-// directory's table (battle_presentation.json) overrides any field of any entry.
+// How the battle stage is arranged: the party seen from behind along the bottom facing the enemies, or the two sides
+// facing each other across the screen.
+public enum BattleLayout { Front, Side }
+
+// The battle presentation table: the stage's layout (per encounter or area too), step lengths, and a look per ability or
+// item id. An id the table does not name takes the fallback for its kind, effect and element (`technique.damage.shock`,
+// then `technique.damage`, then `technique`), so every action looks reasonable with nothing authored. The built-in
+// defaults cover every fallback key; the asset directory's table (battle_presentation.json) overrides any field of any
+// entry.
 public sealed class BattlePresentation
 {
 	public const string FileName = "battle_presentation.json";
@@ -30,6 +35,9 @@ public sealed class BattlePresentation
 	public Dictionary<string, int> Timings { get; } = new(DefaultTimings);
 	public Dictionary<string, ActionLook> Fallbacks { get; } = [];
 	public Dictionary<string, ActionLook> Actions { get; } = [];
+	public BattleLayout Layout { get; private set; } = BattleLayout.Front;
+	// By `encounter:ID` and `area:ID`, over Layout.
+	public Dictionary<string, BattleLayout> Layouts { get; } = [];
 
 	public int Ms(string step) => Timings[step];
 
@@ -37,6 +45,13 @@ public sealed class BattlePresentation
 	public static IEnumerable<string> GeneratedEffects =>
 		new[] { "slash", "burst", "nova" }.SelectMany(style => Elements.Select(e => e == "none" ? style : $"{style}_{e}"))
 			.Concat(["ring_status", "ring_stat", "ring_cure", "motes_heal", "motes_revive", "motes_item", "shield"]);
+
+	public BattleLayout LayoutFor(string encounter, string area) =>
+		Layouts.TryGetValue("encounter:" + encounter, out BattleLayout layout) || Layouts.TryGetValue("area:" + area, out layout) ? layout : Layout;
+
+	public static string NameOf(BattleLayout layout) => layout.ToString().ToLowerInvariant();
+
+	public static BattleLayout? ParseLayout(string? name) => name switch { "front" => BattleLayout.Front, "side" => BattleLayout.Side, _ => null };
 
 	public static BattlePresentation Defaults()
 	{
@@ -111,13 +126,44 @@ public sealed class BattlePresentation
 		}
 		foreach ((string name, JsonNode? node) in root)
 		{
-			if (name is not ("timings" or "fallbacks" or "actions"))
+			if (name is not ("timings" or "fallbacks" or "actions" or "layout" or "layouts"))
 			{
 				Problem("-", $"unknown field '{name}'");
+			}
+			else if (name == "layout")
+			{
+				if (ParseLayout(node is JsonValue v && v.TryGetValue(out string? text) ? text : null) is { } layout)
+				{
+					p.Layout = layout;
+				}
+				else
+				{
+					Problem(name, "must be front or side");
+				}
 			}
 			else if (node is not JsonObject)
 			{
 				Problem(name, "must be an object");
+			}
+		}
+		if (root["layouts"] is JsonObject layouts)
+		{
+			foreach ((string key, JsonNode? value) in layouts)
+			{
+				string[] parts = key.Split(':', 2);
+				bool known = parts is ["encounter", string encounter] ? data.Encounters.Contains(encounter) : parts is ["area", string area] && data.Areas.Contains(area);
+				if (!known)
+				{
+					Problem($"layouts.{key}", "unknown key: encounter:ID or area:ID, with an encounter or area of the game data");
+				}
+				else if (ParseLayout(value is JsonValue v && v.TryGetValue(out string? text) ? text : null) is { } layout)
+				{
+					p.Layouts[key] = layout;
+				}
+				else
+				{
+					Problem($"layouts.{key}", "must be front or side");
+				}
 			}
 		}
 		if (root["timings"] is JsonObject timings)
@@ -228,6 +274,8 @@ public sealed class BattlePresentation
 		};
 		var root = new JsonObject
 		{
+			["layout"] = NameOf(Layout),
+			["layouts"] = new JsonObject(Layouts.OrderBy(l => l.Key, StringComparer.Ordinal).Select(l => KeyValuePair.Create(l.Key, (JsonNode?)NameOf(l.Value)))),
 			["timings"] = new JsonObject(Timings.Select(t => KeyValuePair.Create(t.Key, (JsonNode?)t.Value))),
 			["fallbacks"] = new JsonObject(Fallbacks.OrderBy(f => f.Key, StringComparer.Ordinal).Select(f => KeyValuePair.Create(f.Key, (JsonNode?)Look(f.Value)))),
 			["actions"] = new JsonObject(Actions.OrderBy(a => a.Key, StringComparer.Ordinal).Select(a => KeyValuePair.Create(a.Key, (JsonNode?)Look(a.Value)))),

@@ -1,0 +1,344 @@
+# The front battle layout (the default), played on a copy of the placeholder data with one more encounter of six
+# enemies (scripts/make_front_data.py), with --dev for the commands that reach the moments it checks. Seed 1. The
+# command window beside the member choosing, the target pointer and the descriptions; a round with an enemy hitting a
+# member (its slot flashing), a critical, a technique sweeping along every enemy and a defend; the Twin Arc
+# combination's name plate above the strip and a poison status; the log; retargets and a miss; a full party of five in
+# the strip; six enemies in two ranks, swept along both, and a victory with level-ups; a vehicle battle with the
+# vehicle seen from behind; the side layout again for one battle; and a defeat. After each round the playback matches
+# the session (battlesync), and at each moment nothing covers the enemies' labels or the member acting (overlaps). With
+# --window the shot lines save screenshots under build/shots/ (run from bindings/), most at 100% and 150% text size;
+# headless runs write nothing for them.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+cmd set difficulty hard
+cmd set reward x2
+
+# The macro: the medic's Glint and the mystic's Spark at the first enemy.
+press M
+press Right 5
+expect state tab Macros
+press Down 3
+press Enter
+press D
+press U
+press O
+press Enter
+press Enter
+press Enter
+press Enter
+press Down 2
+press Enter
+press Down
+press Enter
+press Down 4
+press Enter
+press Down 3
+press Enter
+press Enter
+press Down
+press Enter
+press Down
+press Enter
+press Down
+press Enter
+press Enter
+press Down 3
+press Enter
+press Enter
+expect state macro.Duo Test Medic: Glint -> enemy 1 / Test Mystic: Spark -> enemy 1
+pressuntil Escape Field 20
+
+# The cache's three enemies in one row; three members, so two of the strip's five slots are empty frames. The member
+# choosing stands up a little and the command window opens beside it.
+cmd walk 13 4
+cmd walk cache_front
+expect mode Battle
+waitstate 120 battlephase Command
+expect state battlelayout front
+expect state ranks 3
+expect state figures fighter back, mystic back, medic back
+expect state strip Test Fighter acting | Test Mystic | Test Medic | - | -
+expect state overlaps none
+shot build/shots/front_command.png
+cmd set text_size 150
+shot build/shots/front_command_150.png
+cmd set text_size 100
+press Enter
+expect state battlephase Target
+expect state overlaps none
+shot build/shots/front_target.png
+cmd set text_size 150
+shot build/shots/front_target_150.png
+cmd set text_size 100
+present mark
+press Enter
+press Down
+press Enter
+press Down 2
+expect state battlephase Option
+expect state description A sheet of frost settles on every foe.
+expect state strip Test Fighter | Test Mystic acting | Test Medic | - | -
+expect state overlaps none
+shot build/shots/front_options.png
+cmd set text_size 150
+expect state overlaps none
+shot build/shots/front_options_150.png
+cmd set text_size 100
+press Enter
+press Down 4
+press Enter
+
+# The round: the hound hits the fighter (a number over its back, its slot flashing), the fighter's critical, the
+# mystic's Frost Pane sweeping along all three enemies, the medic's defend.
+waitstatehas 200 step result Test Fighter -12
+expect statehas strip Test Fighter hit
+expect state overlaps none
+shot build/shots/front_member_hit.png
+cmd set text_size 150
+shot build/shots/front_member_hit_150.png
+cmd set text_size 100
+waitstatehas 900 step effect burst_chill on Gel Mite A, Gel Mite B, Rust Hound
+wait 8
+expect state strip Test Fighter | Test Mystic acting | Test Medic | - | -
+expect state overlaps none
+shot build/shots/front_sweep.png
+cmd set text_size 150
+shot build/shots/front_sweep_150.png
+cmd set text_size 100
+waitstatehas 200 step result Gel Mite A
+shot build/shots/front_numbers.png
+waitstatehas 900 step effect shield on Test Medic
+shot build/shots/front_defend.png
+waitstate 900 battlephase Command
+expect present round 1 | forward Rust Hound | banner Attack | animate Rust Hound attack | effect slash on Test Fighter | result Test Fighter -12 | back Rust Hound | forward Test Fighter | banner Attack | animate Test Fighter attack | effect slash on Gel Mite A | result Gel Mite A critical, Gel Mite A -47 | back Test Fighter | forward Test Mystic | banner Frost Pane | animate Test Mystic cast | effect burst_chill on Gel Mite A, Gel Mite B, Rust Hound | result Gel Mite A -13 resisted, Gel Mite A falls, Gel Mite B -24 resisted, Rust Hound -56 | back Test Mystic | forward Test Medic | banner Defend | animate Test Medic defend | effect shield on Test Medic | back Test Medic | cancel Gel Mite A: Gel Mite A cannot act (Defeated) | forward Gel Mite B | banner Attack | animate Gel Mite B attack | effect slash on Test Medic | result Test Medic -1 | back Gel Mite B
+expect state battlesync 2 checked, all match
+
+# The macro's round: the hound's venom poisons the fighter (its icon grows in on the slot), then the Twin Arc's name
+# plate sits above the strip, with both participants raised out of the line.
+press Down 6
+press Enter
+expect state battlephase Macro
+expect state overlaps none
+shot build/shots/front_macro.png
+press Down 3
+present mark
+press Enter
+waitstatehas 600 step result Test Fighter -13, Test Fighter +poison
+wait 10
+expect statehas shown Test Fighter 61/86 8/8 poison
+expect state overlaps none
+shot build/shots/front_status.png
+cmd set text_size 150
+shot build/shots/front_status_150.png
+cmd set text_size 100
+waitstatehas 900 step banner Twin Arc
+expect statehas strip acting
+expect state overlaps none
+shot build/shots/front_combo_banner.png
+cmd set text_size 150
+shot build/shots/front_combo_banner_150.png
+cmd set text_size 100
+waitstatehas 300 step effect nova_shock
+expect state flash on
+shot build/shots/front_combo_effect.png
+waitstatehas 300 step result
+shot build/shots/front_combo_numbers.png
+waitstate 900 battlephase Ended
+expect present round 2 | forward Rust Hound | banner Venom Spit | animate Rust Hound cast | effect burst on Test Fighter | result Test Fighter -13, Test Fighter +poison | back Rust Hound | forward Test Fighter | banner Attack | animate Test Fighter attack | effect slash on Rust Hound | result Rust Hound -34, Rust Hound falls | back Test Fighter | forward Test Medic+Test Mystic | banner Twin Arc: Test Medic (Glint) + Test Mystic (Spark) | animate Test Medic+Test Mystic cast | effect nova_shock on Gel Mite B | result Gel Mite B -36, Gel Mite B falls | back Test Medic+Test Mystic | outcome victory | notice Victory. 52 experience, 36 money.
+expect state battlesync 3 checked, all match
+expect statehas victory Victory! / Experience 52 / Money 36
+expect statehas strip Test Fighter | Test Mystic | Test Medic | - | -
+shot build/shots/front_victory.png
+cmd set text_size 150
+shot build/shots/front_victory_150.png
+cmd set text_size 100
+press Enter
+expect screen Field
+
+# Random battles off from here. The lookout's scene battle: the first targets are taken by other actions, so pointers
+# move to new targets, a bog wisp heals itself and misses the mystic, and the battle ends by its script.
+dev encounters off
+cmd walk 0 4
+cmd walk inn_front
+cmd face west
+cmd talk
+cmd rest
+cmd walk 13 4
+cmd walk lookout_front
+cmd face north
+wait 2
+press Enter
+pressuntil Enter Battle 600
+waitstate 300 battlephase Command
+press L
+expect state battlelogshown on
+expect state overlaps none
+shot build/shots/front_log.png
+press L
+present mark
+press Down 7
+press Enter
+waitstatehas 600 step retarget Test Fighter
+wait 8
+expect state overlaps none
+shot build/shots/front_retarget.png
+waitstatehas 600 step result Test Mystic miss
+shot build/shots/front_miss.png
+waitstate 600 battlephase Ended
+expect present notice Auto-battle on with opener. | round 1 | forward Test Mystic | retarget Test Mystic: Bog Wisp A>Gel Mite | banner Spark | animate Test Mystic cast | effect burst_shock on Gel Mite | result Gel Mite -60, Gel Mite falls | back Test Mystic | forward Test Fighter | retarget Test Fighter: Bog Wisp A>Bog Wisp B | banner Attack | animate Test Fighter attack | effect slash on Bog Wisp B | result Bog Wisp B -41 | back Test Fighter | forward Bog Wisp B | banner Patch Up | animate Bog Wisp B cast | effect motes_heal on Bog Wisp B | result Bog Wisp B +31 | back Bog Wisp B | forward Bog Wisp A | banner Attack | animate Bog Wisp A attack | effect slash on Test Mystic | result Test Mystic miss | back Bog Wisp A | forward Test Medic | retarget Test Medic: Test Fighter>Test Medic | banner Mend | animate Test Medic cast | effect motes_heal on Test Medic | result Test Medic +0 | back Test Medic | cancel Gel Mite: Gel Mite cannot act (Defeated) | outcome scripted_end | notice The battle is over. 14 experience, 9 money.
+expect statehas battlesync all match
+press Enter
+pressuntil Enter Field 600
+
+# The board's scene fills the party to five: every slot of the strip holds a member. Six enemies stand in two ranks,
+# the first three in front and the others smaller, further back in the gaps.
+cmd walk 0 4
+dev event tidewater_board
+pressuntil Enter Field 900
+expect state party Test Fighter, Test Mystic, Test Medic, Test Scout, Test Engineer
+dev level fighter 20
+dev level mystic 20
+dev level medic 20
+dev level scout 1
+dev level engineer 1
+dev battle horde
+expect mode Battle
+waitstate 300 battlephase Command
+expect state ranks 3+3
+expect state strip Test Fighter acting | Test Mystic | Test Medic | Test Scout | Test Engineer
+expect state overlaps none
+shot build/shots/front_ranks.png
+cmd set text_size 150
+shot build/shots/front_ranks_150.png
+cmd set text_size 100
+
+# The mystic's Frost Pane sweeps along all six, both ranks; the others attack or defend. Then auto-battle, fast-forwarded,
+# to the victory, where the two members at level 1 level up.
+press Enter
+press Enter
+press Down
+press Enter
+press Down 2
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+expect state strip Test Fighter | Test Mystic | Test Medic | Test Scout | Test Engineer acting
+expect state overlaps none
+shot build/shots/front_full_party.png
+press Enter
+waitstatehas 1500 step effect burst_chill on Gel Mite A, Rust Hound A, Gel Mite B, Rust Hound B, Gel Mite C, Brass Warden
+wait 10
+expect state overlaps none
+shot build/shots/front_ranks_effect.png
+cmd set text_size 150
+shot build/shots/front_ranks_effect_150.png
+cmd set text_size 100
+waitstate 1500 battlephase Command
+press Down 7
+press Enter
+hold F 60
+expect state battlephase Ended
+expect statehas battlesync all match
+expect statehas victory Test Scout reached level 2! / Test Engineer reached level 2!
+expect state overlaps none
+shot build/shots/front_levelup.png
+cmd set text_size 150
+shot build/shots/front_levelup_150.png
+cmd set text_size 100
+press Enter
+expect screen Field
+
+# A vehicle battle: the skimmer seen from behind takes the members' place on the field and takes the commands, with
+# its own plate above the strip, where the members riding inside keep their slots.
+dev vehicle reed_skimmer reed_path skimmer_front
+cmd walk 13 4
+cmd walk 9 6
+cmd walk 16 6
+press Right
+wait 3
+press Enter
+wait 4
+expect state aboard reed_skimmer
+dev battle training
+expect mode Battle
+waitstate 300 battlephase Command
+expect state figures reed_skimmer vehicle back
+expect statehas strip vehicle Reed Skimmer acting
+expect state overlaps none
+shot build/shots/front_vehicle.png
+cmd set text_size 150
+shot build/shots/front_vehicle_150.png
+cmd set text_size 100
+present mark
+press Enter
+press Enter
+waitstatehas 900 step result Reed Skimmer
+wait 6
+expect statehas strip vehicle Reed Skimmer hit
+expect state overlaps none
+shot build/shots/front_vehicle_hit.png
+hold F 1
+waitstate 300 battlephase Command
+press Down 7
+press Enter
+hold F 60
+expect state battlephase Ended
+expect statehas battlesync all match
+press Enter
+expect screen Field
+press Enter
+wait 4
+expect state aboard -
+
+# The side layout for one battle, by the script's override: the figures from the side, the panels and the menu at the
+# right, no strip; then the presentation table's layout again.
+battlelayout side
+dev battle training
+expect mode Battle
+waitstate 300 battlephase Command
+expect state battlelayout side
+expect state strip -
+expect state figures fighter side, mystic side, medic side, scout side, engineer side
+shot build/shots/side_command.png
+cmd set text_size 150
+shot build/shots/side_command_150.png
+cmd set text_size 100
+press Down 7
+press Enter
+waitstatehas 900 step effect
+wait 6
+shot build/shots/side_effect.png
+hold F 60
+expect state battlephase Ended
+expect statehas battlesync all match
+shot build/shots/side_victory.png
+press Enter
+battlelayout data
+expect state battlelayout front
+
+# A defeat: the party falls (a developer loss), slumped and grey behind the strip, and the result says so.
+dev battle warden
+expect mode Battle
+waitstate 300 battlephase Command
+dev lose
+waitstate 900 battlephase Ended
+expect state victory Defeated... / The party has fallen.
+expect statehas strip Test Fighter | Test Mystic
+expect state overlaps none
+shot build/shots/front_defeat.png
+cmd set text_size 150
+shot build/shots/front_defeat_150.png
+cmd set text_size 100
+press Enter
+expect screen Title

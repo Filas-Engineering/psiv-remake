@@ -22,6 +22,7 @@ public sealed partial class Art
 	private readonly Dictionary<string, (CharacterEntry Entry, int[] Images)> _people = [];
 	private readonly Dictionary<string, int> _portraits = [];
 	private readonly Dictionary<(string, bool), Figure> _figures = [];
+	private readonly Dictionary<string, Figure> _backFigures = [];
 	private readonly Dictionary<string, Figure> _fieldEnemies = [];
 	private readonly Dictionary<string, int> _backdrops = [];
 	private readonly Dictionary<string, Figure> _effects = [];
@@ -31,7 +32,7 @@ public sealed partial class Art
 	private readonly string _assetDir = "";
 
 	// Whether the picture for a key (`tileset:town`, `tileset:area:tidewater`, `character:fighter`, `portrait:guide`,
-	// `figure:party:fighter`, `figure:enemy:gel_mite`, `field_enemy:training`, `vehicle:reed_skimmer`, `backdrop:kind:town`, `effect:slash`,
+	// `figure:party:fighter`, `figure:back:fighter`, `figure:enemy:gel_mite`, `field_enemy:training`, `vehicle:reed_skimmer`, `backdrop:kind:town`, `effect:slash`,
 	// `sprite:shadow`, `status_icon:sleep`, `ui:frame` ...) came from a file.
 	public bool FromFile(string key) => _fromFile.ContainsKey(key);
 
@@ -177,8 +178,16 @@ public sealed partial class Art
 		}
 		foreach (FigureEntry f in m.Figures)
 		{
-			_figures[(f.Id, f.Enemy)] = new Figure(Cut(f.Image), f.Idle, f.Animations);
-			_fromFile[$"figure:{(f.Enemy ? "enemy" : "party")}:{f.Id}"] = f.Image.Path;
+			var figure = new Figure(Cut(f.Image), f.Idle, f.Animations);
+			if (f.Back)
+			{
+				_backFigures[f.Id] = figure;
+			}
+			else
+			{
+				_figures[(f.Id, f.Enemy)] = figure;
+			}
+			_fromFile[$"figure:{(f.Enemy ? "enemy" : f.Back ? "back" : "party")}:{f.Id}"] = f.Image.Path;
 		}
 		foreach (FieldEnemyEntry f in m.FieldEnemies)
 		{

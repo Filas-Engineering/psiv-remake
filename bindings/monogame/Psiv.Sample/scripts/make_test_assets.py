@@ -143,6 +143,7 @@ def main():
 	manifest["characters"][0]["animations"]["dance"] = "nod"
 	manifest["characters"][1]["animations"]["nod"] = "twirl"
 	manifest["figures"][0]["animations"]["juggle"] = {"frames": [0], "ms": 100}
+	next(f for f in manifest["figures"] if f["side"] == "enemy")["view"] = "back"
 	next(a for a in manifest["audio"] if a["kind"] == "music")["loop_end"] = 99999999
 	next(a for a in manifest["audio"] if a["kind"] == "ambient")["loop_start"] = 2
 	next(a for a in manifest["audio"] if a["kind"] == "ambient")["loop_end"] = 1
@@ -156,6 +157,8 @@ def main():
 	table = json.loads((broken / "battle_presentation.json").read_text())
 	table["actions"]["strike"] = {"effect": "fireworks", "animation": "moonwalk"}
 	table["actions"]["unknown_move"] = {}
+	table["layout"] = "diagonal"
+	table["layouts"] = {"encounter:nowhere": "side"}
 	(broken / "battle_presentation.json").write_text(json.dumps(table, indent="\t") + "\n")
 
 

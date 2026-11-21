@@ -352,6 +352,6 @@ public sealed partial class SampleController
 		"shown" => string.Join(", ", _show.All.Select((c, i) => $"{(i < _battle.Labels.Count ? _battle.Labels[i] : "?")} {c.Hp}/{c.MaxHp} {c.Tp}/{c.MaxTp}" +
 			(c.Statuses.Count > 0 ? " " + string.Join(" ", c.Statuses) : "") + (c.Alive ? "" : " down"))),
 		"victory" => _probeVictory,
-		_ => "?",
+		_ => FrontState(key),
 	};
 }

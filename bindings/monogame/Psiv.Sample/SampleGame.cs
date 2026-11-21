@@ -46,15 +46,18 @@ public sealed class SampleGame : Game
 	private readonly string? _assets;
 	private readonly bool _dev;
 	private readonly string? _dataDir;
+	private readonly BattleLayout? _battleLayout;
 	private readonly FileSystemWatcher? _watcher;
 	// When the watcher last saw a change in the asset directory; the reload waits for a quiet moment after it.
 	private long _assetChangeTicks;
 	private const int WatchQuietMs = 300;
 
 	public SampleGame(GameSession session, GameData data, string? fontPath, int exitAfterMs, string? saves, string? scriptPath = null, string? screenshot = null, bool mute = false,
-		(int Width, int Height)? windowSize = null, bool fullscreen = false, string? assets = null, bool watchAssets = false, bool dev = false, string? dataDir = null)
+		(int Width, int Height)? windowSize = null, bool fullscreen = false, string? assets = null, bool watchAssets = false, bool dev = false, string? dataDir = null,
+		BattleLayout? battleLayout = null)
 	{
 		_dev = dev;
+		_battleLayout = battleLayout;
 		_dataDir = dataDir;
 		_data = data;
 		_assets = assets;
@@ -75,7 +78,7 @@ public sealed class SampleGame : Game
 		_scriptPath = scriptPath;
 		_screenshot = screenshot;
 		_audio = MonoGameAudio.Create(mute, Console.WriteLine);
-		_controller = new SampleController(session, data, Console.WriteLine, _controlsPath, _audio, assets, dev, dataDir);
+		_controller = new SampleController(session, data, Console.WriteLine, _controlsPath, _audio, assets, dev, dataDir, battleLayout);
 		_graphics = new GraphicsDeviceManager(this)
 		{
 			PreferredBackBufferWidth = windowSize?.Width ?? Letterbox.BaseWidth,
@@ -118,7 +121,7 @@ public sealed class SampleGame : Game
 		if (_scriptPath is not null)
 		{
 			_player = new ScriptPlayer(_session, _controller, _scriptPath, () => [], () => _frame, _shots.Add,
-				() => _controller = new SampleController(_session, _data, Console.WriteLine, _controlsPath, _audio, _assets, _dev, _dataDir), _saves, Resize);
+				() => _controller = new SampleController(_session, _data, Console.WriteLine, _controlsPath, _audio, _assets, _dev, _dataDir, _battleLayout), _saves, Resize);
 		}
 	}
 
@@ -166,10 +169,11 @@ public sealed class SampleGame : Game
 			_controller.ReloadAssets();
 		}
 		_frame++;
-		// The session takes whole milliseconds; the remainder carries into the next frame.
+		// The session takes whole milliseconds; the remainder carries into the next frame. A script's frames take the
+		// headless frame time, so its screenshots show the moments the headless run of the same script checks.
 		_carryMs += gameTime.ElapsedGameTime.TotalMilliseconds;
-		int dt = (int)_carryMs;
-		_carryMs -= dt;
+		int dt = _player is not null ? Headless.FrameMs : (int)_carryMs;
+		_carryMs -= _player is not null ? _carryMs : dt;
 		_controller.Update(dt, _input);
 		_elapsedMs += gameTime.ElapsedGameTime.TotalMilliseconds;
 		bool scriptDone = _player is not null && _player.Done && _exitAfterMs == 0;

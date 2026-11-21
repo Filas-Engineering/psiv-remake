@@ -136,6 +136,16 @@ public static class PlaceholderExport
 				["animations"] = new JsonObject(f.Animations.Select(a => KeyValuePair.Create(a.Key, (JsonNode?)Run(a.Value, i => i)))),
 			});
 		}
+		foreach (string id in data.Characters.Concat(data.Vehicles).Order(StringComparer.Ordinal))
+		{
+			Figure f = data.FieldVehicles.Contains(id) ? art.VehicleBackFigure(id) : art.BackFigure(id);
+			figures.Add(new JsonObject
+			{
+				["id"] = id, ["side"] = "party", ["view"] = "back", ["image"] = Sheet($"figures/party_back_{id}.png", f.Images),
+				["frame"] = Ints([Pixels.Size, Pixels.Size]), ["idle"] = Run(f.Idle, i => i),
+				["animations"] = new JsonObject(f.Animations.Select(a => KeyValuePair.Create(a.Key, (JsonNode?)Run(a.Value, i => i)))),
+			});
+		}
 		manifest["figures"] = figures;
 
 		var fieldEnemies = new JsonArray();
