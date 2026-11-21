@@ -8,18 +8,21 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-// The windowed front end: MonoGame owns the window, the clock and the keyboard; SampleController does the
-// rest. One session update per frame, driven from Update with the frame's elapsed milliseconds.
+// The windowed front end: MonoGame owns the window, the clock, the keyboard and the gamepad; SampleController
+// does the rest. One session update per frame, driven from Update with the frame's elapsed milliseconds.
 public sealed class SampleGame : Game
 {
 	private readonly GraphicsDeviceManager _graphics;
 	private readonly GameSession _session;
-	private readonly SampleController _controller;
+	public const string ControlsFile = "controls.json";
+
+	private SampleController _controller;
 	private readonly InputState _input = new();
 	private readonly string? _fontPath;
 	private readonly int _exitAfterMs;
 	private readonly string? _scriptPath;
 	private readonly string? _screenshot;
+	private readonly string? _controlsPath;
 	private ScriptPlayer? _player;
 	private readonly List<string> _shots = [];
 	private int _frame;
@@ -30,15 +33,17 @@ public sealed class SampleGame : Game
 	private double _elapsedMs;
 	private bool _exiting;
 	private bool _finished;
+	private bool _padConnected;
 
-	public SampleGame(GameSession session, string? fontPath, int exitAfterMs, string? scriptPath = null, string? screenshot = null)
+	public SampleGame(GameSession session, string? fontPath, int exitAfterMs, string? saves, string? scriptPath = null, string? screenshot = null)
 	{
+		_controlsPath = saves is null ? null : Path.Combine(saves, ControlsFile);
 		_session = session;
 		_fontPath = fontPath;
 		_exitAfterMs = exitAfterMs;
 		_scriptPath = scriptPath;
 		_screenshot = screenshot;
-		_controller = new SampleController(session, Console.WriteLine);
+		_controller = new SampleController(session, Console.WriteLine, _controlsPath);
 		_graphics = new GraphicsDeviceManager(this) { PreferredBackBufferWidth = 1280, PreferredBackBufferHeight = 720 };
 		Window.Title = session.GameInfo().Title;
 		IsMouseVisible = true;
@@ -51,7 +56,8 @@ public sealed class SampleGame : Game
 		_surface = new MonoGameSurface(GraphicsDevice, _batch, _fonts);
 		if (_scriptPath is not null)
 		{
-			_player = new ScriptPlayer(_session, _controller, _scriptPath, () => [], () => _frame, _shots.Add);
+			_player = new ScriptPlayer(_session, _controller, _scriptPath, () => [], () => _frame, _shots.Add,
+				() => _controller = new SampleController(_session, Console.WriteLine, _controlsPath));
 		}
 	}
 
@@ -65,7 +71,21 @@ public sealed class SampleGame : Game
 			base.Update(gameTime);
 			return;
 		}
-		_input.Set(_player is not null ? _player.Next() : Keyboard.GetState().GetPressedKeys());
+		if (_player is not null)
+		{
+			InputFrame next = _player.Next();
+			_input.Set(next.Keys, next.Buttons);
+		}
+		else
+		{
+			GamePadState pad = GamePad.GetState(PlayerIndex.One);
+			if (pad.IsConnected != _padConnected)
+			{
+				_padConnected = pad.IsConnected;
+				Console.WriteLine(_padConnected ? "gamepad connected" : "gamepad disconnected");
+			}
+			_input.Set(Keyboard.GetState().GetPressedKeys(), Pad.ButtonsDown(pad), _padConnected);
+		}
 		_frame++;
 		// The session takes whole milliseconds; the remainder carries into the next frame.
 		_carryMs += gameTime.ElapsedGameTime.TotalMilliseconds;

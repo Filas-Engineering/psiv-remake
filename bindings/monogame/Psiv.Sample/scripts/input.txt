@@ -1,0 +1,130 @@
+# Input through the bindings: the arrival, a walk, the field menu and the logs played with gamepad buttons and the
+# left stick only, then an action rebound through the controller's capture calls (a later options screen's), the
+# bindings saved to controls.json and read back by a new controller, and files that do not read or leave a required
+# action unbound falling back to the defaults.
+
+expect screen Title
+pad A
+paduntil A Field 400
+expect screen Field
+
+# A D-pad tap turns the leader without a step; held, it walks, as the arrows do.
+cmd walk 7 4
+pad DPadLeft
+wait 3
+expect actor fighter 7 4 west
+padhold DPadRight 20
+wait 20
+expect actor fighter 8 4 east
+# The stick inside its dead zone does nothing; a one-frame flick past it turns, and held it walks.
+padstick 0.4 -0.3 30
+expect actor fighter 8 4 east
+padstick -0.2 0.9 1
+wait 3
+expect actor fighter 8 4 north
+cmd walk 7 4
+padstick 0.1 -1 60
+expect actor fighter 7 6 south
+dump
+
+# The menu from Start, tabs with the shoulders and the D-pad, a member picked with A and the menu left with B.
+pad Start
+expect screen Menu
+pad RightShoulder
+pad DPadRight
+dump
+pad LeftShoulder 2
+pad A
+pad DPadDown
+pad B
+expect screen Menu
+pad B
+expect screen Field
+pad Y
+expect screen Menu
+pad B
+expect screen Field
+pad LeftTrigger
+expect screen QuestLog
+pad B
+expect screen Field
+pad RightTrigger
+expect screen TextLog
+pad A
+expect screen Field
+
+# The menu rebound to K: K opens it, M and Escape no longer do.
+controls capture Menu
+press K
+expect screen Field
+expect binding Menu K | Start, Y
+press M
+expect screen Field
+press Escape
+expect screen Field
+press K
+expect screen Menu
+press Escape
+expect screen Field
+# Escape cancels a capture; a button replaces only the buttons.
+controls capture Confirm
+press Escape
+expect screen Field
+expect binding Confirm Enter, Z, Space | A
+controls capture PartyTalk
+pad RightStick
+expect binding PartyTalk T | R3
+# A required action cannot be cleared; another can, and then does nothing.
+controls clear Confirm
+expect binding Confirm Enter, Z, Space | A
+controls clear TextLog
+expect binding TextLog - | -
+press L
+expect screen Field
+dump
+
+# Saved, and read back by a new controller.
+controls save
+controls restart
+wait 2
+expect binding Menu K | Start, Y
+expect binding PartyTalk T | R3
+expect binding TextLog - | -
+press M
+expect screen Field
+press K
+expect screen Menu
+press Escape
+expect screen Field
+controls list
+
+# Back to the defaults, saved and read back.
+controls reset
+controls save
+controls restart
+wait 2
+expect binding Menu M, Esc | Start, Y
+expect binding TextLog L | RT
+press M
+expect screen Menu
+press Escape
+
+# A file that does not read gives the defaults and one log line; so does an unknown key name.
+controls write {"Menu": {"keys": ["K"]
+controls restart
+wait 2
+expect binding Menu M, Esc | Start, Y
+controls write {"Menu": {"keys": ["NoSuchKey"], "buttons": []}}
+controls restart
+wait 2
+expect binding Menu M, Esc | Start, Y
+# A required action left unbound gets its default back; the rest of the file still applies.
+controls write {"Confirm": {"keys": [], "buttons": []}, "Menu": {"keys": ["K"]}}
+controls restart
+wait 2
+expect binding Confirm Enter, Z, Space | A
+expect binding Menu K | -
+press K
+expect screen Menu
+press Escape
+expect screen Field

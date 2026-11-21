@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 
 using Psiv.Session;
@@ -17,9 +18,11 @@ public static class Program
 		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N]   headless, no window\n" +
 		"\n" +
 		"Headless script lines: press KEY [COUNT] | hold KEY FRAMES | wait FRAMES | pressuntil KEY SCREEN MAXFRAMES |\n" +
+		"pad BUTTON [COUNT] | padhold BUTTON FRAMES | paduntil BUTTON SCREEN MAXFRAMES | padstick X Y FRAMES |\n" +
+		"controls list|reset|save|restart | controls capture|clear ACTION | controls write JSON |\n" +
 		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | expect actor ID X Y [FACING]|walking|hidden | expect pose ID POSE [marked] |\n" +
-		"expect label none | expect toast none|TEXT | expect notoast TEXT | dump | shot FILE.png (window only) | # comment.\n" +
-		"Keys are MonoGame Keys names.\n" +
+		"expect label none | expect toast none|TEXT | expect notoast TEXT | expect binding ACTION KEYS \"|\" BUTTONS | dump | shot FILE.png (window only) | # comment.\n" +
+		"Keys are MonoGame Keys names, buttons MonoGame Buttons names, actions the sample's GameAction names.\n" +
 		"Exit codes: 0 done, 1 a failure, 2 bad arguments.\n";
 
 	public static int Main(string[] args)
@@ -89,11 +92,11 @@ public static class Program
 		{
 			if (script is not null && !window)
 			{
-				return Headless.Run(session, script, frames);
+				return Headless.Run(session, script, frames, saves);
 			}
 			try
 			{
-				using var game = new SampleGame(session, font, exitAfterMs, script, screenshot);
+				using var game = new SampleGame(session, font, exitAfterMs, saves, script, screenshot);
 				game.Run();
 				return game.Failures == 0 ? 0 : 1;
 			}
@@ -122,12 +125,19 @@ public static class Program
 	}
 }
 
-// Plays a key script frame by frame: each call to Next gives the keys held for one frame. Lines that take
-// no frames (cmd, expect, dump) run between frames.
+// The keys and gamepad buttons held for one frame.
+public readonly record struct InputFrame(Keys[] Keys, Buttons[] Buttons)
+{
+	public static readonly InputFrame None = new([], []);
+}
+
+// Plays an input script frame by frame: each call to Next gives the keys and buttons held for one frame. Lines
+// that take no frames (cmd, controls, expect, dump) run between frames.
 public sealed class ScriptPlayer
 {
 	private readonly GameSession _session;
-	private readonly SampleController _controller;
+	private readonly Func<SampleController>? _restart;
+	private SampleController _controller;
 	private readonly ScriptRunner _runner;
 	private readonly StringWriter _commandOutput = new();
 	private readonly Func<IReadOnlyList<string>> _frameText;
@@ -136,13 +146,16 @@ public sealed class ScriptPlayer
 	private readonly string _name;
 	private readonly string[] _lines;
 	private int _next;
-	private IEnumerator<Keys[]>? _action;
+	private IEnumerator<InputFrame>? _action;
 	private string? _pendingFailure;
 
-	// `shot` saves the next drawn frame to a file; null (headless) skips shot lines.
-	public ScriptPlayer(GameSession session, SampleController controller, string path, Func<IReadOnlyList<string>> frameText, Func<int> frame, Action<string>? shot = null)
+	// `shot` saves the next drawn frame to a file; null (headless) skips shot lines. `restart` makes a new controller
+	// for `controls restart`.
+	public ScriptPlayer(GameSession session, SampleController controller, string path, Func<IReadOnlyList<string>> frameText, Func<int> frame,
+		Action<string>? shot = null, Func<SampleController>? restart = null)
 	{
 		_shot = shot;
+		_restart = restart;
 		_session = session;
 		_controller = controller;
 		_runner = new ScriptRunner(session, _commandOutput, autoBattle: false);
@@ -155,6 +168,8 @@ public sealed class ScriptPlayer
 
 	public int Failures { get; private set; }
 
+	public SampleController Controller => _controller;
+
 	public bool Done => _action is null && _next >= _lines.Length;
 
 	private void Fail(string message)
@@ -163,31 +178,36 @@ public sealed class ScriptPlayer
 		Console.WriteLine($"[{_frame()}] FAIL: {message}");
 	}
 
-	private static IEnumerable<Keys[]> Press(Keys key, int count)
+	private static IEnumerable<InputFrame> Press(InputFrame frame, int count)
 	{
 		for (int i = 0; i < count; i++)
 		{
-			yield return [key];
-			yield return [];
+			yield return frame;
+			yield return InputFrame.None;
 		}
 	}
 
-	private static IEnumerable<Keys[]> Repeat(Keys[] keys, int count)
+	private static IEnumerable<InputFrame> Repeat(InputFrame frame, int count)
 	{
 		for (int i = 0; i < count; i++)
 		{
-			yield return keys;
+			yield return frame;
 		}
 	}
+
+	// The buttons a connected pad reports with its left stick at x, y (each -1 to 1, y up), through the same dead zone
+	// as a real pad.
+	private static InputFrame Stick(float x, float y) =>
+		new([], [.. Pad.ButtonsDown(new GamePadState(new GamePadThumbSticks(new Vector2(x, y), Vector2.Zero), new GamePadTriggers(), new GamePadButtons(), new GamePadDPad()))]);
 
 	// One frame with no keys, so the frame drawn is the one the script reached.
-	private IEnumerable<Keys[]> Shot(string path)
+	private IEnumerable<InputFrame> Shot(string path)
 	{
 		_shot?.Invoke(path);
-		yield return [];
+		yield return InputFrame.None;
 	}
 
-	private IEnumerable<Keys[]> PressUntil(Keys key, Screen screen, int max, string source)
+	private IEnumerable<InputFrame> PressUntil(InputFrame frame, Screen screen, int max, string source)
 	{
 		for (int i = 0; i < max; i += 2)
 		{
@@ -195,8 +215,8 @@ public sealed class ScriptPlayer
 			{
 				yield break;
 			}
-			yield return [key];
-			yield return [];
+			yield return frame;
+			yield return InputFrame.None;
 		}
 		if (_controller.Screen != screen)
 		{
@@ -204,7 +224,7 @@ public sealed class ScriptPlayer
 		}
 	}
 
-	private IEnumerator<Keys[]>? NextAction()
+	private IEnumerator<InputFrame>? NextAction()
 	{
 		while (_next < _lines.Length)
 		{
@@ -218,16 +238,41 @@ public sealed class ScriptPlayer
 			}
 			Keys key = Keys.None;
 			bool keyOk = w.Length > 1 && Enum.TryParse(w[1], ignoreCase: true, out key);
+			Buttons button = default;
+			bool buttonOk = w.Length > 1 && Enum.TryParse(w[1], ignoreCase: true, out button) && Enum.IsDefined(button);
+			GameAction action = default;
+			bool actionOk = w.Length > 2 && Enum.TryParse(w[2], ignoreCase: true, out action) && Enum.IsDefined(action);
 			switch (w[0])
 			{
 			case "press" when keyOk:
-				return Press(key, w.Length > 2 ? int.Parse(w[2], CultureInfo.InvariantCulture) : 1).GetEnumerator();
+				return Press(new([key], []), w.Length > 2 ? int.Parse(w[2], CultureInfo.InvariantCulture) : 1).GetEnumerator();
 			case "hold" when keyOk && w.Length == 3:
-				return Repeat([key], int.Parse(w[2], CultureInfo.InvariantCulture)).GetEnumerator();
+				return Repeat(new([key], []), int.Parse(w[2], CultureInfo.InvariantCulture)).GetEnumerator();
 			case "wait" when w.Length == 2:
-				return Repeat([], int.Parse(w[1], CultureInfo.InvariantCulture)).GetEnumerator();
+				return Repeat(InputFrame.None, int.Parse(w[1], CultureInfo.InvariantCulture)).GetEnumerator();
 			case "pressuntil" when keyOk && w.Length == 4 && Enum.TryParse(w[2], true, out Screen screen):
-				return PressUntil(key, screen, int.Parse(w[3], CultureInfo.InvariantCulture), source).GetEnumerator();
+				return PressUntil(new([key], []), screen, int.Parse(w[3], CultureInfo.InvariantCulture), source).GetEnumerator();
+			case "pad" when buttonOk:
+				return Press(new([], [button]), w.Length > 2 ? int.Parse(w[2], CultureInfo.InvariantCulture) : 1).GetEnumerator();
+			case "padhold" when buttonOk && w.Length == 3:
+				return Repeat(new([], [button]), int.Parse(w[2], CultureInfo.InvariantCulture)).GetEnumerator();
+			case "paduntil" when buttonOk && w.Length == 4 && Enum.TryParse(w[2], true, out Screen padScreen):
+				return PressUntil(new([], [button]), padScreen, int.Parse(w[3], CultureInfo.InvariantCulture), source).GetEnumerator();
+			case "padstick" when w.Length == 4 && float.TryParse(w[1], CultureInfo.InvariantCulture, out float stickX) &&
+				float.TryParse(w[2], CultureInfo.InvariantCulture, out float stickY):
+				return Repeat(Stick(stickX, stickY), int.Parse(w[3], CultureInfo.InvariantCulture)).GetEnumerator();
+			case "controls" when w.Length >= 2:
+				Controls(w, actionOk ? action : null, source);
+				break;
+			case "expect" when w.Length >= 4 && w[1] == "binding" && actionOk:
+				ControlBinding row = _controller.Controls().First(r => r.Action == action);
+				string bound = $"{row.KeyNames} | {row.ButtonNames}";
+				string expected = string.Join(" ", w[3..]);
+				if (bound != expected)
+				{
+					Fail($"{source}: {action} is bound to {bound}, expected {expected}");
+				}
+				break;
 			case "cmd" when w.Length > 1:
 				int before = _runner.Errors;
 				_runner.Execute(string.Join(" ", w[1..]));
@@ -307,9 +352,48 @@ public sealed class ScriptPlayer
 		return null;
 	}
 
+	// `controls ...`: the controller's rebinding calls, a later options screen's, so scripts can test them.
+	private void Controls(string[] w, GameAction? action, string source)
+	{
+		switch (w[1])
+		{
+		case "list" when w.Length == 2:
+			foreach (ControlBinding row in _controller.Controls())
+			{
+				Console.WriteLine($"[{_frame()}] controls| {row.Action}: {row.KeyNames} | {row.ButtonNames}");
+			}
+			break;
+		case "capture" when action is { } capture && w.Length == 3:
+			_controller.BeginCapture(capture);
+			break;
+		case "clear" when action is { } clear && w.Length == 3:
+			Console.WriteLine($"[{_frame()}] controls| clear {clear}: {(_controller.ClearBinding(clear) ? "cleared" : "refused")}");
+			break;
+		case "reset" when w.Length == 2:
+			_controller.ResetControls();
+			break;
+		case "save" when w.Length == 2:
+			if (!_controller.SaveControls())
+			{
+				Fail($"{source}: the controls were not saved");
+			}
+			break;
+		case "write" when w.Length > 2 && _controller.ControlsPath is { } path:
+			File.WriteAllText(path, string.Join(" ", w[2..]));
+			break;
+		case "restart" when w.Length == 2 && _restart is not null:
+			_controller = _restart();
+			Console.WriteLine($"[{_frame()}] controls| restarted the controller");
+			break;
+		default:
+			Fail($"{source}: cannot run '{string.Join(" ", w)}'");
+			break;
+		}
+	}
+
 	// `expect apart ID FRAMES`: the last frame and the next FRAMES frames, played with no keys, draw nobody else
 	// overlapping the person, less than a cell away on both axes.
-	private IEnumerable<Keys[]> Apart(string id, int frames, string source)
+	private IEnumerable<InputFrame> Apart(string id, int frames, string source)
 	{
 		for (int i = 0; ; i++)
 		{
@@ -330,7 +414,7 @@ public sealed class ScriptPlayer
 			{
 				yield break;
 			}
-			yield return [];
+			yield return InputFrame.None;
 		}
 	}
 
@@ -374,8 +458,8 @@ public sealed class ScriptPlayer
 		}
 	}
 
-	// The keys for the next frame; none once the script is done.
-	public Keys[] Next()
+	// The keys and buttons for the next frame; none once the script is done.
+	public InputFrame Next()
 	{
 		while (_action is not null)
 		{
@@ -390,7 +474,7 @@ public sealed class ScriptPlayer
 			}
 			_action = NextAction();
 		}
-		return [];
+		return InputFrame.None;
 	}
 
 	public void Finish(int frames)
@@ -406,25 +490,29 @@ public sealed class ScriptPlayer
 	}
 }
 
-// Runs the same controller and screens as the window, frame by frame at 16 ms, with scripted key presses
-// and a drawing surface that only records.
+// Runs the same controller and screens as the window, frame by frame at 16 ms, with scripted key and button
+// presses and a drawing surface that only records.
 public static class Headless
 {
 	private const int FrameMs = 16;
 
-	public static int Run(GameSession session, string scriptPath, int frames)
+	public static int Run(GameSession session, string scriptPath, int frames, string? saves)
 	{
 		int frame = 0;
 		int failures = 0;
 		var surface = new RecordingSurface();
-		var controller = new SampleController(session, line => Console.WriteLine($"[{frame}] {line}"));
+		string? controls = saves is null ? null : Path.Combine(saves, SampleGame.ControlsFile);
+		SampleController NewController() => new(session, line => Console.WriteLine($"[{frame}] {line}"), controls);
+		SampleController controller = NewController();
 		var input = new InputState();
 		try
 		{
-			var player = new ScriptPlayer(session, controller, scriptPath, () => surface.FrameText, () => frame);
+			var player = new ScriptPlayer(session, controller, scriptPath, () => surface.FrameText, () => frame, restart: NewController);
 			while (frame < frames && !controller.QuitRequested)
 			{
-				input.Set(player.Next());
+				InputFrame next = player.Next();
+				controller = player.Controller;
+				input.Set(next.Keys, next.Buttons);
 				controller.Update(FrameMs, input);
 				surface.BeginFrame();
 				controller.Draw(surface);

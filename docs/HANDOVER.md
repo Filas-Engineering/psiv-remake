@@ -65,7 +65,7 @@ Bringing in real data: [`data-import.md`](data-import.md).
 | acceptance | PASS 26, FAIL 0, NOT IMPLEMENTED 12, NOT AUTOMATABLE 26 |
 | C API | 814 checks pass |
 | C# | 14 tests pass |
-| MonoGame sample | four headless runs (smoke 2000 frames, large areas 1600, scripted actors and the tide chart scene 1300, the board scene with a full party 1100), 0 failures |
+| MonoGame sample | five headless runs (smoke 2000 frames, large areas 1600, scripted actors and the tide chart scene 1300, the board scene with a full party 1100), 0 failures |
 
 Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch64 and Linux x86-64 (GCC 13.3 and clang 18.1, Ubuntu 24.04 in Docker). The Linux check also runs the sample's window on a virtual display (Xvfb, Mesa llvmpipe) through `scripts/smoke.txt` and checks its screenshot. Windows, cross-compiled with MinGW-w64 (GCC 14) and run under Wine 10 (`tools/windows-check.sh`): the core, events and game unit tests, the C API as a DLL with its checks (726 when it last ran; not run again since the menu operations were added), and the C playthrough against `game_cli.exe` and the golden transcript, saves included. That check does not cover MSVC, the acceptance suites, the C# wrapper or the sample. The latest round (party order, macro editor, member detail, combo log) has run on macOS arm64 only; the Linux and Windows checks were not run again for it.
 
