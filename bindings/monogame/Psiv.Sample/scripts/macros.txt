@@ -132,9 +132,9 @@ press Down 6
 press Enter
 press Down 2
 press Enter
-# Confirm plays the round's lines at once: the mystic's Spark and the medic's Glint, back to back as the macro says,
-# make the Twin Arc combination.
-press Enter
+# Holding fast-forward plays the round to its end at once: the mystic's Spark and the medic's Glint, back to back as
+# the macro says, make the Twin Arc combination.
+hold F 1
 expect statehas battlelog Combo: Twin Arc.
 wait 30
 press Down 7

@@ -158,4 +158,8 @@ These are the messages a converter usually trips first. The line number points a
 * `inline text in say in event 'cave_door': player-facing text must be a string ID (@id) from the string tables` and `the name "Bell Warden" is typed out`: the scripts' strict check. Every line is a string ID, and glossary names are written as name tokens.
 * `string ID 'cave.old_line' is not used by any script or by the game`: a dialogue string left over, or one language has a key another lacks. The strict check treats warnings as problems.
 
-The scripted playthrough, the bot runs and the acceptance checks then test behavior on top of loading. After bringing in new placeholder content, run `make test` and `make acceptance`; `make acceptance` also checks that every character the text tables use is in the placeholder glyph lists (`game/data/text/glyphs_<code>.txt`).
+The scripted playthrough, the bot runs and the acceptance checks then test behavior on top of loading.
+
+## Pictures and sounds
+
+The data formats above hold no pictures or sounds. The MonoGame sample generates them and reads files in their place from an asset directory, keyed by the ids this data defines (area kinds and ids, actors, characters, vehicles, enemies, encounters, statuses, abilities and items, cameras, languages, `presentation.audio`, `presentation.animations` and `presentation.portraits`). [`assets.md`](assets.md) describes its manifest and the battle presentation table; `Psiv.Sample --check-assets --assets DIR` checks a directory against the data the way `game_cli --check` checks the data, and `--export-placeholders DIR` writes a complete starting set. After bringing in new placeholder content, run `make test` and `make acceptance`; `make acceptance` also checks that every character the text tables use is in the placeholder glyph lists (`game/data/text/glyphs_<code>.txt`).

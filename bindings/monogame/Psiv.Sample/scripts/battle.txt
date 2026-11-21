@@ -1,0 +1,325 @@
+# The battle presentation, played from the session's typed events (seed 1): the fighter alone loses at the reed path's
+# cache, with its result screen and the game over; then with the apprentices, a macro of the medic's Glint and the
+# mystic's Spark makes the Twin Arc combination, its round checked step by step at 1x, hurried by Confirm and with
+# its flash and shake, and again with reduced flash; a round fast-forwarded; an escape; the marsh's sleep put on and
+# worn off; battles at 3x; and a victory whose result screen shows level-ups and a learned ability. Every round's
+# playback must end at the session's numbers (battlesync).
+# With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing.
+
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+
+# Defeat: the fighter alone. At 1x the opening step (900 ms) still plays after 50 frames.
+cmd walk 13 4
+cmd walk cache_front
+expect mode Battle
+wait 2
+expect statehas step intro
+wait 50
+expect statehas step intro
+waitstate 40 battlephase Command
+press Down 7
+press Enter
+hold F 30
+expect state battlephase Ended
+expect presenthas outcome defeat | notice The party has fallen.
+expect state victory Defeated... / The party has fallen.
+expect state battlesync 5 checked, all match
+shot build/shots/battle_defeat.png
+press Enter
+expect screen Title
+expect mode Title
+
+# A new game; the apprentices join, at double reward on Hard, so the medic reaches level 4 within a few battles.
+expect state selected New game
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+cmd set difficulty hard
+cmd set reward x2
+
+# The macro: the medic's Glint and the mystic's Spark at the first enemy.
+press M
+press Right 5
+expect state tab Macros
+press Down 3
+press Enter
+press D
+press U
+press O
+press Enter
+press Enter
+press Enter
+press Enter
+press Down 2
+press Enter
+press Down
+press Enter
+press Down 4
+press Enter
+press Down 3
+press Enter
+press Enter
+press Down
+press Enter
+press Down
+press Enter
+press Down
+press Enter
+press Enter
+press Down 3
+press Enter
+press Enter
+expect state macro.Duo Test Medic: Glint -> enemy 1 / Test Mystic: Spark -> enemy 1
+pressuntil Escape Field 20
+
+# The combination round at 1x: Confirm hurries the round's banner, then the round plays on its own.
+cmd walk 13 4
+cmd walk cache_front
+expect mode Battle
+waitstate 120 battlephase Command
+press Down 6
+press Enter
+expect state battlephase Macro
+press Down 3
+present mark
+press Enter
+expect state step round 1
+press Enter
+expect statehas step forward
+waitstatehas 900 step banner Twin Arc
+shot build/shots/battle_combo_banner.png
+waitstatehas 200 step effect nova_shock
+expect state flash on
+expect state battleshake 6
+shot build/shots/battle_combo_effect.png
+waitstatehas 200 step result
+shot build/shots/battle_numbers.png
+waitstatehas 1500 battlephase Command
+expect present round 1 | forward Rust Hound | banner Attack | animate Rust Hound attack | effect slash on Test Fighter | result Test Fighter -12 | back Rust Hound | forward Test Fighter | banner Attack | animate Test Fighter attack | effect slash on Gel Mite A | result Gel Mite A critical, Gel Mite A -47 | back Test Fighter | forward Test Medic+Test Mystic | banner Twin Arc: Test Medic (Glint) + Test Mystic (Spark) | animate Test Medic+Test Mystic cast | effect nova_shock on Gel Mite A | result Gel Mite A -13, Gel Mite A falls | back Test Medic+Test Mystic | cancel Gel Mite A: Gel Mite A cannot act (Defeated) | forward Gel Mite B | banner Attack | animate Gel Mite B attack | effect slash on Test Medic | result Test Medic -13 | back Gel Mite B
+expect state battlesync 7 checked, all match
+
+# The same round again from the autosave written on arriving at the reed path, now with reduced flash: the combination
+# does not flash and its shake goes a quarter as far. The battle and its results are the same as the first time.
+cmd title
+wait 2
+cmd load auto_1
+expect mode Field
+cmd set reduced_flash on
+cmd walk cache_front
+expect mode Battle
+waitstate 120 battlephase Command
+press Down 6
+press Enter
+press Down 3
+present mark
+press Enter
+waitstatehas 900 step effect nova_shock
+expect state flash off
+expect state battleshake 1
+expect presenthas forward Test Medic+Test Mystic | banner Twin Arc: Test Medic (Glint) + Test Mystic (Spark) | animate Test Medic+Test Mystic cast | effect nova_shock on Gel Mite A
+cmd set reduced_flash off
+
+# Fast-forward: held, it plays the rest of the round at once, every line in the log; then auto-battle, fast-forwarded
+# too, to the victory and its result screen.
+present mark
+hold F 1
+expect state step -
+expect state battlephase Command
+expect presenthas result Gel Mite A -13, Gel Mite A falls | back Test Medic+Test Mystic | cancel Gel Mite A: Gel Mite A cannot act (Defeated)
+expect statehas battlelog Combo: Twin Arc. | A new combination joins the combo log. | Gel Mite A takes 13 damage. | Gel Mite A falls.
+press L
+expect state battlelogshown on
+shot build/shots/battle_log.png
+press L
+expect state battlelogshown off
+press Down 7
+press Enter
+hold F 10
+expect state battlephase Ended
+expect presenthas outcome victory
+expect statehas victory Victory! / Experience 52 / Money 36
+press Enter
+expect screen Field
+
+# An escape: the fighter tries it while the others defend.
+cmd walk 5 4
+pressuntil F Battle 900
+waitstate 120 battlephase Command
+present mark
+press Down 5
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 step banner Escape
+shot build/shots/battle_escape.png
+waitstate 900 battlephase Command
+expect presenthas forward Test Fighter | banner Escape | result no escape | back Test Fighter
+present mark
+press Down 5
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+hold F 1
+expect presenthas forward Test Fighter | banner Escape | result no escape | back Test Fighter | forward Test Mystic | banner Defend | animate Test Mystic defend | effect shield on Test Mystic | back Test Mystic
+press Down 7
+press Enter
+hold F 10
+press Enter
+expect screen Field
+
+# Healed at the inn, then the battles on the way back into the reeds.
+cmd walk 0 4
+cmd walk inn_front
+cmd face west
+cmd talk
+cmd rest
+cmd walk 13 4
+cmd walk 1 7
+expect mode Battle
+waitstate 120 battlephase Command
+press Down 7
+press Enter
+hold F 10
+press Enter
+expect screen Field
+# At 3x the opening step (900 ms) is over after 19 frames; the enemies' ambush follows with its banner.
+cmd set battle 3x
+cmd walk 12 7
+pressuntil F Battle 900
+expect statehas step intro
+wait 17
+expect statehas step intro
+wait 2
+expect state step opening enemy_first
+shot build/shots/battle_opening.png
+waitstate 300 battlephase Command
+press Down 7
+press Enter
+hold F 10
+press Enter
+expect screen Field
+cmd walk 14 6
+pressuntil F Battle 900
+waitstate 300 battlephase Command
+press Down 7
+press Enter
+hold F 10
+press Enter
+expect screen Field
+cmd walk 0 4
+cmd walk inn_front
+cmd face west
+cmd talk
+cmd rest
+cmd walk 13 4
+# The lookout's scene: its marsh battle ends once the party has stood a round. A bog wisp's spores and hum put
+# statuses on the whole party, one resisted and one it is immune to; the sleepers cannot act, and one wakes as the
+# round ends.
+cmd walk lookout_front
+cmd face north
+wait 2
+press Enter
+pressuntil Enter Battle 600
+waitstate 300 battlephase Command
+present mark
+press Down 7
+press Enter
+waitstatehas 600 step result Test Fighter +sleep
+shot build/shots/battle_status.png
+waitstatehas 600 step roundend
+shot build/shots/battle_status_ends.png
+waitstate 600 battlephase Ended
+expect presenthas effect ring_status on Test Fighter, Test Mystic, Test Medic, Test Scout | result Test Fighter +jumble, Test Mystic resists jumble, Test Medic resists jumble, Test Scout resists jumble
+expect presenthas result Test Fighter +sleep, Test Mystic immune to sleep, Test Medic +sleep, Test Scout +sleep
+expect presenthas cancel Test Scout: Test Scout cannot act (Sleep)
+expect presenthas roundend Test Scout -sleep | outcome scripted_end
+expect statehas shown Test Fighter
+expect statehas battlesync all match
+press Enter
+pressuntil Enter Field 600
+
+# Back and forth to the inn for battles at the reed path's gate, fast-forwarded with auto-battle, until the party levels
+# up: the result screen lists each level-up and what the medic learned.
+cmd walk 0 4
+cmd walk inn_front
+cmd face west
+cmd talk
+cmd rest
+cmd walk 13 4
+pressuntil F Battle 900
+waitstate 300 battlephase Command
+press Down 7
+press Enter
+hold F 10
+press Enter
+expect screen Field
+cmd walk 0 4
+cmd walk inn_front
+cmd face west
+cmd talk
+cmd rest
+cmd walk 13 4
+pressuntil F Battle 900
+waitstate 300 battlephase Command
+press Down 7
+press Enter
+hold F 10
+press Enter
+expect screen Field
+cmd walk 0 4
+cmd walk inn_front
+cmd face west
+cmd talk
+cmd rest
+cmd walk 13 4
+pressuntil F Battle 900
+waitstate 300 battlephase Command
+press Down 7
+press Enter
+hold F 10
+press Enter
+expect screen Field
+cmd walk 0 4
+cmd walk inn_front
+cmd face west
+cmd talk
+cmd rest
+cmd walk 13 4
+pressuntil F Battle 900
+waitstate 300 battlephase Command
+press Down 7
+press Enter
+hold F 10
+press Enter
+expect screen Field
+cmd walk 0 4
+cmd walk inn_front
+cmd face west
+cmd talk
+cmd rest
+cmd walk 13 4
+cmd walk 5 4
+pressuntil F Battle 900
+waitstate 300 battlephase Command
+press Down 7
+press Enter
+hold F 10
+expect state battlephase Ended
+expect statehas victory Victory! / Experience 52 / Money 36
+expect statehas victory Test Fighter reached level 4! / Test Mystic reached level 4! / Test Medic reached level 4! / Learned Renew
+expect presenthas notice Test Medic reached level 4.
+expect statehas battlesync all match
+shot build/shots/battle_levelup.png
+press Enter
+expect screen Field
+cmd status

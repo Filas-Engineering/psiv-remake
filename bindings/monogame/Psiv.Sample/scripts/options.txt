@@ -1,7 +1,7 @@
 # Options and what they change. From the title: Slow text, then the arrival's first line reveals a character every
 # 40 ms; Confirm shows the rest, the next Confirm moves on. From the pause overlay: Fast text and auto-advance, so the
 # guide's lines reveal at 100 characters a second and move on by themselves; the largest text size on dialogue and the
-# menu; 2x battle speed, which halves the battle's playback interval; and the Controls page: an action rebound by
+# menu; 2x battle speed, which plays the battle's presentation at twice the speed; and the Controls page: an action rebound by
 # capture, one cleared, a required one refused, everything reset after a confirm, a rebind saved on leaving the page
 # and read back by a new controller.
 # With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing.
@@ -54,7 +54,7 @@ shot build/shots/options_150.png
 press Down
 press Right 2
 expect state battle_speed 2x
-expect state playback 175
+expect state timescale 200
 press Escape
 expect screen Pause
 shot build/shots/pause_150.png
@@ -106,17 +106,21 @@ shot build/shots/menu_macros_150.png
 press Escape
 expect screen Field
 
-# 2x battle speed: one playback line every 175 ms instead of 350.
+# 2x battle speed: the presentation runs twice as fast, so the battle's first step, 900 ms at 1x, is over after 29
+# frames instead of 57.
 cmd walk 13 4
 cmd walk cache_front
 expect mode Battle
-expect state playback 175
+expect state timescale 200
 wait 2
-expect state battlelines 0
-wait 12
 expect state battlelines 1
+expect statehas step intro
+wait 26
+expect statehas step intro
+wait 2
+expect state step -
 shot build/shots/battle_2x.png
-wait 40
+wait 24
 press Enter
 press Enter
 press Down 7

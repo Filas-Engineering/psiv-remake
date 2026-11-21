@@ -47,7 +47,7 @@ public sealed partial class SampleController
 		Widgets.Tabs(s, x + 24, 76, w - 220, ["Buy", "Sell"], _tab, Px);
 		string money = $"Money {_s.WorldInfo().Money}";
 		s.Text(money, x + w - 40 - s.Measure(money), 81, Style.Text);
-		s.Image(art.Stall, x + w - 120, 120, 80, 80, Color.White);
+		s.Image(AreaTiles(art).Stall, x + w - 120, 120, 80, 80, Color.White);
 		int priceX = x + 560;
 		int countX = x + 680;
 		int headY = 76 + Px(52);

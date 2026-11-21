@@ -1,0 +1,22 @@
+# Run with --assets on a copy of build/test_assets, since it changes a file there. The town's tileset swapped for
+# another file while the field is up: the reload brings the new picture in at the next frame, keeps the session where
+# it was, and says what changed; F5 reloads too, and says nothing changed.
+# With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing.
+
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+expect state assetfile.tileset:town tilesets/town.png 640e766c
+expect actor fighter 3 4
+shot build/shots/reload_before.png
+assets swap tilesets/town.png tilesets/town_alt.png
+wait 2
+expect asset tileset:town file
+expect state assetfile.tileset:town tilesets/town.png 238c1a00
+expect screen Field
+expect state area Tidewater Landing
+expect actor fighter 3 4
+shot build/shots/reload_after.png
+press F5
+wait 2
+expect state assetfile.tileset:town tilesets/town.png 238c1a00

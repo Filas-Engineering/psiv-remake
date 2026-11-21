@@ -170,14 +170,17 @@ public readonly record struct MotionMark(int Image, int Dx, int Dy);
 // and headband.
 public sealed record ActorLook(Color Hair, Color Skin, Color Coat, Color Scarf, int Head = 0, int Body = 0, Color Hat = default);
 
-// Every picture the sample draws, generated at startup from code (no files), and handed to the surface once.
-// Actors and creatures are built on first use per look.
-public sealed class Art
+// Every picture the sample draws, generated at startup from code and handed to the surface once, unless the asset
+// directory's manifest names a file for it (Art.Files.cs). Actors and creatures are built on first use per look.
+public sealed partial class Art
 {
 	public const int Scale = 3;
 	public const int Tile = Pixels.Size * Scale;
 	public const int WaterFrames = 4;
 
+	// An area's tiles, how the renderer picks among them (one floor in DecorOneIn is a decoration, one wall top in
+	// WallTopAltOneIn and one wall face in WallFaceAltOneIn is a variant, water steps a frame every WaterFrameMs) and
+	// the objects standing on its cells.
 	public sealed class TileSet
 	{
 		public required int[] Floor { get; init; }
@@ -187,6 +190,26 @@ public sealed class Art
 		public required int[] Water { get; init; }
 		public required Color Edge { get; init; }
 		public required Color Bank { get; init; }
+		public int DecorOneIn { get; init; } = 11;
+		public int WallTopAltOneIn { get; init; } = 3;
+		public int WallFaceAltOneIn { get; init; } = 5;
+		public int WaterFrameMs { get; init; } = 220;
+		public required int Door { get; init; }
+		public required int ChestClosed { get; init; }
+		public required int ChestOpen { get; init; }
+		public required int Stall { get; init; }
+		public required int Bed { get; init; }
+		// A talk point that is not an actor.
+		public required int Sign { get; init; }
+		public required int Rune { get; init; }
+		// North, east, south, west.
+		public required int[] ExitArrow { get; init; }
+
+		public int WaterFrame(int clockMs) => clockMs / WaterFrameMs % Water.Length;
+
+		// The first picture, or with a one in `oneIn` chance one of the others, from the cell's hash.
+		public static int Variant(int[] images, uint hash, int oneIn) =>
+			images.Length > 1 && hash % (uint)oneIn == 0 ? images[1 + (int)(hash / (uint)oneIn % (uint)(images.Length - 1))] : images[0];
 	}
 
 	private static readonly Color Outline = new(26, 20, 32);
@@ -201,23 +224,19 @@ public sealed class Art
 	private readonly MotionMark[] _nodMarks;
 	private readonly MotionMark[] _shakeMarks;
 
-	public Art(IDrawSurface surface)
+	public Art(IDrawSurface surface, AssetManifest? assets = null)
 	{
 		_s = surface;
-		foreach (Theme theme in Enum.GetValues<Theme>())
-		{
-			_tiles[theme] = BuildTiles(theme);
-		}
 		Pixels arrow = Arrow();
-		ExitArrow = [Add(arrow.Rotate().Rotate().Rotate()), Add(arrow), Add(arrow.Rotate()), Add(arrow.Rotate().Rotate())];
-		Door = Add(BuildDoor());
-		ChestClosed = Add(BuildChest(open: false));
-		ChestOpen = Add(BuildChest(open: true));
-		Stall = Add(BuildStall());
-		Bed = Add(BuildBed());
-		Rune = Add(BuildRune());
+		int[] exitArrow = [Add(arrow.Rotate().Rotate().Rotate()), Add(arrow), Add(arrow.Rotate()), Add(arrow.Rotate().Rotate())];
+		int door = Add(BuildDoor());
+		int chestClosed = Add(BuildChest(open: false));
+		int chestOpen = Add(BuildChest(open: true));
+		int stall = Add(BuildStall());
+		int bed = Add(BuildBed());
+		int rune = Add(BuildRune());
 		Bubble = Add(BuildBubble());
-		Noticeboard = Add(BuildNoticeboard());
+		int noticeboard = Add(BuildNoticeboard());
 		Alert = Add(BuildAlert());
 		Shadow = Add(BuildShadow());
 		Pointer = Add(BuildPointer());
@@ -225,6 +244,15 @@ public sealed class Art
 		_nodMarks = [new MotionMark(Add(nod), -3, -3), new MotionMark(Add(nod.MirrorX()), 3, -3)];
 		Pixels shake = BuildShakeMark();
 		_shakeMarks = [new MotionMark(Add(shake), -2, 0), new MotionMark(Add(shake.MirrorX()), 2, 0)];
+		foreach (Theme theme in Enum.GetValues<Theme>())
+		{
+			_tiles[theme] = BuildTiles(theme, door, chestClosed, chestOpen, stall, bed, noticeboard, rune, exitArrow);
+		}
+		if (assets is not null)
+		{
+			_assetDir = assets.Directory;
+			LoadFiles(assets);
+		}
 	}
 
 	public static Theme ThemeOf(AreaKind kind) => kind switch
@@ -236,21 +264,18 @@ public sealed class Art
 
 	public TileSet Tiles(Theme theme) => _tiles[theme];
 
-	// North, east, south, west.
-	public int[] ExitArrow { get; }
-	public int Door { get; }
-	public int ChestClosed { get; }
-	public int ChestOpen { get; }
-	public int Stall { get; }
-	public int Bed { get; }
-	public int Rune { get; }
-	public int Bubble { get; }
-	// A talk point that is not an actor.
-	public int Noticeboard { get; }
-	public int Alert { get; }
-	public int Shadow { get; }
+	public int Bubble { get; private set; }
+	public int Alert { get; private set; }
+	public int Shadow { get; private set; }
 	// A downward pointer, for battle targets.
-	public int Pointer { get; }
+	public int Pointer { get; private set; }
+
+	public static (Color Edge, Color Bank) DefaultEdges(Theme theme) => theme switch
+	{
+		Theme.Field => (new Color(20, 52, 30), new Color(120, 98, 62)),
+		Theme.Town => (new Color(40, 36, 70), new Color(110, 104, 98)),
+		_ => (new Color(18, 16, 24), new Color(58, 54, 66)),
+	};
 
 	private int Add(Pixels p) => _s.CreateImage(Pixels.Size, Pixels.Size, p.Data);
 
@@ -547,6 +572,19 @@ public sealed class Art
 
 	private static readonly int[] NodPhases = [0, 1, 2, 1];
 
+	// PoseFrame's pictures as frames for one play: each stretch's picture phase (0 the standing frame) and milliseconds.
+	public static (int[] Phases, int[] Ms) PoseTimeline(Pose pose) => pose switch
+	{
+		Pose.Nod => ([0, 1, 2, 1, 0, 1, 2, 1], [80, 80, 80, 80, 80, 80, 80, 80]),
+		Pose.Shake => ([1, 2, 1, 2, 1, 2], [100, 100, 100, 100, 100, 100]),
+		Pose.Startle => ([1], [560]),
+		Pose.Bow => ([0, 1, 2, 1, 0], [46, 90, 629, 90, 45]),
+		Pose.Wave => ([1, 2, 1, 2, 1, 2], [140, 140, 140, 140, 140, 140]),
+		_ => ([0], [PoseLengthMs(pose)]),
+	};
+
+	public int GeneratedPoseImage(string id, Direction facing, Pose pose, int phase) => PoseImage(LookFor(id), facing, pose, phase);
+
 	private readonly Dictionary<(ActorLook, Direction, Pose, int), int> _poses = [];
 
 	// Phase 0 is always the standing frame.
@@ -763,9 +801,10 @@ public sealed class Art
 		return image;
 	}
 
-	private TileSet BuildTiles(Theme theme)
+	private TileSet BuildTiles(Theme theme, int door, int chestClosed, int chestOpen, int stall, int bed, int sign, int rune, int[] exitArrow)
 	{
 		int seed = (int)theme * 1000;
+		(Color edge, Color bank) = DefaultEdges(theme);
 		return theme switch
 		{
 			Theme.Field => new TileSet
@@ -775,8 +814,9 @@ public sealed class Art
 				WallTop = [Add(Canopy(seed + 20)), Add(Canopy(seed + 21))],
 				WallFace = [Add(HedgeFace(seed + 30)), Add(HedgeFace(seed + 31))],
 				Water = [.. Enumerable.Range(0, WaterFrames).Select(f => Add(Water(f, new Color(56, 120, 196))))],
-				Edge = new Color(20, 52, 30),
-				Bank = new Color(120, 98, 62),
+				Edge = edge,
+				Bank = bank,
+				Door = door, ChestClosed = chestClosed, ChestOpen = chestOpen, Stall = stall, Bed = bed, Sign = sign, Rune = rune, ExitArrow = exitArrow,
 			},
 			Theme.Town => new TileSet
 			{
@@ -786,8 +826,9 @@ public sealed class Art
 				WallTop = [Add(Roof(seed + 20)), Add(Roof(seed + 21))],
 				WallFace = [Add(Plaster(seed + 30, window: false)), Add(Plaster(seed + 31, window: true))],
 				Water = [.. Enumerable.Range(0, WaterFrames).Select(f => Add(Water(f, new Color(48, 108, 180))))],
-				Edge = new Color(40, 36, 70),
-				Bank = new Color(110, 104, 98),
+				Edge = edge,
+				Bank = bank,
+				Door = door, ChestClosed = chestClosed, ChestOpen = chestOpen, Stall = stall, Bed = bed, Sign = sign, Rune = rune, ExitArrow = exitArrow,
 			},
 			_ => new TileSet
 			{
@@ -796,8 +837,9 @@ public sealed class Art
 				WallTop = [Add(Rock(seed + 20)), Add(Rock(seed + 21))],
 				WallFace = [Add(Bricks(seed + 30)), Add(Bricks(seed + 31))],
 				Water = [.. Enumerable.Range(0, WaterFrames).Select(f => Add(Water(f, new Color(36, 82, 142))))],
-				Edge = new Color(18, 16, 24),
-				Bank = new Color(58, 54, 66),
+				Edge = edge,
+				Bank = bank,
+				Door = door, ChestClosed = chestClosed, ChestOpen = chestOpen, Stall = stall, Bed = bed, Sign = sign, Rune = rune, ExitArrow = exitArrow,
 			},
 		};
 	}

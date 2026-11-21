@@ -49,7 +49,7 @@ public sealed partial class SampleController
 	{
 		Art.TileSet tiles = art.Tiles(Theme.Field);
 		static CellFlags Terrain(int x, int y) => y <= 1 ? CellFlags.Wall : y is 11 or 12 ? CellFlags.Water : CellFlags.Floor;
-		int frame = _clockMs / 220 % Art.WaterFrames;
+		int frame = tiles.WaterFrame(_clockMs);
 		for (int y = 0; y * Art.Tile < s.Height; y++)
 		{
 			for (int x = 0; x * Art.Tile < s.Width; x++)

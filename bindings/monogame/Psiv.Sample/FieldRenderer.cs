@@ -14,7 +14,6 @@ public sealed class FieldRenderer
 {
 	private const int Tile = Art.Tile;
 	private const int BannerMs = 2600;
-	private const int WaterFrameMs = 220;
 	// Every member of a full lineup (rules::kMaxPartySize, 5) walks behind the leader.
 	private const int Followers = 4;
 
@@ -188,7 +187,7 @@ public sealed class FieldRenderer
 		public Direction Facing { get; set; } = facing;
 	}
 
-	private sealed record PoseRun(Pose Pose, ulong Handle, int StartMs, bool Loop);
+	private sealed record PoseRun(string Animation, ulong Handle, int StartMs, bool Loop);
 
 	private string _area = "";
 	private int _lastClock = -1;
@@ -449,8 +448,8 @@ public sealed class FieldRenderer
 		return null;
 	}
 
-	// A pose from `startMs` on the controller's clock; a looping one repeats until another pose replaces it.
-	public void StartPose(string id, Pose pose, ulong handle, int startMs, bool loop) => _poseRuns[id] = new PoseRun(pose, handle, startMs, loop);
+	// A script animation's pose from `startMs` on the controller's clock; a looping one repeats until another replaces it.
+	public void StartPose(string id, string animation, ulong handle, int startMs, bool loop) => _poseRuns[id] = new PoseRun(animation, handle, startMs, loop);
 
 	// A skip abandoned the animation: its pose stops.
 	public void StopPose(ulong handle)
@@ -488,19 +487,14 @@ public sealed class FieldRenderer
 		_poseRuns.Clear();
 	}
 
-	private (Pose Pose, float T)? PoseAt(string id, int clockMs)
+	private (string Animation, int ElapsedMs, bool Loop)? PoseAt(string id, int clockMs, Art art)
 	{
 		if (!_poseRuns.TryGetValue(id, out PoseRun? run))
 		{
 			return null;
 		}
-		int length = Art.PoseLengthMs(run.Pose);
 		int elapsed = Math.Max(0, clockMs - run.StartMs);
-		if (run.Loop)
-		{
-			return (run.Pose, elapsed % length / (float)length);
-		}
-		return elapsed < length ? (run.Pose, elapsed / (float)length) : null;
+		return run.Loop || elapsed < art.PoseLengthMs(id, run.Animation) ? (run.Animation, elapsed, run.Loop) : null;
 	}
 
 	public static string KindName(AreaKind kind) => kind switch { AreaKind.Town => "Town", AreaKind.Dungeon => "Dungeon", _ => "Field" };
@@ -686,7 +680,7 @@ public sealed class FieldRenderer
 		int tile, Point shake, bool record)
 	{
 		FieldInfo f = view.Info;
-		Art.TileSet tiles = art.Tiles(Art.ThemeOf(f.AreaKind));
+		Art.TileSet tiles = art.Tiles(f.AreaKind, f.AreaId);
 		MemberPlace? scriptedLeader = lineup.Count > 0 ? _members.GetValueOrDefault(lineup[0]) : null;
 		float leaderY = Leader(lineup).Y;
 		// Pixels at the field's own scale, scaled to this view's cell size.
@@ -702,7 +696,7 @@ public sealed class FieldRenderer
 		int ox = viewport.X - cameraX, oy = viewport.Y - cameraY;
 		int x0 = Math.Max(0, cameraX / tile - 1), x1 = Math.Min(f.Width - 1, (cameraX + viewport.Width) / tile + 1);
 		int y0 = Math.Max(0, cameraY / tile - 1), y1 = Math.Min(f.Height - 1, (cameraY + viewport.Height) / tile + 1);
-		int waterFrame = clockMs / WaterFrameMs % Art.WaterFrames;
+		int waterFrame = tiles.WaterFrame(clockMs);
 
 		CellFlags Terrain(int x, int y) => view.Cell(x, y) & CellFlags.TerrainMask;
 		for (int y = y0; y <= y1; y++)
@@ -720,12 +714,12 @@ public sealed class FieldRenderer
 			int dir = e.X == 0 ? 3 : e.X == f.Width - 1 ? 1 : e.Y == 0 ? 0 : e.Y == f.Height - 1 ? 2 : -1;
 			if (dir < 0)
 			{
-				s.Image(art.Door, sx, sy, tile, tile, Color.White);
+				s.Image(tiles.Door, sx, sy, tile, tile, Color.White);
 			}
 			else
 			{
 				s.Fill(sx + Px(4), sy + Px(4), tile - Px(8), tile - Px(8), new Color(120, 240, 160) * (0.18f * pulse));
-				s.Image(art.ExitArrow[dir], sx, sy, tile, tile, Color.White * pulse);
+				s.Image(tiles.ExitArrow[dir], sx, sy, tile, tile, Color.White * pulse);
 			}
 		}
 
@@ -746,18 +740,19 @@ public sealed class FieldRenderer
 			}
 		}
 		// A person, actor or party member, in its pose if it is playing one: the shadow stays on the ground while a
-		// pose lifts the body. `extra` draws on top, given the body's screen position.
-		void Person(string id, ActorLook look, float px, float py, Direction facing, int frame, bool walking, float sortBias = 0f, Action<int, int>? extra = null)
+		// pose lifts the body. `extra` draws on top, given the body's screen position. `look` stands in for a person
+		// with no id.
+		void Person(string id, float px, float py, Direction facing, int frame, bool walking, float sortBias = 0f, Action<int, int>? extra = null, ActorLook? look = null)
 		{
-			int image = art.ActorFrame(look, facing, frame);
+			int image = look is null ? art.PersonFrame(id, facing, frame) : art.ActorFrame(look, facing, frame);
 			int lift = 0;
 			bool alert = false;
 			MotionMark[] marks = [];
 			Pose pose = Pose.None;
-			if (PoseAt(id, clockMs) is { } run)
+			if (look is null && PoseAt(id, clockMs, art) is { } run)
 			{
-				(image, lift, alert, marks) = art.PoseFrame(look, facing, run.Pose, run.T);
-				pose = run.Pose;
+				(image, lift, alert, marks) = art.PoseFrame(id, facing, run.Animation, run.ElapsedMs, run.Loop);
+				pose = Art.PoseFor(run.Animation);
 			}
 			if (record)
 			{
@@ -767,7 +762,8 @@ public sealed class FieldRenderer
 			Put(px, py, (sx, sy) =>
 			{
 				s.Image(art.Shadow, sx, sy + Px(3), tile, tile, Color.White);
-				s.Image(image, sx, sy - lift, tile, tile, Color.White);
+				Rectangle body = art.Stand(image, sx, sy - lift, tile);
+				s.Image(image, body.X, body.Y, body.Width, body.Height, Color.White);
 				if (alert)
 				{
 					overlays.Add(() => s.Image(art.Alert, sx + tile / 4, sy - lift - tile / 2 - Px(8), tile / 2, tile / 2 + Px(8), Color.White));
@@ -786,17 +782,17 @@ public sealed class FieldRenderer
 			case PointKind.Step:
 				if (p.Active)
 				{
-					s.Image(art.Rune, ox + p.X * tile, oy + p.Y * tile, tile, tile, Color.White * (0.35f + 0.3f * pulse));
+					s.Image(tiles.Rune, ox + p.X * tile, oy + p.Y * tile, tile, tile, Color.White * (0.35f + 0.3f * pulse));
 				}
 				break;
 			case PointKind.Chest:
-				Put(p.X, p.Y, (sx, sy) => s.Image(p.Active ? art.ChestClosed : art.ChestOpen, sx, sy, tile, tile, Color.White));
+				Put(p.X, p.Y, (sx, sy) => s.Image(p.Active ? tiles.ChestClosed : tiles.ChestOpen, sx, sy, tile, tile, Color.White));
 				break;
 			case PointKind.Shop:
-				Put(p.X, p.Y, (sx, sy) => s.Image(art.Stall, sx, sy, tile, tile, Color.White));
+				Put(p.X, p.Y, (sx, sy) => s.Image(tiles.Stall, sx, sy, tile, tile, Color.White));
 				break;
 			case PointKind.Rest:
-				Put(p.X, p.Y, (sx, sy) => s.Image(art.Bed, sx, sy, tile, tile, Color.White));
+				Put(p.X, p.Y, (sx, sy) => s.Image(tiles.Bed, sx, sy, tile, tile, Color.White));
 				break;
 			case PointKind.Talk:
 				FieldActor? actor = view.Actors.FirstOrDefault(a => a.Id == p.Id);
@@ -804,7 +800,7 @@ public sealed class FieldRenderer
 				{
 					Put(p.X, p.Y, (sx, sy) =>
 					{
-						s.Image(art.Noticeboard, sx, sy, tile, tile, Color.White);
+						s.Image(tiles.Sign, sx, sy, tile, tile, Color.White);
 						if (p.Active && BubbleFree(p.X, p.Y))
 						{
 							int bob = (int)(2 * MathF.Sin(clockMs / 300f + p.X));
@@ -831,9 +827,9 @@ public sealed class FieldRenderer
 				continue;
 			}
 			// A pose has the person's attention, so the bubble waits until it ends.
-			bool talks = talkers.Contains(a.Id) && BubbleFree(a.X, a.Y) && PoseAt(a.Id, clockMs) is null;
+			bool talks = talkers.Contains(a.Id) && BubbleFree(a.X, a.Y) && PoseAt(a.Id, clockMs, art) is null;
 			int bob = (int)(2 * MathF.Sin(clockMs / 300f + a.X));
-			Person(a.Id, Art.LookFor(a.Id), w.PX, w.PY, w.Facing, w.Frame, w.Walking, extra: talks
+			Person(a.Id, w.PX, w.PY, w.Facing, w.Frame, w.Walking, extra: talks
 				? (sx, sy) => overlays.Add(() => s.Image(art.Bubble, sx + tile / 2, sy - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8), Color.White))
 				: null);
 		}
@@ -843,13 +839,13 @@ public sealed class FieldRenderer
 			{
 				continue;
 			}
-			uint seed = Noise.Hash(e.Encounter);
-			int frame = (clockMs / 280 + e.Id) % 2;
+			int creature = art.FieldEnemy(e.Encounter, clockMs, e.Id);
 			bool chasing = e.State == EnemyState.Chasing;
 			Put(g.PX, g.PY, (sx, sy) =>
 			{
 				s.Image(art.Shadow, sx, sy + Px(2), tile, tile, Color.White);
-				s.Image(art.Creature(seed, frame), sx, sy, tile, tile, Color.White);
+				Rectangle body = art.Stand(creature, sx, sy, tile);
+				s.Image(creature, body.X, body.Y, body.Width, body.Height, Color.White);
 				if (chasing)
 				{
 					overlays.Add(() => s.Image(art.Alert, sx + tile / 4, sy - tile / 2 - Px(8), tile / 2, tile / 2 + Px(8), Color.White));
@@ -862,12 +858,12 @@ public sealed class FieldRenderer
 			// A follower sorts just above anyone on its own row, so the leader stays in front.
 			if (_members.TryGetValue(id, out MemberPlace? m))
 			{
-				Person(id, Art.LookFor(id), m.Walk.PX, m.Walk.PY, m.Walk.Walking ? m.Walk.Facing : m.Facing, m.Walk.Frame, m.Walk.Walking, -0.01f);
+				Person(id, m.Walk.PX, m.Walk.PY, m.Walk.Walking ? m.Walk.Facing : m.Facing, m.Walk.Frame, m.Walk.Walking, -0.01f);
 				continue;
 			}
 			if (_returns.TryGetValue(id, out ActorWalk? back))
 			{
-				Person(id, Art.LookFor(id), back.PX, back.PY, back.Facing, back.Frame, back.Walking, -0.01f);
+				Person(id, back.PX, back.PY, back.Facing, back.Frame, back.Walking, -0.01f);
 				continue;
 			}
 			Glide g = _followers[i];
@@ -875,24 +871,24 @@ public sealed class FieldRenderer
 			{
 				continue;
 			}
-			Person(id, Art.LookFor(id), g.PX, g.PY, g.Facing, g.Frame, g.Progress < 1f, -0.01f);
+			Person(id, g.PX, g.PY, g.Facing, g.Frame, g.Progress < 1f, -0.01f);
 		}
 		foreach ((string id, MemberPlace m) in _members)
 		{
 			if (IndexOf(lineup, id) < 0)
 			{
-				Person(id, Art.LookFor(id), m.Walk.PX, m.Walk.PY, m.Walk.Walking ? m.Walk.Facing : m.Facing, m.Walk.Frame, m.Walk.Walking);
+				Person(id, m.Walk.PX, m.Walk.PY, m.Walk.Walking ? m.Walk.Facing : m.Facing, m.Walk.Frame, m.Walk.Walking);
 			}
 		}
 		string leaderId = lineup.Count > 0 ? lineup[0] : "";
-		ActorLook leaderLook = lineup.Count > 0 ? Art.LookFor(leaderId) : Art.Hero;
+		ActorLook? noLeader = lineup.Count > 0 ? null : Art.Hero;
 		if (scriptedLeader is { } sl)
 		{
-			Person(leaderId, leaderLook, sl.Walk.PX, sl.Walk.PY, sl.Walk.Walking ? sl.Walk.Facing : sl.Facing, sl.Walk.Frame, sl.Walk.Walking);
+			Person(leaderId, sl.Walk.PX, sl.Walk.PY, sl.Walk.Walking ? sl.Walk.Facing : sl.Facing, sl.Walk.Frame, sl.Walk.Walking, look: noLeader);
 		}
 		else
 		{
-			Person(leaderId, leaderLook, _leader.PX, _leader.PY, _leader.Facing, _leader.Frame, _leader.Progress < 1f);
+			Person(leaderId, _leader.PX, _leader.PY, _leader.Facing, _leader.Frame, _leader.Progress < 1f, look: noLeader);
 		}
 		if (record)
 		{
@@ -918,11 +914,11 @@ public sealed class FieldRenderer
 			bool faceDown = terrain(x, y + 1) != CellFlags.Wall;
 			if (faceDown)
 			{
-				s.Image(t.WallFace[hash % 5 == 0 ? 1 : 0], sx, sy, tile, tile, Color.White);
+				s.Image(Art.TileSet.Variant(t.WallFace, hash, t.WallFaceAltOneIn), sx, sy, tile, tile, Color.White);
 			}
 			else
 			{
-				s.Image(t.WallTop[hash % 3 == 0 ? 1 : 0], sx, sy, tile, tile, Color.White);
+				s.Image(Art.TileSet.Variant(t.WallTop, hash, t.WallTopAltOneIn), sx, sy, tile, tile, Color.White);
 				if (terrain(x, y - 1) != CellFlags.Wall)
 				{
 					s.Fill(sx, sy, tile, edge, t.Edge);
@@ -940,7 +936,7 @@ public sealed class FieldRenderer
 		}
 		if (c == CellFlags.Water)
 		{
-			s.Image(t.Water[(waterFrame + (int)(hash % 2)) % Art.WaterFrames], sx, sy, tile, tile, Color.White);
+			s.Image(t.Water[(waterFrame + (int)(hash % 2)) % t.Water.Length], sx, sy, tile, tile, Color.White);
 			Color foam = new Color(230, 244, 255) * 0.7f;
 			if (terrain(x, y - 1) != CellFlags.Water)
 			{
@@ -961,8 +957,8 @@ public sealed class FieldRenderer
 			}
 			return;
 		}
-		// Floor: one of four variants, with an occasional decoration, from the cell's coordinates.
-		int image = hash % 11 == 0 ? t.Decor[(hash >> 8) % (uint)t.Decor.Length] : t.Floor[(hash >> 4) % (uint)t.Floor.Length];
+		// Floor: one of the variants, with an occasional decoration, from the cell's coordinates.
+		int image = hash % (uint)t.DecorOneIn == 0 ? t.Decor[(hash >> 8) % (uint)t.Decor.Length] : t.Floor[(hash >> 4) % (uint)t.Floor.Length];
 		s.Image(image, sx, sy, tile, tile, Color.White);
 		if (terrain(x, y - 1) == CellFlags.Wall)
 		{

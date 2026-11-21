@@ -1,0 +1,17 @@
+assets: tilesets/dungeon.png: tilesets[2]: 17x17 does not divide into 16x16 frames
+assets: assets.json: characters[0].animations.dance: unknown animation 'dance': not in game.json's presentation animations
+assets: assets.json: characters[1].animations.nod: unknown pose 'twirl': not one of this character's poses
+assets: assets.json: characters[1].poses.nod: no animation plays this pose: map script animation names to it in 'animations'
+assets: assets.json: characters[11]: unknown character 'nobody': not a party member or actor in the game data
+assets: portraits/guide.png: portraits.guide: missing file
+assets: assets.json: figures[0].animations.juggle: unknown animation 'juggle': attack, cast, item, defend, hurt, defeat
+assets: assets.json: backdrops[3]: unknown area 'atlantis': not in the game data
+assets: assets.json: sprites.moon: unknown sprite 'moon': shadow, bubble, alert, pointer
+assets: audio/music/battle_brass_warden.wav: audio[0]: bad loop points 0 to 99999999: the file has 280320 frames, and the start must come before the end
+assets: audio/ambient/marsh_wind.wav: audio[24]: bad loop points 2 to 1: the file has 88200 frames, and the start must come before the end
+assets: assets.json: audio[46]: unknown music 'not_a_track': not an id the game or the sample plays as music
+assets: battle_presentation.json: actions.strike: unknown effect 'fireworks': not a generated effect, an effect in assets.json or none
+assets: battle_presentation.json: actions.strike: unknown animation 'moonwalk': none, attack, cast, item, defend
+assets: battle_presentation.json: actions.unknown_move: unknown ability or item 'unknown_move': not in the game data
+assets: 2 tilesets, 9 characters, 10 portraits, 9 figures, 3 field enemies, 3 backdrops, 22 effects, 4 sprites, 6 status icons, a UI skin turned off, 44 sounds, a battle presentation table
+FAILED: 15 problems.

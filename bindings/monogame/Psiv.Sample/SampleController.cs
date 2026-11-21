@@ -22,6 +22,15 @@ public sealed partial class SampleController
 	private readonly HashSet<string> _actorIds;
 	private readonly FieldRenderer _field = new();
 	private Art? _art;
+	private readonly GameData _data;
+	// The asset directory the sample was started with, and what loaded from it; null without one.
+	private readonly string? _assetDir;
+	private Assets? _assets;
+	// The art is rebuilt at the next draw, after a reload.
+	private bool _rebuildArt;
+	// The UI skin font the surface was last given, as file and scale; null after switching back to the system font,
+	// "" while it was never switched, so a run without a skin never calls UseFont.
+	private string? _font = "";
 	// Milliseconds of frame time seen, for animations; advances only with the frame times Update gets.
 	private int _clockMs;
 	private readonly List<(string Text, int MsLeft)> _ticker = [];
@@ -50,15 +59,65 @@ public sealed partial class SampleController
 	private string _probeDescription = "-";
 
 	// `controlsPath` is where the bindings load from and save to; null keeps the defaults and saves nothing. Without
-	// `audio` nothing plays and the calls are only recorded.
-	public SampleController(GameSession session, Action<string>? log = null, string? controlsPath = null, IAudioOut? audio = null)
+	// `audio` nothing plays and the calls are only recorded. `assetDir` is the asset directory, whose files replace the
+	// generated pictures and sounds they name; problems in it are logged and the generated ones stand in.
+	public SampleController(GameSession session, GameData data, Action<string>? log = null, string? controlsPath = null, IAudioOut? audio = null, string? assetDir = null)
 	{
 		_s = session;
+		_data = data;
 		_log = log ?? (_ => { });
 		_audio = audio ?? new RecordingAudio();
 		_actorIds = [.. session.ActorIds()];
 		ControlsPath = controlsPath;
 		_bindings = Bindings.Load(controlsPath, _log);
+		_assetDir = assetDir;
+		if (assetDir is not null)
+		{
+			_assets = Assets.Load(assetDir, data);
+			LogAssetProblems();
+			_audio.UseAssets(_assets.Manifest);
+		}
+	}
+
+	public string? AssetDirectory => _assetDir;
+
+	private BattlePresentation PresentationTable => _assets?.Battle ?? (_defaultPresentation ??= BattlePresentation.Defaults());
+	private BattlePresentation? _defaultPresentation;
+
+	private void LogAssetProblems()
+	{
+		foreach (AssetProblem problem in _assets!.Problems)
+		{
+			_log("assets: " + problem);
+		}
+	}
+
+	// The manifest and every file again, keeping the session and the screens where they are: pictures from the next
+	// draw, sounds from the next time each plays, the battle presentation table from the next round.
+	public void ReloadAssets()
+	{
+		if (_assetDir is null)
+		{
+			_log("assets: no asset directory to reload");
+			return;
+		}
+		Assets before = _assets!;
+		_assets = Assets.Load(_assetDir, _data);
+		List<string> changed = [.. _assets.ChangedSince(before)];
+		_log($"assets: reloaded, {(changed.Count == 0 ? "nothing changed" : "changed: " + string.Join(", ", changed))}");
+		LogAssetProblems();
+		_audio.UseAssets(_assets.Manifest);
+		_rebuildArt = true;
+	}
+
+	// Whether the picture or sound for a key (see Art.FromFile; sounds are `audio:KIND:ID`) came from a file.
+	public bool AssetFromFile(string key)
+	{
+		if (key.StartsWith("audio:", StringComparison.Ordinal) && key.Split(':') is [_, string kind, string id])
+		{
+			return _assets?.Manifest.Audio.Any(a => a.Kind.ToString().Equals(kind, StringComparison.OrdinalIgnoreCase) && a.Id == id) == true;
+		}
+		return _art?.FromFile(key) == true;
 	}
 
 	public bool QuitRequested { get; private set; }
@@ -136,7 +195,7 @@ public sealed partial class SampleController
 		{
 			if (_battle.Active)
 			{
-				_battle.Queue.Enqueue((n.Text, NoticeCue(n)));
+				AddBattleNotice(n);
 			}
 			else if (n.Kind == NoticeKind.Action)
 			{
@@ -184,6 +243,9 @@ public sealed partial class SampleController
 		}
 	}
 
+	// The party's area's tiles, for the pictures menus show of its objects.
+	private Art.TileSet AreaTiles(Art art) => _s.FieldInfo() is { } f ? art.Tiles(f.AreaKind, f.AreaId) : art.Tiles(Theme.Field);
+
 	private List<string> Lineup() => _s.Party().Where(m => m.InLineup).Select(m => m.Id).ToList();
 
 	private void ResetUi()
@@ -202,6 +264,11 @@ public sealed partial class SampleController
 
 	public void Update(int dtMs, InputState raw)
 	{
+		// F5 reloads the asset directory, like F11 a key of the window's own outside the bindings.
+		if (raw.Pressed(Microsoft.Xna.Framework.Input.Keys.F5))
+		{
+			ReloadAssets();
+		}
 		var input = new ActionInput(raw, _bindings);
 		_usingGamepad = raw.UsingGamepad;
 		_clockMs += dtMs;
@@ -377,7 +444,27 @@ public sealed partial class SampleController
 
 	public void Draw(IDrawSurface s)
 	{
-		Art art = _art ??= new Art(s);
+		if (_art is null || _rebuildArt)
+		{
+			if (_rebuildArt)
+			{
+				s.ClearImages();
+				// Unknown, so the font is set again even when the reloaded skin names none.
+				_font = "?";
+			}
+			_rebuildArt = false;
+			_art = new Art(s, _assets?.Manifest);
+			Style.Skin = _art.Skin;
+		}
+		Art art = _art;
+		// The text language's font from the UI skin, switched only when it changes.
+		FontEntry? font = _assets?.Manifest.Ui is { Enabled: true } ui ? ui.Fonts.GetValueOrDefault(_s.Profile().TextLanguage) : null;
+		string? fontKey = font is null ? null : _assets!.Manifest.Full(font.File) + "@" + font.Scale.ToString(CultureInfo.InvariantCulture);
+		if (fontKey != _font && !(fontKey is null && _font == ""))
+		{
+			s.UseFont(font is null ? null : _assets!.Manifest.Full(font.File), font?.Scale ?? 1f);
+			_font = fontKey;
+		}
 		_scale = _s.Profile().TextSizePercent / 100f;
 		IDrawSurface t = _scale == 1f ? s : new ScaledSurface(s, _scale);
 		_probeSelected = "";
@@ -446,9 +533,6 @@ public sealed partial class SampleController
 			"cell" => Screen == Screen.NameEntry ? _nameEntry.Cell : _macroName.Cell,
 			"line" => _s.Line()?.Text ?? "-",
 			"reveal" => _s.Line() is { } line ? $"{Revealed(line.Text)}/{line.Text.Length}" : "-",
-			"playback" => PlaybackLineMs().ToString(CultureInfo.InvariantCulture),
-			"battlelog" => string.Join(" | ", _battle.Log),
-			"battlelines" => _battle.Log.Count.ToString(CultureInfo.InvariantCulture),
 			"party" => string.Join(", ", _s.Party().Where(m => m.InLineup).Select(m => m.Name)),
 			"macros" => string.Join(", ", _s.MacroList().Select(m => $"{m.Name}({m.Steps.Count})" + (m.Name == settings.AutoMacro ? "*" : ""))),
 			"area" => _s.FieldInfo()?.AreaName ?? "-",
@@ -471,10 +555,11 @@ public sealed partial class SampleController
 			"difficulty" => settings.Difficulty,
 			"reward" => GameSession.NameOf(NameKind.RewardMultiplier, (int)settings.RewardMultiplier),
 			"auto_macro" => settings.AutoMacro.Length == 0 ? "-" : settings.AutoMacro,
+			_ when key.StartsWith("assetfile.", StringComparison.Ordinal) => _art?.FileOf(key["assetfile.".Length..]) ?? "-",
 			_ when key.StartsWith("macro.", StringComparison.Ordinal) => _s.MacroList().FirstOrDefault(m => m.Name == key[6..]) is { } macro
 				? string.Join(" / ", macro.Steps.Select(StepText))
 				: "-",
-			_ => "?",
+			_ => BattleState(key),
 		};
 	}
 }

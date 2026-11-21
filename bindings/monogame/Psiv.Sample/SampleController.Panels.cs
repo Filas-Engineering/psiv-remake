@@ -292,9 +292,16 @@ public sealed partial class SampleController
 		{
 			float shown = p.Shown;
 			Rectangle r = PanelRect(p, s.Width, s.Height);
-			s.Fill(r.X + 6, r.Y + 6, r.Width, r.Height, Style.PanelShadow * (0.7f * shown));
-			s.Fill(r.X - PanelBorder, r.Y - PanelBorder, r.Width + 2 * PanelBorder, r.Height + 2 * PanelBorder, Color.Black * shown);
-			s.Fill(r.X - PanelBorder + 1, r.Y - PanelBorder + 1, r.Width + 2 * PanelBorder - 2, r.Height + 2 * PanelBorder - 2, Style.Text * shown);
+			if ((Style.Skin?.CameraFrames.GetValueOrDefault(p.Camera) ?? Style.Skin?.PanelFrame) is { } frame)
+			{
+				Style.NineSlice(s, frame, r.X - PanelBorder, r.Y - PanelBorder, r.Width + 2 * PanelBorder, r.Height + 2 * PanelBorder, Color.White * shown);
+			}
+			else
+			{
+				s.Fill(r.X + 6, r.Y + 6, r.Width, r.Height, Style.PanelShadow * (0.7f * shown));
+				s.Fill(r.X - PanelBorder, r.Y - PanelBorder, r.Width + 2 * PanelBorder, r.Height + 2 * PanelBorder, Color.Black * shown);
+				s.Fill(r.X - PanelBorder + 1, r.Y - PanelBorder + 1, r.Width + 2 * PanelBorder - 2, r.Height + 2 * PanelBorder - 2, Style.Text * shown);
+			}
 			s.Fill(r.X, r.Y, r.Width, r.Height, Style.Background);
 			int tile = PanelTileSize(p);
 			s.Clip(r.X, r.Y, r.Width, r.Height);

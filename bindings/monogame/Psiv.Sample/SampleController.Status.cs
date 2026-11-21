@@ -183,7 +183,7 @@ public sealed partial class SampleController
 		}
 		// The header: portrait, name and level, experience, HP and TP.
 		s.Fill(x, y, 84, 84, Style.Track);
-		s.Image(art.ActorFrame(Art.LookFor(member.Id), Direction.South, 0), x + 2, y + 2, 80, 80, Color.White);
+		s.Image(art.Portrait("", member.Id), x + 2, y + 2, 80, 80, Color.White);
 		int hx = x + 104;
 		s.Text($"{member.Name}   Lv {member.Level}", hx, y, Style.Accent);
 		s.Text($"EXP {member.Experience}   next level in {detail.ExperienceToNext}", hx, y + Px(30), Style.Dim, Style.Small);

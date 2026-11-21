@@ -25,7 +25,7 @@ public sealed partial class SampleController
 		int y = DialogueTop(s, field);
 		Style.Box(t, 24, y, s.Width - 48, DialogueHeight);
 		Style.Plate(t, "Inn", 42, y - Px(16), Style.Accent, Style.Body);
-		t.Image(art.Bed, 48, y + 34, 96, 96, Color.White);
+		t.Image(AreaTiles(art).Bed, 48, y + 34, 96, 96, Color.White);
 		InnInfo? inn = _s.Inn();
 		t.Text($"A night's rest costs {inn?.Cost ?? 0}. You have {_s.WorldInfo().Money}.", 170, y + Px(30), Style.Text);
 		for (int i = 0; i < 2; i++)

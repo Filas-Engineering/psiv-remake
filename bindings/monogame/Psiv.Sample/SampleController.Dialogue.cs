@@ -135,8 +135,7 @@ public sealed partial class SampleController
 				t.Fill(px - 2, py - 2, 100, 100, Style.PanelEdge);
 				t.Fill(px, py, 96, 96, Style.Track);
 				t.Fill(px, py + 56, 96, 40, Style.PanelTop);
-				ActorLook look = Art.LookFor(line.SpeakerId.Length > 0 ? line.SpeakerId : line.SpeakerName);
-				t.Image(art.ActorFrame(look, Direction.South, 0), px + 8, py + 8, 80, 80, Color.White);
+				t.Image(art.Portrait(line.Portrait, line.SpeakerId.Length > 0 ? line.SpeakerId : line.SpeakerName), px + 8, py + 8, 80, 80, Color.White);
 				tx = px + 122;
 			}
 			// Wrapped as a whole first, so a word being revealed does not jump to the next line.

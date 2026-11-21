@@ -1,0 +1,66 @@
+# Run with --assets build/test_assets, the directory make_test_assets.py builds from the placeholder export: a few ids
+# replaced by recolored copies of their exported pictures, a cue and a track, an enabled UI skin and a battle
+# presentation table. Which pictures and sounds came from files, the town in its recolored tiles, the guide's portrait,
+# and a battle on the reed path's backdrop from file, with the table's look for the fighter's strike (a heat burst that
+# flashes and shakes) and its fallback for shock techniques (the nova).
+# With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing.
+
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+expect asset tileset:town file
+expect asset tileset:field generated
+expect asset tileset:dungeon generated
+expect asset character:fighter file
+expect asset character:mystic generated
+expect asset portrait:guide file
+expect asset portrait:fighter generated
+expect asset figure:enemy:gel_mite file
+expect asset figure:enemy:rust_hound generated
+expect asset figure:party:fighter generated
+expect asset backdrop:kind:field file
+expect asset backdrop:kind:town generated
+expect asset effect:slash file
+expect asset effect:burst_heat generated
+expect asset status_icon:sleep file
+expect asset status_icon:silence generated
+expect asset ui:frame file
+expect asset sprite:shadow generated
+expect asset audio:cue:confirm file
+expect asset audio:music:town_tide_bells file
+expect asset audio:music:field_marsh_reeds generated
+expect state assetfile.tileset:town tilesets/town.png 640e766c
+expect state assetfile.tileset:field -
+expect state music town_tide_bells
+shot build/shots/assets_town.png
+
+# The guide's line shows the portrait from file in the skin's window frame.
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+wait 30
+shot build/shots/assets_dialogue.png
+pressuntil Enter Field 400
+
+cmd walk 13 4
+cmd walk cache_front
+expect mode Battle
+waitstate 120 battlephase Command
+present mark
+press Enter
+press Enter
+press Down
+press Enter
+press Enter
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 step effect burst_heat
+expect state flash on
+expect state battleshake 8
+shot build/shots/assets_battle.png
+waitstatehas 900 step effect nova_shock
+expect presenthas banner Attack | animate Test Fighter attack | effect burst_heat on Gel Mite A
+hold F 1
+expect state battlesync 2 checked, all match

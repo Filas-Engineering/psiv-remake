@@ -21,6 +21,12 @@ public interface IDrawSurface
 	// Until Unclip, nothing is drawn outside this rectangle; panels draw the scene through one.
 	void Clip(int x, int y, int w, int h);
 	void Unclip();
+	// A PNG from the asset directory as premultiplied pixels, decoded by the device where there is one.
+	Color[] ReadImage(string path, out int width, out int height);
+	// Drops every image, so a reloaded set of assets starts from handle 0.
+	void ClearImages();
+	// Text in this font file, every size scaled, from now on; null goes back to the system font.
+	void UseFont(string? file, float scale);
 }
 
 public static class Style
@@ -44,9 +50,31 @@ public static class Style
 	public static readonly Color Tp = new(96, 168, 248);
 	public static readonly Color Track = new(10, 12, 22);
 
+	// The asset directory's UI skin while one is loaded and enabled; null draws the generated look with rectangles.
+	public static UiSkin? Skin { get; set; }
+
+	// Corners at their size times the slice's scale, edges and middle stretched between them.
+	public static void NineSlice(IDrawSurface s, NineSliceImage n, int x, int y, int w, int h, Color tint)
+	{
+		int b = Math.Min(n.Border * n.Scale, Math.Min(w, h) / 2);
+		int[] xs = [x, x + b, x + w - b, x + w], ys = [y, y + b, y + h - b, y + h];
+		for (int j = 0; j < 3; j++)
+		{
+			for (int i = 0; i < 3; i++)
+			{
+				s.Image(n.Images[j * 3 + i], xs[i], ys[j], xs[i + 1] - xs[i], ys[j + 1] - ys[j], tint);
+			}
+		}
+	}
+
 	// A window: drop shadow, a light border with clipped corners, a dark body with a lighter top band.
 	public static void Box(IDrawSurface s, int x, int y, int w, int h, float opacity = 1f)
 	{
+		if (Skin?.Frame is { } frame)
+		{
+			NineSlice(s, frame, x, y, w, h, Color.White * opacity);
+			return;
+		}
 		s.Fill(x + 4, y + 4, w, h, PanelShadow * (0.6f * opacity));
 		s.Fill(x + 2, y, w - 4, h, PanelEdge * opacity);
 		s.Fill(x, y + 2, w, h - 4, PanelEdge * opacity);
@@ -78,6 +106,15 @@ public static class Style
 
 	public static void Bar(IDrawSurface s, int x, int y, int w, int h, int value, int max, Color color)
 	{
+		if (Skin is { BarTrack: int track, BarFill: int fill })
+		{
+			s.Image(track, x, y, w, h, Color.White);
+			if (max > 0 && value > 0)
+			{
+				s.Image(fill, x, y, Math.Max(1, w * Math.Min(value, max) / max), h, color);
+			}
+			return;
+		}
 		s.Fill(x - 1, y - 1, w + 2, h + 2, PanelShadow);
 		s.Fill(x, y, w, h, Track);
 		if (max > 0 && value > 0)
@@ -91,6 +128,11 @@ public static class Style
 	// A right-pointing cursor, `size` pixels tall, its tip at (x + size / 2, y + size / 2).
 	public static void Pointer(IDrawSurface s, int x, int y, Color color, int size = 12)
 	{
+		if (Skin?.Cursor is int cursor)
+		{
+			s.Image(cursor, x, y, size, size, Color.White);
+			return;
+		}
 		for (int i = 0; i < size; i++)
 		{
 			int len = Math.Max(1, size / 2 - Math.Abs(i - size / 2));
@@ -191,6 +233,9 @@ public sealed class ScaledSurface(IDrawSurface inner, float scale) : IDrawSurfac
 	public void Image(int image, int x, int y, int w, int h, Color tint) => inner.Image(image, x, y, w, h, tint);
 	public void Clip(int x, int y, int w, int h) => inner.Clip(x, y, w, h);
 	public void Unclip() => inner.Unclip();
+	public Color[] ReadImage(string path, out int width, out int height) => inner.ReadImage(path, out width, out height);
+	public void ClearImages() => inner.ClearImages();
+	public void UseFont(string? file, float scale) => inner.UseFont(file, scale);
 }
 
 public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, FontSystem fonts) : IDrawSurface, IDisposable
@@ -198,6 +243,10 @@ public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, Fo
 	private static readonly RasterizerState Scissor = new() { CullMode = CullMode.None, ScissorTestEnable = true };
 	private readonly Texture2D _pixel = CreatePixel(device);
 	private readonly List<Texture2D> _images = [];
+	private readonly Dictionary<string, FontSystem> _fontFiles = [];
+	private readonly FontSystem _system = fonts;
+	private FontSystem _font = fonts;
+	private float _fontScale = 1f;
 
 	private static Texture2D CreatePixel(GraphicsDevice device)
 	{
@@ -211,9 +260,70 @@ public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, Fo
 
 	public void Fill(int x, int y, int w, int h, Color color) => batch.Draw(_pixel, new Rectangle(x, y, w, h), color);
 
-	public void Text(string text, int x, int y, Color color, int size = Style.Body) => fonts.GetFont(size).DrawText(batch, text, new Vector2(x, y), color);
+	public void Text(string text, int x, int y, Color color, int size = Style.Body) => _font.GetFont(FontSize(size)).DrawText(batch, text, new Vector2(x, y), color);
 
-	public int Measure(string text, int size = Style.Body) => (int)fonts.GetFont(size).MeasureString(text).X;
+	public int Measure(string text, int size = Style.Body) => (int)_font.GetFont(FontSize(size)).MeasureString(text).X;
+
+	private int FontSize(int size) => Math.Max(1, (int)MathF.Round(size * _fontScale));
+
+	// The file first, the system faces after it for the glyphs it lacks.
+	public void UseFont(string? file, float scale)
+	{
+		_fontScale = file is null ? 1f : scale;
+		if (file is null)
+		{
+			_font = _system;
+			return;
+		}
+		if (!_fontFiles.TryGetValue(file, out FontSystem? system))
+		{
+			system = new FontSystem();
+			system.AddFont(File.ReadAllBytes(file));
+			foreach (string fallback in Fonts.Candidates().Where(File.Exists).Distinct())
+			{
+				try
+				{
+					system.AddFont(File.ReadAllBytes(fallback));
+				}
+				catch (Exception)
+				{
+					// As in Fonts.Load: a face the rasterizer cannot read is left out.
+				}
+			}
+			_fontFiles[file] = system;
+		}
+		_font = system;
+	}
+
+	// Through Texture2D.FromStream, premultiplied the way Png.Read does it so a picture is the same with and without a device.
+	public Color[] ReadImage(string path, out int width, out int height)
+	{
+		using FileStream file = File.OpenRead(path);
+		using Texture2D texture = Texture2D.FromStream(device, file, rgba =>
+		{
+			for (int i = 0; i < rgba.Length; i += 4)
+			{
+				int a = rgba[i + 3];
+				rgba[i] = (byte)((rgba[i] * a + 127) / 255);
+				rgba[i + 1] = (byte)((rgba[i + 1] * a + 127) / 255);
+				rgba[i + 2] = (byte)((rgba[i + 2] * a + 127) / 255);
+			}
+		});
+		width = texture.Width;
+		height = texture.Height;
+		var pixels = new Color[width * height];
+		texture.GetData(pixels);
+		return pixels;
+	}
+
+	public void ClearImages()
+	{
+		foreach (Texture2D texture in _images)
+		{
+			texture.Dispose();
+		}
+		_images.Clear();
+	}
 
 	public int CreateImage(int width, int height, Color[] pixels)
 	{
@@ -241,16 +351,18 @@ public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, Fo
 
 	public void Dispose()
 	{
-		foreach (Texture2D texture in _images)
+		ClearImages();
+		foreach (FontSystem system in _fontFiles.Values)
 		{
-			texture.Dispose();
+			system.Dispose();
 		}
-		_images.Clear();
 		_pixel.Dispose();
 	}
 }
 
-// Headless: draws nothing, keeps the last frame's text so a script can print it, and counts calls.
+// Headless: draws nothing, keeps the last frame's text so a script can print it, and counts calls. Each frame's draws
+// also fold into a digest, with every image known by a hash of its pixels rather than its handle, so two runs that draw
+// the same pictures in the same places give the same digests whether the pictures came from code or from files.
 public sealed class RecordingSurface : IDrawSurface
 {
 	public int Width => 1280;
@@ -258,21 +370,52 @@ public sealed class RecordingSurface : IDrawSurface
 	public int Rects { get; private set; }
 	public int Texts { get; private set; }
 	public int Images { get; private set; }
-	private int _created;
+	private readonly List<ulong> _contents = [];
 	private bool _clipped;
+	private float _fontScale = 1f;
+	private ulong _digest;
 	public List<string> FrameText { get; } = [];
+	public List<ulong> Digests { get; } = [];
 
-	public void BeginFrame() => FrameText.Clear();
+	public void BeginFrame()
+	{
+		FrameText.Clear();
+		_digest = 14695981039346656037ul;
+	}
 
-	public void Fill(int x, int y, int w, int h, Color color) => Rects++;
+	public void EndFrame() => Digests.Add(_digest);
+
+	private void Mix(params long[] values)
+	{
+		foreach (long v in values)
+		{
+			_digest = (_digest ^ (ulong)v) * 1099511628211ul;
+		}
+	}
+
+	private void Mix(string text)
+	{
+		foreach (char c in text)
+		{
+			Mix(c);
+		}
+	}
+
+	public void Fill(int x, int y, int w, int h, Color color)
+	{
+		Rects++;
+		Mix(1, x, y, w, h, color.PackedValue);
+	}
 
 	public void Text(string text, int x, int y, Color color, int size = Style.Body)
 	{
 		Texts++;
 		FrameText.Add(text);
+		Mix(2, x, y, color.PackedValue, size);
+		Mix(text);
 	}
 
-	public int Measure(string text, int size = Style.Body) => text.Length * size * 11 / 20;
+	public int Measure(string text, int size = Style.Body) => text.Length * (int)MathF.Round(size * _fontScale) * 11 / 20;
 
 	public int CreateImage(int width, int height, Color[] pixels)
 	{
@@ -280,16 +423,23 @@ public sealed class RecordingSurface : IDrawSurface
 		{
 			throw new ArgumentException($"{pixels.Length} pixels for a {width}x{height} image");
 		}
-		return _created++;
+		ulong h = 14695981039346656037ul;
+		foreach (uint v in pixels.Select(p => p.PackedValue).Prepend((uint)height).Prepend((uint)width))
+		{
+			h = (h ^ v) * 1099511628211ul;
+		}
+		_contents.Add(h);
+		return _contents.Count - 1;
 	}
 
 	public void Image(int image, int x, int y, int w, int h, Color tint)
 	{
-		if (image < 0 || image >= _created)
+		if (image < 0 || image >= _contents.Count)
 		{
 			throw new ArgumentOutOfRangeException(nameof(image));
 		}
 		Images++;
+		Mix(3, (long)_contents[image], x, y, w, h, tint.PackedValue);
 	}
 
 	public void Clip(int x, int y, int w, int h)
@@ -299,6 +449,7 @@ public sealed class RecordingSurface : IDrawSurface
 			throw new InvalidOperationException($"a clip of {w}x{h} inside another clip, or an empty one");
 		}
 		_clipped = true;
+		Mix(4, x, y, w, h);
 	}
 
 	public void Unclip()
@@ -308,6 +459,92 @@ public sealed class RecordingSurface : IDrawSurface
 			throw new InvalidOperationException("an unclip without a clip");
 		}
 		_clipped = false;
+		Mix(5);
+	}
+
+	public Color[] ReadImage(string path, out int width, out int height) => Png.Read(path, out width, out height);
+
+	public void ClearImages() => _contents.Clear();
+
+	public void UseFont(string? file, float scale)
+	{
+		_fontScale = file is null ? 1f : scale;
+		Mix(6, (long)(_fontScale * 1000));
+		Mix(file ?? "");
+	}
+}
+
+// Draws into a pixel buffer, for pictures the sample builds from rectangles and other pictures (the placeholder export's
+// window frame, cursor and bars, and the battle backdrops). Text is left out.
+public sealed class CanvasSurface(int width, int height) : IDrawSurface
+{
+	private readonly List<(int W, int H, Color[] Pixels)> _images = [];
+	private Rectangle _clip = new(0, 0, width, height);
+
+	public int Width => width;
+	public int Height => height;
+	public Color[] Pixels { get; } = new Color[width * height];
+
+	private void Blend(int x, int y, Color c)
+	{
+		if (!_clip.Contains(x, y) || c.A == 0)
+		{
+			return;
+		}
+		ref Color d = ref Pixels[y * width + x];
+		int keep = 255 - c.A;
+		d = new Color(c.R + d.R * keep / 255, c.G + d.G * keep / 255, c.B + d.B * keep / 255, c.A + d.A * keep / 255);
+	}
+
+	public void Fill(int x, int y, int w, int h, Color color)
+	{
+		for (int j = Math.Max(y, 0); j < Math.Min(y + h, height); j++)
+		{
+			for (int i = Math.Max(x, 0); i < Math.Min(x + w, width); i++)
+			{
+				Blend(i, j, color);
+			}
+		}
+	}
+
+	public void Text(string text, int x, int y, Color color, int size = Style.Body)
+	{
+	}
+
+	public int Measure(string text, int size = Style.Body) => 0;
+
+	public int CreateImage(int w, int h, Color[] pixels)
+	{
+		_images.Add((w, h, pixels));
+		return _images.Count - 1;
+	}
+
+	// Nearest neighbor, tinted as SpriteBatch tints premultiplied pixels.
+	public void Image(int image, int x, int y, int w, int h, Color tint)
+	{
+		(int iw, int ih, Color[] src) = _images[image];
+		for (int j = Math.Max(y, 0); j < Math.Min(y + h, height); j++)
+		{
+			for (int i = Math.Max(x, 0); i < Math.Min(x + w, width); i++)
+			{
+				Color c = src[(j - y) * ih / h * iw + (i - x) * iw / w];
+				Blend(i, j, new Color(c.R * tint.R / 255, c.G * tint.G / 255, c.B * tint.B / 255, c.A * tint.A / 255));
+			}
+		}
+	}
+
+	public void Clip(int x, int y, int w, int h) => _clip = Rectangle.Intersect(new Rectangle(x, y, w, h), new Rectangle(0, 0, width, height));
+
+	public void Unclip() => _clip = new Rectangle(0, 0, width, height);
+
+	public (int W, int H, Color[] Pixels) ImageData(int image) => _images[image];
+
+	public Color[] ReadImage(string path, out int w, out int h) => Png.Read(path, out w, out h);
+
+	public void ClearImages() => _images.Clear();
+
+	public void UseFont(string? file, float scale)
+	{
 	}
 }
 

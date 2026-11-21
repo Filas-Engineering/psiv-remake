@@ -14,9 +14,14 @@ public static class Program
 		"Psiv.Sample: plays the placeholder adventure through libpsiv_session\n" +
 		"\n" +
 		"  Psiv.Sample [--data DIR] [--saves DIR] [--seed N] [--font FILE] [--exit-after-ms N] [--screenshot FILE.png] [--mute] [--window-size WxH] [--fullscreen]\n" +
+		"              [--assets DIR] [--watch-assets]\n" +
 		"  Psiv.Sample --window --script FILE ...   the window, with keys from the script instead of the keyboard\n" +
-		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N]   headless, no window, no sound\n" +
+		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N] [--assets DIR] [--frame-digests FILE]   headless, no window, no sound\n" +
 		"  Psiv.Sample --dump-audio DIR   writes a generated track and three cues as WAV files and checks every generated sound\n" +
+		"  Psiv.Sample --check-assets [--assets DIR]   checks the asset directory's manifest and files against the data\n" +
+		"  Psiv.Sample --export-placeholders DIR   writes every generated picture and sound and a manifest that reproduces them\n" +
+		"\n" +
+		"The asset directory defaults to assets/ beside the data directory, when there is one; F5 in the window reloads it.\n" +
 		"\n" +
 		"Headless script lines: press KEY [COUNT] | hold KEY FRAMES | wait FRAMES | pressuntil KEY SCREEN MAXFRAMES |\n" +
 		"pad BUTTON [COUNT] | padhold BUTTON FRAMES | paduntil BUTTON SCREEN MAXFRAMES | padstick X Y FRAMES |\n" +
@@ -25,6 +30,8 @@ public static class Program
 		"expect label none | expect toast none|TEXT | expect notoast TEXT | expect binding ACTION KEYS \"|\" BUTTONS |\n" +
 		"expect state KEY VALUE | expect statehas KEY TEXT | expect audio TEXT | expect noaudio TEXT | audio mark|log |\n" +
 		"savefile damage SLOT | click X Y | clickcell X Y | expect letterbox W H X Y WIDTH HEIGHT PERCENT | window W H | window fullscreen |\n" +
+		"assets reload | assets swap FILE WITH | expect asset KEY file|generated | present mark | expect present STEP \"|\" ... | expect presenthas TEXT |\n" +
+		"waitstate MAXFRAMES KEY VALUE | waitstatehas MAXFRAMES KEY TEXT |\n" +
 		"dump | shot FILE.png (window only) | # comment.\n" +
 		"Keys are MonoGame Keys names, buttons MonoGame Buttons names, actions the sample's GameAction names.\n" +
 		"Exit codes: 0 done, 1 a failure, 2 bad arguments.\n";
@@ -44,6 +51,11 @@ public static class Program
 		(int, int)? windowSize = null;
 		string? screenshot = null;
 		string? dumpAudio = null;
+		string? assets = null;
+		string? export = null;
+		string? digests = null;
+		bool checkAssets = false;
+		bool watchAssets = false;
 		for (int i = 0; i < args.Length; i++)
 		{
 			string? Next() => i + 1 < args.Length ? args[++i] : null;
@@ -60,6 +72,11 @@ public static class Program
 				windowSize = (sw, sh);
 				break;
 			case "--dump-audio": dumpAudio = Next(); break;
+			case "--assets": assets = Next(); break;
+			case "--check-assets": checkAssets = true; break;
+			case "--watch-assets": watchAssets = true; break;
+			case "--export-placeholders": export = Next(); break;
+			case "--frame-digests": digests = Next(); break;
 			case "--screenshot": screenshot = Next(); break;
 			case "--script": script = Next(); break;
 			case "--frames" when int.TryParse(Next(), CultureInfo.InvariantCulture, out int n): frames = n; break;
@@ -81,6 +98,12 @@ public static class Program
 		if (data is null)
 		{
 			Console.Error.WriteLine("cannot find game/data; pass --data DIR");
+			return 2;
+		}
+		assets ??= Path.Combine(Path.GetDirectoryName(Path.GetFullPath(data))!, "assets") is var beside && Directory.Exists(beside) ? beside : null;
+		if (checkAssets && assets is null)
+		{
+			Console.Error.WriteLine("no asset directory to check: pass --assets DIR");
 			return 2;
 		}
 		if (script is not null && !window && frames <= 0)
@@ -109,13 +132,22 @@ public static class Program
 		}
 		using (session)
 		{
+			GameData gameData = GameData.Load(session, data);
+			if (checkAssets)
+			{
+				return CheckAssets(assets!, gameData);
+			}
+			if (export is not null)
+			{
+				return PlaceholderExport.Run(export, gameData);
+			}
 			if (script is not null && !window)
 			{
-				return Headless.Run(session, script, frames, saves);
+				return Headless.Run(session, gameData, script, frames, saves, assets, digests);
 			}
 			try
 			{
-				using var game = new SampleGame(session, font, exitAfterMs, saves, script, screenshot, mute, windowSize, fullscreen);
+				using var game = new SampleGame(session, gameData, font, exitAfterMs, saves, script, screenshot, mute, windowSize, fullscreen, assets, watchAssets);
 				game.Run();
 				return game.Failures == 0 ? 0 : 1;
 			}
@@ -125,6 +157,23 @@ public static class Program
 				return 1;
 			}
 		}
+	}
+
+	// The asset counterpart of game_cli --check: every problem with its file, entry and reason, then what loaded.
+	private static int CheckAssets(string dir, GameData data)
+	{
+		Assets assets = Assets.Load(dir, data);
+		foreach (AssetProblem problem in assets.Problems)
+		{
+			Console.WriteLine("assets: " + problem);
+		}
+		AssetManifest m = assets.Manifest;
+		Console.WriteLine($"assets: {m.Tilesets.Count} tilesets, {m.Characters.Count} characters, {m.Portraits.Count} portraits, {m.Figures.Count} figures, " +
+			$"{m.FieldEnemies.Count} field enemies, {m.Backdrops.Count} backdrops, {m.Effects.Count} effects, {m.Sprites.Count} sprites, {m.StatusIcons.Count} status icons, " +
+			$"{(m.Ui is null ? "no UI skin" : m.Ui.Enabled ? "a UI skin" : "a UI skin turned off")}, {m.Audio.Count} sounds, " +
+			$"{(m.BattlePresentation is null ? "the built-in battle presentation" : "a battle presentation table")}");
+		Console.WriteLine(assets.Problems.Count == 0 ? "OK: no problems." : $"FAILED: {assets.Problems.Count} problems.");
+		return assets.Problems.Count == 0 ? 0 : 1;
 	}
 
 	// One generated track and three cues as WAV files, then the synthesizer's self-check over every sound the sample
@@ -200,6 +249,7 @@ public sealed class ScriptPlayer
 	private IEnumerator<InputFrame>? _action;
 	private string? _pendingFailure;
 	private int _audioMark;
+	private int _presentMark;
 
 	// `shot` saves the next drawn frame to a file; null (headless) skips shot lines. `restart` makes a new controller
 	// for `controls restart`.
@@ -445,6 +495,35 @@ public sealed class ScriptPlayer
 					Fail($"{source}: expected {(w[1] == "audio" ? "a" : "no")} call holding '{call}' since the mark, heard [{string.Join(" | ", calls)}]");
 				}
 				break;
+			case "assets" when w.Length == 2 && w[1] == "reload":
+				_controller.ReloadAssets();
+				break;
+			case "assets" when w.Length == 4 && w[1] == "swap" && _controller.AssetDirectory is { } assetDir:
+				// Copies WITH over FILE in the asset directory, then reloads, as an artist saving over a file would.
+				File.Copy(Path.Combine(assetDir, w[3]), Path.Combine(assetDir, w[2]), overwrite: true);
+				File.SetLastWriteTimeUtc(Path.Combine(assetDir, w[2]), DateTime.UtcNow);
+				_controller.ReloadAssets();
+				break;
+			case "expect" when w.Length == 4 && w[1] == "asset" && w[3] is "file" or "generated":
+				if (_controller.AssetFromFile(w[2]) != (w[3] == "file"))
+				{
+					Fail($"{source}: {w[2]} is {(_controller.AssetFromFile(w[2]) ? "from a file" : "generated")}, expected {w[3]}");
+				}
+				break;
+			case "waitstate" or "waitstatehas" when w.Length >= 4 && int.TryParse(w[1], CultureInfo.InvariantCulture, out int maxWait):
+				return WaitState(w[2], string.Join(" ", w[3..]), w[0] == "waitstatehas", maxWait, source).GetEnumerator();
+			case "present" when w.Length == 2 && w[1] == "mark":
+				_presentMark = _controller.PresentedSteps.Count;
+				break;
+			case "expect" when w.Length >= 3 && w[1] is "present" or "presenthas":
+				// The presentation steps started since the last `present mark`, joined by " | ": all of them, or holding the text.
+				string steps = string.Join(" | ", _controller.PresentedSteps.Skip(_presentMark));
+				string wantSteps = string.Join(" ", w[2..]);
+				if (w[1] == "present" ? steps != wantSteps : !steps.Contains(wantSteps, StringComparison.Ordinal))
+				{
+					Fail($"{source}: presented [{steps}], expected {(w[1] == "present" ? "" : "it to hold ")}[{wantSteps}]");
+				}
+				break;
 			case "shot" when w.Length == 2:
 				return Shot(w[1]).GetEnumerator();
 			case "dump":
@@ -497,6 +576,25 @@ public sealed class ScriptPlayer
 		default:
 			Fail($"{source}: cannot run '{string.Join(" ", w)}'");
 			break;
+		}
+	}
+
+	// `waitstate MAXFRAMES KEY VALUE` and `waitstatehas MAXFRAMES KEY TEXT`: frames with no keys until the probe equals the
+	// value, or holds the text.
+	private IEnumerable<InputFrame> WaitState(string key, string want, bool holds, int max, string source)
+	{
+		bool Met()
+		{
+			string value = string.Join(" ", _controller.State(key).Split(' ', StringSplitOptions.RemoveEmptyEntries));
+			return holds ? value.Contains(want, StringComparison.Ordinal) : value == want;
+		}
+		for (int i = 0; i < max && !Met(); i++)
+		{
+			yield return InputFrame.None;
+		}
+		if (!Met())
+		{
+			_pendingFailure = $"{source}: {key} is still '{_controller.State(key)}' after {max} frames";
 		}
 	}
 
@@ -605,14 +703,14 @@ public static class Headless
 {
 	private const int FrameMs = 16;
 
-	public static int Run(GameSession session, string scriptPath, int frames, string? saves)
+	public static int Run(GameSession session, GameData data, string scriptPath, int frames, string? saves, string? assets, string? digests)
 	{
 		int frame = 0;
 		int failures = 0;
 		var surface = new RecordingSurface();
 		string? controls = saves is null ? null : Path.Combine(saves, SampleGame.ControlsFile);
 		var audio = new RecordingAudio();
-		SampleController NewController() => new(session, line => Console.WriteLine($"[{frame}] {line}"), controls, audio);
+		SampleController NewController() => new(session, data, line => Console.WriteLine($"[{frame}] {line}"), controls, audio, assets);
 		SampleController controller = NewController();
 		var input = new InputState();
 		try
@@ -626,6 +724,7 @@ public static class Headless
 				controller.Update(FrameMs, input);
 				surface.BeginFrame();
 				controller.Draw(surface);
+				surface.EndFrame();
 				frame++;
 			}
 			player.Finish(frames);
@@ -635,6 +734,11 @@ public static class Headless
 		{
 			failures++;
 			Console.WriteLine($"[{frame}] FAIL: exception: {e}");
+		}
+		if (digests is not null)
+		{
+			// One line per frame, so two runs compare with cmp and differ at a frame number diff can show.
+			File.WriteAllLines(digests, surface.Digests.Select((d, i) => $"{i} {d:x16}"));
 		}
 		WorldInfo world = session.WorldInfo();
 		Console.WriteLine($"headless: {frame} frames, screen {controller.Screen}, mode {session.Mode}, money {world.Money}, play time {world.PlayTimeMs} ms, " +

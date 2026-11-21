@@ -7,7 +7,7 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-public enum GameAction { Up, Down, Left, Right, Confirm, Back, Menu, QuestLog, PartyTalk, TextLog, Skip, PagePrev, PageNext, Pause }
+public enum GameAction { Up, Down, Left, Right, Confirm, Back, Menu, QuestLog, PartyTalk, TextLog, Skip, PagePrev, PageNext, Pause, FastForward }
 
 // Keys and gamepad buttons down this frame and the ones that went down since the last frame.
 public sealed class InputState
@@ -141,6 +141,8 @@ public sealed class Bindings
 		GameAction.PageNext => ([Keys.Right], [Buttons.RightShoulder, Buttons.DPadRight]),
 		// Start opens the field menu, so Select pauses: it is Skip only while an event runs, where there is no pause.
 		GameAction.Pause => ([Keys.P], [Buttons.Back]),
+		// Held during a battle's playback; the shoulder button is PageNext only in menus.
+		GameAction.FastForward => ([Keys.F], [Buttons.RightShoulder]),
 		_ => ([], []),
 	};
 

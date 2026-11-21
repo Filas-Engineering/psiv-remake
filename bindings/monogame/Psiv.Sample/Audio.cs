@@ -21,6 +21,9 @@ public interface IAudioOut
 	// Percentages, from the profile's music, ambient and effects volumes.
 	void SetVolumes(int music, int ambient, int effects);
 	void Update(int dtMs);
+	// The asset directory's sound files replace the generated sound of the ids they name, from the next time each plays;
+	// null goes back to generated sound for every id.
+	void UseAssets(AssetManifest? assets);
 }
 
 // Silent: keeps what is playing and a log of every call, for headless runs, --mute and machines without an audio
@@ -102,6 +105,10 @@ public class RecordingAudio : IAudioOut
 	public virtual void Update(int dtMs)
 	{
 	}
+
+	public virtual void UseAssets(AssetManifest? assets)
+	{
+	}
 }
 
 // Plays the generated sounds through MonoGame, keeping the same state and log as the silent one. Cues are generated
@@ -109,16 +116,21 @@ public class RecordingAudio : IAudioOut
 public sealed class MonoGameAudio : RecordingAudio, IDisposable
 {
 	// A looping instance fading toward a gain; one that has faded out is stopped and dropped.
-	private sealed class Loop(SoundEffectInstance instance, float gain, float target, int fadeMs)
+	private sealed class Loop(SoundEffectInstance instance, float gain, float target, int fadeMs, float scale)
 	{
 		public SoundEffectInstance Instance { get; } = instance;
+		// The sound file's gain from the manifest; 1 for generated sound.
+		public float Scale { get; } = scale;
 		public float Gain { get; set; } = gain;
 		public float Target { get; set; } = target;
 		public float PerMs { get; set; } = fadeMs <= 0 ? 1f : 1f / fadeMs;
 	}
 
 	private readonly Action<string> _log;
-	private readonly Dictionary<(SoundKind, string), SoundEffect> _sounds = [];
+	private readonly Dictionary<(SoundKind, string), (SoundEffect Effect, float Gain)> _sounds = [];
+	private AssetManifest? _assets;
+	// Sounds a reload replaced, kept until the end since an instance of one may still be playing.
+	private readonly List<SoundEffect> _retired = [];
 	private readonly List<Loop> _music = [];
 	private readonly List<Loop> _ambient = [];
 	private bool _failed;
@@ -151,15 +163,36 @@ public sealed class MonoGameAudio : RecordingAudio, IDisposable
 		}
 	}
 
-	private SoundEffect Sound(SoundKind kind, string id)
+	// The manifest's file for the id, with its loop points and gain, else the generated sound.
+	private (SoundEffect Effect, float Gain) Sound(SoundKind kind, string id)
 	{
-		if (!_sounds.TryGetValue((kind, id), out SoundEffect? sound))
+		if (!_sounds.TryGetValue((kind, id), out var sound))
 		{
-			short[] pcm = Synth.Generate(kind, id);
-			sound = new SoundEffect(MemoryMarshal.AsBytes(pcm.AsSpan()).ToArray(), Synth.Rate, AudioChannels.Mono);
+			if (_assets?.Audio.FirstOrDefault(a => a.Kind == kind && a.Id == id) is { } file)
+			{
+				PcmSound pcm = SoundFile.Read(_assets.Full(file.Path));
+				byte[] bytes = MemoryMarshal.AsBytes(pcm.Samples.AsSpan()).ToArray();
+				AudioChannels channels = pcm.Channels == 2 ? AudioChannels.Stereo : AudioChannels.Mono;
+				sound = (kind == SoundKind.Cue
+					? new SoundEffect(bytes, pcm.Rate, channels)
+					: new SoundEffect(bytes, 0, bytes.Length, pcm.Rate, channels, file.LoopStart, file.LoopEnd - file.LoopStart), file.Gain);
+			}
+			else
+			{
+				short[] pcm = Synth.Generate(kind, id);
+				sound = (new SoundEffect(MemoryMarshal.AsBytes(pcm.AsSpan()).ToArray(), Synth.Rate, AudioChannels.Mono), 1f);
+			}
 			_sounds[(kind, id)] = sound;
 		}
 		return sound;
+	}
+
+	// Sounds already built are dropped, so each comes from its file or Synth the next time it plays; what plays now goes on.
+	public override void UseAssets(AssetManifest? assets)
+	{
+		_assets = assets;
+		_retired.AddRange(_sounds.Values.Select(s => s.Effect));
+		_sounds.Clear();
 	}
 
 	// A device that goes away mid-run leaves the sample silent, not crashed.
@@ -198,12 +231,13 @@ public sealed class MonoGameAudio : RecordingAudio, IDisposable
 	private void Start(List<Loop> loops, SoundKind kind, string id, int fadeMs)
 	{
 		FadeOutAll(loops, fadeMs);
-		SoundEffectInstance instance = Sound(kind, id).CreateInstance();
+		(SoundEffect effect, float scale) = Sound(kind, id);
+		SoundEffectInstance instance = effect.CreateInstance();
 		instance.IsLooped = true;
 		float gain = fadeMs <= 0 ? 1f : 0f;
 		instance.Volume = 0f;
 		instance.Play();
-		loops.Add(new Loop(instance, gain, 1f, fadeMs));
+		loops.Add(new Loop(instance, gain, 1f, fadeMs, scale));
 	}
 
 	public override void PlayMusic(string track, int fadeMs)
@@ -243,7 +277,11 @@ public sealed class MonoGameAudio : RecordingAudio, IDisposable
 		base.PlayCue(cue);
 		if (Volumes.Effects > 0)
 		{
-			Guard(() => Sound(SoundKind.Cue, cue).Play(Volumes.Effects / 100f, 0f, 0f));
+			Guard(() =>
+			{
+				(SoundEffect effect, float gain) = Sound(SoundKind.Cue, cue);
+				effect.Play(Math.Clamp(Volumes.Effects / 100f * gain, 0f, 1f), 0f, 0f);
+			});
 		}
 	}
 
@@ -270,7 +308,7 @@ public sealed class MonoGameAudio : RecordingAudio, IDisposable
 				loops.RemoveAt(i);
 				continue;
 			}
-			loop.Instance.Volume = Math.Clamp(loop.Gain * Math.Max(0, volume) / 100f, 0f, 1f);
+			loop.Instance.Volume = Math.Clamp(loop.Gain * loop.Scale * Math.Max(0, volume) / 100f, 0f, 1f);
 		}
 	}
 
@@ -280,9 +318,9 @@ public sealed class MonoGameAudio : RecordingAudio, IDisposable
 		{
 			loop.Instance.Dispose();
 		}
-		foreach (SoundEffect sound in _sounds.Values)
+		foreach (SoundEffect effect in _sounds.Values.Select(s => s.Effect).Concat(_retired))
 		{
-			sound.Dispose();
+			effect.Dispose();
 		}
 		_sounds.Clear();
 	}

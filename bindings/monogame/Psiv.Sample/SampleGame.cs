@@ -42,10 +42,27 @@ public sealed class SampleGame : Game
 	private bool _mouseWasDown;
 	private bool _fullscreenKeyWasDown;
 	private Letterbox _box = Letterbox.Fit(Letterbox.BaseWidth, Letterbox.BaseHeight);
+	private readonly GameData _data;
+	private readonly string? _assets;
+	private readonly FileSystemWatcher? _watcher;
+	// When the watcher last saw a change in the asset directory; the reload waits for a quiet moment after it.
+	private long _assetChangeTicks;
+	private const int WatchQuietMs = 300;
 
-	public SampleGame(GameSession session, string? fontPath, int exitAfterMs, string? saves, string? scriptPath = null, string? screenshot = null, bool mute = false,
-		(int Width, int Height)? windowSize = null, bool fullscreen = false)
+	public SampleGame(GameSession session, GameData data, string? fontPath, int exitAfterMs, string? saves, string? scriptPath = null, string? screenshot = null, bool mute = false,
+		(int Width, int Height)? windowSize = null, bool fullscreen = false, string? assets = null, bool watchAssets = false)
 	{
+		_data = data;
+		_assets = assets;
+		if (watchAssets && assets is not null)
+		{
+			_watcher = new FileSystemWatcher(assets) { IncludeSubdirectories = true, EnableRaisingEvents = true };
+			FileSystemEventHandler changed = (_, _) => Interlocked.Exchange(ref _assetChangeTicks, DateTime.UtcNow.Ticks);
+			_watcher.Changed += changed;
+			_watcher.Created += changed;
+			_watcher.Deleted += changed;
+			_watcher.Renamed += (_, _) => Interlocked.Exchange(ref _assetChangeTicks, DateTime.UtcNow.Ticks);
+		}
 		_saves = saves;
 		_controlsPath = saves is null ? null : Path.Combine(saves, ControlsFile);
 		_session = session;
@@ -54,7 +71,7 @@ public sealed class SampleGame : Game
 		_scriptPath = scriptPath;
 		_screenshot = screenshot;
 		_audio = MonoGameAudio.Create(mute, Console.WriteLine);
-		_controller = new SampleController(session, Console.WriteLine, _controlsPath, _audio);
+		_controller = new SampleController(session, data, Console.WriteLine, _controlsPath, _audio, assets);
 		_graphics = new GraphicsDeviceManager(this)
 		{
 			PreferredBackBufferWidth = windowSize?.Width ?? Letterbox.BaseWidth,
@@ -97,7 +114,7 @@ public sealed class SampleGame : Game
 		if (_scriptPath is not null)
 		{
 			_player = new ScriptPlayer(_session, _controller, _scriptPath, () => [], () => _frame, _shots.Add,
-				() => _controller = new SampleController(_session, Console.WriteLine, _controlsPath, _audio), _saves, Resize);
+				() => _controller = new SampleController(_session, _data, Console.WriteLine, _controlsPath, _audio, _assets), _saves, Resize);
 		}
 	}
 
@@ -137,6 +154,12 @@ public sealed class SampleGame : Game
 			(int X, int Y)? click = mouseDown && !_mouseWasDown ? _box.ToBase(mouse.X, mouse.Y) : null;
 			_mouseWasDown = mouseDown;
 			_input.Set(keys.GetPressedKeys(), Pad.ButtonsDown(pad), _padConnected, click);
+		}
+		long changedAt = Interlocked.Read(ref _assetChangeTicks);
+		if (changedAt != 0 && (DateTime.UtcNow.Ticks - changedAt) / TimeSpan.TicksPerMillisecond >= WatchQuietMs)
+		{
+			Interlocked.CompareExchange(ref _assetChangeTicks, 0, changedAt);
+			_controller.ReloadAssets();
 		}
 		_frame++;
 		// The session takes whole milliseconds; the remainder carries into the next frame.
@@ -203,6 +226,7 @@ public sealed class SampleGame : Game
 
 	protected override void UnloadContent()
 	{
+		_watcher?.Dispose();
 		_surface?.Dispose();
 		_target?.Dispose();
 		(_audio as IDisposable)?.Dispose();

@@ -66,6 +66,22 @@ SAMPLE_NAME_PAD_SCRIPT = monogame/Psiv.Sample/scripts/name_pad.txt
 SAMPLE_PANELS_SCRIPT = monogame/Psiv.Sample/scripts/panels.txt
 SAMPLE_AUDIO_SCRIPT = monogame/Psiv.Sample/scripts/audio.txt
 SAMPLE_WINDOW_SCRIPT = monogame/Psiv.Sample/scripts/window.txt
+SAMPLE_BATTLE_SCRIPT = monogame/Psiv.Sample/scripts/battle.txt
+SAMPLE_ASSETS_SCRIPT = monogame/Psiv.Sample/scripts/assets.txt
+SAMPLE_RELOAD_SCRIPT = monogame/Psiv.Sample/scripts/hot_reload.txt
+SAMPLE_SCRIPTS = monogame/Psiv.Sample/scripts
+SAMPLE_RUN = $(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data
+
+# The round trip: a headless run with the exported placeholders as the asset directory must draw every frame as the
+# generated run did (same digests) and print the same transcript. $(1) names the run, $(2) its transcript, $(3) the
+# script, $(4) the frames.
+define round_trip
+	rm -rf $(BUILD)/exported_saves
+	$(SAMPLE_RUN) --saves $(BUILD)/exported_saves --script $(3) --frames $(4) --assets $(BUILD)/export --frame-digests $(BUILD)/digests_$(1)_exported.txt \
+		> $(BUILD)/$(2)_exported.txt || (cat $(BUILD)/$(2)_exported.txt; exit 1)
+	cmp $(BUILD)/digests_$(1).txt $(BUILD)/digests_$(1)_exported.txt
+	cmp $(BUILD)/$(2).txt $(BUILD)/$(2)_exported.txt
+endef
 
 .PHONY: all test native-test dotnet dotnet-test dotnet-missing clean deps
 
@@ -123,7 +139,7 @@ dotnet: $(LIB)
 dotnet-test: dotnet
 	PSIV_DATA_DIR=$(CURDIR)/$(GAME)/data $(DOTNET) test csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj --no-build -nologo
 	rm -rf $(BUILD)/sample_saves
-	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_saves --script $(SAMPLE_SCRIPT) --frames 2000 > $(BUILD)/sample_headless.txt \
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_saves --script $(SAMPLE_SCRIPT) --frames 2000 --frame-digests $(BUILD)/digests_smoke.txt > $(BUILD)/sample_headless.txt \
 		|| (cat $(BUILD)/sample_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_headless.txt
 	rm -rf $(BUILD)/sample_large_saves
@@ -131,7 +147,7 @@ dotnet-test: dotnet
 		|| (cat $(BUILD)/sample_large_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_large_headless.txt
 	rm -rf $(BUILD)/sample_actors_saves
-	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_actors_saves --script $(SAMPLE_ACTORS_SCRIPT) --frames 1300 > $(BUILD)/sample_actors_headless.txt \
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_actors_saves --script $(SAMPLE_ACTORS_SCRIPT) --frames 1300 --frame-digests $(BUILD)/digests_actors.txt > $(BUILD)/sample_actors_headless.txt \
 		|| (cat $(BUILD)/sample_actors_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_actors_headless.txt
 	rm -rf $(BUILD)/sample_party_saves
@@ -163,17 +179,42 @@ dotnet-test: dotnet
 		|| (cat $(BUILD)/sample_name_pad_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_name_pad_headless.txt
 	rm -rf $(BUILD)/sample_panels_saves
-	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_panels_saves --script $(SAMPLE_PANELS_SCRIPT) --frames 1200 > $(BUILD)/sample_panels_headless.txt \
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_panels_saves --script $(SAMPLE_PANELS_SCRIPT) --frames 1200 --frame-digests $(BUILD)/digests_panels.txt > $(BUILD)/sample_panels_headless.txt \
 		|| (cat $(BUILD)/sample_panels_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_panels_headless.txt
 	rm -rf $(BUILD)/sample_audio_saves
-	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_audio_saves --script $(SAMPLE_AUDIO_SCRIPT) --frames 800 > $(BUILD)/sample_audio_headless.txt \
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_audio_saves --script $(SAMPLE_AUDIO_SCRIPT) --frames 1000 > $(BUILD)/sample_audio_headless.txt \
 		|| (cat $(BUILD)/sample_audio_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_audio_headless.txt
 	rm -rf $(BUILD)/sample_window_saves
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_window_saves --script $(SAMPLE_WINDOW_SCRIPT) --frames 540 > $(BUILD)/sample_window_headless.txt \
 		|| (cat $(BUILD)/sample_window_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_window_headless.txt
+	rm -rf $(BUILD)/sample_battle_saves
+	$(SAMPLE_RUN) --saves $(BUILD)/sample_battle_saves --script $(SAMPLE_BATTLE_SCRIPT) --frames 5200 --frame-digests $(BUILD)/digests_battle.txt > $(BUILD)/sample_battle_headless.txt \
+		|| (cat $(BUILD)/sample_battle_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_battle_headless.txt
+	rm -rf $(BUILD)/export
+	$(SAMPLE_RUN) --export-placeholders $(BUILD)/export
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/export
+	$(call round_trip,smoke,sample_headless,$(SAMPLE_SCRIPT),2000)
+	$(call round_trip,actors,sample_actors_headless,$(SAMPLE_ACTORS_SCRIPT),1300)
+	$(call round_trip,panels,sample_panels_headless,$(SAMPLE_PANELS_SCRIPT),1200)
+	$(call round_trip,battle,sample_battle_headless,$(SAMPLE_BATTLE_SCRIPT),5200)
+	@echo "the exported placeholders draw every frame of the smoke, actors, panels and battle runs as the generated ones do"
+	python3 -I $(SAMPLE_SCRIPTS)/make_test_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/broken_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/test_assets
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/broken_assets > $(BUILD)/check_assets_broken.txt
+	diff $(SAMPLE_SCRIPTS)/check_assets_broken.expected $(BUILD)/check_assets_broken.txt
+	rm -rf $(BUILD)/sample_assets_saves
+	$(SAMPLE_RUN) --saves $(BUILD)/sample_assets_saves --assets $(BUILD)/test_assets --script $(SAMPLE_ASSETS_SCRIPT) --frames 2000 > $(BUILD)/sample_assets_headless.txt \
+		|| (cat $(BUILD)/sample_assets_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_assets_headless.txt
+	rm -rf $(BUILD)/sample_reload_saves $(BUILD)/reload_assets
+	cp -R $(BUILD)/test_assets $(BUILD)/reload_assets
+	$(SAMPLE_RUN) --saves $(BUILD)/sample_reload_saves --assets $(BUILD)/reload_assets --script $(SAMPLE_RELOAD_SCRIPT) --frames 400 > $(BUILD)/sample_reload_headless.txt \
+		|| (cat $(BUILD)/sample_reload_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_reload_headless.txt
 	rm -rf $(BUILD)/audio
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --dump-audio $(BUILD)/audio
 	python3 -I monogame/Psiv.Sample/scripts/check_wav.py $(BUILD)/audio

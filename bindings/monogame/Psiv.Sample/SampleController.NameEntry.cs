@@ -25,7 +25,7 @@ public sealed partial class SampleController
 		int y = Math.Max(48, (s.Height - h) / 2);
 		Style.Window(s, x, y, w, h, "Name");
 		string member = _s.NameEntryMember;
-		s.Image(art.ActorFrame(Art.LookFor(member), Direction.South, 0), x + 28, y + 40, 96, 96, Color.White);
+		s.Image(art.Portrait("", member), x + 28, y + 40, 96, 96, Color.White);
 		s.Text($"A name for {_s.DisplayName(member)}:", x + 150, y + Px(36), Style.Accent);
 		int used = _nameEntry.Draw(s, x + 150, y + Px(76), w - 190, _clockMs, Px);
 		Widgets.Hints(s, x + 28, y + Px(76) + used + Px(12), w - 56, _usingGamepad

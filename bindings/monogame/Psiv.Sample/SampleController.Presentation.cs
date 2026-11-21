@@ -166,9 +166,8 @@ public sealed partial class SampleController
 	// and is done as soon as it starts, as the script format says; the event waits for one play of any other.
 	private int PoseAction(PresentationAction a)
 	{
-		Pose pose = Art.PoseFor(a.Target);
-		_field.StartPose(a.Subject, pose, a.Handle, _clockMs, a.Loop);
-		return a.Loop ? 0 : Art.PoseLengthMs(pose);
+		_field.StartPose(a.Subject, a.Target, a.Handle, _clockMs, a.Loop);
+		return a.Loop ? 0 : _art?.PoseLengthMs(a.Subject, a.Target) ?? Art.PoseLengthMs(Art.PoseFor(a.Target));
 	}
 
 	// The end state of an action, for one that finished or was put up at once.
