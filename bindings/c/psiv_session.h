@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 5
+#define PSIV_ABI_VERSION 6
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -152,6 +152,7 @@ typedef enum psiv_macro_issue {
 	PSIV_ISSUE_FORCED_BY_STATUS, PSIV_ISSUE_UNKNOWN_ABILITY, PSIV_ISSUE_SILENCED, PSIV_ISSUE_NOT_ENOUGH_TP, PSIV_ISSUE_NO_USES_LEFT,
 	PSIV_ISSUE_NO_ITEM, PSIV_ISSUE_ESCAPE_NOT_ALLOWED, PSIV_ISSUE_TARGET_GONE, PSIV_ISSUE_NO_TARGET
 } psiv_macro_issue;
+typedef enum psiv_macro_target_kind { PSIV_MACRO_TARGET_DEFAULT, PSIV_MACRO_TARGET_SELF, PSIV_MACRO_TARGET_MEMBER, PSIV_MACRO_TARGET_ENEMY, PSIV_MACRO_TARGET_ALL } psiv_macro_target_kind;
 typedef enum psiv_action_type {
 	PSIV_ACTION_MOVE, PSIV_ACTION_FACE, PSIV_ACTION_ANIMATE, PSIV_ACTION_SHOW_ACTOR, PSIV_ACTION_HIDE_ACTOR, PSIV_ACTION_PANEL_SHOW,
 	PSIV_ACTION_PANEL_HIDE, PSIV_ACTION_PANEL_CLEAR, PSIV_ACTION_CAMERA_CUT, PSIV_ACTION_CAMERA_MOVE, PSIV_ACTION_FADE_IN, PSIV_ACTION_FADE_OUT,
@@ -173,7 +174,7 @@ typedef enum psiv_name_kind {
 	PSIV_NAME_BATTLE_SOURCE, PSIV_NAME_SIDE, PSIV_NAME_COMMAND_KIND, PSIV_NAME_ABILITY_KIND, PSIV_NAME_TARGETING, PSIV_NAME_EQUIP_SLOT,
 	PSIV_NAME_OUTCOME, PSIV_NAME_EVENT_TYPE, PSIV_NAME_CANCEL_REASON, PSIV_NAME_EFFECTIVENESS, PSIV_NAME_STATUS_END, PSIV_NAME_RESOURCE_KIND,
 	PSIV_NAME_ELEMENT, PSIV_NAME_STAT, PSIV_NAME_OPENING, PSIV_NAME_AUTO_STOP, PSIV_NAME_MACRO_STEP_STATUS, PSIV_NAME_MACRO_ISSUE,
-	PSIV_NAME_ACTION_TYPE
+	PSIV_NAME_ACTION_TYPE, PSIV_NAME_MACRO_TARGET_KIND
 } psiv_name_kind;
 
 /* The stable name of an enum value as the C++ libraries spell it, lowercase with underscores ("field",
@@ -264,6 +265,64 @@ PSIV_API psiv_status psiv_settings_set(psiv_session* session, const char* diffic
 PSIV_API psiv_status psiv_settings_set_auto_macro(psiv_session* session, const char* macro);
 /* The save's macro names. */
 PSIV_API psiv_status psiv_macros(psiv_session* session, const char* const** out, int32_t* count);
+
+/* ------------------------------------------------------------------------------------------------------ */
+/* Macro editor. Reading works any time; changes are refused outside the field menu                       */
+/* ("game.refuse.macro_menu_only"). Positions and step indexes count from 0. Unknown macro names are       */
+/* refused with "game.refuse.no_macro".                                                                   */
+
+typedef struct psiv_macro_step {
+	const char* member;
+	const char* member_name;
+	/* A psiv_command_kind. */
+	int32_t command_kind;
+	/* The ability or item id, "" for attack, defend and escape. */
+	const char* id;
+	const char* id_name;
+	/* A psiv_macro_target_kind. */
+	int32_t target_kind;
+	/* PSIV_MACRO_TARGET_MEMBER: the character id and its name; otherwise "". */
+	const char* target_member;
+	const char* target_member_name;
+	/* PSIV_MACRO_TARGET_ENEMY: the formation position from 0; otherwise -1. */
+	int32_t target_enemy;
+	/* A psiv_macro_issue saying why the step cannot run as written now (not in the party, defeated, unknown
+	 * ability, silenced, not enough TP, no uses left, no item), PSIV_ISSUE_NONE otherwise. */
+	int32_t issue;
+} psiv_macro_step;
+
+typedef struct psiv_macro {
+	const char* name;
+	int32_t step_count;
+	const psiv_macro_step* steps;
+} psiv_macro;
+
+/* The save's macros in order, with their steps. */
+PSIV_API psiv_status psiv_macro_list(psiv_session* session, const psiv_macro** out, int32_t* count);
+/* MUTATES. A new empty macro at the end. Names are 1 to 16 bytes without control characters, spaces at the ends
+ * dropped ("game.refuse.name_length"), and unique ("game.refuse.macro_name_taken"); there are at most 8 macros
+ * ("game.refuse.macro_slots_full"). */
+PSIV_API psiv_status psiv_macro_create(psiv_session* session, const char* name);
+/* MUTATES. Same name rules as psiv_macro_create. The auto macro keeps being the auto macro under its new name. */
+PSIV_API psiv_status psiv_macro_rename(psiv_session* session, const char* name, const char* new_name);
+/* MUTATES. Deleting the auto macro turns auto-battle's macro off and queues a "game.auto_macro_cleared" notice. */
+PSIV_API psiv_status psiv_macro_delete(psiv_session* session, const char* name);
+/* MUTATES. Moves the macro to `position` ("game.refuse.macro_no_position"). */
+PSIV_API psiv_status psiv_macro_move(psiv_session* session, const char* name, int32_t position);
+/* MUTATES. Replaces step `index`, or appends when `index` is the step count ("game.refuse.macro_no_step").
+ * command_kind is a psiv_command_kind and target_kind a psiv_macro_target_kind; id is the ability or item (NULL or
+ * "" for attack, defend and escape), target_member is read for PSIV_MACRO_TARGET_MEMBER and target_enemy for
+ * PSIV_MACRO_TARGET_ENEMY. Refusals: "game.refuse.macro_steps_full" (one step per party member, at most 5),
+ * "game.refuse.macro_unknown_member" (the member or the target member is not in the roster),
+ * "game.refuse.macro_member_twice", "game.refuse.macro_unknown_ability" (the member does not know it now),
+ * "game.refuse.macro_unknown_item", "game.refuse.macro_bad_command" (no command, or an id on a command that takes
+ * none) and "game.refuse.macro_target" (the target rule does not fit the command, or an enemy position past 7). */
+PSIV_API psiv_status psiv_macro_set_step(psiv_session* session, const char* macro, int32_t index, const char* member, int32_t command_kind,
+	const char* id, int32_t target_kind, const char* target_member, int32_t target_enemy);
+/* MUTATES. "game.refuse.macro_no_step" for an index past the steps. */
+PSIV_API psiv_status psiv_macro_remove_step(psiv_session* session, const char* macro, int32_t index);
+/* MUTATES. Moves step `from` to `to`. */
+PSIV_API psiv_status psiv_macro_move_step(psiv_session* session, const char* macro, int32_t from, int32_t to);
 
 /* ------------------------------------------------------------------------------------------------------ */
 /* Title and saves                                                                                        */
@@ -774,9 +833,84 @@ typedef struct psiv_ability_info {
 	int32_t cost;
 	/* Usable outside battle from the menu. */
 	int32_t field;
+	/* Skills: uses left and uses after a rest. Otherwise -1. */
+	int32_t uses;
+	int32_t max_uses;
 } psiv_ability_info;
 
 PSIV_API psiv_status psiv_member_abilities(psiv_session* session, const char* member, const psiv_ability_info** out, int32_t* count);
+
+/* MUTATES. From the field menu ("game.refuse.party_menu_only"): swaps two lineup positions, the leader's included
+ * ("game.refuse.party_no_position" for one past the lineup). Members join and leave only through events. */
+PSIV_API psiv_status psiv_party_swap(psiv_session* session, int32_t a, int32_t b);
+
+typedef struct psiv_stat_bonus {
+	int32_t max_hp;
+	int32_t max_tp;
+	int32_t strength;
+	int32_t mental;
+	int32_t agility;
+	int32_t dexterity;
+	int32_t defense;
+	int32_t critical;
+	int32_t evasion;
+} psiv_stat_bonus;
+
+typedef struct psiv_affinity {
+	/* A psiv_element. */
+	int32_t element;
+	/* Percent of that element's damage taken: above 100 a weakness, 0 immunity. */
+	int32_t percent;
+} psiv_affinity;
+
+typedef struct psiv_status_resist {
+	const char* id;
+	const char* name;
+	/* Percent taken off the status's chance; 100 is immunity. */
+	int32_t percent;
+} psiv_status_resist;
+
+/* What a status screen shows beyond psiv_member. */
+typedef struct psiv_member_detail {
+	const char* id;
+	/* Experience still needed for the next level; 0 at the level cap. */
+	int32_t experience_to_next;
+	/* With equipment, like psiv_member's stats. */
+	int32_t critical;
+	int32_t evasion;
+	/* The worn weapon's psiv_element, PSIV_ELEMENT_NONE without one. */
+	int32_t attack_element;
+	/* Each worn piece's bonus, indexed by psiv_equip_slot; all 0 for an empty slot. */
+	psiv_stat_bonus equipment_bonus[PSIV_SLOT_COUNT];
+	/* Every element but PSIV_ELEMENT_NONE, in enum order. */
+	int32_t affinity_count;
+	const psiv_affinity* affinities;
+	/* The character's resistances plus its pieces', capped at 100, in status id order. */
+	int32_t status_resist_count;
+	const psiv_status_resist* status_resists;
+} psiv_member_detail;
+
+/* PSIV_NOT_FOUND for a character not in the roster. */
+PSIV_API psiv_status psiv_member_detail_get(psiv_session* session, const char* member, psiv_member_detail* out);
+
+typedef struct psiv_combo_entry {
+	const char* recipe;
+	/* The combination's ability and its name. */
+	const char* result;
+	const char* result_name;
+	int64_t play_time_ms;
+	/* Character ids in the order they acted, and their names. */
+	int32_t participant_count;
+	const char* const* participants;
+	const char* const* participant_names;
+	/* The abilities the recipe needs, in recipe order, and their names. */
+	int32_t ability_count;
+	const char* const* abilities;
+	const char* const* ability_names;
+} psiv_combo_entry;
+
+/* The combo log in discovery order. *total (may be NULL) is the number of recipes, discovered or not. */
+PSIV_API psiv_status psiv_combo_log(psiv_session* session, const psiv_combo_entry** out, int32_t* count, int32_t* total);
 
 typedef struct psiv_inventory_entry {
 	const char* id;

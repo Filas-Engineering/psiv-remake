@@ -1,6 +1,6 @@
 # Handover
 
-State of the repo on 2026-11-20, for whoever picks it up next.
+State of the repo on 2026-11-21, for whoever picks it up next.
 
 ## What this is
 
@@ -18,7 +18,7 @@ Planning documents, engine-neutral C++17 libraries and tooling for a 3D remake o
 | `docs/research/original-battle-rules.md` | The original's battle rules as read from the disassembly: AI, targeting, combinations, rewards, statuses, end conditions, vehicles |
 | `core/` | Battle rules library (`librules.a`), placeholder data, `battle_cli`, 179 tests |
 | `events/` | Event script format, compiler and resumable interpreter, `event_cli`, 92 tests |
-| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles. `game_cli` (play, bot, `--check` for data), 80 tests |
+| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles, the field menu's party order, macro editor, member detail and combo log. `game_cli` (play, bot, `--check` for data), 85 tests |
 | `tools/text/` | Line database, glossary, rename review and localization export (Python, 98 tests) |
 | `tools/maps/` | Tiled maps to area files and back (Python, 46 tests) |
 | `acceptance/` | The spec's automatable checks, run against the libraries. `report.md` maps every requirement to a status |
@@ -59,21 +59,21 @@ Bringing in real data: [`data-import.md`](data-import.md).
 | --- | --- |
 | core | 179 tests pass |
 | events | 92 tests pass |
-| game | 80 tests pass, data check passes, area files match their Tiled sources, scripted playthrough matches its expected transcript, bot finishes both encounter modes on the main route and the kiln route |
+| game | 85 tests pass, data check passes, area files match their Tiled sources, scripted playthrough matches its expected transcript, bot finishes both encounter modes on the main route and the kiln route |
 | text tooling | 98 tests pass |
 | map tooling | 46 tests pass |
 | acceptance | PASS 26, FAIL 0, NOT IMPLEMENTED 12, NOT AUTOMATABLE 26 |
-| C API | 726 checks pass |
-| C# | 13 tests pass |
+| C API | 814 checks pass |
+| C# | 14 tests pass |
 | MonoGame sample | four headless runs (smoke 2000 frames, large areas 1600, scripted actors and the tide chart scene 1300, the board scene with a full party 1100), 0 failures |
 
-Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch64 and Linux x86-64 (GCC 13.3 and clang 18.1, Ubuntu 24.04 in Docker). The Linux check also runs the sample's window on a virtual display (Xvfb, Mesa llvmpipe) through `scripts/smoke.txt` and checks its screenshot. Windows, cross-compiled with MinGW-w64 (GCC 14) and run under Wine 10 (`tools/windows-check.sh`): the core, events and game unit tests, the C API as a DLL with its 726 checks, and the C playthrough against `game_cli.exe` and the golden transcript, saves included. That check does not cover MSVC, the acceptance suites, the C# wrapper or the sample.
+Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch64 and Linux x86-64 (GCC 13.3 and clang 18.1, Ubuntu 24.04 in Docker). The Linux check also runs the sample's window on a virtual display (Xvfb, Mesa llvmpipe) through `scripts/smoke.txt` and checks its screenshot. Windows, cross-compiled with MinGW-w64 (GCC 14) and run under Wine 10 (`tools/windows-check.sh`): the core, events and game unit tests, the C API as a DLL with its checks (726 when it last ran; not run again since the menu operations were added), and the C playthrough against `game_cli.exe` and the golden transcript, saves included. That check does not cover MSVC, the acceptance suites, the C# wrapper or the sample. The latest round (party order, macro editor, member detail, combo log) has run on macOS arm64 only; the Linux and Windows checks were not run again for it.
 
 ## Versions
 
 * Rules version 9 and event schema 6 (`core/include/rules/version.h`). Bump the rules version whenever a rule, a formula or the order of random draws changes. `replayBattle` refuses records from another rules version or event schema.
 * Battle record format 5. `parseRecord` still reads 3 and 4.
-* C API `PSIV_ABI_VERSION` 5 (library version 0.4.0).
+* C API `PSIV_ABI_VERSION` 6 (library version 0.5.0).
 * Save schema 3 (`PSR-SAVE 3`). Schemas 1 and 2 migrate when they load.
 * Everything is deterministic from the seed: the same setup, data and commands give the same event stream on every platform and optimization level. ACC-BAT-15 checks this.
 

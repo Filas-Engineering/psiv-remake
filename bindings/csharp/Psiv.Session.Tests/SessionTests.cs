@@ -148,6 +148,13 @@ public class NativeLayoutTests
 		Same<PsivAutoBattle>("psiv_auto_battle");
 		Same<PsivPacingArea>("psiv_pacing_area");
 		Same<PsivPacingBoss>("psiv_pacing_boss");
+		Same<PsivMacroStep>("psiv_macro_step");
+		Same<PsivMacro>("psiv_macro");
+		Same<PsivStatBonus>("psiv_stat_bonus");
+		Same<PsivAffinity>("psiv_affinity");
+		Same<PsivStatusResist>("psiv_status_resist");
+		Same<PsivMemberDetail>("psiv_member_detail");
+		Same<PsivComboEntry>("psiv_combo_entry");
 		Assert.Equal(0u, Native.SizeOf("no_such_struct"));
 	}
 
@@ -162,6 +169,7 @@ public class NativeLayoutTests
 		Assert.Null(GameSession.ParseName(NameKind.Outcome, "won"));
 		Assert.Equal("one_fallen_ally", GameSession.NameOf(NameKind.Targeting, (int)Targeting.OneFallenAlly));
 		Assert.Equal("warp", GameSession.NameOf(NameKind.ActionType, (int)ActionType.Warp));
+		Assert.Equal("member", GameSession.NameOf(NameKind.MacroTargetKind, (int)MacroTargetKind.Member));
 		Assert.Equal("", GameSession.NameOf(NameKind.Outcome, 99));
 	}
 }
@@ -499,5 +507,84 @@ public class SessionTests
 		Assert.True(s.PlayBattle().Ended);
 		s.DismissBattle();
 		Assert.Null(s.BattleInfo());
+	}
+
+	[Fact]
+	public void TheLineupMacrosMemberDetailAndComboLogFromTheMenus()
+	{
+		using GameSession s = NewSession(Paths.FreshDirectory("menus"));
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "guide_front"));
+		Assert.True(s.Face(Direction.North).Ok);
+		Assert.True(s.Interact().Ok);
+		Settle(s);
+		Assert.True(s.EnterName("Bryn").Ok);
+		Settle(s);
+
+		Assert.Equal("game.refuse.party_menu_only", s.SwapLineup(0, 1).Error!.Key);
+		Assert.True(s.OpenMenu().Ok);
+		Assert.True(s.SwapLineup(0, 1).Ok);
+		Assert.Equal(["mystic", "fighter", "medic"], s.Party().Select(m => m.Id));
+		Assert.Equal(["5"], s.SwapLineup(0, 5).Error!.Params);
+		Assert.True(s.SaveManual("manual_1").Ok);
+		Assert.True(s.QuitToTitle().Ok);
+		Assert.True(s.Load("manual_1").Ok);
+		Assert.Equal(["mystic", "fighter", "medic"], s.Party().Select(m => m.Id));
+
+		Macro tempest = s.MacroList().Single(m => m.Name == "tempest");
+		Assert.Equal(new MacroStep("engineer", "Test Engineer", CommandKind.Ability, "flare_burst", "Flare Burst", MacroTargetKind.All, "", "", -1, MacroIssue.NotInParty), tempest.Steps[2]);
+		Assert.Equal(MacroIssue.None, tempest.Steps[3].Issue);
+		Assert.True(s.OpenMenu().Ok);
+		Assert.True(s.SwapLineup(1, 0).Ok);
+		Assert.True(s.CreateMacro("arc").Ok);
+		Assert.True(s.SetMacroStep("arc", 0, "medic", CommandKind.Ability, "glint", MacroTargetKind.Enemy, targetEnemy: 0).Ok);
+		Assert.True(s.SetMacroStep("arc", 1, "mystic", CommandKind.Ability, "spark").Ok);
+		PsivResult unknown = s.SetMacroStep("arc", 2, "medic", CommandKind.Defend);
+		Assert.Equal(("game.refuse.macro_member_twice", "Test Medic already has a step in this macro."), (unknown.Error!.Key, unknown.Error.Text));
+		Assert.Equal("game.refuse.macro_unknown_member", s.SetMacroStep("arc", 2, "scout", CommandKind.Attack).Error!.Key);
+		Assert.True(s.SetMacroStep("arc", 2, "fighter", CommandKind.Attack, target: MacroTargetKind.Enemy, targetEnemy: 1).Ok);
+		Assert.True(s.MoveMacroStep("arc", 2, 0).Ok);
+		Assert.True(s.RemoveMacroStep("arc", 0).Ok);
+		Assert.True(s.MoveMacro("arc", 0).Ok);
+		Macro arc = s.MacroList()[0];
+		Assert.Equal("arc", arc.Name);
+		Assert.Equal(["medic", "mystic"], arc.Steps.Select(x => x.Member));
+		Assert.Equal(("Glint", 0), (arc.Steps[0].IdName, arc.Steps[0].TargetEnemy));
+		Assert.True(s.SetAutoMacro("tempest").Ok);
+		Assert.True(s.RenameMacro("tempest", "storm").Ok);
+		Assert.Equal("storm", s.Settings().AutoMacro);
+		s.DrainNotices();
+		Assert.True(s.DeleteMacro("storm").Ok);
+		Assert.Equal("", s.Settings().AutoMacro);
+		Assert.Equal("game.auto_macro_cleared", Assert.Single(s.DrainNotices()).Key);
+		Assert.Equal("game.refuse.no_macro", s.DeleteMacro("storm").Error!.Key);
+
+		MemberDetail mystic = s.MemberDetail("mystic")!;
+		Assert.Equal(Element.Heat, mystic.AttackElement);
+		Assert.Equal(50, mystic.Affinities[Element.Shock]);
+		Assert.Equal(new StatusResist("sleep", "Sleep", 100), Assert.Single(mystic.StatusResists));
+		Assert.Equal(3, mystic.EquipmentBonus[(int)EquipSlot.Weapon].Mental);
+		Assert.True(mystic.ExperienceToNext > 0);
+		Assert.Null(s.MemberDetail("scout"));
+		AbilityInfo focus = s.MemberAbilities("fighter").Single(a => a.Id == "focus_shot");
+		Assert.Equal((3, 3), (focus.Uses, focus.MaxUses));
+		Assert.True(s.CloseMenu().Ok);
+
+		Assert.Equal(15, s.ComboLog().Total);
+		Assert.Empty(s.ComboLog().Entries);
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "hold_front"));
+		Assert.True(s.Face(Direction.North).Ok);
+		Assert.True(s.Interact().Ok);
+		Settle(s);
+		for (int round = 0; round < 10 && s.Mode == Mode.Battle && s.ComboLog().Entries.Count == 0; round++)
+		{
+			Assert.True(s.ApplyMacro("arc", out _).Ok);
+			s.ResolveRound();
+		}
+		ComboEntry twin = Assert.Single(s.ComboLog().Entries);
+		Assert.Equal(("twin_arc", "Twin Arc"), (twin.Recipe, twin.ResultName));
+		Assert.Equal(["medic", "mystic"], twin.Participants);
+		Assert.Equal(["Glint", "Spark"], twin.AbilityNames);
 	}
 }

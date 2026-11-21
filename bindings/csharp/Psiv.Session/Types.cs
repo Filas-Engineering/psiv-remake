@@ -39,6 +39,7 @@ public enum Stat { Strength, Mental, Agility, Dexterity, Defense }
 public enum Opening { Normal, PartyFirst, EnemyFirst }
 public enum AutoStop { None, Cancelled, MemberFell, CannotPay, BattleEnded }
 public enum MacroStepStatus { Applied, Retargeted, FellBack, Skipped }
+public enum MacroTargetKind { Default, Self, Member, Enemy, All }
 
 public enum MacroIssue
 {
@@ -64,7 +65,7 @@ public enum NameKind
 {
 	Mode, MenuKind, Direction, NoticeKind, AreaKind, EncounterMode, EnemyState, PointKind, JobState, TextSpeed, BattleSpeed,
 	RewardMultiplier, BattleSource, Side, CommandKind, AbilityKind, Targeting, EquipSlot, Outcome, EventType, CancelReason,
-	Effectiveness, StatusEnd, ResourceKind, Element, Stat, Opening, AutoStop, MacroStepStatus, MacroIssue, ActionType,
+	Effectiveness, StatusEnd, ResourceKind, Element, Stat, Opening, AutoStop, MacroStepStatus, MacroIssue, ActionType, MacroTargetKind,
 }
 
 public sealed record PsivError(PsivStatus Status, string Key, IReadOnlyList<string> Params, string Text)
@@ -175,7 +176,29 @@ public sealed record BattleEvent(
 public sealed record Member(string Id, string Name, bool InLineup, int Level, int Experience, int Hp, int MaxHp, int Tp, int MaxTp, int Strength, int Mental,
 	int Agility, int Dexterity, int Defense, IReadOnlyList<ActiveStatus> Statuses, IReadOnlyList<string> Equipment, IReadOnlyList<string> EquipmentNames);
 
-public sealed record AbilityInfo(string Id, string Name, AbilityKind Kind, Targeting Targeting, int Cost, bool Field);
+// Uses and MaxUses: a skill's uses left and after a rest; -1 for other kinds.
+public sealed record AbilityInfo(string Id, string Name, AbilityKind Kind, Targeting Targeting, int Cost, bool Field, int Uses, int MaxUses);
+
+public sealed record StatBonus(int MaxHp, int MaxTp, int Strength, int Mental, int Agility, int Dexterity, int Defense, int Critical, int Evasion);
+
+public sealed record StatusResist(string Id, string Name, int Percent);
+
+// What a status screen shows beyond Member. EquipmentBonus is indexed by EquipSlot; Affinities lists every element but None.
+public sealed record MemberDetail(string Id, int ExperienceToNext, int Critical, int Evasion, Element AttackElement, IReadOnlyList<StatBonus> EquipmentBonus,
+	IReadOnlyDictionary<Element, int> Affinities, IReadOnlyList<StatusResist> StatusResists);
+
+// One step of a saved macro. TargetMember is set for a Member target, TargetEnemy (else -1) for an Enemy target; Issue says
+// why the step cannot run as written now.
+public sealed record MacroStep(string Member, string MemberName, CommandKind CommandKind, string Id, string IdName, MacroTargetKind TargetKind,
+	string TargetMember, string TargetMemberName, int TargetEnemy, MacroIssue Issue);
+
+public sealed record Macro(string Name, IReadOnlyList<MacroStep> Steps);
+
+public sealed record ComboEntry(string Recipe, string Result, string ResultName, long PlayTimeMs, IReadOnlyList<string> Participants,
+	IReadOnlyList<string> ParticipantNames, IReadOnlyList<string> Abilities, IReadOnlyList<string> AbilityNames);
+
+// Total counts every recipe, discovered or not.
+public sealed record ComboLog(IReadOnlyList<ComboEntry> Entries, int Total);
 
 public sealed record InventoryEntry(string Id, string Name, int Count, bool IsEquipment, bool Field, int TargetingOrSlot, int Price)
 {

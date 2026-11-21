@@ -7,6 +7,7 @@
 #include "events/strings.h"
 #include "rules/auto_policy.h"
 #include "rules/field.h"
+#include "rules/formulas.h"
 #include "rules/names.h"
 #include "rules/progression.h"
 #include "rules/setup.h"
@@ -41,6 +42,65 @@ bool rangeHolds(const FlagRange& range, const World& world) {
 
 rules::Message refusal(const char* key, std::vector<std::string> params = {}) {
 	return {std::string("game.refuse.") + key, std::move(params)};
+}
+
+// Spaces at the ends dropped; 1 to kMaxNameLength bytes with no control characters, else empty.
+std::string cleanName(const std::string& name) {
+	const std::size_t first = name.find_first_not_of(' ');
+	const std::size_t last = name.find_last_not_of(' ');
+	const std::string trimmed = first == std::string::npos ? "" : name.substr(first, last - first + 1);
+	if (trimmed.size() > kMaxNameLength || std::any_of(trimmed.begin(), trimmed.end(), [](unsigned char c) { return c < 0x20 || c == 0x7F; })) {
+		return "";
+	}
+	return trimmed;
+}
+
+std::vector<rules::Macro>::iterator findMacro(std::vector<rules::Macro>& macros, const std::string& name) {
+	return std::find_if(macros.begin(), macros.end(), [&](const rules::Macro& m) { return m.name == name; });
+}
+
+// The macro editor's mark for a step (UI-005): the first reason the battle would skip or cancel it, judged on the
+// member as it stands outside battle.
+rules::MacroIssue stepIssue(const rules::Database& db, const World& world, const rules::MacroStep& step) {
+	const rules::PartyMember* m = world.member(step.member);
+	if (!m || std::find(world.lineup.begin(), world.lineup.end(), step.member) == world.lineup.end()) {
+		return rules::MacroIssue::NotInParty;
+	}
+	if (m->hp <= 0) {
+		return rules::MacroIssue::ActorDefeated;
+	}
+	if (step.kind == rules::CommandKind::Ability) {
+		const std::vector<std::string> known = rules::knownAbilities(db, *m);
+		const rules::AbilityDef* ability = db.ability(step.id);
+		if (!ability || std::find(known.begin(), known.end(), step.id) == known.end()) {
+			return rules::MacroIssue::UnknownAbility;
+		}
+		if (ability->kind == rules::AbilityKind::Technique) {
+			const bool silenced = std::any_of(m->statuses.begin(), m->statuses.end(), [&](const rules::ActiveStatus& active) {
+				const rules::StatusDef* status = db.status(active.id);
+				return status && status->blocksTechniques;
+			});
+			if (silenced) {
+				return rules::MacroIssue::Silenced;
+			}
+			if (m->tp < ability->cost) {
+				return rules::MacroIssue::NotEnoughTp;
+			}
+		}
+		if (ability->kind == rules::AbilityKind::Skill) {
+			auto uses = m->skillUses.find(step.id);
+			if (uses == m->skillUses.end() || uses->second <= 0) {
+				return rules::MacroIssue::NoUsesLeft;
+			}
+		}
+	}
+	if (step.kind == rules::CommandKind::Item) {
+		auto held = world.items.find(step.id);
+		if (held == world.items.end() || held->second <= 0) {
+			return rules::MacroIssue::NoItem;
+		}
+	}
+	return rules::MacroIssue::None;
 }
 
 // The data check makes sure an enemy_defeated end names an enemy of the encounter; its first position counts.
@@ -180,6 +240,7 @@ private:
 const std::vector<std::string>& sessionTextKeys() {
 	static const std::vector<std::string> keys = {
 		"game.arrive",
+		"game.auto_macro_cleared",
 		"game.auto_on",
 		"game.autosave_failed",
 		"game.autosave_point",
@@ -221,6 +282,18 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.interact_field_only",
 		"game.refuse.items_menu_only",
 		"game.refuse.load_title",
+		"game.refuse.macro_bad_command",
+		"game.refuse.macro_member_twice",
+		"game.refuse.macro_menu_only",
+		"game.refuse.macro_name_taken",
+		"game.refuse.macro_no_position",
+		"game.refuse.macro_no_step",
+		"game.refuse.macro_slots_full",
+		"game.refuse.macro_steps_full",
+		"game.refuse.macro_target",
+		"game.refuse.macro_unknown_ability",
+		"game.refuse.macro_unknown_item",
+		"game.refuse.macro_unknown_member",
 		"game.refuse.menu_cannot_open",
 		"game.refuse.menu_field_only",
 		"game.refuse.name_length",
@@ -246,6 +319,8 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.nothing_there",
 		"game.refuse.nothing_worn",
 		"game.refuse.nowhere_rest",
+		"game.refuse.party_menu_only",
+		"game.refuse.party_no_position",
 		"game.refuse.pick_option",
 		"game.refuse.profile_not_written",
 		"game.refuse.save_damaged",
@@ -2087,11 +2162,8 @@ rules::Message Session::enterName(const std::string& name) {
 	if (menuKind() != MenuKind::NameEntry) {
 		return refusal("no_name_entry");
 	}
-	const std::size_t first = name.find_first_not_of(' ');
-	const std::size_t last = name.find_last_not_of(' ');
-	const std::string trimmed = first == std::string::npos ? "" : name.substr(first, last - first + 1);
-	if (trimmed.empty() || trimmed.size() > kMaxNameLength ||
-		std::any_of(trimmed.begin(), trimmed.end(), [](unsigned char c) { return c < 0x20 || c == 0x7F; })) {
+	const std::string trimmed = cleanName(name);
+	if (trimmed.empty()) {
 		return refusal("name_length", {std::to_string(kMaxNameLength)});
 	}
 	emit(OutputKind::Notice, "game.named", {displayName(nameMember_), trimmed});
@@ -2116,6 +2188,281 @@ rules::Message Session::setSettings(const Settings& settings) {
 	}
 	world_.settings = settings;
 	return {};
+}
+
+rules::Message Session::swapLineup(int a, int b) {
+	if (menuKind() != MenuKind::Field) {
+		return refusal("party_menu_only");
+	}
+	const int size = static_cast<int>(world_.lineup.size());
+	for (int position : {a, b}) {
+		if (position < 0 || position >= size) {
+			return refusal("party_no_position", {std::to_string(position)});
+		}
+	}
+	std::swap(world_.lineup[a], world_.lineup[b]);
+	return {};
+}
+
+std::vector<MacroView> Session::macroViews() const {
+	std::vector<MacroView> out;
+	for (const rules::Macro& macro : world_.macros) {
+		MacroView view;
+		view.name = macro.name;
+		for (const rules::MacroStep& step : macro.steps) {
+			MacroStepView v;
+			v.step = step;
+			v.memberName = displayName(step.member);
+			if (step.kind == rules::CommandKind::Ability || step.kind == rules::CommandKind::Item) {
+				v.commandName = displayName(step.id);
+			}
+			if (step.target.kind == rules::MacroTargetKind::Member) {
+				v.targetName = displayName(step.target.member);
+			}
+			v.issue = stepIssue(data_.db, world_, step);
+			view.steps.push_back(std::move(v));
+		}
+		out.push_back(std::move(view));
+	}
+	return out;
+}
+
+rules::Message Session::createMacro(const std::string& name) {
+	if (menuKind() != MenuKind::Field) {
+		return refusal("macro_menu_only");
+	}
+	const std::string clean = cleanName(name);
+	if (clean.empty()) {
+		return refusal("name_length", {std::to_string(kMaxNameLength)});
+	}
+	if (findMacro(world_.macros, clean) != world_.macros.end()) {
+		return refusal("macro_name_taken", {clean});
+	}
+	if (static_cast<int>(world_.macros.size()) >= kMaxMacros) {
+		return refusal("macro_slots_full", {std::to_string(kMaxMacros)});
+	}
+	world_.macros.push_back({clean, {}});
+	return {};
+}
+
+rules::Message Session::renameMacro(const std::string& name, const std::string& newName) {
+	if (menuKind() != MenuKind::Field) {
+		return refusal("macro_menu_only");
+	}
+	auto macro = findMacro(world_.macros, name);
+	if (macro == world_.macros.end()) {
+		return refusal("no_macro", {name});
+	}
+	const std::string clean = cleanName(newName);
+	if (clean.empty()) {
+		return refusal("name_length", {std::to_string(kMaxNameLength)});
+	}
+	auto other = findMacro(world_.macros, clean);
+	if (other != world_.macros.end() && other != macro) {
+		return refusal("macro_name_taken", {clean});
+	}
+	if (world_.autoMacro == name) {
+		world_.autoMacro = clean;
+	}
+	macro->name = clean;
+	return {};
+}
+
+rules::Message Session::deleteMacro(const std::string& name) {
+	if (menuKind() != MenuKind::Field) {
+		return refusal("macro_menu_only");
+	}
+	auto macro = findMacro(world_.macros, name);
+	if (macro == world_.macros.end()) {
+		return refusal("no_macro", {name});
+	}
+	world_.macros.erase(macro);
+	if (world_.autoMacro == name) {
+		world_.autoMacro.clear();
+		emit(OutputKind::Notice, "game.auto_macro_cleared", {name});
+	}
+	return {};
+}
+
+rules::Message Session::moveMacro(const std::string& name, int position) {
+	if (menuKind() != MenuKind::Field) {
+		return refusal("macro_menu_only");
+	}
+	auto macro = findMacro(world_.macros, name);
+	if (macro == world_.macros.end()) {
+		return refusal("no_macro", {name});
+	}
+	if (position < 0 || position >= static_cast<int>(world_.macros.size())) {
+		return refusal("macro_no_position", {std::to_string(position)});
+	}
+	rules::Macro moved = std::move(*macro);
+	world_.macros.erase(macro);
+	world_.macros.insert(world_.macros.begin() + position, std::move(moved));
+	return {};
+}
+
+rules::Message Session::setMacroStep(const std::string& name, int index, const rules::MacroStep& step) {
+	if (menuKind() != MenuKind::Field) {
+		return refusal("macro_menu_only");
+	}
+	auto macro = findMacro(world_.macros, name);
+	if (macro == world_.macros.end()) {
+		return refusal("no_macro", {name});
+	}
+	std::vector<rules::MacroStep>& steps = macro->steps;
+	const int count = static_cast<int>(steps.size());
+	if (index < 0 || index > count) {
+		return refusal("macro_no_step", {std::to_string(index)});
+	}
+	if (index == count && count >= rules::kMaxPartySize) {
+		return refusal("macro_steps_full", {std::to_string(rules::kMaxPartySize)});
+	}
+	const rules::Database& db = data_.db;
+	const rules::PartyMember* member = world_.member(step.member);
+	if (!member) {
+		return refusal("macro_unknown_member", {step.member});
+	}
+	for (int i = 0; i < count; ++i) {
+		if (i != index && steps[i].member == step.member) {
+			return refusal("macro_member_twice", {step.member});
+		}
+	}
+	rules::Targeting targeting = rules::Targeting::OneEnemy;
+	switch (step.kind) {
+	case rules::CommandKind::Ability: {
+		const std::vector<std::string> known = rules::knownAbilities(db, *member);
+		const rules::AbilityDef* ability = db.ability(step.id);
+		if (!ability || std::find(known.begin(), known.end(), step.id) == known.end()) {
+			return refusal("macro_unknown_ability", {step.member, step.id});
+		}
+		targeting = ability->targeting;
+		break;
+	}
+	case rules::CommandKind::Item: {
+		const rules::ItemDef* item = db.item(step.id);
+		if (!item) {
+			return refusal("macro_unknown_item", {step.id});
+		}
+		targeting = item->targeting;
+		break;
+	}
+	case rules::CommandKind::Attack:
+	case rules::CommandKind::Defend:
+	case rules::CommandKind::Escape:
+		if (!step.id.empty()) {
+			return refusal("macro_bad_command", {rules::toString(step.kind)});
+		}
+		break;
+	case rules::CommandKind::None:
+		return refusal("macro_bad_command", {rules::toString(step.kind)});
+	}
+	const rules::MacroTarget& target = step.target;
+	if (!rules::macroTargetFits(target.kind, step.kind, targeting) ||
+		(target.kind == rules::MacroTargetKind::Enemy && (target.enemySlot < 0 || target.enemySlot >= rules::kMaxEnemies))) {
+		return refusal("macro_target", {rules::toString(target.kind)});
+	}
+	if (target.kind == rules::MacroTargetKind::Member && !world_.member(target.member)) {
+		return refusal("macro_unknown_member", {target.member});
+	}
+	rules::MacroStep kept = step;
+	if (kept.target.kind != rules::MacroTargetKind::Member) {
+		kept.target.member.clear();
+	}
+	if (kept.target.kind != rules::MacroTargetKind::Enemy) {
+		kept.target.enemySlot = -1;
+	}
+	if (index == count) {
+		steps.push_back(std::move(kept));
+	} else {
+		steps[index] = std::move(kept);
+	}
+	return {};
+}
+
+rules::Message Session::removeMacroStep(const std::string& name, int index) {
+	if (menuKind() != MenuKind::Field) {
+		return refusal("macro_menu_only");
+	}
+	auto macro = findMacro(world_.macros, name);
+	if (macro == world_.macros.end()) {
+		return refusal("no_macro", {name});
+	}
+	if (index < 0 || index >= static_cast<int>(macro->steps.size())) {
+		return refusal("macro_no_step", {std::to_string(index)});
+	}
+	macro->steps.erase(macro->steps.begin() + index);
+	return {};
+}
+
+rules::Message Session::moveMacroStep(const std::string& name, int from, int to) {
+	if (menuKind() != MenuKind::Field) {
+		return refusal("macro_menu_only");
+	}
+	auto macro = findMacro(world_.macros, name);
+	if (macro == world_.macros.end()) {
+		return refusal("no_macro", {name});
+	}
+	std::vector<rules::MacroStep>& steps = macro->steps;
+	for (int index : {from, to}) {
+		if (index < 0 || index >= static_cast<int>(steps.size())) {
+			return refusal("macro_no_step", {std::to_string(index)});
+		}
+	}
+	rules::MacroStep moved = std::move(steps[from]);
+	steps.erase(steps.begin() + from);
+	steps.insert(steps.begin() + to, std::move(moved));
+	return {};
+}
+
+std::vector<ComboView> Session::comboLog() const {
+	std::vector<ComboView> out;
+	for (const rules::ComboLogEntry& entry : world_.comboLog.entries()) {
+		ComboView view;
+		view.recipe = entry.recipe;
+		view.playTimeMs = entry.playTimeMs;
+		view.characters = entry.characters;
+		auto recipe = std::find_if(data_.db.combos.begin(), data_.db.combos.end(), [&](const rules::ComboRecipe& r) { return r.id == entry.recipe; });
+		if (recipe != data_.db.combos.end()) {
+			view.result = recipe->result;
+			view.resultName = displayName(recipe->result);
+			view.abilities = recipe->abilities;
+		}
+		out.push_back(std::move(view));
+	}
+	return out;
+}
+
+std::optional<MemberDetail> Session::memberDetail(const std::string& member) const {
+	const rules::PartyMember* m = world_.member(member);
+	const rules::CharacterDef* character = data_.db.character(member);
+	if (!m || !character) {
+		return std::nullopt;
+	}
+	MemberDetail detail;
+	detail.member = member;
+	detail.experienceToNext = m->level >= rules::formulas::kMaxLevel ? 0 : std::max(0, rules::formulas::experienceToNextLevel(m->level) - m->experience);
+	detail.stats = rules::memberStats(data_.db, *m);
+	detail.statusResist = character->statusResist;
+	for (const auto& [slot, id] : m->equipment) {
+		const rules::EquipmentDef* piece = data_.db.equipmentPiece(id);
+		if (!piece) {
+			continue;
+		}
+		detail.equipmentBonus[slot] = piece->bonus;
+		if (piece->element != rules::Element::None) {
+			detail.attackElement = piece->element;
+		}
+		for (const auto& [status, percent] : piece->statusResist) {
+			auto own = detail.statusResist.find(status);
+			detail.statusResist[status] = std::min(100, (own == detail.statusResist.end() ? 0 : own->second) + percent);
+		}
+	}
+	for (int e = static_cast<int>(rules::Element::Heat); e <= static_cast<int>(rules::Element::Gale); ++e) {
+		const rules::Element element = static_cast<rules::Element>(e);
+		auto affinity = character->affinities.find(element);
+		detail.affinities[element] = affinity == character->affinities.end() ? 100 : affinity->second;
+	}
+	return detail;
 }
 
 }

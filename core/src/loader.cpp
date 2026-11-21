@@ -595,39 +595,6 @@ void parseVehicles(Reader& reader, const JsonValue& root, Database& db) {
 	}
 }
 
-bool targetFits(MacroTargetKind target, CommandKind command, Targeting targeting) {
-	if (target == MacroTargetKind::Default) {
-		return true;
-	}
-	switch (command) {
-	case CommandKind::Attack:
-		return target == MacroTargetKind::Enemy || target == MacroTargetKind::All;
-	case CommandKind::Ability:
-	case CommandKind::Item:
-		switch (targeting) {
-		case Targeting::OneEnemy:
-		case Targeting::EnemyGroup:
-			return target == MacroTargetKind::Enemy;
-		case Targeting::AllEnemies:
-		case Targeting::AllAllies:
-			return target == MacroTargetKind::All;
-		case Targeting::OneAlly:
-		case Targeting::OneFallenAlly:
-			return target == MacroTargetKind::Self || target == MacroTargetKind::Member;
-		case Targeting::Self:
-			return target == MacroTargetKind::Self;
-		case Targeting::RandomEnemy:
-			return false;
-		}
-		return false;
-	case CommandKind::None:
-	case CommandKind::Defend:
-	case CommandKind::Escape:
-		return false;
-	}
-	return false;
-}
-
 void parseMacroTarget(Reader& reader, const Database& db, const JsonValue& entry, MacroTarget& out) {
 	const JsonValue* target = entry.find("target");
 	if (!target) {
@@ -698,7 +665,7 @@ void parseMacroStep(Reader& reader, const Database& db, const JsonValue& entry, 
 		reader.fail(*entry.find("id"), "load.only_ability_item_steps_have_id", {});
 	}
 	parseMacroTarget(reader, db, entry, step.target);
-	if (entry.find("target") && !targetFits(step.target.kind, step.kind, targeting)) {
+	if (entry.find("target") && !macroTargetFits(step.target.kind, step.kind, targeting)) {
 		reader.fail(*entry.find("target"), "load.target_does_not_fit_command", {std::string(toString(step.target.kind))});
 	}
 }

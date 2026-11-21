@@ -10,9 +10,9 @@ A flat C interface to the headless game session in `../game` (with `../core` and
 | `c/psiv_session.cpp` | Its implementation over `game::Session`, built into the shared library |
 | `c/exports_macos.txt`, `c/exports_linux.map` | Export lists, so only `psiv_*` symbols leave the library |
 | `c/tests/playthrough.c` | `game_cli`'s command language rewritten against the C interface; prints the same transcript |
-| `c/tests/test_api.c` | Focused tests: errors and data problems, string ownership, saves, a battle through the event stream, presentation, field and menus, and the adventure's newer paths (line data with portraits, localized yes and no, name entry, a lost event battle kept readable, replayed from its record and retried, path walking, pacing numbers), and script actors (talk points, the arrival's walk under both presentations, saves and loads, another area, every actor id) |
+| `c/tests/test_api.c` | Focused tests: errors and data problems, string ownership, saves, a battle through the event stream, presentation, field and menus, and the adventure's newer paths (line data with portraits, localized yes and no, name entry, a lost event battle kept readable, replayed from its record and retried, path walking, pacing numbers), script actors (talk points, the arrival's walk under both presentations, saves and loads, another area, every actor id), and the menu operations (party order saved and loaded, the macro editor and its refusals, member detail, skill uses, and the combo log filled by an edited macro in the hold fight) |
 | `csharp/Psiv.Session/` | .NET 10 class library: `LibraryImport` declarations (`Native.cs`), C# enums and records (`Types.cs`), `SessionHandle` and `GameSession` (`GameSession.cs`), `BattleText` and `ScriptRunner` (the command language again, over C#) |
-| `csharp/Psiv.Session.Tests/` | xUnit tests: the scripted playthrough against the golden transcript and a fresh `game_cli` run, struct layouts, errors and data problems, saves, a battle, presentation, field and menus, the guide's line data and name entry, a lost event battle with its result, record, replay and retry, and script actors in the field view, every actor id and during a waited move |
+| `csharp/Psiv.Session.Tests/` | xUnit tests: the scripted playthrough against the golden transcript and a fresh `game_cli` run, struct layouts, errors and data problems, saves, a battle, presentation, field and menus, the guide's line data and name entry, a lost event battle with its result, record, replay and retry, script actors in the field view, every actor id and during a waited move, and the menu operations (party order, the macro editor, member detail, skill uses, the combo log) |
 | `monogame/Psiv.Sample/` | MonoGame DesktopGL sample with a headless mode: `SampleController` (screens), `FieldRenderer` (camera, tiles, sprites), `Art` (pictures generated in code), `Surface` (the drawing interface, its MonoGame and headless implementations, the shared panel style); `scripts/smoke.txt`, `scripts/large_areas.txt` and `scripts/actors.txt` are the headless runs `make test` does (`actors.txt` also plays the tide chart scene: party members walked and turned, poses, a resume and a skip) |
 | `Makefile` | `make`, `make test`, `make clean` |
 
@@ -60,6 +60,7 @@ To use another build of the library from .NET, set the MSBuild property `PsivNat
 | Names | `psiv_name_of(kind, value)`: the stable name of any enum value, as the C++ libraries spell it (lowercase with underscores); `psiv_parse_name(kind, text, &value)`, which also takes the older spellings of reward multipliers and event types |
 | Session | `psiv_session_options_init`, `psiv_session_create`, `psiv_session_destroy`, `psiv_game_info_get` |
 | Profile and settings | `psiv_profile_get`, `psiv_profile_set`, `psiv_profile_set_value`, `psiv_settings_get`, `psiv_settings_set`, `psiv_settings_set_auto_macro`, `psiv_macros` |
+| Macro editor | `psiv_macro_list` (every macro with its steps: member, command, ability or item, target rule, names, and why a step cannot run now), `psiv_macro_create`, `psiv_macro_rename`, `psiv_macro_delete`, `psiv_macro_move`, `psiv_macro_set_step`, `psiv_macro_remove_step`, `psiv_macro_move_step` |
 | Title and saves | `psiv_new_game`, `psiv_continue_game`, `psiv_load`, `psiv_retry_battle`, `psiv_quit_to_title`, `psiv_save_manual`, `psiv_saves` |
 | State | `psiv_mode_get`, `psiv_menu_kind_get`, `psiv_world_info_get`, `psiv_flag` |
 | Frame and field | `psiv_update(dt_ms, direction)`, `psiv_walk`, `psiv_face`, `psiv_walk_to` and `psiv_walk_step` (the game's path walk), `psiv_interact`, `psiv_party_talk`, `psiv_field_info_get`, `psiv_field_grid`, `psiv_field_rows`, `psiv_field_enemies`, `psiv_field_markers`, `psiv_field_exits`, `psiv_field_points`, `psiv_field_actors`, `psiv_actor_ids` |
@@ -67,7 +68,7 @@ To use another build of the library from .NET, set the MSBuild property `PsivNat
 | Presentation | `psiv_actions_poll`, `psiv_action_finish`, optional `psiv_actions_set_callback` |
 | Notices | `psiv_notices_drain` |
 | Battle | `psiv_battle_info_get`, `psiv_battle_combatants`, `psiv_battle_options`, `psiv_battle_set_command`, `psiv_battle_apply_macro`, `psiv_battle_start_auto`, `psiv_battle_cancel_auto`, `psiv_battle_fill_from_auto`, `psiv_battle_fill_from_policy`, `psiv_battle_fill_auto_round`, `psiv_battle_resolve_round`, `psiv_battle_last_events`, `psiv_battle_play` (a whole battle the way the terminal plays it), `psiv_battle_result_get` and `psiv_battle_dismiss` (the ended battle), `psiv_battle_record` and `psiv_battle_replay` |
-| Party, menus, shops | `psiv_party`, `psiv_member_abilities`, `psiv_inventory`, `psiv_shop_get`, `psiv_inn_get`, `psiv_open_menu`, `psiv_close_menu`, `psiv_buy`, `psiv_sell`, `psiv_rest`, `psiv_use_item`, `psiv_use_ability`, `psiv_equip`, `psiv_unequip`, `psiv_name_entry_member`, `psiv_enter_name` |
+| Party, menus, shops | `psiv_party`, `psiv_party_swap`, `psiv_member_detail_get`, `psiv_member_abilities`, `psiv_combo_log`, `psiv_inventory`, `psiv_shop_get`, `psiv_inn_get`, `psiv_open_menu`, `psiv_close_menu`, `psiv_buy`, `psiv_sell`, `psiv_rest`, `psiv_use_item`, `psiv_use_ability`, `psiv_equip`, `psiv_unequip`, `psiv_name_entry_member`, `psiv_enter_name` |
 | Journal and text | `psiv_quest_log_get`, `psiv_encyclopedia`, `psiv_glossary`, `psiv_text_log`, `psiv_pacing_table`, `psiv_pacing_areas`, `psiv_pacing_bosses`, `psiv_render`, `psiv_format_text`, `psiv_display_name`, `psiv_string_text` |
 
 ### Errors
@@ -100,7 +101,7 @@ Each frame:
    * Field: `psiv_field_info_get`, `psiv_field_grid`, `psiv_field_enemies`, `psiv_field_points`, `psiv_field_exits`, `psiv_field_actors` (the script actors in the area: where each stands, its facing, whether it is visible; one no script touched stands at the talk point named after it, see `../game/README.md`, "Actors"). `psiv_actor_ids` lists every actor wherever it stands, so a script subject in it but not in `psiv_field_actors` is an actor in another area, and any other subject a character. Act with `psiv_interact`, `psiv_open_menu`, `psiv_party_talk`; `psiv_face` turns in place. For click-to-walk, `psiv_walk_to(x, y)` and then `psiv_walk_step` each frame (or in a loop, running events in between) until it reports anything but `PSIV_WALK_WALKING`.
    * Event: `psiv_line_get` and `psiv_line_confirm`; `psiv_choice_get` and `psiv_choose`; `psiv_can_skip` and `psiv_skip`. With neither a line nor a choice, keep calling `psiv_update`.
    * Battle: `psiv_battle_combatants` and `psiv_battle_options` for the menus, `psiv_battle_set_command` per member (or `psiv_battle_apply_macro`, or `psiv_battle_start_auto` then `psiv_battle_fill_from_auto` each round, or `psiv_battle_fill_auto_round`), then `psiv_battle_resolve_round`, whose typed events the front end plays back. `psiv_battle_play` runs a whole battle at once. The battle can end inside those calls; the mode then says where control went, and `psiv_battle_info_get`, `psiv_battle_combatants`, `psiv_battle_result_get` (rewards paid out, drops, level-ups) and `psiv_battle_record` describe the ended battle, which the game keeps until the next battle starts, `psiv_battle_dismiss`, a new game, a load or the title.
-   * Menu (`psiv_menu_kind_get`: field menu, inn, save prompt, name entry) and Shop: the menu and shop functions, then `psiv_close_menu`.
+   * Menu (`psiv_menu_kind_get`: field menu, inn, save prompt, name entry) and Shop: the menu and shop functions, then `psiv_close_menu`. From the field menu: party order (`psiv_party_swap`), the macro editor (`psiv_macro_*`), status screens (`psiv_party`, `psiv_member_detail_get`, `psiv_member_abilities`) and the combo log (`psiv_combo_log`, with the recipe count for locked entries).
    * Title: `psiv_new_game`, `psiv_continue_game`, `psiv_load`, `psiv_retry_battle`.
 3. `psiv_notices_drain`: arrivals, rewards, autosaves, party talk lines, warnings, each with key, parameters and text.
 4. `psiv_actions_poll`: presentation actions (moves, fades, cameras, music), from the game's own action queue. With `PSIV_PRESENTATION_INSTANT` (the default) they are already done and only tell the engine what happened (the queue keeps the last 256). With `PSIV_PRESENTATION_WAIT` the event waits on each until the engine calls `psiv_action_finish(handle)` when its animation ends (a script actor's move: `psiv_field_actors` already reports where it ends, so walk the sprite there from where it was drawn and finish the action on arrival); `instant` records are done at once (the rebuild after a skip or a restore), and `PSIV_ACTION_CANCEL` records name actions a skip abandoned.
@@ -131,6 +132,7 @@ while (running)
 * `SetActionCallback` is the optional push delivery, through an `UnmanagedCallersOnly` function pointer; the polled `PollActions` is the main path.
 * `Field()` returns the whole field view, script actors included (`FieldView.Actors`, records of `FieldActor`); `ActorIds()` lists every actor id wherever the actor stands.
 * The game's walk and auto play are `WalkTo`/`WalkStep`, `FillAutoRound` and `PlayBattle`; the ended battle is `BattleInfo()`, `Combatants()`, `BattleResult()` and `DismissBattle()`; records are `BattleRecord()` and `ReplayBattle(record)`; pacing is `PacingTable()`, `PacingAreas()` and `PacingBosses()`. `SessionOptions.CoreDataDirectory` gives core's data directory.
+* The field menu's screens: `SwapLineup`, `MacroList` (records of `Macro` and `MacroStep`), `CreateMacro`, `RenameMacro`, `DeleteMacro`, `MoveMacro`, `SetMacroStep`, `RemoveMacroStep`, `MoveMacroStep`, `MemberDetail(member)`, `MemberAbilities(member)` (with skill uses) and `ComboLog()`.
 * `Create` refuses a library whose ABI version differs from the wrapper's.
 
 ## The sample
@@ -167,29 +169,39 @@ The sample keeps the game out of its drawing code: `SampleController` reads the 
 
 ## Changes a host must make
 
-This round: `PSIV_ABI_VERSION` 5, library version 0.4.0. Only an addition: the version moved so that a wrapper refuses an older library without the new function.
+This round: `PSIV_ABI_VERSION` 6, library version 0.5.0. One struct layout changed; everything else is an addition.
+
+* Struct layout: `psiv_ability_info` adds `uses` and `max_uses` at the end (a skill's uses left and after a rest, -1 for other kinds). Rebuild foreign mirrors of it.
+* New party order: `psiv_party_swap(a, b)` swaps two lineup positions from the field menu (refusals `game.refuse.party_menu_only`, `game.refuse.party_no_position`). Saves already kept the lineup's order. There is no swap with members outside the lineup: the party changes only through events (SAV-034).
+* New macro editor: `psiv_macro`, `psiv_macro_step`, `psiv_macro_target_kind` (`PSIV_NAME_MACRO_TARGET_KIND` for its names), `psiv_macro_list`, `psiv_macro_create`, `psiv_macro_rename`, `psiv_macro_delete`, `psiv_macro_move`, `psiv_macro_set_step`, `psiv_macro_remove_step`, `psiv_macro_move_step`. Changes are refused outside the field menu (`game.refuse.macro_menu_only`); the header lists every refusal key. Deleting the auto macro turns auto-battle's macro off and queues the notice `game.auto_macro_cleared`; renaming it keeps it as the auto macro.
+* New status screen data: `psiv_member_detail_get` with `psiv_member_detail`, `psiv_stat_bonus`, `psiv_affinity` and `psiv_status_resist` (experience to the next level, critical and evasion, the weapon's element, each slot's bonus, element affinities and status resistances).
+* New combo log: `psiv_combo_log` with `psiv_combo_entry` (recipe, combination name, play time, participants and required abilities with names) and the number of recipes.
+* `psiv_name_kind` adds `PSIV_NAME_MACRO_TARGET_KIND` at the end; the game's text tables add the keys above.
+* C#: `Native.AbiVersion` is 6; `AbilityInfo` adds `Uses` and `MaxUses`; new `MacroTargetKind`, `NameKind.MacroTargetKind`, the records `Macro`, `MacroStep`, `MemberDetail`, `StatBonus`, `StatusResist`, `ComboEntry` and `ComboLog`, and the `GameSession` methods `SwapLineup`, `MacroList`, `CreateMacro`, `RenameMacro`, `DeleteMacro`, `MoveMacro`, `SetMacroStep`, `RemoveMacroStep`, `MoveMacroStep`, `MemberDetail` and `ComboLog`.
+
+The round before: `PSIV_ABI_VERSION` 5, library version 0.4.0. Only an addition: the version moved so that a wrapper refuses an older library without the new function.
 
 * New `psiv_actor_ids`: every actor id in `game.json` order, wherever the actor stands, at the title too. A front end that draws script subjects tells an actor in another area (in this list, not in `psiv_field_actors`) from a party member (in neither) and draws nothing for the first.
 * C#: `Native.AbiVersion` is 5; new `Native.ActorIds` and `GameSession.ActorIds()`.
 * The placeholder board scene starts with `anim peddler wave`, an `anim` of an actor that stands on the reed path while the party is in Tidewater. The game changes nothing for it (it never tracks `anim`).
 * On Windows, `data_dir`, `core_data_dir` and `save_dir` with characters outside ASCII now reach the files they name: the libraries took them in the ANSI code page, not as UTF-8.
 
-The round before: nothing. The C interface, `PSIV_ABI_VERSION` 4, the C# wrapper and the saves were unchanged; the sample and the placeholder data changed. The tidewater area has seven more markers and two more talk points (the tide chart and the board by the inn), which the C tests count. The board's scene fills the party to five, so a front end that drew a fixed number of followers should draw them all. In it the engineer walks in from the east gate, while the scout is turned toward the leader and nods before any move, so a front end that draws party members has to give such a member a place of its own (the `board_beside` marker is no longer used).
+Two rounds before: nothing. The C interface, `PSIV_ABI_VERSION` 4, the C# wrapper and the saves were unchanged; the sample and the placeholder data changed. The tidewater area has seven more markers and two more talk points (the tide chart and the board by the inn), which the C tests count. The board's scene fills the party to five, so a front end that drew a fixed number of followers should draw them all. In it the engineer walks in from the east gate, while the scout is turned toward the leader and nods before any move, so a front end that draws party members has to give such a member a place of its own (the `board_beside` marker is no longer used).
 
-Two rounds before: `PSIV_ABI_VERSION` 4, library version 0.3.0. Only additions: the version moved so that a wrapper refuses an older library without the new function.
+Three rounds before: `PSIV_ABI_VERSION` 4, library version 0.3.0. Only additions: the version moved so that a wrapper refuses an older library without the new function.
 
 * New `psiv_actor` and `psiv_field_actors`: the script actors in the party's area, with id, speaker name, cell, facing (a `psiv_direction`), `visible` and `scripted`. `psiv_sizeof("psiv_actor")` gives its size.
 * Saves are written as schema 3 with an `actors` chunk; schema 2 saves load (see `../game/README.md`, "Saves").
 * With `PSIV_PRESENTATION_WAIT`, the placeholder arrival now waits on three actions (two moves and a turn of the dockhand) between its narration and the dockhand's line, and three more after it.
 * C#: `Native.AbiVersion` is 4; new `PsivActor`, `Native.FieldActors` and the `FieldActor` record; `FieldView` takes `Actors` as its last parameter.
 
-Three rounds before: `PSIV_ABI_VERSION` 3. Core's rules version 9 removed two battle event types.
+Four rounds before: `PSIV_ABI_VERSION` 3. Core's rules version 9 removed two battle event types.
 
 * `psiv_event_type`: `PSIV_EVENT_STATUS_TICKED` and `PSIV_EVENT_STAT_MODIFIER_EXPIRED` are gone, and every later value moved down (`PSIV_EVENT_STAT_MODIFIED` is now right after `PSIV_EVENT_STATUS_REMOVED`). A `PSIV_EVENT_STAT_MODIFIED` `amount` is the stat's change from its base, and there is no expiry. C#: `BattleEventType.StatusTicked` and `StatModifierExpired` are gone; `Native.AbiVersion` is 3.
 * `psiv_battle_set_command` refuses Defend and items for a vehicle (key `command.vehicle_cannot`).
 * The session tests now use seed 285 (`bindings/c/tests/test_api.c`, C# `SessionTests.NewSession`).
 
-Four rounds before: `PSIV_ABI_VERSION` 2. The binding now calls the game for everything it used to work around (line data, turning, the auto macro, the ended battle, yes and no, presentation, walking, auto play).
+Five rounds before: `PSIV_ABI_VERSION` 2. The binding now calls the game for everything it used to work around (line data, turning, the auto macro, the ended battle, yes and no, presentation, walking, auto play).
 
 * Struct layouts: `psiv_session_options` adds `core_data_dir` after `data_dir`; `psiv_line` adds `text_id` after `speaker_name`. Call `psiv_session_options_init` and rebuild foreign mirrors (the C# wrapper's are updated).
 * Names: `psiv_name_of` returns event types as `battle_started` ... `battle_ended` and reward multipliers as `x1`, `x1_5`, `x2`. Use `psiv_parse_name` to read a name back; it also takes `BattleEnded` and `1.5`.
@@ -205,7 +217,7 @@ Four rounds before: `PSIV_ABI_VERSION` 2. The binding now calls the game for eve
 ## Not covered
 
 * Windows: the C library and its C tests pass cross-compiled with MinGW-w64 under Wine; MSVC, this Makefile's Windows branch, the C# wrapper, the sample and its font list have not run there. Linux passes `make test` with g++ and clang++ and runs the sample's window under Xvfb with software rendering (see "Platforms" in `../README.md`), but not in a real desktop session.
-* Editing macros, the combo log, the pause overlay and anything else `game` itself does not build (see `../game/README.md`, "Not built").
+* The pause overlay, making a macro from a combo log entry (BAT-065) and anything else `game` itself does not build (see `../game/README.md`, "Not built").
 * The pacing bot and the events tools have no C entry points.
 * One session per data load: two sessions load the data twice.
 * Mouse or gamepad input, resizing, audio: the sample is keyboard only, at 1280x720. Script actions other than fades, `anim` and moves and turns of actors and party members (and shows and hides of actors) show as a label sliding across the top; poses are procedural, and every animation name the sample does not know plays the same bounce. After a skip or a load, a party member's facing that only a move's last leg set follows from where it stood when the rebuild ran, as for actors in the game.

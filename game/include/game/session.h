@@ -63,6 +63,9 @@ struct EncyclopediaView {
 	std::string text;
 };
 
+// Macro slots per save: the original's eight (BAT-055, BAT-057).
+inline constexpr int kMaxMacros = 8;
+
 // What the Menu mode is showing. Shop has its own mode.
 enum class MenuKind { None, Field, Inn, SavePrompt, NameEntry };
 
@@ -178,6 +181,54 @@ struct AutoBattle {
 	std::vector<AutoRound> rounds;
 	// False when the round limit was reached first.
 	bool ended = false;
+};
+
+// One step of a saved macro, ready for the macro editor (UI-005).
+struct MacroStepView {
+	rules::MacroStep step;
+	std::string memberName;
+	// The ability's or item's display name; empty for attack, defend and escape steps.
+	std::string commandName;
+	// The display name of a Member target, or empty.
+	std::string targetName;
+	// Why the step cannot run as written now: NotInParty, ActorDefeated, UnknownAbility, NotEnoughTp, NoUsesLeft or
+	// NoItem; None when nothing stops it outside battle.
+	rules::MacroIssue issue = rules::MacroIssue::None;
+};
+
+struct MacroView {
+	std::string name;
+	std::vector<MacroStepView> steps;
+};
+
+// One combo log entry joined with its recipe (UI-011).
+struct ComboView {
+	std::string recipe;
+	// The combination's ability.
+	std::string result;
+	std::string resultName;
+	// The abilities the recipe needs, in recipe order.
+	std::vector<std::string> abilities;
+	std::int64_t playTimeMs = 0;
+	// Character ids of the participants, in the order they acted.
+	std::vector<std::string> characters;
+};
+
+// What a status screen shows beyond the member's own state.
+struct MemberDetail {
+	std::string member;
+	// Experience still needed for the next level; 0 at the level cap.
+	int experienceToNext = 0;
+	// Level stats plus equipment.
+	rules::Stats stats;
+	// Each worn piece's bonus, by slot.
+	std::map<rules::EquipSlot, rules::Stats> equipmentBonus;
+	// The worn weapon's element, or None.
+	rules::Element attackElement = rules::Element::None;
+	// Percent of each element's damage taken, every element listed.
+	std::map<rules::Element, int> affinities;
+	// The character's status resistances plus its pieces', capped at 100, as a battle combatant gets them.
+	rules::StatusResists statusResist;
 };
 
 // One of the game's actors standing in the party's area, from Session::actorsHere(). An actor no script touched
@@ -336,6 +387,26 @@ public:
 	rules::Message setSettings(const Settings& settings);
 	// One of the save's macros, or empty for none.
 	rules::Message setAutoMacro(const std::string& macro);
+
+	// Party order, from the field menu: swaps two positions of the lineup, the leader's included. The party's
+	// members change only through events (SAV-034).
+	rules::Message swapLineup(int a, int b);
+	// The macro editor (UI-005). Reading works any time; changes are made from the field menu. Positions and step
+	// indexes count from 0. A macro holds at most one step per party member (BAT-050) and there are at most
+	// kMaxMacros (BAT-055). Deleting the auto macro turns auto-battle's macro off with a notice; renaming it keeps it.
+	std::vector<MacroView> macroViews() const;
+	rules::Message createMacro(const std::string& name);
+	rules::Message renameMacro(const std::string& name, const std::string& newName);
+	rules::Message deleteMacro(const std::string& name);
+	rules::Message moveMacro(const std::string& name, int position);
+	// Replaces the step at `index`, or appends it when `index` is the step count.
+	rules::Message setMacroStep(const std::string& name, int index, const rules::MacroStep& step);
+	rules::Message removeMacroStep(const std::string& name, int index);
+	rules::Message moveMacroStep(const std::string& name, int from, int to);
+	// The combo log in discovery order; data().db.combos has every recipe, for the locked entries.
+	std::vector<ComboView> comboLog() const;
+	// Empty for a character not in the roster.
+	std::optional<MemberDetail> memberDetail(const std::string& member) const;
 
 	// Presentation actions of the session's own queue since the last call, oldest first. With Instant
 	// presentation only the last 256 are kept.

@@ -226,6 +226,38 @@ public sealed unsafe class GameSession : IDisposable
 		return Native.Strs(names, count);
 	}
 
+	// Macro editor: reads any time, changes from the field menu.
+
+	public IReadOnlyList<Macro> MacroList()
+	{
+		Must(Native.MacroList(_handle, out IntPtr p, out int count));
+		var list = new List<Macro>(count);
+		foreach (PsivMacro m in Native.Span<PsivMacro>(p, count))
+		{
+			var steps = new List<MacroStep>(m.StepCount);
+			foreach (PsivMacroStep s in Native.Span<PsivMacroStep>(m.Steps, m.StepCount))
+			{
+				steps.Add(new MacroStep(Native.Str(s.Member), Native.Str(s.MemberName), (CommandKind)s.CommandKind, Native.Str(s.Id), Native.Str(s.IdName),
+					(MacroTargetKind)s.TargetKind, Native.Str(s.TargetMember), Native.Str(s.TargetMemberName), s.TargetEnemy, (MacroIssue)s.Issue));
+			}
+			list.Add(new Macro(Native.Str(m.Name), steps));
+		}
+		return list;
+	}
+
+	public PsivResult CreateMacro(string name) => Result(Native.MacroCreate(_handle, name));
+	public PsivResult RenameMacro(string name, string newName) => Result(Native.MacroRename(_handle, name, newName));
+	public PsivResult DeleteMacro(string name) => Result(Native.MacroDelete(_handle, name));
+	public PsivResult MoveMacro(string name, int position) => Result(Native.MacroMove(_handle, name, position));
+
+	// Replaces step `index`, or appends when `index` is the step count.
+	public PsivResult SetMacroStep(string macro, int index, string member, CommandKind kind, string? id = null, MacroTargetKind target = MacroTargetKind.Default,
+		string? targetMember = null, int targetEnemy = -1) =>
+		Result(Native.MacroSetStep(_handle, macro, index, member, (int)kind, id, (int)target, targetMember, targetEnemy));
+
+	public PsivResult RemoveMacroStep(string macro, int index) => Result(Native.MacroRemoveStep(_handle, macro, index));
+	public PsivResult MoveMacroStep(string macro, int from, int to) => Result(Native.MacroMoveStep(_handle, macro, from, to));
+
 	// Title and saves
 
 	public PsivResult NewGame() => Result(Native.NewGame(_handle));
@@ -637,9 +669,49 @@ public sealed unsafe class GameSession : IDisposable
 		var list = new List<AbilityInfo>(count);
 		foreach (PsivAbilityInfo a in Native.Span<PsivAbilityInfo>(p, count))
 		{
-			list.Add(new AbilityInfo(Native.Str(a.Id), Native.Str(a.Name), (AbilityKind)a.Kind, (Targeting)a.Targeting, a.Cost, a.Field != 0));
+			list.Add(new AbilityInfo(Native.Str(a.Id), Native.Str(a.Name), (AbilityKind)a.Kind, (Targeting)a.Targeting, a.Cost, a.Field != 0, a.Uses, a.MaxUses));
 		}
 		return list;
+	}
+
+	// Swaps two lineup positions, from the field menu.
+	public PsivResult SwapLineup(int a, int b) => Result(Native.PartySwap(_handle, a, b));
+
+	public MemberDetail? MemberDetail(string member)
+	{
+		if (!Read(Native.MemberDetailGet(_handle, member, out PsivMemberDetail d)))
+		{
+			return null;
+		}
+		var bonuses = new StatBonus[5];
+		for (int i = 0; i < 5; i++)
+		{
+			PsivStatBonus b = d.EquipmentBonus[i];
+			bonuses[i] = new StatBonus(b.MaxHp, b.MaxTp, b.Strength, b.Mental, b.Agility, b.Dexterity, b.Defense, b.Critical, b.Evasion);
+		}
+		var affinities = new Dictionary<Element, int>();
+		foreach (PsivAffinity a in Native.Span<PsivAffinity>(d.Affinities, d.AffinityCount))
+		{
+			affinities[(Element)a.Element] = a.Percent;
+		}
+		var resists = new List<StatusResist>(d.StatusResistCount);
+		foreach (PsivStatusResist r in Native.Span<PsivStatusResist>(d.StatusResists, d.StatusResistCount))
+		{
+			resists.Add(new StatusResist(Native.Str(r.Id), Native.Str(r.Name), r.Percent));
+		}
+		return new MemberDetail(Native.Str(d.Id), d.ExperienceToNext, d.Critical, d.Evasion, (Element)d.AttackElement, bonuses, affinities, resists);
+	}
+
+	public ComboLog ComboLog()
+	{
+		Must(Native.ComboLog(_handle, out IntPtr p, out int count, out int total));
+		var entries = new List<ComboEntry>(count);
+		foreach (PsivComboEntry e in Native.Span<PsivComboEntry>(p, count))
+		{
+			entries.Add(new ComboEntry(Native.Str(e.Recipe), Native.Str(e.Result), Native.Str(e.ResultName), e.PlayTimeMs, Native.Strs(e.Participants, e.ParticipantCount),
+				Native.Strs(e.ParticipantNames, e.ParticipantCount), Native.Strs(e.Abilities, e.AbilityCount), Native.Strs(e.AbilityNames, e.AbilityCount)));
+		}
+		return new ComboLog(entries, total);
 	}
 
 	private static InventoryEntry ToEntry(in PsivInventoryEntry e) =>

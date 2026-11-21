@@ -15,7 +15,7 @@ A headless game session library that joins the battle rules (`../core`, namespac
 | `include/game/save.h` | The chunked save format, migrations, the clear-data record, atomic writes and `SaveStore` (manual and rotating autosave slots) |
 | `include/game/profile.h` | `Profile`: the global settings file (SAV-005) |
 | `include/game/pacing.h` | `PacingRecorder`: the encounter pacing metrics per area and per boss |
-| `include/game/session.h` | `Session`: the game itself, including the `events::Host` implementation, the presentation action queue, script actors, battle driving, path walking and auto play |
+| `include/game/session.h` | `Session`: the game itself, including the `events::Host` implementation, the presentation action queue, script actors, battle driving, path walking and auto play, and the field menu's party order, macro editor, member detail and combo log |
 | `include/game/runner.h` | The terminal command language shared by `game_cli` and the pacing bot |
 | `src/` | Library sources, built into `build/libgame.a` |
 | `cli/game_cli.cpp` | Terminal front end, scripted runs and the pacing bot |
@@ -79,7 +79,8 @@ The engine owns one `GameData` (loaded once) and one `Session`. Every frame:
    * Field: `world()` (position, facing, `enemies`), `area()` and `actorsHere()` (see [Actors](#actors)). Interact with `interact()`, turn in place with `face()`, open the menu with `openMenu()`, party talk with `partyTalk()`. To walk to a cell along the shortest path, `beginWalk(goal)` and then `walkStep(walk)` until it returns anything but `Walking`, running events and battles in between; it stops at the goal, on leaving the area, when the field does not come back, without a path or after 4000 steps.
    * Event: `line()` is the pending line as data (`LineView`: speaker id, speaker name, text ID, rendered text with name tokens resolved for the profile, portrait), or empty; `lineText()` is the same as "Speaker: text". Call `confirmLine()` on the button. `choiceView()` is the pending choice (`ChoiceView`: rendered prompt and options; an ask's options are the dialogue table's `choice.yes` and `choice.no`); call `choose(index)`. `canSkip()` and `skip()` drive skipping; skipped lines go to `textLog()`.
    * Battle: `battle()` is the live `rules::Battle`. Set commands with `setCommand` (its refusal is core's message) or `applyMacro`. For auto-battle call `startAuto()` once, then `fillFromAuto()` at each command phase until it returns false (the stop reason is in the output). `fillFromPolicy()` is core's simple policy, and `fillAutoRound()` fills a round the way the terminal plays (the save's auto macro from the first round, then the policy). Then `resolveRound()`, which returns the round's core events for playback. `playBattle()` plays a whole battle with `fillAutoRound` and `resolveRound` and returns each round's output and events. The battle ends inside `resolveRound()`: rewards, level-ups, grace period, and the return to Field, Event or (game over) Title happen there. `endedBattle()` then keeps the battle as it ended (final combatants, outcome, record, the rewards paid out, drops and level-ups) until the next battle starts, `dismissBattle()`, a new game, a load or `quitToTitle()`.
-   * Menu and Shop: `menuKind()` says field menu, inn, save prompt or name entry. `shop()`, `inn()`, `buy`, `sell`, `rest`, `useItem`, `useAbility`, `equip`, `unequip`, `saveManual`, `enterName`, `closeMenu`. A shop, save prompt or name entry an event opened closes back to the event.
+   * Menu and Shop: `menuKind()` says field menu, inn, save prompt or name entry. `shop()`, `inn()`, `buy`, `sell`, `rest`, `useItem`, `useAbility`, `equip`, `unequip`, `saveManual`, `enterName`, `closeMenu`. A shop, save prompt or name entry an event opened closes back to the event. From the field menu also: `swapLineup` (party order), the macro editor (`createMacro`, `renameMacro`, `deleteMacro`, `moveMacro`, `setMacroStep`, `removeMacroStep`, `moveMacroStep`), and for status screens `memberDetail(member)`.
+   * Any time: `macroViews()` (every macro with its steps, names and the reason a step cannot run now) and `comboLog()` (entries joined with their recipes; `data().db.combos` counts the locked ones).
    * Title: `newGame`, `continueGame`, `load`, `retryBattle`.
    * Any time: `questLog()`, `encyclopedia()`, `textLog()`, `profile()` and `setProfile()`, `setSettings()` and `setAutoMacro()`.
 3. Drain `drainOutput()`. Each `Output` has a text key with parameters (`message`) and its rendering in the profile's language (`text`); warnings about broken data have no key.
@@ -231,14 +232,28 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Path walking (`walkStep`) uses walkable cells only, never steps on an exit other than the goal, and ignores visible enemies, so bumping into one starts its battle; after a refused step (an enemy in the way during grace) it lets one tick pass. It gives up after 4000 steps. `playBattle` stops after 60 rounds by default.
 * Presentation: Instant keeps the last 256 actions for `pollActions()`, so a host that never polls does not grow the queue without bound; Queued keeps them all, since the host must finish each.
 * Vehicle battles come only from scripts (`aboard`); field vehicles and vehicle encounter tables are not built.
+* Party order: `swapLineup` swaps two lineup positions, the leader's included, from the field menu only. It never changes who is in the lineup, so SAV-034 (the party changes only through events) holds and there is no swap with members outside it. Saves keep the order (the party chunk's `lineup` line).
+* Macro editor (UI-005): changes only from the field menu, like equipment; reads any time. At most 8 macros, the original's count (BAT-055, BAT-057), and one step per party member, so at most 5 steps (BAT-050). A new macro goes at the end. Names follow the name entry rule (1 to 16 bytes, no control characters, spaces at the ends dropped) and are unique. A step names a member of the roster; an ability step needs an ability the member knows now (data macros may name one learned later, as core's loader allows); an item step needs an item that exists, held or not; the target rule must fit the command, by core's own check (`rules::macroTargetFits`), and an enemy position is 0 to 7. Target fields the rule does not use are cleared. Deleting the auto macro turns auto-battle's macro off and says so with the notice `game.auto_macro_cleared`; renaming it keeps it as the auto macro. A step's mark (`MacroStepView::issue`) is judged on the member outside battle: not in the lineup, defeated, the ability not known, techniques blocked by a status, not enough technique points, no skill uses left, or the item not held.
+* Member detail: experience to the next level is core's curve less the experience carried in the current level, 0 at the level cap; status resistances are the character's plus each piece's, capped at 100, as core builds a battle combatant.
 
 ## Changes in this round
+
+* The field menu's missing operations, for the front end's screens: party order (`swapLineup`), the macro editor (`macroViews`, `createMacro`, `renameMacro`, `deleteMacro`, `moveMacro`, `setMacroStep`, `removeMacroStep`, `moveMacroStep`), the combo log joined with its recipes (`comboLog`) and status screen data (`memberDetail`). See "Rules this library chose" for their rules. The scripted playthrough does not use them; its transcript and the seeds are unchanged.
+
+### Changes a host must make
+
+* `session.h`: new `MacroStepView`, `MacroView`, `ComboView`, `MemberDetail`, `kMaxMacros` and the `Session` methods above. Replace any write to `World::lineup` or `World::macros` from a menu with them.
+* Text tables: every language needs the new keys `game.auto_macro_cleared`, `game.refuse.macro_bad_command`, `game.refuse.macro_member_twice`, `game.refuse.macro_menu_only`, `game.refuse.macro_name_taken`, `game.refuse.macro_no_position`, `game.refuse.macro_no_step`, `game.refuse.macro_slots_full`, `game.refuse.macro_steps_full`, `game.refuse.macro_target`, `game.refuse.macro_unknown_ability`, `game.refuse.macro_unknown_item`, `game.refuse.macro_unknown_member`, `game.refuse.party_menu_only` and `game.refuse.party_no_position` (the loader checks them). Macro names reuse `game.refuse.name_length`, unknown macros `game.refuse.no_macro`. The placeholder `glyphs_ja.txt` gains the four kanji their Japanese text uses.
+* Core: `rules::macroTargetFits` (macro.h) is public; the loader uses it as before. No rule changed.
+* Saves are unchanged (schema 3).
+
+## Changes in the previous round
 
 * The placeholder adventure has a tide chart on a post in Tidewater Landing (`tidewater_chart`, hook `chart`, open once the guide's apprentices have joined): the apprentices walk up to it and turn, the leader steps back and turns, people nod, shake their heads, startle, wave (looping), bow, jump and shrug, and a crab comes out for an event battle with a `lose` section. `game.json` lists those animations in `presentation.animations` and the flag `tidewater.chart_read`; tidewater gains the markers `chart_front`, `chart_left`, `chart_right` and `chart_back`; the dialogue is in `en` and `ja` (five more kanji in `glyphs_ja.txt`). It is there for the MonoGame sample's party and pose presentation; the scripted playthrough does not read the chart, so its transcript changes only in the `look` map of tidewater, and the seeds stay.
 * The placeholder adventure has a board by the inn in Tidewater Landing (`tidewater_board`, hook `board`, open once the guide's apprentices have joined): before they are in the party, the engineer walks in from the east gate, turns toward the leader and waves, and the scout, with no move first, turns toward the leader and nods; then both join, so the party is full. The scene sets `reed.scout_joined`, so the scout's step hook on the reed path stays shut afterwards. `game.json` lists the flag `tidewater.board_read`; tidewater gains the markers `board_front`, `board_below` and `board_beside` (no longer used); the dialogue is in `en` and `ja`. Like the chart, it is there for the MonoGame sample's party presentation; the scripted playthrough does not read the board, so its transcript changes only in the `look` map of tidewater, and the seeds stay.
 * Party members a script moves or turns stay presentation (see [Actors](#actors)); no API or save change.
 
-## Changes in the previous round
+## Changes two rounds ago
 
 * Script actors are game state: the session follows the end state of every `move`, `face`, `show` and `hide` of a `game.json` actor (see [Actors](#actors)), `actorsHere()` lists the actors in the party's area, and an actor no script touched stands at the talk point named after it.
 * Save schema 3 adds the `actors` chunk; schema 2 saves migrate with every actor at its talk point.
@@ -250,7 +265,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Saves are written as schema 3 (`PSR-SAVE 3`, `kSaveSchemaVersion` 3) with the `actors` chunk, which a schema 3 save must have. Older builds refuse them as from a newer build. `serializeWorldChunks` (the event-start snapshot) includes it.
 * A renderer that drew talk points as people can draw the actors from `actorsHere()` instead, and should move them when a script does.
 
-## Changes two rounds ago
+## Changes three rounds ago
 
 * Front ends stop touching the world: `face()` and `setAutoMacro()` replace writing `World::facing` and `World::autoMacro`, and the terminal front end uses them.
 * Structured event text: `line()` gives the pending line as data and `choiceView()` the pending choice, with an ask's answers from the dialogue tables (`choice.yes`, `choice.no`, in `en` and `ja`).
@@ -287,7 +302,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Several languages: `game.json` takes `languages` instead of `strings` and `text`; a placeholder Japanese pair (`text/ja.strings`, `text/ja.json`) is added; the profile's text language picks the tables.
 * Speaker names and journal text moved from the text table to the dialogue tables. Area display names moved from the area files to `area.<id>` text keys (areas no longer take `name`). `Session` refusals are text keys.
 
-### Changes a host had to make three rounds ago
+### Changes a host had to make four rounds ago
 
 * `Session`: `setProfile`, `newGame`, `continueGame`, `load`, `retryBattle`, `walk`, `interact`, `partyTalk`, `choose`, `setCommand`, `applyMacro`, `startAuto`, `openMenu`, `closeMenu`, `buy`, `sell`, `rest`, `useItem`, `useAbility`, `equip`, `unequip`, `saveManual`, `enterName` and `setSettings` return `rules::Message` instead of `std::string`; `.empty()` still means it ran. Show a refusal with `render()`. New `language()` (the profile's tables) and `stringText(id)`.
 * `data.h`: `GameConfig::stringsFile` and `textFile` are replaced by `languages` (`LanguageFiles { code, strings, text }`); `GameConfig::scriptedEnds` is removed. `GameData::text` and `strings` are replaced by `languages` (`LanguageTables { code, text, strings }`) and `language(code)`. New `GameData::gameStrings` and `gameStringsText()`. `Journal` texts are string IDs.
@@ -311,5 +326,6 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Ambient party talk (FLD-073); the profile has its switch, nothing reads it.
 * Battle text and names from core in other languages: core ships one English text table and English names in its data, so battle messages and character, item and enemy names show in English whatever the language. The terminal front end's own prompts and errors (`Runner`, `game_cli`) are English; an engine replaces them.
 * Text speed, auto-advance, text size, battle speed, reduced flash and volumes are stored in the profile, but nothing reads them headless.
-* The pause overlay; macro editor and combo log screens (the combo log's play times and participants are kept).
+* The pause overlay. Making a macro from a combo log entry (BAT-065).
+* Item and ability descriptions: the data has none, and names are inline English strings in core's data rather than text keys, so adding descriptions means a change to core's formats (and the content hash battle records and saves carry), not to the game's.
 * Analog movement and capsule collision: the field is a grid.

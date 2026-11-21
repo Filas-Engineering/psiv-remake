@@ -115,6 +115,8 @@ static void testVersion(void) {
 	CHECK(psiv_parse_name(PSIV_NAME_DIRECTION, "none", &value) == PSIV_OK && value == PSIV_DIRECTION_NONE);
 	CHECK(psiv_parse_name(PSIV_NAME_OUTCOME, "scripted_end", &value) == PSIV_OK && value == PSIV_OUTCOME_SCRIPTED_END);
 	CHECK(psiv_parse_name(PSIV_NAME_OUTCOME, "won", &value) == PSIV_NOT_FOUND);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_MACRO_TARGET_KIND, PSIV_MACRO_TARGET_ENEMY), "enemy") == 0);
+	CHECK(psiv_parse_name(PSIV_NAME_MACRO_TARGET_KIND, "all", &value) == PSIV_OK && value == PSIV_MACRO_TARGET_ALL);
 	CHECK(strcmp(psiv_name_of(999, 0), "") == 0);
 }
 
@@ -959,6 +961,159 @@ static void testActors(void) {
 	psiv_session_destroy(s);
 }
 
+static int32_t errorIs(psiv_session* s, const char* key) {
+	psiv_error e;
+	return psiv_last_error(s, &e) == PSIV_OK && strcmp(e.key, key) == 0;
+}
+
+static const psiv_macro* findMacro(const psiv_macro* macros, int32_t count, const char* name) {
+	for (int32_t i = 0; i < count; ++i) {
+		if (strcmp(macros[i].name, name) == 0) {
+			return &macros[i];
+		}
+	}
+	return NULL;
+}
+
+/* Party order, the macro editor, member detail and the combo log, once the guide's apprentices have joined. */
+static void testMenus(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/menus", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	const psiv_member* party;
+	const psiv_macro* macros;
+	const psiv_notice* notices;
+	int32_t count;
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK(walkToMarker(s, "guide_front") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	CHECK_OK(psiv_enter_name(s, "Bryn"));
+	settle(s);
+	CHECK(psiv_mode_get(s) == PSIV_MODE_FIELD);
+
+	/* Party order: field menu only, saved and loaded. */
+	CHECK(psiv_party_swap(s, 0, 2) == PSIV_REFUSED && errorIs(s, "game.refuse.party_menu_only"));
+	CHECK_OK(psiv_open_menu(s));
+	CHECK_OK(psiv_party_swap(s, 0, 2));
+	CHECK(psiv_party_swap(s, 0, 3) == PSIV_REFUSED && errorIs(s, "game.refuse.party_no_position"));
+	CHECK_OK(psiv_party(s, &party, &count));
+	CHECK(count == 3 && strcmp(party[0].id, "medic") == 0 && strcmp(party[1].id, "mystic") == 0 && strcmp(party[2].id, "fighter") == 0);
+	CHECK_OK(psiv_save_manual(s, "manual_2"));
+	CHECK_OK(psiv_quit_to_title(s));
+	CHECK_OK(psiv_load(s, "manual_2"));
+	CHECK_OK(psiv_party(s, &party, &count));
+	CHECK(count == 3 && strcmp(party[0].id, "medic") == 0 && strcmp(party[2].id, "fighter") == 0);
+
+	/* The save's macros as data, with names and the marks the editor shows. */
+	CHECK_OK(psiv_macro_list(s, &macros, &count));
+	CHECK(count == 3);
+	const psiv_macro* opener = findMacro(macros, count, "opener");
+	CHECK(opener && opener->step_count == 5);
+	if (opener && opener->step_count == 5) {
+		const psiv_macro_step* spark = &opener->steps[0];
+		CHECK(strcmp(spark->member, "mystic") == 0 && strcmp(spark->member_name, "Test Mystic") == 0);
+		CHECK(spark->command_kind == PSIV_COMMAND_ABILITY && strcmp(spark->id, "spark") == 0 && strcmp(spark->id_name, "Spark") == 0);
+		CHECK(spark->target_kind == PSIV_MACRO_TARGET_ENEMY && spark->target_enemy == 0 && spark->issue == PSIV_ISSUE_NONE);
+		CHECK(strcmp(opener->steps[1].member, "scout") == 0 && opener->steps[1].issue == PSIV_ISSUE_NOT_IN_PARTY);
+		CHECK(opener->steps[4].target_kind == PSIV_MACRO_TARGET_MEMBER && strcmp(opener->steps[4].target_member_name, "Bryn") == 0);
+	}
+
+	/* Editing: a macro for the medic's and the mystic's combination. */
+	CHECK(psiv_macro_create(s, "arc") == PSIV_REFUSED && errorIs(s, "game.refuse.macro_menu_only"));
+	CHECK_OK(psiv_open_menu(s));
+	CHECK_OK(psiv_macro_create(s, "arc"));
+	CHECK(psiv_macro_create(s, "arc") == PSIV_REFUSED && errorIs(s, "game.refuse.macro_name_taken"));
+	CHECK_OK(psiv_macro_set_step(s, "arc", 0, "mystic", PSIV_COMMAND_ABILITY, "spark", PSIV_MACRO_TARGET_ENEMY, NULL, 0));
+	CHECK_OK(psiv_macro_set_step(s, "arc", 0, "medic", PSIV_COMMAND_ABILITY, "glint", PSIV_MACRO_TARGET_ENEMY, NULL, 0));
+	CHECK_OK(psiv_macro_set_step(s, "arc", 1, "mystic", PSIV_COMMAND_ABILITY, "spark", PSIV_MACRO_TARGET_DEFAULT, NULL, -1));
+	CHECK_OK(psiv_macro_set_step(s, "arc", 2, "fighter", PSIV_COMMAND_DEFEND, NULL, PSIV_MACRO_TARGET_DEFAULT, NULL, -1));
+	CHECK(psiv_macro_set_step(s, "arc", 4, "fighter", PSIV_COMMAND_ATTACK, NULL, PSIV_MACRO_TARGET_DEFAULT, NULL, -1) == PSIV_REFUSED &&
+		errorIs(s, "game.refuse.macro_no_step"));
+	CHECK(psiv_macro_set_step(s, "arc", 2, "fighter", PSIV_COMMAND_ABILITY, "spark", PSIV_MACRO_TARGET_DEFAULT, NULL, -1) == PSIV_REFUSED &&
+		errorIs(s, "game.refuse.macro_unknown_ability"));
+	CHECK(psiv_macro_set_step(s, "arc", 2, "fighter", PSIV_COMMAND_DEFEND, NULL, PSIV_MACRO_TARGET_ALL, NULL, -1) == PSIV_REFUSED &&
+		errorIs(s, "game.refuse.macro_target"));
+	CHECK(psiv_macro_set_step(s, "arc", 2, "fighter", PSIV_COMMAND_DEFEND, NULL, 9, NULL, -1) == PSIV_INVALID_ARGUMENT);
+	CHECK(psiv_macro_set_step(s, "nothing", 0, "fighter", PSIV_COMMAND_DEFEND, NULL, PSIV_MACRO_TARGET_DEFAULT, NULL, -1) == PSIV_REFUSED &&
+		errorIs(s, "game.refuse.no_macro"));
+	CHECK_OK(psiv_macro_move_step(s, "arc", 2, 0));
+	CHECK_OK(psiv_macro_remove_step(s, "arc", 0));
+	CHECK(psiv_macro_remove_step(s, "arc", 2) == PSIV_REFUSED);
+	CHECK_OK(psiv_macro_move(s, "arc", 0));
+	CHECK_OK(psiv_macro_list(s, &macros, &count));
+	CHECK(count == 4 && strcmp(macros[0].name, "arc") == 0 && macros[0].step_count == 2);
+	CHECK(strcmp(macros[0].steps[0].member, "medic") == 0 && strcmp(macros[0].steps[0].id_name, "Glint") == 0 && macros[0].steps[0].target_enemy == 0);
+	CHECK(strcmp(macros[0].steps[1].member, "mystic") == 0 && macros[0].steps[1].target_enemy == -1);
+
+	CHECK_OK(psiv_macro_create(s, "spare"));
+	CHECK_OK(psiv_settings_set_auto_macro(s, "spare"));
+	CHECK_OK(psiv_macro_rename(s, "spare", "extra"));
+	psiv_settings settings;
+	CHECK_OK(psiv_settings_get(s, &settings));
+	CHECK(strcmp(settings.auto_macro, "extra") == 0);
+	CHECK(psiv_macro_rename(s, "extra", "arc") == PSIV_REFUSED && errorIs(s, "game.refuse.macro_name_taken"));
+	CHECK_OK(psiv_notices_drain(s, &notices, &count));
+	CHECK_OK(psiv_macro_delete(s, "extra"));
+	CHECK_OK(psiv_settings_get(s, &settings));
+	CHECK(strcmp(settings.auto_macro, "") == 0);
+	CHECK_OK(psiv_notices_drain(s, &notices, &count));
+	CHECK(count == 1 && strcmp(notices[0].key, "game.auto_macro_cleared") == 0 && strcmp(notices[0].params[0], "extra") == 0);
+
+	/* Member detail and skill uses. */
+	psiv_member_detail detail;
+	CHECK_OK(psiv_member_detail_get(s, "fighter", &detail));
+	CHECK(detail.experience_to_next > 0 && detail.critical == 8 && detail.attack_element == PSIV_ELEMENT_NONE);
+	CHECK(detail.equipment_bonus[PSIV_SLOT_WEAPON].strength == 4 && detail.equipment_bonus[PSIV_SLOT_BODY].max_hp == 10);
+	CHECK(detail.equipment_bonus[PSIV_SLOT_ARMS].defense == 0 && detail.affinity_count == 4 && detail.status_resist_count == 0);
+	CHECK_OK(psiv_member_detail_get(s, "mystic", &detail));
+	CHECK(detail.attack_element == PSIV_ELEMENT_HEAT && detail.affinities[2].element == PSIV_ELEMENT_SHOCK && detail.affinities[2].percent == 50);
+	CHECK(detail.status_resist_count == 1 && strcmp(detail.status_resists[0].name, "Sleep") == 0 && detail.status_resists[0].percent == 100);
+	CHECK(psiv_member_detail_get(s, "scout", &detail) == PSIV_NOT_FOUND);
+	const psiv_ability_info* abilities;
+	CHECK_OK(psiv_member_abilities(s, "fighter", &abilities, &count));
+	int32_t skills = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		if (strcmp(abilities[i].id, "focus_shot") == 0) {
+			skills += abilities[i].uses == 3 && abilities[i].max_uses == 3;
+		} else {
+			skills += abilities[i].uses != -1;
+		}
+	}
+	CHECK(skills == 1);
+	CHECK_OK(psiv_party_swap(s, 2, 0));
+	CHECK_OK(psiv_close_menu(s));
+
+	/* The macro played in the hold fight: the medic's glint and the mystic's spark make a combination. */
+	int32_t total = 0;
+	const psiv_combo_entry* combos;
+	CHECK_OK(psiv_combo_log(s, &combos, &count, &total));
+	CHECK(count == 0 && total == 15);
+	CHECK(walkToMarker(s, "hold_front") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	CHECK(psiv_mode_get(s) == PSIV_MODE_BATTLE);
+	for (int round = 0; round < 10 && psiv_mode_get(s) == PSIV_MODE_BATTLE && count == 0; ++round) {
+		const psiv_battle_event* events;
+		int32_t eventCount;
+		CHECK_OK(psiv_battle_apply_macro(s, "arc", NULL, NULL));
+		CHECK_OK(psiv_battle_resolve_round(s, &events, &eventCount));
+		CHECK_OK(psiv_combo_log(s, &combos, &count, NULL));
+	}
+	CHECK(count == 1);
+	if (count == 1) {
+		CHECK(strcmp(combos[0].recipe, "twin_arc") == 0 && strcmp(combos[0].result_name, "Twin Arc") == 0 && combos[0].play_time_ms > 0);
+		CHECK(combos[0].participant_count == 2 && strcmp(combos[0].participants[0], "medic") == 0 && strcmp(combos[0].participant_names[1], "Test Mystic") == 0);
+		CHECK(combos[0].ability_count == 2 && strcmp(combos[0].abilities[0], "glint") == 0 && strcmp(combos[0].ability_names[1], "Spark") == 0);
+	}
+	psiv_session_destroy(s);
+}
+
 int main(int argc, char** argv) {
 	for (int i = 1; i + 1 < argc; i += 2) {
 		if (strcmp(argv[i], "--data") == 0) {
@@ -978,6 +1133,7 @@ int main(int argc, char** argv) {
 	testFieldAndMenus();
 	testAdventurePaths();
 	testActors();
+	testMenus();
 	if (failures) {
 		fprintf(stderr, "%d of %d checks failed\n", failures, checks);
 		return 1;

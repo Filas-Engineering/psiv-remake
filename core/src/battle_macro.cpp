@@ -27,6 +27,39 @@ bool isCostIssue(MacroIssue issue) {
 	return issue == MacroIssue::Silenced || issue == MacroIssue::NotEnoughTp || issue == MacroIssue::NoUsesLeft || issue == MacroIssue::NoItem;
 }
 
+bool macroTargetFits(MacroTargetKind target, CommandKind command, Targeting targeting) {
+	if (target == MacroTargetKind::Default) {
+		return true;
+	}
+	switch (command) {
+	case CommandKind::Attack:
+		return target == MacroTargetKind::Enemy || target == MacroTargetKind::All;
+	case CommandKind::Ability:
+	case CommandKind::Item:
+		switch (targeting) {
+		case Targeting::OneEnemy:
+		case Targeting::EnemyGroup:
+			return target == MacroTargetKind::Enemy;
+		case Targeting::AllEnemies:
+		case Targeting::AllAllies:
+			return target == MacroTargetKind::All;
+		case Targeting::OneAlly:
+		case Targeting::OneFallenAlly:
+			return target == MacroTargetKind::Self || target == MacroTargetKind::Member;
+		case Targeting::Self:
+			return target == MacroTargetKind::Self;
+		case Targeting::RandomEnemy:
+			return false;
+		}
+		return false;
+	case CommandKind::None:
+	case CommandKind::Defend:
+	case CommandKind::Escape:
+		return false;
+	}
+	return false;
+}
+
 // A step whose cost cannot be paid, or that has no target yet, keeps its command: the battle validates it at
 // execution (BAT-015, BAT-053). Only a command the battle would refuse outright (an ability the member does not
 // know, an escape the battle forbids) falls back to a basic attack on the intended enemy, or the first living one.

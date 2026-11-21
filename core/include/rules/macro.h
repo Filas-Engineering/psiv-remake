@@ -2,6 +2,7 @@
 
 #include "rules/command.h"
 #include "rules/result.h"
+#include "rules/types.h"
 
 #include <string>
 #include <vector>
@@ -62,6 +63,9 @@ struct MacroStepResult {
 
 // True for the issues that mean the step's cost cannot be paid now.
 bool isCostIssue(MacroIssue issue);
+
+// Whether a step's target rule fits its command; `targeting` is the ability's or item's. Default always fits.
+bool macroTargetFits(MacroTargetKind target, CommandKind command, Targeting targeting);
 
 // A versioned line-based text form for saves.
 std::string serializeMacros(const std::vector<Macro>& macros);

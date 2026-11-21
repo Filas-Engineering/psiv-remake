@@ -209,7 +209,7 @@ Items use the same effects and targets, but their power is flat: user stats do n
   * `member`
   * `command`: `attack`, `ability`, `item`, `defend` or `escape`.
   * `id`: for ability and item steps. The member must know the ability from the start, by level or through equipment it can wear.
-  * `target` (optional, a rule, not a combatant index): left out means the ability's default; `"self"`; `"all"`; `{"enemy": N}` for formation position N from 0; `{"member": "fighter"}` for a party member by character. The rule must fit the command's targeting. When the step runs, a single-foe action and a heal, cure or revive on one ally pick their target afresh (see [Round resolution](#round-resolution)), as the original's macros do, so the rule sets only the command `applyMacro` returns.
+  * `target` (optional, a rule, not a combatant index): left out means the ability's default; `"self"`; `"all"`; `{"enemy": N}` for formation position N from 0; `{"member": "fighter"}` for a party member by character. The rule must fit the command's targeting (`macroTargetFits` in `macro.h`, which a host editing macros calls too). When the step runs, a single-foe action and a heal, cure or revive on one ally pick their target afresh (see [Round resolution](#round-resolution)), as the original's macros do, so the rule sets only the command `applyMacro` returns.
 
   Each member can have only one step per macro.
 
