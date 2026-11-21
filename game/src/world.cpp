@@ -194,6 +194,9 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 	if (a.follower != b.follower) return differs("follower");
 	if (a.dungeonExitArea != b.dungeonExitArea) return differs("dungeonExitArea");
 	if (a.dungeonExitCell != b.dungeonExitCell) return differs("dungeonExitCell");
+	if (a.shipPort != b.shipPort) return differs("shipPort");
+	if (a.brokenCells != b.brokenCells) return differs("brokenCells");
+	if (a.brokenHere != b.brokenHere) return differs("brokenHere");
 	if (a.graceMs != b.graceMs) return differs("graceMs");
 	if (a.randomCounter != b.randomCounter) return differs("randomCounter");
 	if (a.randomThreshold != b.randomThreshold) return differs("randomThreshold");

@@ -63,19 +63,19 @@ press Escape
 expect state page items
 expect state selected Tonic x3
 
-# Equip: the fighter's weapon slot offers only taking the blade off, which shows what it costs; off and back on.
+# Equip: the fighter's right hand offers only taking the blade off, which shows what it costs; off and back on.
 press Right
 expect state tab Equip
 press Enter
 expect state page slots
-expect state selected weapon: Copper Blade
+expect state selected right hand: Copper Blade
 press Enter
 expect state page pieces
 expect state selected Remove Copper Blade
 shot build/shots/menu_equip_remove.png
 press Enter
 expect state page slots
-expect state selected weapon: -
+expect state selected right hand: -
 shot build/shots/menu_equip_change.png
 press Enter
 expect state selected Copper Blade x1
@@ -102,7 +102,7 @@ press Enter
 press Enter
 expect state selected Copper Blade x1
 press Enter
-expect state selected weapon: Copper Blade
+expect state selected right hand: Copper Blade
 press Escape
 expect state page members
 

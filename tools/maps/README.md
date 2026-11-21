@@ -34,7 +34,7 @@ Every problem in a map is printed as `MAP.tmj: text`, all of them in one run, an
 | Custom property | Type | Area field |
 | --- | --- | --- |
 | `id` | string, required | `id` |
-| `kind` | string | `kind` (`town`, `field`, `dungeon`) |
+| `kind` | string | `kind` (`town`, `field`, `dungeon`, `vessel`) |
 | `encounter_mode` | string | `encounter_mode` (`visible`, `random`) |
 | `step_ms` | int | `step_ms` |
 | `music` | string | `music` (an audio id from `game.json`) |
@@ -45,7 +45,7 @@ A property left out is left out of the area, so the game's default applies. Any 
 
 ### Layer `terrain`
 
-A tile layer the size of the map. Each tile's tileset entry carries a custom string property `kind`: `floor`, `wall` or `water`, the game's three cell kinds, written `.`, `#` and `~` in the area's `map` rows. Any tileset works as long as its tiles have a `kind`; `cells.tsj` has one tile per kind. Flip and rotation bits are ignored. An empty cell, a tile without `kind` or an unknown kind is refused, with the first cell it happens at.
+A tile layer the size of the map. Each tile's tileset entry carries a custom string property `kind`: `floor`, `wall`, `water`, `soft` (soft ground) or `barrier`, the game's five cell kinds, written `.`, `#`, `~`, `:` and `%` in the area's `map` rows. Any tileset works as long as its tiles have a `kind`; `cells.tsj` has one tile per kind, in that order (tile ids 0 to 4), so a new kind is appended and older maps keep their tiles. Flip and rotation bits are ignored. An empty cell, a tile without `kind` or an unknown kind is refused, with the first cell it happens at.
 
 ### Layer `objects`
 
@@ -54,21 +54,25 @@ An object layer. Each object's class (Tiled's Class field, `type` in older versi
 | Class | Name | Properties | Area entry |
 | --- | --- | --- | --- |
 | `marker` | the marker name, unique | none | `markers[name]: [x, y]` |
-| `exit` | ignored | `to` (string), `marker` (string) | `exits[]: {at, to, marker}` |
+| `exit` | ignored | `to` (string), `marker` (string), optional `fall` (bool) | `exits[]: {at, to, marker, fall}` |
 | `hook` | the hook id | `event` (string), optional `trigger`, `require_flag`, `block_flag` (strings) | `hooks[]` |
-| `shop` | the shop id | `stock` (JSON list), optional `sell_percent` (int), `script_only` (bool) | `shops[]` |
+| `shop` | the shop id | `stock` (JSON list), optional `kind`, `require_flag`, `block_flag` (strings), `sell_percent` (int), `script_only` (bool) | `shops[]` |
 | `rest` | the rest point id | optional `cost` (int), `script_only` (bool) | `rests[]` |
 | `chest` | the chest id | `flag` (string), optional `items` and `equipment` (JSON objects), `money` (int) | `chests[]` |
-| `port` | the port id | `marker` (string), optional `flag` (string) | `ports[]` |
+| `port` | the port id | `marker` (string), optional `flag`, `ship` (strings) | `ports[]` |
 | `zone` | the zone id | `table` (JSON list), optional `visible`, `random` (JSON objects) | `zones[]` |
+| `helm` | the helm id | none | `helms[]: {id, at}` |
+| `gangway` | ignored | none | `gangway[]: [x, y]`, one object per cell |
+| `change` | ignored | `flag` (string), `tile` (string, one map character), `cells` (JSON list of cells) | `changes[]: {flag, tile, cells}` |
 
-* "JSON" properties are string properties holding JSON text in the area format, for example a shop's stock `["tonic", "clear_gel"]`, a chest's items `{"tonic": 2}` or a zone's table `[{"encounter": "training", "weight": 2}]`. Spawn points inside `visible` are cells, `[[4, 2], [8, 6]]`.
+* "JSON" properties are string properties holding JSON text in the area format, for example a shop's stock `["tonic", {"id": "spark_flask", "require_flag": "fells.bridge_mended"}]`, a chest's items `{"tonic": 2}` or a zone's table `[{"encounter": "training", "weight": 2}]`. Spawn points inside `visible` are cells, `[[4, 2], [8, 6]]`.
 * A hook whose `trigger` is `load` or `flag` has no cell: its position is ignored, and `area_to_tiled.py` puts it in a column just left of the map.
 * `script_only: true` on a shop or rest point leaves out `at` (one reached only from a script), and the position is ignored the same way.
+* A change's cells are in its `cells` property, `[[7, 4], [8, 4]]`, since they need not touch; its position is ignored the same way.
 * A zone is a rectangle; its `from` and `to` are the first and last cell it covers. Edges that do not fall on the grid widen it to whole cells.
 * Property types are checked (an int property for `money`, a bool for `script_only`), and an unknown property or class is refused, so a typo cannot drop a field.
 * Entries keep the order of the objects in the layer, so list order (which zone wins, which hook is first) is the drawing order. Markers keep it too.
 
 ## Round trip and the canonical form
 
-Area to map to area gives back the same area. "The same" means equal once normalized: object keys in any order, any whitespace, and an empty optional list (`"hooks": []`) the same as none; every value, and the order of every list, must match. `mapkit.areajson.same()` compares that way and `mapkit.areajson.dumps()` writes the canonical text: tabs, fields in the order of the area format, one map row, marker or list entry per line, a zone one field per line. `tiled_to_area.py` always writes the canonical text, so regenerating an unchanged map changes nothing. The tests convert every file in `game/data/areas` to a map and back and require both equality and identical canonical text.
+Area to map to area gives back the same area. "The same" means equal once normalized: object keys in any order, any whitespace, and an empty optional list (`"hooks": []`) the same as none; every value, and the order of every list, must match. `mapkit.areajson.same()` compares that way and `mapkit.areajson.dumps()` writes the canonical text: tabs, fields in the order of the area format, one map row, marker or list entry per line (a gangway cell is an entry), a zone one field per line. `tiled_to_area.py` always writes the canonical text, so regenerating an unchanged map changes nothing. The tests convert every file in `game/data/areas` to a map and back and require both equality and identical canonical text.

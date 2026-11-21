@@ -70,6 +70,7 @@ SAMPLE_WINDOW_SCRIPT = monogame/Psiv.Sample/scripts/window.txt
 SAMPLE_BATTLE_SCRIPT = monogame/Psiv.Sample/scripts/battle.txt
 SAMPLE_BATTLE_FRONT_SCRIPT = monogame/Psiv.Sample/scripts/battle_front.txt
 SAMPLE_BATTLE_CHANGES_SCRIPT = monogame/Psiv.Sample/scripts/battle_changes.txt
+SAMPLE_FELLS_SCRIPT = monogame/Psiv.Sample/scripts/fells.txt
 SAMPLE_VEHICLES_SCRIPT = monogame/Psiv.Sample/scripts/vehicles.txt
 SAMPLE_ASSETS_SCRIPT = monogame/Psiv.Sample/scripts/assets.txt
 SAMPLE_RELOAD_SCRIPT = monogame/Psiv.Sample/scripts/hot_reload.txt
@@ -217,6 +218,15 @@ dotnet-test: dotnet
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_battle_changes_saves \
 		--script $(SAMPLE_BATTLE_CHANGES_SCRIPT) --frames 9600 > $(BUILD)/sample_battle_changes_headless.txt || (cat $(BUILD)/sample_battle_changes_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_battle_changes_headless.txt
+	rm -rf $(BUILD)/sample_fells_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_fells_saves \
+		--script $(SAMPLE_FELLS_SCRIPT) --frames 5600 > $(BUILD)/sample_fells_headless.txt || (cat $(BUILD)/sample_fells_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_fells_headless.txt
+	rm -rf $(BUILD)/sample_magic_defense_saves
+	python3 -I $(SAMPLE_SCRIPTS)/make_front_data.py $(GAME)/data $(CORE)/data $(BUILD)/magic_data --magic-defense
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/magic_data/game/data --dev --saves $(BUILD)/sample_magic_defense_saves \
+		--script $(SAMPLE_SCRIPTS)/magic_defense.txt --frames 1200 > $(BUILD)/sample_magic_defense_headless.txt || (cat $(BUILD)/sample_magic_defense_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_magic_defense_headless.txt
 	rm -rf $(BUILD)/sample_vehicles_saves
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_vehicles_saves --script $(SAMPLE_VEHICLES_SCRIPT) --frames 3200 --frame-digests $(BUILD)/digests_vehicles.txt > $(BUILD)/sample_vehicles_headless.txt \
 		|| (cat $(BUILD)/sample_vehicles_headless.txt; exit 1)

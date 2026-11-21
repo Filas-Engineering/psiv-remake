@@ -157,7 +157,7 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 				return fail("expected 'battle_record <version>'");
 			}
 			// Format 4 differs only in having no escape rating, and format 3 also has no member names.
-			if (version != kRecordFormatVersion && version != 5 && version != 4 && version != 3) {
+			if (version != kRecordFormatVersion && version != 6 && version != 5 && version != 4 && version != 3) {
 				return fail("record format " + t[1] + " is not supported (this build reads " + std::to_string(kRecordFormatVersion) + ")");
 			}
 			sawHeader = true;

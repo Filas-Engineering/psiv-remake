@@ -1,0 +1,596 @@
+The Bell at Tidewater (seed 6)
+title> new
+You arrive at Tidewater Landing.
+  (fade in 1)
+The ferry bumps against the pilings of Tidewater Landing.
+  (move dockhand to dock_front)
+  (move dockhand to greet_spot)
+  (face dockhand fighter)
+Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  (move dockhand to dock_front)
+  (move dockhand to 10 0 2)
+  (face dockhand dock_front)
+New job: The dockhand's lost crate.
+New encyclopedia entry: Tidewater Landing.
+[Autosaved to auto_0 (event end).]
+field> walk guide_front
+field> face north
+field> talk
+  (face guide fighter)
+Harbor Guide: You came about the bell? It rings every night at Bell Cove, east past the reeds.
+Will you look into it? [0] Yes [1] No
+event> choose 0
+Harbor Guide: Before you go: what should the harbor call you?
+menu> name Bryn
+Test Fighter will be called Bryn.
+Bryn: Tell the ferry I am staying a while.
+Harbor Guide: Then take my apprentices. One knows a spark or two, the other knows bandages.
+Test Mystic joins the party.
+Test Medic joins the party.
+[Autosaved to auto_1 (event end).]
+field> dev warp reed_path cache_front
+Developer tools changed this game. It and its saves are marked.
+You arrive at Reed Path.
+~ Test Mystic: Every step out here squelches. I am counting them.
+~ Test Medic: Count the bites instead. I am the one who has to dress them.
+[Autosaved to auto_2 (area entry).]
+field> s 2
+Test Scout: Heading for the cove? I have mapped these reeds twice over. I am coming along.
+Test Scout joins the party.
+[Autosaved to auto_0 (event end).]
+field> dev money 700
+field> dev warp cinder_quay pier_front
+You arrive at Cinder Quay.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+[Autosaved to auto_1 (area entry).]
+field> look
+  ###########N##
+  #..$.....R...#
+  #............#
+  #............#
+  #............>
+  #.....@......#
+  #~~~~~P~~~P~~#
+  ##############
+field> walk dock_front
+field> face south
+field> refused talk
+! The ferry is not running yet.
+field> walk bell_front
+field> face north
+field> talk
+You ring the old dock bell. Far out, a stone dock rises from the water, and a lantern barge noses in beside it.
+[Autosaved to auto_2 (event end).]
+field> look
+  ###########N##
+  #..$.....R.@.#
+  #............#
+  #............#
+  #............>
+  #............#
+  #~~~~~P~~~P~~#
+  ##############
+field> walk dock_front
+field> face south
+field> talk
+You walk aboard the Lantern Barge.
+You arrive at Lantern Barge.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+[Autosaved to auto_0 (area entry).]
+field> look
+  #########
+  #...H...#
+  G@......#
+  #.......#
+  #########
+field> walk 4 2
+field> face north
+field> talk
+Where will the ship sail?
+menu> destinations port
+  fell_dock: Ashfall Market (3,6)
+menu> travel port fell_dock
+You arrive at Ashfall Market.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+[Autosaved to auto_1 (area entry).]
+field> look
+  ################
+  #.$.$.$~.$.$...#
+  #......~.......#
+  #N....N~.......#
+  #......~.......>
+  #$..N..~......##
+  #..@..N~......N#
+  #~~P~~~~~~~~~~~#
+  ################
+field> walk lodge_front
+field> face west
+field> talk
+Lodge Keeper: One place left in your party, and two who would take it. Choose; you can come back and change your mind.
+Who takes the last place? [0] The lancer with the long blade [1] The harpooner with the disc and shield
+event> choose 0
+Test Lancer joins the party.
+field> gear lancer
+  Test Lancer: weapon kelp_cleaver, body padded_coat; strength 31, defense 12, attack strike.
+field> walk arms_front
+field> face north
+field> talk
+The shop is open.
+shop> stock
+  weapon shop ashfall_arms: gill_knife 30, kelp_cleaver 90.
+shop> buy gill_knife
+Bought 1 Gill Knife for 30.
+shop> buy kelp_cleaver
+Bought 1 Kelp Cleaver for 90.
+shop> leave
+field> walk armor_front
+field> face north
+field> talk
+The shop is open.
+shop> stock
+  armor shop ashfall_armor: driftwood_buckler 40, tin_cap 35, padded_coat 45.
+shop> buy driftwood_buckler 2
+Bought 2 Driftwood Buckler for 80.
+shop> leave
+field> walk tools_front
+field> face north
+field> talk
+The shop is open.
+shop> stock
+  tool shop ashfall_tools: tonic 8, homing_shell 40.
+shop> leave
+field> walk gifts_front
+field> face west
+field> talk
+The shop is open.
+shop> stock
+  gift shop ashfall_gifts: lantern_charm 20.
+shop> buy lantern_charm
+Bought 1 Lantern Charm for 20.
+shop> leave
+field> menu
+menu> gear fighter
+  Bryn: weapon copper_blade, head tin_cap, body padded_coat; strength 22, defense 15, attack strike.
+menu> equip fighter gill_knife left_hand
+Bryn equips Gill Knife.
+menu> gear fighter
+  Bryn: weapon copper_blade, head tin_cap, body padded_coat, left_hand gill_knife; strength 25, defense 15, attack strike.
+menu> equip fighter driftwood_buckler
+Bryn equips Driftwood Buckler.
+menu> gear fighter
+  Bryn: weapon copper_blade, head tin_cap, body padded_coat, left_hand driftwood_buckler; strength 22, defense 19, attack strike.
+menu> equip fighter driftwood_buckler weapon
+Bryn equips Driftwood Buckler.
+menu> gear fighter
+  Bryn: weapon driftwood_buckler, head tin_cap, body padded_coat, left_hand driftwood_buckler; strength 18, defense 23, attack strike.
+menu> equip fighter kelp_cleaver
+Bryn equips Kelp Cleaver.
+menu> gear fighter
+  Bryn: weapon kelp_cleaver, head tin_cap, body padded_coat; strength 30, defense 15, attack strike.
+menu> refused equip fighter kelp_cleaver left_hand
+! Kelp Cleaver cannot be worn there.
+menu> close
+field> walk bell_front
+field> face east
+field> talk
+You ring the storm bell. Doors slam along the street, and the market empties under a fall of ash.
+  (hide ashwife)
+  (hide lodgekeeper)
+[Autosaved to auto_2 (event end).]
+field> look
+  ################
+  #.$.$.$~.$.$...#
+  #......~.......#
+  #N....N~.......#
+  #......~.......>
+  #$..N..~......##
+  #....@N~......N#
+  #~~P~~~~~~~~~~~#
+  ################
+field> walk lodge_front
+field> face west
+field> refused talk
+! There is no answer.
+field> walk arms_front
+field> face north
+field> refused talk
+! The shop is closed.
+field> walk bell_front
+field> face east
+field> talk
+You ring the bell again. The ash settles, shutters open, and the market fills once more.
+  (show ashwife)
+  (show lodgekeeper)
+[Autosaved to auto_0 (event end).]
+field> walk bridge_west
+field> face east
+field> refused e
+! The way is blocked.
+field> face north
+field> talk
+Bridgewright: That gap won't stop you for long. Give me a moment and a few planks.
+[Autosaved to auto_1 (event end).]
+field> look
+  ################
+  #.$.$.$~.$.$...#
+  #......~.......#
+  #N....N~.......#
+  #.....@........>
+  #$..N..~......##
+  #.....N~......N#
+  #~~P~~~~~~~~~~~#
+  ################
+field> walk tools_front
+field> face north
+field> talk
+The shop is open.
+shop> stock
+  tool shop ashfall_tools: tonic 8, homing_shell 40, spark_flask 12.
+shop> leave
+field> walk lodge_front
+field> face west
+field> talk
+Want to trade your new companion for the other one? [0] Yes [1] No
+event> choose 0
+Test Lancer leaves the party.
+Test Harpooner joins the party.
+Lodge Keeper: Done. The other waits here, keeping in practice.
+field> gear lancer
+  Test Lancer: weapon kelp_cleaver, body padded_coat; strength 31, defense 12, attack strike.
+field> gear harpooner
+  Test Harpooner: weapon arc_disc, left_hand driftwood_buckler; strength 13, defense 12, attack disc_throw.
+field> walk fine_arms_front
+field> face north
+field> refused talk
+! The shop is closed.
+field> walk shrine_front
+field> face east
+field> talk
+A warm stone sits on the shrine's ledge. As you lift it, the shrine shudders.
+You arrive at Ashfall Market.
+  (warp ashfall_market shrine_out)
+Behind you the shrine's mouth closes with a grinding of rock. It will not open again.
+[Autosaved to auto_2 (event end).]
+field> look
+  ################
+  #.$.$.$~.$.$...#
+  #......~.......#
+  #N....N~.......#
+  #..............>
+  #$..N..~......##
+  #.....N~....@#N#
+  #~~P~~~~~~~~~~~#
+  ################
+field> walk east_gate
+field> e
+You arrive at Fell Moor.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+[Autosaved to auto_0 (area entry).]
+field> walk garage_front
+field> face north
+field> talk
+An old garage. Three engines wait under tarps, and a horn, a bell and a reed hang by their keys.
+The Dune Crawler is yours to ride.
+The Rime Borer is yours to ride.
+The Reed Skimmer is yours to ride.
+[Autosaved to auto_1 (after acquiring a vehicle).]
+field> look
+  ###N##############
+  #..@...:::...%...#
+  #.V.V..:::...%...#
+  #......:::...%...#
+  >......:::...%...>
+  #~~~~~.:::...%...#
+  #~.C~~V:::...%...#
+  #~~~~~.:::...%...#
+  ##################
+field> walk 6 4
+field> menu
+menu> item skimmer_reed
+The Reed Skimmer comes at your call, and you climb aboard.
+field> s 2
+field> w 2
+field> n
+field> w 2
+field> face south
+field> disembark
+You step off the Reed Skimmer.
+field> face east
+field> talk
+Found 2 Spark Flask.
+Found 60 money.
+field> menu
+menu> item skimmer_reed
+The Reed Skimmer comes at your call, and you climb aboard.
+field> n
+field> e 3
+field> s
+field> e
+field> disembark
+You step off the Reed Skimmer.
+field> menu
+menu> item dune_horn
+The Dune Crawler comes at your call, and you climb aboard.
+field> e 4
+field> disembark
+You step off the Dune Crawler.
+field> n 3
+field> s 3
+field> n 3
+Battle!
+Enemies: Squall Kite, Cinder Kite.
+-- round 1 --
+Combo: Pincer Dive.
+  Test Mystic takes 46 damage.
+  Test Mystic falls.
+Test Medic uses Glint on Cinder Kite.
+  Cinder Kite takes 47 damage.
+Test Scout uses Gust on Cinder Kite.
+  Cinder Kite takes 13 damage.
+  Cinder Kite falls.
+Test Mystic cannot act (Defeated).
+Bryn turns from Cinder Kite to Squall Kite.
+Bryn uses Focus Shot on Squall Kite.
+  Squall Kite takes 70 damage.
+  Squall Kite falls.
+Outcome: victory
+Victory. 24 experience, 12 money.
+field> s 3
+field> n 3
+field> menu
+menu> item rime_bell
+The Rime Borer comes at your call, and you climb aboard.
+field> walk 12 4
+field> face east
+field> e 4
+The Rime Borer breaks through the barrier.
+field> look
+  ###N##############
+  #......:::...%...#
+  #......:::...%...#
+  #......:::...%...#
+  >......:::......@>
+  #~~~~~.:::V..%...#
+  #~.c~~V:::...%...#
+  #~~~~~.:::...%...#
+  ##################
+field> e
+The Rime Borer waits outside.
+You arrive at Fell Vault, Upper Hall.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+[Autosaved to auto_2 (area entry).]
+field> walk switch_front
+field> face north
+field> talk
+You pull the lever. Somewhere stone slides against stone.
+[Autosaved to auto_0 (event end).]
+field> look
+  ##N######N#####
+  #.@.#...#..#..#
+  #...#...#..#..#
+  #...#...N..#..#
+  >.......#..#..N
+  #...#...#..#..#
+  #...#.>.#..#..#
+  #...#...#..#.>#
+  ###############
+field> walk 6 5
+field> s
+The floor gives way!
+You arrive at Fell Vault, Undercroft.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+[Autosaved to auto_1 (area entry).]
+field> walk key_front
+field> face east
+field> talk
+Found 1 Vault Key.
+field> walk 8 1
+You arrive at Fell Vault, Upper Hall.
+[Autosaved to auto_2 (area entry).]
+field> look
+  ##N######N#####
+  #...#...#.@#..#
+  #...#...#..#..#
+  #...#...N..#..#
+  >.......#..#..N
+  #...#...#..#..#
+  #...#.>.#..#..#
+  #...#...#..#.>#
+  ###############
+field> walk lens_front
+field> face north
+field> talk
+Through the lens set in the wall, the wall to the east wavers and is gone. It was never there.
+[Autosaved to auto_0 (event end).]
+field> look
+  ##N######N#####
+  #...#...#@.#..#
+  #...#...#..#..#
+  #...#...N..#..#
+  >.......#.....N
+  #...#...#..#..#
+  #...#.>.#..#..#
+  #...#...#..#.>#
+  ###############
+field> walk warden_front
+field> face east
+field> talk
+Embers stir in the iron shell. The bulwark rises.
+Battle!
+[Autosaved to auto_1 (before an event battle).]
+Enemies: Cinder Bulwark.
+-- round 1 --
+Test Scout uses Gust on Cinder Bulwark.
+  Cinder Bulwark takes 40 damage.
+Test Harpooner uses Glint on Cinder Bulwark.
+  Cinder Bulwark takes 29 damage.
+Cinder Bulwark uses Gear Slam on Test Harpooner.
+  Test Harpooner takes 36 damage.
+Bryn uses Focus Shot on Cinder Bulwark.
+  Cinder Bulwark takes 70 damage.
+Test Medic uses Rekindle on Test Mystic.
+  Test Mystic is revived.
+-- round 2 --
+Combo: Storm Spark.
+  A new combination joins the combo log.
+  Cinder Bulwark takes 116 damage.
+Bryn uses Focus Shot on Cinder Bulwark.
+  Cinder Bulwark takes 5 damage.
+  Cinder Bulwark falls.
+Outcome: victory
+Victory. 1600 experience, 300 money.
+Bryn reached level 4.
+Test Mystic reached level 4.
+Test Medic reached level 4.
+Test Medic learned Renew.
+Test Scout reached level 5.
+Test Harpooner reached level 4.
+Test Harpooner learned Rally Cry.
+Test Lancer reached level 4.
+Test Lancer learned Focus Shot.
+The bulwark cools and settles. Outside, the guild bell rings: the fine shops are open again.
+[Autosaved to auto_2 (event end).]
+field> status
+Mode field, Fell Vault, Upper Hall (13,4) facing east, play time 0:00:58.
+  Bryn Lv4 HP 86/94 TP 8/9 EXP 181
+  Test Mystic Lv4 HP 23/50 TP 27/33 EXP 175
+  Test Medic Lv4 HP 52/57 TP 20/35 EXP 181
+  Test Scout Lv5 HP 60/65 TP 9/20 EXP 76
+  Test Harpooner Lv4 HP 26/68 TP 10/13 EXP 181
+  Money 902. Items: dune_horn x1, lantern_charm x1, rime_bell x1, skimmer_reed x1, spark_flask x2, sunstone x1, tonic x3, vault_key x1, copper_blade x1, driftwood_buckler x2, gill_knife x1.
+field> walk 13 6
+field> s
+You arrive at Fell Vault, Upper Hall.
+field> walk lock_front
+field> face east
+field> talk
+The key turns. The door swings open.
+[Autosaved to auto_0 (event end).]
+field> look
+  ##N######N#####
+  #...#...#..#..#
+  #...#...#..#..#
+  #...#..@N..#..#
+  >.............N
+  #...#...#..#..#
+  #...#.>.#..#..#
+  #...#...#..#.>#
+  ###############
+field> walk 6 5
+field> s
+The floor gives way!
+You arrive at Fell Vault, Undercroft.
+[Autosaved to auto_1 (area entry).]
+field> walk cache_front
+field> face east
+field> talk
+Found 1 Reef Targe.
+Found 120 money.
+field> walk 8 1
+You arrive at Fell Vault, Upper Hall.
+[Autosaved to auto_2 (area entry).]
+field> walk 9 4
+field> w
+field> walk entry
+field> w
+You arrive at Fell Moor.
+[Autosaved to auto_0 (area entry).]
+field> menu
+menu> item dune_horn
+The Dune Crawler comes at your call, and you climb aboard.
+field> w 10
+field> disembark
+You step off the Dune Crawler.
+field> walk town_gate
+field> w
+You arrive at Ashfall Market.
+[Autosaved to auto_1 (area entry).]
+field> walk fine_arms_front
+field> face north
+field> talk
+The shop is open.
+shop> stock
+  weapon shop ashfall_fine_arms: kelp_cleaver 90, storm_rod 80.
+shop> leave
+field> walk fine_armor_front
+field> face north
+field> talk
+The shop is open.
+shop> stock
+  armor shop ashfall_fine_armor: reef_targe 75, rivet_plate 60, ward_mantle 65.
+shop> buy reef_targe
+Bought 1 Reef Targe for 75.
+shop> leave
+field> walk lodge_front
+field> face west
+field> talk
+Want to trade your new companion for the other one? [0] Yes [1] No
+event> choose 0
+Test Harpooner leaves the party.
+Test Lancer joins the party.
+Lodge Keeper: Done. The other waits here, keeping in practice.
+field> status
+Mode field, Ashfall Market (2,3) facing west, play time 0:01:17.
+  Bryn Lv4 HP 86/94 TP 8/9 EXP 181
+  Test Mystic Lv4 HP 23/50 TP 27/33 EXP 175
+  Test Medic Lv4 HP 52/57 TP 20/35 EXP 181
+  Test Scout Lv5 HP 60/65 TP 9/20 EXP 76
+  Test Lancer Lv4 HP 82/89 TP 8/9 EXP 181
+  Money 947. Items: dune_horn x1, lantern_charm x1, rime_bell x1, skimmer_reed x1, spark_flask x2, sunstone x1, tonic x3, vault_key x1, copper_blade x1, driftwood_buckler x2, gill_knife x1, reef_targe x2.
+field> gear lancer
+  Test Lancer: weapon kelp_cleaver, body padded_coat; strength 33, defense 13, attack strike.
+field> walk dock_front
+field> face south
+field> talk
+You walk aboard the Lantern Barge.
+You arrive at Lantern Barge.
+[Autosaved to auto_2 (area entry).]
+field> menu
+menu> save manual_0
+Saved to manual_0.
+menu> close
+field> walk 0 2
+You walk back ashore.
+You arrive at Ashfall Market.
+[Autosaved to auto_0 (area entry).]
+field> status
+Mode field, Ashfall Market (3,6) facing west, play time 0:01:18.
+  Bryn Lv4 HP 86/94 TP 8/9 EXP 181
+  Test Mystic Lv4 HP 23/50 TP 27/33 EXP 175
+  Test Medic Lv4 HP 52/57 TP 20/35 EXP 181
+  Test Scout Lv5 HP 60/65 TP 9/20 EXP 76
+  Test Lancer Lv4 HP 82/89 TP 8/9 EXP 181
+  Money 947. Items: dune_horn x1, lantern_charm x1, rime_bell x1, skimmer_reed x1, spark_flask x2, sunstone x1, tonic x3, vault_key x1, copper_blade x1, driftwood_buckler x2, gill_knife x1, reef_targe x2.
+field> title
+title> load manual_0
+Loaded manual_0.
+field> status
+Mode field, Lantern Barge (1,2) facing south, play time 0:01:18.
+  Bryn Lv4 HP 86/94 TP 8/9 EXP 181
+  Test Mystic Lv4 HP 23/50 TP 27/33 EXP 175
+  Test Medic Lv4 HP 52/57 TP 20/35 EXP 181
+  Test Scout Lv5 HP 60/65 TP 9/20 EXP 76
+  Test Lancer Lv4 HP 82/89 TP 8/9 EXP 181
+  Money 947. Items: dune_horn x1, lantern_charm x1, rime_bell x1, skimmer_reed x1, spark_flask x2, sunstone x1, tonic x3, vault_key x1, copper_blade x1, driftwood_buckler x2, gill_knife x1, reef_targe x2.
+field> look
+  #########
+  #...H...#
+  G@......#
+  #.......#
+  #########
+field> walk 4 2
+field> face north
+field> talk
+Where will the ship sail?
+menu> travel port quay_dock
+You arrive at Cinder Quay.
+[Autosaved to auto_1 (area entry).]
+field> status
+Mode field, Cinder Quay (10,5) facing north, play time 0:01:18.
+  Bryn Lv4 HP 86/94 TP 8/9 EXP 181
+  Test Mystic Lv4 HP 23/50 TP 27/33 EXP 175
+  Test Medic Lv4 HP 52/57 TP 20/35 EXP 181
+  Test Scout Lv5 HP 60/65 TP 9/20 EXP 76
+  Test Lancer Lv4 HP 82/89 TP 8/9 EXP 181
+  Money 947. Items: dune_horn x1, lantern_charm x1, rime_bell x1, skimmer_reed x1, spark_flask x2, sunstone x1, tonic x3, vault_key x1, copper_blade x1, driftwood_buckler x2, gill_knife x1, reef_targe x2.
+End of script.

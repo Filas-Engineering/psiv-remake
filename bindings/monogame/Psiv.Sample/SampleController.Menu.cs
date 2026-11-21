@@ -252,7 +252,8 @@ public sealed partial class SampleController
 			s.Text(T("ui.items.none"), x + 14, y, Style.Dim);
 		}
 		int descH = Px(56);
-		DrawItems(s, _list, x, y, listW, h - descH, items.Select(i => T("ui.common.item_count", i.Name, i.Count) + (i.Field ? "" : "  " + T("ui.items.battle_only"))).ToList(), _pickAction is null);
+		DrawItems(s, _list, x, y, listW, h - descH, items.Select(i => T("ui.common.item_count", i.Name, i.Count) +
+			(i.CallsVehicle.Length > 0 ? "  " + T("ui.items.calls", _s.DisplayName(i.CallsVehicle)) : i.Field ? "" : "  " + T("ui.items.battle_only"))).ToList(), _pickAction is null);
 		if (items.Count > 0)
 		{
 			s.Fill(x, y + h - descH, listW - 14, 1, Style.PanelEdge * 0.4f);

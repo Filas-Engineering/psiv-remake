@@ -38,6 +38,8 @@ All in `core/data/` (or the directory `--core` names). Full reference: [core/REA
 
 ### rules.json
 
+Optional rule switches, each defaulting to the placeholder's rule: `affinity_divisor` (what affinities are divided by: 100 for percents, 4 for the original's factors), `magic_defense` (elemental damage subtracts the `magic_defense` stat in place of mental) and `instant_defeat_kinds` (party member kinds that instant defeat can fell). Reference: [rules.json](../core/README.md#rulesjson).
+
 Battle rules that wait on measurements of the original, such as surprise rounds and whether rest revives. Reference: [rules.json](../core/README.md#rulesjson). Every field is required.
 
 ### statuses.json
@@ -50,25 +52,25 @@ Basic attacks, techniques, skills and combo results, each with its target rule a
 
 ### items.json
 
-Consumables, using the same targets and effects as abilities with flat power. Reference: [items.json](../core/README.md#itemsjson).
+Consumables, using the same targets and effects as abilities with flat power. An item without `effects` is a key item (a key, a quest item, a vehicle's call item), which the game gives its use. Reference: [items.json](../core/README.md#itemsjson).
 
 Fast travel the original has (FLD-051, FLD-052) is an effect: `{"type": "travel", "to": "town"}` (back to a visited town of the region, outside dungeons) or `{"type": "travel", "to": "dungeon_exit"}` (out of the dungeon the party is in), alone on a `field` technique or item that targets `all_allies`. The game decides where the party may go; core takes only the cost and refuses it in battle.
 
 ### equipment.json
 
-Weapons and armor: slot, category, stat bonuses, a weapon's element or replacement attack, granted abilities and status resistances. Reference: [equipment.json](../core/README.md#equipmentjson).
+Weapons, shields and armor: slot (`weapon` and `shield` go in either hand), category, `hands: 2` for a two-handed weapon, stat bonuses, a weapon's element or replacement attack, granted abilities and status resistances. Reference: [equipment.json](../core/README.md#equipmentjson).
 
 ### party.json
 
-Characters (base stats, growth, basic attack, abilities known and learned, what they can wear and start in), vehicles, the starting lineup, inventory and spare equipment, and the macros. Reference: [party.json](../core/README.md#partyjson) and [Vehicle battles](../core/README.md#vehicle-battles).
+Characters (base stats, growth, basic attack, abilities known and learned, what they can wear and start in, `vulnerable` to enemy instant defeat), vehicles, the starting lineup, inventory and spare equipment, and the macros. Reference: [party.json](../core/README.md#partyjson) and [Vehicle battles](../core/README.md#vehicle-battles).
 
 ### enemies.json
 
-Enemies (stats, abilities, the eight AI slots, overrides, affinities, rewards) and encounters (enemy groups in formation order, escape and opening numbers, drops). Reference: [enemies.json](../core/README.md#enemiesjson).
+Enemies (stats with an optional `magic_defense`, abilities, the eight AI slots, overrides, affinities, rewards, `flying` for the renderer, `next_form` and `next_form_at` for a form taken at a percent of hit points) and encounters (enemy groups in formation order, escape and opening numbers, drops). Reference: [enemies.json](../core/README.md#enemiesjson).
 
 ### combos.json
 
-Combination recipes, compared in data order. Reference: [combos.json](../core/README.md#combosjson).
+Combination recipes, compared in data order, and `enemy_combos`, the enemies' joint attacks. Reference: [combos.json](../core/README.md#combosjson).
 
 ### difficulties.json
 
@@ -121,7 +123,9 @@ Optional presentation data, none of which is part of the content hash, so it can
 
 One JSON file per area: the cell grid, markers, exits, hooks, shops, rest points, chests and encounter zones, and an optional `music` track (`"music": "town_tide_bells"`, an id from `presentation.audio`; the Tiled map property of the same name). Reference: [Areas](../game/README.md#areas). Draw them in Tiled and convert with [tools/maps](../tools/maps/README.md), or write the JSON directly. The display name is the text key `area.<id>`. An interact hook may stand on a wall or water cell (a sign, a ladder): the party uses it from a floor cell beside it, which the check makes sure it can reach. Give a person's interact hook the id of its actor in `game.json`'s `actors`: the actor then stands on that cell until a script moves it (see [Actors](../game/README.md#actors)).
 
-Travel data lives in areas too: `region` groups areas into a world or region (a return to a town reaches the visited towns of the party's region), a town's `arrival` names the marker a return lands on, and `ports` are the transport between regions (a port stands on any cell like an interact hook, lands travellers on its `marker`, and opens once its `flag` is set). The Tiled converter carries `region` and `arrival` as map properties and ports as objects of class `port`.
+Travel data lives in areas too: `region` groups areas into a world or region (a return to a town reaches the visited towns of the party's region), a town's `arrival` names the marker a return lands on, and `ports` are the transport between regions (a port stands on any cell like an interact hook, lands travellers on its `marker`, and opens once its `flag` is set). The Tiled converter carries `region` and `arrival` as map properties and ports as objects of class `port`. A port with a `ship` puts the party aboard a `vessel` area (its `arrival` marker, `helms`, `gangway`).
+
+Story and dungeon changes are area data too: `changes` turn cells to another tile while a flag is set (bridges, sealed places, gates, illusions), an exit with `fall` is a pit, an exit within the area a transport tile, map rows may hold soft ground `:` and barriers `%` for vehicles (`game.json` `crosses`, `breaks`, `call_item`), and shops take a `kind`, flag-gated `stock` entries and `require_flag`/`block_flag`. The rest (switches, locked doors, story barriers) are scripts setting those flags, with the script tests `item <id>` and `party <member>`.
 
 ### Events
 
@@ -133,7 +137,9 @@ A route (`routes/*.route`) is a list of terminal commands the pacing bot plays f
 
 ### Text tables
 
-Per language, a dialogue string table `text/<code>.strings` (format: [events/FORMAT.md, "String tables"](../events/FORMAT.md#string-tables)) and a text table `text/<code>.json` (core's `{"text": {...}}` format). Every language must have the source language's keys, except descriptions.
+Per language, a dialogue string table `text/<code>.strings` (format: [events/FORMAT.md, "String tables"](../events/FORMAT.md#string-tables)) and a text table `text/<code>.json` (core's `{"text": {...}}` format). Every language must have the source language's keys, except descriptions and names.
+
+Names are optional keys too: `name.<kind>.<id>` (kind `character`, `ability`, `item`, `equipment`, `status`, `enemy`, `vehicle` or `difficulty`) gives a thing's name in that language, in place of the battle data's English name; a key naming nothing the battle data has is reported. They are left out of the content hash.
 
 Descriptions (UI-007) are optional keys of the text tables: `desc.<kind>.<id>`, where kind is `item`, `equipment`, `ability`, `status`, `enemy` or `difficulty` and id is an id of that kind in the battle data. Each language has its own or none; a missing one shows as empty. They are left out of the content hash. `python3 -I tools/text/cli.py descriptions --text game/data/text/en.json --text game/data/text/ja.json --core core/data` counts them per kind and lists what has none.
 

@@ -1,6 +1,7 @@
 #include "rules/progression.h"
 
 #include "rules/formulas.h"
+#include "rules/names.h"
 
 #include <algorithm>
 
@@ -28,8 +29,8 @@ void clampResources(PartyMember& member, const Database& db) {
 }
 
 // A granted skill keeps its uses when the piece comes off, so swapping equipment never refills it.
-void putOn(PartyMember& member, const Database& db, const EquipmentDef& piece) {
-	member.equipment[piece.slot] = piece.id;
+void putOn(PartyMember& member, const Database& db, const EquipmentDef& piece, EquipSlot position) {
+	member.equipment[position] = piece.id;
 	for (const std::string& id : piece.abilities) {
 		grantSkillUses(member, db, id);
 	}
@@ -52,6 +53,7 @@ Stats statsAtLevel(const CharacterDef& character, int level) {
 	s.defense = b.defense + g.defense * gained;
 	s.critical = b.critical + g.critical * gained;
 	s.evasion = b.evasion + g.evasion * gained;
+	s.magicDefense = b.magicDefense + g.magicDefense * gained;
 	s.level = gained + 1;
 	return s;
 }
@@ -77,6 +79,7 @@ Stats memberStats(const Database& db, const PartyMember& member) {
 		s.defense += b.defense;
 		s.critical += b.critical;
 		s.evasion += b.evasion;
+		s.magicDefense += b.magicDefense;
 	}
 	s.maxHp = std::max(1, s.maxHp);
 	s.maxTp = std::max(0, s.maxTp);
@@ -87,6 +90,7 @@ Stats memberStats(const Database& db, const PartyMember& member) {
 	s.defense = std::max(0, s.defense);
 	s.critical = std::clamp(s.critical, 0, 100);
 	s.evasion = std::clamp(s.evasion, 0, 100);
+	s.magicDefense = std::max(0, s.magicDefense);
 	return s;
 }
 
@@ -123,7 +127,8 @@ PartyMember makePartyMember(const Database& db, const CharacterDef& character, i
 	member.level = std::clamp(level, 1, formulas::kMaxLevel);
 	for (const std::string& id : character.startingEquipment) {
 		if (canEquip(db, character.id, id).empty()) {
-			putOn(member, db, *db.equipmentPiece(id));
+			const EquipmentDef& piece = *db.equipmentPiece(id);
+			putOn(member, db, piece, startingPosition(member.equipment, piece));
 		}
 	}
 	rest(member, db);
@@ -162,24 +167,69 @@ Message canEquip(const Database& db, const std::string& characterId, const std::
 	return {};
 }
 
+bool isHandPiece(const EquipmentDef& piece) {
+	return piece.slot == EquipSlot::Weapon || piece.slot == EquipSlot::Shield;
+}
+
+EquipSlot defaultPosition(const EquipmentDef& piece) {
+	return piece.slot == EquipSlot::Shield ? EquipSlot::LeftHand : piece.slot;
+}
+
+bool fitsPosition(const EquipmentDef& piece, EquipSlot position) {
+	if (!isHandPiece(piece)) {
+		return position == piece.slot;
+	}
+	return position == EquipSlot::Weapon || (position == EquipSlot::LeftHand && piece.hands == 1);
+}
+
+EquipSlot startingPosition(const std::map<EquipSlot, std::string>& worn, const EquipmentDef& piece) {
+	const EquipSlot first = defaultPosition(piece);
+	if (!isHandPiece(piece) || piece.hands == 2 || !worn.count(first)) {
+		return first;
+	}
+	return first == EquipSlot::Weapon ? EquipSlot::LeftHand : EquipSlot::Weapon;
+}
+
 Message equip(PartyMember& member, const Database& db, EquipmentBag& bag, const std::string& equipmentId) {
+	const EquipmentDef* piece = db.equipmentPiece(equipmentId);
+	return equip(member, db, bag, equipmentId, piece ? defaultPosition(*piece) : EquipSlot::Weapon);
+}
+
+Message equip(PartyMember& member, const Database& db, EquipmentBag& bag, const std::string& equipmentId, EquipSlot position) {
 	const Message refused = canEquip(db, member.characterId, equipmentId);
 	if (!refused.empty()) {
 		return refused;
+	}
+	const EquipmentDef& piece = *db.equipmentPiece(equipmentId);
+	if (!fitsPosition(piece, position)) {
+		return {"equip.wrong_position", {equipmentId, toString(position)}};
 	}
 	const auto held = bag.find(equipmentId);
 	if (held == bag.end() || held->second <= 0) {
 		return {"equip.not_in_bag", {equipmentId}};
 	}
-	const EquipmentDef& piece = *db.equipmentPiece(equipmentId);
 	if (--held->second == 0) {
 		bag.erase(held);
 	}
-	const auto worn = member.equipment.find(piece.slot);
-	if (worn != member.equipment.end()) {
-		++bag[worn->second];
+	std::vector<EquipSlot> freed = {position};
+	if (piece.hands == 2) {
+		freed.push_back(EquipSlot::LeftHand);
 	}
-	putOn(member, db, piece);
+	const auto right = member.equipment.find(EquipSlot::Weapon);
+	if (position == EquipSlot::LeftHand && right != member.equipment.end()) {
+		const EquipmentDef* holding = db.equipmentPiece(right->second);
+		if (holding && holding->hands == 2) {
+			freed.push_back(EquipSlot::Weapon);
+		}
+	}
+	for (EquipSlot slot : freed) {
+		const auto worn = member.equipment.find(slot);
+		if (worn != member.equipment.end()) {
+			++bag[worn->second];
+			member.equipment.erase(worn);
+		}
+	}
+	putOn(member, db, piece, position);
 	return {};
 }
 

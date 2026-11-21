@@ -66,9 +66,11 @@ public sealed partial class SampleController
 		int h = Px(40) + listH + descH;
 		int x = (s.Width - w) / 2;
 		int y = Math.Max(96, (s.Height - h) / 2 - 60);
-		string title = port ? T("ui.travel.ferry") : _travelPick is { } pick ? _s.DisplayName(pick.Thing) : T("ui.travel.title");
+		// At a ship's helm the same list is the ship's ports.
+		bool helm = port && _s.FieldInfo()?.AreaKind == AreaKind.Vessel;
+		string title = helm ? T("ui.travel.ship") : port ? T("ui.travel.ferry") : _travelPick is { } pick ? _s.DisplayName(pick.Thing) : T("ui.travel.title");
 		Style.Window(s, x - 24, y - 40, w + 48, h + 64, title);
-		string question = T(port ? "ui.travel.ferry_question" : _travelPick?.Kind == TravelKind.DungeonExit ? "ui.travel.exit_question" : "ui.travel.town_question");
+		string question = T(helm ? "ui.travel.ship_question" : port ? "ui.travel.ferry_question" : _travelPick?.Kind == TravelKind.DungeonExit ? "ui.travel.exit_question" : "ui.travel.town_question");
 		s.Text(question, x, y, Style.Accent);
 		DrawItems(s, _travelList, x, y + Px(40), w, listH, labels);
 		_probeSelected = labels[Math.Clamp(_travelList.Cursor, 0, labels.Count - 1)];

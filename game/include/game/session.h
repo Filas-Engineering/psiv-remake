@@ -270,8 +270,12 @@ struct CombatView {
 struct EquipPreview {
 	std::string member;
 	rules::EquipmentDef piece;
-	// The piece worn in that slot now, or empty.
+	// Where the piece would go (P10).
+	rules::EquipSlot position = rules::EquipSlot::Weapon;
+	// The piece worn there now, or empty.
 	std::string replaces;
+	// The other hand's piece it also sends back to the bag: beside a two-handed weapon, or held when one goes on.
+	std::string alsoReplaces = {};
 	// Empty when the member can wear the piece, otherwise core's refusal (equip.wrong_category).
 	rules::Message refusal;
 	// Lineup members whose equipment categories allow the piece, in lineup order.
@@ -356,7 +360,10 @@ public:
 	const ModeMachine& modes() const { return modes_; }
 	const World& world() const { return world_; }
 	World& world() { return world_; }
+	// The party's area as it stands now: its cell changes whose flags are set and the barriers broken in it applied to
+	// its rows (F3, F8, F10). areaAt gives any area the same way.
 	const Area* area() const;
+	const Area* areaAt(const std::string& id) const;
 	EncounterMode encounterMode() const;
 	PacingRecorder& pacing() { return pacing_; }
 	const PacingRecorder& pacing() const { return pacing_; }
@@ -483,6 +490,9 @@ public:
 	rules::Message closeMenu();
 	MenuKind menuKind() const { return mode() == Mode::Menu ? menuKind_ : MenuKind::None; }
 	const Shop* shop() const;
+	// A shop is open while its flags hold, and sells the stock entries whose flags hold (F7, F10).
+	bool shopOpen(const Shop& shop) const;
+	std::vector<std::string> stock(const Shop& shop) const;
 	const RestPoint* inn() const;
 	rules::Message buy(const std::string& id, int count);
 	rules::Message sell(const std::string& id, int count);
@@ -492,6 +502,8 @@ public:
 	rules::Message useItem(const std::string& item, const std::string& member);
 	rules::Message useAbility(const std::string& user, const std::string& ability, const std::string& member);
 	rules::Message equip(const std::string& member, const std::string& equipment);
+	// At a position the piece fits: a hand for weapons and shields (P10).
+	rules::Message equip(const std::string& member, const std::string& equipment, rules::EquipSlot position);
 	rules::Message unequip(const std::string& member, rules::EquipSlot slot);
 	// From the field menu, or from a save prompt an event opened.
 	rules::Message saveManual(const std::string& slot);
@@ -535,6 +547,7 @@ public:
 	std::vector<BagEntry> bag(ItemSort order) const;
 	// Empty for a character not in the roster or a piece that is not equipment. The piece need not be in the bag.
 	std::optional<EquipPreview> equipPreview(const std::string& member, const std::string& piece) const;
+	std::optional<EquipPreview> equipPreview(const std::string& member, const std::string& piece, rules::EquipSlot position) const;
 
 	// Developer tools (docs/dev-tools.md). Every command that changes the game marks it (World::devMarked, kept in its
 	// saves): from then on it writes no clear-data record and adds nothing to the pacing numbers. devList only reads.
@@ -631,6 +644,8 @@ private:
 	void endEvent();
 	void dropEvent();
 	void openChest(const Chest& chest);
+	void boardShip(const Port& port);
+	rules::Message callVehicle(const FieldVehicle& vehicle);
 	void applyActorAction(const events::Action& action);
 	std::optional<Cell> actorCell(const std::string& actor) const;
 	void giveThing(const std::string& id, int count);
@@ -691,6 +706,8 @@ private:
 	events::Handle menuHandle_ = 0;
 	int autosaveCount_ = 0;
 	bool encountersOn_ = true;
+	// Per area: the flags and broken cells its rows were built for, and the copy area() hands out.
+	mutable std::map<std::string, std::pair<std::string, Area>> areaViews_;
 
 	std::unique_ptr<events::Interpreter> interpreter_;
 	std::map<events::Handle, HandleState> handles_;

@@ -1,0 +1,43 @@
+{
+	"id": "fell_vault",
+	"kind": "dungeon",
+	"encounter_mode": "random",
+	"step_ms": 250,
+	"region": "fells",
+	"map": [
+		"###############",
+		"#...#...#..#..#",
+		"#...#...#..#..#",
+		"#...#...#..#..#",
+		"....#...#..#..#",
+		"#...#...#..#..#",
+		"#...#...#..#..#",
+		"#...#...#..#..#",
+		"###############"
+	],
+	"markers": {
+		"entry": [1, 4],
+		"glyph_landing": [2, 7],
+		"switch_front": [2, 1],
+		"lock_front": [7, 3],
+		"stair_top": [10, 1],
+		"lens_front": [9, 1],
+		"warden_front": [13, 4]
+	},
+	"exits": [
+		{"at": [0, 4], "to": "fell_moor", "marker": "east_gate"},
+		{"at": [6, 6], "to": "fell_vault_lower", "marker": "pit_landing", "fall": true},
+		{"at": [13, 7], "to": "fell_vault", "marker": "glyph_landing"}
+	],
+	"hooks": [
+		{"id": "vault_switch", "at": [2, 0], "event": "vault_switch"},
+		{"id": "vault_lock", "at": [8, 3], "event": "vault_lock"},
+		{"id": "vault_lens", "at": [9, 0], "event": "vault_lens"},
+		{"id": "vault_warden", "at": [14, 4], "event": "vault_warden", "block_flag": "fells.vault_cleared"}
+	],
+	"changes": [
+		{"flag": "fells.vault_switch", "tile": ".", "cells": [[4, 4]]},
+		{"flag": "fells.vault_door_open", "tile": ".", "cells": [[8, 4]]},
+		{"flag": "fells.illusion_lifted", "tile": ".", "cells": [[11, 4]]}
+	]
+}

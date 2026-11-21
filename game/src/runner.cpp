@@ -270,6 +270,24 @@ void Runner::status() {
 	}
 }
 
+// The developer commands a script uses to reach a part of the adventure directly; each marks the game.
+void Runner::dev(const std::vector<std::string>& w) {
+	int n = 0;
+	if (w[1] == "warp" && w.size() == 4) {
+		report(session_.devWarp(w[2], w[3]));
+	} else if (w[1] == "flag" && w.size() == 4 && (w[3] == "on" || w[3] == "off")) {
+		report(session_.devSetFlag(w[2], w[3] == "on"));
+	} else if (w[1] == "give" && w.size() == 4 && toInt(w[3], n)) {
+		report(session_.devGive(w[2], n));
+	} else if (w[1] == "money" && w.size() == 3 && toInt(w[2], n)) {
+		report(session_.devMoney(n));
+	} else if (w[1] == "level" && w.size() == 4 && toInt(w[3], n)) {
+		report(session_.devSetLevel(w[2], n));
+	} else {
+		error("unknown dev command");
+	}
+}
+
 void Runner::walkTo(Cell goal) {
 	PathWalk walk = session_.beginWalk(goal);
 	for (;;) {
@@ -299,6 +317,20 @@ bool Runner::execute(const std::string& rawLine) {
 	}
 	if (options_.echo) {
 		print(prompt() + line.substr(line.find_first_not_of(" \t")));
+	}
+	// `refused COMMAND` runs the command and passes only when the game refuses it, so a script can show a refusal.
+	if (w[0] == "refused" && w.size() > 1) {
+		const int before = errors_;
+		const bool echo = options_.echo;
+		options_.echo = false;
+		const bool more = execute(line.substr(line.find("refused") + 7));
+		options_.echo = echo;
+		if (errors_ == before) {
+			error("'" + line.substr(line.find("refused") + 8) + "' was not refused");
+		} else {
+			errors_ = before;
+		}
+		return more;
 	}
 	const std::string& cmd = w[0];
 	const Mode mode = session_.mode();
@@ -473,6 +505,35 @@ bool Runner::execute(const std::string& rawLine) {
 		}
 	} else if (cmd == "equip" && w.size() == 3) {
 		report(session_.equip(w[1], w[2]));
+	} else if (cmd == "equip" && w.size() == 4) {
+		rules::EquipSlot position;
+		if (!rules::parseEquipSlot(w[3], position)) {
+			error("unknown slot '" + w[3] + "'");
+		} else {
+			report(session_.equip(w[1], w[2], position));
+		}
+	} else if (cmd == "gear" && w.size() == 2) {
+		const rules::PartyMember* m = session_.world().member(w[1]);
+		if (!m) {
+			error("'" + w[1] + "' has not joined");
+		} else {
+			std::string worn;
+			for (const auto& [slot, id] : m->equipment) {
+				worn += std::string(worn.empty() ? "" : ", ") + rules::toString(slot) + " " + id;
+			}
+			const rules::Combatant c = rules::memberCombatant(session_.data().db, *m);
+			print("  " + session_.displayName(w[1]) + ": " + (worn.empty() ? "nothing" : worn) + "; strength " + std::to_string(c.stats.strength) + ", defense " +
+				std::to_string(c.stats.defense) + ", attack " + c.basicAttack + ".");
+		}
+	} else if (cmd == "stock" && mode == Mode::Shop) {
+		const Shop* shop = session_.shop();
+		std::string sold;
+		for (const std::string& id : session_.stock(*shop)) {
+			sold += (sold.empty() ? "" : ", ") + id + " " + std::to_string(session_.data().price(id));
+		}
+		print("  " + std::string(toString(shop->kind)) + " shop " + shop->id + ": " + (sold.empty() ? "nothing" : sold) + ".");
+	} else if (cmd == "dev" && w.size() >= 2) {
+		dev(w);
 	} else if (cmd == "unequip" && w.size() == 3) {
 		rules::EquipSlot slot;
 		if (!rules::parseEquipSlot(w[2], slot)) {
@@ -540,6 +601,8 @@ bool Runner::execute(const std::string& rawLine) {
 			for (const Shop& s : a->shops) if (s.at) put(*s.at, '$');
 			for (const RestPoint& r : a->rests) if (r.at) put(*r.at, 'R');
 			for (const Port& p : a->ports) put(p.at, 'P');
+			for (const Helm& h : a->helms) put(h.at, 'H');
+			for (Cell g : a->gangway) put(g, 'G');
 			for (const VehicleView& v : session_.vehiclesHere()) put(v.cell, 'V');
 			for (const VisibleEnemy& e : session_.world().enemies) put(e.position, e.state == EnemyState::Chasing ? '!' : 'E');
 			put(session_.world().position, '@');

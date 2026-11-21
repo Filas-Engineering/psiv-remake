@@ -37,6 +37,7 @@ const char* const kFixedKeys[] = {
 	"equip.unknown_character",
 	"equip.unknown_equipment",
 	"equip.wrong_category",
+	"equip.wrong_position",
 	"field.no_stock",
 	"field.no_target",
 	"field.no_uses_left",

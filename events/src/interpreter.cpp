@@ -414,8 +414,14 @@ void Interpreter::write_var(const std::string& name, std::int64_t value) {
 bool Interpreter::evaluate(const Condition& condition) {
 	for (const Term& term : condition.terms) {
 		bool value;
-		if (term.vehicle != VehicleTest::none) {
-			value = term.vehicle == VehicleTest::owns ? host_.has_vehicle(term.name) : host_.aboard_vehicle(term.name);
+		if (term.test == TermTest::owns) {
+			value = host_.has_vehicle(term.name);
+		} else if (term.test == TermTest::aboard) {
+			value = host_.aboard_vehicle(term.name);
+		} else if (term.test == TermTest::member) {
+			value = host_.in_party(term.name);
+		} else if (term.test == TermTest::holds) {
+			value = host_.item_count(term.name) > 0;
 		} else if (term.is_flag) {
 			value = read_flag(term.name);
 		} else {

@@ -46,7 +46,7 @@ press Enter
 press Right
 press Enter
 expect state page target
-expect statehas selected Test Fighter
+expect statehas selected 戦士
 press Escape
 press Escape
 expect state page members
@@ -65,11 +65,11 @@ press T
 press T
 expect state itemsort id
 
-# Equip: the fighter's weapon slot and taking the blade off, not done.
+# Equip: the fighter's right hand and taking the blade off, not done.
 press Right
 expect state tab Equip
 press Enter
-expect statehas selected 武器:
+expect statehas selected 右手:
 press Enter
 expect state page pieces
 expect statehas selected を外す
@@ -120,7 +120,7 @@ press Enter
 expect state selected おまかせ
 press Enter
 expect state page steps
-expect state macro.Ja Test Fighter: 攻撃 -> おまかせ
+expect state macro.Ja 戦士: 攻撃 -> おまかせ
 press Enter
 expect state page stepactions
 expect state selected 変更
@@ -230,6 +230,8 @@ shot build/shots/ja_battle_options.png
 press Escape
 press Enter
 expect state battlephase Target
+expect statehas shown 術師
+expect statehas battlemenu ゲルダニ
 press Enter
 press Enter
 press Enter

@@ -367,6 +367,16 @@ end
 	CHECK(test::has_diagnostic(bad, 7, "expected 'give', 'place' or 'remove'"));
 }
 
+TEST(party_and_item_tests_name_listed_members_and_items) {
+	Registry r = registry_ok();
+	r.add(NameKind::member, "scout");
+	r.add(NameKind::item, "rusty_key");
+	CHECK(compile_with(r, "event e unskippable\n\tif party scout and item rusty_key\n\t\tparty remove scout\n\tend\nend\n").empty());
+	auto bad = compile_with(r, "event e unskippable\n\tif party engineer or item brass_key\n\t\tparty remove scout\n\tend\nend\n");
+	CHECK(test::has_diagnostic(bad, 2, "unknown party member 'engineer'"));
+	CHECK(test::has_diagnostic(bad, 2, "unknown item 'brass_key'"));
+}
+
 TEST(learn_names_a_member_and_an_ability_and_follower_an_actor) {
 	Registry r = registry_ok();
 	r.add(NameKind::member, "medic");

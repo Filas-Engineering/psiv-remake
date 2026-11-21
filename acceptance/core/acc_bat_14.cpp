@@ -42,6 +42,9 @@ ACC_CHECK(acc_bat_14, "ACC-BAT-14", "BAT-112") {
 	for (const ComboRecipe& recipe : db.combos) {
 		combos.insert(recipe.id);
 	}
+	for (const EnemyComboRecipe& recipe : db.enemyCombos) {
+		combos.insert(recipe.id);
+	}
 	std::set<std::string> macros;
 	for (const Macro& macro : db.macros) {
 		macros.insert(macro.name);

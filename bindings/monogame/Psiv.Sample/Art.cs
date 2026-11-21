@@ -257,7 +257,7 @@ public sealed partial class Art
 
 	public static Theme ThemeOf(AreaKind kind) => kind switch
 	{
-		AreaKind.Town => Theme.Town,
+		AreaKind.Town or AreaKind.Vessel => Theme.Town,
 		AreaKind.Dungeon => Theme.Dungeon,
 		_ => Theme.Field,
 	};

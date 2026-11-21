@@ -23,6 +23,7 @@ public sealed partial class SampleController
 	private string _probeFigures = "-";
 	private string _probeOverlaps = "-";
 	private string _probeMarks = "none";
+	private string _probeFlying = "none";
 	// Where the command window's middle goes, from the members' arrangement; -1 to place it by the actor.
 	private int _commandX = -1;
 
@@ -266,8 +267,11 @@ public sealed partial class SampleController
 			Rectangle r = bodies[i];
 			targets.Add((all[i].Name, new Rectangle(r.X, r.Y, r.Width, Math.Max(0, StripTop - r.Y))));
 		}
+		if (!stage.Banner.IsEmpty)
+		{
+			covers.Add(("name plate", stage.Banner));
+		}
 		var overlaps = covers.SelectMany(c => targets.Where(t => c.Box.Intersects(t.Box)).Select(t => $"{c.Name} over {t.Name}")).ToList();
-		overlaps.AddRange(stage.Labels.Where(l => !stage.Banner.IsEmpty && stage.Banner.Intersects(l.Value)).Select(l => $"name plate over {l.Key} label"));
 		_probeOverlaps = overlaps.Count == 0 ? "none" : string.Join(", ", overlaps);
 		int enemies = Math.Max(1, _show.Slots);
 		_probeRanks = enemies <= 4 ? enemies.ToString(System.Globalization.CultureInfo.InvariantCulture) : $"{(enemies + 1) / 2}+{enemies / 2}";
@@ -282,6 +286,7 @@ public sealed partial class SampleController
 		"figures" => _probeFigures,
 		"overlaps" => _probeOverlaps,
 		"marks" => _probeMarks,
+		"flying" => _probeFlying,
 		_ => "?",
 	};
 }

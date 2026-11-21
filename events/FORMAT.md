@@ -123,7 +123,10 @@ A condition is one or more tests:
 - `flag` is true when the flag is set
 - `not flag` is true when it is not
 - `variable <op> <integer>`, where `<op>` is `==`, `!=`, `<`, `<=`, `>` or `>=`. `not` works here too.
-- `vehicle <vehicle>` is true when the party has that vehicle, and `aboard <vehicle>` when it rides it. `not` works here too. A flag may still be named `vehicle` or `aboard`: the word starts a vehicle test only when a name follows it.
+- `vehicle <vehicle>` is true when the party has that vehicle, and `aboard <vehicle>` when it rides it.
+- `party <member>` is true when the member is in the active party, and `item <item>` when the party holds at least one of the item or equipment piece.
+
+`not` works on each of these. A flag may still be named `vehicle`, `aboard`, `party` or `item`: the word starts one of these tests only when a name follows it.
 
 Join tests with `and` or with `or`, but not with both in one condition. Nest ifs instead.
 
@@ -434,7 +437,7 @@ var harbor.first_stop
 var market.offer local default 30
 ```
 
-- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `face` and `anim` subject), `marker` (`move`, `face` and `warp` targets), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation`, `portrait` (the `as` of `say`), `item`, `member` (`party` and `name entry`), `encounter`, `enemy` (`until defeat`), `vehicle` (`battle ... aboard`, the `vehicle` commands and the `vehicle` and `aboard` tests), `ability` (`learn`), `map`, `shop` and `rest`. Panel IDs are not listed; each scene names its own.
+- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `face` and `anim` subject), `marker` (`move`, `face` and `warp` targets), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation`, `portrait` (the `as` of `say`), `item` (also the `item` test), `member` (`party`, `name entry` and the `party` test), `encounter`, `enemy` (`until defeat`), `vehicle` (`battle ... aboard`, the `vehicle` commands and the `vehicle` and `aboard` tests), `ability` (`learn`), `map`, `shop` and `rest`. Panel IDs are not listed; each scene names its own.
 - `map_markers <map> <marker>...` lists the markers on one map; they count as listed markers. A marker on several maps is listed for each. `warp <map> <marker>` to a marker that is not on that map is an error. The checker also follows the map the party is on through each event, from its last `warp` (and from the start, see `event_map`), so a `move` to a marker on another map is an error too. Where the map cannot be known (after a branch that warps on one side only, a `call`, a `label`, or in a loop that warps), nothing more is checked until the next `warp`.
 - `event_map <map> <event>...` says the game starts those events on that map, for example from a hook in that area. An event listed for one map starts the move check on it; one listed for several, or none, starts with the map unknown.
 - `enemy <name>...` lists the enemies a `battle ... until defeat` may name.

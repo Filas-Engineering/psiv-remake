@@ -130,10 +130,24 @@ bool describes(const rules::Database& db, DescriptionKind kind, const std::strin
 	return false;
 }
 
+bool namesKnownThing(const rules::Database& db, const std::string& key) {
+	const std::size_t dot = key.find('.', std::char_traits<char>::length(kNamePrefix));
+	if (key.compare(0, std::char_traits<char>::length(kNamePrefix), kNamePrefix) != 0 || dot == std::string::npos) {
+		return false;
+	}
+	const std::string kind = key.substr(std::char_traits<char>::length(kNamePrefix), dot - std::char_traits<char>::length(kNamePrefix));
+	const std::string id = key.substr(dot + 1);
+	return (kind == "ability" && db.ability(id)) || (kind == "character" && db.character(id)) || (kind == "difficulty" && db.difficulty(id)) ||
+		(kind == "enemy" && db.enemy(id)) || (kind == "equipment" && db.equipmentPiece(id)) || (kind == "item" && db.item(id)) ||
+		(kind == "status" && db.status(id)) || (kind == "vehicle" && db.vehicle(id));
+}
+
 namespace {
 
+// Descriptions and names are optional in every language.
 bool isDescription(const std::string& key) {
-	return key.compare(0, std::char_traits<char>::length(kDescriptionPrefix), kDescriptionPrefix) == 0;
+	return key.compare(0, std::char_traits<char>::length(kDescriptionPrefix), kDescriptionPrefix) == 0 ||
+		key.compare(0, std::char_traits<char>::length(kNamePrefix), kNamePrefix) == 0;
 }
 
 std::uint64_t fnv(std::uint64_t hash, const std::string& text) {
@@ -261,7 +275,7 @@ void readCameras(JsonReader& reader, const JsonValue& presentation, std::vector<
 void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.only(json, {"title", "core_data", "areas", "events", "glossary", "languages", "journal", "actors", "presentation", "flags",
 		"vars", "clear_flag", "start", "join_levels", "prices", "item_cap", "money_cap", "tick_ms", "grace_ms", "round_ms",
-		"autosave_slots", "manual_slots", "bosses", "vehicles", "machine_step_heal", "outside_experience_until"});
+		"autosave_slots", "manual_slots", "bosses", "vehicles", "machine_step_heal", "outside_experience_until", "leave_equipment", "random_encounters_everywhere"});
 	reader.text(json, "title", c.title, true);
 	reader.text(json, "core_data", c.coreData, true);
 	reader.texts(json, "areas", c.areaFiles, true);
@@ -360,6 +374,14 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.integer(json, "manual_slots", c.manualSlots, false, 1, 99);
 	reader.integer(json, "machine_step_heal", c.machineStepHeal, false, 0, 999);
 	reader.text(json, "outside_experience_until", c.outsideExperienceUntil, false);
+	std::string leaving = "keep";
+	reader.text(json, "leave_equipment", leaving, false);
+	if (leaving == "bag") {
+		c.leaveEquipment = LeaveEquipment::Bag;
+	} else if (leaving != "keep") {
+		reader.fail(json, "data.bad_leave_equipment", {leaving});
+	}
+	reader.boolean(json, "random_encounters_everywhere", c.randomEncountersEverywhere, false);
 	if (const JsonValue* bosses = reader.field(json, "bosses", JsonValue::Type::Array, false)) {
 		for (const JsonValue& b : bosses->items) {
 			reader.only(b, {"encounter", "flag"});
@@ -371,20 +393,31 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	}
 	if (const JsonValue* vehicles = reader.field(json, "vehicles", JsonValue::Type::Array, false)) {
 		for (const JsonValue& v : vehicles->items) {
-			reader.only(v, {"id", "crosses", "speed_percent", "encounters"});
+			reader.only(v, {"id", "crosses", "breaks", "breaks_for_good", "speed_percent", "encounters", "call_item"});
 			FieldVehicle vehicle;
 			reader.text(v, "id", vehicle.id, true);
-			std::vector<std::string> terrain;
-			reader.texts(v, "crosses", terrain, true);
-			for (const std::string& t : terrain) {
-				if (t == "floor") {
-					vehicle.crosses += '.';
-				} else if (t == "water") {
-					vehicle.crosses += '~';
-				} else {
-					reader.fail(v, "data.unknown_terrain", {t});
+			const auto terrains = [&](const char* key, std::string& out, bool required) {
+				std::vector<std::string> names;
+				reader.texts(v, key, names, required);
+				for (const std::string& t : names) {
+					if (t == "floor") {
+						out += '.';
+					} else if (t == "water") {
+						out += '~';
+					} else if (t == "soft") {
+						out += ':';
+					} else if (t == "barrier") {
+						out += '%';
+					} else {
+						reader.fail(v, "data.unknown_terrain", {t});
+					}
 				}
-			}
+				return names;
+			};
+			const std::vector<std::string> terrain = terrains("crosses", vehicle.crosses, true);
+			terrains("breaks", vehicle.breaks, false);
+			reader.boolean(v, "breaks_for_good", vehicle.breaksForGood, false);
+			reader.text(v, "call_item", vehicle.callItem, false);
 			if (terrain.empty()) {
 				reader.fail(v, "data.vehicle_needs_terrain", {vehicle.id});
 			}
@@ -655,6 +688,10 @@ void checkReferences(const GameData& data, Problems& problems) {
 		if (!db.vehicle(v.id)) {
 			problems.add("game.json vehicles", "data.vehicle_unknown", {v.id});
 		}
+		const rules::ItemDef* call = v.callItem.empty() ? nullptr : db.item(v.callItem);
+		if (!v.callItem.empty() && (!call || !call->effects.empty())) {
+			problems.add("game.json vehicle '" + v.id + "'", "data.call_item_unknown", {v.id, v.callItem});
+		}
 		for (const TableEntry& t : v.encounters) {
 			if (!db.encounter(t.encounter)) {
 				problems.add("game.json vehicle '" + v.id + "'", "data.zone_lists_unknown_encounter", {v.id, t.encounter});
@@ -719,11 +756,18 @@ void checkReferences(const GameData& data, Problems& problems) {
 			flagAt(h.line, h.blockFlag);
 		}
 		for (const Shop& s : area.shops) {
-			for (const std::string& id : s.stock) {
-				if (!knownThing(db, id) || data.price(id) < 0) {
-					at(s.line, "data.shop_stock_unknown", {s.id, id});
+			for (const StockEntry& entry : s.stock) {
+				if (!knownThing(db, entry.id) || data.price(entry.id) < 0) {
+					at(s.line, "data.shop_stock_unknown", {s.id, entry.id});
 				}
+				flagAt(s.line, entry.requireFlag);
+				flagAt(s.line, entry.blockFlag);
 			}
+			flagAt(s.line, s.requireFlag);
+			flagAt(s.line, s.blockFlag);
+		}
+		for (const CellChange& change : area.changes) {
+			flagAt(change.line, change.flag);
 		}
 		for (const Chest& ch : area.chests) {
 			for (const auto& [id, n] : ch.items) {
@@ -746,8 +790,12 @@ void checkReferences(const GameData& data, Problems& problems) {
 		}
 		for (const Port& p : area.ports) {
 			flagAt(p.line, p.flag);
+			const Area* ship = p.ship.empty() ? nullptr : data.area(p.ship);
+			if (!p.ship.empty() && (!ship || ship->kind != AreaKind::Vessel || ship->arrival.empty())) {
+				at(p.line, "data.port_ship_not_vessel", {p.id, p.ship});
+			}
 		}
-		if (!area.arrival.empty() && area.kind != AreaKind::Town) {
+		if (!area.arrival.empty() && area.kind != AreaKind::Town && area.kind != AreaKind::Vessel) {
 			at(0, "data.arrival_not_town", {});
 		}
 	}
@@ -890,7 +938,7 @@ void loadInto(const DataDirectories& directories, GameData& data, Problems& prob
 		}
 		data.languages.push_back(std::move(tables));
 	}
-	// Descriptions are optional in every language; the other keys must match the source language's.
+	// Descriptions and names are optional in every language; the other keys must match the source language's.
 	for (std::size_t i = 1; i < data.languages.size(); ++i) {
 		const rules::TextTable& first = data.languages.front().text;
 		const rules::TextTable& other = data.languages[i].text;
@@ -909,6 +957,12 @@ void loadInto(const DataDirectories& directories, GameData& data, Problems& prob
 		for (std::size_t i = 0; i < data.languages.size(); ++i) {
 			for (const auto& [key, value] : data.languages[i].text) {
 				if (!isDescription(key)) {
+					continue;
+				}
+				if (key.compare(0, std::char_traits<char>::length(kNamePrefix), kNamePrefix) == 0) {
+					if (!namesKnownThing(data.db, key)) {
+						problems.add(data.config.languages[i].text, "data.name_unknown", {key});
+					}
 					continue;
 				}
 				bool known = false;

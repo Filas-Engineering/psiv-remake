@@ -713,6 +713,10 @@ public sealed class FieldRenderer
 			for (int x = x0; x <= x1; x++)
 			{
 				DrawCell(s, tiles, Terrain, x, y, ox + x * tile, oy + y * tile, Noise.Hash(x, y, f.AreaId.Length), waterFrame, tile);
+				if (view.Cell(x, y).HasFlag(CellFlags.Barrier))
+				{
+					DrawBarrier(s, ox + x * tile, oy + y * tile, Noise.Hash(x, y, 7), tile);
+				}
 			}
 		}
 
@@ -805,7 +809,17 @@ public sealed class FieldRenderer
 				Put(p.X, p.Y, (sx, sy) => s.Image(tiles.Bed, sx, sy, tile, tile, Color.White));
 				break;
 			case PointKind.Port:
-				Put(p.X, p.Y, (sx, sy) => s.Image(art.Pier, sx, sy, tile, tile, p.Active ? Color.White : Color.Gray));
+				// A port appears once its story opens it.
+				if (p.Active)
+				{
+					Put(p.X, p.Y, (sx, sy) => s.Image(art.Pier, sx, sy, tile, tile, Color.White));
+				}
+				break;
+			case PointKind.Helm:
+				Put(p.X, p.Y, (sx, sy) => DrawHelm(s, sx, sy, tile, pulse));
+				break;
+			case PointKind.Gangway:
+				DrawGangway(s, ox + p.X * tile, oy + p.Y * tile, tile, pulse);
 				break;
 			case PointKind.Talk:
 				FieldActor? actor = view.Actors.FirstOrDefault(a => a.Id == p.Id);
@@ -987,6 +1001,17 @@ public sealed class FieldRenderer
 			}
 			return;
 		}
+		if (c == CellFlags.Soft)
+		{
+			// Soft ground: sand only a vehicle crosses, rippled.
+			s.Fill(sx, sy, tile, tile, new Color(214, 186, 128));
+			for (int i = 0; i < 3; ++i)
+			{
+				int ry = Px(8 + i * 14 + (int)((hash >> i) % 4));
+				s.Fill(sx + Px(4 + (int)((hash >> (i + 3)) % 8)), sy + ry, tile / 2, Px(2), new Color(176, 146, 92));
+			}
+			return;
+		}
 		// Floor: one of the variants, with an occasional decoration, from the cell's coordinates.
 		int image = hash % (uint)t.DecorOneIn == 0 ? t.Decor[(hash >> 8) % (uint)t.Decor.Length] : t.Floor[(hash >> 4) % (uint)t.Floor.Length];
 		s.Image(image, sx, sy, tile, tile, Color.White);
@@ -998,6 +1023,38 @@ public sealed class FieldRenderer
 		{
 			s.Fill(sx, sy, Px(6), tile, Color.Black * 0.16f);
 		}
+	}
+
+	// A barrier wall a vehicle can break: the wall drawn under it, frosted, with cracks.
+	private static void DrawBarrier(IDrawSurface s, int sx, int sy, uint hash, int tile)
+	{
+		int Px(int pixels) => pixels * tile / Tile;
+		s.Fill(sx + Px(2), sy + Px(2), tile - Px(4), tile - Px(4), new Color(200, 236, 255) * 0.55f);
+		Color crack = new Color(70, 110, 150) * 0.9f;
+		int cx = Px(10 + (int)(hash % 20));
+		s.Fill(sx + cx, sy + Px(6), Px(2), tile / 2, crack);
+		s.Fill(sx + cx - Px(8), sy + tile / 2, Px(10), Px(2), crack);
+		s.Fill(sx + Px(4), sy + tile - Px(10), tile - Px(8), Px(2), new Color(240, 250, 255) * 0.8f);
+	}
+
+	// A ship's helm: a post with a lit console.
+	private static void DrawHelm(IDrawSurface s, int sx, int sy, int tile, float pulse)
+	{
+		int Px(int pixels) => pixels * tile / Tile;
+		s.Fill(sx + Px(12), sy + Px(18), tile - Px(24), tile - Px(22), new Color(92, 62, 38));
+		s.Fill(sx + Px(6), sy + Px(8), tile - Px(12), Px(14), new Color(60, 44, 30));
+		s.Fill(sx + Px(9), sy + Px(11), tile - Px(18), Px(8), new Color(250, 214, 120) * (0.6f + 0.4f * pulse));
+	}
+
+	// The gangway: planks over the deck's edge, back ashore.
+	private static void DrawGangway(IDrawSurface s, int sx, int sy, int tile, float pulse)
+	{
+		int Px(int pixels) => pixels * tile / Tile;
+		for (int i = 0; i < 4; ++i)
+		{
+			s.Fill(sx + Px(4), sy + Px(4 + i * 10), tile - Px(8), Px(7), new Color(150, 110, 70));
+		}
+		s.Fill(sx, sy, Px(3), tile, new Color(120, 240, 160) * (0.3f * pulse));
 	}
 
 	// The area's name and its kind as `kindName` words it, shown for a moment after arriving.

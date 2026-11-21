@@ -249,6 +249,14 @@ bool Host::has_vehicle(const std::string&) {
 	return false;
 }
 
+bool Host::in_party(const std::string&) {
+	return false;
+}
+
+int Host::item_count(const std::string&) {
+	return 0;
+}
+
 bool Host::aboard_vehicle(const std::string&) {
 	return false;
 }

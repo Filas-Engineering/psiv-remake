@@ -210,6 +210,41 @@ TEST(loaderRejectsBadEquipmentAndLearning) {
 		auto files = fixtures::dataTexts();
 		replaceOnce(files["enemies.json"], "\"status_resist\": {\"poison\": 100}", "\"status_resist\": {\"defeated\": 100}");
 		expectError(files, "enemy 'gel_mite': the defeated status cannot be resisted");
+	}	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["equipment.json"], "\"category\": \"buckler\", \"stats\": {\"defense\": 4}", "\"category\": \"buckler\", \"hands\": 2, \"stats\": {\"defense\": 4}");
+		expectError(files, "equipment 'driftwood_buckler': only weapons have hands");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["equipment.json"], "\"slot\": \"shield\", \"category\": \"buckler\", \"stats\": {\"defense\": 4}", "\"slot\": \"left_hand\", \"category\": \"buckler\", \"stats\": {\"defense\": 4}");
+		expectError(files, "equipment 'driftwood_buckler': unknown slot 'left_hand'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["party.json"], "\"equipment\": [\"copper_blade\", \"tin_cap\"", "\"equipment\": [\"copper_blade\", \"kelp_cleaver\", \"tin_cap\"");
+		expectError(files, "character 'fighter': 'kelp_cleaver' needs a hand when both are taken");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["combos.json"], "{\"enemy\": \"cinder_kite\", \"ability\": \"talon\"}", "{\"enemy\": \"cinder_kite\", \"ability\": \"venom_spit\"}");
+		expectError(files, "enemy combo 'kite_pincer': enemy 'cinder_kite' cannot use 'venom_spit'");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["combos.json"], ", {\"enemy\": \"cinder_kite\", \"ability\": \"talon\"}", "");
+		expectError(files, "enemy combo 'kite_pincer': needs 2 to 4 parts");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["enemies.json"], "\"next_form\": \"shellback_bare\",\n", "");
+		expectError(files, "enemy 'shellback': next_form_at needs a next_form");
+	}
+	{
+		auto files = fixtures::dataTexts();
+		replaceOnce(files["rules.json"], "\"surprise_rounds\": 1,", "\"surprise_rounds\": 1, \"affinity_divisor\": 0, \"instant_defeat_kinds\": [\"ghost\"],");
+		expectError(files, "rules.json:2: field 'affinity_divisor'");
+		expectError(files, "unknown kind 'ghost'");
 	}
 }
 

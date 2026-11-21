@@ -1,0 +1,285 @@
+# The Ashen Fells and the party features of the latest round, on the data copy scripts/make_front_data.py writes, with
+# --dev for the commands that reach each moment. Seed 1. The dock at Cinder Quay appearing once its flag is set, the
+# lantern barge walked aboard with its helm and gangway, the helm's destination screen; Ashfall Market's weapon shop
+# under its own label; the Equip page with a knife in the left hand beside the blade, the two-handed cleaver's
+# comparison sending both back, and a shield in each hand; the bridge mended and the market emptied by the ash storm;
+# the moor's soft ground and barrier wall, a vehicle called from the Items page; in the front battle layout the kites
+# hovering over their shadows and their joint attack's name plate clear of every party figure, and the attack again in
+# the side layout; and the Cogwright
+# falling to the scrap crusher and standing up after the won battle. With --window the shot lines save screenshots
+# under build/shots/ (run from bindings/); headless runs write nothing for them.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+
+# The dock: no port drawn until its flag is set, then the barge walked aboard; the helm and the gangway on deck.
+dev warp cinder_quay dock_front
+wait 10
+expect state area Cinder Quay
+shot build/shots/fells_quay_closed.png
+wait 2
+dev flag travel.dock_open on
+wait 2
+shot build/shots/fells_quay_dock.png
+wait 2
+press Down
+wait 3
+press Enter
+wait 30
+expect state area Lantern Barge
+shot build/shots/fells_barge.png
+wait 2
+cmd walk 4 2
+press Up
+wait 3
+press Enter
+wait 4
+expect screen Travel
+expect state destinations ashfall_market
+expect state selected Ashfall Market   (fells)
+shot build/shots/fells_helm.png
+wait 2
+press Enter
+wait 40
+expect screen Field
+expect state area Ashfall Market
+shot build/shots/fells_market.png
+wait 2
+
+# The weapon shop, under its kind's label.
+cmd walk arms_front
+press Up
+wait 3
+press Enter
+expect screen Shop
+expect statehas selected Gill Knife
+shot build/shots/fells_weapon_shop.png
+wait 2
+press Escape
+expect screen Field
+
+# Two hands on the Equip page: a knife in the left hand beside the blade, the cleaver needing both, a shield in each.
+dev give gill_knife 1
+dev give kelp_cleaver 1
+dev give driftwood_buckler 2
+press M
+press Right 2
+expect state tab Equip
+press Enter
+expect state page slots
+expect state selected right hand: Copper Blade
+press Down
+expect state selected left hand: -
+press Enter
+expect state page pieces
+press Down
+expect state selected Gill Knife x1
+expect statehas compare Strength
+shot build/shots/fells_equip_left.png
+wait 2
+press Enter
+expect state page slots
+expect state selected left hand: Gill Knife
+press Up
+press Enter
+press Down
+expect state selected Kelp Cleaver x1  (both hands)
+expect statehas compare Strength
+shot build/shots/fells_equip_cleaver.png
+wait 2
+press Up
+expect state selected Driftwood Buckler x2
+press Enter
+expect state selected right hand: Driftwood Buckler
+press Down
+press Enter
+expect state selected Copper Blade x1
+press Down
+expect state selected Driftwood Buckler x1
+press Enter
+expect state selected left hand: Driftwood Buckler
+shot build/shots/fells_equip_shields.png
+wait 2
+pressuntil Escape Field 10
+
+# The bridge mended by story, and the market emptied by the ash storm.
+dev flag fells.bridge_mended on
+dev flag fells.ash_storm on
+cmd walk bridge_west
+wait 6
+shot build/shots/fells_market_storm.png
+wait 2
+dev flag fells.ash_storm off
+
+# The moor: soft ground, a barrier wall and water; the crawler called from the Items page carries the party.
+dev warp fell_moor town_gate
+wait 10
+expect state area Fell Moor
+shot build/shots/fells_moor.png
+wait 2
+dev vehicle dune_crawler fell_moor crawler_bay
+dev give dune_horn 1
+press M
+press Right
+expect state tab Items
+expect state selected Dune Horn x1  (calls the Dune Crawler)
+press Enter
+wait 6
+expect screen Field
+expect state vehicles dune_crawler 1 4 aboard
+shot build/shots/fells_called.png
+wait 2
+press Enter
+wait 6
+expect state vehicles dune_crawler 1 4
+
+# The kites in the front layout: both hover over their shadows, and their joint attack's name plate covers no party
+# figure and no label.
+present mark
+dev battle kites
+expect mode Battle
+waitstate 120 battlephase Command
+expect state battlelayout front
+expect state flying Squall Kite, Cinder Kite
+shot build/shots/fells_kites.png
+wait 2
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 step effect
+wait 4
+expect presenthas banner Pincer Dive
+expect state overlaps none
+shot build/shots/fells_pincer.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+dev win
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+
+# The joint attack again in the side layout.
+battlelayout side
+present mark
+dev battle kites
+waitstate 120 battlephase Command
+expect state battlelayout side
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 step effect
+wait 4
+expect presenthas banner Pincer Dive
+shot build/shots/fells_pincer_side.png
+waitstate 900 battlephase Command
+dev win
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+battlelayout front
+
+# The Cogwright joins, falls to the scrap crusher's answer to its attack, and stands up after the won battle.
+dev event steps_tinker
+pressuntil Enter Field 100
+dev battle crusher
+expect mode Battle
+waitstate 120 battlephase Command
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Enter
+press Enter
+waitstate 900 battlephase Command
+expect statehas shown Test Cogwright 0/
+dev win
+waitstatehas 900 step recover
+wait 6
+expect state overlaps none
+shot build/shots/fells_machine_recovers.png
+wait 2
+hold F 60
+expect state battlephase Ended
+expect statehas shown Test Cogwright 1/
+expect statehas battlesync all match
+press Enter
+expect screen Field
+
+# The reaper's Last Toll: every member but the Cogwright, the one marked vulnerable, shrugs it off; the mark stands on
+# the felled member's slot.
+present mark
+dev battle reaper
+waitstate 120 battlephase Command
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 step result
+wait 6
+expect presenthas Last Toll
+expect state marks Test Cogwright
+expect state overlaps none
+shot build/shots/fells_member_felled.png
+wait 2
+waitstate 900 battlephase Command
+dev win
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+
+# The shellback takes its bare form at half its hit points, not when it falls: the fighter strikes while the others
+# defend, a round at a time.
+dev level fighter 9
+present mark
+dev battle shellback
+waitstate 120 battlephase Command
+press Enter
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstate 900 battlephase Command
+press Enter
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 step transform
+wait 12
+expect statehas shown Bare Shellback
+shot build/shots/fells_next_form_at.png
+wait 2
+waitstate 900 battlephase Command
+dev win
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field

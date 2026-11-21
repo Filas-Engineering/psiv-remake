@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 10
+#define PSIV_ABI_VERSION 11
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -115,10 +115,10 @@ typedef enum psiv_menu_kind { PSIV_MENU_NONE, PSIV_MENU_FIELD, PSIV_MENU_INN, PS
 typedef enum psiv_direction { PSIV_DIRECTION_NONE = -1, PSIV_DIRECTION_NORTH = 0, PSIV_DIRECTION_EAST, PSIV_DIRECTION_SOUTH, PSIV_DIRECTION_WEST } psiv_direction;
 /* PSIV_NOTICE_AMBIENT: a party talk line that came up by itself as the party arrived; show it without stopping play. */
 typedef enum psiv_notice_kind { PSIV_NOTICE_LINE, PSIV_NOTICE_CHOICE, PSIV_NOTICE_ACTION, PSIV_NOTICE_NOTICE, PSIV_NOTICE_WARNING, PSIV_NOTICE_AUTOSAVE, PSIV_NOTICE_AMBIENT } psiv_notice_kind;
-typedef enum psiv_area_kind { PSIV_AREA_TOWN, PSIV_AREA_FIELD, PSIV_AREA_DUNGEON } psiv_area_kind;
+typedef enum psiv_area_kind { PSIV_AREA_TOWN, PSIV_AREA_FIELD, PSIV_AREA_DUNGEON, PSIV_AREA_VESSEL } psiv_area_kind;
 typedef enum psiv_encounter_mode { PSIV_ENCOUNTERS_VISIBLE, PSIV_ENCOUNTERS_RANDOM } psiv_encounter_mode;
 typedef enum psiv_enemy_state { PSIV_ENEMY_IDLE, PSIV_ENEMY_CHASING, PSIV_ENEMY_RETURNING } psiv_enemy_state;
-typedef enum psiv_point_kind { PSIV_POINT_TALK, PSIV_POINT_STEP, PSIV_POINT_CHEST, PSIV_POINT_SHOP, PSIV_POINT_REST, PSIV_POINT_PORT } psiv_point_kind;
+typedef enum psiv_point_kind { PSIV_POINT_TALK, PSIV_POINT_STEP, PSIV_POINT_CHEST, PSIV_POINT_SHOP, PSIV_POINT_REST, PSIV_POINT_PORT, PSIV_POINT_HELM, PSIV_POINT_GANGWAY } psiv_point_kind;
 /* Ways to travel at once: from a port to another open port, back to a visited town of the region, out of a dungeon. */
 typedef enum psiv_travel_kind { PSIV_TRAVEL_PORT, PSIV_TRAVEL_TOWN, PSIV_TRAVEL_DUNGEON_EXIT } psiv_travel_kind;
 typedef enum psiv_job_state { PSIV_JOB_AVAILABLE, PSIV_JOB_ACCEPTED, PSIV_JOB_COMPLETED, PSIV_JOB_MISSED } psiv_job_state;
@@ -133,7 +133,11 @@ typedef enum psiv_targeting {
 	PSIV_TARGET_ONE_ENEMY, PSIV_TARGET_ENEMY_GROUP, PSIV_TARGET_ALL_ENEMIES, PSIV_TARGET_ONE_ALLY, PSIV_TARGET_ALL_ALLIES,
 	PSIV_TARGET_SELF, PSIV_TARGET_ONE_FALLEN_ALLY, PSIV_TARGET_RANDOM_ENEMY
 } psiv_targeting;
-typedef enum psiv_equip_slot { PSIV_SLOT_WEAPON, PSIV_SLOT_HEAD, PSIV_SLOT_BODY, PSIV_SLOT_ARMS, PSIV_SLOT_ACCESSORY, PSIV_SLOT_COUNT } psiv_equip_slot;
+/* A piece's slot and where a member wears it. Weapons and shields are hand pieces: PSIV_SLOT_WEAPON is also the right
+ * hand, and PSIV_SLOT_LEFT_HAND only a place to wear one. */
+typedef enum psiv_equip_slot { PSIV_SLOT_WEAPON, PSIV_SLOT_HEAD, PSIV_SLOT_BODY, PSIV_SLOT_ARMS, PSIV_SLOT_ACCESSORY, PSIV_SLOT_SHIELD, PSIV_SLOT_LEFT_HAND, PSIV_SLOT_COUNT } psiv_equip_slot;
+/* What a shop sells, for its label. */
+typedef enum psiv_shop_kind { PSIV_SHOP_GENERAL, PSIV_SHOP_WEAPON, PSIV_SHOP_ARMOR, PSIV_SHOP_TOOL, PSIV_SHOP_GIFT } psiv_shop_kind;
 typedef enum psiv_outcome { PSIV_OUTCOME_ONGOING, PSIV_OUTCOME_VICTORY, PSIV_OUTCOME_DEFEAT, PSIV_OUTCOME_ESCAPED, PSIV_OUTCOME_SCRIPTED_END } psiv_outcome;
 typedef enum psiv_event_type {
 	PSIV_EVENT_BATTLE_STARTED, PSIV_EVENT_ROUND_STARTED, PSIV_EVENT_COMMANDS_LOCKED, PSIV_EVENT_ORDER_RESOLVED, PSIV_EVENT_RETARGETED,
@@ -184,7 +188,9 @@ typedef enum psiv_camera_target { PSIV_CAMERA_NONE, PSIV_CAMERA_MARKER, PSIV_CAM
  * to the display name, then the id. */
 typedef enum psiv_item_sort { PSIV_SORT_ID, PSIV_SORT_KIND, PSIV_SORT_NAME, PSIV_SORT_COUNT } psiv_item_sort;
 /* Cell flags in psiv_field_grid. The low two bits are the terrain. */
-typedef enum psiv_cell { PSIV_CELL_FLOOR = 0, PSIV_CELL_WALL = 1, PSIV_CELL_WATER = 2, PSIV_CELL_TERRAIN_MASK = 3, PSIV_CELL_WALKABLE = 16 } psiv_cell;
+/* A cell's terrain (masked by PSIV_CELL_TERRAIN_MASK) and flags. Soft ground is crossed by a vehicle only; a barrier is a
+ * wall (PSIV_CELL_WALL | PSIV_CELL_BARRIER) that a vehicle can break through. */
+typedef enum psiv_cell { PSIV_CELL_FLOOR = 0, PSIV_CELL_WALL = 1, PSIV_CELL_WATER = 2, PSIV_CELL_TERRAIN_MASK = 3, PSIV_CELL_WALKABLE = 16, PSIV_CELL_SOFT = 3, PSIV_CELL_BARRIER = 8 } psiv_cell;
 /* The id lists of psiv_dev_ids: what the developer commands take. Markers are "area:marker". */
 typedef enum psiv_dev_list {
 	PSIV_DEV_AREAS, PSIV_DEV_MARKERS, PSIV_DEV_FLAGS, PSIV_DEV_ITEMS, PSIV_DEV_EQUIPMENT, PSIV_DEV_ABILITIES, PSIV_DEV_ENEMIES, PSIV_DEV_ENCOUNTERS,
@@ -198,7 +204,7 @@ typedef enum psiv_name_kind {
 	PSIV_NAME_OUTCOME, PSIV_NAME_EVENT_TYPE, PSIV_NAME_CANCEL_REASON, PSIV_NAME_EFFECTIVENESS, PSIV_NAME_STATUS_END, PSIV_NAME_RESOURCE_KIND,
 	PSIV_NAME_ELEMENT, PSIV_NAME_STAT, PSIV_NAME_OPENING, PSIV_NAME_AUTO_STOP, PSIV_NAME_MACRO_STEP_STATUS, PSIV_NAME_MACRO_ISSUE,
 	PSIV_NAME_ACTION_TYPE, PSIV_NAME_MACRO_TARGET_KIND, PSIV_NAME_DESCRIPTION_KIND, PSIV_NAME_ITEM_SORT, PSIV_NAME_CAMERA_TARGET,
-	PSIV_NAME_TRAVEL_KIND, PSIV_NAME_DEV_LIST, PSIV_NAME_CREATURE_KIND
+	PSIV_NAME_TRAVEL_KIND, PSIV_NAME_DEV_LIST, PSIV_NAME_CREATURE_KIND, PSIV_NAME_SHOP_KIND
 } psiv_name_kind;
 
 /* The stable name of an enum value as the C++ libraries spell it, lowercase with underscores ("field",
@@ -252,6 +258,8 @@ typedef struct psiv_game_info {
 	const char* title_music;
 	const char* victory_music;
 	const char* defeat_music;
+	/* 1 when rules.json sets magic_defense: elemental damage subtracts magic defense, which a front end then shows. */
+	int32_t magic_defense;
 } psiv_game_info;
 
 PSIV_API psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out);
@@ -479,6 +487,8 @@ typedef struct psiv_field_info {
 	const char* aboard;
 	/* The leader's time per cell now: step_ms on foot, the vehicle's speed aboard. */
 	int32_t leader_step_ms;
+	/* In a vessel: the port the party walked aboard from, where its gangway leads; "" otherwise. */
+	const char* ship_port;
 } psiv_field_info;
 
 typedef struct psiv_enemy {
@@ -511,10 +521,13 @@ typedef struct psiv_point {
 	int32_t y;
 	/* Talk and step points: the event they run. */
 	const char* event;
-	/* Talk and step points: their flag conditions hold now. Chests: not opened yet. Shops, rests: 1. */
+	/* Talk and step points: their flag conditions hold now. Chests: not opened yet. Shops: open now. Ports: open now
+	 * (a port that its story has not opened yet is not there to see). Rests, helms and gangway cells: 1. */
 	int32_t active;
 	/* Rests: the price. */
 	int32_t cost;
+	/* Shops: a psiv_shop_kind. */
+	int32_t shop_kind;
 } psiv_point;
 
 /* One of the party's vehicles in its area. */
@@ -735,6 +748,8 @@ typedef struct psiv_combatant {
 	int32_t command_kind;
 	const char* command_id;
 	int32_t command_target;
+	/* An enemy the data marks as flying, for a renderer to show off the ground. */
+	int32_t flying;
 } psiv_combatant;
 
 typedef struct psiv_battle_info {
@@ -990,6 +1005,8 @@ typedef struct psiv_stat_bonus {
 	int32_t defense;
 	int32_t critical;
 	int32_t evasion;
+	/* Used only when psiv_game_info's magic_defense is set. */
+	int32_t magic_defense;
 } psiv_stat_bonus;
 
 typedef struct psiv_affinity {
@@ -1024,6 +1041,8 @@ typedef struct psiv_member_detail {
 	/* The character's resistances plus its pieces', capped at 100, in status id order. */
 	int32_t status_resist_count;
 	const psiv_status_resist* status_resists;
+	/* With equipment; see psiv_game_info's magic_defense. */
+	int32_t magic_defense;
 } psiv_member_detail;
 
 /* PSIV_NOT_FOUND for a character not in the roster. */
@@ -1081,11 +1100,22 @@ typedef struct psiv_equip_preview {
 	/* The member now, and wearing the piece in place of `replaces` (the same as before when it cannot wear it). */
 	psiv_combat_view before;
 	psiv_combat_view after;
+	/* Where the piece goes (a psiv_equip_slot): the slot, or a hand for a weapon or shield. */
+	int32_t position;
+	/* The other hand's piece it also sends back: beside a two-handed weapon, or a two-handed weapon a piece in the left
+	 * hand replaces; "" for none. */
+	const char* also_replaces;
+	const char* also_replaces_name;
+	/* 2 for a weapon that needs both hands, otherwise 1. */
+	int32_t hands;
 } psiv_equip_preview;
 
 /* Works on any equipment piece, held or not, so shops can compare too. PSIV_NOT_FOUND for a character not in the
- * roster or an id that is not equipment. */
+ * roster or an id that is not equipment. The piece goes where psiv_equip puts it. */
 PSIV_API psiv_status psiv_equip_preview_get(psiv_session* session, const char* member, const char* piece, psiv_equip_preview* out);
+/* The same at a position (a psiv_equip_slot): a hand for a weapon or shield. A position the piece does not fit leaves
+ * can_wear 0 with refusal_key equip.wrong_position. */
+PSIV_API psiv_status psiv_equip_preview_at(psiv_session* session, const char* member, const char* piece, int32_t position, psiv_equip_preview* out);
 
 typedef struct psiv_combo_entry {
 	const char* recipe;
@@ -1120,6 +1150,10 @@ typedef struct psiv_inventory_entry {
 	int32_t price;
 	/* An item that travels: the psiv_travel_kind psiv_travel takes it with (TOWN or DUNGEON_EXIT); -1 otherwise. */
 	int32_t travel;
+	/* An item that calls a vehicle (psiv_use_item with no member): the vehicle's id; "" otherwise. */
+	const char* calls_vehicle;
+	/* Equipment: 2 for a weapon that needs both hands, otherwise 1. Items: 0. */
+	int32_t hands;
 } psiv_inventory_entry;
 
 /* Items in id order, then unworn equipment in id order. */
@@ -1131,8 +1165,10 @@ typedef struct psiv_shop_info {
 	const char* id;
 	int32_t sell_percent;
 	int32_t stock_count;
-	/* count is what the party holds; price the buy price. */
+	/* count is what the party holds; price the buy price. Only what the shop sells now, by its stock's flags. */
 	const psiv_inventory_entry* stock;
+	/* A psiv_shop_kind. */
+	int32_t kind;
 } psiv_shop_info;
 
 typedef struct psiv_inn_info {
@@ -1153,7 +1189,12 @@ PSIV_API psiv_status psiv_rest(psiv_session* session); /* MUTATES */
 /* MUTATES. Field use from the menu. member is a character id of the active party, or NULL/"" for everyone. */
 PSIV_API psiv_status psiv_use_item(psiv_session* session, const char* item, const char* member);
 PSIV_API psiv_status psiv_use_ability(psiv_session* session, const char* user, const char* ability, const char* member); /* MUTATES */
-PSIV_API psiv_status psiv_equip(psiv_session* session, const char* member, const char* equipment); /* MUTATES */
+/* MUTATES. Puts the piece on where it goes by default: a weapon in the right hand (PSIV_SLOT_WEAPON), a shield in the
+ * left (PSIV_SLOT_LEFT_HAND), anything else in its slot. */
+PSIV_API psiv_status psiv_equip(psiv_session* session, const char* member, const char* equipment);
+/* MUTATES. Puts the piece on at a position it fits (a hand for weapons and shields); a two-handed weapon goes in the
+ * right hand and sends the left hand's piece back to the bag. PSIV_REFUSED with equip.wrong_position otherwise. */
+PSIV_API psiv_status psiv_equip_at(psiv_session* session, const char* member, const char* equipment, int32_t position);
 PSIV_API psiv_status psiv_unequip(psiv_session* session, const char* member, int32_t slot); /* MUTATES */
 /* The member a name entry is naming, "" when none is open. */
 PSIV_API const char* psiv_name_entry_member(psiv_session* session);

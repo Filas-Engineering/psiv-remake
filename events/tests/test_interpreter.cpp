@@ -582,6 +582,31 @@ end
 	check_clean(host);
 }
 
+TEST(party_and_item_tests_read_the_host) {
+	Program p = test::compile_ok(R"(event a unskippable
+	if party scout and not item rusty_key
+		say guide "the scout, no key"
+	end
+	if item tonic or party medic
+		say guide "a tonic"
+	end
+	if party medic
+		say guide "never"
+	end
+end
+)");
+	RecordingHost host;
+	host.party = {"fighter", "scout"};
+	host.items["tonic"] = 2;
+	Interpreter it(p, host);
+	CHECK(it.start("a"));
+	test::run(it, host);
+	CHECK(it.status() == Status::finished);
+	CHECK_EQ(spoken(host).size(), 2u);
+	CHECK_EQ(events::describe(p.code[0].condition), std::string("party scout and not item rusty_key"));
+	check_clean(host);
+}
+
 TEST(learn_and_follower_reach_the_host_and_apply_while_skipping) {
 	Program p = test::compile_ok(R"(event a skippable
 	learn medic hallow

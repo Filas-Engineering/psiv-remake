@@ -127,6 +127,11 @@ struct World {
 	// area is empty when the party is not in a dungeon or came in by a script's warp from another dungeon.
 	std::string dungeonExitArea;
 	Cell dungeonExitCell;
+	// The port the party walked aboard a ship from, while it is in the vessel (F2); empty ashore.
+	std::string shipPort;
+	// Barrier cells a vehicle broke through (F3), by area: for good, and in the current area until the party leaves it.
+	std::map<std::string, std::set<Cell>> brokenCells;
+	std::set<Cell> brokenHere;
 	// Time left in the post-battle grace period (ENC-015, ENC-042).
 	int graceMs = 0;
 	// Random mode distance counter and the threshold it is racing (ENC-040).

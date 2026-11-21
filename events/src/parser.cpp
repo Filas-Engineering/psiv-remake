@@ -305,14 +305,15 @@ private:
 			if (a.keyword("not")) {
 				term.negate = true;
 			}
-			// `vehicle` and `aboard` followed by a name test a vehicle; alone they are still flag names.
+			// `vehicle`, `aboard`, `party` and `item` followed by a name test the game; alone they are still flag names.
 			const Token* test = a.peek();
 			const Token* subject = a.peek(1);
-			if (test && subject && test->kind == TokenKind::word && subject->kind == TokenKind::word && (test->text == "vehicle" || test->text == "aboard") &&
+			if (test && subject && test->kind == TokenKind::word && subject->kind == TokenKind::word && one_of(test->text, {"vehicle", "aboard", "party", "item"}) &&
 				!one_of(subject->text, {"and", "or"})) {
-				term.vehicle = test->text == "vehicle" ? VehicleTest::owns : VehicleTest::aboard;
+				term.test = test->text == "vehicle" ? TermTest::owns : test->text == "aboard" ? TermTest::aboard : test->text == "party" ? TermTest::member : TermTest::holds;
+				const char* what = term.test == TermTest::member ? "a member name" : term.test == TermTest::holds ? "an item name" : "a vehicle name";
 				a.keyword(test->text.c_str());
-				if (!a.name(term.name, "a vehicle name")) {
+				if (!a.name(term.name, what)) {
 					return false;
 				}
 			} else if (!parse_value_test(a, term)) {

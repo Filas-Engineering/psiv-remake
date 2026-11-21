@@ -16,6 +16,8 @@ struct EquipmentDef {
 	std::string category;
 	Stats bonus = Stats::filled(0);
 	Element element = Element::None;
+	// 2 for a weapon that needs both hands: it is worn in the right hand and leaves the left one empty.
+	int hands = 1;
 	// Replaces the wearer's basic attack.
 	std::string attack;
 	std::vector<std::string> abilities;

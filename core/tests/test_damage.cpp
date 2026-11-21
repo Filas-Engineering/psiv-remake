@@ -1,5 +1,6 @@
 #include "fixtures.h"
 #include "rules/formulas.h"
+#include "rules/progression.h"
 #include "test.h"
 
 #include <algorithm>
@@ -222,4 +223,60 @@ TEST(loweringAFoeRollsLikeAStatus) {
 	const double chance = 100.0 * expected / (formulas::kChanceRollMax + 1);
 	CHECK(rate > chance - 3 && rate < chance + 3);
 	CHECK(chance > 5 && chance < 95);
+}
+
+// rules.json `affinity_divisor`: the affinity step divides by it, rounding down once, before defense comes off.
+TEST(theAffinityDivisorScalesDamageAndDefend) {
+	CHECK_EQ(formulas::damage(26, 4, 13, 200, formulas::kSpreadMean, 200), formulas::damage(26, 4, 13, 100, formulas::kSpreadMean));
+	CHECK_EQ(formulas::damage(26, 4, 13, 100, formulas::kSpreadMean, 200), 35);
+	// 78 * 50 / 200 rounds down once to 19, then the defense comes off.
+	CHECK_EQ(formulas::damage(26, 4, 13, 50, formulas::kSpreadMean, 200), 15);
+	Database db = data();
+	db.battleRules.affinityDivisor = 200;
+	db.characters["fighter"].base.strength = 200;
+	db.characters["fighter"].base.dexterity = 500;
+	for (bool defending : {false, true}) {
+		Battle battle = makeBattle(db, {"gel_mite"}, 3);
+		battle.combatant(kFirstEnemy).hp = 5000;
+		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+		battle.setCommand(kFirstEnemy, defending ? Command::defend() : Command::attack(kEngineer));
+		othersDefend(battle);
+		const std::vector<Event> events = battle.resolveRound();
+		const std::optional<Event> hit = firstBy(events, EventType::DamageDealt, kFighter);
+		CHECK(hit.has_value());
+		const bool critical = std::any_of(events.begin(), events.end(), [](const Event& c) { return c.type == EventType::Critical; });
+		const int strength = battle.combatant(kFighter).stats.strength;
+		const int bonus = critical ? formulas::criticalBonus(strength) : 0;
+		const int defense = battle.combatant(kFirstEnemy).effective(Stat::Defense);
+		const int affinity = defending ? 50 : 100;
+		CHECK(hit && hit->amount >= formulas::damage(strength, defense, bonus, affinity, formulas::kSpreadMin, 200));
+		CHECK(hit && hit->amount <= formulas::damage(strength, defense, bonus, affinity, formulas::kSpreadMax, 200));
+	}
+}
+
+// rules.json `magic_defense`: elemental damage subtracts magic defense in place of mental; armor adds to it.
+TEST(magicDefenseStandsInForMentalWhenTheRulesSaySo) {
+	Database db = data();
+	PartyMember fighter = makePartyMember(db, db.characters.at("fighter"), 1);
+	EquipmentBag bag = {{"ward_mantle", 1}};
+	CHECK(equip(fighter, db, bag, "ward_mantle").empty());
+	CHECK_EQ(memberStats(db, fighter).magicDefense, 8);
+	db.characters["scout"].base.mental = 200;
+	for (bool magicDefense : {false, true}) {
+		db.battleRules.magicDefense = magicDefense;
+		Battle battle = makeBattle(db, {"gloam_reaper"}, 5);
+		battle.combatant(kFirstEnemy).hp = 5000;
+		battle.combatant(kFirstEnemy).stats.mental = 150;
+		battle.setCommand(kScout, Command::ability("gust", kFirstEnemy));
+		battle.setCommand(kFirstEnemy, Command::defend());
+		othersDefend(battle);
+		const std::optional<Event> hit = firstBy(battle.resolveRound(), EventType::DamageDealt, kScout);
+		const Combatant& reaper = battle.combatant(kFirstEnemy);
+		const int guard = magicDefense ? reaper.stats.magicDefense : reaper.effective(Stat::Mental);
+		const int attack = battle.combatant(kScout).effective(Stat::Mental);
+		const int power = db.ability("gust")->effects[0].power;
+		const int affinity = reaper.affinity(Element::Gale);
+		CHECK(hit && hit->amount >= formulas::damage(attack, guard, power, affinity, formulas::kSpreadMin));
+		CHECK(hit && hit->amount <= formulas::damage(attack, guard, power, affinity, formulas::kSpreadMax));
+	}
 }

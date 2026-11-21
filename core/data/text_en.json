@@ -25,6 +25,7 @@
 		"equip.unknown_character": "Nobody called {0} is in the roster.",
 		"equip.unknown_equipment": "There is no such equipment as {0}.",
 		"equip.wrong_category": "{0} cannot equip {1}.",
+		"equip.wrong_position": "{0} cannot be worn there.",
 
 		"field.learned": "{0} learned {1}.",
 		"field.no_stock": "No {0} left.",

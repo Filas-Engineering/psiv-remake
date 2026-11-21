@@ -129,6 +129,7 @@ public sealed partial class SampleController
 		}
 		var bodies = new Dictionary<int, Rectangle>();
 		var figures = new List<string>();
+		var hovering = new List<string>();
 		var order = Enumerable.Range(0, Math.Min(all.Count, shown.Count)).OrderBy(i => Where(i).Foot).ToList();
 		foreach (int i in order)
 		{
@@ -227,12 +228,20 @@ public sealed partial class SampleController
 			bool idle = run == figure.Idle;
 			int image = figure.Images[run.FrameAt(idle ? _clockMs + i * 137 : _timeline.ElapsedMs, loop: idle)];
 			int left = x - size / 2 + (int)MathF.Round(dx) + jolt.X, top = foot - size + (int)MathF.Round(dy) + jolt.Y;
-			Rectangle body = art.Stand(image, left, top, size);
+			// In the front layout a flying enemy hovers over its place, bobbing, while its shadow stays on the ground.
+			int hover = front && enemy && c.Flying ? size / 5 + (int)MathF.Round(5 * MathF.Sin((_clockMs + i * 211) / 420f)) : 0;
+			Rectangle body = art.Stand(image, left, top - hover, size);
 			bodies[i] = body;
 			// The members seen from behind stand in the strip's shadow, so only the others cast one.
 			if (!front || enemy)
 			{
-				s.Image(art.Shadow, left, top + size / 6, size, size, Color.White * alpha);
+				float shadow = hover > 0 ? 0.6f : 1f;
+				int shrink = hover > 0 ? size / 6 : 0;
+				s.Image(art.Shadow, left + shrink / 2, top + size / 6 + shrink / 2, size - shrink, size - shrink, Color.White * (alpha * shadow));
+			}
+			if (hover > 0)
+			{
+				hovering.Add(c.Label);
 			}
 			// A change of form: the old form fades out as the new one, lit white, fades in.
 			if (changing && step!.Kind is StepKind.Transform or StepKind.Merge && sc.PreviousId.Length > 0)
@@ -247,6 +256,7 @@ public sealed partial class SampleController
 			s.Image(image, body.X, body.Y, body.Width, body.Height, tint * alpha);
 		}
 		_probeFigures = figures.Count == 0 ? "none" : string.Join(", ", figures);
+		_probeFlying = hovering.Count == 0 ? "none" : string.Join(", ", hovering);
 
 		// Where effects and numbers land: on each figure, and in the front layout on the slot of a member with none.
 		var anchors = new Dictionary<int, Rectangle>(bodies);
@@ -258,7 +268,7 @@ public sealed partial class SampleController
 			{
 				anchors[index] = slot;
 			}
-			stage.Banner = DrawBanner(s, step, p, 0, front, aboveStrip: true);
+			stage.Banner = DrawBanner(s, step, p, b.LogShown ? BattleLogLines * 22 + 48 : 20, front, plate: true);
 		}
 		bool Behind(int i) => front && i < partyCount;
 
@@ -598,17 +608,18 @@ public sealed partial class SampleController
 		};
 	}
 
-	// The step's words: the action's name over its whole turn, and the opening, the round, a cancel, a notice or the
+	// The step's words at `y`: the action's name over its whole turn, and the opening, the round, a cancel, a notice or the
 	// outcome on their own, fading in and out. In the front layout the action's name and a cancel are a framed name plate
-	// just above the status strip (`aboveStrip`), the rest stays at `y`. Returns the box drawn.
-	private Rectangle DrawBanner(IDrawSurface s, BattleStep? step, float p, int y, bool front, bool aboveStrip = false)
+	// (`plate`), drawn with the stage's figures so the probe can check what it covers; it stays at the top of the stage, over
+	// no party figure and no enemy's label. Returns the box drawn.
+	private Rectangle DrawBanner(IDrawSurface s, BattleStep? step, float p, int y, bool front, bool plate = false)
 	{
 		if (step is null)
 		{
 			return Rectangle.Empty;
 		}
 		bool turnName = step.Kind is StepKind.Banner or StepKind.Animate or StepKind.Effect or StepKind.Result or StepKind.Retarget;
-		if (front && (turnName || step.Kind == StepKind.Cancel) != aboveStrip)
+		if (front && (turnName || step.Kind == StepKind.Cancel) != plate)
 		{
 			return Rectangle.Empty;
 		}
@@ -623,12 +634,8 @@ public sealed partial class SampleController
 		int w = s.Measure(text, size) + 48;
 		int h = size + 22;
 		int x = (s.Width - w) / 2;
-		if (aboveStrip)
-		{
-			y = StripTop - h - 6;
-		}
 		Style.Box(s, x, y, w, h, 0.95f * alpha);
-		if (aboveStrip)
+		if (plate)
 		{
 			Style.Frame(s, x + 6, y + 6, w - 12, h - 12, Style.Accent * (0.5f * alpha), 1);
 		}

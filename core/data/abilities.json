@@ -12,6 +12,12 @@
 		{"id": "scatter_shot", "name": "Scatter Shot", "kind": "attack", "target": "enemy_group", "effects": [
 			{"type": "physical_damage", "power": 0}
 		]},
+		{"id": "last_toll", "name": "Last Toll", "kind": "technique", "cost": 0, "target": "all_enemies", "effects": [
+			{"type": "instant_defeat", "threshold": 20, "element": "holy"}
+		]},
+		{"id": "talon", "name": "Talon", "kind": "attack", "target": "one_enemy", "effects": [
+			{"type": "physical_damage", "power": 2}
+		]},
 
 		{"id": "spark", "name": "Spark", "kind": "technique", "cost": 3, "target": "one_enemy", "family": "spark", "effects": [
 			{"type": "elemental_damage", "power": 13, "element": "shock"}
@@ -77,6 +83,12 @@
 		{"id": "hull_vent", "name": "Hull Vent", "kind": "skill", "uses": 3, "target": "enemy_group", "effects": [
 			{"type": "elemental_damage", "power": 11, "element": "heat"}
 		]},
+		{"id": "sand_spray", "name": "Sand Spray", "kind": "skill", "uses": 3, "target": "enemy_group", "effects": [
+			{"type": "physical_damage", "power": 12}
+		]},
+		{"id": "rime_drill", "name": "Rime Drill", "kind": "skill", "uses": 2, "target": "one_enemy", "effects": [
+			{"type": "elemental_damage", "power": 20, "element": "chill"}
+		]},
 		{"id": "hull_patch", "name": "Hull Patch", "kind": "skill", "uses": 2, "target": "self", "effects": [
 			{"type": "heal", "power": 20}
 		]},
@@ -104,6 +116,9 @@
 			{"type": "apply_status", "status": "silence", "threshold": 47}
 		]},
 		{"id": "sundering_cleave", "name": "Sundering Cleave", "kind": "combo", "target": "enemy_group", "effects": [
+			{"type": "physical_damage"}
+		]},
+		{"id": "pincer_dive", "name": "Pincer Dive", "kind": "combo", "target": "one_enemy", "effects": [
 			{"type": "physical_damage"}
 		]},
 		{"id": "twin_arc", "name": "Twin Arc", "kind": "combo", "target": "one_enemy", "effects": [

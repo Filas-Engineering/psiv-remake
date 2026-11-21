@@ -15,5 +15,8 @@
 		{"id": "dawn_call", "abilities": ["rekindle", "rally"], "result": "dawn_call"},
 		{"id": "kiln_roar", "abilities": ["flare_burst", "ember"], "result": "kiln_roar"},
 		{"id": "dream_lance", "abilities": ["drowse", "focus_shot"], "ordered": true, "result": "dream_lance"}
+	],
+	"enemy_combos": [
+		{"id": "kite_pincer", "parts": [{"enemy": "squall_kite", "ability": "talon"}, {"enemy": "cinder_kite", "ability": "talon"}], "result": "pincer_dive"}
 	]
 }

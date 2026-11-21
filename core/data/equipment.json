@@ -11,6 +11,11 @@
 		{"id": "spark_ring", "name": "Spark Ring", "slot": "accessory", "category": "charm", "abilities": ["glint"]},
 		{"id": "drift_feather", "name": "Drift Feather", "slot": "accessory", "category": "charm", "stats": {"evasion": 10, "agility": 2}},
 		{"id": "arc_disc", "name": "Arc Disc", "slot": "weapon", "category": "sling", "attack": "disc_throw"},
-		{"id": "storm_rod", "name": "Storm Rod", "slot": "weapon", "category": "rod", "use": "gust", "stats": {"mental": 2}}
+		{"id": "storm_rod", "name": "Storm Rod", "slot": "weapon", "category": "rod", "use": "gust", "stats": {"mental": 2}},
+		{"id": "gill_knife", "name": "Gill Knife", "slot": "weapon", "category": "blade", "stats": {"strength": 3, "dexterity": 2}},
+		{"id": "kelp_cleaver", "name": "Kelp Cleaver", "slot": "weapon", "category": "greatblade", "hands": 2, "stats": {"strength": 12}},
+		{"id": "driftwood_buckler", "name": "Driftwood Buckler", "slot": "shield", "category": "buckler", "stats": {"defense": 4}},
+		{"id": "reef_targe", "name": "Reef Targe", "slot": "shield", "category": "buckler", "stats": {"defense": 6, "agility": -1}},
+		{"id": "ward_mantle", "name": "Ward Mantle", "slot": "body", "category": "light_armor", "stats": {"defense": 2, "magic_defense": 8}}
 	]
 }

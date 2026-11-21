@@ -84,6 +84,10 @@ struct EnemyDef {
 	std::string mergesInto = {};
 	// The form it takes when it falls, at full hit points, in place of being defeated (B16).
 	std::string nextForm = {};
+	// Presentation only: a renderer shows it off the ground.
+	bool flying = false;
+	// The percent of its maximum hit points at or below which it takes its next form; 0 takes it on defeat.
+	int nextFormAt = 0;
 };
 
 // One position in an enemy group's formation. Group targeting hits every living enemy with the same group.

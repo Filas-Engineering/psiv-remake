@@ -30,6 +30,7 @@ struct Database {
 	std::map<std::string, EnemyDef> enemies;
 	std::map<std::string, Encounter> encounters;
 	std::vector<ComboRecipe> combos;
+	std::vector<EnemyComboRecipe> enemyCombos;
 	std::map<std::string, DifficultyDef> difficulties;
 	std::vector<Macro> macros;
 	std::vector<std::string> lineup;

@@ -38,7 +38,7 @@ public sealed partial class SampleController
 		DrawBackdrop(s, art);
 		int x = 80;
 		int w = s.Width - 160;
-		Style.Window(s, x, 50, w, s.Height - 100, T("ui.shop.title"));
+		Style.Window(s, x, 50, w, s.Height - 100, _s.Shop() is { } open ? T(NameKind.ShopKind, (int)open.Kind) : T("ui.shop.title"));
 		ShopInfo? shop = _s.Shop();
 		if (shop is null)
 		{

@@ -8,9 +8,9 @@ from pathlib import Path
 
 from . import areajson
 
-KINDS = {"floor": ".", "wall": "#", "water": "~"}
+KINDS = {"floor": ".", "wall": "#", "water": "~", "soft": ":", "barrier": "%"}
 KIND_OF_CHARACTER = {c: k for k, c in KINDS.items()}
-TILE_IDS = {"floor": 0, "wall": 1, "water": 2}
+TILE_IDS = {"floor": 0, "wall": 1, "water": 2, "soft": 3, "barrier": 4}
 FLIP_BITS = 0xF0000000
 MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "int", "music": "string", "region": "string", "arrival": "string"}
 # Map properties in the area format's order, as the importer copies them and the exporter writes them.
@@ -20,19 +20,24 @@ REQUIRED_MAP_PROPERTIES = ["id"]
 # Per object class: property name to type. "json" is a string property holding JSON text of the given shape.
 OBJECT_PROPERTIES = {
 	"marker": {},
-	"exit": {"to": "string", "marker": "string"},
+	"exit": {"to": "string", "marker": "string", "fall": "bool"},
 	"hook": {"trigger": "string", "event": "string", "require_flag": "string", "block_flag": "string"},
-	"shop": {"stock": "json list", "sell_percent": "int", "script_only": "bool"},
+	"shop": {"kind": "string", "stock": "json list", "sell_percent": "int", "require_flag": "string", "block_flag": "string", "script_only": "bool"},
 	"rest": {"cost": "int", "script_only": "bool"},
 	"chest": {"flag": "string", "items": "json object", "equipment": "json object", "money": "int"},
-	"port": {"marker": "string", "flag": "string"},
+	"port": {"marker": "string", "flag": "string", "ship": "string"},
 	"zone": {"table": "json list", "visible": "json object", "random": "json object"},
+	"helm": {},
+	"gangway": {},
+	"change": {"flag": "string", "tile": "string", "cells": "json list"},
 }
-REQUIRED_PROPERTIES = {"exit": ["to", "marker"], "hook": ["event"], "shop": ["stock"], "chest": ["flag"], "port": ["marker"], "zone": ["table"]}
-NAMED_CLASSES = {"marker", "hook", "shop", "rest", "chest", "port", "zone"}
+REQUIRED_PROPERTIES = {"exit": ["to", "marker"], "hook": ["event"], "shop": ["stock"], "chest": ["flag"], "port": ["marker"], "zone": ["table"],
+	"change": ["flag", "tile", "cells"]}
+NAMED_CLASSES = {"marker", "hook", "shop", "rest", "chest", "port", "zone", "helm"}
 # Hooks with these triggers have no cell; their object's position is ignored.
 CELL_FREE_TRIGGERS = {"load", "flag"}
-CLASS_OF_LIST = {"exits": "exit", "hooks": "hook", "shops": "shop", "rests": "rest", "chests": "chest", "ports": "port", "zones": "zone"}
+CLASS_OF_LIST = {"exits": "exit", "hooks": "hook", "shops": "shop", "rests": "rest", "chests": "chest", "ports": "port", "zones": "zone", "helms": "helm",
+	"gangway": "gangway", "changes": "change"}
 TILED_VERSION = "1.10.2"
 FORMAT_VERSION = "1.10"
 
@@ -361,13 +366,21 @@ def _read_object(obj, tw, th, area, lists, problems):
 		zone.update(props)
 		lists["zones"].append(zone)
 		return
+	if cls == "change":
+		if props["tile"] not in areajson.CELL_CHARACTERS:
+			problems.append(f"{where}: property 'tile' must be one map character: {', '.join(areajson.CELL_CHARACTERS)}")
+			return
+		lists["changes"].append({"flag": props["flag"], "tile": props["tile"], "cells": props["cells"]})
+		return
 	cell = _cell(obj, tw, th)
 	if cls == "marker":
 		if name in area["markers"]:
 			problems.append(f"{where}: marker '{name}' is defined twice")
 		area["markers"][name] = cell
 	elif cls == "exit":
-		lists["exits"].append({"at": cell, "to": props["to"], "marker": props["marker"]})
+		entry = {"at": cell}
+		entry.update(props)
+		lists["exits"].append(entry)
 	elif cls == "hook":
 		hook = {"id": name}
 		if props.get("trigger") not in CELL_FREE_TRIGGERS:
@@ -388,6 +401,10 @@ def _read_object(obj, tw, th, area, lists, problems):
 		port = {"id": name, "at": cell}
 		port.update(props)
 		lists["ports"].append(port)
+	elif cls == "helm":
+		lists["helms"].append({"id": name, "at": cell})
+	elif cls == "gangway":
+		lists["gangway"].append(cell)
 
 
 def load_tmj(path):
@@ -427,7 +444,7 @@ def area_to_tmj(area, tileset_ref, tile_size=16):
 	elif any(len(r) != len(rows[0]) for r in rows):
 		problems.append("every map row must have the same width")
 	elif any(c not in KIND_OF_CHARACTER for r in rows for c in r):
-		problems.append("map rows use '.' for floor, '#' for wall and '~' for water")
+		problems.append("map rows use " + ", ".join(f"'{c}' for {k}" for k, c in KINDS.items()))
 	if not isinstance(area.get("id"), str) or not area.get("id"):
 		problems.append("the area needs an id")
 	if problems:
@@ -457,9 +474,12 @@ def area_to_tmj(area, tileset_ref, tile_size=16):
 			obj["properties"] = [_prop(k, v) for k, v in props.items()]
 		objects.append(obj)
 
+	def is_cell(value):
+		return isinstance(value, list) and len(value) == 2 and all(isinstance(v, int) for v in value)
+
 	def cell_of(entry, where):
 		at = entry.get("at")
-		if not (isinstance(at, list) and len(at) == 2 and all(isinstance(v, int) for v in at)):
+		if not is_cell(at):
 			problems.append(f"{where}: 'at' must be [x, y]")
 			return [0, 0]
 		return at
@@ -467,7 +487,7 @@ def area_to_tmj(area, tileset_ref, tile_size=16):
 	for name, cell in area.get("markers", {}).items():
 		add("marker", name, {}, cell=cell)
 	for i, e in enumerate(area.get("exits", [])):
-		add("exit", "", {"to": e.get("to"), "marker": e.get("marker")}, cell=cell_of(e, f"exits[{i}]"))
+		add("exit", "", {k: v for k, v in e.items() if k != "at"}, cell=cell_of(e, f"exits[{i}]"))
 	for i, h in enumerate(area.get("hooks", [])):
 		props = {k: v for k, v in h.items() if k not in ("id", "at")}
 		if h.get("trigger") in CELL_FREE_TRIGGERS:
@@ -488,10 +508,19 @@ def area_to_tmj(area, tileset_ref, tile_size=16):
 		add("port", p.get("id", ""), {k: v for k, v in p.items() if k not in ("id", "at")}, cell=cell_of(p, f"ports[{i}]"))
 	for i, z in enumerate(area.get("zones", [])):
 		corners = [z.get("from"), z.get("to")]
-		if not all(isinstance(v, list) and len(v) == 2 and all(isinstance(n, int) for n in v) for v in corners):
+		if not all(is_cell(v) for v in corners):
 			problems.append(f"zones[{i}]: 'from' and 'to' must be [x, y]")
 			continue
 		add("zone", z.get("id", ""), {k: v for k, v in z.items() if k not in ("id", "from", "to")}, rect=corners)
+	for i, h in enumerate(area.get("helms", [])):
+		add("helm", h.get("id", ""), {}, cell=cell_of(h, f"helms[{i}]"))
+	for i, cell in enumerate(area.get("gangway", [])):
+		if not is_cell(cell):
+			problems.append(f"gangway[{i}] must be [x, y]")
+			continue
+		add("gangway", "", {}, cell=cell)
+	for c in area.get("changes", []):
+		add("change", "", dict(c))
 	if problems:
 		raise areajson.AreaError(problems)
 

@@ -175,6 +175,10 @@ public:
 	virtual void remove_vehicle(const std::string& vehicle);
 	virtual bool has_vehicle(const std::string& vehicle);
 	virtual bool aboard_vehicle(const std::string& vehicle);
+	// For the `party` and `item` tests: whether the member is in the active party, and how many of the item the party
+	// holds. The defaults say nobody and none.
+	virtual bool in_party(const std::string& member);
+	virtual int item_count(const std::string& item);
 	// The member learns the ability for good.
 	virtual void teach_ability(const std::string& member, const std::string& ability);
 	// A character who walks with the party without joining it; empty for none.

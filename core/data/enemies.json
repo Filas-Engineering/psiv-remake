@@ -27,6 +27,7 @@
 		},
 		{
 			"id": "bog_wisp",
+			"flying": true,
 			"name": "Bog Wisp",
 			"kind": "spirit",
 			"stats": {"hp": 70, "tp": 20, "strength": 8, "mental": 12, "agility": 9, "dexterity": 9, "defense": 4, "level": 2, "evasion": 10},
@@ -58,6 +59,7 @@
 		},
 		{
 			"id": "hive_lantern",
+			"flying": true,
 			"name": "Hive Lantern",
 			"stats": {"hp": 320, "tp": 0, "strength": 10, "mental": 8, "agility": 4, "dexterity": 8, "defense": 6, "level": 3},
 			"basic_attack": "bite",
@@ -158,6 +160,69 @@
 			],
 			"experience": 14,
 			"currency": 8
+		},
+		{
+			"id": "cinder_bulwark",
+			"name": "Cinder Bulwark",
+			"kind": "machine",
+			"stats": {"hp": 260, "tp": 20, "strength": 17, "mental": 9, "agility": 7, "dexterity": 12, "defense": 11, "level": 7},
+			"basic_attack": "bite",
+			"abilities": ["gear_slam", "steam_vent"],
+			"slots": ["bite", "gear_slam", "bite", "steam_vent", "bite", "gear_slam", "bite", "bite"],
+			"experience": 1600,
+			"currency": 300
+		},
+		{
+			"id": "gloam_reaper",
+			"name": "Gloam Reaper",
+			"kind": "spirit",
+			"flying": true,
+			"stats": {"hp": 90, "tp": 0, "strength": 9, "mental": 20, "agility": 6, "dexterity": 9, "defense": 5, "level": 4, "magic_defense": 12},
+			"basic_attack": "bite",
+			"abilities": ["last_toll"],
+			"slots": ["last_toll", "last_toll", "last_toll", "last_toll", "last_toll", "last_toll", "last_toll", "last_toll"],
+			"experience": 20,
+			"currency": 10
+		},
+		{
+			"id": "shellback",
+			"name": "Shellback",
+			"stats": {"hp": 140, "tp": 0, "strength": 12, "mental": 4, "agility": 5, "dexterity": 9, "defense": 12, "level": 4, "magic_defense": 8},
+			"basic_attack": "bite",
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"next_form": "shellback_bare",
+			"next_form_at": 50,
+			"experience": 4,
+			"currency": 2
+		},
+		{
+			"id": "shellback_bare",
+			"name": "Bare Shellback",
+			"stats": {"hp": 80, "tp": 0, "strength": 16, "mental": 4, "agility": 9, "dexterity": 11, "defense": 3, "level": 4},
+			"basic_attack": "bite",
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"experience": 18,
+			"currency": 9
+		},
+		{
+			"id": "squall_kite",
+			"name": "Squall Kite",
+			"flying": true,
+			"stats": {"hp": 70, "tp": 0, "strength": 12, "mental": 4, "agility": 40, "dexterity": 12, "defense": 4, "level": 3},
+			"basic_attack": "talon",
+			"slots": ["talon", "talon", "talon", "talon", "talon", "talon", "talon", "talon"],
+			"experience": 12,
+			"currency": 6
+		},
+		{
+			"id": "cinder_kite",
+			"name": "Cinder Kite",
+			"flying": true,
+			"stats": {"hp": 60, "tp": 0, "strength": 13, "mental": 4, "agility": 40, "dexterity": 12, "defense": 3, "level": 3},
+			"basic_attack": "talon",
+			"slots": ["talon", "talon", "talon", "talon", "talon", "talon", "talon", "talon"],
+			"experience": 12,
+			"currency": 6
 		}
 	],
 	"encounters": [
@@ -174,6 +239,10 @@
 		{"id": "colossus", "enemies": ["tide_colossus"], "escape": false},
 		{"id": "sentinel", "enemies": ["aegis_sentinel"], "escape": false},
 		{"id": "endless", "enemies": ["gel_mite", "gel_mite"], "replace_fallen": true},
-		{"id": "echoes", "enemies": ["echo_twin", "echo_twin"]}
+		{"id": "echoes", "enemies": ["echo_twin", "echo_twin"]},
+		{"id": "kites", "enemies": ["squall_kite", "cinder_kite"]},
+		{"id": "bulwark", "enemies": ["cinder_bulwark"], "escape": false},
+		{"id": "reaper", "enemies": ["gloam_reaper"]},
+		{"id": "shellback", "enemies": ["shellback"]}
 	]
 }

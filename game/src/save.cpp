@@ -252,6 +252,17 @@ std::string travelChunk(const World& w) {
 		}
 	}
 	o.key("dungeon_exit").text(w.dungeonExitArea).num(w.dungeonExitCell.x).num(w.dungeonExitCell.y).end();
+	if (!w.shipPort.empty()) {
+		o.key("ship").text(w.shipPort).end();
+	}
+	for (const auto& [area, cells] : w.brokenCells) {
+		for (Cell c : cells) {
+			o.key("broken").text(area).num(c.x).num(c.y).end();
+		}
+	}
+	for (Cell c : w.brokenHere) {
+		o.key("broken_here").num(c.x).num(c.y).end();
+	}
 	return o.str();
 }
 
@@ -614,6 +625,9 @@ bool readTravel(const std::string& payload, World& w, std::string& error) {
 	w.aboard.clear();
 	w.dungeonExitArea.clear();
 	w.dungeonExitCell = {};
+	w.shipPort.clear();
+	w.brokenCells.clear();
+	w.brokenHere.clear();
 	for (const auto& l : in.lines()) {
 		if (l[0] == "aboard" && in.need(l, 1)) {
 			w.aboard = in.text(l[1]);
@@ -637,6 +651,12 @@ bool readTravel(const std::string& payload, World& w, std::string& error) {
 		} else if (l[0] == "dungeon_exit" && in.need(l, 3)) {
 			w.dungeonExitArea = in.text(l[1]);
 			w.dungeonExitCell = {static_cast<int>(in.num(l[2])), static_cast<int>(in.num(l[3]))};
+		} else if (l[0] == "ship" && in.need(l, 1)) {
+			w.shipPort = in.text(l[1]);
+		} else if (l[0] == "broken" && in.need(l, 3)) {
+			w.brokenCells[in.text(l[1])].insert({static_cast<int>(in.num(l[2])), static_cast<int>(in.num(l[3]))});
+		} else if (l[0] == "broken_here" && in.need(l, 2)) {
+			w.brokenHere.insert({static_cast<int>(in.num(l[1])), static_cast<int>(in.num(l[2]))});
 		} else {
 			in.fail("unknown line '" + l[0] + "'");
 		}
@@ -698,7 +718,7 @@ struct KnownChunk {
 // In the order they are written.
 const KnownChunk kWorldChunks[] = {
 	{"location", 1, locationChunk, readLocation, 1},
-	{"party", 3, partyChunk, readParty, 2},
+	{"party", 4, partyChunk, readParty, 2},
 	{"inventory", 1, inventoryChunk, readInventory, 1},
 	{"world", 2, worldChunk, readWorld, 1},
 	{"battle", 2, battleChunk, readBattle, 2},
@@ -708,7 +728,7 @@ const KnownChunk kWorldChunks[] = {
 	{"unlocks", 1, unlocksChunk, readUnlocks, 1},
 	{"actors", 1, actorsChunk, readActors, 1},
 	{"talk", 1, talkChunk, readTalk, 1},
-	{"travel", 2, travelChunk, readTravel, 1},
+	{"travel", 3, travelChunk, readTravel, 1},
 	{"dev", 1, devChunk, readDev, 1},
 };
 
@@ -898,6 +918,12 @@ bool migrate6to7(std::vector<Chunk>&, std::string&) {
 	return true;
 }
 
+// Schema 7 to 8: a member may wear a piece in the left hand (party chunk 4), and the travel chunk gains the ship the
+// party is aboard and the barriers broken (travel chunk 3); a schema 7 save has neither.
+bool migrate7to8(std::vector<Chunk>&, std::string&) {
+	return true;
+}
+
 struct Migration {
 	int from;
 	bool (*apply)(std::vector<Chunk>& chunks, std::string& error);
@@ -911,6 +937,7 @@ const Migration kMigrations[] = {
 	{4, migrate4to5},
 	{5, migrate5to6},
 	{6, migrate6to7},
+	{7, migrate7to8},
 };
 
 std::string headerChunk(const SaveFile& save) {

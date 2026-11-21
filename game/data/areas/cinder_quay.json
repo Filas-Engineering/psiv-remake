@@ -19,12 +19,20 @@
 	"markers": {
 		"pier_front": [6, 5],
 		"stall_front": [3, 2],
-		"east_gate": [12, 4]
+		"east_gate": [12, 4],
+		"dock_front": [10, 5],
+		"bell_front": [11, 1]
 	},
 	"exits": [
 		{"at": [13, 4], "to": "ember_steps", "marker": "west_gate"}
 	],
+	"hooks": [
+		{"id": "dock_bell", "at": [11, 0], "event": "quay_dock_bell"}
+	],
 	"shops": [{"id": "quay_stall", "at": [3, 1], "stock": ["homing_shell", "waymark_chalk", "tonic"], "sell_percent": 50}],
 	"rests": [{"id": "quay_home", "at": [9, 1], "cost": 0}],
-	"ports": [{"id": "quay_pier", "at": [6, 6], "marker": "pier_front", "flag": "travel.isles_open"}]
+	"ports": [
+		{"id": "quay_pier", "at": [6, 6], "marker": "pier_front", "flag": "travel.isles_open"},
+		{"id": "quay_dock", "at": [10, 6], "marker": "dock_front", "flag": "travel.dock_open", "ship": "lantern_barge"}
+	]
 }

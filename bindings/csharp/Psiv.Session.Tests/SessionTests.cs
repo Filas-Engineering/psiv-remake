@@ -413,7 +413,7 @@ public class SessionTests
 		Assert.Equal(new FieldActor("dockhand", "Dockhand", 10, 2, Direction.South, true, true), view.Actors[0]);
 		Assert.Equal(new FieldActor("guide", "Harbor Guide", 5, 2, Direction.South, true, false), view.Actors[1]);
 		// Every actor is in the ids; those standing on the reed path or in Saltgrass are not in this area's view.
-		Assert.Equal(["dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler", "wayfarer"], s.ActorIds());
+		Assert.Equal(["ashwife", "bridgewright", "dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "lodgekeeper", "peddler", "wayfarer"], s.ActorIds());
 		Assert.DoesNotContain(view.Actors, a => a.Id == "peddler");
 		Assert.True(s.OpenMenu().Ok);
 		Member fighter = s.Party().Single();
@@ -888,6 +888,67 @@ public class DevToolsTests
 		Assert.Null(s.VehicleSkillUses("reed_skimmer", "hull_vent"));
 		s.DevVehicle("reed_skimmer", "reed_path", "skimmer_front").ThrowIfFailed();
 		Assert.Equal(3, s.VehicleSkillUses("reed_skimmer", "hull_vent"));
+	}
+
+	[Fact]
+	public void HandsShipsShopsVehiclesAndNamesThroughTheWrapper()
+	{
+		string saves = Paths.FreshDirectory("fells");
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = saves, Seed = 285 });
+		Assert.Equal("left_hand", GameSession.NameOf(NameKind.EquipSlot, (int)EquipSlot.LeftHand));
+		Assert.Equal("gift", GameSession.NameOf(NameKind.ShopKind, (int)ShopKind.Gift));
+		s.NewGame().ThrowIfFailed();
+		Settle(s);
+		s.DevWarp("cinder_quay", "dock_front").ThrowIfFailed();
+		s.DevSetFlag("travel.dock_open", true).ThrowIfFailed();
+		s.Face(Direction.South).ThrowIfFailed();
+		s.Interact().ThrowIfFailed();
+		Settle(s);
+		FieldView field = s.Field()!;
+		Assert.Equal((AreaKind.Vessel, "quay_dock"), (field.Info.AreaKind, field.Info.ShipPort));
+		Assert.Contains(field.Points, p => p.Kind == PointKind.Helm);
+		Assert.Contains(field.Points, p => p.Kind == PointKind.Gangway);
+
+		s.DevWarp("ashfall_market", "tools_front").ThrowIfFailed();
+		Assert.Contains(s.Field()!.Points, p => p.Kind == PointKind.Shop && p.Id == "ashfall_gifts" && p.ShopKind == ShopKind.Gift && p.Active);
+		s.Face(Direction.North).ThrowIfFailed();
+		s.Interact().ThrowIfFailed();
+		Assert.Equal((ShopKind.Tool, 2), (s.Shop()!.Kind, s.Shop()!.Stock.Count));
+		s.CloseMenu().ThrowIfFailed();
+
+		s.DevGive("kelp_cleaver", 1).ThrowIfFailed();
+		s.DevGive("gill_knife", 1).ThrowIfFailed();
+		s.OpenMenu().ThrowIfFailed();
+		Assert.Equal(2, s.Inventory().Single(e => e.Id == "kelp_cleaver").Hands);
+		s.EquipAt("fighter", "gill_knife", EquipSlot.LeftHand).ThrowIfFailed();
+		EquipPreview cleaver = s.EquipPreview("fighter", "kelp_cleaver")!;
+		Assert.Equal((EquipSlot.Weapon, "copper_blade", "gill_knife", 2), (cleaver.Position, cleaver.Replaces, cleaver.AlsoReplaces, cleaver.Hands));
+		Assert.Equal("equip.wrong_position", s.EquipPreview("fighter", "kelp_cleaver", EquipSlot.LeftHand)!.Refusal?.Key);
+		Assert.Equal("equip.wrong_position", s.EquipAt("fighter", "kelp_cleaver", EquipSlot.LeftHand).Error?.Key);
+		Assert.False(s.GameInfo().MagicDefense);
+		s.DevGive("ward_mantle", 1).ThrowIfFailed();
+		Assert.Equal(8, s.EquipPreview("fighter", "ward_mantle")!.Bonus.MagicDefense);
+		s.Equip("fighter", "ward_mantle").ThrowIfFailed();
+		Assert.Equal(8, s.MemberDetail("fighter")!.MagicDefense);
+		s.CloseMenu().ThrowIfFailed();
+
+		s.DevWarp("fell_moor", "town_gate").ThrowIfFailed();
+		field = s.Field()!;
+		Assert.Equal(CellFlags.Soft, field.Cell(8, 1) & CellFlags.TerrainMask);
+		Assert.True(field.Cell(13, 1).HasFlag(CellFlags.Barrier));
+		s.DevVehicle("dune_crawler", "fell_moor", "crawler_bay").ThrowIfFailed();
+		s.DevGive("dune_horn", 1).ThrowIfFailed();
+		Assert.Equal("dune_crawler", s.Inventory().Single(e => e.Id == "dune_horn").CallsVehicle);
+		s.OpenMenu().ThrowIfFailed();
+		s.UseItem("dune_horn", null).ThrowIfFailed();
+		Assert.Equal("dune_crawler", s.FieldInfo()!.Aboard);
+		s.LeaveVehicle().ThrowIfFailed();
+
+		s.SetProfileValue("text_language", "ja").ThrowIfFailed();
+		s.DevBattle("kites").ThrowIfFailed();
+		Combatant kite = s.Combatants().Last();
+		Assert.True(kite.Flying);
+		Assert.Equal("燃えさしの凧鳥", kite.Name);
 	}
 
 	[Fact]

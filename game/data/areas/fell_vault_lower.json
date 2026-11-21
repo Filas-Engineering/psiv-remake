@@ -1,0 +1,31 @@
+{
+	"id": "fell_vault_lower",
+	"kind": "dungeon",
+	"encounter_mode": "random",
+	"step_ms": 250,
+	"region": "fells",
+	"map": [
+		"##########",
+		"#........#",
+		"#.######.#",
+		"#.#....#.#",
+		"#.#....#.#",
+		"#........#",
+		"##########"
+	],
+	"markers": {
+		"pit_landing": [1, 1],
+		"key_front": [7, 5],
+		"cache_front": [4, 4]
+	},
+	"exits": [
+		{"at": [8, 1], "to": "fell_vault", "marker": "stair_top"}
+	],
+	"chests": [
+		{"id": "vault_key_chest", "at": [8, 5], "flag": "chest.vault_key", "items": {"vault_key": 1}},
+		{"id": "vault_cache", "at": [5, 4], "flag": "chest.vault_cache", "equipment": {"reef_targe": 1}, "money": 120}
+	],
+	"changes": [
+		{"flag": "fells.vault_cleared", "tile": ".", "cells": [[4, 2]]}
+	]
+}

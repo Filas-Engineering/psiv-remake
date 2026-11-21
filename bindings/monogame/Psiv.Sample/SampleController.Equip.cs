@@ -2,34 +2,47 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-// The menu's Equip page: a member, a slot, then the bag's pieces for it (those the member cannot wear marked) or removing
-// what is worn. Browsing a piece shows the session's comparison: the piece's bonuses and the member's stats before and
-// after, as a battle would use them.
+// The menu's Equip page: a member, a place to wear something (each hand, then the other slots), then the bag's pieces for
+// it (those the member cannot wear there marked) or removing what is worn. Browsing a piece shows the session's
+// comparison at that place: the piece's bonuses, what else it sends back, and the member's stats before and after, as a
+// battle would use them.
 public sealed partial class SampleController
 {
+	private static readonly EquipSlot[] EquipPositions = [EquipSlot.Weapon, EquipSlot.LeftHand, EquipSlot.Head, EquipSlot.Body, EquipSlot.Arms, EquipSlot.Accessory];
+
 	private int? _equipSlot;
 	// The member's stats before and after the last change made here.
 	private (string Title, List<(string Label, int Before, int After)> Rows)? _equipChange;
 
+	// Magic defense is shown only when the rules use it.
+	private bool MagicDefenseShown => _s.GameInfo().MagicDefense;
+
 	private string[] CompareLabels =>
-		[.. new[] { "max_hp", "max_tp", "strength", "mental", "agility", "dexterity", "defense", "critical", "evasion" }.Select(stat => T("ui.stat." + stat))];
+		[.. new[] { "max_hp", "max_tp", "strength", "mental", "agility", "dexterity", "defense", "critical", "evasion", "magic_defense" }
+			.Take(MagicDefenseShown ? 10 : 9).Select(stat => T("ui.stat." + stat))];
 
 	private int[]? Totals(string memberId)
 	{
 		Member? m = _s.Party().FirstOrDefault(x => x.Id == memberId);
 		MemberDetail? d = _s.MemberDetail(memberId);
-		return m is null || d is null ? null : [m.MaxHp, m.MaxTp, m.Strength, m.Mental, m.Agility, m.Dexterity, m.Defense, d.Critical, d.Evasion];
+		return m is null || d is null ? null : [m.MaxHp, m.MaxTp, m.Strength, m.Mental, m.Agility, m.Dexterity, m.Defense, d.Critical, d.Evasion, d.MagicDefense];
 	}
 
-	private static int[] Values(StatBonus b) => [b.MaxHp, b.MaxTp, b.Strength, b.Mental, b.Agility, b.Dexterity, b.Defense, b.Critical, b.Evasion];
+	private static int[] Values(StatBonus b) => [b.MaxHp, b.MaxTp, b.Strength, b.Mental, b.Agility, b.Dexterity, b.Defense, b.Critical, b.Evasion, b.MagicDefense];
 
-	// What can go in the slot: the bag's pieces for it, marked when the member cannot wear them, then taking off the one worn.
+	private static bool Fits(InventoryEntry piece, int position) => position is (int)EquipSlot.Weapon or (int)EquipSlot.LeftHand
+		? piece.Slot is EquipSlot.Weapon or EquipSlot.Shield
+		: (int)piece.Slot == position;
+
+	// What can go there: the bag's pieces for it (weapons and shields in either hand), marked when the member cannot wear
+	// them there, two-handed ones marked too, then taking off the one worn.
 	private List<(string Label, string? Piece, bool Wearable)> EquipChoices(string memberId, int slot)
 	{
-		var choices = _s.Inventory().Where(i => i.IsEquipment && (int)i.Slot == slot).Select(i =>
+		var choices = _s.Inventory().Where(i => i.IsEquipment && Fits(i, slot)).Select(i =>
 		{
-			bool wearable = _s.EquipPreview(memberId, i.Id)?.CanWear ?? false;
-			return (T("ui.common.item_count", i.Name, i.Count) + (wearable ? "" : "  " + T("ui.equip.cannot_wear_mark")), (string?)i.Id, wearable);
+			bool wearable = _s.EquipPreview(memberId, i.Id, (EquipSlot)slot)?.CanWear ?? false;
+			string label = T("ui.common.item_count", i.Name, i.Count) + (i.Hands == 2 ? "  " + T("ui.equip.both_hands_mark") : "");
+			return (label + (wearable ? "" : "  " + T("ui.equip.cannot_wear_mark")), (string?)i.Id, wearable);
 		}).ToList();
 		Member? m = _s.Party().FirstOrDefault(x => x.Id == memberId);
 		if (m is not null && m.Equipment[slot].Length > 0)
@@ -70,7 +83,8 @@ public sealed partial class SampleController
 			_probeCompare = "cannot wear";
 			return;
 		}
-		s.Text(Style.Fit(s, p.ReplacesName.Length > 0 ? T("ui.equip.with_it_instead", p.ReplacesName) : T("ui.equip.with_it"), w), x, ly, Style.Accent);
+		string instead = p.AlsoReplacesName.Length > 0 ? (p.ReplacesName.Length > 0 ? ListText([p.ReplacesName, p.AlsoReplacesName]) : p.AlsoReplacesName) : p.ReplacesName;
+		s.Text(Style.Fit(s, instead.Length > 0 ? T("ui.equip.with_it_instead", instead) : T("ui.equip.with_it"), w), x, ly, Style.Accent);
 		ly += Px(32);
 		int[] before = Values(p.Before.Stats);
 		int[] after = Values(p.After.Stats);
@@ -121,14 +135,14 @@ public sealed partial class SampleController
 		}
 		if (_equipSlot is not { } slot)
 		{
-			_sub.Move(input, Enum.GetValues<EquipSlot>().Length);
+			_sub.Move(input, EquipPositions.Length);
 			if (input.Back)
 			{
 				_pickMember = null;
 			}
 			else if (input.Confirm)
 			{
-				_equipSlot = _sub.Cursor;
+				_equipSlot = (int)EquipPositions[_sub.Cursor];
 				_third.Reset();
 			}
 			return;
@@ -143,7 +157,7 @@ public sealed partial class SampleController
 		{
 			(string label, string? piece, _) = choices[_third.Cursor];
 			int[]? before = Totals(_pickMember);
-			PsivResult result = piece is null ? _s.Unequip(_pickMember, (EquipSlot)slot) : _s.Equip(_pickMember, piece);
+			PsivResult result = piece is null ? _s.Unequip(_pickMember, (EquipSlot)slot) : _s.EquipAt(_pickMember, piece, (EquipSlot)slot);
 			Report(result);
 			if (result.Ok && before is not null && Totals(_pickMember) is { } after)
 			{
@@ -171,14 +185,14 @@ public sealed partial class SampleController
 		int rx = x + listW + 30;
 		int rw = w - listW - 30;
 		s.Text(member.Name, x, y, Style.Accent);
-		var slots = Enum.GetValues<EquipSlot>().Select(slot => (int)slot).ToList();
+		var slots = EquipPositions.Select(slot => (int)slot).ToList();
 		DrawItems(s, _sub, x, y + Px(36), listW, Px(30) * slots.Count, slots.Select(slot =>
 			$"{T(NameKind.EquipSlot, slot)}: " + (member.Equipment[slot].Length > 0 ? member.EquipmentNames[slot] : "-")).ToList(), _equipSlot is null);
 		int[] totals = Totals(member.Id)!;
 		int rowH = Px(24);
 		if (_equipSlot is not { } chosen)
 		{
-			int slot = _sub.Cursor;
+			int slot = slots[_sub.Cursor];
 			s.Text(T("ui.equip.worn_here"), rx, y, Style.Accent);
 			s.Text(Style.Fit(s, member.Equipment[slot].Length > 0 ? $"{member.EquipmentNames[slot]}: {BonusText(detail.EquipmentBonus[slot])}" : T("ui.equip.nothing"), rw, Style.Small),
 				rx, y + Px(36), Style.Text, Style.Small);
@@ -212,7 +226,7 @@ public sealed partial class SampleController
 			var rows = CompareLabels.Select((l, i) => (l, totals[i], totals[i] - worn[i])).Where(r => r.Item2 != r.Item3).ToList();
 			Widgets.Compare(s, rx, y + Px(104), rw, rowH, rows.Count > 0 ? rows : [(T("ui.equip.no_changes"), 0, 0)]);
 		}
-		else if (_s.EquipPreview(member.Id, piece) is { } preview)
+		else if (_s.EquipPreview(member.Id, piece, (EquipSlot)chosen) is { } preview)
 		{
 			s.Text(Style.Fit(s, preview.PieceName, rw), rx, y + Px(70), Style.Accent);
 			DrawPreview(s, preview, rx, y + Px(104), rw);

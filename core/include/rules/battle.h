@@ -161,8 +161,11 @@ private:
 
 	std::vector<int> computeTurnOrder();
 	int tryCombo(const std::vector<int>& order, std::size_t index, std::vector<Event>& out);
+	int tryEnemyCombo(const std::vector<int>& order, std::size_t index, std::vector<Event>& out);
+	Attacker comboTeam(const std::vector<int>& participants, const std::vector<std::string>& components, const AbilityDef& combo, std::vector<Event>& out);
 
-	void takeTurn(int actor, std::vector<Event>& out);
+	// Returns the queued turns it used: 1, or more when an enemy combination fired.
+	int takeTurn(const std::vector<int>& order, std::size_t index, std::vector<Event>& out);
 	bool cancelledByStatus(int actor, const Command& command, std::vector<Event>& out);
 	void cancel(int actor, const Command& command, CancelReason reason, const std::string& status, std::vector<Event>& out);
 	int aimAt(int user, Targeting targeting, const std::vector<Effect>& effects, int requested, std::vector<Event>& out);

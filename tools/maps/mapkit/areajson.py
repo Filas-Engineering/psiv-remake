@@ -3,21 +3,24 @@
 import json
 
 TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "ports",
-	"zones"]
-LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "ports", "zones"]
+	"zones", "helms", "gangway", "changes"]
+LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes"]
 ENTRY_FIELDS = {
-	"exits": ["at", "to", "marker"],
+	"exits": ["at", "to", "marker", "fall"],
 	"hooks": ["id", "at", "trigger", "event", "require_flag", "block_flag"],
-	"shops": ["id", "at", "stock", "sell_percent"],
+	"shops": ["id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag"],
 	"rests": ["id", "at", "cost"],
 	"chests": ["id", "at", "flag", "items", "equipment", "money"],
-	"ports": ["id", "at", "marker", "flag"],
+	"ports": ["id", "at", "marker", "flag", "ship"],
 	"zones": ["id", "from", "to", "table", "visible", "random"],
+	"helms": ["id", "at"],
+	"changes": ["flag", "tile", "cells"],
 }
+STOCK_FIELDS = ["id", "require_flag", "block_flag"]
 TABLE_FIELDS = ["encounter", "weight"]
 VISIBLE_FIELDS = ["spawns", "cap", "detection_radius", "leash_radius", "chase_speed_percent", "chase_ms", "wander_speed_percent", "wander_percent"]
 RANDOM_FIELDS = ["min_steps", "max_steps", "step_distance"]
-CELL_CHARACTERS = {".": "floor", "#": "wall", "~": "water"}
+CELL_CHARACTERS = {".": "floor", "#": "wall", "~": "water", ":": "soft", "%": "barrier"}
 
 
 class AreaError(Exception):
@@ -55,10 +58,14 @@ def normalize(area):
 		if not entries:
 			del out[field]
 			continue
+		if field == "gangway":
+			continue
 		normalized = []
 		for i, entry in enumerate(entries):
 			where = f"{field}[{i}]"
 			e = _ordered(entry, ENTRY_FIELDS[field], where, problems)
+			if field == "shops" and isinstance(e.get("stock"), list):
+				e["stock"] = [_ordered(s, STOCK_FIELDS, f"{where}.stock[{j}]", problems) if isinstance(s, dict) else s for j, s in enumerate(e["stock"])]
 			if field == "zones":
 				if isinstance(e.get("table"), list):
 					e["table"] = [_ordered(t, TABLE_FIELDS, f"{where}.table", problems) for t in e["table"]]

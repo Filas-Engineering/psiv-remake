@@ -8,7 +8,7 @@
 			"basic_attack": "strike",
 			"abilities": ["rally", "focus_shot"],
 			"learns": [{"level": 3, "ability": "cleave"}],
-			"equip": ["blade", "light_armor", "heavy_armor", "charm"],
+			"equip": ["blade", "greatblade", "buckler", "light_armor", "heavy_armor", "charm"],
 			"equipment": ["copper_blade", "tin_cap", "padded_coat"]
 		},
 		{
@@ -54,12 +54,13 @@
 			"abilities": ["drowse", "flare_burst"],
 			"affinities": {"heat": 50},
 			"status_resist": {"paralysis": 50},
-			"equip": ["blade", "light_armor", "heavy_armor"],
+			"equip": ["blade", "buckler", "light_armor", "heavy_armor"],
 			"equipment": ["rivet_plate", "grip_bands"]
 		},
 		{
 			"id": "cogwright",
 			"name": "Test Cogwright",
+			"vulnerable": true,
 			"kind": "machine",
 			"base": {"hp": 70, "tp": 0, "strength": 15, "mental": 2, "agility": 7, "dexterity": 11, "defense": 12},
 			"growth": {"hp": 8, "tp": 0, "strength": 2, "mental": 0, "agility": 1, "dexterity": 1, "defense": 2},
@@ -67,6 +68,28 @@
 			"abilities": ["self_repair", "calm_tide"],
 			"equip": ["blade", "heavy_armor"],
 			"equipment": ["copper_blade", "rivet_plate"]
+		},
+		{
+			"id": "lancer",
+			"name": "Test Lancer",
+			"base": {"hp": 58, "tp": 6, "strength": 15, "mental": 5, "agility": 9, "dexterity": 11, "defense": 7},
+			"growth": {"hp": 7, "tp": 1, "strength": 2, "mental": 0, "agility": 1, "dexterity": 1, "defense": 1},
+			"basic_attack": "strike",
+			"abilities": ["weaken"],
+			"learns": [{"level": 4, "ability": "focus_shot"}],
+			"equip": ["greatblade", "light_armor"],
+			"equipment": ["kelp_cleaver", "padded_coat"]
+		},
+		{
+			"id": "harpooner",
+			"name": "Test Harpooner",
+			"base": {"hp": 50, "tp": 10, "strength": 11, "mental": 8, "agility": 12, "dexterity": 13, "defense": 6},
+			"growth": {"hp": 6, "tp": 1, "strength": 1, "mental": 1, "agility": 1, "dexterity": 1, "defense": 1},
+			"basic_attack": "strike",
+			"abilities": ["glint"],
+			"learns": [{"level": 4, "ability": "rally"}],
+			"equip": ["sling", "buckler", "light_armor"],
+			"equipment": ["arc_disc", "driftwood_buckler"]
 		}
 	],
 	"vehicles": [
@@ -78,6 +101,21 @@
 			"abilities": ["hull_vent", "hull_patch"],
 			"affinities": {"shock": 150},
 			"status_resist": {"paralysis": 100}
+		},
+		{
+			"id": "dune_crawler",
+			"name": "Dune Crawler",
+			"stats": {"hp": 260, "tp": 20, "strength": 22, "mental": 6, "agility": 5, "dexterity": 10, "defense": 16},
+			"basic_attack": "ram",
+			"abilities": ["sand_spray", "hull_patch"]
+		},
+		{
+			"id": "rime_borer",
+			"name": "Rime Borer",
+			"stats": {"hp": 240, "tp": 20, "strength": 24, "mental": 7, "agility": 4, "dexterity": 11, "defense": 18},
+			"basic_attack": "ram",
+			"abilities": ["rime_drill", "hull_patch"],
+			"affinities": {"heat": 150}
 		}
 	],
 	"lineup": ["fighter", "mystic", "scout", "medic", "engineer"],

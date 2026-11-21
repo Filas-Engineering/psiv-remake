@@ -9,14 +9,14 @@ namespace rules {
 
 namespace {
 
-Effectiveness effectivenessOf(int affinity) {
+Effectiveness effectivenessOf(int affinity, int divisor) {
 	if (affinity <= 0) {
 		return Effectiveness::Immune;
 	}
-	if (affinity > 100) {
+	if (affinity > divisor) {
 		return Effectiveness::Weak;
 	}
-	return affinity < 100 ? Effectiveness::Resisted : Effectiveness::Normal;
+	return affinity < divisor ? Effectiveness::Resisted : Effectiveness::Normal;
 }
 
 }
@@ -79,47 +79,52 @@ bool Battle::cancelledByStatus(int actor, const Command& command, std::vector<Ev
 }
 
 // An actor that cannot act loses the turn and pays nothing. An enemy the AI drives picks its action only now.
-void Battle::takeTurn(int actor, std::vector<Event>& out) {
+int Battle::takeTurn(const std::vector<int>& order, std::size_t index, std::vector<Event>& out) {
+	const int actor = order[index];
 	if (commands_[actor].kind == CommandKind::None) {
-		return;
+		return 1;
 	}
 	if (!combatants_[actor].alive()) {
 		cancel(actor, commands_[actor], CancelReason::ActorUnable, kDefeatedStatus, out);
-		return;
+		return 1;
 	}
 	if (cancelledByStatus(actor, commands_[actor], out)) {
-		return;
+		return 1;
 	}
 	if (aiTurn_[actor]) {
 		chooseEnemyAction(actor, out);
+		if (const int consumed = tryEnemyCombo(order, index, out)) {
+			return consumed;
+		}
 	}
 	const Command command = commands_[actor];
 	switch (command.kind) {
 	case CommandKind::None:
-		return;
+		break;
 	case CommandKind::Defend: {
 		Event& e = emit(out, EventType::ActionStarted);
 		e.actor = actor;
 		e.command = CommandKind::Defend;
-		return;
+		break;
 	}
 	case CommandKind::Escape:
 		attemptEscape(actor, out);
-		return;
+		break;
 	case CommandKind::Attack:
 		if (const AbilityDef* ability = db_->ability(combatants_[actor].basicAttack)) {
 			useAbility(actor, *ability, command.target, CommandKind::Attack, out);
 		}
-		return;
+		break;
 	case CommandKind::Ability:
 		if (const AbilityDef* ability = db_->ability(command.id)) {
 			useAbility(actor, *ability, command.target, CommandKind::Ability, out);
 		}
-		return;
+		break;
 	case CommandKind::Item:
 		useItem(actor, command, out);
-		return;
+		break;
 	}
+	return 1;
 }
 
 void Battle::useAbility(int actor, const AbilityDef& ability, int target, CommandKind kind, std::vector<Event>& out) {
@@ -311,9 +316,10 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 					e.target = target;
 					e.ability = source;
 				}
-				const int affinity = attacker.element != Element::None ? t.affinity(attacker.element) : (t.defending ? formulas::kDefendedAffinity : 100);
-				const int damage = formulas::damage(attack, t.effective(Stat::Defense), bonus, affinity, rollSpread());
-				const Effectiveness effectiveness = attacker.element != Element::None ? effectivenessOf(affinity) : Effectiveness::Normal;
+				const int divisor = db_->battleRules.affinityDivisor;
+				const int affinity = attacker.element != Element::None ? t.affinity(attacker.element) : (t.defending ? formulas::kDefendedAffinity * divisor / 100 : 100);
+				const int damage = formulas::damage(attack, t.effective(Stat::Defense), bonus, affinity, rollSpread(), divisor);
+				const Effectiveness effectiveness = attacker.element != Element::None ? effectivenessOf(affinity, divisor) : Effectiveness::Normal;
 				changed = dealDamage(user, target, damage, attacker.element, effectiveness, out) > 0 || changed;
 				noteHit(user, target, attacker, flatPower);
 				break;
@@ -322,8 +328,10 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				const int affinity = t.affinity(effect.element);
 				const int attack = flatPower ? effect.power : (attacker.combo ? attacker.comboAttack : attacker.mental);
 				const int bonus = flatPower ? 0 : (attacker.combo ? attacker.comboBonus : effect.power);
-				const int damage = formulas::damage(attack, t.effective(Stat::Mental), bonus, affinity, rollSpread());
-				changed = dealDamage(user, target, damage, effect.element, effectivenessOf(affinity), out) > 0 || changed;
+				const BattleRules& rules = db_->battleRules;
+				const int guard = rules.magicDefense ? t.stats.magicDefense : t.effective(Stat::Mental);
+				const int damage = formulas::damage(attack, guard, bonus, affinity, rollSpread(), rules.affinityDivisor);
+				changed = dealDamage(user, target, damage, effect.element, effectivenessOf(affinity, rules.affinityDivisor), out) > 0 || changed;
 				noteHit(user, target, attacker, flatPower);
 				break;
 			}
@@ -427,8 +435,14 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 			case EffectKind::Teach:
 				break;
 			case EffectKind::InstantDefeat: {
-				const bool immune = !t.vulnerable;
-				if (immune || formulas::statusScore(rng_.range(0, formulas::kChanceRollMax), attacker.mental, t.effective(Stat::Mental), 0) <= effect.threshold) {
+				// With an element the roll's factor is the target's affinity for it, as the original's death effect reads it
+				// (original-battle-rules.md, section 6); an affinity of 0 is immunity.
+				const int elementAffinity = effect.element == Element::None ? 1 : t.affinity(effect.element);
+				const bool immune = !t.vulnerable || elementAffinity <= 0;
+				const int roll = immune ? 0 : rng_.range(0, formulas::kChanceRollMax);
+				const int score = effect.element == Element::None ? formulas::statusScore(roll, attacker.mental, t.effective(Stat::Mental), 0)
+					: formulas::elementScore(roll, attacker.mental, t.effective(Stat::Mental), elementAffinity, db_->battleRules.affinityDivisor);
+				if (immune || score <= effect.threshold) {
 					Event& e = emit(out, EventType::Message);
 					e.actor = user;
 					e.target = target;
@@ -542,8 +556,11 @@ int Battle::dealDamage(int user, int target, int amount, Element element, Effect
 	e.hp = t.hp;
 	e.element = element;
 	e.effectiveness = effectiveness;
+	const EnemyDef* enemyDef = isParty(target) ? nullptr : db_->enemy(t.defId);
 	if (!t.alive()) {
 		defeat(target, out);
+	} else if (enemyDef && enemyDef->nextFormAt > 0 && dealt > 0 && t.hp * 100 <= t.stats.maxHp * enemyDef->nextFormAt && db_->enemy(enemyDef->nextForm)) {
+		transform(target, *db_->enemy(enemyDef->nextForm), out);
 	} else if (dealt > 0) {
 		const std::vector<ActiveStatus> statuses = t.statuses;
 		for (const ActiveStatus& active : statuses) {

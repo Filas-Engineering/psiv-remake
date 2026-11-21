@@ -10,16 +10,16 @@ namespace events {
 
 enum class Compare { eq, ne, lt, le, gt, ge };
 
-// A term that tests a vehicle instead of a flag or variable: `vehicle <id>` (the party has it) or `aboard <id>` (the
-// party rides it).
-enum class VehicleTest { none, owns, aboard };
+// A term that tests the game instead of a flag or variable: `vehicle <id>` (the party has it), `aboard <id>` (the party
+// rides it), `party <member>` (the member is in the active party) or `item <id>` (the party holds at least one).
+enum class TermTest { none, owns, aboard, member, holds };
 
 struct Term {
 	bool negate = false;
 	// A flag test when true, otherwise `name compare value` on a variable.
 	bool is_flag = true;
-	// Set for a vehicle test; `name` is then the vehicle.
-	VehicleTest vehicle = VehicleTest::none;
+	// Set for a test of the game; `name` is then the vehicle, member or item.
+	TermTest test = TermTest::none;
 	std::string name;
 	Compare compare = Compare::eq;
 	std::int64_t value = 0;

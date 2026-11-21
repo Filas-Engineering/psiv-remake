@@ -23,9 +23,8 @@ std::string describe(const Condition& condition) {
 		if (t.negate) {
 			out += "not ";
 		}
-		if (t.vehicle != VehicleTest::none) {
-			out += t.vehicle == VehicleTest::owns ? "vehicle " : "aboard ";
-		}
+		static const char* const tests[] = {"", "vehicle ", "aboard ", "party ", "item "};
+		out += tests[static_cast<int>(t.test)];
 		out += t.name;
 		if (!t.is_flag) {
 			out += std::string(" ") + compares[static_cast<int>(t.compare)] + " " + std::to_string(t.value);

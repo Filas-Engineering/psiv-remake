@@ -1,0 +1,45 @@
+{
+	"id": "fell_moor",
+	"kind": "field",
+	"encounter_mode": "random",
+	"step_ms": 250,
+	"region": "fells",
+	"map": [
+		"##################",
+		"#......:::...%...#",
+		"#......:::...%...#",
+		"#......:::...%...#",
+		".......:::...%....",
+		"#~~~~~.:::...%...#",
+		"#~..~~.:::...%...#",
+		"#~~~~~.:::...%...#",
+		"##################"
+	],
+	"markers": {
+		"town_gate": [1, 4],
+		"garage_front": [3, 1],
+		"crawler_bay": [2, 2],
+		"borer_bay": [4, 2],
+		"skimmer_bay": [6, 6],
+		"east_gate": [16, 4]
+	},
+	"exits": [
+		{"at": [0, 4], "to": "ashfall_market", "marker": "east_gate"},
+		{"at": [17, 4], "to": "fell_vault", "marker": "entry"}
+	],
+	"hooks": [
+		{"id": "fell_garage", "at": [3, 0], "event": "fell_garage"}
+	],
+	"chests": [
+		{"id": "fells_islet", "at": [3, 6], "flag": "chest.fells_islet", "items": {"spark_flask": 2}, "money": 60}
+	],
+	"zones": [
+		{
+			"id": "moor",
+			"from": [10, 1],
+			"to": [16, 7],
+			"table": [{"encounter": "kites", "weight": 1}],
+			"random": {"min_steps": 8, "max_steps": 12}
+		}
+	]
+}

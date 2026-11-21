@@ -30,6 +30,7 @@ public struct PsivGameInfo
 	public IntPtr GameBuild;
 	public int RulesVersion, TickMs, RoundMs, ManualSlots, AutosaveSlots, ItemCap, MoneyCap, LanguageCount;
 	public IntPtr Languages, TitleMusic, VictoryMusic, DefeatMusic;
+	public int MagicDefense;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -75,6 +76,7 @@ public struct PsivFieldInfo
 	public int AreaKind, EncounterMode, Width, Height, StepMs, LeaderX, LeaderY, Facing, PlayerControl, GraceMs;
 	public IntPtr Music, Region, Aboard;
 	public int LeaderStepMs;
+	public IntPtr ShipPort;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -90,7 +92,7 @@ public struct PsivExit { public int X, Y; public IntPtr ToArea, ToMarker; }
 public struct PsivActor { public IntPtr Id, Name; public int X, Y, Facing, Visible, Scripted; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivPoint { public int Kind; public IntPtr Id; public int X, Y; public IntPtr Event; public int Active, Cost; }
+public struct PsivPoint { public int Kind; public IntPtr Id; public int X, Y; public IntPtr Event; public int Active, Cost, ShopKind; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivVehicle { public IntPtr Id, Name; public int X, Y, Facing, Aboard; }
@@ -150,7 +152,7 @@ public struct PsivCombatant
 	public IntPtr Statuses;
 	public int CommandKind;
 	public IntPtr CommandId;
-	public int CommandTarget;
+	public int CommandTarget, Flying;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -193,7 +195,7 @@ public struct PsivBattleEvent
 	public IntPtr Commands;
 }
 
-[InlineArray(5)]
+[InlineArray(Native.SlotCount)]
 public struct PsivSlotPointers { private IntPtr _first; }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -224,9 +226,9 @@ public struct PsivMacroStep
 public struct PsivMacro { public IntPtr Name; public int StepCount; public IntPtr Steps; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivStatBonus { public int MaxHp, MaxTp, Strength, Mental, Agility, Dexterity, Defense, Critical, Evasion; }
+public struct PsivStatBonus { public int MaxHp, MaxTp, Strength, Mental, Agility, Dexterity, Defense, Critical, Evasion, MagicDefense; }
 
-[InlineArray(5)]
+[InlineArray(Native.SlotCount)]
 public struct PsivSlotBonuses { private PsivStatBonus _first; }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -245,6 +247,7 @@ public struct PsivMemberDetail
 	public IntPtr Affinities;
 	public int StatusResistCount;
 	public IntPtr StatusResists;
+	public int MagicDefense;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -276,6 +279,9 @@ public struct PsivEquipPreview
 	public int WearerCount;
 	public IntPtr Wearers, WearerNames;
 	public PsivCombatView Before, After;
+	public int Position;
+	public IntPtr AlsoReplaces, AlsoReplacesName;
+	public int Hands;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -290,10 +296,10 @@ public struct PsivComboEntry
 }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivInventoryEntry { public IntPtr Id, Name; public int Count, Equipment, Field, TargetingOrSlot, Price, Travel; }
+public struct PsivInventoryEntry { public IntPtr Id, Name; public int Count, Equipment, Field, TargetingOrSlot, Price, Travel; public IntPtr CallsVehicle; public int Hands; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivShopInfo { public IntPtr Id; public int SellPercent, StockCount; public IntPtr Stock; }
+public struct PsivShopInfo { public IntPtr Id; public int SellPercent, StockCount; public IntPtr Stock; public int Kind; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivInnInfo { public IntPtr Id; public int Cost; }
@@ -356,7 +362,9 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 10;
+	public const uint AbiVersion = 11;
+	// PSIV_SLOT_COUNT: the places a member wears equipment, which the member structs index by psiv_equip_slot.
+	public const int SlotCount = 7;
 
 	[LibraryImport(Library, EntryPoint = "psiv_abi_version")] public static partial uint AbiVersionOf();
 	[LibraryImport(Library, EntryPoint = "psiv_version")] public static partial IntPtr Version();
@@ -463,6 +471,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_party_swap")] public static partial int PartySwap(SessionHandle s, int a, int b);
 	[LibraryImport(Library, EntryPoint = "psiv_member_detail_get", StringMarshalling = StringMarshalling.Utf8)] public static partial int MemberDetailGet(SessionHandle s, string member, out PsivMemberDetail detail);
 	[LibraryImport(Library, EntryPoint = "psiv_equip_preview_get", StringMarshalling = StringMarshalling.Utf8)] public static partial int EquipPreviewGet(SessionHandle s, string member, string piece, out PsivEquipPreview preview);
+	[LibraryImport(Library, EntryPoint = "psiv_equip_preview_at", StringMarshalling = StringMarshalling.Utf8)] public static partial int EquipPreviewAt(SessionHandle s, string member, string piece, int position, out PsivEquipPreview preview);
 	[LibraryImport(Library, EntryPoint = "psiv_combo_log")] public static partial int ComboLog(SessionHandle s, out IntPtr list, out int count, out int total);
 	[LibraryImport(Library, EntryPoint = "psiv_inventory")] public static partial int Inventory(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_inventory_sorted")] public static partial int InventorySorted(SessionHandle s, int order, out IntPtr list, out int count);
@@ -476,6 +485,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_use_item", StringMarshalling = StringMarshalling.Utf8)] public static partial int UseItem(SessionHandle s, string item, string? member);
 	[LibraryImport(Library, EntryPoint = "psiv_use_ability", StringMarshalling = StringMarshalling.Utf8)] public static partial int UseAbility(SessionHandle s, string user, string ability, string? member);
 	[LibraryImport(Library, EntryPoint = "psiv_equip", StringMarshalling = StringMarshalling.Utf8)] public static partial int Equip(SessionHandle s, string member, string equipment);
+	[LibraryImport(Library, EntryPoint = "psiv_equip_at", StringMarshalling = StringMarshalling.Utf8)] public static partial int EquipAt(SessionHandle s, string member, string equipment, int position);
 	[LibraryImport(Library, EntryPoint = "psiv_unequip", StringMarshalling = StringMarshalling.Utf8)] public static partial int Unequip(SessionHandle s, string member, int slot);
 	[LibraryImport(Library, EntryPoint = "psiv_name_entry_member")] public static partial IntPtr NameEntryMember(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_enter_name", StringMarshalling = StringMarshalling.Utf8)] public static partial int EnterName(SessionHandle s, string name);

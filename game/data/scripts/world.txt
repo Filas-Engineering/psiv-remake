@@ -1,0 +1,231 @@
+# The Ashen Fells, for the party and world features of docs/research/feature-checklist.md: the opening and the scout
+# reached through developer warps; the dock bell at Cinder Quay raising a ship's port, the lantern barge walked
+# aboard and sailed from its helm; the lodge's last place given to one of two candidates and changed there later,
+# the one who leaves keeping its equipment and coming back at a higher level with a new ability; weapon, armor, tool
+# and gift shops, stock that changes with a story flag and a better pair that opens later; two weapons, a weapon
+# and a shield, two shields and a two-handed weapon; the ash storm emptying the market and the bell restoring it;
+# the bridge mended and the shrine sealed for good; the moor's three vehicles called from the item list over water,
+# soft ground and a barrier wall broken for good, and a battle with the kites' joint attack; the vault's switch,
+# pit, key, locked door, illusion, transport tile, boss and the rubble it clears; the barge's gangway; and a manual
+# save aboard loaded again. Run with --seed 6 --auto-battle.
+new
+walk guide_front
+face north
+talk
+choose 0
+name Bryn
+dev warp reed_path cache_front
+s 2
+dev money 700
+dev warp cinder_quay pier_front
+look
+walk dock_front
+face south
+refused talk
+walk bell_front
+face north
+talk
+look
+walk dock_front
+face south
+talk
+look
+walk 4 2
+face north
+talk
+destinations port
+travel port fell_dock
+look
+walk lodge_front
+face west
+talk
+choose 0
+gear lancer
+walk arms_front
+face north
+talk
+stock
+buy gill_knife
+buy kelp_cleaver
+leave
+walk armor_front
+face north
+talk
+stock
+buy driftwood_buckler 2
+leave
+walk tools_front
+face north
+talk
+stock
+leave
+walk gifts_front
+face west
+talk
+stock
+buy lantern_charm
+leave
+menu
+gear fighter
+equip fighter gill_knife left_hand
+gear fighter
+equip fighter driftwood_buckler
+gear fighter
+equip fighter driftwood_buckler weapon
+gear fighter
+equip fighter kelp_cleaver
+gear fighter
+refused equip fighter kelp_cleaver left_hand
+close
+walk bell_front
+face east
+talk
+look
+walk lodge_front
+face west
+refused talk
+walk arms_front
+face north
+refused talk
+walk bell_front
+face east
+talk
+walk bridge_west
+face east
+refused e
+face north
+talk
+look
+walk tools_front
+face north
+talk
+stock
+leave
+walk lodge_front
+face west
+talk
+choose 0
+gear lancer
+gear harpooner
+walk fine_arms_front
+face north
+refused talk
+walk shrine_front
+face east
+talk
+look
+walk east_gate
+e
+walk garage_front
+face north
+talk
+look
+walk 6 4
+menu
+item skimmer_reed
+s 2
+w 2
+n
+w 2
+face south
+disembark
+face east
+talk
+menu
+item skimmer_reed
+n
+e 3
+s
+e
+disembark
+menu
+item dune_horn
+e 4
+disembark
+n 3
+s 3
+n 3
+s 3
+n 3
+menu
+item rime_bell
+walk 12 4
+face east
+e 4
+look
+e
+walk switch_front
+face north
+talk
+look
+walk 6 5
+s
+walk key_front
+face east
+talk
+walk 8 1
+look
+walk lens_front
+face north
+talk
+look
+walk warden_front
+face east
+talk
+status
+walk 13 6
+s
+walk lock_front
+face east
+talk
+look
+walk 6 5
+s
+walk cache_front
+face east
+talk
+walk 8 1
+walk 9 4
+w
+walk entry
+w
+menu
+item dune_horn
+w 10
+disembark
+walk town_gate
+w
+walk fine_arms_front
+face north
+talk
+stock
+leave
+walk fine_armor_front
+face north
+talk
+stock
+buy reef_targe
+leave
+walk lodge_front
+face west
+talk
+choose 0
+status
+gear lancer
+walk dock_front
+face south
+talk
+menu
+save manual_0
+close
+walk 0 2
+status
+title
+load manual_0
+status
+look
+walk 4 2
+face north
+talk
+travel port quay_dock
+status

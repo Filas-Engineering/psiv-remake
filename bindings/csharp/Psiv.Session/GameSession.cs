@@ -171,7 +171,8 @@ public sealed unsafe class GameSession : IDisposable
 	{
 		Must(Native.GameInfoGet(_handle, out PsivGameInfo i));
 		return new GameInfo(Native.Str(i.Title), Native.Str(i.GameBuild), i.RulesVersion, i.TickMs, i.RoundMs, i.ManualSlots, i.AutosaveSlots, i.ItemCap,
-			i.MoneyCap, Native.Strs(i.Languages, i.LanguageCount), Native.Str(i.TitleMusic), Native.Str(i.VictoryMusic), Native.Str(i.DefeatMusic));
+			i.MoneyCap, Native.Strs(i.Languages, i.LanguageCount), Native.Str(i.TitleMusic), Native.Str(i.VictoryMusic), Native.Str(i.DefeatMusic),
+			i.MagicDefense != 0);
 	}
 
 	public Profile Profile()
@@ -370,7 +371,8 @@ public sealed unsafe class GameSession : IDisposable
 			return null;
 		}
 		return new FieldInfo(Native.Str(f.AreaId), Native.Str(f.AreaName), (AreaKind)f.AreaKind, (EncounterMode)f.EncounterMode, f.Width, f.Height, f.StepMs,
-			f.LeaderX, f.LeaderY, (Direction)f.Facing, f.PlayerControl != 0, f.GraceMs, Native.Str(f.Music), Native.Str(f.Region), Native.Str(f.Aboard), f.LeaderStepMs);
+			f.LeaderX, f.LeaderY, (Direction)f.Facing, f.PlayerControl != 0, f.GraceMs, Native.Str(f.Music), Native.Str(f.Region), Native.Str(f.Aboard), f.LeaderStepMs,
+			Native.Str(f.ShipPort));
 	}
 
 	public IReadOnlyList<string> FieldRows()
@@ -412,7 +414,7 @@ public sealed unsafe class GameSession : IDisposable
 		var points = new List<FieldPoint>(pc);
 		foreach (PsivPoint p in Native.Span<PsivPoint>(pp, pc))
 		{
-			points.Add(new FieldPoint((PointKind)p.Kind, Native.Str(p.Id), p.X, p.Y, Native.Str(p.Event), p.Active != 0, p.Cost));
+			points.Add(new FieldPoint((PointKind)p.Kind, Native.Str(p.Id), p.X, p.Y, Native.Str(p.Event), p.Active != 0, p.Cost, (ShopKind)p.ShopKind));
 		}
 		Must(Native.FieldActors(_handle, out IntPtr ap, out int ac));
 		var actors = new List<FieldActor>(ac);
@@ -555,7 +557,8 @@ public sealed unsafe class GameSession : IDisposable
 		foreach (PsivCombatant c in Native.Span<PsivCombatant>(p, count))
 		{
 			list.Add(new Combatant(c.Index, Native.Str(c.Id), Native.Str(c.Name), Native.Str(c.Label), (Side)c.Side, Native.Str(c.Group), c.Hp, c.MaxHp, c.Tp,
-				c.MaxTp, c.Alive != 0, c.Defending != 0, Statuses(c.Statuses, c.StatusCount), (CommandKind)c.CommandKind, Native.Str(c.CommandId), c.CommandTarget));
+				c.MaxTp, c.Alive != 0, c.Defending != 0, Statuses(c.Statuses, c.StatusCount), (CommandKind)c.CommandKind, Native.Str(c.CommandId), c.CommandTarget,
+				c.Flying != 0));
 		}
 		return list;
 	}
@@ -707,9 +710,9 @@ public sealed unsafe class GameSession : IDisposable
 		var list = new List<Member>(count);
 		foreach (PsivMember m in Native.Span<PsivMember>(p, count))
 		{
-			var equipment = new string[5];
-			var names = new string[5];
-			for (int i = 0; i < 5; i++)
+			var equipment = new string[Native.SlotCount];
+			var names = new string[Native.SlotCount];
+			for (int i = 0; i < Native.SlotCount; i++)
 			{
 				equipment[i] = Native.Str(m.Equipment[i]);
 				names[i] = Native.Str(m.EquipmentNames[i]);
@@ -744,11 +747,11 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			return null;
 		}
-		var bonuses = new StatBonus[5];
-		for (int i = 0; i < 5; i++)
+		var bonuses = new StatBonus[Native.SlotCount];
+		for (int i = 0; i < Native.SlotCount; i++)
 		{
 			PsivStatBonus b = d.EquipmentBonus[i];
-			bonuses[i] = new StatBonus(b.MaxHp, b.MaxTp, b.Strength, b.Mental, b.Agility, b.Dexterity, b.Defense, b.Critical, b.Evasion);
+			bonuses[i] = ToBonus(b);
 		}
 		var affinities = new Dictionary<Element, int>();
 		foreach (PsivAffinity a in Native.Span<PsivAffinity>(d.Affinities, d.AffinityCount))
@@ -760,10 +763,10 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			resists.Add(new StatusResist(Native.Str(r.Id), Native.Str(r.Name), r.Percent));
 		}
-		return new MemberDetail(Native.Str(d.Id), d.ExperienceToNext, d.Critical, d.Evasion, (Element)d.AttackElement, bonuses, affinities, resists);
+		return new MemberDetail(Native.Str(d.Id), d.ExperienceToNext, d.Critical, d.Evasion, (Element)d.AttackElement, bonuses, affinities, resists, d.MagicDefense);
 	}
 
-	private static StatBonus ToBonus(in PsivStatBonus b) => new(b.MaxHp, b.MaxTp, b.Strength, b.Mental, b.Agility, b.Dexterity, b.Defense, b.Critical, b.Evasion);
+	private static StatBonus ToBonus(in PsivStatBonus b) => new(b.MaxHp, b.MaxTp, b.Strength, b.Mental, b.Agility, b.Dexterity, b.Defense, b.Critical, b.Evasion, b.MagicDefense);
 
 	private static IReadOnlyList<StatusResist> Resists(IntPtr p, int count)
 	{
@@ -779,10 +782,11 @@ public sealed unsafe class GameSession : IDisposable
 		new(ToBonus(v.Stats), Native.Str(v.BasicAttack), Native.Str(v.BasicAttackName), (Element)v.AttackElement, Native.Strs(v.Abilities, v.AbilityCount),
 			Native.Strs(v.AbilityNames, v.AbilityCount), Resists(v.StatusResists, v.StatusResistCount));
 
-	// Any equipment piece, held or not; null for a character not in the roster or an id that is not equipment.
-	public EquipPreview? EquipPreview(string member, string piece)
+	// Any equipment piece, held or not, where Equip puts it, or at a position (a hand for weapons and shields); null for a
+	// character not in the roster or an id that is not equipment.
+	public EquipPreview? EquipPreview(string member, string piece, EquipSlot? position = null)
 	{
-		if (!Read(Native.EquipPreviewGet(_handle, member, piece, out PsivEquipPreview p)))
+		if (!Read(position is { } at ? Native.EquipPreviewAt(_handle, member, piece, (int)at, out PsivEquipPreview p) : Native.EquipPreviewGet(_handle, member, piece, out p)))
 		{
 			return null;
 		}
@@ -791,7 +795,8 @@ public sealed unsafe class GameSession : IDisposable
 		return new EquipPreview(Native.Str(p.Member), Native.Str(p.Piece), Native.Str(p.PieceName), (EquipSlot)p.Slot, Native.Str(p.Category), ToBonus(p.Bonus),
 			(Element)p.Element, Native.Str(p.Attack), Native.Str(p.AttackName), Native.Strs(p.Granted, p.GrantedCount), Native.Strs(p.GrantedNames, p.GrantedCount),
 			Resists(p.PieceResists, p.PieceResistCount), Native.Str(p.Replaces), Native.Str(p.ReplacesName), p.CanWear != 0, refusal,
-			Native.Strs(p.Wearers, p.WearerCount), Native.Strs(p.WearerNames, p.WearerCount), ToCombat(p.Before), ToCombat(p.After));
+			Native.Strs(p.Wearers, p.WearerCount), Native.Strs(p.WearerNames, p.WearerCount), ToCombat(p.Before), ToCombat(p.After), (EquipSlot)p.Position,
+			Native.Str(p.AlsoReplaces), Native.Str(p.AlsoReplacesName), p.Hands);
 	}
 
 	public ComboLog ComboLog()
@@ -807,7 +812,8 @@ public sealed unsafe class GameSession : IDisposable
 	}
 
 	private static InventoryEntry ToEntry(in PsivInventoryEntry e) =>
-		new(Native.Str(e.Id), Native.Str(e.Name), e.Count, e.Equipment != 0, e.Field != 0, e.TargetingOrSlot, e.Price, e.Travel < 0 ? null : (TravelKind)e.Travel);
+		new(Native.Str(e.Id), Native.Str(e.Name), e.Count, e.Equipment != 0, e.Field != 0, e.TargetingOrSlot, e.Price, e.Travel < 0 ? null : (TravelKind)e.Travel,
+			Native.Str(e.CallsVehicle), e.Hands);
 
 	// Items in id order, then unworn pieces in id order; another ItemSort lists them as one sorted list.
 	public IReadOnlyList<InventoryEntry> Inventory(ItemSort order = ItemSort.Id)
@@ -832,7 +838,7 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			stock.Add(ToEntry(e));
 		}
-		return new ShopInfo(Native.Str(s.Id), s.SellPercent, stock);
+		return new ShopInfo(Native.Str(s.Id), s.SellPercent, stock, (ShopKind)s.Kind);
 	}
 
 	public InnInfo? Inn() => Read(Native.InnGet(_handle, out PsivInnInfo i)) ? new InnInfo(Native.Str(i.Id), i.Cost) : null;
@@ -845,6 +851,7 @@ public sealed unsafe class GameSession : IDisposable
 	public PsivResult UseItem(string item, string? member = null) => Result(Native.UseItem(_handle, item, member));
 	public PsivResult UseAbility(string user, string ability, string? member = null) => Result(Native.UseAbility(_handle, user, ability, member));
 	public PsivResult Equip(string member, string equipment) => Result(Native.Equip(_handle, member, equipment));
+	public PsivResult EquipAt(string member, string equipment, EquipSlot position) => Result(Native.EquipAt(_handle, member, equipment, (int)position));
 	public PsivResult Unequip(string member, EquipSlot slot) => Result(Native.Unequip(_handle, member, (int)slot));
 	public string NameEntryMember => Native.Str(Native.NameEntryMember(_handle));
 	public PsivResult EnterName(string name) => Result(Native.EnterName(_handle, name));

@@ -97,7 +97,7 @@ class MapRejectionTest(TempCase):
 	def test_unknown_kind(self):
 		tmj = sample_tmj()
 		tmj["tilesets"] = [{"firstgid": 1, "name": "odd", "tiles": [{"id": i, "properties": [{"name": "kind", "type": "string", "value": "lava"}]} for i in range(3)]}]
-		self.rejects(tmj, "whose kind 'lava' is not one of floor, wall, water")
+		self.rejects(tmj, "whose kind 'lava' is not one of floor, wall, water, soft, barrier")
 
 	def test_kind_must_be_a_string_property(self):
 		tmj = sample_tmj()
@@ -133,7 +133,7 @@ class ObjectRejectionTest(TempCase):
 	def test_unknown_class(self):
 		tmj = sample_tmj()
 		obj(tmj, "door")["type"] = "npc"
-		self.rejects(tmj, "object 1 ('door') has class 'npc'; use one of marker, exit, hook, shop, rest, chest, port, zone")
+		self.rejects(tmj, "object 1 ('door') has class 'npc'; use one of marker, exit, hook, shop, rest, chest, port, zone, helm, gangway, change")
 
 	def test_class_field_of_newer_tiled_is_read(self):
 		tmj = sample_tmj()

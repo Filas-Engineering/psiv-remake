@@ -4,6 +4,7 @@
 #include "test.h"
 
 #include <algorithm>
+#include <cstdint>
 
 using namespace rules;
 using namespace fixtures;
@@ -417,4 +418,53 @@ TEST(comboLogKeepsPlayTimeAndCharacters) {
 	std::vector<Event> events;
 	CHECK(replayBattle(db, battle.record(), replayLog, events).ok());
 	CHECK(replayLog.entry("storm_spark") && replayLog.entry("storm_spark")->playTimeMs == 4321000);
+}
+
+// B4: enemies back to back whose parts match a recipe spend their turns on one joint attack.
+TEST(anEnemyRecipeSpendsEveryPartsTurnOnAJointAttack) {
+	const Database& db = data();
+	Battle battle = makeBattle(db, {"squall_kite", "cinder_kite"}, 21);
+	partyDefends(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	const std::vector<Event> combos = ofType(events, EventType::ComboTriggered);
+	CHECK_EQ(combos.size(), std::size_t(1));
+	CHECK_EQ(combos.front().combo, std::string("kite_pincer"));
+	CHECK_EQ(combos.front().ability, std::string("pincer_dive"));
+	CHECK_EQ(combos.front().participants, (std::vector<int>{kFirstEnemy, kFirstEnemy + 1}));
+	CHECK(!firstBy(events, EventType::ActionStarted, kFirstEnemy + 1));
+	CHECK(ofType(events, EventType::ComboDiscovered).empty());
+	CHECK_EQ(ofType(events, EventType::DamageDealt).size(), std::size_t(1));
+}
+
+// B4: an unordered recipe fires whichever part's enemy acts first; an ordered one only in the listed order.
+TEST(anEnemyRecipeTakesItsPartsInAnyOrderUnlessOrdered) {
+	Database ordered = data();
+	ordered.enemyCombos.front().ordered = true;
+	int cinderFirst = 0;
+	for (std::uint64_t seed = 1; seed <= 12; ++seed) {
+		for (const Database* db : {&data(), static_cast<const Database*>(&ordered)}) {
+			Battle battle = makeBattle(*db, {"squall_kite", "cinder_kite"}, seed);
+			partyDefends(battle);
+			const std::vector<Event> events = battle.resolveRound();
+			const std::vector<Event> combos = ofType(events, EventType::ComboTriggered);
+			const std::vector<int> order = ofType(events, EventType::OrderResolved).front().order;
+			const bool squallLeads = std::find(order.begin(), order.end(), kFirstEnemy) < std::find(order.begin(), order.end(), kFirstEnemy + 1);
+			cinderFirst += db == &ordered && !squallLeads ? 1 : 0;
+			CHECK_EQ(combos.size(), std::size_t(db == &ordered && !squallLeads ? 0 : 1));
+		}
+	}
+	CHECK(cinderFirst > 0);
+}
+
+// B4: once a part has fallen, the others act alone.
+TEST(anEnemyRecipeNeedsEveryPartStanding) {
+	const Database& db = data();
+	Battle battle = makeBattle(db, {"squall_kite", "cinder_kite"}, 21);
+	battle.combatant(kFirstEnemy + 1).hp = 0;
+	battle.combatant(kFirstEnemy + 1).statuses = {{kDefeatedStatus, 0}};
+	partyDefends(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	CHECK(ofType(events, EventType::ComboTriggered).empty());
+	const std::optional<Event> alone = firstBy(events, EventType::ActionStarted, kFirstEnemy);
+	CHECK(alone && alone->ability == "talon");
 }

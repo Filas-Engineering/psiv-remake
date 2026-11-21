@@ -40,6 +40,7 @@ private:
 	void printEvents(const std::vector<rules::Event>& events);
 	void finishBattleAuto();
 	void status();
+	void dev(const std::vector<std::string>& w);
 	void walkTo(Cell goal);
 	std::string battleName(int index) const;
 

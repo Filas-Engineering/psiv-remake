@@ -36,11 +36,14 @@ int initiative(int agility, int roll);
 int chanceScore(int roll, int actorStat, int targetStat);
 int criticalBonus(int attack);
 // The attack scaled by the spread, plus the attack and twice the bonus, scaled by affinity, less defense. 1 to 999; 0 when immune.
-int damage(int attack, int defense, int bonus, int affinity, int spread);
+int damage(int attack, int defense, int bonus, int affinity, int spread, int divisor = 100);
 int healAmount(int power, int mental, int spread);
 int reviveHp(int maxHp, int percent);
 // A status is resisted when the score is at or below the effect's threshold.
 int statusScore(int roll, int actorMental, int targetMental, int resistance);
+// A roll whose factor is the target's affinity for an element on the original's scale of 4 for normal
+// (original-battle-rules.md, section 6): affinity * 4 / divisor.
+int elementScore(int roll, int actorMental, int targetMental, int affinity, int divisor);
 int experienceToNextLevel(int level);
 
 }

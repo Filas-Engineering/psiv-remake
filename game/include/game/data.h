@@ -137,15 +137,25 @@ struct LanguageFiles {
 // which fights its vehicle battles (BAT-140).
 struct FieldVehicle {
 	std::string id;
-	// Map characters it crosses: '.' floor, '~' water. Walls stop every vehicle.
+	// Map characters it crosses: '.' floor, '~' water, ':' soft ground. Walls stop every vehicle.
 	std::string crosses;
+	// Map characters it breaks through, turning them to floor (F3): '%' barriers.
+	std::string breaks = {};
+	// Whether a broken cell stays floor for good; otherwise it is whole again once the party leaves the area.
+	bool breaksForGood = true;
+	// An item that calls the vehicle from the item list anywhere outdoors (F3): it comes to the party, who board it.
+	std::string callItem = {};
 	// Its speed against walking: 200 crosses a cell in half the area's step time.
 	int speedPercent = 100;
 	// The encounter table of battles while riding it (ENC-007).
 	std::vector<TableEntry> encounters;
 
-	bool canCross(char terrain) const { return crosses.find(terrain) != std::string::npos; }
+	bool canCross(char terrain) const { return crosses.find(terrain) != std::string::npos || breaks.find(terrain) != std::string::npos; }
 };
+
+// What a member who leaves the party does with its equipment (P2, SAV-035): keeps wearing it, so it goes with it, or
+// gives it back to the bag.
+enum class LeaveEquipment { Keep, Bag };
 
 // game.json: everything about the adventure that is not an area, a script or battle data.
 struct GameConfig {
@@ -195,6 +205,9 @@ struct GameConfig {
 	// Members who have joined and are out of the party get the same experience share as those in it until this flag
 	// is set (SAV-032); empty gives them none.
 	std::string outsideExperienceUntil = {};
+	LeaveEquipment leaveEquipment = LeaveEquipment::Keep;
+	// Every area plays in random mode (F1, ENC-002): one switch for the whole game, off in the placeholder.
+	bool randomEncountersEverywhere = false;
 };
 
 struct LanguageTables {
@@ -279,5 +292,12 @@ std::string descriptionKey(DescriptionKind kind, const std::string& id);
 // Whether `id` is a thing of that kind in the battle data.
 bool describes(const rules::Database& db, DescriptionKind kind, const std::string& id);
 inline constexpr const char* kDescriptionPrefix = "desc.";
+
+// A thing's name in one language is the optional text key `name.<kind>.<id>`, with kind character, ability, item,
+// equipment, status, enemy, vehicle or difficulty; without one the battle data's name shows. Like descriptions they
+// are left out of the key-for-key rule and the content hash.
+inline constexpr const char* kNamePrefix = "name.";
+// Whether `key` is `name.<kind>.<id>` for a thing the battle data has.
+bool namesKnownThing(const rules::Database& db, const std::string& key);
 
 }

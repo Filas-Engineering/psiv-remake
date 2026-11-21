@@ -1,0 +1,57 @@
+{
+	"id": "ashfall_market",
+	"kind": "town",
+	"encounter_mode": "visible",
+	"step_ms": 250,
+	"region": "fells",
+	"arrival": "dock_front",
+	"map": [
+		"################",
+		"#......~.......#",
+		"#......~.......#",
+		"#......~.......#",
+		"#......~........",
+		"#......~......##",
+		"#......~.......#",
+		"#~~~~~~~~~~~~~~#",
+		"################"
+	],
+	"markers": {
+		"dock_front": [3, 6],
+		"lodge_front": [2, 3],
+		"arms_front": [2, 2],
+		"armor_front": [4, 2],
+		"tools_front": [6, 2],
+		"gifts_front": [2, 5],
+		"bell_front": [5, 6],
+		"bridge_west": [6, 4],
+		"fine_arms_front": [9, 2],
+		"fine_armor_front": [11, 2],
+		"shrine_front": [13, 6],
+		"shrine_out": [12, 6],
+		"east_gate": [14, 4]
+	},
+	"exits": [
+		{"at": [15, 4], "to": "fell_moor", "marker": "town_gate"}
+	],
+	"hooks": [
+		{"id": "lodgekeeper", "at": [1, 3], "event": "ashfall_lodge", "block_flag": "fells.ash_storm"},
+		{"id": "ashwife", "at": [4, 5], "event": "ashfall_ashwife", "block_flag": "fells.ash_storm"},
+		{"id": "storm_bell", "at": [6, 6], "event": "ashfall_storm"},
+		{"id": "bridgewright", "at": [6, 3], "event": "ashfall_bridge"},
+		{"id": "shrine", "at": [14, 6], "event": "ashfall_shrine", "block_flag": "fells.shrine_sealed"}
+	],
+	"shops": [
+		{"id": "ashfall_arms", "at": [2, 1], "kind": "weapon", "stock": ["gill_knife", "kelp_cleaver"], "block_flag": "fells.ash_storm"},
+		{"id": "ashfall_armor", "at": [4, 1], "kind": "armor", "stock": ["driftwood_buckler", "tin_cap", "padded_coat"], "block_flag": "fells.ash_storm"},
+		{"id": "ashfall_tools", "at": [6, 1], "kind": "tool", "stock": ["tonic", "homing_shell", {"id": "spark_flask", "require_flag": "fells.bridge_mended"}], "block_flag": "fells.ash_storm"},
+		{"id": "ashfall_gifts", "at": [1, 5], "kind": "gift", "stock": ["lantern_charm"], "block_flag": "fells.ash_storm"},
+		{"id": "ashfall_fine_arms", "at": [9, 1], "kind": "weapon", "stock": ["kelp_cleaver", "storm_rod"], "require_flag": "fells.guild_open"},
+		{"id": "ashfall_fine_armor", "at": [11, 1], "kind": "armor", "stock": ["reef_targe", "rivet_plate", "ward_mantle"], "require_flag": "fells.guild_open"}
+	],
+	"ports": [{"id": "fell_dock", "at": [3, 7], "marker": "dock_front", "flag": "travel.dock_open", "ship": "lantern_barge"}],
+	"changes": [
+		{"flag": "fells.bridge_mended", "tile": ".", "cells": [[7, 4]]},
+		{"flag": "fells.shrine_sealed", "tile": "#", "cells": [[13, 6]]}
+	]
+}

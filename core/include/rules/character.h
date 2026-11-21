@@ -29,6 +29,8 @@ struct CharacterDef {
 	std::vector<std::string> startingEquipment;
 	// A machine is reached only by effects that name machines, and stands up after a won or escaped battle (P6).
 	CreatureKind kind = CreatureKind::Living;
+	// Instant-defeat effects can fell it (rules.json `instant_defeat_kinds` makes whole kinds so).
+	bool vulnerable = false;
 };
 
 // The persistent state of a party member between battles. The host owns it.

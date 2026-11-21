@@ -5,6 +5,8 @@
 
 #include "json_read.h"
 
+#include <algorithm>
+
 namespace game {
 
 using rules::JsonValue;
@@ -14,8 +16,29 @@ const char* toString(AreaKind kind) {
 	case AreaKind::Town: return "town";
 	case AreaKind::Field: return "field";
 	case AreaKind::Dungeon: return "dungeon";
+	case AreaKind::Vessel: return "vessel";
 	}
 	return "field";
+}
+
+namespace {
+
+const char* const kShopKinds[] = {"general", "weapon", "armor", "tool", "gift"};
+
+}
+
+const char* toString(ShopKind kind) {
+	return kShopKinds[static_cast<int>(kind)];
+}
+
+bool parseShopKind(const std::string& text, ShopKind& out) {
+	for (int i = 0; i < 5; ++i) {
+		if (text == kShopKinds[i]) {
+			out = static_cast<ShopKind>(i);
+			return true;
+		}
+	}
+	return false;
 }
 
 const char* toString(EncounterMode mode) {
@@ -54,7 +77,7 @@ bool Area::walkable(Cell cell) const {
 	if (!inside(cell) || rows[cell.y][cell.x] != '.') {
 		return false;
 	}
-	return !hookAt(cell, HookTrigger::Interact) && !shopAt(cell) && !restAt(cell) && !chestAt(cell) && !portAt(cell);
+	return !hookAt(cell, HookTrigger::Interact) && !shopAt(cell) && !restAt(cell) && !chestAt(cell) && !portAt(cell) && !helmAt(cell);
 }
 
 const Zone* Area::zoneAt(Cell cell) const {
@@ -127,6 +150,19 @@ const Port* Area::portAt(Cell cell) const {
 		}
 	}
 	return nullptr;
+}
+
+const Helm* Area::helmAt(Cell cell) const {
+	for (const Helm& h : helms) {
+		if (h.at == cell) {
+			return &h;
+		}
+	}
+	return nullptr;
+}
+
+bool Area::gangwayAt(Cell cell) const {
+	return std::find(gangway.begin(), gangway.end(), cell) != gangway.end();
 }
 
 const Port* Area::port(const std::string& id) const {
@@ -235,7 +271,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		return rules::Result<Area>::failure(reader.problems(), reader.errors());
 	}
 	reader.only(json, {"id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "map", "markers", "exits", "hooks", "shops", "rests",
-		"chests", "ports", "zones"});
+		"chests", "ports", "zones", "helms", "gangway", "changes"});
 	reader.text(json, "id", area.id, true);
 	reader.text(json, "music", area.music, false);
 	reader.text(json, "region", area.region, false);
@@ -246,6 +282,8 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		area.kind = AreaKind::Town;
 	} else if (kind == "dungeon") {
 		area.kind = AreaKind::Dungeon;
+	} else if (kind == "vessel") {
+		area.kind = AreaKind::Vessel;
 	} else if (kind != "field") {
 		reader.fail(json, "data.bad_area_kind", {});
 	}
@@ -261,7 +299,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			reader.fail(json, "data.map_rows_differ", {});
 			break;
 		}
-		if (row.find_first_not_of(".#~") != std::string::npos) {
+		if (row.find_first_not_of(kMapTiles) != std::string::npos) {
 			reader.fail(json, "data.bad_map_character", {});
 			break;
 		}
@@ -284,12 +322,13 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* exits = array(reader, json, "exits")) {
 		for (const JsonValue& e : exits->items) {
-			reader.only(e, {"at", "to", "marker"});
+			reader.only(e, {"at", "to", "marker", "fall"});
 			Exit exit;
 			exit.line = e.line;
 			reader.cellField(e, "at", exit.at, true);
 			reader.text(e, "to", exit.toArea, true);
 			reader.text(e, "marker", exit.toMarker, true);
+			reader.boolean(e, "fall", exit.fall, false);
 			checkCell(e, exit.at, "exit");
 			area.exits.push_back(exit);
 		}
@@ -333,7 +372,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* shops = array(reader, json, "shops")) {
 		for (const JsonValue& s : shops->items) {
-			reader.only(s, {"id", "at", "stock", "sell_percent"});
+			reader.only(s, {"id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag"});
 			Shop shop;
 			shop.line = s.line;
 			reader.text(s, "id", shop.id, true);
@@ -342,8 +381,31 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 				reader.cellField(s, "at", *shop.at, true);
 				checkCell(s, *shop.at, "shop '" + shop.id + "'");
 			}
-			reader.texts(s, "stock", shop.stock, true);
+			std::string shopKind = "general";
+			reader.text(s, "kind", shopKind, false);
+			if (!parseShopKind(shopKind, shop.kind)) {
+				reader.fail(s, "data.bad_shop_kind", {shopKind});
+			}
+			if (const JsonValue* stock = reader.field(s, "stock", JsonValue::Type::Array, true)) {
+				for (const JsonValue& item : stock->items) {
+					StockEntry entry;
+					if (item.is(JsonValue::Type::String) && !item.string.empty()) {
+						entry.id = item.string;
+					} else if (item.is(JsonValue::Type::Object)) {
+						reader.only(item, {"id", "require_flag", "block_flag"});
+						reader.text(item, "id", entry.id, true);
+						reader.text(item, "require_flag", entry.requireFlag, false);
+						reader.text(item, "block_flag", entry.blockFlag, false);
+					} else {
+						reader.fail(item, "data.stock_entry_shape", {});
+						continue;
+					}
+					shop.stock.push_back(entry);
+				}
+			}
 			reader.integer(s, "sell_percent", shop.sellPercent, false, 0, 100);
+			reader.text(s, "require_flag", shop.requireFlag, false);
+			reader.text(s, "block_flag", shop.blockFlag, false);
 			area.shops.push_back(shop);
 		}
 	}
@@ -382,13 +444,14 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* ports = array(reader, json, "ports")) {
 		for (const JsonValue& p : ports->items) {
-			reader.only(p, {"id", "at", "marker", "flag"});
+			reader.only(p, {"id", "at", "marker", "flag", "ship"});
 			Port port;
 			port.line = p.line;
 			reader.text(p, "id", port.id, true);
 			reader.cellField(p, "at", port.at, true);
 			reader.text(p, "marker", port.marker, true);
 			reader.text(p, "flag", port.flag, false);
+			reader.text(p, "ship", port.ship, false);
 			if (!area.inside(port.at)) {
 				reader.fail(p, "data.not_on_map", {"port '" + port.id + "'"});
 			}
@@ -409,6 +472,58 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 				}
 			}
 			area.zones.push_back(zone);
+		}
+	}
+	if (const JsonValue* helms = array(reader, json, "helms")) {
+		for (const JsonValue& h : helms->items) {
+			reader.only(h, {"id", "at"});
+			Helm helm;
+			helm.line = h.line;
+			reader.text(h, "id", helm.id, true);
+			reader.cellField(h, "at", helm.at, true);
+			if (!area.inside(helm.at)) {
+				reader.fail(h, "data.not_on_map", {"helm '" + helm.id + "'"});
+			}
+			area.helms.push_back(helm);
+		}
+	}
+	if (const JsonValue* gangway = array(reader, json, "gangway")) {
+		for (const JsonValue& g : gangway->items) {
+			Cell c;
+			if (reader.cell(g, c)) {
+				checkCell(g, c, "gangway");
+				area.gangway.push_back(c);
+			}
+		}
+	}
+	if ((!area.helms.empty() || !area.gangway.empty()) && area.kind != AreaKind::Vessel) {
+		reader.fail(json, "data.helm_outside_vessel", {});
+	}
+	if (const JsonValue* changes = array(reader, json, "changes")) {
+		for (const JsonValue& c : changes->items) {
+			reader.only(c, {"flag", "tile", "cells"});
+			CellChange change;
+			change.line = c.line;
+			reader.text(c, "flag", change.flag, true);
+			std::string tile = ".";
+			reader.text(c, "tile", tile, true);
+			if (tile.size() != 1 || std::string(kMapTiles).find(tile[0]) == std::string::npos) {
+				reader.fail(c, "data.bad_map_character", {});
+			} else {
+				change.tile = tile[0];
+			}
+			if (const JsonValue* cells = reader.field(c, "cells", JsonValue::Type::Array, true)) {
+				for (const JsonValue& at : cells->items) {
+					Cell cell;
+					if (reader.cell(at, cell)) {
+						if (!area.inside(cell)) {
+							reader.fail(at, "data.not_on_map", {"change of '" + change.flag + "'"});
+						}
+						change.cells.push_back(cell);
+					}
+				}
+			}
+			area.changes.push_back(change);
 		}
 	}
 	if (!reader.ok()) {

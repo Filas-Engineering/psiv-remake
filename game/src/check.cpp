@@ -30,7 +30,7 @@ private:
 	std::vector<rules::Problem>& out_;
 };
 
-// What stands on a solid cell: interact hooks, shops, rest points, chests with a cell and ports.
+// What stands on a solid cell: interact hooks, shops, rest points, chests with a cell, ports and helms.
 struct Solid {
 	std::string what;
 	int line = 0;
@@ -73,6 +73,9 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 	for (const Port& p : area.ports) {
 		addSolid(p.at, "port '" + p.id + "'", p.line);
 	}
+	for (const Helm& h : area.helms) {
+		addSolid(h.at, "helm '" + h.id + "'", h.line);
+	}
 	auto solidAt = [&](Cell c) -> const Solid* {
 		auto it = solids.find(c);
 		return it == solids.end() ? nullptr : &it->second;
@@ -84,6 +87,10 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 		}
 	}
 	std::map<Cell, const Exit*> exitCells;
+	const Exit gangway{{}, "ashore", "", false, 0};
+	for (Cell g : area.gangway) {
+		exitCells.emplace(g, &gangway);
+	}
 	for (const Exit& e : area.exits) {
 		if (const Solid* s = solidAt(e.at)) {
 			found.add(file, e.line, "check.exit_on_object", {e.toArea, s->what});
@@ -132,9 +139,16 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 		return;
 	}
 	// The cells the party can walk to from a way in. Exit cells are reached but never walked through, since
-	// stepping on one leaves the area. In a field area a vehicle may carry the party over terrain it crosses.
+	// stepping on one leaves the area. In a field area a vehicle may carry the party over terrain it crosses, and a
+	// cell that a flag's change turns to floor counts as floor.
 	auto crossable = [&](Cell c) {
 		if (area.walkable(c)) {
+			return true;
+		}
+		const bool opened = std::any_of(area.changes.begin(), area.changes.end(), [&](const CellChange& change) {
+			return change.tile == '.' && std::find(change.cells.begin(), change.cells.end(), c) != change.cells.end();
+		});
+		if (opened && !solids.count(c)) {
 			return true;
 		}
 		if (area.kind != AreaKind::Field || !area.inside(c) || solids.count(c)) {
@@ -165,6 +179,11 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 	for (const Exit& e : area.exits) {
 		if (!reached.count(e.at)) {
 			found.add(file, e.line, "check.exit_not_reached", {e.toArea, cellText(e.at)});
+		}
+	}
+	for (Cell g : area.gangway) {
+		if (!reached.count(g)) {
+			found.add(file, 0, "check.exit_not_reached", {"ashore", cellText(g)});
 		}
 	}
 	for (const auto& [name, cell] : area.markers) {
@@ -209,12 +228,18 @@ std::vector<rules::Problem> crossCheck(const GameData& data, bool loaderChecked)
 			warpTargets.insert(in.action.subject);
 		}
 	}
-	// Ports lead to each other, and a return lands at a town's arrival marker.
+	// Ferry ports lead to each other, a ship's ports to its vessel and the vessel to them, and a return lands at a town's
+	// arrival marker.
 	std::set<std::string> portAreas;
+	std::map<std::string, std::set<std::string>> shipPorts;
 	for (const auto& [id, area] : data.areas) {
 		for (const Port& p : area.ports) {
 			entrances[id].insert(p.marker);
-			portAreas.insert(id);
+			if (p.ship.empty()) {
+				portAreas.insert(id);
+			} else {
+				shipPorts[p.ship].insert(id);
+			}
 		}
 		if (!area.arrival.empty()) {
 			entrances[id].insert(area.arrival);
@@ -275,6 +300,18 @@ std::vector<rules::Problem> crossCheck(const GameData& data, bool loaderChecked)
 			for (const std::string& other : portAreas) {
 				if (reached.insert(other).second) {
 					queue.push_back(other);
+				}
+			}
+		}
+		for (const auto& [ship, areas] : shipPorts) {
+			if (areas.count(a->id) && reached.insert(ship).second) {
+				queue.push_back(ship);
+			}
+			if (ship == a->id) {
+				for (const std::string& other : areas) {
+					if (reached.insert(other).second) {
+						queue.push_back(other);
+					}
 				}
 			}
 		}

@@ -200,3 +200,60 @@ TEST(memberCombatantIsWhatABattleSetsUp) {
 	CHECK(mystic.attackElement == Element::Heat);
 	CHECK_EQ(mystic.resistance("sleep"), 100);
 }
+
+// P10: two hands hold two weapons, a weapon and a shield, or two shields; a two-handed weapon takes both.
+TEST(handsHoldTwoPiecesOrOneTwoHandedWeapon) {
+	const Database& db = data();
+	PartyMember fighter = makePartyMember(db, db.characters.at("fighter"), 1);
+	EquipmentBag bag = {{"gill_knife", 1}, {"driftwood_buckler", 1}, {"reef_targe", 1}, {"kelp_cleaver", 1}};
+	const int strength = memberStats(db, fighter).strength;
+	const int defense = memberStats(db, fighter).defense;
+
+	CHECK(equip(fighter, db, bag, "gill_knife", EquipSlot::LeftHand).empty());
+	CHECK_EQ(fighter.equipment.at(EquipSlot::Weapon), std::string("copper_blade"));
+	CHECK_EQ(memberStats(db, fighter).strength, strength + 3);
+
+	CHECK(equip(fighter, db, bag, "driftwood_buckler").empty());
+	CHECK_EQ(fighter.equipment.at(EquipSlot::LeftHand), std::string("driftwood_buckler"));
+	CHECK_EQ(bag.at("gill_knife"), 1);
+	CHECK_EQ(memberStats(db, fighter).defense, defense + 4);
+
+	CHECK(equip(fighter, db, bag, "reef_targe", EquipSlot::Weapon).empty());
+	CHECK_EQ(bag.at("copper_blade"), 1);
+	CHECK_EQ(memberStats(db, fighter).defense, defense + 4 + 6);
+	CHECK_EQ(memberCombatant(db, fighter).basicAttack, std::string("strike"));
+
+	CHECK_EQ(equip(fighter, db, bag, "kelp_cleaver", EquipSlot::LeftHand).key, std::string("equip.wrong_position"));
+	CHECK_EQ(equip(fighter, db, bag, "tin_cap", EquipSlot::Weapon).key, std::string("equip.wrong_position"));
+	CHECK(equip(fighter, db, bag, "kelp_cleaver").empty());
+	CHECK_EQ(fighter.equipment.count(EquipSlot::LeftHand), std::size_t(0));
+	CHECK_EQ(bag.at("reef_targe"), 1);
+	CHECK_EQ(bag.at("driftwood_buckler"), 1);
+	CHECK_EQ(memberStats(db, fighter).strength, strength - 4 + 12);
+
+	// A piece put in the left hand sends the two-handed weapon back.
+	CHECK(equip(fighter, db, bag, "driftwood_buckler").empty());
+	CHECK_EQ(fighter.equipment.count(EquipSlot::Weapon), std::size_t(0));
+	CHECK_EQ(bag.at("kelp_cleaver"), 1);
+	BattleSetup setup = makeSetup(db, {"gel_mite"}, 1);
+	setup.party[kFighter] = fighter;
+	CHECK(Battle::create(db, setup, nullptr).ok());
+	setup.party[kFighter].equipment[EquipSlot::Weapon] = "kelp_cleaver";
+	CHECK(!Battle::create(db, setup, nullptr).ok());
+}
+
+// P10: the right hand's weapon gives the attack and element; a weapon reaching every enemy in either hand wins, as
+// original-battle-rules.md section 2 reads the attack command.
+TEST(eitherHandsWideWeaponMakesTheAttackReachEveryEnemy) {
+	Database db = data();
+	db.characters["fighter"].equipCategories.push_back("sling");
+	PartyMember fighter = makePartyMember(db, db.characters.at("fighter"), 1);
+	EquipmentBag bag = {{"arc_disc", 1}, {"ember_rod", 1}};
+	CHECK(equip(fighter, db, bag, "arc_disc", EquipSlot::LeftHand).empty());
+	CHECK_EQ(memberCombatant(db, fighter).basicAttack, std::string("disc_throw"));
+	db.characters["fighter"].equipCategories.push_back("rod");
+	CHECK(equip(fighter, db, bag, "ember_rod", EquipSlot::Weapon).empty());
+	const Combatant both = memberCombatant(db, fighter);
+	CHECK_EQ(both.basicAttack, std::string("disc_throw"));
+	CHECK(both.attackElement == Element::Heat);
+}

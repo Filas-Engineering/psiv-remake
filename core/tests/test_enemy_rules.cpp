@@ -609,3 +609,51 @@ TEST(loaderChecksTheNewEnemyLinks) {
 	replaceOnce(files["abilities.json"], "{\"type\": \"heal\", \"kinds\": [\"machine\"], \"power\": 40}", "{\"type\": \"heal\", \"kinds\": [\"robot\"], \"power\": 40}");
 	expectError(files, "unknown kind 'robot'");
 }
+
+// Party members marked vulnerable, or of a kind rules.json `instant_defeat_kinds` names, can be felled by an enemy's
+// instant defeat, rolled against their affinity for its element; the others are immune.
+TEST(enemyInstantDefeatFellsOnlyVulnerableMembers) {
+	for (bool byKind : {false, true}) {
+		Database db = data();
+		db.characters["engineer"].vulnerable = !byKind;
+		if (byKind) {
+			db.battleRules.instantDefeatKinds = {CreatureKind::Living};
+		}
+		int felled = 0;
+		int immune = 0;
+		for (std::uint64_t seed = 1; seed <= 20; ++seed) {
+			Battle battle = makeBattle(db, {"gloam_reaper"}, seed);
+			partyDefends(battle);
+			for (const Event& e : ofType(battle.resolveRound(), EventType::Message)) {
+				felled += e.message == "battle.instant_defeat" ? 1 : 0;
+				immune += e.message == "battle.instant_defeat_immune" ? 1 : 0;
+				CHECK(e.message != "battle.instant_defeat" || byKind || e.target == kEngineer);
+			}
+		}
+		CHECK(felled > 0);
+		CHECK_EQ(immune > 0, !byKind);
+	}
+	Database holy = data();
+	holy.characters["engineer"].vulnerable = true;
+	holy.characters["engineer"].affinities[Element::Holy] = 0;
+	Battle battle = makeBattle(holy, {"gloam_reaper"}, 1);
+	partyDefends(battle);
+	for (const Event& e : ofType(battle.resolveRound(), EventType::Message)) {
+		CHECK(e.message == "battle.instant_defeat_immune");
+	}
+}
+
+// `next_form_at`: the enemy takes its next form once its hit points fall to that percent, not only when it falls.
+TEST(aNextFormCanComeAtAPercentOfHitPoints) {
+	const Database& db = data();
+	Battle battle = makeBattle(db, {"shellback"}, 2);
+	battle.combatant(kFirstEnemy).hp = 71;
+	battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	const std::vector<Event> changed = ofType(events, EventType::EnemyTransformed);
+	CHECK_EQ(changed.size(), std::size_t(1));
+	CHECK(!changed.empty() && changed.front().ids == std::vector<std::string>{"shellback_bare"});
+	CHECK_EQ(battle.combatant(kFirstEnemy).defId, std::string("shellback_bare"));
+	CHECK(battle.combatant(kFirstEnemy).alive());
+}

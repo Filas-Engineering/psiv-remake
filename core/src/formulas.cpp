@@ -20,12 +20,14 @@ int criticalBonus(int attack) {
 	return attack / 4;
 }
 
-int damage(int attack, int defense, int bonus, int affinity, int spread) {
+// The spread step rounds down as the original's does; the affinity step multiplies before it divides, so it rounds down
+// once, before the defense is subtracted.
+int damage(int attack, int defense, int bonus, int affinity, int spread, int divisor) {
 	if (affinity <= 0) {
 		return 0;
 	}
 	const int raw = attack * spread / 64 + attack + bonus * 2;
-	return std::clamp(raw * affinity / 100 - defense, 1, kMaxDamage);
+	return std::clamp(raw * affinity / divisor - defense, 1, kMaxDamage);
 }
 
 int healAmount(int power, int mental, int spread) {
@@ -38,6 +40,10 @@ int reviveHp(int maxHp, int percent) {
 
 int statusScore(int roll, int actorMental, int targetMental, int resistance) {
 	return (roll + actorMental - targetMental) * ((100 - resistance) * 4 / 100);
+}
+
+int elementScore(int roll, int actorMental, int targetMental, int affinity, int divisor) {
+	return (roll + actorMental - targetMental) * (affinity * 4 / divisor);
 }
 
 int experienceToNextLevel(int level) {

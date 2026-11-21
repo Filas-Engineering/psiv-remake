@@ -97,8 +97,12 @@ private:
 
 	void condition(const Condition& c, int line) {
 		for (const Term& t : c.terms) {
-			if (t.vehicle != VehicleTest::none) {
+			if (t.test == TermTest::owns || t.test == TermTest::aboard) {
 				name(NameKind::vehicle, t.name, line);
+			} else if (t.test == TermTest::member) {
+				name(NameKind::member, t.name, line);
+			} else if (t.test == TermTest::holds) {
+				name(NameKind::item, t.name, line);
 			} else {
 				declared(t.name, t.is_flag, line);
 			}

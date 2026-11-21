@@ -9,10 +9,10 @@ public enum MenuKind { None, Field, Inn, SavePrompt, NameEntry, Port }
 public enum Direction { None = -1, North, East, South, West }
 // Ambient: a party talk line that came up by itself on arrival; it does not stop play.
 public enum NoticeKind { Line, Choice, Action, Notice, Warning, Autosave, Ambient }
-public enum AreaKind { Town, Field, Dungeon }
+public enum AreaKind { Town, Field, Dungeon, Vessel }
 public enum EncounterMode { Visible, Random }
 public enum EnemyState { Idle, Chasing, Returning }
-public enum PointKind { Talk, Step, Chest, Shop, Rest, Port }
+public enum PointKind { Talk, Step, Chest, Shop, Rest, Port, Helm, Gangway }
 // From a port to another open port, back to a visited town of the region, out of a dungeon.
 public enum TravelKind { Port, Town, DungeonExit }
 public enum JobState { Available, Accepted, Completed, Missed }
@@ -24,7 +24,10 @@ public enum Side { Party, Enemy }
 public enum CommandKind { None, Attack, Ability, Item, Defend, Escape }
 public enum AbilityKind { Attack, Technique, Skill, Combo }
 public enum Targeting { OneEnemy, EnemyGroup, AllEnemies, OneAlly, AllAllies, Self, OneFallenAlly, RandomEnemy }
-public enum EquipSlot { Weapon, Head, Body, Arms, Accessory }
+// Weapon is also the right hand; LeftHand is only a place to wear a weapon or a shield.
+public enum EquipSlot { Weapon, Head, Body, Arms, Accessory, Shield, LeftHand }
+
+public enum ShopKind { General, Weapon, Armor, Tool, Gift }
 public enum Outcome { Ongoing, Victory, Defeat, Escaped, ScriptedEnd }
 
 public enum BattleEventType
@@ -68,7 +71,8 @@ public enum ItemSort { Id, Kind, Name, Count }
 public enum CameraTarget { None, Marker, Follow, Leader }
 
 [Flags]
-public enum CellFlags : byte { Floor = 0, Wall = 1, Water = 2, TerrainMask = 3, Walkable = 16 }
+// Soft ground is crossed by a vehicle only; a barrier is a wall (Wall | Barrier) a vehicle can break through.
+public enum CellFlags : byte { Floor = 0, Wall = 1, Water = 2, Soft = 3, TerrainMask = 3, Barrier = 8, Walkable = 16 }
 
 // The kinds psiv_name_of knows, for the stable names of enum values.
 public enum NameKind
@@ -76,7 +80,7 @@ public enum NameKind
 	Mode, MenuKind, Direction, NoticeKind, AreaKind, EncounterMode, EnemyState, PointKind, JobState, TextSpeed, BattleSpeed,
 	RewardMultiplier, BattleSource, Side, CommandKind, AbilityKind, Targeting, EquipSlot, Outcome, EventType, CancelReason,
 	Effectiveness, StatusEnd, ResourceKind, Element, Stat, Opening, AutoStop, MacroStepStatus, MacroIssue, ActionType, MacroTargetKind,
-	DescriptionKind, ItemSort, CameraTarget, TravelKind, DevList, CreatureKind,
+	DescriptionKind, ItemSort, CameraTarget, TravelKind, DevList, CreatureKind, ShopKind,
 }
 
 // The id lists of DevIds: what the developer commands take. Markers are "area:marker".
@@ -122,7 +126,7 @@ public sealed record SessionOptions
 
 // TitleMusic, VictoryMusic and DefeatMusic are game.json's tracks, "" when the data names none.
 public sealed record GameInfo(string Title, string GameBuild, int RulesVersion, int TickMs, int RoundMs, int ManualSlots, int AutosaveSlots, int ItemCap, int MoneyCap,
-	IReadOnlyList<string> Languages, string TitleMusic, string VictoryMusic, string DefeatMusic);
+	IReadOnlyList<string> Languages, string TitleMusic, string VictoryMusic, string DefeatMusic, bool MagicDefense = false);
 
 public sealed record Profile(TextSpeed TextSpeed, bool AutoAdvance, bool ShowShippedNames, string TextLanguage, int TextSizePercent, BattleSpeed BattleSpeed,
 	bool AmbientTalk, bool ReducedFlash, int MusicVolume, int AmbientVolume, int EffectsVolume);
@@ -150,9 +154,9 @@ public sealed record Zone(string Id, int FromX, int FromY, int ToX, int ToY, IRe
 	IReadOnlyList<(int X, int Y)> Spawns);
 
 // Music is the area's track, "" when the data names none. Aboard is the vehicle the party rides, "" on foot; LeaderStepMs
-// the leader's time per cell now, StepMs on foot.
+// the leader's time per cell now, StepMs on foot. ShipPort, in a vessel, is the port the party walked aboard from.
 public sealed record FieldInfo(string AreaId, string AreaName, AreaKind AreaKind, EncounterMode EncounterMode, int Width, int Height, int StepMs,
-	int LeaderX, int LeaderY, Direction Facing, bool PlayerControl, int GraceMs, string Music, string Region, string Aboard, int LeaderStepMs);
+	int LeaderX, int LeaderY, Direction Facing, bool PlayerControl, int GraceMs, string Music, string Region, string Aboard, int LeaderStepMs, string ShipPort = "");
 
 public sealed record FieldEnemy(int Id, string Encounter, string Zone, int X, int Y, Direction Facing, EnemyState State);
 
@@ -160,7 +164,8 @@ public sealed record Marker(string Name, int X, int Y);
 
 public sealed record FieldExit(int X, int Y, string ToArea, string ToMarker);
 
-public sealed record FieldPoint(PointKind Kind, string Id, int X, int Y, string Event, bool Active, int Cost);
+// Active for a shop or a port: open now.
+public sealed record FieldPoint(PointKind Kind, string Id, int X, int Y, string Event, bool Active, int Cost, ShopKind ShopKind = ShopKind.General);
 
 // One of the game's actors in the party's area. Scripted: a script has moved, turned, shown or hidden it; an
 // untouched actor stands at the talk point named after it.
@@ -196,7 +201,7 @@ public sealed record Notice(NoticeKind Kind, string Key, IReadOnlyList<string> P
 public sealed record ActiveStatus(string Id, string Name, int Remaining);
 
 public sealed record Combatant(int Index, string Id, string Name, string Label, Side Side, string Group, int Hp, int MaxHp, int Tp, int MaxTp, bool Alive,
-	bool Defending, IReadOnlyList<ActiveStatus> Statuses, CommandKind CommandKind, string CommandId, int CommandTarget);
+	bool Defending, IReadOnlyList<ActiveStatus> Statuses, CommandKind CommandKind, string CommandId, int CommandTarget, bool Flying = false);
 
 // Music is the encounter's track from game.json, "" when the data names none. Vehicle is a vehicle battle's vehicle, the
 // combatant after the members riding it, "" otherwise.
@@ -227,13 +232,14 @@ public sealed record Member(string Id, string Name, bool InLineup, int Level, in
 // technique with, null for others.
 public sealed record AbilityInfo(string Id, string Name, AbilityKind Kind, Targeting Targeting, int Cost, bool Field, int Uses, int MaxUses, TravelKind? Travel);
 
-public sealed record StatBonus(int MaxHp, int MaxTp, int Strength, int Mental, int Agility, int Dexterity, int Defense, int Critical, int Evasion);
+// MagicDefense counts only when GameInfo.MagicDefense is set.
+public sealed record StatBonus(int MaxHp, int MaxTp, int Strength, int Mental, int Agility, int Dexterity, int Defense, int Critical, int Evasion, int MagicDefense = 0);
 
 public sealed record StatusResist(string Id, string Name, int Percent);
 
 // What a status screen shows beyond Member. EquipmentBonus is indexed by EquipSlot; Affinities lists every element but None.
 public sealed record MemberDetail(string Id, int ExperienceToNext, int Critical, int Evasion, Element AttackElement, IReadOnlyList<StatBonus> EquipmentBonus,
-	IReadOnlyDictionary<Element, int> Affinities, IReadOnlyList<StatusResist> StatusResists);
+	IReadOnlyDictionary<Element, int> Affinities, IReadOnlyList<StatusResist> StatusResists, int MagicDefense = 0);
 
 // A member's battle numbers, built by the code that sets up a battle combatant.
 public sealed record CombatView(StatBonus Stats, string BasicAttack, string BasicAttackName, Element AttackElement, IReadOnlyList<string> Abilities,
@@ -244,7 +250,7 @@ public sealed record CombatView(StatBonus Stats, string BasicAttack, string Basi
 public sealed record EquipPreview(string Member, string Piece, string PieceName, EquipSlot Slot, string Category, StatBonus Bonus, Element Element,
 	string Attack, string AttackName, IReadOnlyList<string> Granted, IReadOnlyList<string> GrantedNames, IReadOnlyList<StatusResist> PieceResists,
 	string Replaces, string ReplacesName, bool CanWear, PsivError? Refusal, IReadOnlyList<string> Wearers, IReadOnlyList<string> WearerNames,
-	CombatView Before, CombatView After);
+	CombatView Before, CombatView After, EquipSlot Position = EquipSlot.Weapon, string AlsoReplaces = "", string AlsoReplacesName = "", int Hands = 1);
 
 // One step of a saved macro. TargetMember is set for a Member target, TargetEnemy (else -1) for an Enemy target; Issue says
 // why the step cannot run as written now.
@@ -259,14 +265,16 @@ public sealed record ComboEntry(string Recipe, string Result, string ResultName,
 // Total counts every recipe, discovered or not.
 public sealed record ComboLog(IReadOnlyList<ComboEntry> Entries, int Total);
 
-// Travel: the kind Travel takes a travelling item with, null for others.
-public sealed record InventoryEntry(string Id, string Name, int Count, bool IsEquipment, bool Field, int TargetingOrSlot, int Price, TravelKind? Travel)
+// Travel: the kind Travel takes a travelling item with, null for others. CallsVehicle: the vehicle an item calls, "" for
+// others. Hands: 2 for a two-handed weapon, 1 for other pieces, 0 for items.
+public sealed record InventoryEntry(string Id, string Name, int Count, bool IsEquipment, bool Field, int TargetingOrSlot, int Price, TravelKind? Travel,
+	string CallsVehicle = "", int Hands = 0)
 {
 	public Targeting Targeting => (Targeting)TargetingOrSlot;
 	public EquipSlot Slot => (EquipSlot)TargetingOrSlot;
 }
 
-public sealed record ShopInfo(string Id, int SellPercent, IReadOnlyList<InventoryEntry> Stock);
+public sealed record ShopInfo(string Id, int SellPercent, IReadOnlyList<InventoryEntry> Stock, ShopKind Kind = ShopKind.General);
 
 public sealed record InnInfo(string Id, int Cost);
 

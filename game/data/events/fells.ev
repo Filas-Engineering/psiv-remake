@@ -1,0 +1,147 @@
+# The Ashen Fells, reached by the lantern barge from a dock at Cinder Quay that rises when its bell is rung: a lodge
+# where the last place in the party goes to one of two candidates, and the pick can be changed there later; four
+# kinds of shop and a better pair that opens once the vault is cleared; a bridge mended by story; an ash storm that
+# empties the market until it passes; a shrine sealed for good; a garage of vehicles on the moor; and a vault of
+# pits, a switch, a locked door with another way round, an illusion, a transport tile and rubble the story clears.
+
+event quay_dock_bell unskippable
+	lock player
+	if travel.dock_open
+		narrate @quay.dock_bell.again
+	else
+		narrate @quay.dock_bell.ring
+		set travel.dock_open
+	end
+	unlock player
+end
+
+event ashfall_lodge unskippable
+	lock player
+	if party lancer or party harpooner
+		ask @fells.lodge.change
+		yes
+			if party lancer
+				party remove lancer
+				party add harpooner
+			else
+				party remove harpooner
+				party add lancer
+			end
+			say lodgekeeper @fells.lodge.changed
+		no
+			say lodgekeeper @fells.lodge.kept
+		end
+	else
+		say lodgekeeper @fells.lodge.offer
+		choice @fells.lodge.pick into fells.recruit
+		option @fells.lodge.pick_lancer
+			party add lancer
+		option @fells.lodge.pick_harpooner
+			party add harpooner
+		end
+	end
+	unlock player
+end
+
+event ashfall_ashwife unskippable
+	say ashwife @fells.ashwife.talk
+end
+
+event ashfall_storm unskippable
+	lock player
+	if fells.ash_storm
+		narrate @fells.storm.passes
+		clear fells.ash_storm
+		show ashwife
+		show lodgekeeper
+	else
+		narrate @fells.storm.comes
+		set fells.ash_storm
+		hide ashwife
+		hide lodgekeeper
+	end
+	unlock player
+end
+
+event ashfall_bridge unskippable
+	lock player
+	if fells.bridge_mended
+		say bridgewright @fells.bridge.whole
+	else
+		say bridgewright @fells.bridge.mend
+		set fells.bridge_mended
+	end
+	unlock player
+end
+
+event ashfall_shrine unskippable
+	lock player
+	narrate @fells.shrine.visit
+	give sunstone
+	warp ashfall_market shrine_out
+	set fells.shrine_sealed
+	narrate @fells.shrine.sealed
+	unlock player
+end
+
+event fell_garage unskippable
+	lock player
+	if vehicle dune_crawler
+		narrate @fells.garage.empty
+	else
+		narrate @fells.garage.keys
+		vehicle give dune_crawler fell_moor crawler_bay
+		give dune_horn
+		vehicle give rime_borer fell_moor borer_bay
+		give rime_bell
+		if not vehicle reed_skimmer
+			vehicle give reed_skimmer fell_moor skimmer_bay
+		end
+		if not item skimmer_reed
+			give skimmer_reed
+		end
+	end
+	unlock player
+end
+
+event vault_switch unskippable
+	if fells.vault_switch
+		narrate @vault.switch.off
+		clear fells.vault_switch
+	else
+		narrate @vault.switch.on
+		set fells.vault_switch
+	end
+end
+
+event vault_lock unskippable
+	if fells.vault_door_open
+		narrate @vault.lock.open
+	else if item vault_key
+		narrate @vault.lock.opens
+		set fells.vault_door_open
+	else
+		narrate @vault.lock.locked
+	end
+end
+
+event vault_lens unskippable
+	if fells.illusion_lifted
+		narrate @vault.lens.done
+	else
+		narrate @vault.lens.see
+		set fells.illusion_lifted
+	end
+end
+
+event vault_warden unskippable
+	lock player
+	narrate @vault.warden.wakes
+	battle bulwark
+	win
+		narrate @vault.warden.falls
+		set fells.vault_cleared
+		set fells.guild_open
+	end
+	unlock player
+end

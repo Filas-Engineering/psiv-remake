@@ -891,13 +891,13 @@ static void testActors(void) {
 	/* Every actor id, from game.json, already at the title. */
 	const char* const* ids;
 	int32_t idCount;
-	const char* allActors[] = {"dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler"};
+	const char* allActors[] = {"ashwife", "bridgewright", "dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "lodgekeeper", "peddler", "wayfarer"};
 	CHECK(psiv_actor_ids(s, NULL, &idCount) == PSIV_INVALID_ARGUMENT);
 	CHECK(psiv_actor_ids(s, &ids, NULL) == PSIV_INVALID_ARGUMENT);
 	CHECK(psiv_actor_ids(NULL, &ids, &idCount) == PSIV_INVALID_ARGUMENT);
 	CHECK_OK(psiv_actor_ids(s, &ids, &idCount));
-	CHECK(idCount == 7);
-	for (int32_t i = 0; i < idCount && i < 6; ++i) {
+	CHECK(idCount == 10);
+	for (int32_t i = 0; i < idCount && i < 10; ++i) {
 		CHECK(strcmp(ids[i], allActors[i]) == 0);
 	}
 	CHECK_OK(psiv_new_game(s));
@@ -956,7 +956,7 @@ static void testActors(void) {
 	CHECK(count == 1 && strcmp(actors[0].id, "peddler") == 0 && actors[0].x == 10 && actors[0].y == 7 && !actors[0].scripted);
 	/* The dockhand and the guide are actors in another area: in the ids, not among the field's actors. */
 	CHECK_OK(psiv_actor_ids(s, &ids, &idCount));
-	CHECK(idCount == 7 && strcmp(ids[0], "dockhand") == 0 && strcmp(ids[2], "guide") == 0);
+	CHECK(idCount == 10 && strcmp(ids[2], "dockhand") == 0 && strcmp(ids[4], "guide") == 0);
 	CHECK(!findActor(actors, count, "dockhand") && !findActor(actors, count, "guide"));
 	psiv_session_destroy(s);
 }
@@ -1763,6 +1763,132 @@ static void testFollowersKindsAndUses(void) {
 	psiv_session_destroy(s);
 }
 
+static const psiv_point* findPoint(const psiv_point* points, int32_t count, int32_t kind, const char* id) {
+	for (int32_t i = 0; i < count; ++i) {
+		if (points[i].kind == kind && (!id || strcmp(points[i].id, id) == 0)) {
+			return &points[i];
+		}
+	}
+	return NULL;
+}
+
+/* The Ashen Fells: hands, shop kinds, the ship, the vehicles' call items and terrain, flying enemies, names in Japanese. */
+static void testFells(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/fells", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_EQUIP_SLOT, PSIV_SLOT_LEFT_HAND), "left_hand") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_SHOP_KIND, PSIV_SHOP_GIFT), "gift") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_AREA_KIND, PSIV_AREA_VESSEL), "vessel") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_POINT_KIND, PSIV_POINT_GANGWAY), "gangway") == 0);
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+
+	/* A dock that its bell raises, walked aboard; the helm, the gangway and the port it came from. */
+	CHECK_OK(psiv_dev_warp(s, "cinder_quay", "dock_front"));
+	settle(s);
+	const psiv_point* points = NULL;
+	int32_t count = 0;
+	CHECK_OK(psiv_field_points(s, &points, &count));
+	const psiv_point* dock = findPoint(points, count, PSIV_POINT_PORT, "quay_dock");
+	CHECK(dock && !dock->active);
+	CHECK_OK(psiv_dev_set_flag(s, "travel.dock_open", 1));
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_SOUTH));
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	psiv_field_info info;
+	CHECK_OK(psiv_field_info_get(s, &info));
+	CHECK(info.area_kind == PSIV_AREA_VESSEL && strcmp(info.ship_port, "quay_dock") == 0);
+	CHECK_OK(psiv_field_points(s, &points, &count));
+	CHECK(findPoint(points, count, PSIV_POINT_HELM, "barge_helm") && findPoint(points, count, PSIV_POINT_GANGWAY, NULL));
+
+	/* Shop kinds and the stock a story flag adds. */
+	CHECK_OK(psiv_dev_warp(s, "ashfall_market", "tools_front"));
+	settle(s);
+	CHECK_OK(psiv_field_points(s, &points, &count));
+	const psiv_point* arms = findPoint(points, count, PSIV_POINT_SHOP, "ashfall_arms");
+	const psiv_point* fine = findPoint(points, count, PSIV_POINT_SHOP, "ashfall_fine_arms");
+	CHECK(arms && arms->shop_kind == PSIV_SHOP_WEAPON && arms->active);
+	CHECK(fine && !fine->active);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	psiv_shop_info shop;
+	CHECK_OK(psiv_shop_get(s, &shop));
+	CHECK(shop.kind == PSIV_SHOP_TOOL && shop.stock_count == 2);
+	CHECK_OK(psiv_close_menu(s));
+	CHECK_OK(psiv_dev_set_flag(s, "fells.bridge_mended", 1));
+	CHECK_OK(psiv_interact(s));
+	CHECK_OK(psiv_shop_get(s, &shop));
+	CHECK(shop.stock_count == 3);
+	CHECK_OK(psiv_close_menu(s));
+
+	/* Two hands: a piece in the hand named, the preview of a two-handed weapon, and a refused hand. */
+	CHECK_OK(psiv_dev_give(s, "gill_knife", 1));
+	CHECK_OK(psiv_dev_give(s, "kelp_cleaver", 1));
+	CHECK_OK(psiv_open_menu(s));
+	CHECK(psiv_equip_at(s, "fighter", "gill_knife", 99) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_equip_at(s, "fighter", "gill_knife", PSIV_SLOT_LEFT_HAND));
+	const psiv_member* party = NULL;
+	CHECK_OK(psiv_party(s, &party, &count));
+	CHECK(count > 0 && strcmp(party[0].equipment[PSIV_SLOT_LEFT_HAND], "gill_knife") == 0 && strcmp(party[0].equipment[PSIV_SLOT_WEAPON], "copper_blade") == 0);
+	psiv_equip_preview preview;
+	CHECK_OK(psiv_equip_preview_get(s, "fighter", "kelp_cleaver", &preview));
+	CHECK(preview.hands == 2 && preview.position == PSIV_SLOT_WEAPON && strcmp(preview.replaces, "copper_blade") == 0 && strcmp(preview.also_replaces, "gill_knife") == 0);
+	CHECK_OK(psiv_equip_preview_at(s, "fighter", "kelp_cleaver", PSIV_SLOT_LEFT_HAND, &preview));
+	CHECK(!preview.can_wear && strcmp(preview.refusal_key, "equip.wrong_position") == 0);
+	CHECK(psiv_equip_at(s, "fighter", "kelp_cleaver", PSIV_SLOT_LEFT_HAND) == PSIV_REFUSED);
+	/* Magic defense comes with armor, though these rules do not use it. */
+	psiv_game_info game;
+	CHECK_OK(psiv_game_info_get(s, &game));
+	CHECK(game.magic_defense == 0);
+	CHECK_OK(psiv_dev_give(s, "ward_mantle", 1));
+	CHECK_OK(psiv_equip_preview_get(s, "fighter", "ward_mantle", &preview));
+	CHECK(preview.bonus.magic_defense == 8 && preview.after.stats.magic_defense - preview.before.stats.magic_defense == 8);
+	CHECK_OK(psiv_equip(s, "fighter", "ward_mantle"));
+	psiv_member_detail detail;
+	CHECK_OK(psiv_member_detail_get(s, "fighter", &detail));
+	CHECK(detail.magic_defense == 8 && detail.equipment_bonus[PSIV_SLOT_BODY].magic_defense == 8);
+	CHECK_OK(psiv_close_menu(s));
+
+	/* The moor's terrain and a vehicle called from the item list. */
+	CHECK_OK(psiv_dev_warp(s, "fell_moor", "town_gate"));
+	settle(s);
+	const uint8_t* cells = NULL;
+	int32_t cellCount = 0;
+	CHECK_OK(psiv_field_info_get(s, &info));
+	CHECK_OK(psiv_field_grid(s, &cells, &cellCount));
+	CHECK((cells[1 * info.width + 8] & PSIV_CELL_TERRAIN_MASK) == PSIV_CELL_SOFT && !(cells[1 * info.width + 8] & PSIV_CELL_WALKABLE));
+	CHECK((cells[1 * info.width + 13] & PSIV_CELL_TERRAIN_MASK) == PSIV_CELL_WALL && (cells[1 * info.width + 13] & PSIV_CELL_BARRIER));
+	CHECK_OK(psiv_dev_vehicle(s, "dune_crawler", "fell_moor", "crawler_bay"));
+	CHECK_OK(psiv_dev_give(s, "dune_horn", 1));
+	const psiv_inventory_entry* items = NULL;
+	CHECK_OK(psiv_inventory(s, &items, &count));
+	int32_t horn = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		horn = horn || (strcmp(items[i].id, "dune_horn") == 0 && strcmp(items[i].calls_vehicle, "dune_crawler") == 0);
+	}
+	CHECK(horn);
+	CHECK_OK(psiv_open_menu(s));
+	CHECK_OK(psiv_use_item(s, "dune_horn", NULL));
+	CHECK_OK(psiv_field_info_get(s, &info));
+	CHECK(strcmp(info.aboard, "dune_crawler") == 0);
+
+	/* Flying enemies, and every name in the battle in Japanese. */
+	psiv_profile profile;
+	CHECK_OK(psiv_profile_get(s, &profile));
+	profile.text_language = "ja";
+	CHECK_OK(psiv_profile_set(s, &profile));
+	CHECK_OK(psiv_leave_vehicle(s));
+	CHECK_OK(psiv_dev_battle(s, "kites"));
+	const psiv_combatant* combatants = NULL;
+	CHECK_OK(psiv_battle_combatants(s, &combatants, &count));
+	CHECK(count >= 2 && combatants[count - 1].flying && strcmp(combatants[count - 1].name, "燃えさしの凧鳥") == 0);
+	CHECK(!combatants[0].flying && strcmp(combatants[1].name, "術師") != 0);
+	psiv_session_destroy(s);
+}
+
 int main(int argc, char** argv) {
 	for (int i = 1; i + 1 < argc; i += 2) {
 		if (strcmp(argv[i], "--data") == 0) {
@@ -1792,6 +1918,7 @@ int main(int argc, char** argv) {
 	testVehiclesAndTravel();
 	testDevTools();
 	testFollowersKindsAndUses();
+	testFells();
 	if (failures) {
 		fprintf(stderr, "%d of %d checks failed\n", failures, checks);
 		return 1;

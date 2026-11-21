@@ -1,6 +1,7 @@
 #include "rules/battle.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <numeric>
 
 namespace rules {
@@ -99,30 +100,102 @@ int Battle::tryCombo(const std::vector<int>& order, std::size_t index, std::vect
 		if (comboLog_ && comboLog_->discover(recipe.id, playTimeMs_, characters)) {
 			emit(out, EventType::ComboDiscovered).combo = recipe.id;
 		}
-		// Damage adds up each participant's stat for its component and each component's damage power. Other effects
-		// read the participants' average stats.
-		Attacker team;
-		team.combo = true;
+		std::vector<std::string> components;
 		for (int actor : participants) {
-			const AbilityDef& component = *db_->ability(commands_[actor].id);
-			payCost(actor, component, out);
-			const Attacker member = attackerOf(actor);
-			team.strength += member.strength;
-			team.mental += member.mental;
-			team.dexterity += member.dexterity;
-			team.critical += member.critical;
-			team.comboAttack += component.kind == AbilityKind::Technique ? member.mental : member.strength;
-			team.comboBonus += damagePower(component);
+			components.push_back(commands_[actor].id);
 		}
-		const int count = static_cast<int>(participants.size());
-		team.strength /= count;
-		team.mental /= count;
-		team.dexterity /= count;
-		team.critical /= count;
-		team.changeAmount = team.comboAttack;
-		team.groupTarget = combo.targeting == Targeting::EnemyGroup || combo.targeting == Targeting::AllEnemies;
-		applyEffects(lead, team, combo.id, combo.effects, targets, false, out);
+		applyEffects(lead, comboTeam(participants, components, combo, out), combo.id, combo.effects, targets, false, out);
 		return static_cast<int>(queuePlaces[size - 1] - index + 1);
+	}
+	return 0;
+}
+
+// Every participant pays for its component. Damage adds up each participant's stat for its component (mental for a
+// technique, strength otherwise) and each component's damage power; other effects read the average stats.
+Battle::Attacker Battle::comboTeam(const std::vector<int>& participants, const std::vector<std::string>& components, const AbilityDef& combo, std::vector<Event>& out) {
+	Attacker team;
+	team.combo = true;
+	for (std::size_t k = 0; k < participants.size(); ++k) {
+		const int actor = participants[k];
+		const AbilityDef& component = *db_->ability(components[k]);
+		payCost(actor, component, out);
+		const Attacker member = attackerOf(actor);
+		team.strength += member.strength;
+		team.mental += member.mental;
+		team.dexterity += member.dexterity;
+		team.critical += member.critical;
+		team.comboAttack += component.kind == AbilityKind::Technique ? member.mental : member.strength;
+		team.comboBonus += damagePower(component);
+	}
+	const int count = static_cast<int>(participants.size());
+	team.strength /= count;
+	team.mental /= count;
+	team.dexterity /= count;
+	team.critical /= count;
+	team.changeAmount = team.comboAttack;
+	team.groupTarget = combo.targeting == Targeting::EnemyGroup || combo.targeting == Targeting::AllEnemies;
+	return team;
+}
+
+// Right after an enemy its AI drives drew its action (B4): its part is the first one (any one for an unordered
+// recipe) of its id with the action it drew. The next queued turns, passing over party members who fell earlier in
+// the round, must be living enemies its AI drives that can act and pay for a part not yet taken, of that part's id
+// (the next part's in an ordered recipe). The first recipe in data order that fills every part fires on the lead's
+// foe; the others' turns are spent on it, so none of them draws an action. A participant that has fallen is not in
+// the queue alive, so a recipe needs all its parts standing. Returns the queued turns consumed, or 0.
+int Battle::tryEnemyCombo(const std::vector<int>& order, std::size_t index, std::vector<Event>& out) {
+	const int lead = order[index];
+	const Command& leading = commands_[lead];
+	const std::string drawn = leading.kind == CommandKind::Attack ? combatants_[lead].basicAttack : leading.kind == CommandKind::Ability ? leading.id : std::string();
+	for (const EnemyComboRecipe& recipe : db_->enemyCombos) {
+		const std::size_t size = recipe.parts.size();
+		std::vector<bool> taken(size, false);
+		const auto fits = [&](std::size_t p, int actor) {
+			return !taken[p] && recipe.parts[p].enemy == combatants_[actor].defId && (!recipe.ordered || std::count(taken.begin(), taken.end(), true) == static_cast<std::ptrdiff_t>(p));
+		};
+		std::size_t first = 0;
+		while (first < size && !(fits(first, lead) && recipe.parts[first].ability == drawn)) {
+			++first;
+		}
+		if (first == size) {
+			continue;
+		}
+		taken[first] = true;
+		std::vector<int> participants = {lead};
+		std::vector<std::string> components = {drawn};
+		std::size_t k = index + 1;
+		for (; k < order.size() && participants.size() < size; ++k) {
+			const int actor = order[k];
+			if (isParty(actor) && !combatants_[actor].alive()) {
+				continue;
+			}
+			if (isParty(actor) || !aiTurn_[actor] || !combatants_[actor].alive() || commands_[actor].kind == CommandKind::None || statusWith(actor, StatusAction::CannotAct)) {
+				break;
+			}
+			std::size_t p = 0;
+			while (p < size && !(fits(p, actor) && db_->ability(recipe.parts[p].ability) && checkUsable(actor, *db_->ability(recipe.parts[p].ability)) == CancelReason::None)) {
+				++p;
+			}
+			if (p == size) {
+				break;
+			}
+			taken[p] = true;
+			participants.push_back(actor);
+			components.push_back(recipe.parts[p].ability);
+		}
+		if (participants.size() != size) {
+			continue;
+		}
+		const AbilityDef& combo = *db_->ability(recipe.result);
+		const std::vector<int> targets = resolveTargets(lead, combo.targeting, leading.target, combo.revives());
+		Event& e = emit(out, EventType::ComboTriggered);
+		e.actor = lead;
+		e.ability = combo.id;
+		e.combo = recipe.id;
+		e.target = targets.size() == 1 ? targets.front() : -1;
+		e.participants = participants;
+		applyEffects(lead, comboTeam(participants, components, combo, out), combo.id, combo.effects, targets, false, out);
+		return static_cast<int>(k - index);
 	}
 	return 0;
 }

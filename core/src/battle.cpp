@@ -70,8 +70,12 @@ std::string checkMember(const Database& db, const PartyMember& member) {
 		if (!refused.empty()) {
 			return "'" + member.characterId + "' cannot wear '" + id + "' (" + refused.key + ")";
 		}
-		if (db.equipmentPiece(id)->slot != slot) {
+		const EquipmentDef& piece = *db.equipmentPiece(id);
+		if (!fitsPosition(piece, slot)) {
 			return "'" + id + "' does not go in that slot";
+		}
+		if (piece.hands == 2 && member.equipment.count(EquipSlot::LeftHand)) {
+			return "'" + id + "' needs both hands";
 		}
 	}
 	for (const ActiveStatus& active : member.statuses) {
@@ -104,16 +108,32 @@ Combatant memberCombatant(const Database& db, const PartyMember& member) {
 	c.affinities = def.affinities;
 	c.statusResist = def.statusResist;
 	c.kind = def.kind;
+	const std::vector<CreatureKind>& felled = db.battleRules.instantDefeatKinds;
+	c.vulnerable = def.vulnerable || std::find(felled.begin(), felled.end(), def.kind) != felled.end();
 	for (const auto& [slot, id] : member.equipment) {
-		const EquipmentDef& piece = *db.equipmentPiece(id);
-		if (!piece.attack.empty()) {
-			c.basicAttack = piece.attack;
-		}
-		if (piece.element != Element::None) {
-			c.attackElement = piece.element;
-		}
-		for (const auto& [status, percent] : piece.statusResist) {
+		for (const auto& [status, percent] : db.equipmentPiece(id)->statusResist) {
 			c.statusResist[status] = std::min(100, c.resistance(status) + percent);
+		}
+	}
+	// The right hand's weapon gives the attack and its element, the left hand's what the right lacks. A weapon that
+	// reaches more than one enemy in either hand makes the attack reach them (original-battle-rules.md, section 2).
+	const auto reachesMany = [&db](const std::string& ability) {
+		const AbilityDef* def = db.ability(ability);
+		return def && (def->targeting == Targeting::AllEnemies || def->targeting == Targeting::EnemyGroup);
+	};
+	bool attackFromWeapon = false;
+	for (EquipSlot hand : {EquipSlot::Weapon, EquipSlot::LeftHand}) {
+		const auto worn = member.equipment.find(hand);
+		const EquipmentDef* piece = worn == member.equipment.end() ? nullptr : db.equipmentPiece(worn->second);
+		if (!piece || piece->slot != EquipSlot::Weapon) {
+			continue;
+		}
+		if (!piece->attack.empty() && (!attackFromWeapon || (reachesMany(piece->attack) && !reachesMany(c.basicAttack)))) {
+			c.basicAttack = piece->attack;
+			attackFromWeapon = true;
+		}
+		if (piece->element != Element::None && c.attackElement == Element::None) {
+			c.attackElement = piece->element;
 		}
 	}
 	// Defeat clears every other status, so a fallen member carries none in.
@@ -469,13 +489,11 @@ std::vector<Event> Battle::resolveRound() {
 		}
 	}
 	for (std::size_t i = 0; i < order.size() && outcome_ == Outcome::Ongoing;) {
-		const int consumed = tryCombo(order, i, out);
-		if (consumed > 0) {
-			i += static_cast<std::size_t>(consumed);
-		} else {
-			takeTurn(order[i], out);
-			++i;
+		int consumed = tryCombo(order, i, out);
+		if (consumed == 0) {
+			consumed = takeTurn(order, i, out);
 		}
+		i += static_cast<std::size_t>(consumed);
 		updateOutcome();
 	}
 	if (outcome_ == Outcome::Ongoing) {

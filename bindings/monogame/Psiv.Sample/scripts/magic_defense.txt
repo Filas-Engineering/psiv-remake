@@ -1,0 +1,29 @@
+# Magic defense on the data copy whose rules.json sets `magic_defense` (scripts/make_front_data.py --magic-defense): the
+# Equip page compares it for the Ward Mantle and the status page lists it; without the switch neither shows it
+# (scripts/menus.txt). With --window the shot lines save screenshots under build/shots/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev give ward_mantle 1
+press M
+press Right 2
+expect state tab Equip
+press Enter
+press Down 3
+expect state selected body: Padded Coat
+press Enter
+expect state selected Ward Mantle x1
+expect statehas compare Magic defense 0>8
+shot build/shots/magic_defense_compare.png
+wait 2
+press Enter
+pressuntil Escape Field 10
+press M
+expect state tab Status
+press Enter
+expect state page stats
+shot build/shots/magic_defense_status.png
+wait 2
+pressuntil Escape Field 10

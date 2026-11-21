@@ -22,7 +22,9 @@ enum class CreatureKind { Living, Spirit, Machine };
 // Where a Travel effect takes the party (FLD-051): a town visited before, or out of the dungeon it is in.
 enum class TravelTarget { Town, DungeonExit };
 
-enum class EquipSlot { Weapon, Head, Body, Arms, Accessory };
+// A piece's slot, and where a member wears it. Weapons and shields are hand pieces: Weapon is also the right hand,
+// where a hand piece goes first, and LeftHand is only a place to wear one (P10).
+enum class EquipSlot { Weapon, Head, Body, Arms, Accessory, Shield, LeftHand };
 
 enum class Opening { Normal, PartyFirst, EnemyFirst };
 

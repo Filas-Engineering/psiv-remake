@@ -213,6 +213,19 @@ bool RecordingHost::has_vehicle(const std::string& vehicle) {
 	return held;
 }
 
+bool RecordingHost::in_party(const std::string& member) {
+	const bool in = std::find(party.begin(), party.end(), member) != party.end();
+	trace.push_back("in_party " + member + " -> " + (in ? "true" : "false"));
+	return in;
+}
+
+int RecordingHost::item_count(const std::string& item) {
+	const auto held = items.find(item);
+	const int count = held == items.end() ? 0 : held->second;
+	trace.push_back("item_count " + item + " -> " + std::to_string(count));
+	return count;
+}
+
 void RecordingHost::take_item(const std::string& item, int count) {
 	trace.push_back("take " + item + " " + std::to_string(count));
 	int& held = items[item];

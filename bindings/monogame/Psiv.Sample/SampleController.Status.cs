@@ -33,6 +33,10 @@ public sealed partial class SampleController
 		Add("def", b.Defense);
 		Add("crit", b.Critical);
 		Add("eva", b.Evasion);
+		if (_s.GameInfo().MagicDefense)
+		{
+			Add("mdef", b.MagicDefense);
+		}
 		return parts.Count == 0 ? T("ui.status.no_bonus") : ListText(parts);
 	}
 
@@ -125,6 +129,10 @@ public sealed partial class SampleController
 		left.Add((T("ui.stat.defense"), Stat(m.Defense, b => b.Defense)));
 		left.Add((T("ui.stat.critical"), Stat(d.Critical, b => b.Critical)));
 		left.Add((T("ui.stat.evasion"), Stat(d.Evasion, b => b.Evasion)));
+		if (_s.GameInfo().MagicDefense)
+		{
+			left.Add((T("ui.stat.magic_defense"), Stat(d.MagicDefense, b => b.MagicDefense)));
+		}
 		left.Add((T("ui.status.attack_element"), T(NameKind.Element, (int)d.AttackElement)));
 		left.Add((T("ui.status.affinities"), ""));
 		foreach ((Element element, int percent) in d.Affinities)
@@ -141,7 +149,7 @@ public sealed partial class SampleController
 			left.Add((r.Name, $"{r.Percent}%"));
 		}
 		right.Add((T("ui.status.equipment"), ""));
-		for (int slot = 0; slot < m.Equipment.Count; slot++)
+		foreach (int slot in EquipPositions.Select(p => (int)p))
 		{
 			string piece = m.EquipmentNames[slot].Length > 0 ? m.EquipmentNames[slot] : "-";
 			right.Add((T(NameKind.EquipSlot, slot), piece));

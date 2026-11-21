@@ -43,13 +43,17 @@ class AreaToTiledTest(TempCase):
 		ts = tmj["tilesets"][0]
 		self.assertEqual(1, ts["firstgid"])
 		self.assertEqual("cells.png", ts["image"])
-		self.assertEqual(["floor", "wall", "water"], [t["properties"][0]["value"] for t in ts["tiles"]])
+		self.assertEqual(["floor", "wall", "water", "soft", "barrier"], [t["properties"][0]["value"] for t in ts["tiles"]])
 
 	def test_refuses_areas_the_format_does_not_allow(self):
 		for change, fragment in (
 			({"lighting": "dim"}, "unknown field 'lighting'"),
 			({"map": ["#.", "#"]}, "same width"),
 			({"map": ["#?"]}, "'.' for floor"),
+			({"map": ["#?"]}, "'%' for barrier"),
+			({"shops": [{"id": "s", "stock": [{"id": "tonic", "price": 3}]}]}, "shops[0].stock[0]: unknown field 'price'"),
+			({"helms": [{"id": "wheel", "at": [1]}]}, "helms[0]: 'at' must be [x, y]"),
+			({"gangway": [[0, 0], "plank"]}, "gangway[1] must be [x, y]"),
 			({"exits": [{"at": [0, 0], "to": "x", "marker": "y", "door": "oak"}]}, "exits[0]: unknown field 'door'"),
 			({"chests": [{"id": "c", "at": "here", "flag": "f"}]}, "chests[0]: 'at' must be [x, y]"),
 		):
@@ -112,12 +116,71 @@ class TiledToAreaTest(TempCase):
 		self.assertEqual({"id": "sign", "at": [1, 2], "trigger": "interact", "event": "sign_event"}, hook)
 
 
+VESSEL_AREA = {
+	"id": "barge",
+	"kind": "vessel",
+	"map": ["#:%.", "...."],
+	"markers": {"deck": [3, 1]},
+	"exits": [{"at": [0, 1], "to": "below", "marker": "hold", "fall": True}],
+	"shops": [{"id": "galley", "at": [3, 0], "kind": "tool", "stock": ["tonic", {"block_flag": "b.flag", "id": "flask", "require_flag": "a.flag"}], "require_flag": "c.flag"}],
+	"ports": [{"id": "berth", "at": [1, 1], "marker": "deck", "flag": "d.flag", "ship": "barge"}],
+	"helms": [{"id": "wheel", "at": [2, 1]}],
+	"gangway": [[0, 1], [1, 0]],
+	"changes": [{"flag": "e.flag", "tile": ".", "cells": [[1, 0], [2, 0]]}, {"flag": "f.flag", "tile": "%", "cells": [[3, 1]]}],
+}
+
+
+class VesselAndChangesTest(TempCase):
+	def test_soft_ground_and_barriers_use_the_appended_tiles(self):
+		tmj = tiled.area_to_tmj(copy.deepcopy(VESSEL_AREA), "cells.tsj")
+		self.assertEqual([2, 4, 5, 1], terrain(tmj)["data"][:4])
+		self.assertEqual("#:%.", self.convert(tmj)["map"][0])
+
+	def test_helms_gangway_and_changes_are_objects(self):
+		objs = objects(tiled.area_to_tmj(copy.deepcopy(VESSEL_AREA), "cells.tsj"))
+		self.assertEqual(["marker", "exit", "shop", "port", "helm", "gangway", "gangway", "change", "change"], [o["type"] for o in objs])
+		helm, plank = objs[4], objs[6]
+		self.assertEqual(("wheel", 40, 24), (helm["name"], helm["x"], helm["y"]))
+		self.assertEqual((24, 8), (plank["x"], plank["y"]))
+		change = objs[7]
+		self.assertLess(change["x"], 0)
+		props = {p["name"]: (p["type"], p["value"]) for p in change["properties"]}
+		self.assertEqual({"flag": ("string", "e.flag"), "tile": ("string", "."), "cells": ("string", "[[1, 0], [2, 0]]")}, props)
+
+	def test_every_new_field_survives_a_round_trip(self):
+		back = self.convert(tiled.area_to_tmj(copy.deepcopy(VESSEL_AREA), "cells.tsj"))
+		self.assertEqual(areajson.normalize(VESSEL_AREA), areajson.normalize(back))
+		self.assertEqual(areajson.dumps(VESSEL_AREA), areajson.dumps(back))
+		self.assertEqual({"id": "flask", "require_flag": "a.flag", "block_flag": "b.flag"}, back["shops"][0]["stock"][1])
+		self.assertEqual(list(areajson.STOCK_FIELDS), list(areajson.normalize(VESSEL_AREA)["shops"][0]["stock"][1]))
+
+	def test_refuses_a_change_tile_that_is_not_a_map_character_and_a_change_without_cells(self):
+		tmj = tiled.area_to_tmj(copy.deepcopy(VESSEL_AREA), "cells.tsj")
+		changes = [o for o in objects(tmj) if o["type"] == "change"]
+		next(p for p in changes[0]["properties"] if p["name"] == "tile")["value"] = "?"
+		changes[1]["properties"] = [p for p in changes[1]["properties"] if p["name"] != "cells"]
+		self.rejects(tmj, "a change: property 'tile' must be one map character: ., #, ~, :, %", "a change needs the property 'cells'")
+
+	def test_a_helm_needs_a_name(self):
+		tmj = tiled.area_to_tmj(copy.deepcopy(VESSEL_AREA), "cells.tsj")
+		next(o for o in objects(tmj) if o["type"] == "helm")["name"] = ""
+		self.rejects(tmj, "a helm needs a name: it is the id")
+
+
 class AreaTextTest(TempCase):
 	def test_canonical_text_orders_fields_and_drops_empty_lists(self):
 		area = {"markers": {"b": [1, 0], "a": [0, 0]}, "map": ["..", ".."], "id": "x", "hooks": [], "exits": [{"marker": "m", "to": "y", "at": [0, 1]}]}
 		self.assertEqual(
 			'{\n\t"id": "x",\n\t"map": [\n\t\t"..",\n\t\t".."\n\t],\n\t"markers": {\n\t\t"b": [1, 0],\n\t\t"a": [0, 0]\n\t},\n'
 			'\t"exits": [\n\t\t{"at": [0, 1], "to": "y", "marker": "m"}\n\t]\n}\n',
+			areajson.dumps(area),
+		)
+
+	def test_canonical_text_puts_each_gangway_cell_and_change_on_its_own_line(self):
+		area = {"id": "x", "kind": "vessel", "map": [".."], "markers": {}, "gangway": [[0, 0], [1, 0]], "changes": [{"cells": [[1, 0]], "tile": "#", "flag": "f"}]}
+		self.assertEqual(
+			'{\n\t"id": "x",\n\t"kind": "vessel",\n\t"map": [\n\t\t".."\n\t],\n\t"markers": {},\n'
+			'\t"gangway": [\n\t\t[0, 0],\n\t\t[1, 0]\n\t],\n\t"changes": [\n\t\t{"flag": "f", "tile": "#", "cells": [[1, 0]]}\n\t]\n}\n',
 			areajson.dumps(area),
 		)
 

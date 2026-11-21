@@ -23,6 +23,22 @@ struct ComboRecipe {
 	bool ordered = false;
 };
 
+// One part of an enemy combination: an enemy of this id using this ability.
+struct EnemyComboPart {
+	std::string enemy;
+	std::string ability;
+};
+
+// Fires when enemies of the parts' ids take their turns back to back, the first drawing its part's ability; the
+// others' turns are spent on it (B4).
+struct EnemyComboRecipe {
+	std::string id;
+	std::vector<EnemyComboPart> parts;
+	std::string result;
+	// When set, the enemies must act in the listed order; otherwise in any order.
+	bool ordered = false;
+};
+
 struct ComboLogEntry {
 	std::string recipe;
 	// The host's play time when the combination first fired, in milliseconds.

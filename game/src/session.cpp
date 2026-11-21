@@ -278,18 +278,22 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.autosave_failed",
 		"game.autosave_point",
 		"game.autosaved",
+		"game.barrier_broken",
 		"game.battle_start",
 		"game.boarded",
+		"game.boarded_ship",
 		"game.bought",
 		"game.chest_empty",
 		"game.clear_not_recorded",
 		"game.clear_recorded",
 		"game.dev_marked",
 		"game.dropped",
+		"game.equipment_returned",
 		"game.equipped",
 		"game.event_cannot_resume",
 		"game.event_damaged",
 		"game.fallen",
+		"game.fell",
 		"game.follower_joined",
 		"game.follower_left",
 		"game.found",
@@ -297,6 +301,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.game_over",
 		"game.got_away",
 		"game.healed",
+		"game.helm_open",
 		"game.inn_offer",
 		"game.job.accepted",
 		"game.job.available",
@@ -304,6 +309,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.job.missed",
 		"game.joins",
 		"game.learned",
+		"game.left_ship",
 		"game.left_vehicle",
 		"game.leaves",
 		"game.level_up",
@@ -320,6 +326,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.aboard",
 		"game.refuse.blocked",
 		"game.refuse.buy_one",
+		"game.refuse.call_outdoors",
 		"game.refuse.combo_no_member",
 		"game.refuse.combo_not_found",
 		"game.refuse.carry_cap",
@@ -389,6 +396,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.nothing_worn",
 		"game.refuse.nowhere_leave",
 		"game.refuse.nowhere_rest",
+		"game.refuse.on_ship",
 		"game.refuse.party_menu_only",
 		"game.refuse.party_no_position",
 		"game.refuse.pick_option",
@@ -403,6 +411,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.sell_one",
 		"game.refuse.settings_in_battle",
 		"game.refuse.settings_no_game",
+		"game.refuse.shop_closed",
 		"game.refuse.slot_unreadable",
 		"game.refuse.talk_field_only",
 		"game.refuse.tech_menu_only",
@@ -410,6 +419,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.travel_menu_only",
 		"game.refuse.unknown_difficulty",
 		"game.refuse.unknown_language",
+		"game.refuse.vehicle_not_owned",
 		"game.refuse.walk_field_only",
 		"game.rest_no_money",
 		"game.rested",
@@ -424,6 +434,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.used",
 		"game.used_ability",
 		"game.vehicle_acquired",
+		"game.vehicle_called",
 		"game.vehicle_parked",
 		"game.vehicle_returned",
 		"game.victory",
@@ -623,6 +634,13 @@ public:
 		}
 		w.lineup.erase(it);
 		s_.emit(OutputKind::Notice, "game.leaves", {member});
+		rules::PartyMember* leaving = w.member(member);
+		if (leaving && s_.data_.config.leaveEquipment == LeaveEquipment::Bag && !leaving->equipment.empty()) {
+			while (!leaving->equipment.empty()) {
+				rules::unequip(*leaving, s_.data_.db, w.equipmentBag, leaving->equipment.begin()->first);
+			}
+			s_.emit(OutputKind::Notice, "game.equipment_returned", {member});
+		}
 	}
 
 	void set_player_control(bool enabled) override { s_.world_.playerControl = enabled; }
@@ -682,6 +700,16 @@ public:
 	bool has_vehicle(const std::string& vehicle) override { return s_.world_.vehicles.count(vehicle) > 0; }
 
 	bool aboard_vehicle(const std::string& vehicle) override { return s_.world_.aboard == vehicle; }
+
+	bool in_party(const std::string& member) override {
+		return std::find(s_.world_.lineup.begin(), s_.world_.lineup.end(), member) != s_.world_.lineup.end();
+	}
+
+	int item_count(const std::string& item) override {
+		const std::map<std::string, int>& bag = s_.data_.db.item(item) ? s_.world_.items : s_.world_.equipmentBag;
+		const auto held = bag.find(item);
+		return held == bag.end() ? 0 : held->second;
+	}
 
 	std::string snapshot_world() override { return serializeWorldChunks(s_.world_); }
 
@@ -867,12 +895,59 @@ std::vector<ActorView> Session::actorsHere() const {
 }
 
 const Area* Session::area() const {
-	return data_.area(world_.area);
+	return areaAt(world_.area);
+}
+
+// The copy keeps its hooks, shops and the rest in place, so pointers into it stay valid while only its rows change.
+const Area* Session::areaAt(const std::string& id) const {
+	const Area* base = data_.area(id);
+	if (!base) {
+		return nullptr;
+	}
+	const auto broken = world_.brokenCells.find(id);
+	const bool here = id == world_.area && !world_.brokenHere.empty();
+	if (base->changes.empty() && broken == world_.brokenCells.end() && !here) {
+		return base;
+	}
+	std::set<Cell> open = broken == world_.brokenCells.end() ? std::set<Cell>() : broken->second;
+	if (here) {
+		open.insert(world_.brokenHere.begin(), world_.brokenHere.end());
+	}
+	std::string key;
+	for (const CellChange& change : base->changes) {
+		key += world_.flag(change.flag) ? '1' : '0';
+	}
+	for (Cell c : open) {
+		key += ";" + std::to_string(c.x) + "," + std::to_string(c.y);
+	}
+	auto view = areaViews_.find(id);
+	if (view == areaViews_.end()) {
+		view = areaViews_.emplace(id, std::make_pair(std::string("-"), *base)).first;
+	}
+	if (view->second.first != key) {
+		std::vector<std::string>& rows = view->second.second.rows;
+		rows = base->rows;
+		for (const CellChange& change : base->changes) {
+			if (world_.flag(change.flag)) {
+				for (Cell c : change.cells) {
+					rows[c.y][c.x] = change.tile;
+				}
+			}
+		}
+		for (Cell c : open) {
+			rows[c.y][c.x] = '.';
+		}
+		view->second.first = key;
+	}
+	return &view->second.second;
 }
 
 EncounterMode Session::encounterMode() const {
 	if (options_.encounterMode) {
 		return *options_.encounterMode;
+	}
+	if (data_.config.randomEncountersEverywhere) {
+		return EncounterMode::Random;
 	}
 	const Area* a = area();
 	return a ? a->mode : EncounterMode::Visible;
@@ -931,29 +1006,33 @@ std::string Session::displayName(const std::string& id) const {
 	if (named != world_.memberNames.end()) {
 		return named->second;
 	}
+	const auto inLanguage = [&](const char* kind, const std::string& dataName) {
+		const auto named = language().text.find(std::string(kNamePrefix) + kind + "." + id);
+		return named == language().text.end() ? dataName : named->second;
+	};
 	if (const rules::CharacterDef* c = db.character(id)) {
-		return c->name;
+		return inLanguage("character", c->name);
 	}
 	if (language().strings.find("speaker." + id)) {
 		return stringText("speaker." + id);
 	}
 	if (const rules::AbilityDef* a = db.ability(id)) {
-		return a->name;
+		return inLanguage("ability", a->name);
 	}
 	if (const rules::ItemDef* i = db.item(id)) {
-		return i->name;
+		return inLanguage("item", i->name);
 	}
 	if (const rules::StatusDef* s = db.status(id)) {
-		return s->name;
+		return inLanguage("status", s->name);
 	}
 	if (const rules::EnemyDef* e = db.enemy(id)) {
-		return e->name;
+		return inLanguage("enemy", e->name);
 	}
 	if (const rules::EquipmentDef* e = db.equipmentPiece(id)) {
-		return e->name;
+		return inLanguage("equipment", e->name);
 	}
 	if (const rules::VehicleDef* v = db.vehicle(id)) {
-		return v->name;
+		return inLanguage("vehicle", v->name);
 	}
 	if (data_.area(id)) {
 		return text("area." + id);
@@ -1338,12 +1417,31 @@ void Session::arrive(Cell cell) {
 		pacing_.step();
 	}
 	healMachinesOnStep();
+	if (const FieldVehicle* vehicle = riding(); vehicle && vehicle->breaks.find(area()->rows[cell.y][cell.x]) != std::string::npos) {
+		if (vehicle->breaksForGood) {
+			world_.brokenCells[world_.area].insert(cell);
+		} else {
+			world_.brokenHere.insert(cell);
+		}
+		emit(OutputKind::Notice, "game.barrier_broken", {vehicle->id});
+	}
 	const Area& a = *area();
+	const Area* shore = nullptr;
+	if (const Port* boarded = a.gangwayAt(cell) ? data_.port(world_.shipPort, &shore) : nullptr) {
+		const std::string marker = boarded->marker;
+		emit(OutputKind::Notice, "game.left_ship");
+		enterArea(shore->id, marker, from);
+		settleField();
+		return;
+	}
 	if (const Exit* exit = a.exitAt(cell)) {
 		const Exit e = *exit;
+		if (e.fall) {
+			emit(OutputKind::Notice, "game.fell");
+		}
 		// A vehicle goes on into another field area it can stand in; at a town or a dungeon it stays outside.
 		if (const FieldVehicle* vehicle = riding()) {
-			const Area* to = data_.area(e.toArea);
+			const Area* to = areaAt(e.toArea);
 			if (!to || to->kind != AreaKind::Field || !vehicle->canCross(to->rows[to->markers.at(e.toMarker).y][to->markers.at(e.toMarker).x])) {
 				const std::string id = world_.aboard;
 				world_.aboard.clear();
@@ -1400,6 +1498,12 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 	} else if (before && before->kind != AreaKind::Dungeon) {
 		world_.dungeonExitArea = before->id;
 		world_.dungeonExitCell = standing ? *standing : world_.position;
+	}
+	if (world_.area != a->id) {
+		world_.brokenHere.clear();
+	}
+	if (a->kind != AreaKind::Vessel) {
+		world_.shipPort.clear();
 	}
 	world_.area = a->id;
 	world_.position = cell;
@@ -1588,10 +1692,21 @@ rules::Message Session::interact() {
 		if (!port->flag.empty() && !world_.flag(port->flag)) {
 			return refusal("port_closed");
 		}
+		if (!port->ship.empty()) {
+			boardShip(*port);
+			return {};
+		}
 		modes_.transition(Mode::Menu);
 		menuKind_ = MenuKind::Port;
 		portId_ = port->id;
 		emit(OutputKind::Notice, "game.port_open");
+		return {};
+	}
+	if (a.helmAt(target) && data_.port(world_.shipPort)) {
+		modes_.transition(Mode::Menu);
+		menuKind_ = MenuKind::Port;
+		portId_ = world_.shipPort;
+		emit(OutputKind::Notice, "game.helm_open");
 		return {};
 	}
 	if (const Hook* hook = a.hookAt(target, HookTrigger::Interact)) {
@@ -1606,6 +1721,9 @@ rules::Message Session::interact() {
 		return {};
 	}
 	if (const Shop* shop = a.shopAt(target)) {
+		if (!shopOpen(*shop)) {
+			return refusal("shop_closed", {shop->id});
+		}
 		modes_.transition(Mode::Shop);
 		shopId_ = shop->id;
 		emit(OutputKind::Notice, "game.shop_open");
@@ -1717,6 +1835,42 @@ rules::Message Session::leaveVehicle() {
 	return refusal("nowhere_leave");
 }
 
+// F3: from the item list anywhere outdoors, a vehicle the party has comes to it, and the party boards it where it stands.
+rules::Message Session::callVehicle(const FieldVehicle& vehicle) {
+	if (!world_.vehicles.count(vehicle.id)) {
+		return refusal("vehicle_not_owned", {vehicle.id});
+	}
+	if (!world_.aboard.empty()) {
+		return refusal("aboard", {world_.aboard});
+	}
+	const Area& a = *area();
+	if (a.kind != AreaKind::Field || !vehicle.canCross(a.rows[world_.position.y][world_.position.x])) {
+		return refusal("call_outdoors", {vehicle.callItem});
+	}
+	VehiclePlace& place = world_.vehicles[vehicle.id];
+	place.area = world_.area;
+	place.cell = world_.position;
+	place.facing = world_.facing;
+	place.homeArea = place.area;
+	place.home = place.cell;
+	world_.aboard = vehicle.id;
+	stepProgressMs_ = 0;
+	modes_.transition(Mode::Field);
+	menuKind_ = MenuKind::None;
+	emit(OutputKind::Notice, "game.vehicle_called", {vehicle.id});
+	return {};
+}
+
+// F2: the party walks aboard the ship at the vessel's arrival marker; its helm lists the open ports of the same ship.
+void Session::boardShip(const Port& port) {
+	const std::string from = port.id;
+	const Area& ship = *data_.area(port.ship);
+	emit(OutputKind::Notice, "game.boarded_ship", {ship.id});
+	enterArea(ship.id, ship.arrival, world_.position);
+	world_.shipPort = from;
+	settleField();
+}
+
 void Session::leaveVehicleBehind() {
 	if (world_.aboard.empty()) {
 		return;
@@ -1728,7 +1882,7 @@ void Session::leaveVehicleBehind() {
 
 void Session::parkVehicle(const std::string& id, const std::string& areaId, Cell cell) {
 	VehiclePlace& place = world_.vehicles[id];
-	const Area* a = data_.area(areaId);
+	const Area* a = areaAt(areaId);
 	bool reachable = a && a->walkable(cell);
 	for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
 		reachable = reachable || (a && a->walkable(stepFrom(cell, f)));
@@ -1790,7 +1944,7 @@ std::vector<TravelDestination> Session::travelDestinations(TravelKind kind) cons
 		}
 		for (const auto& [id, a] : data_.areas) {
 			for (const Port& p : a.ports) {
-				if (p.id != portId_ && (p.flag.empty() || world_.flag(p.flag))) {
+				if (p.id != portId_ && p.ship == port()->ship && (p.flag.empty() || world_.flag(p.flag))) {
 					out.push_back({p.id, a.id, a.markers.at(p.marker), a.region});
 				}
 			}
@@ -1831,6 +1985,9 @@ rules::Message Session::travel(TravelKind kind, const std::string& destination, 
 		const bool inDungeon = area()->kind == AreaKind::Dungeon;
 		if (kind == TravelKind::Town && inDungeon) {
 			return refusal("in_dungeon", {thing});
+		}
+		if (area()->kind == AreaKind::Vessel) {
+			return refusal("on_ship", {thing});
 		}
 		if (kind == TravelKind::DungeonExit && !inDungeon) {
 			return refusal("not_dungeon", {thing});
@@ -2559,12 +2716,27 @@ const RestPoint* Session::inn() const {
 	return menuKind() == MenuKind::Inn ? data_.rest(innId_) : nullptr;
 }
 
+bool Session::shopOpen(const Shop& shop) const {
+	return (shop.requireFlag.empty() || world_.flag(shop.requireFlag)) && (shop.blockFlag.empty() || !world_.flag(shop.blockFlag));
+}
+
+std::vector<std::string> Session::stock(const Shop& shop) const {
+	std::vector<std::string> out;
+	for (const StockEntry& entry : shop.stock) {
+		if ((entry.requireFlag.empty() || world_.flag(entry.requireFlag)) && (entry.blockFlag.empty() || !world_.flag(entry.blockFlag))) {
+			out.push_back(entry.id);
+		}
+	}
+	return out;
+}
+
 rules::Message Session::buy(const std::string& id, int count) {
 	const Shop* s = shop();
 	if (!s) {
 		return refusal("no_shop");
 	}
-	if (std::find(s->stock.begin(), s->stock.end(), id) == s->stock.end()) {
+	const std::vector<std::string> sold = stock(*s);
+	if (std::find(sold.begin(), sold.end(), id) == sold.end()) {
 		return refusal("not_sold", {id});
 	}
 	if (count < 1) {
@@ -2665,6 +2837,11 @@ rules::Message Session::useItem(const std::string& item, const std::string& memb
 	if (def && rules::travelEffect(def->effects)) {
 		return refusal("travel_item", {item});
 	}
+	for (const FieldVehicle& vehicle : data_.config.vehicles) {
+		if (!vehicle.callItem.empty() && vehicle.callItem == item && world_.items.count(item)) {
+			return callVehicle(vehicle);
+		}
+	}
 	std::vector<rules::PartyMember> party = activeParty();
 	int target = -1;
 	if (!member.empty()) {
@@ -2724,6 +2901,11 @@ rules::Message Session::useAbility(const std::string& user, const std::string& a
 }
 
 rules::Message Session::equip(const std::string& member, const std::string& equipment) {
+	const rules::EquipmentDef* piece = data_.db.equipmentPiece(equipment);
+	return equip(member, equipment, piece ? rules::defaultPosition(*piece) : rules::EquipSlot::Weapon);
+}
+
+rules::Message Session::equip(const std::string& member, const std::string& equipment, rules::EquipSlot position) {
 	if (menuKind() != MenuKind::Field) {
 		return refusal("equip_menu_only");
 	}
@@ -2731,7 +2913,7 @@ rules::Message Session::equip(const std::string& member, const std::string& equi
 	if (!m) {
 		return {"equip.unknown_character", {member}};
 	}
-	const rules::Message refused = rules::equip(*m, data_.db, world_.equipmentBag, equipment);
+	const rules::Message refused = rules::equip(*m, data_.db, world_.equipmentBag, equipment, position);
 	if (!refused.empty()) {
 		return refused;
 	}
@@ -2795,7 +2977,8 @@ rules::Message Session::setSettings(const Settings& settings) {
 std::vector<DifficultyView> Session::difficulties() const {
 	std::vector<DifficultyView> out;
 	for (const auto& [id, d] : data_.db.difficulties) {
-		out.push_back({id, d.name, description(DescriptionKind::Difficulty, id), d.rewardPercent});
+		const auto named = language().text.find(std::string(kNamePrefix) + "difficulty." + id);
+		out.push_back({id, named == language().text.end() ? d.name : named->second, description(DescriptionKind::Difficulty, id), d.rewardPercent});
 	}
 	return out;
 }
@@ -3166,6 +3349,11 @@ std::vector<BagEntry> Session::bag(ItemSort order) const {
 }
 
 std::optional<EquipPreview> Session::equipPreview(const std::string& member, const std::string& piece) const {
+	const rules::EquipmentDef* def = data_.db.equipmentPiece(piece);
+	return equipPreview(member, piece, def ? rules::defaultPosition(*def) : rules::EquipSlot::Weapon);
+}
+
+std::optional<EquipPreview> Session::equipPreview(const std::string& member, const std::string& piece, rules::EquipSlot position) const {
 	const rules::PartyMember* m = world_.member(member);
 	const rules::EquipmentDef* def = data_.db.equipmentPiece(piece);
 	if (!m || !def || !data_.db.character(member)) {
@@ -3178,8 +3366,16 @@ std::optional<EquipPreview> Session::equipPreview(const std::string& member, con
 	EquipPreview preview;
 	preview.member = member;
 	preview.piece = *def;
-	if (auto worn = m->equipment.find(def->slot); worn != m->equipment.end()) {
+	preview.position = position;
+	if (auto worn = m->equipment.find(position); worn != m->equipment.end()) {
 		preview.replaces = worn->second;
+	}
+	const auto other = m->equipment.find(position == rules::EquipSlot::Weapon ? rules::EquipSlot::LeftHand : rules::EquipSlot::Weapon);
+	if (rules::isHandPiece(*def) && other != m->equipment.end()) {
+		const rules::EquipmentDef* held = data_.db.equipmentPiece(other->second);
+		if ((def->hands == 2 && position == rules::EquipSlot::Weapon) || (position == rules::EquipSlot::LeftHand && held && held->hands == 2)) {
+			preview.alsoReplaces = other->second;
+		}
 	}
 	for (const std::string& id : world_.lineup) {
 		if (rules::canEquip(data_.db, id, piece).empty()) {
@@ -3190,7 +3386,7 @@ std::optional<EquipPreview> Session::equipPreview(const std::string& member, con
 	rules::PartyMember wearing = *m;
 	rules::EquipmentBag bag = world_.equipmentBag;
 	bag[piece] += 1;
-	preview.refusal = rules::equip(wearing, data_.db, bag, piece);
+	preview.refusal = rules::equip(wearing, data_.db, bag, piece, position);
 	preview.after = preview.refusal.empty() ? view(wearing) : preview.before;
 	return preview;
 }

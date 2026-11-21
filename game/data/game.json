@@ -2,15 +2,16 @@
 	"title": "The Bell at Tidewater",
 	"core_data": "../../core/data",
 	"areas": ["areas/tidewater.json", "areas/reed_path.json", "areas/bell_cove.json", "areas/saltgrass.json", "areas/kiln_upper.json", "areas/kiln_lower.json", "areas/brine_flats.json",
-		"areas/cinder_quay.json", "areas/ember_steps.json"],
-	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev", "events/saltgrass.ev", "events/kiln.ev", "events/flats.ev", "events/steps.ev"],
+		"areas/cinder_quay.json", "areas/ember_steps.json", "areas/lantern_barge.json", "areas/ashfall_market.json", "areas/fell_moor.json", "areas/fell_vault.json",
+		"areas/fell_vault_lower.json"],
+	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev", "events/saltgrass.ev", "events/kiln.ev", "events/flats.ev", "events/steps.ev", "events/fells.ev"],
 	"glossary": "text/glossary.txt",
 	"languages": [
 		{"code": "en", "strings": "text/en.strings", "text": "text/en.json"},
 		{"code": "ja", "strings": "text/ja.strings", "text": "text/ja.json"}
 	],
 	"journal": "journal.json",
-	"actors": ["dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler", "wayfarer"],
+	"actors": ["ashwife", "bridgewright", "dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "lodgekeeper", "peddler", "wayfarer"],
 	"presentation": {
 		"animations": ["bow", "jump", "nod", "shake", "shrug", "startle", "wave"],
 		"audio": ["battle_brass_warden", "battle_marsh_ambush", "brass_alarm", "defeat_low_tide", "dungeon_firing_floor", "dungeon_kiln_halls",
@@ -43,6 +44,14 @@
 		"cove.warden_beaten",
 		"cove.warden_lost",
 		"cove.warden_seen",
+		"fells.ash_storm",
+		"fells.bridge_mended",
+		"fells.guild_open",
+		"fells.illusion_lifted",
+		"fells.shrine_sealed",
+		"fells.vault_cleared",
+		"fells.vault_door_open",
+		"fells.vault_switch",
 		"job.lost_cache.accepted",
 		"job.lost_cache.done",
 		"job.steps_courier.accepted",
@@ -66,8 +75,10 @@
 		"tidewater.hold_cleared",
 		"tidewater.met_guide",
 		"tidewater.reported",
+		"travel.dock_open",
 		"travel.isles_open"
 	],
+	"vars": {"fells.recruit": 0},
 	"clear_flag": "cove.quiet_seen",
 	"start": {
 		"area": "tidewater",
@@ -78,7 +89,7 @@
 		"money": 50,
 		"items": {"tonic": 1}
 	},
-	"join_levels": {"mystic": 3, "medic": 3, "scout": 4},
+	"join_levels": {"harpooner": 3, "lancer": 3, "mystic": 3, "medic": 3, "scout": 4},
 	"prices": {
 		"tonic": 8,
 		"clear_gel": 6,
@@ -94,7 +105,14 @@
 		"padded_coat": 45,
 		"calm_charm": 70,
 		"homing_shell": 40,
-		"waymark_chalk": 24
+		"waymark_chalk": 24,
+		"gill_knife": 30,
+		"kelp_cleaver": 90,
+		"driftwood_buckler": 40,
+		"reef_targe": 75,
+		"storm_rod": 80,
+		"lantern_charm": 20,
+		"ward_mantle": 65
 	},
 	"item_cap": 99,
 	"money_cap": 999999,
@@ -106,7 +124,11 @@
 	"bosses": [{"encounter": "warden", "flag": "cove.warden_beaten"}],
 	"machine_step_heal": 1,
 	"outside_experience_until": "saltgrass.kiln_done",
+	"leave_equipment": "keep",
+	"random_encounters_everywhere": false,
 	"vehicles": [
-		{"id": "reed_skimmer", "crosses": ["floor", "water"], "speed_percent": 200, "encounters": [{"encounter": "marsh", "weight": 1}, {"encounter": "training", "weight": 1}]}
+		{"id": "reed_skimmer", "crosses": ["floor", "water"], "speed_percent": 200, "encounters": [{"encounter": "marsh", "weight": 1}, {"encounter": "training", "weight": 1}], "call_item": "skimmer_reed"},
+		{"id": "dune_crawler", "crosses": ["floor", "soft"], "speed_percent": 150, "encounters": [{"encounter": "kites", "weight": 1}], "call_item": "dune_horn"},
+		{"id": "rime_borer", "crosses": ["floor"], "breaks": ["barrier"], "breaks_for_good": true, "speed_percent": 100, "encounters": [{"encounter": "kites", "weight": 1}], "call_item": "rime_bell"}
 	]
 }

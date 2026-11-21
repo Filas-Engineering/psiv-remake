@@ -1,10 +1,12 @@
 #pragma once
 
 #include "rules/character.h"
+#include "rules/equipment.h"
 #include "rules/database.h"
 #include "rules/message.h"
 #include "rules/stats.h"
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -28,9 +30,21 @@ void rest(PartyMember& member, const Database& db);
 
 // Each returns an empty message on success, otherwise why the change was refused.
 Message canEquip(const Database& db, const std::string& characterId, const std::string& equipmentId);
-// Takes the piece out of the bag; the piece worn in that slot before goes back into it.
+// Weapons and shields (P10). A hand piece is worn in either hand: the right hand is the Weapon position, the left
+// hand LeftHand. A two-handed weapon is worn in the right hand only, with the left hand empty.
+bool isHandPiece(const EquipmentDef& piece);
+bool fitsPosition(const EquipmentDef& piece, EquipSlot position);
+// Where equip puts a piece when no position is named: a weapon in the right hand, a shield in the left hand, any
+// other piece in its slot.
+EquipSlot defaultPosition(const EquipmentDef& piece);
+// The default position, or the other hand when a one-handed piece's default is taken: how starting equipment is put on.
+EquipSlot startingPosition(const std::map<EquipSlot, std::string>& worn, const EquipmentDef& piece);
+// Takes the piece out of the bag and puts it on at its default position; the piece worn there goes back into the bag.
 Message equip(PartyMember& member, const Database& db, EquipmentBag& bag, const std::string& equipmentId);
-// Puts the piece worn in that slot back into the bag.
+// The same at a position the piece fits (`equip.wrong_position` otherwise). A two-handed weapon also sends the left
+// hand's piece back, and a piece put in the left hand sends back a two-handed weapon held in the right.
+Message equip(PartyMember& member, const Database& db, EquipmentBag& bag, const std::string& equipmentId, EquipSlot position);
+// Puts the piece worn at that position back into the bag.
 void unequip(PartyMember& member, const Database& db, EquipmentBag& bag, EquipSlot slot);
 
 struct LevelUp {

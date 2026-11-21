@@ -12,11 +12,20 @@
 
 namespace game {
 
-enum class AreaKind { Town, Field, Dungeon };
+// A vessel is the inside of a ship between regions (F2): no battles, no vehicles, no returns to a town.
+enum class AreaKind { Town, Field, Dungeon, Vessel };
+// What a shop sells, for its label (F7): `shop.kind.<kind>` in the text tables.
+enum class ShopKind { General, Weapon, Armor, Tool, Gift };
 enum class EncounterMode { Visible, Random };
 enum class HookTrigger { Interact, Step, Load, Flag };
 
 const char* toString(AreaKind kind);
+const char* toString(ShopKind kind);
+bool parseShopKind(const std::string& text, ShopKind& out);
+
+// Map rows: '.' floor, '#' wall, '~' water, ':' soft ground, '%' a barrier wall a vehicle can break (F3). Only floor is
+// walked on foot.
+inline constexpr const char* kMapTiles = ".#~:%";
 const char* toString(EncounterMode mode);
 bool parseEncounterMode(const std::string& text, EncounterMode& out);
 
@@ -24,6 +33,8 @@ struct Exit {
 	Cell at;
 	std::string toArea;
 	std::string toMarker;
+	// A pit (F8): a one-way drop, announced as a fall.
+	bool fall = false;
 	// Line in the area file, for problem reports; 0 when not read from a file.
 	int line = 0;
 };
@@ -40,13 +51,22 @@ struct Hook {
 	int line = 0;
 };
 
-// A shop or rest point without a cell is reached only from a script.
+// An item or equipment id a shop sells while its flags hold; prices come from the game's price table.
+struct StockEntry {
+	std::string id;
+	std::string requireFlag;
+	std::string blockFlag;
+};
+
+// A shop or rest point without a cell is reached only from a script. A shop whose flags do not hold is closed (F10).
 struct Shop {
 	std::string id;
 	std::optional<Cell> at;
-	// Item or equipment ids; prices come from the game's price table.
-	std::vector<std::string> stock;
+	ShopKind kind = ShopKind::General;
+	std::vector<StockEntry> stock;
 	int sellPercent = 50;
+	std::string requireFlag = {};
+	std::string blockFlag = {};
 	int line = 0;
 };
 
@@ -77,6 +97,26 @@ struct Port {
 	std::string marker;
 	// The port is open, as a place to leave from and to arrive at, once this flag is set; always when empty.
 	std::string flag;
+	// A ship's port (F2): the party walks aboard the vessel area at its arrival marker and picks the destination at its
+	// helm, among the open ports of the same ship. Empty: the destination menu opens at the port, among the ports
+	// without a ship.
+	std::string ship = {};
+	int line = 0;
+};
+
+// A vessel's helm: interacting with it lists the open ports of its ship. It stands on any cell, like a port.
+struct Helm {
+	std::string id;
+	Cell at;
+	int line = 0;
+};
+
+// Map cells that become `tile` while the flag is set (F8, F10): a bridge repaired, a barrier removed, a place sealed.
+// Later changes win over earlier ones on the same cell.
+struct CellChange {
+	std::string flag;
+	char tile = '.';
+	std::vector<Cell> cells;
 	int line = 0;
 };
 
@@ -140,6 +180,10 @@ struct Area {
 	std::vector<Chest> chests;
 	std::vector<Port> ports;
 	std::vector<Zone> zones;
+	std::vector<Helm> helms;
+	// In a vessel: cells that take the party back ashore, to the port it boarded from.
+	std::vector<Cell> gangway;
+	std::vector<CellChange> changes;
 	// The file game.json names for the area, and the line of each marker, for problem reports.
 	std::string file;
 	std::map<std::string, int> markerLines;
@@ -157,6 +201,8 @@ struct Area {
 	const RestPoint* restAt(Cell cell) const;
 	const Chest* chestAt(Cell cell) const;
 	const Port* portAt(Cell cell) const;
+	const Helm* helmAt(Cell cell) const;
+	bool gangwayAt(Cell cell) const;
 	const Port* port(const std::string& id) const;
 	const Shop* shop(const std::string& id) const;
 	const RestPoint* rest(const std::string& id) const;
