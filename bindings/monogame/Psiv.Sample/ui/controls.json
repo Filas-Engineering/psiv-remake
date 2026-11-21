@@ -1,0 +1,26 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "text", "key": "ui.options.keys", "x": "cw * 26 / 100", "style": "small_dim"},
+			{"type": "text", "key": "ui.options.gamepad", "x": "cw * 60 / 100", "style": "small_dim"},
+			{"type": "list", "items": "actions", "state": "list", "active": "active", "probe": false, "y": "t(28)", "h": "ch - t(28)", "row_height": "t(30)", "row": [
+				{"type": "fill", "visible": "selected", "x": -6, "y": -3, "w": "cw - 14", "h": "t(28)", "color": "row"},
+				{"type": "pointer", "visible": "selected", "x": -4, "y": "(t(28) - 8) / 2 - 6"},
+				{"type": "text", "value": "label", "x": 14, "color": "selected ? 'accent' : 'text'"},
+				{"type": "text", "visible": "!reset", "value": "keys", "x": "cw * 26 / 100", "y": "t(2)", "max_width": "cw * 60 / 100 - cw * 26 / 100 - 20",
+					"color": "selected ? 'accent' : 'text'", "style": "small"},
+				{"type": "text", "visible": "!reset", "value": "buttons", "x": "cw * 60 / 100", "y": "t(2)", "max_width": "cw - cw * 60 / 100 - 30",
+					"color": "selected ? 'accent' : 'text'", "style": "small"}
+			]}
+		]},
+		{"name": "action", "visible": "picking", "x": "area_x + area_w - t(320) - 20", "y": "area_y + t(40)", "w": "t(320)", "h": "t(110)", "frame": "panel",
+			"title": {"value": "action_name"}, "elements": [
+			{"type": "rows", "items": "choices", "selected": "choice", "x": 30, "y": "t(28)", "w": "t(320) - 50", "row_height": "t(32)", "height": "t(28)"}
+		]},
+		{"name": "capture", "visible": "capturing", "x": "(W - w) / 2", "y": "H / 2 - t(40)", "w": "measure(ask, size_body) + t(60)", "h": "t(80)", "frame": "panel",
+			"title": "ui.options.rebind", "elements": [
+			{"type": "text", "value": "ask", "x": "t(30)", "y": "t(28)"}
+		]}
+	]
+}

@@ -291,6 +291,16 @@ public static class PlaceholderExport
 		}
 		manifest["audio"] = audio;
 
+		// The built-in layouts as files, turned on: they draw every frame as the built-in set does.
+		Directory.CreateDirectory(Path.Combine(dir, UiLayoutSet.Directory));
+		int layouts = 0;
+		foreach ((string name, string text) in UiLayoutSet.BuiltInFiles())
+		{
+			File.WriteAllText(Path.Combine(dir, UiLayoutSet.Directory, name + ".json"), text);
+			layouts++;
+		}
+		manifest["ui_layout"] = new JsonObject { ["enabled"] = true };
+
 		BattlePresentation.Defaults().Write(Path.Combine(dir, BattlePresentation.FileName));
 		manifest["battle_presentation"] = BattlePresentation.FileName;
 		File.WriteAllText(Path.Combine(dir, AssetManifest.FileName),
@@ -309,7 +319,7 @@ public static class PlaceholderExport
 		{
 			Console.WriteLine("export: " + problem);
 		}
-		Console.WriteLine($"export: {written.Count} pictures and {sounds} sounds in {Path.GetFullPath(dir)}, each read back: {problems.Count} problems");
+		Console.WriteLine($"export: {written.Count} pictures, {sounds} sounds and {layouts} layout files in {Path.GetFullPath(dir)}, each read back: {problems.Count} problems");
 		return problems.Count == 0 ? 0 : 1;
 	}
 }

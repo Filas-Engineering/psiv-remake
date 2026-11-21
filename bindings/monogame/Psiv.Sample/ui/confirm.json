@@ -1,0 +1,11 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "dim", "elements": [{"type": "fill", "w": "W", "h": "H", "color": "black", "alpha": 0.4}]},
+		{"name": "box", "anchor": "center", "w": "max(t(420), measure(question, size_body) + t(80))", "h": "t(64) + 2 * t(30) + t(16)", "frame": "panel",
+			"title": "ui.confirm.title", "elements": [
+			{"type": "text", "value": "question", "x": "t(28)", "y": "t(26)"},
+			{"type": "rows", "items": "options", "selected": "on_yes ? 0 : 1", "x": "t(48)", "y": "t(64)", "w": "t(160)", "row_height": "t(30)", "height": "t(28)"}
+		]}
+	]
+}

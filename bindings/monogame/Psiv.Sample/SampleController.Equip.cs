@@ -52,73 +52,6 @@ public sealed partial class SampleController
 		return choices;
 	}
 
-	// The comparison of a piece on the member: its own effects in words, who can wear it, then each stat and effect that
-	// would change, before and after.
-	private void DrawPreview(IDrawSurface s, EquipPreview p, int x, int y, int w)
-	{
-		int rowH = Px(24);
-		DrawDescription(s, _s.Description(DescriptionKind.Equipment, p.Piece), x, y, w);
-		int ly = y + Px(50);
-		var effects = new List<string> { BonusText(p.Bonus) };
-		if (p.Element != Element.None)
-		{
-			effects.Add(T("ui.equip.element_attacks", ElementText(p.Element)));
-		}
-		if (p.AttackName.Length > 0)
-		{
-			effects.Add(T("ui.equip.attacks_with", p.AttackName));
-		}
-		effects.AddRange(p.GrantedNames.Select(n => T("ui.equip.grants", n)));
-		effects.AddRange(p.PieceResists.Select(r => T("ui.equip.resists", r.Name, r.Percent)));
-		foreach (string l in Style.Wrap(s, ListText(effects), w, Style.Small))
-		{
-			s.Text(l, x, ly, Style.Text, Style.Small);
-			ly += rowH;
-		}
-		s.Text(Style.Fit(s, WearersText(p.WearerNames), w, Style.Small), x, ly, Style.Dim, Style.Small);
-		ly += rowH + Px(6);
-		if (!p.CanWear)
-		{
-			s.Text(Style.Fit(s, p.Refusal?.Text ?? T("ui.equip.cannot_wear"), w, Style.Small), x, ly, Style.Bad, Style.Small);
-			_probeCompare = "cannot wear";
-			return;
-		}
-		string instead = p.AlsoReplacesName.Length > 0 ? (p.ReplacesName.Length > 0 ? ListText([p.ReplacesName, p.AlsoReplacesName]) : p.AlsoReplacesName) : p.ReplacesName;
-		s.Text(Style.Fit(s, instead.Length > 0 ? T("ui.equip.with_it_instead", instead) : T("ui.equip.with_it"), w), x, ly, Style.Accent);
-		ly += Px(32);
-		int[] before = Values(p.Before.Stats);
-		int[] after = Values(p.After.Stats);
-		var rows = CompareLabels.Select((l, i) => (l, before[i], after[i])).Where(r => r.Item2 != r.Item3).ToList();
-		Widgets.Compare(s, x, ly, w, rowH, rows.Count > 0 ? rows : [(T("ui.equip.no_changes"), 0, 0)]);
-		_probeCompare = rows.Count == 0 ? "none" : string.Join(", ", rows.Select(r => $"{r.Item1} {r.Item2}>{r.Item3}"));
-		ly += rowH * Math.Max(1, rows.Count) + Px(6);
-		var notes = new List<string>();
-		if (p.Before.AttackElement != p.After.AttackElement)
-		{
-			notes.Add(T("ui.equip.element_change", ElementText(p.Before.AttackElement), ElementText(p.After.AttackElement)));
-		}
-		if (p.Before.BasicAttack != p.After.BasicAttack)
-		{
-			notes.Add(T("ui.equip.attack_change", p.Before.BasicAttackName, p.After.BasicAttackName));
-		}
-		notes.AddRange(p.After.AbilityNames.Except(p.Before.AbilityNames).Select(n => T("ui.equip.learns", n)));
-		notes.AddRange(p.Before.AbilityNames.Except(p.After.AbilityNames).Select(n => T("ui.equip.loses", n)));
-		foreach (string status in p.Before.StatusResists.Select(r => r.Name).Union(p.After.StatusResists.Select(r => r.Name)))
-		{
-			int was = p.Before.StatusResists.FirstOrDefault(r => r.Name == status)?.Percent ?? 0;
-			int now = p.After.StatusResists.FirstOrDefault(r => r.Name == status)?.Percent ?? 0;
-			if (was != now)
-			{
-				notes.Add(T("ui.equip.resistance_change", status, was, now));
-			}
-		}
-		foreach (string note in notes)
-		{
-			s.Text(Style.Fit(s, note, w, Style.Small), x, ly, Style.Text, Style.Small);
-			ly += rowH;
-		}
-	}
-
 	private void UpdateEquip(ActionInput input)
 	{
 		List<Member> lineup = LineupMembers();
@@ -167,12 +100,16 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawEquip(IDrawSurface s, int x, int y, int w, int h)
+	private void DrawEquip(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{
 		List<Member> lineup = LineupMembers();
+		UiContext data = UiArea(x, y, w, h);
 		if (_pickMember is null)
 		{
-			DrawItems(s, _list, x, y, w, h, lineup.Select(m => m.Name + ": " + ListText(m.EquipmentNames.Where(n => n.Length > 0))).ToList());
+			Ui.Draw("menu_equip", s, t, data
+				.Set("view", "members")
+				.Set("members", lineup.Select(m => m.Name + ": " + ListText(m.EquipmentNames.Where(n => n.Length > 0))).ToList())
+				.Set("list", _list));
 			return;
 		}
 		Member? member = lineup.FirstOrDefault(m => m.Id == _pickMember);
@@ -181,55 +118,109 @@ public sealed partial class SampleController
 		{
 			return;
 		}
-		int listW = w / 2 - 10;
-		int rx = x + listW + 30;
-		int rw = w - listW - 30;
-		s.Text(member.Name, x, y, Style.Accent);
+		string WornText(int slot) => member.Equipment[slot].Length > 0 ? $"{member.EquipmentNames[slot]}: {BonusText(detail.EquipmentBonus[slot])}" : T("ui.equip.nothing");
 		var slots = EquipPositions.Select(slot => (int)slot).ToList();
-		DrawItems(s, _sub, x, y + Px(36), listW, Px(30) * slots.Count, slots.Select(slot =>
-			$"{T(NameKind.EquipSlot, slot)}: " + (member.Equipment[slot].Length > 0 ? member.EquipmentNames[slot] : "-")).ToList(), _equipSlot is null);
+		data.Set("member_name", member.Name)
+			.Set("slot_rows", slots.Select(slot => $"{T(NameKind.EquipSlot, slot)}: " + (member.Equipment[slot].Length > 0 ? member.EquipmentNames[slot] : "-")).ToList())
+			.Set("slot_list", _sub);
 		int[] totals = Totals(member.Id)!;
-		int rowH = Px(24);
+		List<(string Label, int Before, int After)> compare = [];
 		if (_equipSlot is not { } chosen)
 		{
-			int slot = slots[_sub.Cursor];
-			s.Text(T("ui.equip.worn_here"), rx, y, Style.Accent);
-			s.Text(Style.Fit(s, member.Equipment[slot].Length > 0 ? $"{member.EquipmentNames[slot]}: {BonusText(detail.EquipmentBonus[slot])}" : T("ui.equip.nothing"), rw, Style.Small),
-				rx, y + Px(36), Style.Text, Style.Small);
+			data.Set("view", "slots")
+				.Set("right", "worn")
+				.Set("worn_text", WornText(slots[Math.Clamp(_sub.Cursor, 0, slots.Count - 1)]))
+				.Set("has_change", _equipChange is not null)
+				.Set("change_text", _equipChange is { } last ? T("ui.equip.last_change", last.Title) : "");
 			if (_equipChange is { } change)
 			{
-				s.Text(Style.Fit(s, T("ui.equip.last_change", change.Title), rw), rx, y + Px(80), Style.Accent);
-				Widgets.Compare(s, rx, y + Px(116), rw, rowH, change.Rows.Count > 0 ? change.Rows : [(T("ui.equip.no_change_made"), 0, 0)]);
+				compare = change.Rows.Count > 0 ? change.Rows : [(T("ui.equip.no_change_made"), 0, 0)];
 			}
-			return;
 		}
-		int py = y + Px(36) + Px(30) * slots.Count + Px(20);
-		List<(string Label, string? Piece, bool Wearable)> choices = EquipChoices(member.Id, chosen);
-		s.Text(T("ui.equip.for_slot", T(NameKind.EquipSlot, chosen)), x, py, Style.Accent);
-		if (choices.Count == 0)
+		else
 		{
-			s.Text(T("ui.equip.nothing_fits"), x + 14, py + Px(36), Style.Dim);
+			List<(string Label, string? Piece, bool Wearable)> choices = EquipChoices(member.Id, chosen);
+			data.Set("view", "pieces")
+				.Set("slot_name", T(NameKind.EquipSlot, chosen))
+				.Set("choices", choices.Select(c => new UiContext(data).Set("text", c.Label).Set("enabled", c.Wearable)).ToList())
+				.Set("choice_list", _third);
+			if (choices.Count > 0)
+			{
+				string? piece = choices[Math.Clamp(_third.Cursor, 0, choices.Count - 1)].Piece;
+				data.Set("right", "piece").Set("worn_text", WornText(chosen)).Set("removing", piece is null);
+				if (piece is null)
+				{
+					int[] worn = Values(detail.EquipmentBonus[chosen]);
+					var rows = CompareLabels.Select((l, i) => (l, totals[i], totals[i] - worn[i])).Where(r => r.Item2 != r.Item3).ToList();
+					compare = rows.Count > 0 ? rows : [(T("ui.equip.no_changes"), 0, 0)];
+				}
+				else if (_s.EquipPreview(member.Id, piece, (EquipSlot)chosen) is { } p)
+				{
+					compare = PreviewData(t, data, p);
+				}
+			}
 		}
-		DrawItems(s, _third, x, py + Px(36), listW, y + h - py - Px(36), choices.Select(c => c.Label).ToList(), enabled: choices.Select(c => c.Wearable).ToList());
-		if (choices.Count == 0)
+		Ui.Draw("menu_equip", s, t, data.Set("compare_rows", compare.Select(r => new UiContext(data).Set("label", r.Label).Set("before", r.Before).Set("after", r.After)).ToList()));
+	}
+
+	// The comparison's fields; returns its stat rows.
+	private List<(string Label, int Before, int After)> PreviewData(IDrawSurface t, UiContext data, EquipPreview p)
+	{
+		string description = _s.Description(DescriptionKind.Equipment, p.Piece) ?? "";
+		_probeDescription = description.Length == 0 ? "-" : description;
+		var effects = new List<string> { BonusText(p.Bonus) };
+		if (p.Element != Element.None)
 		{
-			return;
+			effects.Add(T("ui.equip.element_attacks", ElementText(p.Element)));
 		}
-		(string label, string? piece, _) = choices[_third.Cursor];
-		int[] worn = Values(detail.EquipmentBonus[chosen]);
-		s.Text(T("ui.equip.worn_now"), rx, y, Style.Accent);
-		s.Text(Style.Fit(s, member.Equipment[chosen].Length > 0 ? $"{member.EquipmentNames[chosen]}: {BonusText(detail.EquipmentBonus[chosen])}" : T("ui.equip.nothing"), rw, Style.Small),
-			rx, y + Px(32), Style.Text, Style.Small);
-		if (piece is null)
+		if (p.AttackName.Length > 0)
 		{
-			s.Text(T("ui.equip.after_removing"), rx, y + Px(70), Style.Accent);
-			var rows = CompareLabels.Select((l, i) => (l, totals[i], totals[i] - worn[i])).Where(r => r.Item2 != r.Item3).ToList();
-			Widgets.Compare(s, rx, y + Px(104), rw, rowH, rows.Count > 0 ? rows : [(T("ui.equip.no_changes"), 0, 0)]);
+			effects.Add(T("ui.equip.attacks_with", p.AttackName));
 		}
-		else if (_s.EquipPreview(member.Id, piece, (EquipSlot)chosen) is { } preview)
+		effects.AddRange(p.GrantedNames.Select(n => T("ui.equip.grants", n)));
+		effects.AddRange(p.PieceResists.Select(r => T("ui.equip.resists", r.Name, r.Percent)));
+		string effectsText = ListText(effects);
+		data.Set("has_preview", true)
+			.Set("piece_name", p.PieceName)
+			.Set("description", description)
+			.Set("effects", effectsText)
+			.Set("wearers", WearersText(p.WearerNames))
+			.Set("can_wear", p.CanWear);
+		// The lines after the effects stand below however many lines they wrap to at the column's width.
+		int width = Ui.WindowRect("menu_equip", "piece", t, data)?.Width ?? 0;
+		data.Set("effect_lines", Style.Wrap(t, effectsText, width, Style.Small).Count);
+		if (!p.CanWear)
 		{
-			s.Text(Style.Fit(s, preview.PieceName, rw), rx, y + Px(70), Style.Accent);
-			DrawPreview(s, preview, rx, y + Px(104), rw);
+			data.Set("refusal", p.Refusal?.Text ?? T("ui.equip.cannot_wear"));
+			_probeCompare = "cannot wear";
+			return [];
 		}
+		string instead = p.AlsoReplacesName.Length > 0 ? (p.ReplacesName.Length > 0 ? ListText([p.ReplacesName, p.AlsoReplacesName]) : p.AlsoReplacesName) : p.ReplacesName;
+		int[] before = Values(p.Before.Stats);
+		int[] after = Values(p.After.Stats);
+		var rows = CompareLabels.Select((l, i) => (l, before[i], after[i])).Where(r => r.Item2 != r.Item3).ToList();
+		_probeCompare = rows.Count == 0 ? "none" : string.Join(", ", rows.Select(r => $"{r.Item1} {r.Item2}>{r.Item3}"));
+		var notes = new List<string>();
+		if (p.Before.AttackElement != p.After.AttackElement)
+		{
+			notes.Add(T("ui.equip.element_change", ElementText(p.Before.AttackElement), ElementText(p.After.AttackElement)));
+		}
+		if (p.Before.BasicAttack != p.After.BasicAttack)
+		{
+			notes.Add(T("ui.equip.attack_change", p.Before.BasicAttackName, p.After.BasicAttackName));
+		}
+		notes.AddRange(p.After.AbilityNames.Except(p.Before.AbilityNames).Select(n => T("ui.equip.learns", n)));
+		notes.AddRange(p.Before.AbilityNames.Except(p.After.AbilityNames).Select(n => T("ui.equip.loses", n)));
+		foreach (string status in p.Before.StatusResists.Select(r => r.Name).Union(p.After.StatusResists.Select(r => r.Name)))
+		{
+			int was = p.Before.StatusResists.FirstOrDefault(r => r.Name == status)?.Percent ?? 0;
+			int now = p.After.StatusResists.FirstOrDefault(r => r.Name == status)?.Percent ?? 0;
+			if (was != now)
+			{
+				notes.Add(T("ui.equip.resistance_change", status, was, now));
+			}
+		}
+		data.Set("with_it", instead.Length > 0 ? T("ui.equip.with_it_instead", instead) : T("ui.equip.with_it")).Set("notes", notes);
+		return rows.Count > 0 ? rows : [(T("ui.equip.no_changes"), 0, 0)];
 	}
 }

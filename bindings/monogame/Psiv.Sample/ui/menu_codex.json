@@ -1,0 +1,13 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "text", "visible": "len(titles) == 0", "key": "ui.codex.none", "x": 14, "color": "dim"},
+			{"type": "group", "visible": "len(titles) > 0", "elements": [
+				{"type": "list", "items": "titles", "state": "list", "w": "cw / 3"},
+				{"type": "text", "value": "title", "x": "cw / 3 + 24", "color": "accent"},
+				{"type": "text", "value": "body", "x": "cw / 3 + 24", "y": "t(26) + t(6)", "wrap": true, "max_width": "cw - cw / 3 - 24", "lines": "(ch - t(26) - t(6)) / t(22)", "line_height": "t(22)", "style": "small"}
+			]}
+		]}
+	]
+}

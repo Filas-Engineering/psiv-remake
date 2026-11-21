@@ -55,6 +55,9 @@ public static class Style
 	// The asset directory's UI skin while one is loaded and enabled; null draws the generated look with rectangles.
 	public static UiSkin? Skin { get; set; }
 
+	// The off half of the layout's cursor blink (timings.cursor_blink_ms), set each frame.
+	public static bool PointerHidden { get; set; }
+
 	// Corners at their size times the slice's scale, edges and middle stretched between them.
 	public static void NineSlice(IDrawSurface s, NineSliceImage n, int x, int y, int w, int h, Color tint)
 	{
@@ -130,6 +133,10 @@ public static class Style
 	// A right-pointing cursor, `size` pixels tall, its tip at (x + size / 2, y + size / 2).
 	public static void Pointer(IDrawSurface s, int x, int y, Color color, int size = 12)
 	{
+		if (PointerHidden)
+		{
+			return;
+		}
 		if (Skin?.Cursor is int cursor)
 		{
 			s.Image(cursor, x, y, size, size, Color.White);
@@ -412,8 +419,9 @@ public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, Fo
 // the same pictures in the same places give the same digests whether the pictures came from code or from files.
 public sealed class RecordingSurface : IDrawSurface
 {
-	public int Width => 1280;
-	public int Height => 720;
+	// The layout's logical resolution, set by the headless runner each frame.
+	public int Width { get; set; } = 1280;
+	public int Height { get; set; } = 720;
 	public int Rects { get; private set; }
 	public int Texts { get; private set; }
 	public int Images { get; private set; }

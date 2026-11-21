@@ -1,0 +1,9 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "text", "key": "ui.menu.options_about"},
+			{"type": "rows", "items": "options", "selected": 0, "x": 20, "y": "t(44)", "w": "t(260)", "height": "t(28)"}
+		]}
+	]
+}

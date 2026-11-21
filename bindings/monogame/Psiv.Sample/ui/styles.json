@@ -1,0 +1,53 @@
+{
+	"version": 1,
+	"resolution": {"width": 1280, "height": 720},
+	"scaling": {"mode": "fit", "safe_area": [0, 0, 0, 0], "filter": "auto"},
+	"colors": {
+		"background": "#0e101a",
+		"panel": "#161c34",
+		"panel_top": "#222c4e",
+		"panel_edge": "#c4cee8",
+		"panel_shadow": "#060810",
+		"row": "#40548c",
+		"text": "#ecece2",
+		"dim": "#9298ac",
+		"accent": "#fcd660",
+		"bad": "#ec6054",
+		"good": "#70d67c",
+		"tp": "#60a8f8",
+		"track": "#0a0c16",
+		"black": "#000000",
+		"white": "#ffffff"
+	},
+	"sizes": {"small": 16, "body": 20, "title": 28, "line": 26},
+	"text_styles": {
+		"small": {"size": "size_small"},
+		"small_dim": {"size": "size_small", "color": "dim"},
+		"hint": {"size": "size_small", "color": "dim", "role": "hint"},
+		"body": {"size": "size_body"},
+		"title": {"size": "size_title", "color": "accent"}
+	},
+	"frames": {
+		"panel": {"type": "generated"},
+		"none": {"type": "none"}
+	},
+	"cursors": {
+		"pointer": {"type": "generated", "size": 12, "color": "accent"}
+	},
+	"timings": {
+		"text_speed": {"slow": 25, "normal": 50, "fast": 100},
+		"punctuation_pauses": {},
+		"auto_advance_ms_per_char": 50,
+		"auto_advance_min_ms": 1000,
+		"text_tick_ms": 70,
+		"next_arrow_ms": 260,
+		"caret_ms": 400,
+		"cursor_blink_ms": 0,
+		"toast_ms": 4000,
+		"toast_fade_ms": 400,
+		"panel_transition_ms": 350,
+		"wait_unit_ms": 16,
+		"list_repeat_delay_ms": 0,
+		"list_repeat_ms": 0
+	}
+}

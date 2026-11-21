@@ -422,6 +422,9 @@ public sealed class BattleContext(GameSession session, List<string> labels, Batt
 			BattleEventType.ActionStarted when e.Command == CommandKind.Escape => T("ui.battle.log.escape_try", Label(e.Actor)),
 			BattleEventType.ActionStarted when e.Target >= 0 => T("ui.battle.log.uses_on", Label(e.Actor), Name(e.Ability), Label(e.Target)),
 			BattleEventType.ActionStarted => T("ui.battle.log.uses", Label(e.Actor), Name(e.Ability)),
+			BattleEventType.Message when e.Message is "battle.instant_defeat" or "battle.instant_defeat_immune" or "battle.instant_defeat_resisted"
+				=> T("ui." + e.Message.Insert("battle.".Length, "log."), Label(e.Target)),
+			BattleEventType.Message when e.Message == "battle.self_destruct" => T("ui.battle.log.self_destruct", Label(e.Actor)),
 			BattleEventType.ActionCancelled or BattleEventType.Message => e.Text,
 			BattleEventType.ComboTriggered => T("ui.battle.log.combo", Name(e.Ability)),
 			BattleEventType.ComboDiscovered => T("ui.battle.log.combo_found"),
@@ -469,6 +472,7 @@ public sealed class BattleContext(GameSession session, List<string> labels, Batt
 			BattleEventType.EscapeAttempted => e.Succeeded ? "the party escapes" : "no escape",
 			BattleEventType.Message when e.Message == "battle.instant_defeat" => $"{Label(e.Target)} felled",
 			BattleEventType.Message when e.Message == "battle.self_destruct" => $"{Label(e.Actor)} bursts",
+			BattleEventType.Message when e.Message == "battle.removed_beside" => $"{Label(e.Target)} swept away",
 			BattleEventType.Message when e.Effectiveness == Effectiveness.Immune => $"{Label(e.Target)} immune to felling",
 			BattleEventType.Message => $"{Label(e.Target)} resists felling",
 			_ => "",

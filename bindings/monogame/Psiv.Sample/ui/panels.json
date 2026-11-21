@@ -1,0 +1,18 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "panels", "elements": [
+			{"type": "fill", "w": "W", "h": "H", "color": "black", "alpha": "dim"},
+			{"type": "repeater", "items": "panels", "template": [
+				{"type": "slot", "visible": "skinned", "slot": "frame", "x": "left - 4", "y": "top - 4", "w": "width + 8", "h": "height + 8"},
+				{"type": "group", "visible": "!skinned", "elements": [
+					{"type": "fill", "x": "left + 6", "y": "top + 6", "w": "width", "h": "height", "color": "panel_shadow", "alpha": "shadow_alpha"},
+					{"type": "fill", "x": "left - 4", "y": "top - 4", "w": "width + 8", "h": "height + 8", "color": "black", "alpha": "shown"},
+					{"type": "fill", "x": "left - 3", "y": "top - 3", "w": "width + 6", "h": "height + 6", "color": "text", "alpha": "shown"}
+				]},
+				{"type": "fill", "x": "left", "y": "top", "w": "width", "h": "height", "color": "background"},
+				{"type": "slot", "slot": "scene", "x": "left", "y": "top", "w": "width", "h": "height"}
+			]}
+		]}
+	]
+}

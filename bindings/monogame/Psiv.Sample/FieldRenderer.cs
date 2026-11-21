@@ -13,7 +13,7 @@ public readonly record struct DrawnPerson(float X, float Y, bool Walking, Direct
 public sealed class FieldRenderer
 {
 	private const int Tile = Art.Tile;
-	private const int BannerMs = 2600;
+	public const int BannerMs = 2600;
 	// Every member of a full lineup (rules::kMaxPartySize, 5) walks behind the leader, and a follower who is not a
 	// member walks last.
 	private const int Followers = 5;
@@ -209,6 +209,11 @@ public sealed class FieldRenderer
 	private int _bannerLeftMs;
 	private string _bannerTitle = "";
 	private AreaKind _bannerKind;
+
+	// The area's name and kind, shown for BannerMs after arriving; BannerLeftMs is 0 once it is gone.
+	public string BannerTitle => _bannerTitle;
+	public AreaKind BannerKind => _bannerKind;
+	public int BannerLeftMs => _bannerLeftMs;
 
 	// Whether a story flag is set, and an area's map as written, for the cells a whole-area picture shows changed.
 	public Func<string, bool> Flag { get; set; } = _ => false;
@@ -1285,23 +1290,5 @@ public sealed class FieldRenderer
 				s.Fill(sx + Px(6), sy + Px(along), tile - Px(12), Px(4), new Color(190, 180, 120));
 			}
 		}
-	}
-
-	// The area's name and its kind as `kindName` words it, shown for a moment after arriving.
-	public void DrawBanner(IDrawSurface s, Func<AreaKind, string> kindName)
-	{
-		if (_bannerLeftMs <= 0)
-		{
-			return;
-		}
-		int shown = BannerMs - _bannerLeftMs;
-		float alpha = Math.Clamp(Math.Min(shown / 300f, _bannerLeftMs / 500f), 0f, 1f);
-		string kind = kindName(_bannerKind);
-		int w = Math.Max(s.Measure(_bannerTitle, Style.Title), s.Measure(kind, Style.Small)) + 80;
-		int x = (s.Width - w) / 2;
-		int y = 70 - (int)((1f - alpha) * 16);
-		Style.Box(s, x, y, w, 86, alpha);
-		s.Text(kind, (s.Width - s.Measure(kind, Style.Small)) / 2, y + 14, Style.Dim * alpha, Style.Small);
-		s.Text(_bannerTitle, (s.Width - s.Measure(_bannerTitle, Style.Title)) / 2, y + 38, Style.Accent * alpha, Style.Title);
 	}
 }

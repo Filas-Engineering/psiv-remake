@@ -1,7 +1,3 @@
-using System.Globalization;
-
-using Microsoft.Xna.Framework;
-
 using Psiv.Session;
 
 namespace Psiv.Sample;
@@ -33,57 +29,46 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawShop(IDrawSurface s, Art art)
+	private void DrawShop(IDrawSurface s, IDrawSurface t, Art art)
 	{
-		DrawBackdrop(s, art);
-		int x = 80;
-		int w = s.Width - 160;
-		Style.Window(s, x, 50, w, s.Height - 100, _s.Shop() is { } open ? T(NameKind.ShopKind, (int)open.Kind) : T("ui.shop.title"));
 		ShopInfo? shop = _s.Shop();
-		if (shop is null)
+		UiContext ctx = UiData()
+			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+			.Set("title", shop is { } open ? T(NameKind.ShopKind, (int)open.Kind) : T("ui.shop.title"))
+			.Set("open", shop is not null)
+			.Set("tab", _tab);
+		List<InventoryEntry> entries = shop is null ? [] : _tab == 0 ? shop.Stock.ToList() : _s.Inventory().Where(i => i.Price >= 0).ToList();
+		if (shop is not null)
 		{
-			return;
+			ctx.Set("tabs", new List<string> { T("ui.shop.buy"), T("ui.shop.sell") })
+				.Set("money", T("ui.common.money", _s.WorldInfo().Money))
+				.Set("stall", AreaTiles(art).Stall)
+				.Set("hint", T("ui.shop.hint", Hint(GameAction.PagePrev), Hint(GameAction.PageNext), Hint(GameAction.Confirm), Hint(GameAction.Back)))
+				.Set("toasts", (UiSlot)((x, y, _, _) => DrawToasts(t, x, y, right: true)));
 		}
-		Widgets.Tabs(s, x + 24, 76, w - 220, [T("ui.shop.buy"), T("ui.shop.sell")], _tab, Px);
-		string money = T("ui.common.money", _s.WorldInfo().Money);
-		s.Text(money, x + w - 40 - s.Measure(money), 81, Style.Text);
-		s.Image(AreaTiles(art).Stall, x + w - 120, 120, 80, 80, Color.White);
-		int priceX = x + 560;
-		int countX = x + 680;
-		int headY = 76 + Px(52);
-		s.Text(T(_tab == 0 ? "ui.shop.price" : "ui.shop.each"), priceX, headY, Style.Dim, Style.Small);
-		s.Text(T("ui.shop.have"), countX, headY, Style.Dim, Style.Small);
-		List<InventoryEntry> entries = _tab == 0 ? shop.Stock.ToList() : _s.Inventory().Where(i => i.Price >= 0).ToList();
-		IReadOnlyList<(string Name, int Price, int Count)> rows = entries.Select(i => (i.Name, _tab == 0 ? i.Price : i.Price * shop.SellPercent / 100, i.Count)).ToList();
-		int top = headY + Px(28);
-		int listW = countX + 80 - x - 40;
-		int descH = Px(80);
-		_list.Draw(s, x + 40, top, listW, s.Height - 140 - top - descH, Px(30), rows.Count, (i, y, on) =>
+		ctx.Set("rows", entries.Select(i => new UiContext(ctx).Set("text", i.Name).Set("price", _tab == 0 ? i.Price : i.Price * shop!.SellPercent / 100).Set("have", i.Count)).ToList())
+			.Set("list", _list)
+			.Set("compare", "");
+		if (entries.Count > 0)
 		{
-			Style.ListRow(s, Style.Fit(s, rows[i].Name, priceX - x - 100), x + 40, y, listW - 20, on, height: Px(28));
-			string price = rows[i].Price.ToString(CultureInfo.InvariantCulture);
-			s.Text(price, priceX + 40 - s.Measure(price), y, on ? Style.Accent : Style.Text);
-			s.Text(T("ui.common.count", rows[i].Count), countX, y, Style.Dim);
-		});
-		if (rows.Count > 0)
-		{
-			_probeSelected = rows[_list.Cursor].Name;
 			InventoryEntry selected = entries[Math.Clamp(_list.Cursor, 0, entries.Count - 1)];
-			int dy = s.Height - 140 - descH + Px(8);
-			s.Fill(x + 40, dy - Px(8), listW - 20, 1, Style.PanelEdge * 0.4f);
-			DrawDescription(s, DescriptionOf(selected), x + 54, dy, w - 120);
+			SetDescription(ctx, DescriptionOf(selected));
 			if (selected.IsEquipment && LineupMembers().FirstOrDefault() is { } leader && _s.EquipPreview(leader.Id, selected.Id) is { } preview)
 			{
-				s.Text(Style.Fit(s, $"{BonusText(preview.Bonus)}   " + WearersText(preview.WearerNames), w - 120, Style.Small),
-					x + 54, dy + Px(48), Style.Dim, Style.Small);
+				ctx.Set("compare", $"{BonusText(preview.Bonus)}   " + WearersText(preview.WearerNames));
 			}
 		}
-		else
+		Ui.Draw("shop", s, t, ctx);
+		if (entries.Count > 0)
 		{
-			s.Text(T(_tab == 0 ? "ui.shop.nothing_for_sale" : "ui.shop.nothing_to_sell"), x + 54, top, Style.Dim);
+			_probeSelected = entries[_list.Cursor].Name;
 		}
-		DrawToasts(s, x + 24, s.Height - 140 - descH, right: true);
-		Widgets.Hints(s, x + 24, s.Height - 50 - Px(36), w - 48,
-			T("ui.shop.hint", Hint(GameAction.PagePrev), Hint(GameAction.PageNext), Hint(GameAction.Confirm), Hint(GameAction.Back)));
+	}
+
+	// The description fields of a highlighted row, at most two small lines; the session gives "" when the data has none.
+	private UiContext SetDescription(UiContext ctx, string? text)
+	{
+		_probeDescription = string.IsNullOrEmpty(text) ? "-" : text;
+		return ctx.Set("description", string.IsNullOrEmpty(text) ? T("ui.common.no_description") : text).Set("description_missing", string.IsNullOrEmpty(text));
 	}
 }

@@ -1,4 +1,3 @@
-using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 
 using Psiv.Session;
@@ -171,101 +170,59 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawOptions(IDrawSurface s, Art art)
+	private void DrawOptions(IDrawSurface s, IDrawSurface t, Art art)
 	{
-		if (_s.Mode == Mode.Title)
-		{
-			DrawTitleScene(s, art);
-			s.Fill(0, 0, s.Width, s.Height, Color.Black * 0.5f);
-		}
-		else
-		{
-			DrawBackdrop(s, art);
-		}
-		int x = 80;
-		int w = s.Width - 160;
-		int y = 50;
-		int h = s.Height - 100;
-		Style.Window(s, x, y, w, h, T(_controlsPage ? "ui.options.controls" : "ui.options.title"));
-		int footH = Px(64);
-		int listY = y + Px(30);
-		int listH = h - (listY - y) - footH - 10;
-		int ix = x + 40;
-		int iw = w - 70;
-		if (_controlsPage)
-		{
-			DrawControlsPage(s, ix, listY, iw, listH);
-		}
-		else
+		UiContext data = UiData()
+			.Set("title_mode", _s.Mode == Mode.Title)
+			.Set("scene", (UiSlot)((_, _, _, _) => DrawTitleScene(t, art)))
+			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+			.Set("title", T(_controlsPage ? "ui.options.controls" : "ui.options.title"))
+			.Set("on_controls", _controlsPage)
+			.Set("controls", (UiSlot)((x, y, w, h) => DrawControlsPage(s, t, x, y, w, h)))
+			.Set("toasts", (UiSlot)((x, y, w, h) => DrawToasts(t, t.Width - x - w, y + h, right: true)))
+			.Set("hint", _controlsPage
+				? T("ui.options.hint_controls", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm), Hint(GameAction.Back))
+				: T("ui.options.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Left), Hint(GameAction.Right), Hint(GameAction.Confirm), Hint(GameAction.Back)));
+		if (!_controlsPage)
 		{
 			List<OptionRow> rows = OptionRows();
-			int valueX = ix + iw * 55 / 100;
-			_optList.Draw(s, ix, listY, iw, listH, Px(30), rows.Count, (i, ry, on) =>
-			{
-				OptionRow row = rows[i];
-				Style.ListRow(s, row.Label, ix, ry, iw - 14, on, row.Change is not null || row.Label == ControlsRow, height: Px(28));
-				string value = row.Value.Length == 0 ? "" : on && row.Change is not null ? $"<  {row.Value}  >" : row.Value;
-				s.Text(value, valueX, ry, on ? Style.Accent : Style.Text);
-			});
-			OptionRow selected = rows[_optList.Cursor];
-			_probeSelected = $"{selected.Label}: {selected.Value}".TrimEnd(' ', ':');
-			_probeTop = _optList.Top;
-			foreach ((string l, int i) in Style.Wrap(s, selected.Description, iw, Style.Small).Take(2).Select((l, i) => (l, i)))
-			{
-				s.Text(l, ix, y + h - footH - Px(4) + i * Px(22), Style.Dim, Style.Small);
-			}
+			data.Set("rows", rows.Select(row => new UiContext(data)
+					.Set("text", $"{row.Label}: {row.Value}".TrimEnd(' ', ':'))
+					.Set("label", row.Label)
+					.Set("value", row.Value)
+					.Set("changeable", row.Change is not null)
+					.Set("enabled", row.Change is not null || row.Label == ControlsRow)).ToList())
+				.Set("list", _optList)
+				.Set("description", rows[Math.Clamp(_optList.Cursor, 0, rows.Count - 1)].Description);
 		}
-		DrawToasts(s, x + 24, y + h - footH - Px(20), right: true);
-		Widgets.Hints(s, ix, y + h - Px(24) - 10, iw, _controlsPage
-			? T("ui.options.hint_controls", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm), Hint(GameAction.Back))
-			: T("ui.options.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Left), Hint(GameAction.Right), Hint(GameAction.Confirm), Hint(GameAction.Back)));
+		Ui.Draw("options", s, t, data);
 	}
 
-	private void DrawControlsPage(IDrawSurface s, int x, int y, int w, int h)
+	private void DrawControlsPage(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{
 		GameAction[] actions = Enum.GetValues<GameAction>();
 		string resetRow = T("ui.options.reset");
-		int keysX = x + w * 26 / 100;
-		int buttonsX = x + w * 60 / 100;
-		s.Text(T("ui.options.keys"), keysX, y, Style.Dim, Style.Small);
-		s.Text(T("ui.options.gamepad"), buttonsX, y, Style.Dim, Style.Small);
-		int listY = y + Px(28);
-		_optSub.Draw(s, x, listY, w, h - Px(28), Px(30), actions.Length + 1, (i, ry, on) =>
-		{
-			if (i == actions.Length)
-			{
-				Style.ListRow(s, resetRow, x, ry, w - 14, on, height: Px(28));
-				return;
-			}
-			string keys = BindingsText(_bindings.KeysOf(actions[i]).Select(KeyText));
-			string buttons = BindingsText(_bindings.ButtonsOf(actions[i]).Select(ButtonText));
-			Style.ListRow(s, ActionText(actions[i]), x, ry, w - 14, on, height: Px(28));
-			s.Text(Style.Fit(s, keys, buttonsX - keysX - 20, Style.Small), keysX, ry + Px(2), on ? Style.Accent : Style.Text, Style.Small);
-			s.Text(Style.Fit(s, buttons, x + w - buttonsX - 30, Style.Small), buttonsX, ry + Px(2), on ? Style.Accent : Style.Text, Style.Small);
-		}, _optAction is null && Capturing is null);
+		UiContext data = UiArea(x, y, w, h);
+		Ui.Draw("controls", s, t, data
+			.Set("actions", actions.Select(a => new UiContext(data)
+					.Set("label", ActionText(a))
+					.Set("keys", BindingsText(_bindings.KeysOf(a).Select(KeyText)))
+					.Set("buttons", BindingsText(_bindings.ButtonsOf(a).Select(ButtonText)))
+					.Set("reset", false))
+				.Append(new UiContext(data).Set("label", resetRow).Set("reset", true)).ToList())
+			.Set("list", _optSub)
+			.Set("active", _optAction is null && Capturing is null)
+			.Set("picking", _optAction is not null)
+			.Set("action_name", _optAction is { } picked ? ActionText(picked) : "")
+			.Set("choices", new List<string> { T("ui.options.rebind"), T("ui.options.clear") })
+			.Set("choice", _optList.Cursor)
+			.Set("capturing", Capturing is not null)
+			.Set("ask", Capturing is { } capturing ? T("ui.options.press_for", ActionText(capturing), KeyText(Keys.Escape)) : ""));
 		_probeSelected = _optSub.Cursor == actions.Length ? resetRow : ActionText(actions[_optSub.Cursor]);
 		_probeTop = _optSub.Top;
-		if (_optAction is { } action)
+		if (_optAction is not null)
 		{
-			int bw = Px(320);
-			int bh = Px(110);
-			int bx = x + w - bw - 20;
-			int by = y + Px(40);
-			Style.Window(s, bx, by, bw, bh, ActionText(action));
-			for (int i = 0; i < 2; i++)
-			{
-				Style.ListRow(s, T(i == 0 ? "ui.options.rebind" : "ui.options.clear"), bx + 30, by + Px(28) + i * Px(32), bw - 50, i == _optList.Cursor, height: Px(28));
-			}
 			_probeSelected = T(_optList.Cursor == 0 ? "ui.options.rebind" : "ui.options.clear");
-		}
-		if (Capturing is { } capturing)
-		{
-			string ask = T("ui.options.press_for", ActionText(capturing), KeyText(Keys.Escape));
-			int bw = s.Measure(ask) + Px(60);
-			int bx = (s.Width - bw) / 2;
-			int by = s.Height / 2 - Px(40);
-			Style.Window(s, bx, by, bw, Px(80), T("ui.options.rebind"));
-			s.Text(ask, bx + Px(30), by + Px(28), Style.Text);
 		}
 	}
 }

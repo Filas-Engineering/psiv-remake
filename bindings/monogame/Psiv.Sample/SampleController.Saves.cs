@@ -22,32 +22,36 @@ public sealed partial class SampleController
 	private void DrawSlots(IDrawSurface s, ScrollList list, int x, int y, int w, int h, IReadOnlyList<string> slots, IReadOnlyList<SaveSummary> saves,
 		bool active = true)
 	{
-		int rowH = Px(56);
-		list.Draw(s, x, y, w, h, rowH, slots.Count, (i, ry, on) =>
+		UiContext data = UiArea(x, y, w, h);
+		UiContext Row(string slot)
 		{
-			SaveSummary? save = saves.FirstOrDefault(v => v.Slot == slots[i]);
-			string name = slots[i] + (save is { Autosave: true } ? " " + T("ui.saves.autosave") : "") + (_dev && save is { Dev: true } ? " " + T("ui.saves.dev") : "");
+			SaveSummary? save = saves.FirstOrDefault(v => v.Slot == slot);
+			string name = slot + (save is { Autosave: true } ? " " + T("ui.saves.autosave") : "") + (_dev && save is { Dev: true } ? " " + T("ui.saves.dev") : "");
 			string head = save is null ? $"{name}   {T("ui.saves.empty")}"
 				: save.Damaged ? $"{name}   {T("ui.saves.damaged")}"
 				: $"{name}   {_s.DisplayName(save.Area)}   {Clock(save.PlayTimeMs)}   {_s.DisplayName(save.Difficulty)}";
-			Style.ListRow(s, Style.Fit(s, head, w - 40), x, ry, w - 14, on, save is not { Damaged: true }, height: rowH - Px(6));
+			string detail = "";
 			if (save is { Damaged: false })
 			{
 				string party = string.Join(", ", save.Party.Select(p => p.Split(':') is [string id, string level] ? $"{_s.DisplayName(id)} {T("ui.common.level_short", level)}" : p));
 				string written = save.WriteTime >= UnixYear2000 ? DateTimeOffset.FromUnixTimeSeconds(save.WriteTime).ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) : "-";
-				s.Text(Style.Fit(s, T("ui.saves.written", party, written), w - 60, Style.Small), x + 34, ry + Px(26), Style.Dim, Style.Small);
+				detail = T("ui.saves.written", party, written);
 			}
-			else if (save is { Damaged: true } && save.Error.Length > 0)
+			else if (save is { Damaged: true })
 			{
-				s.Text(Style.Fit(s, save.Error, w - 60, Style.Small), x + 34, ry + Px(26), Style.Bad, Style.Small);
+				detail = save.Error;
 			}
-		}, active);
-		if (active && slots.Count > 0)
-		{
-			_probeSelected = slots[list.Cursor] + (saves.FirstOrDefault(v => v.Slot == slots[list.Cursor]) is { } shown ? shown.Damaged ? " damaged" : " " + shown.Area : " empty") +
-				(_dev && saves.FirstOrDefault(v => v.Slot == slots[list.Cursor]) is { Dev: true } ? " dev" : "");
-			_probeTop = list.Top;
+			return new UiContext(data)
+				.Set("text", slot + (save is null ? " empty" : save.Damaged ? " damaged" : " " + save.Area) + (_dev && save is { Dev: true } ? " dev" : ""))
+				.Set("head", head)
+				.Set("enabled", save is not { Damaged: true })
+				.Set("detail", detail)
+				.Set("detail_color", save is { Damaged: true } ? "bad" : "dim");
 		}
+		Ui.Draw("save_slots", s, s, data
+			.Set("slots", slots.Select(Row).ToList())
+			.Set("list", list)
+			.Set("active", active));
 	}
 
 	// Saves to the slot, asking first when a save is there.
@@ -97,20 +101,14 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawLoadGame(IDrawSurface s, Art art)
+	private void DrawLoadGame(IDrawSurface s, IDrawSurface t, Art art)
 	{
-		DrawTitleScene(s, art);
-		s.Fill(0, 0, s.Width, s.Height, Microsoft.Xna.Framework.Color.Black * 0.5f);
-		int x = 120;
-		int w = s.Width - 240;
-		Style.Window(s, x, 50, w, s.Height - 100, T("ui.saves.load_title"));
 		List<SaveSummary> saves = LoadableSaves();
-		if (saves.Count == 0)
-		{
-			s.Text(T("ui.saves.none"), x + 40, 90, Style.Dim);
-		}
-		DrawSlots(s, _list, x + 40, 84, w - 70, s.Height - 190, saves.Select(v => v.Slot).ToList(), saves);
-		DrawToasts(s, x + 24, s.Height - 92, right: true);
-		Widgets.Hints(s, x + 24, s.Height - 50 - Px(36), w - 48, T("ui.saves.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm), Hint(GameAction.Back)));
+		Ui.Draw("load_game", s, t, UiData()
+			.Set("scene", (UiSlot)((_, _, _, _) => DrawTitleScene(t, art)))
+			.Set("has_saves", saves.Count > 0)
+			.Set("slot_list", (UiSlot)((x, y, w, h) => DrawSlots(t, _list, x, y, w, h, saves.Select(v => v.Slot).ToList(), saves)))
+			.Set("toasts", (UiSlot)((x, y, w, h) => DrawToasts(t, t.Width - x - w, y + h, right: true)))
+			.Set("hint", T("ui.saves.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm), Hint(GameAction.Back))));
 	}
 }

@@ -1,0 +1,106 @@
+# Run with --dev on the copy scripts/make_tag_data.py writes: the dialogue's control tags in English.
+# The guide starts smiling and switches portrait after "Back so soon?", then a {page} waits for Confirm and clears the
+# box; three waits hold the reveal after "Listen"; {var:...} shows the leader's name, the money and an item's name; the
+# narration is longer than the box's four lines, so it goes on in a second box; the dockhand's `sound` tag plays a cue
+# through the dialogue layout's tags table (and logs a problem for a cue the game lacks), `shake` is only logged
+# (`tag: shake 2`), and `portrait_off` takes the portrait away. Then again with fast text, auto-advance and 150% text:
+# the pages and boxes move on by themselves, the key hint stays inside the frame, and Skip ends the scene mid-line.
+# With --window the shot lines save screenshots under build/shots/dialogue_tags/ (run from bindings/).
+
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev event dialogue_tags
+wait 2
+expect screen Dialogue
+expect state lineportrait guide_smile
+expect state pagetext Back so soon? Then you had better hear this.
+expect state dialoguepage 1/2
+expect state tags none
+shot build/shots/dialogue_tags/en_portrait_smile.png
+# "Back so soon?" is 13 characters: 260 ms at 50 a second.
+waitstate 30 lineportrait guide
+expect state tags portrait:guide
+expect state dialogueoverlaps none
+shot build/shots/dialogue_tags/en_portrait_switched.png
+# Confirm shows the rest of the page, the next Confirm the next page in a cleared box.
+press Enter
+expect state reveal 44/126
+press Enter
+expect state dialoguepage 2/2
+expect state pagetext The cove bell rang three times at midnight, and nobody was there to pull the rope.
+expect state reveal 44/126
+expect state tags portrait:guide, page
+press Enter
+expect state reveal 126/126
+shot build/shots/dialogue_tags/en_page_two.png
+press Enter
+
+# The waits: "Listen" shows, then each {wait:20} holds the reveal 320 ms (20 x the 16 ms wait unit).
+waitstate 40 reveal 6/86
+wait 10
+expect state reveal 6/86
+shot build/shots/dialogue_tags/en_wait.png
+waitstate 250 reveal 86/86
+expect state pagetext Listen... There it is again. Test Fighter, keep your 50 coins close and a Tonic handy.
+expect state tags wait:20, wait:20, wait:20, var:leader, var:money, var:tonic
+shot build/shots/dialogue_tags/en_vars.png
+press Enter
+
+# The narration fills the box's four lines and goes on in a second box.
+wait 2
+expect state dialoguepage 1/2
+expect statehas pagetext The harbor wakes slowly.
+expect statehas wrapped 4:
+press Enter
+expect statehas pagetext three fishers are arguing about whose turn it is to fix it.
+expect state reveal 416/682
+shot build/shots/dialogue_tags/en_long_box_one.png
+press Enter
+expect state dialoguepage 2/2
+expect statehas pagetext Nobody says the word cove out loud before noon.
+press Enter
+expect state reveal 682/682
+expect state dialogueoverlaps none
+shot build/shots/dialogue_tags/en_long_box_two.png
+audio mark
+press Enter
+
+# The hooks: a cue through the tags table, a logged tag, a problem for an unknown cue, the portrait taken away.
+wait 2
+expect state lineportrait -
+press Enter
+expect state tags sound:lookout_creak, shake:2, sound:foghorn, portrait_off
+expect state lineportrait off
+expect audio cue lookout_creak
+expect noaudio cue foghorn
+expect state pagetext Did you hear that creak? The whole pier is trembling! I am not staying to find out.
+shot build/shots/dialogue_tags/en_hooks.png
+press Enter
+wait 10
+expect screen Field
+expect state tags sound:lookout_creak, shake:2, sound:foghorn, portrait_off
+
+# Fast text, auto-advance and 150% text: Confirm is not pressed again until Skip.
+cmd set text fast
+cmd set auto_advance on
+cmd set text_size 150
+dev event dialogue_tags
+wait 2
+expect state dialoguepage 1/2
+# 45 characters: 450 ms to show, then max(1000, 45 x 50) ms before the page turns by itself.
+waitstate 200 dialoguepage 2/2
+expect state tags portrait:guide, page
+expect state dialogueoverlaps none
+shot build/shots/dialogue_tags/en_150_page_two.png
+waitstatehas 400 reveal /86
+waitstate 500 dialoguepage 1/3
+expect statehas pagetext The harbor wakes slowly.
+expect state dialogueoverlaps none
+shot build/shots/dialogue_tags/en_150_long.png
+waitstate 1400 dialoguepage 2/3
+expect state dialogueoverlaps none
+press Tab
+wait 10
+expect screen Field
+expect state tags none

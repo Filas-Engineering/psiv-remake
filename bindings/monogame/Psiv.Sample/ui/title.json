@@ -1,0 +1,22 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "scene", "elements": [{"type": "slot", "slot": "scene"}]},
+		{"name": "box", "anchor": "center", "w": 600, "h": "t(132) + t(44) + len(options) * t(32)", "frame": "panel", "elements": [
+			{"type": "text", "value": "title", "x": "-box.x", "w": "W", "align": "center", "y": "t(26)", "style": "title"},
+			{"type": "text", "value": "subtitle", "x": "-box.x", "w": "W", "align": "center", "y": "t(66)", "style": "small_dim"},
+			{"type": "image", "image": "hero_frame", "x": 28, "y": 18, "w": 64, "h": 64},
+			{"type": "image", "image": "creature_frame", "x": "cw - 92", "y": 18, "w": 64, "h": 64},
+			{"type": "text", "visible": "game_over", "key": "ui.title.fallen", "x": "-box.x", "w": "W", "align": "center", "y": "t(96)", "color": "bad"},
+			{"type": "rows", "items": "options", "selected": "cursor", "x": 80, "y": "t(132)", "w": "cw - 140", "row_height": "t(32)", "height": "t(28)"}
+		]},
+		{"name": "corner", "elements": [
+			{"type": "text", "value": "version", "w": "W - 12", "align": "right", "y": 8, "style": "small_dim"},
+			{"type": "slot", "slot": "toasts"}
+		]},
+		{"name": "hint", "x": 0, "y": "H - t(30)", "h": "t(30)", "elements": [
+			{"type": "fill", "w": "W", "h": "t(30)", "color": "black", "alpha": 0.6},
+			{"type": "text", "value": "hint", "max_width": "W - 32", "w": "W", "align": "center", "y": "t(5)", "style": "small_dim"}
+		]}
+	]
+}

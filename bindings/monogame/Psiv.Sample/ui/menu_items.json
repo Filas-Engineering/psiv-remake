@@ -1,0 +1,20 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "text", "key": "ui.items.sorted_by", "args": ["sort_name"], "y": "-t(26)", "style": "small_dim"},
+			{"type": "text", "key": "ui.items.totals", "args": ["item_count", "item_total"], "w": "(picking ? cw / 2 - 20 : cw) - 20", "align": "right", "y": "-t(26)", "style": "small_dim"},
+			{"type": "text", "visible": "item_count == 0", "key": "ui.items.none", "x": 14, "color": "dim"},
+			{"type": "list", "items": "items", "state": "list", "w": "picking ? cw / 2 - 20 : cw", "h": "ch - t(56)", "active": "!picking"},
+			{"type": "group", "visible": "item_count > 0", "y": "ch - t(56)", "elements": [
+				{"type": "fill", "w": "(picking ? cw / 2 - 20 : cw) - 14", "h": 1, "color": "panel_edge", "alpha": 0.4},
+				{"type": "text", "visible": "description != ''", "value": "description", "x": 14, "y": "t(8)", "wrap": true, "max_width": "(picking ? cw / 2 - 20 : cw) - 40", "lines": 2, "line_height": "t(22)", "style": "small"},
+				{"type": "text", "visible": "description == ''", "key": "ui.common.no_description", "x": 14, "y": "t(8)", "wrap": true, "max_width": "(picking ? cw / 2 - 20 : cw) - 40", "lines": 2, "line_height": "t(22)", "style": "small_dim"}
+			]},
+			{"type": "group", "visible": "picking", "x": "cw / 2", "elements": [
+				{"type": "text", "key": "ui.menu.use_on_whom", "args": ["target_name"], "color": "accent"},
+				{"type": "list", "items": "members", "state": "member_list", "y": "t(40)", "w": "cw / 2", "h": "ch - t(40)"}
+			]}
+		]}
+	]
+}

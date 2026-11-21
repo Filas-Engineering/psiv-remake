@@ -49,8 +49,38 @@ public sealed class InputState
 
 	// Whether the last key or button that went down was on the gamepad.
 	public bool UsingGamepad { get; private set; }
-	// A mouse click this frame, in the sample's own 1280x720 pixels.
+	// A mouse click this frame, in the sample's own logical pixels (1280x720 by default).
 	public (int X, int Y)? Click { get; private set; }
+
+	private readonly Dictionary<Keys, int> _heldMs = [];
+	private readonly Dictionary<Buttons, int> _buttonHeldMs = [];
+
+	// Held keys and buttons that `repeats` picks press again after `delayMs`, then every `everyMs`: the layout's list
+	// scroll repeat. Called once a frame after Set.
+	public void Repeat(int dtMs, int delayMs, int everyMs, Func<Keys, bool> keyRepeats, Func<Buttons, bool> buttonRepeats)
+	{
+		RepeatHeld(_heldMs, _down, _pressed, dtMs, delayMs, everyMs, keyRepeats);
+		RepeatHeld(_buttonHeldMs, _buttonsDown, _buttonsPressed, dtMs, delayMs, everyMs, buttonRepeats);
+	}
+
+	private static void RepeatHeld<T>(Dictionary<T, int> held, HashSet<T> down, HashSet<T> pressed, int dtMs, int delayMs, int everyMs, Func<T, bool> repeats) where T : notnull
+	{
+		int Count(int ms) => ms < delayMs ? 0 : 1 + (ms - delayMs) / Math.Max(1, everyMs);
+		foreach (T item in held.Keys.Where(k => !down.Contains(k)).ToList())
+		{
+			held.Remove(item);
+		}
+		foreach (T item in down.Where(repeats))
+		{
+			int before = pressed.Contains(item) ? 0 : held.GetValueOrDefault(item);
+			int after = before + (pressed.Contains(item) ? 0 : dtMs);
+			held[item] = after;
+			if (Count(after) > Count(before))
+			{
+				pressed.Add(item);
+			}
+		}
+	}
 
 	public bool Down(Keys key) => _down.Contains(key);
 	public bool Pressed(Keys key) => _pressed.Contains(key);

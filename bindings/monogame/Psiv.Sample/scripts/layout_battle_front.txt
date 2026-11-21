@@ -1,0 +1,113 @@
+# The example layout set's front battle (make_layout_assets.py), on the data copy with the six-enemy encounter
+# (scripts/make_front_data.py): the party's cards in a column at the left edge (empty frames for free places), the
+# enemies on the smaller stage, the command window of four scrolling rows beside the member choosing, the target and
+# a technique's description, a round with a member hit and an effect sweeping the enemies, the result window; then a
+# full party of five against six enemies in two ranks, and the victory with level-ups. Each moment checks where the
+# windows went and that nothing covers the enemies' labels (overlaps). With --window the shot lines save screenshots in
+# the working directory; headless runs write nothing.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+cmd set difficulty hard
+cmd set reward x2
+
+# The cache's three enemies in one row; three members, two free places in the column.
+cmd walk 13 4
+cmd walk cache_front
+expect mode Battle
+waitstate 120 battlephase Command
+expect state battlelayout front
+expect state ranks 3
+expect state strip Test Fighter acting | Test Mystic | Test Medic | - | -
+expect state overlaps none
+expect state windows battle_front/stage 0 0 640x480, battle_front/strip 8 8 140x276, battle_front/effects 0 0 640x480, battle_front/command 244 308 156x94, battle_front/keys 0 464 640x16
+shot front_command.png
+press Enter
+expect state battlephase Target
+expect state overlaps none
+expect state window.description battle_front/description 156 8 476x38
+shot front_target.png
+press Enter
+press Down
+press Enter
+press Down 2
+expect state battlephase Option
+expect state description A sheet of frost settles on every foe.
+expect state battlemenu Spark (3 TP) | Ember Fan (4 TP) | [Frost Pane (6 TP)] | Hush (3 TP)
+expect state window.command battle_front/command 336 308 156x94
+shot front_options.png
+press Enter
+press Down 4
+press Enter
+
+# The round: the hound hits the fighter (its card flashing), the mystic's Frost Pane sweeping all three.
+waitstatehas 200 step result Test Fighter -12
+expect statehas strip Test Fighter hit
+expect state overlaps none
+shot front_member_hit.png
+waitstatehas 900 step effect burst_chill on Gel Mite A, Gel Mite B, Rust Hound
+wait 8
+expect state overlaps none
+expect state window.name_plate battle_front/name_plate 349 8 90x24
+shot front_sweep.png
+waitstate 900 battlephase Command
+expect state battlesync 2 checked, all match
+
+# Auto-battle to the end, then the result window over the stage.
+press L
+expect state battlelogshown on
+expect state window.log battle_front/log 156 8 476x66
+shot front_log.png
+press L
+press Up
+press Enter
+waitstate 1200 battlephase Ended
+expect statehas battlesync all match
+expect state window.result battle_front/result 204 324 380x80
+shot front_result.png
+press Enter
+expect screen Field
+
+# The board's scene fills the party to five: every card holds a member. Six enemies stand in two ranks.
+dev encounters off
+cmd walk 0 4
+dev event tidewater_board
+pressuntil Enter Field 900
+expect state party Test Fighter, Test Mystic, Test Medic, Test Scout, Test Engineer
+dev level scout 1
+dev level engineer 1
+dev level fighter 20
+dev level mystic 20
+dev level medic 20
+dev battle horde
+expect mode Battle
+waitstate 300 battlephase Command
+expect state ranks 3+3
+expect state strip Test Fighter acting | Test Mystic | Test Medic | Test Scout | Test Engineer
+expect state overlaps none
+expect state windows battle_front/stage 0 0 640x480, battle_front/strip 8 8 140x276, battle_front/effects 0 0 640x480, battle_front/command 112 308 156x94, battle_front/keys 0 464 640x16
+shot front_ranks.png
+press Down 7
+expect state battlemenu Attack | Technique | Skill | Item | Defend | Escape | Macro | [Auto]
+expect state window.command battle_front/command 112 308 156x94
+shot front_ranks_auto.png
+press Enter
+hold F 60
+waitstate 300 battlephase Command
+dev win
+waitstatehas 300 step sync
+hold F 60
+expect state battlephase Ended
+expect statehas battlesync all match
+expect state victory Victory! / Experience 235 / Money 182 / Test Scout reached level 2! / Test Engineer reached level 2!
+expect state window.result battle_front/result 204 296 380x108
+shot front_levelup.png
+press Enter
+expect screen Field

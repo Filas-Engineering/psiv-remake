@@ -22,7 +22,7 @@ assets: audio/ambient/marsh_wind.wav: audio[33]: bad loop points 2 to 1: the fil
 assets: assets.json: audio[55]: unknown music 'not_a_track': not an id the game or the sample plays as music
 assets: assets.json: battle_figures: field 'reference_height' must be a whole number from 1 to 720
 assets: assets.json: figures[3]: 'natural': true needs battle_figures' reference_height, the screen height the figure was drawn for
-assets: assets.json: bitmap_fonts.fonts[2]: unknown role 'subtitles': menu, dialogue, battle_numbers
+assets: assets.json: bitmap_fonts.fonts[2]: unknown role 'subtitles': menu, dialogue, battle_numbers, hint
 assets: assets.json: bitmap_fonts.fonts[2]: field 'scale' must be a number above 0, at most 64
 assets: assets.json: bitmap_fonts.fonts[3]: a second font for en
 assets: fonts/ja_partial.json: bitmap_fonts.fonts[4]: lacks 2 glyphs the ja text tables use for dialogue: 灰降
@@ -50,5 +50,22 @@ assets: battle_presentation.json: enemies.nobody: unknown enemy 'nobody': not in
 assets: battle_presentation.json: enemies.gel_mite.juggle: unknown action 'juggle': attack, defend or an ability of the game data
 assets: battle_presentation.json: changes.transform: unknown effect 'smoke': not a generated effect, an effect in assets.json or none
 assets: battle_presentation.json: changes.join.nobody: unknown change: join, merge, transform, instant_defeat, each alone or with .ENEMY for an enemy of the game data
-assets: 0 tilesets, 17 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 3 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts
-FAILED: 52 problems.
+assets: ui/menu.json: -: missing file: the built-in layout stands in
+assets: ui/styles.json: resolution: field 'width' must be a whole number from 160 to 7680
+assets: ui/styles.json: colors.mud: must be #rrggbb or #rrggbbaa
+assets: ui/styles.json: -: the built-in styles stand in
+assets: ui/inn.json: windows.box: unknown field 'colour'
+assets: ui/inn.json: windows.box.elements[3]: unknown element type 'sparkle': fill, outline, box, plate, text, bar, value_bar, image, pointer, rows, list, hints, tabs, scroll_bar, repeater, group, slot, role
+assets: ui/inn.json: windows.box.elements[4]: field 'value' reads 'no_such_field', which is not a field of the inn screen, a window or a variable
+assets: ui/inn.json: windows.box.elements[4]: field 'x': unexpected end at character 5 of '(3 +'
+assets: ui/inn.json: windows.box.elements[4]: field 'y': t takes 1 argument at character 8 of 't(1, 2)'
+assets: ui/inn.json: windows.box.elements[5]: field 'color': unexpected '#' at character 1 of '#12345'
+assets: ui/inn.json: windows.box.elements[5]: missing field 'color'
+assets: ui/inn.json: windows.box.elements[6]: the inn screen has no slots
+assets: ui/inn.json: windows.box: field 'relative_to' names no window of this screen: 'missing'
+assets: ui/inn.json: -: the built-in layout of this screen stands in
+assets: ui/nonsense.json: -: unknown screen 'nonsense': battle_front, battle_side, confirm, controls, dialogue, field, inn, load_game, menu, menu_codex, menu_combos, menu_equip, menu_items, menu_log, menu_macros, menu_options, menu_order, menu_quests, menu_status, name_entry, options, panels, pause, quest_log, save_prompt, save_slots, shop, sound_test, text_log, title, travel or styles
+assets: ui/title.json: -: not valid JSON: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 27.
+assets: ui/title.json: -: the built-in layout of this screen stands in
+assets: 0 tilesets, 17 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 3 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 28 layout files (1280x720)
+FAILED: 69 problems.

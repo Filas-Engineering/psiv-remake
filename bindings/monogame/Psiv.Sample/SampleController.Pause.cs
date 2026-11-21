@@ -1,5 +1,3 @@
-using Microsoft.Xna.Framework;
-
 using Psiv.Session;
 
 namespace Psiv.Sample;
@@ -37,28 +35,22 @@ public sealed partial class SampleController
 
 	private void DrawPause(IDrawSurface s, IDrawSurface t, Art art)
 	{
-		if (_battle.Active)
-		{
-			DrawBattle(s, art);
-		}
-		else
-		{
-			DrawField(s, art);
-			DrawHud(s);
-		}
-		s.Fill(0, 0, s.Width, s.Height, Color.Black * 0.55f);
-		int rowH = Px(32);
-		int w = Px(360);
-		int h = Px(40) + PauseRows.Length * rowH + Px(20);
-		int x = (s.Width - w) / 2;
-		int y = (s.Height - h) / 2;
-		Style.Window(t, x, y, w, h, T("ui.pause.title"));
 		string[] rows = PauseRows;
-		for (int i = 0; i < rows.Length; i++)
-		{
-			Style.ListRow(t, rows[i], x + Px(40), y + Px(34) + i * rowH, w - Px(70), i == _pauseList.Cursor, height: Px(28));
-		}
+		Ui.Draw("pause", s, t, SetHud(UiData(), !_battle.Active)
+			.Set("scene", (UiSlot)((_, _, _, _) =>
+			{
+				if (_battle.Active)
+				{
+					DrawBattle(s, art);
+				}
+				else
+				{
+					DrawField(s, art);
+				}
+			}))
+			.Set("rows", rows.ToList())
+			.Set("cursor", _pauseList.Cursor)
+			.Set("hint", T("ui.pause.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm), Hint(GameAction.Back))));
 		_probeSelected = rows[_pauseList.Cursor];
-		DrawHint(t, T("ui.pause.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm), Hint(GameAction.Back)));
 	}
 }

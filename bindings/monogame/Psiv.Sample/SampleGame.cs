@@ -10,7 +10,7 @@ namespace Psiv.Sample;
 
 // The windowed front end: MonoGame owns the window, the clock, the keyboard, the mouse and the gamepad;
 // SampleController does the rest. One session update per frame, driven from Update with the frame's elapsed
-// milliseconds. The controller draws a 1280x720 frame, which goes into the window letterboxed (Letterbox): the window
+// milliseconds. The controller draws a frame at the layout's logical resolution (1280x720 by default), which goes into the window letterboxed (Letterbox): the window
 // can be resized, and F11 toggles borderless fullscreen; clicks are mapped back to the frame's pixels.
 public sealed class SampleGame : Game
 {
@@ -117,7 +117,6 @@ public sealed class SampleGame : Game
 		_batch = new SpriteBatch(GraphicsDevice);
 		_fonts = Fonts.Load(_fontPath);
 		_surface = new MonoGameSurface(GraphicsDevice, _batch, _fonts);
-		_target = new RenderTarget2D(GraphicsDevice, Letterbox.BaseWidth, Letterbox.BaseHeight);
 		if (_scriptPath is not null)
 		{
 			_player = new ScriptPlayer(_session, _controller, _scriptPath, () => [], () => _frame, _shots.Add,
@@ -135,7 +134,7 @@ public sealed class SampleGame : Game
 			base.Update(gameTime);
 			return;
 		}
-		_box = Letterbox.Fit(GraphicsDevice.PresentationParameters.BackBufferWidth, GraphicsDevice.PresentationParameters.BackBufferHeight);
+		_box = Fit();
 		if (_player is not null)
 		{
 			InputFrame next = _player.Next();
@@ -184,8 +183,18 @@ public sealed class SampleGame : Game
 		base.Update(gameTime);
 	}
 
+	private Letterbox Fit() => Letterbox.Fit(GraphicsDevice.PresentationParameters.BackBufferWidth, GraphicsDevice.PresentationParameters.BackBufferHeight,
+		_controller.LogicalSize.Width, _controller.LogicalSize.Height, _controller.Scaling);
+
 	protected override void Draw(GameTime gameTime)
 	{
+		// The layout's resolution can change with an asset reload.
+		(int width, int height) = _controller.LogicalSize;
+		if (_target is null || _target.Width != width || _target.Height != height)
+		{
+			_target?.Dispose();
+			_target = new RenderTarget2D(GraphicsDevice, width, height);
+		}
 		GraphicsDevice.SetRenderTarget(_target);
 		GraphicsDevice.Clear(Color.Black);
 		_batch!.Begin(samplerState: SamplerState.PointClamp);
@@ -193,8 +202,9 @@ public sealed class SampleGame : Game
 		_batch.End();
 		GraphicsDevice.SetRenderTarget(null);
 		GraphicsDevice.Clear(Color.Black);
-		_box = Letterbox.Fit(GraphicsDevice.PresentationParameters.BackBufferWidth, GraphicsDevice.PresentationParameters.BackBufferHeight);
-		_batch.Begin(samplerState: _box.Scale >= 1f ? SamplerState.PointClamp : SamplerState.LinearClamp);
+		_box = Fit();
+		bool point = _controller.Scaling.Filter switch { "point" => true, "linear" => false, _ => _box.Scale >= 1f };
+		_batch.Begin(samplerState: point ? SamplerState.PointClamp : SamplerState.LinearClamp);
 		_batch.Draw(_target, new Rectangle(_box.X, _box.Y, _box.Width, _box.Height), Color.White);
 		_batch.End();
 		foreach (string shot in _shots)

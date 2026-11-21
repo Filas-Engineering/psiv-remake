@@ -1,7 +1,5 @@
 using System.Globalization;
 
-using Microsoft.Xna.Framework;
-
 using Psiv.Session;
 
 namespace Psiv.Sample;
@@ -181,13 +179,16 @@ public sealed partial class SampleController
 		return left.Count >= right.Count ? left : right;
 	}
 
-	private void DrawStatus(IDrawSurface s, Art art, int x, int y, int w, int h)
+	private void DrawStatus(IDrawSurface s, IDrawSurface t, Art art, int x, int y, int w, int h)
 	{
 		List<Member> lineup = LineupMembers();
+		UiContext data = UiArea(x, y, w, h);
 		if (_pickMember is null)
 		{
-			DrawItems(s, _list, x, y, w, h, lineup.Select(m => $"{MemberRow(m)}  {T("ui.status.exp", m.Experience)}" +
-				string.Concat(m.Statuses.Select(st => $" [{st.Name}]"))).ToList());
+			Ui.Draw("menu_status", s, t, data
+				.Set("view", "members")
+				.Set("members", lineup.Select(m => $"{MemberRow(m)}  {T("ui.status.exp", m.Experience)}" + string.Concat(m.Statuses.Select(st => $" [{st.Name}]"))).ToList())
+				.Set("list", _list));
 			return;
 		}
 		Member? member = lineup.FirstOrDefault(m => m.Id == _pickMember);
@@ -196,87 +197,49 @@ public sealed partial class SampleController
 		{
 			return;
 		}
-		// The header: portrait, name and level, experience, HP and TP.
-		s.Fill(x, y, 84, 84, Style.Track);
-		s.Image(art.Portrait("", member.Id), x + 2, y + 2, 80, 80, Color.White);
-		int hx = x + 104;
-		s.Text(T("ui.status.header", member.Name, member.Level), hx, y, Style.Accent);
-		s.Text(T("ui.status.exp_next", member.Experience, detail.ExperienceToNext), hx, y + Px(30), Style.Dim, Style.Small);
-		int barW = Math.Min(300, (w - 104) / 2 - 30);
-		int barsY = y + Px(56);
-		Widgets.ValueBar(s, hx, barsY, barW, T("ui.stat_short.hp"), member.Hp, member.MaxHp, member.Hp * 4 <= member.MaxHp ? Style.Bad : Style.Good, Px(20), 8);
-		Widgets.ValueBar(s, hx + barW + 40, barsY, barW, T("ui.stat_short.tp"), member.Tp, member.MaxTp, Style.Tp, Px(20), 8);
-		Widgets.Tabs(s, x + w - Px(300), y, Px(300), [T("ui.status.stats"), T("ui.status.abilities")], _statusPage, Px);
-		int top = Math.Max(y + 96, barsY + Px(20) + 18);
-		int bodyH = y + h - top;
+		data.Set("view", _statusPage == 0 ? "stats" : "abilities")
+			.Set("portrait", art.Portrait("", member.Id))
+			.Set("name", member.Name)
+			.Set("level", member.Level)
+			.Set("experience", member.Experience)
+			.Set("experience_next", detail.ExperienceToNext)
+			.Set("hp", member.Hp)
+			.Set("max_hp", member.MaxHp)
+			.Set("tp", member.Tp)
+			.Set("max_tp", member.MaxTp)
+			.Set("pages", new List<string> { T("ui.status.stats"), T("ui.status.abilities") })
+			.Set("page", _statusPage)
+			.Set("sub_list", _sub);
 		if (_statusPage == 0)
 		{
 			var (left, right) = StatusColumns(member.Id);
-			int colW = w / 2 - 20;
-			int rowH = Px(26);
-			void Row(List<(string Label, string Value)> rows, int cx, int i, int ry)
-			{
-				if (i >= rows.Count)
-				{
-					return;
-				}
-				(string label, string value) = rows[i];
-				if (value.Length == 0)
-				{
-					s.Text(label, cx, ry, Style.Accent, Style.Small);
-					return;
-				}
-				int valueW = s.Measure(value, Style.Small);
-				string shownLabel = Style.Fit(s, label, colW - Math.Min(valueW, colW / 2) - 40, Style.Small);
-				s.Text(shownLabel, cx + 14, ry, Style.Text, Style.Small);
-				string shownValue = Style.Fit(s, value, label.Length == 0 ? colW - 40 : colW - s.Measure(shownLabel, Style.Small) - 50, Style.Small);
-				s.Text(shownValue, label.Length == 0 ? cx + 28 : cx + colW - 20 - s.Measure(shownValue, Style.Small), ry, label.Length == 0 ? Style.Dim : Style.Text, Style.Small);
-			}
-			_sub.DrawView(s, x, top, w, bodyH, rowH, Math.Max(left.Count, right.Count), (i, ry, _) =>
-			{
-				Row(left, x, i, ry);
-				Row(right, x + colW + 40, i, ry);
-			});
+			UiContext Cell(List<(string Label, string Value)> rows, int i) => i < rows.Count
+				? new UiContext(data).Set("shown", true).Set("label", rows[i].Label).Set("value", rows[i].Value)
+				: new UiContext(data).Set("shown", false);
+			Ui.Draw("menu_status", s, t, data.Set("stat_rows", Enumerable.Range(0, Math.Max(left.Count, right.Count))
+				.Select(i => new UiContext(data).Set("cells", new List<UiContext> { Cell(left, i), Cell(right, i) })).ToList()));
 			_probeTop = _sub.Top;
 			return;
 		}
 		IReadOnlyList<AbilityInfo> abilities = _s.MemberAbilities(member.Id);
-		if (abilities.Count == 0)
+		string description = "";
+		if (abilities.Count > 0)
 		{
-			s.Text(T("ui.status.no_abilities"), x + 14, top, Style.Dim);
-			return;
+			description = _s.Description(DescriptionKind.Ability, abilities[Math.Clamp(_sub.Cursor, 0, abilities.Count - 1)].Id) ?? "";
+			_probeDescription = description.Length == 0 ? "-" : description;
 		}
-		int listW = _pickAction is null ? w : w * 3 / 5;
-		int kindX = x + listW * 45 / 100;
-		int costX = x + listW * 62 / 100;
-		int usesX = x + listW * 76 / 100;
-		s.Text(T("ui.status.kind"), kindX, top, Style.Dim, Style.Small);
-		s.Text(T("ui.status.cost"), costX, top, Style.Dim, Style.Small);
-		s.Text(T("ui.status.uses"), usesX, top, Style.Dim, Style.Small);
-		int listTop = top + Px(28);
-		int descH = Px(56);
-		_sub.Draw(s, x, listTop, listW, y + h - listTop - descH, Px(30), abilities.Count, (i, ry, on) =>
-		{
-			AbilityInfo a = abilities[i];
-			Style.ListRow(s, Style.Fit(s, a.Name + (a.Field ? "  *" : ""), kindX - x - 30), x, ry, listW - 14, on, a.Field, height: Px(28));
-			s.Text(T(NameKind.AbilityKind, (int)a.Kind), kindX, ry, Style.Dim, Style.Small);
-			s.Text(a.Cost > 0 ? T("ui.common.tp_cost", a.Cost) : "-", costX, ry, Style.Text, Style.Small);
-			s.Text(a.MaxUses >= 0 ? $"{a.Uses}/{a.MaxUses}" : "-", usesX, ry, Style.Text, Style.Small);
-		}, _pickAction is null);
-		s.Fill(x, y + h - descH, listW - 14, 1, Style.PanelEdge * 0.4f);
-		DrawDescription(s, _s.Description(DescriptionKind.Ability, abilities[Math.Clamp(_sub.Cursor, 0, abilities.Count - 1)].Id), x + 14, y + h - descH + Px(8), listW - 40);
-		if (_pickAction is null)
-		{
-			_probeSelected = abilities[_sub.Cursor].Name;
-			_probeTop = _sub.Top;
-			string usable = T("ui.status.usable_here");
-			s.Text(usable, x + w - s.Measure(usable, Style.Small) - 20, top, Style.Dim, Style.Small);
-		}
-		else
-		{
-			int tx = x + listW + 20;
-			s.Text(T("ui.menu.use_on_whom", _s.DisplayName(_pickAction)), tx, top, Style.Accent);
-			DrawItems(s, _third, tx, listTop + Px(12), w - listW - 20, y + h - listTop - Px(12), lineup.Select(m => T("ui.status.member_hp", m.Name, m.Hp, m.MaxHp)).ToList());
-		}
+		Ui.Draw("menu_status", s, t, data
+			.Set("picking", _pickAction is not null)
+			.Set("abilities", abilities.Select(a => new UiContext(data)
+				.Set("text", a.Name)
+				.Set("label", a.Name + (a.Field ? "  *" : ""))
+				.Set("usable", a.Field)
+				.Set("kind", T(NameKind.AbilityKind, (int)a.Kind))
+				.Set("cost", a.Cost > 0 ? T("ui.common.tp_cost", a.Cost) : "-")
+				.Set("uses", a.MaxUses >= 0 ? $"{a.Uses}/{a.MaxUses}" : "-")).ToList())
+			.Set("description", description)
+			.Set("target_name", _pickAction is null ? "" : _s.DisplayName(_pickAction))
+			.Set("targets", _pickAction is null ? new List<string>() : lineup.Select(m => T("ui.status.member_hp", m.Name, m.Hp, m.MaxHp)).ToList())
+			.Set("target_list", _third));
 	}
 }

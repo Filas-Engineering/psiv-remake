@@ -1,0 +1,14 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "scene", "elements": [
+			{"type": "slot", "slot": "scene"},
+			{"type": "fill", "w": "W", "h": "H", "color": "black", "alpha": 0.5}
+		]},
+		{"name": "box", "x": 120, "y": 50, "w": "W - 240", "h": "H - 100", "frame": "panel", "title": "ui.sound_test.title", "elements": [
+			{"type": "list", "items": "tracks", "state": "list", "x": 40, "y": 40, "w": "cw - 80", "h": "H - 220"},
+			{"type": "text", "visible": "playing != ''", "key": "ui.sound_test.playing", "args": ["playing"], "x": 40, "y": "H - 170", "color": "accent"},
+			{"type": "hints", "value": "hint", "x": 24, "y": "H - 100 - t(36)", "w": "cw - 48"}
+		]}
+	]
+}

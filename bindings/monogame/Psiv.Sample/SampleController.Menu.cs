@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using Microsoft.Xna.Framework.Input;
 
 using Psiv.Session;
@@ -182,41 +180,44 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawMenu(IDrawSurface s, Art art)
+	private void DrawMenu(IDrawSurface s, IDrawSurface t, Art art)
 	{
-		DrawBackdrop(s, art);
-		Style.Window(s, 24, 56, s.Width - 48, s.Height - 72, T("ui.menu.title"));
-		string money = T("ui.common.money", _s.WorldInfo().Money);
-		int moneyX = s.Width - 64 - s.Measure(money);
-		Widgets.Tabs(s, 48, 64, moneyX - 72, [.. MenuTabs.Select(tab => T("ui.menu.tab." + tab.ToLowerInvariant()))], _tab, Px);
-		s.Text(money, moneyX, 64 + Px(5), Style.Text);
-		int x = 56;
-		int y = 64 + Px(60);
-		int w = s.Width - 112;
-		int h = s.Height - 66 - Px(10) - y;
+		Ui.Draw("menu", s, t, UiData()
+			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+			.Set("tabs", MenuTabs.Select(tab => T("ui.menu.tab." + tab.ToLowerInvariant())).ToList())
+			.Set("tab", _tab)
+			.Set("money", T("ui.common.money", _s.WorldInfo().Money))
+			.Set("page", (UiSlot)((x, y, w, h) => DrawMenuPage(s, t, art, x, y, w, h)))
+			.Set("hint", MenuHint())
+			.Set("toasts", (UiSlot)((x, y, w, h) => DrawToasts(s, s.Width - x - w, y + h, right: true))));
+	}
+
+	// The data of a layout drawn into the rectangle another layout's slot gave it.
+	private UiContext UiArea(int x, int y, int w, int h) => UiData().Set("area_x", x).Set("area_y", y).Set("area_w", w).Set("area_h", h);
+
+	private void DrawMenuPage(IDrawSurface s, IDrawSurface t, Art art, int x, int y, int w, int h)
+	{
 		switch (MenuTabs[_tab])
 		{
-		case "Status": DrawStatus(s, art, x, y, w, h); break;
-		case "Items": DrawItemsPage(s, x, y, w, h); break;
-		case "Equip": DrawEquip(s, x, y, w, h); break;
+		case "Status": DrawStatus(s, t, art, x, y, w, h); break;
+		case "Items": DrawItemsPage(s, t, x, y, w, h); break;
+		case "Equip": DrawEquip(s, t, x, y, w, h); break;
 		case "Order":
-			List<Member> lineup = LineupMembers();
-			DrawItems(s, _list, x, y, w, h, lineup.Select((m, i) => (_orderFrom == i ? "> " : "") +
-				$"{i + 1}. {MemberRow(m)}" + string.Concat(m.Statuses.Select(st => $" [{st.Name}]"))).ToList());
+			Ui.Draw("menu_order", s, t, UiArea(x, y, w, h)
+				.Set("rows", LineupMembers().Select((m, i) => (_orderFrom == i ? "> " : "") + $"{i + 1}. {MemberRow(m)}" + string.Concat(m.Statuses.Select(st => $" [{st.Name}]"))).ToList())
+				.Set("list", _list));
 			break;
-		case "Macros": DrawMacros(s, x, y, w, h); break;
-		case "Combos": DrawCombos(s, x, y, w, h); break;
-		case "Quests": DrawQuestLog(s, x, y, w, h); break;
-		case "Codex": DrawCodex(s, x, y, w, h); break;
-		case "Log": DrawTextLog(s, x, y, w, h); break;
-		case "Save": DrawSlots(s, _list, x, y, w, h, ManualSlots(), _s.Saves() ?? []); break;
+		case "Macros": DrawMacros(s, t, x, y, w, h); break;
+		case "Combos": DrawCombos(s, t, x, y, w, h); break;
+		case "Quests": DrawQuestLog(s, t, x, y, w, h); break;
+		case "Codex": DrawCodex(s, t, x, y, w, h); break;
+		case "Log": DrawTextLog(s, t, x, y, w, h); break;
+		case "Save": DrawSlots(t, _list, x, y, w, h, ManualSlots(), _s.Saves() ?? []); break;
 		case "Options":
-			s.Text(T("ui.menu.options_about"), x, y, Style.Text);
-			Style.ListRow(s, T("ui.menu.open_options"), x + 20, y + Px(44), Px(260), true, height: Px(28));
+			Ui.Draw("menu_options", s, t, UiArea(x, y, w, h).Set("options", new List<string> { T("ui.menu.open_options") }));
 			_probeSelected = T("ui.menu.open_options");
 			break;
 		}
-		Widgets.Hints(s, x, s.Height - 66, w, MenuHint());
 	}
 
 	private string MenuHint()
@@ -240,30 +241,27 @@ public sealed partial class SampleController
 		return string.Join("   ", page);
 	}
 
-	private void DrawItemsPage(IDrawSurface s, int x, int y, int w, int h)
+	private void DrawItemsPage(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{
 		var items = _s.Inventory(_itemSort).Where(i => !i.IsEquipment).ToList();
-		int listW = _pickAction is null ? w : w / 2 - 20;
-		s.Text(T("ui.items.sorted_by", T(NameKind.ItemSort, (int)_itemSort)), x, y - Px(26), Style.Dim, Style.Small);
-		string totals = T("ui.items.totals", items.Count, items.Sum(i => i.Count));
-		s.Text(totals, x + listW - s.Measure(totals, Style.Small) - 20, y - Px(26), Style.Dim, Style.Small);
-		if (items.Count == 0)
-		{
-			s.Text(T("ui.items.none"), x + 14, y, Style.Dim);
-		}
-		int descH = Px(56);
-		DrawItems(s, _list, x, y, listW, h - descH, items.Select(i => T("ui.common.item_count", i.Name, i.Count) +
-			(i.CallsVehicle.Length > 0 ? "  " + T("ui.items.calls", _s.DisplayName(i.CallsVehicle)) : i.Field ? "" : "  " + T("ui.items.battle_only"))).ToList(), _pickAction is null);
+		string description = "";
 		if (items.Count > 0)
 		{
-			s.Fill(x, y + h - descH, listW - 14, 1, Style.PanelEdge * 0.4f);
-			DrawDescription(s, DescriptionOf(items[Math.Clamp(_list.Cursor, 0, items.Count - 1)]), x + 14, y + h - descH + Px(8), listW - 40);
+			description = DescriptionOf(items[Math.Clamp(_list.Cursor, 0, items.Count - 1)]) ?? "";
+			_probeDescription = description.Length == 0 ? "-" : description;
 		}
-		if (_pickAction is not null)
-		{
-			s.Text(T("ui.menu.use_on_whom", _s.DisplayName(_pickAction)), x + w / 2, y, Style.Accent);
-			DrawItems(s, _sub, x + w / 2, y + Px(40), w / 2, h - Px(40), LineupMembers().Select(m => T("ui.menu.member_points", m.Name, m.Hp, m.MaxHp, m.Tp, m.MaxTp)).ToList());
-		}
+		Ui.Draw("menu_items", s, t, UiArea(x, y, w, h)
+			.Set("picking", _pickAction is not null)
+			.Set("sort_name", T(NameKind.ItemSort, (int)_itemSort))
+			.Set("item_count", items.Count)
+			.Set("item_total", items.Sum(i => i.Count))
+			.Set("items", items.Select(i => T("ui.common.item_count", i.Name, i.Count) +
+				(i.CallsVehicle.Length > 0 ? "  " + T("ui.items.calls", _s.DisplayName(i.CallsVehicle)) : i.Field ? "" : "  " + T("ui.items.battle_only"))).ToList())
+			.Set("list", _list)
+			.Set("description", description)
+			.Set("target_name", _pickAction is null ? "" : _s.DisplayName(_pickAction))
+			.Set("members", _pickAction is null ? new List<string>() : LineupMembers().Select(m => T("ui.menu.member_points", m.Name, m.Hp, m.MaxHp, m.Tp, m.MaxTp)).ToList())
+			.Set("member_list", _sub));
 	}
 
 	// "Make macro" (UI-011): a macro named after the combination, its first 16 bytes, filled by the session.
@@ -282,53 +280,37 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawCombos(IDrawSurface s, int x, int y, int w, int h)
+	private void DrawCombos(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{
 		ComboLog log = _s.ComboLog();
 		int total = Math.Max(log.Total, log.Entries.Count);
-		s.Text(T("ui.combos.discovered", log.Entries.Count, log.Total), x, y, Style.Accent);
-		int detailH = Px(96);
 		var rows = log.Entries.Select(e => T("ui.combos.row", e.ResultName, string.Join(" + ", e.ParticipantNames)))
 			.Concat(Enumerable.Repeat(T("ui.combos.unknown"), total - log.Entries.Count)).ToList();
-		DrawItems(s, _list, x, y + Px(36), w, h - Px(36) - detailH, rows, enabled: rows.Select((_, i) => i < log.Entries.Count).ToList());
-		int dy = y + h - detailH + Px(8);
-		s.Fill(x, dy - Px(8), w, 1, Style.PanelEdge * 0.4f);
-		if (_list.Cursor < log.Entries.Count)
-		{
-			ComboEntry e = log.Entries[_list.Cursor];
-			s.Text(Style.Fit(s, T("ui.combos.members", ListText(e.ParticipantNames)), w, Style.Small), x, dy, Style.Text, Style.Small);
-			s.Text(Style.Fit(s, T("ui.combos.abilities", ListText(e.AbilityNames)), w, Style.Small), x, dy + Px(26), Style.Text, Style.Small);
-			s.Text(T("ui.combos.first_found", Clock(e.PlayTimeMs), Hint(GameAction.Confirm)), x, dy + Px(52), Style.Dim, Style.Small);
-		}
-		else if (total > 0)
-		{
-			s.Text(T("ui.combos.not_discovered"), x, dy, Style.Dim, Style.Small);
-		}
+		int cursor = Math.Clamp(_list.Cursor, 0, Math.Max(0, rows.Count - 1));
+		ComboEntry? entry = cursor < log.Entries.Count ? log.Entries[cursor] : null;
+		UiContext data = UiArea(x, y, w, h);
+		Ui.Draw("menu_combos", s, t, data
+			.Set("discovered", log.Entries.Count)
+			.Set("log_total", log.Total)
+			.Set("total", total)
+			.Set("rows", rows.Select((row, i) => new UiContext(data).Set("text", row).Set("enabled", i < log.Entries.Count)).ToList())
+			.Set("list", _list)
+			.Set("has_entry", entry is not null)
+			.Set("members_text", entry is null ? "" : T("ui.combos.members", ListText(entry.ParticipantNames)))
+			.Set("abilities_text", entry is null ? "" : T("ui.combos.abilities", ListText(entry.AbilityNames)))
+			.Set("found_time", entry is null ? "" : Clock(entry.PlayTimeMs))
+			.Set("make_key", Hint(GameAction.Confirm)));
 	}
 
-	private void DrawCodex(IDrawSurface s, int x, int y, int w, int h)
+	private void DrawCodex(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{
 		IReadOnlyList<CodexEntry> entries = _s.Encyclopedia();
-		int listW = w / 3;
-		if (entries.Count == 0)
-		{
-			s.Text(T("ui.codex.none"), x + 14, y, Style.Dim);
-			return;
-		}
-		DrawItems(s, _list, x, y, listW, h, entries.Select(e => e.Title).ToList());
-		CodexEntry entry = entries[Math.Clamp(_list.Cursor, 0, entries.Count - 1)];
-		int tx = x + listW + 24;
-		s.Text(entry.Title, tx, y, Style.Accent);
-		int ty = y + Px(Style.LineHeight) + Px(6);
-		foreach (string l in Style.Wrap(s, entry.Text, w - listW - 24, Style.Small))
-		{
-			if (ty + Px(22) > y + h)
-			{
-				break;
-			}
-			s.Text(l, tx, ty, Style.Text, Style.Small);
-			ty += Px(22);
-		}
+		CodexEntry? entry = entries.Count > 0 ? entries[Math.Clamp(_list.Cursor, 0, entries.Count - 1)] : null;
+		Ui.Draw("menu_codex", s, t, UiArea(x, y, w, h)
+			.Set("titles", entries.Select(e => e.Title).ToList())
+			.Set("list", _list)
+			.Set("title", entry?.Title ?? "")
+			.Set("body", entry?.Text ?? ""));
 	}
 
 	// The quest log as rows: headings, the objective and each job, with blank rows between the parts.
@@ -340,16 +322,12 @@ public sealed partial class SampleController
 		return rows;
 	}
 
-	private void DrawQuestLog(IDrawSurface s, int x, int y, int w, int h)
+	private void DrawQuestLog(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{
-		List<(string Text, bool Heading)> rows = QuestRows();
-		_list.DrawView(s, x, y, w, h, Px(30), rows.Count, (i, ry, _) =>
-		{
-			if (rows[i].Text.Length > 0)
-			{
-				s.Text(Style.Fit(s, rows[i].Text, w - 40), rows[i].Heading ? x : x + 20, ry, rows[i].Heading ? Style.Accent : Style.Text);
-			}
-		});
+		UiContext data = UiArea(x, y, w, h);
+		Ui.Draw("menu_quests", s, t, data
+			.Set("rows", QuestRows().Select(r => new UiContext(data).Set("text", r.Text).Set("heading", r.Heading)).ToList())
+			.Set("list", _list));
 		_probeTop = _list.Top;
 	}
 
@@ -366,23 +344,20 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawTextLog(IDrawSurface s, int x, int y, int w, int height)
+	private void DrawTextLog(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{
-		List<string> pages = _s.TextLog().SelectMany(page => Style.Wrap(s, page, w - 20, Style.Small)).ToList();
-		int lineH = Px(22);
-		int lines = Math.Max(1, height / lineH);
-		int back = Math.Clamp(_list.Cursor, 0, Math.Max(0, pages.Count - lines));
+		UiContext data = UiArea(x, y, w, h);
+		int width = Ui.Param("menu_log", "wrap_width", data, w - 20);
+		int rows = Math.Max(1, Ui.Param("menu_log", "rows", data, h / Px(22)));
+		List<string> lines = _s.TextLog().SelectMany(page => Style.Wrap(t, page, width, Style.Small)).ToList();
+		int back = Math.Clamp(_list.Cursor, 0, Math.Max(0, lines.Count - rows));
 		_list.Cursor = back;
-		int first = Math.Max(0, pages.Count - lines - back);
-		var visible = pages.Skip(first).Take(lines).ToList();
-		for (int i = 0; i < visible.Count; i++)
-		{
-			s.Text(visible[i], x, y + i * lineH, Style.Text, Style.Small);
-		}
-		if (pages.Count > lines)
-		{
-			Widgets.ScrollBar(s, x + w - 6, y, lines * lineH - 6, first, lines, pages.Count);
-		}
+		int first = Math.Max(0, lines.Count - rows - back);
+		Ui.Draw("menu_log", s, t, data
+			.Set("lines", lines.Skip(first).Take(rows).ToList())
+			.Set("first", first)
+			.Set("rows", rows)
+			.Set("total", lines.Count));
 		_probeTop = first;
 	}
 }

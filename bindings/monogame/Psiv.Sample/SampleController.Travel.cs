@@ -52,34 +52,23 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawTravel(IDrawSurface s, Art art)
+	private void DrawTravel(IDrawSurface s, IDrawSurface t, Art art)
 	{
-		DrawBackdrop(s, art);
 		bool port = _s.MenuKind == MenuKind.Port;
 		IReadOnlyList<TravelDestination> rows = TravelRows();
-		var labels = rows.Select(d => d.AreaName + (d.Region.Length > 0 ? "   " + T("ui.travel.region", d.Region) : "")).Append(T(port ? "ui.travel.leave" : "ui.travel.cancel")).ToList();
-		// A window as tall as its rows, centered above the toasts' corner.
-		int w = 640;
-		int rowH = Px(30);
-		int descH = Px(56);
-		int listH = Math.Min(labels.Count, 8) * rowH + Px(8);
-		int h = Px(40) + listH + descH;
-		int x = (s.Width - w) / 2;
-		int y = Math.Max(96, (s.Height - h) / 2 - 60);
 		// At a ship's helm the same list is the ship's ports.
 		bool helm = port && _s.FieldInfo()?.AreaKind == AreaKind.Vessel;
-		string title = helm ? T("ui.travel.ship") : port ? T("ui.travel.ferry") : _travelPick is { } pick ? _s.DisplayName(pick.Thing) : T("ui.travel.title");
-		Style.Window(s, x - 24, y - 40, w + 48, h + 64, title);
-		string question = T(helm ? "ui.travel.ship_question" : port ? "ui.travel.ferry_question" : _travelPick?.Kind == TravelKind.DungeonExit ? "ui.travel.exit_question" : "ui.travel.town_question");
-		s.Text(question, x, y, Style.Accent);
-		DrawItems(s, _travelList, x, y + Px(40), w, listH, labels);
-		_probeSelected = labels[Math.Clamp(_travelList.Cursor, 0, labels.Count - 1)];
-		string detail = _travelList.Cursor < rows.Count
-			? T("ui.travel.arrive", rows[_travelList.Cursor].AreaName)
-			: T(port ? "ui.travel.stay" : "ui.travel.keep_menu");
-		s.Fill(x, y + h - descH, w - 14, 1, Style.PanelEdge * 0.4f);
-		DrawDescription(s, detail, x + 14, y + h - descH + Px(8), w - 40);
-		DrawHint(s, T(port ? "ui.travel.hint_port" : "ui.travel.hint", Hint(GameAction.Confirm), Hint(GameAction.Back)));
+		// The cursor where the list will show it (the rows and the leave row), for the description under it.
+		_travelList.Cursor = Math.Clamp(_travelList.Cursor, 0, rows.Count);
+		string detail = _travelList.Cursor < rows.Count ? T("ui.travel.arrive", rows[_travelList.Cursor].AreaName) : T(port ? "ui.travel.stay" : "ui.travel.keep_menu");
+		Ui.Draw("travel", s, t, SetDescription(UiData(), detail)
+			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+			.Set("title", helm ? T("ui.travel.ship") : port ? T("ui.travel.ferry") : _travelPick is { } pick ? _s.DisplayName(pick.Thing) : T("ui.travel.title"))
+			.Set("question", T(helm ? "ui.travel.ship_question" : port ? "ui.travel.ferry_question" : _travelPick?.Kind == TravelKind.DungeonExit ? "ui.travel.exit_question" : "ui.travel.town_question"))
+			.Set("labels", rows.Select(d => d.AreaName + (d.Region.Length > 0 ? "   " + T("ui.travel.region", d.Region) : "")).Append(T(port ? "ui.travel.leave" : "ui.travel.cancel")).ToList())
+			.Set("list", _travelList)
+			.Set("hint", T(port ? "ui.travel.hint_port" : "ui.travel.hint", Hint(GameAction.Confirm), Hint(GameAction.Back)))
+			.Set("toasts", (UiSlot)((x, y, _, _) => DrawToasts(s, x, y, right: true))));
 	}
 
 	// The probe `destinations`: what the travel screen lists, as area ids.

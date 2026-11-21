@@ -1,0 +1,13 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "backdrop", "elements": [{"type": "slot", "slot": "backdrop"}]},
+		{"name": "box", "anchor": "top", "y": "max(48, (H - h) / 2)", "w": "max(760, t(44) * 13 + 220)", "h": "t(380) + t(40)", "frame": "panel",
+			"title": "ui.name_entry.title", "elements": [
+			{"type": "image", "image": "portrait", "x": 28, "y": 40, "w": 96, "h": 96},
+			{"type": "text", "key": "ui.name_entry.prompt", "args": ["member_name"], "x": 150, "y": "t(36)", "color": "accent"},
+			{"type": "slot", "slot": "entry", "x": 150, "y": "t(76)", "w": "cw - 190", "h": "entry_h"},
+			{"type": "hints", "value": "hint", "x": 28, "y": "t(76) + entry_h + t(12)", "w": "cw - 56"}
+		]}
+	]
+}

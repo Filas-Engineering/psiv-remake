@@ -40,9 +40,11 @@ public sealed partial class SampleController
 	// text, else the sample's own.
 	private int LineStep(int size) => _bitmapFont?.LineStep((int)MathF.Round(size * _scale)) ?? Px(Style.LineHeight);
 
-	// The bitmap font for each role in the text language, as `ROLE FILE` or `ROLE -`.
-	private string BitmapFontProbe() => string.Join(", ", Enum.GetValues<TextRole>().Select(r =>
-		$"{Snake(r.ToString())} {_art?.BitmapFontFor(_s.Profile().TextLanguage, r)?.Key ?? "-"}"));
+	// The bitmap font for each role in the text language, as `ROLE FILE` or `ROLE -`; the hint only when it has a font
+	// other than the menu's.
+	private string BitmapFontProbe() => string.Join(", ", Enum.GetValues<TextRole>()
+		.Where(r => r != TextRole.Hint || _art?.BitmapFontFor(_s.Profile().TextLanguage, r) != _art?.BitmapFontFor(_s.Profile().TextLanguage, TextRole.Menu))
+		.Select(r => $"{Snake(r.ToString())} {_art?.BitmapFontFor(_s.Profile().TextLanguage, r)?.Key ?? "-"}"));
 
 	private string T(string key, params object[] parameters)
 	{

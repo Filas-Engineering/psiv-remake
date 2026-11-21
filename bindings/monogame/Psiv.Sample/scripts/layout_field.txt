@@ -1,0 +1,89 @@
+# The example layout set (make_layout_assets.py: 640x480, integer scaling, the bitmap font): the title, the arrival's
+# lines in the box at the top, the field's HUD card and hint line, the guide's line with a portrait, the yes/no choice,
+# the name entry, the area banner over the hint line, a shop with its side column, the inn and the pause window. Each
+# moment checks where the windows went (`windows`, `window.NAME`). With --window the shot lines save screenshots in the
+# working directory; headless runs write nothing.
+
+cmd set text instant
+expect screen Title
+wait 1
+expect state windows title/scene 0 0 640x480, title/box 32 149 344x158, title/corner 0 0 640x480, title/hint 0 464 640x16
+shot title.png
+
+# The arrival: the narration and the dockhand's line in the box at the top.
+press Enter
+waitstatehas 200 line The ferry bumps
+expect screen Dialogue
+expect state windows dialogue/banner 192 400 256x52, dialogue/box 40 46 560x92
+shot dialogue_narration.png
+press Enter
+waitstatehas 300 line Mind the ropes
+expect state windows dialogue/banner 192 386 256x52, dialogue/box 40 46 560x92
+shot dialogue_speaker.png
+pressuntil Enter Field 400
+dev encounters off
+wait 20
+expect state windows field/hud 6 6 126x34, field/toasts 0 0 640x480, field/hint 0 464 640x16
+shot field.png
+
+# The guide: a line with a portrait, the yes/no question, the name entry.
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+waitstatehas 60 line You came about the bell?
+expect screen Dialogue
+expect state windows dialogue/box 40 46 560x92
+shot dialogue_portrait.png
+press Enter
+wait 2
+expect state windows dialogue/box 40 46 560x74
+shot dialogue_choice.png
+press Enter
+waitstatehas 60 line what should the harbor call you?
+press Enter
+wait 2
+expect screen NameEntry
+expect state windows name_entry/backdrop 0 0 640x480, name_entry/box 40 46 560x384
+shot name_entry.png
+pressuntil Enter Field 400
+# The notices of the guide's scene go before the stall opens.
+wait 180
+
+# The stall: the stock, the stall picture, the description and the comparison at the right.
+cmd walk stall_front
+press Up
+wait 3
+press Enter
+expect screen Shop
+expect state selected Tonic
+expect state windows shop/backdrop 0 0 640x480, shop/box 16 46 608x426
+shot shop_buy.png
+press Right
+expect state windows shop/backdrop 0 0 640x480, shop/box 16 46 608x426
+shot shop_sell.png
+press Escape
+expect screen Field
+
+# The inn, then the pause window at the right over the field.
+cmd walk inn_front
+press Left
+wait 3
+press Enter
+expect screen Inn
+expect state windows inn/box 40 46 560x92
+shot inn.png
+press Escape
+expect screen Field
+press P
+expect screen Pause
+expect state windows pause/scene 0 0 640x480, pause/hud 6 6 126x34, pause/dim 0 0 640x480, pause/box 432 192 180x96, pause/hint 0 464 640x16
+shot pause.png
+press Escape
+
+# Into the reeds: the area's banner over the hint line.
+cmd walk 13 4
+press Right
+wait 30
+expect state windows field/hud 6 6 126x34, field/banner 240 400 160x52, field/toasts 0 0 640x480, field/hint 0 464 640x16
+shot field_banner.png

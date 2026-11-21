@@ -1,0 +1,166 @@
+# The example layout set's field menu (make_layout_assets.py): the pages listed down the left column, each page in the
+# panel at the right with shorter rows; the status page's stats and abilities, the items with a target, the equipment
+# comparison, a manual save, the codex and the options; then the quit confirm, the Load screen at the right with the
+# save just written, and Bell Cove's save prompt. Each moment checks where the windows went. With --window the shot
+# lines save screenshots in the working directory; headless runs write nothing.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+# The notices of the guide's scene go before the menu opens.
+wait 180
+
+# Status: the members, then a member's stats and abilities under the portrait card and the bars.
+press M
+expect screen Menu
+expect state tab Status
+expect state windows menu/backdrop 0 0 640x480, menu/nav 8 46 136x402, menu/box 152 46 480x402, menu_status/members 166 60 452x376, menu/hint 0 464 640x16, menu/toasts 0 0 640x480
+shot menu_status.png
+press Enter
+expect state page stats
+expect state windows menu/backdrop 0 0 640x480, menu/nav 8 46 136x402, menu/box 152 46 480x402, menu_status/header 166 60 452x376, menu_status/stats 166 124 452x312, menu/hint 0 464 640x16, menu/toasts 0 0 640x480
+shot menu_stats.png
+press Right
+expect state page abilities
+expect state selected Rally Cry
+expect state window.abilities menu_status/abilities 166 124 452x312
+shot menu_abilities.png
+press Escape
+
+# Items: the tonic needs a member, picked from the list beside the bag.
+press Right
+expect state tab Items
+expect state selected Tonic x3
+press Enter
+expect state page target
+expect state window.page menu_items/page 166 60 452x376
+shot menu_items_target.png
+press Escape
+
+# Equip: taking the blade off shows what it costs; the comparison of putting it back on.
+press Right
+expect state tab Equip
+press Enter
+press Enter
+expect state selected Remove Copper Blade
+expect state window.piece menu_equip/piece 389 60 229x376
+shot menu_equip_remove.png
+press Enter
+press Enter
+expect state selected Copper Blade x1
+expect statehas compare Strength
+expect state windows menu/backdrop 0 0 640x480, menu/nav 8 46 136x402, menu/box 152 46 480x402, menu_equip/page 166 60 207x376, menu_equip/piece 389 60 229x376, menu/hint 0 464 640x16, menu/toasts 0 0 640x480
+shot menu_equip_compare.png
+press Enter
+expect state selected right hand: Copper Blade
+press Escape
+expect state page members
+
+# Save: the empty slot saves without asking.
+press Right
+expect state tab Save
+expect state selected manual_0 empty
+press Enter
+expect toast Saved to manual_0.
+expect state windows menu/backdrop 0 0 640x480, menu/nav 8 46 136x402, menu/box 152 46 480x402, save_slots/slots 166 60 452x376, menu/hint 0 464 640x16, menu/toasts 0 0 640x480
+shot menu_save.png
+# The notices go before the other pages.
+wait 160
+
+# The other pages, then the options and their controls page.
+press Right
+expect state tab Order
+expect state window.page menu_order/page 166 60 452x376
+shot menu_order.png
+press Right
+expect state tab Macros
+expect state window.detail menu_macros/detail 354 60 264x376
+shot menu_macros.png
+press Right
+expect state tab Combos
+expect state window.page menu_combos/page 166 60 452x376
+shot menu_combos.png
+press Right
+expect state tab Quests
+shot menu_quests.png
+press Right
+expect state tab Codex
+expect state selected Tidewater Landing
+expect state window.page menu_codex/page 166 60 452x376
+shot menu_codex.png
+press Right
+expect state tab Log
+expect state window.page menu_log/page 166 60 452x376
+shot menu_log.png
+press Right
+expect state tab Options
+press Enter
+expect screen Options
+expect state selected Text speed: Instant
+expect state windows options/backdrop 0 0 640x480, options/box 16 46 608x426
+shot options.png
+press Up
+expect state selected Controls
+press Enter
+expect state windows options/backdrop 0 0 640x480, options/box 16 46 608x426, controls/page 46 82 562x356
+shot options_controls.png
+press Escape
+press Escape
+press Escape
+expect screen Field
+
+# The quest log and the text log over the field.
+press Q
+expect screen QuestLog
+expect state windows quest_log/backdrop 0 0 640x480, quest_log/box 48 46 544x418, menu_quests/page 64 80 512x372
+shot quest_log.png
+press Escape
+press L
+expect screen TextLog
+expect state windows text_log/backdrop 0 0 640x480, text_log/box 48 46 544x418, menu_log/page 64 80 512x372
+shot text_log.png
+press Escape
+expect screen Field
+
+# Quit to the title through the pause window and its confirm, then the save loaded from the Load screen.
+press P
+press Down 2
+press Enter
+expect state prompt Quit to the title? Play since the last save is lost.
+expect state windows pause/scene 0 0 640x480, pause/hud 6 6 126x34, pause/dim 0 0 640x480, pause/box 432 192 180x96, pause/hint 0 464 640x16, confirm/dim 0 0 640x480, confirm/box 154 176 332x88
+shot confirm.png
+press Up
+press Enter
+expect screen Title
+press Down 2
+press Enter
+expect screen LoadGame
+expect state selected manual_0 tidewater dev
+expect state windows load_game/scene 0 0 640x480, load_game/box 204 46 420x402, save_slots/slots 228 82 380x354, load_game/hint 0 464 640x16
+shot load.png
+press Enter
+expect screen Field
+expect state area Tidewater Landing
+
+# Bell Cove's campfire: the rest ends in the save prompt with the shared slot list.
+dev encounters off
+cmd walk 13 4
+cmd walk 19 4
+expect state area Bell Cove
+cmd walk camp_front
+press Up
+wait 3
+press Enter
+pressuntil Enter SavePrompt 400
+expect state windows save_prompt/backdrop 0 0 640x480, save_prompt/box 100 46 440x324, save_slots/slots 124 100 400x230
+shot save_prompt.png
+press Up
+press Enter
+pressuntil Enter Field 400

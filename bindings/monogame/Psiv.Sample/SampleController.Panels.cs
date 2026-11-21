@@ -14,11 +14,9 @@ namespace Psiv.Sample;
 // data. All of it lasts until the event ends.
 public sealed partial class SampleController
 {
-	private const int PanelTransitionMs = 350;
 	private const int PanelSlide = 64;
 	private const int PanelMargin = 24;
 	private const int PanelGutter = 16;
-	private const int PanelBorder = 4;
 	private const int PanelTile = Art.Tile;
 	// Pixels a shake of strength 1 moves the view; the profile's reduced flash damps it to a quarter.
 	private const int ShakePixels = 10;
@@ -144,7 +142,7 @@ public sealed partial class SampleController
 		return 0;
 	}
 
-	private static int TransitionMs(PresentationAction a) => a.Duration > 0 ? (int)(a.Duration * 1000) : PanelTransitionMs;
+	private int TransitionMs(PresentationAction a) => a.Duration > 0 ? (int)(a.Duration * 1000) : Timing("panel_transition_ms");
 
 	// The scene action's animation has started: the panels it shows or hides, the camera glide or the shake follow it.
 	private void FollowSceneAction(Animation animation)
@@ -287,32 +285,36 @@ public sealed partial class SampleController
 			return;
 		}
 		List<string> lineup = Lineup();
-		s.Fill(0, 0, s.Width, s.Height, Color.Black * (0.45f * _panels.Max(p => p.Shown)));
 		Point shake = ShakeOffset();
-		foreach (Panel p in _panels)
+		UiContext ctx = UiData().Set("dim", 0.45f * _panels.Max(p => p.Shown));
+		ctx.Set("panels", _panels.Select(p =>
 		{
 			float shown = p.Shown;
 			Rectangle r = PanelRect(p, s.Width, s.Height);
-			if ((Style.Skin?.CameraFrames.GetValueOrDefault(p.Camera) ?? Style.Skin?.PanelFrame) is { } frame)
-			{
-				Style.NineSlice(s, frame, r.X - PanelBorder, r.Y - PanelBorder, r.Width + 2 * PanelBorder, r.Height + 2 * PanelBorder, Color.White * shown);
-			}
-			else
-			{
-				s.Fill(r.X + 6, r.Y + 6, r.Width, r.Height, Style.PanelShadow * (0.7f * shown));
-				s.Fill(r.X - PanelBorder, r.Y - PanelBorder, r.Width + 2 * PanelBorder, r.Height + 2 * PanelBorder, Color.Black * shown);
-				s.Fill(r.X - PanelBorder + 1, r.Y - PanelBorder + 1, r.Width + 2 * PanelBorder - 2, r.Height + 2 * PanelBorder - 2, Style.Text * shown);
-			}
-			s.Fill(r.X, r.Y, r.Width, r.Height, Style.Background);
-			int tile = PanelTileSize(p);
-			s.Clip(r.X, r.Y, r.Width, r.Height);
-			_field.DrawView(s, art, view, _clockMs, lineup, r, Resolve(p.Camera, view), tile, shake);
-			if (shown < 1f)
-			{
-				s.Fill(r.X, r.Y, r.Width, r.Height, Color.Black * (1f - shown));
-			}
-			s.Unclip();
-		}
+			NineSliceImage? frame = Style.Skin?.CameraFrames.GetValueOrDefault(p.Camera) ?? Style.Skin?.PanelFrame;
+			return new UiContext(ctx)
+				.Set("left", r.X)
+				.Set("top", r.Y)
+				.Set("width", r.Width)
+				.Set("height", r.Height)
+				.Set("shown", shown)
+				.Set("shadow_alpha", 0.7f * shown)
+				.Set("skinned", frame is not null)
+				.Set("frame", (UiSlot)((x, y, w, h) => Style.NineSlice(s, frame!, x, y, w, h, Color.White * shown)))
+				// The live scene clipped to the panel, darkened while it comes in or goes.
+				.Set("scene", (UiSlot)((x, y, w, h) =>
+				{
+					int tile = PanelTileSize(p);
+					s.Clip(x, y, w, h);
+					_field.DrawView(s, art, view, _clockMs, lineup, new Rectangle(x, y, w, h), Resolve(p.Camera, view), tile, shake);
+					if (shown < 1f)
+					{
+						s.Fill(x, y, w, h, Color.Black * (1f - shown));
+					}
+					s.Unclip();
+				}));
+		}).ToList());
+		Ui.Draw("panels", s, s, ctx);
 	}
 
 	// The dialogue box goes where it covers the fewest panels, then the least of them; a tie keeps it at the bottom,

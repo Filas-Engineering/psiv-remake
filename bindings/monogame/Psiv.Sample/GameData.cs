@@ -220,8 +220,8 @@ public sealed partial class GameData
 
 	// The characters a bitmap font for a language and role must have to draw that language's text tables: for the
 	// dialogue role the string tables' lines and the dialogue box's own words; for the battle numbers the digits and the
-	// words that float over targets; otherwise every line. Placeholders such as {0} are left out, spaces and line breaks
-	// too.
+	// words that float over targets; for the hint the dialogue box's next and skip words and the key and button names;
+	// otherwise every line. Placeholders such as {0} are left out, spaces and line breaks too.
 	public SortedSet<char> TextGlyphs(string language, TextRole? role)
 	{
 		IEnumerable<(string Key, string Text, bool Dialogue)> lines = TextTables.GetValueOrDefault(language) ?? [];
@@ -230,6 +230,8 @@ public sealed partial class GameData
 			TextRole.Dialogue => lines.Where(l => l.Dialogue || l.Key.StartsWith("ui.dialogue.", StringComparison.Ordinal)),
 			TextRole.BattleNumbers => lines.Where(l => l.Key.StartsWith("ui.battle.float.", StringComparison.Ordinal) || l.Key.StartsWith("name.status.", StringComparison.Ordinal))
 				.Append(("", "0123456789+", false)),
+			TextRole.Hint => lines.Where(l => l.Key is "ui.dialogue.next" or "ui.dialogue.skip" || l.Key.StartsWith("ui.key.", StringComparison.Ordinal)
+				|| l.Key.StartsWith("ui.button.", StringComparison.Ordinal)),
 			_ => lines,
 		};
 		return [.. lines.SelectMany(l => Placeholder().Replace(l.Text, "")).Where(c => !char.IsWhiteSpace(c) || c == '\u3000')];

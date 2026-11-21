@@ -8,7 +8,7 @@ dotnet run --project monogame/Psiv.Sample -- --dev                              
 dotnet run --project monogame/Psiv.Sample -- --dev --script FILE --frames N          # headless, the tools reachable from the script
 ```
 
-Without `--dev` none of their keys does anything and every `dev` script line is refused, so ordinary runs, transcripts and goldens are the same as before (`scripts/dev_off.txt` checks it). The game library and the C API carry the commands the tools need (below, "Session API"); any front end can offer the same.
+Without `--dev` none of their keys does anything and every `dev` script line is refused, so ordinary runs, transcripts and goldens are the same as before (`scripts/dev_off.txt` checks it). The game library and the C API carry the commands the tools need (below, "Session API"); any front end can offer the same. The tools' own screens (console, picker, previewer, badges, overlays) are drawn in code at fixed places, not by the layout files ([`ui-layout.md`](ui-layout.md)).
 
 ## Keys
 
@@ -17,6 +17,7 @@ The keys are the window's own, like F5 (asset reload) and F11 (fullscreen): they
 | Key | Tool |
 | --- | --- |
 | `` ` `` (backquote, `OemTilde`) | Opens and closes the console |
+| F1 | Layout windows overlay |
 | F2 | Collision and terrain overlay |
 | F3 | Hooks, exits, ports and markers overlay |
 | F4 | Encounter zones overlay |
@@ -102,6 +103,7 @@ Each is toggled by its key or `overlay NAME`. The field overlays draw over the m
 * `actors` (F7): the id over every person drawn (party members and script actors) and `encounter#id` over visible enemies.
 * `camera` (F8): a cross on what the field's camera follows, the leader or the scene's camera, with its name.
 * `fps` (F9): frames per second and frame time, averaged over the last 30 frames of the time the window gives, the speed and whether paused (headless runs read `62.5 fps 16.0 ms x1`).
+* `windows` (F1): every window the screen's layout drew this frame outlined, with its screen and name (`title/box`), on every screen including the battle and the menus ([`ui-layout.md`](ui-layout.md)). `overlay windows [on|off]` toggles it; `overlay all` and `overlay none` leave it as it is, and `help` does not list it. `overlay.windows` reads how many windows it outlined.
 * `event` (F10): the running event and the source line of the instruction its interpreter is at, `event reed_path_lookout events/reed_path.ev:62` (`psiv_event_position_get`: the innermost event a `call` runs, and while it waits on a `together` or `race` block, the first live branch's line).
 
 ## Previewer

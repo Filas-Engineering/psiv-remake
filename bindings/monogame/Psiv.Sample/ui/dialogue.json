@@ -1,0 +1,41 @@
+{
+	"version": 1,
+	"tags": {
+		"music": {"action": "music"},
+		"music_stop": {"action": "music_stop"},
+		"panel": {"action": "panel_show", "slot": "center"},
+		"panel_hide": {"action": "panel_hide"},
+		"panels_clear": {"action": "panel_clear"},
+		"portrait_off": {"action": "portrait_off"},
+		"sound": {"action": "cue"}
+	},
+	"windows": [
+		{"name": "banner", "visible": "banner_visible", "anchor": "top", "y": "70 - banner_drop", "h": 86, "frame": "panel", "opacity": "banner_alpha",
+			"w": "max(measure_unscaled(banner_title, size_title), measure_unscaled(banner_kind, size_small)) + 80", "elements": [
+			{"type": "text", "value": "banner_kind", "x": "-banner.x", "w": "W", "align": "center", "y": 14, "style": "small_dim", "alpha": "banner_alpha", "scaled": false},
+			{"type": "text", "value": "banner_title", "x": "-banner.x", "w": "W", "align": "center", "y": 38, "style": "title", "alpha": "banner_alpha", "scaled": false}
+		]},
+		{"name": "box", "visible": "box_visible", "x": 24, "y": "top", "w": "W - 48", "h": "t(176)", "frame": "panel", "elements": [
+			{"type": "role", "role": "dialogue"},
+			{"type": "group", "visible": "speaker != ''", "elements": [
+				{"type": "plate", "value": "speaker", "x": 18, "y": "-t(16)", "size": "size_body"},
+				{"type": "fill", "x": 20, "y": "t(34) - 2", "w": 100, "h": 100, "color": "panel_edge"},
+				{"type": "fill", "x": 22, "y": "t(34)", "w": 96, "h": 96, "color": "track"},
+				{"type": "fill", "x": 22, "y": "t(34) + 56", "w": 96, "h": 40, "color": "panel_top"},
+				{"type": "image", "name": "portrait", "image": "portrait", "x": 30, "y": "t(34) + 8", "w": 80, "h": 80}
+			]},
+			{"type": "group", "visible": "has_line", "elements": [
+				{"type": "text", "name": "line", "value": "line", "x": "speaker != '' ? 144 : 26", "y": "t(30)", "max_width": "cw - (speaker != '' ? 144 : 26) - 30", "wrap": true,
+					"lines": 4, "reveal": "revealed", "line_height": "line_step"},
+				{"type": "text", "name": "hint", "value": "hint", "w": "cw - 58", "max_width": "cw - 58 - 26", "align": "right", "y": "ch - t(32)", "style": "hint"},
+				{"type": "role", "role": "dialogue"},
+				{"type": "image", "name": "arrow", "visible": "all_shown", "image": "arrow", "x": "cw - 48", "y": "ch - 40 + clock_ms / max(1, next_arrow_ms) % 2 * 3", "w": 24, "h": 24}
+			]},
+			{"type": "group", "visible": "has_choice", "elements": [
+				{"type": "text", "value": "prompt", "x": 26, "y": "t(22)", "color": "accent"},
+				{"type": "rows", "items": "options", "selected": "cursor", "x": 44, "y": "t(62)", "w": 420, "row_height": "t(30)", "height": "t(28)"}
+			]},
+			{"type": "role", "role": "menu"}
+		]}
+	]
+}

@@ -1,0 +1,34 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "backdrop", "elements": [{"type": "slot", "slot": "backdrop"}]},
+		{"name": "box", "x": 80, "y": 50, "w": "W - 160", "h": "H - 100", "frame": "panel", "title": {"value": "title"}, "elements": [
+			{"type": "group", "visible": "open", "elements": [
+				{"type": "tabs", "items": "tabs", "selected": "tab", "x": 24, "y": 26, "w": "cw - 220"},
+				{"type": "text", "value": "money", "w": "cw - 40", "align": "right", "y": 31},
+				{"type": "image", "image": "stall", "x": "cw - 120", "y": 70, "w": 80, "h": 80},
+				{"type": "text", "visible": "tab == 0", "key": "ui.shop.price", "x": 560, "y": "26 + t(52)", "style": "small_dim"},
+				{"type": "text", "visible": "tab != 0", "key": "ui.shop.each", "x": 560, "y": "26 + t(52)", "style": "small_dim"},
+				{"type": "text", "key": "ui.shop.have", "x": 680, "y": "26 + t(52)", "style": "small_dim"},
+				{"type": "list", "items": "rows", "state": "list", "probe": false, "x": 40, "y": "26 + t(52) + t(28)", "w": 720, "h": "H - 140 - (76 + t(52) + t(28)) - t(80)",
+					"row_height": "t(30)", "row": [
+					{"type": "fill", "visible": "selected", "x": -6, "y": -3, "w": 700, "h": "t(28)", "color": "row"},
+					{"type": "pointer", "visible": "selected", "x": -4, "y": "(t(28) - 8) / 2 - 6"},
+					{"type": "text", "value": "text", "x": 14, "max_width": 460, "color": "selected ? 'accent' : 'text'"},
+					{"type": "text", "value": "price", "w": 560, "align": "right", "color": "selected ? 'accent' : 'text'"},
+					{"type": "text", "key": "ui.common.count", "args": ["have"], "x": 640, "color": "dim"}
+				]},
+				{"type": "group", "visible": "len(rows) > 0", "elements": [
+					{"type": "fill", "x": 40, "y": "H - 190 - t(80)", "w": 700, "h": 1, "color": "panel_edge", "alpha": 0.4},
+					{"type": "text", "value": "description", "x": 54, "y": "H - 190 - t(80) + t(8)", "wrap": true, "max_width": "cw - 120", "lines": 2, "line_height": "t(22)",
+						"style": "small", "color": "description_missing ? 'dim' : 'text'"},
+					{"type": "text", "visible": "compare != ''", "value": "compare", "x": 54, "y": "H - 190 - t(80) + t(8) + t(48)", "max_width": "cw - 120", "style": "small_dim"}
+				]},
+				{"type": "text", "visible": "len(rows) == 0 && tab == 0", "key": "ui.shop.nothing_for_sale", "x": 54, "y": "26 + t(52) + t(28)", "color": "dim"},
+				{"type": "text", "visible": "len(rows) == 0 && tab != 0", "key": "ui.shop.nothing_to_sell", "x": 54, "y": "26 + t(52) + t(28)", "color": "dim"},
+				{"type": "slot", "slot": "toasts", "x": 24, "y": "H - 190 - t(80)"},
+				{"type": "hints", "value": "hint", "x": 24, "y": "H - 100 - t(36)", "w": "cw - 48"}
+			]}
+		]}
+	]
+}

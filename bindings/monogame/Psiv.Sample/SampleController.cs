@@ -14,8 +14,6 @@ public enum Screen { Title, Field, Dialogue, Battle, Menu, Shop, Inn, SavePrompt
 // scene has put party members, which the game leaves to the front end).
 public sealed partial class SampleController
 {
-	private const int TickerMs = 4000;
-
 	private readonly GameSession _s;
 	private readonly Action<string> _log;
 	// Every script actor, wherever it stands, to tell one outside the party's area from a party member.
@@ -183,7 +181,7 @@ public sealed partial class SampleController
 
 	private void Say(string text)
 	{
-		_ticker.Add((text, TickerMs));
+		_ticker.Add((text, Timing("toast_ms")));
 		if (_ticker.Count > 6)
 		{
 			_ticker.RemoveAt(0);
@@ -308,6 +306,11 @@ public sealed partial class SampleController
 			StartBattle();
 		}
 		Screen screen = Screen;
+		if (Timing("list_repeat_delay_ms") is > 0 and int delay && screen is not (Screen.Field or Screen.Dialogue))
+		{
+			GameAction[] directions = [GameAction.Up, GameAction.Down, GameAction.Left, GameAction.Right];
+			raw.Repeat(dtMs, delay, Timing("list_repeat_ms"), k => directions.Any(a => _bindings.KeysOf(a).Contains(k)), b => directions.Any(a => _bindings.ButtonsOf(a).Contains(b)));
+		}
 		if (screen != _lastScreen)
 		{
 			_log($"screen: {screen}");
@@ -398,14 +401,6 @@ public sealed partial class SampleController
 		return _cursor = Math.Clamp(_cursor, 0, count - 1);
 	}
 
-	private void DrawHint(IDrawSurface s, string hint)
-	{
-		int h = Px(30);
-		s.Fill(0, s.Height - h, s.Width, h, Color.Black * 0.6f);
-		hint = Style.Fit(s, hint, s.Width - 32, Style.Small);
-		s.Text(hint, (s.Width - s.Measure(hint, Style.Small)) / 2, s.Height - h + Px(5), Style.Dim, Style.Small);
-	}
-
 	// The field menu, shop, logs, save prompt and name entry share this: the field dimmed behind a window.
 	private void DrawBackdrop(IDrawSurface s, Art art)
 	{
@@ -421,28 +416,24 @@ public sealed partial class SampleController
 	{
 		s = s is ScaledSurface scaled ? scaled.Inner : s;
 		int y = bottom;
-		for (int i = _ticker.Count - 1; i >= Math.Max(0, _ticker.Count - most); i--)
+		foreach ((string shown, float alpha, int boxW) in ToastRows(s, x, most))
 		{
-			(string text, int msLeft) = _ticker[i];
-			float alpha = Math.Clamp(msLeft / 400f, 0f, 1f);
-			string shown = Style.Fit(s, text, s.Width - 2 * x - 28, Style.Small);
 			y -= 38;
-			int boxW = s.Measure(shown, Style.Small) + 28;
 			int bx = right ? s.Width - x - boxW : x;
 			Style.Box(s, bx, y, boxW, 32, alpha * 0.95f);
 			s.Text(shown, bx + 14, y + 7, Style.Text * alpha, Style.Small);
 		}
 	}
 
-	// The description of a highlighted row, at most two small lines; the session gives "" when the data has none.
-	private void DrawDescription(IDrawSurface s, string? text, int x, int y, int w)
+	// The newest notices first, each cut to the width between margins of `x`, with its opacity and its box's width.
+	private IEnumerable<(string Shown, float Alpha, int BoxW)> ToastRows(IDrawSurface s, int x, int most = 4)
 	{
-		_probeDescription = string.IsNullOrEmpty(text) ? "-" : text;
-		int ly = y;
-		foreach (string l in Style.Wrap(s, string.IsNullOrEmpty(text) ? T("ui.common.no_description") : text, w, Style.Small).Take(2))
+		for (int i = _ticker.Count - 1; i >= Math.Max(0, _ticker.Count - most); i--)
 		{
-			s.Text(l, x, ly, string.IsNullOrEmpty(text) ? Style.Dim : Style.Text, Style.Small);
-			ly += Px(22);
+			(string text, int msLeft) = _ticker[i];
+			float alpha = Math.Clamp(msLeft / (float)Math.Max(1, Timing("toast_fade_ms")), 0f, 1f);
+			string shown = Style.Fit(s, text, s.Width - 2 * x - 28, Style.Small);
+			yield return (shown, alpha, s.Measure(shown, Style.Small) + 28);
 		}
 	}
 
@@ -498,6 +489,7 @@ public sealed partial class SampleController
 			_font = fontKey;
 		}
 		_scale = _s.Profile().TextSizePercent / 100f;
+		_measure = s;
 		IDrawSurface t = _scale == 1f ? s : new ScaledSurface(s, _scale);
 		UseTextRole(s, TextRole.Menu);
 		_probeSelected = "";
@@ -507,49 +499,36 @@ public sealed partial class SampleController
 		_dialogueAt = "-";
 		_probeWrapped = "-";
 		_overlayDrawn.Clear();
+		BeginUiFrame(s);
 		s.Fill(0, 0, s.Width, s.Height, Style.Background);
 		switch (Screen)
 		{
-		case Screen.Title: DrawTitle(t, art); break;
-		case Screen.Field:
-			DrawField(s, art);
-			DrawHud(s);
-			_field.DrawBanner(s, AreaKindText);
-			DrawToasts(s, 16, s.Height - 40);
-			bool aboard = _s.FieldInfo()?.Aboard.Length > 0;
-			DrawHint(s, T("ui.hint.field", Walk(), T(aboard ? "ui.hint.drive" : "ui.hint.walk"), Hint(GameAction.Confirm), T(aboard ? "ui.hint.step_off" : "ui.hint.talk"),
-				Hint(GameAction.Menu), Hint(GameAction.QuestLog), Hint(GameAction.PartyTalk), Hint(GameAction.TextLog), Hint(GameAction.Pause)));
-			break;
+		case Screen.Title: DrawTitle(s, t, art); break;
+		case Screen.Field: DrawFieldScreen(s, t, art); break;
 		case Screen.Dialogue: DrawDialogue(s, t, art); break;
 		case Screen.Battle: DrawBattle(s, art); break;
-		case Screen.Menu:
-			DrawMenu(t, art);
-			DrawToasts(s, 48, s.Height - 92, right: true);
-			break;
-		case Screen.Shop: DrawShop(t, art); break;
+		case Screen.Menu: DrawMenu(s, t, art); break;
+		case Screen.Shop: DrawShop(s, t, art); break;
 		case Screen.Inn: DrawInn(s, t, art); break;
-		case Screen.SavePrompt: DrawSavePrompt(t, art); break;
-		case Screen.NameEntry: DrawNameEntry(t, art); break;
-		case Screen.Options: DrawOptions(t, art); break;
+		case Screen.SavePrompt: DrawSavePrompt(s, t, art); break;
+		case Screen.NameEntry: DrawNameEntry(s, t, art); break;
+		case Screen.Options: DrawOptions(s, t, art); break;
 		case Screen.Pause: DrawPause(s, t, art); break;
-		case Screen.LoadGame: DrawLoadGame(t, art); break;
-		case Screen.SoundTest: DrawSoundTest(t, art); break;
-		case Screen.Travel:
-			DrawTravel(t, art);
-			DrawToasts(s, 48, s.Height - 92, right: true);
-			break;
+		case Screen.LoadGame: DrawLoadGame(s, t, art); break;
+		case Screen.SoundTest: DrawSoundTest(s, t, art); break;
+		case Screen.Travel: DrawTravel(s, t, art); break;
 		case Screen.QuestLog:
-			DrawBackdrop(t, art);
-			Style.Window(t, 24, 40, s.Width - 48, s.Height - 72, T("ui.quest_log.title"));
-			DrawQuestLog(t, 56, 72, s.Width - 112, s.Height - 120);
+			Ui.Draw("quest_log", s, t, UiData()
+				.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+				.Set("quests", (UiSlot)((x, y, w, h) => DrawQuestLog(s, t, x, y, w, h))));
 			break;
 		case Screen.TextLog:
-			DrawBackdrop(t, art);
-			Style.Window(t, 24, 40, s.Width - 48, s.Height - 72, T("ui.text_log.title"));
-			DrawTextLog(t, 56, 72, s.Width - 112, s.Height - 140);
+			Ui.Draw("text_log", s, t, UiData()
+				.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+				.Set("log", (UiSlot)((x, y, w, h) => DrawTextLog(s, t, x, y, w, h))));
 			break;
 		}
-		_confirm.Draw(t, Px, T("ui.confirm.title"), T("ui.confirm.yes"), T("ui.confirm.no"));
+		DrawConfirm(s, t);
 		DrawAnimations(s);
 		if (_dev)
 		{
@@ -585,11 +564,11 @@ public sealed partial class SampleController
 				? $"belts {(!ml.Conveyors ? "off" : _art.FromFile("conveyor_overlay") ? "overlay" : "generated")} pads {(!ml.TileHooks ? "off" : _art.FromFile("tile_hook_overlay") ? "overlay" : "generated")}"
 				: "-",
 			"bitmapfonts" => BitmapFontProbe(),
+			"windows" => WindowsProbe(),
+			_ when key.StartsWith("window.", StringComparison.Ordinal) => WindowProbe(key["window.".Length..]),
 			"wrapped" => _probeWrapped,
 			// The characters of the line on screen that the dialogue's bitmap font draws in the fallback font.
-			"fontmissing" => _s.Line() is { } shown && _art?.BitmapFontFor(p.TextLanguage, TextRole.Dialogue) is { } dialogueFont
-				? (dialogueFont.Missing(shown.Text) is { Length: > 0 } missing ? missing : "none") : "-",
-			"reveal" => _s.Line() is { } line ? $"{Revealed(line.Text)}/{line.Text.Length}" : "-",
+			"fontmissing" or "reveal" or "tags" or "pagetext" or "dialoguepage" or "lineportrait" or "dialogueoverlaps" => DialogueState(key),
 			"party" => string.Join(", ", _s.Party().Where(m => m.InLineup).Select(m => m.Name)),
 			"macros" => string.Join(", ", _s.MacroList().Select(m => $"{m.Name}({m.Steps.Count})" + (m.Name == settings.AutoMacro ? "*" : ""))),
 			"area" => _s.FieldInfo()?.AreaName ?? "-",

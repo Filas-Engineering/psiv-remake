@@ -12,7 +12,6 @@ public sealed partial class SampleController
 	private const int CrossfadeMs = 800;
 	private const int StopFadeMs = 150;
 	// Rate limits: one reveal tick per this much frame time, and one footstep per this much.
-	private const int TextTickMs = 70;
 	private const int StepCueMs = 200;
 
 	private readonly IAudioOut _audio;

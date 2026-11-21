@@ -1,5 +1,3 @@
-using Microsoft.Xna.Framework;
-
 using Psiv.Session;
 
 namespace Psiv.Sample;
@@ -22,15 +20,13 @@ public sealed partial class SampleController
 	private void DrawInn(IDrawSurface s, IDrawSurface t, Art art)
 	{
 		bool field = DrawField(s, art);
-		int y = DialogueTop(s, field);
-		Style.Box(t, 24, y, s.Width - 48, DialogueHeight);
-		Style.Plate(t, T("ui.inn.title"), 42, y - Px(16), Style.Accent, Style.Body);
-		t.Image(AreaTiles(art).Bed, 48, y + 34, 96, 96, Color.White);
 		InnInfo? inn = _s.Inn();
-		t.Text(T("ui.inn.cost", inn?.Cost ?? 0, _s.WorldInfo().Money), 170, y + Px(30), Style.Text);
-		for (int i = 0; i < 2; i++)
-		{
-			Style.ListRow(t, T(i == 0 ? "ui.inn.rest" : "ui.inn.leave"), 186, y + Px(74) + i * Px(30), 300, i == _cursor, height: Px(28));
-		}
+		Ui.Draw("inn", s, t, UiData()
+			.Set("top", DialogueTop(s, field))
+			.Set("bed", AreaTiles(art).Bed)
+			.Set("cost", inn?.Cost ?? 0)
+			.Set("money", _s.WorldInfo().Money)
+			.Set("options", new List<string> { T("ui.inn.rest"), T("ui.inn.leave") })
+			.Set("cursor", _cursor));
 	}
 }

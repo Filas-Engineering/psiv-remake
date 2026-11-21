@@ -8,12 +8,14 @@ public sealed class Assets
 
 	public AssetManifest Manifest { get; }
 	public BattlePresentation Battle { get; }
+	public UiLayoutSet Layout { get; }
 	public IReadOnlyList<AssetProblem> Problems { get; }
 
-	private Assets(AssetManifest manifest, BattlePresentation battle, List<AssetProblem> problems)
+	private Assets(AssetManifest manifest, BattlePresentation battle, UiLayoutSet layout, List<AssetProblem> problems)
 	{
 		Manifest = manifest;
 		Battle = battle;
+		Layout = layout;
 		Problems = problems;
 		_stamps = manifest.Files().Select(manifest.Full).Where(File.Exists).ToDictionary(f => f, f => (new FileInfo(f).Length, File.GetLastWriteTimeUtc(f)));
 		_stamps[Path.Combine(manifest.Directory, AssetManifest.FileName)] = Stamp(Path.Combine(manifest.Directory, AssetManifest.FileName));
@@ -28,7 +30,8 @@ public sealed class Assets
 		BattlePresentation battle = manifest.BattlePresentation is { } table
 			? BattlePresentation.Load(manifest.Full(table), table, data, manifest.Effects.Select(e => e.Id), problems)
 			: BattlePresentation.Defaults();
-		return new Assets(manifest, battle, problems);
+		UiLayoutSet layout = manifest.UiLayoutEnabled == false ? UiLayoutSet.Defaults : UiLayoutSet.Load(manifest.Directory, manifest.UiLayoutEnabled == true, problems);
+		return new Assets(manifest, battle, layout, problems);
 	}
 
 	// The files whose size or time differ from what `before` loaded, the manifest included; empty when nothing changed.

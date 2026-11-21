@@ -1,0 +1,57 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "members", "visible": "view == 'members'", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "list", "items": "members", "state": "list"}
+		]},
+		{"name": "header", "visible": "view == 'stats' || view == 'abilities'", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "fill", "w": 84, "h": 84, "color": "track"},
+			{"type": "image", "image": "portrait", "x": 2, "y": 2, "w": 80, "h": 80},
+			{"type": "text", "key": "ui.status.header", "args": ["name", "level"], "x": 104, "color": "accent"},
+			{"type": "text", "key": "ui.status.exp_next", "args": ["experience", "experience_next"], "x": 104, "y": "t(30)", "style": "small_dim"},
+			{"type": "value_bar", "key": "ui.stat_short.hp", "value": "hp", "max": "max_hp", "x": 104, "y": "t(56)", "w": "min(300, (cw - 104) / 2 - 30)",
+				"color": "hp * 4 <= max_hp ? 'bad' : 'good'", "gap": "t(20)", "bar_h": 8},
+			{"type": "value_bar", "key": "ui.stat_short.tp", "value": "tp", "max": "max_tp", "x": "104 + min(300, (cw - 104) / 2 - 30) + 40", "y": "t(56)", "w": "min(300, (cw - 104) / 2 - 30)",
+				"color": "tp", "gap": "t(20)", "bar_h": 8},
+			{"type": "tabs", "items": "pages", "selected": "page", "x": "cw - t(300)", "w": "t(300)"}
+		]},
+		{"name": "stats", "visible": "view == 'stats'", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "list", "items": "stat_rows", "state": "sub_list", "view": true, "y": "max(96, t(56) + t(20) + 18)", "h": "ch - max(96, t(56) + t(20) + 18)", "row_height": "t(26)", "row": [
+				{"type": "repeater", "items": "cells", "dx": "cw / 2 - 20 + 40", "template": [
+					{"type": "text", "visible": "shown && value == ''", "value": "label", "color": "accent", "style": "small"},
+					{"type": "text", "visible": "shown && value != ''", "value": "label", "x": 14, "max_width": "cw / 2 - 20 - min(measure(value, size_small), (cw / 2 - 20) / 2) - 40", "style": "small"},
+					{"type": "text", "visible": "shown && value != ''", "value": "value", "x": "label == '' ? 28 : cw / 2 - 20 - 20 - tw",
+						"max_width": "label == '' ? cw / 2 - 20 - 40 : cw / 2 - 20 - measure(fit(label, cw / 2 - 20 - min(measure(value, size_small), (cw / 2 - 20) / 2) - 40, size_small), size_small) - 50",
+						"color": "label == '' ? 'dim' : 'text'", "style": "small"}
+				]}
+			]}
+		]},
+		{"name": "abilities", "visible": "view == 'abilities'", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "text", "visible": "len(abilities) == 0", "key": "ui.status.no_abilities", "x": 14, "y": "max(96, t(56) + t(20) + 18)", "color": "dim"},
+			{"type": "group", "visible": "len(abilities) > 0", "y": "max(96, t(56) + t(20) + 18)", "elements": [
+				{"type": "text", "key": "ui.status.kind", "x": "(picking ? cw * 3 / 5 : cw) * 45 / 100", "style": "small_dim"},
+				{"type": "text", "key": "ui.status.cost", "x": "(picking ? cw * 3 / 5 : cw) * 62 / 100", "style": "small_dim"},
+				{"type": "text", "key": "ui.status.uses", "x": "(picking ? cw * 3 / 5 : cw) * 76 / 100", "style": "small_dim"},
+				{"type": "list", "items": "abilities", "state": "sub_list", "active": "!picking", "y": "t(28)", "w": "picking ? cw * 3 / 5 : cw",
+					"h": "ch - max(96, t(56) + t(20) + 18) - t(28) - t(56)", "row_height": "t(30)", "row": [
+					{"type": "fill", "visible": "selected", "x": -6, "y": -3, "w": "(picking ? cw * 3 / 5 : cw) - 14", "h": "t(28)", "color": "row"},
+					{"type": "pointer", "visible": "selected", "x": -4, "y": "(t(28) - 8) / 2 - 6"},
+					{"type": "text", "value": "label", "x": 14, "max_width": "(picking ? cw * 3 / 5 : cw) * 45 / 100 - 30", "color": "!usable ? 'dim' : selected ? 'accent' : 'text'"},
+					{"type": "text", "value": "kind", "x": "(picking ? cw * 3 / 5 : cw) * 45 / 100", "style": "small_dim"},
+					{"type": "text", "value": "cost", "x": "(picking ? cw * 3 / 5 : cw) * 62 / 100", "style": "small"},
+					{"type": "text", "value": "uses", "x": "(picking ? cw * 3 / 5 : cw) * 76 / 100", "style": "small"}
+				]}
+			]},
+			{"type": "group", "visible": "len(abilities) > 0", "y": "ch - t(56)", "elements": [
+				{"type": "fill", "w": "(picking ? cw * 3 / 5 : cw) - 14", "h": 1, "color": "panel_edge", "alpha": 0.4},
+				{"type": "text", "visible": "description != ''", "value": "description", "x": 14, "y": "t(8)", "wrap": true, "max_width": "(picking ? cw * 3 / 5 : cw) - 40", "lines": 2, "line_height": "t(22)", "style": "small"},
+				{"type": "text", "visible": "description == ''", "key": "ui.common.no_description", "x": 14, "y": "t(8)", "wrap": true, "max_width": "(picking ? cw * 3 / 5 : cw) - 40", "lines": 2, "line_height": "t(22)", "style": "small_dim"}
+			]},
+			{"type": "text", "visible": "len(abilities) > 0 && !picking", "key": "ui.status.usable_here", "w": "cw - 20", "align": "right", "y": "max(96, t(56) + t(20) + 18)", "style": "small_dim"},
+			{"type": "group", "visible": "len(abilities) > 0 && picking", "x": "cw * 3 / 5 + 20", "y": "max(96, t(56) + t(20) + 18)", "elements": [
+				{"type": "text", "key": "ui.menu.use_on_whom", "args": ["target_name"], "color": "accent"},
+				{"type": "list", "items": "targets", "state": "target_list", "y": "t(28) + t(12)", "w": "cw - cw * 3 / 5 - 20", "h": "ch - max(96, t(56) + t(20) + 18) - t(28) - t(12)"}
+			]}
+		]}
+	]
+}

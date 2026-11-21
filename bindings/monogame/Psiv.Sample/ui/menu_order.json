@@ -1,0 +1,8 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "list", "items": "rows", "state": "list"}
+		]}
+	]
+}

@@ -90,6 +90,24 @@ define round_trip
 	cmp $(BUILD)/$(2).txt $(BUILD)/$(2)_exported.txt
 endef
 
+# A run of the example layout set with --dev, on its own copy of the directory: $(1) the script's name, $(2) the data,
+# $(3) the frames.
+define layout_run
+	rm -rf $(BUILD)/sample_$(1)_saves $(BUILD)/$(1)_assets
+	cp -R $(BUILD)/layout_assets $(BUILD)/$(1)_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(2) --dev --saves $(BUILD)/sample_$(1)_saves --assets $(BUILD)/$(1)_assets \
+		--script $(SAMPLE_SCRIPTS)/$(1).txt --frames $(3) > $(BUILD)/sample_$(1)_headless.txt || (cat $(BUILD)/sample_$(1)_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_$(1)_headless.txt
+endef
+
+# A run of the control tags scene with --dev: $(1) the script's name, $(2) more options.
+define tag_run
+	rm -rf $(BUILD)/sample_$(1)_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/tag_data/game/data --dev $(2) --saves $(BUILD)/sample_$(1)_saves \
+		--script $(SAMPLE_SCRIPTS)/$(1).txt --frames 3400 > $(BUILD)/sample_$(1)_headless.txt || (cat $(BUILD)/sample_$(1)_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_$(1)_headless.txt
+endef
+
 .PHONY: all test native-test dotnet dotnet-test dotnet-missing clean deps
 
 all: $(LIB) $(PLAYTHROUGH) $(TESTS)
@@ -254,11 +272,27 @@ dotnet-test: dotnet
 	$(call round_trip,battle,sample_battle_headless,$(SAMPLE_BATTLE_SCRIPT),5200)
 	$(call round_trip,vehicles,sample_vehicles_headless,$(SAMPLE_VEHICLES_SCRIPT),3200)
 	@echo "the exported placeholders draw every frame of the smoke, actors, panels, battle and vehicles runs as the generated ones do"
-	python3 -I $(SAMPLE_SCRIPTS)/make_test_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/broken_assets $(BUILD)/font_assets
+	python3 -I $(SAMPLE_SCRIPTS)/make_test_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/broken_assets $(BUILD)/font_assets $(BUILD)/layout_assets
 	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/test_assets
 	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/font_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/layout_assets
 	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/broken_assets > $(BUILD)/check_assets_broken.txt
 	diff $(SAMPLE_SCRIPTS)/check_assets_broken.expected $(BUILD)/check_assets_broken.txt
+	# The broken copy's layouts (a screen file that does not parse, one with every kind of problem, a missing one, broken
+	# styles, and a hostile but valid pause layout) must leave the sample running: the saves run passes on them.
+	rm -rf $(BUILD)/sample_broken_layouts_saves
+	$(SAMPLE_RUN) --saves $(BUILD)/sample_broken_layouts_saves --assets $(BUILD)/broken_assets --script $(SAMPLE_SAVES_SCRIPT) --frames 550 \
+		> $(BUILD)/sample_broken_layouts_headless.txt || (cat $(BUILD)/sample_broken_layouts_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_broken_layouts_headless.txt
+	# The example layout set (make_layout_assets.py: 640x480, integer scaling, the bitmap font, other places and list sizes).
+	$(call layout_run,layout_field,$(GAME)/data,900)
+	$(call layout_run,layout_menus,$(GAME)/data,1800)
+	$(call layout_run,layout_battle_front,$(BUILD)/front_data/game/data,2600)
+	$(call layout_run,layout_battle_side,$(GAME)/data,1800)
+	# The dialogue's control tags in English and Japanese, on a data copy with a scene that uses every one.
+	python3 -I $(SAMPLE_SCRIPTS)/make_tag_data.py $(GAME)/data $(CORE)/data $(BUILD)/tag_data
+	$(call tag_run,dialogue_tags,)
+	$(call tag_run,dialogue_tags_ja,--language ja --strict-text)
 	rm -rf $(BUILD)/sample_assets_saves
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_assets_saves --assets $(BUILD)/test_assets --script $(SAMPLE_ASSETS_SCRIPT) --frames 2000 > $(BUILD)/sample_assets_headless.txt \
 		|| (cat $(BUILD)/sample_assets_headless.txt; exit 1)

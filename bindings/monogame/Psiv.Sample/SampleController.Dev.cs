@@ -30,6 +30,9 @@ public sealed partial class SampleController
 		("collision", Keys.F2), ("hooks", Keys.F3), ("zones", Keys.F4), ("actors", Keys.F7), ("camera", Keys.F8), ("fps", Keys.F9), ("event", Keys.F10),
 	];
 
+	// The layout's windows outlined with their names (F1); `overlay all` and `overlay none` leave it as it is.
+	private const string WindowsOverlay = "windows";
+
 	private static readonly string[] Help =
 	[
 		"warp AREA MARKER | warp AREA X Y      flag NAME on|off      give ID [COUNT]      money AMOUNT",
@@ -132,7 +135,7 @@ public sealed partial class SampleController
 			UpdatePicker(new ActionInput(raw, _bindings));
 			return false;
 		}
-		foreach ((string name, Keys key) in OverlayKeys)
+		foreach ((string name, Keys key) in OverlayKeys.Append((WindowsOverlay, Keys.F1)))
 		{
 			if (raw.Pressed(key))
 			{
@@ -352,7 +355,7 @@ public sealed partial class SampleController
 				ToggleOverlay(name, w[1] == "all");
 			}
 			return true;
-		case "overlay" when w.Length is 2 or 3 && OverlayKeys.Any(o => o.Name == w[1]):
+		case "overlay" when w.Length is 2 or 3 && (OverlayKeys.Any(o => o.Name == w[1]) || w[1] == WindowsOverlay):
 			bool overlayOn = !_overlays.Contains(w[1]);
 			if (w.Length == 3 && !OnOff(w[2], out overlayOn))
 			{
@@ -850,6 +853,10 @@ public sealed partial class SampleController
 	// Overlays, the dev mark, the speed, the previewer and the console, over whatever the frame drew.
 	private void DrawDev(IDrawSurface s, Art art)
 	{
+		if (_overlays.Contains(WindowsOverlay))
+		{
+			DrawWindowOverlay(s);
+		}
 		int y = 52;
 		if (_overlays.Contains("fps"))
 		{
@@ -891,12 +898,12 @@ public sealed partial class SampleController
 			? "   " + T("ui.dev.badge_event", p.Id, p.Controller._panelShows)
 			: _stageEntry is { } entry ? "   " + T("ui.dev.badge_battle", entry) : "");
 		// The battle's banners take the top middle, so there the badge sits at the right: in the side layout just above the
-		// party panels, in the front one in the keys' line under the strip, or at the top while a preview's long badge
-		// would run into the keys.
+		// party panels (the layout's stage bottom), in the front one in the keys' line under the strip, or at the top while a
+		// preview's long badge would run into the keys.
 		bool battle = Screen == Screen.Battle;
 		int x = battle ? s.Width - s.Measure(badge, Style.Small) - 40 : (s.Width - s.Measure(badge, Style.Small)) / 2 - 12;
 		bool previewing = _preview is not null || _stageEntry is not null;
-		int y = !battle ? 12 : _stageLayout == BattleLayout.Side ? BattlePanelTop - 44 : previewing ? 12 : s.Height - HintBarHeight + 1;
+		int y = !battle ? 12 : _stageLayout == BattleLayout.Side ? Ui.Param("battle_side", "stage_bottom", UiData(), 0) - 44 : previewing ? 12 : s.Height - HintBarHeight + 1;
 		Style.Plate(s, badge, x, y, marked ? Style.Bad : previewing ? Style.Accent : Style.Dim);
 		if (_paused || Speed != 1f)
 		{

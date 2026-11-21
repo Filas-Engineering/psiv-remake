@@ -203,7 +203,8 @@ public static class Program
 			$"{(m.Ui is null ? "no UI skin" : m.Ui.Enabled ? "a UI skin" : "a UI skin turned off")}, {m.Audio.Count} sounds, " +
 			$"{(m.BattlePresentation is null ? "the built-in battle presentation" : "a battle presentation table")}, " +
 			$"{(m.MapsEnabled ? $"{m.Maps.Count} area pictures" : "area pictures turned off")}, {m.Objects.Count} objects, {m.VehicleOverlays.Count} vehicle overlays" +
-			(m.BitmapFontsEnabled switch { true => $", {m.BitmapFonts.Count} bitmap fonts", false => ", bitmap fonts turned off", null => "" }));
+			(m.BitmapFontsEnabled switch { true => $", {m.BitmapFonts.Count} bitmap fonts", false => ", bitmap fonts turned off", null => "" }) +
+			(assets.Layout.IsDefault ? m.UiLayoutEnabled == false ? ", layouts turned off" : "" : $", {assets.Layout.FromFiles.Count} layout files ({assets.Layout.Styles.Width}x{assets.Layout.Styles.Height})"));
 		Console.WriteLine(assets.Problems.Count == 0 ? "OK: no problems." : $"FAILED: {assets.Problems.Count} problems.");
 		return assets.Problems.Count == 0 ? 0 : 1;
 	}
@@ -411,7 +412,7 @@ public sealed class ScriptPlayer
 				return Press(new([], [], _controller.CellCenter(cellX, cellY)), 1).GetEnumerator();
 			case "expect" when w.Length == 9 && w[1] == "letterbox":
 				int[] n = w[2..].Select(v => int.Parse(v, CultureInfo.InvariantCulture)).ToArray();
-				Letterbox box = Letterbox.Fit(n[0], n[1]);
+				Letterbox box = Letterbox.Fit(n[0], n[1], _controller.LogicalSize.Width, _controller.LogicalSize.Height, _controller.Scaling);
 				if ((box.X, box.Y, box.Width, box.Height, (int)MathF.Round(box.Scale * 100)) != (n[2], n[3], n[4], n[5], n[6]))
 				{
 					Fail($"{source}: a {n[0]}x{n[1]} window letterboxes to {box.X} {box.Y} {box.Width} {box.Height} at {box.Scale * 100:0}%");
@@ -790,6 +791,7 @@ public static class Headless
 				controller = player.Controller;
 				input.Set(next.Keys, next.Buttons, click: next.Click);
 				controller.Update(FrameMs, input);
+				(surface.Width, surface.Height) = controller.LogicalSize;
 				surface.BeginFrame();
 				controller.Draw(surface);
 				surface.EndFrame();

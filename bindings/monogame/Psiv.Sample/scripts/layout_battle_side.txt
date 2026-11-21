@@ -1,0 +1,112 @@
+# The example layout set's side battle and vehicle battles (make_layout_assets.py): the side layout's stage over the
+# top two thirds, the party as one line per member at the bottom left and the commands at the bottom right, a
+# technique's description, the playback's hints and the result window; then the reed skimmer's battles in both
+# layouts (in the front one its card under the members' column, where effects on the members riding inside land on
+# their cards), and a defeat's result. Each moment checks where the windows went. With --window the shot lines save
+# screenshots in the working directory; headless runs write nothing.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev encounters off
+
+# The side layout, by the script's override.
+battlelayout side
+dev battle training
+expect mode Battle
+waitstate 300 battlephase Command
+expect state battlelayout side
+expect state strip -
+expect state windows battle_side/stage 0 0 640x480, battle_side/effects 0 0 640x480, battle_side/party 8 332 416x140, battle_side/menu 432 332 200x140, battle_side/status 432 332 200x140
+shot side_command.png
+press Down
+press Enter
+expect state battlephase Option
+expect state window.description battle_side/description 8 8 624x38
+shot side_options.png
+press Escape
+expect state battlephase Command
+press Down 7
+press Enter
+expect state battlephase Playback
+waitstatehas 900 step effect
+wait 6
+expect state window.status battle_side/status 432 332 200x140
+shot side_playback.png
+hold F 60
+waitstate 300 battlephase Ended
+expect statehas battlesync all match
+expect state windows battle_side/stage 0 0 640x480, battle_side/effects 0 0 640x480, battle_side/party 8 332 416x140, battle_side/menu 432 332 200x140, battle_side/status 432 332 200x140, battle_side/result 130 40 380x80
+shot side_result.png
+press Enter
+expect screen Field
+
+# The skimmer: boarded at the reeds, then a battle aboard in each layout.
+dev vehicle reed_skimmer reed_path skimmer_front
+cmd walk 13 4
+cmd walk 9 6
+cmd walk 16 6
+press Right
+wait 3
+press Enter
+wait 4
+expect state aboard reed_skimmer
+battlelayout front
+dev battle training
+expect mode Battle
+waitstate 300 battlephase Command
+expect state figures reed_skimmer vehicle back
+expect statehas strip vehicle Reed Skimmer acting
+expect state overlaps none
+expect state windows battle_front/stage 0 0 640x480, battle_front/strip 8 8 140x276, battle_front/vehicle 8 292 140x52, battle_front/effects 0 0 640x480, battle_front/command 366 308 156x94, battle_front/keys 0 464 640x16
+shot front_vehicle.png
+present mark
+press Enter
+press Enter
+waitstatehas 900 step result Reed Skimmer
+wait 6
+expect statehas strip vehicle Reed Skimmer hit
+shot front_vehicle_hit.png
+hold F 1
+waitstate 300 battlephase Command
+dev win
+waitstatehas 300 step sync
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+battlelayout side
+dev battle training
+expect mode Battle
+waitstate 300 battlephase Command
+expect statehas battlemenu [Attack] | Hull Vent x
+expect state windows battle_side/stage 0 0 640x480, battle_side/effects 0 0 640x480, battle_side/party 8 332 416x140, battle_side/menu 432 332 200x140, battle_side/status 432 332 200x140
+shot side_vehicle.png
+dev win
+waitstatehas 300 step sync
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+press Enter
+wait 4
+expect state aboard -
+
+# A defeat in the front layout: the members fallen, the result saying so.
+battlelayout front
+dev battle warden
+expect mode Battle
+waitstate 300 battlephase Command
+dev lose
+waitstate 900 battlephase Ended
+expect state victory Defeated... / The party has fallen.
+expect state window.result battle_front/result 204 330 380x66
+shot front_defeat.png
+press Enter
+expect screen Title

@@ -18,20 +18,14 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawSavePrompt(IDrawSurface s, Art art)
+	private void DrawSavePrompt(IDrawSurface s, IDrawSurface t, Art art)
 	{
-		DrawBackdrop(s, art);
 		List<string> slots = ManualSlots();
-		int w = 760;
-		int h = s.Height - 120;
-		int x = (s.Width - w) / 2;
-		int y = 60;
-		Style.Window(s, x, y, w, h, T("ui.save_prompt.title"));
-		s.Text(T("ui.save_prompt.question"), x + 28, y + Px(28), Style.Accent);
-		int listTop = y + Px(72);
-		int leave = Px(40);
-		DrawSlots(s, _list, x + 40, listTop, w - 70, h - (listTop - y) - leave - 20, slots, _s.Saves() ?? [], _list.Cursor < slots.Count);
-		Style.ListRow(s, T("ui.save_prompt.dont_save"), x + 40, y + h - leave - 10, w - 84, _list.Cursor == slots.Count, height: Px(28));
+		Ui.Draw("save_prompt", s, t, UiData()
+			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art)))
+			.Set("slot_list", (UiSlot)((x, y, w, h) => DrawSlots(t, _list, x, y, w, h, slots, _s.Saves() ?? [], _list.Cursor < slots.Count)))
+			.Set("leave", new List<string> { T("ui.save_prompt.dont_save") })
+			.Set("leave_selected", _list.Cursor == slots.Count));
 		if (_list.Cursor == slots.Count)
 		{
 			_probeSelected = T("ui.save_prompt.dont_save");

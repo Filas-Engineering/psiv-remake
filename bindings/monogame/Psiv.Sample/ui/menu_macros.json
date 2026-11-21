@@ -1,0 +1,30 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "macros", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "text", "key": "ui.macros.count", "args": ["macro_count"], "color": "accent", "style": "small"},
+			{"type": "list", "items": "macro_rows", "state": "list", "active": "stage == 'list'", "y": "t(30)", "w": "cw * 2 / 5 - 10", "h": "ch - t(30)"}
+		]},
+		{"name": "detail", "x": "area_x + area_w * 2 / 5 - 10 + 30", "y": "area_y", "w": "area_w - (area_w * 2 / 5 - 10) - 30", "h": "area_h", "elements": [
+			{"type": "text", "visible": "!has_macro", "key": "ui.macros.new_help", "y": "t(30)", "style": "small_dim"},
+			{"type": "text", "visible": "has_macro", "value": "title", "max_width": "cw", "color": "accent", "style": "small"},
+			{"type": "group", "visible": "stage == 'name'", "elements": [
+				{"type": "text", "value": "name_prompt", "y": "t(64)", "color": "accent"},
+				{"type": "slot", "slot": "name_pad", "y": "t(100)", "w": "cw - 20"}
+			]},
+			{"type": "group", "visible": "has_macro && stage == 'actions'", "elements": [
+				{"type": "list", "items": "actions", "state": "sub_list", "y": "t(30)", "h": "ch - t(30)"},
+				{"type": "repeater", "items": "step_notes", "x": 14, "y": "t(30) + t(30) * 6 + t(16)", "dy": "t(24)", "template": [
+					{"type": "text", "value": "text", "max_width": "cw - 20", "color": "ok ? 'dim' : 'bad'", "style": "small"}
+				]}
+			]},
+			{"type": "list", "visible": "has_macro && stage != 'name' && stage != 'actions'", "items": "steps", "state": "sub_list", "active": "stage == 'steps'", "enabled": "enabled",
+				"y": "t(30)", "h": "stage == 'list' ? ch - t(30) : t(30) * min(6, len(steps))"},
+			{"type": "group", "visible": "has_macro && building", "y": "t(30) + t(30) * min(6, len(steps)) + t(14)", "elements": [
+				{"type": "fill", "y": "-t(6)", "w": "cw", "h": 1, "color": "panel_edge", "alpha": 0.4},
+				{"type": "text", "value": "what", "color": "accent", "style": "small"},
+				{"type": "list", "items": "stage_rows", "state": "stage_list", "y": "t(30)", "h": "ch - (t(30) + t(30) * min(6, len(steps)) + t(14)) - t(30)"}
+			]}
+		]}
+	]
+}

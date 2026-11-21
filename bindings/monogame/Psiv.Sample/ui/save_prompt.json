@@ -1,0 +1,11 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "backdrop", "elements": [{"type": "slot", "slot": "backdrop"}]},
+		{"name": "box", "anchor": "top", "y": 60, "w": 760, "h": "H - 120", "frame": "panel", "title": "ui.save_prompt.title", "elements": [
+			{"type": "text", "key": "ui.save_prompt.question", "x": 28, "y": "t(28)", "color": "accent"},
+			{"type": "slot", "slot": "slot_list", "x": 40, "y": "t(72)", "w": "cw - 70", "h": "ch - t(72) - t(40) - 20"},
+			{"type": "rows", "items": "leave", "selected": "leave_selected ? 0 : -1", "x": 40, "y": "ch - t(40) - 10", "w": "cw - 84", "height": "t(28)"}
+		]}
+	]
+}

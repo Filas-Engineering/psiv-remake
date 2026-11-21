@@ -1,0 +1,13 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "backdrop", "elements": [{"type": "slot", "slot": "backdrop"}]},
+		{"name": "box", "x": 24, "y": 56, "w": "W - 48", "h": "H - 72", "frame": "panel", "title": "ui.menu.title", "elements": [
+			{"type": "tabs", "items": "tabs", "selected": "tab", "x": 24, "y": 8, "w": "W - 64 - measure(money, size_body) - 72"},
+			{"type": "text", "value": "money", "w": "W - 88", "align": "right", "y": "8 + t(5)"},
+			{"type": "slot", "slot": "page", "x": 32, "y": "8 + t(60)", "w": "W - 112", "h": "H - 66 - t(10) - 64 - t(60)"},
+			{"type": "hints", "value": "hint", "x": 32, "y": "H - 122", "w": "W - 112"}
+		]},
+		{"name": "toasts", "elements": [{"type": "slot", "slot": "toasts", "y": "H - 92", "w": "W - 48", "h": 0}]}
+	]
+}

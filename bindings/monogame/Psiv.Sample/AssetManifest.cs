@@ -127,7 +127,7 @@ public sealed class AssetManifest
 	public static readonly string[] FigureAnimations = ["attack", "cast", "item", "defend", "hurt", "defeat"];
 	// The terrain under the party, as a battle backdrop's scope: floor, water and soft ground.
 	public static readonly string[] TerrainNames = ["floor", "water", "soft"];
-	public static readonly string[] RoleNames = ["menu", "dialogue", "battle_numbers"];
+	public static readonly string[] RoleNames = ["menu", "dialogue", "battle_numbers", "hint"];
 
 	public string Directory { get; }
 	public List<TilesetEntry> Tilesets { get; } = [];
@@ -161,6 +161,8 @@ public sealed class AssetManifest
 	public int? ReferenceHeight { get; private set; }
 	public bool FigureShadows { get; private set; } = true;
 	public List<AssetProblem> Problems { get; } = [];
+	// Null without a ui_layout entry (the ui/ layout files load when there are any); false when the entry turns them off.
+	public bool? UiLayoutEnabled { get; private set; }
 
 	private AssetManifest(string directory) => Directory = directory;
 
@@ -177,6 +179,7 @@ public sealed class AssetManifest
 			.Concat(BitmapFonts.SelectMany(f => new[] { f.Image, f.MetricsFile }))
 			.Concat(Ui is null ? [] : new[] { Ui.Frame?.Path, Ui.Cursor, Ui.BarTrack, Ui.BarFill }.OfType<string>().Concat(Ui.PanelFrames.Select(p => p.Path)).Concat(Ui.Fonts.Values.Select(f => f.File)))
 			.Concat(BattlePresentation is null ? [] : [BattlePresentation])
+			.Concat(UiLayoutEnabled == false ? [] : UiLayoutSet.FilesIn(Directory))
 			.Distinct();
 
 	// Reads DIR/assets.json against the session's data. A directory without a manifest is a problem too, since the
@@ -523,7 +526,7 @@ public sealed class AssetManifest
 				return;
 			}
 			Fields(root, "-", "version", "tilesets", "characters", "portraits", "figures", "field_enemies", "vehicles", "backdrops", "effects", "sprites", "status_icons", "ui",
-				"audio", "battle_presentation", "maps", "objects", "field", "vehicle_overlays", "battle_figures", "bitmap_fonts");
+				"audio", "battle_presentation", "maps", "objects", "field", "vehicle_overlays", "battle_figures", "bitmap_fonts", "ui_layout");
 			if (Int(root, "version", "-", 0, 0, int.MaxValue) != Version)
 			{
 				Problem("-", $"field 'version' must be {Version}");
@@ -613,6 +616,11 @@ public sealed class AssetManifest
 			foreach ((JsonElement e, string entry) in List(root, "audio"))
 			{
 				Audio(e, entry);
+			}
+			if (root.TryGetProperty("ui_layout", out JsonElement ul) && IsObject(ul, "ui_layout"))
+			{
+				Fields(ul, "ui_layout", "enabled");
+				m.UiLayoutEnabled = Bool(ul, "enabled", "ui_layout", true);
 			}
 			if (root.TryGetProperty("battle_figures", out JsonElement bf) && IsObject(bf, "battle_figures"))
 			{

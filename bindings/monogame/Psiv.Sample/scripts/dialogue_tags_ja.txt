@@ -1,0 +1,92 @@
+# Run with --dev --language ja on the copy scripts/make_tag_data.py writes: the same scene as
+# dialogue_tags.txt in Japanese, whose lines keep the English control tags in the same order. The narration is broken
+# between characters and goes on in a second box; the values come in the Japanese names. With --window the shot lines
+# save screenshots under build/shots/dialogue_tags/ (run from bindings/).
+
+expect screen Title
+expect state language ja
+press Enter
+pressuntil Enter Field 800
+dev event dialogue_tags
+wait 2
+expect screen Dialogue
+expect state lineportrait guide_smile
+expect state pagetext もう戻ったのかい？なら、これを聞いておくといい。
+expect state dialoguepage 1/2
+expect state tags none
+shot build/shots/dialogue_tags/ja_portrait_smile.png
+waitstate 30 lineportrait guide
+expect state tags portrait:guide
+expect state dialogueoverlaps none
+press Enter
+expect state reveal 24/56
+press Enter
+expect state dialoguepage 2/2
+expect state pagetext 真夜中に入り江の鐘が三度鳴った。綱を引く者は誰もいなかったのに。
+expect state tags portrait:guide, page
+press Enter
+expect state reveal 56/56
+shot build/shots/dialogue_tags/ja_page_two.png
+press Enter
+
+# "聞いて" shows, then each {wait:20} holds the reveal 320 ms.
+waitstate 40 reveal 3/39
+wait 10
+expect state reveal 3/39
+shot build/shots/dialogue_tags/ja_wait.png
+waitstate 250 reveal 39/39
+expect state pagetext 聞いて。。。また鳴った。戦士、50枚の硬貨を手放さず、強壮薬を用意しておきな。
+expect state tags wait:20, wait:20, wait:20, var:leader, var:money, var:tonic
+shot build/shots/dialogue_tags/ja_vars.png
+press Enter
+
+wait 2
+expect state dialoguepage 1/2
+expect statehas pagetext 港はゆっくりと目を覚ます。
+expect statehas wrapped 4:
+press Enter
+expect state reveal 424/520
+shot build/shots/dialogue_tags/ja_long_box_one.png
+press Enter
+expect state dialoguepage 2/2
+expect statehas pagetext どこか少しだけ違っていた。
+press Enter
+expect state reveal 520/520
+expect state dialogueoverlaps none
+shot build/shots/dialogue_tags/ja_long_box_two.png
+audio mark
+press Enter
+
+wait 2
+expect state lineportrait -
+press Enter
+expect state tags sound:lookout_creak, shake:2, sound:foghorn, portrait_off
+expect state lineportrait off
+expect audio cue lookout_creak
+expect noaudio cue foghorn
+expect state pagetext 今のきしみ、聞こえた？桟橋じゅうが揺れている！確かめに残る気はないよ。
+shot build/shots/dialogue_tags/ja_hooks.png
+press Enter
+wait 10
+expect screen Field
+
+cmd set text fast
+cmd set auto_advance on
+cmd set text_size 150
+dev event dialogue_tags
+wait 2
+expect state dialoguepage 1/2
+waitstate 200 dialoguepage 2/2
+expect state dialogueoverlaps none
+shot build/shots/dialogue_tags/ja_150_page_two.png
+waitstatehas 400 reveal /39
+waitstate 500 dialoguepage 1/2
+expect statehas pagetext 港はゆっくりと目を覚ます。
+expect state dialogueoverlaps none
+shot build/shots/dialogue_tags/ja_150_long.png
+waitstate 1400 dialoguepage 2/2
+expect state dialogueoverlaps none
+press Tab
+wait 10
+expect screen Field
+expect state tags none

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Builds the asset directories the sample's asset tests use, from the placeholder export (--export-placeholders).
 
-  make_test_assets.py EXPORT OVERRIDE BROKEN FONTS
+  make_test_assets.py EXPORT OVERRIDE BROKEN FONTS [LAYOUT]
 
 OVERRIDE: a small asset directory replacing a few ids with recolored copies of their exported pictures (the town
 tileset, the fighter, the guide's portrait, the gel mite's battle figure, the field backdrop, the slash effect, the
@@ -20,6 +20,8 @@ its natural size on its foot row), and the medic's back figure kept at its slot'
 
 BROKEN: a copy of the export with one problem of each kind the asset check reports.
 
+LAYOUT (optional): FONTS with the example layout set, written by make_layout_assets.py.
+
 FONTS: an asset directory with bitmap fonts only: the export's English and Japanese fonts turned on, and a recolored copy
 of the English one at one and a half times the size for the battle numbers; alt/ja_partial.json is the Japanese metrics
 without the kanji, for a run that swaps it in and sees them fall back to the system font.
@@ -28,6 +30,7 @@ without the kanji, for a run that swaps it in and sees them fall back to the sys
 import json
 import shutil
 import struct
+import subprocess
 import sys
 import zlib
 from pathlib import Path
@@ -207,7 +210,10 @@ def main():
 	table["enemies"] = {"nobody": {}, "gel_mite": {"juggle": {}}}
 	(broken / "battle_presentation.json").write_text(json.dumps(table, indent="\t") + "\n")
 	newer_broken(broken)
+	broken_layouts(broken)
 	bitmap_fonts(export, fonts)
+	if len(sys.argv) > 5:
+		subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("make_layout_assets.py")), str(export), str(fonts), sys.argv[5]], check=True)
 
 
 def bitmap_fonts(export, fonts):
@@ -442,6 +448,39 @@ def newer_broken(broken):
 	(broken / "fonts/ja_bad.json").write_text(json.dumps({"line_height": 10, "cell": [10, 10], "rows": ["AB"], "colour": "red",
 		"glyphs": {"Q": {"rect": [0, 0, 999, 10]}}, "kerning": {"AZ": -1}}) + "\n")
 	(broken / "assets.json").write_text(json.dumps(m, indent="\t") + "\n")
+
+
+def broken_layouts(broken):
+	"""Layout files that fail each way, in BROKEN's ui/: each screen with a problem falls back to the built-in one, and
+	the hostile but valid pause layout must draw without stopping the sample."""
+	ui = broken / "ui"
+	(ui / "title.json").write_text('{"version": 1, "windows": [')
+	(ui / "menu.json").unlink()
+	(ui / "nonsense.json").write_text('{"version": 1, "windows": []}\n')
+	inn = json.loads((ui / "inn.json").read_text())
+	box = inn["windows"][0]
+	box["colour"] = "red"
+	box["elements"] += [
+		{"type": "sparkle", "x": 0},
+		{"type": "text", "value": "no_such_field + 1", "x": "(3 +", "y": "t(1, 2)"},
+		{"type": "fill", "w": 10, "h": 10, "color": "#12345"},
+		{"type": "slot", "slot": "nowhere", "w": 1, "h": 1},
+	]
+	box["relative_to"] = "missing"
+	(ui / "inn.json").write_text(json.dumps(inn, indent="\t") + "\n")
+	styles = json.loads((ui / "styles.json").read_text())
+	styles["resolution"]["width"] = 50
+	styles["colors"]["mud"] = "brown"
+	(ui / "styles.json").write_text(json.dumps(styles, indent="\t") + "\n")
+	pause = json.loads((ui / "pause.json").read_text())
+	pause["windows"] += [
+		{"name": "loop_a", "relative_to": "loop_b", "x": "loop_b.x / 0", "w": -40, "h": "0 - 99999", "frame": "panel",
+			"elements": [{"type": "text", "value": "'x' + 1 / 0", "max_width": -5, "wrap": True, "lines": -1},
+				{"type": "list", "items": "rows", "state": "rows", "w": -1, "h": -1},
+				{"type": "repeater", "count": 100000000, "layout": "slots", "slots": [[0, 0]], "template": [{"type": "bar", "w": -9, "h": 3, "value": 5, "max": 0}]}]},
+		{"name": "loop_b", "relative_to": "loop_a", "x": 2147483647, "y": "-2147483647 * 4", "w": 99999, "h": 99999, "frame": "panel"},
+	]
+	(ui / "pause.json").write_text(json.dumps(pause, indent="\t") + "\n")
 
 
 if __name__ == "__main__":

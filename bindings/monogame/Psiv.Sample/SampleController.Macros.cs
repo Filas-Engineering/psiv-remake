@@ -252,72 +252,43 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawMacros(IDrawSurface s, int x, int y, int w, int h)
+	private void DrawMacros(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{
 		IReadOnlyList<Macro> macros = _s.MacroList();
 		Macro? macro = _list.Cursor < macros.Count ? macros[_list.Cursor] : null;
-		int leftW = w * 2 / 5 - 10;
-		int rx = x + leftW + 30;
-		int rw = w - leftW - 30;
-		MacroStage stage = _macroStage;
-		s.Text(T("ui.macros.count", macros.Count), x, y, Style.Accent, Style.Small);
-		DrawItems(s, _list, x, y + Px(30), leftW, h - Px(30), MacroRows(macros), stage == MacroStage.List);
-		if (macro is null)
+		bool building = _macroStage is not (MacroStage.List or MacroStage.Steps or MacroStage.Actions or MacroStage.Name);
+		UiContext data = UiArea(x, y, w, h)
+			.Set("macro_count", macros.Count)
+			.Set("macro_rows", MacroRows(macros))
+			.Set("list", _list)
+			.Set("stage", _macroStage.ToString().ToLowerInvariant())
+			.Set("building", building)
+			.Set("has_macro", macro is not null)
+			.Set("name_prompt", _renaming is null ? T("ui.macros.name_new") : T("ui.macros.rename_to", _renaming))
+			.Set("name_pad", (UiSlot)((nx, ny, nw, _) => _macroName.Draw(t, nx, ny, nw, _clockMs, Px, PadLabels(), Timing("caret_ms"))))
+			.Set("sub_list", _sub)
+			.Set("stage_list", _third);
+		if (macro is not null)
 		{
-			s.Text(T("ui.macros.new_help"), rx, y + Px(30), Style.Dim, Style.Small);
-			if (stage == MacroStage.Name)
+			data.Set("title", macro.Name + (macro.Name == _s.Settings().AutoMacro ? "  " + T("ui.macros.used_for_auto") : ""))
+				.Set("actions", MacroActions(macro.Name))
+				.Set("step_notes", macro.Steps.Select(step => new UiContext(data).Set("text", StepText(step)).Set("ok", step.Issue == MacroIssue.None)).ToList())
+				.Set("steps", macro.Steps.Select(step => new UiContext(data).Set("text", StepText(step)).Set("enabled", step.Issue == MacroIssue.None))
+					.Append(new UiContext(data).Set("text", T("ui.macros.add_step")).Set("enabled", true)).ToList());
+			if (building)
 			{
-				DrawMacroName(s, rx, y, rw);
+				data.Set("what", _macroStage switch
+				{
+					MacroStage.StepActions => T("ui.macros.step_number", _stepIndex + 1),
+					MacroStage.Member => T("ui.macros.who"),
+					MacroStage.Command => T("ui.macros.does_what", _s.DisplayName(_draftMember)),
+					MacroStage.Pick => T(_draftKind == CommandKind.Ability ? "ui.macros.which_ability" : "ui.macros.which_item"),
+					MacroStage.Target => T("ui.macros.aimed_at"),
+					MacroStage.TargetMember => T("ui.macros.which_member"),
+					_ => T("ui.macros.which_enemy"),
+				}).Set("stage_rows", StageRows(macros, macro));
 			}
-			return;
 		}
-		// The macro's steps, or its actions, on the right; the step being built under them.
-		string title = macro.Name + (macro.Name == _s.Settings().AutoMacro ? "  " + T("ui.macros.used_for_auto") : "");
-		s.Text(Style.Fit(s, title, rw, Style.Small), rx, y, Style.Accent, Style.Small);
-		if (stage == MacroStage.Name)
-		{
-			DrawMacroName(s, rx, y, rw);
-			return;
-		}
-		int stepsH = Px(30) * Math.Min(6, macro.Steps.Count + 1);
-		if (stage == MacroStage.Actions)
-		{
-			DrawItems(s, _sub, rx, y + Px(30), rw, h - Px(30), MacroActions(macro.Name));
-			int ay = y + Px(30) + Px(30) * 6 + Px(16);
-			foreach (MacroStep step in macro.Steps)
-			{
-				s.Text(Style.Fit(s, StepText(step), rw - 20, Style.Small), rx + 14, ay, step.Issue == MacroIssue.None ? Style.Dim : Style.Bad, Style.Small);
-				ay += Px(24);
-			}
-			return;
-		}
-		List<string> steps = [.. macro.Steps.Select(StepText), T("ui.macros.add_step")];
-		bool onSteps = stage == MacroStage.Steps || stage == MacroStage.List;
-		DrawItems(s, _sub, rx, y + Px(30), rw, stage == MacroStage.List ? h - Px(30) : stepsH, steps, stage == MacroStage.Steps,
-			steps.Select((_, i) => i >= macro.Steps.Count || macro.Steps[i].Issue == MacroIssue.None).ToList());
-		if (onSteps)
-		{
-			return;
-		}
-		int by = y + Px(30) + stepsH + Px(14);
-		string what = stage switch
-		{
-			MacroStage.StepActions => T("ui.macros.step_number", _stepIndex + 1),
-			MacroStage.Member => T("ui.macros.who"),
-			MacroStage.Command => T("ui.macros.does_what", _s.DisplayName(_draftMember)),
-			MacroStage.Pick => T(_draftKind == CommandKind.Ability ? "ui.macros.which_ability" : "ui.macros.which_item"),
-			MacroStage.Target => T("ui.macros.aimed_at"),
-			MacroStage.TargetMember => T("ui.macros.which_member"),
-			_ => T("ui.macros.which_enemy"),
-		};
-		s.Fill(rx, by - Px(6), rw, 1, Style.PanelEdge * 0.4f);
-		s.Text(what, rx, by, Style.Accent, Style.Small);
-		DrawItems(s, _third, rx, by + Px(30), rw, y + h - by - Px(30), StageRows(macros, macro));
-	}
-
-	private void DrawMacroName(IDrawSurface s, int x, int y, int w)
-	{
-		s.Text(_renaming is null ? T("ui.macros.name_new") : T("ui.macros.rename_to", _renaming), x, y + Px(64), Style.Accent);
-		_macroName.Draw(s, x, y + Px(100), w - 20, _clockMs, Px, PadLabels());
+		Ui.Draw("menu_macros", s, t, data);
 	}
 }

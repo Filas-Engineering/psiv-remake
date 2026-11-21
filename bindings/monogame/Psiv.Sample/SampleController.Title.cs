@@ -75,37 +75,23 @@ public sealed partial class SampleController
 		s.Fill(0, 0, s.Width, s.Height, Style.Background * 0.35f);
 	}
 
-	private void DrawTitle(IDrawSurface s, Art art)
+	private void DrawTitle(IDrawSurface s, IDrawSurface t, Art art)
 	{
-		DrawTitleScene(s, art);
 		var options = TitleOptions();
-		int rowH = Px(32);
-		int w = 600;
-		int top = Px(132);
-		int h = top + Px(44) + options.Count * rowH;
-		int bx = (s.Width - w) / 2;
-		int by = (s.Height - h) / 2;
-		Style.Box(s, bx, by, w, h);
-		string title = _s.GameInfo().Title;
-		s.Text(title, (s.Width - s.Measure(title, Style.Title)) / 2, by + Px(26), Style.Accent, Style.Title);
-		string subtitle = T("ui.title.subtitle");
-		s.Text(subtitle, (s.Width - s.Measure(subtitle, Style.Small)) / 2, by + Px(66), Style.Dim, Style.Small);
-		int walk = 1 + _clockMs / 260 % 2;
-		s.Image(art.ActorFrame(Art.Hero, Direction.East, walk == 1 ? 1 : 0), bx + 28, by + 18, 64, 64, Color.White);
-		s.Image(art.Creature(Noise.Hash("title"), _clockMs / 400 % 2), bx + w - 92, by + 18, 64, 64, Color.White);
-		if (_s.WorldInfo().GameOver)
-		{
-			string fallen = T("ui.title.fallen");
-			s.Text(fallen, (s.Width - s.Measure(fallen)) / 2, by + Px(96), Style.Bad);
-		}
-		for (int i = 0; i < options.Count; i++)
-		{
-			Style.ListRow(s, options[i].Label, bx + 80, by + top + i * rowH, w - 140, i == _cursor, height: Px(28));
-		}
 		_probeSelected = options[Math.Clamp(_cursor, 0, options.Count - 1)].Label;
-		s.Text(LibraryVersion, s.Width - s.Measure(LibraryVersion, Style.Small) - 12, 8, Style.Dim, Style.Small);
-		DrawToasts(s, 16, s.Height - 40, right: true);
-		DrawHint(s, T("ui.title.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm)));
+		int walk = 1 + _clockMs / 260 % 2;
+		Ui.Draw("title", s, t, UiData()
+			.Set("scene", (UiSlot)((_, _, _, _) => DrawTitleScene(t, art)))
+			.Set("title", _s.GameInfo().Title)
+			.Set("subtitle", T("ui.title.subtitle"))
+			.Set("hero_frame", art.ActorFrame(Art.Hero, Direction.East, walk == 1 ? 1 : 0))
+			.Set("creature_frame", art.Creature(Noise.Hash("title"), _clockMs / 400 % 2))
+			.Set("game_over", _s.WorldInfo().GameOver)
+			.Set("options", options.Select(o => o.Label).ToList())
+			.Set("cursor", _cursor)
+			.Set("version", LibraryVersion)
+			.Set("toasts", (UiSlot)((_, _, _, _) => DrawToasts(t, 16, t.Height - 40, right: true)))
+			.Set("hint", T("ui.title.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm))));
 	}
 
 	// F15: every track the data lists, once the story has been finished. Confirm plays one; back returns to the title
@@ -125,19 +111,13 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawSoundTest(IDrawSurface s, Art art)
+	private void DrawSoundTest(IDrawSurface s, IDrawSurface t, Art art)
 	{
-		DrawTitleScene(s, art);
-		s.Fill(0, 0, s.Width, s.Height, Color.Black * 0.5f);
-		int x = 120;
-		int w = s.Width - 240;
-		Style.Window(s, x, 50, w, s.Height - 100, T("ui.sound_test.title"));
-		List<string> rows = [.. _s.AudioIds().Select(id => T("ui.track." + id))];
-		DrawItems(s, _list, x + 40, 90, w - 80, s.Height - 220, rows);
-		if (_soundTestTrack.Length > 0)
-		{
-			s.Text(T("ui.sound_test.playing", T("ui.track." + _soundTestTrack)), x + 40, s.Height - 120, Style.Accent);
-		}
-		Widgets.Hints(s, x + 24, s.Height - 50 - Px(36), w - 48, T("ui.sound_test.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm), Hint(GameAction.Back)));
+		Ui.Draw("sound_test", s, t, UiData()
+			.Set("scene", (UiSlot)((_, _, _, _) => DrawTitleScene(t, art)))
+			.Set("tracks", _s.AudioIds().Select(id => T("ui.track." + id)).ToList())
+			.Set("list", _list)
+			.Set("playing", _soundTestTrack.Length > 0 ? T("ui.track." + _soundTestTrack) : "")
+			.Set("hint", T("ui.sound_test.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm), Hint(GameAction.Back))));
 	}
 }

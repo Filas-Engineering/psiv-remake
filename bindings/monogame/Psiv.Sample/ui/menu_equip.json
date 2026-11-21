@@ -1,0 +1,56 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "list", "visible": "view == 'members'", "items": "members", "state": "list"},
+			{"type": "group", "visible": "view == 'slots' || view == 'pieces'", "elements": [
+				{"type": "text", "value": "member_name", "color": "accent"},
+				{"type": "list", "items": "slot_rows", "state": "slot_list", "active": "view == 'slots'", "y": "t(36)", "w": "cw / 2 - 10", "h": "t(30) * len(slot_rows)"}
+			]},
+			{"type": "group", "visible": "view == 'pieces'", "y": "t(36) + t(30) * len(slot_rows) + t(20)", "elements": [
+				{"type": "text", "key": "ui.equip.for_slot", "args": ["slot_name"], "color": "accent"},
+				{"type": "text", "visible": "len(choices) == 0", "key": "ui.equip.nothing_fits", "x": 14, "y": "t(36)", "color": "dim"},
+				{"type": "list", "items": "choices", "state": "choice_list", "enabled": "enabled", "y": "t(36)", "w": "cw / 2 - 10",
+					"h": "ch - (t(36) + t(30) * len(slot_rows) + t(20)) - t(36)"}
+			]}
+		]},
+		{"name": "worn", "visible": "right == 'worn'", "x": "area_x + area_w / 2 - 10 + 30", "y": "area_y", "w": "area_w - (area_w / 2 - 10) - 30", "h": "area_h", "elements": [
+			{"type": "text", "key": "ui.equip.worn_here", "color": "accent"},
+			{"type": "text", "value": "worn_text", "y": "t(36)", "max_width": "cw", "style": "small"},
+			{"type": "group", "visible": "has_change", "elements": [
+				{"type": "text", "value": "change_text", "y": "t(80)", "max_width": "cw", "color": "accent"},
+				{"type": "repeater", "items": "compare_rows", "y": "t(116)", "dy": "t(24)", "template": [
+					{"type": "text", "value": "label", "style": "small"},
+					{"type": "text", "value": "before", "x": "cw * 55 / 100", "style": "small_dim"},
+					{"type": "text", "value": "'->'", "x": "cw * 70 / 100", "style": "small_dim"},
+					{"type": "text", "value": "after", "x": "cw * 82 / 100", "color": "after > before ? 'good' : after < before ? 'bad' : 'text'", "style": "small"}
+				]}
+			]}
+		]},
+		{"name": "piece", "visible": "right == 'piece'", "x": "area_x + area_w / 2 - 10 + 30", "y": "area_y", "w": "area_w - (area_w / 2 - 10) - 30", "h": "area_h", "elements": [
+			{"type": "text", "key": "ui.equip.worn_now", "color": "accent"},
+			{"type": "text", "value": "worn_text", "y": "t(32)", "max_width": "cw", "style": "small"},
+			{"type": "text", "visible": "removing", "key": "ui.equip.after_removing", "y": "t(70)", "color": "accent"},
+			{"type": "text", "visible": "has_preview", "value": "piece_name", "y": "t(70)", "max_width": "cw", "color": "accent"},
+			{"type": "group", "visible": "has_preview", "y": "t(104)", "elements": [
+				{"type": "text", "visible": "description != ''", "value": "description", "wrap": true, "max_width": "cw", "lines": 2, "line_height": "t(22)", "style": "small"},
+				{"type": "text", "visible": "description == ''", "key": "ui.common.no_description", "wrap": true, "max_width": "cw", "lines": 2, "line_height": "t(22)", "style": "small_dim"},
+				{"type": "text", "value": "effects", "y": "t(50)", "wrap": true, "max_width": "cw", "line_height": "t(24)", "style": "small"},
+				{"type": "text", "value": "wearers", "y": "t(50) + effect_lines * t(24)", "max_width": "cw", "style": "small_dim"},
+				{"type": "text", "visible": "!can_wear", "value": "refusal", "y": "t(50) + effect_lines * t(24) + t(24) + t(6)", "max_width": "cw", "color": "bad", "style": "small"},
+				{"type": "text", "visible": "can_wear", "value": "with_it", "y": "t(50) + effect_lines * t(24) + t(24) + t(6)", "max_width": "cw", "color": "accent"}
+			]},
+			{"type": "repeater", "visible": "removing || has_preview && can_wear", "items": "compare_rows", "dy": "t(24)",
+				"y": "removing ? t(104) : t(104) + t(50) + effect_lines * t(24) + t(24) + t(6) + t(32)", "template": [
+				{"type": "text", "value": "label", "style": "small"},
+				{"type": "text", "value": "before", "x": "cw * 55 / 100", "style": "small_dim"},
+				{"type": "text", "value": "'->'", "x": "cw * 70 / 100", "style": "small_dim"},
+				{"type": "text", "value": "after", "x": "cw * 82 / 100", "color": "after > before ? 'good' : after < before ? 'bad' : 'text'", "style": "small"}
+			]},
+			{"type": "repeater", "visible": "has_preview && can_wear", "items": "notes", "dy": "t(24)",
+				"y": "t(104) + t(50) + effect_lines * t(24) + t(24) + t(6) + t(32) + t(24) * len(compare_rows) + t(6)", "template": [
+				{"type": "text", "value": "text", "max_width": "cw", "style": "small"}
+			]}
+		]}
+	]
+}

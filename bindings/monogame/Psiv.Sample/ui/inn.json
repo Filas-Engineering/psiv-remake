@@ -1,0 +1,11 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "box", "x": 24, "y": "top", "w": "W - 48", "h": "t(176)", "frame": "panel",
+			"title": {"key": "ui.inn.title", "x": 18, "y": "-t(16)", "size": "size_body"}, "elements": [
+			{"type": "image", "image": "bed", "x": 24, "y": 34, "w": 96, "h": 96},
+			{"type": "text", "key": "ui.inn.cost", "args": ["cost", "money"], "x": 146, "y": "t(30)"},
+			{"type": "rows", "items": "options", "selected": "cursor", "x": 162, "y": "t(74)", "w": 300, "row_height": "t(30)", "height": "t(28)"}
+		]}
+	]
+}

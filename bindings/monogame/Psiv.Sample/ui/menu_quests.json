@@ -1,0 +1,10 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "list", "items": "rows", "state": "list", "view": true, "row_height": "t(30)", "row": [
+				{"type": "text", "visible": "text != ''", "value": "text", "x": "heading ? 0 : 20", "max_width": "cw - 40", "color": "heading ? 'accent' : 'text'"}
+			]}
+		]}
+	]
+}

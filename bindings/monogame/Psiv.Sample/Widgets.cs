@@ -104,6 +104,7 @@ public sealed class ConfirmPrompt
 	private bool _onYes;
 
 	public string? Question { get; private set; }
+	public bool OnYes => _onYes;
 
 	public void Ask(string question, Action yes)
 	{
@@ -132,24 +133,6 @@ public sealed class ConfirmPrompt
 				_yes?.Invoke();
 			}
 		}
-	}
-
-	public void Draw(IDrawSurface s, Func<int, int> px, string title, string yes, string no)
-	{
-		if (Question is null)
-		{
-			return;
-		}
-		int rowH = px(30);
-		int w = Math.Max(px(420), s.Measure(Question) + px(80));
-		int h = px(64) + 2 * rowH + px(16);
-		int x = (s.Width - w) / 2;
-		int y = (s.Height - h) / 2;
-		s.Fill(0, 0, s.Width, s.Height, Color.Black * 0.4f);
-		Style.Window(s, x, y, w, h, title);
-		s.Text(Question, x + px(28), y + px(26), Style.Text);
-		Style.ListRow(s, yes, x + px(48), y + px(64), px(160), _onYes, height: px(28));
-		Style.ListRow(s, no, x + px(48), y + px(64) + rowH, px(160), !_onYes, height: px(28));
 	}
 }
 
@@ -262,13 +245,16 @@ public sealed class TextEntry(int maxLength)
 		return null;
 	}
 
+	// The height the text box and the grid take.
+	public static int Height(Func<int, int> px) => px(50) + px(14) + Grid.Length * px(36);
+
 	// The text box and the grid under it, its last row's cells worded as `labels` says; returns the height used.
-	public int Draw(IDrawSurface s, int x, int y, int w, int clockMs, Func<int, int> px, (string Space, string Erase, string Done) labels)
+	public int Draw(IDrawSurface s, int x, int y, int w, int clockMs, Func<int, int> px, (string Space, string Erase, string Done) labels, int caretMs = 400)
 	{
 		int boxH = px(50);
 		s.Fill(x, y, w, boxH, Style.Track);
 		Style.Frame(s, x, y, w, boxH, Style.PanelEdge);
-		string caret = clockMs / 400 % 2 == 0 ? "_" : " ";
+		string caret = clockMs / Math.Max(1, caretMs) % 2 == 0 ? "_" : " ";
 		s.Text(Buffer + caret, x + px(16), y + px(8), Style.Text, Style.Title);
 		int cellW = Math.Min(px(44), w / Grid[0].Length);
 		int cellH = px(36);
@@ -290,7 +276,7 @@ public sealed class TextEntry(int maxLength)
 				s.Text(label, cx + (width - s.Measure(label)) / 2, cy + (cellH - px(24)) / 2, on ? Style.Accent : Style.Text);
 			}
 		}
-		return boxH + px(14) + Grid.Length * cellH;
+		return Height(px);
 	}
 }
 

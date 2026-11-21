@@ -1,0 +1,18 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "text", "key": "ui.combos.discovered", "args": ["discovered", "log_total"], "color": "accent"},
+			{"type": "list", "items": "rows", "state": "list", "y": "t(36)", "h": "ch - t(36) - t(96)", "enabled": "enabled"},
+			{"type": "group", "y": "ch - t(96)", "elements": [
+				{"type": "fill", "w": "cw", "h": 1, "color": "panel_edge", "alpha": 0.4},
+				{"type": "group", "visible": "has_entry", "y": "t(8)", "elements": [
+					{"type": "text", "value": "members_text", "max_width": "cw", "style": "small"},
+					{"type": "text", "value": "abilities_text", "y": "t(26)", "max_width": "cw", "style": "small"},
+					{"type": "text", "key": "ui.combos.first_found", "args": ["found_time", "make_key"], "y": "t(52)", "style": "small_dim"}
+				]},
+				{"type": "text", "visible": "!has_entry && total > 0", "key": "ui.combos.not_discovered", "y": "t(8)", "style": "small_dim"}
+			]}
+		]}
+	]
+}

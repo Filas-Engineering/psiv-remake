@@ -7,12 +7,10 @@ namespace Psiv.Sample;
 // The battle drawn in either layout (the presentation table's, SampleController.BattleFront.cs for the front one's own
 // parts): the backdrop, the figures, the playback's steps on them (stepping forward, banners, animations, effects, hit
 // reactions, floating numbers, bars, status icons, falls), the party's panels or status strip and the command menu, the
-// log when it is shown, and the result screen.
+// log when it is shown, and the result screen. The layout files `battle_front` and `battle_side` place the windows and
+// give the stage's placement rules as params; the stage itself is code drawn into the files' `stage` and `effects` slots.
 public sealed partial class SampleController
 {
-	private const int BattlePanelTop = 420;
-	private const int BattleMenuWidth = 300;
-	private const int BattleLogLines = 5;
 	private const int EffectScale = 3;
 
 	private int _probeShake;
@@ -46,27 +44,56 @@ public sealed partial class SampleController
 
 	private BattleLayout StageLayout() => _layoutOverride ?? PresentationTable.LayoutFor(StageInfo()?.Encounter ?? "", _s.FieldInfo()?.AreaId ?? "");
 
-	// Where a combatant stands in the side layout: its center x, the y of its feet and its size. Enemies fill the left by
-	// formation position over `enemyCount` places, in one row, or in two ranks from five on, the first ones in front; the
-	// party stands in a diagonal on the right.
-	private static (int X, int Foot, int Size) Place(int index, int partyCount, int position, int enemyCount)
+	// The stage's placement rules from the layout file's params: the members stand from (party_x, party_foot) a step of
+	// (party_dx, party_dy) apart; enemies fill `enemy_row_span` around enemy_x in one row up to `enemy_row_max`, then two
+	// ranks, the first ones in front, either interleaved over `enemy_rank_span` or each rank spread on its own and the back
+	// one shifted half a place.
+	private sealed record StageRules(int StageBottom, int PartyX, int PartyDx, int PartyFoot, int PartyDy, int PartySize, int VehicleX, int VehicleFoot,
+		int VehicleSize, int StepGap, int StepMargin, int EnemyX, int RowMax, int RowSpan, int RowSpacingMax, int RowFoot, int RowStagger, bool RanksInterleaved,
+		int RankSpan, int RankSpacingMax, int FrontFoot, int BackFoot);
+
+	// A param the screen's file leaves out takes the built-in file's value.
+	private StageRules Rules(string screen, UiContext ctx)
 	{
-		if (index < partyCount)
+		int P(string name) => Ui.Param(screen, name, ctx, 0);
+		return new StageRules(P("stage_bottom"), P("party_x"), P("party_dx"), P("party_foot"), P("party_dy"), P("party_size"), P("vehicle_x"), P("vehicle_foot"),
+			P("vehicle_size"), P("step_gap"), P("step_margin"), P("enemy_x"), P("enemy_row_max"), P("enemy_row_span"), P("enemy_row_spacing_max"), P("enemy_row_foot"),
+			P("enemy_row_stagger"), P("enemy_ranks_interleaved") != 0, P("enemy_rank_span"), P("enemy_rank_spacing_max"), P("enemy_front_foot"), P("enemy_back_foot"));
+	}
+
+	// Where the enemy at formation position `j` of `n` places stands: its center x, the y of its feet and its size. The
+	// file's `enemy_slot_J_x` and `enemy_slot_J_foot` override the computed place, -1 keeping it.
+	private (int X, int Foot, int Size) PlaceEnemy(string screen, StageRules r, UiContext ctx, int j, int n)
+	{
+		int x, foot;
+		bool back = false;
+		if (n <= r.RowMax)
 		{
-			return (912 + index * 68, 236 + index * 40, 80);
+			int spacing = Math.Min(r.RowSpacingMax, r.RowSpan / n);
+			x = r.EnemyX + (int)((j - (n - 1) / 2f) * spacing);
+			foot = r.RowFoot - j % 2 * r.RowStagger;
 		}
-		int j = position;
-		int size = enemyCount <= 3 ? 112 : enemyCount <= 5 ? 96 : 80;
-		if (enemyCount <= 4)
+		else
 		{
-			int spacing = Math.Min(200, 640 / enemyCount);
-			return (420 + (int)((j - (enemyCount - 1) / 2f) * spacing), 352 - j % 2 * 28, size);
+			int first = (n + 1) / 2;
+			back = j >= first;
+			if (r.RanksInterleaved)
+			{
+				int place = back ? 2 * (j - first) + 1 : 2 * j;
+				float gap = r.RankSpan / (float)n;
+				x = r.EnemyX + (int)((place - (n - 1) / 2f) * gap);
+			}
+			else
+			{
+				int k = back ? j - first : j, m = back ? n - first : first;
+				int rankSpacing = Math.Min(r.RankSpacingMax, r.RankSpan / m);
+				x = r.EnemyX + (int)((k - (m - 1) / 2f) * rankSpacing) + (back ? rankSpacing / 2 : 0);
+			}
+			foot = back ? r.BackFoot : r.FrontFoot;
 		}
-		int front = (enemyCount + 1) / 2;
-		bool back = j >= front;
-		int k = back ? j - front : j, m = back ? enemyCount - front : front;
-		int rankSpacing = Math.Min(170, 640 / m);
-		return (420 + (int)((k - (m - 1) / 2f) * rankSpacing) + (back ? rankSpacing / 2 : 0), back ? 292 : 376, size);
+		int size = Ui.Param(screen, "enemy_size", new UiContext(ctx).Set("enemy_count", n).Set("enemy_back", back), 0);
+		int ox = Ui.Param(screen, $"enemy_slot_{j}_x", ctx, -1), ofoot = Ui.Param(screen, $"enemy_slot_{j}_foot", ctx, -1);
+		return (ox >= 0 ? ox : x, ofoot >= 0 ? ofoot : foot, size);
 	}
 
 	private void DrawBattle(IDrawSurface s, Art art)
@@ -86,7 +113,12 @@ public sealed partial class SampleController
 		List<ShownCombatant> shown = _show.All;
 		_stageLayout = StageLayout();
 		bool front = _stageLayout == BattleLayout.Front;
-		int stageBottom = front ? StripTop : BattlePanelTop;
+		string screen = front ? "battle_front" : "battle_side";
+		string vehicle = info?.Vehicle ?? "";
+		(List<string> Items, List<bool>? Usable)? menu = MenuRows(all);
+		UiContext ui = BattleWindows(s, all, info, menu, target, screen);
+		StageRules rules = Rules(screen, ui);
+		int stageBottom = rules.StageBottom;
 
 		// The screen shakes with a heavy effect, a critical hit and a heavy change of form, easing off over the step; reduced
 		// flash damps it.
@@ -106,36 +138,37 @@ public sealed partial class SampleController
 
 		FieldInfo? field = _s.FieldInfo();
 		(int backdrop, _probeBackdrop) = art.Backdrop(field?.AreaKind ?? AreaKind.Field, field?.AreaId ?? "", info?.Encounter ?? "", _battleTerrain);
-		if (front)
-		{
-			DrawFrontBackdrop(s, backdrop, jolt);
-		}
-		else
-		{
-			s.Image(backdrop, jolt.X - 8, jolt.Y - 8, s.Width + 16, BattlePanelTop + 8, Color.White);
-		}
 
 		// Each figure's picture, offset and tint for the step playing, drawn back to front. In the front layout a vehicle
-		// stands left of the middle, clear of the action's name plate.
-		string vehicle = info?.Vehicle ?? "";
-		// In the front layout the members step aside for the command window, so it hides none of them.
-		Dictionary<int, int> centers = front ? FrontMemberCenters(all, vehicle, commanding && MenuRows(all) is not null ? b.Actor : -1, out _commandX) : [];
+		// stands left of the middle, clear of the action's name plate. In the front layout the members step aside for the
+		// command window, so it hides none of them.
+		int commandWidth = front && menu is not null ? Ui.WindowRect(screen, "command", s, ui)?.Width ?? 0 : 0;
+		int commandCenter = -1;
+		Dictionary<int, int> centers = front ? FrontMemberCenters(all, vehicle, commanding && menu is not null ? b.Actor : -1, commandWidth, rules, s.Width, out commandCenter) : [];
+		var enemyPlaces = new Dictionary<int, (int X, int Foot, int Size)>();
 		(int X, int Foot, int Size) Where(int i)
 		{
 			if (vehicle.Length > 0 && all[i].Id == vehicle)
 			{
-				return front ? (SlotX(1) + SlotWidth / 2, StripTop + 8, 160) : (1012, 336, 128);
+				return (rules.VehicleX, rules.VehicleFoot, rules.VehicleSize);
 			}
-			if (!front)
+			(int X, int Foot, int Size) f;
+			if (i < partyCount)
 			{
-				return Place(i, partyCount, shown[i].Position, enemyCount);
+				f = (rules.PartyX + i * rules.PartyDx, rules.PartyFoot + i * rules.PartyDy, rules.PartySize);
 			}
-			(int X, int Foot, int Size) f = PlaceFront(i, partyCount, shown[i].Position, enemyCount);
+			else if (!enemyPlaces.TryGetValue(shown[i].Position, out f))
+			{
+				f = enemyPlaces[shown[i].Position] = PlaceEnemy(screen, rules, ui, shown[i].Position, enemyCount);
+			}
 			return centers.TryGetValue(i, out int cx) ? (cx, f.Foot, f.Size) : f;
 		}
 		var bodies = new Dictionary<int, Rectangle>();
 		var figures = new List<string>();
 		var hovering = new List<string>();
+		// The figures' pictures go on the stage when the layout draws its `stage` slot; where each lands is known now.
+		var pictures = new List<Action>();
+		void Picture(int image, int x, int y, int w, int h, Color tint) => pictures.Add(() => s.Image(image, x, y, w, h, tint));
 		var order = Enumerable.Range(0, Math.Min(all.Count, shown.Count)).OrderBy(i => Where(i).Foot).ToList();
 		foreach (int i in order)
 		{
@@ -248,7 +281,7 @@ public sealed partial class SampleController
 			{
 				float shadow = hover > 0 ? 0.6f : 1f;
 				int shrink = hover > 0 ? size / 6 : 0;
-				s.Image(art.Shadow, body.X + shrink / 2, top + size / 6 + shrink / 2, body.Width - shrink, size - shrink, Color.White * (alpha * shadow));
+				Picture(art.Shadow, body.X + shrink / 2, top + size / 6 + shrink / 2, body.Width - shrink, size - shrink, Color.White * (alpha * shadow));
 			}
 			if (hover > 0)
 			{
@@ -260,11 +293,11 @@ public sealed partial class SampleController
 				Figure old = art.BattleFigure(sc.PreviousId, true);
 				int oldImage = old.Images[old.Idle.FrameAt(_clockMs + i * 137, loop: true)];
 				Rectangle was = art.Stand(oldImage, left, top, size);
-				s.Image(oldImage, was.X, was.Y, was.Width, was.Height, Color.White * (alpha * (1f - Ease(p))));
+				Picture(oldImage, was.X, was.Y, was.Width, was.Height, Color.White * (alpha * (1f - Ease(p))));
 				tint = Color.Lerp(Color.White * 4f, tint, Ease(p));
 				alpha *= Ease(p);
 			}
-			s.Image(image, body.X, body.Y, body.Width, body.Height, tint * alpha);
+			Picture(image, body.X, body.Y, body.Width, body.Height, tint * alpha);
 		}
 		_probeFigures = figures.Count == 0 ? "none" : string.Join(", ", figures);
 		_probeBodies = string.Join(", ", bodies.OrderBy(x => x.Key).Select(x => $"{all[x.Key].Label} {x.Value.Width}x{x.Value.Height} {x.Value.Bottom - Where(x.Key).Foot}"));
@@ -274,242 +307,279 @@ public sealed partial class SampleController
 		_probeOverlay = "-";
 		if (vehicle.Length > 0 && art.VehicleOverlay(vehicle) is int overlay)
 		{
-			s.Image(overlay, jolt.X, jolt.Y, s.Width, stageBottom, Color.White);
+			Picture(overlay, jolt.X, jolt.Y, s.Width, stageBottom, Color.White);
 			_probeOverlay = art.FromFile("vehicle_overlay:" + vehicle) ? vehicle : "every vehicle";
 		}
 
-		// Where effects and numbers land: on each figure, and in the front layout on the slot of a member with none.
+		// Where effects and numbers land: on each figure, and in the front layout on the slot of a member with none (the
+		// strip's `anchor` slots add those as the layout draws them).
 		var anchors = new Dictionary<int, Rectangle>(bodies);
-		var stage = new FrontStage();
-		if (front)
-		{
-			stage = DrawFrontStrip(s, art, all, vehicle, commanding, target, step, p, pulse, reduced);
-			foreach ((int index, Rectangle slot) in stage.Slots.Where(x => !anchors.ContainsKey(x.Key)))
-			{
-				anchors[index] = slot;
-			}
-			stage.Banner = DrawBanner(s, step, p, b.LogShown ? BattleLogLines * 22 + 48 : 20, front, plate: true);
-		}
+		var labels = new Dictionary<string, Rectangle>();
 		bool Behind(int i) => front && i < partyCount;
+		bool flash = (step is { Kind: StepKind.Effect, Turn.Look.Flash: true } || step is { Change.Flash: true }) && !reduced && p < 0.25f;
+		_probeFlash = flash;
 
-		// A change of the formation plays its effect on the enemy it brings or changes.
-		if (step is { Change: { } change, To: >= 0 } && art.Effect(change.Effect) is { } changeFx && anchors.TryGetValue(step.To, out Rectangle into))
+		void DrawEffects()
 		{
-			int frame = changeFx.Images[changeFx.Idle.FrameAt(_timeline.ElapsedMs, loop: false)];
-			(int ew, int eh) = art.DrawnEffectSize(frame, EffectScale + 1);
-			s.Image(frame, into.Center.X - ew / 2, into.Center.Y - eh / 2, ew, eh, Color.White);
+			// A change of the formation plays its effect on the enemy it brings or changes.
+			if (step is { Change: { } change, To: >= 0 } && art.Effect(change.Effect) is { } changeFx && anchors.TryGetValue(step.To, out Rectangle into))
+			{
+				int frame = changeFx.Images[changeFx.Idle.FrameAt(_timeline.ElapsedMs, loop: false)];
+				(int ew, int eh) = art.DrawnEffectSize(frame, EffectScale + 1);
+				s.Image(frame, into.Center.X - ew / 2, into.Center.Y - eh / 2, ew, eh, Color.White);
+			}
+
+			// The effect on each target, centered on its body (on a member seen from behind, its head); in the front layout an
+			// effect on several targets sweeps along them.
+			if (step is { Kind: StepKind.Effect, Turn.Look: { } fx } && art.Effect(fx.Effect) is { } effect)
+			{
+				List<int> hit = [.. turn!.Targets.Where(anchors.ContainsKey)];
+				if (front)
+				{
+					hit = [.. hit.OrderBy(t => anchors[t].Center.X)];
+				}
+				int stagger = front && hit.Count > 1 ? Math.Min(90, fx.EffectMs / (2 * hit.Count)) : 0;
+				for (int k = 0; k < hit.Count; k++)
+				{
+					int ms = _timeline.ElapsedMs - k * stagger;
+					if (ms < 0)
+					{
+						continue;
+					}
+					int frame = effect.Images[effect.Idle.FrameAt(ms, loop: false)];
+					(int ew, int eh) = art.DrawnEffectSize(frame, front && !Behind(hit[k]) ? EffectScale + 1 : EffectScale);
+					Rectangle r = anchors[hit[k]];
+					int cy = Behind(hit[k]) ? r.Y + r.Height * 3 / 8 : r.Center.Y;
+					s.Image(frame, r.Center.X - ew / 2, cy - eh / 2, ew, eh, Color.White);
+					_probeEffectSize = $"{ew}x{eh}";
+				}
+			}
+
+			// Labels, statuses and HP bars under the enemies, as before: one per enemy, its group's name and number.
+			// An enemy merging away takes no label: it is sliding into the other one.
+			foreach (int i in order.Where(i => all[i].Side == Side.Enemy && (shown[i].Alive || (shown[i].AliveStep is not null && shown[i].AliveStep == step))
+				&& !(step is { Kind: StepKind.Merge } && i == step.From)))
+			{
+				(int x, int foot, _) = Where(i);
+				bool targeted = i == target;
+				string label = Style.Fit(s, shown[i].Label, 190, Style.Small);
+				int lw = s.Measure(label, Style.Small);
+				s.Fill(x - lw / 2 - 8, foot + 6, lw + 16, 24, Color.Black * 0.6f);
+				s.Text(label, x - lw / 2, foot + 9, targeted ? Style.Accent : Style.Text, Style.Small);
+				Style.Bar(s, x - 50, foot + 34, 100, 6, Shown(shown[i], step, p).Hp, shown[i].MaxHp, Style.Bad);
+				DrawIcons(s, art, shown[i], step, p, x - 50, foot + 44);
+				int lx = Math.Min(x - lw / 2 - 8, x - 50);
+				labels[shown[i].Label] = new Rectangle(lx, foot + 6, Math.Max(x - lx, lw / 2 + 8) * 2, 58);
+			}
+
+			// The target cursor over the figure being chosen (a member seen from behind gets it over the command window), and
+			// over the retarget step's new target as it moves there.
+			int PointerY(int i, Rectangle r) => Behind(i) ? r.Y - 8 : r.Y - 40;
+			if (target >= 0 && !Behind(target) && bodies.TryGetValue(target, out Rectangle aim))
+			{
+				s.Image(art.Pointer, aim.Center.X - 18, PointerY(target, aim) + (int)(5 * pulse), 36, 36, Color.White);
+			}
+			if (step is { Kind: StepKind.Retarget } && bodies.TryGetValue(step.To, out Rectangle to))
+			{
+				Rectangle from = bodies.GetValueOrDefault(step.From, to);
+				float e = Ease(p);
+				s.Image(art.Pointer, (int)MathHelper.Lerp(from.Center.X, to.Center.X, e) - 18, (int)MathHelper.Lerp(PointerY(step.From, from), PointerY(step.To, to), e), 36, 36, Color.White);
+			}
+
+			// Floating numbers and words over each target: damage, critical, misses, weak and resisted hits, healing, statuses.
+			// Over a member seen from behind they rise from its head, clear of the enemies' labels.
+			var marks = new List<string>();
+			if (step is { Kind: StepKind.Result } && art.Effect(PresentationTable.ChangeFor("instant_defeat", "").Effect) is not null)
+			{
+				// The instant defeat's mark, stamped on the enemy it felled for the whole step.
+				foreach (BattleEvent e in step.Events.Where(e => e.Type == BattleEventType.Message && e.Message == "battle.instant_defeat" && anchors.ContainsKey(e.Target)))
+				{
+					string enemyId = e.Target < shown.Count ? shown[e.Target].Id : "";
+					if (art.Effect(PresentationTable.ChangeFor("instant_defeat", enemyId).Effect) is not { } mark)
+					{
+						continue;
+					}
+					int frame = mark.Images[mark.Idle.FrameAt(_timeline.ElapsedMs, loop: true)];
+					(int ew, int eh) = art.DrawnEffectSize(frame, EffectScale + 1);
+					Rectangle r = anchors[e.Target];
+					s.Image(frame, r.Center.X - ew / 2, r.Center.Y - eh / 2, ew, eh, Color.White * (p < 0.85f ? 1f : (1f - p) / 0.15f));
+					marks.Add(e.Target < shown.Count ? shown[e.Target].Label : "?");
+				}
+			}
+			_probeMarks = marks.Count == 0 ? "none" : string.Join(", ", marks);
+			if (step is { Kind: StepKind.Result or StepKind.RoundEnd })
+			{
+				UseTextRole(s, TextRole.BattleNumbers);
+				var stacked = new Dictionary<int, int>();
+				BattleEvent? previous = null;
+				foreach (BattleEvent e in step.Events)
+				{
+					int t = e.Type == BattleEventType.ItemHadNoEffect ? e.Actor : e.Target;
+					if (!anchors.TryGetValue(t, out Rectangle r) || Floating(e, previous) is not { } floating)
+					{
+						previous = e;
+						continue;
+					}
+					previous = e;
+					int n = stacked.GetValueOrDefault(t);
+					stacked[t] = n + 1;
+					float fade = p < 0.7f ? 1f : (1f - p) / 0.3f;
+					int rise = (int)(30 * Ease(Math.Min(1f, p * 2f)));
+					int w = s.Measure(floating.Text, floating.Size);
+					int fy = (Behind(t) ? r.Y + 36 : r.Y - 26) - rise - n * (floating.Size + 6);
+					s.Text(floating.Text, r.Center.X - w / 2 + 2, fy + 2, Color.Black * (0.8f * fade), floating.Size);
+					s.Text(floating.Text, r.Center.X - w / 2, fy, floating.Color * fade, floating.Size);
+				}
+				UseTextRole(s, TextRole.Menu);
+			}
+
+			// A full-screen flash at the start of a big effect, left out with reduced flash.
+			if (flash)
+			{
+				s.Fill(0, 0, s.Width, stageBottom, Color.White * (0.55f * (1f - p * 4f)));
+			}
 		}
 
-		// The effect on each target, centered on its body (on a member seen from behind, its head); in the front layout an
-		// effect on several targets sweeps along them.
-		if (step is { Kind: StepKind.Effect, Turn.Look: { } fx } && art.Effect(fx.Effect) is { } effect)
+		ui.Set("stage", (UiSlot)((_, _, _, _) =>
 		{
-			List<int> hit = [.. turn!.Targets.Where(anchors.ContainsKey)];
 			if (front)
 			{
-				hit = [.. hit.OrderBy(t => anchors[t].Center.X)];
+				DrawFrontBackdrop(s, backdrop, jolt);
 			}
-			int stagger = front && hit.Count > 1 ? Math.Min(90, fx.EffectMs / (2 * hit.Count)) : 0;
-			for (int k = 0; k < hit.Count; k++)
+			else
 			{
-				int ms = _timeline.ElapsedMs - k * stagger;
-				if (ms < 0)
-				{
-					continue;
-				}
-				int frame = effect.Images[effect.Idle.FrameAt(ms, loop: false)];
-				(int ew, int eh) = art.DrawnEffectSize(frame, front && !Behind(hit[k]) ? EffectScale + 1 : EffectScale);
-				Rectangle r = anchors[hit[k]];
-				int cy = Behind(hit[k]) ? r.Y + r.Height * 3 / 8 : r.Center.Y;
-				s.Image(frame, r.Center.X - ew / 2, cy - eh / 2, ew, eh, Color.White);
-				_probeEffectSize = $"{ew}x{eh}";
+				s.Image(backdrop, jolt.X - 8, jolt.Y - 8, s.Width + 16, stageBottom + 8, Color.White);
 			}
-		}
-
-		// Labels, statuses and HP bars under the enemies, as before: one per enemy, its group's name and number.
-		// An enemy merging away takes no label: it is sliding into the other one.
-		foreach (int i in order.Where(i => all[i].Side == Side.Enemy && (shown[i].Alive || (shown[i].AliveStep is not null && shown[i].AliveStep == step))
-			&& !(step is { Kind: StepKind.Merge } && i == step.From)))
-		{
-			(int x, int foot, _) = Where(i);
-			bool targeted = i == target;
-			string label = Style.Fit(s, shown[i].Label, 190, Style.Small);
-			int lw = s.Measure(label, Style.Small);
-			s.Fill(x - lw / 2 - 8, foot + 6, lw + 16, 24, Color.Black * 0.6f);
-			s.Text(label, x - lw / 2, foot + 9, targeted ? Style.Accent : Style.Text, Style.Small);
-			Style.Bar(s, x - 50, foot + 34, 100, 6, Shown(shown[i], step, p).Hp, shown[i].MaxHp, Style.Bad);
-			DrawIcons(s, art, shown[i], step, p, x - 50, foot + 44);
-			int lx = Math.Min(x - lw / 2 - 8, x - 50);
-			stage.Labels[shown[i].Label] = new Rectangle(lx, foot + 6, Math.Max(x - lx, lw / 2 + 8) * 2, 58);
-		}
-
-		// The target cursor over the figure being chosen (a member seen from behind gets it over the command window), and
-		// over the retarget step's new target as it moves there.
-		int PointerY(int i, Rectangle r) => Behind(i) ? r.Y - 8 : r.Y - 40;
-		if (target >= 0 && !Behind(target) && bodies.TryGetValue(target, out Rectangle aim))
-		{
-			s.Image(art.Pointer, aim.Center.X - 18, PointerY(target, aim) + (int)(5 * pulse), 36, 36, Color.White);
-		}
-		if (step is { Kind: StepKind.Retarget } && bodies.TryGetValue(step.To, out Rectangle to))
-		{
-			Rectangle from = bodies.GetValueOrDefault(step.From, to);
-			float e = Ease(p);
-			s.Image(art.Pointer, (int)MathHelper.Lerp(from.Center.X, to.Center.X, e) - 18, (int)MathHelper.Lerp(PointerY(step.From, from), PointerY(step.To, to), e), 36, 36, Color.White);
-		}
-
-		// Floating numbers and words over each target: damage, critical, misses, weak and resisted hits, healing, statuses.
-		// Over a member seen from behind they rise from its head, clear of the enemies' labels.
-		var marks = new List<string>();
-		if (step is { Kind: StepKind.Result } && art.Effect(PresentationTable.ChangeFor("instant_defeat", "").Effect) is not null)
-		{
-			// The instant defeat's mark, stamped on the enemy it felled for the whole step.
-			foreach (BattleEvent e in step.Events.Where(e => e.Type == BattleEventType.Message && e.Message == "battle.instant_defeat" && anchors.ContainsKey(e.Target)))
+			foreach (Action picture in pictures)
 			{
-				string enemyId = e.Target < shown.Count ? shown[e.Target].Id : "";
-				if (art.Effect(PresentationTable.ChangeFor("instant_defeat", enemyId).Effect) is not { } mark)
-				{
-					continue;
-				}
-				int frame = mark.Images[mark.Idle.FrameAt(_timeline.ElapsedMs, loop: true)];
-				(int ew, int eh) = art.DrawnEffectSize(frame, EffectScale + 1);
-				Rectangle r = anchors[e.Target];
-				s.Image(frame, r.Center.X - ew / 2, r.Center.Y - eh / 2, ew, eh, Color.White * (p < 0.85f ? 1f : (1f - p) / 0.15f));
-				marks.Add(e.Target < shown.Count ? shown[e.Target].Label : "?");
+				picture();
 			}
-		}
-		_probeMarks = marks.Count == 0 ? "none" : string.Join(", ", marks);
-		if (step is { Kind: StepKind.Result or StepKind.RoundEnd })
+		}));
+		ui.Set("effects", (UiSlot)((_, _, _, _) => DrawEffects()));
+		// A member being targeted may stand behind the command window: its pointer stays on top.
+		ui.Set("target_pointer", (UiSlot)((_, _, _, _) =>
 		{
-			UseTextRole(s, TextRole.BattleNumbers);
-			var stacked = new Dictionary<int, int>();
-			BattleEvent? previous = null;
-			foreach (BattleEvent e in step.Events)
+			if (target >= 0 && target < all.Count && all[target].Side == Side.Party && bodies.TryGetValue(target, out Rectangle aim))
 			{
-				int t = e.Type == BattleEventType.ItemHadNoEffect ? e.Actor : e.Target;
-				if (!anchors.TryGetValue(t, out Rectangle r) || Floating(e, previous) is not { } floating)
-				{
-					previous = e;
-					continue;
-				}
-				previous = e;
-				int n = stacked.GetValueOrDefault(t);
-				stacked[t] = n + 1;
-				float fade = p < 0.7f ? 1f : (1f - p) / 0.3f;
-				int rise = (int)(30 * Ease(Math.Min(1f, p * 2f)));
-				int w = s.Measure(floating.Text, floating.Size);
-				int fy = (Behind(t) ? r.Y + 36 : r.Y - 26) - rise - n * (floating.Size + 6);
-				s.Text(floating.Text, r.Center.X - w / 2 + 2, fy + 2, Color.Black * (0.8f * fade), floating.Size);
-				s.Text(floating.Text, r.Center.X - w / 2, fy, floating.Color * fade, floating.Size);
+				s.Image(art.Pointer, aim.Center.X - 18, aim.Y - 8, 36, 36, Color.White);
 			}
-			UseTextRole(s, TextRole.Menu);
-		}
+		}));
 
-		// A full-screen flash at the start of a big effect, left out with reduced flash.
-		_probeFlash = false;
-		if ((step is { Kind: StepKind.Effect, Turn.Look.Flash: true } || step is { Change.Flash: true }) && !reduced && p < 0.25f)
+		// The party's status: each member's numbers, marks and status icons, and in the front layout the strip slot it
+		// stands over, where effects land on a member with no figure.
+		UiContext Member(Combatant c)
 		{
-			_probeFlash = true;
-			s.Fill(0, 0, s.Width, stageBottom, Color.White * (0.55f * (1f - p * 4f)));
+			ShownCombatant sc = shown.ElementAtOrDefault(c.Index) ?? new ShownCombatant(c, -1);
+			(int hp, int tp) = Shown(sc, step, p);
+			string? next = NextCommand(c);
+			return new UiContext(ui)
+				.Set("name", c.Name)
+				.Set("alive", sc.Alive)
+				.Set("acting", commanding ? c.Index == b.Actor : turn?.Actors.Contains(c.Index) == true)
+				.Set("targeted", c.Index == target || (step?.Kind is StepKind.Effect or StepKind.Result && turn?.Targets.Contains(c.Index) == true))
+				.Set("hit", step is { Kind: StepKind.Result } && step.Events.Any(e => e.Type == BattleEventType.DamageDealt && e.Target == c.Index))
+				.Set("hp", hp)
+				.Set("max_hp", sc.MaxHp)
+				.Set("hp_low", hp * 4 <= sc.MaxHp)
+				.Set("tp", tp)
+				.Set("max_tp", sc.MaxTp)
+				.Set("state", MemberState(c, sc))
+				.Set("next", next is null ? "" : T("ui.battle.next", next))
+				.Set("icon_count", sc.Statuses.Count + sc.Leaving.Count(l => l.Step == step))
+				.Set("portrait", c.Id == vehicle ? art.VehicleFrame(c.Id, Direction.South, 0) : art.Portrait("", c.Id))
+				.Set("icons", (UiSlot)((x, y, _, _) => DrawIcons(s, art, sc, step, p, x, y)))
+				.Set("anchor", (UiSlot)((x, y, w, h) => anchors.TryAdd(c.Index, new Rectangle(x, y, w, h))));
 		}
-
-		if (b.LogShown)
-		{
-			Style.Box(s, 16, 12, s.Width - 32, BattleLogLines * 22 + 24, 0.94f);
-			var wrapped = new List<(string Text, bool Newest)>();
-			for (int i = Math.Max(0, b.Log.Count - BattleLogLines); i < b.Log.Count; i++)
-			{
-				foreach (string l in Style.Wrap(s, b.Log[i], s.Width - 80, Style.Small))
-				{
-					wrapped.Add((l, i == b.Log.Count - 1));
-				}
-			}
-			var lines = wrapped.Skip(Math.Max(0, wrapped.Count - BattleLogLines)).ToList();
-			for (int i = 0; i < lines.Count; i++)
-			{
-				s.Text(lines[i].Text, 36, 24 + i * 22, lines[i].Newest ? Style.Text : Style.Dim, Style.Small);
-			}
-		}
-		DrawBanner(s, step, p, b.LogShown ? BattleLogLines * 22 + 48 : 20, front);
+		List<Combatant> partySide = [.. all.Where(c => c.Side == Side.Party)];
+		List<UiContext> party = [.. partySide.Select(Member)];
+		List<UiContext> members = [.. partySide.Zip(party).Where(m => m.First.Id != vehicle).Select(m => m.Second)];
+		List<UiContext> ride = [.. partySide.Zip(party).Where(m => vehicle.Length > 0 && m.First.Id == vehicle).Select(m => m.Second).Take(1)];
+		ui.Set("party", party)
+			.Set("members", members)
+			.Set("vehicle", ride)
+			.Set("target_pulse", 0.4f + 0.6f * pulse)
+			.Set("hit_flash", !reduced && p < 0.5f)
+			.Set("hit_fade", 1f - p * 2f);
 		if (front)
 		{
-			DrawFrontMenus(s, all, info, bodies, target, stage);
-			return;
+			_probeStrip = StripProbe(members, ride);
 		}
 
-		// The party, one column each: portrait, name, status icons and names, HP and TP bars, the command already chosen.
-		var party = all.Where(c => c.Side == Side.Party).ToList();
-		int panelW = s.Width - 32 - BattleMenuWidth - 12;
-		int panelH = s.Height - BattlePanelTop - 16;
-		Style.Box(s, 16, BattlePanelTop, panelW, panelH);
-		int colW = (panelW - 16) / Math.Max(1, party.Count);
-		for (int i = 0; i < party.Count; i++)
+		// The command window goes beside the member choosing, where the members made room for it, else beside the actor.
+		Rectangle actor = bodies.TryGetValue(b.Actor, out Rectangle actorBody) ? actorBody
+			: new Rectangle(s.Width / 2 - 64, (Ui.WindowRect(screen, "strip", s, ui)?.Y ?? 0) - 64, 128, 128);
+		ui.Set("command_center", commandCenter)
+			.Set("actor_left", actor.Left)
+			.Set("actor_right", actor.Right)
+			.Set("actor_center", actor.Center.X);
+
+		Ui.Draw(screen, s, s, ui);
+		if (front)
 		{
-			Combatant c = party[i];
-			ShownCombatant sc = shown.ElementAtOrDefault(c.Index) ?? new ShownCombatant(c, -1);
-			int cx = 24 + i * colW;
-			int cy = BattlePanelTop + 10;
-			int cw = colW - 8;
-			int ch = panelH - 20;
-			bool acting = commanding ? c.Index == b.Actor : turn?.Actors.Contains(c.Index) == true;
-			bool targeted = c.Index == target || (step?.Kind is StepKind.Effect or StepKind.Result && turn?.Targets.Contains(c.Index) == true);
-			if (acting)
+			FrontProbes(s, all, bodies, labels, screen, ui);
+		}
+	}
+
+	// The battle's windows' data: the menu, the description, the step's banner, the log, the keys and the result.
+	private UiContext BattleWindows(IDrawSurface s, IReadOnlyList<Combatant> all, BattleInfo? info, (List<string> Items, List<bool>? Usable)? menu, int target,
+		string screen)
+	{
+		BattleUi b = _battle;
+		BattleStep? step = b.Phase == BattlePhase.Playback ? _timeline.Current : null;
+		UiContext ui = UiData()
+			.Set("phase", b.Phase.ToString().ToLowerInvariant())
+			.Set("auto", b.Auto)
+			.Set("cursor", _cursor)
+			.Set("menu_shown", menu is not null)
+			.Set("menu_title", MenuTitle(all))
+			.Set("menu_items", menu is { } m ? m.Items.Select((item, i) => new UiContext().Set("text", item).Set("usable", m.Usable is null || m.Usable[i])).ToList() : [])
+			.Set("key_confirm", Hint(GameAction.Confirm))
+			.Set("key_back", Hint(GameAction.Back))
+			.Set("key_fast_forward", Hint(GameAction.FastForward))
+			.Set("key_text_log", Hint(GameAction.TextLog))
+			.Set("hint", b.Phase switch
 			{
-				s.Fill(cx, cy, cw, ch, Style.Row);
-			}
-			if (acting || targeted)
-			{
-				Style.Frame(s, cx, cy, cw, ch, targeted ? Style.Accent * (0.4f + 0.6f * pulse) : Style.Accent);
-			}
-			int portrait = c.Id == vehicle ? art.VehicleFrame(c.Id, Direction.South, 0) : art.Portrait("", c.Id);
-			s.Image(portrait, cx + 8, cy + 8, 64, 64, sc.Alive ? Color.White : new Color(80, 80, 92));
-			s.Text(Style.Fit(s, c.Name, cw - 90), cx + 80, cy + 12, !sc.Alive ? Style.Dim : acting ? Style.Accent : Style.Text);
-			string state = MemberState(c, sc);
-			DrawIcons(s, art, sc, step, p, cx + 80, cy + 38);
-			if (state.Length > 0)
-			{
-				s.Text(Style.Fit(s, state, cw - 90, Style.Small), cx + 80, cy + 60, sc.Alive ? Style.Dim : Style.Bad, Style.Small);
-			}
-			(int hp, int tp) = Shown(sc, step, p);
-			int bw = cw - 24;
-			Widgets.ValueBar(s, cx + 12, cy + 86, bw, T("ui.battle.hp"), hp, sc.MaxHp, hp * 4 <= sc.MaxHp ? Style.Bad : Style.Good);
-			Widgets.ValueBar(s, cx + 12, cy + 130, bw, T("ui.battle.tp"), tp, sc.MaxTp, Style.Tp);
-			if (NextCommand(c) is { } command)
-			{
-				s.Text(Style.Fit(s, T("ui.battle.next", command), bw, Style.Small), cx + 12, cy + 180, Style.Dim, Style.Small);
-			}
+				BattlePhase.Playback => T("ui.battle.hint.playback", Hint(GameAction.Confirm), Hint(GameAction.FastForward), Hint(GameAction.TextLog)) +
+					(b.Auto ? T("ui.battle.hint.playback_auto", Hint(GameAction.Back)) : ""),
+				BattlePhase.Ended => T("ui.battle.hint.continue", Hint(GameAction.Confirm)),
+				_ => T("ui.battle.hint.command", Hint(GameAction.Confirm), Hint(GameAction.Back), Hint(GameAction.TextLog), Hint(GameAction.Pause)),
+			})
+			.Set("outcome", OutcomeText(info?.Outcome ?? Outcome.Ongoing))
+			.Set("result_lines", b.Phase == BattlePhase.Ended ? ResultLines(info) : []);
+		string? description = MenuDescription(all, target, out bool described);
+		ui.Set("description_shown", described).Set("description", description ?? "");
+		if (described)
+		{
+			_probeDescription = string.IsNullOrEmpty(description) ? "-" : description;
 		}
 
-		int mx = s.Width - 16 - BattleMenuWidth;
-		Style.Window(s, mx, BattlePanelTop, BattleMenuWidth, panelH, MenuTitle(all));
-		if (MenuRows(all) is { } menu)
+		// The step's words: the action's name over its whole turn (in the front layout a framed name plate, with a cancel),
+		// and the opening, the round, a notice or the outcome on their own, fading in and out.
+		bool turnName = step?.Kind is StepKind.Banner or StepKind.Animate or StepKind.Effect or StepKind.Result or StepKind.Retarget;
+		string banner = step is null || step.Kind is StepKind.Forward or StepKind.Back ? "" : turnName ? BannerOf(step) : step.Text;
+		ui.Set("banner", banner)
+			.Set("banner_plate", turnName || step?.Kind == StepKind.Cancel)
+			.Set("banner_big", step?.Kind is StepKind.Outcome or StepKind.Opening or StepKind.Round)
+			.Set("banner_cancel", step?.Kind == StepKind.Cancel)
+			.Set("banner_alpha", turnName ? 1f : Math.Clamp(Math.Min(_timeline.Progress * 6f, (1f - _timeline.Progress) * 6f), 0f, 1f));
+
+		// The log's newest lines: its last entries wrapped to the log window, the newest entry's lines bright.
+		ui.Set("log_shown", b.LogShown);
+		var lines = new List<UiContext>();
+		if (b.LogShown)
 		{
-			int rows = (panelH - 44) / 28;
-			int first = Math.Clamp(_cursor - rows + 1, 0, Math.Max(0, menu.Items.Count - rows));
-			for (int i = first; i < Math.Min(menu.Items.Count, first + rows); i++)
+			int rows = Ui.Param(screen, "log_rows", ui, 0);
+			int width = (Ui.WindowRect(screen, "log", s, ui)?.Width ?? 0) - Ui.Param(screen, "log_wrap_margin", ui, 0);
+			for (int i = Math.Max(0, b.Log.Count - rows); i < b.Log.Count; i++)
 			{
-				Style.ListRow(s, Style.Fit(s, menu.Items[i], BattleMenuWidth - 70, Style.Small), mx + 24, BattlePanelTop + 30 + (i - first) * 28,
-					BattleMenuWidth - 36, i == _cursor, menu.Usable is null || menu.Usable[i], Style.Small);
+				foreach (string l in Style.Wrap(s, b.Log[i], width, Style.Small))
+				{
+					lines.Add(new UiContext().Set("text", l).Set("newest", i == b.Log.Count - 1));
+				}
 			}
+			lines = [.. lines.Skip(Math.Max(0, lines.Count - rows))];
 		}
-		MenuDescription(s, all, target);
-		switch (b.Phase)
-		{
-		case BattlePhase.Playback:
-			s.Text(b.Auto ? T("ui.battle.auto") : T("ui.battle.playing"), mx + 24, BattlePanelTop + 34, Style.Text);
-			if (b.Auto)
-			{
-				s.Text(Style.Fit(s, T("ui.battle.hint.auto_stops", Hint(GameAction.Back)), BattleMenuWidth - 48, Style.Small), mx + 24, BattlePanelTop + 64, Style.Dim, Style.Small);
-			}
-			s.Text(Style.Fit(s, T("ui.battle.hint.hurry", Hint(GameAction.Confirm)), BattleMenuWidth - 48, Style.Small), mx + 24, BattlePanelTop + panelH - 82, Style.Dim, Style.Small);
-			s.Text(Style.Fit(s, T("ui.battle.hint.skip", Hint(GameAction.FastForward)), BattleMenuWidth - 48, Style.Small), mx + 24, BattlePanelTop + panelH - 58, Style.Dim, Style.Small);
-			s.Text(Style.Fit(s, T("ui.battle.hint.log", Hint(GameAction.TextLog)), BattleMenuWidth - 48, Style.Small), mx + 24, BattlePanelTop + panelH - 34, Style.Dim, Style.Small);
-			break;
-		case BattlePhase.Ended:
-			s.Text(OutcomeText(info?.Outcome ?? Outcome.Ongoing), mx + 24, BattlePanelTop + 34, Style.Accent, Style.Title);
-			s.Text(T("ui.battle.hint.continue", Hint(GameAction.Confirm)), mx + 24, BattlePanelTop + 84, Style.Text);
-			DrawResult(s, info, BattlePanelTop);
-			break;
-		}
+		return ui.Set("log_lines", lines);
 	}
 
 	// A member's state under its name: fallen, defending and its statuses.
@@ -545,27 +615,29 @@ public sealed partial class SampleController
 		};
 	}
 
-	// The highlighted option's or targeted enemy's description strip; its box, or an empty one when none shows.
-	private Rectangle MenuDescription(IDrawSurface s, IReadOnlyList<Combatant> all, int target)
+	// The highlighted option's or targeted enemy's description (null or "" when the data has none); `described` false when
+	// no description shows.
+	private string? MenuDescription(IReadOnlyList<Combatant> all, int target, out bool described)
 	{
 		BattleUi b = _battle;
+		described = true;
 		if (b.Phase == BattlePhase.Option && b.Options.Count > 0)
 		{
 			BattleOption option = b.Options[Math.Clamp(_cursor, 0, b.Options.Count - 1)];
 			if (b.Worn.Contains(option.Id))
 			{
 				string? piece = _s.Description(DescriptionKind.Equipment, option.Id);
-				return BattleDescription(s, T("ui.battle.worn_note") + (piece is { Length: > 0 } ? " " + piece : ""));
+				return T("ui.battle.worn_note") + (piece is { Length: > 0 } ? " " + piece : "");
 			}
-			return BattleDescription(s, _s.Description(option.Command == CommandKind.Item ? DescriptionKind.Item : DescriptionKind.Ability, option.Id));
+			return _s.Description(option.Command == CommandKind.Item ? DescriptionKind.Item : DescriptionKind.Ability, option.Id);
 		}
 		if (b.Phase == BattlePhase.Target && target >= 0 && target < all.Count && all[target].Side == Side.Enemy)
 		{
-			return BattleDescription(s, _s.Description(DescriptionKind.Enemy, all[target].Id));
+			return _s.Description(DescriptionKind.Enemy, all[target].Id);
 		}
-		return Rectangle.Empty;
+		described = false;
+		return null;
 	}
-
 
 	// A bar's numbers while the step that changed them plays, else where it left them.
 	private static (int Hp, int Tp) Shown(ShownCombatant c, BattleStep? step, float p) => c.BarStep is not null && c.BarStep == step
@@ -628,89 +700,36 @@ public sealed partial class SampleController
 		};
 	}
 
-	// The step's words at `y`: the action's name over its whole turn, and the opening, the round, a cancel, a notice or the
-	// outcome on their own, fading in and out. In the front layout the action's name and a cancel are a framed name plate
-	// (`plate`), drawn with the stage's figures so the probe can check what it covers; it stays at the top of the stage, over
-	// no party figure and no enemy's label. Returns the box drawn.
-	private Rectangle DrawBanner(IDrawSurface s, BattleStep? step, float p, int y, bool front, bool plate = false)
-	{
-		if (step is null)
-		{
-			return Rectangle.Empty;
-		}
-		bool turnName = step.Kind is StepKind.Banner or StepKind.Animate or StepKind.Effect or StepKind.Result or StepKind.Retarget;
-		if (front && (turnName || step.Kind == StepKind.Cancel) != plate)
-		{
-			return Rectangle.Empty;
-		}
-		string text = turnName ? BannerOf(step) : step.Text;
-		if (text.Length == 0 || step.Kind is StepKind.Forward or StepKind.Back)
-		{
-			return Rectangle.Empty;
-		}
-		float alpha = turnName ? 1f : Math.Clamp(Math.Min(p * 6f, (1f - p) * 6f), 0f, 1f);
-		int size = step.Kind is StepKind.Outcome or StepKind.Opening or StepKind.Round ? Style.Title : Style.Body;
-		text = Style.Fit(s, text, s.Width - 160, size);
-		int w = s.Measure(text, size) + 48;
-		int h = size + 22;
-		int x = (s.Width - w) / 2;
-		Style.Box(s, x, y, w, h, 0.95f * alpha);
-		if (plate)
-		{
-			Style.Frame(s, x + 6, y + 6, w - 12, h - 12, Style.Accent * (0.5f * alpha), 1);
-		}
-		s.Text(text, x + 24, y + 10, (step.Kind == StepKind.Cancel ? Style.Bad : Style.Accent) * alpha, size);
-		return new Rectangle(x, y, w, h);
-	}
-
 	private static string BannerOf(BattleStep step) => step.Kind == StepKind.Banner ? step.Text : step.Turn?.Name ?? "";
 
-	// The result screen over the battlefield: experience, money, drops, and each level-up with what it taught.
-	private void DrawResult(IDrawSurface s, BattleInfo? info, int stageBottom)
+	// The result screen's lines: experience, money, drops, and each level-up with what it taught; or the party's fall.
+	private List<UiContext> ResultLines(BattleInfo? info)
 	{
 		BattleResult? result = _s.BattleResult();
-		var lines = new List<(string Text, Color Color)>();
+		var lines = new List<UiContext>();
+		UiContext Line(string kind, string text) => new UiContext().Set("kind", kind).Set("text", text);
 		if (result is not null && result.Outcome is Outcome.Victory or Outcome.ScriptedEnd)
 		{
-			lines.Add((T("ui.battle.result.experience", result.Experience), Style.Text));
-			lines.Add((T("ui.battle.result.money", result.Money), Style.Text));
+			lines.Add(Line("experience", T("ui.battle.result.experience", result.Experience)));
+			lines.Add(Line("money", T("ui.battle.result.money", result.Money)));
 			if (result.Drops.Count > 0)
 			{
-				lines.Add((T("ui.battle.result.found", ListText(result.Drops.Select(d => d.Value > 1 ? T("ui.common.item_count", _s.DisplayName(d.Key), d.Value) : _s.DisplayName(d.Key)))), Style.Text));
+				lines.Add(Line("found", T("ui.battle.result.found", ListText(result.Drops.Select(d => d.Value > 1 ? T("ui.common.item_count", _s.DisplayName(d.Key), d.Value) : _s.DisplayName(d.Key))))));
 			}
 			foreach (LevelUp up in result.LevelUps)
 			{
-				lines.Add((T("ui.battle.result.level_up", up.Name, up.Level), Style.Accent));
+				lines.Add(Line("level_up", T("ui.battle.result.level_up", up.Name, up.Level)));
 				if (up.Learned.Count > 0)
 				{
-					lines.Add(("  " + T("ui.battle.result.learned", ListText(up.Learned.Select(_s.DisplayName))), Style.Good));
+					lines.Add(Line("learned", T("ui.battle.result.learned", ListText(up.Learned.Select(_s.DisplayName)))));
 				}
 			}
 		}
 		else if (info?.GameOver == true)
 		{
-			lines.Add((T("ui.battle.result.fallen"), Style.Bad));
+			lines.Add(Line("fallen", T("ui.battle.result.fallen")));
 		}
-		string heading = OutcomeText(info?.Outcome ?? Outcome.Ongoing);
-		_probeVictory = string.Join(" / ", lines.Select(l => l.Text.Trim()).Prepend(heading));
-		int w = 640, h = 84 + lines.Count * 30;
-		int x = (s.Width - w) / 2, y = Math.Max(24, (stageBottom - h) / 2);
-		Style.Window(s, x, y, w, h, T("ui.battle.result.title"));
-		s.Text(heading, x + (w - s.Measure(heading, Style.Title)) / 2, y + 22, Style.Accent, Style.Title);
-		for (int i = 0; i < lines.Count; i++)
-		{
-			s.Text(Style.Fit(s, lines[i].Text, w - 64), x + 32, y + 70 + i * 30, lines[i].Color);
-		}
-	}
-
-	// A strip at the top of the battlefield, under the log when it shows, with the highlighted option's or targeted
-	// enemy's description, clear of the figures and their labels.
-	private Rectangle BattleDescription(IDrawSurface s, string? text)
-	{
-		int h = Px(22) * 2 + 16;
-		int y = _battle.LogShown ? BattleLogLines * 22 + 48 : 16;
-		Style.Box(s, 16, y, s.Width - 32, h, 0.9f);
-		DrawDescription(s, text, 32, y + 8, s.Width - 64);
-		return new Rectangle(16, y, s.Width - 32, h);
+		_probeVictory = string.Join(" / ", lines.Select(l => ((string)l.Get("text")!).Trim()).Prepend(OutcomeText(info?.Outcome ?? Outcome.Ongoing)));
+		return lines;
 	}
 }

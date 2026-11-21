@@ -1,0 +1,15 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "scene", "elements": [
+			{"type": "slot", "slot": "scene"},
+			{"type": "fill", "w": "W", "h": "H", "color": "black", "alpha": 0.5}
+		]},
+		{"name": "box", "x": 120, "y": 50, "w": "W - 240", "h": "H - 100", "frame": "panel", "title": "ui.saves.load_title", "elements": [
+			{"type": "text", "visible": "!has_saves", "key": "ui.saves.none", "x": 40, "y": 40, "color": "dim"},
+			{"type": "slot", "slot": "slot_list", "x": 40, "y": 34, "w": "cw - 70", "h": "H - 190"},
+			{"type": "slot", "slot": "toasts", "x": 24, "y": "H - 142", "w": "cw - 48", "h": 0},
+			{"type": "hints", "value": "hint", "x": 24, "y": "H - 100 - t(36)", "w": "cw - 48"}
+		]}
+	]
+}

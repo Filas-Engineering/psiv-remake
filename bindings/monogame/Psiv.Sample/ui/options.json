@@ -1,0 +1,25 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "scene", "visible": "title_mode", "elements": [
+			{"type": "slot", "slot": "scene"},
+			{"type": "fill", "w": "W", "h": "H", "color": "black", "alpha": 0.5}
+		]},
+		{"name": "backdrop", "visible": "!title_mode", "elements": [{"type": "slot", "slot": "backdrop"}]},
+		{"name": "box", "x": 80, "y": 50, "w": "W - 160", "h": "H - 100", "frame": "panel", "title": {"value": "title"}, "elements": [
+			{"type": "group", "visible": "!on_controls", "elements": [
+				{"type": "list", "items": "rows", "state": "list", "x": 40, "y": "t(30)", "w": "cw - 70", "h": "ch - t(30) - t(64) - 10", "row_height": "t(30)", "row": [
+					{"type": "fill", "visible": "selected", "x": -6, "y": -3, "w": "cw - 70 - 14", "h": "t(28)", "color": "row"},
+					{"type": "pointer", "visible": "selected", "x": -4, "y": "(t(28) - 8) / 2 - 6"},
+					{"type": "text", "value": "label", "x": 14, "color": "!enabled ? 'dim' : selected ? 'accent' : 'text'"},
+					{"type": "text", "value": "value == '' ? '' : selected && changeable ? '<  ' + value + '  >' : value", "x": "(cw - 70) * 55 / 100",
+						"color": "selected ? 'accent' : 'text'"}
+				]},
+				{"type": "text", "value": "description", "x": 40, "y": "ch - t(64) - t(4)", "wrap": true, "max_width": "cw - 70", "lines": 2, "line_height": "t(22)", "style": "small_dim"}
+			]},
+			{"type": "slot", "visible": "on_controls", "slot": "controls", "x": 40, "y": "t(30)", "w": "cw - 70", "h": "ch - t(30) - t(64) - 10"},
+			{"type": "slot", "slot": "toasts", "y": "ch - t(64) - t(20)", "w": "cw - 24", "h": 0},
+			{"type": "hints", "value": "hint", "x": 40, "y": "ch - t(24) - 10", "w": "cw - 70"}
+		]}
+	]
+}

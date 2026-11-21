@@ -43,7 +43,7 @@ public sealed partial class Art
 	// How a picture with a scale, a natural size or a foot row stands: file pixels per grid pixel (0: the generated
 	// pictures' factor, -1: the natural multiple) and the row its feet stand on.
 	private readonly Dictionary<int, (float Scale, int Foot)> _fits = [];
-	// Logical pixels per file pixel for figures drawn at their natural size: the 720-pixel stage over battle_figures'
+	// Logical pixels per file pixel for figures drawn at their natural size: the logical screen height (720 by default) over battle_figures'
 	// reference height, rounded down, at least 1.
 	private int _naturalMultiple;
 	private bool _figureShadows = true;
@@ -107,9 +107,10 @@ public sealed partial class Art
 		return ((int)MathF.Round(w * p), (int)MathF.Round(h * p));
 	}
 
-	// The bitmap font for a text language and role: the role's own, else the language's font for every role.
+	// The bitmap font for a text language and role: the role's own, else the language's font for every role. The hint
+	// without its own font draws in the menu's.
 	public BitmapFont? BitmapFontFor(string language, TextRole role) =>
-		_bitmapFonts.GetValueOrDefault((language, role)) ?? _bitmapFonts.GetValueOrDefault((language, null));
+		_bitmapFonts.GetValueOrDefault((language, role)) ?? (role == TextRole.Hint ? BitmapFontFor(language, TextRole.Menu) : _bitmapFonts.GetValueOrDefault((language, null)));
 
 	// The picture on a cell of an active tile step hook, from the field's overlay, or null for the generated rune.
 	public int? TileHookOverlay(int clockMs) => _tileHookOverlay is { } o ? o.Images[o.Idle.FrameAt(clockMs, loop: true)] : null;
@@ -177,6 +178,34 @@ public sealed partial class Art
 		return images;
 	}
 
+	private readonly Dictionary<string, NineSliceImage?> _layoutSlices = [];
+	private readonly Dictionary<string, int> _layoutPictures = [];
+
+	// A frame or cursor picture a layout's styles name, from the asset directory; null or -1 when it cannot be read.
+	public NineSliceImage? LayoutSlice(string file, int border, int scale)
+	{
+		string key = $"{file}#{border}#{scale}";
+		if (!_layoutSlices.TryGetValue(key, out NineSliceImage? slice))
+		{
+			string full = Path.GetFullPath(Path.Combine(_assetDir, file));
+			slice = _assetDir.Length > 0 && System.IO.File.Exists(full) && Png.ReadHeader(full, out _) is { } h && h.Width > 2 * border && h.Height > 2 * border
+				? Slice(new NineSlice(null, file, border, scale)) : null;
+			_layoutSlices[key] = slice;
+		}
+		return slice;
+	}
+
+	public int LayoutPicture(string file)
+	{
+		if (!_layoutPictures.TryGetValue(file, out int image))
+		{
+			string full = Path.GetFullPath(Path.Combine(_assetDir, file));
+			image = _assetDir.Length > 0 && System.IO.File.Exists(full) && Png.ReadHeader(full, out _) is not null ? Whole(file) : -1;
+			_layoutPictures[file] = image;
+		}
+		return image;
+	}
+
 	private NineSliceImage Slice(NineSlice slice)
 	{
 		(int w, int h, Color[] pixels) = File(slice.Path);
@@ -201,7 +230,7 @@ public sealed partial class Art
 
 	private void LoadFiles(AssetManifest m)
 	{
-		_naturalMultiple = m.ReferenceHeight is int reference ? Math.Max(1, 720 / reference) : 0;
+		_naturalMultiple = m.ReferenceHeight is int reference ? Math.Max(1, _s.Height / reference) : 0;
 		_figureShadows = m.FigureShadows;
 		// Kinds first, so an area's tileset takes the objects it leaves out from its kind's.
 		foreach (TilesetEntry t in m.Tilesets.OrderBy(t => t.Kind is null))
