@@ -26,7 +26,7 @@ public sealed partial class SampleController
 		list.Draw(s, x, y, w, h, rowH, slots.Count, (i, ry, on) =>
 		{
 			SaveSummary? save = saves.FirstOrDefault(v => v.Slot == slots[i]);
-			string name = slots[i] + (save is { Autosave: true } ? " (autosave)" : "");
+			string name = slots[i] + (save is { Autosave: true } ? " (autosave)" : "") + (_dev && save is { Dev: true } ? " [dev]" : "");
 			string head = save is null ? $"{name}   (empty)"
 				: save.Damaged ? $"{name}   (damaged)"
 				: $"{name}   {_s.DisplayName(save.Area)}   {Clock(save.PlayTimeMs)}   {_s.DisplayName(save.Difficulty)}";
@@ -44,7 +44,8 @@ public sealed partial class SampleController
 		}, active);
 		if (active && slots.Count > 0)
 		{
-			_probeSelected = slots[list.Cursor] + (saves.FirstOrDefault(v => v.Slot == slots[list.Cursor]) is { } shown ? shown.Damaged ? " damaged" : " " + shown.Area : " empty");
+			_probeSelected = slots[list.Cursor] + (saves.FirstOrDefault(v => v.Slot == slots[list.Cursor]) is { } shown ? shown.Damaged ? " damaged" : " " + shown.Area : " empty") +
+				(_dev && saves.FirstOrDefault(v => v.Slot == slots[list.Cursor]) is { Dev: true } ? " dev" : "");
 			_probeTop = list.Top;
 		}
 	}

@@ -57,6 +57,7 @@ public struct PsivSaveSummary
 	public ulong Sequence;
 	public int Autosave, Damaged;
 	public IntPtr Error;
+	public int Dev;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -64,7 +65,7 @@ public struct PsivWorldInfo
 {
 	public int Mode, MenuKind, Money;
 	public long PlayTimeMs;
-	public int AutosaveCount, GameOver, CanRetry, PlayerControl;
+	public int AutosaveCount, GameOver, CanRetry, PlayerControl, Dev, Encounters;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -93,6 +94,19 @@ public struct PsivPoint { public int Kind; public IntPtr Id; public int X, Y; pu
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivVehicle { public IntPtr Id, Name; public int X, Y, Facing, Aboard; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivEventPosition { public IntPtr Event, File; public int Line; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivZone
+{
+	public IntPtr Id;
+	public int FromX, FromY, ToX, ToY, EntryCount;
+	public IntPtr Encounters, Weights;
+	public int SpawnCount;
+	public IntPtr Spawns;
+}
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivTravelDestination { public IntPtr Id, Area, AreaName, Region; public int X, Y; }
@@ -342,7 +356,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 8;
+	public const uint AbiVersion = 9;
 
 	[LibraryImport(Library, EntryPoint = "psiv_abi_version")] public static partial uint AbiVersionOf();
 	[LibraryImport(Library, EntryPoint = "psiv_version")] public static partial IntPtr Version();
@@ -478,6 +492,25 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_display_name", StringMarshalling = StringMarshalling.Utf8)] public static partial int DisplayName(SessionHandle s, string id, out IntPtr text);
 	[LibraryImport(Library, EntryPoint = "psiv_string_text", StringMarshalling = StringMarshalling.Utf8)] public static partial int StringText(SessionHandle s, string id, out IntPtr text);
 	[LibraryImport(Library, EntryPoint = "psiv_description", StringMarshalling = StringMarshalling.Utf8)] public static partial int Description(SessionHandle s, int kind, string id, out IntPtr text);
+
+	[LibraryImport(Library, EntryPoint = "psiv_dev_ids")] public static partial int DevIds(SessionHandle s, int list, out IntPtr ids, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_warp", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevWarp(SessionHandle s, string area, string marker);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_warp_cell", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevWarpCell(SessionHandle s, string area, int x, int y);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_set_flag", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevSetFlag(SessionHandle s, string flag, int value);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_give", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevGive(SessionHandle s, string id, int count);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_money")] public static partial int DevMoney(SessionHandle s, int amount);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_set_level", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevSetLevel(SessionHandle s, string member, int level);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_battle", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevBattle(SessionHandle s, string encounter);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_end_battle")] public static partial int DevEndBattle(SessionHandle s, int victory, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_vehicle", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevVehicle(SessionHandle s, string vehicle, string area, string marker);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_encounters")] public static partial int DevEncounters(SessionHandle s, int on);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_run_event", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevRunEvent(SessionHandle s, string ev);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_mark")] public static partial int DevMark(SessionHandle s);
+	[LibraryImport(Library, EntryPoint = "psiv_event_position_get")] public static partial int EventPositionGet(SessionHandle s, out PsivEventPosition position);
+	[LibraryImport(Library, EntryPoint = "psiv_field_zones")] public static partial int FieldZones(SessionHandle s, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_save_text")] public static partial int SaveText(SessionHandle s, out IntPtr text);
+	[LibraryImport(Library, EntryPoint = "psiv_load_text", StringMarshalling = StringMarshalling.Utf8)] public static partial int LoadText(SessionHandle s, string text);
+	[LibraryImport(Library, EntryPoint = "psiv_session_reload")] public static partial int SessionReload(SessionHandle s);
 
 	public static string Str(IntPtr p) => p == IntPtr.Zero ? "" : Marshal.PtrToStringUTF8(p) ?? "";
 

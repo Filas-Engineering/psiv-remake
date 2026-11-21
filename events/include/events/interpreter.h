@@ -49,6 +49,15 @@ public:
 	Status status() const { return status_; }
 	const std::string& error() const { return error_; }
 
+	// For tools: the innermost running event, and the source of the instruction its main thread is at, or the first
+	// live branch's while the main thread waits on a `together` or `race` block. Empty while nothing runs.
+	struct Position {
+		std::string event;
+		std::string file;
+		int line = 0;
+	};
+	Position position() const;
+
 private:
 	struct Thread {
 		int pc = -1;

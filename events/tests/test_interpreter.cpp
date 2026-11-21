@@ -234,6 +234,39 @@ end
 	}
 }
 
+TEST(position_names_the_innermost_event_and_the_waiting_line) {
+	Program p = test::compile_ok(R"(event outer unskippable
+	call inner
+	together
+		wait 1.0
+		sequence
+			move guide to pier
+		end
+	end
+end
+event inner unskippable
+	sound first
+	wait 0.5
+end
+)");
+	RecordingHost host;
+	host.set_duration(ActionType::move, 0.5);
+	Interpreter it(p, host);
+	CHECK(it.position().event.empty());
+	it.start("outer");
+	it.step(0);
+	CHECK_EQ(it.position().event, std::string("inner"));
+	CHECK_EQ(it.position().file, std::string("test.ev"));
+	CHECK_EQ(it.position().line, 12);
+	host.advance(0.5);
+	it.step(0.5);
+	// Back in the caller, waiting on the together block: its first live branch, the timed wait.
+	CHECK_EQ(it.position().event, std::string("outer"));
+	CHECK_EQ(it.position().line, 4);
+	test::run(it, host);
+	CHECK(it.position().event.empty());
+}
+
 TEST(nowait_actions_run_in_background_until_sync_or_event_end) {
 	Program p = test::compile_ok(R"(event a unskippable
 	move guide to pier nowait

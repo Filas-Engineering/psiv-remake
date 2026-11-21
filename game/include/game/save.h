@@ -11,9 +11,9 @@
 namespace game {
 
 // Schema 2 added the party's statuses and names, core's macro and combo log forms, and the quests and unlocks
-// chunks; schema 3 the actors chunk; schema 4 the talk chunk; schema 5 the travel chunk. Older schemas are migrated in
-// order when they load (SAV-021).
-constexpr int kSaveSchemaVersion = 5;
+// chunks; schema 3 the actors chunk; schema 4 the talk chunk; schema 5 the travel chunk; schema 6 the dev chunk. Older
+// schemas are migrated in order when they load (SAV-021).
+constexpr int kSaveSchemaVersion = 6;
 constexpr const char* kSaveMagic = "PSR-SAVE";
 constexpr const char* kClearMagic = "PSR-CLEAR";
 constexpr int kClearVersion = 1;
@@ -39,6 +39,8 @@ struct SaveSummary {
 	std::int64_t writeTime = 0;
 	std::uint64_t sequence = 0;
 	bool autosave = false;
+	// The game is marked by developer tools (World::devMarked).
+	bool dev = false;
 	bool damaged = false;
 	std::string error;
 };

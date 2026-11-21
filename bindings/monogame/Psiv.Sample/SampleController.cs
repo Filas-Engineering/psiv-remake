@@ -19,10 +19,10 @@ public sealed partial class SampleController
 	private readonly GameSession _s;
 	private readonly Action<string> _log;
 	// Every script actor, wherever it stands, to tell one outside the party's area from a party member.
-	private readonly HashSet<string> _actorIds;
+	private HashSet<string> _actorIds;
 	private readonly FieldRenderer _field = new();
 	private Art? _art;
-	private readonly GameData _data;
+	private GameData _data;
 	// The asset directory the sample was started with, and what loaded from it; null without one.
 	private readonly string? _assetDir;
 	private Assets? _assets;
@@ -60,10 +60,14 @@ public sealed partial class SampleController
 
 	// `controlsPath` is where the bindings load from and save to; null keeps the defaults and saves nothing. Without
 	// `audio` nothing plays and the calls are only recorded. `assetDir` is the asset directory, whose files replace the
-	// generated pictures and sounds they name; problems in it are logged and the generated ones stand in.
-	public SampleController(GameSession session, GameData data, Action<string>? log = null, string? controlsPath = null, IAudioOut? audio = null, string? assetDir = null)
+	// generated pictures and sounds they name; problems in it are logged and the generated ones stand in. `dev` turns the
+	// developer tools on; they reload and preview from `dataDir`.
+	public SampleController(GameSession session, GameData data, Action<string>? log = null, string? controlsPath = null, IAudioOut? audio = null, string? assetDir = null,
+		bool dev = false, string? dataDir = null)
 	{
 		_s = session;
+		_dev = dev;
+		_dataDir = dataDir;
 		_data = data;
 		_log = log ?? (_ => { });
 		_audio = audio ?? new RecordingAudio();
@@ -271,6 +275,10 @@ public sealed partial class SampleController
 		{
 			ReloadAssets();
 		}
+		if (_dev && !DevUpdate(ref dtMs, raw))
+		{
+			return;
+		}
 		var input = new ActionInput(raw, _bindings);
 		_usingGamepad = raw.UsingGamepad;
 		_clockMs += dtMs;
@@ -283,7 +291,7 @@ public sealed partial class SampleController
 				_ticker.RemoveAt(i);
 			}
 		}
-		if (_battle.Active && _s.Mode == Mode.Title && _s.BattleInfo() is null)
+		if (_battle.Active && _stage is null && _s.Mode == Mode.Title && _s.BattleInfo() is null)
 		{
 			// Quitting to the title drops the battle (after a game over the ended battle stays up until confirmed).
 			_battle.Active = false;
@@ -336,6 +344,7 @@ public sealed partial class SampleController
 		case Screen.Title: UpdateTitle(input); break;
 		case Screen.Field: UpdateField(dtMs, input); break;
 		case Screen.Dialogue: UpdateDialogue(dtMs, input); break;
+		case Screen.Battle when _stage is not null: UpdateStagePreview(dtMs, input); break;
 		case Screen.Battle: UpdateBattle(dtMs, input); break;
 		case Screen.Menu: UpdateMenu(input); break;
 		case Screen.Shop: UpdateShop(input); break;
@@ -447,6 +456,12 @@ public sealed partial class SampleController
 
 	public void Draw(IDrawSurface s)
 	{
+		if (_dev && _preview is { } preview)
+		{
+			preview.Controller.Draw(s);
+			DrawDev(s, preview.Controller._art!);
+			return;
+		}
 		if (_art is null || _rebuildArt)
 		{
 			if (_rebuildArt)
@@ -475,6 +490,7 @@ public sealed partial class SampleController
 		_probeCompare = "-";
 		_probeDescription = "-";
 		_dialogueAt = "-";
+		_overlayDrawn.Clear();
 		s.Fill(0, 0, s.Width, s.Height, Style.Background);
 		switch (Screen)
 		{
@@ -517,6 +533,10 @@ public sealed partial class SampleController
 		}
 		_confirm.Draw(t, Px);
 		DrawAnimations(s);
+		if (_dev)
+		{
+			DrawDev(s, art);
+		}
 	}
 
 	// `expect state KEY VALUE` in headless scripts reads these: where the screens stand and what the session holds.
@@ -569,7 +589,7 @@ public sealed partial class SampleController
 			_ when key.StartsWith("macro.", StringComparison.Ordinal) => _s.MacroList().FirstOrDefault(m => m.Name == key[6..]) is { } macro
 				? string.Join(" / ", macro.Steps.Select(StepText))
 				: "-",
-			_ => BattleState(key),
+			_ => DevState(key) is var dev && dev != "?" ? dev : BattleState(key),
 		};
 	}
 }

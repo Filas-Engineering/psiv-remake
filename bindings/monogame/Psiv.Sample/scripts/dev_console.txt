@@ -1,0 +1,94 @@
+# The developer console, run with --dev: opened and closed with the backquote key, a command typed into it, then every
+# command through `dev` lines (the console's own language): warp, flags, items, money, levels, a vehicle, encounters off,
+# a named battle won, an event run, the id lists, and refusals. The first command marks the game: the HUD's DEV badge
+# turns red, the save written afterwards is marked in the slot list, and the clear flag set by the event writes no
+# clear-data record. With --window the shot lines save screenshots under build/shots/ (run from bindings/).
+
+cmd set text instant
+expect state dev on
+expect screen Title
+expect state console closed
+devrefused warp reed_path west_gate
+expect statehas consolelast Start or load a game first.
+press Enter
+pressuntil Enter Field 400
+expect state devmark no
+expect state hudmark no
+
+# Opened with the key; a command typed and run with Enter; closed again.
+press OemTilde
+expect state console open
+dev help
+press M
+press O
+press N
+press E
+press Y
+press Space
+press D5
+expect statehas consolelast preview event ID
+shot build/shots/dev_console.png
+press Enter
+expect state consolelast money 55
+expect toast Developer tools changed this game.
+press OemTilde
+expect state console closed
+expect state devmark yes
+wait 1
+expect state hudmark yes
+dev list areas
+expect statehas consolelast tidewater
+devrefused list nothing
+devrefused bogus command
+
+# Warps to a marker and to a cell; a wall is refused.
+dev warp reed_path west_gate
+wait 2
+expect state leader reed_path 1 4
+expect state area Reed Path
+dev warp reed_path 3 4
+wait 2
+expect state leader reed_path 3 4
+devrefused warp reed_path 0 0
+expect statehas consolelast is not a walkable cell
+devrefused warp nowhere gate
+dev flag reed.lookout_seen on
+devrefused flag no.such.flag on
+dev give tonic 3
+devrefused give tonic 0
+dev level fighter 9
+devrefused level fighter 99
+expect statehas consolelast Levels go from 1 to 50
+dev vehicle reed_skimmer reed_path skimmer_front
+wait 2
+expect statehas vehicles reed_skimmer 17 6
+dev encounters off
+expect state encounters off
+
+# A named battle, won at once; its round plays through the battle presentation.
+dev battle training
+wait 3
+expect screen Battle
+dev win
+waitstate 900 battlephase Ended
+expect statehas victory Victory
+pressuntil Enter Field 200
+devrefused win
+
+# A named event runs at once; it sets the clear flag, but a marked game writes no clear-data record.
+dev event cove_quiet
+wait 2
+expect screen Dialogue
+pressuntil Enter Field 400
+expect toast no clear-data record
+
+# The save written now is marked in the slot list.
+press M
+press Right 3
+expect state tab Save
+press Enter
+expect toast Saved to manual_0.
+expect state selected manual_0 reed_path dev
+shot build/shots/dev_saves.png
+press Escape
+expect screen Field

@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 8
+#define PSIV_ABI_VERSION 9
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -182,6 +182,11 @@ typedef enum psiv_camera_target { PSIV_CAMERA_NONE, PSIV_CAMERA_MARKER, PSIV_CAM
 typedef enum psiv_item_sort { PSIV_SORT_ID, PSIV_SORT_KIND, PSIV_SORT_NAME, PSIV_SORT_COUNT } psiv_item_sort;
 /* Cell flags in psiv_field_grid. The low two bits are the terrain. */
 typedef enum psiv_cell { PSIV_CELL_FLOOR = 0, PSIV_CELL_WALL = 1, PSIV_CELL_WATER = 2, PSIV_CELL_TERRAIN_MASK = 3, PSIV_CELL_WALKABLE = 16 } psiv_cell;
+/* The id lists of psiv_dev_ids: what the developer commands take. Markers are "area:marker". */
+typedef enum psiv_dev_list {
+	PSIV_DEV_AREAS, PSIV_DEV_MARKERS, PSIV_DEV_FLAGS, PSIV_DEV_ITEMS, PSIV_DEV_EQUIPMENT, PSIV_DEV_ABILITIES, PSIV_DEV_ENEMIES, PSIV_DEV_ENCOUNTERS,
+	PSIV_DEV_EVENTS, PSIV_DEV_VEHICLES, PSIV_DEV_CHARACTERS
+} psiv_dev_list;
 
 typedef enum psiv_name_kind {
 	PSIV_NAME_MODE, PSIV_NAME_MENU_KIND, PSIV_NAME_DIRECTION, PSIV_NAME_NOTICE_KIND, PSIV_NAME_AREA_KIND, PSIV_NAME_ENCOUNTER_MODE,
@@ -190,7 +195,7 @@ typedef enum psiv_name_kind {
 	PSIV_NAME_OUTCOME, PSIV_NAME_EVENT_TYPE, PSIV_NAME_CANCEL_REASON, PSIV_NAME_EFFECTIVENESS, PSIV_NAME_STATUS_END, PSIV_NAME_RESOURCE_KIND,
 	PSIV_NAME_ELEMENT, PSIV_NAME_STAT, PSIV_NAME_OPENING, PSIV_NAME_AUTO_STOP, PSIV_NAME_MACRO_STEP_STATUS, PSIV_NAME_MACRO_ISSUE,
 	PSIV_NAME_ACTION_TYPE, PSIV_NAME_MACRO_TARGET_KIND, PSIV_NAME_DESCRIPTION_KIND, PSIV_NAME_ITEM_SORT, PSIV_NAME_CAMERA_TARGET,
-	PSIV_NAME_TRAVEL_KIND
+	PSIV_NAME_TRAVEL_KIND, PSIV_NAME_DEV_LIST
 } psiv_name_kind;
 
 /* The stable name of an enum value as the C++ libraries spell it, lowercase with underscores ("field",
@@ -387,6 +392,8 @@ typedef struct psiv_save_summary {
 	int32_t autosave;
 	int32_t damaged;
 	const char* error;
+	/* 1 when developer tools marked the saved game (see "Developer tools" below). */
+	int32_t dev;
 } psiv_save_summary;
 
 /* Every slot with a file, manual slots first. PSIV_REFUSED when saving is disabled. */
@@ -401,6 +408,10 @@ typedef struct psiv_world_info {
 	int32_t game_over;
 	int32_t can_retry;
 	int32_t player_control;
+	/* 1 when developer tools marked the game (see "Developer tools" below). */
+	int32_t dev;
+	/* 0 while psiv_dev_encounters has turned battles off for this session. */
+	int32_t encounters;
 } psiv_world_info;
 
 PSIV_API int32_t psiv_mode_get(const psiv_session* session); /* a psiv_mode, or -1 for a NULL session */
@@ -1221,6 +1232,90 @@ PSIV_API psiv_status psiv_string_text(psiv_session* session, const char* id, con
  * in the profile's language, "" when that language has none. PSIV_NOT_FOUND when the battle data has no such id of
  * that kind. Descriptions are the optional text keys desc.<kind>.<id> of the game's text tables. */
 PSIV_API psiv_status psiv_description(psiv_session* session, int32_t kind, const char* id, const char** out);
+
+/* ------------------------------------------------------------------------------------------------------ */
+/* Developer tools (../../docs/dev-tools.md). Every command that changes the game marks it: the mark is    */
+/* saved (psiv_world_info.dev, psiv_save_summary.dev), and from then on the game writes no clear-data      */
+/* record and adds nothing to the pacing numbers. Refusals: game.refuse.no_game at the title, the          */
+/* game.refuse.dev_* keys otherwise. A refused command changes nothing and does not mark the game.         */
+
+/* The ids of one psiv_dev_list kind, sorted. Works at the title too. */
+PSIV_API psiv_status psiv_dev_ids(psiv_session* session, int32_t list, const char* const** out, int32_t* count);
+/* MUTATES. From the field, to a marker of any area (a ridden vehicle stays where it was). */
+PSIV_API psiv_status psiv_dev_warp(psiv_session* session, const char* area, const char* marker);
+/* MUTATES. The same to a walkable cell (game.refuse.dev_bad_cell otherwise). */
+PSIV_API psiv_status psiv_dev_warp_cell(psiv_session* session, const char* area, int32_t x, int32_t y);
+/* MUTATES. Sets (value 1) or clears a declared flag; the area's flag hooks run as when a script sets it. */
+PSIV_API psiv_status psiv_dev_set_flag(psiv_session* session, const char* flag, int32_t value);
+/* MUTATES. Adds count of an item or equipment piece, capped; a negative count takes them away. Not in a battle. */
+PSIV_API psiv_status psiv_dev_give(psiv_session* session, const char* id, int32_t count);
+/* MUTATES. Adds amount to the money (negative takes it away), kept between 0 and the cap. Not in a battle. */
+PSIV_API psiv_status psiv_dev_money(psiv_session* session, int32_t amount);
+/* MUTATES. Sets a roster member's level (1 to 50) with no experience into it and refills it as a rest does, reviving it. */
+PSIV_API psiv_status psiv_dev_set_level(psiv_session* session, const char* member, int32_t level);
+/* MUTATES. From the field, a battle with the encounter as a random battle (a vehicle battle while riding). */
+PSIV_API psiv_status psiv_dev_battle(psiv_session* session, const char* encounter);
+/* MUTATES. Ends the live battle: every enemy (victory 1) or every party combatant (0) falls, then one round resolves and
+ * the battle ends as that outcome leads (a defeat without a scripted branch is a game over). The round's events are
+ * returned and kept as psiv_battle_last_events. game.refuse.no_battle without a live battle. */
+PSIV_API psiv_status psiv_dev_end_battle(psiv_session* session, int32_t victory, const psiv_battle_event** out, int32_t* count);
+/* MUTATES. From the field, gives the party a vehicle with field rules, or moves one it has, to a marker of a field area. */
+PSIV_API psiv_status psiv_dev_vehicle(psiv_session* session, const char* vehicle, const char* area, const char* marker);
+/* MUTATES. Turns random battles, battles aboard and visible enemies' battles off (0) or on for this session; not saved. */
+PSIV_API psiv_status psiv_dev_encounters(psiv_session* session, int32_t on);
+/* MUTATES. From the field, runs an event as a hook would. */
+PSIV_API psiv_status psiv_dev_run_event(psiv_session* session, const char* event);
+/* MUTATES. Marks the game without changing anything else, for a host's own tools. Nothing at the title. */
+PSIV_API psiv_status psiv_dev_mark(psiv_session* session);
+
+/* Where the running event is. */
+typedef struct psiv_event_position {
+	/* The innermost running event (a called one inside its caller). */
+	const char* event;
+	/* The script file, as game.json names it, and the source line of the instruction the event is at: the command it
+	 * waits on, or the first live branch's while it waits on a together or race block. */
+	const char* file;
+	int32_t line;
+} psiv_event_position;
+
+/* PSIV_NOT_FOUND while no event runs. */
+PSIV_API psiv_status psiv_event_position_get(psiv_session* session, psiv_event_position* out);
+
+/* An encounter zone of the party's area. */
+typedef struct psiv_zone {
+	const char* id;
+	/* The rectangle it covers, corners included. */
+	int32_t from_x;
+	int32_t from_y;
+	int32_t to_x;
+	int32_t to_y;
+	/* Its encounter table: encounter ids and weights. */
+	int32_t entry_count;
+	const char* const* encounters;
+	const int32_t* weights;
+	/* Visible mode: where its enemies spawn, as x, y pairs (2 * spawn_count numbers). */
+	int32_t spawn_count;
+	const int32_t* spawns;
+} psiv_zone;
+
+/* The zones of the party's area in data order. PSIV_NOT_FOUND outside an area. */
+PSIV_API psiv_status psiv_field_zones(psiv_session* session, const psiv_zone** out, int32_t* count);
+
+/* The game as a save file's text, the running event's interpreter state included; during a battle, the world as the
+ * battle found it (loading sets an event battle up again and drops a field battle). PSIV_REFUSED at the title
+ * (game.refuse.no_game). */
+PSIV_API psiv_status psiv_save_text(psiv_session* session, const char** out);
+/* MUTATES. Loads such a text (or any save file's text) from the title, as psiv_load does. */
+PSIV_API psiv_status psiv_load_text(psiv_session* session, const char* text);
+/* MUTATES. Loads the data again from the directories the session was created with, then, when it loads, puts a new game
+ * session in place of the old one with the same options, profile and encounter switch, and the game restored from
+ * psiv_save_text (marked, as a developer tool's use). The handle stays the same. On data problems it returns
+ * PSIV_DATA_ERROR with every problem in psiv_data_problems and keeps the old session; when the restored game does not
+ * load into the new data (an area gone), PSIV_REFUSED with the load's refusal, the old session kept. What is not in
+ * the text starts over: the text log, the pacing numbers, an ended battle, a field battle in progress, the presentation
+ * queue (actions in flight are rebuilt as instant ones) and a game over. An event whose scripts changed starts again
+ * from its first command with the world it started with. */
+PSIV_API psiv_status psiv_session_reload(psiv_session* session);
 
 #ifdef __cplusplus
 }

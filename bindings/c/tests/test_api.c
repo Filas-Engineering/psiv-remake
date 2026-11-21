@@ -1595,6 +1595,122 @@ static void testVehiclesAndTravel(void) {
 	psiv_session_destroy(s);
 }
 
+static void testDevTools(void) {
+	char saves[512];
+	char clearPath[600];
+	snprintf(saves, sizeof saves, "%s/dev", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	snprintf(clearPath, sizeof clearPath, "%s/clear.sav", saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	const char* const* ids = NULL;
+	int32_t count = 0;
+	CHECK(psiv_sizeof("psiv_event_position") == sizeof(psiv_event_position) && psiv_sizeof("psiv_zone") == sizeof(psiv_zone));
+	CHECK(psiv_sizeof("psiv_world_info") == sizeof(psiv_world_info) && psiv_sizeof("psiv_save_summary") == sizeof(psiv_save_summary));
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_DEV_LIST, PSIV_DEV_MARKERS), "markers") == 0);
+	CHECK_OK(psiv_dev_ids(s, PSIV_DEV_MARKERS, &ids, &count));
+	CHECK(hasName(ids, count, "reed_path:west_gate"));
+	CHECK_OK(psiv_dev_ids(s, PSIV_DEV_EVENTS, &ids, &count));
+	CHECK(hasName(ids, count, "cove_quiet"));
+	CHECK(psiv_dev_ids(s, 99, &ids, &count) == PSIV_INVALID_ARGUMENT);
+	CHECK(psiv_dev_warp(s, "reed_path", "west_gate") == PSIV_REFUSED && errorIs(s, "game.refuse.no_game"));
+	const char* text = NULL;
+	CHECK(psiv_save_text(s, &text) == PSIV_REFUSED);
+	psiv_event_position at;
+	CHECK(psiv_event_position_get(s, &at) == PSIV_NOT_FOUND);
+
+	/* A reload mid-event resumes the event at the line it waits on, and marks the game. */
+	CHECK_OK(psiv_new_game(s));
+	CHECK_OK(psiv_event_position_get(s, &at));
+	CHECK(strcmp(at.event, "tidewater_arrival") == 0 && strcmp(at.file, "events/tidewater.ev") == 0 && at.line > 4);
+	const int32_t line = at.line;
+	psiv_world_info world;
+	CHECK_OK(psiv_world_info_get(s, &world));
+	CHECK(!world.dev && world.encounters);
+	CHECK_OK(psiv_session_reload(s));
+	CHECK(psiv_mode_get(s) == PSIV_MODE_EVENT && psiv_line_pending(s));
+	CHECK_OK(psiv_event_position_get(s, &at));
+	CHECK(at.line == line);
+	CHECK_OK(psiv_world_info_get(s, &world));
+	CHECK(world.dev);
+	settle(s);
+	CHECK(psiv_event_position_get(s, &at) == PSIV_NOT_FOUND);
+
+	CHECK_OK(psiv_dev_warp(s, "reed_path", "west_gate"));
+	psiv_field_info field;
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.area_id, "reed_path") == 0 && field.leader_x == 1 && field.leader_y == 4);
+	CHECK(psiv_dev_warp_cell(s, "reed_path", 0, 0) == PSIV_REFUSED && errorIs(s, "game.refuse.dev_bad_cell"));
+	const psiv_zone* zones = NULL;
+	CHECK_OK(psiv_field_zones(s, &zones, &count));
+	CHECK(count == 2 && strcmp(zones[0].id, "west_reeds") == 0 && zones[0].entry_count > 0 && zones[0].from_x <= zones[0].to_x);
+	CHECK_OK(psiv_dev_encounters(s, 0));
+	CHECK_OK(psiv_world_info_get(s, &world));
+	CHECK(!world.encounters);
+	CHECK_OK(psiv_dev_give(s, "tonic", 3));
+	CHECK(psiv_dev_give(s, "tonic", 0) == PSIV_REFUSED && errorIs(s, "game.refuse.dev_bad_count"));
+	CHECK_OK(psiv_dev_money(s, 1000));
+	CHECK_OK(psiv_world_info_get(s, &world));
+	CHECK(world.money == 1050);
+	CHECK_OK(psiv_dev_set_level(s, "fighter", 9));
+	const psiv_member* party = NULL;
+	CHECK_OK(psiv_party(s, &party, &count));
+	CHECK(count >= 1 && party[0].level == 9 && party[0].hp == party[0].max_hp);
+	CHECK_OK(psiv_dev_set_flag(s, "reed.lookout_seen", 1));
+	CHECK(psiv_flag(s, "reed.lookout_seen"));
+	CHECK_OK(psiv_dev_vehicle(s, "reed_skimmer", "reed_path", "skimmer_front"));
+	const psiv_vehicle* vehicles = NULL;
+	CHECK_OK(psiv_field_vehicles(s, &vehicles, &count));
+	CHECK(count == 1 && strcmp(vehicles[0].id, "reed_skimmer") == 0);
+
+	CHECK_OK(psiv_dev_battle(s, "training"));
+	CHECK(psiv_mode_get(s) == PSIV_MODE_BATTLE);
+	const psiv_battle_event* events = NULL;
+	CHECK_OK(psiv_dev_end_battle(s, 1, &events, &count));
+	CHECK(count > 0 && events[count - 1].type == PSIV_EVENT_BATTLE_ENDED && events[count - 1].outcome == PSIV_OUTCOME_VICTORY);
+	CHECK(psiv_mode_get(s) == PSIV_MODE_FIELD);
+	CHECK(psiv_dev_end_battle(s, 1, &events, &count) == PSIV_REFUSED && errorIs(s, "game.refuse.no_battle"));
+
+	CHECK_OK(psiv_open_menu(s));
+	CHECK_OK(psiv_save_manual(s, "manual_0"));
+	CHECK_OK(psiv_close_menu(s));
+	const psiv_save_summary* list = NULL;
+	CHECK_OK(psiv_saves(s, &list, &count));
+	CHECK(count >= 1 && strcmp(list[0].slot, "manual_0") == 0 && list[0].dev);
+
+	/* A reload in the field keeps the leader where it stood. */
+	CHECK_OK(psiv_walk(s, PSIV_DIRECTION_EAST));
+	CHECK_OK(psiv_field_info_get(s, &field));
+	const int32_t x = field.leader_x;
+	CHECK_OK(psiv_session_reload(s));
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(psiv_mode_get(s) == PSIV_MODE_FIELD && strcmp(field.area_id, "reed_path") == 0 && field.leader_x == x);
+	CHECK_OK(psiv_world_info_get(s, &world));
+	CHECK(world.dev && !world.encounters);
+
+	CHECK_OK(psiv_save_text(s, &text));
+	char* copy = malloc(strlen(text) + 1);
+	strcpy(copy, text);
+	psiv_session* other = create(NULL, -1, PSIV_PRESENTATION_INSTANT);
+	CHECK(psiv_load_text(other, "not a save") == PSIV_REFUSED);
+	CHECK(psiv_load_text(other, copy) == PSIV_OK);
+	CHECK(psiv_field_info_get(other, &field) == PSIV_OK && field.leader_x == x);
+	CHECK(psiv_world_info_get(other, &world) == PSIV_OK && world.dev);
+	free(copy);
+	psiv_session_destroy(other);
+
+	CHECK_OK(psiv_dev_run_event(s, "cove_quiet"));
+	CHECK(psiv_mode_get(s) == PSIV_MODE_EVENT);
+	settle(s);
+	CHECK(psiv_flag(s, "cove.quiet_seen"));
+	FILE* clear = fopen(clearPath, "rb");
+	CHECK(clear == NULL);
+	if (clear) {
+		fclose(clear);
+	}
+	psiv_session_destroy(s);
+}
+
 int main(int argc, char** argv) {
 	for (int i = 1; i + 1 < argc; i += 2) {
 		if (strcmp(argv[i], "--data") == 0) {
@@ -1622,6 +1738,7 @@ int main(int argc, char** argv) {
 	testCamerasAndMusic();
 	testAmbientTalk();
 	testVehiclesAndTravel();
+	testDevTools();
 	if (failures) {
 		fprintf(stderr, "%d of %d checks failed\n", failures, checks);
 		return 1;

@@ -317,6 +317,21 @@ struct TravelDestination {
 	std::string region;
 };
 
+// What Session::devList lists: the ids a developer command takes. Markers are "area:marker".
+enum class DevList { Areas, Markers, Flags, Items, Equipment, Abilities, Enemies, Encounters, Events, Vehicles, Characters };
+
+const char* toString(DevList list);
+bool parseDevList(const std::string& text, DevList& out);
+
+// Where the running event is, from Session::eventPosition.
+struct EventPosition {
+	// The innermost running event.
+	std::string event;
+	// The script file and the source line of the instruction it is at.
+	std::string file;
+	int line = 0;
+};
+
 enum class WalkStatus { Walking, Arrived, LeftArea, Stopped, NoPath, TooLong };
 
 // A walk to a cell along the shortest path, from Session::beginWalk.
@@ -521,6 +536,44 @@ public:
 	// Empty for a character not in the roster or a piece that is not equipment. The piece need not be in the bag.
 	std::optional<EquipPreview> equipPreview(const std::string& member, const std::string& piece) const;
 
+	// Developer tools (docs/dev-tools.md). Every command that changes the game marks it (World::devMarked, kept in its
+	// saves): from then on it writes no clear-data record and adds nothing to the pacing numbers. devList only reads.
+	std::vector<std::string> devList(DevList list) const;
+	// To a marker, or to a walkable cell, of any area; from the field.
+	rules::Message devWarp(const std::string& area, const std::string& marker);
+	rules::Message devWarpCell(const std::string& area, Cell cell);
+	// A declared flag, set or cleared; flag hooks of the area run as when a script sets it.
+	rules::Message devSetFlag(const std::string& flag, bool value);
+	// Adds `count` of an item or equipment piece (a negative count takes them away), capped like any gain.
+	rules::Message devGive(const std::string& id, int count);
+	// Adds `amount` to the money (negative takes it away), kept between 0 and the cap.
+	rules::Message devMoney(int amount);
+	// Sets a roster member's level with no experience into it, and refills it as a rest does, reviving it.
+	rules::Message devSetLevel(const std::string& member, int level);
+	// Starts a battle with the encounter from the field, as a random battle (a vehicle battle while riding).
+	rules::Message devBattle(const std::string& encounter);
+	// Ends the live battle: every enemy (victory) or every party combatant (defeat) falls, then a round resolves, so the
+	// battle ends the way that round's outcome leads. `events` gets the round's events.
+	rules::Message devEndBattle(bool victory, std::vector<rules::Event>* events = nullptr);
+	// Gives the party a vehicle with field rules, or moves one it has, to a marker of a field area; from the field.
+	rules::Message devVehicle(const std::string& vehicle, const std::string& area, const std::string& marker);
+	// Turns random battles, battles aboard and visible enemies' battles off or on for this session (not saved).
+	rules::Message devEncounters(bool on);
+	bool encountersOn() const { return encountersOn_; }
+	// Runs an event from the field, as a hook would.
+	rules::Message devRunEvent(const std::string& event);
+	// Marks the game without changing anything else, for a host's own tools (a data reload).
+	void devMark();
+	bool devMarked() const { return world_.devMarked; }
+	// The running event and the source line its interpreter is at; empty when no event runs.
+	std::optional<EventPosition> eventPosition() const;
+	// The game as a save file's text, with the running event's interpreter state, and during a battle the world as it
+	// was when the battle was set up (an event battle is set up again when it loads; a field battle is gone). Refused at
+	// the title (game.refuse.no_game).
+	rules::Message saveText(std::string& out) const;
+	// Loads such a text, or any save file's text, from the title, as load() does.
+	rules::Message loadSaveText(const std::string& text);
+
 	// Presentation actions of the session's own queue since the last call, oldest first. With Instant
 	// presentation only the last 256 are kept.
 	std::vector<PresentedAction> pollActions();
@@ -592,7 +645,13 @@ private:
 	void finishBattle();
 	void enterGameOver();
 	void autosave(std::string reason);
+	// `slot` empty: a text from saveText, announced without a slot.
 	rules::Message loadText(const std::string& text, const std::string& slot);
+	// Refusals shared by the developer commands, empty when the command may run.
+	rules::Message devNeedsGame() const;
+	rules::Message devNeedsField() const;
+	// Pacing counts only play before the game is marked.
+	bool pacingOn() const { return !world_.devMarked; }
 	events::Handle newHandle(HandleState state);
 	std::vector<rules::PartyMember> activeParty() const;
 	Presenter* presenter() const;
@@ -629,6 +688,7 @@ private:
 	// The open shop, save prompt or name entry an event is waiting on.
 	events::Handle menuHandle_ = 0;
 	int autosaveCount_ = 0;
+	bool encountersOn_ = true;
 
 	std::unique_ptr<events::Interpreter> interpreter_;
 	std::map<events::Handle, HandleState> handles_;

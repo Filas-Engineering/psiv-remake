@@ -7,3 +7,6 @@ source-material/
 *.smd
 
 .DS_Store
+
+# tools/package.sh output.
+/dist/

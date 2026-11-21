@@ -139,6 +139,8 @@ struct World {
 
 	std::int64_t playTimeMs = 0;
 	Settings settings;
+	// A developer command changed this game (docs/dev-tools.md). Never cleared once set.
+	bool devMarked = false;
 	std::vector<UnknownChunk> unknownChunks;
 
 	rules::PartyMember* member(const std::string& characterId);

@@ -1,0 +1,52 @@
+# Frame step and speed, run with --dev: the frame time the controller passes on (its animation clock and the session's
+# play time) stops while paused, moves one 16 ms frame per step, and is scaled from 0.25x to 8x, from the console and with
+# the keys ([ slower, ] faster, \ pause, . step). Headless frames stay 16 ms, so every number here is the same on every run.
+# With --window the shot lines save screenshots under build/shots/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+expect state speed x1
+expect state paused no
+dev pause
+expect state paused yes
+expect state clock 4544
+expect state playtime 4448
+wait 10
+expect state clock 4544
+expect state playtime 4448
+dev step
+wait 1
+expect state clock 4560
+dev step 3
+wait 5
+expect state clock 4608
+press OemPeriod
+expect state clock 4624
+expect state paused yes
+wait 1
+shot build/shots/dev_speed_paused.png
+press OemPipe
+expect state paused no
+dev speed 0.25
+wait 8
+expect state clock 4688
+expect state playtime 4598
+dev speed 8
+wait 2
+expect state clock 4944
+expect state playtime 4848
+press OemCloseBrackets
+expect state speed x8
+press OemOpenBrackets
+expect state speed x4
+wait 1
+shot build/shots/dev_speed_x4.png
+dev overlay fps on
+wait 1
+expect state overlay.fps 62.5 fps 16.0 ms x4
+shot build/shots/dev_speed_fps.png
+devrefused speed 3
+dev speed 1
+expect state speed x1

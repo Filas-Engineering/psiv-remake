@@ -1,0 +1,67 @@
+# The panel and scene previewer, run with --dev. F12 opens its picker (events, and battle presentation entries). An event
+# plays from a clean state: a new game in a scratch session that writes nothing, its opening event skipped, the party put
+# beside the hook that starts the event, the event started at once. PageDown plays on to the next panel show and pauses,
+# PageUp starts again and stops one panel earlier, End stops. A battle presentation entry plays one turn of synthetic
+# typed events on dummy targets through BattleTimeline, with no session battle. The game being played is untouched and
+# stays unmarked. With --window the shot lines save screenshots under build/shots/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+press F12
+expect state preview picker
+wait 1
+shot build/shots/dev_picker.png
+press Right
+wait 1
+expect statehas selected attack
+press Escape
+expect state preview -
+
+# The lookout scene from a clean state, panel by panel.
+dev preview event reed_path_lookout
+expect state preview event reed_path_lookout panels 0
+waitstatehas 100 preview.line An old reed-cutters'
+press PageDown
+expect state preview event reed_path_lookout panels 2
+expect state paused yes
+expect statehas preview.panels west top_left
+wait 1
+shot build/shots/dev_preview_event.png
+press PageDown
+expect state preview event reed_path_lookout panels 3
+expect statehas preview.panels cart wide_bottom
+press PageUp
+expect state preview event reed_path_lookout panels 2
+dev resume
+wait 30
+press End
+expect state preview -
+expect screen Field
+expect state devmark no
+expect state area Tidewater Landing
+
+# Battle presentation entries on dummies.
+present mark
+dev preview battle technique.damage.shock
+expect screen Battle
+waitstatehas 300 preview step effect burst_shock on Dummy A, Dummy B, Dummy C
+wait 4
+shot build/shots/dev_preview_battle.png
+waitstate 400 preview battle technique.damage.shock step done
+expect presenthas result Dummy A -24, Dummy B -24, Dummy C -24
+press PageDown
+waitstatehas 100 preview step banner
+dev preview battle item.heal
+waitstate 400 preview battle item.heal step done
+expect presenthas effect motes_heal on
+dev preview battle skill.revive
+waitstate 400 preview battle skill.revive step done
+devrefused preview battle no_such_entry
+press End
+expect state preview -
+expect screen Field
+devrefused preview event no_such_event
+devrefused preview next
+expect state devmark no

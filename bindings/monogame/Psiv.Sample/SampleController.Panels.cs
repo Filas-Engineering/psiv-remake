@@ -94,6 +94,7 @@ public sealed partial class SampleController
 		switch (a.Type)
 		{
 		case ActionType.PanelShow:
+			_panelShows++;
 			Panel? panel = _panels.FirstOrDefault(p => p.Id == a.Subject);
 			if (panel is null)
 			{

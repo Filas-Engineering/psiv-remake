@@ -1,0 +1,28 @@
+# Without --dev the developer tools are off: every dev command is refused and changes nothing, and the console, overlay,
+# reload, previewer and speed keys do nothing; the game stays unmarked.
+
+cmd set text instant
+expect state dev off
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+devrefused warp reed_path west_gate
+devrefused money 1000
+devrefused overlay all
+press OemTilde
+expect state console closed
+press F2
+press F9
+expect state overlays none
+press F6
+expect state reload -
+press F12
+expect state preview -
+press OemPipe
+press OemPeriod
+expect state paused no
+wait 2
+expect screen Field
+expect state area Tidewater Landing
+expect state devmark no
+expect state hudmark no

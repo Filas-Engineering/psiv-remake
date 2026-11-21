@@ -199,6 +199,7 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 	if (a.jobs != b.jobs) return differs("jobs");
 	if (a.unlocked != b.unlocked) return differs("unlocked");
 	if (a.ambientHeard != b.ambientHeard) return differs("ambientHeard");
+	if (a.devMarked != b.devMarked) return differs("devMarked");
 	if (a.playTimeMs != b.playTimeMs) return differs("playTimeMs");
 	if (a.settings.difficulty != b.settings.difficulty) return differs("settings.difficulty");
 	if (a.settings.rewardMultiplier != b.settings.rewardMultiplier) return differs("settings.rewardMultiplier");

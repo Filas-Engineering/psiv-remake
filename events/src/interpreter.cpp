@@ -742,6 +742,31 @@ void Interpreter::fail(int pc, const std::string& message) {
 	status_ = Status::error;
 }
 
+Interpreter::Position Interpreter::position() const {
+	Position out;
+	if (status_ != Status::running || frames_.empty()) {
+		return out;
+	}
+	out.event = program_.events[frames_.back().event].name;
+	const Thread* thread = &main_;
+	if (main_.wait == WaitKind::children) {
+		for (const Thread& child : children_) {
+			if (child.alive) {
+				thread = &child;
+				break;
+			}
+		}
+	}
+	if (thread->pc >= 0 && thread->pc < static_cast<int>(program_.code.size())) {
+		const Instruction& ins = program_.code[thread->pc];
+		if (ins.file >= 0 && ins.file < static_cast<int>(program_.files.size())) {
+			out.file = program_.files[ins.file];
+		}
+		out.line = ins.source_line;
+	}
+	return out;
+}
+
 SaveState Interpreter::save() const {
 	SaveState state;
 	state.fingerprint = program_.fingerprint;

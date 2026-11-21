@@ -294,7 +294,7 @@ public sealed unsafe class GameSession : IDisposable
 		foreach (PsivSaveSummary s in Native.Span<PsivSaveSummary>(p, count))
 		{
 			list.Add(new SaveSummary(Native.Str(s.Slot), Native.Str(s.Area), s.PlayTimeMs, Native.Strs(s.Party, s.PartyCount), Native.Str(s.Difficulty),
-				s.WriteTime, s.Sequence, s.Autosave != 0, s.Damaged != 0, Native.Str(s.Error)));
+				s.WriteTime, s.Sequence, s.Autosave != 0, s.Damaged != 0, Native.Str(s.Error), s.Dev != 0));
 		}
 		return list;
 	}
@@ -306,7 +306,8 @@ public sealed unsafe class GameSession : IDisposable
 	public WorldInfo WorldInfo()
 	{
 		Must(Native.WorldInfoGet(_handle, out PsivWorldInfo w));
-		return new WorldInfo((Mode)w.Mode, (MenuKind)w.MenuKind, w.Money, w.PlayTimeMs, w.AutosaveCount, w.GameOver != 0, w.CanRetry != 0, w.PlayerControl != 0);
+		return new WorldInfo((Mode)w.Mode, (MenuKind)w.MenuKind, w.Money, w.PlayTimeMs, w.AutosaveCount, w.GameOver != 0, w.CanRetry != 0, w.PlayerControl != 0,
+			w.Dev != 0, w.Encounters != 0);
 	}
 
 	public bool Flag(string name) => Native.Flag(_handle, name) != 0;
@@ -960,5 +961,86 @@ public sealed unsafe class GameSession : IDisposable
 	{
 		Must(Native.StringText(_handle, id, out IntPtr text));
 		return Native.Str(text);
+	}
+
+	// Developer tools (docs/dev-tools.md). A command that changes the game marks it (WorldInfo.Dev, SaveSummary.Dev); refusals
+	// are game.refuse.no_game and game.refuse.dev_* results.
+
+	public IReadOnlyList<string> DevIds(DevList list)
+	{
+		Must(Native.DevIds(_handle, (int)list, out IntPtr p, out int count));
+		return Native.Strs(p, count);
+	}
+
+	public PsivResult DevWarp(string area, string marker) => Result(Native.DevWarp(_handle, area, marker));
+	public PsivResult DevWarpCell(string area, int x, int y) => Result(Native.DevWarpCell(_handle, area, x, y));
+	public PsivResult DevSetFlag(string flag, bool value) => Result(Native.DevSetFlag(_handle, flag, value ? 1 : 0));
+	public PsivResult DevGive(string id, int count) => Result(Native.DevGive(_handle, id, count));
+	public PsivResult DevMoney(int amount) => Result(Native.DevMoney(_handle, amount));
+	public PsivResult DevSetLevel(string member, int level) => Result(Native.DevSetLevel(_handle, member, level));
+	public PsivResult DevBattle(string encounter) => Result(Native.DevBattle(_handle, encounter));
+	public PsivResult DevVehicle(string vehicle, string area, string marker) => Result(Native.DevVehicle(_handle, vehicle, area, marker));
+	public PsivResult DevEncounters(bool on) => Result(Native.DevEncounters(_handle, on ? 1 : 0));
+	public PsivResult DevRunEvent(string ev) => Result(Native.DevRunEvent(_handle, ev));
+	public void DevMark() => Must(Native.DevMark(_handle));
+
+	// The round that ended the battle, or the refusal (no battle) with no events.
+	public (PsivResult Result, IReadOnlyList<BattleEvent> Events) DevEndBattle(bool victory)
+	{
+		PsivResult result = Result(Native.DevEndBattle(_handle, victory ? 1 : 0, out IntPtr p, out int count));
+		return (result, result.Ok ? Events(p, count) : []);
+	}
+
+	// Null while no event runs.
+	public EventPosition? EventPosition() =>
+		Read(Native.EventPositionGet(_handle, out PsivEventPosition at)) ? new EventPosition(Native.Str(at.Event), Native.Str(at.File), at.Line) : null;
+
+	public IReadOnlyList<Zone> FieldZones()
+	{
+		if (!Read(Native.FieldZones(_handle, out IntPtr p, out int count)))
+		{
+			return [];
+		}
+		var list = new List<Zone>(count);
+		foreach (PsivZone z in Native.Span<PsivZone>(p, count))
+		{
+			string[] encounters = Native.Strs(z.Encounters, z.EntryCount);
+			ReadOnlySpan<int> weights = Native.Span<int>(z.Weights, z.EntryCount);
+			var table = new List<(string, int)>(z.EntryCount);
+			for (int i = 0; i < z.EntryCount; i++)
+			{
+				table.Add((encounters[i], weights[i]));
+			}
+			ReadOnlySpan<int> cells = Native.Span<int>(z.Spawns, z.SpawnCount * 2);
+			var spawns = new List<(int, int)>(z.SpawnCount);
+			for (int i = 0; i < z.SpawnCount; i++)
+			{
+				spawns.Add((cells[2 * i], cells[2 * i + 1]));
+			}
+			list.Add(new Zone(Native.Str(z.Id), z.FromX, z.FromY, z.ToX, z.ToY, table, spawns));
+		}
+		return list;
+	}
+
+	// The game as a save file's text, or the refusal at the title.
+	public (PsivResult Result, string Text) SaveText()
+	{
+		PsivResult result = Result(Native.SaveText(_handle, out IntPtr text));
+		return (result, result.Ok ? Native.Str(text) : "");
+	}
+
+	public PsivResult LoadText(string text) => Result(Native.LoadText(_handle, text));
+
+	// Loads the data again and rebuilds the game session behind this one, restoring the game (see psiv_session_reload).
+	// Throws PsivDataException when the data has problems, with the old session kept; a game that does not load into the
+	// new data is a refusal.
+	public PsivResult Reload()
+	{
+		int status = Native.SessionReload(_handle);
+		if ((PsivStatus)status == PsivStatus.DataError)
+		{
+			throw new PsivDataException(LastError(), DataProblems());
+		}
+		return Result(status);
 	}
 }

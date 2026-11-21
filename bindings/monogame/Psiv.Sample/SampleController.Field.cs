@@ -112,6 +112,10 @@ public sealed partial class SampleController
 			int r = Art.Tile / 3 + (int)(3 * MathF.Sin(_clockMs / 120f));
 			Style.Frame(s, gx - r, gy - r, 2 * r, 2 * r, Style.Accent);
 		}
+		if (_dev)
+		{
+			DrawFieldOverlays(s, view);
+		}
 		DrawPanels(s, art, view);
 		return true;
 	}

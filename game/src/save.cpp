@@ -246,6 +246,15 @@ std::string travelChunk(const World& w) {
 	return o.str();
 }
 
+// Only a marked game has a line, so an ordinary save's chunk is empty.
+std::string devChunk(const World& w) {
+	Writer o;
+	if (w.devMarked) {
+		o.key("marked").num(1).end();
+	}
+	return o.str();
+}
+
 std::string unlocksChunk(const World& w) {
 	Writer o;
 	for (const std::string& id : w.unlocked) {
@@ -614,6 +623,20 @@ bool readTravel(const std::string& payload, World& w, std::string& error) {
 	return error.empty();
 }
 
+bool readDev(const std::string& payload, World& w, std::string& error) {
+	Lines in("dev", payload);
+	w.devMarked = false;
+	for (const auto& l : in.lines()) {
+		if (l[0] == "marked" && in.need(l, 1)) {
+			w.devMarked = in.num(l[1]) != 0;
+		} else {
+			in.fail("unknown line '" + l[0] + "'");
+		}
+	}
+	error = in.error;
+	return error.empty();
+}
+
 bool readActors(const std::string& payload, World& w, std::string& error) {
 	Lines in("actors", payload);
 	w.actors.clear();
@@ -659,6 +682,7 @@ const KnownChunk kWorldChunks[] = {
 	{"actors", 1, actorsChunk, readActors},
 	{"talk", 1, talkChunk, readTalk},
 	{"travel", 1, travelChunk, readTravel},
+	{"dev", 1, devChunk, readDev},
 };
 
 // The clear-data record holds these, from the same writers.
@@ -835,6 +859,12 @@ bool migrate4to5(std::vector<Chunk>& chunks, std::string&) {
 	return true;
 }
 
+// Schema 5 to 6: the dev chunk starts empty, so the game is not marked.
+bool migrate5to6(std::vector<Chunk>& chunks, std::string&) {
+	chunks.push_back({"dev", 1, ""});
+	return true;
+}
+
 struct Migration {
 	int from;
 	bool (*apply)(std::vector<Chunk>& chunks, std::string& error);
@@ -846,6 +876,7 @@ const Migration kMigrations[] = {
 	{2, migrate2to3},
 	{3, migrate3to4},
 	{4, migrate4to5},
+	{5, migrate5to6},
 };
 
 std::string headerChunk(const SaveFile& save) {
@@ -867,6 +898,9 @@ std::string headerChunk(const SaveFile& save) {
 	}
 	o.end();
 	o.key("difficulty").text(w.settings.difficulty).end();
+	if (w.devMarked) {
+		o.key("dev").num(1).end();
+	}
 	return o.str();
 }
 
@@ -1025,6 +1059,8 @@ rules::Result<SaveSummary> readSummary(const std::string& text) {
 				s.area = in.text(l[1]);
 			} else if (k == "difficulty" && in.need(l, 1)) {
 				s.difficulty = in.text(l[1]);
+			} else if (k == "dev" && in.need(l, 1)) {
+				s.dev = in.num(l[1]) != 0;
 			} else if (k == "party") {
 				for (std::size_t i = 1; i < l.size(); ++i) {
 					s.party.push_back(in.text(l[i]));

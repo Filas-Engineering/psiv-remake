@@ -71,6 +71,7 @@ SAMPLE_BATTLE_SCRIPT = monogame/Psiv.Sample/scripts/battle.txt
 SAMPLE_VEHICLES_SCRIPT = monogame/Psiv.Sample/scripts/vehicles.txt
 SAMPLE_ASSETS_SCRIPT = monogame/Psiv.Sample/scripts/assets.txt
 SAMPLE_RELOAD_SCRIPT = monogame/Psiv.Sample/scripts/hot_reload.txt
+SAMPLE_DEV_SCRIPTS = dev_console dev_overlays dev_preview dev_speed
 SAMPLE_SCRIPTS = monogame/Psiv.Sample/scripts
 SAMPLE_RUN = $(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data
 
@@ -229,6 +230,26 @@ dotnet-test: dotnet
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_reload_saves --assets $(BUILD)/reload_assets --script $(SAMPLE_RELOAD_SCRIPT) --frames 400 > $(BUILD)/sample_reload_headless.txt \
 		|| (cat $(BUILD)/sample_reload_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_reload_headless.txt
+	@for run in $(SAMPLE_DEV_SCRIPTS); do \
+		rm -rf $(BUILD)/sample_$${run}_saves; \
+		$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_$${run}_saves --script $(SAMPLE_SCRIPTS)/$$run.txt --frames 1500 > $(BUILD)/sample_$${run}_headless.txt \
+			|| { cat $(BUILD)/sample_$${run}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${run}_headless.txt; \
+	done
+	# The data reload changes files, so it runs on a copy, with core's data beside it where game.json's core_data looks.
+	rm -rf $(BUILD)/dev_reload $(BUILD)/sample_dev_reload_saves
+	mkdir -p $(BUILD)/dev_reload/game $(BUILD)/dev_reload/core
+	cp -R $(GAME)/data $(BUILD)/dev_reload/game/data
+	cp -R $(CORE)/data $(BUILD)/dev_reload/core/data
+	sed 's/"area.tidewater": "Tidewater Landing"/"area.tidewater": "Tidewater Quay"/' $(GAME)/data/text/en.json > $(BUILD)/dev_reload/game/data/text/en_renamed.json
+	printf '{ "text": {\n' > $(BUILD)/dev_reload/game/data/text/en_broken.json
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/dev_reload/game/data --dev --saves $(BUILD)/sample_dev_reload_saves \
+		--script $(SAMPLE_SCRIPTS)/dev_reload.txt --frames 700 > $(BUILD)/sample_dev_reload_headless.txt || (cat $(BUILD)/sample_dev_reload_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_dev_reload_headless.txt
+	rm -rf $(BUILD)/sample_dev_off_saves
+	$(SAMPLE_RUN) --saves $(BUILD)/sample_dev_off_saves --script $(SAMPLE_SCRIPTS)/dev_off.txt --frames 400 > $(BUILD)/sample_dev_off_headless.txt \
+		|| (cat $(BUILD)/sample_dev_off_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_dev_off_headless.txt
 	rm -rf $(BUILD)/audio
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --dump-audio $(BUILD)/audio
 	python3 -I monogame/Psiv.Sample/scripts/check_wav.py $(BUILD)/audio
@@ -238,5 +259,10 @@ dotnet-missing:
 
 clean:
 	rm -rf $(BUILD) csharp/*/bin csharp/*/obj monogame/*/bin monogame/*/obj
+
+# Self-contained builds of the sample per platform under ../dist, built apart from build/ and the projects' bin/ and obj/.
+.PHONY: package
+package:
+	DOTNET="$(DOTNET)" ../tools/package.sh
 
 -include $(LIB_OBJS:.o=.d) $(PLAYTHROUGH_OBJS:.o=.d) $(TEST_OBJS:.o=.d)

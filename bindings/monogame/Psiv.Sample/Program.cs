@@ -14,14 +14,17 @@ public static class Program
 		"Psiv.Sample: plays the placeholder adventure through libpsiv_session\n" +
 		"\n" +
 		"  Psiv.Sample [--data DIR] [--saves DIR] [--seed N] [--font FILE] [--exit-after-ms N] [--screenshot FILE.png] [--mute] [--window-size WxH] [--fullscreen]\n" +
-		"              [--assets DIR] [--watch-assets]\n" +
+		"              [--assets DIR] [--watch-assets] [--dev]\n" +
 		"  Psiv.Sample --window --script FILE ...   the window, with keys from the script instead of the keyboard\n" +
 		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N] [--assets DIR] [--frame-digests FILE]   headless, no window, no sound\n" +
 		"  Psiv.Sample --dump-audio DIR   writes a generated track and three cues as WAV files and checks every generated sound\n" +
 		"  Psiv.Sample --check-assets [--assets DIR]   checks the asset directory's manifest and files against the data\n" +
 		"  Psiv.Sample --export-placeholders DIR   writes every generated picture and sound and a manifest that reproduces them\n" +
+		"  Psiv.Sample --version   prints the library version\n" +
 		"\n" +
 		"The asset directory defaults to assets/ beside the data directory, when there is one; F5 in the window reloads it.\n" +
+		"--dev turns on the developer tools (docs/dev-tools.md): ` console, F6 data reload, F2-F4 and F7-F10 overlays, F12 previewer,\n" +
+		"[ ] speed, \\ pause, . step.\n" +
 		"\n" +
 		"Headless script lines: press KEY [COUNT] | hold KEY FRAMES | wait FRAMES | pressuntil KEY SCREEN MAXFRAMES |\n" +
 		"pad BUTTON [COUNT] | padhold BUTTON FRAMES | paduntil BUTTON SCREEN MAXFRAMES | padstick X Y FRAMES |\n" +
@@ -31,7 +34,7 @@ public static class Program
 		"expect state KEY VALUE | expect statehas KEY TEXT | expect audio TEXT | expect noaudio TEXT | audio mark|log |\n" +
 		"savefile damage SLOT | click X Y | clickcell X Y | expect letterbox W H X Y WIDTH HEIGHT PERCENT | window W H | window fullscreen |\n" +
 		"assets reload | assets swap FILE WITH | expect asset KEY file|generated | present mark | expect present STEP \"|\" ... | expect presenthas TEXT |\n" +
-		"waitstate MAXFRAMES KEY VALUE | waitstatehas MAXFRAMES KEY TEXT |\n" +
+		"waitstate MAXFRAMES KEY VALUE | waitstatehas MAXFRAMES KEY TEXT | dev CONSOLE_COMMAND | devrefused CONSOLE_COMMAND | datafile swap FILE WITH |\n" +
 		"dump | shot FILE.png (window only) | # comment.\n" +
 		"Keys are MonoGame Keys names, buttons MonoGame Buttons names, actions the sample's GameAction names.\n" +
 		"Exit codes: 0 done, 1 a failure, 2 bad arguments.\n";
@@ -56,6 +59,7 @@ public static class Program
 		string? digests = null;
 		bool checkAssets = false;
 		bool watchAssets = false;
+		bool dev = false;
 		for (int i = 0; i < args.Length; i++)
 		{
 			string? Next() => i + 1 < args.Length ? args[++i] : null;
@@ -75,6 +79,7 @@ public static class Program
 			case "--assets": assets = Next(); break;
 			case "--check-assets": checkAssets = true; break;
 			case "--watch-assets": watchAssets = true; break;
+			case "--dev": dev = true; break;
 			case "--export-placeholders": export = Next(); break;
 			case "--frame-digests": digests = Next(); break;
 			case "--screenshot": screenshot = Next(); break;
@@ -84,6 +89,9 @@ public static class Program
 			case "--seed" when ulong.TryParse(Next(), CultureInfo.InvariantCulture, out ulong n): seed = n; break;
 			case "--help" or "-h":
 				Console.Write(Usage);
+				return 0;
+			case "--version":
+				Console.WriteLine(GameSession.LibraryVersion);
 				return 0;
 			default:
 				Console.Error.Write(Usage);
@@ -143,11 +151,11 @@ public static class Program
 			}
 			if (script is not null && !window)
 			{
-				return Headless.Run(session, gameData, script, frames, saves, assets, digests);
+				return Headless.Run(session, gameData, script, frames, saves, assets, digests, dev, data);
 			}
 			try
 			{
-				using var game = new SampleGame(session, gameData, font, exitAfterMs, saves, script, screenshot, mute, windowSize, fullscreen, assets, watchAssets);
+				using var game = new SampleGame(session, gameData, font, exitAfterMs, saves, script, screenshot, mute, windowSize, fullscreen, assets, watchAssets, dev, data);
 				game.Run();
 				return game.Failures == 0 ? 0 : 1;
 			}
@@ -208,6 +216,12 @@ public static class Program
 
 	private static string? FindData()
 	{
+		// A macOS app bundle keeps the binary in Contents/MacOS and the data in Contents/Resources.
+		string bundled = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Resources", "game", "data"));
+		if (File.Exists(Path.Combine(bundled, "game.json")))
+		{
+			return bundled;
+		}
 		foreach (string start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
 		{
 			for (DirectoryInfo? dir = new(start); dir is not null; dir = dir.Parent)
@@ -524,6 +538,18 @@ public sealed class ScriptPlayer
 					Fail($"{source}: presented [{steps}], expected {(w[1] == "present" ? "" : "it to hold ")}[{wantSteps}]");
 				}
 				break;
+			case "datafile" when w.Length == 4 && w[1] == "swap" && _controller.DataDirectory is { } dataDir:
+				// Copies WITH over FILE in the data directory, as a writer saving a data file would; `dev reload` or F6 reads it.
+				File.Copy(Path.Combine(dataDir, w[3]), Path.Combine(dataDir, w[2]), overwrite: true);
+				break;
+			case "dev" or "devrefused" when w.Length > 1:
+				// The console's command language; `devrefused` expects the command to be refused, as every one is without --dev.
+				bool accepted = _controller.DevCommand(string.Join(" ", w[1..]));
+				if (accepted != (w[0] == "dev"))
+				{
+					Fail($"{source}: the dev command was {(accepted ? "accepted" : "refused")}");
+				}
+				break;
 			case "shot" when w.Length == 2:
 				return Shot(w[1]).GetEnumerator();
 			case "dump":
@@ -703,14 +729,15 @@ public static class Headless
 {
 	private const int FrameMs = 16;
 
-	public static int Run(GameSession session, GameData data, string scriptPath, int frames, string? saves, string? assets, string? digests)
+	public static int Run(GameSession session, GameData data, string scriptPath, int frames, string? saves, string? assets, string? digests, bool dev = false,
+		string? dataDir = null)
 	{
 		int frame = 0;
 		int failures = 0;
 		var surface = new RecordingSurface();
 		string? controls = saves is null ? null : Path.Combine(saves, SampleGame.ControlsFile);
 		var audio = new RecordingAudio();
-		SampleController NewController() => new(session, data, line => Console.WriteLine($"[{frame}] {line}"), controls, audio, assets);
+		SampleController NewController() => new(session, data, line => Console.WriteLine($"[{frame}] {line}"), controls, audio, assets, dev, dataDir);
 		SampleController controller = NewController();
 		var input = new InputState();
 		try

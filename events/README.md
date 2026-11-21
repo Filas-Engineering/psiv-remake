@@ -78,6 +78,8 @@ interpreter.step(delta_seconds);   // returns Status::running until done
 
 `step()` runs until every thread is blocked, then returns. A thread blocks on a timed `wait`, on a host handle that is not done yet (an action, a dialogue line, a choice, a battle, a menu or a rest), on a `together` block whose branches are still running or a `race` none of whose branches has finished, or on `sync` or the end of an event while `nowait` actions are still running. Time passed to `step()` only counts against waits that were already in progress when the step began. A wait that starts during a step begins counting at the next step.
 
+`position()` says where a running event is, for tools such as a script line overlay: the innermost event (one a `call` runs, inside its caller) and the file and source line of the instruction its main thread is at, which is the command it waits on; while the main thread waits on a `together` or `race` block, the first live branch's. Every `Instruction` keeps its `file` and `source_line`, so nothing extra is compiled for it. It is empty while nothing runs.
+
 Runtime problems put the interpreter in `Status::error`, with `error()` giving `file:line: message`. Examples are a host returning an out-of-range choice index, a host that returns no handle for a menu or rest it does not support, calls nested more than 32 deep, or 100,000 commands in one step without a wait. Everything in flight is cancelled when this happens.
 
 `Program` is immutable after compiling, and one program can drive many interpreters.
@@ -177,19 +179,21 @@ Every CLI command is a library call, so a build pipeline can run them without th
 
 ## Changes a host must make
 
-This round's changes. No save changes: `events-save 3` saves still load, and scripts that do not use the new syntax keep their fingerprint (the compiler's code layout version is unchanged; the new ops are appended).
+This round's change: `Interpreter::position()` and `Interpreter::Position` (event, file, line), above. Nothing else changed: no save, format, fingerprint or host call.
+
+The round before's changes. No save changes: `events-save 3` saves still load, and scripts that do not use the new syntax keep their fingerprint (the compiler's code layout version is unchanged; the new ops are appended).
 
 - `host.h`: new virtual methods with defaults, `give_vehicle`, `place_vehicle`, `remove_vehicle`, `has_vehicle` and `aboard_vehicle` (see [Implementing Host](#implementing-host)). Override them to keep vehicles in the game's state.
 - `program.h`: `Op::vehicle_give`, `vehicle_place` and `vehicle_remove` (appended; `Instruction::name` is the vehicle, `action.subject` and `action.target` the map and marker); `enum class VehicleTest { none, owns, aboard }` and `Term::vehicle`, set for a `vehicle` or `aboard` test, whose `name` is then the vehicle. `describe(Condition)` writes them as `vehicle X` and `aboard X`. A `switch` over `Op` needs the new cases.
 - `RecordingHost` keeps `vehicles` (id to `"map marker"`), logs `vehicle give|place|remove ...` and `has_vehicle X -> true|false`, includes them in `snapshot_world`, `restore_world` and `same_world`, and never rides one. `event_cli run` prints the vehicles at the end.
 - Format: the `vehicle give|place|remove` commands and the `vehicle` and `aboard` tests ([FORMAT.md](FORMAT.md)). With a registry, the vehicle must be listed and the marker on the map.
 
-The round before's changes. No save, format or fingerprint changes: `events-save 3` saves still load, and the interpreter issues the same host calls as before.
+Two rounds before. No save, format or fingerprint changes: `events-save 3` saves still load, and the interpreter issues the same host calls as before.
 
 - `host.h`: new `parse_action_type(name, type)` (the action names timing configurations use: `move`, `panel_show`, `camera_move`, ...) and `action_seconds(action, by_type, by_subject)`, the timing rule (the entry for the action's type and subject, else its type's, else the action's own `seconds`). `RecordingHost`, and so `TimingHost` and `event_cli time`, use them unchanged; the game uses them for the durations its data carries (`../game/README.md`, "game.json").
 - The save-state contract gains rule 9 on cameras and panels (below). Nothing changed in the interpreter; the rule says what a host that frames panels by the scene's camera must keep.
 
-Two rounds before. No save changes: `events-save 3` saves still load. Scripts that do not use `aboard` keep their fingerprint.
+Three rounds before. No save changes: `events-save 3` saves still load. Scripts that do not use `aboard` keep their fingerprint.
 
 - `diagnostics.h`: `Diagnostic` adds `key` and `params`, the text key and parameters of the problem; `message` is still the English text, rendered from them (a parser diagnostic's message also starts with its command, as before). New `struct DiagnosticMessage { key, params, empty() }`, `diagnostic_text()` (the English template of every key: `script.*`, `strings.*`, `names.*`, `registry.*`, `lint.*`, `timing.*`), `format_message(table, key, params)`, and `diagnostic(severity, file, line, key, params)` to build one. A host that showed `message` keeps working; one that shows its own language looks `key` up in its table. Aggregate initialization of `Diagnostic` with four fields still compiles and leaves the key empty.
 - `host.h`: `BattleRequest::vehicle`, from `aboard <vehicle>` on `battle`: set the battle up as a vehicle battle with it. `describe(BattleRequest)` writes ` aboard <vehicle>` after the encounter.
@@ -197,7 +201,7 @@ Two rounds before. No save changes: `events-save 3` saves still load. Scripts th
 - Build: the library is compiled with `-fPIC`.
 - Format: `aboard <vehicle>` on `battle`; `vehicle` lines in the registry.
 
-Three rounds before. No save or fingerprint changes: `events-save 3` saves still load, and scripts that do not use the new syntax keep their fingerprint.
+Four rounds before. No save or fingerprint changes: `events-save 3` saves still load, and scripts that do not use the new syntax keep their fingerprint.
 
 - `host.h`: new `enum class BattleEndKind { none, survive_rounds, enemy_defeated }` and `BattleRequest::end`, `end_rounds` and `end_enemy`, from the script's `until`. Set the battle's scripted end from them and report it as `win`. `describe(BattleRequest)` appends ` until survive <n>` or ` until defeat <enemy>`.
 - `registry.h`: `NameKind::enemy` (appended, keyword `enemy`); `Registry::marker_maps`, `Registry::event_maps`, `add_marker(map, marker)`, `add_event_map(map, event)` and `marker_on(marker, map)`; registry files take `map_markers`, `event_map` and `enemy` lines. A host that builds its registry in code should call `add_marker` for every marker (and `add_event_map` for every event it starts on a known map) so a warp or move to another map's marker fails to compile. A warp to a marker on another map, and a move to one on the map the party is known to be on, are now compile errors.
@@ -205,7 +209,7 @@ Three rounds before. No save or fingerprint changes: `events-save 3` saves still
 - CLI: `check` and `strings check` take `--used FILE`; `strings check` takes `--strict`.
 - Format: `until survive <rounds>` and `until defeat <enemy>` on `battle`; the game strings file.
 
-Four rounds before, the public API changed as follows. Old saves of interpreter state (`events-save 2`) no longer load, and every program's fingerprint changed.
+Five rounds before, the public API changed as follows. Old saves of interpreter state (`events-save 2`) no longer load, and every program's fingerprint changed.
 
 Host (`host.h`):
 

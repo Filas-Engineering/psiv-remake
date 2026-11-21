@@ -1,0 +1,53 @@
+# Data hot reload, run with --dev on a copy of the data (bindings/Makefile makes build/dev_reload with game/data and
+# core/data side by side, plus text/en_renamed.json and text/en_broken.json). A valid change: the town renamed in the
+# English text table, reloaded with F6 while the field is up, the leader where it stood and the game marked. A broken
+# change: the reload shows the problems on screen and in the log, and the game goes on with the data it had. Then a
+# reload in the middle of the guide's line resumes the event at that line. With --window the shot lines save
+# screenshots under build/shots/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+cmd walk 7 4
+wait 2
+expect actor fighter 7 4
+expect state area Tidewater Landing
+expect state reload -
+
+datafile swap text/en.json text/en_renamed.json
+press F6
+wait 2
+expect state reload ok
+expect state area Tidewater Quay
+expect state leader tidewater 7 4
+expect actor fighter 7 4
+expect state devmark yes
+expect state deverror -
+shot build/shots/dev_reload_ok.png
+
+datafile swap text/en.json text/en_broken.json
+devrefused reload
+expect state reload error
+expect statehas deverror The data did not load
+expect statehas deverror en.json
+wait 2
+shot build/shots/dev_reload_error.png
+expect screen Field
+expect state area Tidewater Quay
+cmd walk 8 4
+wait 30
+expect actor fighter 8 4
+
+# Mid-event: the guide's first line waits, the data reloads, and the event resumes at the same line.
+datafile swap text/en.json text/en_renamed.json
+cmd walk guide_front
+cmd face north
+press Enter
+waitstatehas 200 line You came about the bell?
+expect screen Dialogue
+dev reload
+expect state reload ok
+waitstatehas 200 line You came about the bell?
+expect screen Dialogue
+expect state deverror -

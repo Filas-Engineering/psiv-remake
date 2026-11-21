@@ -1,0 +1,73 @@
+# The developer overlays, run with --dev: each turned on and off with its key and from the console, and what it drew
+# read back through the overlay probes: collision and terrain (F2), hooks, exits, ports and markers (F3), encounter zones
+# with their tables and spawn cells (F4), actor ids (F7), the camera's target (F8), frames per second and frame time (F9),
+# and the running event with its script line (F10). With --window the shot lines save screenshots under build/shots/.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+expect state overlays none
+press F2
+expect state overlays collision
+wait 1
+expect statehas overlay.collision cells
+shot build/shots/dev_overlay_collision.png
+press F2
+expect state overlays none
+wait 1
+expect state overlay.collision -
+
+dev encounters off
+dev warp reed_path east_gate
+wait 30
+press F4
+wait 1
+expect state overlay.zones west_reeds, east_marsh
+shot build/shots/dev_overlay_zones.png
+press F4
+press F3
+wait 1
+expect statehas overlay.hooks 2 exits
+shot build/shots/dev_overlay_hooks.png
+press F3
+press F7
+wait 1
+expect statehas overlay.actors fighter
+shot build/shots/dev_overlay_actors.png
+press F7
+press F8
+wait 1
+expect state overlay.camera leader
+press F8
+press F9
+wait 1
+expect state overlay.fps 62.5 fps 16.0 ms x1
+shot build/shots/dev_overlay_fps.png
+press F9
+
+# The event overlay names the running event and its line; the camera overlay follows the scene's camera.
+press F10
+wait 1
+expect state overlay.event -
+dev overlay camera on
+dev warp reed_path lookout_front
+wait 30
+dev event reed_path_lookout
+wait 2
+expect statehas overlay.event reed_path_lookout events/reed_path.ev:
+waitstatehas 100 line An old reed-cutters'
+press Enter
+waitstatehas 200 line Tidewater's lamps
+press Enter
+waitstatehas 200 line My prices
+press Enter
+waitstatehas 300 overlay.camera lookout_east
+shot build/shots/dev_overlay_event.png
+dev overlay all
+expect state overlays collision, hooks, zones, actors, camera, fps, event
+wait 1
+shot build/shots/dev_overlay_all.png
+dev overlay none
+expect state overlays none
+devrefused overlay bogus

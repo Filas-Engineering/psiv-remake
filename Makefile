@@ -21,3 +21,8 @@ bindings:
 # Linux in Docker, with g++ and clang++ (see "Platforms" in README.md).
 linux-check:
 	tools/linux-check.sh
+
+# Self-contained builds of the MonoGame sample per platform under dist/ (see "Packaging" in bindings/README.md).
+.PHONY: package
+package:
+	tools/package.sh

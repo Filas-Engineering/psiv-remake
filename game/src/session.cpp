@@ -282,7 +282,9 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.boarded",
 		"game.bought",
 		"game.chest_empty",
+		"game.clear_not_recorded",
 		"game.clear_recorded",
+		"game.dev_marked",
 		"game.dropped",
 		"game.equipped",
 		"game.event_cannot_resume",
@@ -303,6 +305,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.leaves",
 		"game.level_up",
 		"game.loaded",
+		"game.loaded_text",
 		"game.named",
 		"game.no_effect",
 		"game.port_open",
@@ -317,6 +320,20 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.combo_no_member",
 		"game.refuse.combo_not_found",
 		"game.refuse.carry_cap",
+		"game.refuse.dev_bad_cell",
+		"game.refuse.dev_bad_count",
+		"game.refuse.dev_bad_level",
+		"game.refuse.dev_field_only",
+		"game.refuse.dev_in_battle",
+		"game.refuse.dev_unknown_area",
+		"game.refuse.dev_unknown_encounter",
+		"game.refuse.dev_unknown_event",
+		"game.refuse.dev_unknown_flag",
+		"game.refuse.dev_unknown_marker",
+		"game.refuse.dev_unknown_member",
+		"game.refuse.dev_unknown_thing",
+		"game.refuse.dev_unknown_vehicle",
+		"game.refuse.dev_vehicle_outdoors",
 		"game.refuse.equip_menu_only",
 		"game.refuse.in_dungeon",
 		"game.refuse.in_the_way",
@@ -346,6 +363,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.no_control_act",
 		"game.refuse.no_control_move",
 		"game.refuse.no_destination",
+		"game.refuse.no_game",
 		"game.refuse.no_macro",
 		"game.refuse.no_menu",
 		"game.refuse.no_money",
@@ -640,10 +658,12 @@ public:
 
 	bool restore_world(const std::string& snapshot) override {
 		std::string error;
+		const bool marked = s_.world_.devMarked;
 		if (!parseWorldChunks(snapshot, s_.world_, error)) {
 			s_.warn("cannot restore the event-start world: " + error);
 			return false;
 		}
+		s_.world_.devMarked = s_.world_.devMarked || marked;
 		return true;
 	}
 
@@ -1133,8 +1153,14 @@ rules::Message Session::loadText(const std::string& text, const std::string& slo
 	tickRemainderMs_ = 0;
 	modes_.transition(Mode::Field);
 	const Area* a = area();
-	pacing_.enterArea(a->id, a->kind == AreaKind::Dungeon);
-	emit(OutputKind::Notice, "game.loaded", {slot});
+	if (pacingOn()) {
+		pacing_.enterArea(a->id, a->kind == AreaKind::Dungeon);
+	}
+	if (slot.empty()) {
+		emit(OutputKind::Notice, "game.loaded_text");
+	} else {
+		emit(OutputKind::Notice, "game.loaded", {slot});
+	}
 	if (save.value->midEvent.empty()) {
 		return {};
 	}
@@ -1189,7 +1215,9 @@ void Session::update(int ms, const FieldInput& input) {
 		break;
 	case Mode::Event:
 		addTime(ms);
-		pacing_.eventTime(ms);
+		if (pacingOn()) {
+			pacing_.eventTime(ms);
+		}
 		pumpEvent(ms / 1000.0);
 		break;
 	case Mode::Menu:
@@ -1212,7 +1240,9 @@ void Session::addTime(int ms) {
 void Session::tickField(const FieldInput& input) {
 	const int tick = data_.config.tickMs;
 	addTime(tick);
-	pacing_.fieldTime(tick);
+	if (pacingOn()) {
+		pacing_.fieldTime(tick);
+	}
 	world_.graceMs = std::max(0, world_.graceMs - tick);
 	const Area& a = *area();
 	const FieldVehicle* vehicle = riding();
@@ -1223,7 +1253,7 @@ void Session::tickField(const FieldInput& input) {
 		}
 		const Cell target = stepFrom(world_.position, input.direction);
 		// Aboard, visible enemies are in the way but start nothing: battles aboard come from the vehicle's own table.
-		if (!vehicle) {
+		if (!vehicle && encountersOn_) {
 			if (std::optional<EncounterStart> contact = leaderBump(world_, target)) {
 				startFieldBattle(*contact);
 				return;
@@ -1246,7 +1276,7 @@ void Session::tickField(const FieldInput& input) {
 	} else {
 		stepProgressMs_ = 0;
 	}
-	if (encounterMode() == EncounterMode::Visible && world_.area == a.id) {
+	if (encounterMode() == EncounterMode::Visible && world_.area == a.id && encountersOn_) {
 		if (std::optional<EncounterStart> contact = tickVisibleEnemies(world_, a, tick, a.stepMs, !world_.aboard.empty())) {
 			startFieldBattle(*contact);
 		}
@@ -1259,7 +1289,9 @@ void Session::arrive(Cell cell) {
 	if (!world_.aboard.empty()) {
 		world_.vehicles[world_.aboard].cell = cell;
 	}
-	pacing_.step();
+	if (pacingOn()) {
+		pacing_.step();
+	}
 	const Area& a = *area();
 	if (const Exit* exit = a.exitAt(cell)) {
 		const Exit e = *exit;
@@ -1282,6 +1314,9 @@ void Session::arrive(Cell cell) {
 			startEvent(hook->event);
 			return;
 		}
+	}
+	if (!encountersOn_) {
+		return;
 	}
 	if (const FieldVehicle* vehicle = riding()) {
 		const rules::VehicleDef* fighter = data_.db.vehicle(vehicle->id);
@@ -1333,7 +1368,9 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 	} else {
 		world_.enemies.clear();
 	}
-	pacing_.enterArea(a->id, a->kind == AreaKind::Dungeon);
+	if (pacingOn()) {
+		pacing_.enterArea(a->id, a->kind == AreaKind::Dungeon);
+	}
 	loadHooksPending_ = true;
 	ambientPending_ = true;
 	loadHooksFired_.clear();
@@ -1375,7 +1412,11 @@ void Session::settleField() {
 	}
 	if (clearPending_) {
 		clearPending_ = false;
-		writeClearRecord();
+		if (world_.devMarked) {
+			emit(OutputKind::Notice, "game.clear_not_recorded");
+		} else {
+			writeClearRecord();
+		}
 	}
 	if (!autosaveReason_.empty()) {
 		autosave(autosaveReason_);
@@ -1407,7 +1448,8 @@ rules::Message Session::walk(Facing direction) {
 		if (mode() != Mode::Field || world_.position != start || world_.area != startArea) {
 			return {};
 		}
-		if (world_.graceMs == 0 && std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; }) && !leaderBump(world_, target)) {
+		if (world_.graceMs == 0 && std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; }) &&
+			(!encountersOn_ || !leaderBump(world_, target))) {
 			return refusal("in_the_way");
 		}
 	}
@@ -2068,9 +2110,11 @@ std::string Session::startBattle(const std::string& encounter, rules::Opening op
 	battleDefeatHandled_ = defeatHasBranch;
 	const Boss* boss = data_.boss(encounter);
 	battleIsBoss_ = boss != nullptr;
-	pacing_.battleStarted();
-	if (boss) {
-		pacing_.bossStarted(boss->flag, encounter, averageLevelX100());
+	if (pacingOn()) {
+		pacing_.battleStarted();
+		if (boss) {
+			pacing_.bossStarted(boss->flag, encounter, averageLevelX100());
+		}
 	}
 	emit(OutputKind::Notice, "game.battle_start");
 	return "";
@@ -2246,9 +2290,11 @@ void Session::finishBattle() {
 	} else {
 		emit(OutputKind::Notice, "game.fallen");
 	}
-	pacing_.battleEnded(battleRounds_, data_.config.roundMs, experience, money);
-	if (battleIsBoss_ && outcome == rules::Outcome::Victory) {
-		pacing_.bossEnded();
+	if (pacingOn()) {
+		pacing_.battleEnded(battleRounds_, data_.config.roundMs, experience, money);
+		if (battleIsBoss_ && outcome == rules::Outcome::Victory) {
+			pacing_.bossEnded();
+		}
 	}
 	world_.graceMs = data_.config.graceMs;
 
@@ -3063,6 +3109,313 @@ std::optional<EquipPreview> Session::equipPreview(const std::string& member, con
 	preview.refusal = rules::equip(wearing, data_.db, bag, piece);
 	preview.after = preview.refusal.empty() ? view(wearing) : preview.before;
 	return preview;
+}
+
+// Developer tools
+
+rules::Message Session::devNeedsGame() const {
+	if (mode() == Mode::Title) {
+		return refusal("no_game");
+	}
+	if (mode() == Mode::Battle) {
+		return refusal("dev_in_battle");
+	}
+	return {};
+}
+
+rules::Message Session::devNeedsField() const {
+	if (mode() == Mode::Title) {
+		return refusal("no_game");
+	}
+	if (mode() != Mode::Field) {
+		return refusal("dev_field_only");
+	}
+	return {};
+}
+
+void Session::devMark() {
+	if (!world_.devMarked) {
+		world_.devMarked = true;
+		emit(OutputKind::Notice, "game.dev_marked");
+	}
+}
+
+std::vector<std::string> Session::devList(DevList list) const {
+	std::vector<std::string> out;
+	auto keys = [&out](const auto& table) {
+		for (const auto& entry : table) {
+			out.push_back(entry.first);
+		}
+	};
+	switch (list) {
+	case DevList::Areas: keys(data_.areas); break;
+	case DevList::Markers:
+		for (const auto& [id, a] : data_.areas) {
+			for (const auto& marker : a.markers) {
+				out.push_back(id + ":" + marker.first);
+			}
+		}
+		break;
+	case DevList::Flags:
+		for (const events::Declaration& d : data_.program.declarations) {
+			if (d.is_flag && !d.local) {
+				out.push_back(d.name);
+			}
+		}
+		std::sort(out.begin(), out.end());
+		break;
+	case DevList::Items: keys(data_.db.items); break;
+	case DevList::Equipment: keys(data_.db.equipment); break;
+	case DevList::Abilities: keys(data_.db.abilities); break;
+	case DevList::Enemies: keys(data_.db.enemies); break;
+	case DevList::Encounters: keys(data_.db.encounters); break;
+	case DevList::Events:
+		for (const events::EventInfo& e : data_.program.events) {
+			out.push_back(e.name);
+		}
+		std::sort(out.begin(), out.end());
+		break;
+	case DevList::Vehicles:
+		for (const FieldVehicle& v : data_.config.vehicles) {
+			out.push_back(v.id);
+		}
+		std::sort(out.begin(), out.end());
+		break;
+	case DevList::Characters: keys(data_.db.characters); break;
+	}
+	return out;
+}
+
+rules::Message Session::devWarp(const std::string& areaId, const std::string& marker) {
+	const Area* a = data_.area(areaId);
+	if (!a) {
+		return refusal("dev_unknown_area", {areaId});
+	}
+	auto it = a->markers.find(marker);
+	if (it == a->markers.end()) {
+		return refusal("dev_unknown_marker", {areaId, marker});
+	}
+	return devWarpCell(areaId, it->second);
+}
+
+rules::Message Session::devWarpCell(const std::string& areaId, Cell cell) {
+	if (rules::Message refused = devNeedsField(); !refused.empty()) {
+		return refused;
+	}
+	const Area* a = data_.area(areaId);
+	if (!a) {
+		return refusal("dev_unknown_area", {areaId});
+	}
+	if (!a->walkable(cell)) {
+		return refusal("dev_bad_cell", {areaId, std::to_string(cell.x), std::to_string(cell.y)});
+	}
+	devMark();
+	leaveVehicleBehind();
+	enterAreaAt(areaId, cell);
+	settleField();
+	return {};
+}
+
+rules::Message Session::devSetFlag(const std::string& flag, bool value) {
+	if (mode() == Mode::Title) {
+		return refusal("no_game");
+	}
+	const events::Declaration* declared = data_.registry.find(flag);
+	if (!declared || !declared->is_flag || declared->local) {
+		return refusal("dev_unknown_flag", {flag});
+	}
+	devMark();
+	world_.flags[flag] = value;
+	refreshJournal(true);
+	settleField();
+	return {};
+}
+
+rules::Message Session::devGive(const std::string& id, int count) {
+	if (rules::Message refused = devNeedsGame(); !refused.empty()) {
+		return refused;
+	}
+	if (!data_.db.item(id) && !data_.db.equipmentPiece(id)) {
+		return refusal("dev_unknown_thing", {id});
+	}
+	if (count == 0) {
+		return refusal("dev_bad_count");
+	}
+	devMark();
+	if (count > 0) {
+		giveThing(id, count);
+	} else {
+		host_->take_item(id, -count);
+	}
+	return {};
+}
+
+rules::Message Session::devMoney(int amount) {
+	if (rules::Message refused = devNeedsGame(); !refused.empty()) {
+		return refused;
+	}
+	devMark();
+	world_.money = static_cast<int>(std::clamp<std::int64_t>(static_cast<std::int64_t>(world_.money) + amount, 0, data_.config.moneyCap));
+	return {};
+}
+
+rules::Message Session::devSetLevel(const std::string& member, int level) {
+	if (rules::Message refused = devNeedsGame(); !refused.empty()) {
+		return refused;
+	}
+	rules::PartyMember* m = world_.member(member);
+	if (!m) {
+		return refusal("dev_unknown_member", {member});
+	}
+	if (level < 1 || level > rules::formulas::kMaxLevel) {
+		return refusal("dev_bad_level", {std::to_string(level), std::to_string(rules::formulas::kMaxLevel)});
+	}
+	devMark();
+	m->level = level;
+	m->experience = 0;
+	m->hp = std::max(m->hp, 1);
+	rules::rest(*m, data_.db);
+	return {};
+}
+
+rules::Message Session::devBattle(const std::string& encounter) {
+	if (rules::Message refused = devNeedsField(); !refused.empty()) {
+		return refused;
+	}
+	if (!data_.db.encounter(encounter)) {
+		return refusal("dev_unknown_encounter", {encounter});
+	}
+	devMark();
+	startFieldBattle(EncounterStart{encounter, rules::Opening::Normal, 0}, world_.aboard);
+	return {};
+}
+
+rules::Message Session::devEndBattle(bool victory, std::vector<rules::Event>* events) {
+	if (!battle_) {
+		return refusal("no_battle");
+	}
+	devMark();
+	for (int i = 0; i < static_cast<int>(battle_->combatants().size()); ++i) {
+		if (battle_->isParty(i) != victory) {
+			battle_->combatant(i).hp = 0;
+		}
+	}
+	std::vector<rules::Event> round = resolveRound();
+	if (events) {
+		*events = std::move(round);
+	}
+	return {};
+}
+
+rules::Message Session::devVehicle(const std::string& vehicle, const std::string& areaId, const std::string& marker) {
+	if (rules::Message refused = devNeedsField(); !refused.empty()) {
+		return refused;
+	}
+	if (!data_.vehicle(vehicle)) {
+		return refusal("dev_unknown_vehicle", {vehicle});
+	}
+	const Area* a = data_.area(areaId);
+	if (!a) {
+		return refusal("dev_unknown_area", {areaId});
+	}
+	if (!a->markers.count(marker)) {
+		return refusal("dev_unknown_marker", {areaId, marker});
+	}
+	if (a->kind != AreaKind::Field) {
+		return refusal("dev_vehicle_outdoors", {areaId});
+	}
+	devMark();
+	const bool had = world_.vehicles.count(vehicle) > 0;
+	if (world_.aboard == vehicle) {
+		dismount();
+	}
+	const Cell cell = a->markers.at(marker);
+	world_.vehicles[vehicle] = {areaId, cell, Facing::South, areaId, cell};
+	if (!had) {
+		emit(OutputKind::Notice, "game.vehicle_acquired", {vehicle});
+	}
+	return {};
+}
+
+rules::Message Session::devEncounters(bool on) {
+	if (mode() == Mode::Title) {
+		return refusal("no_game");
+	}
+	devMark();
+	encountersOn_ = on;
+	return {};
+}
+
+rules::Message Session::devRunEvent(const std::string& event) {
+	if (rules::Message refused = devNeedsField(); !refused.empty()) {
+		return refused;
+	}
+	if (data_.program.find_event(event) < 0) {
+		return refusal("dev_unknown_event", {event});
+	}
+	devMark();
+	startEvent(event);
+	return {};
+}
+
+std::optional<EventPosition> Session::eventPosition() const {
+	if (!interpreter_) {
+		return std::nullopt;
+	}
+	const events::Interpreter::Position at = interpreter_->position();
+	if (at.event.empty()) {
+		return std::nullopt;
+	}
+	return EventPosition{at.event, at.file, at.line};
+}
+
+rules::Message Session::saveText(std::string& out) const {
+	if (mode() == Mode::Title) {
+		return refusal("no_game");
+	}
+	SaveFile save = makeSave(false);
+	if (battle_) {
+		save.world.encounterStream.restore(streamBeforeBattle_);
+	}
+	if (interpreter_) {
+		save.midEvent = events::save_state_to_text(interpreter_->save());
+	}
+	out = serializeSave(save);
+	return {};
+}
+
+rules::Message Session::loadSaveText(const std::string& text) {
+	retryCount_ = 0;
+	retrySlot_.clear();
+	return loadText(text, "");
+}
+
+const char* toString(DevList list) {
+	switch (list) {
+	case DevList::Areas: return "areas";
+	case DevList::Markers: return "markers";
+	case DevList::Flags: return "flags";
+	case DevList::Items: return "items";
+	case DevList::Equipment: return "equipment";
+	case DevList::Abilities: return "abilities";
+	case DevList::Enemies: return "enemies";
+	case DevList::Encounters: return "encounters";
+	case DevList::Events: return "events";
+	case DevList::Vehicles: return "vehicles";
+	case DevList::Characters: return "characters";
+	}
+	return "areas";
+}
+
+bool parseDevList(const std::string& text, DevList& out) {
+	for (DevList list : {DevList::Areas, DevList::Markers, DevList::Flags, DevList::Items, DevList::Equipment, DevList::Abilities, DevList::Enemies,
+			 DevList::Encounters, DevList::Events, DevList::Vehicles, DevList::Characters}) {
+		if (text == toString(list)) {
+			out = list;
+			return true;
+		}
+	}
+	return false;
 }
 
 }

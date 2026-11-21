@@ -169,6 +169,8 @@ public class NativeLayoutTests
 		Same<PsivCamera>("psiv_camera");
 		Same<PsivVehicle>("psiv_vehicle");
 		Same<PsivTravelDestination>("psiv_travel_destination");
+		Same<PsivEventPosition>("psiv_event_position");
+		Same<PsivZone>("psiv_zone");
 		Assert.Equal(0u, Native.SizeOf("no_such_struct"));
 	}
 
@@ -828,5 +830,100 @@ public class SessionTests
 		Assert.Equal(("saltgrass", 46, 12), (way.Area, way.X, way.Y));
 		Assert.True(s.Travel(TravelKind.DungeonExit, null, null, "waymark_chalk").Ok);
 		Assert.Equal(("saltgrass", 46, 12), (s.FieldInfo()!.AreaId, s.FieldInfo()!.LeaderX, s.FieldInfo()!.LeaderY));
+	}
+}
+
+public class DevToolsTests
+{
+	private static void Settle(GameSession s)
+	{
+		for (int guard = 0; guard < 10000 && s.Mode == Mode.Event; guard++)
+		{
+			if (s.LinePending)
+			{
+				s.ConfirmLine();
+			}
+			else if (s.ChoicePending)
+			{
+				s.Choose(0).ThrowIfFailed();
+			}
+			else
+			{
+				s.Update(100);
+			}
+		}
+	}
+
+	private static void CopyDirectory(string from, string to)
+	{
+		foreach (string dir in Directory.GetDirectories(from, "*", SearchOption.AllDirectories))
+		{
+			Directory.CreateDirectory(Path.Combine(to, Path.GetRelativePath(from, dir)));
+		}
+		foreach (string file in Directory.GetFiles(from, "*", SearchOption.AllDirectories))
+		{
+			File.Copy(file, Path.Combine(to, Path.GetRelativePath(from, file)));
+		}
+	}
+
+	[Fact]
+	public void CommandsMarkTheGameAndTheMarkIsSaved()
+	{
+		string saves = Paths.FreshDirectory("dev_mark");
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = saves, Seed = 285 });
+		Assert.Contains("reed_path:west_gate", s.DevIds(DevList.Markers));
+		Assert.Equal("game.refuse.no_game", s.DevWarp("reed_path", "west_gate").Error?.Key);
+		Assert.False(s.SaveText().Result.Ok);
+		s.NewGame().ThrowIfFailed();
+		Assert.Equal("tidewater_arrival", s.EventPosition()?.Event);
+		Settle(s);
+		Assert.Null(s.EventPosition());
+		Assert.False(s.WorldInfo().Dev);
+		Assert.Equal("game.refuse.dev_unknown_marker", s.DevWarp("reed_path", "nowhere").Error?.Key);
+		Assert.False(s.WorldInfo().Dev);
+		s.DevWarp("reed_path", "west_gate").ThrowIfFailed();
+		Assert.True(s.WorldInfo().Dev);
+		Assert.Equal(("reed_path", 1, 4), (s.FieldInfo()!.AreaId, s.FieldInfo()!.LeaderX, s.FieldInfo()!.LeaderY));
+		Zone reeds = s.FieldZones().First(z => z.Id == "west_reeds");
+		Assert.NotEmpty(reeds.Table);
+		s.DevEncounters(false).ThrowIfFailed();
+		Assert.False(s.WorldInfo().Encounters);
+		s.DevBattle("training").ThrowIfFailed();
+		(PsivResult ended, IReadOnlyList<BattleEvent> events) = s.DevEndBattle(victory: true);
+		Assert.True(ended.Ok);
+		Assert.Equal(Outcome.Victory, events[^1].Outcome);
+		Assert.Equal(Mode.Field, s.Mode);
+		s.OpenMenu().ThrowIfFailed();
+		s.SaveManual("manual_0").ThrowIfFailed();
+		Assert.True(s.Saves()!.First(x => x.Slot == "manual_0").Dev);
+	}
+
+	[Fact]
+	public void ReloadKeepsThePlaceAndReportsBrokenData()
+	{
+		string data = Paths.FreshDirectory("dev_reload_data");
+		CopyDirectory(Paths.GameData, data);
+		string core = Path.GetFullPath(Path.Combine(Paths.Game, "..", "core", "data"));
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = data, CoreDataDirectory = core, Seed = 285 });
+		s.NewGame().ThrowIfFailed();
+		Settle(s);
+		FieldInfo before = s.FieldInfo()!;
+		string english = Path.Combine(data, "text", "en.json");
+		string text = File.ReadAllText(english);
+		File.WriteAllText(english, text.Replace("\"area.tidewater\": \"Tidewater Landing\"", "\"area.tidewater\": \"Tidewater Quay\""));
+		s.Reload().ThrowIfFailed();
+		FieldInfo after = s.FieldInfo()!;
+		Assert.Equal((before.AreaId, before.LeaderX, before.LeaderY), (after.AreaId, after.LeaderX, after.LeaderY));
+		Assert.Equal("Tidewater Quay", after.AreaName);
+		Assert.True(s.WorldInfo().Dev);
+		File.WriteAllText(english, "{ broken");
+		PsivDataException broken = Assert.Throws<PsivDataException>(() => s.Reload());
+		Assert.Contains(broken.Problems, p => p.File.EndsWith("en.json", StringComparison.Ordinal));
+		Assert.Equal("Tidewater Quay", s.FieldInfo()!.AreaName);
+		(PsivResult saved, string save) = s.SaveText();
+		Assert.True(saved.Ok);
+		using GameSession other = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, Seed = 285 });
+		other.LoadText(save).ThrowIfFailed();
+		Assert.Equal(before.LeaderY, other.FieldInfo()!.LeaderY);
 	}
 }

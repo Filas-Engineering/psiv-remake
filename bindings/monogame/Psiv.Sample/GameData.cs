@@ -36,6 +36,8 @@ public sealed partial class GameData
 	public HashSet<string> Ambient { get; } = [];
 	public HashSet<string> Cues { get; } = [];
 	public Dictionary<string, ActionShape> Actions { get; } = [];
+	// Where each event a hook starts begins: the hook's area and cell, for the event previewer.
+	public Dictionary<string, (string Area, int X, int Y)> EventStarts { get; } = [];
 
 	[GeneratedRegex(@"^\s*(music play|ambient play|sound)\s+([A-Za-z0-9_]+)", RegexOptions.Multiline)]
 	private static partial Regex ScriptAudio();
@@ -56,6 +58,13 @@ public sealed partial class GameData
 			AreaKind kind = Enum.Parse<AreaKind>(doc.RootElement.GetProperty("kind").GetString()!, ignoreCase: true);
 			d.Areas.Add(id);
 			d.AreaKinds[id] = kind;
+			foreach (JsonElement hook in Array(doc.RootElement, "hooks"))
+			{
+				if (hook.TryGetProperty("event", out JsonElement ev) && hook.TryGetProperty("at", out JsonElement at) && at.ValueKind == JsonValueKind.Array)
+				{
+					d.EventStarts.TryAdd(ev.GetString()!, (id, at[0].GetInt32(), at[1].GetInt32()));
+				}
+			}
 			d.Music.Add($"{FieldRenderer.KindName(kind).ToLowerInvariant()}_{id}");
 		}
 		d.Music.UnionWith(["title", "battle_town", "battle_field", "battle_dungeon", "battle_scripted"]);

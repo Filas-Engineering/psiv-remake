@@ -74,8 +74,11 @@ public enum NameKind
 	Mode, MenuKind, Direction, NoticeKind, AreaKind, EncounterMode, EnemyState, PointKind, JobState, TextSpeed, BattleSpeed,
 	RewardMultiplier, BattleSource, Side, CommandKind, AbilityKind, Targeting, EquipSlot, Outcome, EventType, CancelReason,
 	Effectiveness, StatusEnd, ResourceKind, Element, Stat, Opening, AutoStop, MacroStepStatus, MacroIssue, ActionType, MacroTargetKind,
-	DescriptionKind, ItemSort, CameraTarget, TravelKind,
+	DescriptionKind, ItemSort, CameraTarget, TravelKind, DevList,
 }
+
+// The id lists of DevIds: what the developer commands take. Markers are "area:marker".
+public enum DevList { Areas, Markers, Flags, Items, Equipment, Abilities, Enemies, Encounters, Events, Vehicles, Characters }
 
 public sealed record PsivError(PsivStatus Status, string Key, IReadOnlyList<string> Params, string Text)
 {
@@ -129,9 +132,20 @@ public sealed record Difficulty(string Id, string Name, string Description, int 
 // Every preset in id order; CanChange says SetSettings would accept a change now (a game in progress, outside battle).
 public sealed record Difficulties(IReadOnlyList<Difficulty> Presets, bool CanChange);
 
-public sealed record SaveSummary(string Slot, string Area, long PlayTimeMs, IReadOnlyList<string> Party, string Difficulty, long WriteTime, ulong Sequence, bool Autosave, bool Damaged, string Error);
+// Dev: developer tools marked the saved game.
+public sealed record SaveSummary(string Slot, string Area, long PlayTimeMs, IReadOnlyList<string> Party, string Difficulty, long WriteTime, ulong Sequence, bool Autosave, bool Damaged, string Error,
+	bool Dev);
 
-public sealed record WorldInfo(Mode Mode, MenuKind MenuKind, int Money, long PlayTimeMs, int AutosaveCount, bool GameOver, bool CanRetry, bool PlayerControl);
+// Dev: developer tools marked the game. Encounters: false while DevEncounters has turned battles off for this session.
+public sealed record WorldInfo(Mode Mode, MenuKind MenuKind, int Money, long PlayTimeMs, int AutosaveCount, bool GameOver, bool CanRetry, bool PlayerControl,
+	bool Dev, bool Encounters);
+
+// The running event and the source line its interpreter is at.
+public sealed record EventPosition(string Event, string File, int Line);
+
+// An encounter zone of the party's area: the rectangle it covers (corners included), its table and its visible spawns.
+public sealed record Zone(string Id, int FromX, int FromY, int ToX, int ToY, IReadOnlyList<(string Encounter, int Weight)> Table,
+	IReadOnlyList<(int X, int Y)> Spawns);
 
 // Music is the area's track, "" when the data names none. Aboard is the vehicle the party rides, "" on foot; LeaderStepMs
 // the leader's time per cell now, StepMs on foot.

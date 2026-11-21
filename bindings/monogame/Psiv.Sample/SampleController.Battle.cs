@@ -45,7 +45,7 @@ public sealed partial class SampleController
 
 	private BattleContext Context()
 	{
-		int partyCount = _s.BattleInfo()?.PartyCount ?? 0;
+		int partyCount = StageInfo()?.PartyCount ?? 0;
 		return new BattleContext(_s, _battle.Labels, PresentationTable, _data, e => BattleCue(e, partyCount));
 	}
 

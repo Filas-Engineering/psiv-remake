@@ -43,8 +43,8 @@ public sealed partial class SampleController
 	private void DrawBattle(IDrawSurface s, Art art)
 	{
 		BattleUi b = _battle;
-		IReadOnlyList<Combatant> all = _s.Combatants();
-		BattleInfo? info = _s.BattleInfo();
+		IReadOnlyList<Combatant> all = StageCombatants();
+		BattleInfo? info = StageInfo();
 		int partyCount = info?.PartyCount ?? all.Count(c => c.Side == Side.Party);
 		int enemyCount = all.Count - partyCount;
 		bool commanding = b.Phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro;

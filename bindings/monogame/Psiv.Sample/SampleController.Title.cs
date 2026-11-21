@@ -6,6 +6,8 @@ namespace Psiv.Sample;
 
 public sealed partial class SampleController
 {
+	private static readonly string LibraryVersion = GameSession.LibraryVersion;
+
 	private List<(string Label, Func<PsivResult> Run)> TitleOptions()
 	{
 		var options = new List<(string, Func<PsivResult>)>();
@@ -88,6 +90,7 @@ public sealed partial class SampleController
 			Style.ListRow(s, options[i].Label, bx + 80, by + top + i * rowH, w - 140, i == _cursor, height: Px(28));
 		}
 		_probeSelected = options[Math.Clamp(_cursor, 0, options.Count - 1)].Label;
+		s.Text(LibraryVersion, s.Width - s.Measure(LibraryVersion, Style.Small) - 12, 8, Style.Dim, Style.Small);
 		DrawToasts(s, 16, s.Height - 40, right: true);
 		DrawHint(s, $"{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} confirm");
 	}

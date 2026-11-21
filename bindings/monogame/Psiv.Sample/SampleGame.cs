@@ -44,14 +44,18 @@ public sealed class SampleGame : Game
 	private Letterbox _box = Letterbox.Fit(Letterbox.BaseWidth, Letterbox.BaseHeight);
 	private readonly GameData _data;
 	private readonly string? _assets;
+	private readonly bool _dev;
+	private readonly string? _dataDir;
 	private readonly FileSystemWatcher? _watcher;
 	// When the watcher last saw a change in the asset directory; the reload waits for a quiet moment after it.
 	private long _assetChangeTicks;
 	private const int WatchQuietMs = 300;
 
 	public SampleGame(GameSession session, GameData data, string? fontPath, int exitAfterMs, string? saves, string? scriptPath = null, string? screenshot = null, bool mute = false,
-		(int Width, int Height)? windowSize = null, bool fullscreen = false, string? assets = null, bool watchAssets = false)
+		(int Width, int Height)? windowSize = null, bool fullscreen = false, string? assets = null, bool watchAssets = false, bool dev = false, string? dataDir = null)
 	{
+		_dev = dev;
+		_dataDir = dataDir;
 		_data = data;
 		_assets = assets;
 		if (watchAssets && assets is not null)
@@ -71,7 +75,7 @@ public sealed class SampleGame : Game
 		_scriptPath = scriptPath;
 		_screenshot = screenshot;
 		_audio = MonoGameAudio.Create(mute, Console.WriteLine);
-		_controller = new SampleController(session, data, Console.WriteLine, _controlsPath, _audio, assets);
+		_controller = new SampleController(session, data, Console.WriteLine, _controlsPath, _audio, assets, dev, dataDir);
 		_graphics = new GraphicsDeviceManager(this)
 		{
 			PreferredBackBufferWidth = windowSize?.Width ?? Letterbox.BaseWidth,
@@ -114,7 +118,7 @@ public sealed class SampleGame : Game
 		if (_scriptPath is not null)
 		{
 			_player = new ScriptPlayer(_session, _controller, _scriptPath, () => [], () => _frame, _shots.Add,
-				() => _controller = new SampleController(_session, _data, Console.WriteLine, _controlsPath, _audio, _assets), _saves, Resize);
+				() => _controller = new SampleController(_session, _data, Console.WriteLine, _controlsPath, _audio, _assets, _dev, _dataDir), _saves, Resize);
 		}
 	}
 
