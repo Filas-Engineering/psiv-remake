@@ -10,6 +10,28 @@ namespace Psiv.Sample;
 // "cure", "stat" or "other") and its element ("none" for physical and non-damage effects).
 public sealed record ActionShape(string Kind, string Effect, string Element);
 
+// A step hook that fires on every cell of one map character (the C interface lists it as no point): its cells as the
+// map writes them, and the flags that gate it.
+public sealed record TileHook(string Id, char Tile, (int X, int Y)[] Cells, string RequireFlag, string BlockFlag);
+
+// An area's map as its file writes it, before any change: each cell's terrain (CellFlags' terrain and barrier bits),
+// its changes by flag in data order, the ids of its points (hooks, chests, shops, rests, ports, helms) and of its chests,
+// its tile step hooks, and the interact hooks solid only while their flags hold.
+public sealed record AreaMap(int Width, int Height, CellFlags[] Written, List<(string Flag, (int X, int Y)[] Cells)> Changes, HashSet<string> Points,
+	HashSet<string> Chests, List<TileHook> TileHooks, HashSet<string> SolidWhileActive)
+{
+	public const CellFlags TerrainBits = CellFlags.TerrainMask | CellFlags.Barrier;
+
+	public static CellFlags Terrain(char tile) => tile switch
+	{
+		'#' => CellFlags.Wall,
+		'~' => CellFlags.Water,
+		':' => CellFlags.Soft,
+		'%' => CellFlags.Wall | CellFlags.Barrier,
+		_ => CellFlags.Floor,
+	};
+}
+
 // The ids the session's data defines, for checking an asset manifest and for battle presentations. The session lists
 // actors, cameras and languages; the C interface lists no areas, characters, enemies, encounters, statuses, abilities,
 // items, audio ids or script animations, so those are read from the files the session loaded (game.json, the area
@@ -18,6 +40,8 @@ public sealed partial class GameData
 {
 	public HashSet<string> Areas { get; } = [];
 	public Dictionary<string, AreaKind> AreaKinds { get; } = [];
+	public Dictionary<string, AreaMap> Maps { get; } = [];
+	public HashSet<string> Flags { get; } = [];
 	public HashSet<string> Actors { get; } = [];
 	public HashSet<string> Characters { get; } = [];
 	public HashSet<string> Vehicles { get; } = [];
@@ -43,6 +67,8 @@ public sealed partial class GameData
 	public Dictionary<string, List<string>> EnemyStatuses { get; } = [];
 	// Where each event a hook starts begins: the hook's area and cell, for the event previewer.
 	public Dictionary<string, (string Area, int X, int Y)> EventStarts { get; } = [];
+	// Per language the text tables' lines: each key and text, and whether it came from the dialogue's string table.
+	public Dictionary<string, List<(string Key, string Text, bool Dialogue)>> TextTables { get; } = [];
 
 	[GeneratedRegex(@"^\s*(music play|ambient play|sound)\s+([A-Za-z0-9_]+)", RegexOptions.Multiline)]
 	private static partial Regex ScriptAudio();
@@ -71,7 +97,46 @@ public sealed partial class GameData
 				}
 			}
 			d.Music.Add($"{FieldRenderer.KindName(kind).ToLowerInvariant()}_{id}");
+			string[] rows = [.. Array(doc.RootElement, "map").Select(r => r.GetString()!)];
+			int width = rows.Length == 0 ? 0 : rows[0].Length;
+			var changes = Array(doc.RootElement, "changes")
+				.Select(c => (c.GetProperty("flag").GetString()!, Array(c, "cells").Select(at => (at[0].GetInt32(), at[1].GetInt32())).ToArray())).ToList();
+			var points = new HashSet<string>(new[] { "hooks", "chests", "shops", "rests", "ports", "helms" }
+				.SelectMany(list => Array(doc.RootElement, list)).Select(p => p.GetProperty("id").GetString()!));
+			string Flag(JsonElement hook, string name) => hook.TryGetProperty(name, out JsonElement f) ? f.GetString()! : "";
+			var tileHooks = Array(doc.RootElement, "hooks").Where(h => h.TryGetProperty("tile", out _)).Select(h =>
+			{
+				char tile = h.GetProperty("tile").GetString()![0];
+				(int, int)[] cells = [.. rows.SelectMany((r, y) => r.Select((c, x) => (c, x, y))).Where(t => t.c == tile).Select(t => (t.x, t.y))];
+				return new TileHook(h.GetProperty("id").GetString()!, tile, cells, Flag(h, "require_flag"), Flag(h, "block_flag"));
+			}).ToList();
+			var whileActive = new HashSet<string>(Array(doc.RootElement, "hooks")
+				.Where(h => h.TryGetProperty("solid", out JsonElement solid) && solid.GetString() == "while_active").Select(h => h.GetProperty("id").GetString()!));
+			d.Maps[id] = new AreaMap(width, rows.Length, [.. rows.SelectMany(r => r.PadRight(width).Select(AreaMap.Terrain))], changes, points,
+				[.. Array(doc.RootElement, "chests").Select(c => c.GetProperty("id").GetString()!)], tileHooks, whileActive);
 		}
+		foreach (JsonElement language in Array(root, "languages"))
+		{
+			var lines = new List<(string, string, bool)>();
+			if (language.TryGetProperty("text", out JsonElement textFile))
+			{
+				using JsonDocument text = JsonDocument.Parse(File.ReadAllText(Path.Combine(dataDir, textFile.GetString()!)));
+				lines.AddRange(text.RootElement.GetProperty("text").EnumerateObject().Select(t => (t.Name, t.Value.GetString() ?? "", false)));
+			}
+			if (language.TryGetProperty("strings", out JsonElement stringsFile))
+			{
+				foreach (string line in File.ReadLines(Path.Combine(dataDir, stringsFile.GetString()!)))
+				{
+					int eq = line.IndexOf('=');
+					if (!line.TrimStart().StartsWith('#') && eq > 0)
+					{
+						lines.Add((line[..eq].Trim(), line[(eq + 1)..].Trim(), true));
+					}
+				}
+			}
+			d.TextTables[language.GetProperty("code").GetString()!] = lines;
+		}
+		d.Flags.UnionWith(Array(root, "flags").Select(f => f.GetString()!));
 		d.Music.UnionWith(["title", "battle_town", "battle_field", "battle_dungeon", "battle_scripted"]);
 		d.FieldVehicles.UnionWith(Array(root, "vehicles").Select(v => v.GetProperty("id").GetString()!));
 		var scripted = new Dictionary<string, string>();
@@ -148,6 +213,26 @@ public sealed partial class GameData
 		};
 		string element = first.ValueKind == JsonValueKind.Object && first.TryGetProperty("element", out JsonElement el) ? el.GetString()! : "none";
 		return new ActionShape(kind, effect, element);
+	}
+
+	[GeneratedRegex(@"\{[^{}]*\}")]
+	private static partial Regex Placeholder();
+
+	// The characters a bitmap font for a language and role must have to draw that language's text tables: for the
+	// dialogue role the string tables' lines and the dialogue box's own words; for the battle numbers the digits and the
+	// words that float over targets; otherwise every line. Placeholders such as {0} are left out, spaces and line breaks
+	// too.
+	public SortedSet<char> TextGlyphs(string language, TextRole? role)
+	{
+		IEnumerable<(string Key, string Text, bool Dialogue)> lines = TextTables.GetValueOrDefault(language) ?? [];
+		lines = role switch
+		{
+			TextRole.Dialogue => lines.Where(l => l.Dialogue || l.Key.StartsWith("ui.dialogue.", StringComparison.Ordinal)),
+			TextRole.BattleNumbers => lines.Where(l => l.Key.StartsWith("ui.battle.float.", StringComparison.Ordinal) || l.Key.StartsWith("name.status.", StringComparison.Ordinal))
+				.Append(("", "0123456789+", false)),
+			_ => lines,
+		};
+		return [.. lines.SelectMany(l => Placeholder().Replace(l.Text, "")).Where(c => !char.IsWhiteSpace(c) || c == '\u3000')];
 	}
 
 	// The shape of an action no data file defines (a bare basic attack): a physical hit.

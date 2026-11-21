@@ -210,6 +210,15 @@ public sealed class FieldRenderer
 	private string _bannerTitle = "";
 	private AreaKind _bannerKind;
 
+	// Whether a story flag is set, and an area's map as written, for the cells a whole-area picture shows changed.
+	public Func<string, bool> Flag { get; set; } = _ => false;
+	public Func<string, AreaMap?> MapOf { get; set; } = _ => null;
+
+	// What the last frame drew from the asset directory's field entries: the whole-area picture with its above picture
+	// and how many cells came from a change's picture or from tiles, and each object by key with its state and frame.
+	public string DrawnPicture { get; private set; } = "-";
+	public List<string> DrawnObjects { get; } = [];
+
 	public int CameraX { get; private set; }
 	public int CameraY { get; private set; }
 	// Where the leader was last drawn, in screen pixels (its top edge).
@@ -226,6 +235,9 @@ public sealed class FieldRenderer
 	// Conveyor cells drawn in the last frame, running or still, for the headless probe.
 	public int DrawnConveyors { get; private set; }
 	public int RunningConveyors { get; private set; }
+	// Cells of tile step hooks in the last frame's area, and those of hooks whose flags hold, drawn with a rune.
+	public int DrawnTileHooks { get; private set; }
+	public int ActiveTileHooks { get; private set; }
 
 	// The cell an actor is drawn at or walking to, if it is on screen in this area.
 	public (int X, int Y)? ActorCell(string id) => _actors.TryGetValue(id, out ActorWalk? w) ? w.Target : null;
@@ -709,16 +721,71 @@ public sealed class FieldRenderer
 		int x0 = Math.Max(0, cameraX / tile - 1), x1 = Math.Min(f.Width - 1, (cameraX + viewport.Width) / tile + 1);
 		int y0 = Math.Max(0, cameraY / tile - 1), y1 = Math.Min(f.Height - 1, (cameraY + viewport.Height) / tile + 1);
 		int waterFrame = tiles.WaterFrame(clockMs);
+		FieldLook look = art.FieldLookOf(f.AreaId);
+		AreaPicture? picture = art.AreaPictureOf(f.AreaId);
+		AreaMap? map = MapOf(f.AreaId);
+		AreaMap? written = picture is null ? null : map;
 
 		CellFlags Terrain(int x, int y) => view.Cell(x, y) & CellFlags.TerrainMask;
-		for (int y = y0; y <= y1; y++)
+		void Tiled(int x, int y)
 		{
-			for (int x = x0; x <= x1; x++)
+			DrawCell(s, tiles, Terrain, x, y, ox + x * tile, oy + y * tile, Noise.Hash(x, y, f.AreaId.Length), waterFrame, tile, clockMs, look);
+			if (view.Cell(x, y).HasFlag(CellFlags.Barrier))
 			{
-				DrawCell(s, tiles, Terrain, x, y, ox + x * tile, oy + y * tile, Noise.Hash(x, y, f.AreaId.Length), waterFrame, tile);
-				if (view.Cell(x, y).HasFlag(CellFlags.Barrier))
+				DrawBarrier(s, ox + x * tile, oy + y * tile, Noise.Hash(x, y, 7), tile);
+			}
+		}
+		if (picture is not null && written is not null && written.Width == f.Width && written.Height == f.Height)
+		{
+			// The picture shows the map as written. A cell whose flag's change has a picture of its own shows that, the
+			// latest set change winning as in the game; any other cell whose terrain is not as written (a change without
+			// a picture, a broken barrier) shows its tile.
+			s.Image(picture.Ground, ox, oy, f.Width * tile, f.Height * tile, Color.White);
+			var patched = new Dictionary<(int X, int Y), int>();
+			foreach ((string flag, IReadOnlyDictionary<(int X, int Y), int> cells) in picture.Patches.Where(p => Flag(p.Flag)))
+			{
+				foreach ((string _, (int X, int Y)[] changed) in written.Changes.Where(c => c.Flag == flag))
 				{
-					DrawBarrier(s, ox + x * tile, oy + y * tile, Noise.Hash(x, y, 7), tile);
+					foreach ((int X, int Y) c in changed.Where(cells.ContainsKey))
+					{
+						patched[c] = cells[c];
+					}
+				}
+			}
+			int fromPatches = 0, fromTiles = 0;
+			for (int y = y0; y <= y1; y++)
+			{
+				for (int x = x0; x <= x1; x++)
+				{
+					if (patched.TryGetValue((x, y), out int image))
+					{
+						s.Image(image, ox + x * tile, oy + y * tile, tile, tile, Color.White);
+						fromPatches++;
+					}
+					else if ((view.Cell(x, y) & AreaMap.TerrainBits) != written.Written[y * f.Width + x])
+					{
+						Tiled(x, y);
+						fromTiles++;
+					}
+				}
+			}
+			if (record)
+			{
+				DrawnPicture = $"{f.AreaId}{(picture.Above is null ? "" : " above")} patched {fromPatches} tiled {fromTiles}";
+			}
+		}
+		else
+		{
+			picture = null;
+			if (record)
+			{
+				DrawnPicture = "-";
+			}
+			for (int y = y0; y <= y1; y++)
+			{
+				for (int x = x0; x <= x1; x++)
+				{
+					Tiled(x, y);
 				}
 			}
 		}
@@ -778,7 +845,10 @@ public sealed class FieldRenderer
 			lift = Px(lift + raise);
 			Put(px, py, (sx, sy) =>
 			{
-				s.Image(art.Shadow, sx, sy + Px(3), tile, tile, Color.White);
+				if (look is not null || art.PersonShadow(id))
+				{
+					s.Image(art.Shadow, sx, sy + Px(3), tile, tile, Color.White);
+				}
 				Rectangle body = art.Stand(image, sx, sy - lift, tile);
 				s.Image(image, body.X, body.Y, body.Width, body.Height, Color.White);
 				if (alert)
@@ -794,8 +864,97 @@ public sealed class FieldRenderer
 		}
 		DrawnConveyors = view.Points.Count(p => p.Kind == PointKind.Conveyor);
 		RunningConveyors = view.Points.Count(p => p.Kind == PointKind.Conveyor && p.Active);
+		// A tile step hook fires on every cell its character marks in the map as written, so its rune goes on each of them
+		// while its flags hold, as a step hook point's does.
+		int tileCells = 0, activeCells = 0;
+		foreach (TileHook hook in map?.TileHooks ?? [])
+		{
+			bool active = (hook.RequireFlag.Length == 0 || Flag(hook.RequireFlag)) && (hook.BlockFlag.Length == 0 || !Flag(hook.BlockFlag));
+			tileCells += hook.Cells.Length;
+			if (!active)
+			{
+				continue;
+			}
+			activeCells += hook.Cells.Length;
+			if (!look.TileHooks)
+			{
+				continue;
+			}
+			int? overlay = art.TileHookOverlay(clockMs);
+			foreach ((int x, int y) in hook.Cells)
+			{
+				s.Image(overlay ?? tiles.Rune, ox + x * tile, oy + y * tile, tile, tile, overlay is null ? Color.White * (0.35f + 0.3f * pulse) : Color.White);
+			}
+		}
+		if (record)
+		{
+			DrawnTileHooks = tileCells;
+			ActiveTileHooks = activeCells;
+		}
+		if (record)
+		{
+			DrawnObjects.Clear();
+		}
+		IReadOnlyList<LoadedObject> objects = art.ObjectsIn(f.AreaId);
+		// An object with a picture of its own: a person's standing frame on its cell, or frames filling its size in cells
+		// around the anchor cell, which stands on the object's cell and sorts it by that row.
+		void PutObject(LoadedObject o, int x, int y, bool opened)
+		{
+			ObjectEntry e = o.Entry;
+			if (e.Character is { } character)
+			{
+				int person = art.PersonFrame(character, e.Facing, 0);
+				Put(x, y, (sx, sy) =>
+				{
+					s.Image(art.Shadow, sx, sy + Px(3), tile, tile, Color.White);
+					Rectangle body = art.Stand(person, sx, sy, tile);
+					s.Image(person, body.X, body.Y, body.Width, body.Height, Color.White);
+				});
+				if (record)
+				{
+					DrawnObjects.Add($"{e.Key} {character} {e.Facing.ToString().ToLowerInvariant()}");
+				}
+				return;
+			}
+			bool showOpen = opened && e.Open is not null;
+			ObjectState state = showOpen ? e.Open! : e.Closed!;
+			int frame = state.Run.FrameAt(clockMs, loop: true);
+			int image = (showOpen ? o.Open : o.Closed)[frame];
+			Put(x, y, (sx, sy) => s.Image(image, sx - state.AnchorX * tile, sy - state.AnchorY * tile, state.Width * tile, state.Height * tile, Color.White));
+			if (record)
+			{
+				DrawnObjects.Add($"{e.Key} {(opened && e.Open is not null ? "open" : "closed")} {state.Width}x{state.Height} frame {frame}");
+			}
+		}
+		foreach (LoadedObject o in objects.Where(o => o.Entry.At is not null))
+		{
+			PutObject(o, o.Entry.At!.Value.X, o.Entry.At.Value.Y, o.Entry.OpenFlag is { } flag && Flag(flag));
+		}
 		foreach (FieldPoint p in view.Points)
 		{
+			// An interact hook solid only while its flags hold shows nothing while they do not: the party walks over its cell.
+			if (p.Kind == PointKind.Talk && !p.Active && map?.SolidWhileActive.Contains(p.Id) == true)
+			{
+				continue;
+			}
+			if (objects.FirstOrDefault(o => o.Entry.Point == p.Id) is { } own)
+			{
+				bool opened = own.Entry.OpenFlag is { } flag ? Flag(flag) : p.Kind == PointKind.Chest && !p.Active;
+				if (p.Kind == PointKind.Port && !p.Active)
+				{
+					continue;
+				}
+				PutObject(own, p.X, p.Y, opened);
+				if (p.Kind == PointKind.Talk && p.Active && BubbleFree(p.X, p.Y))
+				{
+					overlays.Add(() =>
+					{
+						int bob = (int)(2 * MathF.Sin(clockMs / 300f + p.X));
+						s.Image(art.Bubble, ox + p.X * tile + tile / 2, oy + p.Y * tile - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8), Color.White);
+					});
+				}
+				continue;
+			}
 			switch (p.Kind)
 			{
 			case PointKind.Step:
@@ -826,8 +985,13 @@ public sealed class FieldRenderer
 			case PointKind.Gangway:
 				DrawGangway(s, ox + p.X * tile, oy + p.Y * tile, tile, pulse);
 				break;
+			case PointKind.Conveyor when !look.Conveyors:
+				break;
+			case PointKind.Conveyor when art.ConveyorOverlay(p.Direction, p.Active, clockMs) is int belt:
+				s.Image(belt, ox + p.X * tile, oy + p.Y * tile, tile, tile, Color.White);
+				break;
 			case PointKind.Conveyor:
-				DrawConveyor(s, ox + p.X * tile, oy + p.Y * tile, tile, p.Active, p.Direction, pulse);
+				DrawConveyor(s, ox + p.X * tile, oy + p.Y * tile, tile, p.Active, p.Direction, clockMs);
 				break;
 			case PointKind.Talk:
 				FieldActor? actor = view.Actors.FirstOrDefault(a => a.Id == p.Id);
@@ -950,15 +1114,22 @@ public sealed class FieldRenderer
 		{
 			draw();
 		}
+		if (picture?.Above is int above)
+		{
+			s.Image(above, ox, oy, f.Width * tile, f.Height * tile, Color.White);
+		}
 		foreach (Action draw in overlays)
 		{
 			draw();
 		}
 	}
 
-	public static void DrawCell(IDrawSurface s, Art.TileSet t, Func<int, int, CellFlags> terrain, int x, int y, int sx, int sy, uint hash, int waterFrame, int tile = Tile)
+	// `look` turns off the walls' shadows and the water's foam; `clockMs` steps the tileset's animated tiles.
+	public static void DrawCell(IDrawSurface s, Art.TileSet t, Func<int, int, CellFlags> terrain, int x, int y, int sx, int sy, uint hash, int waterFrame, int tile = Tile,
+		int clockMs = 0, FieldLook? look = null)
 	{
 		int Px(int pixels) => pixels * tile / Tile;
+		bool shadows = look?.WallShadows ?? true, foam = look?.WaterFoam ?? true;
 		CellFlags c = terrain(x, y);
 		int edge = Px(3);
 		if (c == CellFlags.Wall)
@@ -966,11 +1137,11 @@ public sealed class FieldRenderer
 			bool faceDown = terrain(x, y + 1) != CellFlags.Wall;
 			if (faceDown)
 			{
-				s.Image(Art.TileSet.Variant(t.WallFace, hash, t.WallFaceAltOneIn), sx, sy, tile, tile, Color.White);
+				s.Image(t.Frame(Art.TileSet.Variant(t.WallFace, hash, t.WallFaceAltOneIn), clockMs), sx, sy, tile, tile, Color.White);
 			}
 			else
 			{
-				s.Image(Art.TileSet.Variant(t.WallTop, hash, t.WallTopAltOneIn), sx, sy, tile, tile, Color.White);
+				s.Image(t.Frame(Art.TileSet.Variant(t.WallTop, hash, t.WallTopAltOneIn), clockMs), sx, sy, tile, tile, Color.White);
 				if (terrain(x, y - 1) != CellFlags.Wall)
 				{
 					s.Fill(sx, sy, tile, edge, t.Edge);
@@ -989,23 +1160,27 @@ public sealed class FieldRenderer
 		if (c == CellFlags.Water)
 		{
 			s.Image(t.Water[(waterFrame + (int)(hash % 2)) % t.Water.Length], sx, sy, tile, tile, Color.White);
-			Color foam = new Color(230, 244, 255) * 0.7f;
+			if (!foam)
+			{
+				return;
+			}
+			Color spray = new Color(230, 244, 255) * 0.7f;
 			if (terrain(x, y - 1) != CellFlags.Water)
 			{
 				s.Fill(sx, sy, tile, Px(5), t.Bank);
-				s.Fill(sx, sy + Px(5), tile, Px(2), foam);
+				s.Fill(sx, sy + Px(5), tile, Px(2), spray);
 			}
 			if (terrain(x - 1, y) != CellFlags.Water)
 			{
-				s.Fill(sx, sy, Px(2), tile, foam);
+				s.Fill(sx, sy, Px(2), tile, spray);
 			}
 			if (terrain(x + 1, y) != CellFlags.Water)
 			{
-				s.Fill(sx + tile - Px(2), sy, Px(2), tile, foam);
+				s.Fill(sx + tile - Px(2), sy, Px(2), tile, spray);
 			}
 			if (terrain(x, y + 1) != CellFlags.Water)
 			{
-				s.Fill(sx, sy + tile - Px(2), tile, Px(2), foam);
+				s.Fill(sx, sy + tile - Px(2), tile, Px(2), spray);
 			}
 			return;
 		}
@@ -1022,7 +1197,11 @@ public sealed class FieldRenderer
 		}
 		// Floor: one of the variants, with an occasional decoration, from the cell's coordinates.
 		int image = hash % (uint)t.DecorOneIn == 0 ? t.Decor[(hash >> 8) % (uint)t.Decor.Length] : t.Floor[(hash >> 4) % (uint)t.Floor.Length];
-		s.Image(image, sx, sy, tile, tile, Color.White);
+		s.Image(t.Frame(image, clockMs), sx, sy, tile, tile, Color.White);
+		if (!shadows)
+		{
+			return;
+		}
 		if (terrain(x, y - 1) == CellFlags.Wall)
 		{
 			s.Fill(sx, sy, tile, Px(9), Color.Black * 0.28f);
@@ -1031,6 +1210,27 @@ public sealed class FieldRenderer
 		{
 			s.Fill(sx, sy, Px(6), tile, Color.Black * 0.16f);
 		}
+	}
+
+	// The area's map as written, from its kind's generated tiles at `cell` pixels a cell, the water at its first frame:
+	// the export's starting point for a whole-area picture.
+	public static Color[] WrittenPixels(AreaMap map, AreaKind kind, string area, int cell)
+	{
+		var canvas = new CanvasSurface(map.Width * cell, map.Height * cell);
+		Art.TileSet tiles = new Art(canvas).Tiles(kind, area);
+		CellFlags Terrain(int x, int y) => x < 0 || y < 0 || x >= map.Width || y >= map.Height ? CellFlags.Wall : map.Written[y * map.Width + x] & CellFlags.TerrainMask;
+		for (int y = 0; y < map.Height; y++)
+		{
+			for (int x = 0; x < map.Width; x++)
+			{
+				DrawCell(canvas, tiles, Terrain, x, y, x * cell, y * cell, Noise.Hash(x, y, area.Length), 0, cell);
+				if (map.Written[y * map.Width + x].HasFlag(CellFlags.Barrier))
+				{
+					DrawBarrier(canvas, x * cell, y * cell, Noise.Hash(x, y, 7), cell);
+				}
+			}
+		}
+		return canvas.Pixels;
 	}
 
 	// A barrier wall a vehicle can break: the wall drawn under it, frosted, with cracks.
@@ -1066,11 +1266,11 @@ public sealed class FieldRenderer
 	}
 
 	// Belt slats that run toward the belt's direction while it is on.
-	private static void DrawConveyor(IDrawSurface s, int sx, int sy, int tile, bool running, Direction direction, float pulse)
+	private static void DrawConveyor(IDrawSurface s, int sx, int sy, int tile, bool running, Direction direction, int clockMs)
 	{
 		int Px(int pixels) => pixels * tile / Tile;
 		s.Fill(sx + Px(2), sy + Px(2), tile - Px(4), tile - Px(4), new Color(70, 70, 80));
-		int shift = running ? (int)(pulse * 12) : 0;
+		int shift = running ? clockMs / 40 % 12 : 0;
 		bool across = direction is Direction.East or Direction.West;
 		int sign = direction is Direction.East or Direction.South ? 1 : -1;
 		for (int i = 0; i < 4; ++i)

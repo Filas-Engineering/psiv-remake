@@ -17,6 +17,12 @@ public sealed partial class SampleController
 
 	private int _probeShake;
 	private bool _probeFlash;
+	private string _probeBackdrop = "-";
+	private string _probeOverlay = "-";
+	// Each figure drawn: its label, the drawn size and how far its bottom lies below the ground line.
+	private string _probeBodies = "-";
+	// The last effect frame drawn on a target, as WxH screen pixels.
+	private string _probeEffectSize = "-";
 	private string _probeVictory = "-";
 	private BattleLayout? _layoutOverride;
 	// The layout the last battle frame was drawn in.
@@ -99,7 +105,7 @@ public sealed partial class SampleController
 		var jolt = new Point((int)MathF.Round(shake * MathF.Sin(_clockMs * 0.09f)), (int)MathF.Round(shake * MathF.Cos(_clockMs * 0.13f)));
 
 		FieldInfo? field = _s.FieldInfo();
-		int backdrop = art.Backdrop(field?.AreaKind ?? AreaKind.Field, field?.AreaId ?? "", info?.Encounter ?? "");
+		(int backdrop, _probeBackdrop) = art.Backdrop(field?.AreaKind ?? AreaKind.Field, field?.AreaId ?? "", info?.Encounter ?? "", _battleTerrain);
 		if (front)
 		{
 			DrawFrontBackdrop(s, backdrop, jolt);
@@ -217,6 +223,11 @@ public sealed partial class SampleController
 				animation = "defeat";
 				tint = new Color(150, 150, 170);
 			}
+			// An enemy plays its fallen pose, when it has one, while it fades.
+			else if (!sc.Alive && fading)
+			{
+				animation = "defeat";
+			}
 			Figure figure = enemy ? art.BattleFigure(id, true)
 				: c.Id == vehicle ? (front ? art.VehicleBackFigure(c.Id) : art.VehicleFigure(c.Id))
 				: front ? art.BackFigure(c.Id) : art.BattleFigure(c.Id, false);
@@ -233,11 +244,11 @@ public sealed partial class SampleController
 			Rectangle body = art.Stand(image, left, top - hover, size);
 			bodies[i] = body;
 			// The members seen from behind stand in the strip's shadow, so only the others cast one.
-			if (!front || enemy)
+			if ((!front || enemy) && figure.Shadow)
 			{
 				float shadow = hover > 0 ? 0.6f : 1f;
 				int shrink = hover > 0 ? size / 6 : 0;
-				s.Image(art.Shadow, left + shrink / 2, top + size / 6 + shrink / 2, size - shrink, size - shrink, Color.White * (alpha * shadow));
+				s.Image(art.Shadow, body.X + shrink / 2, top + size / 6 + shrink / 2, body.Width - shrink, size - shrink, Color.White * (alpha * shadow));
 			}
 			if (hover > 0)
 			{
@@ -256,7 +267,16 @@ public sealed partial class SampleController
 			s.Image(image, body.X, body.Y, body.Width, body.Height, tint * alpha);
 		}
 		_probeFigures = figures.Count == 0 ? "none" : string.Join(", ", figures);
+		_probeBodies = string.Join(", ", bodies.OrderBy(x => x.Key).Select(x => $"{all[x.Key].Label} {x.Value.Width}x{x.Value.Height} {x.Value.Bottom - Where(x.Key).Foot}"));
 		_probeFlying = hovering.Count == 0 ? "none" : string.Join(", ", hovering);
+		// A vehicle battle's overlay (a cockpit, a hull's rim) goes over the stage and its figures, under the effects and
+		// every window.
+		_probeOverlay = "-";
+		if (vehicle.Length > 0 && art.VehicleOverlay(vehicle) is int overlay)
+		{
+			s.Image(overlay, jolt.X, jolt.Y, s.Width, stageBottom, Color.White);
+			_probeOverlay = art.FromFile("vehicle_overlay:" + vehicle) ? vehicle : "every vehicle";
+		}
 
 		// Where effects and numbers land: on each figure, and in the front layout on the slot of a member with none.
 		var anchors = new Dictionary<int, Rectangle>(bodies);
@@ -276,9 +296,8 @@ public sealed partial class SampleController
 		if (step is { Change: { } change, To: >= 0 } && art.Effect(change.Effect) is { } changeFx && anchors.TryGetValue(step.To, out Rectangle into))
 		{
 			int frame = changeFx.Images[changeFx.Idle.FrameAt(_timeline.ElapsedMs, loop: false)];
-			(int ew, int eh) = art.SizeOf(frame);
-			int scale = EffectScale + 1;
-			s.Image(frame, into.Center.X - ew * scale / 2, into.Center.Y - eh * scale / 2, ew * scale, eh * scale, Color.White);
+			(int ew, int eh) = art.DrawnEffectSize(frame, EffectScale + 1);
+			s.Image(frame, into.Center.X - ew / 2, into.Center.Y - eh / 2, ew, eh, Color.White);
 		}
 
 		// The effect on each target, centered on its body (on a member seen from behind, its head); in the front layout an
@@ -299,11 +318,11 @@ public sealed partial class SampleController
 					continue;
 				}
 				int frame = effect.Images[effect.Idle.FrameAt(ms, loop: false)];
-				(int ew, int eh) = art.SizeOf(frame);
-				int scale = front && !Behind(hit[k]) ? EffectScale + 1 : EffectScale;
+				(int ew, int eh) = art.DrawnEffectSize(frame, front && !Behind(hit[k]) ? EffectScale + 1 : EffectScale);
 				Rectangle r = anchors[hit[k]];
 				int cy = Behind(hit[k]) ? r.Y + r.Height * 3 / 8 : r.Center.Y;
-				s.Image(frame, r.Center.X - ew * scale / 2, cy - eh * scale / 2, ew * scale, eh * scale, Color.White);
+				s.Image(frame, r.Center.X - ew / 2, cy - eh / 2, ew, eh, Color.White);
+				_probeEffectSize = $"{ew}x{eh}";
 			}
 		}
 
@@ -352,16 +371,16 @@ public sealed partial class SampleController
 					continue;
 				}
 				int frame = mark.Images[mark.Idle.FrameAt(_timeline.ElapsedMs, loop: true)];
-				(int ew, int eh) = art.SizeOf(frame);
-				int scale = EffectScale + 1;
+				(int ew, int eh) = art.DrawnEffectSize(frame, EffectScale + 1);
 				Rectangle r = anchors[e.Target];
-				s.Image(frame, r.Center.X - ew * scale / 2, r.Center.Y - eh * scale / 2, ew * scale, eh * scale, Color.White * (p < 0.85f ? 1f : (1f - p) / 0.15f));
+				s.Image(frame, r.Center.X - ew / 2, r.Center.Y - eh / 2, ew, eh, Color.White * (p < 0.85f ? 1f : (1f - p) / 0.15f));
 				marks.Add(e.Target < shown.Count ? shown[e.Target].Label : "?");
 			}
 		}
 		_probeMarks = marks.Count == 0 ? "none" : string.Join(", ", marks);
 		if (step is { Kind: StepKind.Result or StepKind.RoundEnd })
 		{
+			UseTextRole(s, TextRole.BattleNumbers);
 			var stacked = new Dictionary<int, int>();
 			BattleEvent? previous = null;
 			foreach (BattleEvent e in step.Events)
@@ -382,6 +401,7 @@ public sealed partial class SampleController
 				s.Text(floating.Text, r.Center.X - w / 2 + 2, fy + 2, Color.Black * (0.8f * fade), floating.Size);
 				s.Text(floating.Text, r.Center.X - w / 2, fy, floating.Color * fade, floating.Size);
 			}
+			UseTextRole(s, TextRole.Menu);
 		}
 
 		// A full-screen flash at the start of a big effect, left out with reduced flash.

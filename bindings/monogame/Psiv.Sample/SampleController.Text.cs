@@ -19,6 +19,31 @@ public sealed partial class SampleController
 	// Called with each key the text table of the profile's language lacks; the key itself is shown in its place.
 	public Action<string>? MissingText { get; set; }
 
+	// The bitmap font the surface was given last, null when none (a run without bitmap fonts never gives one).
+	private BitmapFont? _bitmapFont;
+	// The dialogue box's lines as the last frame wrapped them: how many, and each one's measured width.
+	private string _probeWrapped = "-";
+
+	// Text in the asset directory's bitmap font for the text language and `role` from now on, if it gives one. Given every
+	// time once a font was in use, since the developer previewer draws through the same surface with its own.
+	private void UseTextRole(IDrawSurface s, TextRole role)
+	{
+		BitmapFont? font = _art?.BitmapFontFor(_s.Profile().TextLanguage, role);
+		if (font is not null || _bitmapFont is not null)
+		{
+			s.UseBitmapFont(font);
+		}
+		_bitmapFont = font;
+	}
+
+	// The step from one line of wrapped text to the next at a text size: the bitmap font's line height when one draws the
+	// text, else the sample's own.
+	private int LineStep(int size) => _bitmapFont?.LineStep((int)MathF.Round(size * _scale)) ?? Px(Style.LineHeight);
+
+	// The bitmap font for each role in the text language, as `ROLE FILE` or `ROLE -`.
+	private string BitmapFontProbe() => string.Join(", ", Enum.GetValues<TextRole>().Select(r =>
+		$"{Snake(r.ToString())} {_art?.BitmapFontFor(_s.Profile().TextLanguage, r)?.Key ?? "-"}"));
+
 	private string T(string key, params object[] parameters)
 	{
 		string text = _s.FormatText(key, [.. parameters.Select(p => Convert.ToString(p, CultureInfo.InvariantCulture) ?? "")]);

@@ -183,7 +183,7 @@ public sealed partial class Art
 		if (!_vehicleFigures.TryGetValue(id, out Figure? figure))
 		{
 			figure = new Figure([GeneratedVehicle(id, Direction.West, 0), GeneratedVehicle(id, Direction.West, 1)], new FrameRun([0, 1], [VehicleFrameMs, VehicleFrameMs]),
-				new Dictionary<string, FrameRun> { ["attack"] = new([1, 0], [140, 140]) });
+				new Dictionary<string, FrameRun> { ["attack"] = new([1, 0], [140, 140]) }, _figureShadows);
 			_vehicleFigures[id] = figure;
 		}
 		return figure;

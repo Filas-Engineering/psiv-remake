@@ -205,7 +205,12 @@ public sealed partial class Art
 		// North, east, south, west.
 		public required int[] ExitArrow { get; init; }
 
+		// By the picture they stand in for: frame runs over Images, looping in step on every cell.
+		public IReadOnlyDictionary<int, Figure> Animated { get; init; } = new Dictionary<int, Figure>();
+
 		public int WaterFrame(int clockMs) => clockMs / WaterFrameMs % Water.Length;
+
+		public int Frame(int image, int clockMs) => Animated.TryGetValue(image, out Figure? run) ? run.Images[run.Idle.FrameAt(clockMs, loop: true)] : image;
 
 		// The first picture, or with a one in `oneIn` chance one of the others, from the cell's hash.
 		public static int Variant(int[] images, uint hash, int oneIn) =>

@@ -1,0 +1,119 @@
+# Run with --dev on a copy of build/font_assets (make_test_assets.py), since it swaps a file there: the bitmap fonts in
+# English (the title, the opening line revealing a character at a time and wrapped by the font's widths, the field menu,
+# both at 150% text size) and the battle numbers in their own font at one and a half times the size; then in Japanese
+# (the board's narration broken between characters, the menu, a battle's numbers in the language's font), and the Japanese
+# metrics swapped for a copy without the kanji, which then draw in the system font. With --window the shot lines save
+# screenshots under build/shots/ (run from bindings/); headless runs write nothing for them.
+
+expect screen Title
+waitstate 30 bitmapfonts menu fonts/en.png, dialogue fonts/en.png, battle_numbers fonts/numbers.png
+expect asset bitmap_font:en file
+expect asset bitmap_font:en:battle_numbers file
+expect asset bitmap_font:ja file
+shot build/shots/font_title_en.png
+
+# The opening line reveals a glyph at a time, in lines the font's widths wrap.
+press Enter
+waitstatehas 60 reveal /57
+wait 3
+expect statehas reveal /57
+expect state fontmissing none
+shot build/shots/font_dialogue_en_reveal.png
+waitstate 300 reveal 57/57
+expect state wrapped 1: 652
+shot build/shots/font_dialogue_en.png
+pressuntil Enter Field 800
+
+# At 150% text size the guide's line takes three screen pixels a file pixel and wraps.
+cmd set text instant
+cmd set text_size 150
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+waitstatehas 60 wrapped :
+expect state wrapped 2: 993 342
+shot build/shots/font_dialogue_en_150.png
+pressuntil Enter Field 400
+cmd set text_size 100
+
+# The field menu in the font, at 100% and 150% text size.
+press M
+expect screen Menu
+wait 2
+shot build/shots/font_menu_en.png
+cmd set text_size 150
+wait 2
+shot build/shots/font_menu_en_150.png
+cmd set text_size 100
+press Escape
+expect screen Field
+
+# A battle: the floating numbers in the gold battle numbers font, the rest in the menu font.
+dev encounters off
+dev battle training
+expect mode Battle
+waitstate 120 battlephase Command
+press Enter
+press Enter
+press Enter
+press Enter
+press Enter
+press Enter
+waitstatehas 900 step result
+wait 6
+shot build/shots/font_battle_en.png
+hold F 120
+dev win
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+
+# Japanese: every role in the language's one font.
+cmd set text_language ja
+wait 2
+expect state language ja
+expect state bitmapfonts menu fonts/ja.png, dialogue fonts/ja.png, battle_numbers fonts/ja.png
+# The board's narration, wider than the box, breaks between characters.
+cmd walk 7 3
+hold Left 100
+press Enter
+waitstatehas 60 wrapped :
+expect state fontmissing none
+expect statehas wrapped 2:
+shot build/shots/font_dialogue_ja.png
+pressuntil Enter Field 800
+press M
+expect screen Menu
+wait 2
+shot build/shots/font_menu_ja.png
+press Escape
+expect screen Field
+dev battle training
+expect mode Battle
+waitstate 120 battlephase Command
+press Enter 10
+waitstatehas 900 step result
+wait 6
+shot build/shots/font_battle_ja.png
+hold F 120
+dev win
+hold F 60
+press Enter
+expect screen Field
+
+# The Japanese metrics swapped for a copy without the kanji: those draw in the system font, the kana stay.
+assets swap fonts/ja.json alt/ja_partial.json
+wait 2
+expect asset bitmap_font:ja file
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+wait 60
+press Enter
+waitstatehas 60 wrapped :
+expect statehas fontmissing 真鍮
+shot build/shots/font_dialogue_ja_fallback.png
+pressuntil Enter Field 400

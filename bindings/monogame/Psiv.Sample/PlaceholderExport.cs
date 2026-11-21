@@ -230,6 +230,39 @@ public static class PlaceholderExport
 			["bar_fill"] = Picture("ui/bar_fill.png", 8, 8, Draw(8, 8, c => c.Fill(0, 0, 8, 8, Color.White))),
 		};
 
+		// Each area's map as written, drawn from its tiles, as a starting point for whole-area pictures. Turned off, since a
+		// still picture cannot reproduce the water's frames, and with the section off the maps/ file convention is off too.
+		manifest["maps"] = new JsonObject
+		{
+			["enabled"] = false,
+			["cell"] = Pixels.Size,
+			["areas"] = new JsonArray([.. data.Areas.Order(StringComparer.Ordinal).Select(area =>
+			{
+				AreaMap map = data.Maps[area];
+				string file = Picture($"maps/{area}.png", map.Width * Pixels.Size, map.Height * Pixels.Size,
+					FieldRenderer.WrittenPixels(map, data.AreaKinds[area], area, Pixels.Size));
+				return (JsonNode?)new JsonObject { ["area"] = area, ["image"] = file };
+			})]),
+		};
+		manifest["field"] = new JsonObject { ["wall_shadows"] = true, ["water_foam"] = true };
+
+		// A bitmap font per language with every glyph its text tables use, turned off: the generated look is the system font.
+		Directory.CreateDirectory(Path.Combine(dir, "fonts"));
+		manifest["bitmap_fonts"] = new JsonObject
+		{
+			["enabled"] = false,
+			["fonts"] = new JsonArray([.. data.Languages.Order(StringComparer.Ordinal).Select(language =>
+			{
+				(int w, int h, Color[] pixels, JsonObject metrics) = GeneratedFont.Build(data.TextGlyphs(language, null));
+				string metricsFile = $"fonts/{language}.json";
+				File.WriteAllText(Path.Combine(dir, metricsFile), metrics.ToJsonString(new JsonSerializerOptions
+				{
+					WriteIndented = true, IndentCharacter = '\t', IndentSize = 1, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+				}) + "\n");
+				return (JsonNode?)new JsonObject { ["language"] = language, ["image"] = Picture($"fonts/{language}.png", w, h, pixels), ["metrics"] = metricsFile };
+			})]),
+		};
+
 		var audio = new JsonArray();
 		int sounds = 0;
 		List<string> problems = [];

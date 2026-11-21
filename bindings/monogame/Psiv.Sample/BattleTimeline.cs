@@ -259,7 +259,8 @@ public sealed class BattleTimeline
 		{
 			shape = shape with { Element = element };
 		}
-		t.Look = c.Table.For(head.Command == CommandKind.Defend ? "" : head.Ability, shape);
+		t.Look = c.Table.For(head.Command == CommandKind.Defend ? "" : head.Ability, shape, head.Type == BattleEventType.ComboTriggered ? "" : c.EnemyId(actor),
+			head.Command switch { CommandKind.Defend => "defend", CommandKind.Attack => "attack", _ => head.Ability });
 		if (head.Command == CommandKind.Defend)
 		{
 			t.Targets = [actor];
@@ -367,6 +368,9 @@ public sealed class BattleContext(GameSession session, List<string> labels, Batt
 
 	// The label the session gives a combatant after the round.
 	public string FinalLabel(int index) => index >= 0 && index < _final.Count ? _final[index].Label : "?";
+
+	// The enemy id of a combatant, "" for a party member.
+	public string EnemyId(int index) => index >= 0 && index < _final.Count && _final[index].Side == Side.Enemy ? _final[index].Id : "";
 
 	public string Name(string id) => session.DisplayName(id);
 

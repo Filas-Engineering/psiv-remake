@@ -201,7 +201,9 @@ public static class Program
 		Console.WriteLine($"assets: {m.Tilesets.Count} tilesets, {m.Characters.Count} characters, {m.Portraits.Count} portraits, {m.Figures.Count} figures, " +
 			$"{m.FieldEnemies.Count} field enemies, {m.Vehicles.Count} vehicles, {m.Backdrops.Count} backdrops, {m.Effects.Count} effects, {m.Sprites.Count} sprites, {m.StatusIcons.Count} status icons, " +
 			$"{(m.Ui is null ? "no UI skin" : m.Ui.Enabled ? "a UI skin" : "a UI skin turned off")}, {m.Audio.Count} sounds, " +
-			$"{(m.BattlePresentation is null ? "the built-in battle presentation" : "a battle presentation table")}");
+			$"{(m.BattlePresentation is null ? "the built-in battle presentation" : "a battle presentation table")}, " +
+			$"{(m.MapsEnabled ? $"{m.Maps.Count} area pictures" : "area pictures turned off")}, {m.Objects.Count} objects, {m.VehicleOverlays.Count} vehicle overlays" +
+			(m.BitmapFontsEnabled switch { true => $", {m.BitmapFonts.Count} bitmap fonts", false => ", bitmap fonts turned off", null => "" }));
 		Console.WriteLine(assets.Problems.Count == 0 ? "OK: no problems." : $"FAILED: {assets.Problems.Count} problems.");
 		return assets.Problems.Count == 0 ? 0 : 1;
 	}

@@ -254,8 +254,9 @@ dotnet-test: dotnet
 	$(call round_trip,battle,sample_battle_headless,$(SAMPLE_BATTLE_SCRIPT),5200)
 	$(call round_trip,vehicles,sample_vehicles_headless,$(SAMPLE_VEHICLES_SCRIPT),3200)
 	@echo "the exported placeholders draw every frame of the smoke, actors, panels, battle and vehicles runs as the generated ones do"
-	python3 -I $(SAMPLE_SCRIPTS)/make_test_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/broken_assets
+	python3 -I $(SAMPLE_SCRIPTS)/make_test_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/broken_assets $(BUILD)/font_assets
 	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/test_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/font_assets
 	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/broken_assets > $(BUILD)/check_assets_broken.txt
 	diff $(SAMPLE_SCRIPTS)/check_assets_broken.expected $(BUILD)/check_assets_broken.txt
 	rm -rf $(BUILD)/sample_assets_saves
@@ -267,6 +268,28 @@ dotnet-test: dotnet
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_reload_saves --assets $(BUILD)/reload_assets --script $(SAMPLE_RELOAD_SCRIPT) --frames 400 > $(BUILD)/sample_reload_headless.txt \
 		|| (cat $(BUILD)/sample_reload_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_reload_headless.txt
+	# The newer entries (whole-area pictures, objects, scales, animated tiles, terrain backdrops, vehicle overlays) on a
+	# copy of the override directory, since the run swaps a file there, with --dev for the commands that reach them.
+	rm -rf $(BUILD)/sample_assets_field_saves $(BUILD)/field_assets
+	cp -R $(BUILD)/test_assets $(BUILD)/field_assets
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_assets_field_saves --assets $(BUILD)/field_assets --script $(SAMPLE_SCRIPTS)/assets_field.txt --frames 2600 \
+		> $(BUILD)/sample_assets_field_headless.txt || (cat $(BUILD)/sample_assets_field_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_assets_field_headless.txt
+	# The Cogway's picture with belts and a tile step hook on a data copy that has one, and formations with free places
+	# under scaled and natural-size figures, on a copy of the override directory, since the run swaps its manifest.
+	rm -rf $(BUILD)/sample_assets_cogway_saves $(BUILD)/cogway_assets
+	python3 -I $(SAMPLE_SCRIPTS)/make_front_data.py $(GAME)/data $(CORE)/data $(BUILD)/tile_data --tile-hook
+	cp -R $(BUILD)/test_assets $(BUILD)/cogway_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/tile_data/game/data --dev --saves $(BUILD)/sample_assets_cogway_saves \
+		--assets $(BUILD)/cogway_assets --script $(SAMPLE_SCRIPTS)/assets_cogway.txt --frames 2600 > $(BUILD)/sample_assets_cogway_headless.txt \
+		|| (cat $(BUILD)/sample_assets_cogway_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_assets_cogway_headless.txt
+	# The bitmap fonts in English and Japanese, on a copy of the font directory, since the run swaps a metrics file.
+	rm -rf $(BUILD)/sample_assets_font_saves $(BUILD)/font_run_assets
+	cp -R $(BUILD)/font_assets $(BUILD)/font_run_assets
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_assets_font_saves --assets $(BUILD)/font_run_assets --script $(SAMPLE_SCRIPTS)/assets_font.txt --frames 2000 \
+		> $(BUILD)/sample_assets_font_headless.txt || (cat $(BUILD)/sample_assets_font_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_assets_font_headless.txt
 	@for run in $(SAMPLE_DEV_SCRIPTS); do \
 		rm -rf $(BUILD)/sample_$${run}_saves; \
 		$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_$${run}_saves --script $(SAMPLE_SCRIPTS)/$$run.txt --frames 1500 > $(BUILD)/sample_$${run}_headless.txt \

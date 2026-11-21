@@ -1,0 +1,182 @@
+# Run with --dev on a copy of build/test_assets (make_test_assets.py), since it changes a file there: the reed path's
+# whole-area picture by the maps/ file convention with its above picture over the party, Ashfall Market's picture at 32
+# pixels a cell with the mended bridge from its change's picture and the sealed shrine from tiles, objects with pictures
+# of their own at Ember Steps, the reed path's chest closed and opened at another size and the Fell Vault's door opened
+# by its flag, Saltgrass Market's animated tile with its wall shadows and water foam off, the fighter's sheet at three
+# times the size, battle figures with a scale (snapped sizes in both layouts), the bog wisps at their natural size on
+# their foot row without a shadow, the bog wisps' own attack look and their fallen pose, battles aboard the reed
+# skimmer on water with the water backdrop and the skimmer's overlay in both layouts, and the reed path's picture
+# swapped and reloaded. With --window the shot lines save screenshots under build/shots/ (run from bindings/); headless
+# runs write nothing for them.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev encounters off
+expect asset character:fighter file
+waitstate 30 fieldpicture -
+
+# The reed path: its picture and the reeds above it, drawn over the party standing under them; the long chest.
+dev warp reed_path lookout_front
+wait 2
+expect asset map:reed_path file
+expect asset map:reed_path:above file
+expect asset map:ashfall_market file
+waitstate 30 fieldpicture reed_path above patched 0 tiled 0
+expect actor fighter 1 2
+waitstate 30 objects reed_path:reed_cache closed 2x1 frame 0
+shot build/shots/assets_map_reed.png
+dev flag chest.reed_cache on
+wait 2
+waitstate 30 objects reed_path:reed_cache open 2x2 frame 0
+cmd walk cache_front
+wait 160
+shot build/shots/assets_map_reed_chest.png
+
+# Ashfall Market at 32 pixels a cell: the canal as drawn, then the bridge from its change's picture, then the sealed
+# shrine, whose change has no picture, from tiles.
+dev warp ashfall_market bridge_west
+wait 2
+waitstate 30 fieldpicture ashfall_market patched 0 tiled 0
+shot build/shots/assets_map_ashfall.png
+dev flag fells.bridge_mended on
+wait 2
+waitstate 30 fieldpicture ashfall_market patched 1 tiled 0
+dev flag fells.shrine_sealed on
+wait 2
+waitstate 30 fieldpicture ashfall_market patched 1 tiled 1
+shot build/shots/assets_map_ashfall_changed.png
+
+# Ember Steps: the blinking console a cell wide and two tall, the board two cells wide, the tinker drawn as a person
+# facing east, the spring two cells square; the wayfarer is an actor and keeps its own sprite.
+dev warp ember_steps west_gate
+wait 2
+waitstate 30 fieldpicture -
+expect asset object:ember_steps:steps_console file
+expect asset object:ember_steps:steps_tinker generated
+waitstatehas 30 objects ember_steps:steps_board closed 2x1 frame 0
+waitstatehas 30 objects ember_steps:steps_tinker mystic east
+waitstatehas 30 objects ember_steps:steps_spring closed 2x2 frame 0
+waitstatehas 40 objects ember_steps:steps_console closed 1x2 frame 1
+shot build/shots/assets_objects_steps.png
+waitstatehas 40 objects ember_steps:steps_console closed 1x2 frame 0
+
+# The Fell Vault's locked door, shut and then open once its flag is set.
+dev warp fell_vault lock_front
+wait 2
+waitstate 30 objects fell_vault:8,4 closed 1x2 frame 0
+shot build/shots/assets_object_door.png
+dev flag fells.vault_door_open on
+wait 2
+waitstate 30 objects fell_vault:8,4 open 1x2 frame 1
+shot build/shots/assets_object_door_open.png
+
+# Saltgrass Market's own tileset: its first floor frame steps through the water's frames, and no wall shadows or foam.
+dev warp saltgrass west_gate
+wait 2
+expect asset tileset:area:saltgrass file
+waitstate 30 fieldlook shadows off foam off
+waitstate 100 animated 0>15
+shot build/shots/assets_tiles_saltgrass.png
+waitstate 100 animated 0>16
+dev warp tidewater east_gate
+wait 2
+waitstate 30 fieldlook shadows on foam on
+waitstate 30 animated none
+
+# A battle on foot in the front layout: the fighter seen from behind from a sheet three times as large; the bog wisps'
+# attacks with their own look, and their fallen pose when the battle is won.
+dev warp reed_path west_gate
+wait 2
+present mark
+dev battle marsh
+expect mode Battle
+waitstate 120 battlephase Command
+expect state battlelayout front
+expect state backdrop kind:field
+expect state battleoverlay -
+expect asset figure:back:fighter file
+expect asset figure:enemy:gel_mite file
+expect asset figure:enemy:bog_wisp file
+expect state figuresizes Test Fighter 144x144 -12, Test Mystic 144x144 0, Test Medic 144x144 0, Bog Wisp A 144x180 -3, Bog Wisp B 144x180 -1, Gel Mite 192x192 0
+shot build/shots/assets_battle_front.png
+press Up
+press Enter
+waitstatehas 900 step effect burst_chill
+shot build/shots/assets_battle_enemy_look.png
+press Escape
+waitstate 900 battlephase Command
+dev win
+waitstatehas 200 step sync
+wait 8
+shot build/shots/assets_battle_fallen.png
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+
+# The same in the side layout, with the mystic's side figure from a sheet twice as large.
+battlelayout side
+dev battle marsh
+waitstate 120 battlephase Command
+expect state battlelayout side
+expect asset figure:party:mystic file
+expect state figuresizes Test Fighter 80x80 0, Test Mystic 96x96 0, Test Medic 80x80 0, Bog Wisp A 144x180 36, Bog Wisp B 144x180 36, Gel Mite 128x128 0
+shot build/shots/assets_battle_side.png
+dev win
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+battlelayout front
+
+# Aboard the reed skimmer on the brine flats' water: the backdrop for water and the skimmer's overlay, in both layouts.
+dev vehicle reed_skimmer brine_flats mooring
+dev warp brine_flats 6 4
+wait 2
+press Right
+wait 3
+press Enter
+wait 4
+expect state aboard reed_skimmer
+hold Right 20
+expect state leader brine_flats 9 4
+dev battle training
+waitstate 120 battlephase Command
+expect state backdrop terrain:water
+expect state battleoverlay reed_skimmer
+expect asset vehicle_overlay:reed_skimmer file
+shot build/shots/assets_vehicle_front.png
+dev win
+hold F 60
+press Enter
+expect screen Field
+battlelayout side
+dev battle training
+waitstate 120 battlephase Command
+expect state backdrop terrain:water
+expect state battleoverlay reed_skimmer
+shot build/shots/assets_vehicle_side.png
+dev win
+hold F 60
+press Enter
+expect screen Field
+battlelayout front
+
+# The reed path's picture swapped for another while the field is up: the reload brings it in at the next frame with the
+# session where it was.
+dev warp reed_path lookout_front
+wait 2
+expect state assetfile.map:reed_path maps/reed_path.png 97e24f17
+assets swap maps/reed_path.png alt/reed_path.png
+wait 2
+expect state assetfile.map:reed_path maps/reed_path.png 47608047
+waitstate 30 fieldpicture reed_path above patched 0 tiled 0
+expect actor fighter 1 2
+shot build/shots/assets_map_reed_reloaded.png

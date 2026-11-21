@@ -41,6 +41,8 @@ public sealed class BattlePresentation
 	public Dictionary<string, ActionLook> Actions { get; } = [];
 	// By change, and by `CHANGE.ENEMY` for the enemy it brings or marks.
 	public Dictionary<string, ActionLook> ChangeLooks { get; } = [];
+	// By `ENEMY.ACTION`: how one enemy's basic attack (`attack`), Defend (`defend`) or ability looks, over the action's own.
+	public Dictionary<string, ActionLook> EnemyLooks { get; } = [];
 	public BattleLayout Layout { get; private set; } = BattleLayout.Front;
 	// By `encounter:ID` and `area:ID`, over Layout.
 	public Dictionary<string, BattleLayout> Layouts { get; } = [];
@@ -108,7 +110,10 @@ public sealed class BattlePresentation
 		return new ActionLook(animation, fx, "", combo ? 420 : 280, combo ? 520 : 360, shake, combo);
 	}
 
-	// The look for an action: its own entry, else the most specific fallback.
+	// The look for an action: the acting enemy's entry for it, else its own entry, else the most specific fallback.
+	public ActionLook For(string id, ActionShape shape, string enemy, string action) =>
+		enemy.Length > 0 && EnemyLooks.TryGetValue($"{enemy}.{action}", out ActionLook? look) ? look : For(id, shape);
+
 	public ActionLook For(string id, ActionShape shape)
 	{
 		if (Actions.TryGetValue(id, out ActionLook? own))
@@ -141,7 +146,7 @@ public sealed class BattlePresentation
 		}
 		foreach ((string name, JsonNode? node) in root)
 		{
-			if (name is not ("timings" or "fallbacks" or "actions" or "changes" or "layout" or "layouts"))
+			if (name is not ("timings" or "fallbacks" or "actions" or "changes" or "layout" or "layouts" or "enemies"))
 			{
 				Problem("-", $"unknown field '{name}'");
 			}
@@ -221,6 +226,37 @@ public sealed class BattlePresentation
 					continue;
 				}
 				p.Actions[id] = Merge(p.For(id, shape), value, $"actions.{id}", effects, Problem);
+			}
+		}
+		if (root["enemies"] is JsonObject enemies)
+		{
+			foreach ((string enemy, JsonNode? node) in enemies)
+			{
+				if (!data.Enemies.Contains(enemy))
+				{
+					Problem($"enemies.{enemy}", $"unknown enemy '{enemy}': not in the game data");
+					continue;
+				}
+				if (node is not JsonObject looks)
+				{
+					Problem($"enemies.{enemy}", "must be an object of actions: attack, defend or an ability id");
+					continue;
+				}
+				foreach ((string action, JsonNode? value) in looks)
+				{
+					ActionShape? shape = action switch
+					{
+						"attack" => new ActionShape("attack", "damage", "none"),
+						"defend" => new ActionShape("defend", "damage", "none"),
+						_ => data.Actions.GetValueOrDefault(action) is { Kind: not "item" } a ? a : null,
+					};
+					if (shape is null)
+					{
+						Problem($"enemies.{enemy}.{action}", $"unknown action '{action}': attack, defend or an ability of the game data");
+						continue;
+					}
+					p.EnemyLooks[$"{enemy}.{action}"] = Merge(p.For(action is "attack" or "defend" ? "" : action, shape), value, $"enemies.{enemy}.{action}", effects, Problem);
+				}
 			}
 		}
 		if (root["changes"] is JsonObject changes)
@@ -308,6 +344,8 @@ public sealed class BattlePresentation
 			["fallbacks"] = new JsonObject(Fallbacks.OrderBy(f => f.Key, StringComparer.Ordinal).Select(f => KeyValuePair.Create(f.Key, (JsonNode?)Look(f.Value)))),
 			["actions"] = new JsonObject(Actions.OrderBy(a => a.Key, StringComparer.Ordinal).Select(a => KeyValuePair.Create(a.Key, (JsonNode?)Look(a.Value)))),
 			["changes"] = new JsonObject(ChangeLooks.OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => KeyValuePair.Create(c.Key, (JsonNode?)Look(c.Value)))),
+			["enemies"] = new JsonObject(EnemyLooks.GroupBy(e => e.Key[..e.Key.IndexOf('.')]).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g => KeyValuePair.Create(g.Key,
+				(JsonNode?)new JsonObject(g.OrderBy(e => e.Key, StringComparer.Ordinal).Select(e => KeyValuePair.Create(e.Key[(e.Key.IndexOf('.') + 1)..], (JsonNode?)Look(e.Value))))))),
 		};
 		File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true, IndentCharacter = '\t', IndentSize = 1 }) + "\n");
 	}

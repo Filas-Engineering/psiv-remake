@@ -18,22 +18,25 @@ public sealed partial class Art
 	private readonly Dictionary<Theme, int> _generatedBackdrops = [];
 	private readonly Dictionary<string, int> _generatedIcons = [];
 
-	// The encounter's backdrop, else the area's, else the area kind's.
-	public int Backdrop(AreaKind kind, string area, string encounter)
+	// The encounter's backdrop, else the terrain's under the party, else the area's, else the area kind's, with the key it
+	// came by ("generated" for none).
+	public (int Image, string Key) Backdrop(AreaKind kind, string area, string encounter, string terrain = "")
 	{
-		if (_backdrops.TryGetValue("encounter:" + encounter, out int image) || _backdrops.TryGetValue("area:" + area, out image) ||
-			_backdrops.TryGetValue("kind:" + FieldRenderer.KindName(kind).ToLowerInvariant(), out image))
+		foreach (string key in new[] { "encounter:" + encounter, "terrain:" + terrain, "area:" + area, "kind:" + FieldRenderer.KindName(kind).ToLowerInvariant() })
 		{
-			return image;
+			if (_backdrops.TryGetValue(key, out int found))
+			{
+				return (found, key);
+			}
 		}
 		Theme theme = ThemeOf(kind);
-		if (!_generatedBackdrops.TryGetValue(theme, out image))
+		if (!_generatedBackdrops.TryGetValue(theme, out int image))
 		{
 			image = _s.CreateImage(BackdropWidth, BackdropHeight, BackdropPixels(theme));
 			_sizes[image] = (BackdropWidth, BackdropHeight);
 			_generatedBackdrops[theme] = image;
 		}
-		return image;
+		return (image, "generated");
 	}
 
 	// Sky shading into a horizon, a far silhouette (rooftops with lit windows, hills, or a cave's hanging rock and
@@ -104,7 +107,7 @@ public sealed partial class Art
 		if (enemy)
 		{
 			uint seed = Noise.Hash(id);
-			figure = new Figure([Creature(seed, 0), Creature(seed, 1)], new FrameRun([0, 1], [400, 400]), new Dictionary<string, FrameRun>());
+			figure = new Figure([Creature(seed, 0), Creature(seed, 1)], new FrameRun([0, 1], [400, 400]), new Dictionary<string, FrameRun>(), _figureShadows);
 		}
 		else
 		{
@@ -117,7 +120,7 @@ public sealed partial class Art
 					["cast"] = new([2], [280]),
 					["item"] = new([2], [280]),
 					["defeat"] = new([3], [400]),
-				});
+				}, _figureShadows);
 		}
 		_figures[(id, enemy)] = figure;
 		return figure;
@@ -144,7 +147,7 @@ public sealed partial class Art
 			["defend"] = new([4], [400]),
 			["hurt"] = new([5], [300]),
 			["defeat"] = new([6], [400]),
-		});
+		}, _figureShadows);
 		_backFigures[id] = figure;
 		return figure;
 	}
@@ -155,7 +158,7 @@ public sealed partial class Art
 		if (!_backFigures.TryGetValue(id, out Figure? figure))
 		{
 			figure = new Figure([GeneratedVehicle(id, Direction.North, 0), GeneratedVehicle(id, Direction.North, 1)], new FrameRun([0, 1], [VehicleFrameMs, VehicleFrameMs]),
-				new Dictionary<string, FrameRun> { ["attack"] = new([1, 0], [140, 140]) });
+				new Dictionary<string, FrameRun> { ["attack"] = new([1, 0], [140, 140]) }, _figureShadows);
 			_backFigures[id] = figure;
 		}
 		return figure;

@@ -12,7 +12,7 @@ dotnet run --project monogame/Psiv.Sample -- --assets my_assets                 
 dotnet run --project monogame/Psiv.Sample -- --assets my_assets --watch-assets  # reloads by itself when a file changes
 ```
 
-The export writes each generated picture into sheets (`tilesets/`, `characters/`, `portraits/`, `figures/` (with `party_back_ID.png`, the back figures), `field_enemies/`, `vehicles/`, `backdrops/`, `effects/`, `sprites/`, `status_icons/`, `ui/`), every sound the game can ask for as 16-bit mono WAV at 22050 Hz (`audio/music/`, `audio/ambient/`, `audio/cue/`), the built-in battle presentation table (`battle_presentation.json`) and `assets.json`. It reads every file back and compares it with what it generated, then checks the directory. Run with that directory, the sample draws every frame exactly as it does without one (see [Round trip](#round-trip)); replace one sheet at a time, keeping its layout, or rewrite its entry.
+The export writes each generated picture into sheets (`maps/` (each area as written, drawn from its tiles, with the section turned off), `tilesets/`, `characters/`, `portraits/`, `figures/` (with `party_back_ID.png`, the back figures), `field_enemies/`, `vehicles/`, `backdrops/`, `effects/`, `sprites/`, `status_icons/`, `ui/`, `fonts/` (a placeholder bitmap font per language, with the section turned off)), every sound the game can ask for as 16-bit mono WAV at 22050 Hz (`audio/music/`, `audio/ambient/`, `audio/cue/`), the built-in battle presentation table (`battle_presentation.json`) and `assets.json`. It reads every file back and compares it with what it generated, then checks the directory. Run with that directory, the sample draws every frame exactly as it does without one (see [Round trip](#round-trip)); replace one sheet at a time, keeping its layout, or rewrite its entry.
 
 Without `--assets` the sample uses `assets/` beside the data directory (`game/assets` for the placeholder data) when there is one.
 
@@ -44,9 +44,26 @@ Every field is checked: unknown fields, wrong types, unknown ids and files that 
 	"status_icons": {},
 	"ui": {},
 	"audio": [],
-	"battle_presentation": "battle_presentation.json"
+	"battle_presentation": "battle_presentation.json",
+	"battle_figures": {},
+	"maps": {},
+	"objects": [],
+	"field": {},
+	"vehicle_overlays": [],
+	"bitmap_fonts": {}
 }
 ```
+
+## How big pictures are drawn: scale, natural size and the foot row
+
+The sample lays everything out on a grid of 16-pixel units: a field cell is 16 units drawn at 48 screen pixels (3 pixels a unit), a battle figure's slot is 16 units drawn at the slot's size (front layout: 144 for members, 176, 160, 136 or 112 for enemies by rank; side layout: 80 for members, 128 for enemies, 128 and 160 for vehicles). A file without `scale` is drawn as the generated pictures are: its pixels at the slot's factor (a 16x16 frame fills the slot, a 16x24 one rises half a cell above it), which for a figure is 9 screen pixels a file pixel for members in front and 11 for front-rank enemies, so a full-resolution sheet comes out enormous.
+
+* `scale` (characters, figures, field enemies, vehicles, effects, tilesets): file pixels per unit, any number above 0 up to 64, whole or fractional. `"scale": 1` means one file pixel is one unit, the generated pictures' size; `"scale": 4` means a 64x64 frame takes the room of a 16x16 one. The screen pixels per file pixel are the slot's factor over the scale, snapped so every file pixel covers the same whole number of screen pixels: from 1 up, to the nearest whole number (halves up); below 1, to the nearest whole fraction 1/n. So a sheet keeps crisp pixels at the cost of drawing a little larger or smaller than its slot when the factor is not whole: in the field (3 pixels a unit) a scale of 3 draws a 48x48 frame at exactly 48 pixels, a scale of 2 draws a 32x32 frame at 64 (1.5 snaps to 2) and a scale of 4 a 64x64 frame at 64 (0.75 snaps to 1). Drawing is nearest-neighbor everywhere (`SamplerState.PointClamp`).
+* Effects are drawn at 3 screen pixels a file pixel (4 on enemies in the front layout), so an effect sheet's `scale` gives 3 (or 4) over the scale, snapped the same way: a 64x64 sheet at `"scale": 2` draws at 128 in both cases (1.5 snaps to 2). Tiles lie edge to edge and fill their cell, so a tileset's `scale` must make a tile exactly one cell (below, [tilesets](#tilesets)).
+* Natural size (`battle_figures.reference_height`, below): a figure entry without `scale` is drawn at a whole multiple of its own pixel size, the same for every slot and layout and independent of the window: the multiple is the 720-pixel logical screen's height divided by the reference height, rounded down, at least 1 (224 gives 3, 180 gives 4, 240 gives 3, 480 gives 1). The window then scales the whole 1280x720 frame as it does everything else.
+* `natural` (figures): `true` or `false` opts one figure in or out of its natural size whatever the manifest-wide setting does: `false` draws it as a file without `scale` is drawn when there is no reference height (the slot's factor), so a sheet drawn for the slots can stand beside figures drawn at their natural size; `true` asks for it, which needs `battle_figures.reference_height` and does not go with `scale` (both are problems). Left out, a figure without `scale` follows `reference_height`.
+* `foot` (characters, figures, field enemies, vehicles): the frame row, counted in file pixels from the frame's top (1 to the frame's height), that stands on the ground line; left out, the frame's bottom. Rows below it hang under the line, so figures of different sizes and paddings stand on the same ground. The figure's drawn rectangle is what the target pointer, the effects, the floating numbers and the retarget slide use, and the enemies' labels, bars and status icons sit under the ground line, so all of them follow a scaled figure.
+* `shadow` (characters, figures): `false` leaves out the generated ground shadow under that figure or person; figures take `battle_figures.shadows` when they leave it out. In battle the shadow is as wide as the drawn figure.
 
 ### tilesets
 
@@ -70,6 +87,8 @@ How the renderer uses them, from a hash of each cell's coordinates so the pictur
 * Water steps through `water` every `water_frame_ms`, neighbors a frame apart, with a `bank`-colored band and light foam on its edges.
 * `objects` are the point objects: doorways (exits inside the map), chests closed and opened, shop stalls, rest beds, `sign` (a talk point that is not an actor), `rune` (an active step hook) and the four exit arrows on the map's edges. An object left out keeps its kind's picture (an area tileset's, its kind's tileset's).
 * `edge` and `bank` are `#rrggbb` or `#rrggbbaa`; left out, the generated kind's colors.
+* `scale` (optional): file pixels per unit, as for figures, with `tile` defaulting to 16 times it. A tile always fills exactly one cell, so the snapped factor (3 over the scale) times `tile` must be the field's 48 pixels: `{"kind": "town", "image": "tilesets/town_x3.png", "scale": 3, ...}` (48-pixel tiles at one screen pixel a file pixel), 24 at 1.5 or 96 at 6; a 32-pixel tile at scale 2 would draw 64 pixels a cell and is a problem. The check then guarantees every file pixel of the tileset covers the same whole number of screen pixels; without `scale` a tile of any size is stretched to its cell. In a panel whose camera zooms to another cell size the tiles fill the cell either way.
+* `animated` (optional): frame runs that stand in for a tile wherever the renderer picks it, `[{"tile": 0, "frames": [0, 29, 30], "ms": 300}]` (`ms` a number for every frame or a list). `tile` is one of the tileset's `floor`, `decor`, `wall_top` or `wall_face` frames (water animates by itself); every cell showing it plays the run in step, from the controller's clock. A kind's tileset animates every area of that kind without one of its own; an area's tileset animates that area only.
 
 ### characters
 
@@ -90,6 +109,7 @@ The field sprite of a party member or actor, by its id.
 * `animations` maps script animation names (`anim fighter nod`; every name must be in `game.json`'s `presentation.animations`) to poses. A pose no animation plays is a problem.
 * The generated motion of the animation (the hop of `jump` and `startle`, the startled mark, the strokes beside the head of `nod` and `shake`, the small bounces of names the sample does not know) plays over the frames unless the pose says `"motion": false`.
 * An animation a sheet does not map plays on its standing frame with that motion only. The person's portrait, without a `portraits` entry, is its south standing frame.
+* `scale`, `foot` and `shadow` as above ([How big pictures are drawn](#how-big-pictures-are-drawn-scale-natural-size-and-the-foot-row)): `{"id": "fighter", "image": "characters/fighter_x3.png", "frame": [48, 48], "scale": 3, ...}` draws 48x48 frames on the 48-pixel cell.
 
 ### portraits
 
@@ -109,9 +129,28 @@ Battle figures, by character or vehicle id (`"side": "party"`) or enemy id (`"si
 	"animations": {"attack": {"frames": [1, 0], "ms": [140, 140]}, "cast": {"frames": [2], "ms": [280]}, "defeat": {"frames": [3], "ms": [400]}}}
 ```
 
-`idle` loops. The named animations are `attack`, `cast`, `item` and `defend` (as the presentation table's `animation` names them), `hurt` (a hit) and `defeat` (a fallen party member); each plays once and holds its last frame, and one left out plays `idle`. The battle adds its own motion on top, the same for files and generated pictures: stepping forward and back, a lunge with `attack`, a glow with `cast` and `item`, a shake and a red flash when hurt, a fade when an enemy falls. The party faces west, toward the enemies on the left.
+`idle` loops. The named animations are `attack`, `cast`, `item` and `defend` (as the presentation table's `animation` names them, for enemies too), `hurt` (a hit) and `defeat` (a fallen party member, and an enemy's fallen pose while it fades out); each plays once and holds its last frame, and one left out plays `idle`. The battle adds its own motion on top, the same for files and generated pictures: stepping forward and back, a lunge with `attack`, a glow with `cast` and `item`, a shake and a red flash when hurt, a fade when an enemy falls. The party faces west, toward the enemies on the left.
 
 `"view": "back"` (default `"side"`) makes an entry the party member or vehicle seen from behind, which the front battle layout draws (below, [The battle presentation table](#the-battle-presentation-table)); the side layout keeps using the `"side"` entry, so an id can have both. A back figure takes the same animations; the generated set is the person's look as head and shoulders, 16 by 16 drawn at 9x: `idle`, `attack` (the right arm raised), `cast` (both arms up), `item` (a hand up holding a pale bottle), `defend` (the head lowered, braced), `hurt` (the head knocked aside) and `defeat` (slumped, the head sunk between the shoulders), one frame each in that order (`attack` plays frames 1 then 0). A vehicle's generated back figure is its north field frames, bobbing. The front layout's motion: a member rises out of the line instead of stepping sideways (the member choosing a command already a little), an enemy comes toward the camera. A back figure's key is `figure:back:ID`.
+
+Figures take `scale`, `foot` and `shadow` ([How big pictures are drawn](#how-big-pictures-are-drawn-scale-natural-size-and-the-foot-row)):
+
+```json
+{"id": "gel_mite", "side": "enemy", "image": "figures/gel_mite_x4.png", "frame": [64, 64], "scale": 4,
+	"idle": {"frames": [0, 1], "ms": [400, 400]}, "animations": {"defeat": {"frames": [2], "ms": [400]}}}
+{"id": "rust_hound", "side": "enemy", "image": "figures/rust_hound.png", "frame": [48, 60], "foot": 48, "shadow": false, "idle": {"frames": [0, 1], "ms": [400, 400]}}
+{"id": "medic", "side": "party", "view": "back", "image": "figures/medic_back.png", "natural": false, "idle": {"frames": [0], "ms": [400]}}
+{"id": "fuse_beetle", "side": "enemy", "image": "figures/fuse_beetle.png", "frame": [48, 60], "foot": 48, "natural": true, "idle": {"frames": [0, 1], "ms": [400, 400]}}
+```
+
+### battle_figures
+
+```json
+"battle_figures": {"reference_height": 224, "shadows": true}
+```
+
+* `reference_height` (1 to 720, optional): the logical screen height the figures without a `scale` were drawn for; each is drawn at the natural multiple (above), unless its entry says `"natural": false`. Figures with a `scale`, and generated figures, are not affected.
+* `shadows` (default true): whether figures cast the generated ground shadow, generated ones included, unless an entry's `shadow` says otherwise.
 
 ### field_enemies
 
@@ -136,11 +175,23 @@ Every facing needs at least one frame. The field draws the vehicle where it stan
 {"encounter": "warden", "image": "backdrops/warden.png"}
 ```
 
-The encounter's, else the area's, else the area kind's. In the side layout drawn over the battlefield above the party panels, 1280 by 420 (the generated ones are 320 by 105, at 4x), any size stretched to it. In the front layout drawn at 1280 by 480 over the stage, and its part below 62% of its height (the generated ground, under the horizon's shadow) drawn again, taller, from there to the bottom of the screen, behind the members and the status strip.
+```json
+{"terrain": "water", "image": "backdrops/water.png"}
+```
+
+The encounter's, else the terrain's (`floor`, `water` or `soft`: the cell the party stood on when the battle began, so a battle aboard a vehicle on water takes `water`), else the area's, else the area kind's. Each entry names exactly one of `kind`, `area`, `encounter` and `terrain`. The state probe `backdrop` says which key was used (`terrain:water`, `generated`). In the side layout drawn over the battlefield above the party panels, 1280 by 420 (the generated ones are 320 by 105, at 4x), any size stretched to it. In the front layout drawn at 1280 by 480 over the stage, and its part below 62% of its height (the generated ground, under the horizon's shadow) drawn again, taller, from there to the bottom of the screen, behind the members and the status strip.
+
+### vehicle_overlays
+
+```json
+"vehicle_overlays": [{"vehicle": "reed_skimmer", "image": "overlays/skimmer_rim.png"}, {"image": "overlays/any_hull.png"}]
+```
+
+A picture over the stage in a vehicle battle (a cockpit, a hull's rim): the vehicle's own (an id of core's `party.json` vehicles), else the entry without `vehicle`, which serves every vehicle. It is stretched over the stage, 1280 pixels wide down to the status strip (front layout, 580 pixels) or the panels (side layout, 420 pixels), drawn over the backdrop and every figure and under the effects, numbers, labels' windows, the strip, the panels and the menus; transparent pixels show the stage.
 
 ### effects
 
-Frame runs drawn over each target of an action, at 3x (4x on enemies in the front layout), centered on its figure (on the head of a member seen from behind, and on its status slot in a vehicle battle, where members have no figure; in the front layout an effect on several targets starts on each a moment after the one to its left, sweeping along them): `{"id": "spark_bolt", "image": "effects/spark_bolt.png", "frame": [32, 32], "frames": [0, 1, 2, 3], "ms": 60}`. The presentation table names effects by id; an id here replaces the generated effect of that id or adds a new one. The generated effects are `slash`, `burst` and `nova` with the suffixes `_heat`, `_chill`, `_shock`, `_gale` and `_holy` (or none), and `ring_status`, `ring_stat`, `ring_cure`, `motes_heal`, `motes_revive`, `motes_item`, `shield`, `motes_join`, `ring_merge`, `nova_transform` and `mark_defeat` (the last four for the presentation table's `changes`).
+Frame runs drawn over each target of an action, at 3x (4x on enemies in the front layout; with `scale`, 3 or 4 over the scale, snapped as figures are), centered on its figure (on the head of a member seen from behind, and on its status slot in a vehicle battle, where members have no figure; in the front layout an effect on several targets starts on each a moment after the one to its left, sweeping along them): `{"id": "spark_bolt", "image": "effects/spark_bolt.png", "frame": [32, 32], "frames": [0, 1, 2, 3], "ms": 60}`, or from a sheet drawn twice as large, `{"id": "slash", "image": "effects/slash_x2.png", "frame": [64, 64], "scale": 2, "frames": [0, 1, 2, 3], "ms": 60}` (128 pixels on screen, in both layouts). The presentation table names effects by id; an id here replaces the generated effect of that id or adds a new one. The generated effects are `slash`, `burst` and `nova` with the suffixes `_heat`, `_chill`, `_shock`, `_gale` and `_holy` (or none), and `ring_status`, `ring_stat`, `ring_cure`, `motes_heal`, `motes_revive`, `motes_item`, `shield`, `motes_join`, `ring_merge`, `nova_transform` and `mark_defeat` (the last four for the presentation table's `changes`).
 
 ### sprites and status_icons
 
@@ -150,6 +201,75 @@ Frame runs drawn over each target of an action, at 3x (4x on enemies in the fron
 ```
 
 The shadow under everyone, the speech bubble over talk points, the `!` over chasing enemies and startled people, the pointer over targets and finished dialogue lines, the pier a port stands on (greyed while the port is closed); and an icon per status id (from core's `statuses.json`), drawn in the battle's panels and under the enemies, growing in when a status lands and blinking out when it ends.
+
+### maps
+
+Whole-area pictures in place of tile drawing, by area id. Without the section every area with `maps/AREA.png` in the asset directory gets one by convention:
+
+| File | What it is |
+| --- | --- |
+| `maps/AREA.png` | The ground: the whole map as written in the area file, drawn in place of the tiles |
+| `maps/AREA_above.png` | Optional, drawn over everyone standing on the map (roofs, treetops, arches): transparent where people show |
+| `maps/AREA@FLAG.png` | Optional, one per flag of the area's `changes`: the map as it looks with that change, of which only the change's cells are used |
+
+```json
+"maps": {"enabled": true, "cell": 16, "areas": [
+	{"area": "ashfall_market", "image": "maps/ashfall_big.png", "above": "maps/ashfall_roofs.png", "cell": 32,
+		"changes": {"fells.bridge_mended": "maps/ashfall_bridge.png"}}
+]}
+```
+
+* Alignment: every picture is aligned cell for cell to the area's grid, its top left pixel on cell (0, 0). `cell` (1 to 256, default 16; per entry over the section's) is the picture's pixels a cell, so its size must be exactly the area's width and height in cells times `cell` (the reed path, 20x9 cells, at 16: 320x144); any other size is a problem. The field draws a cell at 48 screen pixels, so 16 draws at 3x and 48 at 1x, nearest-neighbor.
+* Layering, bottom to top: the ground picture; the cells drawn over it (below); exits' arrows and doorways, step runes, the runes on every cell of an active tile step hook (a hook with `tile`, whose cells the map marks with its character), and conveyor belts; then everyone sorted by row as before (objects and their pictures, chests, signs, shops, beds, piers, helms, vehicles, actors, visible enemies, the party); then the above picture; then speech bubbles, the `!` marks and pose marks; then the developer overlays and windows. The generated wall shadows, water foam, barrier frost and water frames are not drawn on a picture area (draw them into the picture). Belts and tile step hooks' runes are drawn on a picture area as on tiles, generated or from `field`'s overlay pictures; when the picture already shows them, turn them off for the area with `field`'s `conveyors` and `tile_hooks` ([field](#field)).
+* Map changes by flag: the picture shows the map as written. Each frame, for each change of the area in data order whose flag is set, a cell of that change shows the change's picture (`changes` above, or `maps/AREA@FLAG.png`) cut out at that cell, a later change winning a cell, as in the game. Any other cell whose terrain is not as written (a change without a picture, a barrier a vehicle broke) is drawn from the area's tileset, as without a picture. Only the changed cells are cut from a change's picture; the rest of it is never drawn.
+* `enabled: false` loads none of it and turns the file convention off (the export writes it so: a still picture cannot reproduce the water's frames, so the export's map pictures are a starting point, not a round trip). An explicit entry replaces the convention for its area. A picture in `maps/` that neither an entry nor the convention names is a problem (a misspelled area, most likely).
+* A change's picture or an above picture without a ground picture is a problem; the ground is required.
+* Asset keys: `map:AREA`, `map:AREA:above`, `map:AREA@FLAG`. The state probe `fieldpicture` reads `AREA [above] patched N tiled N` (cells drawn from change pictures and from tiles in the last frame) or `-`.
+
+### objects
+
+A picture of its own for one interactable or cell, in place of the one picture its kind shares:
+
+```json
+"objects": [
+	{"area": "ember_steps", "point": "steps_console", "image": "objects/console.png", "frame": [16, 32], "frames": [0, 1], "ms": 300, "size": [1, 2]},
+	{"area": "ember_steps", "point": "steps_tinker", "character": "mystic", "facing": "east"},
+	{"area": "reed_path", "point": "reed_cache", "image": "objects/long_chest.png", "frame": [32, 16], "frames": [0], "size": [2, 1], "anchor": [0, 0],
+		"open": {"image": "objects/long_chest_open.png", "frame": [32, 32], "frames": [0], "size": [2, 2], "anchor": [0, 1]}},
+	{"area": "fell_vault", "at": [8, 4], "image": "objects/door.png", "frame": [16, 32], "frames": [0], "size": [1, 2], "open_flag": "fells.vault_door_open",
+		"open": {"frames": [1]}}
+]
+```
+
+* Where: `area` and exactly one of `point` (the id of a hook, chest, shop, rest point, port or helm of that area; the point's own picture, the sign, chest, stall, bed, rune, pier or helm, is replaced) or `at` (`[x, y]`, a cell with no point: a door, a statue, a lamp; nothing is replaced). A talk point an actor stands on is a problem: the actor is drawn from its `characters` entry.
+* What: exactly one of `character` (a party member's or actor's id: that person's standing frame, from its sheet or generated look, facing `facing`, `south` by default, with the ground shadow; for townspeople hooks that are not actors) or `image` (a sheet cut into `frame`, 16x16 by default) with `frames` and `ms` (default 400 a frame; a number or a list), looping from the controller's clock.
+* Size and anchor: `size` is `[width, height]` in cells (1 to 16, default `[1, 1]`); the frame is stretched over those cells (draw it at `size` x 16 x a whole number pixels to keep it crisp). `anchor` is the cell of the object, `[x, y]` from its top left, that stands on the point's or `at` cell (default: the bottom row's middle, rounded left). The object sorts with everyone else by the anchor's row, so a person on a higher row is drawn behind it and one on the anchor's row or below in front.
+* States: the fields above are the closed look. `open` (`image`, `frame`, `frames`, `ms`, `size`, `anchor`, each left out taken from the closed look; a new size without an anchor takes the default anchor) is shown once the point's chest is opened, or while `open_flag` (a flag of `game.json`) is set; `open` needs one of the two. A door that a flag's map change opens takes the same flag.
+* A talk point keeps its speech bubble, on its cell. A closed port draws nothing either way.
+* Asset keys: `object:AREA:POINT` and `object:AREA:X,Y` (pictures only). The state probe `objects` lists each object drawn in the last frame as `KEY closed|open WxH frame N` or `KEY CHARACTER FACING`.
+
+### field
+
+```json
+"field": {"wall_shadows": true, "water_foam": true, "areas": {"saltgrass": {"wall_shadows": false, "water_foam": false}}}
+```
+
+Switches for the generated touches the tile drawing adds: `wall_shadows` (the dark bands on floor below and right of walls) and `water_foam` (the bank band and the light foam on water's edges), both on by default; `areas` sets them per area id over the section's. The wall's edge-colored borders and the barrier frost stay. The state probe `fieldlook` reads `shadows on|off foam on|off` for the area shown.
+
+Conveyors and tile step hooks have no picture of their own in the area's tiles or its whole-area picture, so the field marks them:
+
+```json
+"field": {
+	"conveyor_overlay": {"image": "overlays/belt.png", "frame": [16, 16], "facings": {"north": [0, 1], "east": [2, 3], "south": [4, 5], "west": [6, 7]}, "ms": 150},
+	"tile_hook_overlay": {"image": "overlays/pad.png", "frames": [0, 1], "ms": 400},
+	"areas": {"cogway": {"conveyors": false, "tile_hooks": false}}
+}
+```
+
+* `conveyors` (default true): draw each conveyor cell; without `conveyor_overlay` as generated belt slats that run toward its direction while its flags hold and stand still otherwise. `conveyor_overlay` (optional) draws a picture instead: per direction a frame run, every facing at least one frame, looping at `ms` (default 120) a frame while the belt runs and showing its first frame while it stands. Each fills its cell, on the ground under everyone.
+* `tile_hooks` (default true): draw the step rune (the tileset's `rune`) on every cell of a tile step hook while its flags hold, as a step hook at a point shows it; `tile_hook_overlay` (optional: `image`, `frame`, `frames`, `ms`, default 300 a frame, looping) draws its frames instead. The cells are those the area file's map writes with the hook's character.
+* `false` for either leaves the marks to the art: a whole-area picture with the belts and pads painted in (the belts then do not move). Both take a per-area value in `areas`.
+* Asset keys: `conveyor_overlay`, `tile_hook_overlay`. The state probes `fieldmarks` (`belts generated|overlay|off pads generated|overlay|off` for the area shown), `conveyors` (`RUNNING/CELLS`) and `tilehooks` (`ACTIVE/CELLS`, the tile step hooks' cells whose flags hold).
 
 ### ui
 
@@ -161,11 +281,63 @@ The shadow under everyone, the speech bubble over talk points, the `!` over chas
 	"fonts": {"en": {"file": "fonts/body.ttf", "scale": 1.0}, "ja": {"file": "fonts/cjk.otf", "scale": 1.1}}}
 ```
 
-* `frame`: every window (menus, dialogue, toasts, banners, the battle's panels) as a nine-slice: corners `border` pixels square drawn at `scale`, edges and middle stretched.
+* `frame`: every window (menus, dialogue, toasts, banners, the battle's panels) as a nine-slice: corners `border` pixels square drawn at `scale`, edges and middle stretched. It is drawn untinted, exactly as the picture is (only a fading window's opacity applies), with none of the generated window's band or shadow.
 * `panel_frames`: the border around comic panels, one with no `camera` for all and one per camera id (`game.json`'s `presentation.cameras`) for its panels.
 * `cursor`: the menu cursor; `bar_track` and `bar_fill`: HP and TP bars, the fill tinted with the bar's color and stretched to its value's width.
-* `fonts`: per language (`game.json`'s `languages`) a TrueType or OpenType file, with the system faces after it for glyphs it lacks, and a `scale` for every text size.
+* `fonts`: per language (`game.json`'s `languages`) a TrueType or OpenType file, with the system faces after it for glyphs it lacks, and a `scale` for every text size. A bitmap font for the language ([bitmap_fonts](#bitmap_fonts)) draws before it; this font then draws the glyphs the bitmap font lacks.
 * `"enabled": false` keeps the generated look and loads nothing of the section (the export writes it that way, see [Round trip](#round-trip)).
+
+### bitmap_fonts
+
+Fonts drawn from a picture of glyphs, per language and optionally per role:
+
+```json
+"bitmap_fonts": {"enabled": true, "fonts": [
+	{"language": "en", "image": "fonts/en.png", "metrics": "fonts/en.json"},
+	{"language": "en", "role": "battle_numbers", "image": "fonts/numbers.png", "metrics": "fonts/numbers.json", "scale": 1.5},
+	{"language": "ja", "image": "fonts/ja.png", "metrics": "fonts/ja.json"}
+]}
+```
+
+* `language`: one of `game.json`'s `languages`. `role` (optional): `dialogue` (the dialogue box: the line, the speaker's plate, the hint and a choice), `battle_numbers` (the numbers and words that float over battle targets) or `menu` (all other text). A font without `role` serves every role of its language that has no font of its own; two fonts for one language and role are a problem. A language without a font draws in the system font (or `ui.fonts`) as before.
+* `image`: the glyph sheet, a PNG. Glyphs are drawn tinted with the text's color, so draw them white (shades of gray for anti-aliasing) on transparent; a colored sheet multiplies with the text's color.
+* `metrics`: the metrics file, below.
+* `scale` (above 0, at most 64, default 1): the screen pixels a file pixel are the text size times `scale` over the metrics' `size`, snapped as figures' scales are (from 1 up to the nearest whole number, halves up; below 1 to the nearest 1/n), so every file pixel covers the same whole number of screen pixels. The sample's text sizes are 16 (small), 20 (body), 28 (titles) and 28 to 36 (battle numbers), all times the profile's text size: a font with `size` 10 draws body text at 2, titles at 3 and, at 150%, body text at 3. Close sizes can snap to the same factor (small and body both at 2 there); give a role its own font or `scale` to set them apart.
+* Characters the font has no glyph for are drawn in the fallback font, the language's `ui.fonts` file or the system font, at the text size, in place: measuring, wrapping and the text's reveal count them as that font does. Spaces take the metrics' `space`; line breaks are never glyphs.
+* With a bitmap font the dialogue box steps its lines by the font's line height times the factor.
+* The check reads the language's text tables (`text/CODE.json` and `text/CODE.strings`, placeholders such as `{0}` left out) and reports a font that lacks glyphs they use as one problem line listing them (the first sixty and how many more): for a font without `role` every line, for `dialogue` the string tables' lines and the `ui.dialogue.` keys, for `battle_numbers` the digits, `+`, the `ui.battle.float.` keys and the status names, for `menu` every line. Unlike other problems, the font still loads: those glyphs draw in the fallback font.
+* `"enabled": false` loads none of it (the export writes it so, below).
+* Asset keys: `bitmap_font:LANGUAGE`, `bitmap_font:LANGUAGE:ROLE`. The state probes `bitmapfonts` (`menu FILE, dialogue FILE, battle_numbers FILE` for the text language, `-` where none), `wrapped` (the dialogue box's lines as last wrapped: `COUNT: WIDTH ...`) and `fontmissing` (the characters of the line on screen the dialogue's font draws in the fallback font, or `none`).
+
+The metrics file is JSON:
+
+```json
+{
+	"size": 10,
+	"line_height": 10,
+	"baseline": 8,
+	"space": 4,
+	"advance": 6,
+	"cell": [10, 10],
+	"rows": ["ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ0123", "456789.,!?"],
+	"glyphs": {
+		"I": {"advance": 4},
+		"W": {"advance": 8},
+		"g": {"rect": [0, 40, 6, 12], "offset": [0, 2], "advance": 6},
+		"灰": {"rect": [10, 40, 10, 10], "advance": 10}
+	},
+	"kerning": {"AV": -1, "To": -1}
+}
+```
+
+* `line_height` (required, 1 to 256): pixels from one line's top to the next's. `baseline` (0 to the line height, default the line height): the row, from the line's top, the letters stand on; the fallback font's text is placed so its baseline falls near it. `size` (1 to 256, default the line height): the text size at which the sheet draws at one screen pixel a file pixel.
+* `space` (default `advance`, else a third of the line height): how far a space moves the pen. `advance` (optional): the default advance of every glyph; left out, a glyph's own width.
+* A grid: `cell` (`[width, height]`) and `rows`, one string per row of cells from the top of the sheet, each character the glyph in that cell, left to right (a space in a row is an empty cell). Each grid glyph is its whole cell, drawn from the pen position at the line's top.
+* `glyphs`: per character (one character of the Basic Multilingual Plane) `rect` (`[x, y, width, height]` in the sheet; required unless the character is in the grid, where it replaces the cell), `offset` (`[x, y]` from the pen position and the line's top, -256 to 256, default `[0, 0]`) and `advance` (0 to 1024). A grid character with only `advance` or `offset` keeps its cell.
+* `kerning`: per pair of characters (both glyphs of the font) the pixels, -64 to 64, the second moves toward the first (negative) or away.
+* Unknown fields, a rectangle past the sheet, a character twice in the rows and a font with no glyphs are problems.
+
+Text without spaces (Japanese) wraps between characters where it reaches the edge, keeping closing punctuation (`、。」` and the like) on the line it closes; this is the same with the system font.
 
 ### audio
 
@@ -211,18 +383,19 @@ The shadow under everyone, the speech bubble over talk points, the `!` over chas
 * `timings`: each step's milliseconds at 1x battle speed (see "Battle" in `bindings/README.md` for the steps).
 * `actions`: by ability or item id (core's `abilities.json` and `items.json`; enemy techniques and skills are abilities too): `animation` (`attack`, `cast`, `item`, `defend` or `none`), `effect` (an effect id or `none`), `cue` (a sound played as the effect starts, any cue id), `animate_ms` and `effect_ms` (those two steps' lengths), `shake` (pixels, easing off over the effect) and `flash` (a white flash at the effect's start). An entry gives only the fields it changes; the rest come from its fallback.
 * `fallbacks`: an id without an entry takes the most specific of `KIND.EFFECT.ELEMENT`, `KIND.EFFECT` and `KIND`. KIND is the ability's kind (`attack`, `technique`, `skill`, `combo`) or `item`, and `defend` for Defend; EFFECT is its first effect (`damage`, `heal`, `revive`, `status`, `cure`, `stat`, `other`); ELEMENT is the damage's element (`none`, `heat`, `chill`, `shock`, `gale`, `holy`; a basic attack takes its weapon's element from the hit). The built-in table has every key: attacks slash, damaging techniques and items burst in their element's color, combinations nova and flash, heals and revives rise in motes, statuses and stat changes ring, Defend raises a shield. Override any of them.
+* `enemies`: by enemy id (core's `enemies.json`), how that enemy's actions look, over the action's own entry or fallback: `attack` (its basic attack), `defend`, or an ability id (`"enemies": {"gel_mite": {"attack": {"effect": "burst_chill", "cue": "miss"}}}`). The fields are an action's. A combination keeps its own look.
 * `changes`: how the enemy formation's changes look, each a step of its own after the turn's results: `join` (a summon, or a replacement taking a fallen enemy's place: the newcomer fades in, rising into its formation place, and the stage spreads over that place when it is a new one), `merge` (an enemy that leaves into another slides into it and fades while that one changes form), `transform` (a next form: the old figure fades out as the new one fades in lit white, at full hit points with its own label, bar and statuses), and `instant_defeat` (the mark stamped on an enemy an instant defeat fells, for the whole result step, with "Felled!" over it). The fields are an action's; `effect` plays on the enemy brought or changed, `effect_ms` is the step's length (unused for `instant_defeat`, which lasts the result step), `animation` and `animate_ms` are unused. `CHANGE.ENEMY` overrides a change for the enemy it brings, changes into or marks (core's `enemies.json` ids), over the change's own entry. The built-in entries use the generated `motes_join`, `ring_merge`, `nova_transform` (with a 5-pixel shake and a flash) and `mark_defeat`.
 * The battle speed scales every step; Confirm finishes the current step, holding fast-forward plays the round to its end. With the profile's reduced flash there is no flash and shakes go a quarter as far.
 
 ## Hot reload
 
-F5 in the window (and `--watch-assets`, a moment after files stop changing) loads `assets.json` and every file again, keeps the session and the screens where they are, and logs what changed (`assets: reloaded, changed: tilesets/town.png`) and any new problem. Pictures change at the next frame; a sound that changed plays from its new file the next time it starts; the battle presentation table applies to the next round, its layout at the next frame.
+F5 in the window (and `--watch-assets`, a moment after files stop changing) loads `assets.json` and every file again (bitmap fonts' sheets and metrics files included), keeps the session and the screens where they are, and logs what changed (`assets: reloaded, changed: tilesets/town.png`) and any new problem. Pictures change at the next frame; a sound that changed plays from its new file the next time it starts; the battle presentation table applies to the next round, its layout at the next frame.
 
 ## Round trip
 
 The exported directory reproduces the generated look exactly. `make bindings` checks it: the smoke, actors, panels, battle and vehicles headless runs are played again with the export as `--assets`, and every frame's draws (each picture by a hash of its pixels, rectangles, text, clips) and the whole transcript must be identical to the generated run's. Every exported sound is read back and compared sample for sample with the generated one.
 
-Two things are not part of it. The UI skin's frame, panel border, cursor and bars are drawn with rectangles, and a window's top band and drop shadow depend on its size, which a nine-slice cannot reproduce at every size; the export writes pictures of them as a starting point with `"enabled": false`. Fonts are system files, so the export names none.
+Two things are not part of it. The UI skin's frame, panel border, cursor and bars are drawn with rectangles, and a window's top band and drop shadow depend on its size, which a nine-slice cannot reproduce at every size; the export writes pictures of them as a starting point with `"enabled": false`. Fonts are system files, so the export names no TrueType font; it writes a placeholder bitmap font per language (`fonts/CODE.png` and `fonts/CODE.json`: printable ASCII as 5 by 9 pixel letters, every other character the language's text tables use as a distinct pattern of strokes, wide ones in a 9 by 9 box) with `"enabled": false`, since the generated look is the system font. Turned on, it covers every glyph the tables use.
 
 ## Not replaceable yet
 

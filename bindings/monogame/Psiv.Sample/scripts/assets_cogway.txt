@@ -1,0 +1,94 @@
+# Run with --dev on the Cogway data copy (make_front_data.py --tile-hook) and a copy of build/test_assets, since it swaps
+# the manifest: the Cogway's whole-area picture with the belts and the tile step hook's pads drawn from the field's
+# overlay pictures, the pads dark while the hall is off and lit once its lever is thrown; a belt carrying the party over
+# the picture; the manifest swapped for one whose pictures carry both, so the sample draws neither; then formations with
+# free places in both layouts with a scaled figure (the brine jelly in the middle of three) and figures at their natural
+# size on their foot row (the fuse beetles on each side of a free place), and a slash from its scaled sheet. With
+# --window the shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing for them.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev encounters off
+dev warp cogway 1 4
+wait 4
+expect asset map:cogway file
+expect asset conveyor_overlay file
+expect asset tile_hook_overlay file
+waitstate 30 fieldpicture cogway patched 0 tiled 1
+expect state fieldmarks belts overlay pads overlay
+expect state conveyors 4/4
+expect state tilehooks 0/3
+shot build/shots/cogway_picture_off.png
+
+# The lever: the gate opens, so its cell shows the picture again, and the pads light up.
+press Left
+wait 3
+press Enter
+wait 4
+pressuntil Enter Field 400
+waitstate 30 fieldpicture cogway patched 0 tiled 0
+expect state tilehooks 3/3
+shot build/shots/cogway_picture_on.png
+
+# A belt carries the party along its row over the picture.
+dev warp cogway 2 3
+wait 60
+expect state leader cogway 6 3
+shot build/shots/cogway_picture_belt.png
+
+# The manifest swapped for one that leaves belts and pads to the picture: the Cogway draws neither, the rest stays.
+assets swap assets.json alt/assets_drawn.json
+wait 2
+waitstate 30 fieldmarks belts off pads off
+expect state conveyors 4/4
+waitstate 30 fieldpicture cogway patched 0 tiled 0
+shot build/shots/cogway_picture_drawn.png
+
+# The brine jelly from a sheet twice as large with a scale of 2, in the middle of three places, in both layouts; the
+# jelly's slash on a member from its scaled sheet, 128 pixels square at the side layout's 3x (1.5 snapped up to 2).
+dev battle jelly
+expect mode Battle
+waitstate 120 battlephase Command
+expect state formation 3: 1
+expect asset figure:enemy:brine_jelly file
+expect state figuresizes Test Fighter 144x144 -12, Test Mystic 144x144 0, Test Medic 144x144 0, Brine Jelly 192x192 0
+shot build/shots/cogway_jelly_front.png
+battlelayout side
+wait 4
+expect state formation 3: 1
+expect state figuresizes Test Fighter 80x80 0, Test Mystic 96x96 0, Test Medic 80x80 0, Brine Jelly 128x128 0
+press Enter 6
+waitstatehas 900 step effect slash
+wait 4
+expect state effectsize 128x128
+shot build/shots/cogway_jelly_side.png
+dev win
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+
+# The fuse beetles at their natural size, standing on their foot row, on each side of a free place, in both layouts.
+battlelayout front
+dev battle beetles
+waitstate 120 battlephase Command
+expect state formation 3: 0 2
+expect asset figure:enemy:fuse_beetle file
+expect state figuresizes Test Fighter 144x144 -12, Test Mystic 144x144 0, Test Medic 144x144 0, Fuse Beetle A 144x180 36, Fuse Beetle B 144x180 36
+shot build/shots/cogway_beetles_front.png
+battlelayout side
+wait 4
+expect state formation 3: 0 2
+expect state figuresizes Test Fighter 80x80 0, Test Mystic 96x96 0, Test Medic 80x80 0, Fuse Beetle A 144x180 36, Fuse Beetle B 144x180 36
+shot build/shots/cogway_beetles_side.png
+dev win
+hold F 60
+press Enter
+expect screen Field

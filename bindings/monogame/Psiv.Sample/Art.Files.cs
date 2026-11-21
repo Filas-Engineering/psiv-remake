@@ -5,10 +5,17 @@ using Psiv.Session;
 namespace Psiv.Sample;
 
 // Frames of one picture set: idle and named animations are runs over Images, by index.
-public sealed record Figure(int[] Images, FrameRun Idle, IReadOnlyDictionary<string, FrameRun> Animations);
+// Shadow: whether the battle draws the generated ground shadow under it.
+public sealed record Figure(int[] Images, FrameRun Idle, IReadOnlyDictionary<string, FrameRun> Animations, bool Shadow = true);
 
 // A window frame cut in nine: corners drawn at their size times Scale, edges and middle stretched.
 public sealed record NineSliceImage(int[] Images, int Border, int Scale);
+
+// A whole-area picture loaded: the ground and above images, pixels a cell, and per change flag the patch's cells cut out.
+public sealed record AreaPicture(int Ground, int? Above, int Cell, int Width, int Height, IReadOnlyList<(string Flag, IReadOnlyDictionary<(int X, int Y), int> Cells)> Patches);
+
+// An object loaded: its entry and the images each state's frame run indexes (none for a person's standing frame).
+public sealed record LoadedObject(ObjectEntry Entry, int[] Closed, int[] Open);
 
 // The UI skin from the asset directory: any part left out keeps the generated look, drawn with rectangles.
 public sealed record UiSkin(NineSliceImage? Frame, NineSliceImage? PanelFrame, IReadOnlyDictionary<string, NineSliceImage> CameraFrames, int? Cursor, int? BarTrack, int? BarFill);
@@ -27,13 +34,31 @@ public sealed partial class Art
 	private readonly Dictionary<string, int> _backdrops = [];
 	private readonly Dictionary<string, Figure> _effects = [];
 	private readonly Dictionary<string, int> _statusIcons = [];
+	private readonly Dictionary<string, AreaPicture> _areaPictures = [];
+	private readonly Dictionary<string, List<LoadedObject>> _objects = [];
+	private readonly Dictionary<string, int> _vehicleOverlays = [];
+	private FieldLook _fieldLook = new(true, true);
+	private readonly Dictionary<string, FieldLook> _fieldLooks = [];
 	private readonly Dictionary<int, (int W, int H)> _sizes = [];
+	// How a picture with a scale, a natural size or a foot row stands: file pixels per grid pixel (0: the generated
+	// pictures' factor, -1: the natural multiple) and the row its feet stand on.
+	private readonly Dictionary<int, (float Scale, int Foot)> _fits = [];
+	// Logical pixels per file pixel for figures drawn at their natural size: the 720-pixel stage over battle_figures'
+	// reference height, rounded down, at least 1.
+	private int _naturalMultiple;
+	private bool _figureShadows = true;
+	// Effect frames with a scale: file pixels per grid pixel.
+	private readonly Dictionary<int, float> _effectScales = [];
+	private readonly Dictionary<(string Language, TextRole? Role), BitmapFont> _bitmapFonts = [];
+	private Figure? _tileHookOverlay;
+	private (Dictionary<Direction, int[]> Facings, int Ms, int[] Images)? _conveyorOverlay;
 	private readonly Dictionary<string, string> _fromFile = [];
 	private readonly string _assetDir = "";
 
 	// Whether the picture for a key (`tileset:town`, `tileset:area:tidewater`, `character:fighter`, `portrait:guide`,
 	// `figure:party:fighter`, `figure:back:fighter`, `figure:enemy:gel_mite`, `field_enemy:training`, `vehicle:reed_skimmer`, `backdrop:kind:town`, `effect:slash`,
-	// `sprite:shadow`, `status_icon:sleep`, `ui:frame` ...) came from a file.
+	// `sprite:shadow`, `status_icon:sleep`, `ui:frame`, `map:tidewater`, `map:tidewater:above`, `map:AREA@FLAG`, `object:AREA:POINT`,
+	// `object:AREA:X,Y`, `vehicle_overlay[:ID]` ...) came from a file.
 	public bool FromFile(string key) => _fromFile.ContainsKey(key);
 
 	// The file a key's picture came from and a hash of its pixels as loaded, or null for a generated picture.
@@ -57,13 +82,56 @@ public sealed partial class Art
 	public (int W, int H) SizeOf(int image) => _sizes.GetValueOrDefault(image, (Pixels.Size, Pixels.Size));
 
 	// Where a picture standing on a cell goes: bottom-centered on the cell, at the cell's scale for 16 pixels, so a
-	// 16x16 picture fills the cell and a taller one rises above it.
+	// 16x16 picture fills the cell and a taller one rises above it. A picture with a scale is drawn at the cell's factor
+	// over its scale, snapped to a whole number of screen pixels per file pixel (or a whole fraction below 1); one at its
+	// natural size at the natural multiple; and one with a foot row stands on that row instead of its bottom.
 	public Rectangle Stand(int image, int x, int y, int cell)
 	{
 		(int w, int h) = SizeOf(image);
-		int dw = w * cell / Pixels.Size, dh = h * cell / Pixels.Size;
-		return new Rectangle(x + (cell - dw) / 2, y + cell - dh, dw, dh);
+		if (!_fits.TryGetValue(image, out var fit))
+		{
+			int dw = w * cell / Pixels.Size, dh = h * cell / Pixels.Size;
+			return new Rectangle(x + (cell - dw) / 2, y + cell - dh, dw, dh);
+		}
+		float p = fit.Scale > 0 ? Snap(cell / (Pixels.Size * fit.Scale)) : fit.Scale < 0 ? _naturalMultiple : cell / (float)Pixels.Size;
+		int fw = (int)MathF.Round(w * p), fh = (int)MathF.Round(h * p), below = (int)MathF.Round((h - fit.Foot) * p);
+		return new Rectangle(x + (cell - fw) / 2, y + cell - fh + below, fw, fh);
 	}
+
+	// An effect frame's size drawn at `factor` screen pixels a grid pixel: at the factor over its scale, snapped, when its
+	// sheet gives one.
+	public (int W, int H) DrawnEffectSize(int image, int factor)
+	{
+		(int w, int h) = SizeOf(image);
+		float p = _effectScales.TryGetValue(image, out float scale) ? Snap(factor / scale) : factor;
+		return ((int)MathF.Round(w * p), (int)MathF.Round(h * p));
+	}
+
+	// The bitmap font for a text language and role: the role's own, else the language's font for every role.
+	public BitmapFont? BitmapFontFor(string language, TextRole role) =>
+		_bitmapFonts.GetValueOrDefault((language, role)) ?? _bitmapFonts.GetValueOrDefault((language, null));
+
+	// The picture on a cell of an active tile step hook, from the field's overlay, or null for the generated rune.
+	public int? TileHookOverlay(int clockMs) => _tileHookOverlay is { } o ? o.Images[o.Idle.FrameAt(clockMs, loop: true)] : null;
+
+	// The picture on a conveyor cell from the field's overlay (its direction's run while it runs, the first frame while it
+	// stands), or null for the generated belt.
+	public int? ConveyorOverlay(Direction direction, bool running, int clockMs)
+	{
+		if (_conveyorOverlay is not { } o)
+		{
+			return null;
+		}
+		int[] frames = o.Facings[direction];
+		return o.Images[running ? frames[clockMs / o.Ms % frames.Length] : frames[0]];
+	}
+
+	// The nearest whole factor, halves up, or below 1 the nearest whole fraction 1/n, so every file pixel covers the same
+	// number of screen pixels.
+	public static float Snap(float raw) => raw >= 1f ? MathF.Floor(raw + 0.5f) : 1f / Math.Max(1f, MathF.Floor(1f / raw + 0.5f));
+
+	// Whether the field draws the ground shadow under a person: not when its sheet turns it off.
+	public bool PersonShadow(string id) => !_people.TryGetValue(id, out var sheet) || sheet.Entry.Shadow != false;
 
 	private (int W, int H, Color[] Pixels) File(string relative)
 	{
@@ -84,7 +152,9 @@ public sealed partial class Art
 		return image;
 	}
 
-	private int[] Cut(GridImage grid)
+	// `natural`: a battle figure, which stands at the natural multiple when battle_figures gives a reference height and
+	// the entry no scale.
+	private int[] Cut(GridImage grid, bool natural = false)
 	{
 		(int w, _, Color[] pixels) = File(grid.Path);
 		var images = new int[grid.Cells];
@@ -98,6 +168,11 @@ public sealed partial class Art
 			}
 			images[cell] = _s.CreateImage(grid.FrameWidth, grid.FrameHeight, frame);
 			_sizes[images[cell]] = (grid.FrameWidth, grid.FrameHeight);
+			float? fit = grid.Scale ?? (natural && _naturalMultiple > 0 ? -1f : grid.Foot is not null ? 0f : null);
+			if (fit is float f)
+			{
+				_fits[images[cell]] = (f, grid.Foot ?? grid.FrameHeight);
+			}
 		}
 		return images;
 	}
@@ -126,6 +201,8 @@ public sealed partial class Art
 
 	private void LoadFiles(AssetManifest m)
 	{
+		_naturalMultiple = m.ReferenceHeight is int reference ? Math.Max(1, 720 / reference) : 0;
+		_figureShadows = m.FigureShadows;
 		// Kinds first, so an area's tileset takes the objects it leaves out from its kind's.
 		foreach (TilesetEntry t in m.Tilesets.OrderBy(t => t.Kind is null))
 		{
@@ -145,6 +222,7 @@ public sealed partial class Art
 				WallTopAltOneIn = t.WallTopAltOneIn,
 				WallFaceAltOneIn = t.WallFaceAltOneIn,
 				WaterFrameMs = t.WaterFrameMs,
+				Animated = t.Animated.ToDictionary(a => cells[a.Key], a => new Figure(cells, a.Value, new Dictionary<string, FrameRun>())),
 				Door = Object("door", fallback.Door),
 				ChestClosed = Object("chest_closed", fallback.ChestClosed),
 				ChestOpen = Object("chest_open", fallback.ChestOpen),
@@ -178,7 +256,7 @@ public sealed partial class Art
 		}
 		foreach (FigureEntry f in m.Figures)
 		{
-			var figure = new Figure(Cut(f.Image), f.Idle, f.Animations);
+			var figure = new Figure(Cut(f.Image, natural: f.Natural ?? true), f.Idle, f.Animations, f.Shadow ?? m.FigureShadows);
 			if (f.Back)
 			{
 				_backFigures[f.Id] = figure;
@@ -196,13 +274,21 @@ public sealed partial class Art
 		}
 		foreach (BackdropEntry b in m.Backdrops)
 		{
-			string key = b.Kind is not null ? "kind:" + b.Kind : b.Area is not null ? "area:" + b.Area : "encounter:" + b.Encounter;
-			_backdrops[key] = Whole(b.Path);
-			_fromFile["backdrop:" + key] = b.Path;
+			_backdrops[b.Key] = Whole(b.Path);
+			_fromFile["backdrop:" + b.Key] = b.Path;
 		}
 		foreach (EffectEntry e in m.Effects)
 		{
-			_effects[e.Id] = new Figure(Cut(e.Image), e.Run, new Dictionary<string, FrameRun>());
+			int[] frames = Cut(e.Image);
+			if (e.Image.Scale is float scale)
+			{
+				foreach (int frame in frames)
+				{
+					_fits.Remove(frame);
+					_effectScales[frame] = scale;
+				}
+			}
+			_effects[e.Id] = new Figure(frames, e.Run, new Dictionary<string, FrameRun>());
 			_fromFile["effect:" + e.Id] = e.Image.Path;
 		}
 		foreach ((string id, string file) in m.Sprites)
@@ -224,6 +310,85 @@ public sealed partial class Art
 			_fromFile["status_icon:" + id] = file;
 		}
 		LoadVehicleFiles(m);
+		foreach (MapEntry a in m.Maps)
+		{
+			var patches = new List<(string, IReadOnlyDictionary<(int X, int Y), int>)>();
+			foreach (MapPatch p in a.Patches)
+			{
+				(int w, _, Color[] pixels) = File(p.Path);
+				var cells = new Dictionary<(int X, int Y), int>();
+				foreach ((int x, int y) in p.Cells)
+				{
+					var part = new Color[a.Cell * a.Cell];
+					for (int row = 0; row < a.Cell; row++)
+					{
+						Array.Copy(pixels, (y * a.Cell + row) * w + x * a.Cell, part, row * a.Cell, a.Cell);
+					}
+					cells[(x, y)] = _s.CreateImage(a.Cell, a.Cell, part);
+				}
+				patches.Add((p.Flag, cells));
+				_fromFile[$"map:{a.Area}@{p.Flag}"] = p.Path;
+			}
+			(int gw, int gh, _) = File(a.Ground);
+			_areaPictures[a.Area] = new AreaPicture(Whole(a.Ground), a.Above is null ? null : Whole(a.Above), a.Cell, gw / a.Cell, gh / a.Cell, patches);
+			_fromFile["map:" + a.Area] = a.Ground;
+			if (a.Above is not null)
+			{
+				_fromFile[$"map:{a.Area}:above"] = a.Above;
+			}
+		}
+		foreach (ObjectEntry o in m.Objects)
+		{
+			if (!_objects.TryGetValue(o.Area, out List<LoadedObject>? list))
+			{
+				_objects[o.Area] = list = [];
+			}
+			int[] closed = o.Closed is null ? [] : Cut(o.Closed.Image);
+			list.Add(new LoadedObject(o, closed, o.Open is null ? [] : o.Open.Image == o.Closed!.Image ? closed : Cut(o.Open.Image)));
+			if (o.Closed is not null)
+			{
+				_fromFile["object:" + o.Key] = o.Closed.Image.Path;
+			}
+		}
+		foreach (OverlayEntry o in m.VehicleOverlays)
+		{
+			_vehicleOverlays[o.Vehicle ?? ""] = Whole(o.Path);
+			_fromFile["vehicle_overlay" + (o.Vehicle is null ? "" : ":" + o.Vehicle)] = o.Path;
+		}
+		if (m.TileHookOverlay is { } pad)
+		{
+			_tileHookOverlay = new Figure(Cut(pad.Image), pad.Run, new Dictionary<string, FrameRun>());
+			_fromFile["tile_hook_overlay"] = pad.Image.Path;
+		}
+		if (m.ConveyorOverlay is { } belt)
+		{
+			_conveyorOverlay = (belt.Facings, belt.Ms, Cut(belt.Image));
+			_fromFile["conveyor_overlay"] = belt.Image.Path;
+		}
+		if (m.BitmapFontsEnabled == true)
+		{
+			foreach (BitmapFontEntry f in m.BitmapFonts)
+			{
+				(int w, _, Color[] pixels) = File(f.Image);
+				var glyphs = new Dictionary<char, int>();
+				foreach ((char c, GlyphMetrics g) in f.Metrics.Glyphs)
+				{
+					var part = new Color[g.Width * g.Height];
+					for (int y = 0; y < g.Height; y++)
+					{
+						Array.Copy(pixels, (g.Y + y) * w + g.X, part, y * g.Width, g.Width);
+					}
+					glyphs[c] = _s.CreateImage(g.Width, g.Height, part);
+				}
+				_bitmapFonts[(f.Language, f.Role)] = new BitmapFont(f.Image, f.Metrics, f.Scale, glyphs);
+				_fromFile[$"bitmap_font:{f.Language}{(f.Role is { } role ? ":" + AssetManifest.RoleNames[(int)role] : "")}"] = f.Image;
+			}
+		}
+		_fieldLook = m.Field;
+		foreach ((string area, FieldLook look) in m.FieldAreas)
+		{
+			_fieldLooks[area] = look;
+		}
 		if (m.Ui is { Enabled: true } ui)
 		{
 			int? Picture(string? file, string key)
@@ -289,6 +454,16 @@ public sealed partial class Art
 		}
 		return Creature(Noise.Hash(encounter), (clockMs / 280 + offset) % 2);
 	}
+
+	public AreaPicture? AreaPictureOf(string area) => _areaPictures.GetValueOrDefault(area);
+
+	// The objects of an area with a picture of their own, at points and at cells.
+	public IReadOnlyList<LoadedObject> ObjectsIn(string area) => _objects.GetValueOrDefault(area) ?? [];
+
+	public FieldLook FieldLookOf(string area) => _fieldLooks.GetValueOrDefault(area) ?? _fieldLook;
+
+	// The overlay over a vehicle battle's stage: the vehicle's own, else the one for every vehicle.
+	public int? VehicleOverlay(string vehicle) => _vehicleOverlays.TryGetValue(vehicle, out int image) || _vehicleOverlays.TryGetValue("", out image) ? image : null;
 
 	public TileSet Tiles(AreaKind kind, string area) => _areaTiles.GetValueOrDefault(area) ?? _tiles[ThemeOf(kind)];
 }

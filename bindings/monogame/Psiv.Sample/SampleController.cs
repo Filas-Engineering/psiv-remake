@@ -76,6 +76,8 @@ public sealed partial class SampleController
 		_actorIds = [.. session.ActorIds()];
 		ControlsPath = controlsPath;
 		_bindings = Bindings.Load(controlsPath, _log);
+		_field.Flag = session.Flag;
+		_field.MapOf = area => _data.Maps.GetValueOrDefault(area);
 		_assetDir = assetDir;
 		if (assetDir is not null)
 		{
@@ -475,6 +477,12 @@ public sealed partial class SampleController
 				s.ClearImages();
 				// Unknown, so the font is set again even when the reloaded skin names none.
 				_font = "?";
+				// The glyphs' images are gone with the rest.
+				if (_bitmapFont is not null)
+				{
+					s.UseBitmapFont(null);
+					_bitmapFont = null;
+				}
 			}
 			_rebuildArt = false;
 			_art = new Art(s, _assets?.Manifest);
@@ -491,11 +499,13 @@ public sealed partial class SampleController
 		}
 		_scale = _s.Profile().TextSizePercent / 100f;
 		IDrawSurface t = _scale == 1f ? s : new ScaledSurface(s, _scale);
+		UseTextRole(s, TextRole.Menu);
 		_probeSelected = "";
 		_probeTop = 0;
 		_probeCompare = "-";
 		_probeDescription = "-";
 		_dialogueAt = "-";
+		_probeWrapped = "-";
 		_overlayDrawn.Clear();
 		s.Fill(0, 0, s.Width, s.Height, Style.Background);
 		switch (Screen)
@@ -569,12 +579,29 @@ public sealed partial class SampleController
 			"line" => _s.Line()?.Text ?? "-",
 			"speaker" => _s.Line() is { } spoken ? (spoken.SpeakerName.Length > 0 ? spoken.SpeakerName : "none") : "-",
 			"conveyors" => $"{_field.RunningConveyors}/{_field.DrawnConveyors}",
+			"tilehooks" => $"{_field.ActiveTileHooks}/{_field.DrawnTileHooks}",
+			// How the area shows its conveyor belts and tile step hooks: generated, from the field's overlay pictures, or off.
+			"fieldmarks" => _art is null || _s.FieldInfo() is not { } marked ? "-" : _art.FieldLookOf(marked.AreaId) is var ml
+				? $"belts {(!ml.Conveyors ? "off" : _art.FromFile("conveyor_overlay") ? "overlay" : "generated")} pads {(!ml.TileHooks ? "off" : _art.FromFile("tile_hook_overlay") ? "overlay" : "generated")}"
+				: "-",
+			"bitmapfonts" => BitmapFontProbe(),
+			"wrapped" => _probeWrapped,
+			// The characters of the line on screen that the dialogue's bitmap font draws in the fallback font.
+			"fontmissing" => _s.Line() is { } shown && _art?.BitmapFontFor(p.TextLanguage, TextRole.Dialogue) is { } dialogueFont
+				? (dialogueFont.Missing(shown.Text) is { Length: > 0 } missing ? missing : "none") : "-",
 			"reveal" => _s.Line() is { } line ? $"{Revealed(line.Text)}/{line.Text.Length}" : "-",
 			"party" => string.Join(", ", _s.Party().Where(m => m.InLineup).Select(m => m.Name)),
 			"macros" => string.Join(", ", _s.MacroList().Select(m => $"{m.Name}({m.Steps.Count})" + (m.Name == settings.AutoMacro ? "*" : ""))),
 			"area" => _s.FieldInfo()?.AreaName ?? "-",
 			"aboard" => _s.FieldInfo() is { Aboard.Length: > 0 } aboard ? aboard.Aboard : "-",
 			"vehicles" => _field.DrawnVehicles.Count == 0 ? "none" : string.Join(", ", _field.DrawnVehicles.Select(v => $"{v.Key} {v.Value}")),
+			"fieldpicture" => _field.DrawnPicture,
+			// The area tileset's animated tiles: each as TILE>FRAME, the sheet frame it shows now.
+			"animated" => _art is null || _s.FieldInfo() is null ? "-" : string.Join(", ", AreaTiles(_art).Animated.Select(a =>
+				$"{Array.IndexOf(a.Value.Images, a.Key)}>{a.Value.Idle.FrameAt(_clockMs, loop: true)}").DefaultIfEmpty("none")),
+			"fieldlook" => _art is null || _s.FieldInfo() is not { } at ? "-"
+				: _art.FieldLookOf(at.AreaId) is var fl ? $"shadows {OnOff(fl.WallShadows)} foam {OnOff(fl.WaterFoam)}" : "-",
+			"objects" => _field.DrawnObjects.Count == 0 ? "none" : string.Join(", ", _field.DrawnObjects.Order(StringComparer.Ordinal)),
 			"destinations" => TravelProbe(),
 			"panels" => _panels.Count == 0 ? "none" : string.Join(", ", _panels.Select(x => $"{x.Id} {x.Slot} {x.Camera}" + (x.Transition is null ? "" : "~"))),
 			"camera" => (_camera ?? "-") + (_cameraMove is null ? "" : "~"),

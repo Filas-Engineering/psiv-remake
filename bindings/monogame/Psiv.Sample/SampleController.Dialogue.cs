@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Microsoft.Xna.Framework;
 
 using Psiv.Session;
@@ -124,6 +126,7 @@ public sealed partial class SampleController
 		}
 		_dialogueAt = y > s.Height / 2 ? "bottom" : "top";
 		Style.Box(t, x, y, w, DialogueHeight);
+		UseTextRole(t, TextRole.Dialogue);
 		if (_s.Line() is { } line)
 		{
 			int tx = x + 26;
@@ -142,15 +145,17 @@ public sealed partial class SampleController
 			int left = Revealed(line.Text);
 			bool all = left == line.Text.Length;
 			int ty = y + Px(30);
-			foreach (string l in Style.Wrap(t, line.Text, x + w - tx - 30))
+			List<(int Start, int Length)> spans = Style.WrapSpans(t, line.Text, x + w - tx - 30);
+			_probeWrapped = $"{spans.Count}: " + string.Join(" ", spans.Select(span => t.Measure(line.Text.Substring(span.Start, span.Length)).ToString(CultureInfo.InvariantCulture)));
+			foreach ((int start, int length) in spans)
 			{
-				if (left <= 0 && !all)
+				if (left <= start && !all)
 				{
 					break;
 				}
-				t.Text(all ? l : l[..Math.Min(l.Length, left)], tx, ty, Style.Text);
-				left -= l.Length + 1;
-				ty += Px(Style.LineHeight);
+				string l = line.Text.Substring(start, length);
+				t.Text(all ? l : l[..Math.Min(l.Length, left - start)], tx, ty, Style.Text);
+				ty += LineStep(Style.Body);
 			}
 			string hint = T("ui.dialogue.next", Hint(GameAction.Confirm)) + (_s.CanSkip ? "   " + T("ui.dialogue.skip", Hint(GameAction.Skip)) : "");
 			t.Text(hint, x + w - t.Measure(hint, Style.Small) - 58, y + DialogueHeight - Px(32), Style.Dim, Style.Small);
@@ -167,5 +172,6 @@ public sealed partial class SampleController
 				Style.ListRow(t, choice.Options[i], x + 44, y + Px(62) + i * Px(30), 420, i == _cursor, height: Px(28));
 			}
 		}
+		UseTextRole(t, TextRole.Menu);
 	}
 }

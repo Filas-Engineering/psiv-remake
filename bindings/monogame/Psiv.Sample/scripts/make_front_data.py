@@ -5,9 +5,11 @@ can be checked; a lone Twin Ooze, which has no partner to merge with, for an ins
 scrap crusher that answers a basic attack with a blow no member survives, so a fallen machine member stands up after a
 won battle.
 
-Usage: make_front_data.py GAME_DATA CORE_DATA OUT [--magic-defense]
+Usage: make_front_data.py GAME_DATA CORE_DATA OUT [--magic-defense] [--tile-hook]
 
-With --magic-defense the copy's rules.json also sets `magic_defense`, for scripts/magic_defense.txt.
+With --magic-defense the copy's rules.json also sets `magic_defense`, for scripts/magic_defense.txt. With --tile-hook
+the copy's Cogway also has a row of soft ground pads (map character `:`, which a tile step hook names) that play the
+music box once the hall is powered, for scripts/assets_cogway.txt (the placeholder has no tile step hook).
 
 OUT gets game/data and core/data side by side, where game.json's core_data looks. The added encounters, `horde`,
 `lone_ooze` and `crusher`, are in no zone table: the scripts start them with the `dev battle` command.
@@ -22,6 +24,7 @@ from pathlib import Path
 def main():
 	game, core, out = (Path(a) for a in sys.argv[1:4])
 	magic_defense = "--magic-defense" in sys.argv[4:]
+	tile_hook = "--tile-hook" in sys.argv[4:]
 	if out.exists():
 		shutil.rmtree(out)
 	shutil.copytree(game, out / "game" / "data")
@@ -48,6 +51,12 @@ def main():
 	abilities["abilities"].append({"id": "crush", "name": "Crush", "kind": "technique", "cost": 0, "target": "one_enemy",
 		"effects": [{"type": "physical_damage", "power": 999}]})
 	abilities_file.write_text(json.dumps(abilities, indent="\t") + "\n")
+	if tile_hook:
+		cogway_file = out / "game" / "data" / "areas" / "cogway.json"
+		cogway = json.loads(cogway_file.read_text())
+		cogway["map"][5] = cogway["map"][5][:7] + ":::" + cogway["map"][5][10:]
+		cogway["hooks"].append({"id": "cogway_pads", "trigger": "step", "tile": ":", "event": "cogway_jukebox", "require_flag": "cogway.open"})
+		cogway_file.write_text(json.dumps(cogway, indent="\t") + "\n")
 	if magic_defense:
 		rules_file = out / "core" / "data" / "rules.json"
 		rules = json.loads(rules_file.read_text())

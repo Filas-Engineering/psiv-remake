@@ -27,6 +27,8 @@ public interface IDrawSurface
 	void ClearImages();
 	// Text in this font file, every size scaled, from now on; null goes back to the system font.
 	void UseFont(string? file, float scale);
+	// Text in this bitmap font from now on, its missing glyphs in the font UseFont set; null goes back to that font alone.
+	void UseBitmapFont(BitmapFont? font);
 }
 
 public static class Style
@@ -191,29 +193,59 @@ public static class Style
 		return text + "...";
 	}
 
-	public static List<string> Wrap(IDrawSurface s, string text, int width, int size = Body)
+	public static List<string> Wrap(IDrawSurface s, string text, int width, int size = Body) =>
+		[.. WrapSpans(s, text, width, size).Select(span => text.Substring(span.Start, span.Length))];
+
+	// The lines as spans of the text: broken at spaces, which no line keeps, and inside a word wider than the line (text
+	// without spaces, such as Japanese) between characters, keeping closing punctuation on the line it closes.
+	public static List<(int Start, int Length)> WrapSpans(IDrawSurface s, string text, int width, int size = Body)
 	{
-		var lines = new List<string>();
+		var lines = new List<(int, int)>();
+		int at = 0;
 		foreach (string paragraph in text.Split('\n'))
 		{
-			string line = "";
+			int lineStart = at, lineEnd = at;
+			int wordStart = at;
 			foreach (string word in paragraph.Split(' '))
 			{
-				string candidate = line.Length == 0 ? word : line + " " + word;
-				if (line.Length > 0 && s.Measure(candidate, size) > width)
+				if (lineEnd == lineStart)
 				{
-					lines.Add(line);
-					line = word;
+					lineStart = wordStart;
 				}
-				else
+				else if (s.Measure(text[lineStart..(wordStart + word.Length)], size) > width)
 				{
-					line = candidate;
+					lines.Add((lineStart, lineEnd - lineStart));
+					lineStart = wordStart;
 				}
+				// A word wider than the line on its own is cut where it stops fitting.
+				while (wordStart + word.Length > lineStart && s.Measure(text[lineStart..(wordStart + word.Length)], size) > width)
+				{
+					int cut = lineStart + 1;
+					while (cut < wordStart + word.Length && s.Measure(text[lineStart..(cut + 1)], size) <= width)
+					{
+						cut++;
+					}
+					while (cut < wordStart + word.Length && Closing.Contains(text[cut]))
+					{
+						cut++;
+					}
+					if (cut >= wordStart + word.Length)
+					{
+						break;
+					}
+					lines.Add((lineStart, cut - lineStart));
+					lineStart = cut;
+				}
+				lineEnd = wordStart + word.Length;
+				wordStart = lineEnd + 1;
 			}
-			lines.Add(line);
+			lines.Add((lineStart, lineEnd - lineStart));
+			at += paragraph.Length + 1;
 		}
 		return lines;
 	}
+
+	private const string Closing = "、。，．・：；？！ー）」』】〉》〕｝,.!?:;)]}";
 }
 
 // Another surface with every text size scaled, for the profile's text size; the layout scales its own spacing.
@@ -236,6 +268,7 @@ public sealed class ScaledSurface(IDrawSurface inner, float scale) : IDrawSurfac
 	public Color[] ReadImage(string path, out int width, out int height) => inner.ReadImage(path, out width, out height);
 	public void ClearImages() => inner.ClearImages();
 	public void UseFont(string? file, float scale) => inner.UseFont(file, scale);
+	public void UseBitmapFont(BitmapFont? font) => inner.UseBitmapFont(font);
 }
 
 public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, FontSystem fonts) : IDrawSurface, IDisposable
@@ -247,6 +280,7 @@ public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, Fo
 	private readonly FontSystem _system = fonts;
 	private FontSystem _font = fonts;
 	private float _fontScale = 1f;
+	private BitmapFont? _bitmap;
 
 	private static Texture2D CreatePixel(GraphicsDevice device)
 	{
@@ -260,9 +294,22 @@ public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, Fo
 
 	public void Fill(int x, int y, int w, int h, Color color) => batch.Draw(_pixel, new Rectangle(x, y, w, h), color);
 
-	public void Text(string text, int x, int y, Color color, int size = Style.Body) => _font.GetFont(FontSize(size)).DrawText(batch, text, new Vector2(x, y), color);
+	public void Text(string text, int x, int y, Color color, int size = Style.Body)
+	{
+		if (_bitmap is null)
+		{
+			_font.GetFont(FontSize(size)).DrawText(batch, text, new Vector2(x, y), color);
+			return;
+		}
+		_bitmap.Layout(text, size, run => FallbackWidth(run, size), (image, gx, gy, w, h) => Image(image, x + gx, y + gy, w, h, color),
+			(run, fx, fy) => _font.GetFont(FontSize(size)).DrawText(batch, run, new Vector2(x + fx, y + fy), color));
+	}
 
-	public int Measure(string text, int size = Style.Body) => (int)_font.GetFont(FontSize(size)).MeasureString(text).X;
+	public int Measure(string text, int size = Style.Body) => _bitmap is null ? FallbackWidth(text, size) : _bitmap.Layout(text, size, run => FallbackWidth(run, size));
+
+	private int FallbackWidth(string text, int size) => (int)_font.GetFont(FontSize(size)).MeasureString(text).X;
+
+	public void UseBitmapFont(BitmapFont? font) => _bitmap = font;
 
 	private int FontSize(int size) => Math.Max(1, (int)MathF.Round(size * _fontScale));
 
@@ -413,9 +460,17 @@ public sealed class RecordingSurface : IDrawSurface
 		FrameText.Add(text);
 		Mix(2, x, y, color.PackedValue, size);
 		Mix(text);
+		// A bitmap font's glyphs are pictures: each folds in as an image, its fallback runs as their position and text.
+		_bitmap?.Layout(text, size, run => FallbackWidth(run, size), (image, gx, gy, w, h) => Image(image, x + gx, y + gy, w, h, color), (run, fx, fy) =>
+		{
+			Mix(8, x + fx, y + fy);
+			Mix(run);
+		});
 	}
 
-	public int Measure(string text, int size = Style.Body) => text.Length * (int)MathF.Round(size * _fontScale) * 11 / 20;
+	public int Measure(string text, int size = Style.Body) => _bitmap is null ? FallbackWidth(text, size) : _bitmap.Layout(text, size, run => FallbackWidth(run, size));
+
+	private int FallbackWidth(string text, int size) => text.Length * (int)MathF.Round(size * _fontScale) * 11 / 20;
 
 	public int CreateImage(int width, int height, Color[] pixels)
 	{
@@ -471,6 +526,19 @@ public sealed class RecordingSurface : IDrawSurface
 		_fontScale = file is null ? 1f : scale;
 		Mix(6, (long)(_fontScale * 1000));
 		Mix(file ?? "");
+	}
+
+	private BitmapFont? _bitmap;
+
+	public void UseBitmapFont(BitmapFont? font)
+	{
+		if (font == _bitmap)
+		{
+			return;
+		}
+		_bitmap = font;
+		Mix(7);
+		Mix(font?.ToString() ?? "");
 	}
 }
 
@@ -544,6 +612,10 @@ public sealed class CanvasSurface(int width, int height) : IDrawSurface
 	public void ClearImages() => _images.Clear();
 
 	public void UseFont(string? file, float scale)
+	{
+	}
+
+	public void UseBitmapFont(BitmapFont? font)
 	{
 	}
 }

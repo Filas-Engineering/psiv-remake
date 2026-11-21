@@ -36,6 +36,8 @@ public sealed partial class SampleController
 	private readonly BattleUi _battle = new();
 	private readonly BattleTimeline _timeline = new();
 	private readonly BattleShow _show = new();
+	// The terrain of the cell the party stood on when the battle began (floor, water, soft), for the backdrop.
+	private string _battleTerrain = "";
 	// Rounds whose playback was compared with the session as it ended, and what differed.
 	private int _syncChecks;
 	private readonly List<string> _syncProblems = [];
@@ -96,6 +98,13 @@ public sealed partial class SampleController
 		_battle.Auto = false;
 		_timeline.Clear();
 		_show.Start(_s.Combatants(), _s.BattleInfo()?.PartyCount ?? 0, _s.BattleInfo()?.FormationSize ?? 0);
+		_battleTerrain = _s.Field() is { } view ? (view.Cell(view.Info.LeaderX, view.Info.LeaderY) & CellFlags.TerrainMask) switch
+		{
+			CellFlags.Water => "water",
+			CellFlags.Soft => "soft",
+			CellFlags.Floor => "floor",
+			_ => "",
+		} : "";
 		string enemies = ListText(_s.Combatants().Where(c => c.Side == Side.Enemy).Select(c => c.Label));
 		BattleStep intro = Context().Step(StepKind.Intro, enemies, "intro " + enemies, []);
 		intro.Lines.Add(T("ui.battle.log.enemies", enemies));
@@ -416,6 +425,10 @@ public sealed partial class SampleController
 		"battlesync" => $"{_syncChecks} checked, " + (_syncProblems.Count == 0 ? "all match" : string.Join("; ", _syncProblems)),
 		"battleshake" => _probeShake.ToString(CultureInfo.InvariantCulture),
 		"flash" => _probeFlash ? "on" : "off",
+		"backdrop" => _probeBackdrop,
+		"battleoverlay" => _probeOverlay,
+		"figuresizes" => _probeBodies,
+		"effectsize" => _probeEffectSize,
 		"shown" => string.Join(", ", _show.All.Select((c, i) => $"{(i < _battle.Labels.Count ? _battle.Labels[i] : "?")} {c.Hp}/{c.MaxHp} {c.Tp}/{c.MaxTp}" +
 			(c.Statuses.Count > 0 ? " " + string.Join(" ", c.Statuses) : "") + (c.Alive ? "" : " down"))),
 		"victory" => _probeVictory,
