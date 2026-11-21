@@ -12,7 +12,11 @@
 
 namespace rules {
 
+// The character's `level_stats` up to the table's end, then its last row plus growth per level; base plus growth
+// without a table.
 Stats statsAtLevel(const CharacterDef& character, int level);
+// The character's `experience_table` up to its end, then the formula's curve.
+int experienceToNextLevel(const CharacterDef& character, int level);
 
 // Level stats plus equipment bonuses.
 Stats memberStats(const Database& db, const PartyMember& member);

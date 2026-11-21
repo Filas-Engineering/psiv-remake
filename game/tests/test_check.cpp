@@ -127,6 +127,15 @@ TEST(checkFollowsTheStartAcrossWalls) {
 	CHECK_EQ(r.problems.size(), 5u);
 }
 
+// Standing on an exit leaves the area, so a chest whose only open side is an exit cannot be opened.
+TEST(anExitCellIsNoPlaceToOpenAnObjectFrom) {
+	const std::string dir = copyData("ledge", {"ledge.json"});
+	replaceIn(dir + "/game.json", "\"area\": \"tidewater\",\n\t\t\"marker\": \"start\"", "\"area\": \"ledge\",\n\t\t\"marker\": \"start\"");
+	const CheckReport r = checkData(DataDirectories{dir, "../core/data"});
+	CHECK_EQ(count(r, "/areas/ledge.json", 16, "check.object_not_reached"), 1);
+	CHECK_EQ(count(r, "/areas/ledge.json", 13, "check.exit_not_reached"), 0);
+}
+
 TEST(checkKeepsGoingPastBrokenBattleData) {
 	const std::string dir = copyData("core", {"islet.json", "rock.json"});
 	const std::string core = dir + "/../core";

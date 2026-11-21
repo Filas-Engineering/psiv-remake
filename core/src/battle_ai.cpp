@@ -185,9 +185,15 @@ int Battle::aiTarget(int actor, const AbilityDef& ability, const AiTarget& targe
 			}
 		}
 	}
+	const bool transforms = ability.hasEffect(EffectKind::Transform);
+	auto canTransform = [this](int index) {
+		const EnemyDef* def = isParty(index) ? nullptr : db_->enemy(combatants_[index].defId);
+		return def && !def->transformsInto.empty();
+	};
 	int best = actor;
 	for (int ally : candidates) {
-		if (lowerHpShare(combatants_[ally], combatants_[best])) {
+		const bool better = transforms && canTransform(ally) != canTransform(best) ? canTransform(ally) : lowerHpShare(combatants_[ally], combatants_[best]);
+		if (better) {
 			best = ally;
 		}
 	}

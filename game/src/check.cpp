@@ -196,10 +196,13 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 			found.add(file, h.line, "check.hook_not_reached", {h.id});
 		}
 	}
+	// Standing on an exit or a gangway leaves the area, so the party cannot face an object from there.
+	auto standable = [&](Cell c) {
+		return reached.count(c) && !exitCells.count(c) && std::find(area.gangway.begin(), area.gangway.end(), c) == area.gangway.end();
+	};
 	for (const auto& [cell, solid] : solids) {
 		const Cell c = cell;
-		const bool besideReached = reached.count({c.x, c.y - 1}) || reached.count({c.x + 1, c.y}) || reached.count({c.x, c.y + 1}) ||
-			reached.count({c.x - 1, c.y});
+		const bool besideReached = standable({c.x, c.y - 1}) || standable({c.x + 1, c.y}) || standable({c.x, c.y + 1}) || standable({c.x - 1, c.y});
 		if (!besideReached) {
 			found.add(file, solid.line, "check.object_not_reached", {solid.what});
 		}

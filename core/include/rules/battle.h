@@ -147,6 +147,8 @@ private:
 
 	bool surprised(Side side, int round) const;
 	Attacker attackerOf(int actor) const;
+	// The target's affinity for an elemental hit, Defend included.
+	int elementAffinity(const Combatant& target, const Element& element) const;
 	const StatusDef* statusWith(int actor, StatusAction action) const;
 	bool countsAsDown(int index) const;
 	void drawDrops();

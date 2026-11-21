@@ -40,8 +40,15 @@ void putOn(PartyMember& member, const Database& db, const EquipmentDef& piece, E
 }
 
 Stats statsAtLevel(const CharacterDef& character, int level) {
-	const int gained = std::clamp(level, 1, formulas::kMaxLevel) - 1;
-	const Stats& b = character.base;
+	const int capped = std::clamp(level, 1, formulas::kMaxLevel);
+	const int rows = static_cast<int>(character.levelStats.size());
+	if (rows >= capped) {
+		Stats s = character.levelStats[static_cast<std::size_t>(capped - 1)];
+		s.level = capped;
+		return s;
+	}
+	const int gained = rows > 0 ? capped - rows : capped - 1;
+	const Stats& b = rows > 0 ? character.levelStats.back() : character.base;
 	const Stats& g = character.growth;
 	Stats s;
 	s.maxHp = b.maxHp + g.maxHp * gained;
@@ -54,8 +61,15 @@ Stats statsAtLevel(const CharacterDef& character, int level) {
 	s.critical = b.critical + g.critical * gained;
 	s.evasion = b.evasion + g.evasion * gained;
 	s.magicDefense = b.magicDefense + g.magicDefense * gained;
-	s.level = gained + 1;
+	s.level = capped;
 	return s;
+}
+
+int experienceToNextLevel(const CharacterDef& character, int level) {
+	if (level >= 1 && level <= static_cast<int>(character.levelExperience.size())) {
+		return character.levelExperience[static_cast<std::size_t>(level - 1)];
+	}
+	return formulas::experienceToNextLevel(level);
 }
 
 Stats memberStats(const Database& db, const PartyMember& member) {
@@ -252,7 +266,7 @@ LevelUp grantExperience(PartyMember& member, const Database& db, int experience)
 	member.experience += std::max(0, experience);
 	const int startLevel = member.level;
 	while (member.level < formulas::kMaxLevel) {
-		const int needed = formulas::experienceToNextLevel(member.level);
+		const int needed = experienceToNextLevel(*character, member.level);
 		if (member.experience < needed) {
 			break;
 		}

@@ -110,8 +110,9 @@ int Battle::tryCombo(const std::vector<int>& order, std::size_t index, std::vect
 	return 0;
 }
 
-// Every participant pays for its component. Damage adds up each participant's stat for its component (mental for a
-// technique, strength otherwise) and each component's damage power; other effects read the average stats.
+// Every participant pays for its component. Damage adds up each participant's stat for its component (its attack_stat,
+// else mental for a technique and strength otherwise) and each component's damage power; other effects read the
+// average stats.
 Battle::Attacker Battle::comboTeam(const std::vector<int>& participants, const std::vector<std::string>& components, const AbilityDef& combo, std::vector<Event>& out) {
 	Attacker team;
 	team.combo = true;
@@ -124,7 +125,7 @@ Battle::Attacker Battle::comboTeam(const std::vector<int>& participants, const s
 		team.mental += member.mental;
 		team.dexterity += member.dexterity;
 		team.critical += member.critical;
-		team.comboAttack += component.kind == AbilityKind::Technique ? member.mental : member.strength;
+		team.comboAttack += component.attackStat ? combatants_[actor].effective(*component.attackStat) : component.kind == AbilityKind::Technique ? member.mental : member.strength;
 		team.comboBonus += damagePower(component);
 	}
 	const int count = static_cast<int>(participants.size());

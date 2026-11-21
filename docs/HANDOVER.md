@@ -18,9 +18,9 @@ Planning documents, engine-neutral C++17 libraries and tooling for a 3D remake o
 | `docs/dev-tools.md` | The MonoGame sample's developer tools (`--dev`): console commands, data hot reload and its limits, overlays, the panel and scene previewer, frame step and speed, the dev mark that marks games they touch, and the session API behind them |
 | `docs/assets.md` | The MonoGame sample's asset directory: the manifest that puts pictures and sounds in place of the generated ones, the battle presentation table, the export, the check and hot reload |
 | `docs/research/original-battle-rules.md` | The original's battle rules as read from the disassembly: AI, targeting, combinations, rewards, statuses, end conditions, vehicles |
-| `core/` | Battle rules library (`librules.a`), placeholder data, `battle_cli`, 233 tests |
+| `core/` | Battle rules library (`librules.a`), placeholder data, `battle_cli`, 239 tests |
 | `events/` | Event script format, compiler and resumable interpreter, `event_cli`, 102 tests |
-| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles, vehicles in the field, travel (ports between regions, returns to a town, the way out of a dungeon), the field menu's party order, macro editor (and make macro from the combo log), member detail, equipment comparison, bag sorting, descriptions, difficulty presets, ambient party talk, developer commands and the game as save text. `game_cli` (play, bot, `--check` for data), 138 tests |
+| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles, vehicles in the field, travel (ports between regions, returns to a town, the way out of a dungeon), the field menu's party order, macro editor (and make macro from the combo log), member detail, equipment comparison, bag sorting, descriptions, difficulty presets, ambient party talk, developer commands and the game as save text. `game_cli` (play, bot, `--check` for data), 143 tests |
 | `tools/text/` | Line database, glossary, rename review, localization export and the descriptions report (Python, 101 tests) |
 | `tools/maps/` | Tiled maps to area files and back, and the canonical area text every area file is kept in (Python, 54 tests) |
 | `acceptance/` | The spec's automatable checks, run against the libraries. `report.md` maps every requirement to a status |
@@ -63,9 +63,9 @@ Bringing in real data: [`data-import.md`](data-import.md). Pictures and sounds f
 
 | Suite | Result |
 | --- | --- |
-| core | 233 tests pass |
+| core | 239 tests pass |
 | events | 102 tests pass |
-| game | 138 tests pass, data check passes, area files match their Tiled sources, scripted playthrough, the vehicle and travel script and the Ashen Fells script match their expected transcripts, bot finishes both encounter modes on the main route and the kiln route |
+| game | 143 tests pass, data check passes, area files match their Tiled sources, scripted playthrough, the vehicle and travel script and the Ashen Fells script match their expected transcripts, bot finishes both encounter modes on the main route and the kiln route |
 | text tooling | 101 tests pass |
 | map tooling | 54 tests pass (every area file in the canonical form) |
 | acceptance | PASS 26, FAIL 0, NOT IMPLEMENTED 12, NOT AUTOMATABLE 26 |
@@ -78,7 +78,8 @@ Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch
 
 ## Versions
 
-* Rules version 13 and event schema 7 (`core/include/rules/version.h`). Version 13 makes the affinity divisor the normal affinity (at a divisor other than 100 ordinary hits were halved and labeled resisted); every other option of the round is data with today's behavior as the default. The event's `element` is now an element id, its text form unchanged.
+* Rules version 14 and event schema 7 (`core/include/rules/version.h`). Version 14 makes a combination component's `attack_stat` the stat its participant adds to the combination's attack; no placeholder battle changes. Battle record format 8, C API `PSIV_ABI_VERSION` 12 and save schema 9 are unchanged this round.
+* Before that: rules version 13 and event schema 7. Version 13 makes the affinity divisor the normal affinity (at a divisor other than 100 ordinary hits were halved and labeled resisted); every other option of the round is data with today's behavior as the default. The event's `element` is now an element id, its text form unchanged.
 * Battle record format 8 (`piece` lines for bag pieces members can cast, and free formation places as `enemy -`). `parseRecord` still reads 3 to 7.
 * C API `PSIV_ABI_VERSION` 12 (library version 0.11.0, 149 `PSIV_API` functions): `psiv_elements`, element indexes past holy for declared elements, five structs grown at their ends, two enum values appended (`bindings/README.md`).
 * Save schema 9 (`PSR-SAVE 9`: world chunk 3 adds steps in the area, once hooks fired and a script's area music). Schemas 1 to 8 load; a schema 8 save simply lacks those lines. Loading now checks the save against the data (`game.refuse.save_invalid`).
@@ -93,6 +94,15 @@ Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch
 ## Optional rules, field and script options
 
 Built this round, each optional data with today's behavior as the default, so every existing data file loads unchanged and the three golden transcripts, the bot's runs and every seed are byte-identical; `docs/research/feature-checklist.md` rows R5 to R28 say what each is, what exercises it and what the research says. In `core/`: `rules.json` `ambush_opening` (R5) and `elements` (R17, the placeholder's `tide`), `merges_with`, `transform` and `after_turns` (R6), free formation places (`null`, R7), `split` and `self_destruct` (R8), a stat change's `power` (R9) and stat `magic_defense` (R15), items' `consumed` and equipment's `use_from_bag` (R10), `teachable` (R11), equipment `affinities` and drops (R12), `attack_stat` (R14), enemies' `attack_element` (R16), and the divisor fix (R13, rules version 13). In `events/`: `money give|take` and the `money` test, `equip`, `unequip`, `music area`. In `game/`: zone `grace_steps`, `step_chance`, `vehicle_step_chance`, `safe_near_exits` (R18), gated exits and ports (R19), hooks solid while active (R20), once flag hooks (R24), tile step hooks and conveyors (R25), `nameless_actors` (R26), the terminal naming joined enemies (R27), save schema 9 and the save checked against the data (R28); sand stays soft ground (R22). The placeholder content is new core enemies, items, pieces and techniques and the Cogway (`game/data/events/cogway.ev`, reached by developer warps); `bindings/monogame/Psiv.Sample/scripts/cogway.txt` shows it. Every area file is in the canonical form `tools/maps` writes, which its tests check. The status screen lists each element the data knows with a non-normal affinity, which replaces the four fixed elements that left out holy.
+
+## Rule fixes and options (this round)
+
+Each new option is optional data with today's behavior as the default; the three golden transcripts, the bot's runs, the acceptance report and every seed are unchanged. `docs/research/feature-checklist.md` rows R18 and R29 to R36 say what each is, what tests it and what the research says.
+
+* Fixed in `game/`: a zone's `grace_steps` stopped every random battle (the area's steps stopped counting at the grace while the roll waits for a step past it); the first roll is now on step N + 1, on foot and aboard, tested over seeds for 1 in `step_chance` and 1 in `vehicle_step_chance`. `safe_near_exits` and the vehicle chance had no such mistake.
+* In `core/`: `rules.json` `neutral_affinity` (the affinity of a hit without an element), `defend_affinity` and `defend_elemental`; `physical_damage` `element`; `transform` aimed at other combatants, items included; characters' `experience_table` and `level_stats`; `attack_stat` in combinations (rules version 14). The research does not make an element-less hit half the divisor, and its Defend (physical only) is the default.
+* In `game/`: a chest's flag hooks fire as it opens; the data check no longer counts exit and gangway cells as places to stand beside an object; the member detail and rewards follow the tables; the text keys `ui.battle.log.instant_defeat`, `_immune`, `_resisted` and `ui.battle.log.self_destruct` in `en` and `ja`, which the sample's battle log does not use yet.
+* No C API or C# change.
 
 ## Battle rules that match the original
 

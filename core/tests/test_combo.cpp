@@ -468,3 +468,21 @@ TEST(anEnemyRecipeNeedsEveryPartStanding) {
 	const std::optional<Event> alone = firstBy(events, EventType::ActionStarted, kFirstEnemy);
 	CHECK(alone && alone->ability == "talon");
 }
+
+// A component's attack_stat is the stat its participant adds to a combination's attack.
+TEST(aComponentsAttackStatCountsInTheCombination) {
+	Database db = orderedData("");
+	db.abilities["spark"].attackStat = Stat::Defense;
+	Battle battle = makeBattle(db, {"gel_mite"}, 3);
+	battle.combatant(kFirstEnemy).stats.maxHp = battle.combatant(kFirstEnemy).hp = 5000;
+	battle.combatant(kMystic).stats.defense = 300;
+	const std::vector<Event> events = sparkThenGust(battle);
+	CHECK_EQ(ofType(events, EventType::ComboTriggered).size(), std::size_t(1));
+	const std::optional<Event> hit = firstBy(events, EventType::DamageDealt, kMystic);
+	const Combatant& mite = battle.combatant(kFirstEnemy);
+	const int attack = 300 + battle.combatant(kScout).effective(Stat::Mental);
+	const int bonus = db.abilities.at("spark").effects.front().power + db.abilities.at("gust").effects.front().power;
+	const int guard = mite.effective(Stat::Mental);
+	CHECK(hit && hit->amount >= formulas::damage(attack, guard, bonus, mite.affinity(Element::Shock), formulas::kSpreadMin));
+	CHECK(hit && hit->amount <= formulas::damage(attack, guard, bonus, mite.affinity(Element::Shock), formulas::kSpreadMax));
+}

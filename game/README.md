@@ -71,7 +71,7 @@ Commands (one per line; `#` starts a comment):
 
 `game_cli --check DIR [--core DIR]` (`checkData` in `check.h`) loads a data directory the way the game does, with `loadGameDataPartly`, which keeps whatever loaded and goes on reading the game's own files when the battle data has problems. It prints every problem as `file:line: text` (a path you can open; line 0 or none when the problem is about a whole file or a table key), then counts of what loaded (core: statuses, abilities, items, equipment, characters, vehicles, enemies, encounters, combos, difficulties, macros, text keys; game: areas, markers, exits, hooks, shops, rest points, chests, zones, scripts, events, flags, variables, actors, prices and journal entries; per language: game text keys, descriptions and dialogue strings), and exits 1 on any problem. When problems stop the load before the scripts are compiled, it says which checks did not run.
 
-The loader's own checks include the presentation data (a camera's marker must exist in its area, a followed id must be an actor or a character, every music id must be one of `presentation.audio`, music may name only encounters the battle data has, durations name known actions) and the descriptions (a `desc.*` key must name a kind and an id the battle data has; a missing description is no problem). On top of them, `crossCheck` reports: two solid things (interact hooks, shops, rest points, chests, ports) on one cell; a marker, exit, step hook or spawn point on a solid cell; a hook id or zone id used twice in an area, or a chest id used in two areas; a zone with `from` past `to`, reaching off the map, or overlapping another; a shop with nothing in stock; exits, markers, step hooks and solid things the party cannot walk to (or stand beside) from any marker an exit, a script warp or the start leads to, walking only on floor (in a `field` area also over terrain a vehicle of `game.json` crosses) and never through another exit, ports' markers and towns' arrival markers counting as ways in; an area nothing leads into, or one the start area cannot reach through exits (a script warp's target counts as reached, and any port's area once another port's is). When the loader did not get as far as its references, `crossCheck` also checks exit targets and every language's `area.<id>`. Area problems from the loader's own reference check also carry the area file and line. [`docs/data-import.md`](../docs/data-import.md) is the guide for a team converting its own data.
+The loader's own checks include the presentation data (a camera's marker must exist in its area, a followed id must be an actor or a character, every music id must be one of `presentation.audio`, music may name only encounters the battle data has, durations name known actions) and the descriptions (a `desc.*` key must name a kind and an id the battle data has; a missing description is no problem). On top of them, `crossCheck` reports: two solid things (interact hooks, shops, rest points, chests, ports) on one cell; a marker, exit, step hook or spawn point on a solid cell; a hook id or zone id used twice in an area, or a chest id used in two areas; a zone with `from` past `to`, reaching off the map, or overlapping another; a shop with nothing in stock; exits, markers, step hooks and solid things the party cannot walk to (or stand beside, an exit or gangway cell not counting, since standing there leaves the area) from any marker an exit, a script warp or the start leads to, walking only on floor (in a `field` area also over terrain a vehicle of `game.json` crosses) and never through another exit, ports' markers and towns' arrival markers counting as ways in; an area nothing leads into, or one the start area cannot reach through exits (a script warp's target counts as reached, and any port's area once another port's is). When the loader did not get as far as its references, `crossCheck` also checks exit targets and every language's `area.<id>`. Area problems from the loader's own reference check also carry the area file and line. [`docs/data-import.md`](../docs/data-import.md) is the guide for a team converting its own data.
 
 ## How an engine drives a frame
 
@@ -212,8 +212,8 @@ Party members are not tracked. The world keeps one place for the party, the lead
 * `kind`: `town` (no random battles), `field` or `dungeon` (M6 runs from entry to the boss's end). Vehicles move only in `field` areas, and a return to a town does not work in a `dungeon`, where the way out does.
 * `encounter_mode` (ENC-002): `visible` or `random`; `SessionOptions::encounterMode` overrides it for every area, which is how the bot compares the two.
 * Hook `trigger`: `interact` (the cell the leader faces; the cell is solid), `step` (entering the cell), `load` (area entry, once per entry) or `flag` (whenever control is in the field and the flags hold; needs `block_flag`). `require_flag` and `block_flag` gate every hook.
-* Shops, rest points, chests and interact hooks stand on solid cells, interacted with from the next cell while facing them. Shops, rest points, chests and step hooks stand on floor; an interact hook may stand on any cell of the map, so a sign on a wall or a ladder up a cliff is used from the floor beside it (FLD-030). The data check reports one with no floor beside it that the party can reach. A chest's flag is set when opened and never cleared.
-* Visible zone values are the ENC-012/013 defaults when left out. Random thresholds are drawn uniformly between `min_steps` and `max_steps` (the original's distribution is ENC-005). Optional in `random`: `grace_steps` (0 to 1000: no roll for that many steps after entering the area; the save keeps the count), `step_chance` (1 to 10000: each step starts a battle with a 1 in N chance from the encounter stream, in place of the counter), `vehicle_step_chance` (the N aboard a vehicle; without it aboard uses `step_chance`), and `safe_near_exits` (no roll while the leader stands on or next to an exit). A tool-assisted run's ten safe steps after each area change and blocked battles near towns (published-mechanics.md, ENC-005, medium) fit `grace_steps` and `safe_near_exits`; the original's step distribution stays to measure, so the counter remains the default.
+* Shops, rest points, chests and interact hooks stand on solid cells, interacted with from the next cell while facing them. Shops, rest points, chests and step hooks stand on floor; an interact hook may stand on any cell of the map, so a sign on a wall or a ladder up a cliff is used from the floor beside it (FLD-030). The data check reports one with no floor beside it that the party can reach. A chest's flag is set when opened and never cleared, and the area's flag hooks run as part of opening it.
+* Visible zone values are the ENC-012/013 defaults when left out. Random thresholds are drawn uniformly between `min_steps` and `max_steps` (the original's distribution is ENC-005). Optional in `random`: `grace_steps` (0 to 1000: no roll for that many steps after entering the area, so the first roll is on the next step; the save keeps the count), `step_chance` (1 to 10000: each step starts a battle with a 1 in N chance from the encounter stream, in place of the counter), `vehicle_step_chance` (the N aboard a vehicle; without it aboard uses `step_chance`), and `safe_near_exits` (no roll while the leader stands on or next to an exit). A tool-assisted run's ten safe steps after each area change and blocked battles near towns (published-mechanics.md, ENC-005, medium) fit `grace_steps` and `safe_near_exits`; the original's step distribution stays to measure, so the counter remains the default.
 
 ### Event scripts and text
 
@@ -315,6 +315,19 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 
 ## Changes in this round
 
+* Fix: with a zone's `grace_steps` set no random battle ever started, because the steps in the area stopped counting at the grace and the roll waits for a step past it. They now count to one past the longest grace of the area's zones, so the first roll comes on step N + 1, on foot and aboard (R18). A save that stopped at the grace goes on counting.
+* Opening a chest runs the area's flag hooks as part of the same interaction (`interact()` settles the field after it), so a hook that waits on the chest's flag starts before control returns instead of at the next menu close; each fires once as before (a block flag the event sets, or `once`). The three golden transcripts are unchanged, so it is not an option.
+* The data check no longer counts an exit or gangway cell as a place to stand beside a solid thing: standing there leaves the area (`check.object_not_reached`). The placeholder areas pass.
+* The member detail's next level and the levels rewards bring follow a character's `experience_table` and `level_stats` (`../core/README.md`, party.json).
+* Text keys `ui.battle.log.instant_defeat`, `ui.battle.log.instant_defeat_immune`, `ui.battle.log.instant_defeat_resisted` and `ui.battle.log.self_destruct` in `en` and `ja`, for a front end's battle log (each takes `{0}`, the combatant).
+* Builds against core rules version 14 (`../core/README.md`). Saves stay schema 9.
+
+### Changes a host must make
+
+* None in the API. A host that counted on a chest's flag hooks waiting for a menu close sees them start from `interact()`.
+
+## Changes in the round before
+
 * Field and script options, each optional with today's behavior as the default: exits with `require_flag`/`block_flag` and ports with `block_flag`; hooks with `once`, `tile` and `solid`; `conveyors`; zone `random` `grace_steps`, `step_chance`, `vehicle_step_chance`, `safe_near_exits`; `nameless_actors`; the script commands `money give|take`, `equip`, `unequip`, `music area` and the `money` test (`../events/FORMAT.md`). See "Areas" and "game.json".
 * The status screen (`memberDetail`) lists each element the data knows whose affinity is not normal for the member, in the data's order, in place of four fixed ones; `elementName` names an element in the profile's language (`name.element.<id>`, required for each element `rules.json` declares). Bag pieces with `use_from_bag` reach battles; equipment drops go to the bag.
 * Save schema 9 (world chunk 3), and loading checks the save against the data (see "Saves").
@@ -327,7 +340,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * `area.h`: `Exit::requireFlag`, `blockFlag`; `Hook::once`, `tile`, `solidWhileActive`; `Port::blockFlag`; `Conveyor`, `Area::conveyors`, `passable`, `stepHookAt`; `RandomRules::graceSteps`, `stepChance`, `vehicleStepChance`, `safeNearExits`; `portOpen`, `exitOpen`. `data.h`: `GameConfig::namelessActors`, `nameless()`. `world.h`: `World::areaSteps`, `onceHooks`, `areaMusic`. `save.h`: `kSaveSchemaVersion` 9. `session.h`: `areaMusic()`, `elementName()`, `MemberDetail::affinities` is a list of (element, affinity).
 * Text tables: every language needs `game.money_given`, `game.money_taken`, `game.refuse.save_invalid` and `name.element.<id>` for each declared element. Problem keys `data.bad_direction`, `data.bad_hook_solid`, `data.bad_hook_tile`, `data.element_name_missing`, `data.nameless_has_name`, `data.nameless_not_actor`, `data.once_flag_hooks_only`, `data.solid_interact_hooks_only`, `data.tile_hook_has_no_cell`, `data.tile_step_hooks_only`.
 
-## Changes in the round before
+## Changes two rounds ago
 
 * Party and world features from `docs/research/feature-checklist.md`: two hands (P10) through core and the session (`equip` and `equipPreview` with a position); `leave_equipment` (P2); the script tests `party <member>` and `item <id>` (`../events`); `random_encounters_everywhere` (F1); vessels, helms, gangways and ship ports (F2); soft ground and barriers, `breaks`, `breaks_for_good` and `call_item` on vehicles (F3); shop kinds, flag-gated stock and shops (F7, F10); cell changes by flag and pits (F8, F10); names in each language (`name.<kind>.<id>`). See "Rules this library chose".
 * `Session::area()` returns the area with its changes and broken barriers applied (a copy per area whose rows follow the flags; `areaAt` for any area).
@@ -346,7 +359,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * `session.h`: `areaAt`, `shopOpen`, `stock`, `equip` and `equipPreview` with a position, `EquipPreview::position` and `alsoReplaces`. Read shop stock through `stock(shop)`.
 * Text tables: every language needs `game.barrier_broken`, `game.boarded_ship`, `game.equipment_returned`, `game.fell`, `game.helm_open`, `game.left_ship`, `game.vehicle_called` and `game.refuse.call_outdoors`, `on_ship`, `shop_closed`, `vehicle_not_owned`.
 
-## Changes two rounds ago
+## Changes three rounds ago
 
 * Rules read from the original and the published guides: members out of the party share experience until a flag (`outside_experience_until`), machine members heal per step (`machine_step_heal`), vehicle skill uses carry between battles and rest refills them, jobs can be missed for good (`missed`, `JobState::Missed`, notice `game.job.missed`), and the script commands `learn` and `follower` (with `World::follower` and the notices `game.follower_joined` and `game.follower_left`). The registry lists techniques and skills as `ability` names.
 * Builds against core rules version 11 (the effects, kinds and enemy rules in `../core/README.md`). The level cap is 99, and `join_levels` and `start.level` go up to it.
@@ -359,7 +372,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * `world.h`: `JobState::Missed` (appended), `VehiclePlace::skillUses`, `World::follower` (both compared by `sameWorld`). `data.h`: `GameConfig::machineStepHeal`, `outsideExperienceUntil`, `Job::missedFlag`. `save.h`: `kSaveSchemaVersion` 7.
 * Text tables: every language needs `game.follower_joined`, `game.follower_left` and `game.job.missed`.
 
-## Changes three rounds ago
+## Changes four rounds ago
 
 * Developer tools for front ends ([`docs/dev-tools.md`](../docs/dev-tools.md)): `Session::devList`, `devWarp`, `devWarpCell`, `devSetFlag`, `devGive`, `devMoney`, `devSetLevel`, `devBattle`, `devEndBattle`, `devVehicle`, `devEncounters` and `encountersOn`, `devRunEvent`, `devMark` and `devMarked`; the running event's position (`eventPosition`, from the new `events::Interpreter::position`); the game as save text (`saveText`, `loadSaveText`). See "Rules this library chose" for their rules.
 * Save schema 6 with the `dev` chunk and the header's `dev` line; schemas 1 to 5 migrate unmarked.
@@ -371,7 +384,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Text tables: every language needs `game.clear_not_recorded`, `game.dev_marked`, `game.loaded_text` and `game.refuse.no_game`, `dev_bad_cell`, `dev_bad_count`, `dev_bad_level`, `dev_field_only`, `dev_in_battle`, `dev_unknown_area`, `dev_unknown_encounter`, `dev_unknown_event`, `dev_unknown_flag`, `dev_unknown_marker`, `dev_unknown_member`, `dev_unknown_thing`, `dev_unknown_vehicle` and `dev_vehicle_outdoors` (the loader checks them). The placeholder `glyphs_ja.txt` gains the five kanji their Japanese text uses.
 * Saves are written as schema 6 (`PSR-SAVE 6`, `kSaveSchemaVersion` 6) with the `dev` chunk, which a schema 6 save must have; older builds refuse them as from a newer build. `serializeWorldChunks` (the event-start snapshot) includes it.
 
-## Changes four rounds ago
+## Changes five rounds ago
 
 * Vehicles in the field and travel (see "Rules this library chose" for every rule, and which ones the spec asked for): `game.json` `vehicles`; areas `region`, `arrival` and `ports`; script commands `vehicle give|place|remove` and the conditions `vehicle <id>` and `aboard <id>`; `Session::vehiclesHere`, `riding`, `board`, `leaveVehicle`, `port`, `travelDestinations` and `travel`; the field moves the leader aboard at the vehicle's speed over what it crosses, battles aboard are vehicle battles from the vehicle's table, exits park it outside towns and dungeons, and a vehicle left out of reach goes back to its last boarding point.
 * Builds against core rules version 10, whose `travel` effect makes the placeholder's Homing Shell and Homeward (to a visited town of the region) and Waymark Chalk and Outpath (out of a dungeon).
@@ -388,7 +401,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * `problemText()` has the new keys `data.arrival_marker_missing`, `data.arrival_not_town`, `data.port_id_taken`, `data.port_marker_missing`, `data.unknown_terrain`, `data.vehicle_listed_twice`, `data.vehicle_needs_terrain`, `data.vehicle_not_field`, `data.vehicle_not_outdoors` and `data.vehicle_unknown`.
 * `runner.h`'s command language adds `board`, `disembark`, `destinations` and `travel`; `look` draws ports and vehicles and `status` says when the party is aboard.
 
-## Changes five rounds ago
+## Changes six rounds ago
 
 * Equipment comparison (`equipPreview`), descriptions (`description`, the `desc.*` text keys), bag sorting (`bag`), difficulty presets (`difficulties`, `canChangeSettings`), make macro from the combo log (`macroFromCombo`) and ambient party talk, for the front end's screens; see "Rules this library chose".
 * Data: cameras with targets and zooms, music by situation and per encounter, and action durations in `game.json`'s `presentation`; music per area; interact hooks on solid cells. Old `game.json` files with camera names only still load.
@@ -405,7 +418,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * The content hash value changes once, since it is now built from parsed data without presentation; nothing reads it on load.
 * `problemText()` has the new keys `data.camera_*`, `data.description_unknown`, `data.music_*`, `data.not_on_map`, `data.number_out_of_range` and `data.unknown_action`.
 
-## Changes six rounds ago
+## Changes seven rounds ago
 
 * The field menu's missing operations, for the front end's screens: party order (`swapLineup`), the macro editor (`macroViews`, `createMacro`, `renameMacro`, `deleteMacro`, `moveMacro`, `setMacroStep`, `removeMacroStep`, `moveMacroStep`), the combo log joined with its recipes (`comboLog`) and status screen data (`memberDetail`). See "Rules this library chose" for their rules. The scripted playthrough does not use them; its transcript and the seeds are unchanged.
 
@@ -416,13 +429,13 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Core: `rules::macroTargetFits` (macro.h) is public; the loader uses it as before. No rule changed.
 * Saves are unchanged (schema 3).
 
-## Changes seven rounds ago
+## Changes eight rounds ago
 
 * The placeholder adventure has a tide chart on a post in Tidewater Landing (`tidewater_chart`, hook `chart`, open once the guide's apprentices have joined): the apprentices walk up to it and turn, the leader steps back and turns, people nod, shake their heads, startle, wave (looping), bow, jump and shrug, and a crab comes out for an event battle with a `lose` section. `game.json` lists those animations in `presentation.animations` and the flag `tidewater.chart_read`; tidewater gains the markers `chart_front`, `chart_left`, `chart_right` and `chart_back`; the dialogue is in `en` and `ja` (five more kanji in `glyphs_ja.txt`). It is there for the MonoGame sample's party and pose presentation; the scripted playthrough does not read the chart, so its transcript changes only in the `look` map of tidewater, and the seeds stay.
 * The placeholder adventure has a board by the inn in Tidewater Landing (`tidewater_board`, hook `board`, open once the guide's apprentices have joined): before they are in the party, the engineer walks in from the east gate, turns toward the leader and waves, and the scout, with no move first, turns toward the leader and nods; then both join, so the party is full. The scene sets `reed.scout_joined`, so the scout's step hook on the reed path stays shut afterwards. `game.json` lists the flag `tidewater.board_read`; tidewater gains the markers `board_front`, `board_below` and `board_beside` (no longer used); the dialogue is in `en` and `ja`. Like the chart, it is there for the MonoGame sample's party presentation; the scripted playthrough does not read the board, so its transcript changes only in the `look` map of tidewater, and the seeds stay.
 * Party members a script moves or turns stay presentation (see [Actors](#actors)); no API or save change.
 
-## Changes eight rounds ago
+## Changes nine rounds ago
 
 * Script actors are game state: the session follows the end state of every `move`, `face`, `show` and `hide` of a `game.json` actor (see [Actors](#actors)), `actorsHere()` lists the actors in the party's area, and an actor no script touched stands at the talk point named after it.
 * Save schema 3 adds the `actors` chunk; schema 2 saves migrate with every actor at its talk point.
@@ -434,7 +447,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Saves are written as schema 3 (`PSR-SAVE 3`, `kSaveSchemaVersion` 3) with the `actors` chunk, which a schema 3 save must have. Older builds refuse them as from a newer build. `serializeWorldChunks` (the event-start snapshot) includes it.
 * A renderer that drew talk points as people can draw the actors from `actorsHere()` instead, and should move them when a script does.
 
-## Changes nine rounds ago
+## Changes ten rounds ago
 
 * Front ends stop touching the world: `face()` and `setAutoMacro()` replace writing `World::facing` and `World::autoMacro`, and the terminal front end uses them.
 * Structured event text: `line()` gives the pending line as data and `choiceView()` the pending choice, with an ask's answers from the dialogue tables (`choice.yes`, `choice.no`, in `en` and `ja`).
@@ -471,7 +484,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Several languages: `game.json` takes `languages` instead of `strings` and `text`; a placeholder Japanese pair (`text/ja.strings`, `text/ja.json`) is added; the profile's text language picks the tables.
 * Speaker names and journal text moved from the text table to the dialogue tables. Area display names moved from the area files to `area.<id>` text keys (areas no longer take `name`). `Session` refusals are text keys.
 
-### Changes a host had to make seven rounds ago
+### Changes a host had to make eight rounds ago
 
 * `Session`: `setProfile`, `newGame`, `continueGame`, `load`, `retryBattle`, `walk`, `interact`, `partyTalk`, `choose`, `setCommand`, `applyMacro`, `startAuto`, `openMenu`, `closeMenu`, `buy`, `sell`, `rest`, `useItem`, `useAbility`, `equip`, `unequip`, `saveManual`, `enterName` and `setSettings` return `rules::Message` instead of `std::string`; `.empty()` still means it ran. Show a refusal with `render()`. New `language()` (the profile's tables) and `stringText(id)`.
 * `data.h`: `GameConfig::stringsFile` and `textFile` are replaced by `languages` (`LanguageFiles { code, strings, text }`); `GameConfig::scriptedEnds` is removed. `GameData::text` and `strings` are replaced by `languages` (`LanguageTables { code, text, strings }`) and `language(code)`. New `GameData::gameStrings` and `gameStringsText()`. `Journal` texts are string IDs.

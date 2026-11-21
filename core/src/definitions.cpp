@@ -2,6 +2,7 @@
 #include "rules/combatant.h"
 #include "rules/combo.h"
 #include "rules/database.h"
+#include "rules/formulas.h"
 
 #include <algorithm>
 
@@ -122,6 +123,10 @@ void Combatant::setModifier(Stat stat, int amount) {
 		}
 	}
 	modifiers.push_back({stat, amount});
+}
+
+int BattleRules::defendedAffinity() const {
+	return defendAffinity.value_or(formulas::kDefendedAffinity * affinityDivisor / 100);
 }
 
 int Combatant::affinity(Element element) const {

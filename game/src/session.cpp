@@ -1727,7 +1727,7 @@ void Session::arrive(Cell cell) {
 	for (const Zone& zone : area()->zones) {
 		longestGrace = std::max(longestGrace, zone.random.graceSteps);
 	}
-	if (world_.areaSteps < longestGrace) {
+	if (world_.areaSteps <= longestGrace) {
 		++world_.areaSteps;
 	}
 	if (!world_.aboard.empty()) {
@@ -2049,6 +2049,7 @@ rules::Message Session::interact() {
 	}
 	if (const Chest* chest = a.chestAt(target)) {
 		openChest(*chest);
+		settleField();
 		return {};
 	}
 	if (const Shop* shop = a.shopAt(target)) {
@@ -3633,7 +3634,7 @@ std::optional<MemberDetail> Session::memberDetail(const std::string& member) con
 	const rules::Combatant combatant = rules::memberCombatant(data_.db, *m);
 	MemberDetail detail;
 	detail.member = member;
-	detail.experienceToNext = m->level >= rules::formulas::kMaxLevel ? 0 : std::max(0, rules::formulas::experienceToNextLevel(m->level) - m->experience);
+	detail.experienceToNext = m->level >= rules::formulas::kMaxLevel ? 0 : std::max(0, rules::experienceToNextLevel(*data_.db.character(member), m->level) - m->experience);
 	detail.stats = combatant.stats;
 	detail.attackElement = combatant.attackElement;
 	detail.statusResist = combatant.statusResist;

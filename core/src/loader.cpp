@@ -8,6 +8,7 @@
 #include "rules/text.h"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -52,11 +53,7 @@ void insertUnique(Map& map, const std::string& id, Value value, Reader& reader, 
 	map.emplace(id, std::move(value));
 }
 
-void parseStats(Reader& reader, const JsonValue& object, const char* key, Stats& out, bool growth) {
-	const JsonValue* stats = reader.get(object, key, Type::Object, true);
-	if (!stats) {
-		return;
-	}
+void parseStatsObject(Reader& reader, const JsonValue* stats, Stats& out, bool growth) {
 	const int minimum = growth ? 0 : 1;
 	reader.rejectUnknownKeys(*stats, {"hp", "tp", "strength", "mental", "agility", "dexterity", "defense", "level", "critical", "evasion", "magic_defense"});
 	reader.integer(*stats, "hp", out.maxHp, true, minimum, 99999);
@@ -73,6 +70,12 @@ void parseStats(Reader& reader, const JsonValue& object, const char* key, Stats&
 		reader.integer(*stats, "level", out.level, false, 1, 99);
 	} else if (stats->find("level")) {
 		reader.fail(*stats->find("level"), "load.growth_has_no_level", {});
+	}
+}
+
+void parseStats(Reader& reader, const JsonValue& object, const char* key, Stats& out, bool growth) {
+	if (const JsonValue* stats = reader.get(object, key, Type::Object, true)) {
+		parseStatsObject(reader, stats, out, growth);
 	}
 }
 
@@ -171,14 +174,19 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 			}
 		}
 		switch (effect.kind) {
-		case EffectKind::PhysicalDamage:
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power"});
+		case EffectKind::PhysicalDamage: {
+			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power", "element"});
 			if (combo) {
 				rejectComboPower(reader, *entry);
 			} else {
 				reader.integer(*entry, "power", effect.power, true, 0, 9999);
 			}
+			std::string element;
+			if (reader.string(*entry, "element", element, false) && !readElement(db, element, effect.element)) {
+				reader.fail(*entry->find("element"), "load.unknown_element", {element});
+			}
 			break;
+		}
 		case EffectKind::Heal:
 			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power"});
 			reader.integer(*entry, "power", effect.power, true, 1, 9999);
@@ -273,7 +281,7 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 			} else {
 				reader.rejectUnknownKeys(*entry, {"type"});
 			}
-			if (item || combo) {
+			if ((item && effect.kind != EffectKind::Transform) || combo) {
 				reader.fail(*entry->find("type"), "load.enemy_effect_only", {type});
 			}
 			break;
@@ -346,10 +354,10 @@ void checkTravel(Reader& reader, const JsonValue& entry, Targeting targeting, co
 	}
 }
 
-// Summon, merge, transform and split act on the user's own place in the formation.
+// Summon, merge and split act on the user's own place in the formation.
 void checkSelfEffects(Reader& reader, const JsonValue& entry, Targeting targeting, const std::vector<Effect>& effects) {
 	for (const Effect& effect : effects) {
-		const bool own = effect.kind == EffectKind::Summon || effect.kind == EffectKind::Merge || effect.kind == EffectKind::Transform || effect.kind == EffectKind::Split;
+		const bool own = effect.kind == EffectKind::Summon || effect.kind == EffectKind::Merge || effect.kind == EffectKind::Split;
 		if (own && targeting != Targeting::Self) {
 			reader.fail(entry, "load.summon_merge_target_self", {});
 			return;
@@ -360,7 +368,7 @@ void checkSelfEffects(Reader& reader, const JsonValue& entry, Targeting targetin
 void parseRules(Reader& reader, const JsonValue& root, Database& db) {
 	BattleRules& rules = db.battleRules;
 	reader.rejectUnknownKeys(root, {"surprise_rounds", "rest_revives", "machine_recover_hp", "affinity_divisor", "magic_defense", "instant_defeat_kinds", "ambush_opening",
-		"elements"});
+		"elements", "neutral_affinity", "defend_affinity", "defend_elemental"});
 	for (const std::string& id : reader.strings(root, "elements", false)) {
 		Element builtIn;
 		const bool repeated = std::count(rules.elements.begin(), rules.elements.end(), id) > 0;
@@ -383,6 +391,15 @@ void parseRules(Reader& reader, const JsonValue& root, Database& db) {
 	reader.integer(root, "surprise_rounds", rules.surpriseRounds, true, 0, 9);
 	reader.integer(root, "machine_recover_hp", rules.machineRecoverHp, true, 0, 9999);
 	reader.integer(root, "affinity_divisor", rules.affinityDivisor, false, 1, 1000);
+	const int highestAffinity = std::max(400, 4 * rules.affinityDivisor);
+	int affinity = 0;
+	if (reader.integer(root, "neutral_affinity", affinity, false, 1, highestAffinity)) {
+		rules.elementlessAffinity = affinity;
+	}
+	if (reader.integer(root, "defend_affinity", affinity, false, 0, highestAffinity)) {
+		rules.defendAffinity = affinity;
+	}
+	reader.boolean(root, "defend_elemental", rules.defendElemental);
 	reader.boolean(root, "magic_defense", rules.magicDefense);
 	for (const std::string& name : reader.strings(root, "instant_defeat_kinds", false)) {
 		CreatureKind kind = CreatureKind::Living;
@@ -728,6 +745,57 @@ bool canEverKnow(const Database& db, const CharacterDef& character, const std::s
 	return false;
 }
 
+// `level_stats` stands in for `base`, and growth carries on past its last row (zero when left out); `experience_table`
+// lists the total experience each level from 2 needs, rising, and the curve carries on past it.
+void parseGrowthTables(Reader& reader, const JsonValue& entry, CharacterDef& character) {
+	const JsonValue* rows = reader.get(entry, "level_stats", Type::Array, false);
+	if (rows) {
+		if (entry.find("base")) {
+			reader.fail(*entry.find("base"), "load.base_or_level_stats", {});
+		}
+		if (rows->items.empty() || static_cast<int>(rows->items.size()) > formulas::kMaxLevel) {
+			reader.fail(*rows, "load.table_levels", {"level_stats", "1", std::to_string(formulas::kMaxLevel)});
+		}
+		for (const JsonValue* row : reader.objects(entry, "level_stats", false)) {
+			if (row->find("level")) {
+				reader.fail(*row->find("level"), "load.level_stats_have_no_level", {});
+			}
+			Stats stats;
+			parseStatsObject(reader, row, stats, false);
+			character.levelStats.push_back(stats);
+		}
+		if (entry.find("growth")) {
+			parseStats(reader, entry, "growth", character.growth, true);
+		} else {
+			character.growth = Stats::filled(0);
+		}
+	} else {
+		parseStats(reader, entry, "base", character.base, false);
+		parseStats(reader, entry, "growth", character.growth, true);
+	}
+	const JsonValue* totals = reader.get(entry, "experience_table", Type::Array, false);
+	if (!totals) {
+		return;
+	}
+	if (totals->items.empty() || static_cast<int>(totals->items.size()) > formulas::kMaxLevel - 1) {
+		reader.fail(*totals, "load.table_levels", {"experience_table", "1", std::to_string(formulas::kMaxLevel - 1)});
+	}
+	int previous = 0;
+	for (const JsonValue& total : totals->items) {
+		if (!total.is(Type::Number) || total.number != std::floor(total.number) || total.number < 1 || total.number > 9999999) {
+			reader.fail(total, "load.field_out_of_range", {"experience_table", "1", "9999999"});
+			return;
+		}
+		const int value = static_cast<int>(total.number);
+		if (value <= previous) {
+			reader.fail(total, "load.experience_table_rises", {std::to_string(value)});
+			return;
+		}
+		character.levelExperience.push_back(value - previous);
+		previous = value;
+	}
+}
+
 void parseCharacters(Reader& reader, const JsonValue& root, Database& db) {
 	for (const JsonValue* entry : reader.objects(root, "characters", true)) {
 		CharacterDef character;
@@ -736,13 +804,12 @@ void parseCharacters(Reader& reader, const JsonValue& root, Database& db) {
 		}
 		reader.setContext("character '" + character.id + "'");
 		reader.rejectUnknownKeys(*entry, {"id", "name", "base", "growth", "basic_attack", "abilities", "learns", "affinities", "status_resist", "equip", "equipment", "kind",
-			"vulnerable", "teachable"});
+			"vulnerable", "teachable", "experience_table", "level_stats"});
 		reader.string(*entry, "name", character.name);
 		readAbilityList(reader, db, *entry, character.teachable, false, "teachable");
 		reader.boolean(*entry, "vulnerable", character.vulnerable);
 		readCreatureKind(reader, *entry, character.kind);
-		parseStats(reader, *entry, "base", character.base, false);
-		parseStats(reader, *entry, "growth", character.growth, true);
+		parseGrowthTables(reader, *entry, character);
 		readBasicAttack(reader, db, *entry, character.basicAttack);
 		readAbilityList(reader, db, *entry, character.abilities, false);
 		parseLearns(reader, db, *entry, character);
@@ -1102,7 +1169,7 @@ void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
 			if (ability && ability->hasEffect(EffectKind::Merge) && enemy.mergesInto.empty()) {
 				reader.fail(*entry->find("abilities"), "load.merge_needs_merges_into", {id});
 			}
-			if (ability && ability->hasEffect(EffectKind::Transform) && enemy.transformsInto.empty()) {
+			if (ability && ability->hasEffect(EffectKind::Transform) && ability->targeting == Targeting::Self && enemy.transformsInto.empty()) {
 				reader.fail(*entry->find("abilities"), "load.transform_needs_transforms_into", {id});
 			}
 			if (ability && ability->hasEffect(EffectKind::Split) && enemy.splitsInto.empty()) {

@@ -21,6 +21,12 @@ Effectiveness effectivenessOf(int affinity, int divisor) {
 
 }
 
+int Battle::elementAffinity(const Combatant& target, const Element& element) const {
+	const int affinity = target.affinity(element);
+	const BattleRules& rules = db_->battleRules;
+	return target.defending && rules.defendElemental ? std::min(affinity, rules.defendedAffinity()) : affinity;
+}
+
 CancelReason Battle::checkUsable(int actor, const AbilityDef& ability) const {
 	const Combatant& c = combatants_[actor];
 	if (ability.kind == AbilityKind::Technique) {
@@ -356,16 +362,17 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 					e.target = target;
 					e.ability = source;
 				}
-				const int divisor = db_->battleRules.affinityDivisor;
-				const int affinity = attacker.element != Element::None ? t.affinity(attacker.element) : (t.defending ? formulas::kDefendedAffinity * divisor / 100 : divisor);
-				const int damage = formulas::damage(attack, t.effective(Stat::Defense), bonus, affinity, rollSpread(), divisor);
-				const Effectiveness effectiveness = attacker.element != Element::None ? effectivenessOf(affinity, divisor) : Effectiveness::Normal;
-				changed = dealDamage(user, target, damage, attacker.element, effectiveness, out) > 0 || changed;
+				const BattleRules& rules = db_->battleRules;
+				const Element element = effect.element != Element::None ? effect.element : attacker.element;
+				const int affinity = element != Element::None ? elementAffinity(t, element) : (t.defending ? rules.defendedAffinity() : rules.elementlessHitAffinity());
+				const int damage = formulas::damage(attack, t.effective(Stat::Defense), bonus, affinity, rollSpread(), rules.affinityDivisor);
+				const Effectiveness effectiveness = element != Element::None ? effectivenessOf(affinity, rules.affinityDivisor) : Effectiveness::Normal;
+				changed = dealDamage(user, target, damage, element, effectiveness, out) > 0 || changed;
 				noteHit(user, target, attacker, flatPower);
 				break;
 			}
 			case EffectKind::ElementalDamage: {
-				const int affinity = t.affinity(effect.element);
+				const int affinity = elementAffinity(t, effect.element);
 				const int attack = flatPower ? effect.power : (attacker.combo ? attacker.comboAttack : attacker.mental);
 				const int bonus = flatPower ? 0 : (attacker.combo ? attacker.comboBonus : effect.power);
 				const BattleRules& rules = db_->battleRules;

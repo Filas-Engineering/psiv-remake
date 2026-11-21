@@ -12,7 +12,7 @@ ACC_CHECK(acc_sav_05, "ACC-SAV-05", "SAV-022, SAV-030, SAV-033") {
 		// Level-ups follow the experience curve, one point at a time.
 		PartyMember member = makePartyMember(db, character, 1);
 		for (int level = 1; level < formulas::kMaxLevel; ++level) {
-			const int needed = formulas::experienceToNextLevel(level);
+			const int needed = experienceToNextLevel(character, level);
 			t.expect(grantExperience(member, db, needed - 1).levelsGained == 0, id + ": levelled up one point short of level " + std::to_string(level + 1));
 			const int hp = member.hp;
 			const int tp = member.tp;

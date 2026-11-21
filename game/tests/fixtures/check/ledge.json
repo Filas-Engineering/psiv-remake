@@ -1,0 +1,18 @@
+{
+	"id": "ledge",
+	"kind": "town",
+	"map": [
+		"#####",
+		"#...#",
+		"###.#",
+		"###.#",
+		"#####"
+	],
+	"markers": {"start": [1, 1]},
+	"exits": [
+		{"at": [3, 2], "to": "tidewater", "marker": "start"}
+	],
+	"chests": [
+		{"id": "ledge_box", "at": [3, 3], "flag": "chest.ledge_box", "money": 5}
+	]
+}

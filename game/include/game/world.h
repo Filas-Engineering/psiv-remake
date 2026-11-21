@@ -123,7 +123,8 @@ struct World {
 	std::string aboard;
 	// An actor who walks with the party without joining it (F14); empty for none.
 	std::string follower;
-	// Steps since the party entered the area, counted only up to the longest grace of its zones.
+	// Steps since the party entered the area, counted only up to one past the longest grace of its zones, the first step
+	// that may roll.
 	int areaSteps = 0;
 	// Flag hooks with `once` that have fired, as "<area>/<hook>".
 	std::set<std::string> onceHooks;

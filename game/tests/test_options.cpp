@@ -3,6 +3,8 @@
 #include "game/encounters.h"
 #include "game/runner.h"
 #include "game/save.h"
+#include "rules/formulas.h"
+#include "rules/progression.h"
 
 #include <sstream>
 
@@ -168,6 +170,106 @@ TEST(encounterRollsHaveGraceAChancePerStepAndSafeCellsByExits) {
 	CHECK_EQ(w.randomCounter, 0);
 }
 
+namespace {
+
+// The Cogway's floor with no safe cells, so every step after the grace rolls.
+GameData cogwayRolls(int graceSteps, int stepChance, int vehicleStepChance, int graceMs) {
+	GameData d = test::data();
+	d.config.graceMs = graceMs;
+	RandomRules& r = d.areas.at("cogway").zones.at(0).random;
+	r.graceSteps = graceSteps;
+	r.stepChance = stepChance;
+	r.vehicleStepChance = vehicleStepChance;
+	r.safeNearExits = false;
+	return d;
+}
+
+// Holds a direction until the leader stands on the next cell; whether that step started a battle.
+bool stepFor(Session& s, Facing direction) {
+	const Cell from = s.world().position;
+	for (int i = 0; i < 40 && s.world().position == from && s.mode() == Mode::Field; ++i) {
+		s.update(s.data().config.tickMs, {true, direction});
+	}
+	CHECK(s.world().position != from);
+	return s.mode() == Mode::Battle;
+}
+
+// Paces the Cogway's row `y` between columns 2 and 9; whether the step started a battle, which it then wins.
+bool pace(Session& s, int y) {
+	const Cell at = s.world().position;
+	CHECK_EQ(at.y, y);
+	const Facing direction = at.x >= 9 ? Facing::West : at.x <= 2 ? Facing::East : s.world().facing;
+	const bool battle = stepFor(s, direction);
+	if (battle) {
+		CHECK(s.devEndBattle(true).empty());
+		test::confirmLines(s);
+		CHECK(s.mode() == Mode::Field);
+	}
+	return battle;
+}
+
+}
+
+// R18: with grace_steps N and a chance of 1, the first battle comes on step N + 1, on foot and aboard, and battles keep
+// coming after it once the post-battle grace runs out.
+TEST(theFirstRandomBattleComesTheStepAfterTheGrace) {
+	const GameData d = cogwayRolls(3, 1, 1, 3000);
+	for (bool aboard : {false, true}) {
+		Session s(d, SessionOptions());
+		cogway(s, {6, 4}, Facing::South, true);
+		if (aboard) {
+			CHECK(s.devVehicle("reed_skimmer", "cogway", "entry").empty());
+			CHECK(s.board().empty());
+		}
+		s.face(Facing::East);
+		const int y = s.world().position.y;
+		for (int step = 1; step <= 3; ++step) {
+			CHECK(!pace(s, y));
+		}
+		CHECK(pace(s, y));
+		CHECK_EQ(s.world().areaSteps, 4);
+		int later = 0;
+		for (int step = 0; step < 60; ++step) {
+			later += pace(s, y) ? 1 : 0;
+		}
+		CHECK(later >= 3);
+	}
+}
+
+// R18: past the grace, battles come at 1 in step_chance per step on foot and 1 in vehicle_step_chance aboard, over seeds.
+TEST(randomBattlesComeAtTheirChancePerStepOverSeeds) {
+	const GameData d = cogwayRolls(3, 6, 12, 0);
+	for (bool aboard : {false, true}) {
+		int battles = 0;
+		int steps = 0;
+		for (std::uint64_t seed = 1; seed <= 8; ++seed) {
+			SessionOptions options;
+			options.seed = seed;
+			Session s(d, options);
+			cogway(s, {6, 4}, Facing::South, true);
+			if (aboard) {
+				CHECK(s.devVehicle("reed_skimmer", "cogway", "entry").empty());
+				CHECK(s.board().empty());
+			}
+			s.face(Facing::East);
+			const int y = s.world().position.y;
+			for (int step = 1; step <= 3; ++step) {
+				CHECK(!pace(s, y));
+			}
+			for (int step = 0; step < 240; ++step, ++steps) {
+				battles += pace(s, y) ? 1 : 0;
+			}
+		}
+		// 1920 steps: 320 expected at 1 in 6 (standard deviation 16), 160 at 1 in 12 (12).
+		if (aboard) {
+			CHECK(battles > 112 && battles < 208);
+		} else {
+			CHECK(battles > 256 && battles < 384);
+		}
+		CHECK_EQ(steps, 1920);
+	}
+}
+
 // R22: sand is the soft ground ':' already: only a vehicle that crosses soft ground goes over it.
 TEST(sandIsTheSoftGroundTerrain) {
 	const Area& moor = *test::data().area("fell_moor");
@@ -231,4 +333,64 @@ TEST(theTerminalLogNamesEnemiesThatJoin) {
 	const std::string log = out.str();
 	CHECK(log.find("Gel Mite") != std::string::npos);
 	CHECK(log.find(" ?") == std::string::npos && log.find("? ") == std::string::npos);
+}
+
+// R33: a character's experience table drives the member detail's next level and the levels battle rewards bring.
+TEST(experienceTablesReachTheMemberDetailAndRewards) {
+	GameData d = test::data();
+	rules::CharacterDef& fighter = d.db.characters.at("fighter");
+	fighter.levelExperience = {1, 1, 1};
+	fighter.levelStats = {fighter.base, rules::statsAtLevel(fighter, 2), rules::statsAtLevel(fighter, 3)};
+	fighter.levelStats[1].maxHp += 40;
+	Session s(d, SessionOptions());
+	test::placeParty(s, "tidewater", "start", Facing::East);
+	const std::optional<MemberDetail> before = s.memberDetail("fighter");
+	CHECK(before && before->experienceToNext == 1);
+	CHECK(s.devBattle("training").empty());
+	CHECK(s.devEndBattle(true).empty());
+	test::confirmLines(s);
+	const rules::PartyMember& member = *s.world().member("fighter");
+	CHECK(member.level >= 4);
+	const std::optional<MemberDetail> after = s.memberDetail("fighter");
+	CHECK(after && after->experienceToNext == rules::formulas::experienceToNextLevel(member.level) - member.experience);
+	CHECK(s.devSetLevel("fighter", 2).empty());
+	CHECK_EQ(rules::memberStats(d.db, *s.world().member("fighter")).maxHp - rules::memberStats(test::data().db, *s.world().member("fighter")).maxHp, 40);
+}
+
+// A chest's flag hooks fire as part of opening it, each once: a hook with a block flag the event sets, then a once hook
+// after that event ends; closing a menu later fires neither again.
+TEST(openingAChestRunsItsFlagHooksAtOnceAndOnlyOnce) {
+	GameData d = test::data();
+	Area& tidewater = d.areas.at("tidewater");
+	Hook note;
+	note.id = "crate_note";
+	note.trigger = HookTrigger::Flag;
+	note.event = "cove_quiet";
+	note.requireFlag = "chest.tidewater_crate";
+	note.blockFlag = "cove.quiet_seen";
+	tidewater.hooks.push_back(note);
+	Hook again = note;
+	again.id = "crate_again";
+	again.blockFlag.clear();
+	again.once = true;
+	tidewater.hooks.push_back(again);
+	Session s(d, SessionOptions());
+	test::placeParty(s, "tidewater", "start", Facing::East);
+	CHECK(s.devWarpCell("tidewater", {10, 7}).empty());
+	test::confirmLines(s);
+	s.face(Facing::East);
+	CHECK(s.interact().empty());
+	CHECK(s.world().flag("chest.tidewater_crate"));
+	int told = 0;
+	while (s.linePending()) {
+		told += s.line()->textId == "cove.quiet.tide" ? 1 : 0;
+		s.confirmLine();
+	}
+	CHECK_EQ(told, 2);
+	CHECK(s.mode() == Mode::Field);
+	CHECK(s.openMenu().empty());
+	CHECK(s.closeMenu().empty());
+	CHECK(!s.linePending());
+	CHECK(s.interact().empty());
+	CHECK(!s.linePending());
 }

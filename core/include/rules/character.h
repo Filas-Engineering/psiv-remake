@@ -20,6 +20,10 @@ struct CharacterDef {
 	std::string name;
 	Stats base;
 	Stats growth;
+	// Optional tables in place of the curves: the experience each level up to the table's end costs (entry 0 takes
+	// level 1 to 2), and the stats at each level (entry 0 is level 1). Past a table the curve and growth go on.
+	std::vector<int> levelExperience = {};
+	std::vector<Stats> levelStats = {};
 	std::string basicAttack;
 	std::vector<std::string> abilities;
 	std::vector<LearnedAbility> learns;
