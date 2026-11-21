@@ -31,6 +31,8 @@ struct Combatant {
 	std::vector<std::string> abilities;
 	std::map<std::string, int> skillUses;
 	Affinities affinities;
+	// The affinity for an element the data leaves out: the rules' divisor, so that element does normal damage.
+	int neutralAffinity = 100;
 	StatusResists statusResist;
 	std::vector<ActiveStatus> statuses;
 	// At most one per stat.
@@ -45,7 +47,7 @@ struct Combatant {
 	bool hitByAbility = false;
 	bool hitByTechnique = false;
 	bool hitByGroup = false;
-	// Enemies after a Party first opening, until the Ambushed override reads it.
+	// Enemies after the opening `ambush_opening` names, until the Ambushed override reads it.
 	bool ambushed = false;
 	// A party member riding a vehicle in a vehicle battle: it takes no command and cannot be targeted.
 	bool aboard = false;
@@ -55,6 +57,10 @@ struct Combatant {
 	int position = -1;
 	// An enemy that merged into another: out of the battle without being defeated.
 	bool gone = false;
+	// A gone enemy that still pays its rewards.
+	bool paysWhenGone = false;
+	// Turns the enemy has taken, for the after_turns override.
+	int turnsTaken = 0;
 
 	bool alive() const { return hp > 0; }
 	bool knows(const std::string& abilityId) const;

@@ -97,6 +97,103 @@
 			"currency": 20
 		},
 		{
+			"id": "ember_sprite",
+			"name": "Ember Sprite",
+			"stats": {"hp": 40, "tp": 0, "strength": 8, "mental": 6, "agility": 9, "dexterity": 8, "defense": 3, "level": 2},
+			"basic_attack": "bite",
+			"abilities": ["fuse"],
+			"merges_into": "kiln_heart",
+			"merges_with": "shale_sprite",
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"overrides": [
+				{"when": "ally_present", "enemy": "shale_sprite", "ability": "fuse"}
+			],
+			"experience": 4,
+			"currency": 3
+		},
+		{
+			"id": "shale_sprite",
+			"name": "Shale Sprite",
+			"stats": {"hp": 40, "tp": 0, "strength": 9, "mental": 3, "agility": 5, "dexterity": 8, "defense": 5, "level": 2},
+			"basic_attack": "bite",
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"experience": 4,
+			"currency": 3
+		},
+		{
+			"id": "kiln_heart",
+			"name": "Kiln Heart",
+			"stats": {"hp": 150, "tp": 0, "strength": 15, "mental": 9, "agility": 6, "dexterity": 9, "defense": 7, "level": 4},
+			"basic_attack": "bite",
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"experience": 28,
+			"currency": 18
+		},
+		{
+			"id": "moss_pupa",
+			"name": "Moss Pupa",
+			"stats": {"hp": 70, "tp": 0, "strength": 6, "mental": 4, "agility": 3, "dexterity": 6, "defense": 9, "level": 2},
+			"basic_attack": "bite",
+			"abilities": ["molt"],
+			"transforms_into": "moss_moth",
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"overrides": [
+				{"when": "after_turns", "turns": 2, "ability": "molt"}
+			],
+			"experience": 6,
+			"currency": 4
+		},
+		{
+			"id": "moss_moth",
+			"name": "Moss Moth",
+			"flying": true,
+			"stats": {"hp": 90, "tp": 0, "strength": 11, "mental": 8, "agility": 12, "dexterity": 10, "defense": 4, "level": 3},
+			"basic_attack": "bite",
+			"abilities": ["dust_veil"],
+			"slots": ["bite", "dust_veil", "bite", "bite", "dust_veil", "bite", "bite", "bite"],
+			"experience": 16,
+			"currency": 9
+		},
+		{
+			"id": "brine_jelly",
+			"name": "Brine Jelly",
+			"stats": {"hp": 120, "tp": 0, "strength": 10, "mental": 5, "agility": 4, "dexterity": 7, "defense": 4, "level": 3},
+			"basic_attack": "bite",
+			"abilities": ["divide"],
+			"splits_into": "brine_droplet",
+			"affinities": {"tide": 0, "shock": 150},
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"overrides": [
+				{"when": "self_hp_half", "ability": "divide"}
+			],
+			"experience": 12,
+			"currency": 8
+		},
+		{
+			"id": "brine_droplet",
+			"name": "Brine Droplet",
+			"attack_element": "tide",
+			"affinities": {"tide": 0},
+			"stats": {"hp": 25, "tp": 0, "strength": 7, "mental": 3, "agility": 8, "dexterity": 7, "defense": 2, "level": 1},
+			"basic_attack": "bite",
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"experience": 3,
+			"currency": 2
+		},
+		{
+			"id": "fuse_beetle",
+			"name": "Fuse Beetle",
+			"stats": {"hp": 45, "tp": 0, "strength": 9, "mental": 10, "agility": 7, "dexterity": 8, "defense": 5, "level": 2},
+			"basic_attack": "bite",
+			"abilities": ["cinder_burst"],
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"overrides": [
+				{"when": "self_hp_half", "ability": "cinder_burst"}
+			],
+			"experience": 7,
+			"currency": 5
+		},
+		{
 			"id": "mirror_crab",
 			"name": "Mirror Crab",
 			"stats": {"hp": 110, "tp": 0, "strength": 15, "mental": 6, "agility": 6, "dexterity": 10, "defense": 10, "level": 3},
@@ -243,6 +340,10 @@
 		{"id": "kites", "enemies": ["squall_kite", "cinder_kite"]},
 		{"id": "bulwark", "enemies": ["cinder_bulwark"], "escape": false},
 		{"id": "reaper", "enemies": ["gloam_reaper"]},
-		{"id": "shellback", "enemies": ["shellback"]}
+		{"id": "shellback", "enemies": ["shellback"]},
+		{"id": "sprites", "enemies": ["ember_sprite", "shale_sprite"]},
+		{"id": "pupa", "enemies": ["moss_pupa"]},
+		{"id": "jelly", "enemies": [null, "brine_jelly", null]},
+		{"id": "beetles", "enemies": ["fuse_beetle", null, "fuse_beetle"], "drop": {"equipment": "ember_mail", "rate": 64}}
 	]
 }

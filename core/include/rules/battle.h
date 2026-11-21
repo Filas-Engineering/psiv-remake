@@ -31,6 +31,8 @@ struct Rewards {
 	std::vector<int> memberExperience;
 	// Item drops. The reward multiplier and the difficulty reward scale do not apply to them (SAV-023).
 	Inventory items;
+	// Equipment drops.
+	EquipmentBag equipment = {};
 };
 
 // Why auto-battle turned itself off (BAT-104).
@@ -59,6 +61,10 @@ public:
 	const Combatant& combatant(int index) const { return combatants_[index]; }
 	Combatant& combatant(int index) { return combatants_[index]; }
 	int partyCount() const { return partyCount_; }
+	// Places in the enemy formation: the encounter's entries, free ones included, or more once an enemy joins past them.
+	int formationSize() const;
+	// The combatant that started the battle at a formation position, or -1 for a free place.
+	int enemyAt(int position) const;
 	bool isParty(int index) const { return index < partyCount_; }
 	const Inventory& inventory() const { return inventory_; }
 	int round() const { return round_; }
@@ -150,7 +156,10 @@ private:
 	void transform(int target, const EnemyDef& def, std::vector<Event>& out);
 	std::vector<int> freeSlotsBeside(int actor) const;
 	const EquipmentDef* wornPiece(int actor, const std::string& id) const;
-	void useWornPiece(int actor, const Command& command, const EquipmentDef& piece, std::vector<Event>& out);
+	const EquipmentDef* bagPiece(int actor, const std::string& id) const;
+	void leaveBattle(int target, int actor, bool pays, std::vector<Event>& out);
+	void split(int target, const EnemyDef& def, int count, std::vector<Event>& out);
+	void useWornPiece(int actor, const Command& command, const EquipmentDef& piece, bool fromBag, std::vector<Event>& out);
 	void fillMissingCommands();
 	Command forcedCommand(int actor, const StatusDef& status);
 	int drawFoeByPartyOrder(int actor);
@@ -210,6 +219,7 @@ private:
 	std::vector<int> lastTurnOrder_;
 	Inventory inventory_;
 	Inventory drops_;
+	EquipmentBag pieceDrops_;
 	// Vehicle battles: the vehicle's combatant index, or -1.
 	int vehicleIndex_ = -1;
 	Outcome outcome_ = Outcome::Ongoing;

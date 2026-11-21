@@ -1,5 +1,6 @@
 {
 	"surprise_rounds": 1,
 	"rest_revives": true,
-	"machine_recover_hp": 1
+	"machine_recover_hp": 1,
+	"elements": ["tide"]
 }

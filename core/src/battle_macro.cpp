@@ -102,7 +102,7 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro) {
 			continue;
 		}
 		const int actor = result.actor;
-		const int enemyIndex = step.target.kind == MacroTargetKind::Enemy ? partyCount_ + step.target.enemySlot : -1;
+		const int enemyIndex = step.target.kind == MacroTargetKind::Enemy ? enemyAt(step.target.enemySlot) : -1;
 		const bool enemyThere = enemyIndex >= partyCount_ && enemyIndex < static_cast<int>(combatants_.size());
 		int requested = -1;
 		bool intendedGone = false;

@@ -172,7 +172,7 @@ public sealed unsafe class GameSession : IDisposable
 		Must(Native.GameInfoGet(_handle, out PsivGameInfo i));
 		return new GameInfo(Native.Str(i.Title), Native.Str(i.GameBuild), i.RulesVersion, i.TickMs, i.RoundMs, i.ManualSlots, i.AutosaveSlots, i.ItemCap,
 			i.MoneyCap, Native.Strs(i.Languages, i.LanguageCount), Native.Str(i.TitleMusic), Native.Str(i.VictoryMusic), Native.Str(i.DefeatMusic),
-			i.MagicDefense != 0);
+			i.MagicDefense != 0, i.AffinityDivisor);
 	}
 
 	public Profile Profile()
@@ -414,7 +414,7 @@ public sealed unsafe class GameSession : IDisposable
 		var points = new List<FieldPoint>(pc);
 		foreach (PsivPoint p in Native.Span<PsivPoint>(pp, pc))
 		{
-			points.Add(new FieldPoint((PointKind)p.Kind, Native.Str(p.Id), p.X, p.Y, Native.Str(p.Event), p.Active != 0, p.Cost, (ShopKind)p.ShopKind));
+			points.Add(new FieldPoint((PointKind)p.Kind, Native.Str(p.Id), p.X, p.Y, Native.Str(p.Event), p.Active != 0, p.Cost, (ShopKind)p.ShopKind, (Direction)p.Direction));
 		}
 		Must(Native.FieldActors(_handle, out IntPtr ap, out int ac));
 		var actors = new List<FieldActor>(ac);
@@ -544,7 +544,7 @@ public sealed unsafe class GameSession : IDisposable
 			return null;
 		}
 		return new BattleInfo(b.Live != 0, Native.Str(b.Encounter), (BattleSource)b.Source, b.Round, b.PartyCount, b.CombatantCount, (Outcome)b.Outcome,
-			b.EscapeAllowed != 0, b.AutoActive != 0, b.PartyActsNextRound != 0, b.GameOver != 0, Native.Str(b.Music), Native.Str(b.Vehicle));
+			b.EscapeAllowed != 0, b.AutoActive != 0, b.PartyActsNextRound != 0, b.GameOver != 0, Native.Str(b.Music), Native.Str(b.Vehicle), b.FormationSize);
 	}
 
 	public IReadOnlyList<Combatant> Combatants()
@@ -558,7 +558,7 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			list.Add(new Combatant(c.Index, Native.Str(c.Id), Native.Str(c.Name), Native.Str(c.Label), (Side)c.Side, Native.Str(c.Group), c.Hp, c.MaxHp, c.Tp,
 				c.MaxTp, c.Alive != 0, c.Defending != 0, Statuses(c.Statuses, c.StatusCount), (CommandKind)c.CommandKind, Native.Str(c.CommandId), c.CommandTarget,
-				c.Flying != 0));
+				c.Flying != 0, c.Position));
 		}
 		return list;
 	}
@@ -754,16 +754,18 @@ public sealed unsafe class GameSession : IDisposable
 			bonuses[i] = ToBonus(b);
 		}
 		var affinities = new Dictionary<Element, int>();
+		var affinityList = new List<Affinity>(d.AffinityCount);
 		foreach (PsivAffinity a in Native.Span<PsivAffinity>(d.Affinities, d.AffinityCount))
 		{
 			affinities[(Element)a.Element] = a.Percent;
+			affinityList.Add(new Affinity((Element)a.Element, Native.Str(a.Id), Native.Str(a.Name), a.Percent));
 		}
 		var resists = new List<StatusResist>(d.StatusResistCount);
 		foreach (PsivStatusResist r in Native.Span<PsivStatusResist>(d.StatusResists, d.StatusResistCount))
 		{
 			resists.Add(new StatusResist(Native.Str(r.Id), Native.Str(r.Name), r.Percent));
 		}
-		return new MemberDetail(Native.Str(d.Id), d.ExperienceToNext, d.Critical, d.Evasion, (Element)d.AttackElement, bonuses, affinities, resists, d.MagicDefense);
+		return new MemberDetail(Native.Str(d.Id), d.ExperienceToNext, d.Critical, d.Evasion, (Element)d.AttackElement, bonuses, affinities, resists, d.MagicDefense, affinityList);
 	}
 
 	private static StatBonus ToBonus(in PsivStatBonus b) => new(b.MaxHp, b.MaxTp, b.Strength, b.Mental, b.Agility, b.Dexterity, b.Defense, b.Critical, b.Evasion, b.MagicDefense);
@@ -1073,6 +1075,18 @@ public sealed unsafe class GameSession : IDisposable
 	{
 		Must(Native.ClearRecordExists(_handle, out int exists));
 		return exists != 0;
+	}
+
+	// Every element the data knows: the built-in ones, then those rules.json declares.
+	public IReadOnlyList<ElementInfo> Elements()
+	{
+		Must(Native.Elements(_handle, out IntPtr p, out int count));
+		var list = new List<ElementInfo>(count);
+		foreach (PsivElementInfo e in Native.Span<PsivElementInfo>(p, count))
+		{
+			list.Add(new ElementInfo((Element)e.Index, Native.Str(e.Id), Native.Str(e.Name)));
+		}
+		return list;
 	}
 
 	// Every audio id the data lists, for a sound test.

@@ -3,23 +3,24 @@
 import json
 
 TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "ports",
-	"zones", "helms", "gangway", "changes"]
-LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes"]
+	"zones", "helms", "gangway", "changes", "conveyors"]
+LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"]
 ENTRY_FIELDS = {
-	"exits": ["at", "to", "marker", "fall"],
-	"hooks": ["id", "at", "trigger", "event", "require_flag", "block_flag"],
+	"exits": ["at", "to", "marker", "fall", "require_flag", "block_flag"],
+	"hooks": ["id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid"],
 	"shops": ["id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag"],
 	"rests": ["id", "at", "cost"],
 	"chests": ["id", "at", "flag", "items", "equipment", "money"],
-	"ports": ["id", "at", "marker", "flag", "ship"],
+	"ports": ["id", "at", "marker", "flag", "ship", "block_flag"],
 	"zones": ["id", "from", "to", "table", "visible", "random"],
 	"helms": ["id", "at"],
 	"changes": ["flag", "tile", "cells"],
+	"conveyors": ["cells", "direction", "step_ms", "require_flag", "block_flag"],
 }
 STOCK_FIELDS = ["id", "require_flag", "block_flag"]
 TABLE_FIELDS = ["encounter", "weight"]
 VISIBLE_FIELDS = ["spawns", "cap", "detection_radius", "leash_radius", "chase_speed_percent", "chase_ms", "wander_speed_percent", "wander_percent"]
-RANDOM_FIELDS = ["min_steps", "max_steps", "step_distance"]
+RANDOM_FIELDS = ["min_steps", "max_steps", "step_distance", "grace_steps", "step_chance", "vehicle_step_chance", "safe_near_exits"]
 CELL_CHARACTERS = {".": "floor", "#": "wall", "~": "water", ":": "soft", "%": "barrier"}
 
 

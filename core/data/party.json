@@ -5,6 +5,7 @@
 			"name": "Test Fighter",
 			"base": {"hp": 60, "tp": 6, "strength": 14, "mental": 4, "agility": 8, "dexterity": 10, "defense": 8, "critical": 4},
 			"growth": {"hp": 8, "tp": 1, "strength": 2, "mental": 0, "agility": 1, "dexterity": 1, "defense": 1},
+			"teachable": ["hallow"],
 			"basic_attack": "strike",
 			"abilities": ["rally", "focus_shot"],
 			"learns": [{"level": 3, "ability": "cleave"}],

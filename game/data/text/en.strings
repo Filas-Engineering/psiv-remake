@@ -106,6 +106,20 @@ flats.beacon.lit = The beacon burns steadily. The ferry to the isles is running.
 choice.yes = Yes
 choice.no = No
 
+cogway.power.on = You throw the lever. The hall hums, and the gate to the moor unbars.
+cogway.power.off = You pull the lever back. The hall falls quiet and the gate bars itself.
+cogway.welcome = Belts rattle somewhere ahead. The Cogway still runs.
+cogway.lift = The cage lurches and climbs to the far landing.
+cogway.sweeper.offer = Twenty coins and this gill knife is yours. I will even fit it for you.
+cogway.sweeper.ask = Pay twenty coins for the knife?
+cogway.sweeper.thanks = A fair trade. Mind the belts.
+cogway.sweeper.declined = Then step around me, if you can.
+cogway.sweeper.poor = Empty pockets? Here, take a few coins for the road.
+cogway.rack.full = The rack is already hung with spare blades.
+cogway.rack.hang = You hang the gill knife back on the rack.
+cogway.jukebox.on = The music box wheezes into a brisker tune.
+cogway.jukebox.off = The music box winds down to the old tune.
+
 speaker.dockhand = Dockhand
 speaker.ferrywoman = Canal Ferrywoman
 speaker.guide = Harbor Guide

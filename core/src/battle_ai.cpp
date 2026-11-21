@@ -65,6 +65,8 @@ bool Battle::overrideHolds(const AiOverride& entry, int actor) const {
 	}
 	case AiConditionKind::FreeSlotBeside:
 		return !freeSlotsBeside(actor).empty();
+	case AiConditionKind::AfterTurns:
+		return self.turnsTaken >= entry.turns;
 	case AiConditionKind::GroupIntact:
 		for (int i = partyCount_; i < startingCount_; ++i) {
 			if (combatants_[i].group == self.group && !combatants_[i].alive()) {
@@ -234,11 +236,14 @@ void Battle::chooseEnemyAction(int actor, std::vector<Event>& out) {
 		case AiConditionKind::HitByGroup:
 			self.hitByAttack = self.hitByAbility = self.hitByTechnique = self.hitByGroup = false;
 			break;
+		case AiConditionKind::Ambushed:
+			self.ambushed = false;
+			break;
 		case AiConditionKind::SelfHpHalf:
 		case AiConditionKind::AnyAllyHpHalf:
 		case AiConditionKind::LastStanding:
 		case AiConditionKind::TechniquesBlocked:
-		case AiConditionKind::Ambushed:
+		case AiConditionKind::AfterTurns:
 		case AiConditionKind::AllyPresent:
 		case AiConditionKind::AllyAbsent:
 		case AiConditionKind::FreeSlotBeside:
@@ -249,7 +254,10 @@ void Battle::chooseEnemyAction(int actor, std::vector<Event>& out) {
 		rule = entry.target;
 		break;
 	}
-	combatants_[actor].ambushed = false;
+	if (db_->battleRules.ambushOpening == Opening::PartyFirst) {
+		combatants_[actor].ambushed = false;
+	}
+	++combatants_[actor].turnsTaken;
 	const CancelReason why = chosen ? checkUsable(actor, *chosen) : CancelReason::None;
 	if (!chosen || why == CancelReason::NotEnoughTp || why == CancelReason::NoUsesLeft || aiCandidates(actor, *chosen, rule).empty()) {
 		command = Command::attack(command.target);

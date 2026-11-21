@@ -139,7 +139,11 @@ bool namesKnownThing(const rules::Database& db, const std::string& key) {
 	const std::string id = key.substr(dot + 1);
 	return (kind == "ability" && db.ability(id)) || (kind == "character" && db.character(id)) || (kind == "difficulty" && db.difficulty(id)) ||
 		(kind == "enemy" && db.enemy(id)) || (kind == "equipment" && db.equipmentPiece(id)) || (kind == "item" && db.item(id)) ||
-		(kind == "status" && db.status(id)) || (kind == "vehicle" && db.vehicle(id));
+		(kind == "status" && db.status(id)) || (kind == "vehicle" && db.vehicle(id)) || (kind == "element" && db.hasElement(id));
+}
+
+bool GameConfig::nameless(const std::string& actor) const {
+	return std::find(namelessActors.begin(), namelessActors.end(), actor) != namelessActors.end();
 }
 
 namespace {
@@ -275,7 +279,8 @@ void readCameras(JsonReader& reader, const JsonValue& presentation, std::vector<
 void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.only(json, {"title", "core_data", "areas", "events", "glossary", "languages", "journal", "actors", "presentation", "flags",
 		"vars", "clear_flag", "start", "join_levels", "prices", "item_cap", "money_cap", "tick_ms", "grace_ms", "round_ms",
-		"autosave_slots", "manual_slots", "bosses", "vehicles", "machine_step_heal", "outside_experience_until", "leave_equipment", "random_encounters_everywhere"});
+		"autosave_slots", "manual_slots", "bosses", "vehicles", "machine_step_heal", "outside_experience_until", "leave_equipment", "random_encounters_everywhere",
+		"nameless_actors"});
 	reader.text(json, "title", c.title, true);
 	reader.text(json, "core_data", c.coreData, true);
 	reader.texts(json, "areas", c.areaFiles, true);
@@ -301,6 +306,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	}
 	reader.text(json, "journal", c.journalFile, true);
 	reader.texts(json, "actors", c.actors, false);
+	reader.texts(json, "nameless_actors", c.namelessActors, false);
 	if (const JsonValue* p = reader.field(json, "presentation", JsonValue::Type::Object, false)) {
 		reader.only(*p, {"audio", "cameras", "layouts", "animations", "portraits", "music", "durations"});
 		reader.texts(*p, "audio", c.presentation.audio, false);
@@ -609,7 +615,9 @@ events::GameStrings buildGameStrings(const GameData& data) {
 	strings.ids.emplace(kChoiceYes, 0);
 	strings.ids.emplace(kChoiceNo, 0);
 	for (const std::string& actor : data.config.actors) {
-		strings.ids.emplace("speaker." + actor, 0);
+		if (!data.config.nameless(actor)) {
+			strings.ids.emplace("speaker." + actor, 0);
+		}
 	}
 	const Journal& j = data.journal;
 	for (const Objective& o : j.objectives) {
@@ -726,7 +734,19 @@ void checkReferences(const GameData& data, Problems& problems) {
 		if (db.character(actor)) {
 			problems.add("game.json", "data.actor_is_character", {actor});
 		}
-		stringExists("game.json actor", "speaker." + actor);
+		if (!c.nameless(actor)) {
+			stringExists("game.json actor", "speaker." + actor);
+		}
+	}
+	for (const std::string& actor : c.namelessActors) {
+		if (std::find(c.actors.begin(), c.actors.end(), actor) == c.actors.end()) {
+			problems.add("game.json", "data.nameless_not_actor", {actor});
+		}
+		for (const LanguageTables& language : data.languages) {
+			if (language.strings.find("speaker." + actor)) {
+				problems.add("game.json", "data.nameless_has_name", {actor, language.code});
+			}
+		}
 	}
 	for (const auto& [areaId, areaData] : data.areas) {
 		const Area& area = areaData;
@@ -747,6 +767,12 @@ void checkReferences(const GameData& data, Problems& problems) {
 			} else if (!markerExists(e.toArea, e.toMarker)) {
 				at(e.line, "data.exit_leads_missing_marker", {e.toArea, e.toMarker});
 			}
+			flagAt(e.line, e.requireFlag);
+			flagAt(e.line, e.blockFlag);
+		}
+		for (const Conveyor& conveyor : area.conveyors) {
+			flagAt(conveyor.line, conveyor.requireFlag);
+			flagAt(conveyor.line, conveyor.blockFlag);
 		}
 		for (const Hook& h : area.hooks) {
 			if (data.program.find_event(h.event) < 0) {
@@ -790,6 +816,7 @@ void checkReferences(const GameData& data, Problems& problems) {
 		}
 		for (const Port& p : area.ports) {
 			flagAt(p.line, p.flag);
+			flagAt(p.line, p.blockFlag);
 			const Area* ship = p.ship.empty() ? nullptr : data.area(p.ship);
 			if (!p.ship.empty() && (!ship || ship->kind != AreaKind::Vessel || ship->arrival.empty())) {
 				at(p.line, "data.port_ship_not_vessel", {p.id, p.ship});
@@ -955,6 +982,11 @@ void loadInto(const DataDirectories& directories, GameData& data, Problems& prob
 	}
 	if (coreLoaded) {
 		for (std::size_t i = 0; i < data.languages.size(); ++i) {
+			for (const std::string& element : data.db.battleRules.elements) {
+				if (!data.languages[i].text.count(std::string(kNamePrefix) + "element." + element)) {
+					problems.add(data.config.languages[i].text, "data.element_name_missing", {element});
+				}
+			}
 			for (const auto& [key, value] : data.languages[i].text) {
 				if (!isDescription(key)) {
 					continue;

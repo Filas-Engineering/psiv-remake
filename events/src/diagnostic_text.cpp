@@ -63,6 +63,7 @@ const std::map<std::string, std::string>& diagnostic_text() {
 		{"script.malformed_number_named", "malformed number '{0}'"},
 		{"script.marker_not_on_map", "marker '{0}' is not on map '{1}'{2}; it is on {3}"},
 		{"script.mixing_one_condition_supported_split", "mixing 'and' and 'or' in one condition is not supported; split it into nested ifs"},
+		{"script.money_at_least_1", "the amount of money must be at least 1"},
 		{"script.nowait_has_effect_inside_every", "'nowait' has no effect inside '{0}'; every branch already runs in parallel"},
 		{"script.on_skip_directly_close_event", "'on skip' must directly close an event body and may appear only once"},
 		{"script.on_skip_ignored_skip_now", "'on skip' is ignored: a skip now plays the rest of the event at once, applying its state changes; remove the block"},

@@ -12,7 +12,7 @@ public enum NoticeKind { Line, Choice, Action, Notice, Warning, Autosave, Ambien
 public enum AreaKind { Town, Field, Dungeon, Vessel }
 public enum EncounterMode { Visible, Random }
 public enum EnemyState { Idle, Chasing, Returning }
-public enum PointKind { Talk, Step, Chest, Shop, Rest, Port, Helm, Gangway }
+public enum PointKind { Talk, Step, Chest, Shop, Rest, Port, Helm, Gangway, Conveyor }
 // From a port to another open port, back to a visited town of the region, out of a dungeon.
 public enum TravelKind { Port, Town, DungeonExit }
 public enum JobState { Available, Accepted, Completed, Missed }
@@ -44,7 +44,7 @@ public enum StatusEnd { Cured, Duration, Recovered, WokeOnDamage, Defeated }
 public enum ResourceKind { None, Tp, SkillUse, Item }
 public enum Element { None, Heat, Chill, Shock, Gale, Holy }
 public enum CreatureKind { Living, Spirit, Machine }
-public enum Stat { Strength, Mental, Agility, Dexterity, Defense }
+public enum Stat { Strength, Mental, Agility, Dexterity, Defense, MagicDefense }
 public enum Opening { Normal, PartyFirst, EnemyFirst }
 public enum AutoStop { None, Cancelled, MemberFell, CannotPay, BattleEnded }
 public enum MacroStepStatus { Applied, Retargeted, FellBack, Skipped }
@@ -126,7 +126,13 @@ public sealed record SessionOptions
 
 // TitleMusic, VictoryMusic and DefeatMusic are game.json's tracks, "" when the data names none.
 public sealed record GameInfo(string Title, string GameBuild, int RulesVersion, int TickMs, int RoundMs, int ManualSlots, int AutosaveSlots, int ItemCap, int MoneyCap,
-	IReadOnlyList<string> Languages, string TitleMusic, string VictoryMusic, string DefeatMusic, bool MagicDefense = false);
+	IReadOnlyList<string> Languages, string TitleMusic, string VictoryMusic, string DefeatMusic, bool MagicDefense = false, int AffinityDivisor = 100);
+
+// An element the data knows. Element values past Holy are the ones rules.json declares, numbered by Index.
+public sealed record ElementInfo(Element Index, string Id, string Name);
+
+// An affinity on the rules' divisor scale (GameInfo.AffinityDivisor is normal damage).
+public sealed record Affinity(Element Element, string Id, string Name, int Percent);
 
 public sealed record Profile(TextSpeed TextSpeed, bool AutoAdvance, bool ShowShippedNames, string TextLanguage, int TextSizePercent, BattleSpeed BattleSpeed,
 	bool AmbientTalk, bool ReducedFlash, int MusicVolume, int AmbientVolume, int EffectsVolume);
@@ -165,7 +171,8 @@ public sealed record Marker(string Name, int X, int Y);
 public sealed record FieldExit(int X, int Y, string ToArea, string ToMarker);
 
 // Active for a shop or a port: open now.
-public sealed record FieldPoint(PointKind Kind, string Id, int X, int Y, string Event, bool Active, int Cost, ShopKind ShopKind = ShopKind.General);
+// Direction: for a conveyor cell, where it carries the party.
+public sealed record FieldPoint(PointKind Kind, string Id, int X, int Y, string Event, bool Active, int Cost, ShopKind ShopKind = ShopKind.General, Direction Direction = Direction.North);
 
 // One of the game's actors in the party's area. Scripted: a script has moved, turned, shown or hidden it; an
 // untouched actor stands at the talk point named after it.
@@ -201,12 +208,12 @@ public sealed record Notice(NoticeKind Kind, string Key, IReadOnlyList<string> P
 public sealed record ActiveStatus(string Id, string Name, int Remaining);
 
 public sealed record Combatant(int Index, string Id, string Name, string Label, Side Side, string Group, int Hp, int MaxHp, int Tp, int MaxTp, bool Alive,
-	bool Defending, IReadOnlyList<ActiveStatus> Statuses, CommandKind CommandKind, string CommandId, int CommandTarget, bool Flying = false);
+	bool Defending, IReadOnlyList<ActiveStatus> Statuses, CommandKind CommandKind, string CommandId, int CommandTarget, bool Flying = false, int Position = -1);
 
 // Music is the encounter's track from game.json, "" when the data names none. Vehicle is a vehicle battle's vehicle, the
 // combatant after the members riding it, "" otherwise.
 public sealed record BattleInfo(bool Live, string Encounter, BattleSource Source, int Round, int PartyCount, int CombatantCount, Outcome Outcome,
-	bool EscapeAllowed, bool AutoActive, bool PartyActsNextRound, bool GameOver, string Music, string Vehicle);
+	bool EscapeAllowed, bool AutoActive, bool PartyActsNextRound, bool GameOver, string Music, string Vehicle, int FormationSize = 0);
 
 public sealed record BattleOption(string Id, string Name, CommandKind Command, AbilityKind? AbilityKind, Targeting Targeting, int Cost, int Uses, CancelReason Unusable)
 {
@@ -237,9 +244,10 @@ public sealed record StatBonus(int MaxHp, int MaxTp, int Strength, int Mental, i
 
 public sealed record StatusResist(string Id, string Name, int Percent);
 
-// What a status screen shows beyond Member. EquipmentBonus is indexed by EquipSlot; Affinities lists every element but None.
+// What a status screen shows beyond Member. EquipmentBonus is indexed by EquipSlot; Affinities and AffinityList hold each
+// element the member takes at other than the normal rate, the list in the data's element order with names.
 public sealed record MemberDetail(string Id, int ExperienceToNext, int Critical, int Evasion, Element AttackElement, IReadOnlyList<StatBonus> EquipmentBonus,
-	IReadOnlyDictionary<Element, int> Affinities, IReadOnlyList<StatusResist> StatusResists, int MagicDefense = 0);
+	IReadOnlyDictionary<Element, int> Affinities, IReadOnlyList<StatusResist> StatusResists, int MagicDefense = 0, IReadOnlyList<Affinity>? AffinityList = null);
 
 // A member's battle numbers, built by the code that sets up a battle combatant.
 public sealed record CombatView(StatBonus Stats, string BasicAttack, string BasicAttackName, Element AttackElement, IReadOnlyList<string> Abilities,

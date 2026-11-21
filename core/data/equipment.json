@@ -16,6 +16,8 @@
 		{"id": "kelp_cleaver", "name": "Kelp Cleaver", "slot": "weapon", "category": "greatblade", "hands": 2, "stats": {"strength": 12}},
 		{"id": "driftwood_buckler", "name": "Driftwood Buckler", "slot": "shield", "category": "buckler", "stats": {"defense": 4}},
 		{"id": "reef_targe", "name": "Reef Targe", "slot": "shield", "category": "buckler", "stats": {"defense": 6, "agility": -1}},
-		{"id": "ward_mantle", "name": "Ward Mantle", "slot": "body", "category": "light_armor", "stats": {"defense": 2, "magic_defense": 8}}
+		{"id": "ward_mantle", "name": "Ward Mantle", "slot": "body", "category": "light_armor", "stats": {"defense": 2, "magic_defense": 8}},
+		{"id": "squall_fan", "name": "Squall Fan", "slot": "accessory", "category": "charm", "use": "gust", "use_from_bag": true},
+		{"id": "ember_mail", "name": "Ember Mail", "slot": "body", "category": "light_armor", "stats": {"defense": 3}, "affinities": {"heat": 50, "chill": 150}}
 	]
 }

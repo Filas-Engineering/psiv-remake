@@ -630,3 +630,34 @@ end
 	}
 	CHECK(seen == expected);
 }
+
+TEST(money_equipment_and_area_music_reach_the_host_and_apply_while_skipping) {
+	Program p = test::compile_ok(R"(event a skippable
+	money give 30
+	if money >= 25
+		money take 25
+	end
+	equip fighter gill_knife
+	unequip fighter tin_cap
+	music area harbor_theme
+	say guide "done"
+	music area default
+end
+)");
+	RecordingHost host;
+	Interpreter it(p, host);
+	CHECK(it.start("a"));
+	CHECK(it.skip());
+	test::run(it, host);
+	CHECK(it.status() == Status::finished);
+	CHECK_EQ(host.purse, 5);
+	const std::vector<std::string> expected = {"money 30", "money -> 30", "money -25", "equip fighter gill_knife", "unequip fighter tin_cap",
+		"music area harbor_theme", "music area default"};
+	std::vector<std::string> seen;
+	for (const std::string& line : host.trace) {
+		if (line.rfind("money", 0) == 0 || line.rfind("music area", 0) == 0 || line.rfind("equip ", 0) == 0 || line.rfind("unequip ", 0) == 0) {
+			seen.push_back(line);
+		}
+	}
+	CHECK_EQ(test::join(seen), test::join(expected));
+}

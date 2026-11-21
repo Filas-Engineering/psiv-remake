@@ -20,24 +20,25 @@ REQUIRED_MAP_PROPERTIES = ["id"]
 # Per object class: property name to type. "json" is a string property holding JSON text of the given shape.
 OBJECT_PROPERTIES = {
 	"marker": {},
-	"exit": {"to": "string", "marker": "string", "fall": "bool"},
-	"hook": {"trigger": "string", "event": "string", "require_flag": "string", "block_flag": "string"},
+	"exit": {"to": "string", "marker": "string", "fall": "bool", "require_flag": "string", "block_flag": "string"},
+	"hook": {"trigger": "string", "event": "string", "require_flag": "string", "block_flag": "string", "once": "bool", "tile": "string", "solid": "string"},
 	"shop": {"kind": "string", "stock": "json list", "sell_percent": "int", "require_flag": "string", "block_flag": "string", "script_only": "bool"},
 	"rest": {"cost": "int", "script_only": "bool"},
 	"chest": {"flag": "string", "items": "json object", "equipment": "json object", "money": "int"},
-	"port": {"marker": "string", "flag": "string", "ship": "string"},
+	"port": {"marker": "string", "flag": "string", "ship": "string", "block_flag": "string"},
 	"zone": {"table": "json list", "visible": "json object", "random": "json object"},
 	"helm": {},
 	"gangway": {},
 	"change": {"flag": "string", "tile": "string", "cells": "json list"},
+	"conveyor": {"cells": "json list", "direction": "string", "step_ms": "int", "require_flag": "string", "block_flag": "string"},
 }
 REQUIRED_PROPERTIES = {"exit": ["to", "marker"], "hook": ["event"], "shop": ["stock"], "chest": ["flag"], "port": ["marker"], "zone": ["table"],
-	"change": ["flag", "tile", "cells"]}
+	"change": ["flag", "tile", "cells"], "conveyor": ["cells", "direction"]}
 NAMED_CLASSES = {"marker", "hook", "shop", "rest", "chest", "port", "zone", "helm"}
 # Hooks with these triggers have no cell; their object's position is ignored.
 CELL_FREE_TRIGGERS = {"load", "flag"}
 CLASS_OF_LIST = {"exits": "exit", "hooks": "hook", "shops": "shop", "rests": "rest", "chests": "chest", "ports": "port", "zones": "zone", "helms": "helm",
-	"gangway": "gangway", "changes": "change"}
+	"gangway": "gangway", "changes": "change", "conveyors": "conveyor"}
 TILED_VERSION = "1.10.2"
 FORMAT_VERSION = "1.10"
 
@@ -372,6 +373,9 @@ def _read_object(obj, tw, th, area, lists, problems):
 			return
 		lists["changes"].append({"flag": props["flag"], "tile": props["tile"], "cells": props["cells"]})
 		return
+	if cls == "conveyor":
+		lists["conveyors"].append(props)
+		return
 	cell = _cell(obj, tw, th)
 	if cls == "marker":
 		if name in area["markers"]:
@@ -383,7 +387,7 @@ def _read_object(obj, tw, th, area, lists, problems):
 		lists["exits"].append(entry)
 	elif cls == "hook":
 		hook = {"id": name}
-		if props.get("trigger") not in CELL_FREE_TRIGGERS:
+		if props.get("trigger") not in CELL_FREE_TRIGGERS and "tile" not in props:
 			hook["at"] = cell
 		hook.update(props)
 		lists["hooks"].append(hook)
@@ -490,7 +494,7 @@ def area_to_tmj(area, tileset_ref, tile_size=16):
 		add("exit", "", {k: v for k, v in e.items() if k != "at"}, cell=cell_of(e, f"exits[{i}]"))
 	for i, h in enumerate(area.get("hooks", [])):
 		props = {k: v for k, v in h.items() if k not in ("id", "at")}
-		if h.get("trigger") in CELL_FREE_TRIGGERS:
+		if h.get("trigger") in CELL_FREE_TRIGGERS or "tile" in h:
 			add("hook", h.get("id", ""), props)
 		else:
 			add("hook", h.get("id", ""), props, cell=cell_of(h, f"hooks[{i}]"))
@@ -521,6 +525,8 @@ def area_to_tmj(area, tileset_ref, tile_size=16):
 		add("gangway", "", {}, cell=cell)
 	for c in area.get("changes", []):
 		add("change", "", dict(c))
+	for c in area.get("conveyors", []):
+		add("conveyor", "", dict(c))
 	if problems:
 		raise areajson.AreaError(problems)
 

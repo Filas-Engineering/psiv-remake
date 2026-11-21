@@ -95,7 +95,7 @@ public sealed partial class SampleController
 		_battle.Log.Clear();
 		_battle.Auto = false;
 		_timeline.Clear();
-		_show.Start(_s.Combatants(), _s.BattleInfo()?.PartyCount ?? 0);
+		_show.Start(_s.Combatants(), _s.BattleInfo()?.PartyCount ?? 0, _s.BattleInfo()?.FormationSize ?? 0);
 		string enemies = ListText(_s.Combatants().Where(c => c.Side == Side.Enemy).Select(c => c.Label));
 		BattleStep intro = Context().Step(StepKind.Intro, enemies, "intro " + enemies, []);
 		intro.Lines.Add(T("ui.battle.log.enemies", enemies));
@@ -419,6 +419,7 @@ public sealed partial class SampleController
 		"shown" => string.Join(", ", _show.All.Select((c, i) => $"{(i < _battle.Labels.Count ? _battle.Labels[i] : "?")} {c.Hp}/{c.MaxHp} {c.Tp}/{c.MaxTp}" +
 			(c.Statuses.Count > 0 ? " " + string.Join(" ", c.Statuses) : "") + (c.Alive ? "" : " down"))),
 		"victory" => _probeVictory,
+		"formation" => $"{_show.Slots}: " + string.Join(" ", _show.All.Where(c => c.Position >= 0).Select(c => c.Position.ToString(CultureInfo.InvariantCulture))),
 		// The command menu's rows for the phase, the one under the cursor in brackets.
 		"battlemenu" => _battle.Active && MenuRows(StageCombatants()) is { } menu
 			? string.Join(" | ", menu.Items.Select((item, i) => i == _cursor ? $"[{item}]" : item)) : "-",

@@ -248,7 +248,7 @@ TEST(theAffinityDivisorScalesDamageAndDefend) {
 		const int strength = battle.combatant(kFighter).stats.strength;
 		const int bonus = critical ? formulas::criticalBonus(strength) : 0;
 		const int defense = battle.combatant(kFirstEnemy).effective(Stat::Defense);
-		const int affinity = defending ? 50 : 100;
+		const int affinity = defending ? 50 : 200;
 		CHECK(hit && hit->amount >= formulas::damage(strength, defense, bonus, affinity, formulas::kSpreadMin, 200));
 		CHECK(hit && hit->amount <= formulas::damage(strength, defense, bonus, affinity, formulas::kSpreadMax, 200));
 	}

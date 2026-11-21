@@ -265,4 +265,16 @@ void Host::teach_ability(const std::string&, const std::string&) {}
 
 void Host::set_follower(const std::string&) {}
 
+std::int64_t Host::money() {
+	return 0;
+}
+
+void Host::change_money(std::int64_t) {}
+
+void Host::equip_piece(const std::string&, const std::string&) {}
+
+void Host::unequip_piece(const std::string&, const std::string&) {}
+
+void Host::set_area_music(const std::string&) {}
+
 }

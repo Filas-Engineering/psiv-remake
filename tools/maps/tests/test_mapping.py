@@ -154,6 +154,21 @@ class VesselAndChangesTest(TempCase):
 		self.assertEqual({"id": "flask", "require_flag": "a.flag", "block_flag": "b.flag"}, back["shops"][0]["stock"][1])
 		self.assertEqual(list(areajson.STOCK_FIELDS), list(areajson.normalize(VESSEL_AREA)["shops"][0]["stock"][1]))
 
+	def test_gated_exits_and_ports_hooks_on_tiles_once_and_solid_and_conveyors_survive_a_round_trip(self):
+		area = copy.deepcopy(VESSEL_AREA)
+		area["exits"][0].update({"require_flag": "a.flag", "block_flag": "b.flag"})
+		area["ports"][0]["block_flag"] = "b.flag"
+		area["hooks"] = [
+			{"id": "belt_bell", "trigger": "step", "event": "e", "tile": "."},
+			{"id": "once", "trigger": "flag", "event": "e", "require_flag": "a.flag", "once": True},
+			{"id": "sweeper", "at": [1, 0], "event": "e", "block_flag": "b.flag", "solid": "while_active"},
+		]
+		area["conveyors"] = [{"cells": [[1, 1], [2, 1]], "direction": "east", "step_ms": 200, "block_flag": "b.flag"}]
+		back = self.convert(tiled.area_to_tmj(copy.deepcopy(area), "cells.tsj"))
+		self.assertEqual(areajson.dumps(area), areajson.dumps(back))
+		self.assertNotIn("at", back["hooks"][0])
+		self.assertIn('\t"conveyors": [\n\t\t{"cells": [[1, 1], [2, 1]], "direction": "east", "step_ms": 200, "block_flag": "b.flag"}\n\t]', areajson.dumps(back))
+
 	def test_refuses_a_change_tile_that_is_not_a_map_character_and_a_change_without_cells(self):
 		tmj = tiled.area_to_tmj(copy.deepcopy(VESSEL_AREA), "cells.tsj")
 		changes = [o for o in objects(tmj) if o["type"] == "change"]

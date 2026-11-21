@@ -1,0 +1,44 @@
+{
+	"id": "cogway",
+	"kind": "field",
+	"encounter_mode": "random",
+	"step_ms": 250,
+	"music": "dungeon_kiln_halls",
+	"region": "fells",
+	"map": [
+		"############",
+		"#..........#",
+		"#..........#",
+		"#..........#",
+		"#..........#",
+		"#..........#",
+		"######.#####"
+	],
+	"markers": {
+		"entry": [6, 5],
+		"lift_top": [10, 1]
+	},
+	"exits": [
+		{"at": [6, 6], "to": "fell_moor", "marker": "east_gate", "require_flag": "cogway.open"}
+	],
+	"hooks": [
+		{"id": "cogway_welcome", "trigger": "flag", "event": "cogway_welcome", "require_flag": "cogway.open", "once": true},
+		{"id": "cogway_lift", "at": [1, 1], "trigger": "step", "event": "cogway_lift"},
+		{"id": "cog_sweeper", "at": [8, 2], "event": "cogway_sweeper", "block_flag": "cogway.swept", "solid": "while_active"},
+		{"id": "cogway_rack", "at": [3, 0], "event": "cogway_rack"},
+		{"id": "cogway_jukebox", "at": [10, 0], "event": "cogway_jukebox"},
+		{"id": "cogway_power", "at": [0, 4], "event": "cogway_power"}
+	],
+	"zones": [
+		{
+			"id": "cogway_floor",
+			"from": [1, 1],
+			"to": [10, 5],
+			"table": [{"encounter": "sprites", "weight": 2}, {"encounter": "jelly", "weight": 1}, {"encounter": "beetles", "weight": 1}, {"encounter": "pupa", "weight": 1}],
+			"random": {"min_steps": 6, "max_steps": 10, "grace_steps": 3, "step_chance": 6, "vehicle_step_chance": 12, "safe_near_exits": true}
+		}
+	],
+	"conveyors": [
+		{"cells": [[2, 3], [3, 3], [4, 3], [5, 3]], "direction": "east", "step_ms": 200}
+	]
+}

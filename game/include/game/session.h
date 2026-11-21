@@ -229,8 +229,9 @@ struct MemberDetail {
 	std::map<rules::EquipSlot, rules::Stats> equipmentBonus;
 	// The worn weapon's element, or None.
 	rules::Element attackElement = rules::Element::None;
-	// Percent of each element's damage taken, every element listed.
-	std::map<rules::Element, int> affinities;
+	// Each element whose damage the member takes at other than the normal rate, in the data's element order, with that
+	// affinity (on the rules' divisor scale).
+	std::vector<std::pair<rules::Element, int>> affinities;
 	// The character's status resistances plus its pieces', capped at 100, as a battle combatant gets them.
 	rules::StatusResists statusResist;
 };
@@ -383,6 +384,8 @@ public:
 	std::string stringText(const std::string& id) const;
 	// A character's chosen name, its own name, an actor's speaker name or an area's name.
 	std::string displayName(const std::string& id) const;
+	// An element's name in the profile's language (`name.element.<id>`), else its id; "" for none.
+	std::string elementName(const rules::Element& element) const;
 	// An item's, piece's, ability's, status's, enemy's or difficulty's description in the profile's language, name
 	// tokens rendered; empty when that language has none.
 	std::string description(DescriptionKind kind, const std::string& id) const;
@@ -417,6 +420,8 @@ public:
 	WalkStatus walkStep(PathWalk& walk);
 	// The actors in the party's area, in game.json order, hidden ones included.
 	std::vector<ActorView> actorsHere() const;
+	// The track the area plays now: the one a script set (`music area`), else the area's own.
+	std::string areaMusic() const;
 	// Interacts with whatever stands in the cell the leader faces (FLD-030): a vehicle is boarded, a port opens its
 	// destinations. Refused while the party rides a vehicle.
 	rules::Message interact();
@@ -688,6 +693,7 @@ private:
 
 	int tickRemainderMs_ = 0;
 	int stepProgressMs_ = 0;
+	int conveyorMs_ = 0;
 	std::optional<Facing> latchedDirection_;
 	// Not saved: hooks fire once per area entry and autosave points are judged per session (FLOW-050).
 	bool loadHooksPending_ = false;

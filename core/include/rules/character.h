@@ -31,6 +31,8 @@ struct CharacterDef {
 	CreatureKind kind = CreatureKind::Living;
 	// Instant-defeat effects can fell it (rules.json `instant_defeat_kinds` makes whole kinds so).
 	bool vulnerable = false;
+	// Techniques and skills events can teach it, which combination recipes count as abilities it can use.
+	std::vector<std::string> teachable = {};
 };
 
 // The persistent state of a party member between battles. The host owns it.

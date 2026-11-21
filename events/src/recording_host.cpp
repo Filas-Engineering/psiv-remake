@@ -207,6 +207,28 @@ void RecordingHost::set_follower(const std::string& actor) {
 	trace.push_back("follower " + (actor.empty() ? std::string("none") : actor));
 }
 
+std::int64_t RecordingHost::money() {
+	trace.push_back("money -> " + std::to_string(purse));
+	return purse;
+}
+
+void RecordingHost::change_money(std::int64_t delta) {
+	trace.push_back("money " + std::to_string(delta));
+	purse += delta;
+}
+
+void RecordingHost::equip_piece(const std::string& member, const std::string& piece) {
+	trace.push_back("equip " + member + " " + piece);
+}
+
+void RecordingHost::unequip_piece(const std::string& member, const std::string& piece) {
+	trace.push_back("unequip " + member + " " + piece);
+}
+
+void RecordingHost::set_area_music(const std::string& track) {
+	trace.push_back("music area " + (track.empty() ? std::string("default") : track));
+}
+
 bool RecordingHost::has_vehicle(const std::string& vehicle) {
 	const bool held = vehicles.count(vehicle) > 0;
 	trace.push_back("has_vehicle " + vehicle + " -> " + (held ? "true" : "false"));

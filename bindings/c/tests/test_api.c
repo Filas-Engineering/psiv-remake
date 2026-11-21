@@ -891,13 +891,13 @@ static void testActors(void) {
 	/* Every actor id, from game.json, already at the title. */
 	const char* const* ids;
 	int32_t idCount;
-	const char* allActors[] = {"ashwife", "bridgewright", "dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "lodgekeeper", "peddler", "wayfarer"};
+	const char* allActors[] = {"ashwife", "bridgewright", "cog_sweeper", "dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "lodgekeeper", "peddler", "wayfarer"};
 	CHECK(psiv_actor_ids(s, NULL, &idCount) == PSIV_INVALID_ARGUMENT);
 	CHECK(psiv_actor_ids(s, &ids, NULL) == PSIV_INVALID_ARGUMENT);
 	CHECK(psiv_actor_ids(NULL, &ids, &idCount) == PSIV_INVALID_ARGUMENT);
 	CHECK_OK(psiv_actor_ids(s, &ids, &idCount));
-	CHECK(idCount == 10);
-	for (int32_t i = 0; i < idCount && i < 10; ++i) {
+	CHECK(idCount == 11);
+	for (int32_t i = 0; i < idCount && i < 11; ++i) {
 		CHECK(strcmp(ids[i], allActors[i]) == 0);
 	}
 	CHECK_OK(psiv_new_game(s));
@@ -956,7 +956,7 @@ static void testActors(void) {
 	CHECK(count == 1 && strcmp(actors[0].id, "peddler") == 0 && actors[0].x == 10 && actors[0].y == 7 && !actors[0].scripted);
 	/* The dockhand and the guide are actors in another area: in the ids, not among the field's actors. */
 	CHECK_OK(psiv_actor_ids(s, &ids, &idCount));
-	CHECK(idCount == 10 && strcmp(ids[2], "dockhand") == 0 && strcmp(ids[4], "guide") == 0);
+	CHECK(idCount == 11 && strcmp(ids[3], "dockhand") == 0 && strcmp(ids[5], "guide") == 0);
 	CHECK(!findActor(actors, count, "dockhand") && !findActor(actors, count, "guide"));
 	psiv_session_destroy(s);
 }
@@ -1069,9 +1069,16 @@ static void testMenus(void) {
 	CHECK_OK(psiv_member_detail_get(s, "fighter", &detail));
 	CHECK(detail.experience_to_next > 0 && detail.critical == 8 && detail.attack_element == PSIV_ELEMENT_NONE);
 	CHECK(detail.equipment_bonus[PSIV_SLOT_WEAPON].strength == 4 && detail.equipment_bonus[PSIV_SLOT_BODY].max_hp == 10);
-	CHECK(detail.equipment_bonus[PSIV_SLOT_ARMS].defense == 0 && detail.affinity_count == 4 && detail.status_resist_count == 0);
+	CHECK(detail.equipment_bonus[PSIV_SLOT_ARMS].defense == 0 && detail.affinity_count == 0 && detail.status_resist_count == 0);
 	CHECK_OK(psiv_member_detail_get(s, "mystic", &detail));
-	CHECK(detail.attack_element == PSIV_ELEMENT_HEAT && detail.affinities[2].element == PSIV_ELEMENT_SHOCK && detail.affinities[2].percent == 50);
+	CHECK(detail.attack_element == PSIV_ELEMENT_HEAT && detail.affinity_count == 1 && detail.affinities[0].element == PSIV_ELEMENT_SHOCK && detail.affinities[0].percent == 50);
+	CHECK(strcmp(detail.affinities[0].id, "shock") == 0 && strcmp(detail.affinities[0].name, "Shock") == 0);
+	const psiv_element_info* elements;
+	CHECK_OK(psiv_elements(s, &elements, &count));
+	CHECK(count >= 5 && elements[0].index == PSIV_ELEMENT_HEAT && strcmp(elements[4].id, "holy") == 0 && elements[4].index == PSIV_ELEMENT_HOLY);
+	psiv_game_info elementRules;
+	CHECK_OK(psiv_game_info_get(s, &elementRules));
+	CHECK(elementRules.affinity_divisor == 100);
 	CHECK(detail.status_resist_count == 1 && strcmp(detail.status_resists[0].name, "Sleep") == 0 && detail.status_resists[0].percent == 100);
 	CHECK(psiv_member_detail_get(s, "scout", &detail) == PSIV_NOT_FOUND);
 	const psiv_ability_info* abilities;
@@ -1889,6 +1896,44 @@ static void testFells(void) {
 	psiv_session_destroy(s);
 }
 
+static void testCogwayAndFormations(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/cogway", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_POINT_KIND, PSIV_POINT_CONVEYOR), "conveyor") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_STAT, PSIV_STAT_MAGIC_DEFENSE), "magic_defense") == 0);
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK_OK(psiv_dev_warp(s, "cogway", "entry"));
+	settle(s);
+	const psiv_point* points = NULL;
+	int32_t count = 0;
+	CHECK_OK(psiv_field_points(s, &points, &count));
+	int belts = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		if (points[i].kind == PSIV_POINT_CONVEYOR) {
+			CHECK(points[i].direction == PSIV_DIRECTION_EAST && points[i].active && points[i].y == 3);
+			++belts;
+		}
+	}
+	CHECK(belts == 4);
+	psiv_field_info field;
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.music, "dungeon_kiln_halls") == 0);
+
+	/* A formation with free places: the jelly stands in the middle of three. */
+	CHECK_OK(psiv_dev_battle(s, "jelly"));
+	psiv_battle_info info;
+	CHECK_OK(psiv_battle_info_get(s, &info));
+	CHECK(info.formation_size == 3);
+	const psiv_combatant* combatants = NULL;
+	CHECK_OK(psiv_battle_combatants(s, &combatants, &count));
+	CHECK(count == info.party_count + 1 && combatants[count - 1].position == 1 && combatants[0].position == -1);
+	psiv_session_destroy(s);
+}
+
 int main(int argc, char** argv) {
 	for (int i = 1; i + 1 < argc; i += 2) {
 		if (strcmp(argv[i], "--data") == 0) {
@@ -1919,6 +1964,7 @@ int main(int argc, char** argv) {
 	testDevTools();
 	testFollowersKindsAndUses();
 	testFells();
+	testCogwayAndFormations();
 	if (failures) {
 		fprintf(stderr, "%d of %d checks failed\n", failures, checks);
 		return 1;

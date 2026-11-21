@@ -1,0 +1,72 @@
+# The Cogway and the battle options of this round, with --dev on the shipped data. Seed 1. The belts drawn still while
+# the hall is off and running once its lever is thrown, the gate to the moor a wall until then, the welcome that plays
+# once, the nameless sweeper's lines without a name plate and the way it frees once paid, the music box changing the
+# hall's tune, and in battle a formation with free places on each side of the jelly. With --window the shot lines save
+# screenshots under build/shots/ (run from bindings/); headless runs write nothing for them.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev warp cogway 1 4
+wait 10
+expect state area Cogway
+expect state conveyors 4/4
+expect state music dungeon_kiln_halls
+shot build/shots/cogway_off.png
+
+# The lever: the gate opens and the welcome plays once.
+press Left
+wait 3
+press Enter
+wait 4
+expect state speaker none
+pressuntil Enter Field 400
+expect state leader cogway 1 4
+shot build/shots/cogway_on.png
+
+# The sweeper stands in the way, speaks with no name plate, and steps aside once paid.
+dev money 40
+cmd walk 8 3
+press Up
+wait 3
+press Enter
+wait 4
+expect state speaker none
+shot build/shots/cogway_sweeper.png
+press Enter
+wait 3
+press Enter
+pressuntil Enter Field 400
+cmd walk 8 2
+wait 10
+expect state leader cogway 8 2
+
+# The music box sets the hall's tune until the party leaves.
+cmd walk 10 1
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+expect state music dungeon_firing_floor
+
+# A belt carries the party along its row.
+dev warp cogway 2 3
+wait 60
+expect state leader cogway 6 3
+shot build/shots/cogway_belt.png
+
+# Free places in a formation: the jelly stands in the middle of three, in both layouts.
+dev battle jelly
+expect mode Battle
+waitstate 120 battlephase Command
+expect state formation 3: 1
+shot build/shots/cogway_formation_front.png
+battlelayout side
+wait 4
+expect state formation 3: 1
+shot build/shots/cogway_formation_side.png
+dev win
+waitstate 400 battlephase Ended
+pressuntil Enter Field 600

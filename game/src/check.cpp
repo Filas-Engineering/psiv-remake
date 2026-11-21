@@ -100,7 +100,7 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 		}
 	}
 	for (const Hook& h : area.hooks) {
-		if (h.trigger == HookTrigger::Step) {
+		if (h.trigger == HookTrigger::Step && !h.tile) {
 			if (const Solid* s = solidAt(h.at)) {
 				found.add(file, h.line, "check.step_hook_on_object", {h.id, s->what});
 			}
@@ -192,7 +192,7 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 		}
 	}
 	for (const Hook& h : area.hooks) {
-		if (h.trigger == HookTrigger::Step && !reached.count(h.at) && !solidAt(h.at)) {
+		if (h.trigger == HookTrigger::Step && !h.tile && !reached.count(h.at) && !solidAt(h.at)) {
 			found.add(file, h.line, "check.hook_not_reached", {h.id});
 		}
 	}

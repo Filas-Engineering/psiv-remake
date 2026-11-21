@@ -1,0 +1,70 @@
+# The Cogway, a works hall no road leads to yet (developer warps reach it): a greeting the first time its power is on,
+# a belt that carries the party along, a lift, a sweeper with no name who sells a blade and steps aside once paid, a
+# rack to hang it back on, and a music box that changes the hall's tune.
+
+event cogway_power unskippable
+	lock player
+	if cogway.open
+		narrate @cogway.power.off
+		clear cogway.open
+	else
+		narrate @cogway.power.on
+		set cogway.open
+	end
+	unlock player
+end
+
+event cogway_welcome skippable
+	narrate @cogway.welcome
+end
+
+event cogway_lift unskippable
+	narrate @cogway.lift
+	warp cogway lift_top
+end
+
+event cogway_sweeper unskippable
+	lock player
+	if money >= 20
+		say cog_sweeper @cogway.sweeper.offer
+		ask @cogway.sweeper.ask
+		yes
+			money take 20
+			give gill_knife
+			equip fighter gill_knife
+			set cogway.swept
+			say cog_sweeper @cogway.sweeper.thanks
+		no
+			say cog_sweeper @cogway.sweeper.declined
+		end
+	else
+		say cog_sweeper @cogway.sweeper.poor
+		money give 5
+	end
+	unlock player
+end
+
+event cogway_rack unskippable
+	lock player
+	if item gill_knife
+		narrate @cogway.rack.full
+	else
+		narrate @cogway.rack.hang
+		unequip fighter gill_knife
+	end
+	unlock player
+end
+
+event cogway_jukebox unskippable
+	lock player
+	if cogway.loud
+		music area default
+		clear cogway.loud
+		narrate @cogway.jukebox.off
+	else
+		music area dungeon_firing_floor
+		set cogway.loud
+		narrate @cogway.jukebox.on
+	end
+	unlock player
+end

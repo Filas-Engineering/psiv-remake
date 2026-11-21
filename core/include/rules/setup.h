@@ -43,6 +43,8 @@ struct BattleSetup {
 	std::uint64_t seed = 0;
 	// What escape rolls against; 240 or more forbids escape. -1 uses the highest enemy agility at battle start.
 	int escapeRating = -1;
+	// Unworn pieces in the bag that members can cast through the Item command (`use_from_bag`).
+	EquipmentBag pieces = {};
 };
 
 // Fills the enemy group, the escape flag and the escape rating from an encounter. Returns an empty string, or the error.

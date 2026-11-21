@@ -25,7 +25,9 @@
 		{"id": "steps_tinker", "at": [3, 3], "event": "steps_tinker"},
 		{"id": "steps_sentinel", "at": [8, 2], "event": "steps_sentinel"}
 	],
-	"rests": [{"id": "steps_spring", "at": [6, 3], "cost": 0}],
+	"rests": [
+		{"id": "steps_spring", "at": [6, 3], "cost": 0}
+	],
 	"zones": [
 		{
 			"id": "steps",

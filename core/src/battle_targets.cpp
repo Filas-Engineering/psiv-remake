@@ -117,6 +117,9 @@ int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const
 	case EffectKind::Summon:
 	case EffectKind::Merge:
 	case EffectKind::Teach:
+	case EffectKind::Transform:
+	case EffectKind::Split:
+	case EffectKind::SelfDestruct:
 		return requested;
 	}
 	int best = -1;

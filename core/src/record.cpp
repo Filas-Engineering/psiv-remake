@@ -81,6 +81,9 @@ std::string serializeRecord(const BattleRecord& record) {
 	for (const auto& [id, count] : setup.inventory) {
 		s << "inventory " << text::encode(id) << ' ' << count << '\n';
 	}
+	for (const auto& [id, count] : setup.pieces) {
+		s << "piece " << text::encode(id) << ' ' << count << '\n';
+	}
 	for (const PartyMember& member : setup.party) {
 		s << "member " << text::encode(member.characterId) << ' ' << member.level << ' ' << member.experience << ' '
 			<< member.hp << ' ' << member.tp << '\n';
@@ -157,7 +160,7 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 				return fail("expected 'battle_record <version>'");
 			}
 			// Format 4 differs only in having no escape rating, and format 3 also has no member names.
-			if (version != kRecordFormatVersion && version != 6 && version != 5 && version != 4 && version != 3) {
+			if (version != kRecordFormatVersion && version != 7 && version != 6 && version != 5 && version != 4 && version != 3) {
 				return fail("record format " + t[1] + " is not supported (this build reads " + std::to_string(kRecordFormatVersion) + ")");
 			}
 			sawHeader = true;
@@ -206,13 +209,18 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 			ok = text::decode(t[1], setup.enemyGroup);
 		} else if (key == "enemy" && n == 3) {
 			FormationSlot slot;
-			ok = text::decode(t[1], slot.enemy) && text::decode(t[2], slot.group) && !slot.enemy.empty();
+			ok = text::decode(t[1], slot.enemy) && text::decode(t[2], slot.group);
 			setup.enemies.push_back(slot);
 		} else if (key == "inventory" && n == 3) {
 			std::string id;
 			int count = 0;
 			ok = text::decode(t[1], id) && parseInt(t[2], count) && !id.empty();
 			setup.inventory[id] = count;
+		} else if (key == "piece" && n == 3) {
+			std::string id;
+			int count = 0;
+			ok = text::decode(t[1], id) && parseInt(t[2], count) && !id.empty();
+			setup.pieces[id] = count;
 		} else if (key == "member" && n == 6) {
 			PartyMember member;
 			ok = text::decode(t[1], member.characterId) && parseInt(t[2], member.level) && parseInt(t[3], member.experience)

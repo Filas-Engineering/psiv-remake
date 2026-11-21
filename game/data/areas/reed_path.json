@@ -36,8 +36,12 @@
 		{"id": "skimmer", "at": [17, 5], "event": "reed_path_skimmer"},
 		{"id": "lookout", "at": [1, 1], "event": "reed_path_lookout", "block_flag": "reed.lookout_seen"}
 	],
-	"shops": [{"id": "reed_peddler", "stock": ["tonic", "clear_gel", "loosen_oil"], "sell_percent": 40}],
-	"chests": [{"id": "reed_cache", "at": [10, 1], "flag": "chest.reed_cache", "items": {"second_wind": 1}, "money": 30}],
+	"shops": [
+		{"id": "reed_peddler", "stock": ["tonic", "clear_gel", "loosen_oil"], "sell_percent": 40}
+	],
+	"chests": [
+		{"id": "reed_cache", "at": [10, 1], "flag": "chest.reed_cache", "items": {"second_wind": 1}, "money": 30}
+	],
 	"zones": [
 		{
 			"id": "west_reeds",

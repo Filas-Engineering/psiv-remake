@@ -49,6 +49,11 @@ struct Database {
 	const Encounter* encounter(const std::string& id) const;
 	const DifficultyDef* difficulty(const std::string& id) const;
 	const Macro* macro(const std::string& name) const;
+	// Built-in elements, then the declared ones; none is not listed.
+	std::vector<std::string> elementIds() const;
+	bool hasElement(const Element& element) const;
+	// 0 for none, then 1 up in elementIds() order.
+	int elementIndex(const Element& element) const;
 };
 
 }

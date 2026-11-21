@@ -123,6 +123,12 @@ struct World {
 	std::string aboard;
 	// An actor who walks with the party without joining it (F14); empty for none.
 	std::string follower;
+	// Steps since the party entered the area, counted only up to the longest grace of its zones.
+	int areaSteps = 0;
+	// Flag hooks with `once` that have fired, as "<area>/<hook>".
+	std::set<std::string> onceHooks;
+	// The track a script set for the area the party is in, until it leaves; empty plays the area's own.
+	std::string areaMusic;
 	// Where the party stood outside the dungeon it is in, which leaving the dungeon at once returns to (FLD-051); the
 	// area is empty when the party is not in a dungeon or came in by a script's warp from another dungeon.
 	std::string dungeonExitArea;

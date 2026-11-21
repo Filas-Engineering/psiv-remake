@@ -131,6 +131,9 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 		kept.ability = item->id;
 		return use;
 	}
+	if (!item->consumed) {
+		return use;
+	}
 	if (--stock->second == 0) {
 		inventory.erase(stock);
 	}

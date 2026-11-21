@@ -13,7 +13,7 @@ namespace game {
 // Schema 2 added the party's statuses and names, core's macro and combo log forms, and the quests and unlocks
 // chunks; schema 3 the actors chunk; schema 4 the talk chunk; schema 5 the travel chunk; schema 6 the dev chunk. Older
 // schemas are migrated in order when they load (SAV-021).
-constexpr int kSaveSchemaVersion = 8;
+constexpr int kSaveSchemaVersion = 9;
 constexpr const char* kSaveMagic = "PSR-SAVE";
 constexpr const char* kClearMagic = "PSR-CLEAR";
 constexpr int kClearVersion = 1;

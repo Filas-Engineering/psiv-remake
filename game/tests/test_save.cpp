@@ -155,7 +155,7 @@ TEST(damagedAndNewerSavesAreRefused) {
 	CHECK(r.error.find("damaged") != std::string::npos);
 
 	std::string newer = text;
-	newer.replace(0, std::string("PSR-SAVE 8").size(), "PSR-SAVE 9");
+	newer.replace(0, std::string("PSR-SAVE 9").size(), "PSR-SAVE 10");
 	r = parseSave(resign(newer));
 	CHECK(!r.ok());
 	CHECK(r.error.find("newer build") != std::string::npos);
@@ -272,7 +272,7 @@ TEST(schemaOneSavesMigrateToTheCurrentSchema) {
 	CHECK_EQ(w.encounterStream.state(), 7u);
 
 	const std::string again = serializeSave(*save.value);
-	CHECK(again.compare(0, 11, "PSR-SAVE 8\n") == 0);
+	CHECK(again.compare(0, 11, "PSR-SAVE 9\n") == 0);
 	CHECK(again.find("chunk battle 2 ") != std::string::npos);
 	CHECK(again.find("chunk quests 1 ") != std::string::npos);
 	CHECK(again.find("chunk actors 1 ") != std::string::npos);
@@ -333,4 +333,75 @@ TEST(dataAndSavesWorkInDirectoriesWithNonAsciiNames) {
 	Session again(*loaded.value, options);
 	CHECK(again.load("manual_0").empty());
 	CHECK_EQ(again.world().area, std::string("tidewater"));
+}
+
+namespace {
+
+// Replaces text inside one chunk, keeping its byte count and the trailer right, as a hand edit that knows the format.
+std::string editSave(const std::string& text, const std::string& from, const std::string& to) {
+	const std::size_t at = text.find(from);
+	const std::size_t header = text.rfind("\nchunk ", at) + 1;
+	const std::size_t sizeAt = text.rfind(' ', text.find('\n', header)) + 1;
+	const std::size_t lineEnd = text.find('\n', header);
+	const long long size = std::stoll(text.substr(sizeAt, lineEnd - sizeAt)) + static_cast<long long>(to.size()) - static_cast<long long>(from.size());
+	std::string out = text.substr(0, at) + to + text.substr(at + from.size());
+	out = out.substr(0, sizeAt) + std::to_string(size) + out.substr(lineEnd);
+	return resign(out);
+}
+
+}
+
+TEST(damagedSavesAreRefusedBeforeAnythingIndexesWithThem) {
+	Session base(test::data(), SessionOptions());
+	base.newGame();
+	test::confirmLines(base);
+	SaveFile good;
+	good.world = base.world();
+	const std::vector<std::pair<const char*, void (*)(World&)>> damages = {
+		{"position outside the area", [](World& w) { w.position = {-1, 9999}; }},
+		{"broken cell outside the area", [](World& w) { w.brokenCells[w.area].insert({500, 500}); }},
+		{"broken cell in an unknown area", [](World& w) { w.brokenCells["nowhere"].insert({0, 0}); }},
+		{"broken cell here outside the area", [](World& w) { w.brokenHere.insert({-3, 0}); }},
+		{"unknown member", [](World& w) { w.roster.push_back(w.roster.front()); w.roster.back().characterId = "nobody"; }},
+		{"lineup member not in the roster", [](World& w) { w.lineup.push_back("medic"); }},
+		{"empty lineup", [](World& w) { w.lineup.clear(); }},
+		{"negative hit points", [](World& w) { w.roster.front().hp = -5; }},
+		{"level past the cap", [](World& w) { w.roster.front().level = 1000; }},
+		{"unknown piece", [](World& w) { w.roster.front().equipment[rules::EquipSlot::Head] = "crown_of_nothing"; }},
+		{"unknown item", [](World& w) { w.items["mystery"] = 1; }},
+		{"oversized count", [](World& w) { w.items["tonic"] = 1000000; }},
+		{"negative count", [](World& w) { w.equipmentBag["copper_blade"] = -2; }},
+		{"negative money", [](World& w) { w.money = -1; }},
+		{"undeclared flag", [](World& w) { w.flags["made.up"] = true; }},
+		{"macro enemy slot out of range", [](World& w) { w.macros.push_back({"bad", {}}); w.macros.back().steps.push_back({}); w.macros.back().steps.back().member = "fighter"; w.macros.back().steps.back().target.kind = rules::MacroTargetKind::Enemy; w.macros.back().steps.back().target.enemySlot = 40; }},
+		{"unknown vehicle", [](World& w) { w.vehicles["hovercart"] = {w.area, w.position, Facing::South, w.area, w.position}; }},
+		{"vehicle outside its area", [](World& w) { w.vehicles["reed_skimmer"] = {"brine_flats", {900, 2}, Facing::South, "brine_flats", {1, 1}}; }},
+		{"aboard a vehicle not owned", [](World& w) { w.aboard = "reed_skimmer"; }},
+		{"unknown follower", [](World& w) { w.follower = "ghost"; }},
+		{"actor outside its area", [](World& w) { w.actors["peddler"] = {w.area, {-1, -1}, Facing::South, true}; }},
+		{"way out outside its area", [](World& w) { w.dungeonExitArea = w.area; w.dungeonExitCell = {0, -7}; }},
+		{"unknown ship port", [](World& w) { w.shipPort = "atlantis"; }},
+		{"unknown job", [](World& w) { w.jobs["imaginary"] = JobState::Accepted; }},
+		{"negative grace", [](World& w) { w.graceMs = -1; }},
+	};
+	{
+		Session s(test::data(), SessionOptions());
+		CHECK(s.loadSaveText(serializeSave(good)).empty());
+	}
+	for (const auto& [what, damage] : damages) {
+		SaveFile bad = good;
+		damage(bad.world);
+		Session s(test::data(), SessionOptions());
+		const rules::Message refused = s.loadSaveText(serializeSave(bad));
+		const bool refusedAsBad = refused.key == "game.refuse.save_invalid" || refused.key == "game.refuse.save_damaged";
+		CHECK_EQ(std::string(what) + (refusedAsBad ? " refused" : " loaded"), std::string(what) + " refused");
+		CHECK(s.mode() == Mode::Title);
+	}
+	const std::string text = serializeSave(good);
+	const std::string money = "money " + std::to_string(good.world.money) + "\n";
+	for (const std::string& edited : {editSave(text, money, "money 99999999999\n"), editSave(text, money, "money -99999999999\n")}) {
+		Session s(test::data(), SessionOptions());
+		CHECK_EQ(s.loadSaveText(edited).key, std::string("game.refuse.save_damaged"));
+		CHECK(s.mode() == Mode::Title);
+	}
 }

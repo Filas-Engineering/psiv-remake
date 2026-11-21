@@ -46,6 +46,7 @@ std::map<std::string, double> expectedShares(const Database& db, const EnemyDef&
 		case AiConditionKind::TechniquesBlocked:
 		case AiConditionKind::Ambushed:
 		case AiConditionKind::AllyPresent:
+		case AiConditionKind::AfterTurns:
 			break;
 		}
 		if (holds) {

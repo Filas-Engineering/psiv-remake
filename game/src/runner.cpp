@@ -105,6 +105,15 @@ void Runner::printEvents(const std::vector<rules::Event>& events) {
 	const rules::TextTable& text = session_.language().text;
 	auto name = [&](const std::string& id) { return session_.displayName(id); };
 	for (const rules::Event& e : events) {
+		if (e.type == rules::EventType::EnemyJoined && e.target == static_cast<int>(battleNames_.size()) && !e.ids.empty()) {
+			const rules::EnemyDef* def = session_.data().db.enemy(e.ids.front());
+			const std::string base = def ? def->name : e.ids.front();
+			int same = 0;
+			for (const std::string& shown : battleNames_) {
+				same += shown == base || shown.rfind(base + " ", 0) == 0 ? 1 : 0;
+			}
+			battleNames_.push_back(same == 0 ? base : base + " " + std::string(1, static_cast<char>('A' + same)));
+		}
 		switch (e.type) {
 		case rules::EventType::RoundStarted:
 			print("-- round " + std::to_string(e.round) + " --");

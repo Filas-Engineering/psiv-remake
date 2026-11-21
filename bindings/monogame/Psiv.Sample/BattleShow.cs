@@ -40,11 +40,19 @@ public sealed class BattleShow
 	// How many formation places the stage spreads the enemies over: the starting ones, and any a joining enemy took.
 	public int Slots => Math.Max(_startingEnemies, _positions.Values.DefaultIfEmpty(-1).Max() + 1);
 
-	public void Start(IReadOnlyList<Combatant> combatants, int partyCount)
+	// `formationSize` counts the formation's free places too; 0 takes one place per starting enemy.
+	public void Start(IReadOnlyList<Combatant> combatants, int partyCount, int formationSize = 0)
 	{
 		_positions.Clear();
 		_partyCount = partyCount;
-		_startingEnemies = combatants.Count - partyCount;
+		_startingEnemies = Math.Max(formationSize, combatants.Count - partyCount);
+		for (int i = partyCount; i < combatants.Count; i++)
+		{
+			if (combatants[i].Position >= 0)
+			{
+				_positions[i] = combatants[i].Position;
+			}
+		}
 		Reset(combatants);
 	}
 

@@ -62,7 +62,7 @@ public sealed partial class SampleController
 		var effects = new List<string> { BonusText(p.Bonus) };
 		if (p.Element != Element.None)
 		{
-			effects.Add(T("ui.equip.element_attacks", T(NameKind.Element, (int)p.Element)));
+			effects.Add(T("ui.equip.element_attacks", ElementText(p.Element)));
 		}
 		if (p.AttackName.Length > 0)
 		{
@@ -95,7 +95,7 @@ public sealed partial class SampleController
 		var notes = new List<string>();
 		if (p.Before.AttackElement != p.After.AttackElement)
 		{
-			notes.Add(T("ui.equip.element_change", T(NameKind.Element, (int)p.Before.AttackElement), T(NameKind.Element, (int)p.After.AttackElement)));
+			notes.Add(T("ui.equip.element_change", ElementText(p.Before.AttackElement), ElementText(p.After.AttackElement)));
 		}
 		if (p.Before.BasicAttack != p.After.BasicAttack)
 		{

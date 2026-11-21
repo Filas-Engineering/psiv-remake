@@ -567,6 +567,8 @@ public sealed partial class SampleController
 			"buffer" => Screen == Screen.NameEntry ? _nameEntry.Buffer : _macroName.Buffer,
 			"cell" => Screen == Screen.NameEntry ? _nameEntry.Cell : _macroName.Cell,
 			"line" => _s.Line()?.Text ?? "-",
+			"speaker" => _s.Line() is { } spoken ? (spoken.SpeakerName.Length > 0 ? spoken.SpeakerName : "none") : "-",
+			"conveyors" => $"{_field.RunningConveyors}/{_field.DrawnConveyors}",
 			"reveal" => _s.Line() is { } line ? $"{Revealed(line.Text)}/{line.Text.Length}" : "-",
 			"party" => string.Join(", ", _s.Party().Where(m => m.InLineup).Select(m => m.Name)),
 			"macros" => string.Join(", ", _s.MacroList().Select(m => $"{m.Name}({m.Steps.Count})" + (m.Name == settings.AutoMacro ? "*" : ""))),

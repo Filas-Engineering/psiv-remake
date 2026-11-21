@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <set>
 #include <sstream>
 
@@ -195,6 +196,15 @@ std::string worldChunk(const World& w) {
 	if (!w.follower.empty()) {
 		o.key("follower").text(w.follower).end();
 	}
+	if (w.areaSteps > 0) {
+		o.key("area_steps").num(w.areaSteps).end();
+	}
+	for (const std::string& hook : w.onceHooks) {
+		o.key("once").text(hook).end();
+	}
+	if (!w.areaMusic.empty()) {
+		o.key("area_music").text(w.areaMusic).end();
+	}
 	return o.str();
 }
 
@@ -343,6 +353,14 @@ public:
 		}
 		return v;
 	}
+	int integer(const std::string& token) {
+		const long long v = num(token);
+		if (v < std::numeric_limits<int>::min() || v > std::numeric_limits<int>::max()) {
+			fail("number out of range '" + token + "'");
+			return 0;
+		}
+		return static_cast<int>(v);
+	}
 	void fail(const std::string& message) {
 		if (error.empty()) {
 			error = chunk_ + ": " + message;
@@ -363,7 +381,7 @@ bool readLocation(const std::string& payload, World& w, std::string& error) {
 		if (k == "area" && in.need(l, 1)) {
 			w.area = in.text(l[1]);
 		} else if (k == "position" && in.need(l, 2)) {
-			w.position = {static_cast<int>(in.num(l[1])), static_cast<int>(in.num(l[2]))};
+			w.position = {in.integer(l[1]), in.integer(l[2])};
 		} else if (k == "facing" && in.need(l, 1)) {
 			if (!parseFacing(in.text(l[1]), w.facing)) {
 				in.fail("bad facing");
@@ -392,16 +410,16 @@ bool readParty(const std::string& payload, World& w, std::string& error) {
 		} else if (k == "member" && in.need(l, 5)) {
 			rules::PartyMember m;
 			m.characterId = in.text(l[1]);
-			m.level = static_cast<int>(in.num(l[2]));
-			m.experience = static_cast<int>(in.num(l[3]));
-			m.hp = static_cast<int>(in.num(l[4]));
-			m.tp = static_cast<int>(in.num(l[5]));
+			m.level = in.integer(l[2]);
+			m.experience = in.integer(l[3]);
+			m.hp = in.integer(l[4]);
+			m.tp = in.integer(l[5]);
 			w.roster.push_back(m);
 		} else if (k == "uses" && in.need(l, 2)) {
 			if (w.roster.empty()) {
 				in.fail("'uses' before any member");
 			} else {
-				w.roster.back().skillUses[in.text(l[1])] = static_cast<int>(in.num(l[2]));
+				w.roster.back().skillUses[in.text(l[1])] = in.integer(l[2]);
 			}
 		} else if (k == "wear" && in.need(l, 2)) {
 			rules::EquipSlot slot;
@@ -414,7 +432,7 @@ bool readParty(const std::string& payload, World& w, std::string& error) {
 			if (w.roster.empty()) {
 				in.fail("'status' before any member");
 			} else {
-				w.roster.back().statuses.push_back({in.text(l[1]), static_cast<int>(in.num(l[2]))});
+				w.roster.back().statuses.push_back({in.text(l[1]), in.integer(l[2])});
 			}
 		} else if (k == "taught" && in.need(l, 1)) {
 			if (w.roster.empty()) {
@@ -439,11 +457,11 @@ bool readInventory(const std::string& payload, World& w, std::string& error) {
 	for (const auto& l : in.lines()) {
 		const std::string& k = l[0];
 		if (k == "money" && in.need(l, 1)) {
-			w.money = static_cast<int>(in.num(l[1]));
+			w.money = in.integer(l[1]);
 		} else if (k == "item" && in.need(l, 2)) {
-			w.items[in.text(l[1])] = static_cast<int>(in.num(l[2]));
+			w.items[in.text(l[1])] = in.integer(l[2]);
 		} else if (k == "bag" && in.need(l, 2)) {
-			w.equipmentBag[in.text(l[1])] = static_cast<int>(in.num(l[2]));
+			w.equipmentBag[in.text(l[1])] = in.integer(l[2]);
 		} else {
 			in.fail("unknown line '" + k + "'");
 		}
@@ -459,6 +477,9 @@ bool readWorld(const std::string& payload, World& w, std::string& error) {
 	w.visitedAreas.clear();
 	w.enemies.clear();
 	w.follower.clear();
+	w.areaSteps = 0;
+	w.onceHooks.clear();
+	w.areaMusic.clear();
 	for (const auto& l : in.lines()) {
 		const std::string& k = l[0];
 		if (k == "flag" && in.need(l, 2)) {
@@ -471,28 +492,34 @@ bool readWorld(const std::string& payload, World& w, std::string& error) {
 			w.playerControl = in.num(l[1]) != 0;
 		} else if (k == "enemy" && in.need(l, 11)) {
 			VisibleEnemy e;
-			e.id = static_cast<int>(in.num(l[1]));
+			e.id = in.integer(l[1]);
 			e.zone = in.text(l[2]);
 			e.encounter = in.text(l[3]);
-			e.spawn = {static_cast<int>(in.num(l[4])), static_cast<int>(in.num(l[5]))};
-			e.position = {static_cast<int>(in.num(l[6])), static_cast<int>(in.num(l[7]))};
+			e.spawn = {in.integer(l[4]), in.integer(l[5])};
+			e.position = {in.integer(l[6]), in.integer(l[7])};
 			if (!parseFacing(in.text(l[8]), e.facing) || !parseEnemyState(in.text(l[9]), e.state)) {
 				in.fail("bad enemy facing or state");
 			}
-			e.stateMs = static_cast<int>(in.num(l[10]));
-			e.moveProgress = static_cast<int>(in.num(l[11]));
+			e.stateMs = in.integer(l[10]);
+			e.moveProgress = in.integer(l[11]);
 			w.enemies.push_back(e);
 		} else if (k == "next_enemy" && in.need(l, 1)) {
-			w.nextEnemyId = static_cast<int>(in.num(l[1]));
+			w.nextEnemyId = in.integer(l[1]);
 		} else if (k == "grace" && in.need(l, 1)) {
-			w.graceMs = static_cast<int>(in.num(l[1]));
+			w.graceMs = in.integer(l[1]);
 		} else if (k == "random" && in.need(l, 2)) {
-			w.randomCounter = static_cast<int>(in.num(l[1]));
-			w.randomThreshold = static_cast<int>(in.num(l[2]));
+			w.randomCounter = in.integer(l[1]);
+			w.randomThreshold = in.integer(l[2]);
 		} else if (k == "play" && in.need(l, 1)) {
 			w.playTimeMs = in.num(l[1]);
 		} else if (k == "follower" && in.need(l, 1)) {
 			w.follower = in.text(l[1]);
+		} else if (k == "area_steps" && in.need(l, 1)) {
+			w.areaSteps = in.integer(l[1]);
+		} else if (k == "once" && in.need(l, 1)) {
+			w.onceHooks.insert(in.text(l[1]));
+		} else if (k == "area_music" && in.need(l, 1)) {
+			w.areaMusic = in.text(l[1]);
 		} else {
 			in.fail("unknown line '" + k + "'");
 		}
@@ -634,29 +661,29 @@ bool readTravel(const std::string& payload, World& w, std::string& error) {
 		} else if (l[0] == "vehicle" && in.need(l, 8)) {
 			VehiclePlace place;
 			place.area = in.text(l[2]);
-			place.cell = {static_cast<int>(in.num(l[3])), static_cast<int>(in.num(l[4]))};
+			place.cell = {in.integer(l[3]), in.integer(l[4])};
 			if (!parseFacing(in.text(l[5]), place.facing)) {
 				in.fail("bad vehicle facing");
 			}
 			place.homeArea = in.text(l[6]);
-			place.home = {static_cast<int>(in.num(l[7])), static_cast<int>(in.num(l[8]))};
+			place.home = {in.integer(l[7]), in.integer(l[8])};
 			w.vehicles[in.text(l[1])] = place;
 		} else if (l[0] == "uses" && in.need(l, 3)) {
 			auto vehicle = w.vehicles.find(in.text(l[1]));
 			if (vehicle == w.vehicles.end()) {
 				in.fail("'uses' for a vehicle the party does not have");
 			} else {
-				vehicle->second.skillUses[in.text(l[2])] = static_cast<int>(in.num(l[3]));
+				vehicle->second.skillUses[in.text(l[2])] = in.integer(l[3]);
 			}
 		} else if (l[0] == "dungeon_exit" && in.need(l, 3)) {
 			w.dungeonExitArea = in.text(l[1]);
-			w.dungeonExitCell = {static_cast<int>(in.num(l[2])), static_cast<int>(in.num(l[3]))};
+			w.dungeonExitCell = {in.integer(l[2]), in.integer(l[3])};
 		} else if (l[0] == "ship" && in.need(l, 1)) {
 			w.shipPort = in.text(l[1]);
 		} else if (l[0] == "broken" && in.need(l, 3)) {
-			w.brokenCells[in.text(l[1])].insert({static_cast<int>(in.num(l[2])), static_cast<int>(in.num(l[3]))});
+			w.brokenCells[in.text(l[1])].insert({in.integer(l[2]), in.integer(l[3])});
 		} else if (l[0] == "broken_here" && in.need(l, 2)) {
-			w.brokenHere.insert({static_cast<int>(in.num(l[1])), static_cast<int>(in.num(l[2]))});
+			w.brokenHere.insert({in.integer(l[1]), in.integer(l[2])});
 		} else {
 			in.fail("unknown line '" + l[0] + "'");
 		}
@@ -689,7 +716,7 @@ bool readActors(const std::string& payload, World& w, std::string& error) {
 		if (l[0] == "actor" && in.need(l, 6)) {
 			ActorPlace place;
 			place.area = in.text(l[2]);
-			place.cell = {static_cast<int>(in.num(l[3])), static_cast<int>(in.num(l[4]))};
+			place.cell = {in.integer(l[3]), in.integer(l[4])};
 			if (!parseFacing(in.text(l[5]), place.facing)) {
 				in.fail("bad actor facing");
 			}
@@ -720,7 +747,7 @@ const KnownChunk kWorldChunks[] = {
 	{"location", 1, locationChunk, readLocation, 1},
 	{"party", 4, partyChunk, readParty, 2},
 	{"inventory", 1, inventoryChunk, readInventory, 1},
-	{"world", 2, worldChunk, readWorld, 1},
+	{"world", 3, worldChunk, readWorld, 1},
 	{"battle", 2, battleChunk, readBattle, 2},
 	{"random", 1, randomChunk, readRandom, 1},
 	{"difficulty", 1, difficultyChunk, readDifficulty, 1},
@@ -858,7 +885,7 @@ bool migrate1to2(std::vector<Chunk>& chunks, std::string& error) {
 					step.member = in.text(l[1]);
 					step.id = in.text(l[3]);
 					step.target.member = in.text(l[5]);
-					step.target.enemySlot = static_cast<int>(in.num(l[6]));
+					step.target.enemySlot = in.integer(l[6]);
 					if (w.macros.empty() || !rules::parseCommandKind(in.text(l[2]), step.kind) || !rules::parseMacroTargetKind(in.text(l[4]), step.target.kind)) {
 						in.fail("bad macro step");
 						continue;
@@ -924,6 +951,12 @@ bool migrate7to8(std::vector<Chunk>&, std::string&) {
 	return true;
 }
 
+// Schema 8 to 9: the world chunk gains the steps taken in the area, the once hooks that fired and the area's script
+// music (world chunk 3); a schema 8 save has none of them.
+bool migrate8to9(std::vector<Chunk>&, std::string&) {
+	return true;
+}
+
 struct Migration {
 	int from;
 	bool (*apply)(std::vector<Chunk>& chunks, std::string& error);
@@ -938,6 +971,7 @@ const Migration kMigrations[] = {
 	{5, migrate5to6},
 	{6, migrate6to7},
 	{7, migrate7to8},
+	{8, migrate8to9},
 };
 
 std::string headerChunk(const SaveFile& save) {

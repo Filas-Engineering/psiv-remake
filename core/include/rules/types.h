@@ -2,12 +2,40 @@
 
 #include <map>
 #include <string>
+#include <utility>
 
 namespace rules {
 
-enum class Element { None, Heat, Chill, Shock, Gale, Holy };
+// An element by id: one of the built-in ones below or one rules.json `elements` declares. An empty id is none.
+struct Element {
+	std::string id;
 
-enum class Stat { Strength, Mental, Agility, Dexterity, Defense };
+	Element() = default;
+	Element(std::string elementId) : id(std::move(elementId)) {}
+	Element(const char* elementId) : id(elementId) {}
+	bool operator==(const Element& other) const { return id == other.id; }
+	bool operator!=(const Element& other) const { return id != other.id; }
+	bool operator<(const Element& other) const { return id < other.id; }
+
+	static const Element None;
+	static const Element Heat;
+	static const Element Chill;
+	static const Element Shock;
+	static const Element Gale;
+	static const Element Holy;
+};
+
+inline const Element Element::None{};
+inline const Element Element::Heat{"heat"};
+inline const Element Element::Chill{"chill"};
+inline const Element Element::Shock{"shock"};
+inline const Element Element::Gale{"gale"};
+inline const Element Element::Holy{"holy"};
+
+// The elements every data set has, in the order the C API numbers them from 1.
+inline constexpr const char* kBuiltInElements[] = {"heat", "chill", "shock", "gale", "holy"};
+
+enum class Stat { Strength, Mental, Agility, Dexterity, Defense, MagicDefense };
 
 enum class Side { Party, Enemy };
 
@@ -15,7 +43,7 @@ enum class Targeting { OneEnemy, EnemyGroup, AllEnemies, OneAlly, AllAllies, Sel
 
 enum class AbilityKind { Attack, Technique, Skill, Combo };
 
-enum class EffectKind { PhysicalDamage, ElementalDamage, Heal, ApplyStatus, CureStatus, ModifyStat, Revive, Travel, InstantDefeat, RestoreTp, StripModifiers, Summon, Merge, Teach };
+enum class EffectKind { PhysicalDamage, ElementalDamage, Heal, ApplyStatus, CureStatus, ModifyStat, Revive, Travel, InstantDefeat, RestoreTp, StripModifiers, Summon, Merge, Teach, Transform, Split, SelfDestruct };
 // What a combatant is (B6, P6). Spirit is a kind of living being: an effect aimed at the living reaches it too.
 enum class CreatureKind { Living, Spirit, Machine };
 

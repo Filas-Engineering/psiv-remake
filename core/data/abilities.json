@@ -227,6 +227,22 @@
 		]},
 		{"id": "core_flare", "name": "Core Flare", "kind": "technique", "cost": 0, "target": "all_enemies", "effects": [
 			{"type": "elemental_damage", "power": 26, "element": "heat"}
+		]},
+		{"id": "fuse", "name": "Fuse", "kind": "technique", "cost": 0, "target": "self", "effects": [
+			{"type": "merge"}
+		]},
+		{"id": "molt", "name": "Molt", "kind": "technique", "cost": 0, "target": "self", "effects": [
+			{"type": "transform"}
+		]},
+		{"id": "divide", "name": "Divide", "kind": "technique", "cost": 0, "target": "self", "effects": [
+			{"type": "split", "count": 3}
+		]},
+		{"id": "cinder_burst", "name": "Cinder Burst", "kind": "technique", "cost": 0, "target": "all_enemies", "effects": [
+			{"type": "elemental_damage", "power": 30, "element": "heat"},
+			{"type": "self_destruct"}
+		]},
+		{"id": "dust_veil", "name": "Dust Veil", "kind": "technique", "cost": 0, "target": "all_enemies", "effects": [
+			{"type": "modify_stat", "stat": "agility", "direction": "down", "power": 6}
 		]}
 	]
 }

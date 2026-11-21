@@ -171,6 +171,7 @@ public class NativeLayoutTests
 		Same<PsivTravelDestination>("psiv_travel_destination");
 		Same<PsivEventPosition>("psiv_event_position");
 		Same<PsivZone>("psiv_zone");
+		Same<PsivElementInfo>("psiv_element_info");
 		Assert.Equal(0u, Native.SizeOf("no_such_struct"));
 	}
 
@@ -413,7 +414,7 @@ public class SessionTests
 		Assert.Equal(new FieldActor("dockhand", "Dockhand", 10, 2, Direction.South, true, true), view.Actors[0]);
 		Assert.Equal(new FieldActor("guide", "Harbor Guide", 5, 2, Direction.South, true, false), view.Actors[1]);
 		// Every actor is in the ids; those standing on the reed path or in Saltgrass are not in this area's view.
-		Assert.Equal(["ashwife", "bridgewright", "dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "lodgekeeper", "peddler", "wayfarer"], s.ActorIds());
+		Assert.Equal(["ashwife", "bridgewright", "cog_sweeper", "dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "lodgekeeper", "peddler", "wayfarer"], s.ActorIds());
 		Assert.DoesNotContain(view.Actors, a => a.Id == "peddler");
 		Assert.True(s.OpenMenu().Ok);
 		Member fighter = s.Party().Single();
@@ -579,6 +580,11 @@ public class SessionTests
 		MemberDetail mystic = s.MemberDetail("mystic")!;
 		Assert.Equal(Element.Heat, mystic.AttackElement);
 		Assert.Equal(50, mystic.Affinities[Element.Shock]);
+		Assert.Equal(new Affinity(Element.Shock, "shock", "Shock", 50), Assert.Single(mystic.AffinityList!));
+		IReadOnlyList<ElementInfo> elements = s.Elements();
+		Assert.Equal(Element.Holy, elements[4].Index);
+		Assert.Equal(new ElementInfo((Element)6, "tide", "Tide"), elements[5]);
+		Assert.Equal(100, s.GameInfo().AffinityDivisor);
 		Assert.Equal(new StatusResist("sleep", "Sleep", 100), Assert.Single(mystic.StatusResists));
 		Assert.Equal(3, mystic.EquipmentBonus[(int)EquipSlot.Weapon].Mental);
 		Assert.True(mystic.ExperienceToNext > 0);

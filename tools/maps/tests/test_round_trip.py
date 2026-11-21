@@ -29,6 +29,12 @@ class RoundTripTest(TempCase):
 				self.assertTrue(areajson.same(original, back))
 				self.assertEqual(areajson.dumps(original), areajson.dumps(back))
 
+	def test_every_area_file_is_in_the_canonical_form(self):
+		for path in sorted(AREAS.glob("*.json")):
+			with self.subTest(area=path.name):
+				text = path.read_text(encoding="utf-8")
+				self.assertEqual(areajson.dumps(json.loads(text)), text)
+
 	def test_the_command_lines_round_trip_with_an_embedded_tileset(self):
 		source = AREAS / "reed_path.json"
 		tmj = self.tmp / "out" / "reed_path.tmj"

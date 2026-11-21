@@ -97,6 +97,14 @@ const char* op_name(Op op) {
 		return "follower";
 	case Op::vehicle_remove:
 		return "vehicle remove";
+	case Op::money:
+		return "money";
+	case Op::equip:
+		return "equip";
+	case Op::unequip:
+		return "unequip";
+	case Op::area_music:
+		return "music area";
 	}
 	return "unknown";
 }

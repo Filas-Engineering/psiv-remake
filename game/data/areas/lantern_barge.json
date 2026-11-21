@@ -14,6 +14,10 @@
 	"markers": {
 		"deck": [1, 2]
 	},
-	"helms": [{"id": "barge_helm", "at": [4, 1]}],
-	"gangway": [[0, 2]]
+	"helms": [
+		{"id": "barge_helm", "at": [4, 1]}
+	],
+	"gangway": [
+		[0, 2]
+	]
 }

@@ -125,8 +125,9 @@ A condition is one or more tests:
 - `variable <op> <integer>`, where `<op>` is `==`, `!=`, `<`, `<=`, `>` or `>=`. `not` works here too.
 - `vehicle <vehicle>` is true when the party has that vehicle, and `aboard <vehicle>` when it rides it.
 - `party <member>` is true when the member is in the active party, and `item <item>` when the party holds at least one of the item or equipment piece.
+- `money <op> <integer>` compares the party's money, with the operators of a variable test: `if money >= 20`.
 
-`not` works on each of these. A flag may still be named `vehicle`, `aboard`, `party` or `item`: the word starts one of these tests only when a name follows it.
+`not` works on each of these. A flag may still be named `vehicle`, `aboard`, `party` or `item`: the word starts one of these tests only when a name follows it. `money` followed by a comparison is always the party's money, so a variable named `money` cannot be compared.
 
 Join tests with `and` or with `or`, but not with both in one condition. Nest ifs instead.
 
@@ -175,11 +176,13 @@ Live panels are comic-style frames, each showing what a named camera sees in the
 | `music play <track> [nowait]` | `music play tide_theme` |
 | `music stop [nowait]` | `music stop` |
 | `music fade <seconds> [nowait]` | `music fade 1.0` (fades out, then stops) |
+| `music area <track>` | `music area harbor_storm` (the area the party is in plays this track from now on, saved with the game, until the party leaves or a script changes it) |
+| `music area default` | goes back to the area's own track |
 | `ambient play <sound> [nowait]` | `ambient play harbor_gulls` (a background loop such as wind or surf) |
 | `ambient stop [nowait]` | `ambient stop` |
 | `sound <cue> [nowait]` | `sound bell_chime` |
 
-Music and ambient sound are part of what a save rebuilds; a one-shot `sound` is not.
+Music and ambient sound are part of what a save rebuilds; a one-shot `sound` is not. `music area` is game state, not presentation: it changes the game at once, applies while skipping, and is not allowed inside `together` or `race`.
 
 ## Waiting and running things in parallel
 
@@ -233,10 +236,14 @@ Inside `together` and `race` you can use only actor, camera, panel, screen and a
 | `vehicle remove <vehicle>` | `vehicle remove skiff` (the party no longer has it) |
 | `learn <member> <ability>` | `learn guide ward_song` (the member learns a technique or skill for good) |
 | `follower <actor>` | `follower peddler` (walks with the party without joining it); `follower none` ends it |
+| `money give <amount>` | `money give 30` (at least 1) |
+| `money take <amount>` | `money take 20` (the game keeps money at 0 or more) |
+| `equip <member> <piece>` | `equip guide brass_dagger` (puts the piece on from the bag, by the game's equipment rules) |
+| `unequip <member> <piece>` | `unequip guide brass_dagger` (takes the worn piece off, back to the bag) |
 | `lock player` | stops player input during the scene |
 | `unlock player` | gives control back |
 
-The `vehicle`, `learn` and `follower` commands change the game at once, like `give`, and apply while skipping. With a registry, `learn` names a listed `member` and `ability`, and `follower` a listed `actor`. With a registry the vehicle must be listed on a `vehicle` line and the marker must be on the map, as for `warp`; they do not change the map the party is on. Where a vehicle may stand, and what happens to a party riding one that a script moves or removes, is the game's business (`../game/README.md`).
+The `vehicle`, `learn`, `follower`, `money`, `equip` and `unequip` commands change the game at once, like `give`, and apply while skipping. With a registry, `learn` names a listed `member` and `ability`, `follower` a listed `actor`, `equip` and `unequip` a listed `member` and `item`, and `music area` a listed `audio` track. A piece that does not fit, or is not held or worn, is the game's to refuse (`../game` warns and carries on). With a registry the vehicle must be listed on a `vehicle` line and the marker must be on the map, as for `warp`; they do not change the map the party is on. Where a vehicle may stand, and what happens to a party riding one that a script moves or removes, is the game's business (`../game/README.md`).
 
 ## Menus and rests
 

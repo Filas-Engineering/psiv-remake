@@ -99,7 +99,7 @@ TEST(actorPlacesAreSavedAndMigrated) {
 	test::confirmLines(s);
 	const SaveFile save = s.makeSave(false);
 	const std::string text = serializeSave(save);
-	CHECK(text.compare(0, 11, "PSR-SAVE 8\n") == 0);
+	CHECK(text.compare(0, 11, "PSR-SAVE 9\n") == 0);
 	CHECK(text.find("actor guide tidewater 8 3 west 1\n") != std::string::npos);
 	rules::Result<SaveFile> parsed = parseSave(text);
 	CHECK(parsed.ok());
@@ -110,7 +110,7 @@ TEST(actorPlacesAreSavedAndMigrated) {
 	// A schema 2 save has no actors chunk (nor the talk, travel and dev chunks after it); it loads with every actor at its talk point.
 	std::string old = text;
 	old.replace(0, 10, "PSR-SAVE 2");
-	old.replace(old.find("schema 8\n"), 9, "schema 2\n");
+	old.replace(old.find("schema 9\n"), 9, "schema 2\n");
 	const std::size_t chunk = old.find("chunk actors 1 ");
 	old.erase(chunk, old.find("\nend ") + 1 - chunk);
 	const std::string body = old.substr(0, old.rfind("\nend ") + 1);

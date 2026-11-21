@@ -133,11 +133,16 @@ public sealed partial class SampleController
 		{
 			left.Add((T("ui.stat.magic_defense"), Stat(d.MagicDefense, b => b.MagicDefense)));
 		}
-		left.Add((T("ui.status.attack_element"), T(NameKind.Element, (int)d.AttackElement)));
+		left.Add((T("ui.status.attack_element"), ElementText(d.AttackElement)));
 		left.Add((T("ui.status.affinities"), ""));
-		foreach ((Element element, int percent) in d.Affinities)
+		if (d.AffinityList is not { Count: > 0 })
 		{
-			left.Add((T(NameKind.Element, (int)element), $"{percent}%"));
+			left.Add((T("ui.status.none"), "-"));
+		}
+		int divisor = _s.GameInfo().AffinityDivisor;
+		foreach (Affinity a in d.AffinityList ?? [])
+		{
+			left.Add((a.Name, $"{a.Percent * 100 / Math.Max(1, divisor)}%"));
 		}
 		left.Add((T("ui.status.resistances"), ""));
 		if (d.StatusResists.Count == 0)

@@ -71,6 +71,7 @@ SAMPLE_BATTLE_SCRIPT = monogame/Psiv.Sample/scripts/battle.txt
 SAMPLE_BATTLE_FRONT_SCRIPT = monogame/Psiv.Sample/scripts/battle_front.txt
 SAMPLE_BATTLE_CHANGES_SCRIPT = monogame/Psiv.Sample/scripts/battle_changes.txt
 SAMPLE_FELLS_SCRIPT = monogame/Psiv.Sample/scripts/fells.txt
+SAMPLE_COGWAY_SCRIPT = monogame/Psiv.Sample/scripts/cogway.txt
 SAMPLE_VEHICLES_SCRIPT = monogame/Psiv.Sample/scripts/vehicles.txt
 SAMPLE_ASSETS_SCRIPT = monogame/Psiv.Sample/scripts/assets.txt
 SAMPLE_RELOAD_SCRIPT = monogame/Psiv.Sample/scripts/hot_reload.txt
@@ -222,6 +223,10 @@ dotnet-test: dotnet
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_fells_saves \
 		--script $(SAMPLE_FELLS_SCRIPT) --frames 5600 > $(BUILD)/sample_fells_headless.txt || (cat $(BUILD)/sample_fells_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_fells_headless.txt
+	rm -rf $(BUILD)/sample_cogway_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --dev --saves $(BUILD)/sample_cogway_saves \
+		--script $(SAMPLE_COGWAY_SCRIPT) --frames 2400 > $(BUILD)/sample_cogway_headless.txt || (cat $(BUILD)/sample_cogway_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_cogway_headless.txt
 	rm -rf $(BUILD)/sample_magic_defense_saves
 	python3 -I $(SAMPLE_SCRIPTS)/make_front_data.py $(GAME)/data $(CORE)/data $(BUILD)/magic_data --magic-defense
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/magic_data/game/data --dev --saves $(BUILD)/sample_magic_defense_saves \

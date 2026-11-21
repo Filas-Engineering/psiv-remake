@@ -32,6 +32,10 @@
 		{"id": "quiet", "trigger": "flag", "event": "cove_quiet", "require_flag": "cove.warden_beaten", "block_flag": "cove.quiet_seen"},
 		{"id": "campfire", "at": [2, 1], "event": "cove_campfire"}
 	],
-	"rests": [{"id": "cove_camp", "cost": 5}],
-	"chests": [{"id": "cove_box", "at": [9, 7], "flag": "chest.cove_box", "items": {"tonic": 1}, "equipment": {"rivet_plate": 1}}]
+	"rests": [
+		{"id": "cove_camp", "cost": 5}
+	],
+	"chests": [
+		{"id": "cove_box", "at": [9, 7], "flag": "chest.cove_box", "items": {"tonic": 1}, "equipment": {"rivet_plate": 1}}
+	]
 }

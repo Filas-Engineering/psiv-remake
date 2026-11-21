@@ -103,6 +103,8 @@ private:
 				name(NameKind::member, t.name, line);
 			} else if (t.test == TermTest::holds) {
 				name(NameKind::item, t.name, line);
+			} else if (t.test == TermTest::money) {
+				continue;
 			} else {
 				declared(t.name, t.is_flag, line);
 			}
@@ -245,6 +247,16 @@ private:
 		case Op::follower:
 			if (!ins.name.empty()) {
 				name(NameKind::actor, ins.name, s.line);
+			}
+			break;
+		case Op::equip:
+		case Op::unequip:
+			name(NameKind::member, ins.name, s.line);
+			name(NameKind::item, ins.action.subject, s.line);
+			break;
+		case Op::area_music:
+			if (!ins.name.empty()) {
+				name(NameKind::audio, ins.name, s.line);
 			}
 			break;
 		case Op::rest:

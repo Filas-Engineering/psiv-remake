@@ -77,7 +77,7 @@ bool Area::walkable(Cell cell) const {
 	if (!inside(cell) || rows[cell.y][cell.x] != '.') {
 		return false;
 	}
-	return !hookAt(cell, HookTrigger::Interact) && !shopAt(cell) && !restAt(cell) && !chestAt(cell) && !portAt(cell) && !helmAt(cell);
+	return (!hookAt(cell, HookTrigger::Interact) || passable.count(cell)) && !shopAt(cell) && !restAt(cell) && !chestAt(cell) && !portAt(cell) && !helmAt(cell);
 }
 
 const Zone* Area::zoneAt(Cell cell) const {
@@ -109,11 +109,31 @@ const Exit* Area::exitAt(Cell cell) const {
 
 const Hook* Area::hookAt(Cell cell, HookTrigger trigger) const {
 	for (const Hook& h : hooks) {
-		if (h.trigger == trigger && h.at == cell) {
+		if (h.trigger == trigger && h.at == cell && !h.tile) {
 			return &h;
 		}
 	}
 	return nullptr;
+}
+
+const Hook* Area::stepHookAt(Cell cell) const {
+	if (const Hook* at = hookAt(cell, HookTrigger::Step)) {
+		return at;
+	}
+	for (const Hook& h : hooks) {
+		if (h.trigger == HookTrigger::Step && h.tile && inside(cell) && rows[cell.y][cell.x] == h.tile) {
+			return &h;
+		}
+	}
+	return nullptr;
+}
+
+bool portOpen(const Port& port, const World& world) {
+	return (port.flag.empty() || world.flag(port.flag)) && (port.blockFlag.empty() || !world.flag(port.blockFlag));
+}
+
+bool exitOpen(const Exit& exit, const World& world) {
+	return (exit.requireFlag.empty() || world.flag(exit.requireFlag)) && (exit.blockFlag.empty() || !world.flag(exit.blockFlag));
 }
 
 const Shop* Area::shopAt(Cell cell) const {
@@ -241,7 +261,11 @@ void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 	}
 	if (const JsonValue* v = reader.field(z, "random", JsonValue::Type::Object, false)) {
 		RandomRules& r = zone.random;
-		reader.only(*v, {"min_steps", "max_steps", "step_distance"});
+		reader.only(*v, {"min_steps", "max_steps", "step_distance", "grace_steps", "step_chance", "vehicle_step_chance", "safe_near_exits"});
+		reader.integer(*v, "grace_steps", r.graceSteps, false, 0, 1000);
+		reader.integer(*v, "step_chance", r.stepChance, false, 1, 10000);
+		reader.integer(*v, "vehicle_step_chance", r.vehicleStepChance, false, 1, 10000);
+		reader.boolean(*v, "safe_near_exits", r.safeNearExits, false);
 		reader.integer(*v, "min_steps", r.minSteps, false, 1, 1000);
 		reader.integer(*v, "max_steps", r.maxSteps, false, 1, 1000);
 		reader.integer(*v, "step_distance", r.stepDistance, false, 1, 100);
@@ -271,7 +295,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		return rules::Result<Area>::failure(reader.problems(), reader.errors());
 	}
 	reader.only(json, {"id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "map", "markers", "exits", "hooks", "shops", "rests",
-		"chests", "ports", "zones", "helms", "gangway", "changes"});
+		"chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"});
 	reader.text(json, "id", area.id, true);
 	reader.text(json, "music", area.music, false);
 	reader.text(json, "region", area.region, false);
@@ -322,9 +346,11 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* exits = array(reader, json, "exits")) {
 		for (const JsonValue& e : exits->items) {
-			reader.only(e, {"at", "to", "marker", "fall"});
+			reader.only(e, {"at", "to", "marker", "fall", "require_flag", "block_flag"});
 			Exit exit;
 			exit.line = e.line;
+			reader.text(e, "require_flag", exit.requireFlag, false);
+			reader.text(e, "block_flag", exit.blockFlag, false);
 			reader.cellField(e, "at", exit.at, true);
 			reader.text(e, "to", exit.toArea, true);
 			reader.text(e, "marker", exit.toMarker, true);
@@ -335,9 +361,23 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* hooks = array(reader, json, "hooks")) {
 		for (const JsonValue& h : hooks->items) {
-			reader.only(h, {"id", "at", "trigger", "event", "require_flag", "block_flag"});
+			reader.only(h, {"id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid"});
 			Hook hook;
 			hook.line = h.line;
+			reader.boolean(h, "once", hook.once, false);
+			std::string tile;
+			reader.text(h, "tile", tile, false);
+			if (!tile.empty() && (tile.size() != 1 || std::string(kMapTiles).find(tile[0]) == std::string::npos || tile[0] == '#')) {
+				reader.fail(h, "data.bad_hook_tile", {tile});
+			} else if (tile.size() == 1) {
+				hook.tile = tile[0];
+			}
+			std::string solid = "always";
+			reader.text(h, "solid", solid, false);
+			if (solid != "always" && solid != "while_active") {
+				reader.fail(h, "data.bad_hook_solid", {solid});
+			}
+			hook.solidWhileActive = solid == "while_active";
 			reader.text(h, "id", hook.id, true);
 			reader.text(h, "event", hook.event, true);
 			reader.text(h, "require_flag", hook.requireFlag, false);
@@ -350,11 +390,20 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 				hook.trigger = HookTrigger::Load;
 			} else if (trigger == "flag") {
 				hook.trigger = HookTrigger::Flag;
-				if (hook.blockFlag.empty()) {
+				if (hook.blockFlag.empty() && !hook.once) {
 					reader.fail(h, "data.flag_hook_needs_block_flag", {hook.id});
 				}
 			} else if (trigger != "interact") {
 				reader.fail(h, "data.bad_trigger", {});
+			}
+			if (hook.once && hook.trigger != HookTrigger::Flag) {
+				reader.fail(h, "data.once_flag_hooks_only", {hook.id});
+			}
+			if (hook.tile && hook.trigger != HookTrigger::Step) {
+				reader.fail(h, "data.tile_step_hooks_only", {hook.id});
+			}
+			if (hook.solidWhileActive && hook.trigger != HookTrigger::Interact) {
+				reader.fail(h, "data.solid_interact_hooks_only", {hook.id});
 			}
 			if (hook.trigger == HookTrigger::Interact) {
 				// A sign on a wall or a ladder up a cliff is used from the floor beside it (FLD-030), so an interact hook
@@ -362,6 +411,10 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 				reader.cellField(h, "at", hook.at, true);
 				if (!area.inside(hook.at)) {
 					reader.fail(h, "data.not_on_map", {"hook '" + hook.id + "'"});
+				}
+			} else if (hook.trigger == HookTrigger::Step && hook.tile) {
+				if (h.is(JsonValue::Type::Object) && h.find("at")) {
+					reader.fail(h, "data.tile_hook_has_no_cell", {hook.id});
 				}
 			} else if (hook.trigger == HookTrigger::Step) {
 				reader.cellField(h, "at", hook.at, true);
@@ -444,7 +497,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* ports = array(reader, json, "ports")) {
 		for (const JsonValue& p : ports->items) {
-			reader.only(p, {"id", "at", "marker", "flag", "ship"});
+			reader.only(p, {"id", "at", "marker", "flag", "ship", "block_flag"});
 			Port port;
 			port.line = p.line;
 			reader.text(p, "id", port.id, true);
@@ -452,6 +505,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			reader.text(p, "marker", port.marker, true);
 			reader.text(p, "flag", port.flag, false);
 			reader.text(p, "ship", port.ship, false);
+			reader.text(p, "block_flag", port.blockFlag, false);
 			if (!area.inside(port.at)) {
 				reader.fail(p, "data.not_on_map", {"port '" + port.id + "'"});
 			}
@@ -524,6 +578,31 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 				}
 			}
 			area.changes.push_back(change);
+		}
+	}
+	if (const JsonValue* conveyors = array(reader, json, "conveyors")) {
+		for (const JsonValue& c : conveyors->items) {
+			reader.only(c, {"cells", "direction", "step_ms", "require_flag", "block_flag"});
+			Conveyor conveyor;
+			conveyor.line = c.line;
+			std::string direction;
+			reader.text(c, "direction", direction, true);
+			if (!direction.empty() && !parseFacing(direction, conveyor.direction)) {
+				reader.fail(c, "data.bad_direction", {direction});
+			}
+			reader.integer(c, "step_ms", conveyor.stepMs, false, 16, 10000);
+			reader.text(c, "require_flag", conveyor.requireFlag, false);
+			reader.text(c, "block_flag", conveyor.blockFlag, false);
+			if (const JsonValue* cells = reader.field(c, "cells", JsonValue::Type::Array, true)) {
+				for (const JsonValue& at : cells->items) {
+					Cell cell;
+					if (reader.cell(at, cell)) {
+						checkCell(at, cell, "conveyor");
+						conveyor.cells.push_back(cell);
+					}
+				}
+			}
+			area.conveyors.push_back(conveyor);
 		}
 	}
 	if (!reader.ok()) {

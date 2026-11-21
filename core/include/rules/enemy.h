@@ -33,6 +33,8 @@ enum class AiConditionKind {
 	FreeSlotBeside,
 	// Every enemy that started the battle in its group is still standing.
 	GroupIntact,
+	// It has taken at least the override's `turns` turns before this one.
+	AfterTurns,
 };
 
 // How an action picks its single target. Default: a foe drawn by party order when the round's order is resolved,
@@ -52,12 +54,16 @@ struct AiOverride {
 	AiTarget target = {};
 	// AllyPresent and AllyAbsent: the enemy id looked for.
 	std::string enemy = {};
+	// AfterTurns.
+	int turns = 0;
 };
 
 // An encounter's item drop: one roll of 0 to 127 per won battle must come out below the rate.
 struct ItemDrop {
 	std::string item;
 	int rate = 0;
+	// An equipment piece dropped in place of an item.
+	std::string equipment = {};
 };
 
 struct EnemyDef {
@@ -88,9 +94,18 @@ struct EnemyDef {
 	bool flying = false;
 	// The percent of its maximum hit points at or below which it takes its next form; 0 takes it on defeat.
 	int nextFormAt = 0;
+	// The element of its basic attack's physical damage; none by default.
+	Element attackElement = {};
+	// The enemy its Merge effect takes in; empty takes another of its own id.
+	std::string mergesWith = {};
+	// What its Transform effect makes of it, alone.
+	std::string transformsInto = {};
+	// What each of the enemies its Split effect makes of it is.
+	std::string splitsInto = {};
 };
 
-// One position in an enemy group's formation. Group targeting hits every living enemy with the same group.
+// One position in an enemy group's formation. Group targeting hits every living enemy with the same group. An empty
+// enemy is a place left free, which a summon or a split can fill.
 struct FormationSlot {
 	std::string enemy;
 	std::string group;

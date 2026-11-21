@@ -14,6 +14,7 @@ constexpr const char* kPartyGroup = "party";
 
 Combatant fromEnemy(const Database& db, const EnemyDef& def, const std::string& group) {
 	Combatant c;
+	c.neutralAffinity = db.battleRules.neutralAffinity();
 	c.defId = def.id;
 	c.name = def.name;
 	c.side = Side::Enemy;
@@ -22,6 +23,7 @@ Combatant fromEnemy(const Database& db, const EnemyDef& def, const std::string& 
 	c.hp = def.stats.maxHp;
 	c.tp = def.stats.maxTp;
 	c.basicAttack = def.basicAttack;
+	c.attackElement = def.attackElement;
 	c.abilities = def.abilities;
 	c.affinities = def.affinities;
 	c.statusResist = def.statusResist;
@@ -42,6 +44,7 @@ Combatant fromEnemy(const Database& db, const EnemyDef& def, const std::string& 
 
 Combatant fromVehicle(const Database& db, const VehicleDef& def, const std::map<std::string, int>& usesLeft) {
 	Combatant c;
+	c.neutralAffinity = db.battleRules.neutralAffinity();
 	c.kind = CreatureKind::Machine;
 	c.defId = def.id;
 	c.name = def.name;
@@ -95,6 +98,7 @@ std::string checkMember(const Database& db, const PartyMember& member) {
 Combatant memberCombatant(const Database& db, const PartyMember& member) {
 	const CharacterDef& def = *db.character(member.characterId);
 	Combatant c;
+	c.neutralAffinity = db.battleRules.neutralAffinity();
 	c.defId = def.id;
 	c.name = member.name.empty() ? def.name : member.name;
 	c.side = Side::Party;
@@ -113,6 +117,9 @@ Combatant memberCombatant(const Database& db, const PartyMember& member) {
 	for (const auto& [slot, id] : member.equipment) {
 		for (const auto& [status, percent] : db.equipmentPiece(id)->statusResist) {
 			c.statusResist[status] = std::min(100, c.resistance(status) + percent);
+		}
+		for (const auto& [element, percent] : db.equipmentPiece(id)->affinities) {
+			c.affinities[element] = c.affinity(element) * percent / 100;
 		}
 	}
 	// The right hand's weapon gives the attack and its element, the left hand's what the right lacks. A weapon that
@@ -147,14 +154,15 @@ Combatant memberCombatant(const Database& db, const PartyMember& member) {
 
 namespace {
 
-std::string checkScriptedEnd(const ScriptedEnd& end, int enemyCount) {
+std::string checkScriptedEnd(const ScriptedEnd& end, const std::vector<FormationSlot>& enemies) {
+	const int enemyCount = static_cast<int>(enemies.size());
 	switch (end.kind) {
 	case ScriptedEndKind::None:
 		return "";
 	case ScriptedEndKind::SurviveRounds:
 		return end.rounds >= 1 ? "" : "a survive-rounds end needs at least 1 round";
 	case ScriptedEndKind::EnemyDefeated:
-		return end.enemySlot >= 0 && end.enemySlot < enemyCount ? "" : "the scripted end names formation position " + std::to_string(end.enemySlot) + ", which is empty";
+		return end.enemySlot >= 0 && end.enemySlot < enemyCount && !enemies[static_cast<std::size_t>(end.enemySlot)].enemy.empty() ? "" : "the scripted end names formation position " + std::to_string(end.enemySlot) + ", which is empty";
 	}
 	return "";
 }
@@ -169,10 +177,11 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 	if (setup.party.empty() || setup.party.size() > static_cast<std::size_t>(kMaxPartySize)) {
 		return Result<Battle>::failure("a battle needs 1 to " + std::to_string(kMaxPartySize) + " party members");
 	}
-	if (setup.enemies.empty() || setup.enemies.size() > static_cast<std::size_t>(kMaxEnemies)) {
+	const bool anyEnemy = std::any_of(setup.enemies.begin(), setup.enemies.end(), [](const FormationSlot& slot) { return !slot.enemy.empty(); });
+	if (!anyEnemy || setup.enemies.size() > static_cast<std::size_t>(kMaxEnemies)) {
 		return Result<Battle>::failure("a battle needs 1 to " + std::to_string(kMaxEnemies) + " enemies");
 	}
-	const std::string endError = checkScriptedEnd(setup.scriptedEnd, static_cast<int>(setup.enemies.size()));
+	const std::string endError = checkScriptedEnd(setup.scriptedEnd, setup.enemies);
 	if (!endError.empty()) {
 		return Result<Battle>::failure(endError);
 	}
@@ -218,14 +227,18 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 		battle.vehicleIndex_ = static_cast<int>(battle.combatants_.size());
 		battle.combatants_.push_back(fromVehicle(rulesDb, *vehicle, setup.vehicleSkillUses));
 	}
-	for (const FormationSlot& slot : setup.enemies) {
+	for (std::size_t position = 0; position < setup.enemies.size(); ++position) {
+		const FormationSlot& slot = setup.enemies[position];
+		if (slot.enemy.empty()) {
+			continue;
+		}
 		const EnemyDef* def = rulesDb.enemy(slot.enemy);
 		if (!def) {
 			return Result<Battle>::failure("unknown enemy '" + slot.enemy + "'");
 		}
 		battle.combatants_.push_back(fromEnemy(rulesDb, *def, slot.group));
-		battle.combatants_.back().position = static_cast<int>(battle.combatants_.size()) - 1 - battle.partyCount_;
-		battle.combatants_.back().ambushed = setup.opening == Opening::PartyFirst;
+		battle.combatants_.back().position = static_cast<int>(position);
+		battle.combatants_.back().ambushed = setup.opening != Opening::Normal && setup.opening == rulesDb.battleRules.ambushOpening;
 	}
 	battle.startingCount_ = static_cast<int>(battle.combatants_.size());
 	battle.rewards_.memberExperience.assign(setup.party.size(), 0);
@@ -308,7 +321,7 @@ Message Battle::setCommand(int actor, const Command& command) {
 		break;
 	}
 	case CommandKind::Item:
-		if (wornPiece(actor, command.id)) {
+		if (wornPiece(actor, command.id) || bagPiece(actor, command.id)) {
 			break;
 		}
 		if (!db_->item(command.id)) {
@@ -510,6 +523,9 @@ std::vector<Event> Battle::resolveRound() {
 		ended.experience = earned.experience;
 		ended.currency = earned.currency;
 		ended.items = earned.items;
+		for (const auto& [piece, count] : earned.equipment) {
+			ended.items[piece] += count;
+		}
 		ended.gameOver = gameOver();
 		if (autoActive_) {
 			autoActive_ = false;
@@ -560,7 +576,7 @@ void Battle::updateOutcome() {
 		outcome_ = Outcome::Defeat;
 	} else if (!enemiesStanding) {
 		outcome_ = Outcome::Victory;
-	} else if (end.kind == ScriptedEndKind::EnemyDefeated && !combatants_[partyCount_ + end.enemySlot].alive()) {
+	} else if (end.kind == ScriptedEndKind::EnemyDefeated && enemyAt(end.enemySlot) >= 0 && !combatants_[enemyAt(end.enemySlot)].alive()) {
 		outcome_ = Outcome::ScriptedEnd;
 	}
 }
@@ -586,11 +602,15 @@ Battle::Attacker Battle::attackerOf(int actor) const {
 // One roll of 0 to 127 for the encounter's drop, only after a Victory (SAV-031).
 void Battle::drawDrops() {
 	const Encounter* encounter = db_->encounter(record_.setup.enemyGroup);
-	if (outcome_ != Outcome::Victory || !encounter || encounter->drop.item.empty()) {
+	if (outcome_ != Outcome::Victory || !encounter || (encounter->drop.item.empty() && encounter->drop.equipment.empty())) {
 		return;
 	}
 	if (rng_.range(0, 127) < encounter->drop.rate) {
-		++drops_[encounter->drop.item];
+		if (encounter->drop.equipment.empty()) {
+			++drops_[encounter->drop.item];
+		} else {
+			++pieceDrops_[encounter->drop.equipment];
+		}
 	}
 }
 
@@ -605,11 +625,13 @@ Rewards Battle::computeRewards() const {
 		return rewards;
 	}
 	rewards.items = drops_;
+	rewards.equipment = pieceDrops_;
 	long long experience = 0;
 	long long currency = 0;
 	for (int i = partyCount_; i < static_cast<int>(combatants_.size()); ++i) {
 		const EnemyDef* def = db_->enemy(combatants_[i].defId);
-		if (def && !combatants_[i].gone && (outcome_ == Outcome::Victory || !combatants_[i].alive())) {
+		const bool pays = !combatants_[i].gone || combatants_[i].paysWhenGone;
+		if (def && pays && (outcome_ == Outcome::Victory || !combatants_[i].alive())) {
 			experience += def->experience;
 			currency += def->currency;
 		}
@@ -691,6 +713,57 @@ void Battle::transform(int target, const EnemyDef& def, std::vector<Event>& out)
 	e.hp = combatants_[target].hp;
 }
 
+int Battle::formationSize() const {
+	int size = static_cast<int>(record_.setup.enemies.size());
+	for (int i = partyCount_; i < static_cast<int>(combatants_.size()); ++i) {
+		size = std::max(size, combatants_[i].position + 1);
+	}
+	return size;
+}
+
+int Battle::enemyAt(int position) const {
+	for (int i = partyCount_; i < startingCount_; ++i) {
+		if (combatants_[i].position == position) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+// The enemy leaves without being defeated; it pays its rewards only when `pays`.
+void Battle::leaveBattle(int target, int actor, bool pays, std::vector<Event>& out) {
+	Combatant& t = combatants_[target];
+	t.gone = true;
+	t.paysWhenGone = pays;
+	t.hp = 0;
+	Event& left = emit(out, EventType::EnemyLeft);
+	left.actor = actor;
+	left.target = target;
+}
+
+// The enemy takes the first of the new forms in its own place; the others join in the free places nearest it.
+void Battle::split(int target, const EnemyDef& def, int count, std::vector<Event>& out) {
+	const int position = combatants_[target].position;
+	const std::string group = combatants_[target].group;
+	transform(target, def, out);
+	int joined = 1;
+	for (int distance = 1; distance < kMaxEnemies && joined < count; ++distance) {
+		for (int candidate : {position - distance, position + distance}) {
+			if (joined >= count || candidate < 0 || candidate >= kMaxEnemies) {
+				continue;
+			}
+			bool taken = false;
+			for (int i = partyCount_; i < static_cast<int>(combatants_.size()); ++i) {
+				taken = taken || (combatants_[i].alive() && combatants_[i].position == candidate);
+			}
+			if (!taken) {
+				addEnemy(def, group, candidate, target, out);
+				++joined;
+			}
+		}
+	}
+}
+
 // A free position is inside the formation and holds no enemy still in the battle.
 std::vector<int> Battle::freeSlotsBeside(int actor) const {
 	const int position = combatants_[actor].position;
@@ -769,7 +842,7 @@ Macro Battle::lastRoundAsMacro(const std::string& name) const {
 			step.target.kind = MacroTargetKind::Default;
 		} else if (foeTargeting && !isParty(t)) {
 			step.target.kind = MacroTargetKind::Enemy;
-			step.target.enemySlot = t - partyCount_;
+			step.target.enemySlot = combatants_[t].position;
 		} else if (allyTargeting && isParty(t)) {
 			step.target.kind = t == actor ? MacroTargetKind::Self : MacroTargetKind::Member;
 			step.target.member = t == actor ? "" : combatants_[t].defId;

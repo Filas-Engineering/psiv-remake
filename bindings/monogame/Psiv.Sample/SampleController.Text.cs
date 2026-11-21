@@ -32,6 +32,10 @@ public sealed partial class SampleController
 	// The library's name of an enumeration value in the text language: Element 1 is heat, so ui.element.heat.
 	private string T(NameKind kind, int value) => T($"ui.{Snake(kind.ToString())}.{GameSession.NameOf(kind, value)}");
 
+	// A built-in element's word from the sample's table; an element the data declares by the game's own name for it.
+	private string ElementText(Element element) => element <= Element.Holy ? T(NameKind.Element, (int)element)
+		: _s.Elements().FirstOrDefault(e => e.Index == element)?.Name ?? element.ToString();
+
 	private static string Snake(string name) => string.Concat(name.Select((c, i) => (i > 0 && char.IsUpper(c) ? "_" : "") + char.ToLowerInvariant(c)));
 
 	private string KeyText(Keys key) => NamedKeys.Contains(key) ? T("ui.key." + Snake(key.ToString())) : Bindings.KeyName(key);

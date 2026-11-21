@@ -236,16 +236,49 @@ void resetRandomCounter(World& world, const Zone& zone) {
 	world.randomThreshold = world.encounterStream.range(zone.random.minSteps, zone.random.maxSteps) * zone.random.stepDistance;
 }
 
+namespace {
+
+bool besideExit(const Area& area, Cell cell) {
+	for (const Exit& exit : area.exits) {
+		if (std::abs(exit.at.x - cell.x) + std::abs(exit.at.y - cell.y) <= 1) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// Whether this step starts a battle: by a 1 in N chance when the zone gives one, otherwise by the step counter.
+bool stepRolls(World& world, const Area& area, const Zone& zone, Cell cell, bool aboard) {
+	const RandomRules& r = zone.random;
+	if ((r.graceSteps > 0 && world.areaSteps <= r.graceSteps) || (r.safeNearExits && besideExit(area, cell))) {
+		return false;
+	}
+	const int chance = aboard && r.vehicleStepChance > 0 ? r.vehicleStepChance : r.stepChance;
+	if (chance > 0) {
+		return world.encounterStream.range(1, chance) == 1;
+	}
+	if (world.randomThreshold <= 0) {
+		resetRandomCounter(world, zone);
+	}
+	world.randomCounter += r.stepDistance;
+	return world.randomCounter >= world.randomThreshold;
+}
+
+void afterRoll(World& world, const Zone& zone, bool aboard) {
+	const int chance = aboard && zone.random.vehicleStepChance > 0 ? zone.random.vehicleStepChance : zone.random.stepChance;
+	if (chance == 0) {
+		resetRandomCounter(world, zone);
+	}
+}
+
+}
+
 std::optional<EncounterStart> vehicleStep(World& world, const Area& area, Cell cell, const std::vector<TableEntry>& table, const rules::Database& db, int agility) {
 	const Zone* zone = area.zoneAt(cell);
 	if (world.graceMs > 0 || area.kind == AreaKind::Town || !zone || table.empty()) {
 		return std::nullopt;
 	}
-	if (world.randomThreshold <= 0) {
-		resetRandomCounter(world, *zone);
-	}
-	world.randomCounter += zone->random.stepDistance;
-	if (world.randomCounter < world.randomThreshold) {
+	if (!stepRolls(world, area, *zone, cell, true)) {
 		return std::nullopt;
 	}
 	Zone vehicleZone = *zone;
@@ -253,7 +286,7 @@ std::optional<EncounterStart> vehicleStep(World& world, const Area& area, Cell c
 	EncounterStart start;
 	start.encounter = drawEncounter(world.encounterStream, vehicleZone);
 	start.opening = rules::openingFromRoll(world.encounterStream.range(0, rules::formulas::kChanceRollMax), agility, db.encounter(start.encounter)->awareness);
-	resetRandomCounter(world, *zone);
+	afterRoll(world, *zone, true);
 	return start;
 }
 
@@ -265,11 +298,7 @@ std::optional<EncounterStart> randomStep(World& world, const Area& area, Cell ce
 	if (!zone) {
 		return std::nullopt;
 	}
-	if (world.randomThreshold <= 0) {
-		resetRandomCounter(world, *zone);
-	}
-	world.randomCounter += zone->random.stepDistance;
-	if (world.randomCounter < world.randomThreshold) {
+	if (!stepRolls(world, area, *zone, cell, false)) {
 		return std::nullopt;
 	}
 	EncounterStart start;
@@ -281,7 +310,7 @@ std::optional<EncounterStart> randomStep(World& world, const Area& area, Cell ce
 		}
 	}
 	start.opening = rules::openingFromRoll(world.encounterStream.range(0, rules::formulas::kChanceRollMax), partyAgility, db.encounter(start.encounter)->awareness);
-	resetRandomCounter(world, *zone);
+	afterRoll(world, *zone, false);
 	return start;
 }
 

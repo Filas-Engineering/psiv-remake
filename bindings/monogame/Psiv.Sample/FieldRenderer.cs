@@ -223,6 +223,9 @@ public sealed class FieldRenderer
 	public Dictionary<string, DrawnPerson> DrawnActors { get; } = [];
 	// The vehicles the last frame drew, by id: "X Y" of the cell under each, with " aboard" for the one the party rides.
 	public Dictionary<string, string> DrawnVehicles { get; } = [];
+	// Conveyor cells drawn in the last frame, running or still, for the headless probe.
+	public int DrawnConveyors { get; private set; }
+	public int RunningConveyors { get; private set; }
 
 	// The cell an actor is drawn at or walking to, if it is on screen in this area.
 	public (int X, int Y)? ActorCell(string id) => _actors.TryGetValue(id, out ActorWalk? w) ? w.Target : null;
@@ -789,6 +792,8 @@ public sealed class FieldRenderer
 				extra?.Invoke(sx, sy - lift);
 			}, sortBias);
 		}
+		DrawnConveyors = view.Points.Count(p => p.Kind == PointKind.Conveyor);
+		RunningConveyors = view.Points.Count(p => p.Kind == PointKind.Conveyor && p.Active);
 		foreach (FieldPoint p in view.Points)
 		{
 			switch (p.Kind)
@@ -820,6 +825,9 @@ public sealed class FieldRenderer
 				break;
 			case PointKind.Gangway:
 				DrawGangway(s, ox + p.X * tile, oy + p.Y * tile, tile, pulse);
+				break;
+			case PointKind.Conveyor:
+				DrawConveyor(s, ox + p.X * tile, oy + p.Y * tile, tile, p.Active, p.Direction, pulse);
 				break;
 			case PointKind.Talk:
 				FieldActor? actor = view.Actors.FirstOrDefault(a => a.Id == p.Id);
@@ -1055,6 +1063,28 @@ public sealed class FieldRenderer
 			s.Fill(sx + Px(4), sy + Px(4 + i * 10), tile - Px(8), Px(7), new Color(150, 110, 70));
 		}
 		s.Fill(sx, sy, Px(3), tile, new Color(120, 240, 160) * (0.3f * pulse));
+	}
+
+	// Belt slats that run toward the belt's direction while it is on.
+	private static void DrawConveyor(IDrawSurface s, int sx, int sy, int tile, bool running, Direction direction, float pulse)
+	{
+		int Px(int pixels) => pixels * tile / Tile;
+		s.Fill(sx + Px(2), sy + Px(2), tile - Px(4), tile - Px(4), new Color(70, 70, 80));
+		int shift = running ? (int)(pulse * 12) : 0;
+		bool across = direction is Direction.East or Direction.West;
+		int sign = direction is Direction.East or Direction.South ? 1 : -1;
+		for (int i = 0; i < 4; ++i)
+		{
+			int along = ((i * 12 + sign * shift) % 48 + 48) % 48;
+			if (across)
+			{
+				s.Fill(sx + Px(along), sy + Px(6), Px(4), tile - Px(12), new Color(190, 180, 120));
+			}
+			else
+			{
+				s.Fill(sx + Px(6), sy + Px(along), tile - Px(12), Px(4), new Color(190, 180, 120));
+			}
+		}
 	}
 
 	// The area's name and its kind as `kindName` words it, shown for a moment after arriving.

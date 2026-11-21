@@ -3,15 +3,16 @@
 	"core_data": "../../core/data",
 	"areas": ["areas/tidewater.json", "areas/reed_path.json", "areas/bell_cove.json", "areas/saltgrass.json", "areas/kiln_upper.json", "areas/kiln_lower.json", "areas/brine_flats.json",
 		"areas/cinder_quay.json", "areas/ember_steps.json", "areas/lantern_barge.json", "areas/ashfall_market.json", "areas/fell_moor.json", "areas/fell_vault.json",
-		"areas/fell_vault_lower.json"],
-	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev", "events/saltgrass.ev", "events/kiln.ev", "events/flats.ev", "events/steps.ev", "events/fells.ev"],
+		"areas/fell_vault_lower.json", "areas/cogway.json"],
+	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev", "events/saltgrass.ev", "events/kiln.ev", "events/flats.ev", "events/steps.ev", "events/fells.ev", "events/cogway.ev"],
 	"glossary": "text/glossary.txt",
 	"languages": [
 		{"code": "en", "strings": "text/en.strings", "text": "text/en.json"},
 		{"code": "ja", "strings": "text/ja.strings", "text": "text/ja.json"}
 	],
 	"journal": "journal.json",
-	"actors": ["ashwife", "bridgewright", "dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "lodgekeeper", "peddler", "wayfarer"],
+	"nameless_actors": ["cog_sweeper"],
+	"actors": ["ashwife", "bridgewright", "cog_sweeper", "dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "lodgekeeper", "peddler", "wayfarer"],
 	"presentation": {
 		"animations": ["bow", "jump", "nod", "shake", "shrug", "startle", "wave"],
 		"audio": ["battle_brass_warden", "battle_marsh_ambush", "brass_alarm", "defeat_low_tide", "dungeon_firing_floor", "dungeon_kiln_halls",
@@ -40,6 +41,9 @@
 		}
 	},
 	"flags": [
+		"cogway.loud",
+		"cogway.open",
+		"cogway.swept",
 		"cove.quiet_seen",
 		"cove.warden_beaten",
 		"cove.warden_lost",

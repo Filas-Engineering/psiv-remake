@@ -106,6 +106,20 @@ flats.beacon.lit = 灯台はしっかり燃えている。島へのフェリー�
 choice.yes = はい
 choice.no = いいえ
 
+cogway.power.on = レバーを倒した。広間がうなり、荒れ野への門が開いた。
+cogway.power.off = レバーを戻した。広間が静まり、門が閉じた。
+cogway.welcome = 先のほうでベルトがきしむ。歯車路はまだ動いている。
+cogway.lift = かごが揺れて、向こうの踊り場まで上がった。
+cogway.sweeper.offer = 二十コインでこのえらの小刀を売るよ。装備も手伝おう。
+cogway.sweeper.ask = 二十コインでナイフを買う？
+cogway.sweeper.thanks = いい取引だ。ベルトに気をつけな。
+cogway.sweeper.declined = なら、どうにかよけて通りな。
+cogway.sweeper.poor = 文無しかい？少しだけ持っていきな。
+cogway.rack.full = 棚にはもう予備の刃がかかっている。
+cogway.rack.hang = えらの小刀を棚に戻した。
+cogway.jukebox.on = オルゴールが軽快な曲を鳴らしはじめた。
+cogway.jukebox.off = オルゴールが元の曲に戻った。
+
 speaker.dockhand = 港の荷役
 speaker.ferrywoman = 運河の渡し守
 speaker.guide = 港の案内人

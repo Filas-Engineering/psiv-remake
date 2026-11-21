@@ -21,6 +21,13 @@ struct BattleRules {
 	bool magicDefense = false;
 	// Party members of these kinds can be felled by instant-defeat effects, besides characters marked `vulnerable`.
 	std::vector<CreatureKind> instantDefeatKinds = {};
+	// The opening that marks enemies ambushed. Party first: spent at each enemy's first turn. Enemy first: kept until an
+	// ambushed override fires.
+	Opening ambushOpening = Opening::PartyFirst;
+	// Elements beyond the built-in ones, usable wherever an element is.
+	std::vector<std::string> elements = {};
+	// Combatants take this affinity for an element their data leaves out; set from affinityDivisor, so normal damage.
+	int neutralAffinity() const { return affinityDivisor; }
 };
 
 }

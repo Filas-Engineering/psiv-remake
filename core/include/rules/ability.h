@@ -2,6 +2,7 @@
 
 #include "rules/types.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,10 @@ struct Effect {
 	std::vector<CreatureKind> kinds = {};
 	// Teach: the ability the target learns for good.
 	std::string ability = {};
+	// Split: how many enemies the user becomes.
+	int count = 0;
+	// SelfDestruct: the enemy that leaves still pays its experience and currency.
+	bool rewards = false;
 	bool reaches(CreatureKind kind) const;
 };
 
@@ -38,6 +43,9 @@ struct AbilityDef {
 	bool field = false;
 	// A combination component names an ability or a family; any ability of that family fills it (B3).
 	std::string family = {};
+	// The user's stat the ability attacks, heals and rolls with, and moves stats by; unset uses mental for techniques
+	// and strength otherwise, as before.
+	std::optional<Stat> attackStat = {};
 
 	bool revives() const;
 	bool hasEffect(EffectKind kind) const;
@@ -49,6 +57,8 @@ struct ItemDef {
 	Targeting targeting = Targeting::OneAlly;
 	std::vector<Effect> effects;
 	bool field = false;
+	// False for an item that is never used up.
+	bool consumed = true;
 };
 
 bool effectsRevive(const std::vector<Effect>& effects);

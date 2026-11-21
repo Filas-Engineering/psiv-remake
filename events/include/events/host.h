@@ -183,6 +183,14 @@ public:
 	virtual void teach_ability(const std::string& member, const std::string& ability);
 	// A character who walks with the party without joining it; empty for none.
 	virtual void set_follower(const std::string& actor);
+	// For `money give|take` and the `money` test. The defaults hold no money and change nothing.
+	virtual std::int64_t money();
+	virtual void change_money(std::int64_t delta);
+	// The member puts the piece on from the bag, or takes it off, by the game's equipment rules.
+	virtual void equip_piece(const std::string& member, const std::string& piece);
+	virtual void unequip_piece(const std::string& member, const std::string& piece);
+	// The track the area the party is in plays from now on, saved with the game; empty goes back to the area's own.
+	virtual void set_area_music(const std::string& track);
 };
 
 const char* action_type_name(ActionType type);

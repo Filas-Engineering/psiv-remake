@@ -49,7 +49,9 @@
 		{"id": "ashfall_fine_arms", "at": [9, 1], "kind": "weapon", "stock": ["kelp_cleaver", "storm_rod"], "require_flag": "fells.guild_open"},
 		{"id": "ashfall_fine_armor", "at": [11, 1], "kind": "armor", "stock": ["reef_targe", "rivet_plate", "ward_mantle"], "require_flag": "fells.guild_open"}
 	],
-	"ports": [{"id": "fell_dock", "at": [3, 7], "marker": "dock_front", "flag": "travel.dock_open", "ship": "lantern_barge"}],
+	"ports": [
+		{"id": "fell_dock", "at": [3, 7], "marker": "dock_front", "flag": "travel.dock_open", "ship": "lantern_barge"}
+	],
 	"changes": [
 		{"flag": "fells.bridge_mended", "tile": ".", "cells": [[7, 4]]},
 		{"flag": "fells.shrine_sealed", "tile": "#", "cells": [[13, 6]]}

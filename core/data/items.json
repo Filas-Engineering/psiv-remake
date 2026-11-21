@@ -48,6 +48,9 @@
 		{"id": "dune_horn", "name": "Dune Horn", "target": "self"},
 		{"id": "rime_bell", "name": "Rime Bell", "target": "self"},
 		{"id": "vault_key", "name": "Vault Key", "target": "self"},
-		{"id": "lantern_charm", "name": "Lantern Charm", "target": "self"}
+		{"id": "lantern_charm", "name": "Lantern Charm", "target": "self"},
+		{"id": "dawn_bell", "name": "Dawn Bell", "target": "all_allies", "consumed": false, "effects": [
+			{"type": "cure_status", "status": "sleep"}
+		]}
 	]
 }

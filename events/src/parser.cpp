@@ -308,7 +308,13 @@ private:
 			// `vehicle`, `aboard`, `party` and `item` followed by a name test the game; alone they are still flag names.
 			const Token* test = a.peek();
 			const Token* subject = a.peek(1);
-			if (test && subject && test->kind == TokenKind::word && subject->kind == TokenKind::word && one_of(test->text, {"vehicle", "aboard", "party", "item"}) &&
+			if (test && subject && test->kind == TokenKind::word && test->text == "money" && subject->kind != TokenKind::word) {
+				term.test = TermTest::money;
+				if (!parse_value_test(a, term)) {
+					return false;
+				}
+				term.is_flag = false;
+			} else if (test && subject && test->kind == TokenKind::word && subject->kind == TokenKind::word && one_of(test->text, {"vehicle", "aboard", "party", "item"}) &&
 				!one_of(subject->text, {"and", "or"})) {
 				term.test = test->text == "vehicle" ? TermTest::owns : test->text == "aboard" ? TermTest::aboard : test->text == "party" ? TermTest::member : TermTest::holds;
 				const char* what = term.test == TermTest::member ? "a member name" : term.test == TermTest::holds ? "an item name" : "a vehicle name";
@@ -693,10 +699,10 @@ private:
 		}
 
 		static const std::initializer_list<const char*> known = {
-			"ambient", "anim", "ask", "battle", "call", "camera", "choice", "clear", "face", "fade", "follower", "give", "goto", "hide",
-			"if", "label", "learn", "lock", "move", "music", "name", "narrate", "panel", "party", "race", "rest", "return", "save",
-			"say", "sequence", "set", "shake", "shop", "show", "sound", "sync", "take", "together", "unlock", "var", "vehicle",
-			"wait", "warp", "while",
+			"ambient", "anim", "ask", "battle", "call", "camera", "choice", "clear", "equip", "face", "fade", "follower", "give", "goto",
+			"hide", "if", "label", "learn", "lock", "money", "move", "music", "name", "narrate", "panel", "party", "race", "rest",
+			"return", "save", "say", "sequence", "set", "shake", "shop", "show", "sound", "sync", "take", "together", "unequip",
+			"unlock", "var", "vehicle", "wait", "warp", "while",
 		};
 		if (!one_of(cmd, known)) {
 			error(l.number, "script.unknown_command", {cmd});
@@ -704,7 +710,8 @@ private:
 			return;
 		}
 
-		if (ctx.parallel && !one_of(cmd, {"ambient", "anim", "camera", "face", "fade", "hide", "move", "music", "panel", "sequence", "shake", "show", "sound", "wait"})) {
+		const bool areaMusic = cmd == "music" && l.tokens.size() > 1 && l.tokens[1].text == "area";
+		if (ctx.parallel && (areaMusic || !one_of(cmd, {"ambient", "anim", "camera", "face", "fade", "hide", "move", "music", "panel", "sequence", "shake", "show", "sound", "wait"}))) {
 			error(l.number, "script.allowed_inside_only_actor_camera", {cmd, ctx.parallel});
 			skip_command(ctx);
 			return;
@@ -902,6 +909,11 @@ private:
 			s.ins.action.strength = 1;
 			a.number(s.ins.action.seconds, "a duration in seconds");
 			action_options(ctx, a, s, false, true, false);
+		} else if (cmd == "music" && a.keyword("area")) {
+			s = simple(Op::area_music);
+			if (!a.keyword("default")) {
+				a.name(s.ins.name, "a track name or 'default'");
+			}
 		} else if (cmd == "music") {
 			s = action(ActionType::music_play);
 			if (a.keyword("play")) {
@@ -952,6 +964,20 @@ private:
 			s = simple(Op::learn);
 			a.name(s.ins.name, "a party member name");
 			a.name(s.ins.action.subject, "an ability name");
+		} else if (cmd == "money") {
+			s = simple(Op::money);
+			const bool take = a.keyword("take");
+			if (!take && !a.keyword("give")) {
+				a.expected("'give' or 'take'");
+			} else if (a.integer(s.ins.number, "an amount of money") && s.ins.number < 1) {
+				a.error("script.money_at_least_1", {});
+			} else if (take) {
+				s.ins.number = -s.ins.number;
+			}
+		} else if (cmd == "equip" || cmd == "unequip") {
+			s = simple(cmd == "equip" ? Op::equip : Op::unequip);
+			a.name(s.ins.name, "a party member name");
+			a.name(s.ins.action.subject, "an equipment name");
 		} else if (cmd == "follower") {
 			s = simple(Op::follower);
 			if (!a.keyword("none")) {

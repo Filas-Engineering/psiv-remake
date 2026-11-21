@@ -33,6 +33,190 @@ constexpr std::size_t kMaxNameLength = 16;
 constexpr std::size_t kInstantActionRecords = 256;
 constexpr int kMaxWalkSteps = 4000;
 
+// A save is plain text a player can edit, so everything in it that names data or indexes a map is checked against the
+// data before the world is used. Returns what is wrong, in English, or empty.
+std::string invalidWorld(const GameData& data, const World& w) {
+	const rules::Database& db = data.db;
+	auto cellIn = [&](const std::string& areaId, Cell cell) {
+		const Area* a = data.area(areaId);
+		return a && a->inside(cell);
+	};
+	auto named = [](const std::string& what, const std::string& id) { return what + " '" + id + "'"; };
+	if (!cellIn(w.area, w.position)) {
+		return "the party stands outside area '" + w.area + "'";
+	}
+	if (w.lineup.empty() || w.lineup.size() > static_cast<std::size_t>(rules::kMaxPartySize)) {
+		return "the lineup needs 1 to " + std::to_string(rules::kMaxPartySize) + " members";
+	}
+	std::set<std::string> seen;
+	for (const rules::PartyMember& m : w.roster) {
+		if (!db.character(m.characterId) || !seen.insert(m.characterId).second) {
+			return named("unknown or repeated member", m.characterId);
+		}
+		if (m.level < 1 || m.level > rules::formulas::kMaxLevel || m.experience < 0 || m.hp < 0 || m.tp < 0) {
+			return named("out-of-range level, experience or points for", m.characterId);
+		}
+		for (const auto& [slot, piece] : m.equipment) {
+			const rules::EquipmentDef* def = db.equipmentPiece(piece);
+			if (!def || !rules::fitsPosition(*def, slot)) {
+				return named("unknown or misplaced piece", piece);
+			}
+		}
+		for (const auto& [ability, uses] : m.skillUses) {
+			if (!db.ability(ability) || uses < 0) {
+				return named("bad skill uses for", ability);
+			}
+		}
+		for (const rules::ActiveStatus& status : m.statuses) {
+			const rules::StatusDef* def = db.status(status.id);
+			if (!def || !def->persistsOutsideBattle || status.remaining < 0) {
+				return named("bad status", status.id);
+			}
+		}
+		for (const std::string& ability : m.taught) {
+			if (!db.ability(ability)) {
+				return named("unknown taught ability", ability);
+			}
+		}
+	}
+	std::set<std::string> inLineup;
+	for (const std::string& id : w.lineup) {
+		if (!seen.count(id) || !inLineup.insert(id).second) {
+			return named("lineup member not in the roster or repeated", id);
+		}
+	}
+	for (const auto& [id, name] : w.memberNames) {
+		if (!db.character(id)) {
+			return named("name for unknown character", id);
+		}
+	}
+	for (const auto& [id, count] : w.items) {
+		if (!db.item(id) || count < 1 || count > data.config.itemCap) {
+			return named("unknown item or count out of range", id);
+		}
+	}
+	for (const auto& [id, count] : w.equipmentBag) {
+		if (!db.equipmentPiece(id) || count < 1 || count > data.config.itemCap) {
+			return named("unknown piece or count out of range", id);
+		}
+	}
+	if (w.money < 0 || w.money > data.config.moneyCap) {
+		return "money out of range";
+	}
+	for (const auto& [name, value] : w.flags) {
+		const events::Declaration* d = data.registry.find(name);
+		if (!d || !d->is_flag || d->local) {
+			return named("undeclared flag", name);
+		}
+	}
+	for (const auto& [name, value] : w.vars) {
+		const events::Declaration* d = data.registry.find(name);
+		if (!d || d->is_flag || d->local) {
+			return named("undeclared variable", name);
+		}
+	}
+	if (w.macros.size() > static_cast<std::size_t>(kMaxMacros)) {
+		return "too many macros";
+	}
+	bool autoFound = w.autoMacro.empty();
+	for (const rules::Macro& macro : w.macros) {
+		autoFound = autoFound || macro.name == w.autoMacro;
+		if (macro.steps.size() > static_cast<std::size_t>(rules::kMaxPartySize)) {
+			return named("too many steps in macro", macro.name);
+		}
+		for (const rules::MacroStep& step : macro.steps) {
+			const bool badTarget = step.target.kind == rules::MacroTargetKind::Enemy && (step.target.enemySlot < 0 || step.target.enemySlot >= rules::kMaxEnemies);
+			const bool badMember = step.target.kind == rules::MacroTargetKind::Member && !db.character(step.target.member);
+			const bool badId = (step.kind == rules::CommandKind::Ability && !db.ability(step.id)) || (step.kind == rules::CommandKind::Item && !db.item(step.id));
+			if (!db.character(step.member) || badTarget || badMember || badId) {
+				return named("bad step in macro", macro.name);
+			}
+		}
+	}
+	if (!autoFound) {
+		return named("unknown auto macro", w.autoMacro);
+	}
+	for (const rules::ComboLogEntry& entry : w.comboLog.entries()) {
+		const bool known = std::any_of(db.combos.begin(), db.combos.end(), [&](const rules::ComboRecipe& r) { return r.id == entry.recipe; });
+		if (!known || entry.playTimeMs < 0) {
+			return named("unknown combination", entry.recipe);
+		}
+	}
+	for (const std::string& id : w.visitedAreas) {
+		if (!data.area(id)) {
+			return named("unknown visited area", id);
+		}
+	}
+	const Area& here = *data.area(w.area);
+	for (const VisibleEnemy& e : w.enemies) {
+		const bool zoneHere = std::any_of(here.zones.begin(), here.zones.end(), [&](const Zone& z) { return z.id == e.zone; });
+		if (!zoneHere || !db.encounter(e.encounter) || !here.inside(e.spawn) || !here.inside(e.position) || e.id < 1 || e.id >= w.nextEnemyId || e.stateMs < 0 || e.moveProgress < 0) {
+			return "bad visible enemy " + std::to_string(e.id);
+		}
+	}
+	for (const auto& [id, place] : w.actors) {
+		if (std::find(data.config.actors.begin(), data.config.actors.end(), id) == data.config.actors.end() || (!place.area.empty() && !cellIn(place.area, place.cell))) {
+			return named("unknown actor or cell outside its area for", id);
+		}
+	}
+	for (const auto& [id, place] : w.vehicles) {
+		const FieldVehicle* field = data.vehicle(id);
+		const rules::VehicleDef* def = db.vehicle(id);
+		if (!field || !def || !cellIn(place.area, place.cell) || !cellIn(place.homeArea, place.home)) {
+			return named("unknown vehicle or cell outside its area for", id);
+		}
+		for (const auto& [skill, uses] : place.skillUses) {
+			if (std::find(def->abilities.begin(), def->abilities.end(), skill) == def->abilities.end() || uses < 0) {
+				return named("bad skill uses for vehicle", id);
+			}
+		}
+	}
+	if (!w.aboard.empty()) {
+		const auto ridden = w.vehicles.find(w.aboard);
+		if (ridden == w.vehicles.end() || ridden->second.area != w.area || ridden->second.cell != w.position) {
+			return named("aboard a vehicle the party does not have where it stands", w.aboard);
+		}
+	}
+	if (!w.follower.empty() && std::find(data.config.actors.begin(), data.config.actors.end(), w.follower) == data.config.actors.end()) {
+		return named("unknown follower", w.follower);
+	}
+	if (!w.dungeonExitArea.empty() && !cellIn(w.dungeonExitArea, w.dungeonExitCell)) {
+		return "the way out of the dungeon is outside its area";
+	}
+	if (!w.shipPort.empty() && !data.port(w.shipPort)) {
+		return named("unknown ship port", w.shipPort);
+	}
+	for (const auto& [areaId, cells] : w.brokenCells) {
+		for (Cell c : cells) {
+			if (!cellIn(areaId, c)) {
+				return named("broken barrier outside its area", areaId);
+			}
+		}
+	}
+	for (Cell c : w.brokenHere) {
+		if (!here.inside(c)) {
+			return "broken barrier outside the current area";
+		}
+	}
+	if (w.graceMs < 0 || w.randomCounter < 0 || w.randomThreshold < 0 || w.playTimeMs < 0) {
+		return "negative grace, random counter or play time";
+	}
+	for (const auto& job : w.jobs) {
+		if (std::none_of(data.journal.jobs.begin(), data.journal.jobs.end(), [&](const Job& j) { return j.id == job.first; })) {
+			return named("unknown job", job.first);
+		}
+	}
+	for (const std::string& id : w.unlocked) {
+		if (std::none_of(data.journal.encyclopedia.begin(), data.journal.encyclopedia.end(), [&](const EncyclopediaEntry& e) { return e.id == id; })) {
+			return named("unknown encyclopedia entry", id);
+		}
+	}
+	if (!db.difficulty(w.settings.difficulty)) {
+		return named("unknown difficulty", w.settings.difficulty);
+	}
+	return "";
+}
+
 bool hookHolds(const Hook& hook, const World& world) {
 	return (hook.requireFlag.empty() || world.flag(hook.requireFlag)) && (hook.blockFlag.empty() || !world.flag(hook.blockFlag));
 }
@@ -315,6 +499,8 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.level_up",
 		"game.loaded",
 		"game.loaded_text",
+		"game.money_given",
+		"game.money_taken",
 		"game.named",
 		"game.no_effect",
 		"game.port_open",
@@ -405,6 +591,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.save_damaged",
 		"game.refuse.save_failed",
 		"game.refuse.save_in_event",
+		"game.refuse.save_invalid",
 		"game.refuse.save_unknown_area",
 		"game.refuse.save_where",
 		"game.refuse.saving_disabled",
@@ -663,6 +850,47 @@ public:
 		s_.emit(OutputKind::Notice, "game.learned", {member, ability});
 	}
 
+	std::int64_t money() override { return s_.world_.money; }
+
+	void change_money(std::int64_t delta) override {
+		const int before = s_.world_.money;
+		s_.world_.money = static_cast<int>(std::clamp<std::int64_t>(before + delta, 0, s_.data_.config.moneyCap));
+		const int moved = std::abs(s_.world_.money - before);
+		s_.emit(OutputKind::Notice, s_.world_.money >= before ? "game.money_given" : "game.money_taken", {std::to_string(moved)});
+	}
+
+	void equip_piece(const std::string& member, const std::string& piece) override {
+		rules::PartyMember* m = s_.world_.member(member);
+		if (!m) {
+			s_.warn("cannot equip " + piece + " on " + member + ": not in the roster");
+			return;
+		}
+		const rules::Message refused = rules::equip(*m, s_.data_.db, s_.world_.equipmentBag, piece);
+		if (!refused.empty()) {
+			s_.warn("cannot equip " + piece + " on " + member + ": " + s_.render(refused));
+			return;
+		}
+		s_.emit(OutputKind::Notice, "game.equipped", {member, piece});
+	}
+
+	void unequip_piece(const std::string& member, const std::string& piece) override {
+		rules::PartyMember* m = s_.world_.member(member);
+		std::optional<rules::EquipSlot> slot;
+		for (const auto& [position, worn] : m ? m->equipment : std::map<rules::EquipSlot, std::string>()) {
+			if (worn == piece && !slot) {
+				slot = position;
+			}
+		}
+		if (!slot) {
+			s_.warn("cannot unequip " + piece + " from " + member + ": not worn");
+			return;
+		}
+		rules::unequip(*m, s_.data_.db, s_.world_.equipmentBag, *slot);
+		s_.emit(OutputKind::Notice, "game.unequipped", {member, piece});
+	}
+
+	void set_area_music(const std::string& track) override { s_.world_.areaMusic = track; }
+
 	void set_follower(const std::string& actor) override {
 		if (s_.world_.follower == actor) {
 			return;
@@ -716,10 +944,21 @@ public:
 	bool restore_world(const std::string& snapshot) override {
 		std::string error;
 		const bool marked = s_.world_.devMarked;
-		if (!parseWorldChunks(snapshot, s_.world_, error)) {
+		World restored = s_.world_;
+		if (!parseWorldChunks(snapshot, restored, error)) {
 			s_.warn("cannot restore the event-start world: " + error);
 			return false;
 		}
+		if (!s_.data_.area(restored.area)) {
+			error = "unknown area '" + restored.area + "'";
+		} else {
+			error = invalidWorld(s_.data_, restored);
+		}
+		if (!error.empty()) {
+			s_.warn("cannot restore the event-start world: " + error);
+			return false;
+		}
+		s_.world_ = std::move(restored);
 		s_.world_.devMarked = s_.world_.devMarked || marked;
 		return true;
 	}
@@ -888,7 +1127,7 @@ std::vector<ActorView> Session::actorsHere() const {
 				out.push_back({id, it->second.cell, it->second.facing, it->second.visible, true});
 			}
 		} else if (const Hook* home = actorHome(here, id)) {
-			out.push_back({id, home->at, Facing::South, true, false});
+			out.push_back({id, home->at, Facing::South, !home->solidWhileActive || hookHolds(*home, world_), false});
 		}
 	}
 	return out;
@@ -898,7 +1137,18 @@ const Area* Session::area() const {
 	return areaAt(world_.area);
 }
 
-// The copy keeps its hooks, shops and the rest in place, so pointers into it stay valid while only its rows change.
+std::string Session::elementName(const rules::Element& element) const {
+	const auto named = language().text.find(std::string(kNamePrefix) + "element." + element.id);
+	return named == language().text.end() ? element.id : named->second;
+}
+
+std::string Session::areaMusic() const {
+	const Area* here = area();
+	return world_.areaMusic.empty() && here ? here->music : world_.areaMusic;
+}
+
+// The copy keeps its hooks, shops and the rest in place, so pointers into it stay valid while only its rows and passable
+// cells change.
 const Area* Session::areaAt(const std::string& id) const {
 	const Area* base = data_.area(id);
 	if (!base) {
@@ -906,9 +1156,16 @@ const Area* Session::areaAt(const std::string& id) const {
 	}
 	const auto broken = world_.brokenCells.find(id);
 	const bool here = id == world_.area && !world_.brokenHere.empty();
-	if (base->changes.empty() && broken == world_.brokenCells.end() && !here) {
+	const bool gatedExits = std::any_of(base->exits.begin(), base->exits.end(), [](const Exit& e) { return !e.requireFlag.empty() || !e.blockFlag.empty(); });
+	const bool gatedHooks = std::any_of(base->hooks.begin(), base->hooks.end(), [](const Hook& h) { return h.solidWhileActive; });
+	if (base->changes.empty() && broken == world_.brokenCells.end() && !here && !gatedExits && !gatedHooks) {
 		return base;
 	}
+	// A hook that is solid only while active stands while its flags hold and, for an actor's talk point, the actor shows.
+	auto hookStands = [&](const Hook& h) {
+		const auto actor = world_.actors.find(h.id);
+		return hookHolds(h, world_) && (actor == world_.actors.end() || actor->second.visible);
+	};
 	std::set<Cell> open = broken == world_.brokenCells.end() ? std::set<Cell>() : broken->second;
 	if (here) {
 		open.insert(world_.brokenHere.begin(), world_.brokenHere.end());
@@ -919,6 +1176,13 @@ const Area* Session::areaAt(const std::string& id) const {
 	}
 	for (Cell c : open) {
 		key += ";" + std::to_string(c.x) + "," + std::to_string(c.y);
+	}
+	key += "|";
+	for (const Exit& e : base->exits) {
+		key += exitOpen(e, world_) ? '1' : '0';
+	}
+	for (const Hook& h : base->hooks) {
+		key += !h.solidWhileActive || hookStands(h) ? '1' : '0';
 	}
 	auto view = areaViews_.find(id);
 	if (view == areaViews_.end()) {
@@ -935,7 +1199,21 @@ const Area* Session::areaAt(const std::string& id) const {
 			}
 		}
 		for (Cell c : open) {
-			rows[c.y][c.x] = '.';
+			if (base->inside(c)) {
+				rows[c.y][c.x] = '.';
+			}
+		}
+		for (const Exit& e : base->exits) {
+			if (!exitOpen(e, world_)) {
+				rows[e.at.y][e.at.x] = '#';
+			}
+		}
+		std::set<Cell>& passable = view->second.second.passable;
+		passable.clear();
+		for (const Hook& h : base->hooks) {
+			if (h.solidWhileActive && !hookStands(h)) {
+				passable.insert(h.at);
+			}
 		}
 		view->second.first = key;
 	}
@@ -1092,7 +1370,7 @@ void Session::addLog(const events::Line& line, bool skipped) {
 std::vector<std::string> Session::textLog() const {
 	std::vector<std::string> out;
 	for (const LogEntry& e : textLog_) {
-		const std::string line = (e.speaker.empty() ? "" : displayName(e.speaker) + ": ") + scriptText(e.text);
+		const std::string line = (e.speaker.empty() || data_.config.nameless(e.speaker) ? "" : displayName(e.speaker) + ": ") + scriptText(e.text);
 		out.push_back(e.skipped ? text("game.skipped", {line}) : line);
 	}
 	return out;
@@ -1245,11 +1523,21 @@ rules::Message Session::loadText(const std::string& text, const std::string& slo
 	if (!data_.area(save.value->world.area)) {
 		return refusal("save_unknown_area", {slot, save.value->world.area});
 	}
+	const std::string invalid = invalidWorld(data_, save.value->world);
+	if (!invalid.empty()) {
+		return refusal("save_invalid", {slot, invalid});
+	}
 	dropEvent();
 	battle_.reset();
 	ended_.reset();
 	latchedDirection_.reset();
 	world_ = std::move(save.value->world);
+	// Data that changed since the save may have lowered a maximum.
+	for (rules::PartyMember& m : world_.roster) {
+		const rules::Stats stats = rules::memberStats(data_.db, m);
+		m.hp = std::min(m.hp, stats.maxHp);
+		m.tp = std::min(m.tp, stats.maxTp);
+	}
 	refreshJournal(false);
 	textLog_.clear();
 	gameOver_ = false;
@@ -1356,7 +1644,32 @@ void Session::tickField(const FieldInput& input) {
 	world_.graceMs = std::max(0, world_.graceMs - tick);
 	const Area& a = *area();
 	const FieldVehicle* vehicle = riding();
-	if (input.held && world_.playerControl) {
+	const Conveyor* belt = nullptr;
+	for (const Conveyor& c : a.conveyors) {
+		const bool holds = (c.requireFlag.empty() || world_.flag(c.requireFlag)) && (c.blockFlag.empty() || !world_.flag(c.blockFlag));
+		if (holds && std::find(c.cells.begin(), c.cells.end(), world_.position) != c.cells.end()) {
+			belt = &c;
+		}
+	}
+	if (!belt) {
+		conveyorMs_ = 0;
+	}
+	if (belt && world_.playerControl) {
+		// A belt carries the party one cell per step and takes no input while it does.
+		stepProgressMs_ = 0;
+		conveyorMs_ += tick;
+		const Cell target = stepFrom(world_.position, belt->direction);
+		const bool blockedByEnemy = std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; });
+		if (conveyorMs_ >= belt->stepMs) {
+			conveyorMs_ = 0;
+			if (canEnter(a, target) && !blockedByEnemy) {
+				arrive(target);
+				if (mode() != Mode::Field) {
+					return;
+				}
+			}
+		}
+	} else if (input.held && world_.playerControl) {
 		world_.facing = input.direction;
 		if (vehicle) {
 			world_.vehicles[world_.aboard].facing = input.direction;
@@ -1410,6 +1723,13 @@ void Session::healMachinesOnStep() {
 void Session::arrive(Cell cell) {
 	const Cell from = world_.position;
 	world_.position = cell;
+	int longestGrace = 0;
+	for (const Zone& zone : area()->zones) {
+		longestGrace = std::max(longestGrace, zone.random.graceSteps);
+	}
+	if (world_.areaSteps < longestGrace) {
+		++world_.areaSteps;
+	}
 	if (!world_.aboard.empty()) {
 		world_.vehicles[world_.aboard].cell = cell;
 	}
@@ -1453,7 +1773,7 @@ void Session::arrive(Cell cell) {
 		settleField();
 		return;
 	}
-	if (const Hook* hook = a.hookAt(cell, HookTrigger::Step)) {
+	if (const Hook* hook = a.stepHookAt(cell)) {
 		if (hookHolds(*hook, world_)) {
 			startEvent(hook->event);
 			return;
@@ -1501,7 +1821,9 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 	}
 	if (world_.area != a->id) {
 		world_.brokenHere.clear();
+		world_.areaMusic.clear();
 	}
+	world_.areaSteps = 0;
 	if (a->kind != AreaKind::Vessel) {
 		world_.shipPort.clear();
 	}
@@ -1548,7 +1870,11 @@ void Session::settleField() {
 		loadHooksPending_ = false;
 	}
 	for (const Hook& hook : area()->hooks) {
-		if (hook.trigger == HookTrigger::Flag && hookHolds(hook, world_)) {
+		const std::string onceKey = world_.area + "/" + hook.id;
+		if (hook.trigger == HookTrigger::Flag && hookHolds(hook, world_) && !(hook.once && world_.onceHooks.count(onceKey))) {
+			if (hook.once) {
+				world_.onceHooks.insert(onceKey);
+			}
 			startEvent(hook.event);
 			return;
 		}
@@ -1638,6 +1964,11 @@ WalkStatus Session::walkStep(PathWalk& walk) {
 		return WalkStatus::Arrived;
 	}
 	const Area& a = *area();
+	// A belt carries the party wherever it runs, so the path crosses none but the goal.
+	std::set<Cell> belts;
+	for (const Conveyor& c : a.conveyors) {
+		belts.insert(c.cells.begin(), c.cells.end());
+	}
 	std::map<Cell, Cell> from;
 	std::deque<Cell> queue{world_.position};
 	from[world_.position] = world_.position;
@@ -1646,7 +1977,7 @@ WalkStatus Session::walkStep(PathWalk& walk) {
 		queue.pop_front();
 		for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
 			const Cell n = stepFrom(c, f);
-			if (from.count(n) || !canEnter(a, n) || (a.exitAt(n) && n != walk.goal)) {
+			if (from.count(n) || !canEnter(a, n) || ((a.exitAt(n) || belts.count(n)) && n != walk.goal)) {
 				continue;
 			}
 			from[n] = c;
@@ -1689,7 +2020,7 @@ rules::Message Session::interact() {
 		return board();
 	}
 	if (const Port* port = a.portAt(target)) {
-		if (!port->flag.empty() && !world_.flag(port->flag)) {
+		if (!portOpen(*port, world_)) {
 			return refusal("port_closed");
 		}
 		if (!port->ship.empty()) {
@@ -1844,7 +2175,7 @@ rules::Message Session::callVehicle(const FieldVehicle& vehicle) {
 		return refusal("aboard", {world_.aboard});
 	}
 	const Area& a = *area();
-	if (a.kind != AreaKind::Field || !vehicle.canCross(a.rows[world_.position.y][world_.position.x])) {
+	if (a.kind != AreaKind::Field || !a.inside(world_.position) || !vehicle.canCross(a.rows[world_.position.y][world_.position.x])) {
 		return refusal("call_outdoors", {vehicle.callItem});
 	}
 	VehiclePlace& place = world_.vehicles[vehicle.id];
@@ -1944,7 +2275,7 @@ std::vector<TravelDestination> Session::travelDestinations(TravelKind kind) cons
 		}
 		for (const auto& [id, a] : data_.areas) {
 			for (const Port& p : a.ports) {
-				if (p.id != portId_ && p.ship == port()->ship && (p.flag.empty() || world_.flag(p.flag))) {
+				if (p.id != portId_ && p.ship == port()->ship && portOpen(p, world_)) {
 					out.push_back({p.id, a.id, a.markers.at(p.marker), a.region});
 				}
 			}
@@ -2165,7 +2496,7 @@ std::optional<LineView> Session::line() const {
 	const events::Line& line = handles_.at(lineHandle_).line;
 	LineView view;
 	view.speakerId = line.speaker;
-	view.speakerName = line.speaker.empty() ? "" : displayName(line.speaker);
+	view.speakerName = line.speaker.empty() || data_.config.nameless(line.speaker) ? "" : displayName(line.speaker);
 	view.textId = line.text.is_id ? line.text.value : "";
 	view.text = scriptText(line.text);
 	view.portrait = line.portrait;
@@ -2177,7 +2508,7 @@ std::string Session::lineText() const {
 	if (!view) {
 		return "";
 	}
-	return view->speakerId.empty() ? view->text : view->speakerName + ": " + view->text;
+	return view->speakerName.empty() ? view->text : view->speakerName + ": " + view->text;
 }
 
 void Session::confirmLine() {
@@ -2284,6 +2615,12 @@ std::string Session::startBattle(const std::string& encounter, rules::Opening op
 		}
 	}
 	setup.inventory = world_.items;
+	for (const auto& [id, count] : world_.equipmentBag) {
+		const rules::EquipmentDef* piece = data_.db.equipmentPiece(id);
+		if (piece && piece->useFromBag && count > 0) {
+			setup.pieces[id] = count;
+		}
+	}
 	setup.vehicle = vehicle;
 	setup.flags.vehicleBattle = !vehicle.empty();
 	if (auto place = world_.vehicles.find(vehicle); place != world_.vehicles.end()) {
@@ -2505,9 +2842,11 @@ void Session::finishBattle() {
 		money = rewards.currency;
 		world_.money = std::min(data_.config.moneyCap, world_.money + money);
 		emit(OutputKind::Notice, outcome == rules::Outcome::Victory ? "game.victory" : "game.scripted_end", {std::to_string(experience), std::to_string(money)});
-		for (const auto& [id, n] : rewards.items) {
-			giveThing(id, n);
-			emit(OutputKind::Notice, "game.dropped", {std::to_string(n), id});
+		for (const rules::Inventory* drops : {&rewards.items, &rewards.equipment}) {
+			for (const auto& [id, n] : *drops) {
+				giveThing(id, n);
+				emit(OutputKind::Notice, "game.dropped", {std::to_string(n), id});
+			}
 		}
 		for (std::size_t i = 0; i < state.size() && i < rewards.memberExperience.size(); ++i) {
 			rules::PartyMember* member = world_.member(state[i].characterId);
@@ -3303,8 +3642,11 @@ std::optional<MemberDetail> Session::memberDetail(const std::string& member) con
 			detail.equipmentBonus[slot] = piece->bonus;
 		}
 	}
-	for (int e = static_cast<int>(rules::Element::Heat); e <= static_cast<int>(rules::Element::Gale); ++e) {
-		detail.affinities[static_cast<rules::Element>(e)] = combatant.affinity(static_cast<rules::Element>(e));
+	for (const std::string& element : data_.db.elementIds()) {
+		const int affinity = combatant.affinity(element);
+		if (affinity != combatant.neutralAffinity) {
+			detail.affinities.emplace_back(element, affinity);
+		}
 	}
 	return detail;
 }

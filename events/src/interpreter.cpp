@@ -364,6 +364,18 @@ void Interpreter::execute(Thread& thread) {
 	case Op::follower:
 		host_.set_follower(ins.name);
 		break;
+	case Op::money:
+		host_.change_money(ins.number);
+		break;
+	case Op::equip:
+		host_.equip_piece(ins.name, ins.action.subject);
+		break;
+	case Op::unequip:
+		host_.unequip_piece(ins.name, ins.action.subject);
+		break;
+	case Op::area_music:
+		host_.set_area_music(ins.name);
+		break;
 	case Op::take:
 		host_.take_item(ins.name, static_cast<int>(ins.number));
 		break;
@@ -425,7 +437,7 @@ bool Interpreter::evaluate(const Condition& condition) {
 		} else if (term.is_flag) {
 			value = read_flag(term.name);
 		} else {
-			std::int64_t v = read_var(term.name);
+			std::int64_t v = term.test == TermTest::money ? host_.money() : read_var(term.name);
 			switch (term.compare) {
 			case Compare::eq:
 				value = v == term.value;

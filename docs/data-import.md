@@ -80,6 +80,10 @@ Difficulty overlays that scale enemies, abilities and rewards. Reference: [diffi
 
 Core's English message templates for battle and field results. The loader requires a template for every key core can emit with your data. Reference: [text_en.json](../core/README.md#text_enjson).
 
+### This round's options
+
+Every one is optional; data without them loads and plays as before. Core: `rules.json` `ambush_opening` and `elements` (name each declared element as `name.element.<id>` in every language's game text table, or `game_cli --check` reports `data.element_name_missing`); abilities' `attack_stat` and a stat change's `power` (and the stat `magic_defense`); effects `transform`, `split` (`count`) and `self_destruct` (`rewards`), which need the enemy's `transforms_into` and `splits_into`; enemies' `merges_with` and `attack_element`; the override `after_turns` (`turns`); `null` for a free place in an encounter's `enemies` (at least one place must hold an enemy); a drop's `equipment` in place of `item` (an id that is not also an item); items' `consumed`; equipment's `use_from_bag` (needs `use`) and `affinities`; characters' `teachable` (abilities events teach, which recipes then count). Game: exits' `require_flag`/`block_flag`, ports' `block_flag`, hooks' `once`, `tile` and `solid`, `conveyors`, zone `random` `grace_steps`, `step_chance`, `vehicle_step_chance`, `safe_near_exits`, and `game.json` `nameless_actors` (no `speaker.<id>` string for those). Area files: `tools/maps` reads and writes the new area fields, and its tests require every area file in the canonical form `mapkit.areajson.dumps` writes; `python3 -I tools/maps/tiled_to_area.py` and `area_to_tiled.py` keep them. Sand is soft ground (`:`).
+
 ## Game data
 
 All in `game/data/` (or the directory `--check` names). Full reference: [game/README.md, "Data formats"](../game/README.md#data-formats).

@@ -12,7 +12,7 @@ enum class Compare { eq, ne, lt, le, gt, ge };
 
 // A term that tests the game instead of a flag or variable: `vehicle <id>` (the party has it), `aboard <id>` (the party
 // rides it), `party <member>` (the member is in the active party) or `item <id>` (the party holds at least one).
-enum class TermTest { none, owns, aboard, member, holds };
+enum class TermTest { none, owns, aboard, member, holds, money };
 
 struct Term {
 	bool negate = false;
@@ -67,6 +67,10 @@ enum class Op {
 	vehicle_remove,
 	learn,
 	follower,
+	money,
+	equip,
+	unequip,
+	area_music,
 };
 
 const char* op_name(Op op);
@@ -80,6 +84,8 @@ struct Instruction {
 	// vehicle_*: the vehicle; vehicle_give and vehicle_place keep the map in
 	// action.subject and the marker in action.target. learn: the member, with
 	// the ability in action.subject. follower: the actor, empty for none.
+	// money: the change in `number`. equip, unequip: the member, with the
+	// piece in action.subject. area_music: the track, empty for the area's own.
 	std::string name;
 	// fork: 1 for a `race`, which ends when its first branch does.
 	std::int64_t number = 0;

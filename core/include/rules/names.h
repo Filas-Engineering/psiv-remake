@@ -15,7 +15,8 @@ namespace rules {
 
 // Each enum has a stable name per value, lowercase with underscores. Parse functions accept those names, and
 // parseRewardMultiplier and parseEventType also the spellings saves, records and event text used before.
-const char* toString(Element value);
+// "none" for no element.
+std::string toString(const Element& value);
 const char* toString(Stat value);
 const char* toString(Side value);
 const char* toString(Targeting value);
@@ -44,6 +45,7 @@ const char* toString(Effectiveness value);
 const char* toString(StatusEnd value);
 const char* toString(ResourceKind value);
 
+// A built-in element or "none"; elements data declares are the database's (Database::hasElement).
 bool parseElement(const std::string& text, Element& out);
 bool parseStat(const std::string& text, Stat& out);
 bool parseSide(const std::string& text, Side& out);

@@ -391,7 +391,13 @@ PlayedBattle playRandomBattle(const Database& db, std::uint64_t seed, ComboLog& 
 		played.setup.scriptedEnd.rounds = pick.range(1, 4);
 	} else if (pick.chance(15)) {
 		played.setup.scriptedEnd.kind = ScriptedEndKind::EnemyDefeated;
-		played.setup.scriptedEnd.enemySlot = pick.range(0, static_cast<int>(played.setup.enemies.size()) - 1);
+		std::vector<int> occupied;
+		for (int i = 0; i < static_cast<int>(played.setup.enemies.size()); ++i) {
+			if (!played.setup.enemies[static_cast<std::size_t>(i)].enemy.empty()) {
+				occupied.push_back(i);
+			}
+		}
+		played.setup.scriptedEnd.enemySlot = occupied[static_cast<std::size_t>(pick.range(0, static_cast<int>(occupied.size()) - 1))];
 	}
 	for (PartyMember& member : played.setup.party) {
 		if (!carried.empty() && pick.chance(10)) {

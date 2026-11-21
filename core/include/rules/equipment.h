@@ -24,6 +24,10 @@ struct EquipmentDef {
 	StatusResists statusResist;
 	// An ability the wearer casts through the Item command at no cost, without using the piece up (P12).
 	std::string use = {};
+	// Any member who can use items casts `use` with the piece in the bag, at the item rule's flat power.
+	bool useFromBag = false;
+	// Percents that scale the wearer's affinity per element.
+	Affinities affinities = {};
 };
 
 }

@@ -167,8 +167,11 @@ struct GameConfig {
 	// The first language is the one every other language must match key for key.
 	std::vector<LanguageFiles> languages;
 	std::string journalFile;
-	// Script actors that are not characters; each needs a `speaker.<id>` string.
+	// Script actors that are not characters; each needs a `speaker.<id>` string unless it is nameless.
 	std::vector<std::string> actors;
+	// Actors with no name (townsfolk): their lines show no speaker, and they have no `speaker.<id>` string.
+	std::vector<std::string> namelessActors;
+	bool nameless(const std::string& actor) const;
 	PresentationNames presentation;
 	// Every flag and variable a script, hook or journal entry uses, except chest flags, which the areas declare.
 	std::vector<std::string> flags;

@@ -155,10 +155,23 @@ void Battle::useAbility(int actor, const AbilityDef& ability, int target, Comman
 	attacker.technique = ability.kind == AbilityKind::Technique;
 	attacker.groupTarget = ability.targeting == Targeting::EnemyGroup || ability.targeting == Targeting::AllEnemies;
 	attacker.changeAmount = attacker.technique ? attacker.mental : attacker.strength;
+	if (ability.attackStat) {
+		attacker.strength = attacker.mental = attacker.changeAmount = combatants_[actor].effective(*ability.attackStat);
+	}
 	if (kind == CommandKind::Attack) {
 		attacker.element = combatants_[actor].attackElement;
 	}
 	applyEffects(actor, attacker, ability.id, ability.effects, targets, false, out);
+	for (const Effect& effect : ability.effects) {
+		if (effect.kind == EffectKind::SelfDestruct && !isParty(actor) && !combatants_[actor].gone && combatants_[actor].alive()) {
+			Event& e = emit(out, EventType::Message);
+			e.actor = actor;
+			e.message = "battle.self_destruct";
+			e.params = {combatants_[actor].defId};
+			leaveBattle(actor, -1, effect.rewards, out);
+			break;
+		}
+	}
 }
 
 // A piece the party member wears that has a use, or null.
@@ -175,8 +188,19 @@ const EquipmentDef* Battle::wornPiece(int actor, const std::string& id) const {
 	return nullptr;
 }
 
-// A worn piece's own ability, cast with the wearer's stats. Nothing is paid and the piece stays on (P12).
-void Battle::useWornPiece(int actor, const Command& command, const EquipmentDef& piece, std::vector<Event>& out) {
+// An unworn piece in the bag whose data lets any member who can use items cast it, or null.
+const EquipmentDef* Battle::bagPiece(int actor, const std::string& id) const {
+	if (!isParty(actor) || actor == vehicleIndex_ || combatants_[actor].aboard) {
+		return nullptr;
+	}
+	const auto held = record_.setup.pieces.find(id);
+	const EquipmentDef* piece = db_->equipmentPiece(id);
+	return held != record_.setup.pieces.end() && held->second > 0 && piece && piece->useFromBag && !piece->use.empty() ? piece : nullptr;
+}
+
+// A piece's own ability: worn, cast with the wearer's stats; from the bag, at the item rule's flat power. Nothing is
+// paid and the piece stays where it is (P12).
+void Battle::useWornPiece(int actor, const Command& command, const EquipmentDef& piece, bool fromBag, std::vector<Event>& out) {
 	const AbilityDef* ability = db_->ability(piece.use);
 	if (!ability) {
 		cancel(actor, command, CancelReason::NoItem, "", out);
@@ -197,12 +221,25 @@ void Battle::useWornPiece(int actor, const Command& command, const EquipmentDef&
 	attacker.groupTarget = ability->targeting == Targeting::EnemyGroup || ability->targeting == Targeting::AllEnemies;
 	attacker.technique = ability->kind == AbilityKind::Technique;
 	attacker.changeAmount = attacker.technique ? attacker.mental : attacker.strength;
+	if (ability->attackStat) {
+		attacker.strength = attacker.mental = attacker.changeAmount = combatants_[actor].effective(*ability->attackStat);
+	}
+	if (fromBag) {
+		Attacker flat;
+		flat.groupTarget = attacker.groupTarget;
+		applyEffects(actor, flat, ability->id, ability->effects, targets, true, out);
+		return;
+	}
 	applyEffects(actor, attacker, ability->id, ability->effects, targets, false, out);
 }
 
 void Battle::useItem(int actor, const Command& command, std::vector<Event>& out) {
 	if (const EquipmentDef* piece = wornPiece(actor, command.id)) {
-		useWornPiece(actor, command, *piece, out);
+		useWornPiece(actor, command, *piece, false, out);
+		return;
+	}
+	if (const EquipmentDef* piece = bagPiece(actor, command.id)) {
+		useWornPiece(actor, command, *piece, true, out);
 		return;
 	}
 	const ItemDef* item = db_->item(command.id);
@@ -229,6 +266,9 @@ void Battle::useItem(int actor, const Command& command, std::vector<Event>& out)
 		Event& kept = emit(out, EventType::ItemHadNoEffect);
 		kept.actor = actor;
 		kept.ability = item->id;
+		return;
+	}
+	if (!item->consumed) {
 		return;
 	}
 	--stock->second;
@@ -317,7 +357,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 					e.ability = source;
 				}
 				const int divisor = db_->battleRules.affinityDivisor;
-				const int affinity = attacker.element != Element::None ? t.affinity(attacker.element) : (t.defending ? formulas::kDefendedAffinity * divisor / 100 : 100);
+				const int affinity = attacker.element != Element::None ? t.affinity(attacker.element) : (t.defending ? formulas::kDefendedAffinity * divisor / 100 : divisor);
 				const int damage = formulas::damage(attack, t.effective(Stat::Defense), bonus, affinity, rollSpread(), divisor);
 				const Effectiveness effectiveness = attacker.element != Element::None ? effectivenessOf(affinity, divisor) : Effectiveness::Normal;
 				changed = dealDamage(user, target, damage, attacker.element, effectiveness, out) > 0 || changed;
@@ -329,7 +369,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				const int attack = flatPower ? effect.power : (attacker.combo ? attacker.comboAttack : attacker.mental);
 				const int bonus = flatPower ? 0 : (attacker.combo ? attacker.comboBonus : effect.power);
 				const BattleRules& rules = db_->battleRules;
-				const int guard = rules.magicDefense ? t.stats.magicDefense : t.effective(Stat::Mental);
+				const int guard = t.effective(rules.magicDefense ? Stat::MagicDefense : Stat::Mental);
 				const int damage = formulas::damage(attack, guard, bonus, affinity, rollSpread(), rules.affinityDivisor);
 				changed = dealDamage(user, target, damage, effect.element, effectivenessOf(affinity, rules.affinityDivisor), out) > 0 || changed;
 				noteHit(user, target, attacker, flatPower);
@@ -418,7 +458,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 					e.message = "battle.stat_resisted";
 					break;
 				}
-				const int amount = flatPower ? effect.power : attacker.changeAmount;
+				const int amount = flatPower || effect.power > 0 ? effect.power : attacker.changeAmount;
 				const int base = t.base(effect.stat);
 				const int floor = effect.stat == Stat::Agility || effect.stat == Stat::Dexterity ? 1 : 0;
 				const int value = effect.raises ? base + amount : std::max(floor, base - amount);
@@ -498,26 +538,41 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				break;
 			}
 			case EffectKind::Merge: {
-				const EnemyDef* self = db_->enemy(t.defId);
+				const EnemyDef* self = isParty(target) ? nullptr : db_->enemy(t.defId);
 				const EnemyDef* merged = self ? db_->enemy(self->mergesInto) : nullptr;
+				const std::string partnerId = self && !self->mergesWith.empty() ? self->mergesWith : t.defId;
 				int partner = -1;
 				for (int i = partyCount_; i < static_cast<int>(combatants_.size()) && partner < 0; ++i) {
-					if (i != target && combatants_[i].alive() && combatants_[i].defId == t.defId) {
+					if (i != target && combatants_[i].alive() && combatants_[i].defId == partnerId) {
 						partner = i;
 					}
 				}
 				if (!merged || partner < 0) {
 					break;
 				}
-				combatants_[partner].gone = true;
-				combatants_[partner].hp = 0;
-				Event& left = emit(out, EventType::EnemyLeft);
-				left.actor = target;
-				left.target = partner;
+				leaveBattle(partner, target, false, out);
 				transform(target, *merged, out);
 				changed = true;
 				break;
 			}
+			case EffectKind::Transform: {
+				const EnemyDef* self = isParty(target) ? nullptr : db_->enemy(t.defId);
+				if (const EnemyDef* next = self ? db_->enemy(self->transformsInto) : nullptr) {
+					transform(target, *next, out);
+					changed = true;
+				}
+				break;
+			}
+			case EffectKind::Split: {
+				const EnemyDef* self = isParty(target) ? nullptr : db_->enemy(t.defId);
+				if (const EnemyDef* part = self ? db_->enemy(self->splitsInto) : nullptr) {
+					split(target, *part, effect.count, out);
+					changed = true;
+				}
+				break;
+			}
+			case EffectKind::SelfDestruct:
+				break;
 			case EffectKind::Revive:
 				if (!t.alive()) {
 					t.hp = formulas::reviveHp(t.stats.maxHp, effect.power);

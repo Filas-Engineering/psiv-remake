@@ -342,3 +342,19 @@ end
 	CHECK(test::has_diagnostic(d, 10, "expected 'and', 'or' or the end of the line"));
 	CHECK_EQ(d.size(), 5u);
 }
+
+TEST(money_equipment_and_area_music_commands_are_checked) {
+	const std::vector<Diagnostic> d = test::compile_errors(R"(event a skippable
+	money take 0
+	money spend 4
+	equip fighter
+	together
+		music area harbor_theme
+	end
+end
+)");
+	CHECK(test::has_diagnostic(d, 2, "money must be at least 1"));
+	CHECK(test::has_diagnostic(d, 3, "'give' or 'take'"));
+	CHECK(test::has_diagnostic(d, 4, "an equipment name"));
+	CHECK(test::has_diagnostic(d, 6, "music"));
+}

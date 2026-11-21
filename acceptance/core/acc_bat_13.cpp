@@ -33,12 +33,19 @@ ACC_CHECK(acc_bat_13, "ACC-BAT-13", "BAT-110, BAT-111, BAT-115") {
 		const std::vector<Event> started = support::ofType(played.events, EventType::BattleStarted);
 		if (t.expect(started.size() == 1 && played.events.front().type == EventType::BattleStarted, "battle " + std::to_string(seed) + ": the stream does not open with one BattleStarted")) {
 			const Event& b = started[0];
-			bool formation = b.partyCount == static_cast<int>(played.setup.party.size()) && b.ids.size() == played.setup.party.size() + played.setup.enemies.size() && b.groups.size() == b.ids.size();
+			// Free places in the formation hold no combatant.
+			std::vector<FormationSlot> standing;
+			for (const FormationSlot& slot : played.setup.enemies) {
+				if (!slot.enemy.empty()) {
+					standing.push_back(slot);
+				}
+			}
+			bool formation = b.partyCount == static_cast<int>(played.setup.party.size()) && b.ids.size() == played.setup.party.size() + standing.size() && b.groups.size() == b.ids.size();
 			for (std::size_t i = 0; formation && i < played.setup.party.size(); ++i) {
 				formation = b.ids[i] == played.setup.party[i].characterId;
 			}
-			for (std::size_t i = 0; formation && i < played.setup.enemies.size(); ++i) {
-				formation = b.ids[played.setup.party.size() + i] == played.setup.enemies[i].enemy && b.groups[played.setup.party.size() + i] == played.setup.enemies[i].group;
+			for (std::size_t i = 0; formation && i < standing.size(); ++i) {
+				formation = b.ids[played.setup.party.size() + i] == standing[i].enemy && b.groups[played.setup.party.size() + i] == standing[i].group;
 			}
 			t.expect(formation, "battle " + std::to_string(seed) + ": BattleStarted does not list the combatants and formation of the setup");
 			t.expect(b.opening == played.setup.opening && b.flags.escapeAllowed == played.setup.flags.escapeAllowed && b.flags.defeatHasBranch == played.setup.flags.defeatHasBranch,
@@ -53,11 +60,14 @@ ACC_CHECK(acc_bat_13, "ACC-BAT-13", "BAT-110, BAT-111, BAT-115") {
 				t.expect(e.experience == played.rewards.experience && e.currency == played.rewards.currency && e.gameOver == played.gameOver,
 					"battle " + std::to_string(seed) + ": BattleEnded carries rewards " + std::to_string(e.experience) + "/" + std::to_string(e.currency) + ", the battle pays " +
 					std::to_string(played.rewards.experience) + "/" + std::to_string(played.rewards.currency));
-				t.expect(e.items == played.rewards.items, "battle " + std::to_string(seed) + ": BattleEnded carries other item drops than rewards() pays");
+				// BattleEnded lists item and equipment drops together.
+				Inventory paid = played.rewards.items;
+				paid.insert(played.rewards.equipment.begin(), played.rewards.equipment.end());
+				t.expect(e.items == paid, "battle " + std::to_string(seed) + ": BattleEnded carries other item drops than rewards() pays");
 				withDrops += e.items.empty() ? 0 : 1;
-				// A drop is one of the encounter's item, and only after a Victory.
+				// A drop is one of the encounter's item or piece, and only after a Victory.
 				const ItemDrop& drop = db.encounter(played.setup.enemyGroup)->drop;
-				const bool allowed = e.items.empty() || (e.outcome == Outcome::Victory && e.items == Inventory{{drop.item, 1}});
+				const bool allowed = e.items.empty() || (e.outcome == Outcome::Victory && e.items == Inventory{{drop.equipment.empty() ? drop.item : drop.equipment, 1}});
 				t.expect(allowed, "battle " + std::to_string(seed) + ": dropped something other than one of the encounter's item after a Victory");
 			}
 		}

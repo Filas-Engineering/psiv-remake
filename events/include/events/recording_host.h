@@ -19,6 +19,7 @@ public:
 	std::map<std::string, bool> flags;
 	std::map<std::string, std::int64_t> vars;
 	std::map<std::string, int> items;
+	std::int64_t purse = 0;
 	std::vector<std::string> party;
 	// Vehicles the party has, each with "map marker" where a script last put it. Nobody rides one here.
 	std::map<std::string, std::string> vehicles;
@@ -82,6 +83,11 @@ public:
 	int item_count(const std::string& item) override;
 	void teach_ability(const std::string& member, const std::string& ability) override;
 	void set_follower(const std::string& actor) override;
+	std::int64_t money() override;
+	void change_money(std::int64_t delta) override;
+	void equip_piece(const std::string& member, const std::string& piece) override;
+	void unequip_piece(const std::string& member, const std::string& piece) override;
+	void set_area_music(const std::string& track) override;
 
 protected:
 	// Hooks for hosts built on this one (TimingHost). The defaults use the

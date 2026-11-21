@@ -7,6 +7,7 @@
 
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,9 @@ struct Exit {
 	bool fall = false;
 	// Line in the area file, for problem reports; 0 when not read from a file.
 	int line = 0;
+	// While these flags do not hold the exit is closed and the cell is a wall.
+	std::string requireFlag = {};
+	std::string blockFlag = {};
 };
 
 // A field hook (FLD-023): runs one event script when it fires and its flag conditions hold. A Flag hook fires
@@ -46,6 +50,23 @@ struct Hook {
 	Cell at;
 	HookTrigger trigger = HookTrigger::Interact;
 	std::string event;
+	std::string requireFlag;
+	std::string blockFlag;
+	int line = 0;
+	// Flag hooks: fires once per game, which the save keeps, without a block flag.
+	bool once = false;
+	// Step hooks: fires on entering any cell of this map character, in place of `at`; 0 for none.
+	char tile = 0;
+	// Interact hooks: the cell is solid only while the hook's flags hold (and, for an actor's talk point, while the actor
+	// is shown), so a hook switched off stops blocking the way.
+	bool solidWhileActive = false;
+};
+
+// Cells that carry the party one cell in `direction` every `stepMs` while it stands on them and the flags hold.
+struct Conveyor {
+	std::vector<Cell> cells;
+	Facing direction = Facing::South;
+	int stepMs = 250;
 	std::string requireFlag;
 	std::string blockFlag;
 	int line = 0;
@@ -97,6 +118,8 @@ struct Port {
 	std::string marker;
 	// The port is open, as a place to leave from and to arrive at, once this flag is set; always when empty.
 	std::string flag;
+	// Closes the port again while set.
+	std::string blockFlag = {};
 	// A ship's port (F2): the party walks aboard the vessel area at its arrival marker and picks the destination at its
 	// helm, among the open ports of the same ship. Empty: the destination menu opens at the port, among the ports
 	// without a ship.
@@ -144,6 +167,14 @@ struct RandomRules {
 	int maxSteps = 24;
 	// Distance units one cell adds to the counter (ENC-041).
 	int stepDistance = 1;
+	// Steps after entering the area before any roll.
+	int graceSteps = 0;
+	// When nonzero, each step has a 1 in N chance of a battle in place of the counter; aboard a vehicle, the second N
+	// when nonzero.
+	int stepChance = 0;
+	int vehicleStepChance = 0;
+	// No roll while the leader stands on or next to an exit.
+	bool safeNearExits = false;
 };
 
 struct Zone {
@@ -184,6 +215,9 @@ struct Area {
 	// In a vessel: cells that take the party back ashore, to the port it boarded from.
 	std::vector<Cell> gangway;
 	std::vector<CellChange> changes;
+	std::vector<Conveyor> conveyors;
+	// Cells of interact hooks that are solid only while active and are not now; the session's view of the area sets them.
+	std::set<Cell> passable = {};
 	// The file game.json names for the area, and the line of each marker, for problem reports.
 	std::string file;
 	std::map<std::string, int> markerLines;
@@ -197,6 +231,8 @@ struct Area {
 	const Zone* zone(const std::string& id) const;
 	const Exit* exitAt(Cell cell) const;
 	const Hook* hookAt(Cell cell, HookTrigger trigger) const;
+	// A step hook on the cell, or one on its map character.
+	const Hook* stepHookAt(Cell cell) const;
 	const Shop* shopAt(Cell cell) const;
 	const RestPoint* restAt(Cell cell) const;
 	const Chest* chestAt(Cell cell) const;
@@ -207,6 +243,10 @@ struct Area {
 	const Shop* shop(const std::string& id) const;
 	const RestPoint* rest(const std::string& id) const;
 };
+
+// Whether the flags let the party use it now.
+bool portOpen(const Port& port, const World& world);
+bool exitOpen(const Exit& exit, const World& world);
 
 // Errors are "file:line: message", one per line.
 rules::Result<Area> parseArea(const std::string& file, const std::string& text);

@@ -31,6 +31,7 @@ public struct PsivGameInfo
 	public int RulesVersion, TickMs, RoundMs, ManualSlots, AutosaveSlots, ItemCap, MoneyCap, LanguageCount;
 	public IntPtr Languages, TitleMusic, VictoryMusic, DefeatMusic;
 	public int MagicDefense;
+	public int AffinityDivisor;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -92,7 +93,7 @@ public struct PsivExit { public int X, Y; public IntPtr ToArea, ToMarker; }
 public struct PsivActor { public IntPtr Id, Name; public int X, Y, Facing, Visible, Scripted; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivPoint { public int Kind; public IntPtr Id; public int X, Y; public IntPtr Event; public int Active, Cost, ShopKind; }
+public struct PsivPoint { public int Kind; public IntPtr Id; public int X, Y; public IntPtr Event; public int Active, Cost, ShopKind, Direction; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivVehicle { public IntPtr Id, Name; public int X, Y, Facing, Aboard; }
@@ -152,7 +153,7 @@ public struct PsivCombatant
 	public IntPtr Statuses;
 	public int CommandKind;
 	public IntPtr CommandId;
-	public int CommandTarget, Flying;
+	public int CommandTarget, Flying, Position;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -162,6 +163,7 @@ public struct PsivBattleInfo
 	public IntPtr Encounter;
 	public int Source, Round, PartyCount, CombatantCount, Outcome, EscapeAllowed, AutoActive, PartyActsNextRound, GameOver;
 	public IntPtr Music, Vehicle;
+	public int FormationSize;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -232,7 +234,10 @@ public struct PsivStatBonus { public int MaxHp, MaxTp, Strength, Mental, Agility
 public struct PsivSlotBonuses { private PsivStatBonus _first; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivAffinity { public int Element, Percent; }
+public struct PsivAffinity { public int Element, Percent; public IntPtr Id, Name; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivElementInfo { public int Index; public IntPtr Id, Name; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivStatusResist { public IntPtr Id, Name; public int Percent; }
@@ -362,7 +367,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 11;
+	public const uint AbiVersion = 12;
 	// PSIV_SLOT_COUNT: the places a member wears equipment, which the member structs index by psiv_equip_slot.
 	public const int SlotCount = 7;
 
@@ -526,6 +531,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_vehicle_skill_uses", StringMarshalling = StringMarshalling.Utf8)] public static partial int VehicleSkillUses(SessionHandle s, string vehicle, string skill, out int uses);
 	[LibraryImport(Library, EntryPoint = "psiv_clear_record_exists")] public static partial int ClearRecordExists(SessionHandle s, out int exists);
 	[LibraryImport(Library, EntryPoint = "psiv_audio_ids")] public static partial int AudioIds(SessionHandle s, out IntPtr ids, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_elements")] public static partial int Elements(SessionHandle s, out IntPtr elements, out int count);
 
 	public static string Str(IntPtr p) => p == IntPtr.Zero ? "" : Marshal.PtrToStringUTF8(p) ?? "";
 

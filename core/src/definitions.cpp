@@ -97,6 +97,7 @@ int Combatant::base(Stat stat) const {
 	case Stat::Agility: return stats.agility;
 	case Stat::Dexterity: return stats.dexterity;
 	case Stat::Defense: return stats.defense;
+	case Stat::MagicDefense: return stats.magicDefense;
 	}
 	return 0;
 }
@@ -125,7 +126,7 @@ void Combatant::setModifier(Stat stat, int amount) {
 
 int Combatant::affinity(Element element) const {
 	const auto it = affinities.find(element);
-	return it == affinities.end() ? 100 : it->second;
+	return it == affinities.end() ? neutralAffinity : it->second;
 }
 
 int Combatant::resistance(const std::string& statusId) const {
@@ -179,6 +180,22 @@ const Macro* Database::macro(const std::string& name) const {
 		}
 	}
 	return nullptr;
+}
+
+std::vector<std::string> Database::elementIds() const {
+	std::vector<std::string> ids(std::begin(kBuiltInElements), std::end(kBuiltInElements));
+	ids.insert(ids.end(), battleRules.elements.begin(), battleRules.elements.end());
+	return ids;
+}
+
+bool Database::hasElement(const Element& element) const {
+	return elementIndex(element) > 0;
+}
+
+int Database::elementIndex(const Element& element) const {
+	const std::vector<std::string> ids = elementIds();
+	const auto at = std::find(ids.begin(), ids.end(), element.id);
+	return at == ids.end() ? 0 : static_cast<int>(at - ids.begin()) + 1;
 }
 
 }

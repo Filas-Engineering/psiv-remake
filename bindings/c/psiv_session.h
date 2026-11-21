@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 11
+#define PSIV_ABI_VERSION 12
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -118,7 +118,7 @@ typedef enum psiv_notice_kind { PSIV_NOTICE_LINE, PSIV_NOTICE_CHOICE, PSIV_NOTIC
 typedef enum psiv_area_kind { PSIV_AREA_TOWN, PSIV_AREA_FIELD, PSIV_AREA_DUNGEON, PSIV_AREA_VESSEL } psiv_area_kind;
 typedef enum psiv_encounter_mode { PSIV_ENCOUNTERS_VISIBLE, PSIV_ENCOUNTERS_RANDOM } psiv_encounter_mode;
 typedef enum psiv_enemy_state { PSIV_ENEMY_IDLE, PSIV_ENEMY_CHASING, PSIV_ENEMY_RETURNING } psiv_enemy_state;
-typedef enum psiv_point_kind { PSIV_POINT_TALK, PSIV_POINT_STEP, PSIV_POINT_CHEST, PSIV_POINT_SHOP, PSIV_POINT_REST, PSIV_POINT_PORT, PSIV_POINT_HELM, PSIV_POINT_GANGWAY } psiv_point_kind;
+typedef enum psiv_point_kind { PSIV_POINT_TALK, PSIV_POINT_STEP, PSIV_POINT_CHEST, PSIV_POINT_SHOP, PSIV_POINT_REST, PSIV_POINT_PORT, PSIV_POINT_HELM, PSIV_POINT_GANGWAY, PSIV_POINT_CONVEYOR } psiv_point_kind;
 /* Ways to travel at once: from a port to another open port, back to a visited town of the region, out of a dungeon. */
 typedef enum psiv_travel_kind { PSIV_TRAVEL_PORT, PSIV_TRAVEL_TOWN, PSIV_TRAVEL_DUNGEON_EXIT } psiv_travel_kind;
 typedef enum psiv_job_state { PSIV_JOB_AVAILABLE, PSIV_JOB_ACCEPTED, PSIV_JOB_COMPLETED, PSIV_JOB_MISSED } psiv_job_state;
@@ -154,7 +154,7 @@ typedef enum psiv_resource_kind { PSIV_RESOURCE_NONE, PSIV_RESOURCE_TP, PSIV_RES
 typedef enum psiv_element { PSIV_ELEMENT_NONE, PSIV_ELEMENT_HEAT, PSIV_ELEMENT_CHILL, PSIV_ELEMENT_SHOCK, PSIV_ELEMENT_GALE, PSIV_ELEMENT_HOLY } psiv_element;
 /* What a character or enemy is: a machine takes only healing that names machines (core/README.md). */
 typedef enum psiv_creature_kind { PSIV_CREATURE_LIVING, PSIV_CREATURE_SPIRIT, PSIV_CREATURE_MACHINE } psiv_creature_kind;
-typedef enum psiv_stat { PSIV_STAT_STRENGTH, PSIV_STAT_MENTAL, PSIV_STAT_AGILITY, PSIV_STAT_DEXTERITY, PSIV_STAT_DEFENSE } psiv_stat;
+typedef enum psiv_stat { PSIV_STAT_STRENGTH, PSIV_STAT_MENTAL, PSIV_STAT_AGILITY, PSIV_STAT_DEXTERITY, PSIV_STAT_DEFENSE, PSIV_STAT_MAGIC_DEFENSE } psiv_stat;
 typedef enum psiv_opening { PSIV_OPENING_NORMAL, PSIV_OPENING_PARTY_FIRST, PSIV_OPENING_ENEMY_FIRST } psiv_opening;
 typedef enum psiv_auto_stop { PSIV_AUTO_STOP_NONE, PSIV_AUTO_STOP_CANCELLED, PSIV_AUTO_STOP_MEMBER_FELL, PSIV_AUTO_STOP_CANNOT_PAY, PSIV_AUTO_STOP_BATTLE_ENDED } psiv_auto_stop;
 typedef enum psiv_macro_step_status { PSIV_MACRO_APPLIED, PSIV_MACRO_RETARGETED, PSIV_MACRO_FELL_BACK, PSIV_MACRO_SKIPPED } psiv_macro_step_status;
@@ -260,6 +260,8 @@ typedef struct psiv_game_info {
 	const char* defeat_music;
 	/* 1 when rules.json sets magic_defense: elemental damage subtracts magic defense, which a front end then shows. */
 	int32_t magic_defense;
+	/* rules.json affinity_divisor: the affinity of normal damage, so above it is a weakness and below it a resistance. */
+	int32_t affinity_divisor;
 } psiv_game_info;
 
 PSIV_API psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out);
@@ -528,6 +530,8 @@ typedef struct psiv_point {
 	int32_t cost;
 	/* Shops: a psiv_shop_kind. */
 	int32_t shop_kind;
+	/* Conveyor cells (one point each; active while their flags hold): the psiv_direction they carry the party toward. */
+	int32_t direction;
 } psiv_point;
 
 /* One of the party's vehicles in its area. */
@@ -750,6 +754,8 @@ typedef struct psiv_combatant {
 	int32_t command_target;
 	/* An enemy the data marks as flying, for a renderer to show off the ground. */
 	int32_t flying;
+	/* Enemies: the formation position, from 0, free places counted; -1 for the party side. */
+	int32_t position;
 } psiv_combatant;
 
 typedef struct psiv_battle_info {
@@ -770,6 +776,8 @@ typedef struct psiv_battle_info {
 	const char* music;
 	/* A vehicle battle's vehicle, the combatant after the members riding it; "" otherwise. */
 	const char* vehicle;
+	/* Places in the enemy formation, free ones included, which a stage spreads the enemies over. */
+	int32_t formation_size;
 } psiv_battle_info;
 
 typedef struct psiv_battle_option {
@@ -1010,10 +1018,14 @@ typedef struct psiv_stat_bonus {
 } psiv_stat_bonus;
 
 typedef struct psiv_affinity {
-	/* A psiv_element. */
+	/* The element's index in psiv_elements. */
 	int32_t element;
-	/* Percent of that element's damage taken: above 100 a weakness, 0 immunity. */
+	/* That element's damage taken, on the rules' affinity divisor scale (psiv_game_info's affinity_divisor): above the
+	 * divisor a weakness, 0 immunity. */
 	int32_t percent;
+	/* The element's id and its name in the profile's language. */
+	const char* id;
+	const char* name;
 } psiv_affinity;
 
 typedef struct psiv_status_resist {
@@ -1035,7 +1047,7 @@ typedef struct psiv_member_detail {
 	int32_t attack_element;
 	/* Each worn piece's bonus, indexed by psiv_equip_slot; all 0 for an empty slot. */
 	psiv_stat_bonus equipment_bonus[PSIV_SLOT_COUNT];
-	/* Every element but PSIV_ELEMENT_NONE, in enum order. */
+	/* Each element the member takes at other than the normal rate, in psiv_elements order. */
 	int32_t affinity_count;
 	const psiv_affinity* affinities;
 	/* The character's resistances plus its pieces', capped at 100, in status id order. */
@@ -1375,6 +1387,18 @@ PSIV_API psiv_status psiv_vehicle_skill_uses(psiv_session* session, const char* 
 PSIV_API psiv_status psiv_clear_record_exists(psiv_session* session, int32_t* out);
 /* Every audio id game.json's presentation lists, in data order, for a sound test. Works at the title. */
 PSIV_API psiv_status psiv_audio_ids(psiv_session* session, const char* const** out, int32_t* count);
+
+/* An element the data knows. Element fields elsewhere (psiv_battle_event, psiv_member_detail, psiv_combat_view,
+ * psiv_equip_preview, psiv_affinity) hold this index: 0 is none, PSIV_ELEMENT_HEAT to PSIV_ELEMENT_HOLY the built-in
+ * ones, and the elements rules.json declares follow. */
+typedef struct psiv_element_info {
+	int32_t index;
+	const char* id;
+	/* The name in the profile's language (text key name.element.<id>), else the id. */
+	const char* name;
+} psiv_element_info;
+/* Every element, in index order from 1. Works at the title. */
+PSIV_API psiv_status psiv_elements(psiv_session* session, const psiv_element_info** out, int32_t* count);
 
 #ifdef __cplusplus
 }

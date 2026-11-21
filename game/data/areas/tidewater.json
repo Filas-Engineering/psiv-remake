@@ -35,7 +35,9 @@
 		"board_below": [2, 4],
 		"board_beside": [3, 4]
 	},
-	"exits": [{"at": [13, 4], "to": "reed_path", "marker": "west_gate"}],
+	"exits": [
+		{"at": [13, 4], "to": "reed_path", "marker": "west_gate"}
+	],
 	"hooks": [
 		{"id": "arrival", "trigger": "load", "event": "tidewater_arrival", "block_flag": "tidewater.arrived"},
 		{"id": "guide", "at": [5, 2], "event": "tidewater_guide"},
@@ -44,7 +46,13 @@
 		{"id": "chart", "at": [7, 7], "event": "tidewater_chart", "require_flag": "tidewater.met_guide", "block_flag": "tidewater.chart_read"},
 		{"id": "board", "at": [1, 3], "event": "tidewater_board", "require_flag": "tidewater.met_guide", "block_flag": "tidewater.board_read"}
 	],
-	"shops": [{"id": "tidewater_stall", "at": [8, 2], "stock": ["tonic", "clear_gel", "second_wind", "spark_flask", "grip_bands"], "sell_percent": 50}],
-	"rests": [{"id": "tidewater_inn", "at": [2, 6], "cost": 10}],
-	"chests": [{"id": "tidewater_crate", "at": [11, 7], "flag": "chest.tidewater_crate", "items": {"tonic": 2}}]
+	"shops": [
+		{"id": "tidewater_stall", "at": [8, 2], "stock": ["tonic", "clear_gel", "second_wind", "spark_flask", "grip_bands"], "sell_percent": 50}
+	],
+	"rests": [
+		{"id": "tidewater_inn", "at": [2, 6], "cost": 10}
+	],
+	"chests": [
+		{"id": "tidewater_crate", "at": [11, 7], "flag": "chest.tidewater_crate", "items": {"tonic": 2}}
+	]
 }

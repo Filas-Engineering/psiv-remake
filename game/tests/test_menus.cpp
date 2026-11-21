@@ -201,7 +201,7 @@ TEST(memberDetailAddsWhatAStatusScreenNeeds) {
 	}
 	const std::optional<MemberDetail> mystic = s.memberDetail("mystic");
 	CHECK(mystic && mystic->attackElement == rules::Element::Heat);
-	CHECK(mystic && mystic->affinities.size() == 4 && mystic->affinities.at(rules::Element::Shock) == 50 && mystic->affinities.at(rules::Element::Heat) == 100);
+	CHECK(mystic && mystic->affinities.size() == 1 && mystic->affinities[0].first == rules::Element::Shock && mystic->affinities[0].second == 50);
 	CHECK(mystic && mystic->statusResist.at("sleep") == 100);
 	const std::optional<MemberDetail> engineer = s.memberDetail("engineer");
 	CHECK(engineer && engineer->statusResist.at("paralysis") == 50 && engineer->equipmentBonus.at(rules::EquipSlot::Body).agility == -2);

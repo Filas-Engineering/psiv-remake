@@ -22,12 +22,11 @@ bool parseName(const char* const (&names)[N], const std::string& text, E& out) {
 }
 
 // Order matches the enum declarations.
-const char* const kElements[] = {"none", "heat", "chill", "shock", "gale", "holy"};
-const char* const kStats[] = {"strength", "mental", "agility", "dexterity", "defense"};
+const char* const kStats[] = {"strength", "mental", "agility", "dexterity", "defense", "magic_defense"};
 const char* const kSides[] = {"party", "enemy"};
 const char* const kTargetings[] = {"one_enemy", "enemy_group", "all_enemies", "one_ally", "all_allies", "self", "one_fallen_ally", "random_enemy"};
 const char* const kAbilityKinds[] = {"attack", "technique", "skill", "combo"};
-const char* const kEffectKinds[] = {"physical_damage", "elemental_damage", "heal", "apply_status", "cure_status", "modify_stat", "revive", "travel", "instant_defeat", "restore_tp", "strip_modifiers", "summon", "merge", "teach"};
+const char* const kEffectKinds[] = {"physical_damage", "elemental_damage", "heal", "apply_status", "cure_status", "modify_stat", "revive", "travel", "instant_defeat", "restore_tp", "strip_modifiers", "summon", "merge", "teach", "transform", "split", "self_destruct"};
 const char* const kCreatureKinds[] = {"living", "spirit", "machine"};
 const char* const kTravelTargets[] = {"town", "dungeon_exit"};
 const char* const kEquipSlots[] = {"weapon", "head", "body", "arms", "accessory", "shield", "left_hand"};
@@ -39,7 +38,7 @@ const char* const kForcedTargets[] = {"random_any", "random_ally", "random_foe"}
 const char* const kStatusStackings[] = {"refresh", "extend", "keep"};
 const char* const kAiConditions[] = {
 	"self_hp_half", "self_hp_quarter_once", "any_ally_hp_half", "last_standing", "hit_by_attack", "hit_by_ability", "hit_by_technique",
-	"techniques_blocked", "hit_by_group", "ambushed", "ally_present", "ally_absent", "free_slot_beside", "group_intact"};
+	"techniques_blocked", "hit_by_group", "ambushed", "ally_present", "ally_absent", "free_slot_beside", "group_intact", "after_turns"};
 const char* const kAiTargetRules[] = {"default", "random", "lowest_hp", "highest_hp", "has_status", "lacks_status", "last_attacker"};
 const char* const kCommandKinds[] = {"none", "attack", "ability", "item", "defend", "escape"};
 const char* const kMacroTargets[] = {"default", "self", "member", "enemy", "all"};
@@ -68,7 +67,7 @@ const char* const kResources[] = {"none", "tp", "skill_use", "item"};
 
 }
 
-const char* toString(Element value) { return nameOf(kElements, value); }
+std::string toString(const Element& value) { return value.id.empty() ? "none" : value.id; }
 const char* toString(Stat value) { return nameOf(kStats, value); }
 const char* toString(Side value) { return nameOf(kSides, value); }
 const char* toString(Targeting value) { return nameOf(kTargetings, value); }
@@ -97,7 +96,19 @@ const char* toString(Effectiveness value) { return nameOf(kEffectiveness, value)
 const char* toString(StatusEnd value) { return nameOf(kStatusEnds, value); }
 const char* toString(ResourceKind value) { return nameOf(kResources, value); }
 
-bool parseElement(const std::string& text, Element& out) { return parseName(kElements, text, out); }
+bool parseElement(const std::string& text, Element& out) {
+	if (text == "none") {
+		out = Element::None;
+		return true;
+	}
+	for (const char* builtIn : kBuiltInElements) {
+		if (text == builtIn) {
+			out = Element(text);
+			return true;
+		}
+	}
+	return false;
+}
 bool parseStat(const std::string& text, Stat& out) { return parseName(kStats, text, out); }
 bool parseSide(const std::string& text, Side& out) { return parseName(kSides, text, out); }
 bool parseTargeting(const std::string& text, Targeting& out) { return parseName(kTargetings, text, out); }
