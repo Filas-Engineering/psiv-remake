@@ -18,6 +18,9 @@ public interface IDrawSurface
 	// Takes width * height pixels, row-major; returns the handle Image draws.
 	int CreateImage(int width, int height, Color[] pixels);
 	void Image(int image, int x, int y, int w, int h, Color tint);
+	// Until Unclip, nothing is drawn outside this rectangle; panels draw the scene through one.
+	void Clip(int x, int y, int w, int h);
+	void Unclip();
 }
 
 public static class Style
@@ -186,10 +189,13 @@ public sealed class ScaledSurface(IDrawSurface inner, float scale) : IDrawSurfac
 	public int Measure(string text, int size = Style.Body) => inner.Measure(text, Size(size));
 	public int CreateImage(int width, int height, Color[] pixels) => inner.CreateImage(width, height, pixels);
 	public void Image(int image, int x, int y, int w, int h, Color tint) => inner.Image(image, x, y, w, h, tint);
+	public void Clip(int x, int y, int w, int h) => inner.Clip(x, y, w, h);
+	public void Unclip() => inner.Unclip();
 }
 
 public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, FontSystem fonts) : IDrawSurface, IDisposable
 {
+	private static readonly RasterizerState Scissor = new() { CullMode = CullMode.None, ScissorTestEnable = true };
 	private readonly Texture2D _pixel = CreatePixel(device);
 	private readonly List<Texture2D> _images = [];
 
@@ -219,6 +225,20 @@ public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, Fo
 
 	public void Image(int image, int x, int y, int w, int h, Color tint) => batch.Draw(_images[image], new Rectangle(x, y, w, h), tint);
 
+	// The scissor rectangle applies to a whole batch, so a clip ends the batch drawn so far and starts another.
+	public void Clip(int x, int y, int w, int h)
+	{
+		batch.End();
+		device.ScissorRectangle = Rectangle.Intersect(new Rectangle(x, y, w, h), device.Viewport.Bounds);
+		batch.Begin(samplerState: SamplerState.PointClamp, rasterizerState: Scissor);
+	}
+
+	public void Unclip()
+	{
+		batch.End();
+		batch.Begin(samplerState: SamplerState.PointClamp);
+	}
+
 	public void Dispose()
 	{
 		foreach (Texture2D texture in _images)
@@ -239,6 +259,7 @@ public sealed class RecordingSurface : IDrawSurface
 	public int Texts { get; private set; }
 	public int Images { get; private set; }
 	private int _created;
+	private bool _clipped;
 	public List<string> FrameText { get; } = [];
 
 	public void BeginFrame() => FrameText.Clear();
@@ -269,6 +290,24 @@ public sealed class RecordingSurface : IDrawSurface
 			throw new ArgumentOutOfRangeException(nameof(image));
 		}
 		Images++;
+	}
+
+	public void Clip(int x, int y, int w, int h)
+	{
+		if (_clipped || w <= 0 || h <= 0)
+		{
+			throw new InvalidOperationException($"a clip of {w}x{h} inside another clip, or an empty one");
+		}
+		_clipped = true;
+	}
+
+	public void Unclip()
+	{
+		if (!_clipped)
+		{
+			throw new InvalidOperationException("an unclip without a clip");
+		}
+		_clipped = false;
 	}
 }
 

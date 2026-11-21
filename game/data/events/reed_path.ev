@@ -38,3 +38,49 @@ event reed_path_skimmer unskippable
 	end
 	unlock player
 end
+
+# An old reed-cutters' lookout in the path's north-west corner. From its
+# platform the party sees the marsh in comic panels, each the live scene through
+# a camera: the west reeds, the skimmer's mooring, the peddler at the cart and
+# the ladder. A gust shakes the platform and something climbs up after them.
+# It is there for the MonoGame sample's panels, camera, shake and audio.
+event reed_path_lookout skippable
+	lock player
+	ambient play marsh_wind
+	narrate @reed.lookout.climb
+	music play reed_lookout
+	together
+		panel show west camera lookout_west layout top_left
+		panel show east camera lookout_east layout top_right
+	end
+	say mystic @reed.lookout.view
+	panel show cart camera peddler layout wide_bottom nowait
+	anim peddler wave
+	sync
+	say peddler @reed.lookout.peddler
+	panel hide cart
+	camera move lookout_east 1.5
+	say medic @reed.lookout.skimmer
+	together
+		sound lookout_creak
+		shake 0.8 strength 0.6
+	end
+	say fighter @reed.lookout.gust
+	panel clear
+	panel show ladder camera lookout_front layout center
+	narrate @reed.lookout.climber
+	battle marsh until survive 1
+	win
+		narrate @reed.lookout.won
+	lose
+		narrate @reed.lookout.lost
+	end
+	panel clear
+	together
+		music fade 1.0
+		ambient stop
+	end
+	narrate @reed.lookout.down
+	set reed.lookout_seen
+	unlock player
+end

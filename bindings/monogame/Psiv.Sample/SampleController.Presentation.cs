@@ -10,13 +10,13 @@ public sealed partial class SampleController
 	private const int ShortestAnimationMs = 150;
 	private const int LongestAnimationMs = 600;
 
-	// A presentation action being played: the session waits on it until FinishAction.
-	// A move, turn, show, hide or pose of a person in view plays on its sprite instead of as a label.
-	private sealed class Animation(PresentationAction action, int lengthMs, bool onSprite = false)
+	// A presentation action being played: the session waits on it until FinishAction. Only an action the sample has
+	// no picture for (`labeled`) slides its subject across the top.
+	private sealed class Animation(PresentationAction action, int lengthMs, bool labeled = false)
 	{
 		public PresentationAction Action { get; } = action;
 		public int LengthMs { get; } = lengthMs;
-		public bool OnSprite { get; } = onSprite;
+		public bool Labeled { get; } = labeled;
 		public int ElapsedMs { get; set; }
 		public float Progress => LengthMs == 0 ? 1f : Math.Clamp(ElapsedMs / (float)LengthMs, 0f, 1f);
 	}
@@ -26,7 +26,7 @@ public sealed partial class SampleController
 	private float _darkness;
 
 	// The labels sliding across the top, one per playing action that has no picture of its own.
-	public IEnumerable<string> Labels => _animations.Where(a => !a.OnSprite && a.Action.Type is not (ActionType.FadeIn or ActionType.FadeOut)).Select(a => LabelOf(a.Action));
+	public IEnumerable<string> Labels => _animations.Where(a => a.Labeled).Select(a => LabelOf(a.Action));
 
 	private static string LabelOf(PresentationAction a) => a.Subject.Length > 0 ? a.Subject : a.Description;
 
@@ -36,10 +36,35 @@ public sealed partial class SampleController
 		{
 			_animations.RemoveAll(x => x.Action.Handle == a.Handle);
 			_field.StopPose(a.Handle);
+			EndSceneAction(a);
 			_log($"action cancelled: {a.Handle}");
 			return;
 		}
 		_log("action: " + a.Description + (a.Instant ? " (instant)" : ""));
+		// Scenes, sound and warps have their own presentation; the length is what the event waits, 0 for done at once.
+		int? ownMs = a.Type switch
+		{
+			ActionType.PanelShow or ActionType.PanelHide or ActionType.PanelClear or ActionType.CameraCut or ActionType.CameraMove or ActionType.Shake => PresentScene(a),
+			ActionType.MusicPlay or ActionType.MusicStop or ActionType.MusicFade or ActionType.AmbientPlay or ActionType.AmbientStop or ActionType.Sound => PresentAudio(a),
+			// The new area's banner shows the arrival; the session has already moved the party.
+			ActionType.Warp => 0,
+			_ => null,
+		};
+		if (ownMs is { } own)
+		{
+			if (own == 0 || a.Instant)
+			{
+				if (!a.Instant)
+				{
+					_s.FinishAction(a.Handle);
+				}
+				return;
+			}
+			var animation = new Animation(a, own);
+			_animations.Add(animation);
+			FollowSceneAction(animation);
+			return;
+		}
 		bool actor = view?.Actors.Any(x => x.Id == a.Subject) ?? false;
 		// An actor outside the party's area has nothing here to show, so its action is done at once.
 		if (!actor && _actorIds.Contains(a.Subject))
@@ -76,13 +101,16 @@ public sealed partial class SampleController
 		}
 		if (spriteMs is { } length)
 		{
-			_animations.Add(new Animation(a, length, onSprite: true));
+			_animations.Add(new Animation(a, length));
 			return;
 		}
-		int labelLength = a.Type is ActionType.Move or ActionType.FadeIn or ActionType.FadeOut or ActionType.CameraMove
-			? Math.Clamp((int)(a.Seconds * 1000), ShortestAnimationMs, LongestAnimationMs)
-			: ShortestAnimationMs;
-		_animations.Add(new Animation(a, labelLength));
+		if (a.Type is ActionType.FadeIn or ActionType.FadeOut)
+		{
+			_animations.Add(new Animation(a, Math.Clamp((int)(a.Seconds * 1000), ShortestAnimationMs, LongestAnimationMs)));
+			return;
+		}
+		int labelLength = a.Type == ActionType.Move ? Math.Clamp((int)(a.Seconds * 1000), ShortestAnimationMs, LongestAnimationMs) : ShortestAnimationMs;
+		_animations.Add(new Animation(a, labelLength, labeled: true));
 	}
 
 	// Milliseconds per cell of a scripted walk: the area's step time, faster or slower with the move's speed.
@@ -165,6 +193,7 @@ public sealed partial class SampleController
 			if (animation.ElapsedMs >= animation.LengthMs)
 			{
 				EndAnimation(animation.Action);
+				EndSceneAction(animation.Action);
 				_s.FinishAction(animation.Action.Handle);
 				_animations.RemoveAt(i--);
 			}
@@ -184,10 +213,7 @@ public sealed partial class SampleController
 			case ActionType.FadeOut:
 				darkness = a.Progress;
 				break;
-			case var _ when a.OnSprite:
-				break;
-			default:
-				// Anything else is a label sliding across the top of the screen with its subject.
+			case var _ when a.Labeled:
 				string label = LabelOf(a.Action);
 				int x = 20 + (int)((s.Width - s.Measure(label, Style.Small) - 64) * a.Progress);
 				Style.Plate(s, label, x, 52, Style.Accent);

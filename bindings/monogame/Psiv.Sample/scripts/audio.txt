@@ -1,0 +1,145 @@
+# What the sample plays, read from the recording audio layer's call log: the title's and each area's music, the
+# battle's track and the area's back after it, the cues of menu actions, refusals, saves, footsteps and battle events,
+# volume changes from Options applied at once, and a scene's music and wind after a skip and after a load. Each
+# `audio mark` starts a new window of calls for the `expect audio` and `expect noaudio` lines after it.
+
+cmd set text instant
+wait 1
+expect screen Title
+expect state music title
+expect audio music title fade 800
+expect audio volumes 80 80 80
+audio mark
+press Down
+expect audio cue cursor
+press Up
+audio mark
+press Enter
+expect audio cue confirm
+wait 2
+expect state music town_tidewater
+expect audio music town_tidewater fade 800
+pressuntil Enter Field 400
+expect audio cue line
+
+# Talking to nothing is refused, with the refusal's cue and no confirm.
+audio mark
+press Enter
+expect toast There is nothing there.
+expect audio cue refuse
+expect noaudio cue confirm
+audio mark
+press M
+expect audio cue menu_open
+press Right
+expect audio cue cursor
+press Escape
+expect screen Field
+expect audio cue menu_close
+audio mark
+hold Right 30
+expect audio cue step
+
+# Music and ambient volume down a step each from Options over the pause overlay: each applies at once.
+press P
+expect screen Pause
+press Down
+press Enter
+expect screen Options
+press Down 8
+expect state selected Music volume: 80
+audio mark
+press Left
+expect state volumes 70 80 80
+expect audio volumes 70 80 80
+press Down
+press Left
+expect audio volumes 70 70 80
+press Escape
+press Escape
+expect screen Field
+press M
+press Right 3
+expect state tab Save
+audio mark
+press Enter
+expect toast Saved to manual_0.
+expect audio cue save
+press Escape
+expect screen Field
+
+# The guide's apprentices join, so the party wins the reed path's battle below.
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+expect state party Test Fighter, Test Mystic, Test Medic
+
+# The reed path's own track, a visible battle's track and its cues, then the reed path's track again.
+cmd walk 13 4
+wait 2
+expect state music field_reed_path
+expect audio music field_reed_path fade 800
+audio mark
+cmd walk cache_front
+expect mode Battle
+wait 30
+expect state music battle_field
+expect audio music battle_field fade 800
+expect audio cue battle_start
+press Up
+press Enter
+pressuntil Enter Field 4000
+expect audio cue hit
+expect audio cue victory
+expect state music field_reed_path
+expect audio music field_reed_path fade 800
+
+# The lookout: the scene's wind and music crossfade in; a skip stops at the battle with them as watching leaves them
+# and drops the creak.
+cmd walk lookout_front
+press Up
+wait 3
+audio mark
+press Enter
+wait 2
+expect state ambient marsh_wind
+expect audio ambient marsh_wind fade 800
+press Enter
+wait 2
+expect state music reed_lookout
+expect audio music reed_lookout fade 800
+audio mark
+press Tab
+wait 2
+expect screen Battle
+expect state music reed_lookout
+expect state ambient marsh_wind
+expect noaudio lookout_creak
+expect noaudio stop
+# The title has its own music; the autosave written as the battle began brings the scene's back at once.
+cmd title
+wait 2
+expect state music title
+expect state ambient -
+audio mark
+cmd load auto_0
+wait 2
+expect screen Battle
+expect state music reed_lookout
+expect state ambient marsh_wind
+expect audio music reed_lookout fade 0
+expect audio ambient marsh_wind fade 0
+pressuntil Enter Dialogue 600
+wait 2
+audio mark
+press Enter
+wait 90
+expect audio music stop fade 1000
+expect audio ambient stop fade 150
+press Enter
+wait 2
+expect screen Field
+expect state music field_reed_path
+expect audio music field_reed_path fade 800

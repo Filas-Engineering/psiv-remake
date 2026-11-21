@@ -49,6 +49,11 @@ public sealed partial class SampleController
 			else if (Revealed(line.Text) < line.Text.Length)
 			{
 				_lineMs += dtMs;
+				if (_clockMs - _lastTextTickMs >= TextTickMs)
+				{
+					_audio.PlayCue("text");
+					_lastTextTickMs = _clockMs;
+				}
 			}
 			else
 			{
@@ -63,6 +68,7 @@ public sealed partial class SampleController
 			{
 				_s.ConfirmLine();
 				_lastLine = "";
+				_audio.PlayCue("line");
 			}
 			return;
 		}
@@ -80,13 +86,24 @@ public sealed partial class SampleController
 		_s.Update(dtMs);
 	}
 
-	private int DialogueHeight => Px(176);
+	private const int DialogueBoxHeight = 176;
 
-	// The box sits at the bottom of the screen, or at the top when the leader stands where it would cover them.
+	private int DialogueHeight => Px(DialogueBoxHeight);
+
+	// Where the dialogue box was last drawn, for headless expectations: top, bottom or - without one.
+	private string _dialogueAt = "-";
+
+	// The box sits at the bottom of the screen, or at the top when the leader stands where it would cover them; over
+	// panels, where it covers the fewest of them.
 	private int DialogueTop(IDrawSurface s, bool field)
 	{
 		int bottom = s.Height - DialogueHeight - 16;
-		return field && _field.LeaderScreenY + Art.Tile > bottom - 8 ? 36 : bottom;
+		const int top = 36;
+		if (_panels.Count > 0)
+		{
+			return DialogueOnTop(s, bottom, top) ? top : bottom;
+		}
+		return field && _field.LeaderScreenY + Art.Tile > bottom - 8 ? top : bottom;
 	}
 
 	// `s` draws the field and `t` the box, with the profile's text size.
@@ -94,7 +111,7 @@ public sealed partial class SampleController
 	{
 		bool field = DrawField(s, art);
 		int y = DialogueTop(s, field);
-		if (y > s.Height / 2)
+		if (y > s.Height / 2 && _panels.Count == 0)
 		{
 			_field.DrawBanner(s);
 		}
@@ -105,6 +122,7 @@ public sealed partial class SampleController
 		{
 			return;
 		}
+		_dialogueAt = y > s.Height / 2 ? "bottom" : "top";
 		Style.Box(t, x, y, w, DialogueHeight);
 		if (_s.Line() is { } line)
 		{

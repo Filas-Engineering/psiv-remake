@@ -63,6 +63,8 @@ SAMPLE_MACROS_SCRIPT = monogame/Psiv.Sample/scripts/macros.txt
 SAMPLE_SAVES_SCRIPT = monogame/Psiv.Sample/scripts/saves.txt
 SAMPLE_OPTIONS_SCRIPT = monogame/Psiv.Sample/scripts/options.txt
 SAMPLE_NAME_PAD_SCRIPT = monogame/Psiv.Sample/scripts/name_pad.txt
+SAMPLE_PANELS_SCRIPT = monogame/Psiv.Sample/scripts/panels.txt
+SAMPLE_AUDIO_SCRIPT = monogame/Psiv.Sample/scripts/audio.txt
 
 .PHONY: all test native-test dotnet dotnet-test dotnet-missing clean deps
 
@@ -159,6 +161,17 @@ dotnet-test: dotnet
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_name_pad_saves --script $(SAMPLE_NAME_PAD_SCRIPT) --frames 500 > $(BUILD)/sample_name_pad_headless.txt \
 		|| (cat $(BUILD)/sample_name_pad_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_name_pad_headless.txt
+	rm -rf $(BUILD)/sample_panels_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_panels_saves --script $(SAMPLE_PANELS_SCRIPT) --frames 1200 > $(BUILD)/sample_panels_headless.txt \
+		|| (cat $(BUILD)/sample_panels_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_panels_headless.txt
+	rm -rf $(BUILD)/sample_audio_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_audio_saves --script $(SAMPLE_AUDIO_SCRIPT) --frames 800 > $(BUILD)/sample_audio_headless.txt \
+		|| (cat $(BUILD)/sample_audio_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_audio_headless.txt
+	rm -rf $(BUILD)/audio
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --dump-audio $(BUILD)/audio
+	python3 -I monogame/Psiv.Sample/scripts/check_wav.py $(BUILD)/audio
 
 dotnet-missing:
 	@echo "no dotnet at $(DOTNET): skipped the C# tests and the sample's headless run"

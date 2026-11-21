@@ -41,7 +41,10 @@ public sealed partial class SampleController
 		{
 			return false;
 		}
-		_field.Draw(s, art, view, _clockMs, Lineup());
+		List<string> lineup = Lineup();
+		_field.Track(view, _clockMs, lineup);
+		_field.Draw(s, art, view, _clockMs, lineup, _camera is null ? null : CameraFocus(view), ShakeOffset());
+		DrawPanels(s, art, view);
 		return true;
 	}
 

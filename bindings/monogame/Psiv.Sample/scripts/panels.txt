@@ -1,0 +1,159 @@
+# The reed path's lookout: comic panels over the dimmed field, each showing the live scene through a named camera,
+# with the dialogue box over them, a camera move that pushes one panel in, a shake, and a battle in the middle of
+# the scene. The event waits on each panel's transition; a skip and a load of the pre-battle autosave put the same
+# panels, camera and sound back as watching left them. With --window the shot lines save screenshots under
+# build/shots/ (run from bindings/); headless runs write nothing for them.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+# Out of the east gate onto the reed path and up to the lookout in its north-west corner, saved there for the skip.
+cmd walk 13 4
+wait 2
+expect state area Reed Path
+cmd walk lookout_front
+cmd menu
+cmd save manual_0
+cmd close
+wait 2
+press Enter
+wait 2
+expect screen Dialogue
+expect state panels none
+expect state ambient marsh_wind
+expect state dialogue bottom
+# Two panels slide in together; the mystic's line waits until both are in.
+press Enter
+wait 2
+expect state panels west top_left lookout_west~, east top_right lookout_east~
+expect state line -
+expect state music reed_lookout
+wait 10
+shot build/shots/panels_1_sliding.png
+wait 14
+expect state panels west top_left lookout_west, east top_right lookout_east
+expect statehas line Tidewater's lamps
+# Over two top panels the box keeps to the bottom, clear of both.
+expect state dialogue bottom
+shot build/shots/panels_2_two.png
+# A third panel along the bottom follows the peddler, started with nowait while the peddler waves; the event goes
+# on once both have finished. Over three panels the box goes where it covers the fewest: the wide one at the bottom.
+press Enter
+wait 30
+expect state panels west top_left lookout_west, east top_right lookout_east, cart wide_bottom peddler
+expect pose peddler wave
+expect state line -
+shot build/shots/panels_3_cart.png
+wait 30
+expect statehas line Wave all you like
+expect state dialogue bottom
+shot build/shots/panels_4_three.png
+# The cart panel slides out, then the camera moves to the skimmer: the field behind glides east and the east panel,
+# which shows that camera, pushes in over the move's 1.5 seconds.
+press Enter
+wait 10
+expect state panels west top_left lookout_west, east top_right lookout_east, cart wide_bottom peddler~
+wait 64
+expect state camera lookout_east~
+expect state panels west top_left lookout_west, east top_right lookout_east
+shot build/shots/panels_5_moving.png
+wait 50
+expect state camera lookout_east
+expect statehas line The skimmer's boiler
+shot build/shots/panels_6_pushed_in.png
+# A creak and a shake of strength 0.6 together: the view moves up to 6 pixels, easing off over 0.8 seconds, so 5 a few
+# frames in.
+press Enter
+wait 4
+expect state shake 5
+expect state line -
+shot build/shots/panels_7_shake.png
+wait 50
+expect state shake 0
+expect statehas line Grab the rail
+# Cleared, then one panel in the middle on the ladder. The box covers the center panel either way, so it keeps to
+# the bottom.
+press Enter
+wait 50
+expect state panels ladder center lookout_front
+expect statehas line far too many legs
+expect state dialogue bottom
+shot build/shots/panels_8_center.png
+press Enter
+wait 2
+expect screen Battle
+expect state panels ladder center lookout_front
+# Back to the title and into the autosave written as the battle began: the rebuild puts the panel, the camera, the
+# music and the wind back before the battle starts again.
+cmd title
+wait 2
+expect screen Title
+expect state panels none
+expect state camera -
+expect state music title
+cmd load auto_2
+wait 2
+expect screen Battle
+expect state panels ladder center lookout_front
+expect state camera lookout_east
+expect state music reed_lookout
+expect state ambient marsh_wind
+pressuntil Enter Dialogue 600
+wait 2
+expect statehas line bruised but whole
+expect state panels ladder center lookout_front
+shot build/shots/panels_9_after_load.png
+# The battle is lost (the fighter is alone), which the scene allows. The panel slides out, then the music fades over
+# a second with the wind; then the last line, and the field again
+# follows the leader to the area's own music.
+press Enter
+wait 4
+expect state panels ladder center lookout_front~
+wait 86
+expect state panels none
+expect state music -
+expect state ambient -
+expect statehas line crooked shape
+press Enter
+wait 2
+expect screen Field
+expect state camera -
+expect state music field_reed_path
+
+# Again from the save at the lookout with the profile's reduced flash on, which damps the shake to a quarter, and
+# skipped while it shakes: the skip stops at the battle with the same panel, camera and sound as watching, and the
+# shake is gone.
+cmd title
+cmd load manual_0
+cmd set reduced_flash on
+wait 2
+expect screen Field
+expect state music field_reed_path
+press Enter
+wait 2
+press Enter
+wait 26
+press Enter
+wait 60
+press Enter
+wait 124
+press Enter
+wait 4
+expect state shake 1
+press Tab
+wait 2
+expect screen Battle
+expect state panels ladder center lookout_front
+expect state camera lookout_east
+expect state music reed_lookout
+expect state ambient marsh_wind
+expect state shake 0
+pressuntil Enter Dialogue 600
+wait 2
+expect statehas line bruised but whole
+expect state panels ladder center lookout_front
+shot build/shots/panels_10_skipped.png
+pressuntil Enter Field 400
+expect state panels none
+expect state music field_reed_path

@@ -10,7 +10,14 @@
 	],
 	"journal": "journal.json",
 	"actors": ["dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler"],
-	"presentation": {"animations": ["bow", "jump", "nod", "shake", "shrug", "startle", "wave"], "audio": ["brass_alarm"], "portraits": ["guide_smile", "mystic_worried", "scout_grin"]},
+	"presentation": {
+		"animations": ["bow", "jump", "nod", "shake", "shrug", "startle", "wave"],
+		"audio": ["brass_alarm", "lookout_creak", "marsh_wind", "reed_lookout"],
+		"cameras": ["lookout_east", "lookout_front", "lookout_west", "peddler"],
+		"layouts": ["bottom", "bottom_left", "bottom_right", "center", "full", "left", "right", "tall_left", "tall_right", "top", "top_left",
+			"top_right", "wide_bottom", "wide_top"],
+		"portraits": ["guide_smile", "mystic_worried", "scout_grin"]
+	},
 	"flags": [
 		"cove.quiet_seen",
 		"cove.warden_beaten",
@@ -21,6 +28,7 @@
 		"kiln.draft_felt",
 		"kiln.ember_taken",
 		"kiln.upper_seen",
+		"reed.lookout_seen",
 		"reed.scout_joined",
 		"reed.skimmer_cleared",
 		"saltgrass.kiln_asked",

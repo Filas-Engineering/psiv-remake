@@ -17,6 +17,7 @@ public sealed class SampleGame : Game
 	public const string ControlsFile = "controls.json";
 
 	private SampleController _controller;
+	private readonly RecordingAudio _audio;
 	private readonly InputState _input = new();
 	private readonly string? _fontPath;
 	private readonly int _exitAfterMs;
@@ -36,7 +37,7 @@ public sealed class SampleGame : Game
 	private bool _finished;
 	private bool _padConnected;
 
-	public SampleGame(GameSession session, string? fontPath, int exitAfterMs, string? saves, string? scriptPath = null, string? screenshot = null)
+	public SampleGame(GameSession session, string? fontPath, int exitAfterMs, string? saves, string? scriptPath = null, string? screenshot = null, bool mute = false)
 	{
 		_saves = saves;
 		_controlsPath = saves is null ? null : Path.Combine(saves, ControlsFile);
@@ -45,7 +46,8 @@ public sealed class SampleGame : Game
 		_exitAfterMs = exitAfterMs;
 		_scriptPath = scriptPath;
 		_screenshot = screenshot;
-		_controller = new SampleController(session, Console.WriteLine, _controlsPath);
+		_audio = MonoGameAudio.Create(mute, Console.WriteLine);
+		_controller = new SampleController(session, Console.WriteLine, _controlsPath, _audio);
 		_graphics = new GraphicsDeviceManager(this) { PreferredBackBufferWidth = 1280, PreferredBackBufferHeight = 720 };
 		Window.Title = session.GameInfo().Title;
 		IsMouseVisible = true;
@@ -59,7 +61,7 @@ public sealed class SampleGame : Game
 		if (_scriptPath is not null)
 		{
 			_player = new ScriptPlayer(_session, _controller, _scriptPath, () => [], () => _frame, _shots.Add,
-				() => _controller = new SampleController(_session, Console.WriteLine, _controlsPath), _saves);
+				() => _controller = new SampleController(_session, Console.WriteLine, _controlsPath, _audio), _saves);
 		}
 	}
 
@@ -147,6 +149,7 @@ public sealed class SampleGame : Game
 	protected override void UnloadContent()
 	{
 		_surface?.Dispose();
+		(_audio as IDisposable)?.Dispose();
 		_fonts?.Dispose();
 		_batch?.Dispose();
 		base.UnloadContent();

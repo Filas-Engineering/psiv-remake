@@ -29,7 +29,7 @@ public sealed partial class SampleController
 		public BattleOption? Option;
 		public List<int> Targets = [];
 		public List<string> Labels = [];
-		public readonly Queue<string> Queue = new();
+		public readonly Queue<(string Text, string? Cue)> Queue = new();
 		public readonly List<string> Log = [];
 		public int PlaybackMs;
 		public bool Auto;
@@ -47,7 +47,7 @@ public sealed partial class SampleController
 		_battle.Queue.Clear();
 		_battle.Auto = false;
 		string enemies = string.Join(", ", _s.Combatants().Where(c => c.Side == Side.Enemy).Select(c => c.Label));
-		_battle.Queue.Enqueue($"Enemies: {enemies}.");
+		_battle.Queue.Enqueue(($"Enemies: {enemies}.", "battle_start"));
 		_battle.Phase = BattlePhase.Playback;
 	}
 
@@ -80,11 +80,12 @@ public sealed partial class SampleController
 			NextActor(0);
 			return;
 		}
+		int partyCount = _s.BattleInfo()?.PartyCount ?? 0;
 		foreach (BattleEvent e in _s.ResolveRound())
 		{
 			if (BattleText.Describe(_s, _battle.Labels, e) is { } line)
 			{
-				_battle.Queue.Enqueue(line);
+				_battle.Queue.Enqueue((line, BattleCue(e, partyCount)));
 			}
 		}
 		TakeNotices();
@@ -138,9 +139,13 @@ public sealed partial class SampleController
 			while (b.Queue.Count > 0 && (hurry || b.PlaybackMs >= lineMs))
 			{
 				b.PlaybackMs = 0;
-				string line = b.Queue.Dequeue();
+				(string line, string? cue) = b.Queue.Dequeue();
 				b.Log.Add(line);
 				_log("battle: " + line);
+				if (cue is not null)
+				{
+					_audio.PlayCue(cue);
+				}
 			}
 			if (b.Queue.Count == 0 && b.PlaybackMs >= lineMs)
 			{

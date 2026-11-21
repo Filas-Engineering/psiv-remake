@@ -46,11 +46,13 @@ public sealed partial class SampleController
 	private string _probeSelected = "";
 	private int _probeTop;
 
-	// `controlsPath` is where the bindings load from and save to; null keeps the defaults and saves nothing.
-	public SampleController(GameSession session, Action<string>? log = null, string? controlsPath = null)
+	// `controlsPath` is where the bindings load from and save to; null keeps the defaults and saves nothing. Without
+	// `audio` nothing plays and the calls are only recorded.
+	public SampleController(GameSession session, Action<string>? log = null, string? controlsPath = null, IAudioOut? audio = null)
 	{
 		_s = session;
 		_log = log ?? (_ => { });
+		_audio = audio ?? new RecordingAudio();
 		_actorIds = [.. session.ActorIds()];
 		ControlsPath = controlsPath;
 		_bindings = Bindings.Load(controlsPath, _log);
@@ -121,6 +123,7 @@ public sealed partial class SampleController
 		if (result.Error is { } error)
 		{
 			Say(error.Text);
+			_refused = true;
 		}
 	}
 
@@ -130,7 +133,7 @@ public sealed partial class SampleController
 		{
 			if (_battle.Active)
 			{
-				_battle.Queue.Enqueue(n.Text);
+				_battle.Queue.Enqueue((n.Text, NoticeCue(n)));
 			}
 			else if (n.Kind == NoticeKind.Action)
 			{
@@ -141,6 +144,10 @@ public sealed partial class SampleController
 			else
 			{
 				Say(n.Text);
+				if (NoticeCue(n) is { } cue)
+				{
+					_audio.PlayCue(cue);
+				}
 			}
 		}
 		IReadOnlyList<PresentationAction> actions = _s.PollActions();
@@ -153,7 +160,8 @@ public sealed partial class SampleController
 				Present(a, view, lineup);
 			}
 		}
-		// Outside an event nothing is scripted: party members walk back into line and poses stop.
+		// Outside an event nothing is scripted: party members walk back into line, poses stop, panels and the scene's
+		// camera go, and the area's music comes back.
 		if (_s.Mode == Mode.Field)
 		{
 			_field.EndScene(Lineup());
@@ -161,6 +169,15 @@ public sealed partial class SampleController
 		else if (_s.Mode == Mode.Title)
 		{
 			_field.ClearScene();
+		}
+		if (_s.Mode is Mode.Field or Mode.Title)
+		{
+			_panels.Clear();
+			_camera = null;
+			_cameraMove = null;
+			_shake = null;
+			_scriptMusic = null;
+			_scriptAmbient = null;
 		}
 	}
 
@@ -233,6 +250,7 @@ public sealed partial class SampleController
 			UpdateScreen(screen, dtMs, input);
 		}
 		TakeNotices();
+		UpdateAudio(dtMs, screen, Screen, input);
 	}
 
 	private void UpdateScreen(Screen screen, int dtMs, ActionInput input)
@@ -343,6 +361,7 @@ public sealed partial class SampleController
 		IDrawSurface t = _scale == 1f ? s : new ScaledSurface(s, _scale);
 		_probeSelected = "";
 		_probeTop = 0;
+		_dialogueAt = "-";
 		s.Fill(0, 0, s.Width, s.Height, Style.Background);
 		switch (Screen)
 		{
@@ -406,6 +425,12 @@ public sealed partial class SampleController
 			"party" => string.Join(", ", _s.Party().Where(m => m.InLineup).Select(m => m.Name)),
 			"macros" => string.Join(", ", _s.MacroList().Select(m => $"{m.Name}({m.Steps.Count})" + (m.Name == settings.AutoMacro ? "*" : ""))),
 			"area" => _s.FieldInfo()?.AreaName ?? "-",
+			"panels" => _panels.Count == 0 ? "none" : string.Join(", ", _panels.Select(x => $"{x.Id} {x.Slot} {x.Camera}" + (x.Transition is null ? "" : "~"))),
+			"camera" => (_camera ?? "-") + (_cameraMove is null ? "" : "~"),
+			"shake" => ShakeAmplitude().ToString(CultureInfo.InvariantCulture),
+			"dialogue" => _dialogueAt,
+			"music" => _audio.Music.Length == 0 ? "-" : _audio.Music,
+			"ambient" => _audio.Ambient.Length == 0 ? "-" : _audio.Ambient,
 			"text_speed" => GameSession.NameOf(NameKind.TextSpeed, (int)p.TextSpeed),
 			"auto_advance" => OnOff(p.AutoAdvance),
 			"text_size" => p.TextSizePercent.ToString(CultureInfo.InvariantCulture),

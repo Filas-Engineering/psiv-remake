@@ -49,6 +49,15 @@ reed.skimmer.ask = Take the skimmer out across the marsh?
 reed.skimmer.won = The wisps scatter. This old hull can take a beating.
 reed.skimmer.declined = The skimmer knocks gently against its post.
 reed.skimmer.idle = The skimmer rests at its mooring, steam curling from the vent.
+reed.lookout.climb = An old reed-cutters' lookout leans over the path. The ladder groans all the way up to its platform.
+reed.lookout.view = Tidewater's lamps to the west, the skimmer's mooring to the east, and nothing but reeds and wind between.
+reed.lookout.peddler = Wave all you like up there! My prices look even better from down here.
+reed.lookout.skimmer = The skimmer's boiler is lit. Somebody has been out on the water since dusk.
+reed.lookout.gust = The whole platform is swaying. Grab the rail!
+reed.lookout.climber = Something with far too many legs is coming up the ladder behind the party.
+reed.lookout.won = It drops back into the reeds with a splash and does not come up again.
+reed.lookout.lost = The party scrambles down the far side of the lookout, bruised but whole.
+reed.lookout.down = From the path the lookout is only a crooked shape against the sky.
 
 cove.bell.frame = A cracked bell hangs from a driftwood frame. Something stirs beneath it.
 cove.bell.warden = That is no bell keeper. That is a {name:bell_warden}!

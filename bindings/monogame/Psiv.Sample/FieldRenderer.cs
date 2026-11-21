@@ -215,6 +215,10 @@ public sealed class FieldRenderer
 	// Where the leader was last drawn, in screen pixels (its top edge).
 	public int LeaderScreenY { get; private set; }
 
+	// Where the leader is drawn now, in cells: its scripted place during a scene, otherwise its glide.
+	public (float X, float Y) Leader(IReadOnlyList<string> lineup) =>
+		lineup.Count > 0 && _members.TryGetValue(lineup[0], out MemberPlace? m) ? (m.Walk.PX, m.Walk.PY) : (_leader.PX, _leader.PY);
+
 	// The people drawn in the last frame, actors and party members, by id: where, whether between cells, facing, pose.
 	public Dictionary<string, DrawnPerson> DrawnActors { get; } = [];
 
@@ -503,7 +507,7 @@ public sealed class FieldRenderer
 
 	// Follows the view's positions; `clockMs` is the controller's clock, so the glides advance with the
 	// frame time the session got. `lineup` is the party in walking order (the leader first).
-	private void Track(FieldView view, int clockMs, IReadOnlyList<string> lineup)
+	public void Track(FieldView view, int clockMs, IReadOnlyList<string> lineup)
 	{
 		int dt = _lastClock < 0 ? 0 : Math.Max(0, clockMs - _lastClock);
 		_lastClock = clockMs;
@@ -657,26 +661,47 @@ public sealed class FieldRenderer
 		}
 	}
 
-	private static int Axis(float leader, int areaPx, int viewPx)
+	private static int Axis(float focus, int tile, int areaPx, int viewPx)
 	{
 		if (areaPx <= viewPx)
 		{
 			return -(viewPx - areaPx) / 2;
 		}
-		return Math.Clamp((int)MathF.Round(leader * Tile + Tile / 2f - viewPx / 2f), 0, areaPx - viewPx);
+		return Math.Clamp((int)MathF.Round(focus * tile + tile / 2f - viewPx / 2f), 0, areaPx - viewPx);
 	}
 
-	public void Draw(IDrawSurface s, Art art, FieldView view, int clockMs, IReadOnlyList<string> lineup)
+	// The field as the window shows it, after Track: the whole surface around `focus` (in cells; the leader when null),
+	// moved by `shake` pixels. The people drawn are what headless expectations read.
+	public void Draw(IDrawSurface s, Art art, FieldView view, int clockMs, IReadOnlyList<string> lineup, (float X, float Y)? focus, Point shake)
 	{
-		Track(view, clockMs, lineup);
+		Render(s, art, view, clockMs, lineup, new Rectangle(0, 0, s.Width, s.Height), focus ?? Leader(lineup), Tile, shake, record: true);
+	}
+
+	// The same live scene inside `viewport`, `tile` pixels a cell, around `focus`: what a panel's camera sees. Nothing
+	// is tracked or recorded, so a panel never moves anyone.
+	public void DrawView(IDrawSurface s, Art art, FieldView view, int clockMs, IReadOnlyList<string> lineup, Rectangle viewport, (float X, float Y) focus,
+		int tile, Point shake) => Render(s, art, view, clockMs, lineup, viewport, focus, tile, shake, record: false);
+
+	private void Render(IDrawSurface s, Art art, FieldView view, int clockMs, IReadOnlyList<string> lineup, Rectangle viewport, (float X, float Y) focus,
+		int tile, Point shake, bool record)
+	{
 		FieldInfo f = view.Info;
 		Art.TileSet tiles = art.Tiles(Art.ThemeOf(f.AreaKind));
 		MemberPlace? scriptedLeader = lineup.Count > 0 ? _members.GetValueOrDefault(lineup[0]) : null;
-		float leaderX = scriptedLeader?.Walk.PX ?? _leader.PX, leaderY = scriptedLeader?.Walk.PY ?? _leader.PY;
-		CameraX = Axis(leaderX, f.Width * Tile, s.Width);
-		CameraY = Axis(leaderY, f.Height * Tile, s.Height);
-		int x0 = Math.Max(0, CameraX / Tile - 1), x1 = Math.Min(f.Width - 1, (CameraX + s.Width) / Tile + 1);
-		int y0 = Math.Max(0, CameraY / Tile - 1), y1 = Math.Min(f.Height - 1, (CameraY + s.Height) / Tile + 1);
+		float leaderY = Leader(lineup).Y;
+		// Pixels at the field's own scale, scaled to this view's cell size.
+		int Px(int pixels) => pixels * tile / Tile;
+		int cameraX = Axis(focus.X, tile, f.Width * tile, viewport.Width) + shake.X;
+		int cameraY = Axis(focus.Y, tile, f.Height * tile, viewport.Height) + shake.Y;
+		if (record)
+		{
+			CameraX = cameraX;
+			CameraY = cameraY;
+		}
+		// Screen positions of a cell's top left corner.
+		int ox = viewport.X - cameraX, oy = viewport.Y - cameraY;
+		int x0 = Math.Max(0, cameraX / tile - 1), x1 = Math.Min(f.Width - 1, (cameraX + viewport.Width) / tile + 1);
+		int y0 = Math.Max(0, cameraY / tile - 1), y1 = Math.Min(f.Height - 1, (cameraY + viewport.Height) / tile + 1);
 		int waterFrame = clockMs / WaterFrameMs % Art.WaterFrames;
 
 		CellFlags Terrain(int x, int y) => view.Cell(x, y) & CellFlags.TerrainMask;
@@ -684,23 +709,23 @@ public sealed class FieldRenderer
 		{
 			for (int x = x0; x <= x1; x++)
 			{
-				DrawCell(s, tiles, Terrain, x, y, x * Tile - CameraX, y * Tile - CameraY, Noise.Hash(x, y, f.AreaId.Length), waterFrame);
+				DrawCell(s, tiles, Terrain, x, y, ox + x * tile, oy + y * tile, Noise.Hash(x, y, f.AreaId.Length), waterFrame, tile);
 			}
 		}
 
 		float pulse = 0.6f + 0.4f * MathF.Sin(clockMs / 260f);
 		foreach (FieldExit e in view.Exits)
 		{
-			int sx = e.X * Tile - CameraX, sy = e.Y * Tile - CameraY;
+			int sx = ox + e.X * tile, sy = oy + e.Y * tile;
 			int dir = e.X == 0 ? 3 : e.X == f.Width - 1 ? 1 : e.Y == 0 ? 0 : e.Y == f.Height - 1 ? 2 : -1;
 			if (dir < 0)
 			{
-				s.Image(art.Door, sx, sy, Tile, Tile, Color.White);
+				s.Image(art.Door, sx, sy, tile, tile, Color.White);
 			}
 			else
 			{
-				s.Fill(sx + 4, sy + 4, Tile - 8, Tile - 8, new Color(120, 240, 160) * (0.18f * pulse));
-				s.Image(art.ExitArrow[dir], sx, sy, Tile, Tile, Color.White * pulse);
+				s.Fill(sx + Px(4), sy + Px(4), tile - Px(8), tile - Px(8), new Color(120, 240, 160) * (0.18f * pulse));
+				s.Image(art.ExitArrow[dir], sx, sy, tile, tile, Color.White * pulse);
 			}
 		}
 
@@ -714,8 +739,8 @@ public sealed class FieldRenderer
 		bool BubbleFree(int x, int y) => _leader.X != x || _leader.Y != y - 1;
 		void Put(float cx, float cy, Action<int, int> draw, float sortBias = 0f)
 		{
-			int sx = (int)MathF.Round(cx * Tile) - CameraX, sy = (int)MathF.Round(cy * Tile) - CameraY;
-			if (sx > -Tile * 2 && sy > -Tile * 2 && sx < s.Width + Tile && sy < s.Height + Tile)
+			int sx = ox + (int)MathF.Round(cx * tile), sy = oy + (int)MathF.Round(cy * tile);
+			if (sx > viewport.X - tile * 2 && sy > viewport.Y - tile * 2 && sx < viewport.Right + tile && sy < viewport.Bottom + tile)
 			{
 				sprites.Add((cy + sortBias, () => draw(sx, sy)));
 			}
@@ -734,18 +759,22 @@ public sealed class FieldRenderer
 				(image, lift, alert, marks) = art.PoseFrame(look, facing, run.Pose, run.T);
 				pose = run.Pose;
 			}
-			DrawnActors[id] = new DrawnPerson(px, py, walking, facing, pose, marks.Length > 0);
+			if (record)
+			{
+				DrawnActors[id] = new DrawnPerson(px, py, walking, facing, pose, marks.Length > 0);
+			}
+			lift = Px(lift);
 			Put(px, py, (sx, sy) =>
 			{
-				s.Image(art.Shadow, sx, sy + 3, Tile, Tile, Color.White);
-				s.Image(image, sx, sy - lift, Tile, Tile, Color.White);
+				s.Image(art.Shadow, sx, sy + Px(3), tile, tile, Color.White);
+				s.Image(image, sx, sy - lift, tile, tile, Color.White);
 				if (alert)
 				{
-					overlays.Add(() => s.Image(art.Alert, sx + Tile / 4, sy - lift - Tile / 2 - 8, Tile / 2, Tile / 2 + 8, Color.White));
+					overlays.Add(() => s.Image(art.Alert, sx + tile / 4, sy - lift - tile / 2 - Px(8), tile / 2, tile / 2 + Px(8), Color.White));
 				}
 				foreach (MotionMark mark in marks)
 				{
-					overlays.Add(() => s.Image(mark.Image, sx + mark.Dx * Art.Scale, sy - lift + mark.Dy * Art.Scale, Tile, Tile, Color.White));
+					overlays.Add(() => s.Image(mark.Image, sx + mark.Dx * tile / Pixels.Size, sy - lift + mark.Dy * tile / Pixels.Size, tile, tile, Color.White));
 				}
 				extra?.Invoke(sx, sy - lift);
 			}, sortBias);
@@ -757,17 +786,17 @@ public sealed class FieldRenderer
 			case PointKind.Step:
 				if (p.Active)
 				{
-					s.Image(art.Rune, p.X * Tile - CameraX, p.Y * Tile - CameraY, Tile, Tile, Color.White * (0.35f + 0.3f * pulse));
+					s.Image(art.Rune, ox + p.X * tile, oy + p.Y * tile, tile, tile, Color.White * (0.35f + 0.3f * pulse));
 				}
 				break;
 			case PointKind.Chest:
-				Put(p.X, p.Y, (sx, sy) => s.Image(p.Active ? art.ChestClosed : art.ChestOpen, sx, sy, Tile, Tile, Color.White));
+				Put(p.X, p.Y, (sx, sy) => s.Image(p.Active ? art.ChestClosed : art.ChestOpen, sx, sy, tile, tile, Color.White));
 				break;
 			case PointKind.Shop:
-				Put(p.X, p.Y, (sx, sy) => s.Image(art.Stall, sx, sy, Tile, Tile, Color.White));
+				Put(p.X, p.Y, (sx, sy) => s.Image(art.Stall, sx, sy, tile, tile, Color.White));
 				break;
 			case PointKind.Rest:
-				Put(p.X, p.Y, (sx, sy) => s.Image(art.Bed, sx, sy, Tile, Tile, Color.White));
+				Put(p.X, p.Y, (sx, sy) => s.Image(art.Bed, sx, sy, tile, tile, Color.White));
 				break;
 			case PointKind.Talk:
 				FieldActor? actor = view.Actors.FirstOrDefault(a => a.Id == p.Id);
@@ -775,11 +804,11 @@ public sealed class FieldRenderer
 				{
 					Put(p.X, p.Y, (sx, sy) =>
 					{
-						s.Image(art.Noticeboard, sx, sy, Tile, Tile, Color.White);
+						s.Image(art.Noticeboard, sx, sy, tile, tile, Color.White);
 						if (p.Active && BubbleFree(p.X, p.Y))
 						{
 							int bob = (int)(2 * MathF.Sin(clockMs / 300f + p.X));
-							overlays.Add(() => s.Image(art.Bubble, sx + Tile / 2, sy - Tile / 2 + bob, Tile / 2 + 8, Tile / 2 + 8, Color.White));
+							overlays.Add(() => s.Image(art.Bubble, sx + tile / 2, sy - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8), Color.White));
 						}
 					});
 				}
@@ -791,7 +820,10 @@ public sealed class FieldRenderer
 				break;
 			}
 		}
-		DrawnActors.Clear();
+		if (record)
+		{
+			DrawnActors.Clear();
+		}
 		foreach (FieldActor a in view.Actors)
 		{
 			if (!a.Visible || !_actors.TryGetValue(a.Id, out ActorWalk? w))
@@ -802,7 +834,7 @@ public sealed class FieldRenderer
 			bool talks = talkers.Contains(a.Id) && BubbleFree(a.X, a.Y) && PoseAt(a.Id, clockMs) is null;
 			int bob = (int)(2 * MathF.Sin(clockMs / 300f + a.X));
 			Person(a.Id, Art.LookFor(a.Id), w.PX, w.PY, w.Facing, w.Frame, w.Walking, extra: talks
-				? (sx, sy) => overlays.Add(() => s.Image(art.Bubble, sx + Tile / 2, sy - Tile / 2 + bob, Tile / 2 + 8, Tile / 2 + 8, Color.White))
+				? (sx, sy) => overlays.Add(() => s.Image(art.Bubble, sx + tile / 2, sy - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8), Color.White))
 				: null);
 		}
 		foreach (FieldEnemy e in view.Enemies)
@@ -816,11 +848,11 @@ public sealed class FieldRenderer
 			bool chasing = e.State == EnemyState.Chasing;
 			Put(g.PX, g.PY, (sx, sy) =>
 			{
-				s.Image(art.Shadow, sx, sy + 2, Tile, Tile, Color.White);
-				s.Image(art.Creature(seed, frame), sx, sy, Tile, Tile, Color.White);
+				s.Image(art.Shadow, sx, sy + Px(2), tile, tile, Color.White);
+				s.Image(art.Creature(seed, frame), sx, sy, tile, tile, Color.White);
 				if (chasing)
 				{
-					overlays.Add(() => s.Image(art.Alert, sx + Tile / 4, sy - Tile / 2 - 8, Tile / 2, Tile / 2 + 8, Color.White));
+					overlays.Add(() => s.Image(art.Alert, sx + tile / 4, sy - tile / 2 - Px(8), tile / 2, tile / 2 + Px(8), Color.White));
 				}
 			});
 		}
@@ -862,7 +894,10 @@ public sealed class FieldRenderer
 		{
 			Person(leaderId, leaderLook, _leader.PX, _leader.PY, _leader.Facing, _leader.Frame, _leader.Progress < 1f);
 		}
-		LeaderScreenY = (int)MathF.Round(leaderY * Tile) - CameraY;
+		if (record)
+		{
+			LeaderScreenY = (int)MathF.Round(leaderY * Tile) - CameraY;
+		}
 		foreach ((float _, Action draw) in sprites.OrderBy(x => x.Y))
 		{
 			draw();
@@ -873,68 +908,69 @@ public sealed class FieldRenderer
 		}
 	}
 
-	public static void DrawCell(IDrawSurface s, Art.TileSet t, Func<int, int, CellFlags> terrain, int x, int y, int sx, int sy, uint hash, int waterFrame)
+	public static void DrawCell(IDrawSurface s, Art.TileSet t, Func<int, int, CellFlags> terrain, int x, int y, int sx, int sy, uint hash, int waterFrame, int tile = Tile)
 	{
+		int Px(int pixels) => pixels * tile / Tile;
 		CellFlags c = terrain(x, y);
-		const int edge = 3;
+		int edge = Px(3);
 		if (c == CellFlags.Wall)
 		{
 			bool faceDown = terrain(x, y + 1) != CellFlags.Wall;
 			if (faceDown)
 			{
-				s.Image(t.WallFace[hash % 5 == 0 ? 1 : 0], sx, sy, Tile, Tile, Color.White);
+				s.Image(t.WallFace[hash % 5 == 0 ? 1 : 0], sx, sy, tile, tile, Color.White);
 			}
 			else
 			{
-				s.Image(t.WallTop[hash % 3 == 0 ? 1 : 0], sx, sy, Tile, Tile, Color.White);
+				s.Image(t.WallTop[hash % 3 == 0 ? 1 : 0], sx, sy, tile, tile, Color.White);
 				if (terrain(x, y - 1) != CellFlags.Wall)
 				{
-					s.Fill(sx, sy, Tile, edge, t.Edge);
+					s.Fill(sx, sy, tile, edge, t.Edge);
 				}
 			}
 			if (terrain(x - 1, y) != CellFlags.Wall)
 			{
-				s.Fill(sx, sy, edge, Tile, t.Edge);
+				s.Fill(sx, sy, edge, tile, t.Edge);
 			}
 			if (terrain(x + 1, y) != CellFlags.Wall)
 			{
-				s.Fill(sx + Tile - edge, sy, edge, Tile, t.Edge);
+				s.Fill(sx + tile - edge, sy, edge, tile, t.Edge);
 			}
 			return;
 		}
 		if (c == CellFlags.Water)
 		{
-			s.Image(t.Water[(waterFrame + (int)(hash % 2)) % Art.WaterFrames], sx, sy, Tile, Tile, Color.White);
+			s.Image(t.Water[(waterFrame + (int)(hash % 2)) % Art.WaterFrames], sx, sy, tile, tile, Color.White);
 			Color foam = new Color(230, 244, 255) * 0.7f;
 			if (terrain(x, y - 1) != CellFlags.Water)
 			{
-				s.Fill(sx, sy, Tile, 5, t.Bank);
-				s.Fill(sx, sy + 5, Tile, 2, foam);
+				s.Fill(sx, sy, tile, Px(5), t.Bank);
+				s.Fill(sx, sy + Px(5), tile, Px(2), foam);
 			}
 			if (terrain(x - 1, y) != CellFlags.Water)
 			{
-				s.Fill(sx, sy, 2, Tile, foam);
+				s.Fill(sx, sy, Px(2), tile, foam);
 			}
 			if (terrain(x + 1, y) != CellFlags.Water)
 			{
-				s.Fill(sx + Tile - 2, sy, 2, Tile, foam);
+				s.Fill(sx + tile - Px(2), sy, Px(2), tile, foam);
 			}
 			if (terrain(x, y + 1) != CellFlags.Water)
 			{
-				s.Fill(sx, sy + Tile - 2, Tile, 2, foam);
+				s.Fill(sx, sy + tile - Px(2), tile, Px(2), foam);
 			}
 			return;
 		}
 		// Floor: one of four variants, with an occasional decoration, from the cell's coordinates.
 		int image = hash % 11 == 0 ? t.Decor[(hash >> 8) % (uint)t.Decor.Length] : t.Floor[(hash >> 4) % (uint)t.Floor.Length];
-		s.Image(image, sx, sy, Tile, Tile, Color.White);
+		s.Image(image, sx, sy, tile, tile, Color.White);
 		if (terrain(x, y - 1) == CellFlags.Wall)
 		{
-			s.Fill(sx, sy, Tile, 9, Color.Black * 0.28f);
+			s.Fill(sx, sy, tile, Px(9), Color.Black * 0.28f);
 		}
 		if (terrain(x - 1, y) == CellFlags.Wall)
 		{
-			s.Fill(sx, sy, 6, Tile, Color.Black * 0.16f);
+			s.Fill(sx, sy, Px(6), tile, Color.Black * 0.16f);
 		}
 	}
 

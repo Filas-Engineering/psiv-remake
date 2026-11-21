@@ -49,6 +49,15 @@ reed.skimmer.ask = 滑走艇で湿地を渡る？
 reed.skimmer.won = 鬼火が散った。この古い船体はなかなか丈夫だ。
 reed.skimmer.declined = 滑走艇がそっと杭にぶつかる。
 reed.skimmer.idle = 滑走艇は係留されたまま、通気口から湯気が上がっている。
+reed.lookout.climb = 葦刈りの古い見張り台が道にかたむいている。上の台まで、はしごがずっときしんでいる。
+reed.lookout.view = 西に潮見の船着き場の灯、東に滑走艇の係留所。そのあいだは葦と風ばかりだ。
+reed.lookout.peddler = 上でいくら手をふってもいいよ！下から見たほうが、うちの値段はもっと安く見える。
+reed.lookout.skimmer = 滑走艇の釜に火が入っている。夕方から誰かが水に出ていたんだ。
+reed.lookout.gust = 台がまるごと揺れてる。手すりにつかまって！
+reed.lookout.climber = 足の多すぎる何かが、一行の後ろからはしごを登ってくる。
+reed.lookout.won = それは水音を立てて葦の中に落ち、もう上がってこない。
+reed.lookout.lost = 一行は見張り台の反対側を下りた。あざだらけだが、みんな無事だ。
+reed.lookout.down = 道から見ると、見張り台はまた空に浮かぶ曲がった影にすぎない。
 
 cove.bell.frame = 流木の枠にひびの入った鐘が下がっている。その下で何かが動いた。
 cove.bell.warden = あれは鐘の番人なんかじゃない。{name:bell_warden}だ！

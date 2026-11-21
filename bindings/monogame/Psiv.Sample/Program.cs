@@ -13,16 +13,18 @@ public static class Program
 	private const string Usage =
 		"Psiv.Sample: plays the placeholder adventure through libpsiv_session\n" +
 		"\n" +
-		"  Psiv.Sample [--data DIR] [--saves DIR] [--seed N] [--font FILE] [--exit-after-ms N] [--screenshot FILE.png]\n" +
+		"  Psiv.Sample [--data DIR] [--saves DIR] [--seed N] [--font FILE] [--exit-after-ms N] [--screenshot FILE.png] [--mute]\n" +
 		"  Psiv.Sample --window --script FILE ...   the window, with keys from the script instead of the keyboard\n" +
-		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N]   headless, no window\n" +
+		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N]   headless, no window, no sound\n" +
+		"  Psiv.Sample --dump-audio DIR   writes a generated track and three cues as WAV files and checks every generated sound\n" +
 		"\n" +
 		"Headless script lines: press KEY [COUNT] | hold KEY FRAMES | wait FRAMES | pressuntil KEY SCREEN MAXFRAMES |\n" +
 		"pad BUTTON [COUNT] | padhold BUTTON FRAMES | paduntil BUTTON SCREEN MAXFRAMES | padstick X Y FRAMES |\n" +
 		"controls list|reset|save|restart | controls capture|clear ACTION | controls write JSON |\n" +
 		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | expect actor ID X Y [FACING]|walking|hidden | expect pose ID POSE [marked] |\n" +
 		"expect label none | expect toast none|TEXT | expect notoast TEXT | expect binding ACTION KEYS \"|\" BUTTONS |\n" +
-		"expect state KEY VALUE | expect statehas KEY TEXT | savefile damage SLOT | dump | shot FILE.png (window only) | # comment.\n" +
+		"expect state KEY VALUE | expect statehas KEY TEXT | expect audio TEXT | expect noaudio TEXT | audio mark|log |\n" +
+		"savefile damage SLOT | dump | shot FILE.png (window only) | # comment.\n" +
 		"Keys are MonoGame Keys names, buttons MonoGame Buttons names, actions the sample's GameAction names.\n" +
 		"Exit codes: 0 done, 1 a failure, 2 bad arguments.\n";
 
@@ -36,7 +38,9 @@ public static class Program
 		int exitAfterMs = 0;
 		ulong seed = 1;
 		bool window = false;
+		bool mute = false;
 		string? screenshot = null;
+		string? dumpAudio = null;
 		for (int i = 0; i < args.Length; i++)
 		{
 			string? Next() => i + 1 < args.Length ? args[++i] : null;
@@ -46,6 +50,8 @@ public static class Program
 			case "--saves": saves = Next(); break;
 			case "--font": font = Next(); break;
 			case "--window": window = true; break;
+			case "--mute": mute = true; break;
+			case "--dump-audio": dumpAudio = Next(); break;
 			case "--screenshot": screenshot = Next(); break;
 			case "--script": script = Next(); break;
 			case "--frames" when int.TryParse(Next(), CultureInfo.InvariantCulture, out int n): frames = n; break;
@@ -58,6 +64,10 @@ public static class Program
 				Console.Error.Write(Usage);
 				return 2;
 			}
+		}
+		if (dumpAudio is not null)
+		{
+			return DumpAudio(dumpAudio);
 		}
 		data ??= FindData();
 		if (data is null)
@@ -97,7 +107,7 @@ public static class Program
 			}
 			try
 			{
-				using var game = new SampleGame(session, font, exitAfterMs, saves, script, screenshot);
+				using var game = new SampleGame(session, font, exitAfterMs, saves, script, screenshot, mute);
 				game.Run();
 				return game.Failures == 0 ? 0 : 1;
 			}
@@ -107,6 +117,34 @@ public static class Program
 				return 1;
 			}
 		}
+	}
+
+	// One generated track and three cues as WAV files, then the synthesizer's self-check over every sound the sample
+	// and the placeholder scripts name, and over the tracks derived for areas and battles.
+	private static int DumpAudio(string dir)
+	{
+		Directory.CreateDirectory(dir);
+		(SoundKind Kind, string Id)[] dumped = [(SoundKind.Music, "town_tidewater"), (SoundKind.Cue, "confirm"), (SoundKind.Cue, "hit"), (SoundKind.Cue, "level_up")];
+		foreach ((SoundKind kind, string id) in dumped)
+		{
+			short[] pcm = Synth.Generate(kind, id);
+			string path = Path.Combine(dir, $"{kind.ToString().ToLowerInvariant()}_{id}.wav");
+			Synth.WriteWav(path, pcm);
+			Console.WriteLine($"audio: {path}, {pcm.Length} samples ({pcm.Length * 1000 / Synth.Rate} ms), peak {pcm.Max(v => Math.Abs((int)v))}");
+		}
+		List<(SoundKind, string)> all = Synth.SampleCues.Select(c => (SoundKind.Cue, c))
+			.Concat(new[] { "title", "town_tidewater", "field_reed_path", "dungeon_bell_cove", "battle_field", "battle_dungeon", "battle_scripted", "brass_alarm", "reed_lookout" }
+				.Select(t => (SoundKind.Music, t)))
+			.Append((SoundKind.Ambient, "marsh_wind"))
+			.Append((SoundKind.Cue, "lookout_creak"))
+			.ToList();
+		List<string> problems = Synth.Check(all);
+		foreach (string problem in problems)
+		{
+			Console.WriteLine("audio check: " + problem);
+		}
+		Console.WriteLine($"audio check: {all.Count} sounds generated twice each, {problems.Count} problems");
+		return problems.Count == 0 ? 0 : 1;
 	}
 
 	private static string? FindData()
@@ -150,6 +188,7 @@ public sealed class ScriptPlayer
 	private int _next;
 	private IEnumerator<InputFrame>? _action;
 	private string? _pendingFailure;
+	private int _audioMark;
 
 	// `shot` saves the next drawn frame to a file; null (headless) skips shot lines. `restart` makes a new controller
 	// for `controls restart`.
@@ -355,6 +394,24 @@ public sealed class ScriptPlayer
 				bytes[bytes.Length / 2] ^= 0x5a;
 				File.WriteAllBytes(file, bytes);
 				break;
+			case "audio" when w.Length == 2 && w[1] == "mark" && _controller.Audio is RecordingAudio marked:
+				_audioMark = marked.CallCount;
+				break;
+			case "audio" when w.Length == 2 && w[1] == "log" && _controller.Audio is RecordingAudio logged:
+				foreach (string heardCall in logged.CallsSince(_audioMark))
+				{
+					Console.WriteLine($"[{_frame()}] audio| {heardCall}");
+				}
+				break;
+			case "expect" when w.Length >= 3 && w[1] is "audio" or "noaudio" && _controller.Audio is RecordingAudio heard:
+				// The calls since the last `audio mark`: one holds the text, or none does.
+				string call = string.Join(" ", w[2..]);
+				List<string> calls = heard.CallsSince(_audioMark).ToList();
+				if (calls.Any(c => c.Contains(call, StringComparison.Ordinal)) != (w[1] == "audio"))
+				{
+					Fail($"{source}: expected {(w[1] == "audio" ? "a" : "no")} call holding '{call}' since the mark, heard [{string.Join(" | ", calls)}]");
+				}
+				break;
 			case "shot" when w.Length == 2:
 				return Shot(w[1]).GetEnumerator();
 			case "dump":
@@ -521,7 +578,8 @@ public static class Headless
 		int failures = 0;
 		var surface = new RecordingSurface();
 		string? controls = saves is null ? null : Path.Combine(saves, SampleGame.ControlsFile);
-		SampleController NewController() => new(session, line => Console.WriteLine($"[{frame}] {line}"), controls);
+		var audio = new RecordingAudio();
+		SampleController NewController() => new(session, line => Console.WriteLine($"[{frame}] {line}"), controls, audio);
 		SampleController controller = NewController();
 		var input = new InputState();
 		try
