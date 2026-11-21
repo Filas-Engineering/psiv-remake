@@ -3,9 +3,9 @@
 # * the three C++ libraries' unit tests;
 # * the C API as a DLL (bindings/c), checked to export exactly the header's PSIV_API functions, with the C tests
 #   linked against it;
-# * the C playthrough and game_cli.exe on the scripted playthrough, compared the way bindings/Makefile does: the two
-#   transcripts byte for byte, the golden transcript (line ends aside: standard output writes CR LF on Windows), and
-#   every save file the two runs wrote.
+# * the C playthrough and game_cli.exe on the scripted playthrough and the macro script, compared the way
+#   bindings/Makefile does: the two transcripts byte for byte, the golden transcript (line ends aside: standard output
+#   writes CR LF on Windows), and every save file the two runs wrote.
 # It does not cover MSVC, the acceptance suites, the C# wrapper or the MonoGame sample.
 # The repo is mounted read-only and copied inside the container.
 set -eu
@@ -62,5 +62,11 @@ docker run --rm --platform linux/amd64 -v "$ROOT":/src:ro "$IMAGE" sh -euc '
 	# Standard output is in text mode on Windows, so both programs end their lines with CR LF.
 	tr -d "\r" < build/playthrough_c.txt | cmp - ../game/tests/expected/playthrough.txt
 	diff -r build/saves_c build/saves_cpp
-	echo "== windows: C API tests passed; the C playthrough matches game_cli.exe and the golden transcript, saves included"
+	script=../game/data/scripts/macros.txt
+	wine ../game/game_cli.exe --data ../game/data --seed 6 --script $script --saves build/macros_saves_cpp > build/macros_cpp.txt
+	wine build/c_playthrough.exe --data ../game/data --seed 6 --script $script --saves build/macros_saves_c > build/macros_c.txt
+	cmp build/macros_c.txt build/macros_cpp.txt
+	tr -d "\r" < build/macros_c.txt | cmp - ../game/tests/expected/macros.txt
+	diff -r build/macros_saves_c build/macros_saves_cpp
+	echo "== windows: C API tests passed; the C playthrough and macro script match game_cli.exe and their golden transcripts, saves included"
 '

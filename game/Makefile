@@ -39,8 +39,8 @@ maps-check:
 	done
 	@echo "data/areas matches data/maps ($(words $(MAP_SOURCES)) maps)"
 
-# Re-records the golden transcripts of the scripted playthrough, the vehicle and travel script and the Ashen Fells
-# script after a deliberate change.
+# Re-records the golden transcripts of the scripted playthrough, the vehicle and travel script, the Ashen Fells
+# script and the macro script after a deliberate change.
 expected: all
 	rm -rf $(BUILD)/cli_saves
 	./$(CLI) --seed 6 --auto-battle --script data/scripts/playthrough.txt --saves $(BUILD)/cli_saves > tests/expected/playthrough.txt
@@ -48,6 +48,8 @@ expected: all
 	./$(CLI) --seed 6 --auto-battle --script data/scripts/travel.txt --saves $(BUILD)/travel_saves > tests/expected/travel.txt
 	rm -rf $(BUILD)/world_saves
 	./$(CLI) --seed 6 --auto-battle --script data/scripts/world.txt --saves $(BUILD)/world_saves > tests/expected/world.txt
+	rm -rf $(BUILD)/macros_saves
+	./$(CLI) --seed 6 --script data/scripts/macros.txt --saves $(BUILD)/macros_saves > tests/expected/macros.txt
 
 test: all maps-check
 	./$(CLI) --check data > $(BUILD)/check.log || (cat $(BUILD)/check.log; exit 1)
@@ -70,6 +72,10 @@ test: all maps-check
 	./$(CLI) --seed 6 --auto-battle --script data/scripts/world.txt --saves $(BUILD)/world_saves > $(BUILD)/world.log
 	cmp $(BUILD)/world.log tests/expected/world.txt
 	@echo "Ashen Fells script matches tests/expected/world.txt"
+	rm -rf $(BUILD)/macros_saves
+	./$(CLI) --seed 6 --script data/scripts/macros.txt --saves $(BUILD)/macros_saves > $(BUILD)/macros.log
+	cmp $(BUILD)/macros.log tests/expected/macros.txt
+	@echo "macro script matches tests/expected/macros.txt"
 	./$(CLI) --bot --seed 2 > $(BUILD)/bot.log
 	@cat $(BUILD)/bot.log
 	./$(CLI) --bot --seed 2 --route data/routes/kiln.route --goal saltgrass.kiln_done > $(BUILD)/bot_kiln.log

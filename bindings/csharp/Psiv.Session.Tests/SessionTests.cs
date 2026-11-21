@@ -568,6 +568,13 @@ public class SessionTests
 		Assert.Equal("arc", arc.Name);
 		Assert.Equal(["medic", "mystic"], arc.Steps.Select(x => x.Member));
 		Assert.Equal(("Glint", 0), (arc.Steps[0].IdName, arc.Steps[0].TargetEnemy));
+		Assert.False(arc.Steps[0].Piece);
+		Assert.True(s.CreateMacro("fan").Ok);
+		Assert.True(s.SetMacroPieceStep("fan", 0, "fighter", "squall_fan", MacroTargetKind.Enemy, targetEnemy: 1).Ok);
+		Assert.Equal("game.refuse.macro_piece_no_use", s.SetMacroPieceStep("fan", 0, "fighter", "rivet_plate").Error!.Key);
+		MacroStep fan = s.MacroList().Single(m => m.Name == "fan").Steps.Single();
+		Assert.Equal((true, CommandKind.Item, "Squall Fan", MacroIssue.NoItem), (fan.Piece, fan.CommandKind, fan.IdName, fan.Issue));
+		Assert.True(s.DeleteMacro("fan").Ok);
 		Assert.True(s.SetAutoMacro("tempest").Ok);
 		Assert.True(s.RenameMacro("tempest", "storm").Ok);
 		Assert.Equal("storm", s.Settings().AutoMacro);
@@ -601,7 +608,8 @@ public class SessionTests
 		Settle(s);
 		for (int round = 0; round < 10 && s.Mode == Mode.Battle && s.ComboLog().Entries.Count == 0; round++)
 		{
-			Assert.True(s.ApplyMacro("arc", out _).Ok);
+			Assert.True(s.ApplyMacro("arc", out IReadOnlyList<MacroStepResult> applied, MacroFallback.Automatic).Ok);
+			Assert.All(applied, step => Assert.True(step.Status != MacroStepStatus.Automatic || step.Issue != MacroIssue.None));
 			s.ResolveRound();
 		}
 		ComboEntry twin = Assert.Single(s.ComboLog().Entries);

@@ -108,6 +108,9 @@ int Battle::takeTurn(const std::vector<int>& order, std::size_t index, std::vect
 	case CommandKind::None:
 		break;
 	case CommandKind::Defend: {
+		if (db_->battleRules.defendFromTurn) {
+			combatants_[actor].defending = true;
+		}
 		Event& e = emit(out, EventType::ActionStarted);
 		e.actor = actor;
 		e.command = CommandKind::Defend;
@@ -326,7 +329,10 @@ int Battle::rollDamage(int attack, int defense, int bonus, int affinity, const A
 	const BattleRules& rules = db_->battleRules;
 	const std::optional<DamageVariance>& variance = attacker.variance ? attacker.variance : rules.damageVariance;
 	if (!variance) {
-		return formulas::damage(attack, defense, bonus, affinity, rollSpread(), rules.affinityDivisor);
+		return formulas::damage(attack, defense, bonus, affinity, rollSpread(), rules.affinityDivisor, rules.damageWraparound, rules.immuneMinDamage);
+	}
+	if (affinity <= 0 && rules.immuneMinDamage) {
+		return 1;
 	}
 	int offset = 0;
 	int scale = 100;
@@ -363,7 +369,8 @@ void Battle::attemptEscape(int actor, std::vector<Event>& out) {
 	Event& e = emit(out, EventType::EscapeAttempted);
 	e.actor = actor;
 	e.command = CommandKind::Escape;
-	e.succeeded = !enemyCanAct || formulas::chanceScore(rng_.range(0, formulas::kChanceRollMax), partyAgility, record_.setup.escapeRating) > formulas::kEscapeFloor;
+	const bool openingRound = db_->battleRules.escapePartyFirstRound && round_ == 1 && record_.setup.opening == Opening::PartyFirst;
+	e.succeeded = !enemyCanAct || openingRound || formulas::chanceScore(rng_.range(0, formulas::kChanceRollMax), partyAgility, record_.setup.escapeRating) > formulas::kEscapeFloor;
 	if (e.succeeded) {
 		outcome_ = Outcome::Escaped;
 	}
@@ -401,10 +408,10 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				hit.actor = user;
 				hit.target = target;
 				hit.ability = source;
-				const int attack = flatPower ? std::max(0, effect.power) : (attacker.combo ? attacker.comboAttack : attacker.strength) * effect.statPercent / 100;
-				int bonus = flatPower ? 0 : (attacker.combo ? attacker.comboBonus : effect.power);
+				const int attack = flatPower ? std::max(0, effect.power) : (attacker.combo ? attacker.comboAttack : attacker.strength) * effect.statPermille / 1000;
+				int bonus = flatPower ? effect.statValue.value_or(0) : (attacker.combo ? attacker.comboBonus : effect.power);
 				if (critical) {
-					bonus += formulas::criticalBonus(attack);
+					bonus += db_->battleRules.criticalLowByte ? formulas::criticalBonusLowByte(attack) : formulas::criticalBonus(attack);
 					Event& e = emit(out, EventType::Critical);
 					e.actor = user;
 					e.target = target;
@@ -422,8 +429,8 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 			}
 			case EffectKind::ElementalDamage: {
 				const int affinity = elementAffinity(t, effect.element);
-				const int attack = flatPower ? std::max(0, effect.power) : (attacker.combo ? attacker.comboAttack : attacker.mental) * effect.statPercent / 100;
-				const int bonus = flatPower ? 0 : (attacker.combo ? attacker.comboBonus : effect.power);
+				const int attack = flatPower ? std::max(0, effect.power) : (attacker.combo ? attacker.comboAttack : attacker.mental) * effect.statPermille / 1000;
+				const int bonus = flatPower ? effect.statValue.value_or(0) : (attacker.combo ? attacker.comboBonus : effect.power);
 				const BattleRules& rules = db_->battleRules;
 				const int guard = t.effective(rules.magicDefense ? Stat::MagicDefense : Stat::Mental);
 				const int damage = rollDamage(attack, guard, bonus, affinity, attacker);
@@ -432,7 +439,13 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				break;
 			}
 			case EffectKind::Heal: {
-				const int amount = flatPower ? effect.power : formulas::healAmount(effect.power, attacker.mental, static_cast<int>(combatants_.size()) > partyCount_ ? rollSpread() : formulas::kSpreadMean);
+				// Only a heal that rolls draws the spread, so a flat heal leaves the random draws as they were.
+				const bool rolls = !flatPower || effect.statValue;
+				const int spread = rolls && static_cast<int>(combatants_.size()) > partyCount_ ? rollSpread() : formulas::kSpreadMean;
+				int amount = flatPower ? effect.power : formulas::healAmount(effect.power, attacker.mental, spread);
+				if (flatPower && effect.statValue) {
+					amount = formulas::healAmount(*effect.statValue, effect.power, spread);
+				}
 				const int healed = std::min(amount, t.stats.maxHp - t.hp);
 				t.hp += healed;
 				Event& e = emit(out, EventType::Healed);
@@ -517,7 +530,9 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				const int amount = flatPower || effect.power > 0 ? effect.power : attacker.changeAmount;
 				const int base = t.base(effect.stat);
 				const int floor = effect.stat == Stat::Agility || effect.stat == Stat::Dexterity ? 1 : 0;
-				const int value = effect.raises ? base + amount : std::max(floor, base - amount);
+				const BattleRules& rules = db_->battleRules;
+				const bool wraps = effect.raises && std::count(rules.statWraparound.begin(), rules.statWraparound.end(), effect.stat) > 0;
+				const int value = wraps ? (base + amount) % 256 : effect.raises ? base + amount : std::max(floor, base - amount);
 				t.setModifier(effect.stat, value - base);
 				Event& e = emit(out, EventType::StatModified);
 				e.actor = user;

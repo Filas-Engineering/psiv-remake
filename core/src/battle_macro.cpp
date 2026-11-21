@@ -1,3 +1,4 @@
+#include "rules/auto_policy.h"
 #include "rules/battle.h"
 
 namespace rules {
@@ -63,7 +64,8 @@ bool macroTargetFits(MacroTargetKind target, CommandKind command, Targeting targ
 // A step whose cost cannot be paid, or that has no target yet, keeps its command: the battle validates it at
 // execution (BAT-015, BAT-053). Only a command the battle would refuse outright (an ability the member does not
 // know, an escape the battle forbids) falls back to a basic attack on the intended enemy, or the first living one.
-std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro) {
+// With MacroFallback::Automatic every one of those takes autoCommand's choice instead.
+std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro, MacroFallback fallback) {
 	std::vector<MacroStepResult> results;
 	forcedOrder_.clear();
 	macroName_ = macro.name;
@@ -149,7 +151,20 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro) {
 			}
 			break;
 		case CommandKind::Item:
-			if (const ItemDef* item = db_->item(step.id)) {
+			if (step.piece) {
+				const EquipmentDef* def = db_->equipmentPiece(step.id);
+				const AbilityDef* use = def ? db_->ability(def->use) : nullptr;
+				if (!use) {
+					issue = MacroIssue::NoItem;
+					refused = true;
+				} else if (wornPiece(actor, step.id) || bagPiece(actor, step.id)) {
+					targeting = use->targeting;
+					revives = use->revives();
+				} else {
+					targeting = use->targeting;
+					issue = MacroIssue::NoItem;
+				}
+			} else if (const ItemDef* item = db_->item(step.id)) {
 				targeting = item->targeting;
 				revives = effectsRevive(item->effects);
 				const auto stock = inventory_.find(step.id);
@@ -174,7 +189,12 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro) {
 			break;
 		}
 
-		if (refused) {
+		const bool automatic = fallback == MacroFallback::Automatic;
+		if (automatic && (refused || isCostIssue(issue))) {
+			result.status = MacroStepStatus::Automatic;
+			result.issue = issue;
+			command = autoCommand(*this, actor);
+		} else if (refused) {
 			result.status = MacroStepStatus::FellBack;
 			result.issue = issue;
 			const std::vector<int> foes = livingFoes(actor);
@@ -182,7 +202,11 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro) {
 			command = Command::attack(intended ? enemyIndex : (foes.empty() ? -1 : foes.front()));
 		} else if (aimed) {
 			const std::vector<int> targets = resolveTargets(actor, targeting, requested, revives);
-			if (targets.empty()) {
+			if (targets.empty() && automatic) {
+				result.status = MacroStepStatus::Automatic;
+				issue = MacroIssue::NoTarget;
+				command = autoCommand(*this, actor);
+			} else if (targets.empty()) {
 				issue = issue == MacroIssue::None ? MacroIssue::NoTarget : issue;
 			} else if (singleTarget(targeting)) {
 				command.target = targeting == Targeting::EnemyGroup ? primaryFoe(actor, requested) : targets.front();
@@ -199,7 +223,7 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro) {
 		} else {
 			command.target = -1;
 		}
-		if (command.kind == CommandKind::Item) {
+		if (command.kind == CommandKind::Item && !step.piece) {
 			++reserved[command.id];
 		}
 		commands_[actor] = command;

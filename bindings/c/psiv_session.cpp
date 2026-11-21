@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-#define PSIV_BINDING_VERSION "0.11.0"
+#define PSIV_BINDING_VERSION "0.12.0"
 
 static_assert(PSIV_MODE_SHOP == static_cast<int>(game::Mode::Shop), "psiv_mode");
 static_assert(PSIV_MENU_PORT == static_cast<int>(game::MenuKind::Port), "psiv_menu_kind");
@@ -55,7 +55,8 @@ static_assert(PSIV_RESOURCE_ITEM == static_cast<int>(rules::ResourceKind::Item),
 static_assert(PSIV_STAT_MAGIC_DEFENSE == static_cast<int>(rules::Stat::MagicDefense), "psiv_stat");
 static_assert(PSIV_OPENING_ENEMY_FIRST == static_cast<int>(rules::Opening::EnemyFirst), "psiv_opening");
 static_assert(PSIV_AUTO_STOP_BATTLE_ENDED == static_cast<int>(rules::AutoStop::BattleEnded), "psiv_auto_stop");
-static_assert(PSIV_MACRO_SKIPPED == static_cast<int>(rules::MacroStepStatus::Skipped), "psiv_macro_step_status");
+static_assert(PSIV_MACRO_AUTOMATIC == static_cast<int>(rules::MacroStepStatus::Automatic), "psiv_macro_step_status");
+static_assert(PSIV_MACRO_FALLBACK_AUTOMATIC == static_cast<int>(rules::MacroFallback::Automatic), "psiv_macro_fallback");
 static_assert(PSIV_ISSUE_NO_TARGET == static_cast<int>(rules::MacroIssue::NoTarget), "psiv_macro_issue");
 static_assert(PSIV_MACRO_TARGET_ALL == static_cast<int>(rules::MacroTargetKind::All), "psiv_macro_target_kind");
 static_assert(PSIV_ACTION_WARP == static_cast<int>(events::ActionType::warp), "psiv_action_type");
@@ -570,7 +571,7 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 	case PSIV_NAME_AUTO_STOP:
 		return value >= 0 && value <= PSIV_AUTO_STOP_BATTLE_ENDED ? rules::toString(static_cast<rules::AutoStop>(value)) : "";
 	case PSIV_NAME_MACRO_STEP_STATUS:
-		return value >= 0 && value <= PSIV_MACRO_SKIPPED ? rules::toString(static_cast<rules::MacroStepStatus>(value)) : "";
+		return value >= 0 && value <= PSIV_MACRO_AUTOMATIC ? rules::toString(static_cast<rules::MacroStepStatus>(value)) : "";
 	case PSIV_NAME_MACRO_ISSUE:
 		return value >= 0 && value <= PSIV_ISSUE_NO_TARGET ? rules::toString(static_cast<rules::MacroIssue>(value)) : "";
 	case PSIV_NAME_ACTION_TYPE:
@@ -921,6 +922,7 @@ psiv_status psiv_macro_list(psiv_session* session, const psiv_macro** out, int32
 				o.target_member_name = a.str(v.targetName);
 				o.target_enemy = v.step.target.enemySlot;
 				o.issue = static_cast<int32_t>(v.issue);
+				o.piece = v.step.piece ? 1 : 0;
 			}
 			list[i].name = a.str(view.name);
 			list[i].step_count = static_cast<int32_t>(view.steps.size());
@@ -992,6 +994,28 @@ psiv_status psiv_macro_set_step(psiv_session* session, const char* macro, int32_
 			return outOfRange(session, "target_kind", target_kind);
 		}
 		step.kind = static_cast<rules::CommandKind>(command_kind);
+		step.target.kind = static_cast<rules::MacroTargetKind>(target_kind);
+		return refused(session, session->session->setMacroStep(name, index, step));
+	});
+}
+
+psiv_status psiv_macro_set_piece_step(psiv_session* session, const char* macro, int32_t index, const char* member, const char* piece,
+	int32_t target_kind, const char* target_member, int32_t target_enemy) {
+	const std::string name = str(macro);
+	rules::MacroStep step;
+	step.member = str(member);
+	step.kind = rules::CommandKind::Item;
+	step.id = str(piece);
+	step.piece = true;
+	step.target.member = str(target_member);
+	step.target.enemySlot = target_enemy;
+	return guard(session, true, [&] {
+		if (!macro || !member || !piece) {
+			return nullArgument(session, !macro ? "macro" : !member ? "member" : "piece");
+		}
+		if (target_kind < PSIV_MACRO_TARGET_DEFAULT || target_kind > PSIV_MACRO_TARGET_ALL) {
+			return outOfRange(session, "target_kind", target_kind);
+		}
 		step.target.kind = static_cast<rules::MacroTargetKind>(target_kind);
 		return refused(session, session->session->setMacroStep(name, index, step));
 	});
@@ -1877,13 +1901,21 @@ psiv_status psiv_battle_set_command(psiv_session* session, int32_t actor, int32_
 }
 
 psiv_status psiv_battle_apply_macro(psiv_session* session, const char* macro, const psiv_macro_step_result** out, int32_t* count) {
+	return psiv_battle_apply_macro_fallback(session, macro, PSIV_MACRO_FALLBACK_BASIC_ATTACK, out, count);
+}
+
+psiv_status psiv_battle_apply_macro_fallback(psiv_session* session, const char* macro, int32_t fallback, const psiv_macro_step_result** out,
+	int32_t* count) {
 	const std::string name = str(macro);
 	return guard(session, true, [&] {
 		if (!macro) {
 			return nullArgument(session, "macro");
 		}
+		if (fallback < PSIV_MACRO_FALLBACK_BASIC_ATTACK || fallback > PSIV_MACRO_FALLBACK_AUTOMATIC) {
+			return outOfRange(session, "fallback", fallback);
+		}
 		std::vector<rules::MacroStepResult> results;
-		const psiv_status status = refused(session, session->session->applyMacro(name, &results));
+		const psiv_status status = refused(session, session->session->applyMacro(name, &results, static_cast<rules::MacroFallback>(fallback)));
 		Arena& a = session->arena;
 		psiv_macro_step_result* list = a.array<psiv_macro_step_result>(results.size());
 		for (std::size_t i = 0; i < results.size(); ++i) {

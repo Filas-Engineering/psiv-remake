@@ -25,21 +25,6 @@ Command autoCommand(const Battle& battle, int actor) {
 	const Database& db = battle.database();
 	const Combatant& self = battle.combatant(actor);
 
-	int weakestAlly = -1;
-	int defeatedAlly = -1;
-	for (int ally : battle.allies(actor)) {
-		const Combatant& c = battle.combatant(ally);
-		if (!c.alive()) {
-			if (defeatedAlly < 0) {
-				defeatedAlly = ally;
-			}
-			continue;
-		}
-		if (c.hp * 100 < c.stats.maxHp * kHealBelowPercent && (weakestAlly < 0 || c.hp < battle.combatant(weakestAlly).hp)) {
-			weakestAlly = ally;
-		}
-	}
-
 	int weakestFoe = -1;
 	for (int foe : battle.livingFoes(actor)) {
 		if (weakestFoe < 0 || battle.combatant(foe).hp < battle.combatant(weakestFoe).hp) {
@@ -54,18 +39,30 @@ Command autoCommand(const Battle& battle, int actor) {
 			usable.push_back(ability);
 		}
 	}
-	if (defeatedAlly >= 0) {
-		for (const AbilityDef* ability : usable) {
-			if (ability->targeting == Targeting::OneFallenAlly) {
-				return Command::ability(ability->id, defeatedAlly);
+	for (const AbilityDef* ability : usable) {
+		if (ability->targeting != Targeting::OneFallenAlly) {
+			continue;
+		}
+		for (int ally : battle.allies(actor)) {
+			if (!battle.combatant(ally).alive() && battle.wouldChange(ally, ability->effects)) {
+				return Command::ability(ability->id, ally);
 			}
 		}
 	}
-	if (weakestAlly >= 0) {
-		for (const AbilityDef* ability : usable) {
-			if (ability->targeting == Targeting::OneAlly && ability->hasEffect(EffectKind::Heal)) {
-				return Command::ability(ability->id, weakestAlly);
+	for (const AbilityDef* ability : usable) {
+		if (ability->targeting != Targeting::OneAlly || !ability->hasEffect(EffectKind::Heal)) {
+			continue;
+		}
+		int weakest = -1;
+		for (int ally : battle.allies(actor)) {
+			const Combatant& c = battle.combatant(ally);
+			if (c.alive() && c.hp * 100 < c.stats.maxHp * kHealBelowPercent && battle.wouldChange(ally, ability->effects)
+				&& (weakest < 0 || c.hp < battle.combatant(weakest).hp)) {
+				weakest = ally;
 			}
+		}
+		if (weakest >= 0) {
+			return Command::ability(ability->id, weakest);
 		}
 	}
 	const AbilityDef* strongest = nullptr;

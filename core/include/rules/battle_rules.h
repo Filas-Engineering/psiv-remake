@@ -2,6 +2,7 @@
 
 #include "rules/types.h"
 
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -36,6 +37,21 @@ struct BattleRules {
 	Opening ambushOpening = Opening::PartyFirst;
 	// Elements beyond the built-in ones, usable wherever an element is.
 	std::vector<std::string> elements = {};
+	// Defend holds its affinity from the defender's own turn to the end of the round, not from the round's start.
+	bool defendFromTurn = false;
+	// The floor of 1 damage holds at an affinity of 0 too, so an immune target still takes 1.
+	bool immuneMinDamage = false;
+	// A critical hit's bonus is the attack's low byte divided by 4, not the attack divided by 4.
+	bool criticalLowByte = false;
+	// The attack times the spread wraps at 65536 before it is divided by 64, as 16-bit arithmetic would.
+	bool damageWraparound = false;
+	// Escape always works in the first round of a Party first opening.
+	bool escapePartyFirstRound = false;
+	// By the number of party members in an enemy's foe draw: each one's weight in 256ths, in party order; a size left
+	// out draws count, count - 1, ... 1.
+	std::map<int, std::vector<int>> targetWeights = {};
+	// Stats whose raised value wraps past 255 to 0 and up, as a byte would.
+	std::vector<Stat> statWraparound = {};
 	// Combatants take this affinity for an element their data leaves out; set from affinityDivisor, so normal damage.
 	int neutralAffinity() const { return affinityDivisor; }
 	int elementlessHitAffinity() const { return elementlessAffinity.value_or(affinityDivisor); }

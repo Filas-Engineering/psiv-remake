@@ -1049,6 +1049,21 @@ static void testMenus(void) {
 	CHECK(count == 4 && strcmp(macros[0].name, "arc") == 0 && macros[0].step_count == 2);
 	CHECK(strcmp(macros[0].steps[0].member, "medic") == 0 && strcmp(macros[0].steps[0].id_name, "Glint") == 0 && macros[0].steps[0].target_enemy == 0);
 	CHECK(strcmp(macros[0].steps[1].member, "mystic") == 0 && macros[0].steps[1].target_enemy == -1);
+	CHECK(macros[0].steps[0].piece == 0);
+
+	/* A step that names a piece: kept as written, marked while the party has none to cast. */
+	CHECK_OK(psiv_macro_create(s, "fan"));
+	CHECK_OK(psiv_macro_set_piece_step(s, "fan", 0, "fighter", "squall_fan", PSIV_MACRO_TARGET_ENEMY, NULL, 1));
+	CHECK(psiv_macro_set_piece_step(s, "fan", 0, "fighter", "rivet_plate", PSIV_MACRO_TARGET_DEFAULT, NULL, -1) == PSIV_REFUSED &&
+		errorIs(s, "game.refuse.macro_piece_no_use"));
+	CHECK(psiv_macro_set_piece_step(s, "fan", 0, "fighter", NULL, PSIV_MACRO_TARGET_DEFAULT, NULL, -1) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_macro_list(s, &macros, &count));
+	const psiv_macro* fan = findMacro(macros, count, "fan");
+	CHECK(fan && fan->step_count == 1 && fan->steps[0].piece == 1 && fan->steps[0].command_kind == PSIV_COMMAND_ITEM);
+	CHECK(fan && strcmp(fan->steps[0].id, "squall_fan") == 0 && strcmp(fan->steps[0].id_name, "Squall Fan") == 0 && fan->steps[0].issue == PSIV_ISSUE_NO_ITEM);
+	CHECK(fan && fan->steps[0].target_kind == PSIV_MACRO_TARGET_ENEMY && fan->steps[0].target_enemy == 1);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_MACRO_STEP_STATUS, PSIV_MACRO_AUTOMATIC), "automatic") == 0);
+	CHECK_OK(psiv_macro_delete(s, "fan"));
 
 	CHECK_OK(psiv_macro_create(s, "spare"));
 	CHECK_OK(psiv_settings_set_auto_macro(s, "spare"));
@@ -1105,10 +1120,17 @@ static void testMenus(void) {
 	CHECK_OK(psiv_interact(s));
 	settle(s);
 	CHECK(psiv_mode_get(s) == PSIV_MODE_BATTLE);
+	const psiv_macro_step_result* stepResults;
+	int32_t stepCount = 0;
+	CHECK(psiv_battle_apply_macro_fallback(s, "arc", 7, &stepResults, &stepCount) == PSIV_INVALID_ARGUMENT);
 	for (int round = 0; round < 10 && psiv_mode_get(s) == PSIV_MODE_BATTLE && count == 0; ++round) {
 		const psiv_battle_event* events;
 		int32_t eventCount;
-		CHECK_OK(psiv_battle_apply_macro(s, "arc", NULL, NULL));
+		CHECK_OK(psiv_battle_apply_macro_fallback(s, "arc", PSIV_MACRO_FALLBACK_AUTOMATIC, &stepResults, &stepCount));
+		CHECK(stepCount == 2);
+		for (int32_t i = 0; i < stepCount; ++i) {
+			CHECK(stepResults[i].status != PSIV_MACRO_AUTOMATIC || stepResults[i].issue != PSIV_ISSUE_NONE);
+		}
 		CHECK_OK(psiv_battle_resolve_round(s, &events, &eventCount));
 		CHECK_OK(psiv_combo_log(s, &combos, &count, NULL));
 	}

@@ -68,7 +68,20 @@ TEST(macrosRoundTripThroughText) {
 	CHECK(back.name == odd.name && back.steps[0].target.member == "fighter" && back.steps[1].target.enemySlot == 3);
 	CHECK(back.steps[1].target.kind == MacroTargetKind::Enemy && back.steps[1].id.empty());
 
-	CHECK(parseMacros("macros 2\nend\n").error.find("version 2 is not supported") != std::string::npos);
+	Macro worn;
+	worn.name = "fan";
+	MacroStep fan = {"scout", CommandKind::Item, "squall_fan", {MacroTargetKind::Enemy, "", 0}};
+	fan.piece = true;
+	worn.steps = {fan, {"medic", CommandKind::Item, "tonic", {}}};
+	const Result<std::vector<Macro>> pieces = parseMacros(serializeMacros({worn}));
+	CHECK(pieces.ok() && pieces.value->at(0).steps[0].piece && pieces.value->at(0).steps[0].kind == CommandKind::Item);
+	CHECK(pieces.ok() && !pieces.value->at(0).steps[1].piece);
+	CHECK(serializeMacros({worn}).find("step scout piece squall_fan enemy - 0\n") != std::string::npos);
+	// Saves written before piece steps carry version 1, which still reads; "piece" is no command there.
+	const Result<std::vector<Macro>> older = parseMacros("macros 1\nmacro a\nstep fighter item tonic default - -1\nend\n");
+	CHECK(older.ok() && older.value->at(0).steps[0].kind == CommandKind::Item && !older.value->at(0).steps[0].piece);
+	CHECK(parseMacros("macros 1\nmacro a\nstep fighter piece squall_fan default - -1\nend\n").error.find("bad step") != std::string::npos);
+	CHECK(parseMacros("macros 3\nend\n").error.find("version 3 is not supported") != std::string::npos);
 	CHECK(parseMacros("macros 1\nstep fighter attack - default - -1\nend\n").error.find("'step' before any 'macro'") != std::string::npos);
 	CHECK(parseMacros("macros 1\nmacro a\n").error.find("without 'end'") != std::string::npos);
 	CHECK(parseMacros("macros 1\nmacro a\nstep fighter swing - default - -1\nend\n").error.find("line 3: bad step") != std::string::npos);
@@ -109,7 +122,7 @@ TEST(everyPublicEnumHasAParser) {
 	CHECK_EQ(checkNames(parseAiTargetRule), 7);
 	CHECK_EQ(checkNames(parseCommandKind), 6);
 	CHECK_EQ(checkNames(parseMacroTargetKind), 5);
-	CHECK_EQ(checkNames(parseMacroStepStatus), 4);
+	CHECK_EQ(checkNames(parseMacroStepStatus), 5);
 	CHECK_EQ(checkNames(parseMacroIssue), 14);
 	CHECK_EQ(checkNames(parseScriptedEndKind), 3);
 	CHECK_EQ(checkNames(parseAutoStop), 5);

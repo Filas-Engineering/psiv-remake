@@ -42,7 +42,7 @@ const char* const kAiConditions[] = {
 const char* const kAiTargetRules[] = {"default", "random", "lowest_hp", "highest_hp", "has_status", "lacks_status", "last_attacker"};
 const char* const kCommandKinds[] = {"none", "attack", "ability", "item", "defend", "escape"};
 const char* const kMacroTargets[] = {"default", "self", "member", "enemy", "all"};
-const char* const kMacroStepStatuses[] = {"applied", "retargeted", "fell_back", "skipped"};
+const char* const kMacroStepStatuses[] = {"applied", "retargeted", "fell_back", "skipped", "automatic"};
 const char* const kMacroIssues[] = {
 	"none", "not_in_party", "actor_defeated", "caught_off_guard", "cannot_act", "forced_by_status", "unknown_ability",
 	"silenced", "not_enough_tp", "no_uses_left", "no_item", "escape_not_allowed", "target_gone", "no_target"};

@@ -497,7 +497,7 @@ std::vector<Event> Battle::resolveRound() {
 	}
 	locked.macro = macroName_;
 	for (std::size_t i = 0; i < combatants_.size(); ++i) {
-		combatants_[i].defending = combatants_[i].alive() && commands_[i].kind == CommandKind::Defend;
+		combatants_[i].defending = combatants_[i].alive() && commands_[i].kind == CommandKind::Defend && !db_->battleRules.defendFromTurn;
 	}
 
 	const std::vector<int> order = computeTurnOrder();
@@ -829,8 +829,16 @@ Macro Battle::lastRoundAsMacro(const std::string& name) const {
 		} else if (command.kind == CommandKind::Ability) {
 			ability = db_->ability(command.id);
 		}
+		const EquipmentDef* piece = nullptr;
+		if (command.kind == CommandKind::Item) {
+			piece = wornPiece(actor, command.id) ? wornPiece(actor, command.id) : bagPiece(actor, command.id);
+		}
+		const AbilityDef* use = piece ? db_->ability(piece->use) : nullptr;
+		step.piece = use != nullptr;
 		if (ability) {
 			targeting = ability->targeting;
+		} else if (use) {
+			targeting = use->targeting;
 		} else if (const ItemDef* item = command.kind == CommandKind::Item ? db_->item(command.id) : nullptr) {
 			targeting = item->targeting;
 		} else {

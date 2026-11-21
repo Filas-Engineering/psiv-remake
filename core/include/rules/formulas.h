@@ -35,8 +35,13 @@ int initiative(int agility, int roll);
 // Twice the roll plus the actor's stat less the target's.
 int chanceScore(int roll, int actorStat, int targetStat);
 int criticalBonus(int attack);
+// The attack's low byte over 4 (rules.json critical_bonus low_byte).
+int criticalBonusLowByte(int attack);
 // The attack scaled by the spread, plus the attack and twice the bonus, scaled by affinity, less defense. 1 to 999; 0 when immune.
 int damage(int attack, int defense, int bonus, int affinity, int spread, int divisor = 100);
+// damage() under rules.json's damage_wraparound and immune_min_damage: the attack times the spread is taken modulo 65536
+// before it is divided by 64, and an affinity of 0 still gives the floor of 1.
+int damage(int attack, int defense, int bonus, int affinity, int spread, int divisor, bool wraparound, bool immuneFloor);
 // The damage at the spread's mean, times scaleNumerator / scaleDenominator, then as damage(): data's own variance.
 int variedDamage(int attack, int defense, int bonus, int affinity, int scaleNumerator, int scaleDenominator, int divisor);
 int healAmount(int power, int mental, int spread);

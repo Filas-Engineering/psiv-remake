@@ -25,6 +25,8 @@ struct MacroStep {
 	CommandKind kind = CommandKind::Attack;
 	std::string id;
 	MacroTarget target;
+	// Item steps: `id` is an equipment piece with a battle use, worn by the member or cast from the bag, not an item.
+	bool piece = false;
 };
 
 struct Macro {
@@ -33,8 +35,14 @@ struct Macro {
 };
 
 // Applied with an issue (Silenced, NotEnoughTp, NoUsesLeft, NoItem, NoTarget) means the command is set as
-// written but cannot run now; it is cancelled at execution unless that changes first.
-enum class MacroStepStatus { Applied, Retargeted, FellBack, Skipped };
+// written but cannot run now; it is cancelled at execution unless that changes first. Automatic: the step could not
+// run as written and the member takes autoCommand's choice instead (MacroFallback::Automatic).
+enum class MacroStepStatus { Applied, Retargeted, FellBack, Skipped, Automatic };
+
+// What applyMacro does with a step that cannot run as written. BasicAttack: a command the battle would refuse becomes
+// a basic attack, and one that cannot be paid for or has no target is kept, to be cancelled at execution. Automatic:
+// each of those takes core's automatic choice for the member this round (autoCommand).
+enum class MacroFallback { BasicAttack, Automatic };
 
 enum class MacroIssue {
 	None,

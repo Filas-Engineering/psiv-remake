@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 12
+#define PSIV_ABI_VERSION 13
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -157,7 +157,9 @@ typedef enum psiv_creature_kind { PSIV_CREATURE_LIVING, PSIV_CREATURE_SPIRIT, PS
 typedef enum psiv_stat { PSIV_STAT_STRENGTH, PSIV_STAT_MENTAL, PSIV_STAT_AGILITY, PSIV_STAT_DEXTERITY, PSIV_STAT_DEFENSE, PSIV_STAT_MAGIC_DEFENSE } psiv_stat;
 typedef enum psiv_opening { PSIV_OPENING_NORMAL, PSIV_OPENING_PARTY_FIRST, PSIV_OPENING_ENEMY_FIRST } psiv_opening;
 typedef enum psiv_auto_stop { PSIV_AUTO_STOP_NONE, PSIV_AUTO_STOP_CANCELLED, PSIV_AUTO_STOP_MEMBER_FELL, PSIV_AUTO_STOP_CANNOT_PAY, PSIV_AUTO_STOP_BATTLE_ENDED } psiv_auto_stop;
-typedef enum psiv_macro_step_status { PSIV_MACRO_APPLIED, PSIV_MACRO_RETARGETED, PSIV_MACRO_FELL_BACK, PSIV_MACRO_SKIPPED } psiv_macro_step_status;
+typedef enum psiv_macro_step_status { PSIV_MACRO_APPLIED, PSIV_MACRO_RETARGETED, PSIV_MACRO_FELL_BACK, PSIV_MACRO_SKIPPED, PSIV_MACRO_AUTOMATIC } psiv_macro_step_status;
+/* What psiv_battle_apply_macro_fallback does with a step that cannot run as written (core's rules::MacroFallback). */
+typedef enum psiv_macro_fallback { PSIV_MACRO_FALLBACK_BASIC_ATTACK, PSIV_MACRO_FALLBACK_AUTOMATIC } psiv_macro_fallback;
 typedef enum psiv_macro_issue {
 	PSIV_ISSUE_NONE, PSIV_ISSUE_NOT_IN_PARTY, PSIV_ISSUE_ACTOR_DEFEATED, PSIV_ISSUE_CAUGHT_OFF_GUARD, PSIV_ISSUE_CANNOT_ACT,
 	PSIV_ISSUE_FORCED_BY_STATUS, PSIV_ISSUE_UNKNOWN_ABILITY, PSIV_ISSUE_SILENCED, PSIV_ISSUE_NOT_ENOUGH_TP, PSIV_ISSUE_NO_USES_LEFT,
@@ -339,6 +341,10 @@ typedef struct psiv_macro_step {
 	/* A psiv_macro_issue saying why the step cannot run as written now (not in the party, defeated, unknown
 	 * ability, silenced, not enough TP, no uses left, no item), PSIV_ISSUE_NONE otherwise. */
 	int32_t issue;
+	/* 1 for a PSIV_COMMAND_ITEM step whose id is an equipment piece with a battle use (worn, or cast from the bag),
+	 * set with psiv_macro_set_piece_step; its issue is PSIV_ISSUE_NO_ITEM while the member does not wear it and the
+	 * bag holds none it may cast from there. */
+	int32_t piece;
 } psiv_macro_step;
 
 typedef struct psiv_macro {
@@ -369,6 +375,10 @@ PSIV_API psiv_status psiv_macro_move(psiv_session* session, const char* name, in
  * none) and "game.refuse.macro_target" (the target rule does not fit the command, or an enemy position past 7). */
 PSIV_API psiv_status psiv_macro_set_step(psiv_session* session, const char* macro, int32_t index, const char* member, int32_t command_kind,
 	const char* id, int32_t target_kind, const char* target_member, int32_t target_enemy);
+/* MUTATES. As psiv_macro_set_step, for an item step that names `piece`, an equipment piece with a battle use, held
+ * or not ("game.refuse.macro_piece_no_use" otherwise); in battle the member casts it worn or from the bag. */
+PSIV_API psiv_status psiv_macro_set_piece_step(psiv_session* session, const char* macro, int32_t index, const char* member, const char* piece,
+	int32_t target_kind, const char* target_member, int32_t target_enemy);
 /* MUTATES. "game.refuse.macro_no_step" for an index past the steps. */
 PSIV_API psiv_status psiv_macro_remove_step(psiv_session* session, const char* macro, int32_t index);
 /* MUTATES. Moves step `from` to `to`. */
@@ -844,6 +854,11 @@ typedef struct psiv_macro_step_result {
 
 /* MUTATES. Sets the macro's members' commands; *out describes each step. */
 PSIV_API psiv_status psiv_battle_apply_macro(psiv_session* session, const char* macro, const psiv_macro_step_result** out, int32_t* count);
+/* MUTATES. As psiv_battle_apply_macro with a psiv_macro_fallback. PSIV_MACRO_FALLBACK_AUTOMATIC gives each member whose
+ * step cannot be paid for, has no target or would be refused core's automatic choice for the round instead (status
+ * PSIV_MACRO_AUTOMATIC, the issue saying why); PSIV_MACRO_FALLBACK_BASIC_ATTACK is psiv_battle_apply_macro. */
+PSIV_API psiv_status psiv_battle_apply_macro_fallback(psiv_session* session, const char* macro, int32_t fallback, const psiv_macro_step_result** out,
+	int32_t* count);
 /* MUTATES. Auto-battle with the save's auto macro (psiv_settings_set_auto_macro). */
 PSIV_API psiv_status psiv_battle_start_auto(psiv_session* session);
 PSIV_API psiv_status psiv_battle_cancel_auto(psiv_session* session); /* MUTATES */

@@ -1,4 +1,5 @@
 #include "fixtures.h"
+#include "rules/auto_policy.h"
 #include "test.h"
 
 #include <algorithm>
@@ -309,4 +310,85 @@ TEST(macroAllyActionsPickTheirOwnTargets) {
 	CHECK(purge && purge->target == kMedic);
 	const std::optional<Event> none = firstBy(quiet, EventType::ActionCancelled, kEngineer);
 	CHECK(none && none->cancel == CancelReason::NoTarget);
+}
+
+// R48: a step that names a piece the member wears with a use, or one cast from the bag, is kept and cast; a piece the
+// party does not have keeps its step, to be cancelled when it runs, and one with no use falls back to the attack.
+TEST(macroStepsCastWornAndBagPieces) {
+	const Database& db = data();
+	BattleSetup setup = makeSetup(db, {"gel_mite", "rust_hound"}, 3);
+	setup.party[kMystic].equipment[EquipSlot::Weapon] = "storm_rod";
+	setup.pieces["squall_fan"] = 1;
+	Macro macro;
+	macro.name = "pieces";
+	macro.steps.push_back(step("mystic", CommandKind::Item, "storm_rod", MacroTargetKind::Enemy, "", 1));
+	macro.steps.push_back(step("scout", CommandKind::Item, "squall_fan", MacroTargetKind::Enemy, "", 0));
+	macro.steps.push_back(step("fighter", CommandKind::Item, "squall_fan"));
+	for (MacroStep& s : macro.steps) {
+		s.piece = true;
+	}
+	Battle battle = makeBattle(db, setup);
+	for (int i = 0; i < static_cast<int>(battle.combatants().size()); ++i) {
+		battle.combatant(i).stats.maxHp = battle.combatant(i).hp = 5000;
+	}
+	const std::vector<MacroStepResult> results = battle.applyMacro(macro);
+	CHECK(results[0].status == MacroStepStatus::Applied && results[0].issue == MacroIssue::None);
+	CHECK(battle.command(kMystic).kind == CommandKind::Item && battle.command(kMystic).id == "storm_rod" && battle.command(kMystic).target == kFirstEnemy + 1);
+	CHECK(results[1].status == MacroStepStatus::Applied && battle.command(kScout).id == "squall_fan");
+	// The bag piece is not used up, so a second member may cast it in the same round.
+	CHECK(results[2].status == MacroStepStatus::Applied && results[2].issue == MacroIssue::None);
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	const std::optional<Event> rod = firstBy(events, EventType::ActionStarted, kMystic);
+	CHECK(rod && rod->ability == "storm_rod" && rod->command == CommandKind::Item);
+	const std::optional<Event> fan = firstBy(events, EventType::ActionStarted, kScout);
+	CHECK(fan && fan->ability == "squall_fan");
+	CHECK(battle.lastRoundAsMacro("again").steps.size() >= 2);
+	for (const MacroStep& again : battle.lastRoundAsMacro("again").steps) {
+		CHECK_EQ(again.piece, again.member != "medic" && again.member != "engineer");
+	}
+
+	Battle without = makeBattle(db, makeSetup(db, {"gel_mite", "rust_hound"}, 3));
+	const std::vector<MacroStepResult> missing = without.applyMacro(macro);
+	CHECK(missing[0].status == MacroStepStatus::Applied && missing[0].issue == MacroIssue::NoItem);
+	CHECK(without.command(kMystic).kind == CommandKind::Item && without.command(kMystic).id == "storm_rod");
+	Macro plain;
+	plain.name = "plain";
+	plain.steps.push_back(step("fighter", CommandKind::Item, "rivet_plate", MacroTargetKind::Enemy, "", 0));
+	plain.steps.back().piece = true;
+	const std::vector<MacroStepResult> noUse = without.applyMacro(plain);
+	CHECK(noUse[0].status == MacroStepStatus::FellBack && noUse[0].issue == MacroIssue::NoItem && without.command(kFighter).kind == CommandKind::Attack);
+}
+
+// R49: with the automatic fallback a step that cannot be paid for, has no target or would be refused takes core's
+// automatic choice for the member; the default keeps today's handling.
+TEST(automaticFallbackGivesStuckStepsCoresChoice) {
+	Macro macro;
+	macro.name = "stuck";
+	macro.steps.push_back(step("mystic", CommandKind::Ability, "spark", MacroTargetKind::Enemy, "", 0));
+	macro.steps.push_back(step("medic", CommandKind::Ability, "rekindle"));
+	macro.steps.push_back(step("scout", CommandKind::Ability, "cleave"));
+	macro.steps.push_back(step("fighter", CommandKind::Item, "gear_salve"));
+	Battle manual = makeBattle(data(), {"gel_mite", "rust_hound"}, 1);
+	manual.combatant(kMystic).tp = 0;
+	std::vector<MacroStepResult> results = manual.applyMacro(macro);
+	CHECK(results[0].status == MacroStepStatus::Applied && results[0].issue == MacroIssue::NotEnoughTp);
+	CHECK(results[1].status == MacroStepStatus::Applied && results[1].issue == MacroIssue::NoTarget);
+	CHECK(results[2].status == MacroStepStatus::FellBack);
+	CHECK(results[3].status == MacroStepStatus::Applied && results[3].issue == MacroIssue::NoItem);
+
+	Battle automatic = makeBattle(data(), {"gel_mite", "rust_hound"}, 1);
+	automatic.combatant(kMystic).tp = 0;
+	results = automatic.applyMacro(macro, MacroFallback::Automatic);
+	for (const MacroStepResult& r : results) {
+		CHECK(r.status == MacroStepStatus::Automatic);
+		const Command expected = autoCommand(automatic, r.actor);
+		CHECK(automatic.command(r.actor).kind == expected.kind && automatic.command(r.actor).id == expected.id && automatic.command(r.actor).target == expected.target);
+	}
+	CHECK(results[0].issue == MacroIssue::NotEnoughTp && results[1].issue == MacroIssue::NoTarget && results[2].issue == MacroIssue::UnknownAbility);
+	CHECK(results[3].issue == MacroIssue::NoItem);
+	CHECK(automatic.command(kMystic).kind == CommandKind::Attack);
+	othersDefend(automatic);
+	const std::vector<Event> events = automatic.resolveRound();
+	CHECK(ofType(events, EventType::ActionCancelled).empty());
 }

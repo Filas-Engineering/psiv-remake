@@ -1,0 +1,577 @@
+The Bell at Tidewater (seed 6)
+title> new
+You arrive at Tidewater Landing.
+  (fade in 1)
+The ferry bumps against the pilings of Tidewater Landing.
+  (move dockhand to dock_front)
+  (move dockhand to greet_spot)
+  (face dockhand fighter)
+Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  (move dockhand to dock_front)
+  (move dockhand to 10 0 2)
+  (face dockhand dock_front)
+New job: The dockhand's lost crate.
+New encyclopedia entry: Tidewater Landing.
+[Autosaved to auto_0 (event end).]
+field> macros
+  opener
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0 (not_in_party)
+    2 fighter attack e0
+    3 engineer ability drowse e1 (not_in_party)
+    4 medic ability mend fighter (not_in_party)
+  tempest
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0 (not_in_party)
+    2 engineer ability flare_burst all (not_in_party)
+    3 fighter attack e0
+    4 medic defend (not_in_party)
+  regroup
+    0 medic ability mend fighter (not_in_party)
+    1 fighter ability rally all
+    2 mystic ability frostbite (not_in_party)
+    3 scout attack e0 (not_in_party)
+    4 engineer item tonic mystic (not_in_party)
+field> menu
+menu> macro create solo
+menu> macro step solo 0 fighter piece squall_fan e0
+menu> refused macro step solo 1 fighter attack
+! Test Fighter already has a step in this macro.
+menu> refused macro step solo 0 fighter piece rivet_plate e0
+! Rivet Plate is not a piece with a use in battle.
+menu> refused macro step solo 0 mystic attack
+! Test Mystic is not in the party roster.
+menu> macro create spare
+menu> macro rename spare reserve
+menu> macro move reserve 0
+menu> macro step reserve 0 fighter item tonic self
+menu> macro step reserve 0 fighter defend
+menu> macro removestep reserve 0
+menu> macro delete reserve
+menu> macros
+  opener
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0 (not_in_party)
+    2 fighter attack e0
+    3 engineer ability drowse e1 (not_in_party)
+    4 medic ability mend fighter (not_in_party)
+  tempest
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0 (not_in_party)
+    2 engineer ability flare_burst all (not_in_party)
+    3 fighter attack e0
+    4 medic defend (not_in_party)
+  regroup
+    0 medic ability mend fighter (not_in_party)
+    1 fighter ability rally all
+    2 mystic ability frostbite (not_in_party)
+    3 scout attack e0 (not_in_party)
+    4 engineer item tonic mystic (not_in_party)
+  solo
+    0 fighter piece squall_fan e0 (no_item)
+menu> close
+field> refused macro create late
+! Macros are edited from the field menu.
+field> autobattle random
+field> walk hold_front
+field> face north
+field> talk
+Something is gnawing at a crate in the ferry hold. It turns to face you.
+Battle!
+[Autosaved to auto_1 (before an event battle).]
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+battle> fight solo
+The enemies catch the party off guard!
+-- round 1 --
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter takes 11 damage.
+  Test Fighter is poisoned!
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 6 damage.
+Gel Mite A uses Bite on Test Fighter.
+  Test Fighter takes 9 damage.
+-- round 2 --
+Test Fighter turns from Gel Mite A to Gel Mite B.
+Test Fighter uses Focus Shot on Gel Mite B.
+  Gel Mite B takes 60 damage.
+  Gel Mite B falls.
+Rust Hound uses Bite on Test Fighter.
+  Critical hit!
+  Test Fighter takes 20 damage.
+Gel Mite A uses Bite on Test Fighter.
+  Critical hit!
+  Test Fighter takes 11 damage.
+Gel Mite B cannot act (Defeated).
+-- round 3 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 16 damage.
+Test Fighter turns from Gel Mite A to Rust Hound.
+Test Fighter uses Focus Shot on Rust Hound.
+  Rust Hound takes 55 damage.
+Gel Mite A uses Bite on Test Fighter.
+  Test Fighter takes 9 damage.
+-- round 4 --
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter takes 4 damage.
+  The poison leaves Test Fighter.
+  Test Fighter falls.
+Outcome: defeat
+The party has fallen.
+Game over.
+title> retry
+Loaded auto_1.
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+battle> fight solo
+The enemies catch the party off guard!
+-- round 1 --
+Rust Hound uses Bite on Test Fighter.
+  Critical hit!
+  Test Fighter takes 18 damage.
+Gel Mite A uses Bite on Test Fighter.
+  Test Fighter takes 10 damage.
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 6 damage.
+-- round 2 --
+Test Fighter uses Focus Shot on Gel Mite A.
+  Gel Mite A takes 59 damage.
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 12 damage.
+Gel Mite A uses Bite on Test Fighter.
+  Test Fighter takes 6 damage.
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 8 damage.
+-- round 3 --
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter takes 9 damage.
+  Test Fighter is poisoned!
+Test Fighter uses Focus Shot on Gel Mite A.
+  Gel Mite A takes 1 damage.
+  Gel Mite A falls.
+Gel Mite A cannot act (Defeated).
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 7 damage.
+-- round 4 --
+Test Fighter uses Focus Shot on Gel Mite B.
+  Gel Mite B takes 60 damage.
+  Gel Mite B falls.
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter takes 10 damage.
+  The poison leaves Test Fighter.
+  Test Fighter falls.
+Outcome: defeat
+The party has fallen.
+Game over.
+title> retry
+Loaded auto_1.
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+battle> auto
+The enemies catch the party off guard!
+-- round 1 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 8 damage.
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 4 damage.
+Gel Mite A uses Bite on Test Fighter.
+  Test Fighter takes 6 damage.
+-- round 2 --
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter takes 13 damage.
+  Test Fighter is poisoned!
+Test Fighter uses Focus Shot on Gel Mite A.
+  Gel Mite A takes 60 damage.
+  Gel Mite A falls.
+Gel Mite A cannot act (Defeated).
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 5 damage.
+-- round 3 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 9 damage.
+Test Fighter uses Focus Shot on Gel Mite B.
+  Gel Mite B takes 60 damage.
+  Gel Mite B falls.
+Gel Mite B cannot act (Defeated).
+-- round 4 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 11 damage.
+Test Fighter uses Focus Shot on Rust Hound.
+  Rust Hound takes 60 damage.
+-- round 5 --
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter takes 13 damage.
+  Test Fighter resists the poison.
+Test Fighter uses Strike on Rust Hound.
+  Rust Hound evades.
+-- round 6 --
+Test Fighter uses Strike on Rust Hound.
+  Rust Hound takes 30 damage.
+  Rust Hound falls.
+Outcome: victory
+Victory. 22 experience, 15 money.
+The hold falls quiet. A tonic rolls out from behind the crate.
+[Autosaved to auto_2 (event end).]
+field> status
+Mode field, Tidewater Landing (12,2) facing north, play time 0:00:26.
+  Test Fighter Lv3 HP 17/86 TP 8/8 EXP 22 [Poison]
+  Money 65. Items: tonic x2.
+field> dev give squall_fan 1
+Developer tools changed this game. It and its saves are marked.
+field> menu
+menu> macros
+  opener
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0 (not_in_party)
+    2 fighter attack e0
+    3 engineer ability drowse e1 (not_in_party)
+    4 medic ability mend fighter (not_in_party)
+  tempest
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0 (not_in_party)
+    2 engineer ability flare_burst all (not_in_party)
+    3 fighter attack e0
+    4 medic defend (not_in_party)
+  regroup
+    0 medic ability mend fighter (not_in_party)
+    1 fighter ability rally all
+    2 mystic ability frostbite (not_in_party)
+    3 scout attack e0 (not_in_party)
+    4 engineer item tonic mystic (not_in_party)
+  solo
+    0 fighter piece squall_fan e0
+menu> close
+field> walk dock_front
+field> face north
+field> talk
+Dockhand: A crate of my supplies washed into the reeds last storm. Nobody will wade out for it.
+Keep an eye out for it? [0] Yes [1] No
+event> choose 0
+Job accepted: The dockhand's lost crate.
+Dockhand: Bless you. It sits on a dry patch, north side of the path.
+[Autosaved to auto_0 (event end).]
+field> walk guide_front
+field> face north
+field> talk
+  (face guide fighter)
+Harbor Guide: You came about the bell? It rings every night at Bell Cove, east past the reeds.
+Will you look into it? [0] Yes [1] No
+event> choose 0
+Harbor Guide: Before you go: what should the harbor call you?
+menu> name Bryn
+Test Fighter will be called Bryn.
+Bryn: Tell the ferry I am staying a while.
+Harbor Guide: Then take my apprentices. One knows a spark or two, the other knows bandages.
+Test Mystic joins the party.
+Test Medic joins the party.
+[Autosaved to auto_1 (event end).]
+field> menu
+menu> macro step solo 1 mystic ability spark e1
+menu> macro step solo 2 medic ability rekindle
+menu> macro movestep solo 2 0
+menu> macro create arc
+menu> macro step arc 0 medic ability glint e0
+menu> macro step arc 1 mystic ability spark e0
+menu> macro step arc 2 fighter attack
+menu> macros
+  opener
+    0 mystic ability spark e0
+    1 scout ability gust e0 (not_in_party)
+    2 fighter attack e0
+    3 engineer ability drowse e1 (not_in_party)
+    4 medic ability mend fighter
+  tempest
+    0 mystic ability spark e0
+    1 scout ability gust e0 (not_in_party)
+    2 engineer ability flare_burst all (not_in_party)
+    3 fighter attack e0
+    4 medic defend
+  regroup
+    0 medic ability mend fighter
+    1 fighter ability rally all
+    2 mystic ability frostbite
+    3 scout attack e0 (not_in_party)
+    4 engineer item tonic mystic (not_in_party)
+  solo
+    0 medic ability rekindle
+    1 fighter piece squall_fan e0
+    2 mystic ability spark e1
+  arc
+    0 medic ability glint e0
+    1 mystic ability spark e0
+    2 fighter attack
+menu> close
+field> autobattle off
+field> walk 13 4
+You arrive at Reed Path.
+~ Test Mystic: Every step out here squelches. I am counting them.
+~ Test Medic: Count the bites instead. I am the one who has to dress them.
+[Autosaved to auto_2 (area entry).]
+field> walk cache_front
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+battle> fight arc
+-- round 1 --
+Rust Hound uses Bite on Test Mystic.
+  Test Mystic takes 26 damage.
+Test Medic turns from Gel Mite A to Gel Mite B.
+Combo: Twin Arc.
+  A new combination joins the combo log.
+  Gel Mite B takes 60 damage.
+  Gel Mite B falls.
+Bryn uses Strike on Gel Mite A.
+  Gel Mite A takes 42 damage.
+Gel Mite A uses Bite on Test Medic.
+  Test Medic takes 15 damage.
+Gel Mite B cannot act (Defeated).
+-- round 2 --
+Combo: Twin Arc.
+  Gel Mite A takes 18 damage.
+  Gel Mite A falls.
+Bryn turns from Gel Mite A to Rust Hound.
+Bryn uses Strike on Rust Hound.
+  Rust Hound takes 36 damage.
+Rust Hound uses Bite on Bryn.
+  Bryn takes 14 damage.
+Gel Mite A cannot act (Defeated).
+-- round 3 --
+Rust Hound uses Venom Spit on Bryn.
+  Bryn takes 3 damage.
+  The poison leaves Bryn.
+  Bryn falls.
+Combo: Twin Arc.
+  Rust Hound takes 54 damage.
+  Rust Hound falls.
+Outcome: victory
+Victory. 22 experience, 15 money.
+field> menu
+menu> macro combo twin_arc pair
+menu> macro removestep solo 2
+menu> macros
+  opener
+    0 mystic ability spark e0
+    1 scout ability gust e0 (not_in_party)
+    2 fighter attack e0 (actor_defeated)
+    3 engineer ability drowse e1 (not_in_party)
+    4 medic ability mend fighter
+  tempest
+    0 mystic ability spark e0
+    1 scout ability gust e0 (not_in_party)
+    2 engineer ability flare_burst all (not_in_party)
+    3 fighter attack e0 (actor_defeated)
+    4 medic defend
+  regroup
+    0 medic ability mend fighter
+    1 fighter ability rally all (actor_defeated)
+    2 mystic ability frostbite
+    3 scout attack e0 (not_in_party)
+    4 engineer item tonic mystic (not_in_party)
+  solo
+    0 medic ability rekindle
+    1 fighter piece squall_fan e0 (actor_defeated)
+  arc
+    0 medic ability glint e0
+    1 mystic ability spark e0
+    2 fighter attack (actor_defeated)
+  pair
+    0 medic ability glint
+    1 mystic ability spark
+menu> set auto pair
+menu> close
+field> autobattle random
+field> walk 10 4
+Test Scout: Heading for the cove? I have mapped these reeds twice over. I am coming along.
+Test Scout joins the party.
+[Autosaved to auto_0 (event end).]
+field> walk skimmer_front
+Battle!
+Enemies: Bog Wisp A, Bog Wisp B, Gel Mite.
+Auto-battle on with pair.
+-- round 1 --
+Test Scout uses Scatter Shot.
+  Bog Wisp A takes 25 damage.
+  Bog Wisp B takes 19 damage.
+Gel Mite uses Bite on Test Scout.
+  Test Scout evades.
+Combo: Twin Arc.
+  Bog Wisp A takes 0 damage.
+Bog Wisp A uses Numbing Sting on Test Mystic.
+  Test Mystic takes 11 damage.
+  Test Mystic resists the paralysis.
+Bog Wisp B uses Numbing Sting on Test Scout.
+  Test Scout takes 8 damage.
+  Test Scout resists the paralysis.
+-- round 2 --
+Test Scout uses Scatter Shot.
+  Bog Wisp A takes 21 damage.
+  Bog Wisp B takes 25 damage.
+Bog Wisp B uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 32.
+Bog Wisp A uses Patch Up on Bog Wisp B.
+  Bog Wisp B recovers 30.
+Gel Mite uses Bite on Test Mystic.
+  Test Mystic takes 9 damage.
+  Test Mystic falls.
+Test Medic uses Glint on Bog Wisp A.
+  Bog Wisp A takes 0 damage.
+Test Mystic cannot act (Defeated).
+Auto-battle stops: a party member fell.
+-- round 3 --
+Test Scout uses Gust on Bog Wisp A.
+  Bog Wisp A takes 56 damage.
+  Bog Wisp A falls.
+Bog Wisp B uses Numbing Sting on Test Medic.
+  Test Medic takes 9 damage.
+  Test Medic is paralyzed!
+Gel Mite uses Bite on Test Scout.
+  Test Scout takes 13 damage.
+Bog Wisp A cannot act (Defeated).
+Test Medic cannot act (Paralysis).
+-- round 4 --
+Test Scout uses Gust on Bog Wisp B.
+  Bog Wisp B takes 56 damage.
+  Bog Wisp B falls.
+Bog Wisp B cannot act (Defeated).
+Gel Mite uses Bite on Test Medic.
+  Test Medic takes 12 damage.
+Test Medic cannot act (Paralysis).
+-- round 5 --
+Test Scout uses Gust on Gel Mite.
+  Gel Mite takes 46 damage.
+Gel Mite uses Bite on Test Medic.
+  Critical hit!
+  Test Medic takes 16 damage.
+  Test Medic can move again.
+  Test Medic falls.
+Test Medic cannot act (Defeated).
+-- round 6 --
+Test Scout uses Gust on Gel Mite.
+  Gel Mite takes 14 damage.
+  Gel Mite falls.
+Outcome: victory
+Victory. 30 experience, 22 money.
+field> face north
+field> talk
+A reed skimmer bobs at its mooring, its boiler still warm.
+Take the skimmer out across the marsh? [0] Yes [1] No
+event> choose 0
+Battle!
+[Autosaved to auto_1 (before an event battle).]
+Enemies: Bog Wisp A, Bog Wisp B, Gel Mite.
+battle> fight solo
+-- round 1 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Bog Wisp B uses Drone Hum on Reed Skimmer.
+  Reed Skimmer stays awake.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 36 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 6 damage.
+-- round 2 --
+Bog Wisp A uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 33.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 5 damage.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 47 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 8 damage.
+-- round 3 --
+Bog Wisp A uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 31.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 3 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 8 damage.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 39 damage.
+-- round 4 --
+Bog Wisp B uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 32.
+Bog Wisp A uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 44 damage.
+  Bog Wisp A falls.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 9 damage.
+-- round 5 --
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer cannot be paralyzed.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 9 damage.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 43 damage.
+-- round 6 --
+Bog Wisp B uses Patch Up on Bog Wisp B.
+  Bog Wisp B recovers 32.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B evades.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 8 damage.
+-- round 7 --
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 3 damage.
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 42 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 7 damage.
+-- round 8 --
+Bog Wisp B uses Patch Up on Bog Wisp B.
+  Bog Wisp B recovers 31.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 43 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 7 damage.
+-- round 9 --
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 3 damage.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B evades.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 6 damage.
+-- round 10 --
+Bog Wisp B uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 8 damage.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B evades.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 7 damage.
+-- round 11 --
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 5 damage.
+  Bog Wisp B falls.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 9 damage.
+-- round 12 --
+Reed Skimmer uses Ram on Gel Mite.
+  Critical hit!
+  Gel Mite takes 55 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 7 damage.
+-- round 13 --
+Reed Skimmer uses Ram on Gel Mite.
+  Gel Mite takes 5 damage.
+  Gel Mite falls.
+Outcome: victory
+Victory. 15 experience, 22 money.
+The enemies dropped 1 Wake Chime.
+Test Scout: The wisps scatter. This old hull can take a beating.
+[Autosaved to auto_2 (event end).]
+field> autobattle on
+field> status
+Mode field, Reed Path (17,6) facing north, play time 0:02:03.
+  Bryn Lv3 HP 0/86 TP 8/8 EXP 22
+  Test Mystic Lv3 HP 0/46 TP 18/30 EXP 11
+  Test Medic Lv3 HP 0/52 TP 22/32 EXP 11
+  Test Scout Lv4 HP 39/60 TP 6/18 EXP 45
+  Money 124. Items: loosen_oil x1, tonic x4, wake_chime x1, squall_fan x1.
+field> quit
+End of script.

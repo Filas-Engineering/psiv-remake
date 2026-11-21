@@ -20,6 +20,10 @@ int criticalBonus(int attack) {
 	return attack / 4;
 }
 
+int criticalBonusLowByte(int attack) {
+	return attack % 256 / 4;
+}
+
 // The spread step rounds down as the original's does; the affinity step multiplies before it divides, so it rounds down
 // once, before the defense is subtracted.
 int damage(int attack, int defense, int bonus, int affinity, int spread, int divisor) {
@@ -28,6 +32,14 @@ int damage(int attack, int defense, int bonus, int affinity, int spread, int div
 	}
 	const int raw = attack * spread / 64 + attack + bonus * 2;
 	return std::clamp(raw * affinity / divisor - defense, 1, kMaxDamage);
+}
+
+int damage(int attack, int defense, int bonus, int affinity, int spread, int divisor, bool wraparound, bool immuneFloor) {
+	if (affinity <= 0) {
+		return immuneFloor ? 1 : 0;
+	}
+	const int scaled = wraparound ? attack * spread % 65536 / 64 : attack * spread / 64;
+	return std::clamp((scaled + attack + bonus * 2) * affinity / divisor - defense, 1, kMaxDamage);
 }
 
 int variedDamage(int attack, int defense, int bonus, int affinity, int scaleNumerator, int scaleDenominator, int divisor) {

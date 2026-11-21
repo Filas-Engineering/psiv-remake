@@ -47,7 +47,10 @@ public enum CreatureKind { Living, Spirit, Machine }
 public enum Stat { Strength, Mental, Agility, Dexterity, Defense, MagicDefense }
 public enum Opening { Normal, PartyFirst, EnemyFirst }
 public enum AutoStop { None, Cancelled, MemberFell, CannotPay, BattleEnded }
-public enum MacroStepStatus { Applied, Retargeted, FellBack, Skipped }
+public enum MacroStepStatus { Applied, Retargeted, FellBack, Skipped, Automatic }
+// What ApplyMacro does with a step that cannot run as written: BasicAttack is core's default; Automatic gives the member core's
+// automatic choice for the round instead (MacroStepStatus.Automatic).
+public enum MacroFallback { BasicAttack, Automatic }
 public enum MacroTargetKind { Default, Self, Member, Enemy, All }
 
 public enum MacroIssue
@@ -261,9 +264,9 @@ public sealed record EquipPreview(string Member, string Piece, string PieceName,
 	CombatView Before, CombatView After, EquipSlot Position = EquipSlot.Weapon, string AlsoReplaces = "", string AlsoReplacesName = "", int Hands = 1);
 
 // One step of a saved macro. TargetMember is set for a Member target, TargetEnemy (else -1) for an Enemy target; Issue says
-// why the step cannot run as written now.
+// why the step cannot run as written now. Piece: an Item step whose Id is an equipment piece with a battle use.
 public sealed record MacroStep(string Member, string MemberName, CommandKind CommandKind, string Id, string IdName, MacroTargetKind TargetKind,
-	string TargetMember, string TargetMemberName, int TargetEnemy, MacroIssue Issue);
+	string TargetMember, string TargetMemberName, int TargetEnemy, MacroIssue Issue, bool Piece = false);
 
 public sealed record Macro(string Name, IReadOnlyList<MacroStep> Steps);
 

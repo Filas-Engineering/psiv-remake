@@ -250,7 +250,7 @@ public sealed unsafe class GameSession : IDisposable
 			foreach (PsivMacroStep s in Native.Span<PsivMacroStep>(m.Steps, m.StepCount))
 			{
 				steps.Add(new MacroStep(Native.Str(s.Member), Native.Str(s.MemberName), (CommandKind)s.CommandKind, Native.Str(s.Id), Native.Str(s.IdName),
-					(MacroTargetKind)s.TargetKind, Native.Str(s.TargetMember), Native.Str(s.TargetMemberName), s.TargetEnemy, (MacroIssue)s.Issue));
+					(MacroTargetKind)s.TargetKind, Native.Str(s.TargetMember), Native.Str(s.TargetMemberName), s.TargetEnemy, (MacroIssue)s.Issue, s.Piece != 0));
 			}
 			list.Add(new Macro(Native.Str(m.Name), steps));
 		}
@@ -266,6 +266,11 @@ public sealed unsafe class GameSession : IDisposable
 	public PsivResult SetMacroStep(string macro, int index, string member, CommandKind kind, string? id = null, MacroTargetKind target = MacroTargetKind.Default,
 		string? targetMember = null, int targetEnemy = -1) =>
 		Result(Native.MacroSetStep(_handle, macro, index, member, (int)kind, id, (int)target, targetMember, targetEnemy));
+
+	// An Item step naming an equipment piece with a battle use, which the member casts worn or from the bag.
+	public PsivResult SetMacroPieceStep(string macro, int index, string member, string piece, MacroTargetKind target = MacroTargetKind.Default,
+		string? targetMember = null, int targetEnemy = -1) =>
+		Result(Native.MacroSetPieceStep(_handle, macro, index, member, piece, (int)target, targetMember, targetEnemy));
 
 	public PsivResult RemoveMacroStep(string macro, int index) => Result(Native.MacroRemoveStep(_handle, macro, index));
 	public PsivResult MoveMacroStep(string macro, int from, int to) => Result(Native.MacroMoveStep(_handle, macro, from, to));
@@ -578,9 +583,9 @@ public sealed unsafe class GameSession : IDisposable
 	public PsivResult SetCommand(int actor, CommandKind kind, string? id = null, int target = -1) =>
 		Result(Native.BattleSetCommand(_handle, actor, (int)kind, id ?? "", target));
 
-	public PsivResult ApplyMacro(string macro, out IReadOnlyList<MacroStepResult> steps)
+	public PsivResult ApplyMacro(string macro, out IReadOnlyList<MacroStepResult> steps, MacroFallback fallback = MacroFallback.BasicAttack)
 	{
-		PsivResult result = Result(Native.BattleApplyMacro(_handle, macro, out IntPtr p, out int count));
+		PsivResult result = Result(Native.BattleApplyMacroFallback(_handle, macro, (int)fallback, out IntPtr p, out int count));
 		var list = new List<MacroStepResult>(count);
 		foreach (PsivMacroStepResult s in Native.Span<PsivMacroStepResult>(p, count))
 		{

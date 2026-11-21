@@ -985,7 +985,7 @@ TEST(damageCanScaleTheStatTakeANegativePowerAndVary) {
 
 	Database db = strongFighter();
 	Effect& strike = db.abilities["strike"].effects[0];
-	strike.statPercent = 50;
+	strike.statPermille = 500;
 	strike.power = -10;
 	auto fighterHit = [&](const Database& use, std::uint64_t seed, bool& critical) {
 		Battle battle = makeBattle(use, {"gel_mite"}, seed);
@@ -1038,7 +1038,7 @@ TEST(damageCanScaleTheStatTakeANegativePowerAndVary) {
 		CHECK(read.battleRules.damageVariance && read.battleRules.damageVariance->percent == 15 && read.battleRules.damageVariance->shape == VarianceShape::Bell);
 		const AbilityDef& shot = read.abilities.at("focus_shot");
 		CHECK(shot.variance && shot.variance->percent == 5 && shot.variance->shape == VarianceShape::Uniform);
-		CHECK(shot.effects[0].power == -11 && shot.effects[0].statPercent == 150);
+		CHECK(shot.effects[0].power == -11 && shot.effects[0].statPermille == 1500);
 	}
 	CHECK(!data().battleRules.damageVariance && !data().abilities.at("focus_shot").variance);
 	const std::pair<std::string, std::string> refusals[] = {
@@ -1128,4 +1128,222 @@ TEST(defendCanReachNamedElementsOnly) {
 		replaceOnce(refused["rules.json"], "\"elements\"", std::string(bad) + " \"elements\"");
 		CHECK(!loadDatabaseFromTexts(refused).ok());
 	}
+}
+
+// R48: a data macro's item step names a piece with "piece": true; the piece needs a battle use.
+TEST(dataMacrosCanNamePieces) {
+	std::map<std::string, std::string> texts = dataTexts();
+	const std::string step = "{\"member\": \"engineer\", \"command\": \"item\", \"id\": \"tonic\", \"target\": {\"member\": \"mystic\"}}";
+	std::map<std::string, std::string> fan = texts;
+	replaceOnce(fan["party.json"], step, "{\"member\": \"engineer\", \"command\": \"item\", \"piece\": true, \"id\": \"squall_fan\", \"target\": {\"enemy\": 0}}");
+	const Result<Database> loaded = loadDatabaseFromTexts(fan);
+	CHECK(loaded.ok() && loaded.value->macro("regroup")->steps.back().piece);
+	std::map<std::string, std::string> plain = texts;
+	replaceOnce(plain["party.json"], step, "{\"member\": \"engineer\", \"command\": \"item\", \"piece\": true, \"id\": \"rivet_plate\"}");
+	const Result<Database> noUse = loadDatabaseFromTexts(plain);
+	CHECK(!noUse.ok() && noUse.error.find("piece 'rivet_plate' has no battle use") != std::string::npos);
+	std::map<std::string, std::string> attack = texts;
+	replaceOnce(attack["party.json"], step, "{\"member\": \"engineer\", \"command\": \"attack\", \"piece\": true}");
+	const Result<Database> wrong = loadDatabaseFromTexts(attack);
+	CHECK(!wrong.ok() && wrong.error.find("only an item step names a piece") != std::string::npos);
+}
+
+// R53: with defend_timing turn, Defend holds from the defender's turn; a hit before it lands in full.
+TEST(defendCanStartAtTheDefendersTurn) {
+	Database db = data();
+	db.enemies["gel_mite"].stats.agility = 900;
+	db.characters["fighter"].base.agility = 1;
+	auto hit = [&db](bool fromTurn, CommandKind fighter) {
+		db.battleRules.defendFromTurn = fromTurn;
+		Battle battle = makeBattle(db, {"gel_mite"}, 7);
+		sturdyParty(battle);
+		sturdy(battle, kFirstEnemy);
+		battle.setCommand(kFighter, fighter == CommandKind::Defend ? Command::defend() : Command::attack(kFirstEnemy));
+		battle.setCommand(kFirstEnemy, Command::attack(kFighter));
+		othersDefend(battle);
+		const std::vector<Event> events = battle.resolveRound();
+		for (const Event& e : events) {
+			if (e.type == EventType::DamageDealt && e.target == kFighter) {
+				return e.amount;
+			}
+		}
+		return -1;
+	};
+	const int open = hit(false, CommandKind::Attack);
+	CHECK(open > 0);
+	CHECK(hit(false, CommandKind::Defend) < open);
+	CHECK_EQ(hit(true, CommandKind::Defend), open);
+
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["rules.json"], "{", "{\"defend_timing\": \"later\",");
+	const Result<Database> bad = loadDatabaseFromTexts(texts);
+	CHECK(!bad.ok() && bad.error.find("defend_timing is 'later'; it takes round, turn") != std::string::npos);
+}
+
+// R54 to R56: the immune floor, the low-byte critical bonus and 16-bit wraparound of the attack times the spread.
+TEST(damageFormulaOptionsChangeOnlyWhatTheyName) {
+	CHECK_EQ(formulas::damage(50, 0, 0, 0, 64, 100), 0);
+	CHECK_EQ(formulas::damage(50, 0, 0, 0, 64, 100, false, true), 1);
+	CHECK_EQ(formulas::damage(50, 10, 3, 100, 70, 100, false, false), formulas::damage(50, 10, 3, 100, 70, 100));
+	CHECK_EQ(formulas::criticalBonus(300), 75);
+	CHECK_EQ(formulas::criticalBonusLowByte(300), 11);
+	CHECK_EQ(formulas::criticalBonusLowByte(100), formulas::criticalBonus(100));
+	// 600 x 120 = 72000 wraps to 6464, over 64 is 101, plus the attack 600.
+	CHECK_EQ(formulas::damage(600, 0, 0, 100, 120, 100, true, false), 701);
+	CHECK_EQ(formulas::damage(600, 0, 0, 100, 120, 100), 999);
+	CHECK_EQ(formulas::damage(300, 0, 0, 100, 120, 100, true, false), formulas::damage(300, 0, 0, 100, 120, 100));
+
+	Database db = data();
+	db.battleRules.immuneMinDamage = true;
+	db.enemies["gel_mite"].affinities[Element::Shock] = 0;
+	Battle battle = makeBattle(db, {"gel_mite"}, 3);
+	sturdyParty(battle);
+	battle.setCommand(kMystic, Command::ability("spark", kFirstEnemy));
+	othersDefend(battle);
+	battle.setCommand(kFirstEnemy, Command::defend());
+	const std::optional<Event> spark = firstBy(battle.resolveRound(), EventType::DamageDealt, kMystic);
+	CHECK(spark && spark->amount == 1);
+
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["rules.json"], "{", "{\"critical_bonus\": \"low_byte\", \"damage_wraparound\": true, \"immune_min_damage\": true,");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok() && loaded.value->battleRules.criticalLowByte && loaded.value->battleRules.damageWraparound && loaded.value->battleRules.immuneMinDamage);
+}
+
+// R57: an item heal with a stat_value rolls (P x spread / 64 + P + 2V) / 2, the technique heal with the power as the stat;
+// its mean is about P + V. Without it the heal is the flat power.
+TEST(anItemCanHealWithItsStatValueAndTheSpread) {
+	Database db = data();
+	auto heals = [&db](std::uint64_t seed) {
+		Battle battle = makeBattle(db, {"gel_mite"}, seed);
+		sturdyParty(battle);
+		sturdy(battle, kFirstEnemy);
+		battle.combatant(kFighter).hp = 1;
+		battle.setCommand(kFighter, Command::item("tonic", kFighter));
+		othersDefend(battle);
+		battle.setCommand(kFirstEnemy, Command::defend());
+		const std::optional<Event> healed = firstBy(battle.resolveRound(), EventType::Healed, kFighter);
+		return healed ? healed->amount : -1;
+	};
+	CHECK_EQ(heals(1), 30);
+	db.items["tonic"].effects.front().statValue = 10;
+	long long total = 0;
+	int lowest = 999;
+	int highest = 0;
+	const int runs = 400;
+	for (int seed = 1; seed <= runs; ++seed) {
+		const int amount = heals(static_cast<std::uint64_t>(seed));
+		total += amount;
+		lowest = std::min(lowest, amount);
+		highest = std::max(highest, amount);
+	}
+	// The spread's step rounds down, so the mean sits a little under 40.
+	CHECK(total * 10 / runs >= 385 && total * 10 / runs <= 400);
+	CHECK(lowest >= formulas::healAmount(10, 30, formulas::kSpreadMin) && highest <= formulas::healAmount(10, 30, formulas::kSpreadMax) && lowest < highest);
+
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["abilities.json"], "{\"type\": \"heal\", \"kinds\": [\"living\"], \"power\": 28}", "{\"type\": \"heal\", \"kinds\": [\"living\"], \"power\": 28, \"stat_value\": 4}");
+	const Result<Database> bad = loadDatabaseFromTexts(texts);
+	CHECK(!bad.ok() && bad.error.find("stat_value is for items") != std::string::npos);
+}
+
+// R58: stat_permille scales the attacking stat in thousandths; stat_percent is the same value times 10.
+TEST(statPermilleIsAFinerStatPercent) {
+	std::map<std::string, std::string> texts = dataTexts();
+	const std::string ram = "{\"type\": \"physical_damage\", \"power\": 3}";
+	std::map<std::string, std::string> fine = texts;
+	replaceOnce(fine["abilities.json"], ram, "{\"type\": \"physical_damage\", \"power\": 3, \"stat_permille\": 1255}");
+	const Result<Database> loaded = loadDatabaseFromTexts(fine);
+	CHECK(loaded.ok() && loaded.value->ability("ram")->effects.front().statPermille == 1255);
+	std::map<std::string, std::string> percent = texts;
+	replaceOnce(percent["abilities.json"], ram, "{\"type\": \"physical_damage\", \"power\": 3, \"stat_percent\": 125}");
+	const Result<Database> coarse = loadDatabaseFromTexts(percent);
+	CHECK(coarse.ok() && coarse.value->ability("ram")->effects.front().statPermille == 1250);
+	std::map<std::string, std::string> both = texts;
+	replaceOnce(both["abilities.json"], ram, "{\"type\": \"physical_damage\", \"power\": 3, \"stat_permille\": 1255, \"stat_percent\": 125}");
+	const Result<Database> bad = loadDatabaseFromTexts(both);
+	CHECK(!bad.ok() && bad.error.find("stat_percent and stat_permille") != std::string::npos);
+	Database db = data();
+	db.characters["fighter"].base.strength = 400;
+	Effect& strike = db.abilities["strike"].effects.front();
+	auto first = [&db](std::uint64_t seed) {
+		Battle battle = makeBattle(db, {"gel_mite"}, seed);
+		sturdy(battle, kFirstEnemy);
+		battle.combatant(kFirstEnemy).stats.defense = 0;
+		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+		othersDefend(battle);
+		const std::optional<Event> hit = firstBy(battle.resolveRound(), EventType::DamageDealt, kFighter);
+		return hit ? hit->amount : -1;
+	};
+	strike.statPermille = 100;
+	const int tenth = first(9);
+	strike.statPermille = 200;
+	CHECK(tenth > 0 && first(9) > tenth);
+}
+
+// R59: with escape_party_first_round an escape in the first round of a Party first opening always works.
+TEST(escapeCanAlwaysWorkInAPartyFirstRound) {
+	Database db = data();
+	for (auto& [id, character] : db.characters) {
+		character.base.agility = 1;
+	}
+	auto escapes = [&db](int round) {
+		BattleSetup setup = makeSetup(db, {"gel_mite"}, 4);
+		setup.opening = Opening::PartyFirst;
+		setup.escapeRating = 230;
+		Battle battle = makeBattle(db, setup);
+		sturdyParty(battle);
+		std::optional<Event> attempt;
+		for (int r = 1; r <= round; ++r) {
+			battle.setCommand(kFighter, r == round ? Command::escape() : Command::defend());
+			othersDefend(battle);
+			attempt = firstBy(battle.resolveRound(), EventType::EscapeAttempted, kFighter);
+		}
+		return attempt && attempt->succeeded;
+	};
+	CHECK(!escapes(1));
+	db.battleRules.escapePartyFirstRound = true;
+	CHECK(escapes(1));
+	CHECK(!escapes(2));
+}
+
+// R60: target_weights replaces the 3:2:1-style draw for a party of that size, in 256ths by party order.
+TEST(enemyTargetWeightsComeFromTheRules) {
+	Database db = data();
+	db.battleRules.targetWeights[5] = {0, 0, 256, 0, 0};
+	for (std::uint64_t seed = 1; seed <= 40; ++seed) {
+		Battle battle = makeBattle(db, {"gel_mite", "gel_mite"}, seed);
+		sturdyParty(battle);
+		partyDefends(battle);
+		for (const Event& e : battle.resolveRound()) {
+			if (e.type == EventType::ActionStarted && e.actor >= kFirstEnemy) {
+				CHECK_EQ(e.target, kScout);
+			}
+		}
+	}
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["rules.json"], "{", "{\"target_weights\": {\"2\": [200, 50], \"3\": [128, 85, 43]},");
+	const Result<Database> bad = loadDatabaseFromTexts(texts);
+	CHECK(!bad.ok() && bad.error.find("target_weights '2'") != std::string::npos && bad.error.find("target_weights '3'") == std::string::npos);
+}
+
+// R61: a raise of a stat named in stat_wraparound wraps past 255 as a byte would.
+TEST(statRaisesCanWrapPast255) {
+	Database db = data();
+	db.characters["fighter"].base.strength = 250;
+	db.abilities["rally"].effects.front().power = 10;
+	auto raised = [&db] {
+		Battle battle = makeBattle(db, {"gel_mite"}, 2);
+		sturdyParty(battle);
+		sturdy(battle, kFirstEnemy);
+		battle.combatant(kFighter).tp = 99;
+		battle.setCommand(kFighter, Command::ability("rally", -1));
+		othersDefend(battle);
+		battle.resolveRound();
+		return battle.combatant(kFighter).effective(Stat::Strength);
+	};
+	const int capless = raised();
+	CHECK(capless > 255);
+	db.battleRules.statWraparound = {Stat::Strength};
+	CHECK_EQ(raised(), capless % 256);
 }

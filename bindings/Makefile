@@ -53,6 +53,7 @@ TEST_OBJS = $(BUILD)/c/tests/test_api.o
 
 SCRIPT = $(GAME)/data/scripts/playthrough.txt
 TRAVEL_SCRIPT = $(GAME)/data/scripts/travel.txt
+MACROS_SCRIPT = $(GAME)/data/scripts/macros.txt
 SAMPLE = monogame/Psiv.Sample/Psiv.Sample.csproj
 SAMPLE_SCRIPT = monogame/Psiv.Sample/scripts/smoke.txt
 SAMPLE_LARGE_SCRIPT = monogame/Psiv.Sample/scripts/large_areas.txt
@@ -163,6 +164,13 @@ native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI)
 	cmp $(BUILD)/travel_c.txt $(GAME)/tests/expected/travel.txt
 	diff -r $(BUILD)/travel_saves_c $(BUILD)/travel_saves_cpp
 	@echo "C vehicle and travel script matches the C++ session: transcript and every save file"
+	rm -rf $(BUILD)/macros_saves_cpp $(BUILD)/macros_saves_c
+	$(GAME_CLI) --data $(GAME)/data --seed 6 --script $(MACROS_SCRIPT) --saves $(BUILD)/macros_saves_cpp > $(BUILD)/macros_cpp.txt
+	./$(PLAYTHROUGH) --data $(GAME)/data --seed 6 --script $(MACROS_SCRIPT) --saves $(BUILD)/macros_saves_c > $(BUILD)/macros_c.txt
+	cmp $(BUILD)/macros_c.txt $(BUILD)/macros_cpp.txt
+	cmp $(BUILD)/macros_c.txt $(GAME)/tests/expected/macros.txt
+	diff -r $(BUILD)/macros_saves_c $(BUILD)/macros_saves_cpp
+	@echo "C macro script matches the C++ session: transcript and every save file"
 
 dotnet: $(LIB)
 	$(DOTNET) build csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj -nologo -v q -warnaserror

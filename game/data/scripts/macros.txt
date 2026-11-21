@@ -1,0 +1,75 @@
+# Macros from the terminal: the editor's commands from the field menu, a step that names a piece, `fight` with a
+# macro whose stuck steps take core's automatic choice, `macro combo` from the combo log, and the three autobattle
+# states (random leaves the hold's event battle to the script and fights the reed path's encounters itself). Run with
+# --seed 6 and no --auto-battle.
+new
+macros
+menu
+macro create solo
+macro step solo 0 fighter piece squall_fan e0
+refused macro step solo 1 fighter attack
+refused macro step solo 0 fighter piece rivet_plate e0
+refused macro step solo 0 mystic attack
+macro create spare
+macro rename spare reserve
+macro move reserve 0
+macro step reserve 0 fighter item tonic self
+macro step reserve 0 fighter defend
+macro removestep reserve 0
+macro delete reserve
+macros
+close
+refused macro create late
+autobattle random
+walk hold_front
+face north
+talk
+fight solo
+retry
+fight solo
+retry
+auto
+status
+dev give squall_fan 1
+menu
+macros
+close
+walk dock_front
+face north
+talk
+choose 0
+walk guide_front
+face north
+talk
+choose 0
+name Bryn
+menu
+macro step solo 1 mystic ability spark e1
+macro step solo 2 medic ability rekindle
+macro movestep solo 2 0
+macro create arc
+macro step arc 0 medic ability glint e0
+macro step arc 1 mystic ability spark e0
+macro step arc 2 fighter attack
+macros
+close
+autobattle off
+walk 13 4
+walk cache_front
+fight arc
+menu
+macro combo twin_arc pair
+macro removestep solo 2
+macros
+set auto pair
+close
+autobattle random
+walk 10 4
+walk skimmer_front
+face north
+talk
+choose 0
+fight solo
+autobattle on
+status
+quit

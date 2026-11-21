@@ -178,6 +178,18 @@ void Runner::printEvents(const std::vector<rules::Event>& events) {
 		case rules::EventType::BattleEnded:
 			print("Outcome: " + std::string(rules::toString(e.outcome)));
 			break;
+		case rules::EventType::EnemyJoined:
+			print("  " + battleName(e.target) + " joins the battle.");
+			break;
+		// Self-destruct and remove-beside announce the leaving enemy with a message; a merge does not.
+		case rules::EventType::EnemyLeft:
+			if (e.actor >= 0) {
+				print("  " + battleName(e.target) + " merges into " + battleName(e.actor) + ".");
+			}
+			break;
+		case rules::EventType::EnemyTransformed:
+			print("  " + battleName(e.target) + " becomes " + name(e.ids.empty() ? "" : e.ids.front()) + ".");
+			break;
 		default:
 			break;
 		}
@@ -210,7 +222,7 @@ void Runner::settle() {
 				}
 				print("Enemies: " + enemies + ".");
 			}
-			if (!options_.autoBattle) {
+			if (!options_.autoBattle || (options_.autoBattleEncountersOnly && session_.battleSource() == BattleSource::Event)) {
 				return;
 			}
 			finishBattleAuto();
@@ -249,6 +261,102 @@ void Runner::finishBattleAuto() {
 		error("the battle did not end in 60 rounds");
 	}
 	flushOutput();
+}
+
+// Plays the battle round by round with the macro, each member whose step cannot run taking core's automatic choice.
+void Runner::fight(const std::string& macro) {
+	for (int round = 0; round < 60 && session_.battle(); ++round) {
+		flushOutput();
+		const rules::Message refused = session_.applyMacro(macro, nullptr, rules::MacroFallback::Automatic);
+		if (!refused.empty()) {
+			report(refused);
+			return;
+		}
+		printEvents(session_.resolveRound());
+	}
+	if (session_.battle()) {
+		error("the battle did not end in 60 rounds");
+	}
+}
+
+void Runner::listMacros() {
+	for (const MacroView& view : session_.macroViews()) {
+		print("  " + view.name + (view.name == session_.world().autoMacro ? " (auto)" : ""));
+		for (std::size_t i = 0; i < view.steps.size(); ++i) {
+			const rules::MacroStep& step = view.steps[i].step;
+			std::string text = "    " + std::to_string(i) + " " + step.member + " " + (step.piece ? "piece" : rules::toString(step.kind));
+			text += step.id.empty() ? "" : " " + step.id;
+			switch (step.target.kind) {
+			case rules::MacroTargetKind::Default:
+				break;
+			case rules::MacroTargetKind::Self:
+			case rules::MacroTargetKind::All:
+				text += std::string(" ") + rules::toString(step.target.kind);
+				break;
+			case rules::MacroTargetKind::Member:
+				text += " " + step.target.member;
+				break;
+			case rules::MacroTargetKind::Enemy:
+				text += " e" + std::to_string(step.target.enemySlot);
+				break;
+			}
+			if (view.steps[i].issue != rules::MacroIssue::None) {
+				text += std::string(" (") + rules::toString(view.steps[i].issue) + ")";
+			}
+			print(text);
+		}
+	}
+}
+
+// The macro editor's commands: create, rename, delete, move, step, removestep, movestep and combo.
+void Runner::macro(const std::vector<std::string>& w) {
+	int a = 0;
+	int b = 0;
+	if (w[1] == "create" && w.size() == 3) {
+		report(session_.createMacro(w[2]));
+	} else if (w[1] == "rename" && w.size() == 4) {
+		report(session_.renameMacro(w[2], w[3]));
+	} else if (w[1] == "delete" && w.size() == 3) {
+		report(session_.deleteMacro(w[2]));
+	} else if (w[1] == "move" && w.size() == 4 && toInt(w[3], a)) {
+		report(session_.moveMacro(w[2], a));
+	} else if (w[1] == "removestep" && w.size() == 4 && toInt(w[3], a)) {
+		report(session_.removeMacroStep(w[2], a));
+	} else if (w[1] == "movestep" && w.size() == 5 && toInt(w[3], a) && toInt(w[4], b)) {
+		report(session_.moveMacroStep(w[2], a, b));
+	} else if (w[1] == "combo" && w.size() == 4) {
+		report(session_.macroFromCombo(w[2], w[3]));
+	} else if (w[1] == "step" && w.size() >= 6 && w.size() <= 8 && toInt(w[3], a)) {
+		rules::MacroStep step;
+		step.member = w[4];
+		step.piece = w[5] == "piece";
+		if (!step.piece && !rules::parseCommandKind(w[5], step.kind)) {
+			error("unknown command '" + w[5] + "'");
+			return;
+		}
+		step.kind = step.piece ? rules::CommandKind::Item : step.kind;
+		const bool takesId = step.kind == rules::CommandKind::Ability || step.kind == rules::CommandKind::Item;
+		std::size_t next = 6;
+		if (takesId && w.size() > next) {
+			step.id = w[next++];
+		}
+		if (w.size() > next + 1) {
+			error("macro step NAME INDEX MEMBER COMMAND [ID] [TARGET]");
+			return;
+		}
+		const std::string target = w.size() > next ? w[next] : "default";
+		int slot = 0;
+		if (target.size() > 1 && target[0] == 'e' && toInt(target.substr(1), slot)) {
+			step.target.kind = rules::MacroTargetKind::Enemy;
+			step.target.enemySlot = slot;
+		} else if (!rules::parseMacroTargetKind(target, step.target.kind) || step.target.kind == rules::MacroTargetKind::Member || step.target.kind == rules::MacroTargetKind::Enemy) {
+			step.target.kind = rules::MacroTargetKind::Member;
+			step.target.member = target;
+		}
+		report(session_.setMacroStep(w[2], a, step));
+	} else {
+		error("unknown macro command");
+	}
 }
 
 void Runner::status() {
@@ -474,6 +582,15 @@ bool Runner::execute(const std::string& rawLine) {
 		} else {
 			report(session_.setCommand(actor, cmd == "defend" ? rules::Command::defend() : rules::Command::escape()));
 		}
+	} else if (mode == Mode::Battle && cmd == "fight" && w.size() == 2) {
+		fight(w[1]);
+	} else if (cmd == "macros" && w.size() == 1) {
+		listMacros();
+	} else if (cmd == "macro" && w.size() >= 3) {
+		macro(w);
+	} else if (cmd == "autobattle" && w.size() == 2 && (w[1] == "on" || w[1] == "off" || w[1] == "random")) {
+		options_.autoBattle = w[1] != "off";
+		options_.autoBattleEncountersOnly = w[1] == "random";
 	} else if (mode == Mode::Battle && cmd == "macro" && w.size() == 2) {
 		std::vector<rules::MacroStepResult> results;
 		report(session_.applyMacro(w[1], &results));

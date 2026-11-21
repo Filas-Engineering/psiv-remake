@@ -127,7 +127,9 @@ std::string invalidWorld(const GameData& data, const World& w) {
 		for (const rules::MacroStep& step : macro.steps) {
 			const bool badTarget = step.target.kind == rules::MacroTargetKind::Enemy && (step.target.enemySlot < 0 || step.target.enemySlot >= rules::kMaxEnemies);
 			const bool badMember = step.target.kind == rules::MacroTargetKind::Member && !db.character(step.target.member);
-			const bool badId = (step.kind == rules::CommandKind::Ability && !db.ability(step.id)) || (step.kind == rules::CommandKind::Item && !db.item(step.id));
+			const rules::EquipmentDef* piece = step.piece ? db.equipmentPiece(step.id) : nullptr;
+			const bool badPiece = step.piece && (step.kind != rules::CommandKind::Item || !piece || !db.ability(piece->use));
+			const bool badId = (step.kind == rules::CommandKind::Ability && !db.ability(step.id)) || (step.kind == rules::CommandKind::Item && !step.piece && !db.item(step.id)) || badPiece;
 			if (!db.character(step.member) || badTarget || badMember || badId) {
 				return named("bad step in macro", macro.name);
 			}
@@ -279,7 +281,15 @@ rules::MacroIssue stepIssue(const rules::Database& db, const World& world, const
 			}
 		}
 	}
-	if (step.kind == rules::CommandKind::Item) {
+	if (step.kind == rules::CommandKind::Item && step.piece) {
+		const bool worn = std::any_of(m->equipment.begin(), m->equipment.end(), [&](const auto& slot) { return slot.second == step.id; });
+		const rules::EquipmentDef* piece = db.equipmentPiece(step.id);
+		auto bagged = world.equipmentBag.find(step.id);
+		const bool fromBag = piece && piece->useFromBag && bagged != world.equipmentBag.end() && bagged->second > 0;
+		if (!worn && !fromBag) {
+			return rules::MacroIssue::NoItem;
+		}
+	} else if (step.kind == rules::CommandKind::Item) {
 		auto held = world.items.find(step.id);
 		if (held == world.items.end() || held->second <= 0) {
 			return rules::MacroIssue::NoItem;
@@ -541,6 +551,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.macro_menu_only",
 		"game.refuse.macro_name_taken",
 		"game.refuse.macro_no_position",
+		"game.refuse.macro_piece_no_use",
 		"game.refuse.macro_no_step",
 		"game.refuse.macro_slots_full",
 		"game.refuse.macro_steps_full",
@@ -2671,13 +2682,13 @@ rules::Message Session::setCommand(int actor, const rules::Command& command) {
 	return battle_->setCommand(actor, command);
 }
 
-rules::Message Session::applyMacro(const std::string& name, std::vector<rules::MacroStepResult>* results) {
+rules::Message Session::applyMacro(const std::string& name, std::vector<rules::MacroStepResult>* results, rules::MacroFallback fallback) {
 	if (!battle_) {
 		return refusal("no_battle");
 	}
 	for (const rules::Macro& m : world_.macros) {
 		if (m.name == name) {
-			std::vector<rules::MacroStepResult> r = battle_->applyMacro(m);
+			std::vector<rules::MacroStepResult> r = battle_->applyMacro(m, fallback);
 			if (results) {
 				*results = std::move(r);
 			}
@@ -3478,6 +3489,15 @@ rules::Message Session::setMacroStep(const std::string& name, int index, const r
 		break;
 	}
 	case rules::CommandKind::Item: {
+		if (step.piece) {
+			const rules::EquipmentDef* piece = db.equipmentPiece(step.id);
+			const rules::AbilityDef* use = piece ? db.ability(piece->use) : nullptr;
+			if (!use) {
+				return refusal("macro_piece_no_use", {step.id});
+			}
+			targeting = use->targeting;
+			break;
+		}
 		const rules::ItemDef* item = db.item(step.id);
 		if (!item) {
 			return refusal("macro_unknown_item", {step.id});
@@ -3488,7 +3508,7 @@ rules::Message Session::setMacroStep(const std::string& name, int index, const r
 	case rules::CommandKind::Attack:
 	case rules::CommandKind::Defend:
 	case rules::CommandKind::Escape:
-		if (!step.id.empty()) {
+		if (!step.id.empty() || step.piece) {
 			return refusal("macro_bad_command", {rules::toString(step.kind)});
 		}
 		break;

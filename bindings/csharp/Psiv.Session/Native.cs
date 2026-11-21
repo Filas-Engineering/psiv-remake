@@ -221,7 +221,7 @@ public struct PsivMacroStep
 	public IntPtr Id, IdName;
 	public int TargetKind;
 	public IntPtr TargetMember, TargetMemberName;
-	public int TargetEnemy, Issue;
+	public int TargetEnemy, Issue, Piece;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -367,7 +367,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 12;
+	public const uint AbiVersion = 13;
 	// PSIV_SLOT_COUNT: the places a member wears equipment, which the member structs index by psiv_equip_slot.
 	public const int SlotCount = 7;
 
@@ -399,6 +399,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_macro_delete", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroDelete(SessionHandle s, string name);
 	[LibraryImport(Library, EntryPoint = "psiv_macro_move", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroMove(SessionHandle s, string name, int position);
 	[LibraryImport(Library, EntryPoint = "psiv_macro_set_step", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroSetStep(SessionHandle s, string macro, int index, string member, int commandKind, string? id, int targetKind, string? targetMember, int targetEnemy);
+	[LibraryImport(Library, EntryPoint = "psiv_macro_set_piece_step", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroSetPieceStep(SessionHandle s, string macro, int index, string member, string piece, int targetKind, string? targetMember, int targetEnemy);
 	[LibraryImport(Library, EntryPoint = "psiv_macro_remove_step", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroRemoveStep(SessionHandle s, string macro, int index);
 	[LibraryImport(Library, EntryPoint = "psiv_macro_move_step", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroMoveStep(SessionHandle s, string macro, int from, int to);
 	[LibraryImport(Library, EntryPoint = "psiv_macro_from_combo", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroFromCombo(SessionHandle s, string recipe, string name);
@@ -458,6 +459,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_battle_options")] public static partial int BattleOptions(SessionHandle s, int actor, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_set_command", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleSetCommand(SessionHandle s, int actor, int kind, string? id, int target);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_apply_macro", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleApplyMacro(SessionHandle s, string macro, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_battle_apply_macro_fallback", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleApplyMacroFallback(SessionHandle s, string macro, int fallback, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_start_auto")] public static partial int BattleStartAuto(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_cancel_auto")] public static partial int BattleCancelAuto(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_fill_from_auto")] public static partial int BattleFillFromAuto(SessionHandle s, out int filled);

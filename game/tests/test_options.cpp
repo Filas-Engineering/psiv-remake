@@ -469,3 +469,81 @@ TEST(openingAChestRunsItsFlagHooksAtOnceAndOnlyOnce) {
 	CHECK(s.interact().empty());
 	CHECK(!s.linePending());
 }
+
+// R48: a macro step that names a piece is kept by the editor, marked until the party has one to cast, saved and loaded
+// back, and cast in battle.
+TEST(macroStepsNamingPiecesAreKeptSavedAndCast) {
+	Session s(test::data(), SessionOptions());
+	test::placeParty(s, "tidewater", "start", Facing::East);
+	CHECK(s.openMenu().empty());
+	CHECK(s.createMacro("fan").empty());
+	rules::MacroStep step;
+	step.member = "fighter";
+	step.kind = rules::CommandKind::Item;
+	step.id = "rivet_plate";
+	step.piece = true;
+	CHECK_EQ(s.setMacroStep("fan", 0, step).key, std::string("game.refuse.macro_piece_no_use"));
+	step.id = "squall_fan";
+	step.target.kind = rules::MacroTargetKind::Enemy;
+	step.target.enemySlot = 0;
+	CHECK(s.setMacroStep("fan", 0, step).empty());
+	auto fanStep = [&s] { return s.macroViews().back().steps.at(0); };
+	CHECK(fanStep().step.piece && fanStep().issue == rules::MacroIssue::NoItem && fanStep().commandName == "Squall Fan");
+	CHECK(s.devGive("squall_fan", 1).empty());
+	CHECK(fanStep().issue == rules::MacroIssue::None);
+
+	const std::string text = serializeSave(s.makeSave(false));
+	CHECK(text.find("step fighter piece squall_fan enemy - 0\n") != std::string::npos);
+	const rules::Result<SaveFile> loaded = parseSave(text);
+	CHECK(loaded.ok() && loaded.value->world.macros.back().steps.at(0).piece);
+
+	CHECK(s.closeMenu().empty());
+	CHECK(s.devBattle("training").empty());
+	std::vector<rules::MacroStepResult> results;
+	CHECK(s.applyMacro("fan", &results).empty());
+	CHECK(results.size() == 1 && results[0].status == rules::MacroStepStatus::Applied && results[0].command.id == "squall_fan");
+	bool cast = false;
+	for (const rules::Event& e : s.resolveRound()) {
+		cast = cast || (e.type == rules::EventType::ActionStarted && e.ability == "squall_fan" && e.actor == 0);
+	}
+	CHECK(cast);
+}
+
+// R49, R51: `autobattle random` plays the field's battles alone and leaves an event's battle to the script, which
+// `fight` plays with a macro, a member that cannot run its step taking core's choice.
+TEST(theTerminalLeavesEventBattlesToTheScriptUnderAutobattleRandom) {
+	Session s(test::data(), SessionOptions());
+	test::placeParty(s, "tidewater", "hold_front", Facing::North);
+	std::ostringstream out;
+	RunnerOptions options;
+	options.echo = false;
+	Runner runner(s, out, options);
+	runner.execute("autobattle random");
+	CHECK(s.devBattle("training").empty());
+	runner.settle();
+	CHECK(s.mode() != Mode::Battle && s.endedBattle() && s.endedBattle()->source == BattleSource::Random);
+	test::placeParty(s, "tidewater", "hold_front", Facing::North);
+	runner.execute("talk");
+	CHECK(s.mode() == Mode::Battle && s.battleSource() == BattleSource::Event);
+	runner.execute("fight nothing");
+	CHECK(runner.errors() == 1 && s.mode() == Mode::Battle);
+	runner.execute("fight opener");
+	CHECK(s.mode() != Mode::Battle && s.endedBattle() && s.endedBattle()->source == BattleSource::Event);
+	CHECK_EQ(runner.errors(), 1);
+}
+
+// R52: the terminal log names an enemy that takes its next form.
+TEST(theTerminalLogShowsAnEnemyTransforming) {
+	Session s(test::data(), SessionOptions());
+	s.newGame();
+	test::confirmLines(s);
+	std::ostringstream out;
+	Runner runner(s, out);
+	CHECK(s.devBattle("pupa").empty());
+	runner.settle();
+	for (int round = 0; round < 4 && s.mode() == Mode::Battle; ++round) {
+		runner.execute("defend fighter");
+		runner.execute("round");
+	}
+	CHECK(out.str().find("  Moss Pupa becomes Moss Moth.\n") != std::string::npos);
+}

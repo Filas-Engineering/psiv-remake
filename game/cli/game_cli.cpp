@@ -15,6 +15,7 @@ void usage() {
 	std::cout << "game_cli: play the placeholder adventure in a terminal\n"
 				 "\n"
 				 "  game_cli [--data DIR] [--core DIR] [--seed N] [--saves DIR] [--auto-battle] [--encounters visible|random]\n"
+				 "                                  --auto-battle starts as `autobattle on`; the command changes it at any time\n"
 				 "  game_cli --script FILE ...      run the commands in FILE, print the transcript, then exit\n"
 				 "  game_cli --bot [--route FILE] [--goal FLAG]  walk the route in both encounter modes and print pacing tables;\n"
 				 "                                  it finishes when every boss flag (or FLAG) is set\n"
@@ -31,10 +32,13 @@ void commands() {
 	std::cout << "title:  new | continue | load SLOT | retry | quit\n"
 				 "field:  n|e|s|w [COUNT] | walk MARKER | walk X Y | face DIR | talk | chat | menu | look | status | wait MS\n"
 				 "event:  choose N | skip\n"
-				 "battle: attack M [eN] | use M ABILITY [eN|pN] | item M ITEM [eN|pN] | defend M | escape M | macro NAME | round | auto | cancel\n"
+				 "battle: attack M [eN] | use M ABILITY [eN|pN] | item M ITEM [eN|pN] | defend M | escape M | macro NAME | fight NAME | round | auto | cancel\n"
 				 "menu:   item ITEM [MEMBER] | tech USER ABILITY [MEMBER] | equip MEMBER PIECE | unequip MEMBER SLOT | save manual_N | saves | close\n"
 				 "shop:   buy ID [N] | sell ID [N] | leave      inn: rest | close      name entry: name TEXT\n"
-				 "any:    set difficulty|reward|auto|text|battle|shipped|PROFILE_KEY VALUE | quests | codex | log | pacing | title\n";
+				 "macros: macros | macro create|delete NAME | macro rename NAME NEW | macro move NAME POS | macro combo RECIPE NAME\n"
+				 "        macro step NAME INDEX MEMBER attack|defend|escape|ability ID|item ID|piece ID [default|self|all|eN|MEMBER]\n"
+				 "        macro removestep NAME INDEX | macro movestep NAME FROM TO   (changes from the field menu)\n"
+				 "any:    set difficulty|reward|auto|text|battle|shipped|PROFILE_KEY VALUE | autobattle on|off|random | quests | codex | log | pacing | title\n";
 }
 
 bool parseSeed(const std::string& text, std::uint64_t& out) {

@@ -10,6 +10,9 @@ namespace game {
 struct RunnerOptions {
 	// Resolve every battle with Session::playBattle as soon as it starts.
 	bool autoBattle = false;
+	// With autoBattle, only battles the field starts (random and visible encounters, developer battles); a battle an
+	// event starts waits for the script's commands. The `autobattle` command sets both.
+	bool autoBattleEncountersOnly = false;
 	// Print each command before running it, so a scripted run reads as a transcript.
 	bool echo = true;
 };
@@ -39,6 +42,9 @@ private:
 	void flushOutput();
 	void printEvents(const std::vector<rules::Event>& events);
 	void finishBattleAuto();
+	void fight(const std::string& macro);
+	void listMacros();
+	void macro(const std::vector<std::string>& w);
 	void status();
 	void dev(const std::vector<std::string>& w);
 	void walkTo(Cell goal);

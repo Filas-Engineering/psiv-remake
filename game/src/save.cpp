@@ -748,7 +748,7 @@ const KnownChunk kWorldChunks[] = {
 	{"party", 4, partyChunk, readParty, 2},
 	{"inventory", 1, inventoryChunk, readInventory, 1},
 	{"world", 3, worldChunk, readWorld, 1},
-	{"battle", 2, battleChunk, readBattle, 2},
+	{"battle", 3, battleChunk, readBattle, 2},
 	{"random", 1, randomChunk, readRandom, 1},
 	{"difficulty", 1, difficultyChunk, readDifficulty, 1},
 	{"quests", 1, questsChunk, readQuests, 1},
@@ -957,6 +957,12 @@ bool migrate8to9(std::vector<Chunk>&, std::string&) {
 	return true;
 }
 
+// Schema 9 to 10: a macro step may name an equipment piece (battle chunk 3, core's macros block 2); a schema 9 save's
+// macros block 1 reads as it is.
+bool migrate9to10(std::vector<Chunk>&, std::string&) {
+	return true;
+}
+
 struct Migration {
 	int from;
 	bool (*apply)(std::vector<Chunk>& chunks, std::string& error);
@@ -972,6 +978,7 @@ const Migration kMigrations[] = {
 	{6, migrate6to7},
 	{7, migrate7to8},
 	{8, migrate8to9},
+	{9, migrate9to10},
 };
 
 std::string headerChunk(const SaveFile& save) {

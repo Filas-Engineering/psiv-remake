@@ -18,6 +18,9 @@
 static psiv_session* S;
 static int errors;
 static int autoBattle;
+/* With autoBattle, only battles the field starts; an event's battle waits for the script (`autobattle random`). */
+static int autoEncountersOnly;
+static int echo = 1;
 static char battleNames[MAX_COMBATANTS][NAME_SIZE];
 static int battleNameCount;
 
@@ -208,6 +211,24 @@ static void printEvents(const psiv_battle_event* events, int32_t count) {
 		case PSIV_EVENT_BATTLE_ENDED:
 			print("Outcome: %s", psiv_name_of(PSIV_NAME_OUTCOME, e->outcome));
 			break;
+		case PSIV_EVENT_ENEMY_JOINED:
+			if (e->target == battleNameCount && battleNameCount < MAX_COMBATANTS) {
+				const psiv_combatant* list;
+				int32_t count;
+				if (psiv_battle_combatants(S, &list, &count) == PSIV_OK && e->target < count) {
+					snprintf(battleNames[battleNameCount++], NAME_SIZE, "%s", list[e->target].label);
+				}
+			}
+			print("  %s joins the battle.", battleName(e->target));
+			break;
+		case PSIV_EVENT_ENEMY_LEFT:
+			if (e->actor >= 0) {
+				print("  %s merges into %s.", battleName(e->target), battleName(e->actor));
+			}
+			break;
+		case PSIV_EVENT_ENEMY_TRANSFORMED:
+			print("  %s becomes %s.", battleName(e->target), displayName(e->id_count > 0 ? e->ids[0] : ""));
+			break;
 		default:
 			break;
 		}
@@ -260,7 +281,8 @@ static void settle(void) {
 				battleNameCount = count;
 				print("Enemies: %s.", enemies.text);
 			}
-			if (!autoBattle) {
+			psiv_battle_info info;
+			if (!autoBattle || (autoEncountersOnly && psiv_battle_info_get(S, &info) == PSIV_OK && info.source == PSIV_BATTLE_EVENT)) {
 				return;
 			}
 			finishBattleAuto();
@@ -292,6 +314,128 @@ static void settle(void) {
 		psiv_update(S, 100, PSIV_DIRECTION_NONE);
 	}
 	error("the game did not settle");
+}
+
+/* Plays the battle round by round with the macro, each member whose step cannot run taking core's automatic choice. */
+static void fight(const char* macro) {
+	for (int round = 0; round < 60 && psiv_mode_get(S) == PSIV_MODE_BATTLE; ++round) {
+		flushOutput();
+		if (psiv_battle_apply_macro_fallback(S, macro, PSIV_MACRO_FALLBACK_AUTOMATIC, NULL, NULL) != PSIV_OK) {
+			report(PSIV_REFUSED);
+			return;
+		}
+		resolveAndPrint();
+	}
+	if (psiv_mode_get(S) == PSIV_MODE_BATTLE) {
+		error("the battle did not end in 60 rounds");
+	}
+}
+
+static void listMacros(void) {
+	const psiv_macro* macros;
+	psiv_settings settings;
+	int32_t count;
+	psiv_settings_get(S, &settings);
+	if (psiv_macro_list(S, &macros, &count) != PSIV_OK) {
+		return;
+	}
+	for (int32_t i = 0; i < count; ++i) {
+		print("  %s%s", macros[i].name, strcmp(macros[i].name, settings.auto_macro) == 0 ? " (auto)" : "");
+		for (int32_t j = 0; j < macros[i].step_count; ++j) {
+			const psiv_macro_step* step = &macros[i].steps[j];
+			Buffer line;
+			bclear(&line);
+			badd(&line, "    %d %s %s", j, step->member, step->piece ? "piece" : psiv_name_of(PSIV_NAME_COMMAND_KIND, step->command_kind));
+			if (step->id[0]) {
+				badd(&line, " %s", step->id);
+			}
+			if (step->target_kind == PSIV_MACRO_TARGET_SELF || step->target_kind == PSIV_MACRO_TARGET_ALL) {
+				badd(&line, " %s", psiv_name_of(PSIV_NAME_MACRO_TARGET_KIND, step->target_kind));
+			} else if (step->target_kind == PSIV_MACRO_TARGET_MEMBER) {
+				badd(&line, " %s", step->target_member);
+			} else if (step->target_kind == PSIV_MACRO_TARGET_ENEMY) {
+				badd(&line, " e%d", step->target_enemy);
+			}
+			if (step->issue != PSIV_ISSUE_NONE) {
+				badd(&line, " (%s)", psiv_name_of(PSIV_NAME_MACRO_ISSUE, step->issue));
+			}
+			print("%s", line.text);
+		}
+	}
+}
+
+/* The macro editor's commands: create, rename, delete, move, step, removestep, movestep and combo. */
+static void macro(char words[][LINE_SIZE], int wordCount) {
+	int a = 0;
+	int b = 0;
+	if (strcmp(words[1], "create") == 0 && wordCount == 3) {
+		report(psiv_macro_create(S, words[2]));
+	} else if (strcmp(words[1], "rename") == 0 && wordCount == 4) {
+		report(psiv_macro_rename(S, words[2], words[3]));
+	} else if (strcmp(words[1], "delete") == 0 && wordCount == 3) {
+		report(psiv_macro_delete(S, words[2]));
+	} else if (strcmp(words[1], "move") == 0 && wordCount == 4 && toInt(words[3], &a)) {
+		report(psiv_macro_move(S, words[2], a));
+	} else if (strcmp(words[1], "removestep") == 0 && wordCount == 4 && toInt(words[3], &a)) {
+		report(psiv_macro_remove_step(S, words[2], a));
+	} else if (strcmp(words[1], "movestep") == 0 && wordCount == 5 && toInt(words[3], &a) && toInt(words[4], &b)) {
+		report(psiv_macro_move_step(S, words[2], a, b));
+	} else if (strcmp(words[1], "combo") == 0 && wordCount == 4) {
+		report(psiv_macro_from_combo(S, words[2], words[3]));
+	} else if (strcmp(words[1], "step") == 0 && wordCount >= 6 && wordCount <= 8 && toInt(words[3], &a)) {
+		const int piece = strcmp(words[5], "piece") == 0;
+		int32_t kind = PSIV_COMMAND_ITEM;
+		char message[LINE_SIZE + 64];
+		if (!piece && psiv_parse_name(PSIV_NAME_COMMAND_KIND, words[5], &kind) != PSIV_OK) {
+			snprintf(message, sizeof message, "unknown command '%s'", words[5]);
+			error(message);
+			return;
+		}
+		const int takesId = kind == PSIV_COMMAND_ABILITY || kind == PSIV_COMMAND_ITEM;
+		int next = 6;
+		const char* id = "";
+		if (takesId && wordCount > next) {
+			id = words[next++];
+		}
+		if (wordCount > next + 1) {
+			error("macro step NAME INDEX MEMBER COMMAND [ID] [TARGET]");
+			return;
+		}
+		const char* target = wordCount > next ? words[next] : "default";
+		int32_t targetKind = PSIV_MACRO_TARGET_DEFAULT;
+		const char* member = "";
+		int slot = -1;
+		if (strlen(target) > 1 && target[0] == 'e' && toInt(target + 1, &slot)) {
+			targetKind = PSIV_MACRO_TARGET_ENEMY;
+		} else if (psiv_parse_name(PSIV_NAME_MACRO_TARGET_KIND, target, &targetKind) != PSIV_OK || targetKind == PSIV_MACRO_TARGET_MEMBER ||
+			targetKind == PSIV_MACRO_TARGET_ENEMY) {
+			targetKind = PSIV_MACRO_TARGET_MEMBER;
+			member = target;
+			slot = -1;
+		}
+		report(piece ? psiv_macro_set_piece_step(S, words[2], a, words[4], id, targetKind, member, slot)
+					 : psiv_macro_set_step(S, words[2], a, words[4], kind, id, targetKind, member, slot));
+	} else {
+		error("unknown macro command");
+	}
+}
+
+/* The developer commands a script uses to reach a part of the adventure directly; each marks the game. */
+static void dev(char words[][LINE_SIZE], int wordCount) {
+	int n = 0;
+	if (strcmp(words[1], "warp") == 0 && wordCount == 4) {
+		report(psiv_dev_warp(S, words[2], words[3]));
+	} else if (strcmp(words[1], "flag") == 0 && wordCount == 4 && (strcmp(words[3], "on") == 0 || strcmp(words[3], "off") == 0)) {
+		report(psiv_dev_set_flag(S, words[2], strcmp(words[3], "on") == 0));
+	} else if (strcmp(words[1], "give") == 0 && wordCount == 4 && toInt(words[3], &n)) {
+		report(psiv_dev_give(S, words[2], n));
+	} else if (strcmp(words[1], "money") == 0 && wordCount == 3 && toInt(words[2], &n)) {
+		report(psiv_dev_money(S, n));
+	} else if (strcmp(words[1], "level") == 0 && wordCount == 4 && toInt(words[3], &n)) {
+		report(psiv_dev_set_level(S, words[2], n));
+	} else {
+		error("unknown dev command");
+	}
 }
 
 static void status(void) {
@@ -499,7 +643,24 @@ static int execute(const char* rawLine) {
 	if (wordCount == 0) {
 		return 1;
 	}
-	print("%s> %s", modeName(), line + strspn(line, " \t"));
+	if (echo) {
+		print("%s> %s", modeName(), line + strspn(line, " \t"));
+	}
+	/* `refused COMMAND` runs the command and passes only when the game refuses it, so a script can show a refusal. */
+	if (strcmp(words[0], "refused") == 0 && wordCount > 1) {
+		const int before = errors;
+		const char* inner = strstr(line, "refused") + 7;
+		echo = 0;
+		const int more = execute(inner);
+		echo = 1;
+		if (errors == before) {
+			snprintf(message, sizeof message, "'%s' was not refused", inner + 1);
+			error(message);
+		} else {
+			errors = before;
+		}
+		return more;
+	}
 	const char* cmd = words[0];
 	const int32_t mode = psiv_mode_get(S);
 	int facing;
@@ -619,6 +780,18 @@ static int execute(const char* rawLine) {
 		} else {
 			report(psiv_battle_set_command(S, actor, strcmp(cmd, "defend") == 0 ? PSIV_COMMAND_DEFEND : PSIV_COMMAND_ESCAPE, "", -1));
 		}
+	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "fight") == 0 && wordCount == 2) {
+		fight(words[1]);
+	} else if (strcmp(cmd, "macros") == 0 && wordCount == 1) {
+		listMacros();
+	} else if (strcmp(cmd, "macro") == 0 && wordCount >= 3) {
+		macro(words, wordCount);
+	} else if (strcmp(cmd, "autobattle") == 0 && wordCount == 2 &&
+		(strcmp(words[1], "on") == 0 || strcmp(words[1], "off") == 0 || strcmp(words[1], "random") == 0)) {
+		autoBattle = strcmp(words[1], "off") != 0;
+		autoEncountersOnly = strcmp(words[1], "random") == 0;
+	} else if (strcmp(cmd, "dev") == 0 && wordCount >= 2) {
+		dev(words, wordCount);
 	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "macro") == 0 && wordCount == 2) {
 		report(psiv_battle_apply_macro(S, words[1], NULL, NULL));
 	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "round") == 0) {

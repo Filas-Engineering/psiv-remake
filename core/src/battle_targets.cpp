@@ -32,6 +32,76 @@ std::vector<int> Battle::allies(int actor) const {
 	return result;
 }
 
+bool Battle::wouldChange(int target, const std::vector<Effect>& effects) const {
+	const Combatant& t = combatants_[target];
+	if (t.gone) {
+		return false;
+	}
+	for (const Effect& effect : effects) {
+		if (!effect.reaches(t.kind) || (effect.kind != EffectKind::Revive && !t.alive())) {
+			continue;
+		}
+		switch (effect.kind) {
+		case EffectKind::Heal:
+			if (t.hp < t.stats.maxHp) {
+				return true;
+			}
+			break;
+		case EffectKind::Revive:
+			if (!t.alive()) {
+				return true;
+			}
+			break;
+		case EffectKind::CureStatus:
+			if (t.hasStatus(effect.status)) {
+				return true;
+			}
+			break;
+		case EffectKind::RestoreTp:
+			if (t.tp < t.stats.maxTp) {
+				return true;
+			}
+			break;
+		case EffectKind::ApplyStatus: {
+			const StatusDef* def = db_->status(effect.status);
+			if (def && t.resistance(effect.status) < 100 && !(def->stacking == StatusStacking::Keep && t.hasStatus(effect.status))) {
+				return true;
+			}
+			break;
+		}
+		case EffectKind::PhysicalDamage:
+		case EffectKind::ElementalDamage:
+		case EffectKind::ModifyStat:
+		case EffectKind::Travel:
+		case EffectKind::InstantDefeat:
+		case EffectKind::StripModifiers:
+		case EffectKind::Summon:
+		case EffectKind::Merge:
+		case EffectKind::Teach:
+		case EffectKind::Transform:
+		case EffectKind::Split:
+		case EffectKind::SelfDestruct:
+		case EffectKind::RemoveBeside:
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Battle::supports(const std::vector<Effect>& effects) {
+	if (effects.empty()) {
+		return false;
+	}
+	for (const Effect& effect : effects) {
+		const bool helps = effect.kind == EffectKind::Heal || effect.kind == EffectKind::Revive || effect.kind == EffectKind::CureStatus
+			|| effect.kind == EffectKind::RestoreTp || (effect.kind == EffectKind::ModifyStat && effect.raises);
+		if (!helps) {
+			return false;
+		}
+	}
+	return true;
+}
+
 // The requested foe while it stands, otherwise the first living foe.
 int Battle::primaryFoe(int user, int requested) const {
 	const std::vector<int> foes = livingFoes(user);
@@ -41,13 +111,25 @@ int Battle::primaryFoe(int user, int requested) const {
 	return std::find(foes.begin(), foes.end(), requested) != foes.end() ? requested : foes.front();
 }
 
-// Party members who are not defeated, in party order, weighted count, count - 1, ... 1 (BAT-090).
+// Party members who are not defeated, in party order, weighted count, count - 1, ... 1 (BAT-090), or by rules.json's
+// target_weights for that many members.
 int Battle::drawFoeByPartyOrder(int actor) {
 	const std::vector<int> foes = livingFoes(actor);
 	if (foes.empty()) {
 		return -1;
 	}
 	const int count = static_cast<int>(foes.size());
+	const auto weights = db_->battleRules.targetWeights.find(count);
+	if (weights != db_->battleRules.targetWeights.end()) {
+		int roll = rng_.range(0, 255);
+		for (int k = 0; k < count; ++k) {
+			roll -= weights->second[static_cast<std::size_t>(k)];
+			if (roll < 0) {
+				return foes[static_cast<std::size_t>(k)];
+			}
+		}
+		return foes.back();
+	}
 	int roll = rng_.range(0, count * (count + 1) / 2 - 1);
 	for (int k = 0; k < count; ++k) {
 		roll -= count - k;
@@ -78,7 +160,7 @@ int Battle::retargetFoe(int user, const std::vector<Effect>& effects) {
 
 // A one-ally action in a macro round (BAT-053): a revive takes the first fallen member, a cure the first member
 // with a status it cures (or the actor), a heal the member missing the most hit points (ties to the later member).
-// Anything else keeps the command's target.
+// Each passes by members whose kind the effect does not reach. Anything else keeps the command's target.
 int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const {
 	const int requested = commands_[actor].target;
 	if (effects.empty()) {
@@ -88,7 +170,7 @@ int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const
 	switch (effects.front().kind) {
 	case EffectKind::Revive:
 		for (int ally : party) {
-			if (!combatants_[ally].alive()) {
+			if (!combatants_[ally].alive() && wouldChange(ally, effects)) {
 				return ally;
 			}
 		}
@@ -96,7 +178,7 @@ int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const
 	case EffectKind::CureStatus:
 		for (int ally : party) {
 			for (const Effect& effect : effects) {
-				if (combatants_[ally].alive() && effect.kind == EffectKind::CureStatus && combatants_[ally].hasStatus(effect.status)) {
+				if (combatants_[ally].alive() && effect.kind == EffectKind::CureStatus && effect.reaches(combatants_[ally].kind) && combatants_[ally].hasStatus(effect.status)) {
 					return ally;
 				}
 			}
@@ -106,7 +188,12 @@ int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const
 		break;
 	// The original's pick for a one-ally raise never moves off the first member in line, whatever that member's state.
 	case EffectKind::ModifyStat:
-		return party.empty() ? requested : party.front();
+		for (int ally : party) {
+			if (effects.front().reaches(combatants_[ally].kind)) {
+				return ally;
+			}
+		}
+		return requested;
 	case EffectKind::PhysicalDamage:
 	case EffectKind::ElementalDamage:
 	case EffectKind::ApplyStatus:

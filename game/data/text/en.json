@@ -102,6 +102,7 @@
 		"game.refuse.macro_name_taken": "There is already a macro named {0}.",
 		"game.refuse.macro_no_position": "There is no macro position {0}.",
 		"game.refuse.macro_no_step": "There is no step {0} in this macro.",
+		"game.refuse.macro_piece_no_use": "{0} is not a piece with a use in battle.",
 		"game.refuse.macro_slots_full": "There can be at most {0} macros.",
 		"game.refuse.macro_steps_full": "A macro has at most {0} steps.",
 		"game.refuse.macro_target": "That target does not fit this command ({0}).",

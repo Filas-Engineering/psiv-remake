@@ -118,14 +118,14 @@ std::vector<int> Battle::aiCandidates(int actor, const AbilityDef& ability, cons
 		break;
 	case Targeting::OneAlly:
 		for (int ally : allies(actor)) {
-			if (combatants_[ally].alive()) {
+			if (combatants_[ally].alive() && (!supports(ability.effects) || wouldChange(ally, ability.effects))) {
 				pool.push_back(ally);
 			}
 		}
 		break;
 	case Targeting::OneFallenAlly:
 		for (int ally : allies(actor)) {
-			if (!combatants_[ally].alive()) {
+			if (!combatants_[ally].alive() && wouldChange(ally, ability.effects)) {
 				pool.push_back(ally);
 			}
 		}
@@ -220,7 +220,7 @@ int Battle::aiTarget(int actor, const AbilityDef& ability, const AiTarget& targe
 		const EnemyDef* def = isParty(index) ? nullptr : db_->enemy(combatants_[index].defId);
 		return def && !def->transformsInto.empty();
 	};
-	int best = actor;
+	int best = std::find(candidates.begin(), candidates.end(), actor) != candidates.end() ? actor : candidates.front();
 	for (int ally : candidates) {
 		const bool better = transforms && canTransform(ally) != canTransform(best) ? canTransform(ally) : lowerHpShare(combatants_[ally], combatants_[best]);
 		if (better) {

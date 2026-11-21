@@ -28,8 +28,11 @@ struct Effect {
 	int count = 0;
 	// SelfDestruct and RemoveBeside: the enemies that leave still pay their experience and currency.
 	bool rewards = false;
-	// Damage: the percent of the user's attacking stat the formula attacks with.
-	int statPercent = 100;
+	// Damage: the thousandths of the user's attacking stat the formula attacks with (`stat_permille`, or `stat_percent`
+	// times 10).
+	int statPermille = 1000;
+	// An item's heal or damage: with a value, the item rolls the spread with its power as the stat and this as the bonus.
+	std::optional<int> statValue = {};
 	// PhysicalDamage: the hit takes the user's attack element (a member's weapon, an enemy's attack_element).
 	bool weaponElement = false;
 	bool reaches(CreatureKind kind) const;

@@ -1,4 +1,5 @@
 #include "fixtures.h"
+#include "rules/auto_policy.h"
 #include "rules/field.h"
 #include "rules/loader.h"
 #include "rules/progression.h"
@@ -70,6 +71,88 @@ TEST(machineMembersTakeOnlyMachineHealing) {
 	battle.resolveRound();
 	CHECK_EQ(battle.combatant(kCogwright).hp, battle.combatant(kCogwright).stats.maxHp);
 	CHECK_EQ(battle.inventory().at("gear_salve"), 0);
+}
+
+// R50: auto-battle's revives and heals pass by a fallen or hurt machine the technique cannot reach, for the living
+// member beside it, and leave the machine alone when it is the only one down or hurt.
+TEST(autoBattleRevivesAndHealsOnlyMembersItsTechniquesReach) {
+	const Database& db = data();
+	BattleSetup setup = makeSetup(db, {"brass_warden"}, 4);
+	setup.party[kFighter] = makePartyMember(db, *db.character("cogwright"), 1);
+	Battle battle = makeBattle(db, setup);
+	auto fell = [&battle](int index) {
+		battle.combatant(index).hp = 0;
+		battle.combatant(index).statuses = {{kDefeatedStatus, 0}};
+	};
+	fell(kFighter);
+	fell(kScout);
+	Command chosen = autoCommand(battle, kMedic);
+	CHECK(chosen.kind == CommandKind::Ability && chosen.id == "rekindle" && chosen.target == kScout);
+
+	Macro macro;
+	macro.name = "raise";
+	macro.steps.push_back({"medic", CommandKind::Ability, "rekindle", {}});
+	battle.applyMacro(macro);
+	othersDefend(battle);
+	battle.setCommand(kFirstEnemy, Command::defend());
+	std::vector<Event> events = battle.resolveRound();
+	const std::vector<Event> revived = ofType(events, EventType::Revived);
+	CHECK(revived.size() == 1 && revived[0].target == kScout);
+	CHECK(!battle.combatant(kFighter).alive());
+
+	chosen = autoCommand(battle, kMedic);
+	CHECK(chosen.id != "rekindle" && chosen.id != "mend");
+	battle.combatant(kFighter).hp = 1;
+	battle.combatant(kFighter).statuses.clear();
+	battle.combatant(kScout).hp = battle.combatant(kScout).stats.maxHp * 30 / 100;
+	chosen = autoCommand(battle, kMedic);
+	CHECK(chosen.kind == CommandKind::Ability && chosen.id == "mend" && chosen.target == kScout);
+	battle.combatant(kScout).hp = battle.combatant(kScout).stats.maxHp;
+	chosen = autoCommand(battle, kMedic);
+	CHECK(chosen.id != "mend");
+}
+
+// R50: an enemy's revive or heal that cannot reach a fallen or hurt machine ally finds no target there.
+TEST(enemyRevivesAndHealsPassAlliesTheyCannotReach) {
+	Database db = data();
+	db.abilities["rouse"].effects.front().kinds = {CreatureKind::Living};
+	db.enemies["brass_warden"].slots.assign(static_cast<std::size_t>(kAiSlots), "rouse");
+	db.enemies["brass_warden"].overrides.clear();
+	Battle battle = makeBattle(db, {"brass_warden", "brass_warden", "gel_mite"}, 5);
+	for (int i = 0; i < static_cast<int>(battle.combatants().size()); ++i) {
+		battle.combatant(i).stats.maxHp = battle.combatant(i).hp = 5000;
+	}
+	auto fell = [&battle](int index) {
+		battle.combatant(index).hp = 0;
+		battle.combatant(index).statuses = {{kDefeatedStatus, 0}};
+	};
+	fell(kFirstEnemy + 1);
+	fell(kFirstEnemy + 2);
+	partyDefends(battle);
+	std::vector<Event> events = battle.resolveRound();
+	std::optional<Event> action = firstBy(events, EventType::ActionStarted, kFirstEnemy);
+	CHECK(action && action->ability == "rouse" && action->target == kFirstEnemy + 2);
+	fell(kFirstEnemy + 2);
+	battle.combatant(kFirstEnemy + 2).hp = 5000;
+	battle.combatant(kFirstEnemy + 2).statuses.clear();
+	partyDefends(battle);
+	events = battle.resolveRound();
+	action = firstBy(events, EventType::ActionStarted, kFirstEnemy);
+	CHECK(action && action->ability == "bite");
+
+	db = data();
+	db.abilities["patch"].effects.front().kinds = {CreatureKind::Living};
+	db.enemies["bog_wisp"].slots.assign(static_cast<std::size_t>(kAiSlots), "bite");
+	db.enemies["bog_wisp"].overrides = {};
+	AiOverride heal;
+	heal.when = AiConditionKind::AnyAllyHpHalf;
+	heal.ability = "patch";
+	db.enemies["bog_wisp"].overrides.push_back(heal);
+	Battle wisp = makeBattle(db, {"bog_wisp", "brass_warden"}, 1);
+	wisp.combatant(kFirstEnemy + 1).hp = wisp.combatant(kFirstEnemy + 1).stats.maxHp / 3;
+	partyDefends(wisp);
+	action = firstBy(wisp.resolveRound(), EventType::ActionStarted, kFirstEnemy);
+	CHECK(action && action->ability == "bite");
 }
 
 // P6: a fallen machine shares no experience and stands up with the rules' hit points once the battle is won.

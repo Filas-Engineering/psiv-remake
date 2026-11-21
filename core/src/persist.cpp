@@ -9,12 +9,13 @@ namespace rules {
 
 namespace {
 
-constexpr int kMacrosVersion = 1;
+constexpr int kMacrosVersion = 2;
 constexpr int kComboLogVersion = 1;
 
-// Reads "<kind> <version>" ... "end", calling `line` for every line between. Returns an error or "".
+// Reads "<kind> <version>" ... "end", calling `line` for every line between. Returns an error or "". Versions from
+// `oldest` to `version` are read; `found` gets the one the text has.
 template <class LineReader>
-std::string readVersioned(const std::string& text, const char* kind, int version, LineReader line) {
+std::string readVersioned(const std::string& text, const char* kind, int oldest, int version, int& found, LineReader line) {
 	std::istringstream in(text);
 	std::string raw;
 	int number = 0;
@@ -31,11 +32,10 @@ std::string readVersioned(const std::string& text, const char* kind, int version
 			return where + "content after 'end'";
 		}
 		if (!header) {
-			int found = 0;
 			if (t.size() != 2 || t[0] != kind || !text::parseInt(t[1], found)) {
 				return where + "expected '" + kind + " <version>'";
 			}
-			if (found != version) {
+			if (found < oldest || found > version) {
 				return where + "version " + t[1] + " is not supported (this build reads " + std::to_string(version) + ")";
 			}
 			header = true;
@@ -64,7 +64,7 @@ std::string serializeMacros(const std::vector<Macro>& macros) {
 	for (const Macro& macro : macros) {
 		s << "macro " << text::encode(macro.name) << '\n';
 		for (const MacroStep& step : macro.steps) {
-			s << "step " << text::encode(step.member) << ' ' << toString(step.kind) << ' ' << text::encode(step.id) << ' '
+			s << "step " << text::encode(step.member) << ' ' << (step.piece ? "piece" : toString(step.kind)) << ' ' << text::encode(step.id) << ' '
 				<< toString(step.target.kind) << ' ' << text::encode(step.target.member) << ' ' << step.target.enemySlot << '\n';
 		}
 	}
@@ -74,7 +74,9 @@ std::string serializeMacros(const std::vector<Macro>& macros) {
 
 Result<std::vector<Macro>> parseMacros(const std::string& text) {
 	std::vector<Macro> macros;
-	const std::string error = readVersioned(text, "macros", kMacrosVersion, [&macros](const std::vector<std::string>& t) -> std::string {
+	// Version 2 writes an item step that names an equipment piece with the command "piece".
+	int version = 0;
+	const std::string error = readVersioned(text, "macros", 1, kMacrosVersion, version, [&macros, &version](const std::vector<std::string>& t) -> std::string {
 		if (t[0] == "macro" && t.size() == 2) {
 			Macro macro;
 			if (!text::decode(t[1], macro.name) || macro.name.empty()) {
@@ -88,10 +90,14 @@ Result<std::vector<Macro>> parseMacros(const std::string& text) {
 				return "'step' before any 'macro'";
 			}
 			MacroStep step;
-			const bool ok = text::decode(t[1], step.member) && !step.member.empty() && parseCommandKind(t[2], step.kind) && text::decode(t[3], step.id)
+			step.piece = version >= 2 && t[2] == "piece";
+			const bool ok = text::decode(t[1], step.member) && !step.member.empty() && (step.piece || parseCommandKind(t[2], step.kind)) && text::decode(t[3], step.id)
 				&& parseMacroTargetKind(t[4], step.target.kind) && text::decode(t[5], step.target.member) && text::parseInt(t[6], step.target.enemySlot);
-			if (!ok) {
+			if (!ok || (step.piece && step.id.empty())) {
 				return "bad step";
+			}
+			if (step.piece) {
+				step.kind = CommandKind::Item;
 			}
 			macros.back().steps.push_back(step);
 			return "";
@@ -116,7 +122,8 @@ std::string serializeComboLog(const ComboLog& log) {
 
 Result<ComboLog> parseComboLog(const std::string& text) {
 	ComboLog log;
-	const std::string error = readVersioned(text, "combo_log", kComboLogVersion, [&log](const std::vector<std::string>& t) -> std::string {
+	int version = 0;
+	const std::string error = readVersioned(text, "combo_log", kComboLogVersion, kComboLogVersion, version, [&log](const std::vector<std::string>& t) -> std::string {
 		ComboLogEntry entry;
 		if (t[0] != "entry" || t.size() != 4) {
 			return "unknown or malformed line '" + t[0] + "'";

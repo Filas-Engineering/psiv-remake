@@ -82,7 +82,7 @@ public:
 	Message setCommand(int actor, const Command& command);
 
 	// Sets commands for the macro's members and makes each one act no earlier than the member listed ahead of it.
-	std::vector<MacroStepResult> applyMacro(const Macro& macro);
+	std::vector<MacroStepResult> applyMacro(const Macro& macro, MacroFallback fallback = MacroFallback::BasicAttack);
 
 	// The host's play time, stored in the combo log when a combination is first discovered.
 	void setPlayTime(std::int64_t playTimeMs) { playTimeMs_ = playTimeMs; }
@@ -118,6 +118,12 @@ public:
 	std::vector<int> resolveTargets(int user, Targeting targeting, int requested, bool revives) const;
 	std::vector<int> livingFoes(int actor) const;
 	std::vector<int> allies(int actor) const;
+	// Whether any of `effects` reaches the target's kind and would change it now: a heal with hit points missing, a
+	// revive on the fallen, a cure on a status it cures, technique points missing, a status it is not immune to; a fallen
+	// target only by a revive.
+	bool wouldChange(int target, const std::vector<Effect>& effects) const;
+	// Heals, revives, cures, technique point restores and raises: the effects aimed at allies to help them.
+	static bool supports(const std::vector<Effect>& effects);
 
 private:
 	// The stats an action's formulas read.

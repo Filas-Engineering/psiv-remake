@@ -62,7 +62,7 @@ Weapons, shields and armor: slot (`weapon` and `shield` go in either hand), cate
 
 ### party.json
 
-Characters (base stats, growth or per-level tables of stats and experience (`level_stats`, `experience_table`; past a table's end the growth and the curve go on), basic attack, abilities known and learned, what they can wear and start in, `vulnerable` to enemy instant defeat), vehicles, the starting lineup, inventory and spare equipment, and the macros. Reference: [party.json](../core/README.md#partyjson) and [Vehicle battles](../core/README.md#vehicle-battles).
+Characters (base stats, growth or per-level tables of stats and experience (`level_stats`, `experience_table`; past a table's end the growth and the curve go on), basic attack, abilities known and learned, what they can wear and start in, `vulnerable` to enemy instant defeat), vehicles, the starting lineup, inventory and spare equipment, and the macros (an item step may name an equipment piece with a battle use with `"piece": true`). Reference: [party.json](../core/README.md#partyjson) and [Vehicle battles](../core/README.md#vehicle-battles).
 
 ### enemies.json
 
@@ -80,11 +80,15 @@ Difficulty overlays that scale enemies, abilities and rewards. Reference: [diffi
 
 Core's English message templates for battle and field results. The loader requires a template for every key core can emit with your data. Reference: [text_en.json](../core/README.md#text_enjson).
 
-### The newest options
+### This round's options
+
+Every one is optional; data without them loads and plays as before. Core: `rules.json` `defend_timing` (`round`, `turn`), `immune_min_damage`, `critical_bonus` (`quarter`, `low_byte`), `damage_wraparound`, `escape_party_first_round`, `target_weights` (by party size, weights in 256ths that add up to 256) and `stat_wraparound` (stat names); damage effects' `stat_permille` (in place of `stat_percent`, not both); items' `stat_value` on heal and damage effects; a macro step's `"piece": true`. Reference: [rules.json](../core/README.md#rulesjson), [abilities.json](../core/README.md#abilitiesjson), [items.json](../core/README.md#itemsjson), [party.json](../core/README.md#partyjson).
+
+### The round before's options
 
 Every one is optional; data without them loads and plays as before. Core: `rules.json` `defend_elements` and `damage_variance`; abilities' `variance`; damage effects' `stat_percent` and a negative `power` (abilities only; items stay flat); `"element": "weapon"` on `physical_damage` (abilities only); the effect `remove_beside` (`rewards`, enemies); equipment `use_power` (needs `use`), a `use` that transforms another combatant, and `{"set": N}` in `affinities` (a set wins over scaling, the lowest set wins); AI overrides with `all` or `any` in place of `when`, and `count` with `compare` on `ally_present`. Game: zone `random` `grace_after_battle` (needs `grace_steps`) and `game.json` `grace_after_battle`. The data check now treats an interact hook with `solid: "while_active"` that its flags or its actor can switch off as passable, so a converter does not need to move such a hook off a path to pass the check. `weapon` can no longer be declared as an element id. Field references: [core/README.md](../core/README.md#data-formats), [game/README.md](../game/README.md#areas).
 
-### The round before's options
+### Two rounds before's options
 
 Every one is optional; data without them loads and plays as before. Core: `rules.json` `ambush_opening` and `elements` (name each declared element as `name.element.<id>` in every language's game text table, or `game_cli --check` reports `data.element_name_missing`); abilities' `attack_stat` (also the stat a combination component adds) and a stat change's `power` (and the stat `magic_defense`); a `physical_damage` effect's `element`; a `transform` effect aimed at another combatant, also on items (only a `self` transform needs the user's `transforms_into`); effects `transform`, `split` (`count`) and `self_destruct` (`rewards`), which need the enemy's `transforms_into` and `splits_into`; enemies' `merges_with` and `attack_element`; the override `after_turns` (`turns`); `null` for a free place in an encounter's `enemies` (at least one place must hold an enemy); a drop's `equipment` in place of `item` (an id that is not also an item); items' `consumed`; equipment's `use_from_bag` (needs `use`) and `affinities`; characters' `teachable` (abilities events teach, which recipes then count), `level_stats` (in place of `base`) and `experience_table` (rising totals). Game: exits' `require_flag`/`block_flag`, ports' `block_flag`, hooks' `once`, `tile` and `solid`, `conveyors`, zone `random` `grace_steps`, `step_chance`, `vehicle_step_chance`, `safe_near_exits`, and `game.json` `nameless_actors` (no `speaker.<id>` string for those). Area files: `tools/maps` reads and writes the new area fields, and its tests require every area file in the canonical form `mapkit.areajson.dumps` writes; `python3 -I tools/maps/tiled_to_area.py` and `area_to_tiled.py` keep them. Sand is soft ground (`:`).
 

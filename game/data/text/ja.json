@@ -103,6 +103,7 @@
 		"game.refuse.macro_name_taken": "{0}というマクロはもうある。",
 		"game.refuse.macro_no_position": "マクロの{0}番はない。",
 		"game.refuse.macro_no_step": "このマクロに{0}番の手順はない。",
+		"game.refuse.macro_piece_no_use": "{0}は戦いで使える装備ではない。",
 		"game.refuse.macro_slots_full": "マクロは{0}個までです。",
 		"game.refuse.macro_steps_full": "マクロの手順は{0}つまでです。",
 		"game.refuse.macro_target": "その目標はこのコマンドに合わない（{0}）。",

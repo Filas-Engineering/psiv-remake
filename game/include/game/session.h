@@ -196,7 +196,8 @@ struct MacroStepView {
 	// The display name of a Member target, or empty.
 	std::string targetName;
 	// Why the step cannot run as written now: NotInParty, ActorDefeated, UnknownAbility, NotEnoughTp, NoUsesLeft or
-	// NoItem; None when nothing stops it outside battle.
+	// NoItem (for a piece step: the member does not wear it and the bag holds none it may cast from there); None when
+	// nothing stops it outside battle.
 	rules::MacroIssue issue = rules::MacroIssue::None;
 };
 
@@ -467,7 +468,10 @@ public:
 	// Battle
 	const rules::Battle* battle() const { return battle_ ? &*battle_ : nullptr; }
 	rules::Message setCommand(int actor, const rules::Command& command);
-	rules::Message applyMacro(const std::string& name, std::vector<rules::MacroStepResult>* results = nullptr);
+	// MacroFallback::Automatic gives a member whose step cannot be paid for, has no target or would be refused core's
+	// automatic choice for the round (rules::autoCommand) instead; the default keeps core's handling.
+	rules::Message applyMacro(const std::string& name, std::vector<rules::MacroStepResult>* results = nullptr,
+		rules::MacroFallback fallback = rules::MacroFallback::BasicAttack);
 	// Auto-battle (BAT-103, BAT-104) with the save's auto macro. fillFromAuto fills the round and returns true
 	// while it runs; once a stop rule fires it returns false and reports why.
 	rules::Message startAuto();

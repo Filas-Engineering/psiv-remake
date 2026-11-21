@@ -177,11 +177,33 @@ void rejectComboPower(Reader& reader, const JsonValue& entry) {
 // Element ids name elements; this word on a physical hit names the user's attack element instead.
 constexpr const char* kWeaponElement = "weapon";
 
-// An item's damage is flat (its power is the attack), so only abilities scale the user's stat.
-void readStatPercent(Reader& reader, const JsonValue& entry, bool item, Effect& effect) {
-	if (reader.integer(entry, "stat_percent", effect.statPercent, false, 0, 1000) && item) {
-		reader.fail(*entry.find("stat_percent"), "load.item_damage_is_flat", {});
+void readStatValue(Reader& reader, const JsonValue& entry, bool item, Effect& effect) {
+	int value = 0;
+	if (reader.integer(entry, "stat_value", value, false, 0, 999)) {
+		effect.statValue = value;
+		if (!item) {
+			reader.fail(*entry.find("stat_value"), "load.stat_value_needs_item", {});
+		}
 	}
+}
+
+// An item's damage is flat (its power is the attack), so only abilities scale the user's stat; an item may instead give
+// the bonus the spread rolls with (`stat_value`).
+void readStatScale(Reader& reader, const JsonValue& entry, bool item, Effect& effect) {
+	int percent = 0;
+	if (reader.integer(entry, "stat_percent", percent, false, 0, 1000)) {
+		effect.statPermille = percent * 10;
+	}
+	reader.integer(entry, "stat_permille", effect.statPermille, false, 0, 10000);
+	if (entry.find("stat_percent") && entry.find("stat_permille")) {
+		reader.fail(*entry.find("stat_permille"), "load.stat_percent_or_permille", {});
+	}
+	for (const char* key : {"stat_percent", "stat_permille"}) {
+		if (entry.find(key) && item) {
+			reader.fail(*entry.find(key), "load.item_damage_is_flat", {});
+		}
+	}
+	readStatValue(reader, entry, item, effect);
 }
 
 bool readVariance(Reader& reader, const JsonValue& object, const char* key, std::optional<DamageVariance>& out) {
@@ -233,13 +255,13 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 		}
 		switch (effect.kind) {
 		case EffectKind::PhysicalDamage: {
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power", "element", "stat_percent"});
+			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power", "element", "stat_percent", "stat_permille", "stat_value"});
 			if (combo) {
 				rejectComboPower(reader, *entry);
 			} else {
 				reader.integer(*entry, "power", effect.power, true, item ? 0 : -9999, 9999);
 			}
-			readStatPercent(reader, *entry, item, effect);
+			readStatScale(reader, *entry, item, effect);
 			std::string element;
 			if (reader.string(*entry, "element", element, false)) {
 				if (element == kWeaponElement) {
@@ -254,17 +276,18 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 			break;
 		}
 		case EffectKind::Heal:
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power"});
+			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power", "stat_value"});
 			reader.integer(*entry, "power", effect.power, true, 1, 9999);
+			readStatValue(reader, *entry, item, effect);
 			break;
 		case EffectKind::ElementalDamage: {
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power", "element", "stat_percent"});
+			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power", "element", "stat_percent", "stat_permille", "stat_value"});
 			if (combo) {
 				rejectComboPower(reader, *entry);
 			} else {
 				reader.integer(*entry, "power", effect.power, true, item ? 1 : -9999, 9999);
 			}
-			readStatPercent(reader, *entry, item, effect);
+			readStatScale(reader, *entry, item, effect);
 			std::string element;
 			if (reader.string(*entry, "element", element) && !readElement(db, element, effect.element)) {
 				reader.fail(*entry->find("element"), "load.unknown_element", {element});
@@ -436,7 +459,52 @@ void checkSelfEffects(Reader& reader, const JsonValue& entry, Targeting targetin
 void parseRules(Reader& reader, const JsonValue& root, Database& db) {
 	BattleRules& rules = db.battleRules;
 	reader.rejectUnknownKeys(root, {"surprise_rounds", "rest_revives", "machine_recover_hp", "affinity_divisor", "magic_defense", "instant_defeat_kinds", "ambush_opening",
-		"elements", "neutral_affinity", "defend_affinity", "defend_elemental", "defend_elements", "damage_variance"});
+		"elements", "neutral_affinity", "defend_affinity", "defend_elemental", "defend_elements", "damage_variance", "defend_timing", "immune_min_damage",
+		"critical_bonus", "damage_wraparound", "escape_party_first_round", "target_weights", "stat_wraparound"});
+	std::string choice;
+	if (reader.string(root, "defend_timing", choice, false)) {
+		rules.defendFromTurn = choice == "turn";
+		if (choice != "turn" && choice != "round") {
+			reader.fail(*root.find("defend_timing"), "load.unknown_choice", {"defend_timing", choice, "round, turn"});
+		}
+	}
+	if (reader.string(root, "critical_bonus", choice, false)) {
+		rules.criticalLowByte = choice == "low_byte";
+		if (choice != "low_byte" && choice != "quarter") {
+			reader.fail(*root.find("critical_bonus"), "load.unknown_choice", {"critical_bonus", choice, "quarter, low_byte"});
+		}
+	}
+	reader.boolean(root, "immune_min_damage", rules.immuneMinDamage);
+	reader.boolean(root, "damage_wraparound", rules.damageWraparound);
+	reader.boolean(root, "escape_party_first_round", rules.escapePartyFirstRound);
+	if (const JsonValue* weights = reader.get(root, "target_weights", Type::Object, false)) {
+		for (std::size_t i = 0; i < weights->keys.size(); ++i) {
+			const JsonValue& list = weights->values[i];
+			const std::string& key = weights->keys[i];
+			const int size = key.size() == 1 && key[0] >= '1' && key[0] <= '0' + kMaxPartySize ? key[0] - '0' : 0;
+			int sum = 0;
+			std::vector<int> parsed;
+			for (const JsonValue& weight : list.items) {
+				const bool whole = weight.is(Type::Number) && weight.number == std::floor(weight.number) && weight.number >= 0 && weight.number <= 256;
+				parsed.push_back(whole ? static_cast<int>(weight.number) : -1);
+				sum += whole ? static_cast<int>(weight.number) : 0;
+			}
+			const bool bad = std::count(parsed.begin(), parsed.end(), -1) > 0;
+			if (size == 0 || !list.is(Type::Array) || static_cast<int>(parsed.size()) != size || bad || sum != 256) {
+				reader.fail(list, "load.target_weights", {key});
+			} else {
+				rules.targetWeights[size] = parsed;
+			}
+		}
+	}
+	for (const std::string& name : reader.strings(root, "stat_wraparound", false)) {
+		Stat stat = Stat::Strength;
+		if (!parseStat(name, stat)) {
+			reader.fail(*root.find("stat_wraparound"), "load.unknown_stat", {name});
+		} else {
+			rules.statWraparound.push_back(stat);
+		}
+	}
 	for (const std::string& id : reader.strings(root, "elements", false)) {
 		Element builtIn;
 		const bool repeated = std::count(rules.elements.begin(), rules.elements.end(), id) > 0;
@@ -979,7 +1047,7 @@ void parseMacroTarget(Reader& reader, const Database& db, const JsonValue& entry
 }
 
 void parseMacroStep(Reader& reader, const Database& db, const JsonValue& entry, MacroStep& step) {
-	reader.rejectUnknownKeys(entry, {"member", "command", "id", "target"});
+	reader.rejectUnknownKeys(entry, {"member", "command", "id", "target", "piece"});
 	if (!reader.string(entry, "member", step.member)) {
 		return;
 	}
@@ -1003,6 +1071,14 @@ void parseMacroStep(Reader& reader, const Database& db, const JsonValue& entry, 
 				reader.fail(*entry.find("id"), "load.character_does_not_know_ability", {step.member, step.id});
 			}
 		}
+	} else if (step.kind == CommandKind::Item && reader.boolean(entry, "piece", step.piece) && step.piece) {
+		const EquipmentDef* piece = reader.string(entry, "id", step.id) ? db.equipmentPiece(step.id) : nullptr;
+		const AbilityDef* use = piece ? db.ability(piece->use) : nullptr;
+		if (use) {
+			targeting = use->targeting;
+		} else if (entry.find("id")) {
+			reader.fail(*entry.find("id"), piece ? "load.macro_piece_without_use" : "load.names_missing_equipment", {step.id});
+		}
 	} else if (step.kind == CommandKind::Item && reader.string(entry, "id", step.id)) {
 		if (const ItemDef* item = db.item(step.id)) {
 			targeting = item->targeting;
@@ -1011,6 +1087,9 @@ void parseMacroStep(Reader& reader, const Database& db, const JsonValue& entry, 
 		}
 	} else if (entry.find("id") && step.kind != CommandKind::Ability && step.kind != CommandKind::Item) {
 		reader.fail(*entry.find("id"), "load.only_ability_item_steps_have_id", {});
+	}
+	if (entry.find("piece") && step.kind != CommandKind::Item) {
+		reader.fail(*entry.find("piece"), "load.piece_needs_item_step", {});
 	}
 	parseMacroTarget(reader, db, entry, step.target);
 	if (entry.find("target") && !macroTargetFits(step.target.kind, step.kind, targeting)) {
