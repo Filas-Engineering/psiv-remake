@@ -19,6 +19,7 @@ SAMPLE_AREA = {
 	"kind": "dungeon",
 	"encounter_mode": "random",
 	"step_ms": 200,
+	"music": "dungeon_sample",
 	"map": ["######", "#..~.#", "#....#", "###..."],
 	"markers": {"door": [1, 1], "pool_side": [4, 2]},
 	"exits": [{"at": [5, 3], "to": "elsewhere", "marker": "back"}],

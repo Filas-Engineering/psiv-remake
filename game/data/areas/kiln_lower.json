@@ -3,6 +3,7 @@
 	"kind": "dungeon",
 	"encounter_mode": "random",
 	"step_ms": 250,
+	"music": "dungeon_firing_floor",
 	"map": [
 		"########################################",
 		"#......................................#",

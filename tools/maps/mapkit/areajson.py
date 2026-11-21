@@ -2,7 +2,7 @@
 
 import json
 
-TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "zones"]
+TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "zones"]
 LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "zones"]
 ENTRY_FIELDS = {
 	"exits": ["at", "to", "marker"],

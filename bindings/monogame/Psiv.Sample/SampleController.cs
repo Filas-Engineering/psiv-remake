@@ -45,6 +45,9 @@ public sealed partial class SampleController
 	// The row under the cursor of the list that had it in the last frame, and that list's first row shown.
 	private string _probeSelected = "";
 	private int _probeTop;
+	// The Equip page's comparison and the description shown for the highlighted row, as the last frame drew them.
+	private string _probeCompare = "-";
+	private string _probeDescription = "-";
 
 	// `controlsPath` is where the bindings load from and save to; null keeps the defaults and saves nothing. Without
 	// `audio` nothing plays and the calls are only recorded.
@@ -255,6 +258,10 @@ public sealed partial class SampleController
 
 	private void UpdateScreen(Screen screen, int dtMs, ActionInput input)
 	{
+		if (screen != Screen.Field)
+		{
+			_clickWalk = null;
+		}
 		switch (screen)
 		{
 		case Screen.Title: UpdateTitle(input); break;
@@ -340,6 +347,20 @@ public sealed partial class SampleController
 		}
 	}
 
+	// The description of a highlighted row, at most two small lines; the session gives "" when the data has none.
+	private void DrawDescription(IDrawSurface s, string? text, int x, int y, int w)
+	{
+		_probeDescription = string.IsNullOrEmpty(text) ? "-" : text;
+		int ly = y;
+		foreach (string l in Style.Wrap(s, string.IsNullOrEmpty(text) ? "No description." : text, w, Style.Small).Take(2))
+		{
+			s.Text(l, x, ly, string.IsNullOrEmpty(text) ? Style.Dim : Style.Text, Style.Small);
+			ly += Px(22);
+		}
+	}
+
+	private string? DescriptionOf(InventoryEntry entry) => _s.Description(entry.IsEquipment ? DescriptionKind.Equipment : DescriptionKind.Item, entry.Id);
+
 	// Text rows in a box, scrolling when they do not fit; the list with the cursor is the one headless runs probe.
 	private void DrawItems(IDrawSurface s, ScrollList list, int x, int y, int w, int h, IReadOnlyList<string> items, bool active = true,
 		IReadOnlyList<bool>? enabled = null, int size = Style.Body)
@@ -361,6 +382,8 @@ public sealed partial class SampleController
 		IDrawSurface t = _scale == 1f ? s : new ScaledSurface(s, _scale);
 		_probeSelected = "";
 		_probeTop = 0;
+		_probeCompare = "-";
+		_probeDescription = "-";
 		_dialogueAt = "-";
 		s.Fill(0, 0, s.Width, s.Height, Style.Background);
 		switch (Screen)
@@ -414,6 +437,10 @@ public sealed partial class SampleController
 			"page" => Page(),
 			"selected" => _probeSelected,
 			"top" => _probeTop.ToString(CultureInfo.InvariantCulture),
+			"compare" => _probeCompare,
+			"walk" => _clickWalk is { } walkGoal ? $"{walkGoal.X} {walkGoal.Y}" : "-",
+			"itemsort" => GameSession.NameOf(NameKind.ItemSort, (int)_itemSort),
+			"description" => _probeDescription,
 			"prompt" => _confirm.Question ?? "none",
 			"buffer" => Screen == Screen.NameEntry ? _nameEntry.Buffer : _macroName.Buffer,
 			"cell" => Screen == Screen.NameEntry ? _nameEntry.Cell : _macroName.Cell,
@@ -427,6 +454,7 @@ public sealed partial class SampleController
 			"area" => _s.FieldInfo()?.AreaName ?? "-",
 			"panels" => _panels.Count == 0 ? "none" : string.Join(", ", _panels.Select(x => $"{x.Id} {x.Slot} {x.Camera}" + (x.Transition is null ? "" : "~"))),
 			"camera" => (_camera ?? "-") + (_cameraMove is null ? "" : "~"),
+			"paneltiles" => _panels.Count == 0 ? "none" : string.Join(", ", _panels.Select(x => $"{x.Id} {PanelTileSize(x)}")),
 			"shake" => ShakeAmplitude().ToString(CultureInfo.InvariantCulture),
 			"dialogue" => _dialogueAt,
 			"music" => _audio.Music.Length == 0 ? "-" : _audio.Music,

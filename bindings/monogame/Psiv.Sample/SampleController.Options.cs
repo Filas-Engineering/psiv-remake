@@ -51,6 +51,18 @@ public sealed partial class SampleController
 		_ => "2x",
 	};
 
+	// The save's difficulty: stepped through the session's presets while a game is in progress outside battle, shown
+	// only otherwise. Its description is the preset's own, which says what it changes (UI-014).
+	private OptionRow DifficultyRow(Settings settings)
+	{
+		Difficulties d = _s.Difficulties();
+		int at = Math.Max(0, d.Presets.ToList().FindIndex(x => x.Id == settings.Difficulty));
+		Difficulty current = d.Presets[at];
+		string kept = d.CanChange ? "Kept in each save; applies from the next battle." : "Kept in each save; it changes during a game, outside battle.";
+		return new("Difficulty", current.Name, $"{kept} {current.Description}".Trim(),
+			d.CanChange ? by => _s.SetSettings(d.Presets[(at + by + d.Presets.Count) % d.Presets.Count].Id, settings.RewardMultiplier) : null);
+	}
+
 	private List<OptionRow> OptionRows()
 	{
 		Profile p = _s.Profile();
@@ -81,9 +93,9 @@ public sealed partial class SampleController
 				by => _s.SetProfile(p with { AmbientVolume = Volume(p.AmbientVolume, by) })),
 			new("Effects volume", $"{p.EffectsVolume}", "The loudness of menu, dialogue and battle sounds.",
 				by => _s.SetProfile(p with { EffectsVolume = Volume(p.EffectsVolume, by) })),
-			new("Difficulty", _s.DisplayName(settings.Difficulty), "Kept in each save. The session names no other presets, so it is shown here only.", null),
+			DifficultyRow(settings),
 			new("Reward multiplier", RewardName(settings.RewardMultiplier), "Multiplies the experience and money battles pay. 1x is the original amount.",
-				by => _s.SetSettings(settings.Difficulty, Step(settings.RewardMultiplier, by))),
+				_s.Difficulties().CanChange ? by => _s.SetSettings(settings.Difficulty, Step(settings.RewardMultiplier, by)) : null),
 			new(ControlsRow, "", "Rebind each action's keys and gamepad buttons.", null),
 		];
 	}

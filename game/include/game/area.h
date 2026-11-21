@@ -113,6 +113,8 @@ struct Area {
 	EncounterMode mode = EncounterMode::Visible;
 	// Time to walk one cell.
 	int stepMs = 250;
+	// The track for the area outside events and battles, an audio id from game.json; empty when the data names none.
+	std::string music;
 	std::vector<std::string> rows;
 	std::map<std::string, Cell> markers;
 	std::vector<Exit> exits;

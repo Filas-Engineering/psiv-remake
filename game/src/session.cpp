@@ -167,6 +167,7 @@ const char* toString(OutputKind kind) {
 	case OutputKind::Notice: return "notice";
 	case OutputKind::Warning: return "warning";
 	case OutputKind::Autosave: return "autosave";
+	case OutputKind::Ambient: return "ambient";
 	}
 	return "notice";
 }
@@ -182,6 +183,16 @@ const char* toString(MenuKind kind) {
 	return "none";
 }
 
+const char* toString(ItemSort sort) {
+	switch (sort) {
+	case ItemSort::Id: return "id";
+	case ItemSort::Kind: return "kind";
+	case ItemSort::Name: return "name";
+	case ItemSort::Count: return "count";
+	}
+	return "";
+}
+
 const char* toString(BattleSource source) {
 	switch (source) {
 	case BattleSource::Visible: return "visible";
@@ -193,11 +204,11 @@ const char* toString(BattleSource source) {
 
 class Session::ActionQueue : public Presenter {
 public:
-	ActionQueue(Presentation presentation, std::function<void(const PresentedAction&)> onAction)
-		: queued_(presentation == Presentation::Queued), onAction_(std::move(onAction)) {}
+	ActionQueue(const PresentationNames& names, Presentation presentation, std::function<void(const PresentedAction&)> onAction)
+		: names_(names), queued_(presentation == Presentation::Queued), onAction_(std::move(onAction)) {}
 
 	bool begin(std::uint64_t handle, const events::Action& action) override {
-		push({handle, ActionPhase::Begin, action, events::describe(action)});
+		push({handle, ActionPhase::Begin, action, events::describe(action), events::action_seconds(action, names_.durations, names_.subjectDurations)});
 		if (!queued_ || action.instant) {
 			return true;
 		}
@@ -209,7 +220,7 @@ public:
 
 	void cancel(std::uint64_t handle) override {
 		running_.erase(handle);
-		push({handle, ActionPhase::Cancel, events::Action(), ""});
+		push({handle, ActionPhase::Cancel, events::Action(), "", 0});
 	}
 
 	void finish(std::uint64_t handle) { running_.erase(handle); }
@@ -231,6 +242,7 @@ private:
 		}
 	}
 
+	const PresentationNames& names_;
 	bool queued_;
 	std::function<void(const PresentedAction&)> onAction_;
 	std::deque<PresentedAction> records_;
@@ -276,6 +288,8 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.reason.event_end",
 		"game.refuse.blocked",
 		"game.refuse.buy_one",
+		"game.refuse.combo_no_member",
+		"game.refuse.combo_not_found",
 		"game.refuse.carry_cap",
 		"game.refuse.equip_menu_only",
 		"game.refuse.in_the_way",
@@ -331,6 +345,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.saving_disabled",
 		"game.refuse.sell_one",
 		"game.refuse.settings_in_battle",
+		"game.refuse.settings_no_game",
 		"game.refuse.slot_unreadable",
 		"game.refuse.talk_field_only",
 		"game.refuse.tech_menu_only",
@@ -588,7 +603,7 @@ private:
 
 Session::Session(const GameData& data, SessionOptions options) : data_(data), options_(std::move(options)) {
 	if (!options_.presenter) {
-		actions_ = std::make_unique<ActionQueue>(options_.presentation, options_.onAction);
+		actions_ = std::make_unique<ActionQueue>(data_.config.presentation, options_.presentation, options_.onAction);
 	}
 	if (!options_.saveDirectory.empty()) {
 		store_.emplace(options_.saveDirectory, data_.config.manualSlots, data_.config.autosaveSlots);
@@ -759,6 +774,10 @@ std::string Session::render(const rules::Message& message) const {
 	}
 	return events::render_names(rules::formatText(language().text, message.key, params), data_.glossary,
 		events::name_set_for(profile_.showShippedNames, language().code));
+}
+
+std::string Session::description(DescriptionKind kind, const std::string& id) const {
+	return language().text.count(descriptionKey(kind, id)) ? render({descriptionKey(kind, id), {}}) : std::string();
 }
 
 std::string Session::scriptText(const events::Text& text) const {
@@ -1177,6 +1196,7 @@ void Session::enterArea(const std::string& areaId, const std::string& marker) {
 	}
 	pacing_.enterArea(a->id, a->kind == AreaKind::Dungeon);
 	loadHooksPending_ = true;
+	ambientPending_ = true;
 	loadHooksFired_.clear();
 	if (!areasSinceAutosave_.count(a->id)) {
 		areasSinceAutosave_.insert(a->id);
@@ -1205,6 +1225,13 @@ void Session::settleField() {
 		if (hook.trigger == HookTrigger::Flag && hookHolds(hook, world_)) {
 			startEvent(hook.event);
 			return;
+		}
+	}
+	if (ambientPending_) {
+		ambientPending_ = false;
+		const TalkSet* set = profile_.ambientTalk ? talkSet() : nullptr;
+		if (set && world_.playerControl && !world_.ambientHeard.count(set->id + "@" + world_.area) && speak(*set, OutputKind::Ambient)) {
+			world_.ambientHeard.insert(set->id + "@" + world_.area);
 		}
 	}
 	if (clearPending_) {
@@ -1344,10 +1371,9 @@ rules::Message Session::interact() {
 	return refusal("nothing_there");
 }
 
-rules::Message Session::partyTalk() {
-	if (mode() != Mode::Field || interpreter_) {
-		return refusal("talk_field_only");
-	}
+// Among the sets whose area and flag range hold, an area set beats a chapter set, then more range bounds win, then
+// the first listed (FLD-072).
+const TalkSet* Session::talkSet() const {
 	const TalkSet* best = nullptr;
 	int bestScore = -1;
 	for (const TalkSet& set : data_.journal.partyTalk) {
@@ -1360,16 +1386,27 @@ rules::Message Session::partyTalk() {
 			bestScore = score;
 		}
 	}
+	return best;
+}
+
+bool Session::speak(const TalkSet& set, OutputKind kind) {
 	bool spoke = false;
-	for (const TalkLine& line : best ? best->lines : std::vector<TalkLine>()) {
-		// A line of someone who is not in the active party is left out.
+	for (const TalkLine& line : set.lines) {
 		if (std::find(world_.lineup.begin(), world_.lineup.end(), line.speaker) == world_.lineup.end()) {
 			continue;
 		}
-		output_.push_back({OutputKind::Line, {line.text, {}}, displayName(line.speaker) + ": " + stringText(line.text)});
+		output_.push_back({kind, {line.text, {}}, displayName(line.speaker) + ": " + stringText(line.text)});
 		spoke = true;
 	}
-	return spoke ? rules::Message() : refusal("nobody_talks");
+	return spoke;
+}
+
+rules::Message Session::partyTalk() {
+	if (mode() != Mode::Field || interpreter_) {
+		return refusal("talk_field_only");
+	}
+	const TalkSet* best = talkSet();
+	return best && speak(*best, OutputKind::Line) ? rules::Message() : refusal("nobody_talks");
 }
 
 void Session::openChest(const Chest& chest) {
@@ -2183,11 +2220,22 @@ rules::Message Session::setSettings(const Settings& settings) {
 	if (mode() == Mode::Battle) {
 		return refusal("settings_in_battle");
 	}
+	if (mode() == Mode::Title) {
+		return refusal("settings_no_game");
+	}
 	if (!data_.db.difficulty(settings.difficulty)) {
 		return refusal("unknown_difficulty", {settings.difficulty});
 	}
 	world_.settings = settings;
 	return {};
+}
+
+std::vector<DifficultyView> Session::difficulties() const {
+	std::vector<DifficultyView> out;
+	for (const auto& [id, d] : data_.db.difficulties) {
+		out.push_back({id, d.name, description(DescriptionKind::Difficulty, id), d.rewardPercent});
+	}
+	return out;
 }
 
 rules::Message Session::swapLineup(int a, int b) {
@@ -2414,6 +2462,67 @@ rules::Message Session::moveMacroStep(const std::string& name, int from, int to)
 	return {};
 }
 
+rules::Message Session::macroFromCombo(const std::string& recipe, const std::string& name) {
+	if (menuKind() != MenuKind::Field) {
+		return refusal("macro_menu_only");
+	}
+	const rules::ComboLogEntry* entry = world_.comboLog.entry(recipe);
+	auto found = std::find_if(data_.db.combos.begin(), data_.db.combos.end(), [&](const rules::ComboRecipe& r) { return r.id == recipe; });
+	if (!entry || found == data_.db.combos.end()) {
+		return refusal("combo_not_found", {recipe});
+	}
+	const rules::ComboRecipe& r = *found;
+	const std::string clean = cleanName(name);
+	if (clean.empty()) {
+		return refusal("name_length", {std::to_string(kMaxNameLength)});
+	}
+	if (findMacro(world_.macros, clean) != world_.macros.end()) {
+		return refusal("macro_name_taken", {clean});
+	}
+	if (static_cast<int>(world_.macros.size()) >= kMaxMacros) {
+		return refusal("macro_slots_full", {std::to_string(kMaxMacros)});
+	}
+	std::vector<std::string> candidates = entry->characters;
+	for (const std::string& id : world_.lineup) {
+		candidates.push_back(id);
+	}
+	auto knows = [&](const std::string& member, std::size_t component) {
+		const rules::PartyMember* m = world_.member(member);
+		const bool tiedElsewhere = component < r.characters.size() && !r.characters[component].empty() && r.characters[component] != member;
+		if (!m || tiedElsewhere || std::find(world_.lineup.begin(), world_.lineup.end(), member) == world_.lineup.end()) {
+			return false;
+		}
+		const std::vector<std::string> known = rules::knownAbilities(data_.db, *m);
+		return std::find(known.begin(), known.end(), r.abilities[component]) != known.end();
+	};
+	std::vector<std::string> chosen(r.abilities.size());
+	std::size_t stuck = 0;
+	std::function<bool(std::size_t)> assign = [&](std::size_t component) {
+		if (component == r.abilities.size()) {
+			return true;
+		}
+		for (const std::string& member : candidates) {
+			if (std::find(chosen.begin(), chosen.begin() + component, member) == chosen.begin() + component && knows(member, component)) {
+				chosen[component] = member;
+				if (assign(component + 1)) {
+					return true;
+				}
+			}
+		}
+		stuck = std::max(stuck, component);
+		return false;
+	};
+	if (!assign(0)) {
+		return refusal("combo_no_member", {r.abilities[stuck]});
+	}
+	rules::Macro macro{clean, {}};
+	for (std::size_t i = 0; i < r.abilities.size(); ++i) {
+		macro.steps.push_back({chosen[i], rules::CommandKind::Ability, r.abilities[i], {}});
+	}
+	world_.macros.push_back(std::move(macro));
+	return {};
+}
+
 std::vector<ComboView> Session::comboLog() const {
 	std::vector<ComboView> out;
 	for (const rules::ComboLogEntry& entry : world_.comboLog.entries()) {
@@ -2434,35 +2543,94 @@ std::vector<ComboView> Session::comboLog() const {
 
 std::optional<MemberDetail> Session::memberDetail(const std::string& member) const {
 	const rules::PartyMember* m = world_.member(member);
-	const rules::CharacterDef* character = data_.db.character(member);
-	if (!m || !character) {
+	if (!m || !data_.db.character(member)) {
 		return std::nullopt;
 	}
+	const rules::Combatant combatant = rules::memberCombatant(data_.db, *m);
 	MemberDetail detail;
 	detail.member = member;
 	detail.experienceToNext = m->level >= rules::formulas::kMaxLevel ? 0 : std::max(0, rules::formulas::experienceToNextLevel(m->level) - m->experience);
-	detail.stats = rules::memberStats(data_.db, *m);
-	detail.statusResist = character->statusResist;
+	detail.stats = combatant.stats;
+	detail.attackElement = combatant.attackElement;
+	detail.statusResist = combatant.statusResist;
 	for (const auto& [slot, id] : m->equipment) {
-		const rules::EquipmentDef* piece = data_.db.equipmentPiece(id);
-		if (!piece) {
-			continue;
-		}
-		detail.equipmentBonus[slot] = piece->bonus;
-		if (piece->element != rules::Element::None) {
-			detail.attackElement = piece->element;
-		}
-		for (const auto& [status, percent] : piece->statusResist) {
-			auto own = detail.statusResist.find(status);
-			detail.statusResist[status] = std::min(100, (own == detail.statusResist.end() ? 0 : own->second) + percent);
+		if (const rules::EquipmentDef* piece = data_.db.equipmentPiece(id)) {
+			detail.equipmentBonus[slot] = piece->bonus;
 		}
 	}
 	for (int e = static_cast<int>(rules::Element::Heat); e <= static_cast<int>(rules::Element::Gale); ++e) {
-		const rules::Element element = static_cast<rules::Element>(e);
-		auto affinity = character->affinities.find(element);
-		detail.affinities[element] = affinity == character->affinities.end() ? 100 : affinity->second;
+		detail.affinities[static_cast<rules::Element>(e)] = combatant.affinity(static_cast<rules::Element>(e));
 	}
 	return detail;
+}
+
+std::vector<BagEntry> Session::bag(ItemSort order) const {
+	std::vector<BagEntry> out;
+	for (const auto& [id, count] : world_.items) {
+		out.push_back({id, count, false});
+	}
+	for (const auto& [id, count] : world_.equipmentBag) {
+		out.push_back({id, count, true});
+	}
+	if (order == ItemSort::Id) {
+		return out;
+	}
+	auto kind = [&](const BagEntry& e) {
+		if (e.equipment) {
+			const rules::EquipmentDef* piece = data_.db.equipmentPiece(e.id);
+			return 2 + (piece ? static_cast<int>(piece->slot) : 0);
+		}
+		const rules::ItemDef* item = data_.db.item(e.id);
+		return item && item->field ? 0 : 1;
+	};
+	std::vector<std::pair<std::string, BagEntry>> named;
+	for (BagEntry& e : out) {
+		named.emplace_back(displayName(e.id), std::move(e));
+	}
+	std::stable_sort(named.begin(), named.end(), [&](const auto& a, const auto& b) {
+		if (order == ItemSort::Kind && kind(a.second) != kind(b.second)) {
+			return kind(a.second) < kind(b.second);
+		}
+		if (order == ItemSort::Count && a.second.count != b.second.count) {
+			return a.second.count > b.second.count;
+		}
+		return a.first != b.first ? a.first < b.first : a.second.id < b.second.id;
+	});
+	out.clear();
+	for (auto& [name, e] : named) {
+		out.push_back(std::move(e));
+	}
+	return out;
+}
+
+std::optional<EquipPreview> Session::equipPreview(const std::string& member, const std::string& piece) const {
+	const rules::PartyMember* m = world_.member(member);
+	const rules::EquipmentDef* def = data_.db.equipmentPiece(piece);
+	if (!m || !def || !data_.db.character(member)) {
+		return std::nullopt;
+	}
+	auto view = [&](const rules::PartyMember& wearer) {
+		const rules::Combatant c = rules::memberCombatant(data_.db, wearer);
+		return CombatView{c.stats, c.basicAttack, c.attackElement, c.abilities, c.statusResist};
+	};
+	EquipPreview preview;
+	preview.member = member;
+	preview.piece = *def;
+	if (auto worn = m->equipment.find(def->slot); worn != m->equipment.end()) {
+		preview.replaces = worn->second;
+	}
+	for (const std::string& id : world_.lineup) {
+		if (rules::canEquip(data_.db, id, piece).empty()) {
+			preview.wearers.push_back(id);
+		}
+	}
+	preview.before = view(*m);
+	rules::PartyMember wearing = *m;
+	rules::EquipmentBag bag = world_.equipmentBag;
+	bag[piece] += 1;
+	preview.refusal = rules::equip(wearing, data_.db, bag, piece);
+	preview.after = preview.refusal.empty() ? view(wearing) : preview.before;
+	return preview;
 }
 
 }

@@ -16,7 +16,8 @@
 		{"name":"id","type":"string","value":"kiln_lower"},
 		{"name":"kind","type":"string","value":"dungeon"},
 		{"name":"encounter_mode","type":"string","value":"random"},
-		{"name":"step_ms","type":"int","value":250}
+		{"name":"step_ms","type":"int","value":250},
+		{"name":"music","type":"string","value":"dungeon_firing_floor"}
 	],
 	"tilesets": [
 		{"firstgid":1,"source":"cells.tsj"}

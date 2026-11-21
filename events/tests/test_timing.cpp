@@ -188,3 +188,22 @@ end
 		CHECK(near(paths[0].time.wait, 2));
 	}
 }
+
+TEST(action_names_and_authored_seconds_follow_the_timing_rule) {
+	ActionType type = ActionType::move;
+	CHECK(events::parse_action_type("panel_show", type) && type == ActionType::panel_show);
+	CHECK(events::parse_action_type("anim", type) && type == ActionType::animate);
+	CHECK(!events::parse_action_type("panel show", type));
+	CHECK(!events::parse_action_type("teleport", type));
+	std::map<ActionType, double> byType = {{ActionType::camera_move, 1.0}};
+	std::map<std::pair<ActionType, std::string>, double> bySubject = {{{ActionType::camera_move, "wide"}, 2.5}};
+	events::Action move;
+	move.type = ActionType::camera_move;
+	move.subject = "wide";
+	move.seconds = 4;
+	CHECK(near(events::action_seconds(move, byType, bySubject), 2.5));
+	move.subject = "close";
+	CHECK(near(events::action_seconds(move, byType, bySubject), 1.0));
+	move.type = ActionType::fade_out;
+	CHECK(near(events::action_seconds(move, byType, bySubject), 4));
+}

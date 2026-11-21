@@ -121,3 +121,20 @@ TEST(theRegistryRejectsAWarpOrMoveToAnotherAreasMarker) {
 	const events::CompileResult right = events::compile({{"x.ev", "event x unskippable\n\twarp reed_path west_gate\nend\n"}}, options);
 	CHECK(right.diagnostics.empty());
 }
+
+TEST(descriptionsFollowTheProfileLanguage) {
+	Session s(test::data(), SessionOptions());
+	CHECK_EQ(s.description(DescriptionKind::Equipment, "rivet_plate"), std::string("Heavy riveted plates. Sturdy, but they slow the wearer down."));
+	CHECK(!s.description(DescriptionKind::Ability, "glint").empty());
+	CHECK(!s.description(DescriptionKind::Status, "gear_lock").empty());
+	CHECK(!s.description(DescriptionKind::Enemy, "brass_warden").empty());
+	CHECK(!s.description(DescriptionKind::Difficulty, "hard").empty());
+	CHECK_EQ(s.description(DescriptionKind::Item, "rivet_plate"), std::string());
+	CHECK_EQ(s.description(DescriptionKind::Enemy, "nobody"), std::string());
+	CHECK_EQ(descriptionKey(DescriptionKind::Status, "sleep"), std::string("desc.status.sleep"));
+	CHECK(describes(test::data().db, DescriptionKind::Difficulty, "hard") && !describes(test::data().db, DescriptionKind::Enemy, "tonic"));
+	Profile p = s.profile();
+	p.textLanguage = "ja";
+	CHECK(s.setProfile(p).empty());
+	CHECK_EQ(s.description(DescriptionKind::Equipment, "rivet_plate"), std::string("鋲打ちの重い鎧。頑丈だが動きが鈍る。"));
+}

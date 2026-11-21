@@ -25,12 +25,12 @@
 #include <utility>
 #include <vector>
 
-#define PSIV_BINDING_VERSION "0.5.0"
+#define PSIV_BINDING_VERSION "0.6.0"
 
 static_assert(PSIV_MODE_SHOP == static_cast<int>(game::Mode::Shop), "psiv_mode");
 static_assert(PSIV_MENU_NAME_ENTRY == static_cast<int>(game::MenuKind::NameEntry), "psiv_menu_kind");
 static_assert(PSIV_DIRECTION_WEST == static_cast<int>(game::Facing::West), "psiv_direction");
-static_assert(PSIV_NOTICE_AUTOSAVE == static_cast<int>(game::OutputKind::Autosave), "psiv_notice_kind");
+static_assert(PSIV_NOTICE_AMBIENT == static_cast<int>(game::OutputKind::Ambient), "psiv_notice_kind");
 static_assert(PSIV_AREA_DUNGEON == static_cast<int>(game::AreaKind::Dungeon), "psiv_area_kind");
 static_assert(PSIV_ENCOUNTERS_RANDOM == static_cast<int>(game::EncounterMode::Random), "psiv_encounter_mode");
 static_assert(PSIV_ENEMY_RETURNING == static_cast<int>(game::EnemyState::Returning), "psiv_enemy_state");
@@ -61,6 +61,9 @@ static_assert(PSIV_ACTION_WARP == static_cast<int>(events::ActionType::warp), "p
 static_assert(PSIV_ACTION_CANCEL == static_cast<int>(game::ActionPhase::Cancel), "psiv_action_phase");
 static_assert(PSIV_PRESENTATION_WAIT == static_cast<int>(game::Presentation::Queued), "psiv_presentation");
 static_assert(PSIV_WALK_TOO_LONG == static_cast<int>(game::WalkStatus::TooLong), "psiv_walk_status");
+static_assert(PSIV_CAMERA_LEADER == static_cast<int>(game::CameraTarget::Leader), "psiv_camera_target");
+static_assert(PSIV_SORT_COUNT == static_cast<int>(game::ItemSort::Count), "psiv_item_sort");
+static_assert(PSIV_DESCRIPTION_DIFFICULTY == static_cast<int>(game::DescriptionKind::Difficulty), "psiv_description_kind");
 static_assert(PSIV_AREA_DUNGEON == static_cast<int>(game::AreaKind::Dungeon), "psiv_area_kind");
 
 namespace {
@@ -166,6 +169,7 @@ void fillAction(const game::PresentedAction& r, psiv_action& out, Arena& arena) 
 	out.loop = r.action.loop;
 	out.instant = r.action.instant;
 	out.description = arena.str(r.description);
+	out.duration = r.seconds;
 }
 
 std::string str(const char* text) {
@@ -459,7 +463,7 @@ uint32_t psiv_sizeof(const char* struct_name) {
 		PSIV_SIZE(psiv_shop_info), PSIV_SIZE(psiv_world_info), PSIV_SIZE(psiv_problem), PSIV_SIZE(psiv_level_up), PSIV_SIZE(psiv_battle_result),
 		PSIV_SIZE(psiv_auto_round), PSIV_SIZE(psiv_auto_battle), PSIV_SIZE(psiv_pacing_area), PSIV_SIZE(psiv_pacing_boss),
 		PSIV_SIZE(psiv_macro_step), PSIV_SIZE(psiv_macro), PSIV_SIZE(psiv_stat_bonus), PSIV_SIZE(psiv_affinity), PSIV_SIZE(psiv_status_resist),
-		PSIV_SIZE(psiv_member_detail), PSIV_SIZE(psiv_combo_entry),
+		PSIV_SIZE(psiv_member_detail), PSIV_SIZE(psiv_combo_entry), PSIV_SIZE(psiv_combat_view), PSIV_SIZE(psiv_equip_preview), PSIV_SIZE(psiv_difficulty), PSIV_SIZE(psiv_camera),
 	};
 #undef PSIV_SIZE
 	if (!struct_name) {
@@ -492,7 +496,7 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 	case PSIV_NAME_DIRECTION:
 		return value == PSIV_DIRECTION_NONE ? "none" : value >= 0 && value <= PSIV_DIRECTION_WEST ? game::toString(static_cast<game::Facing>(value)) : "";
 	case PSIV_NAME_NOTICE_KIND:
-		return value >= 0 && value <= PSIV_NOTICE_AUTOSAVE ? game::toString(static_cast<game::OutputKind>(value)) : "";
+		return value >= 0 && value <= PSIV_NOTICE_AMBIENT ? game::toString(static_cast<game::OutputKind>(value)) : "";
 	case PSIV_NAME_AREA_KIND:
 		return value >= 0 && value <= PSIV_AREA_DUNGEON ? game::toString(static_cast<game::AreaKind>(value)) : "";
 	case PSIV_NAME_ENCOUNTER_MODE:
@@ -549,6 +553,12 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 		return value >= 0 && value <= PSIV_ACTION_WARP ? events::action_type_name(static_cast<events::ActionType>(value)) : "";
 	case PSIV_NAME_MACRO_TARGET_KIND:
 		return value >= 0 && value <= PSIV_MACRO_TARGET_ALL ? rules::toString(static_cast<rules::MacroTargetKind>(value)) : "";
+	case PSIV_NAME_CAMERA_TARGET:
+		return value >= 0 && value <= PSIV_CAMERA_LEADER ? game::toString(static_cast<game::CameraTarget>(value)) : "";
+	case PSIV_NAME_ITEM_SORT:
+		return value >= 0 && value <= PSIV_SORT_COUNT ? game::toString(static_cast<game::ItemSort>(value)) : "";
+	case PSIV_NAME_DESCRIPTION_KIND:
+		return value >= 0 && value <= PSIV_DESCRIPTION_DIFFICULTY ? game::toString(static_cast<game::DescriptionKind>(value)) : "";
 	default:
 		return "";
 	}
@@ -701,6 +711,9 @@ psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out) {
 		}
 		out->language_count = static_cast<int32_t>(codes.size());
 		out->languages = session->arena.strs(codes);
+		out->title_music = session->arena.str(c.presentation.music.title);
+		out->victory_music = session->arena.str(c.presentation.music.victory);
+		out->defeat_music = session->arena.str(c.presentation.music.defeat);
 		return PSIV_OK;
 	});
 }
@@ -803,6 +816,26 @@ psiv_status psiv_settings_set(psiv_session* session, const char* difficulty, int
 		settings.difficulty = d;
 		settings.rewardMultiplier = static_cast<rules::RewardMultiplier>(reward_multiplier);
 		return refused(session, session->session->setSettings(settings));
+	});
+}
+
+psiv_status psiv_difficulties(psiv_session* session, const psiv_difficulty** out, int32_t* count, int32_t* can_change) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		const std::vector<game::DifficultyView> presets = session->session->difficulties();
+		Arena& a = session->arena;
+		psiv_difficulty* list = a.array<psiv_difficulty>(presets.size());
+		for (std::size_t i = 0; i < presets.size(); ++i) {
+			list[i] = {a.str(presets[i].id), a.str(presets[i].name), a.str(presets[i].description), presets[i].rewardPercent};
+		}
+		*out = list;
+		*count = static_cast<int32_t>(presets.size());
+		if (can_change) {
+			*can_change = session->session->canChangeSettings();
+		}
+		return PSIV_OK;
 	});
 }
 
@@ -945,6 +978,17 @@ psiv_status psiv_macro_move_step(psiv_session* session, const char* macro, int32
 			return nullArgument(session, "macro");
 		}
 		return refused(session, session->session->moveMacroStep(name, from, to));
+	});
+}
+
+psiv_status psiv_macro_from_combo(psiv_session* session, const char* recipe, const char* name) {
+	const std::string r = str(recipe);
+	const std::string n = str(name);
+	return guard(session, true, [&] {
+		if (!recipe || !name) {
+			return nullArgument(session, recipe ? "name" : "recipe");
+		}
+		return refused(session, session->session->macroFromCombo(r, n));
 	});
 }
 
@@ -1175,6 +1219,7 @@ psiv_status psiv_field_info_get(psiv_session* session, psiv_field_info* out) {
 		out->facing = static_cast<int32_t>(w.facing);
 		out->player_control = w.playerControl;
 		out->grace_ms = w.graceMs;
+		out->music = session->arena.str(a->music);
 		return PSIV_OK;
 	});
 }
@@ -1440,6 +1485,24 @@ psiv_status psiv_skip(psiv_session* session) {
 
 // Presentation actions
 
+psiv_status psiv_cameras(psiv_session* session, const psiv_camera** out, int32_t* count) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		const std::vector<game::CameraDef>& cameras = session->data->config.presentation.cameras;
+		Arena& a = session->arena;
+		psiv_camera* list = a.array<psiv_camera>(cameras.size());
+		for (std::size_t i = 0; i < cameras.size(); ++i) {
+			const game::CameraDef& c = cameras[i];
+			list[i] = {a.str(c.id), static_cast<int32_t>(c.target), a.str(c.area), a.str(c.marker), a.str(c.follow), c.zoom};
+		}
+		*out = list;
+		*count = static_cast<int32_t>(cameras.size());
+		return PSIV_OK;
+	});
+}
+
 psiv_status psiv_actions_poll(psiv_session* session, const psiv_action** out, int32_t* count) {
 	return guard(session, true, [&] {
 		if (!out || !count) {
@@ -1508,6 +1571,9 @@ psiv_status psiv_battle_info_get(psiv_session* session, psiv_battle_info* out) {
 		out->auto_active = !ended && b->autoActive();
 		out->party_acts_next_round = !ended && b->sideActsNextRound(rules::Side::Party);
 		out->game_over = b->gameOver();
+		const std::map<std::string, std::string>& tracks = session->data->config.presentation.music.encounters;
+		auto track = tracks.find(ended ? ended->encounter : g.battleEncounter());
+		out->music = session->arena.str(track == tracks.end() ? std::string() : track->second);
 		return PSIV_OK;
 	});
 }
@@ -1986,6 +2052,78 @@ psiv_status psiv_member_detail_get(psiv_session* session, const char* member, ps
 	});
 }
 
+psiv_status psiv_equip_preview_get(psiv_session* session, const char* member, const char* piece, psiv_equip_preview* out) {
+	const std::string memberId = str(member);
+	const std::string pieceId = str(piece);
+	return guard(session, false, [&] {
+		if (!member || !piece) {
+			return nullArgument(session, member ? "piece" : "member");
+		}
+		if (!out) {
+			return nullArgument(session, "out");
+		}
+		const std::optional<game::EquipPreview> preview = session->session->equipPreview(memberId, pieceId);
+		if (!preview) {
+			return fail(session, PSIV_NOT_FOUND, "binding.no_preview", {memberId, pieceId}, "'" + memberId + "' is not in the roster or '" + pieceId + "' is not equipment");
+		}
+		Arena& a = session->arena;
+		game::Session& g = *session->session;
+		auto names = [&](const std::vector<std::string>& ids) {
+			std::vector<std::string> shown;
+			for (const std::string& id : ids) {
+				shown.push_back(g.displayName(id));
+			}
+			return a.strs(shown);
+		};
+		auto resists = [&](const rules::StatusResists& list, int32_t& count, const psiv_status_resist*& outList) {
+			psiv_status_resist* entries = a.array<psiv_status_resist>(list.size());
+			int n = 0;
+			for (const auto& [status, percent] : list) {
+				entries[n++] = {a.str(status), a.str(g.displayName(status)), percent};
+			}
+			count = n;
+			outList = entries;
+		};
+		auto bonus = [](const rules::Stats& b) { return psiv_stat_bonus{b.maxHp, b.maxTp, b.strength, b.mental, b.agility, b.dexterity, b.defense, b.critical, b.evasion}; };
+		auto combat = [&](const game::CombatView& v, psiv_combat_view& o) {
+			o.stats = bonus(v.stats);
+			o.basic_attack = a.str(v.basicAttack);
+			o.basic_attack_name = a.str(g.displayName(v.basicAttack));
+			o.attack_element = static_cast<int32_t>(v.attackElement);
+			o.ability_count = static_cast<int32_t>(v.abilities.size());
+			o.abilities = a.strs(v.abilities);
+			o.ability_names = names(v.abilities);
+			resists(v.statusResist, o.status_resist_count, o.status_resists);
+		};
+		const rules::EquipmentDef& def = preview->piece;
+		*out = psiv_equip_preview();
+		out->member = a.str(preview->member);
+		out->piece = a.str(def.id);
+		out->piece_name = a.str(g.displayName(def.id));
+		out->slot = static_cast<int32_t>(def.slot);
+		out->category = a.str(def.category);
+		out->bonus = bonus(def.bonus);
+		out->element = static_cast<int32_t>(def.element);
+		out->attack = a.str(def.attack);
+		out->attack_name = a.str(def.attack.empty() ? "" : g.displayName(def.attack));
+		out->granted_count = static_cast<int32_t>(def.abilities.size());
+		out->granted = a.strs(def.abilities);
+		out->granted_names = names(def.abilities);
+		resists(def.statusResist, out->piece_resist_count, out->piece_resists);
+		out->replaces = a.str(preview->replaces);
+		out->replaces_name = a.str(preview->replaces.empty() ? "" : g.displayName(preview->replaces));
+		out->can_wear = preview->refusal.empty();
+		out->refusal_key = a.str(preview->refusal.key);
+		out->refusal_text = a.str(preview->refusal.empty() ? "" : g.render(preview->refusal));
+		out->wearer_count = static_cast<int32_t>(preview->wearers.size());
+		out->wearers = a.strs(preview->wearers);
+		out->wearer_names = names(preview->wearers);
+		combat(preview->before, out->before);
+		combat(preview->after, out->after);
+		return PSIV_OK;
+	});
+}
+
 psiv_status psiv_combo_log(psiv_session* session, const psiv_combo_entry** out, int32_t* count, int32_t* total) {
 	return guard(session, false, [&] {
 		if (!out || !count) {
@@ -2024,25 +2162,27 @@ psiv_status psiv_combo_log(psiv_session* session, const psiv_combo_entry** out, 
 	});
 }
 
-psiv_status psiv_inventory(psiv_session* session, const psiv_inventory_entry** out, int32_t* count) {
+psiv_status psiv_inventory_sorted(psiv_session* session, int32_t order, const psiv_inventory_entry** out, int32_t* count) {
 	return guard(session, false, [&] {
 		if (!out || !count) {
 			return nullArgument(session, out ? "count" : "out");
 		}
-		const game::World& w = session->session->world();
-		std::vector<psiv_inventory_entry> entries;
-		for (const auto& [id, n] : w.items) {
-			entries.push_back(entryFor(*session, id, n));
+		if (order < 0 || order > PSIV_SORT_COUNT) {
+			return outOfRange(session, "order", order);
 		}
-		for (const auto& [id, n] : w.equipmentBag) {
-			entries.push_back(entryFor(*session, id, n));
+		const std::vector<game::BagEntry> bag = session->session->bag(static_cast<game::ItemSort>(order));
+		psiv_inventory_entry* list = session->arena.array<psiv_inventory_entry>(bag.size());
+		for (std::size_t i = 0; i < bag.size(); ++i) {
+			list[i] = entryFor(*session, bag[i].id, bag[i].count);
 		}
-		psiv_inventory_entry* list = session->arena.array<psiv_inventory_entry>(entries.size());
-		std::copy(entries.begin(), entries.end(), list);
 		*out = list;
-		*count = static_cast<int32_t>(entries.size());
+		*count = static_cast<int32_t>(bag.size());
 		return PSIV_OK;
 	});
+}
+
+psiv_status psiv_inventory(psiv_session* session, const psiv_inventory_entry** out, int32_t* count) {
+	return psiv_inventory_sorted(session, PSIV_SORT_ID, out, count);
 }
 
 psiv_status psiv_shop_get(psiv_session* session, psiv_shop_info* out) {
@@ -2391,6 +2531,27 @@ psiv_status psiv_string_text(psiv_session* session, const char* id, const char**
 			return nullArgument(session, "out");
 		}
 		*out = session->arena.str(session->session->stringText(id));
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_description(psiv_session* session, int32_t kind, const char* id, const char** out) {
+	const std::string thing = str(id);
+	return guard(session, false, [&] {
+		if (!id) {
+			return nullArgument(session, "id");
+		}
+		if (!out) {
+			return nullArgument(session, "out");
+		}
+		if (kind < 0 || kind > PSIV_DESCRIPTION_DIFFICULTY) {
+			return outOfRange(session, "kind", kind);
+		}
+		const game::DescriptionKind k = static_cast<game::DescriptionKind>(kind);
+		if (!game::describes(session->data->db, k, thing)) {
+			return fail(session, PSIV_NOT_FOUND, "binding.no_such_thing", {game::toString(k), thing}, std::string("there is no ") + game::toString(k) + " '" + thing + "'");
+		}
+		*out = session->arena.str(session->session->description(k, thing));
 		return PSIV_OK;
 	});
 }

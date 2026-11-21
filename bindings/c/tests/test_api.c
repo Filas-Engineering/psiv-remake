@@ -1111,6 +1111,279 @@ static void testMenus(void) {
 		CHECK(combos[0].participant_count == 2 && strcmp(combos[0].participants[0], "medic") == 0 && strcmp(combos[0].participant_names[1], "Test Mystic") == 0);
 		CHECK(combos[0].ability_count == 2 && strcmp(combos[0].abilities[0], "glint") == 0 && strcmp(combos[0].ability_names[1], "Spark") == 0);
 	}
+
+	/* A macro made from the found combination, after the fight. */
+	settle(s);
+	if (psiv_mode_get(s) == PSIV_MODE_BATTLE) {
+		psiv_auto_battle played;
+		CHECK_OK(psiv_battle_play(s, 60, &played));
+		settle(s);
+	}
+	CHECK(psiv_macro_from_combo(s, "twin_arc", "Twin") == PSIV_REFUSED && errorIs(s, "game.refuse.macro_menu_only"));
+	if (psiv_mode_get(s) == PSIV_MODE_FIELD) {
+		CHECK_OK(psiv_open_menu(s));
+		CHECK(psiv_macro_from_combo(s, "storm_spark", "Storm") == PSIV_REFUSED && errorIs(s, "game.refuse.combo_not_found"));
+		CHECK_OK(psiv_macro_from_combo(s, "twin_arc", "Twin"));
+		CHECK(psiv_macro_from_combo(s, "twin_arc", "Twin") == PSIV_REFUSED && errorIs(s, "game.refuse.macro_name_taken"));
+		CHECK(psiv_macro_from_combo(s, NULL, "x") == PSIV_INVALID_ARGUMENT);
+		CHECK_OK(psiv_macro_list(s, &macros, &count));
+		const psiv_macro* twin = findMacro(macros, count, "Twin");
+		CHECK(twin && twin->step_count == 2);
+		if (twin && twin->step_count == 2) {
+			CHECK(strcmp(twin->steps[0].member, "medic") == 0 && strcmp(twin->steps[0].id, "glint") == 0 && twin->steps[0].target_kind == PSIV_MACRO_TARGET_DEFAULT);
+			CHECK(strcmp(twin->steps[1].member, "mystic") == 0 && strcmp(twin->steps[1].id, "spark") == 0 && twin->steps[1].issue == PSIV_ISSUE_NONE);
+		}
+	}
+	psiv_session_destroy(s);
+}
+
+/* A new game played to the field after the guide's scene: Bryn (the fighter), the mystic and the medic. */
+static psiv_session* afterGuide(const char* name) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/%s", scratch, name);
+	makeDirectory(saves);
+	removeFiles(saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK(walkToMarker(s, "guide_front") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	CHECK_OK(psiv_enter_name(s, "Bryn"));
+	settle(s);
+	CHECK(psiv_mode_get(s) == PSIV_MODE_FIELD);
+	return s;
+}
+
+static int32_t hasName(const char* const* names, int32_t count, const char* name) {
+	for (int32_t i = 0; i < count; ++i) {
+		if (strcmp(names[i], name) == 0) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/* Equipment compared before it goes on, with the numbers a battle would use. */
+static void testEquipPreview(void) {
+	psiv_session* s = afterGuide("preview");
+	psiv_equip_preview p;
+	CHECK_OK(psiv_equip_preview_get(s, "fighter", "rivet_plate", &p));
+	CHECK(strcmp(p.piece_name, "Rivet Plate") == 0 && p.slot == PSIV_SLOT_BODY && strcmp(p.category, "heavy_armor") == 0);
+	CHECK(p.bonus.defense == 6 && p.bonus.max_hp == 20 && p.bonus.agility == -2 && p.element == PSIV_ELEMENT_NONE);
+	CHECK(strcmp(p.replaces, "padded_coat") == 0 && strcmp(p.replaces_name, "Padded Coat") == 0 && p.can_wear && strcmp(p.refusal_key, "") == 0);
+	CHECK(p.after.stats.defense - p.before.stats.defense == 3 && p.after.stats.max_hp - p.before.stats.max_hp == 10);
+	CHECK(p.wearer_count == 1 && strcmp(p.wearers[0], "fighter") == 0 && strcmp(p.wearer_names[0], "Bryn") == 0);
+	psiv_member_detail detail;
+	CHECK_OK(psiv_member_detail_get(s, "fighter", &detail));
+	CHECK(detail.critical == p.before.stats.critical);
+
+	CHECK_OK(psiv_equip_preview_get(s, "mystic", "spark_ring", &p));
+	CHECK(p.granted_count == 1 && strcmp(p.granted_names[0], "Glint") == 0 && strcmp(p.replaces, "calm_charm") == 0);
+	CHECK(p.before.status_resist_count == 1 && p.after.status_resist_count == 0);
+	CHECK(hasName(p.after.abilities, p.after.ability_count, "glint") && !hasName(p.before.abilities, p.before.ability_count, "glint"));
+	CHECK(p.wearer_count == 3 && strcmp(p.wearers[1], "mystic") == 0 && strcmp(p.wearers[2], "medic") == 0);
+	CHECK_OK(psiv_equip_preview_get(s, "fighter", "calm_charm", &p));
+	CHECK(p.piece_resist_count == 1 && strcmp(p.piece_resists[0].name, "Sleep") == 0 && p.after.status_resist_count == 1);
+
+	CHECK_OK(psiv_equip_preview_get(s, "fighter", "volley_sling", &p));
+	CHECK(!p.can_wear && strcmp(p.refusal_key, "equip.wrong_category") == 0 && strlen(p.refusal_text) > 0);
+	CHECK(strcmp(p.attack_name, "Scatter Shot") == 0 && strcmp(p.after.basic_attack, p.before.basic_attack) == 0);
+	CHECK(psiv_equip_preview_get(s, "scout", "tin_cap", &p) == PSIV_NOT_FOUND);
+	CHECK(psiv_equip_preview_get(s, "fighter", "tonic", &p) == PSIV_NOT_FOUND);
+	CHECK(psiv_equip_preview_get(s, NULL, "tin_cap", &p) == PSIV_INVALID_ARGUMENT);
+	CHECK(psiv_sizeof("psiv_equip_preview") == sizeof(psiv_equip_preview) && psiv_sizeof("psiv_combat_view") == sizeof(psiv_combat_view));
+	psiv_session_destroy(s);
+}
+
+/* Descriptions for menus, shops and battle menus, in the profile's language. */
+static void testDescriptions(void) {
+	psiv_session* s = create(NULL, -1, PSIV_PRESENTATION_INSTANT);
+	const char* text = NULL;
+	CHECK_OK(psiv_description(s, PSIV_DESCRIPTION_ITEM, "tonic", &text));
+	CHECK(strcmp(text, "A bitter herbal draught. Restores 30 HP to one ally.") == 0);
+	CHECK_OK(psiv_description(s, PSIV_DESCRIPTION_ABILITY, "spark", &text));
+	CHECK(strcmp(text, "A snap of lightning at one foe.") == 0);
+	CHECK_OK(psiv_description(s, PSIV_DESCRIPTION_STATUS, "sleep", &text));
+	CHECK(strlen(text) > 0);
+	CHECK_OK(psiv_description(s, PSIV_DESCRIPTION_ENEMY, "bog_wisp", &text));
+	CHECK(strstr(text, "marsh") != NULL);
+	CHECK_OK(psiv_description(s, PSIV_DESCRIPTION_DIFFICULTY, "hard", &text));
+	CHECK(strstr(text, "smarter") != NULL);
+	CHECK(psiv_description(s, PSIV_DESCRIPTION_ITEM, "copper_blade", &text) == PSIV_NOT_FOUND && errorIs(s, "binding.no_such_thing"));
+	CHECK(psiv_description(s, 9, "tonic", &text) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_profile_set_value(s, "text_language", "ja"));
+	CHECK_OK(psiv_description(s, PSIV_DESCRIPTION_EQUIPMENT, "copper_blade", &text));
+	CHECK(strcmp(text, "打ち延ばした銅の短い刀。軽くて振りやすい。") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_DESCRIPTION_KIND, PSIV_DESCRIPTION_EQUIPMENT), "equipment") == 0);
+	psiv_session_destroy(s);
+}
+
+/* The bag listed in the four orders. */
+static void testInventorySort(void) {
+	psiv_session* s = afterGuide("sort");
+	const psiv_inventory_entry* items;
+	int32_t count = 0;
+	CHECK_OK(psiv_open_menu(s));
+	CHECK_OK(psiv_unequip(s, "fighter", PSIV_SLOT_WEAPON));
+	CHECK_OK(psiv_unequip(s, "fighter", PSIV_SLOT_HEAD));
+	CHECK_OK(psiv_inventory_sorted(s, PSIV_SORT_ID, &items, &count));
+	CHECK(count == 3 && strcmp(items[0].id, "tonic") == 0 && strcmp(items[1].id, "copper_blade") == 0 && strcmp(items[2].id, "tin_cap") == 0);
+	CHECK_OK(psiv_inventory_sorted(s, PSIV_SORT_NAME, &items, &count));
+	CHECK(count == 3 && strcmp(items[0].name, "Copper Blade") == 0 && strcmp(items[1].name, "Tin Cap") == 0 && strcmp(items[2].name, "Tonic") == 0);
+	CHECK_OK(psiv_inventory_sorted(s, PSIV_SORT_COUNT, &items, &count));
+	CHECK(count == 3 && strcmp(items[0].id, "tonic") == 0 && items[0].count == 3);
+	CHECK_OK(psiv_inventory_sorted(s, PSIV_SORT_KIND, &items, &count));
+	CHECK(count == 3 && !items[0].equipment && items[1].targeting_or_slot == PSIV_SLOT_WEAPON && items[2].targeting_or_slot == PSIV_SLOT_HEAD);
+	CHECK(psiv_inventory_sorted(s, 7, &items, &count) == PSIV_INVALID_ARGUMENT);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_ITEM_SORT, PSIV_SORT_KIND), "kind") == 0);
+	psiv_session_destroy(s);
+}
+
+/* Difficulty presets with their text, changed only with a game in progress and outside battle. */
+static void testDifficulties(void) {
+	psiv_session* s = create(NULL, -1, PSIV_PRESENTATION_INSTANT);
+	const psiv_difficulty* presets;
+	int32_t count = 0;
+	int32_t canChange = -1;
+	CHECK_OK(psiv_difficulties(s, &presets, &count, &canChange));
+	CHECK(count == 2 && canChange == 0);
+	CHECK(strcmp(presets[0].id, "hard") == 0 && strcmp(presets[0].name, "Hard") == 0 && presets[0].reward_percent == 120 && strstr(presets[0].description, "smarter"));
+	CHECK(strcmp(presets[1].id, "original") == 0 && presets[1].reward_percent == 100);
+	CHECK(psiv_settings_set(s, "hard", PSIV_REWARD_X1) == PSIV_REFUSED && errorIs(s, "game.refuse.settings_no_game"));
+	CHECK_OK(psiv_new_game(s));
+	CHECK_OK(psiv_difficulties(s, &presets, &count, NULL));
+	settle(s);
+	CHECK_OK(psiv_difficulties(s, &presets, &count, &canChange));
+	CHECK(canChange == 1);
+	CHECK_OK(psiv_settings_set(s, "hard", PSIV_REWARD_X1_5));
+	psiv_settings settings;
+	CHECK_OK(psiv_settings_get(s, &settings));
+	CHECK(strcmp(settings.difficulty, "hard") == 0 && settings.reward_multiplier == PSIV_REWARD_X1_5);
+	CHECK(psiv_sizeof("psiv_difficulty") == sizeof(psiv_difficulty));
+	psiv_session_destroy(s);
+}
+
+/* Leaves the area through its exit to `area`. */
+static int32_t walkOut(psiv_session* s, const char* area) {
+	const psiv_exit* exits;
+	int32_t count;
+	int32_t status = -1;
+	if (psiv_field_exits(s, &exits, &count) != PSIV_OK) {
+		return status;
+	}
+	for (int32_t i = 0; i < count; ++i) {
+		if (strcmp(exits[i].to_area, area) == 0 && psiv_walk_to(s, exits[i].x, exits[i].y) == PSIV_OK) {
+			while (psiv_walk_step(s, &status) == PSIV_OK && status == PSIV_WALK_WALKING) {
+				settle(s);
+			}
+			return status;
+		}
+	}
+	return status;
+}
+
+/* Cameras with targets and zooms, music per area, encounter and situation, and the durations actions report. */
+static void testCamerasAndMusic(void) {
+	psiv_session* s = create(NULL, -1, PSIV_PRESENTATION_INSTANT);
+	const psiv_camera* cameras;
+	int32_t count = 0;
+	CHECK_OK(psiv_cameras(s, &cameras, &count));
+	CHECK(count == 4);
+	if (count == 4) {
+		CHECK(strcmp(cameras[0].id, "lookout_east") == 0 && cameras[0].target == PSIV_CAMERA_MARKER && strcmp(cameras[0].area, "reed_path") == 0);
+		CHECK(strcmp(cameras[0].marker, "lookout_east") == 0 && cameras[0].zoom == 1.25 && strcmp(cameras[0].follow, "") == 0);
+		CHECK(strcmp(cameras[2].id, "lookout_west") == 0 && cameras[2].zoom == 1.0);
+		CHECK(strcmp(cameras[3].id, "peddler") == 0 && cameras[3].target == PSIV_CAMERA_FOLLOW && strcmp(cameras[3].follow, "peddler") == 0 && cameras[3].zoom == 1.5);
+	}
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_CAMERA_TARGET, PSIV_CAMERA_LEADER), "leader") == 0);
+	psiv_game_info game;
+	CHECK_OK(psiv_game_info_get(s, &game));
+	CHECK(strcmp(game.title_music, "title_harbor_dawn") == 0 && strcmp(game.victory_music, "victory_bright_sail") == 0 && strcmp(game.defeat_music, "defeat_low_tide") == 0);
+
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	psiv_field_info field;
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.music, "town_tide_bells") == 0);
+	CHECK(walkOut(s, "reed_path") == PSIV_WALK_LEFT_AREA);
+	settle(s);
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.area_id, "reed_path") == 0 && strcmp(field.music, "field_marsh_reeds") == 0);
+	/* The lookout stands on the wall in the corner and is talked to from the floor below it. */
+	const uint8_t* grid;
+	const psiv_point* points;
+	int32_t cells = 0;
+	CHECK_OK(psiv_field_grid(s, &grid, &cells));
+	CHECK(cells == field.width * field.height && (grid[1 * field.width + 1] & PSIV_CELL_TERRAIN_MASK) == PSIV_CELL_WALL);
+	CHECK_OK(psiv_field_points(s, &points, &count));
+	int32_t lookout = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		lookout += points[i].kind == PSIV_POINT_TALK && strcmp(points[i].id, "lookout") == 0 && points[i].x == 1 && points[i].y == 1;
+	}
+	CHECK(lookout == 1);
+	CHECK(walkToMarker(s, "lookout_front") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	const psiv_action* actions;
+	CHECK_OK(psiv_actions_poll(s, &actions, &count));
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	CHECK(psiv_mode_get(s) == PSIV_MODE_BATTLE);
+	psiv_battle_info info;
+	CHECK_OK(psiv_battle_info_get(s, &info));
+	CHECK(strcmp(info.encounter, "marsh") == 0 && strcmp(info.music, "battle_marsh_ambush") == 0);
+	CHECK_OK(psiv_actions_poll(s, &actions, &count));
+	int32_t found = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		if (actions[i].type == PSIV_ACTION_PANEL_SHOW && strcmp(actions[i].subject, "ladder") == 0) {
+			found += actions[i].duration == 0.5;
+		} else if (actions[i].type == PSIV_ACTION_PANEL_SHOW) {
+			found += actions[i].duration == 0.35;
+		} else if (actions[i].type == PSIV_ACTION_CAMERA_MOVE) {
+			found += actions[i].duration == 1.5 && actions[i].seconds == 1.5;
+		} else if (actions[i].type == PSIV_ACTION_MUSIC_PLAY) {
+			found += actions[i].duration == 0;
+		}
+	}
+	CHECK(found == 6);
+	psiv_session_destroy(s);
+}
+
+/* Party talk coming up by itself as the party arrives, once per area under each set, and not at all when it is off. */
+static int32_t ambientCount(psiv_session* s, const char* keyPrefix) {
+	const psiv_notice* notices;
+	int32_t count = 0;
+	int32_t ambient = 0;
+	CHECK_OK(psiv_notices_drain(s, &notices, &count));
+	for (int32_t i = 0; i < count; ++i) {
+		if (notices[i].kind == PSIV_NOTICE_AMBIENT) {
+			++ambient;
+			CHECK(strncmp(notices[i].key, keyPrefix, strlen(keyPrefix)) == 0);
+		}
+	}
+	return ambient;
+}
+
+static void testAmbientTalk(void) {
+	psiv_session* s = afterGuide("ambient");
+	ambientCount(s, "");
+	CHECK_OK(psiv_profile_set_value(s, "ambient_talk", "off"));
+	CHECK(walkOut(s, "reed_path") == PSIV_WALK_LEFT_AREA);
+	settle(s);
+	CHECK(ambientCount(s, "") == 0);
+	CHECK_OK(psiv_profile_set_value(s, "ambient_talk", "on"));
+	CHECK(walkOut(s, "tidewater") == PSIV_WALK_LEFT_AREA);
+	settle(s);
+	CHECK(ambientCount(s, "talk.chapter_one.") == 1);
+	CHECK(walkOut(s, "reed_path") == PSIV_WALK_LEFT_AREA);
+	settle(s);
+	CHECK(ambientCount(s, "talk.reeds.") == 2);
+	CHECK(psiv_mode_get(s) == PSIV_MODE_FIELD);
+	CHECK(walkOut(s, "tidewater") == PSIV_WALK_LEFT_AREA);
+	settle(s);
+	CHECK(ambientCount(s, "") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_NOTICE_KIND, PSIV_NOTICE_AMBIENT), "ambient") == 0);
 	psiv_session_destroy(s);
 }
 
@@ -1134,6 +1407,12 @@ int main(int argc, char** argv) {
 	testAdventurePaths();
 	testActors();
 	testMenus();
+	testEquipPreview();
+	testDescriptions();
+	testInventorySort();
+	testDifficulties();
+	testCamerasAndMusic();
+	testAmbientTalk();
 	if (failures) {
 		fprintf(stderr, "%d of %d checks failed\n", failures, checks);
 		return 1;

@@ -60,6 +60,32 @@ const char* action_type_name(ActionType type) {
 	return "unknown";
 }
 
+bool parse_action_type(const std::string& name, ActionType& type) {
+	for (int i = 0; i <= static_cast<int>(ActionType::warp); ++i) {
+		std::string candidate = action_type_name(static_cast<ActionType>(i));
+		for (char& c : candidate) {
+			if (c == ' ') {
+				c = '_';
+			}
+		}
+		if (candidate == name) {
+			type = static_cast<ActionType>(i);
+			return true;
+		}
+	}
+	return false;
+}
+
+double action_seconds(const Action& action, const std::map<ActionType, double>& by_type,
+	const std::map<std::pair<ActionType, std::string>, double>& by_subject) {
+	auto subject = by_subject.find({action.type, action.subject});
+	if (subject != by_subject.end()) {
+		return subject->second;
+	}
+	auto type = by_type.find(action.type);
+	return type != by_type.end() ? type->second : action.seconds;
+}
+
 std::string describe(const Text& text) {
 	return text.is_id ? "@" + text.value : "\"" + text.value + "\"";
 }

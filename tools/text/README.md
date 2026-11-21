@@ -180,6 +180,14 @@ Font coverage (TXT-033): reports every character the text uses that the font's g
 - `--lang` keeps only those languages from the database and the string tables (a `--text` table has no language and is always checked), so each font is checked against the languages it serves.
 - Characters are counted as the player reads them: control codes, line breaks, page pauses and runtime values are not glyphs. With `--glossary`, every name token is checked with both its shipped and its restored name; without it, a name token counts as a runtime value.
 
+### descriptions
+
+```bash
+cli.py descriptions --text en.json [--text ja.json]... --core core/data [--out report.txt]
+```
+
+Descriptions in the game's text tables (UI-007): the optional keys `desc.<kind>.<id>`, with kind `item`, `equipment`, `ability`, `status`, `enemy` or `difficulty` and an id from the battle data in `--core`. For each table it counts the described ids of each kind against all of them and lists the ids with none, which is not a problem: a missing description shows as empty. A key of another kind, or for an id the battle data does not have, describes nothing and fails the command (exit 1), as it fails the game's data check. The glyph check (`glyphs --text`) covers descriptions like any other text.
+
 ### render
 
 ```bash

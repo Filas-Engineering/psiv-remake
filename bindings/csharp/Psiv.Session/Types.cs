@@ -6,7 +6,8 @@ public enum PsivStatus { Ok, Refused, InvalidArgument, NotFound, DataError, Inte
 public enum Mode { Title, Field, Event, Battle, Menu, Shop }
 public enum MenuKind { None, Field, Inn, SavePrompt, NameEntry }
 public enum Direction { None = -1, North, East, South, West }
-public enum NoticeKind { Line, Choice, Action, Notice, Warning, Autosave }
+// Ambient: a party talk line that came up by itself on arrival; it does not stop play.
+public enum NoticeKind { Line, Choice, Action, Notice, Warning, Autosave, Ambient }
 public enum AreaKind { Town, Field, Dungeon }
 public enum EncounterMode { Visible, Random }
 public enum EnemyState { Idle, Chasing, Returning }
@@ -56,6 +57,10 @@ public enum ActionType
 public enum ActionPhase { Begin, Cancel }
 public enum Presentation { Instant, Wait }
 public enum WalkStatus { Walking, Arrived, LeftArea, Stopped, NoPath, TooLong }
+public enum DescriptionKind { Item, Equipment, Ability, Status, Enemy, Difficulty }
+// The bag has no order of its own; a sort only lists it.
+public enum ItemSort { Id, Kind, Name, Count }
+public enum CameraTarget { None, Marker, Follow, Leader }
 
 [Flags]
 public enum CellFlags : byte { Floor = 0, Wall = 1, Water = 2, TerrainMask = 3, Walkable = 16 }
@@ -66,6 +71,7 @@ public enum NameKind
 	Mode, MenuKind, Direction, NoticeKind, AreaKind, EncounterMode, EnemyState, PointKind, JobState, TextSpeed, BattleSpeed,
 	RewardMultiplier, BattleSource, Side, CommandKind, AbilityKind, Targeting, EquipSlot, Outcome, EventType, CancelReason,
 	Effectiveness, StatusEnd, ResourceKind, Element, Stat, Opening, AutoStop, MacroStepStatus, MacroIssue, ActionType, MacroTargetKind,
+	DescriptionKind, ItemSort, CameraTarget,
 }
 
 public sealed record PsivError(PsivStatus Status, string Key, IReadOnlyList<string> Params, string Text)
@@ -106,19 +112,27 @@ public sealed record SessionOptions
 	public bool WallClock { get; init; }
 }
 
-public sealed record GameInfo(string Title, string GameBuild, int RulesVersion, int TickMs, int RoundMs, int ManualSlots, int AutosaveSlots, int ItemCap, int MoneyCap, IReadOnlyList<string> Languages);
+// TitleMusic, VictoryMusic and DefeatMusic are game.json's tracks, "" when the data names none.
+public sealed record GameInfo(string Title, string GameBuild, int RulesVersion, int TickMs, int RoundMs, int ManualSlots, int AutosaveSlots, int ItemCap, int MoneyCap,
+	IReadOnlyList<string> Languages, string TitleMusic, string VictoryMusic, string DefeatMusic);
 
 public sealed record Profile(TextSpeed TextSpeed, bool AutoAdvance, bool ShowShippedNames, string TextLanguage, int TextSizePercent, BattleSpeed BattleSpeed,
 	bool AmbientTalk, bool ReducedFlash, int MusicVolume, int AmbientVolume, int EffectsVolume);
 
 public sealed record Settings(string Difficulty, RewardMultiplier RewardMultiplier, string AutoMacro);
 
+public sealed record Difficulty(string Id, string Name, string Description, int RewardPercent);
+
+// Every preset in id order; CanChange says SetSettings would accept a change now (a game in progress, outside battle).
+public sealed record Difficulties(IReadOnlyList<Difficulty> Presets, bool CanChange);
+
 public sealed record SaveSummary(string Slot, string Area, long PlayTimeMs, IReadOnlyList<string> Party, string Difficulty, long WriteTime, ulong Sequence, bool Autosave, bool Damaged, string Error);
 
 public sealed record WorldInfo(Mode Mode, MenuKind MenuKind, int Money, long PlayTimeMs, int AutosaveCount, bool GameOver, bool CanRetry, bool PlayerControl);
 
+// Music is the area's track, "" when the data names none.
 public sealed record FieldInfo(string AreaId, string AreaName, AreaKind AreaKind, EncounterMode EncounterMode, int Width, int Height, int StepMs,
-	int LeaderX, int LeaderY, Direction Facing, bool PlayerControl, int GraceMs);
+	int LeaderX, int LeaderY, Direction Facing, bool PlayerControl, int GraceMs, string Music);
 
 public sealed record FieldEnemy(int Id, string Encounter, string Zone, int X, int Y, Direction Facing, EnemyState State);
 
@@ -143,8 +157,13 @@ public sealed record Line(string SpeakerId, string SpeakerName, string TextId, s
 
 public sealed record Choice(string Prompt, bool YesNo, IReadOnlyList<string> Options);
 
+// Duration is how long the animation lasts by the data (game.json's presentation durations, else Seconds), 0 for none.
 public sealed record PresentationAction(ulong Handle, ActionPhase Phase, ActionType Type, string Subject, string Target, string Slot, bool HasPosition,
-	double X, double Y, double Z, double Seconds, double Speed, double Strength, bool Loop, bool Instant, string Description);
+	double X, double Y, double Z, double Seconds, double Speed, double Strength, bool Loop, bool Instant, string Description, double Duration);
+
+// A camera scripts may name and what game.json says it looks at: Area and Marker for a Marker target, Follow for a Follow
+// target; Zoom is 1 when the data gives none.
+public sealed record Camera(string Id, CameraTarget Target, string Area, string Marker, string Follow, double Zoom);
 
 public sealed record Notice(NoticeKind Kind, string Key, IReadOnlyList<string> Params, string Text);
 
@@ -153,8 +172,9 @@ public sealed record ActiveStatus(string Id, string Name, int Remaining);
 public sealed record Combatant(int Index, string Id, string Name, string Label, Side Side, string Group, int Hp, int MaxHp, int Tp, int MaxTp, bool Alive,
 	bool Defending, IReadOnlyList<ActiveStatus> Statuses, CommandKind CommandKind, string CommandId, int CommandTarget);
 
+// Music is the encounter's track from game.json, "" when the data names none.
 public sealed record BattleInfo(bool Live, string Encounter, BattleSource Source, int Round, int PartyCount, int CombatantCount, Outcome Outcome,
-	bool EscapeAllowed, bool AutoActive, bool PartyActsNextRound, bool GameOver);
+	bool EscapeAllowed, bool AutoActive, bool PartyActsNextRound, bool GameOver, string Music);
 
 public sealed record BattleOption(string Id, string Name, CommandKind Command, AbilityKind? AbilityKind, Targeting Targeting, int Cost, int Uses, CancelReason Unusable)
 {
@@ -186,6 +206,17 @@ public sealed record StatusResist(string Id, string Name, int Percent);
 // What a status screen shows beyond Member. EquipmentBonus is indexed by EquipSlot; Affinities lists every element but None.
 public sealed record MemberDetail(string Id, int ExperienceToNext, int Critical, int Evasion, Element AttackElement, IReadOnlyList<StatBonus> EquipmentBonus,
 	IReadOnlyDictionary<Element, int> Affinities, IReadOnlyList<StatusResist> StatusResists);
+
+// A member's battle numbers, built by the code that sets up a battle combatant.
+public sealed record CombatView(StatBonus Stats, string BasicAttack, string BasicAttackName, Element AttackElement, IReadOnlyList<string> Abilities,
+	IReadOnlyList<string> AbilityNames, IReadOnlyList<StatusResist> StatusResists);
+
+// An equipment piece compared on a member before it goes on. After equals Before when CanWear is false; Refusal then
+// says why. Wearers are the lineup members who can wear it.
+public sealed record EquipPreview(string Member, string Piece, string PieceName, EquipSlot Slot, string Category, StatBonus Bonus, Element Element,
+	string Attack, string AttackName, IReadOnlyList<string> Granted, IReadOnlyList<string> GrantedNames, IReadOnlyList<StatusResist> PieceResists,
+	string Replaces, string ReplacesName, bool CanWear, PsivError? Refusal, IReadOnlyList<string> Wearers, IReadOnlyList<string> WearerNames,
+	CombatView Before, CombatView After);
 
 // One step of a saved macro. TargetMember is set for a Member target, TargetEnemy (else -1) for an Enemy target; Issue says
 // why the step cannot run as written now.

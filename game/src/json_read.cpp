@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 
 namespace game {
 
@@ -59,6 +60,20 @@ void JsonReader::integer(const JsonValue& object, const char* key, int& out, boo
 			return;
 		}
 		out = static_cast<int>(v->number);
+	}
+}
+
+void JsonReader::number(const JsonValue& object, const char* key, double& out, bool required, double min, double max) {
+	if (const JsonValue* v = field(object, key, JsonValue::Type::Number, required)) {
+		if (v->number < min || v->number > max) {
+			std::ostringstream low;
+			std::ostringstream high;
+			low << min;
+			high << max;
+			fail(*v, "data.number_out_of_range", {key, low.str(), high.str()});
+			return;
+		}
+		out = v->number;
 	}
 }
 

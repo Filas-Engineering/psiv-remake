@@ -6,11 +6,12 @@ namespace Psiv.Sample;
 
 // A scene's comic panels, its camera and its shakes. A panel is a framed window over the dimmed field, in a layout
 // slot, showing the live field scene through a named camera: tiles, actors, the party, poses and walks all keep
-// playing inside it. The game names cameras but gives them no place, so a camera is the marker of the same name in
-// the party's area, else the person (actor or party member) with that id, else the leader. Panels show their camera
-// at one zoom; the camera a `camera cut` or `camera move` names is the scene's camera: the field outside the panels
-// centers on it, and a panel showing it pushes in to a closer zoom, gliding over a move's seconds. All of it lasts
-// until the event ends.
+// playing inside it. A camera looks where game.json says (a marker of the party's area, a person it follows or the
+// leader) at its zoom; a camera the data gives no target, or whose target is not in view, is the marker of the same
+// name in the party's area, else the person (actor or party member) with that id, else the leader. The camera a
+// `camera cut` or `camera move` names is the scene's camera: the field outside the panels centers on it, and a panel
+// showing it pushes in by a third, gliding over the move's seconds. Transitions last the action's duration from the
+// data. All of it lasts until the event ends.
 public sealed partial class SampleController
 {
 	private const int PanelTransitionMs = 350;
@@ -19,7 +20,6 @@ public sealed partial class SampleController
 	private const int PanelGutter = 16;
 	private const int PanelBorder = 4;
 	private const int PanelTile = Art.Tile;
-	private const int CameraTile = Art.Tile * 4 / 3;
 	// Pixels a shake of strength 1 moves the view; the profile's reduced flash damps it to a quarter.
 	private const int ShakePixels = 10;
 	private const string DefaultSlot = "center";
@@ -38,6 +38,7 @@ public sealed partial class SampleController
 	}
 
 	private readonly List<Panel> _panels = [];
+	private Dictionary<string, Camera>? _cameraData;
 	private readonly HashSet<string> _unknownSlots = [];
 	// The scene's camera, null while the field follows the leader, and its glide from where the field was centered.
 	private string? _camera;
@@ -135,14 +136,14 @@ public sealed partial class SampleController
 			_cameraFrom = CameraFocus(_s.Field());
 			_camera = a.Subject;
 			_cameraMove = null;
-			return a.Type == ActionType.CameraMove && !a.Instant ? Math.Max(1, (int)(a.Seconds * 1000)) : 0;
+			return a.Type == ActionType.CameraMove && !a.Instant ? Math.Max(1, (int)(a.Duration * 1000)) : 0;
 		case ActionType.Shake:
 			return a.Instant ? 0 : Math.Max(1, (int)(a.Seconds * 1000));
 		}
 		return 0;
 	}
 
-	private static int TransitionMs(PresentationAction a) => a.Seconds > 0 ? (int)(a.Seconds * 1000) : PanelTransitionMs;
+	private static int TransitionMs(PresentationAction a) => a.Duration > 0 ? (int)(a.Duration * 1000) : PanelTransitionMs;
 
 	// The scene action's animation has started: the panels it shows or hides, the camera glide or the shake follow it.
 	private void FollowSceneAction(Animation animation)
@@ -192,9 +193,25 @@ public sealed partial class SampleController
 
 	private static float Ease(float t) => t * t * (3f - 2f * t);
 
-	// Where a camera looks, in cells: the marker of its name, else the person of its name, else the leader.
+	private Camera? CameraData(string camera) => (_cameraData ??= _s.Cameras().ToDictionary(c => c.Id)).GetValueOrDefault(camera);
+
+	// Where a camera looks, in cells: its target from the data when that is in view; otherwise the marker of its name,
+	// else the person of its name, else the leader.
 	private (float X, float Y) Resolve(string camera, FieldView view)
 	{
+		Camera? data = CameraData(camera);
+		if (data?.Target == CameraTarget.Marker && data.Area == view.Info.AreaId && view.Markers.FirstOrDefault(m => m.Name == data.Marker) is { } target)
+		{
+			return (target.X, target.Y);
+		}
+		if (data?.Target == CameraTarget.Follow && _field.DrawnActors.TryGetValue(data.Follow, out DrawnPerson followed))
+		{
+			return (followed.X, followed.Y);
+		}
+		if (data?.Target == CameraTarget.Leader)
+		{
+			return _field.Leader(Lineup());
+		}
 		if (view.Markers.FirstOrDefault(m => m.Name == camera) is { } marker)
 		{
 			return (marker.X, marker.Y);
@@ -220,6 +237,17 @@ public sealed partial class SampleController
 		}
 		float t = Ease(_cameraMove.Progress);
 		return (_cameraFrom.X + (x - _cameraFrom.X) * t, _cameraFrom.Y + (y - _cameraFrom.Y) * t);
+	}
+
+	// A panel's cell size: the field's, times its camera's zoom, and a third more while that camera is the scene's.
+	private int PanelTileSize(Panel p)
+	{
+		float zoom = (float)(CameraData(p.Camera)?.Zoom ?? 1.0);
+		if (p.Camera == _camera)
+		{
+			zoom *= _cameraMove is null ? 4f / 3f : 1f + Ease(_cameraMove.Progress) / 3f;
+		}
+		return Math.Max(4, (int)MathF.Round(PanelTile * zoom));
 	}
 
 	private int ShakeAmplitude()
@@ -268,11 +296,7 @@ public sealed partial class SampleController
 			s.Fill(r.X - PanelBorder, r.Y - PanelBorder, r.Width + 2 * PanelBorder, r.Height + 2 * PanelBorder, Color.Black * shown);
 			s.Fill(r.X - PanelBorder + 1, r.Y - PanelBorder + 1, r.Width + 2 * PanelBorder - 2, r.Height + 2 * PanelBorder - 2, Style.Text * shown);
 			s.Fill(r.X, r.Y, r.Width, r.Height, Style.Background);
-			int tile = PanelTile;
-			if (p.Camera == _camera)
-			{
-				tile = _cameraMove is null ? CameraTile : PanelTile + (int)((CameraTile - PanelTile) * Ease(_cameraMove.Progress));
-			}
+			int tile = PanelTileSize(p);
 			s.Clip(r.X, r.Y, r.Width, r.Height);
 			_field.DrawView(s, art, view, _clockMs, lineup, r, Resolve(p.Camera, view), tile, shake);
 			if (shown < 1f)

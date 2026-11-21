@@ -16,7 +16,8 @@
 		{"name":"id","type":"string","value":"saltgrass"},
 		{"name":"kind","type":"string","value":"town"},
 		{"name":"encounter_mode","type":"string","value":"visible"},
-		{"name":"step_ms","type":"int","value":250}
+		{"name":"step_ms","type":"int","value":250},
+		{"name":"music","type":"string","value":"town_canal_market"}
 	],
 	"tilesets": [
 		{"firstgid":1,"source":"cells.tsj"}

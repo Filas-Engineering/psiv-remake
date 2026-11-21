@@ -3,7 +3,7 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-from . import assets, codes, db, delivery, diff, eventfmt, glossary, l10n, names, outputs, rename, review, sheet, stats, typos, workload
+from . import assets, codes, db, delivery, descriptions, diff, eventfmt, glossary, l10n, names, outputs, rename, review, sheet, stats, typos, workload
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -331,6 +331,15 @@ def cmd_glyphs(args):
 	return EXIT_FAIL if report.missing else EXIT_OK
 
 
+def cmd_descriptions(args):
+	try:
+		reports = descriptions.check(args.text, args.core)
+	except descriptions.DescriptionError as e:
+		raise Failure(str(e))
+	emit(descriptions.render(reports), args.out, args.force, [*args.text, args.core])
+	return EXIT_FAIL if any(r.unknown for r in reports) else EXIT_OK
+
+
 def cmd_export_strings(args):
 	with closing(open_db(args.db)) as conn:
 		registry = db.registry(conn)
@@ -486,6 +495,11 @@ def parser():
 	c.add_argument("--text", action="append", help='{"text": {...}} table as core and game use; repeat for several')
 	c.add_argument("--lang", action="append", help="only this language; repeat for several (default: all)")
 	c.add_argument("--glossary", help="also check shipped and restored names behind name tokens")
+	c.add_argument("--out", help="report path (default: stdout)")
+
+	c = command("descriptions", cmd_descriptions, "Count the descriptions of each kind in game text tables and report keys that describe nothing (UI-007).")
+	c.add_argument("--text", required=True, action="append", help='{"text": {...}} game text table; repeat for several languages')
+	c.add_argument("--core", required=True, help="the battle data directory whose ids descriptions name")
 	c.add_argument("--out", help="report path (default: stdout)")
 
 	c = command("render", cmd_render, "Print the text with name tokens shown as shipped or restored names.")

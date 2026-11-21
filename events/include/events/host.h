@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace events {
@@ -168,6 +170,13 @@ public:
 };
 
 const char* action_type_name(ActionType type);
+// The action named as timing configurations and game data write it: the type name with `_` for spaces ("move",
+// "panel_show", "camera_move").
+bool parse_action_type(const std::string& name, ActionType& type);
+// Authored seconds for an action (FORMAT.md, "Timing configuration"): the entry for its type and subject, else the one
+// for its type, else the action's own `seconds`.
+double action_seconds(const Action& action, const std::map<ActionType, double>& by_type,
+	const std::map<std::pair<ActionType, std::string>, double>& by_subject);
 // Render values back in script syntax, for traces and tools.
 std::string describe(const Text& text);
 std::string describe(const Action& action);

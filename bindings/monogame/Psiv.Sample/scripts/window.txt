@@ -1,0 +1,63 @@
+# The mouse and the window: a click walks the leader to a cell through the session's path walk at walking pace, a key
+# stops it, a click on a wall finds no way, and a click on the town's east exit walks out onto the reed path, where
+# party talk comes up by itself as toasts that do not stop play. Then how the 1280x720 frame fits windows of other
+# sizes: whole-number scales with bars when there is room, shrunk to fit when there is not. With --window, the window
+# lines resize the window and the shot lines save screenshots under build/shots/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+expect state party Test Fighter, Test Mystic, Test Medic
+
+# Two cells right and two down: the walk takes a step each 250 ms, so it is still going after 20 frames.
+clickcell 7 5
+expect state walk 7 5
+wait 20
+expect actor fighter walking
+shot build/shots/window_click_walk.png
+wait 60
+expect state walk -
+expect actor fighter 7 5
+
+# A held direction takes the leader back at once.
+clickcell 10 6
+wait 2
+expect state walk 10 6
+press Left
+expect state walk -
+
+# A wall has no way to it.
+clickcell 0 0
+wait 2
+expect toast There is no way there.
+expect state walk -
+
+# Out of the east gate: the walk ends on the exit, the reed path's arrival brings its party talk as toasts, and the
+# field stays under the player's control.
+clickcell 13 4
+wait 120
+expect state area Reed Path
+expect state walk -
+expect toast Test Mystic: Every step out here squelches.
+expect toast Test Medic: Count the bites instead.
+expect screen Field
+shot build/shots/window_ambient_talk.png
+
+# The frame in other windows.
+expect letterbox 1280 720 0 0 1280 720 100
+expect letterbox 1920 1080 320 180 1280 720 100
+expect letterbox 2560 1440 0 0 2560 1440 200
+expect letterbox 2000 1500 360 390 1280 720 100
+expect letterbox 1000 700 0 69 1000 562 78
+window 1600 1000
+shot build/shots/window_1600x1000.png
+window 960 540
+shot build/shots/window_960x540.png
+window 1280 720
+expect screen Field

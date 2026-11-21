@@ -29,6 +29,7 @@ public:
 	const rules::JsonValue* field(const rules::JsonValue& object, const char* key, rules::JsonValue::Type type, bool required);
 	void text(const rules::JsonValue& object, const char* key, std::string& out, bool required);
 	void integer(const rules::JsonValue& object, const char* key, int& out, bool required, int min, int max);
+	void number(const rules::JsonValue& object, const char* key, double& out, bool required, double min, double max);
 	void boolean(const rules::JsonValue& object, const char* key, bool& out, bool required);
 	void texts(const rules::JsonValue& object, const char* key, std::vector<std::string>& out, bool required);
 	void counts(const rules::JsonValue& object, const char* key, std::map<std::string, int>& out, bool required, int min, int max);

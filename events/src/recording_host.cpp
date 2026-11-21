@@ -63,15 +63,7 @@ Handle RecordingHost::open(double seconds, int result, const std::string& descri
 }
 
 Handle RecordingHost::start_action(const Action& action) {
-	double seconds = action.seconds;
-	auto by_type = durations_.find(action.type);
-	if (by_type != durations_.end()) {
-		seconds = by_type->second;
-	}
-	auto by_subject = subject_durations_.find({action.type, action.subject});
-	if (by_subject != subject_durations_.end()) {
-		seconds = by_subject->second;
-	}
+	double seconds = action_seconds(action, durations_, subject_durations_);
 	std::string description = describe(action);
 	trace.push_back("action " + description);
 	if (action.instant) {

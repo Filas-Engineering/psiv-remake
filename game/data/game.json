@@ -12,11 +12,30 @@
 	"actors": ["dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler"],
 	"presentation": {
 		"animations": ["bow", "jump", "nod", "shake", "shrug", "startle", "wave"],
-		"audio": ["brass_alarm", "lookout_creak", "marsh_wind", "reed_lookout"],
-		"cameras": ["lookout_east", "lookout_front", "lookout_west", "peddler"],
+		"audio": ["battle_brass_warden", "battle_marsh_ambush", "brass_alarm", "defeat_low_tide", "dungeon_firing_floor", "dungeon_kiln_halls",
+			"field_bell_shore", "field_marsh_reeds", "lookout_creak", "marsh_wind", "reed_lookout", "title_harbor_dawn", "town_canal_market",
+			"town_tide_bells", "victory_bright_sail"],
+		"cameras": [
+			{"id": "lookout_east", "area": "reed_path", "marker": "lookout_east", "zoom": 1.25},
+			{"id": "lookout_front", "area": "reed_path", "marker": "lookout_front", "zoom": 0.75},
+			{"id": "lookout_west", "area": "reed_path", "marker": "lookout_west"},
+			{"id": "peddler", "follow": "peddler", "zoom": 1.5}
+		],
+		"durations": [
+			{"action": "panel_show", "seconds": 0.35},
+			{"action": "panel_hide", "seconds": 0.35},
+			{"action": "panel_clear", "seconds": 0.35},
+			{"action": "panel_show", "subject": "ladder", "seconds": 0.5}
+		],
 		"layouts": ["bottom", "bottom_left", "bottom_right", "center", "full", "left", "right", "tall_left", "tall_right", "top", "top_left",
 			"top_right", "wide_bottom", "wide_top"],
-		"portraits": ["guide_smile", "mystic_worried", "scout_grin"]
+		"portraits": ["guide_smile", "mystic_worried", "scout_grin"],
+		"music": {
+			"title": "title_harbor_dawn",
+			"victory": "victory_bright_sail",
+			"defeat": "defeat_low_tide",
+			"encounters": {"marsh": "battle_marsh_ambush", "warden": "battle_brass_warden"}
+		}
 	},
 	"flags": [
 		"cove.quiet_seen",

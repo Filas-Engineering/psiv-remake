@@ -359,6 +359,14 @@ public sealed partial class SampleController
 		_ => "",
 	};
 
+	// A strip above the party panels with the highlighted option's or targeted enemy's description.
+	private void BattleDescription(IDrawSurface s, string? text)
+	{
+		int h = Px(22) * 2 + 16;
+		Style.Box(s, 16, BattlePanelTop - h - 8, s.Width - 32, h, 0.9f);
+		DrawDescription(s, text, 32, BattlePanelTop - h, s.Width - 64);
+	}
+
 	private void DrawBattle(IDrawSurface s, Art art)
 	{
 		BattleUi b = _battle;
@@ -484,9 +492,18 @@ public sealed partial class SampleController
 			break;
 		case BattlePhase.Option:
 			Menu(b.Options.Select(o => o.Name + (o.Cost > 0 ? $" ({o.Cost} TP)" : "") + (o.Uses >= 0 ? $" x{o.Uses}" : "")).ToList(), b.Options.Select(o => o.Usable).ToList());
+			if (b.Options.Count > 0)
+			{
+				BattleOption option = b.Options[Math.Clamp(_cursor, 0, b.Options.Count - 1)];
+				BattleDescription(s, _s.Description(option.Command == CommandKind.Item ? DescriptionKind.Item : DescriptionKind.Ability, option.Id));
+			}
 			break;
 		case BattlePhase.Target:
 			Menu(b.Targets.Select(t => t < all.Count ? (all[t].Side == Side.Party ? all[t].Name : all[t].Label) : "?").ToList());
+			if (target >= 0 && target < all.Count && all[target].Side == Side.Enemy)
+			{
+				BattleDescription(s, _s.Description(DescriptionKind.Enemy, all[target].Id));
+			}
 			break;
 		case BattlePhase.Macro:
 			Menu(_s.Macros());

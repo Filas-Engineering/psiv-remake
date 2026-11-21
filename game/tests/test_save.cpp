@@ -155,7 +155,7 @@ TEST(damagedAndNewerSavesAreRefused) {
 	CHECK(r.error.find("damaged") != std::string::npos);
 
 	std::string newer = text;
-	newer.replace(0, std::string("PSR-SAVE 3").size(), "PSR-SAVE 4");
+	newer.replace(0, std::string("PSR-SAVE 4").size(), "PSR-SAVE 5");
 	r = parseSave(resign(newer));
 	CHECK(!r.ok());
 	CHECK(r.error.find("newer build") != std::string::npos);
@@ -272,10 +272,11 @@ TEST(schemaOneSavesMigrateToTheCurrentSchema) {
 	CHECK_EQ(w.encounterStream.state(), 7u);
 
 	const std::string again = serializeSave(*save.value);
-	CHECK(again.compare(0, 11, "PSR-SAVE 3\n") == 0);
+	CHECK(again.compare(0, 11, "PSR-SAVE 4\n") == 0);
 	CHECK(again.find("chunk battle 2 ") != std::string::npos);
 	CHECK(again.find("chunk quests 1 ") != std::string::npos);
 	CHECK(again.find("chunk actors 1 ") != std::string::npos);
+	CHECK(again.find("chunk talk 1 ") != std::string::npos);
 
 	// Loading fills the quests and unlocks the schema 1 save did not have from its flags.
 	SessionOptions options;

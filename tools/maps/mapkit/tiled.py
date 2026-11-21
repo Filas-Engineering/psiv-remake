@@ -12,7 +12,7 @@ KINDS = {"floor": ".", "wall": "#", "water": "~"}
 KIND_OF_CHARACTER = {c: k for k, c in KINDS.items()}
 TILE_IDS = {"floor": 0, "wall": 1, "water": 2}
 FLIP_BITS = 0xF0000000
-MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "int"}
+MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "int", "music": "string"}
 REQUIRED_MAP_PROPERTIES = ["id"]
 
 # Per object class: property name to type. "json" is a string property holding JSON text of the given shape.
@@ -254,7 +254,7 @@ def tmj_to_area(tmj, base_dir="."):
 				rows = _rows(gids, width, sets, problems)
 
 	area = {"id": map_props.get("id", "")}
-	for name in ("kind", "encounter_mode", "step_ms"):
+	for name in ("kind", "encounter_mode", "step_ms", "music"):
 		if name in map_props:
 			area[name] = map_props[name]
 	area["map"] = rows
@@ -486,7 +486,7 @@ def area_to_tmj(area, tileset_ref, tile_size=16):
 	if problems:
 		raise areajson.AreaError(problems)
 
-	props = [_prop(k, area[k]) for k in ("id", "kind", "encounter_mode", "step_ms") if k in area]
+	props = [_prop(k, area[k]) for k in ("id", "kind", "encounter_mode", "step_ms", "music") if k in area]
 	if isinstance(tileset_ref, dict):
 		tilesets = [dict(tileset_ref, firstgid=1)]
 		tilesets[0].pop("type", None)

@@ -208,3 +208,125 @@ TEST(memberDetailAddsWhatAStatusScreenNeeds) {
 	CHECK(s.memberDetail("fighter") && s.memberDetail("fighter")->experienceToNext == 0);
 	CHECK(!s.memberDetail("scout"));
 }
+
+TEST(equipPreviewComparesAPieceAsABattleWouldSeeIt) {
+	Session s(test::data(), SessionOptions());
+	test::placeParty(s, "tidewater", "start", Facing::East);
+	setParty(s, {"fighter", "mystic", "engineer"}, 3);
+	const rules::Database& db = test::data().db;
+
+	// The fighter's padded coat against a rivet plate the bag does not hold.
+	const std::optional<EquipPreview> plate = s.equipPreview("fighter", "rivet_plate");
+	CHECK(plate.has_value());
+	if (plate) {
+		CHECK(plate->refusal.empty());
+		CHECK_EQ(plate->replaces, std::string("padded_coat"));
+		CHECK(plate->piece.slot == rules::EquipSlot::Body && plate->piece.bonus.defense == 6);
+		CHECK(plate->wearers == (std::vector<std::string>{"fighter", "engineer"}));
+		CHECK_EQ(plate->after.stats.defense - plate->before.stats.defense, 6 - 3);
+		CHECK_EQ(plate->after.stats.maxHp - plate->before.stats.maxHp, 20 - 10);
+		CHECK_EQ(plate->after.stats.agility - plate->before.stats.agility, -2);
+		rules::PartyMember worn = *s.world().member("fighter");
+		rules::EquipmentBag bag = {{"rivet_plate", 1}};
+		CHECK(rules::equip(worn, db, bag, "rivet_plate").empty());
+		CHECK_EQ(plate->after.stats.defense, rules::memberCombatant(db, worn).stats.defense);
+	}
+	CHECK(!s.world().equipmentBag.count("rivet_plate"));
+	CHECK_EQ(s.world().member("fighter")->equipment.at(rules::EquipSlot::Body), std::string("padded_coat"));
+
+	// A rod moves the element; a charm adds a resistance; a ring adds an ability.
+	const std::optional<EquipPreview> rod = s.equipPreview("mystic", "ember_rod");
+	CHECK(rod && rod->after.attackElement == rules::Element::Heat);
+	const std::optional<EquipPreview> ring = s.equipPreview("mystic", "spark_ring");
+	CHECK(ring && ring->replaces == "calm_charm" && ring->before.statusResist.count("sleep") && !ring->after.statusResist.count("sleep"));
+	CHECK(ring && std::count(ring->after.abilities.begin(), ring->after.abilities.end(), "glint") == 1);
+	const std::optional<EquipPreview> sling = s.equipPreview("engineer", "volley_sling");
+	CHECK(sling && sling->refusal.key == "equip.wrong_category");
+	CHECK(sling && sling->after.stats.dexterity == sling->before.stats.dexterity && sling->after.basicAttack == sling->before.basicAttack);
+	CHECK(sling && sling->wearers.empty());
+
+	// The status screen reads the same numbers.
+	const std::optional<MemberDetail> detail = s.memberDetail("fighter");
+	CHECK(detail && plate && detail->stats.defense == plate->before.stats.defense);
+	CHECK(!s.equipPreview("scout", "tin_cap"));
+	CHECK(!s.equipPreview("fighter", "tonic"));
+}
+
+TEST(theBagIsListedInFixedOrdersWithoutChangingIt) {
+	Session s(test::data(), SessionOptions());
+	test::placeParty(s, "tidewater", "start", Facing::East);
+	World& w = s.world();
+	w.items = {{"tonic", 3}, {"spark_flask", 5}, {"clear_gel", 1}, {"second_wind", 5}};
+	w.equipmentBag = {{"tin_cap", 1}, {"copper_blade", 2}};
+	auto ids = [&](ItemSort order) {
+		std::vector<std::string> out;
+		for (const BagEntry& e : s.bag(order)) {
+			out.push_back(e.id + (e.equipment ? "*" : "") + std::to_string(e.count));
+		}
+		return out;
+	};
+	CHECK(ids(ItemSort::Id) == (std::vector<std::string>{"clear_gel1", "second_wind5", "spark_flask5", "tonic3", "copper_blade*2", "tin_cap*1"}));
+	// Field items (Clear Gel, Second Wind, Tonic) by name, the battle-only flask, then the weapon before the cap.
+	CHECK(ids(ItemSort::Kind) == (std::vector<std::string>{"clear_gel1", "second_wind5", "tonic3", "spark_flask5", "copper_blade*2", "tin_cap*1"}));
+	CHECK(ids(ItemSort::Name) == (std::vector<std::string>{"clear_gel1", "copper_blade*2", "second_wind5", "spark_flask5", "tin_cap*1", "tonic3"}));
+	CHECK(ids(ItemSort::Count) == (std::vector<std::string>{"second_wind5", "spark_flask5", "tonic3", "copper_blade*2", "clear_gel1", "tin_cap*1"}));
+	CHECK_EQ(std::string(toString(ItemSort::Count)), std::string("count"));
+	// Sorting reads: the save is the same before and after.
+	const std::string before = serializeSave(s.makeSave(false));
+	s.bag(ItemSort::Name);
+	CHECK_EQ(serializeSave(s.makeSave(false)), before);
+}
+
+TEST(difficultyPresetsAreListedAndChangeOnlyInAGameOutsideBattle) {
+	Session s(test::data(), SessionOptions());
+	const std::vector<DifficultyView> presets = s.difficulties();
+	CHECK_EQ(presets.size(), 2u);
+	if (presets.size() == 2) {
+		CHECK(presets[0].id == "hard" && presets[0].name == "Hard" && presets[0].rewardPercent == 120);
+		CHECK(presets[0].description.find("smarter") != std::string::npos);
+		CHECK(presets[1].id == "original" && presets[1].rewardPercent == 100);
+	}
+	CHECK(!s.canChangeSettings());
+	CHECK_EQ(s.setSettings({"hard", rules::RewardMultiplier::X1}).key, std::string("game.refuse.settings_no_game"));
+	test::placeParty(s, "tidewater", "start", Facing::East);
+	CHECK(s.canChangeSettings());
+	CHECK(s.setSettings({"hard", rules::RewardMultiplier::X2}).empty());
+	CHECK_EQ(s.world().settings.difficulty, std::string("hard"));
+	CHECK(s.openMenu().empty());
+	CHECK(s.canChangeSettings());
+}
+
+TEST(aMacroIsMadeFromADiscoveredCombination) {
+	Session s(test::data(), SessionOptions());
+	test::placeParty(s, "tidewater", "start", Facing::East);
+	setParty(s, {"fighter", "mystic", "medic"}, 3);
+	s.world().comboLog.discover("twin_arc", 1000, {"mystic", "medic"});
+	s.world().comboLog.discover("storm_spark", 2000, {"mystic", "scout"});
+	CHECK_EQ(s.macroFromCombo("twin_arc", "Arc").key, std::string("game.refuse.macro_menu_only"));
+	CHECK(s.openMenu().empty());
+	CHECK_EQ(s.macroFromCombo("cinder_gale", "Gale").key, std::string("game.refuse.combo_not_found"));
+	const rules::Message noGust = s.macroFromCombo("storm_spark", "Storm");
+	CHECK(noGust.key == "game.refuse.combo_no_member" && noGust.params == std::vector<std::string>{"gust"});
+	CHECK(s.macroFromCombo("twin_arc", "  Arc  ").empty());
+	const std::vector<MacroView> views = s.macroViews();
+	const MacroView* arc = findView(views, "Arc");
+	CHECK(arc && arc->steps.size() == 2);
+	if (arc && arc->steps.size() == 2) {
+		// The glint is tied to the medic; the spark goes to the mystic, whom the log recorded.
+		CHECK(arc->steps[0].step.member == "medic" && arc->steps[0].step.id == "glint" && arc->steps[0].step.kind == rules::CommandKind::Ability);
+		CHECK(arc->steps[1].step.member == "mystic" && arc->steps[1].step.id == "spark");
+		CHECK(arc->steps[0].step.target.kind == rules::MacroTargetKind::Default && arc->steps[0].issue == rules::MacroIssue::None);
+	}
+	CHECK_EQ(s.macroFromCombo("twin_arc", "Arc").key, std::string("game.refuse.macro_name_taken"));
+	CHECK_EQ(s.macroFromCombo("twin_arc", "").key, std::string("game.refuse.name_length"));
+
+	// An ordered recipe keeps its order; with the scout in the party a member who knows each ability is found.
+	setParty(s, {"fighter", "mystic", "scout"}, 4);
+	s.world().comboLog.discover("pinpoint_rend", 3000, {"scout", "fighter"});
+	const rules::Message rend = s.macroFromCombo("pinpoint_rend", "Rend");
+	CHECK(rend.empty());
+	const std::vector<MacroView> after = s.macroViews();
+	const MacroView* made = findView(after, "Rend");
+	CHECK(made && made->steps.size() == 2 && made->steps[0].step.id == "weaken" && made->steps[1].step.id == "focus_shot");
+	CHECK(made && made->steps[0].step.member != made->steps[1].step.member);
+}

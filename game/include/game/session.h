@@ -26,7 +26,8 @@
 
 namespace game {
 
-enum class OutputKind { Line, Choice, Action, Notice, Warning, Autosave };
+// Ambient: a party talk line that came up by itself on arrival (FLD-073), shown without stopping play.
+enum class OutputKind { Line, Choice, Action, Notice, Warning, Autosave, Ambient };
 
 const char* toString(OutputKind kind);
 
@@ -119,6 +120,9 @@ struct PresentedAction {
 	ActionPhase phase = ActionPhase::Begin;
 	events::Action action;
 	std::string description;
+	// How long the action's animation lasts by the data: game.json's presentation durations for its type and subject,
+	// else its type, else the action's own seconds (events::action_seconds); 0 for none.
+	double seconds = 0;
 };
 
 struct SessionOptions {
@@ -231,6 +235,51 @@ struct MemberDetail {
 	rules::StatusResists statusResist;
 };
 
+// Orders for listing the bag. The bag itself has no order (items and pieces are kept by id), so a sort is a read and
+// nothing about it is saved. Kind: field items, battle-only items, then pieces by slot; Name: display name; Count: most
+// held first. Ties go to the display name, then the id.
+enum class ItemSort { Id, Kind, Name, Count };
+
+const char* toString(ItemSort sort);
+
+struct BagEntry {
+	std::string id;
+	int count = 0;
+	bool equipment = false;
+};
+
+// A difficulty preset to offer (BAT-120, UI-014): core's name and the description that says what it changes.
+struct DifficultyView {
+	std::string id;
+	std::string name;
+	std::string description;
+	int rewardPercent = 100;
+};
+
+// A member's battle numbers, as rules::memberCombatant builds them for a battle.
+struct CombatView {
+	rules::Stats stats;
+	std::string basicAttack;
+	rules::Element attackElement = rules::Element::None;
+	std::vector<std::string> abilities;
+	rules::StatusResists statusResist;
+};
+
+// A piece compared on a member before it is put on (UI-008, UI-009). `after` is the member wearing the piece in place
+// of `replaces`; it equals `before` when the member cannot wear it.
+struct EquipPreview {
+	std::string member;
+	rules::EquipmentDef piece;
+	// The piece worn in that slot now, or empty.
+	std::string replaces;
+	// Empty when the member can wear the piece, otherwise core's refusal (equip.wrong_category).
+	rules::Message refusal;
+	// Lineup members whose equipment categories allow the piece, in lineup order.
+	std::vector<std::string> wearers;
+	CombatView before;
+	CombatView after;
+};
+
 // One of the game's actors standing in the party's area, from Session::actorsHere(). An actor no script touched
 // stands at the talk point named after it, visible and facing south; script moves, turns, shows and hides change
 // that (see README.md, "Actors").
@@ -287,6 +336,9 @@ public:
 	std::string stringText(const std::string& id) const;
 	// A character's chosen name, its own name, an actor's speaker name or an area's name.
 	std::string displayName(const std::string& id) const;
+	// An item's, piece's, ability's, status's, enemy's or difficulty's description in the profile's language, name
+	// tokens rendered; empty when that language has none.
+	std::string description(DescriptionKind kind, const std::string& id) const;
 
 	// Every operation below that returns a Message returns an empty one when it ran, otherwise the text key and
 	// parameters of why it did not; render() shows it.
@@ -320,7 +372,9 @@ public:
 	std::vector<ActorView> actorsHere() const;
 	// Interacts with whatever stands in the cell the leader faces (FLD-030).
 	rules::Message interact();
-	// Party talk (FLD-070): the lines of the best matching set for this area and the flags, as Line output.
+	// Party talk (FLD-070): the lines of the best matching set for this area and the flags, as Line output. The same set
+	// also comes up by itself, as Ambient output, the first time control returns to the field in an area under it while
+	// the profile's ambient talk is on (FLD-073); World::ambientHeard keeps which ones have.
 	rules::Message partyTalk();
 
 	// Event
@@ -383,8 +437,12 @@ public:
 	// Name entry: the member being named, and the name to confirm, which closes the entry.
 	const std::string& nameEntryMember() const { return nameMember_; }
 	rules::Message enterName(const std::string& name);
-	// Difficulty and reward multiplier apply from the next battle (BAT-126).
+	// Difficulty and reward multiplier apply from the next battle (BAT-126). They belong to a save (SAV-005), so they
+	// change only with a game in progress and outside battle.
 	rules::Message setSettings(const Settings& settings);
+	bool canChangeSettings() const { return mode() != Mode::Title && mode() != Mode::Battle; }
+	// Every difficulty preset in id order.
+	std::vector<DifficultyView> difficulties() const;
 	// One of the save's macros, or empty for none.
 	rules::Message setAutoMacro(const std::string& macro);
 
@@ -403,10 +461,19 @@ public:
 	rules::Message setMacroStep(const std::string& name, int index, const rules::MacroStep& step);
 	rules::Message removeMacroStep(const std::string& name, int index);
 	rules::Message moveMacroStep(const std::string& name, int from, int to);
+	// A new macro named `name` from a discovered combination (BAT-065, UI-011): one ability step per component, in the
+	// recipe's order, which is a valid order for an ordered recipe too, each with its default target. Each component goes
+	// to a lineup member who knows the ability now (the character a component is tied to), trying the members the log
+	// recorded first; refused when no such assignment exists. The name rules are createMacro's.
+	rules::Message macroFromCombo(const std::string& recipe, const std::string& name);
 	// The combo log in discovery order; data().db.combos has every recipe, for the locked entries.
 	std::vector<ComboView> comboLog() const;
 	// Empty for a character not in the roster.
 	std::optional<MemberDetail> memberDetail(const std::string& member) const;
+	// Items, then unworn pieces, in id order for ItemSort::Id; otherwise sorted as one list.
+	std::vector<BagEntry> bag(ItemSort order) const;
+	// Empty for a character not in the roster or a piece that is not equipment. The piece need not be in the bag.
+	std::optional<EquipPreview> equipPreview(const std::string& member, const std::string& piece) const;
 
 	// Presentation actions of the session's own queue since the last call, oldest first. With Instant
 	// presentation only the last 256 are kept.
@@ -442,6 +509,9 @@ private:
 	void enterArea(const std::string& areaId, const std::string& marker);
 	void arrive(Cell cell);
 	void settleField();
+	const TalkSet* talkSet() const;
+	// Lines of `set` whose speakers are in the active party, as output of `kind`; false when none is.
+	bool speak(const TalkSet& set, OutputKind kind);
 	bool startEvent(const std::string& event);
 	void pumpEvent(double seconds);
 	void endEvent();
@@ -486,6 +556,7 @@ private:
 	std::optional<Facing> latchedDirection_;
 	// Not saved: hooks fire once per area entry and autosave points are judged per session (FLOW-050).
 	bool loadHooksPending_ = false;
+	bool ambientPending_ = false;
 	std::set<std::string> loadHooksFired_;
 	std::set<std::string> areasSinceAutosave_;
 	// The autosave point waiting for control to return to the field, if any.

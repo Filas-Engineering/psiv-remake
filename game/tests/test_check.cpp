@@ -146,3 +146,105 @@ TEST(checkKeepsGoingPastBrokenBattleData) {
 	CHECK(text.find("core data") == std::string::npos);
 	CHECK(text.find("game data " + dir + ": areas " + std::to_string(test::data().areas.size() + 2) + ",") != std::string::npos);
 }
+
+TEST(descriptionsAreOptionalCheckedAndLeftOutOfTheContentHash) {
+	const std::string dir = copyData("descriptions", {});
+	const DataDirectories directories{dir, "../core/data"};
+	replaceIn(dir + "/text/en.json", "A bitter herbal draught.", "A very bitter herbal draught.");
+	replaceIn(dir + "/text/ja.json", "\t\t\"desc.item.clear_gel\": \"冷たい軟膏。味方一人の毒を消す。\",\n", "");
+	replaceIn(dir + "/game.json", "\"cameras\": [", "\"cameras\": [\"spare_camera\", ");
+	rules::Result<GameData> edited = loadGameData(directories);
+	CHECK(edited.ok());
+	if (edited.ok()) {
+		CHECK_EQ(edited.value->contentHash, test::data().contentHash);
+		Session s(*edited.value, SessionOptions());
+		CHECK_EQ(s.description(DescriptionKind::Item, "tonic"), std::string("A very bitter herbal draught. Restores 30 HP to one ally."));
+		Profile p = s.profile();
+		p.textLanguage = "ja";
+		CHECK(s.setProfile(p).empty());
+		CHECK_EQ(s.description(DescriptionKind::Item, "clear_gel"), std::string());
+		CHECK(!s.description(DescriptionKind::Item, "tonic").empty());
+	}
+
+	replaceIn(dir + "/text/en.json", "\"desc.item.tonic\"", "\"desc.item.no_such_item\": \"Nothing.\", \"desc.weapon.copper_blade\": \"Wrong kind.\", \"desc.item.tonic\"");
+	const CheckReport r = checkData(directories);
+	CHECK_EQ(count(r, "/text/en.json", 0, "data.description_unknown"), 2);
+	const rules::Problem* unknown = find(r, "data.description_unknown");
+	CHECK(unknown && (unknown->message.params[0] == "desc.item.no_such_item" || unknown->message.params[0] == "desc.weapon.copper_blade"));
+	CHECK(!loadGameData(directories).ok());
+	// A dialogue edit is content: it still changes the hash.
+	replaceIn(dir + "/text/en.json", "\"desc.item.no_such_item\": \"Nothing.\", \"desc.weapon.copper_blade\": \"Wrong kind.\", ", "");
+	replaceIn(dir + "/text/en.strings", "language en", "language en\n# A comment changes the file's text.");
+	rules::Result<GameData> dialogue = loadGameData(directories);
+	CHECK(dialogue.ok() && dialogue.value->contentHash != test::data().contentHash);
+}
+
+TEST(camerasMusicAndDurationsAreCheckedAndLeftOutOfTheContentHash) {
+	const std::string dir = copyData("presentation", {});
+	const DataDirectories directories{dir, "../core/data"};
+	// Names alone still load; zooms, targets, tracks and timings change no hash.
+	replaceIn(dir + "/game.json", "{\"id\": \"lookout_west\", \"area\": \"reed_path\", \"marker\": \"lookout_west\"}", "\"lookout_west\", {\"id\": \"wide\", \"follow\": \"leader\", \"zoom\": 0.5}");
+	replaceIn(dir + "/game.json", "\"zoom\": 1.25", "\"zoom\": 2");
+	replaceIn(dir + "/game.json", "{\"action\": \"panel_hide\", \"seconds\": 0.35}", "{\"action\": \"panel_hide\", \"seconds\": 1}");
+	replaceIn(dir + "/areas/reed_path.json", "\"music\": \"field_marsh_reeds\"", "\"music\": \"marsh_wind\"");
+	rules::Result<GameData> edited = loadGameData(directories);
+	CHECK(edited.ok());
+	if (edited.ok()) {
+		CHECK_EQ(edited.value->contentHash, test::data().contentHash);
+		const CameraDef* west = edited.value->config.presentation.camera("lookout_west");
+		CHECK(west && west->target == CameraTarget::None && west->zoom == 1);
+		const CameraDef* wide = edited.value->config.presentation.camera("wide");
+		CHECK(wide && wide->target == CameraTarget::Leader && wide->follow.empty() && wide->zoom == 0.5);
+		CHECK(edited.value->config.presentation.durations.at(events::ActionType::panel_hide) == 1);
+	}
+
+	replaceIn(dir + "/game.json", "\"marker\": \"lookout_front\"", "\"marker\": \"no_marker\"");
+	replaceIn(dir + "/game.json", "\"follow\": \"peddler\"", "\"follow\": \"stranger\"");
+	replaceIn(dir + "/game.json", "\"victory\": \"victory_bright_sail\"", "\"victory\": \"unlisted_song\"");
+	replaceIn(dir + "/game.json", "\"warden\": \"battle_brass_warden\"", "\"warden\": \"battle_brass_warden\", \"kraken\": \"battle_marsh_ambush\"");
+	replaceIn(dir + "/game.json", "\"action\": \"panel_clear\"", "\"action\": \"teleport\"");
+	replaceIn(dir + "/game.json", "{\"id\": \"wide\", \"follow\": \"leader\", \"zoom\": 0.5}", "{\"id\": \"wide\", \"follow\": \"leader\", \"area\": \"reed_path\", \"zoom\": 9}");
+	replaceIn(dir + "/areas/reed_path.json", "\"music\": \"marsh_wind\"", "\"music\": \"no_such_track\"");
+	const CheckReport bad = checkData(directories);
+	CHECK(find(bad, "data.unknown_action"));
+	CHECK(find(bad, "data.camera_two_targets"));
+	CHECK(find(bad, "data.number_out_of_range"));
+	// The reader's problems stop the load before the references are checked; fix them and look again.
+	replaceIn(dir + "/game.json", "\"action\": \"teleport\"", "\"action\": \"panel_clear\"");
+	replaceIn(dir + "/game.json", "{\"id\": \"wide\", \"follow\": \"leader\", \"area\": \"reed_path\", \"zoom\": 9}", "{\"id\": \"wide\", \"follow\": \"leader\"}");
+	const CheckReport r = checkData(directories);
+	const rules::Problem* marker = find(r, "data.camera_marker_missing");
+	CHECK(marker && marker->message.params == (std::vector<std::string>{"reed_path", "no_marker"}));
+	CHECK(find(r, "data.camera_follows_unknown"));
+	CHECK(find(r, "data.music_unknown_encounter"));
+	CHECK_EQ(static_cast<int>(std::count_if(r.problems.begin(), r.problems.end(), [](const rules::Problem& p) { return p.message.key == "data.music_not_audio"; })), 2);
+	CHECK_EQ(count(r, "/areas/reed_path.json", 0, "data.music_not_audio"), 1);
+}
+
+TEST(anInteractHookMayStandOnAWallTheFloorBesideItReaches) {
+	const char* text = R"({"id": "cliff", "map": ["#####", "#...#", "#####"], "markers": {"start": [1, 1]},
+		"hooks": [{"id": "sign", "at": [2, 0], "event": "e"}, {"id": "ladder", "at": [0, 0], "event": "e"}]})";
+	rules::Result<Area> area = parseArea("cliff.json", text);
+	CHECK(area.ok());
+	const std::string offMap = R"({"id": "cliff", "map": ["###", "#.#"], "markers": {"start": [1, 1]}, "hooks": [{"id": "sign", "at": [5, 0], "event": "e"}]})";
+	rules::Result<Area> outside = parseArea("cliff.json", offMap);
+	CHECK(!outside.ok() && outside.problems[0].message.key == "data.not_on_map");
+	const std::string stepOnWall = R"({"id": "cliff", "map": ["###", "#.#"], "markers": {"start": [1, 1]}, "hooks": [{"id": "trap", "at": [1, 0], "trigger": "step", "event": "e"}]})";
+	rules::Result<Area> step = parseArea("cliff.json", stepOnWall);
+	CHECK(!step.ok() && step.problems[0].message.key == "data.not_on_floor");
+
+	// The placeholder lookout stands on the reed path's wall corner and is used from the floor below it.
+	const Area* reeds = test::data().area("reed_path");
+	CHECK(reeds && reeds->rows[1][1] == '#' && reeds->hookAt({1, 1}, HookTrigger::Interact));
+	Session s(test::data(), SessionOptions());
+	test::placeParty(s, "reed_path", "lookout_front", Facing::North);
+	CHECK(s.interact().empty());
+	CHECK(s.mode() == Mode::Event);
+
+	// The ladder in the corner has no floor beside it, which the data check reports.
+	const std::string dir = copyData("wall_hook", {});
+	replaceIn(dir + "/areas/reed_path.json", "\"at\": [1, 1], \"event\": \"reed_path_lookout\"", "\"at\": [0, 0], \"event\": \"reed_path_lookout\"");
+	const CheckReport r = checkData(DataDirectories{dir, "../core/data"});
+	const rules::Problem* cut = find(r, "check.object_not_reached");
+	CHECK(cut && cut->message.params[0] == "hook 'lookout'");
+}

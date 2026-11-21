@@ -242,3 +242,48 @@ TEST(dataDirectoriesCanBeGivenAndProblemsCarryKeys) {
 		CHECK(problemText().count(key) == 1);
 	}
 }
+
+TEST(presentedActionsCarryTheDataDurations) {
+	SessionOptions options;
+	options.presentation = Presentation::Queued;
+	Session s(test::data(), options);
+	std::map<std::string, double> seconds;
+	auto play = [&] {
+		for (int i = 0; i < 400 && s.mode() == Mode::Event; ++i) {
+			for (const PresentedAction& a : s.pollActions()) {
+				seconds[a.description] = a.seconds;
+				s.finishAction(a.handle);
+			}
+			if (s.linePending()) {
+				s.confirmLine();
+			}
+			s.update(50);
+		}
+	};
+	CHECK(s.newGame().empty());
+	play();
+	test::placeParty(s, "reed_path", "lookout_front", Facing::North);
+	CHECK(s.interact().empty());
+	play();
+	CHECK(s.mode() == Mode::Battle);
+	// game.json: panels show in 0.35 s, the ladder panel in 0.5 s; a camera move keeps its own seconds.
+	CHECK(seconds.count("panel show west camera lookout_west layout top_left") && seconds["panel show west camera lookout_west layout top_left"] == 0.35);
+	CHECK(seconds.count("panel hide cart") && seconds["panel hide cart"] == 0.35);
+	CHECK(seconds.count("panel show ladder camera lookout_front layout center") && seconds["panel show ladder camera lookout_front layout center"] == 0.5);
+	CHECK(seconds.count("camera move lookout_east 1.5") && seconds["camera move lookout_east 1.5"] == 1.5);
+	CHECK(seconds.count("music play reed_lookout") && seconds["music play reed_lookout"] == 0);
+}
+
+TEST(camerasAndMusicComeFromTheData) {
+	const PresentationNames& p = test::data().config.presentation;
+	const CameraDef* east = p.camera("lookout_east");
+	CHECK(east && east->target == CameraTarget::Marker && east->area == "reed_path" && east->marker == "lookout_east" && east->zoom == 1.25);
+	const CameraDef* peddler = p.camera("peddler");
+	CHECK(peddler && peddler->target == CameraTarget::Follow && peddler->follow == "peddler" && peddler->zoom == 1.5);
+	CHECK(p.camera("lookout_west") && p.camera("lookout_west")->zoom == 1);
+	CHECK(!p.camera("nowhere"));
+	CHECK_EQ(p.music.title, std::string("title_harbor_dawn"));
+	CHECK_EQ(p.music.encounters.at("warden"), std::string("battle_brass_warden"));
+	CHECK_EQ(test::data().area("reed_path")->music, std::string("field_marsh_reeds"));
+	CHECK_EQ(std::string(toString(CameraTarget::Leader)), std::string("leader"));
+}

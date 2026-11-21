@@ -37,6 +37,10 @@ enum class AutoStop { None, Cancelled, MemberFell, CannotPay, BattleEnded };
 
 class Battle;
 
+// A party member as a battle sets it up before any difficulty overlay: level stats plus equipment, the basic attack a
+// weapon replaces, the weapon's element, abilities and status resistances. The character must exist in `db`.
+Combatant memberCombatant(const Database& db, const PartyMember& member);
+
 // Rebuilds a battle from its record. `log` starts from the combos the record says were known.
 Result<Battle> replayBattle(const Database& db, const BattleRecord& record, ComboLog& log, std::vector<Event>& events);
 

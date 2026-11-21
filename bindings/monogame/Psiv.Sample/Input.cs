@@ -17,8 +17,9 @@ public sealed class InputState
 	private readonly HashSet<Buttons> _buttonsDown = [];
 	private readonly HashSet<Buttons> _buttonsPressed = [];
 
-	public void Set(IEnumerable<Keys> keys, IEnumerable<Buttons> buttons, bool padConnected = true)
+	public void Set(IEnumerable<Keys> keys, IEnumerable<Buttons> buttons, bool padConnected = true, (int X, int Y)? click = null)
 	{
+		Click = click;
 		Advance(_down, _pressed, keys);
 		Advance(_buttonsDown, _buttonsPressed, buttons);
 		if (_pressed.Count > 0 || !padConnected)
@@ -48,6 +49,8 @@ public sealed class InputState
 
 	// Whether the last key or button that went down was on the gamepad.
 	public bool UsingGamepad { get; private set; }
+	// A mouse click this frame, in the sample's own 1280x720 pixels.
+	public (int X, int Y)? Click { get; private set; }
 
 	public bool Down(Keys key) => _down.Contains(key);
 	public bool Pressed(Keys key) => _pressed.Contains(key);

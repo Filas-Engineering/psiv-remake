@@ -3,9 +3,10 @@ using Psiv.Session;
 namespace Psiv.Sample;
 
 // What plays: a script's music and ambient loop while its event runs, otherwise the battle's or the area's track,
-// and named cues for the sample's own actions and the battle's events. The data names no music per area or per
-// battle, so those tracks are derived from what the session reports: `<kind>_<area>` (town_tidewater), `battle_<kind>`
-// for visible and random battles, `battle_scripted` for an event's battle without music of its own, and `title`.
+// and named cues for the sample's own actions and the battle's events. Tracks come from the data first (an area's
+// music, an encounter's, game.json's title, victory and defeat tracks); where the data names none they are derived
+// from what the session reports: `<kind>_<area>` (town_tidewater), `battle_<kind>` for visible and random battles,
+// `battle_scripted` for an event's battle, `title`, and nothing on a battle's result screen.
 public sealed partial class SampleController
 {
 	private const int CrossfadeMs = 800;
@@ -86,11 +87,14 @@ public sealed partial class SampleController
 		}
 	}
 
+	private GameInfo? _gameInfo;
+
 	private string MusicFor()
 	{
+		GameInfo game = _gameInfo ??= _s.GameInfo();
 		if (_s.Mode == Mode.Title && !_battle.Active)
 		{
-			return "title";
+			return game.TitleMusic.Length > 0 ? game.TitleMusic : "title";
 		}
 		if (_scriptMusic is not null)
 		{
@@ -99,14 +103,19 @@ public sealed partial class SampleController
 		FieldInfo? f = _s.FieldInfo();
 		if (_battle.Active)
 		{
+			BattleInfo? battle = _s.BattleInfo();
 			if (_battle.Phase == BattlePhase.Ended)
 			{
-				return "";
+				return battle?.GameOver == true ? game.DefeatMusic : battle?.Outcome is Outcome.Victory or Outcome.ScriptedEnd ? game.VictoryMusic : "";
+			}
+			if (battle?.Music.Length > 0)
+			{
+				return battle.Music;
 			}
 			string kind = FieldRenderer.KindName(f?.AreaKind ?? AreaKind.Field).ToLowerInvariant();
-			return _s.BattleInfo()?.Source == BattleSource.Event ? "battle_scripted" : "battle_" + kind;
+			return battle?.Source == BattleSource.Event ? "battle_scripted" : "battle_" + kind;
 		}
-		return f is null ? "" : $"{FieldRenderer.KindName(f.AreaKind).ToLowerInvariant()}_{f.AreaId}";
+		return f is null ? "" : f.Music.Length > 0 ? f.Music : $"{FieldRenderer.KindName(f.AreaKind).ToLowerInvariant()}_{f.AreaId}";
 	}
 
 	// After each update: the music and ambient loop for where play stands, the profile's volumes, the cues for what

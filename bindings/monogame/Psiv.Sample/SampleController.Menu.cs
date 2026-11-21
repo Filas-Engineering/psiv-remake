@@ -10,6 +10,8 @@ public sealed partial class SampleController
 	private static readonly string[] MenuTabs = ["Status", "Items", "Equip", "Save", "Order", "Macros", "Combos", "Quests", "Codex", "Log", "Options"];
 
 	private readonly ScrollList _third = new();
+	// The Items page's order; the bag has none of its own, so this is the sample's own choice and is not saved.
+	private ItemSort _itemSort = ItemSort.Id;
 	// The lineup position picked first on the Order page.
 	private int? _orderFrom;
 
@@ -79,6 +81,10 @@ public sealed partial class SampleController
 		case "Combos":
 			ComboLog combos = _s.ComboLog();
 			_list.Move(input, Math.Max(combos.Total, combos.Entries.Count));
+			if (input.Confirm && _list.Cursor < combos.Entries.Count)
+			{
+				MakeComboMacro(combos.Entries[_list.Cursor]);
+			}
 			break;
 		case "Quests":
 			_list.MoveView(input, QuestRows().Count);
@@ -108,7 +114,12 @@ public sealed partial class SampleController
 
 	private void UpdateItems(ActionInput input)
 	{
-		var items = _s.Inventory().Where(i => !i.IsEquipment).ToList();
+		if (_pickAction is null && input.Pressed(GameAction.PartyTalk))
+		{
+			_itemSort = (ItemSort)(((int)_itemSort + 1) % Enum.GetValues<ItemSort>().Length);
+			_list.Reset();
+		}
+		var items = _s.Inventory(_itemSort).Where(i => !i.IsEquipment).ToList();
 		if (_pickAction is null)
 		{
 			_list.Move(input, items.Count);
@@ -213,6 +224,7 @@ public sealed partial class SampleController
 				(_statusPage == 0 ? "scroll" : $"choose   {Hint(GameAction.Confirm)} use") + $"   {back}",
 			"Quests" or "Log" => $"{tabs}{Hint(GameAction.Up)}/{Hint(GameAction.Down)} scroll   {back}",
 			"Order" => $"{tabs}{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} " + (_orderFrom is null ? "pick" : "swap") + $"   {back}",
+			"Items" when _pickAction is null => $"{tabs}{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} use   {Hint(GameAction.PartyTalk)} sort   {back}",
 			"Macros" when _macroStage == MacroStage.Name => $"{Hint(GameAction.Confirm)} type   Enter or {Hint(GameAction.Menu)} confirm   Esc cancel",
 			_ => $"{tabs}{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} use   {back}",
 		};
@@ -220,18 +232,41 @@ public sealed partial class SampleController
 
 	private void DrawItemsPage(IDrawSurface s, int x, int y, int w, int h)
 	{
-		var items = _s.Inventory().Where(i => !i.IsEquipment).ToList();
+		var items = _s.Inventory(_itemSort).Where(i => !i.IsEquipment).ToList();
 		int listW = _pickAction is null ? w : w / 2 - 20;
+		s.Text($"Sorted by {GameSession.NameOf(NameKind.ItemSort, (int)_itemSort)}", x, y - Px(26), Style.Dim, Style.Small);
 		s.Text($"{items.Count} kinds, {items.Sum(i => i.Count)} in all", x + listW - s.Measure($"{items.Count} kinds, {items.Sum(i => i.Count)} in all", Style.Small) - 20, y - Px(26), Style.Dim, Style.Small);
 		if (items.Count == 0)
 		{
 			s.Text("No items.", x + 14, y, Style.Dim);
 		}
-		DrawItems(s, _list, x, y, listW, h, items.Select(i => $"{i.Name} x{i.Count}" + (i.Field ? "" : "  (battle only)")).ToList(), _pickAction is null);
+		int descH = Px(56);
+		DrawItems(s, _list, x, y, listW, h - descH, items.Select(i => $"{i.Name} x{i.Count}" + (i.Field ? "" : "  (battle only)")).ToList(), _pickAction is null);
+		if (items.Count > 0)
+		{
+			s.Fill(x, y + h - descH, listW - 14, 1, Style.PanelEdge * 0.4f);
+			DrawDescription(s, DescriptionOf(items[Math.Clamp(_list.Cursor, 0, items.Count - 1)]), x + 14, y + h - descH + Px(8), listW - 40);
+		}
 		if (_pickAction is not null)
 		{
 			s.Text($"Use {_s.DisplayName(_pickAction)} on whom?", x + w / 2, y, Style.Accent);
 			DrawItems(s, _sub, x + w / 2, y + Px(40), w / 2, h - Px(40), LineupMembers().Select(m => $"{m.Name}  HP {m.Hp}/{m.MaxHp}  TP {m.Tp}/{m.MaxTp}").ToList());
+		}
+	}
+
+	// "Make macro" (UI-011): a macro named after the combination, its first 16 bytes, filled by the session.
+	private void MakeComboMacro(ComboEntry entry)
+	{
+		string name = entry.ResultName;
+		while (System.Text.Encoding.UTF8.GetByteCount(name) > 16)
+		{
+			name = name[..^1];
+		}
+		PsivResult result = _s.MacroFromCombo(entry.Recipe, name);
+		Report(result);
+		if (result.Ok)
+		{
+			Say($"Made the macro {name.Trim()}.");
 		}
 	}
 
@@ -251,7 +286,7 @@ public sealed partial class SampleController
 			ComboEntry e = log.Entries[_list.Cursor];
 			s.Text(Style.Fit(s, $"Members: {string.Join(", ", e.ParticipantNames)}", w, Style.Small), x, dy, Style.Text, Style.Small);
 			s.Text(Style.Fit(s, $"Abilities: {string.Join(", ", e.AbilityNames)}", w, Style.Small), x, dy + Px(26), Style.Text, Style.Small);
-			s.Text($"First found at {Clock(e.PlayTimeMs)} of play", x, dy + Px(52), Style.Dim, Style.Small);
+			s.Text($"First found at {Clock(e.PlayTimeMs)} of play   {Hint(GameAction.Confirm)}: make a macro from it", x, dy + Px(52), Style.Dim, Style.Small);
 		}
 		else if (total > 0)
 		{

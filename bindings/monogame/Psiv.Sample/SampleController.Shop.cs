@@ -53,12 +53,12 @@ public sealed partial class SampleController
 		int headY = 76 + Px(52);
 		s.Text(_tab == 0 ? "Price" : "Each", priceX, headY, Style.Dim, Style.Small);
 		s.Text("Have", countX, headY, Style.Dim, Style.Small);
-		IReadOnlyList<(string Name, int Price, int Count)> rows = _tab == 0
-			? shop.Stock.Select(i => (i.Name, i.Price, i.Count)).ToList()
-			: _s.Inventory().Where(i => i.Price >= 0).Select(i => (i.Name, i.Price * shop.SellPercent / 100, i.Count)).ToList();
+		List<InventoryEntry> entries = _tab == 0 ? shop.Stock.ToList() : _s.Inventory().Where(i => i.Price >= 0).ToList();
+		IReadOnlyList<(string Name, int Price, int Count)> rows = entries.Select(i => (i.Name, _tab == 0 ? i.Price : i.Price * shop.SellPercent / 100, i.Count)).ToList();
 		int top = headY + Px(28);
 		int listW = countX + 80 - x - 40;
-		_list.Draw(s, x + 40, top, listW, s.Height - 140 - top, Px(30), rows.Count, (i, y, on) =>
+		int descH = Px(80);
+		_list.Draw(s, x + 40, top, listW, s.Height - 140 - top - descH, Px(30), rows.Count, (i, y, on) =>
 		{
 			Style.ListRow(s, Style.Fit(s, rows[i].Name, priceX - x - 100), x + 40, y, listW - 20, on, height: Px(28));
 			string price = rows[i].Price.ToString(CultureInfo.InvariantCulture);
@@ -68,12 +68,21 @@ public sealed partial class SampleController
 		if (rows.Count > 0)
 		{
 			_probeSelected = rows[_list.Cursor].Name;
+			InventoryEntry selected = entries[Math.Clamp(_list.Cursor, 0, entries.Count - 1)];
+			int dy = s.Height - 140 - descH + Px(8);
+			s.Fill(x + 40, dy - Px(8), listW - 20, 1, Style.PanelEdge * 0.4f);
+			DrawDescription(s, DescriptionOf(selected), x + 54, dy, w - 120);
+			if (selected.IsEquipment && LineupMembers().FirstOrDefault() is { } leader && _s.EquipPreview(leader.Id, selected.Id) is { } preview)
+			{
+				s.Text(Style.Fit(s, $"{BonusText(preview.Bonus)}   Can wear: " + (preview.WearerNames.Count == 0 ? "nobody in the party" : string.Join(", ", preview.WearerNames)), w - 120, Style.Small),
+					x + 54, dy + Px(48), Style.Dim, Style.Small);
+			}
 		}
 		else
 		{
 			s.Text(_tab == 0 ? "Nothing for sale." : "Nothing to sell.", x + 54, top, Style.Dim);
 		}
-		DrawToasts(s, x + 24, s.Height - 56 - Px(36));
+		DrawToasts(s, x + 24, s.Height - 140 - descH, right: true);
 		Widgets.Hints(s, x + 24, s.Height - 50 - Px(36), w - 48,
 			$"{Hint(GameAction.PagePrev)}/{Hint(GameAction.PageNext)} buy or sell   {Hint(GameAction.Confirm)} one   {Hint(GameAction.Back)} leave");
 	}

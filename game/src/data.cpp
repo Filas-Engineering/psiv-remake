@@ -61,12 +61,88 @@ const RestPoint* GameData::rest(const std::string& id) const {
 	return nullptr;
 }
 
+const char* toString(CameraTarget target) {
+	switch (target) {
+	case CameraTarget::None: return "none";
+	case CameraTarget::Marker: return "marker";
+	case CameraTarget::Follow: return "follow";
+	case CameraTarget::Leader: return "leader";
+	}
+	return "";
+}
+
+const CameraDef* PresentationNames::camera(const std::string& id) const {
+	for (const CameraDef& c : cameras) {
+		if (c.id == id) {
+			return &c;
+		}
+	}
+	return nullptr;
+}
+
+const char* toString(DescriptionKind kind) {
+	switch (kind) {
+	case DescriptionKind::Item: return "item";
+	case DescriptionKind::Equipment: return "equipment";
+	case DescriptionKind::Ability: return "ability";
+	case DescriptionKind::Status: return "status";
+	case DescriptionKind::Enemy: return "enemy";
+	case DescriptionKind::Difficulty: return "difficulty";
+	}
+	return "";
+}
+
+std::string descriptionKey(DescriptionKind kind, const std::string& id) {
+	return std::string(kDescriptionPrefix) + toString(kind) + "." + id;
+}
+
+bool describes(const rules::Database& db, DescriptionKind kind, const std::string& id) {
+	switch (kind) {
+	case DescriptionKind::Item: return db.item(id) != nullptr;
+	case DescriptionKind::Equipment: return db.equipmentPiece(id) != nullptr;
+	case DescriptionKind::Ability: return db.ability(id) != nullptr;
+	case DescriptionKind::Status: return db.status(id) != nullptr;
+	case DescriptionKind::Enemy: return db.enemy(id) != nullptr;
+	case DescriptionKind::Difficulty: return db.difficulty(id) != nullptr;
+	}
+	return false;
+}
+
 namespace {
+
+bool isDescription(const std::string& key) {
+	return key.compare(0, std::char_traits<char>::length(kDescriptionPrefix), kDescriptionPrefix) == 0;
+}
 
 std::uint64_t fnv(std::uint64_t hash, const std::string& text) {
 	for (unsigned char c : text) {
 		hash ^= c;
 		hash *= 1099511628211ULL;
+	}
+	return hash;
+}
+
+// The content hash covers what saves and records depend on, not presentation: it reads the parsed JSON and leaves out
+// the members named in `skipped` at the top level, so camera, music and timing data can change without changing it.
+std::uint64_t hashJson(std::uint64_t hash, const JsonValue& value, const std::set<std::string>& skipped = {}) {
+	hash = fnv(hash, std::string(1, static_cast<char>('0' + static_cast<int>(value.type))));
+	switch (value.type) {
+	case JsonValue::Type::Null: break;
+	case JsonValue::Type::Bool: hash = fnv(hash, value.boolean ? "t" : "f"); break;
+	case JsonValue::Type::Number: hash = fnv(hash, std::to_string(value.number)); break;
+	case JsonValue::Type::String: hash = fnv(hash, value.string); break;
+	case JsonValue::Type::Array:
+		for (const JsonValue& item : value.items) {
+			hash = hashJson(hash, item);
+		}
+		break;
+	case JsonValue::Type::Object:
+		for (std::size_t i = 0; i < value.keys.size(); ++i) {
+			if (!skipped.count(value.keys[i])) {
+				hash = hashJson(fnv(hash, value.keys[i]), value.values[i]);
+			}
+		}
+		break;
 	}
 	return hash;
 }
@@ -119,6 +195,47 @@ private:
 	std::vector<std::string> lines_;
 };
 
+// A camera is a name, or an object with an id, an optional target (a marker in an area, or `follow` an actor, a
+// character or "leader") and an optional zoom.
+void readCameras(JsonReader& reader, const JsonValue& presentation, std::vector<CameraDef>& out) {
+	const JsonValue* list = reader.field(presentation, "cameras", JsonValue::Type::Array, false);
+	if (!list) {
+		return;
+	}
+	for (const JsonValue& entry : list->items) {
+		CameraDef camera;
+		if (entry.is(JsonValue::Type::String) && !entry.string.empty()) {
+			camera.id = entry.string;
+		} else if (entry.is(JsonValue::Type::Object)) {
+			reader.only(entry, {"id", "area", "marker", "follow", "zoom"});
+			reader.text(entry, "id", camera.id, true);
+			reader.text(entry, "area", camera.area, false);
+			reader.text(entry, "marker", camera.marker, false);
+			reader.text(entry, "follow", camera.follow, false);
+			reader.number(entry, "zoom", camera.zoom, false, 0.25, 4);
+			if (!camera.follow.empty() && (!camera.marker.empty() || !camera.area.empty())) {
+				reader.fail(entry, "data.camera_two_targets", {camera.id});
+			} else if (camera.marker.empty() != camera.area.empty()) {
+				reader.fail(entry, "data.camera_marker_needs_area", {camera.id});
+			}
+			camera.target = !camera.marker.empty() ? CameraTarget::Marker : camera.follow == "leader" ? CameraTarget::Leader
+				: !camera.follow.empty() ? CameraTarget::Follow : CameraTarget::None;
+			if (camera.target == CameraTarget::Leader) {
+				camera.follow.clear();
+			}
+		} else {
+			reader.fail(entry, "data.camera_shape", {});
+			continue;
+		}
+		for (const CameraDef& other : out) {
+			if (other.id == camera.id) {
+				reader.fail(entry, "data.camera_listed_twice", {camera.id});
+			}
+		}
+		out.push_back(camera);
+	}
+}
+
 void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.only(json, {"title", "core_data", "areas", "events", "glossary", "languages", "journal", "actors", "presentation", "flags",
 		"vars", "clear_flag", "start", "join_levels", "prices", "item_cap", "money_cap", "tick_ms", "grace_ms", "round_ms",
@@ -149,12 +266,46 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.text(json, "journal", c.journalFile, true);
 	reader.texts(json, "actors", c.actors, false);
 	if (const JsonValue* p = reader.field(json, "presentation", JsonValue::Type::Object, false)) {
-		reader.only(*p, {"audio", "cameras", "layouts", "animations", "portraits"});
+		reader.only(*p, {"audio", "cameras", "layouts", "animations", "portraits", "music", "durations"});
 		reader.texts(*p, "audio", c.presentation.audio, false);
-		reader.texts(*p, "cameras", c.presentation.cameras, false);
+		readCameras(reader, *p, c.presentation.cameras);
 		reader.texts(*p, "layouts", c.presentation.layouts, false);
 		reader.texts(*p, "animations", c.presentation.animations, false);
 		reader.texts(*p, "portraits", c.presentation.portraits, false);
+		if (const JsonValue* m = reader.field(*p, "music", JsonValue::Type::Object, false)) {
+			reader.only(*m, {"title", "victory", "defeat", "encounters"});
+			reader.text(*m, "title", c.presentation.music.title, false);
+			reader.text(*m, "victory", c.presentation.music.victory, false);
+			reader.text(*m, "defeat", c.presentation.music.defeat, false);
+			if (const JsonValue* e = reader.field(*m, "encounters", JsonValue::Type::Object, false)) {
+				for (std::size_t i = 0; i < e->keys.size(); ++i) {
+					if (!e->values[i].is(JsonValue::Type::String) || e->values[i].string.empty()) {
+						reader.fail(e->values[i], "data.music_not_text", {e->keys[i]});
+						continue;
+					}
+					c.presentation.music.encounters[e->keys[i]] = e->values[i].string;
+				}
+			}
+		}
+		if (const JsonValue* list = reader.field(*p, "durations", JsonValue::Type::Array, false)) {
+			for (const JsonValue& d : list->items) {
+				reader.only(d, {"action", "subject", "seconds"});
+				std::string action;
+				std::string subject;
+				double seconds = 0;
+				reader.text(d, "action", action, true);
+				reader.text(d, "subject", subject, false);
+				reader.number(d, "seconds", seconds, true, 0, 60);
+				events::ActionType type = events::ActionType::move;
+				if (!action.empty() && !events::parse_action_type(action, type)) {
+					reader.fail(d, "data.unknown_action", {action});
+				} else if (subject.empty()) {
+					c.presentation.durations[type] = seconds;
+				} else {
+					c.presentation.subjectDurations[{type, subject}] = seconds;
+				}
+			}
+		}
 	}
 	reader.texts(json, "flags", c.flags, false);
 	reader.counts(json, "vars", c.vars, false, -999999, 999999);
@@ -291,7 +442,7 @@ events::Registry buildRegistry(const GameData& data, Problems& problems) {
 		r.add(events::NameKind::vehicle, id);
 	}
 	for (const std::string& n : c.presentation.audio) r.add(events::NameKind::audio, n);
-	for (const std::string& n : c.presentation.cameras) r.add(events::NameKind::camera, n);
+	for (const CameraDef& n : c.presentation.cameras) r.add(events::NameKind::camera, n.id);
 	for (const std::string& n : c.presentation.layouts) r.add(events::NameKind::layout, n);
 	for (const std::string& n : c.presentation.animations) r.add(events::NameKind::animation, n);
 	for (const std::string& n : c.presentation.portraits) r.add(events::NameKind::portrait, n);
@@ -423,6 +574,30 @@ void checkReferences(const GameData& data, Problems& problems) {
 		flagDeclared("game.json boss", b.flag);
 	}
 	flagDeclared("game.json clear_flag", c.clearFlag);
+	const PresentationNames& shown = c.presentation;
+	for (const CameraDef& camera : shown.cameras) {
+		if (camera.target == CameraTarget::Marker && !markerExists(camera.area, camera.marker)) {
+			problems.add("game.json camera '" + camera.id + "'", "data.camera_marker_missing", {camera.area, camera.marker});
+		}
+		if (camera.target == CameraTarget::Follow && !db.character(camera.follow) &&
+			std::find(c.actors.begin(), c.actors.end(), camera.follow) == c.actors.end()) {
+			problems.add("game.json camera '" + camera.id + "'", "data.camera_follows_unknown", {camera.follow});
+		}
+	}
+	auto musicListed = [&](const std::string& where, const std::string& track) {
+		if (!track.empty() && std::find(shown.audio.begin(), shown.audio.end(), track) == shown.audio.end()) {
+			problems.add(where, "data.music_not_audio", {track});
+		}
+	};
+	musicListed("game.json music title", shown.music.title);
+	musicListed("game.json music victory", shown.music.victory);
+	musicListed("game.json music defeat", shown.music.defeat);
+	for (const auto& [encounter, track] : shown.music.encounters) {
+		if (!db.encounter(encounter)) {
+			problems.add("game.json music", "data.music_unknown_encounter", {encounter});
+		}
+		musicListed("game.json music encounter '" + encounter + "'", track);
+	}
 	for (const std::string& actor : c.actors) {
 		if (db.character(actor)) {
 			problems.add("game.json", "data.actor_is_character", {actor});
@@ -439,6 +614,9 @@ void checkReferences(const GameData& data, Problems& problems) {
 			}
 		};
 		textExists(c.languages.front().text, "area." + areaId);
+		if (!area.music.empty() && std::find(shown.audio.begin(), shown.audio.end(), area.music) == shown.audio.end()) {
+			at(0, "data.music_not_audio", {area.music});
+		}
 		for (const Exit& e : area.exits) {
 			if (!data.area(e.toArea)) {
 				at(e.line, "data.exit_leads_unknown_area", {e.toArea});
@@ -550,7 +728,7 @@ void loadInto(const DataDirectories& directories, GameData& data, Problems& prob
 		problems.add(reader.problems());
 		return;
 	}
-	std::uint64_t hash = fnv(1469598103934665603ULL, text);
+	std::uint64_t hash = hashJson(1469598103934665603ULL, *json.value, {"presentation"});
 
 	const std::string coreDirectory = directories.core.empty() ? join(directory, data.config.coreData) : directories.core;
 	rules::Result<rules::Database> db = rules::loadDatabaseFromDirectory(coreDirectory);
@@ -582,12 +760,14 @@ void loadInto(const DataDirectories& directories, GameData& data, Problems& prob
 		if (!readFile(textPath, text)) {
 			problems.add("", "data.cannot_read", {textPath});
 		} else {
-			hash = fnv(hash, text);
 			rules::Result<rules::TextTable> own = rules::parseTextTable(text);
 			if (!own.ok()) {
 				problems.add(own.problems, files.text);
 			} else {
 				for (const auto& [key, value] : *own.value) {
+					if (!isDescription(key)) {
+						hash = fnv(fnv(hash, key), value);
+					}
 					if (!tables.text.emplace(key, value).second) {
 						problems.add(files.text, "data.key_already_in_core", {key});
 					}
@@ -605,17 +785,36 @@ void loadInto(const DataDirectories& directories, GameData& data, Problems& prob
 		}
 		data.languages.push_back(std::move(tables));
 	}
+	// Descriptions are optional in every language; the other keys must match the source language's.
 	for (std::size_t i = 1; i < data.languages.size(); ++i) {
 		const rules::TextTable& first = data.languages.front().text;
 		const rules::TextTable& other = data.languages[i].text;
 		for (const auto& [key, value] : first) {
-			if (!other.count(key)) {
+			if (!other.count(key) && !isDescription(key)) {
 				problems.add(data.config.languages[i].text, "data.key_missing_from_table", {key, std::string(data.languages.front().code)});
 			}
 		}
 		for (const auto& [key, value] : other) {
-			if (!first.count(key)) {
+			if (!first.count(key) && !isDescription(key)) {
 				problems.add(data.config.languages[i].text, "data.key_not_in_source_table", {key, std::string(data.languages.front().code)});
+			}
+		}
+	}
+	if (coreLoaded) {
+		for (std::size_t i = 0; i < data.languages.size(); ++i) {
+			for (const auto& [key, value] : data.languages[i].text) {
+				if (!isDescription(key)) {
+					continue;
+				}
+				bool known = false;
+				for (int k = 0; k <= static_cast<int>(DescriptionKind::Difficulty) && !known; ++k) {
+					const DescriptionKind kind = static_cast<DescriptionKind>(k);
+					const std::string prefix = descriptionKey(kind, "");
+					known = key.compare(0, prefix.size(), prefix) == 0 && describes(data.db, kind, key.substr(prefix.size()));
+				}
+				if (!known) {
+					problems.add(data.config.languages[i].text, "data.description_unknown", {key});
+				}
 			}
 		}
 	}
@@ -626,7 +825,6 @@ void loadInto(const DataDirectories& directories, GameData& data, Problems& prob
 			problems.add("", "data.cannot_read", {path});
 			continue;
 		}
-		hash = fnv(hash, text);
 		rules::Result<Area> area = parseArea(file, text);
 		if (!area.ok()) {
 			problems.add(area.problems);
@@ -636,6 +834,7 @@ void loadInto(const DataDirectories& directories, GameData& data, Problems& prob
 			problems.add(file, "data.duplicate_area_id", {area.value->id});
 			continue;
 		}
+		hash = hashJson(hash, *rules::parseJson(text).value, {"music"});
 		data.areas[area.value->id] = std::move(*area.value);
 	}
 

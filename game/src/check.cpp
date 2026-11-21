@@ -1,5 +1,6 @@
 #include "game/check.h"
 
+#include <algorithm>
 #include <deque>
 #include <filesystem>
 #include <map>
@@ -321,8 +322,10 @@ CheckReport checkData(const DataDirectories& directories) {
 				{"objectives", j.objectives.size()}, {"jobs", j.jobs.size()}, {"encyclopedia entries", j.encyclopedia.size()},
 				{"party talk sets", j.partyTalk.size()}}});
 		for (const LanguageTables& l : data.languages) {
-			const std::size_t own = l.text.size() >= coreKeys ? l.text.size() - coreKeys : l.text.size();
-			report.loaded.push_back({"text " + l.code, {{"game text keys", own}, {"dialogue strings", l.strings.entries.size()}}});
+			const std::size_t descriptions = static_cast<std::size_t>(std::count_if(l.text.begin(), l.text.end(),
+				[](const auto& entry) { return entry.first.compare(0, std::char_traits<char>::length(kDescriptionPrefix), kDescriptionPrefix) == 0; }));
+			const std::size_t own = (l.text.size() >= coreKeys ? l.text.size() - coreKeys : l.text.size()) - descriptions;
+			report.loaded.push_back({"text " + l.code, {{"game text keys", own}, {"descriptions", descriptions}, {"dialogue strings", l.strings.entries.size()}}});
 		}
 	}
 	return report;

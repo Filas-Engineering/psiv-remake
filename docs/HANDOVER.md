@@ -16,10 +16,10 @@ Planning documents, engine-neutral C++17 libraries and tooling for a 3D remake o
 | `docs/research/published-mechanics.md` | What is known about each of those facts, with sources and confidence |
 | `docs/data-import.md` | How a team brings its own data into these formats: what each file holds, the order, the checks, common mistakes |
 | `docs/research/original-battle-rules.md` | The original's battle rules as read from the disassembly: AI, targeting, combinations, rewards, statuses, end conditions, vehicles |
-| `core/` | Battle rules library (`librules.a`), placeholder data, `battle_cli`, 179 tests |
-| `events/` | Event script format, compiler and resumable interpreter, `event_cli`, 92 tests |
-| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles, the field menu's party order, macro editor, member detail and combo log. `game_cli` (play, bot, `--check` for data), 85 tests |
-| `tools/text/` | Line database, glossary, rename review and localization export (Python, 98 tests) |
+| `core/` | Battle rules library (`librules.a`), placeholder data, `battle_cli`, 180 tests |
+| `events/` | Event script format, compiler and resumable interpreter, `event_cli`, 93 tests |
+| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles, the field menu's party order, macro editor (and make macro from the combo log), member detail, equipment comparison, bag sorting, descriptions, difficulty presets, ambient party talk. `game_cli` (play, bot, `--check` for data), 96 tests |
+| `tools/text/` | Line database, glossary, rename review, localization export and the descriptions report (Python, 101 tests) |
 | `tools/maps/` | Tiled maps to area files and back (Python, 46 tests) |
 | `acceptance/` | The spec's automatable checks, run against the libraries. `report.md` maps every requirement to a status |
 | `bindings/` | C API over the session, C# wrapper, MonoGame sample |
@@ -57,24 +57,25 @@ Bringing in real data: [`data-import.md`](data-import.md).
 
 | Suite | Result |
 | --- | --- |
-| core | 179 tests pass |
-| events | 92 tests pass |
-| game | 85 tests pass, data check passes, area files match their Tiled sources, scripted playthrough matches its expected transcript, bot finishes both encounter modes on the main route and the kiln route |
-| text tooling | 98 tests pass |
+| core | 180 tests pass |
+| events | 93 tests pass |
+| game | 96 tests pass, data check passes, area files match their Tiled sources, scripted playthrough matches its expected transcript, bot finishes both encounter modes on the main route and the kiln route |
+| text tooling | 101 tests pass |
 | map tooling | 46 tests pass |
 | acceptance | PASS 26, FAIL 0, NOT IMPLEMENTED 12, NOT AUTOMATABLE 26 |
-| C API | 814 checks pass |
-| C# | 14 tests pass |
-| MonoGame sample | twelve headless runs (smoke 2000 frames, large areas 1600, scripted actors and the tide chart scene 1300, the board scene with a full party 1100, gamepad input and rebinding 600, every field menu page and option 700, the macro editor end to end 700, save, quit to title and load 550, options and their effects with the Controls page 1200, gamepad name entry through the character grid 500, the lookout's panels, camera, shake, load and skip 1200, audio from the recording layer's call log 800), 0 failures; the synthesizer's self-check (31 sounds, each generated twice) and the dumped WAV files' check pass. Every screen before this round was looked at in window screenshots at 100% and 150% text size; the lookout's panels at 100%; all on macOS only. No one has listened to the generated sound |
+| C API | 955 checks pass |
+| C# | 20 tests pass |
+| MonoGame sample | thirteen headless runs (smoke 2000 frames, large areas 1600, scripted actors and the tide chart scene 1300, the board scene with a full party 1100, gamepad input and rebinding 600, every field menu page and option with descriptions, the equipment comparison, the difficulty and item sorting 900, the macro editor end to end with a macro made from the combo log 760, save, quit to title and load 550, options and their effects with the Controls page 1200, gamepad name entry through the character grid 500, the lookout's panels with camera zooms, camera, shake, load and skip 1200, audio from the recording layer's call log 800, click-to-walk, ambient party talk and the letterbox 540), 0 failures; the synthesizer's self-check (39 sounds, each generated twice) and the dumped WAV files' check pass. Every screen before the last round was looked at in window screenshots at 100% and 150% text size; the lookout's panels at 100%; this round's equipment comparison, descriptions (Items, shop, battle), sorted items, the difficulty option, zoomed panels and the window at 1600x1000 and 960x540 at 100%; all on macOS only. No one has listened to the generated sound |
 
-Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch64 and Linux x86-64 (GCC 13.3 and clang 18.1, Ubuntu 24.04 in Docker). The Linux check also runs the sample's window on a virtual display (Xvfb, Mesa llvmpipe) through `scripts/smoke.txt` and checks its screenshot. Windows, cross-compiled with MinGW-w64 (GCC 14) and run under Wine 10 (`tools/windows-check.sh`): the core, events and game unit tests, the C API as a DLL with its checks (726 when it last ran; not run again since the menu operations were added), and the C playthrough against `game_cli.exe` and the golden transcript, saves included. That check does not cover MSVC, the acceptance suites, the C# wrapper or the sample. The latest round (party order, macro editor, member detail, combo log) has run on macOS arm64 only; the Linux and Windows checks were not run again for it.
+Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch64 and Linux x86-64 (GCC 13.3 and clang 18.1, Ubuntu 24.04 in Docker). The Linux check also runs the sample's window on a virtual display (Xvfb, Mesa llvmpipe) through `scripts/smoke.txt` and checks its screenshot. Windows, cross-compiled with MinGW-w64 (GCC 14) and run under Wine 10 (`tools/windows-check.sh`): the core, events and game unit tests, the C API as a DLL with its checks (726 when it last ran; not run again since the menu operations were added), and the C playthrough against `game_cli.exe` and the golden transcript, saves included. That check does not cover MSVC, the acceptance suites, the C# wrapper or the sample. The last two rounds (party order, macro editor, member detail, combo log; then equipment comparison, descriptions, sorting, difficulty presets, make macro, camera and music data, durations, hooks on walls, ambient talk, click-to-walk and the letterboxed window) have run on macOS arm64 only; the Linux and Windows checks were not run again for them.
 
 ## Versions
 
 * Rules version 9 and event schema 6 (`core/include/rules/version.h`). Bump the rules version whenever a rule, a formula or the order of random draws changes. `replayBattle` refuses records from another rules version or event schema.
 * Battle record format 5. `parseRecord` still reads 3 and 4.
-* C API `PSIV_ABI_VERSION` 6 (library version 0.5.0).
-* Save schema 3 (`PSR-SAVE 3`). Schemas 1 and 2 migrate when they load.
+* C API `PSIV_ABI_VERSION` 7 (library version 0.6.0).
+* Save schema 4 (`PSR-SAVE 4`, adding the `talk` chunk for ambient party talk). Schemas 1 to 3 migrate when they load.
+* The game's content hash (save headers, the clear-data record) is built from the parsed data without presentation (`game.json`'s `presentation`, area music, descriptions); its value changed once when that started, and nothing compares it on load. Battle records carry core's hash, which did not change.
 * Everything is deterministic from the seed: the same setup, data and commands give the same event stream on every platform and optimization level. ACC-BAT-15 checks this.
 
 ## Battle rules that match the original
@@ -122,7 +123,7 @@ The seeded tests are tuned to the placeholder balance. Any rule or data change s
 | Bot run (main route and kiln route) | 2 | `game/Makefile`, `game/tests/test_playthrough.cpp` |
 | Hard-difficulty record golden | 11 | `core/Makefile`, `core/tests/test_battle.cpp` |
 
-The scripted playthrough needs the first battle lost twice and then won. After a change, scan seeds until the script's expectations hold, update every place above, and regenerate `game/tests/expected/playthrough.txt` and `acceptance/report.md` with their Makefile targets.
+The scripted playthrough needs the first battle lost twice and then won. After a change, scan seeds until the script's expectations hold, update every place above, and regenerate `game/tests/expected/playthrough.txt` and `acceptance/report.md` with their Makefile targets. The golden transcript last changed by four ambient party talk lines (`~ ` lines); no battle in it changed.
 
 ## Open work
 
@@ -136,9 +137,11 @@ The scripted playthrough needs the first battle lost twice and then won. After a
 
 **Rules read but not built.** The original's AI conditions on particular enemy kinds, spawning beside an enemy and an ambush reaction; vehicle skill uses carried between battles; android recovery and the experience of characters outside the party (see `docs/research/original-battle-rules.md`).
 
-**Measurements.** Per-action presentation times (BAT-102), encounter pacing baselines (ENC-036), walk speeds and step distance (FLD-022, ENC-041).
+**Measurements.** Per-action presentation times (BAT-102; `game.json`'s `presentation.durations` now carries them for the game and the engine once measured), encounter pacing baselines (ENC-036), walk speeds and step distance (FLD-022, ENC-041).
 
-**Engine.** Nothing is integrated with Unreal yet. The contract is the event stream (`core/README.md`, "Events") and the C API in `bindings/c`. The MonoGame sample shows the full loop with generated pictures, sound and text, script actors included, plays party members' scripted moves and turns and every `anim` as procedural poses, and plays comic panels through named cameras, camera moves, shakes, music, ambient loops and cues (`bindings/README.md`, "The sample" and "Audio"). Cameras have no positions in the data and areas and battles name no music, so the sample resolves a camera by the marker of its name and derives track ids from the area's id and kind; real content needs both in the data. Where a scene puts party members is presentation by design (the game keeps only the leader's cell); an engine follows those actions itself, as the sample does (`bindings/README.md`, "The sample"), and draws nothing for an action of an actor outside the party's area (in `psiv_actor_ids`, not in `psiv_field_actors`).
+**Front end gaps left.** Names stay English in every language (core's data holds them inline; descriptions are text keys and translate). The session does not report where each panel looks: a host frames panels from the camera data and the panel actions (`events/README.md`, save contract rule 9). Shops compare equipment through the same call as the Equip page, but the session offers no "best piece" suggestion or batch comparison across members. Ambient party talk is reported as notices; where a front end shows it is its own choice.
+
+**Engine.** Nothing is integrated with Unreal yet. The contract is the event stream (`core/README.md`, "Events") and the C API in `bindings/c`. The MonoGame sample shows the full loop with generated pictures, sound and text, script actors included, plays party members' scripted moves and turns and every `anim` as procedural poses, and plays comic panels through named cameras, camera moves, shakes, music, ambient loops and cues (`bindings/README.md`, "The sample" and "Audio"). Cameras can carry a target and a zoom in `game.json`, areas and encounters name their music, and the data carries action durations; the placeholder fills them in and the sample uses them, falling back to its old rules (a camera's marker or person of the same name, derived track ids) where the data is silent. Real content needs them filled in. Where a scene puts party members is presentation by design (the game keeps only the leader's cell); an engine follows those actions itself, as the sample does (`bindings/README.md`, "The sample"), and draws nothing for an action of an actor outside the party's area (in `psiv_actor_ids`, not in `psiv_field_actors`).
 
 **Platforms.** MSVC has not been tried. On Windows the acceptance suites, the C# wrapper and the MonoGame sample have not run (the C library and its tests have, under Wine). The sample's window has run on macOS and under Xvfb with software rendering on Linux, not in a real Linux desktop session.
 

@@ -23,22 +23,6 @@ std::size_t count_characters(const std::string& text) {
 	return count;
 }
 
-bool parse_action_type(const std::string& word, ActionType& type) {
-	for (int i = 0; i <= static_cast<int>(ActionType::warp); ++i) {
-		std::string name = action_type_name(static_cast<ActionType>(i));
-		for (char& c : name) {
-			if (c == ' ') {
-				c = '_';
-			}
-		}
-		if (name == word) {
-			type = static_cast<ActionType>(i);
-			return true;
-		}
-	}
-	return false;
-}
-
 bool parse_seconds(const std::string& word, double& out) {
 	char* end = nullptr;
 	out = std::strtod(word.c_str(), &end);

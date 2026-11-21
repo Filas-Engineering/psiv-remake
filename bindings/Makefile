@@ -65,6 +65,7 @@ SAMPLE_OPTIONS_SCRIPT = monogame/Psiv.Sample/scripts/options.txt
 SAMPLE_NAME_PAD_SCRIPT = monogame/Psiv.Sample/scripts/name_pad.txt
 SAMPLE_PANELS_SCRIPT = monogame/Psiv.Sample/scripts/panels.txt
 SAMPLE_AUDIO_SCRIPT = monogame/Psiv.Sample/scripts/audio.txt
+SAMPLE_WINDOW_SCRIPT = monogame/Psiv.Sample/scripts/window.txt
 
 .PHONY: all test native-test dotnet dotnet-test dotnet-missing clean deps
 
@@ -142,11 +143,11 @@ dotnet-test: dotnet
 		|| (cat $(BUILD)/sample_input_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_input_headless.txt
 	rm -rf $(BUILD)/sample_menus_saves
-	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_menus_saves --script $(SAMPLE_MENUS_SCRIPT) --frames 700 > $(BUILD)/sample_menus_headless.txt \
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_menus_saves --script $(SAMPLE_MENUS_SCRIPT) --frames 900 > $(BUILD)/sample_menus_headless.txt \
 		|| (cat $(BUILD)/sample_menus_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_menus_headless.txt
 	rm -rf $(BUILD)/sample_macros_saves
-	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_macros_saves --script $(SAMPLE_MACROS_SCRIPT) --frames 700 > $(BUILD)/sample_macros_headless.txt \
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_macros_saves --script $(SAMPLE_MACROS_SCRIPT) --frames 760 > $(BUILD)/sample_macros_headless.txt \
 		|| (cat $(BUILD)/sample_macros_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_macros_headless.txt
 	rm -rf $(BUILD)/sample_saves_saves
@@ -169,6 +170,10 @@ dotnet-test: dotnet
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_audio_saves --script $(SAMPLE_AUDIO_SCRIPT) --frames 800 > $(BUILD)/sample_audio_headless.txt \
 		|| (cat $(BUILD)/sample_audio_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_audio_headless.txt
+	rm -rf $(BUILD)/sample_window_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_window_saves --script $(SAMPLE_WINDOW_SCRIPT) --frames 540 > $(BUILD)/sample_window_headless.txt \
+		|| (cat $(BUILD)/sample_window_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_window_headless.txt
 	rm -rf $(BUILD)/audio
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --dump-audio $(BUILD)/audio
 	python3 -I monogame/Psiv.Sample/scripts/check_wav.py $(BUILD)/audio

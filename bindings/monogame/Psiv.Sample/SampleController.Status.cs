@@ -239,7 +239,8 @@ public sealed partial class SampleController
 		s.Text("Cost", costX, top, Style.Dim, Style.Small);
 		s.Text("Uses", usesX, top, Style.Dim, Style.Small);
 		int listTop = top + Px(28);
-		_sub.Draw(s, x, listTop, listW, y + h - listTop, Px(30), abilities.Count, (i, ry, on) =>
+		int descH = Px(56);
+		_sub.Draw(s, x, listTop, listW, y + h - listTop - descH, Px(30), abilities.Count, (i, ry, on) =>
 		{
 			AbilityInfo a = abilities[i];
 			Style.ListRow(s, Style.Fit(s, a.Name + (a.Field ? "  *" : ""), kindX - x - 30), x, ry, listW - 14, on, a.Field, height: Px(28));
@@ -247,6 +248,8 @@ public sealed partial class SampleController
 			s.Text(a.Cost > 0 ? $"{a.Cost} TP" : "-", costX, ry, Style.Text, Style.Small);
 			s.Text(a.MaxUses >= 0 ? $"{a.Uses}/{a.MaxUses}" : "-", usesX, ry, Style.Text, Style.Small);
 		}, _pickAction is null);
+		s.Fill(x, y + h - descH, listW - 14, 1, Style.PanelEdge * 0.4f);
+		DrawDescription(s, _s.Description(DescriptionKind.Ability, abilities[Math.Clamp(_sub.Cursor, 0, abilities.Count - 1)].Id), x + 14, y + h - descH + Px(8), listW - 40);
 		if (_pickAction is null)
 		{
 			_probeSelected = abilities[_sub.Cursor].Name;

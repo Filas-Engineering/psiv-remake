@@ -83,6 +83,9 @@ void Runner::printOutput(const std::vector<Output>& outputs) {
 		case OutputKind::Autosave:
 			print("[" + o.text + "]");
 			break;
+		case OutputKind::Ambient:
+			print("~ " + o.text);
+			break;
 		default:
 			print(o.text);
 			break;

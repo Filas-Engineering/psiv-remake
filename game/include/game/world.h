@@ -115,6 +115,9 @@ struct World {
 	std::map<std::string, JobState> jobs;
 	// Encyclopedia entries, kept once unlocked even if their flag is cleared later (TXT-041).
 	std::set<std::string> unlocked;
+	// Party talk that already came up by itself (FLD-073), as "<set id>@<area id>": once per area per set, and a set
+	// holds for one stretch of the story.
+	std::set<std::string> ambientHeard;
 
 	std::int64_t playTimeMs = 0;
 	Settings settings;

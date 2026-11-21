@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 6
+#define PSIV_ABI_VERSION 7
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -112,7 +112,8 @@ typedef enum psiv_mode { PSIV_MODE_TITLE, PSIV_MODE_FIELD, PSIV_MODE_EVENT, PSIV
 typedef enum psiv_menu_kind { PSIV_MENU_NONE, PSIV_MENU_FIELD, PSIV_MENU_INN, PSIV_MENU_SAVE_PROMPT, PSIV_MENU_NAME_ENTRY } psiv_menu_kind;
 /* PSIV_DIRECTION_NONE means no direction held. */
 typedef enum psiv_direction { PSIV_DIRECTION_NONE = -1, PSIV_DIRECTION_NORTH = 0, PSIV_DIRECTION_EAST, PSIV_DIRECTION_SOUTH, PSIV_DIRECTION_WEST } psiv_direction;
-typedef enum psiv_notice_kind { PSIV_NOTICE_LINE, PSIV_NOTICE_CHOICE, PSIV_NOTICE_ACTION, PSIV_NOTICE_NOTICE, PSIV_NOTICE_WARNING, PSIV_NOTICE_AUTOSAVE } psiv_notice_kind;
+/* PSIV_NOTICE_AMBIENT: a party talk line that came up by itself as the party arrived; show it without stopping play. */
+typedef enum psiv_notice_kind { PSIV_NOTICE_LINE, PSIV_NOTICE_CHOICE, PSIV_NOTICE_ACTION, PSIV_NOTICE_NOTICE, PSIV_NOTICE_WARNING, PSIV_NOTICE_AUTOSAVE, PSIV_NOTICE_AMBIENT } psiv_notice_kind;
 typedef enum psiv_area_kind { PSIV_AREA_TOWN, PSIV_AREA_FIELD, PSIV_AREA_DUNGEON } psiv_area_kind;
 typedef enum psiv_encounter_mode { PSIV_ENCOUNTERS_VISIBLE, PSIV_ENCOUNTERS_RANDOM } psiv_encounter_mode;
 typedef enum psiv_enemy_state { PSIV_ENEMY_IDLE, PSIV_ENEMY_CHASING, PSIV_ENEMY_RETURNING } psiv_enemy_state;
@@ -165,6 +166,17 @@ typedef enum psiv_action_phase { PSIV_ACTION_BEGIN, PSIV_ACTION_CANCEL } psiv_ac
  * when the host calls psiv_action_finish, so the event waits on the engine's animation. These are the game's
  * own Presentation::Instant and Presentation::Queued. */
 typedef enum psiv_presentation { PSIV_PRESENTATION_INSTANT, PSIV_PRESENTATION_WAIT } psiv_presentation;
+/* What psiv_description describes. */
+typedef enum psiv_description_kind {
+	PSIV_DESCRIPTION_ITEM, PSIV_DESCRIPTION_EQUIPMENT, PSIV_DESCRIPTION_ABILITY, PSIV_DESCRIPTION_STATUS, PSIV_DESCRIPTION_ENEMY, PSIV_DESCRIPTION_DIFFICULTY
+} psiv_description_kind;
+/* What a camera looks at: nothing given (the host decides), a marker in an area, an actor or character it follows, or
+ * the party leader. */
+typedef enum psiv_camera_target { PSIV_CAMERA_NONE, PSIV_CAMERA_MARKER, PSIV_CAMERA_FOLLOW, PSIV_CAMERA_LEADER } psiv_camera_target;
+/* Orders for psiv_inventory_sorted. The bag has no order of its own, so sorting changes nothing in the game or its
+ * saves. KIND: field items, battle-only items, then pieces by slot; NAME: display name; COUNT: most held first. Ties go
+ * to the display name, then the id. */
+typedef enum psiv_item_sort { PSIV_SORT_ID, PSIV_SORT_KIND, PSIV_SORT_NAME, PSIV_SORT_COUNT } psiv_item_sort;
 /* Cell flags in psiv_field_grid. The low two bits are the terrain. */
 typedef enum psiv_cell { PSIV_CELL_FLOOR = 0, PSIV_CELL_WALL = 1, PSIV_CELL_WATER = 2, PSIV_CELL_TERRAIN_MASK = 3, PSIV_CELL_WALKABLE = 16 } psiv_cell;
 
@@ -174,7 +186,7 @@ typedef enum psiv_name_kind {
 	PSIV_NAME_BATTLE_SOURCE, PSIV_NAME_SIDE, PSIV_NAME_COMMAND_KIND, PSIV_NAME_ABILITY_KIND, PSIV_NAME_TARGETING, PSIV_NAME_EQUIP_SLOT,
 	PSIV_NAME_OUTCOME, PSIV_NAME_EVENT_TYPE, PSIV_NAME_CANCEL_REASON, PSIV_NAME_EFFECTIVENESS, PSIV_NAME_STATUS_END, PSIV_NAME_RESOURCE_KIND,
 	PSIV_NAME_ELEMENT, PSIV_NAME_STAT, PSIV_NAME_OPENING, PSIV_NAME_AUTO_STOP, PSIV_NAME_MACRO_STEP_STATUS, PSIV_NAME_MACRO_ISSUE,
-	PSIV_NAME_ACTION_TYPE, PSIV_NAME_MACRO_TARGET_KIND
+	PSIV_NAME_ACTION_TYPE, PSIV_NAME_MACRO_TARGET_KIND, PSIV_NAME_DESCRIPTION_KIND, PSIV_NAME_ITEM_SORT, PSIV_NAME_CAMERA_TARGET
 } psiv_name_kind;
 
 /* The stable name of an enum value as the C++ libraries spell it, lowercase with underscores ("field",
@@ -224,6 +236,10 @@ typedef struct psiv_game_info {
 	int32_t money_cap;
 	int32_t language_count;
 	const char* const* languages;
+	/* game.json's tracks for the title, a won battle and a game over: audio ids, "" when the data names none. */
+	const char* title_music;
+	const char* victory_music;
+	const char* defeat_music;
 } psiv_game_info;
 
 PSIV_API psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out);
@@ -259,8 +275,20 @@ typedef struct psiv_settings {
 } psiv_settings;
 
 PSIV_API psiv_status psiv_settings_get(psiv_session* session, psiv_settings* out);
-/* MUTATES. Difficulty and reward multiplier apply from the next battle; refused during a battle. */
+/* MUTATES. Difficulty and reward multiplier apply from the next battle; refused during a battle
+ * ("game.refuse.settings_in_battle") and at the title ("game.refuse.settings_no_game"). */
 PSIV_API psiv_status psiv_settings_set(psiv_session* session, const char* difficulty, int32_t reward_multiplier);
+/* A difficulty preset: core's name, its description ("" for none) and how it scales battle rewards. */
+typedef struct psiv_difficulty {
+	const char* id;
+	const char* name;
+	const char* description;
+	int32_t reward_percent;
+} psiv_difficulty;
+
+/* Every difficulty preset, in id order. *can_change (may be NULL) is 1 when psiv_settings_set would accept a change now:
+ * with a game in progress and outside battle. */
+PSIV_API psiv_status psiv_difficulties(psiv_session* session, const psiv_difficulty** out, int32_t* count, int32_t* can_change);
 /* MUTATES. NULL or "" turns auto-battle's macro off. */
 PSIV_API psiv_status psiv_settings_set_auto_macro(psiv_session* session, const char* macro);
 /* The save's macro names. */
@@ -323,6 +351,12 @@ PSIV_API psiv_status psiv_macro_set_step(psiv_session* session, const char* macr
 PSIV_API psiv_status psiv_macro_remove_step(psiv_session* session, const char* macro, int32_t index);
 /* MUTATES. Moves step `from` to `to`. */
 PSIV_API psiv_status psiv_macro_move_step(psiv_session* session, const char* macro, int32_t from, int32_t to);
+/* MUTATES. A new macro named `name` from a discovered combination (its psiv_combo_entry recipe): one ability step per
+ * component in the recipe's order, default targets, each component given to a lineup member who knows the ability now
+ * (the character it is tied to; the members the log recorded are tried first). Refusals: the name rules of
+ * psiv_macro_create, "game.refuse.combo_not_found" (not discovered) and "game.refuse.combo_no_member" (no free member
+ * knows the ability named in the parameter). */
+PSIV_API psiv_status psiv_macro_from_combo(psiv_session* session, const char* recipe, const char* name);
 
 /* ------------------------------------------------------------------------------------------------------ */
 /* Title and saves                                                                                        */
@@ -394,7 +428,9 @@ PSIV_API psiv_status psiv_walk_to(psiv_session* session, int32_t x, int32_t y);
 PSIV_API psiv_status psiv_walk_step(psiv_session* session, int32_t* status);
 /* MUTATES. Interacts with whatever stands in the cell the leader faces. */
 PSIV_API psiv_status psiv_interact(psiv_session* session);
-/* MUTATES. The best party talk set's lines arrive as PSIV_NOTICE_LINE notices. */
+/* MUTATES. The best party talk set's lines arrive as PSIV_NOTICE_LINE notices. The same set also comes up by itself
+ * as PSIV_NOTICE_AMBIENT notices the first time control returns to the field in an area under it, while the profile's
+ * ambient_talk is on; saves keep which sets have. */
 PSIV_API psiv_status psiv_party_talk(psiv_session* session);
 
 typedef struct psiv_field_info {
@@ -410,6 +446,8 @@ typedef struct psiv_field_info {
 	int32_t facing;
 	int32_t player_control;
 	int32_t grace_ms;
+	/* The area's track outside events and battles, an audio id; "" when the data names none. */
+	const char* music;
 } psiv_field_info;
 
 typedef struct psiv_enemy {
@@ -542,10 +580,30 @@ typedef struct psiv_action {
 	int32_t instant;
 	/* The script syntax of the action, for logs. */
 	const char* description;
+	/* How long the animation lasts by the data: game.json's presentation durations for the type and subject, else the
+	 * type, else `seconds`; 0 for none. A host can use it for actions whose length the script does not give. */
+	double duration;
 } psiv_action;
 
 typedef void (*psiv_action_callback)(void* user, const psiv_action* action);
 
+/* A camera scripts may name, with what game.json says it looks at. A panel or the scene showing it frames that target
+ * at `zoom` times the field's scale. */
+typedef struct psiv_camera {
+	const char* id;
+	/* A psiv_camera_target. */
+	int32_t target;
+	/* PSIV_CAMERA_MARKER: the area and marker; otherwise "". */
+	const char* area;
+	const char* marker;
+	/* PSIV_CAMERA_FOLLOW: the actor or character id; otherwise "". */
+	const char* follow;
+	/* 1 when the data gives none. */
+	double zoom;
+} psiv_camera;
+
+/* Every camera in game.json order. Works at the title too. */
+PSIV_API psiv_status psiv_cameras(psiv_session* session, const psiv_camera** out, int32_t* count);
 /* MUTATES. Takes every queued record, oldest first. */
 PSIV_API psiv_status psiv_actions_poll(psiv_session* session, const psiv_action** out, int32_t* count);
 /* MUTATES. In PSIV_PRESENTATION_WAIT, marks an action's animation as ended. Unknown handles are ignored. */
@@ -621,6 +679,8 @@ typedef struct psiv_battle_info {
 	int32_t auto_active;
 	int32_t party_acts_next_round;
 	int32_t game_over;
+	/* The encounter's track from game.json, an audio id; "" when the data names none. */
+	const char* music;
 } psiv_battle_info;
 
 typedef struct psiv_battle_option {
@@ -893,6 +953,64 @@ typedef struct psiv_member_detail {
 /* PSIV_NOT_FOUND for a character not in the roster. */
 PSIV_API psiv_status psiv_member_detail_get(psiv_session* session, const char* member, psiv_member_detail* out);
 
+/* A member's battle numbers, built by the same code that sets up a battle combatant. */
+typedef struct psiv_combat_view {
+	/* The member's totals: level stats plus equipment. */
+	psiv_stat_bonus stats;
+	/* The basic attack, which a weapon may replace, and its name. */
+	const char* basic_attack;
+	const char* basic_attack_name;
+	/* A psiv_element: the weapon's, PSIV_ELEMENT_NONE without one. */
+	int32_t attack_element;
+	/* Known abilities, equipment-granted ones included, with their names. */
+	int32_t ability_count;
+	const char* const* abilities;
+	const char* const* ability_names;
+	/* The character's resistances plus its pieces', capped at 100, in status id order. */
+	int32_t status_resist_count;
+	const psiv_status_resist* status_resists;
+} psiv_combat_view;
+
+/* An equipment piece compared on a member before it is put on. */
+typedef struct psiv_equip_preview {
+	const char* member;
+	const char* piece;
+	const char* piece_name;
+	/* A psiv_equip_slot. */
+	int32_t slot;
+	/* The equipment category characters' equip lists name. */
+	const char* category;
+	/* The piece's own bonuses, its weapon element (a psiv_element), the basic attack it replaces with ("" for none), the
+	 * abilities it grants and the status resistances it adds. */
+	psiv_stat_bonus bonus;
+	int32_t element;
+	const char* attack;
+	const char* attack_name;
+	int32_t granted_count;
+	const char* const* granted;
+	const char* const* granted_names;
+	int32_t piece_resist_count;
+	const psiv_status_resist* piece_resists;
+	/* The piece the member wears in that slot now, "" for none. */
+	const char* replaces;
+	const char* replaces_name;
+	/* 1 when the member can wear it; otherwise refusal_key is core's reason ("equip.wrong_category") and its text. */
+	int32_t can_wear;
+	const char* refusal_key;
+	const char* refusal_text;
+	/* Lineup members who can wear the piece, in lineup order, with their names. */
+	int32_t wearer_count;
+	const char* const* wearers;
+	const char* const* wearer_names;
+	/* The member now, and wearing the piece in place of `replaces` (the same as before when it cannot wear it). */
+	psiv_combat_view before;
+	psiv_combat_view after;
+} psiv_equip_preview;
+
+/* Works on any equipment piece, held or not, so shops can compare too. PSIV_NOT_FOUND for a character not in the
+ * roster or an id that is not equipment. */
+PSIV_API psiv_status psiv_equip_preview_get(psiv_session* session, const char* member, const char* piece, psiv_equip_preview* out);
+
 typedef struct psiv_combo_entry {
 	const char* recipe;
 	/* The combination's ability and its name. */
@@ -928,6 +1046,8 @@ typedef struct psiv_inventory_entry {
 
 /* Items in id order, then unworn equipment in id order. */
 PSIV_API psiv_status psiv_inventory(psiv_session* session, const psiv_inventory_entry** out, int32_t* count);
+/* The same entries in a psiv_item_sort order; PSIV_SORT_ID is psiv_inventory's order. */
+PSIV_API psiv_status psiv_inventory_sorted(psiv_session* session, int32_t order, const psiv_inventory_entry** out, int32_t* count);
 
 typedef struct psiv_shop_info {
 	const char* id;
@@ -1033,6 +1153,10 @@ PSIV_API psiv_status psiv_format_text(psiv_session* session, const char* key, co
 PSIV_API psiv_status psiv_display_name(psiv_session* session, const char* id, const char** out);
 /* A dialogue string ID in the profile's language. */
 PSIV_API psiv_status psiv_string_text(psiv_session* session, const char* id, const char** out);
+/* The description of an item, equipment piece, ability, status, enemy or difficulty (kind is a psiv_description_kind)
+ * in the profile's language, "" when that language has none. PSIV_NOT_FOUND when the battle data has no such id of
+ * that kind. Descriptions are the optional text keys desc.<kind>.<id> of the game's text tables. */
+PSIV_API psiv_status psiv_description(psiv_session* session, int32_t kind, const char* id, const char** out);
 
 #ifdef __cplusplus
 }

@@ -4,6 +4,7 @@
 #include "game/world.h"
 
 #include "events/glossary.h"
+#include "events/host.h"
 #include "events/program.h"
 #include "events/registry.h"
 #include "events/strings.h"
@@ -76,13 +77,50 @@ struct Journal {
 	std::vector<TalkSet> partyTalk;
 };
 
-// Names the scripts may use for presentation; the engine owns the assets behind them.
+// What a camera looks at. None leaves it to the host; Marker is a marker in one area; Follow is an actor or a character
+// (a party member); Leader is the party leader.
+enum class CameraTarget { None, Marker, Follow, Leader };
+
+const char* toString(CameraTarget target);
+
+// A camera scripts may name (EVT-033, EVT-035). The game only names it in actions; its target and zoom are data for the
+// host to frame panels and the scene with.
+struct CameraDef {
+	std::string id;
+	CameraTarget target = CameraTarget::None;
+	// Marker: the area and the marker. Follow: the actor or character id.
+	std::string area;
+	std::string marker;
+	std::string follow;
+	// The view's scale against the field's own, 1 when the data gives none.
+	double zoom = 1;
+};
+
+// Tracks by situation, outside scripts (which name their own). Every one is an id of PresentationNames::audio; empty
+// means the data names none.
+struct MusicNames {
+	std::string title;
+	std::string victory;
+	std::string defeat;
+	// By encounter id.
+	std::map<std::string, std::string> encounters;
+};
+
+// Names the scripts may use for presentation; the engine owns the assets behind them. None of this is part of the
+// content hash.
 struct PresentationNames {
 	std::vector<std::string> audio;
-	std::vector<std::string> cameras;
+	std::vector<CameraDef> cameras;
 	std::vector<std::string> layouts;
 	std::vector<std::string> animations;
 	std::vector<std::string> portraits;
+	MusicNames music;
+	// Authored seconds per action type, and per type and subject (BAT-102, EVT-062), in the timing rule of
+	// events::action_seconds.
+	std::map<events::ActionType, double> durations;
+	std::map<std::pair<events::ActionType, std::string>, double> subjectDurations;
+
+	const CameraDef* camera(const std::string& id) const;
 };
 
 // The two tables of one language: the dialogue string table (events format) and the game's own text table
@@ -204,5 +242,17 @@ inline constexpr const char* kChoiceNo = "choice.no";
 
 // Every key of the game's own text table the session can emit.
 const std::vector<std::string>& sessionTextKeys();
+
+// What a description describes. A description is the optional text key `desc.<kind>.<id>` of the game's text tables
+// (UI-007): a missing one shows as empty, and the content hash leaves them out, so writing or editing one changes no
+// save or record.
+enum class DescriptionKind { Item, Equipment, Ability, Status, Enemy, Difficulty };
+
+const char* toString(DescriptionKind kind);
+// The text key of an id's description.
+std::string descriptionKey(DescriptionKind kind, const std::string& id);
+// Whether `id` is a thing of that kind in the battle data.
+bool describes(const rules::Database& db, DescriptionKind kind, const std::string& id);
+inline constexpr const char* kDescriptionPrefix = "desc.";
 
 }

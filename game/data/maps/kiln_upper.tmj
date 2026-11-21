@@ -16,7 +16,8 @@
 		{"name":"id","type":"string","value":"kiln_upper"},
 		{"name":"kind","type":"string","value":"dungeon"},
 		{"name":"encounter_mode","type":"string","value":"visible"},
-		{"name":"step_ms","type":"int","value":250}
+		{"name":"step_ms","type":"int","value":250},
+		{"name":"music","type":"string","value":"dungeon_kiln_halls"}
 	],
 	"tilesets": [
 		{"firstgid":1,"source":"cells.tsj"}

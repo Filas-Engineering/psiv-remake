@@ -1,6 +1,7 @@
 # The macro editor end to end with the keyboard: a macro created and named, two steps built (member, command,
 # ability, target rule), the steps reordered, the macro renamed, moved up the list and made the auto macro, then used
-# from the battle menu's Macro entry and by Auto, and finally deleted, refused once at the confirm and then confirmed.
+# from the battle menu's Macro entry and by Auto, where its Spark and Glint find the Twin Arc combination; a macro made
+# from that combo log entry; and finally the first macro deleted, refused once at the confirm and then confirmed.
 # With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing.
 
 expect screen Title
@@ -31,7 +32,7 @@ expect state page list
 expect state macros opener(5), tempest(5), regroup(5), Duo(0)
 expect state selected Duo
 
-# Step one: the fighter attacks the first enemy position.
+# Step one: the medic's Glint at the first enemy position.
 press Enter
 expect state page actions
 expect state selected Edit steps
@@ -41,9 +42,16 @@ expect state selected + Add step
 press Enter
 expect state page member
 expect state selected Test Fighter
+press Down 2
+expect state selected Test Medic
 press Enter
 expect state page command
 expect state selected attack
+press Down
+press Enter
+expect state page pick
+press Down 4
+expect statehas selected Glint
 press Enter
 expect state page target
 press Down 3
@@ -53,7 +61,7 @@ expect state page targetenemy
 expect state selected Enemy 1
 press Enter
 expect state page steps
-expect state macro.Duo Test Fighter: attack -> enemy 1
+expect state macro.Duo Test Medic: Glint -> enemy 1
 
 # Step two: the mystic's Spark at the same position.
 press Down
@@ -70,7 +78,7 @@ press Enter
 press Down 3
 press Enter
 press Enter
-expect state macro.Duo Test Fighter: attack -> enemy 1 / Test Mystic: Spark -> enemy 1
+expect state macro.Duo Test Medic: Glint -> enemy 1 / Test Mystic: Spark -> enemy 1
 shot build/shots/macro_steps.png
 
 # The mystic's step moved first.
@@ -80,7 +88,7 @@ expect state page stepactions
 press Down
 expect state selected Move up
 press Enter
-expect state macro.Duo Test Mystic: Spark -> enemy 1 / Test Fighter: attack -> enemy 1
+expect state macro.Duo Test Mystic: Spark -> enemy 1 / Test Medic: Glint -> enemy 1
 expect state selected Test Mystic: Spark -> enemy 1
 
 # Renamed, moved up a place and made the auto macro.
@@ -124,16 +132,32 @@ press Down 6
 press Enter
 press Down 2
 press Enter
-# Confirm plays the round's lines at once: the mystic acts first, as the macro now says.
+# Confirm plays the round's lines at once: the mystic's Spark and the medic's Glint, back to back as the macro says,
+# make the Twin Arc combination.
 press Enter
-expect statehas battlelog Test Mystic uses Spark
+expect statehas battlelog Combo: Twin Arc.
 wait 30
 press Down 7
 press Enter
 pressuntil Enter Field 4000
 expect mode Field
 
+# The combo log: the combination the macro found, made into a macro of its own.
+press M
+press Right 6
+expect state tab Combos
+expect statehas selected Twin Arc
+press Enter
+expect toast Made the macro Twin Arc.
+press Enter
+expect toast There is already a macro named Twin Arc.
+shot build/shots/combo_make_macro.png
+press Left
+expect state tab Macros
+expect state macros opener(5), tempest(5), Pair(2)*, regroup(5), Twin Arc(2)
+
 # Deleted: No at the confirm keeps it, Yes removes it and turns auto-battle's macro off.
+press Escape
 press M
 press Right 5
 press Down 2
@@ -146,11 +170,11 @@ expect state prompt Delete the macro Pair?
 shot build/shots/macro_delete.png
 press Enter
 expect state prompt none
-expect state macros opener(5), tempest(5), Pair(2)*, regroup(5)
+expect state macros opener(5), tempest(5), Pair(2)*, regroup(5), Twin Arc(2)
 press Enter
 press Up
 press Enter
-expect state macros opener(5), tempest(5), regroup(5)
+expect state macros opener(5), tempest(5), regroup(5), Twin Arc(2)
 expect state auto_macro -
 expect toast Deleted Pair.
 expect state page list

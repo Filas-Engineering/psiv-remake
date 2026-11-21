@@ -3,6 +3,7 @@
 	"kind": "dungeon",
 	"encounter_mode": "visible",
 	"step_ms": 250,
+	"music": "field_bell_shore",
 	"map": [
 		"######.#####",
 		"#..........#",

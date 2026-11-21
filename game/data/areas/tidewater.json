@@ -3,6 +3,7 @@
 	"kind": "town",
 	"encounter_mode": "visible",
 	"step_ms": 250,
+	"music": "town_tide_bells",
 	"map": [
 		"##############",
 		"#............#",

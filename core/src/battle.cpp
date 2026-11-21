@@ -78,7 +78,10 @@ std::string checkMember(const Database& db, const PartyMember& member) {
 	return "";
 }
 
-Combatant fromMember(const Database& db, const CharacterDef& def, const PartyMember& member) {
+}
+
+Combatant memberCombatant(const Database& db, const PartyMember& member) {
+	const CharacterDef& def = *db.character(member.characterId);
 	Combatant c;
 	c.defId = def.id;
 	c.name = member.name.empty() ? def.name : member.name;
@@ -112,6 +115,8 @@ Combatant fromMember(const Database& db, const CharacterDef& def, const PartyMem
 	}
 	return c;
 }
+
+namespace {
 
 std::string checkScriptedEnd(const ScriptedEnd& end, int enemyCount) {
 	switch (end.kind) {
@@ -177,7 +182,7 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 		if (!memberError.empty()) {
 			return Result<Battle>::failure(memberError);
 		}
-		battle.combatants_.push_back(fromMember(rulesDb, *def, member));
+		battle.combatants_.push_back(memberCombatant(rulesDb, member));
 		battle.combatants_.back().aboard = setup.flags.vehicleBattle;
 	}
 	if (const VehicleDef* vehicle = setup.flags.vehicleBattle ? rulesDb.vehicle(setup.vehicle) : nullptr) {
@@ -215,7 +220,7 @@ Battle Battle::partyOnly(const Database& db, const std::vector<PartyMember>& par
 	battle.db_ = std::shared_ptr<const Database>(std::shared_ptr<const Database>(), &db);
 	battle.partyCount_ = static_cast<int>(party.size());
 	for (const PartyMember& member : party) {
-		battle.combatants_.push_back(fromMember(db, *db.character(member.characterId), member));
+		battle.combatants_.push_back(memberCombatant(db, member));
 	}
 	battle.commands_.resize(battle.combatants_.size());
 	battle.forced_.assign(battle.combatants_.size(), false);

@@ -76,7 +76,7 @@ public static class Synth
 		Mood mood = id.StartsWith("battle", StringComparison.Ordinal) ? Mood.Driving
 			: id.StartsWith("dungeon_", StringComparison.Ordinal) ? Mood.Dark
 			: id.StartsWith("town_", StringComparison.Ordinal) ? Mood.Bright
-			: id == "title" ? Mood.Calm
+			: id.StartsWith("title", StringComparison.Ordinal) ? Mood.Calm
 			: (Mood)rng.Range(4);
 		int bpm = mood switch
 		{

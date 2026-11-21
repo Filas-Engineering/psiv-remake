@@ -37,6 +37,7 @@ Every problem in a map is printed as `MAP.tmj: text`, all of them in one run, an
 | `kind` | string | `kind` (`town`, `field`, `dungeon`) |
 | `encounter_mode` | string | `encounter_mode` (`visible`, `random`) |
 | `step_ms` | int | `step_ms` |
+| `music` | string | `music` (an audio id from `game.json`) |
 
 A property left out is left out of the area, so the game's default applies. Any other map property is refused.
 

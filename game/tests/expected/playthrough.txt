@@ -224,6 +224,8 @@ Saved to manual_0.
 menu> close
 field> walk 13 4
 You arrive at Reed Path.
+~ Test Mystic: Every step out here squelches. I am counting them.
+~ Test Medic: Count the bites instead. I am the one who has to dress them.
 [Autosaved to auto_0 (area entry).]
 field> walk cache_front
 Battle!
@@ -416,6 +418,7 @@ Mode field, Reed Path (17,6) facing north, play time 0:01:37.
 field> set auto tempest
 field> walk 19 4
 You arrive at Bell Cove.
+~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
 [Autosaved to auto_1 (area entry).]
 field> status
 Mode field, Bell Cove (1,4) facing east, play time 0:01:38.
@@ -762,6 +765,7 @@ Outcome: victory
 Victory. 30 experience, 22 money.
 The enemies dropped 1 Wake Chime.
 You arrive at Tidewater Landing.
+~ Test Medic: Supper at the harbor, then. I hear the guide promised.
 [Autosaved to auto_0 (area entry).]
 field> walk dock_front
 field> face north

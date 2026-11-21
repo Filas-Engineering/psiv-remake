@@ -171,7 +171,7 @@ public sealed unsafe class GameSession : IDisposable
 	{
 		Must(Native.GameInfoGet(_handle, out PsivGameInfo i));
 		return new GameInfo(Native.Str(i.Title), Native.Str(i.GameBuild), i.RulesVersion, i.TickMs, i.RoundMs, i.ManualSlots, i.AutosaveSlots, i.ItemCap,
-			i.MoneyCap, Native.Strs(i.Languages, i.LanguageCount));
+			i.MoneyCap, Native.Strs(i.Languages, i.LanguageCount), Native.Str(i.TitleMusic), Native.Str(i.VictoryMusic), Native.Str(i.DefeatMusic));
 	}
 
 	public Profile Profile()
@@ -218,6 +218,17 @@ public sealed unsafe class GameSession : IDisposable
 
 	public PsivResult SetSettings(string difficulty, RewardMultiplier reward) => Result(Native.SettingsSet(_handle, difficulty, (int)reward));
 
+	public Difficulties Difficulties()
+	{
+		Must(Native.Difficulties(_handle, out IntPtr p, out int count, out int canChange));
+		var list = new List<Difficulty>(count);
+		foreach (PsivDifficulty d in Native.Span<PsivDifficulty>(p, count))
+		{
+			list.Add(new Difficulty(Native.Str(d.Id), Native.Str(d.Name), Native.Str(d.Description), d.RewardPercent));
+		}
+		return new Difficulties(list, canChange != 0);
+	}
+
 	public PsivResult SetAutoMacro(string? macro) => Result(Native.SettingsSetAutoMacro(_handle, macro));
 
 	public IReadOnlyList<string> Macros()
@@ -257,6 +268,10 @@ public sealed unsafe class GameSession : IDisposable
 
 	public PsivResult RemoveMacroStep(string macro, int index) => Result(Native.MacroRemoveStep(_handle, macro, index));
 	public PsivResult MoveMacroStep(string macro, int from, int to) => Result(Native.MacroMoveStep(_handle, macro, from, to));
+
+	// A new macro from a discovered combination (a ComboEntry's Recipe): its abilities in the recipe's order, each given
+	// to a lineup member who knows it now.
+	public PsivResult MacroFromCombo(string recipe, string name) => Result(Native.MacroFromCombo(_handle, recipe, name));
 
 	// Title and saves
 
@@ -321,7 +336,7 @@ public sealed unsafe class GameSession : IDisposable
 			return null;
 		}
 		return new FieldInfo(Native.Str(f.AreaId), Native.Str(f.AreaName), (AreaKind)f.AreaKind, (EncounterMode)f.EncounterMode, f.Width, f.Height, f.StepMs,
-			f.LeaderX, f.LeaderY, (Direction)f.Facing, f.PlayerControl != 0, f.GraceMs);
+			f.LeaderX, f.LeaderY, (Direction)f.Facing, f.PlayerControl != 0, f.GraceMs, Native.Str(f.Music));
 	}
 
 	public IReadOnlyList<string> FieldRows()
@@ -418,7 +433,18 @@ public sealed unsafe class GameSession : IDisposable
 
 	private static PresentationAction ToAction(in PsivAction a) =>
 		new(a.Handle, (ActionPhase)a.Phase, (ActionType)a.Type, Native.Str(a.Subject), Native.Str(a.Target), Native.Str(a.Slot), a.HasPosition != 0, a.X, a.Y, a.Z,
-			a.Seconds, a.Speed, a.Strength, a.Loop != 0, a.Instant != 0, Native.Str(a.Description));
+			a.Seconds, a.Speed, a.Strength, a.Loop != 0, a.Instant != 0, Native.Str(a.Description), a.Duration);
+
+	public IReadOnlyList<Camera> Cameras()
+	{
+		Must(Native.Cameras(_handle, out IntPtr p, out int count));
+		var list = new List<Camera>(count);
+		foreach (PsivCamera c in Native.Span<PsivCamera>(p, count))
+		{
+			list.Add(new Camera(Native.Str(c.Id), (CameraTarget)c.Target, Native.Str(c.Area), Native.Str(c.Marker), Native.Str(c.Follow), c.Zoom));
+		}
+		return list;
+	}
 
 	public IReadOnlyList<PresentationAction> PollActions()
 	{
@@ -482,7 +508,7 @@ public sealed unsafe class GameSession : IDisposable
 			return null;
 		}
 		return new BattleInfo(b.Live != 0, Native.Str(b.Encounter), (BattleSource)b.Source, b.Round, b.PartyCount, b.CombatantCount, (Outcome)b.Outcome,
-			b.EscapeAllowed != 0, b.AutoActive != 0, b.PartyActsNextRound != 0, b.GameOver != 0);
+			b.EscapeAllowed != 0, b.AutoActive != 0, b.PartyActsNextRound != 0, b.GameOver != 0, Native.Str(b.Music));
 	}
 
 	public IReadOnlyList<Combatant> Combatants()
@@ -702,6 +728,37 @@ public sealed unsafe class GameSession : IDisposable
 		return new MemberDetail(Native.Str(d.Id), d.ExperienceToNext, d.Critical, d.Evasion, (Element)d.AttackElement, bonuses, affinities, resists);
 	}
 
+	private static StatBonus ToBonus(in PsivStatBonus b) => new(b.MaxHp, b.MaxTp, b.Strength, b.Mental, b.Agility, b.Dexterity, b.Defense, b.Critical, b.Evasion);
+
+	private static IReadOnlyList<StatusResist> Resists(IntPtr p, int count)
+	{
+		var list = new List<StatusResist>(count);
+		foreach (PsivStatusResist r in Native.Span<PsivStatusResist>(p, count))
+		{
+			list.Add(new StatusResist(Native.Str(r.Id), Native.Str(r.Name), r.Percent));
+		}
+		return list;
+	}
+
+	private static CombatView ToCombat(in PsivCombatView v) =>
+		new(ToBonus(v.Stats), Native.Str(v.BasicAttack), Native.Str(v.BasicAttackName), (Element)v.AttackElement, Native.Strs(v.Abilities, v.AbilityCount),
+			Native.Strs(v.AbilityNames, v.AbilityCount), Resists(v.StatusResists, v.StatusResistCount));
+
+	// Any equipment piece, held or not; null for a character not in the roster or an id that is not equipment.
+	public EquipPreview? EquipPreview(string member, string piece)
+	{
+		if (!Read(Native.EquipPreviewGet(_handle, member, piece, out PsivEquipPreview p)))
+		{
+			return null;
+		}
+		string key = Native.Str(p.RefusalKey);
+		PsivError? refusal = key.Length == 0 ? null : new PsivError(PsivStatus.Refused, key, [], Native.Str(p.RefusalText));
+		return new EquipPreview(Native.Str(p.Member), Native.Str(p.Piece), Native.Str(p.PieceName), (EquipSlot)p.Slot, Native.Str(p.Category), ToBonus(p.Bonus),
+			(Element)p.Element, Native.Str(p.Attack), Native.Str(p.AttackName), Native.Strs(p.Granted, p.GrantedCount), Native.Strs(p.GrantedNames, p.GrantedCount),
+			Resists(p.PieceResists, p.PieceResistCount), Native.Str(p.Replaces), Native.Str(p.ReplacesName), p.CanWear != 0, refusal,
+			Native.Strs(p.Wearers, p.WearerCount), Native.Strs(p.WearerNames, p.WearerCount), ToCombat(p.Before), ToCombat(p.After));
+	}
+
 	public ComboLog ComboLog()
 	{
 		Must(Native.ComboLog(_handle, out IntPtr p, out int count, out int total));
@@ -717,9 +774,10 @@ public sealed unsafe class GameSession : IDisposable
 	private static InventoryEntry ToEntry(in PsivInventoryEntry e) =>
 		new(Native.Str(e.Id), Native.Str(e.Name), e.Count, e.Equipment != 0, e.Field != 0, e.TargetingOrSlot, e.Price);
 
-	public IReadOnlyList<InventoryEntry> Inventory()
+	// Items in id order, then unworn pieces in id order; another ItemSort lists them as one sorted list.
+	public IReadOnlyList<InventoryEntry> Inventory(ItemSort order = ItemSort.Id)
 	{
-		Must(Native.Inventory(_handle, out IntPtr p, out int count));
+		Must(Native.InventorySorted(_handle, (int)order, out IntPtr p, out int count));
 		var list = new List<InventoryEntry>(count);
 		foreach (PsivInventoryEntry e in Native.Span<PsivInventoryEntry>(p, count))
 		{
@@ -860,6 +918,9 @@ public sealed unsafe class GameSession : IDisposable
 		Must(Native.DisplayName(_handle, id, out IntPtr text));
 		return Native.Str(text);
 	}
+
+	// "" when the profile's language has no description for it; null when the battle data has no such id of that kind.
+	public string? Description(DescriptionKind kind, string id) => Read(Native.Description(_handle, (int)kind, id, out IntPtr text)) ? Native.Str(text) : null;
 
 	public string StringText(string id)
 	{

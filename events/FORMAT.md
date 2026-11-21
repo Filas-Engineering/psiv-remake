@@ -384,7 +384,7 @@ duration move 1.5      # every move
 duration move traveler 2.5   # moves of one actor
 ```
 
-`duration` takes an action name, an optional subject (actor, camera, panel or track) and seconds. The action names are `move`, `face`, `anim`, `show`, `hide`, `panel_show`, `panel_hide`, `panel_clear`, `camera_cut`, `camera_move`, `fade_in`, `fade_out`, `shake`, `music_play`, `music_stop`, `music_fade`, `ambient_play`, `ambient_stop`, `sound` and `warp`. Menus and rests take no time. An action with no `duration` lasts the seconds written in the script (fades, camera moves, shakes, music fades), or no time at all.
+`duration` takes an action name, an optional subject (actor, camera, panel or track) and seconds. The action names are `move`, `face`, `anim`, `show`, `hide`, `panel_show`, `panel_hide`, `panel_clear`, `camera_cut`, `camera_move`, `fade_in`, `fade_out`, `shake`, `music_play`, `music_stop`, `music_fade`, `ambient_play`, `ambient_stop`, `sound` and `warp`. Menus and rests take no time. An action with no `duration` lasts the seconds written in the script (fades, camera moves, shakes, music fades), or no time at all. The game's data carries the same table (`presentation.durations` in `game.json`, see `../game/README.md`), and the game reports each action's seconds by this rule (`events::action_seconds`), so an engine and this tool time a scene alike.
 
 ## Lint
 

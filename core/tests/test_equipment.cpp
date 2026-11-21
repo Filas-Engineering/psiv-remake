@@ -169,3 +169,34 @@ TEST(equipmentMovesBetweenTheBagAndMembers) {
 	unequip(fighter, db, bag, EquipSlot::Weapon);
 	CHECK(bag.count("copper_blade") == 0);
 }
+
+TEST(memberCombatantIsWhatABattleSetsUp) {
+	const Database& db = data();
+	BattleSetup setup = makeSetup(db, {"gel_mite"}, 3);
+	setup.party[kScout].hp = 20;
+	setup.party[kMystic].statuses.push_back({"poison", 0});
+	const Battle battle = makeBattle(db, setup);
+	for (int i = 0; i < static_cast<int>(setup.party.size()); ++i) {
+		const Combatant built = memberCombatant(db, setup.party[i]);
+		const Combatant& fought = battle.combatant(i);
+		CHECK_EQ(built.defId, fought.defId);
+		CHECK_EQ(built.stats.maxHp, fought.stats.maxHp);
+		CHECK_EQ(built.stats.strength, fought.stats.strength);
+		CHECK_EQ(built.stats.mental, fought.stats.mental);
+		CHECK_EQ(built.stats.dexterity, fought.stats.dexterity);
+		CHECK_EQ(built.stats.defense, fought.stats.defense);
+		CHECK_EQ(built.stats.critical, fought.stats.critical);
+		CHECK_EQ(built.hp, fought.hp);
+		CHECK_EQ(built.basicAttack, fought.basicAttack);
+		CHECK(built.attackElement == fought.attackElement);
+		CHECK_EQ(built.abilities, fought.abilities);
+		CHECK(built.statusResist == fought.statusResist);
+		CHECK(built.affinities == fought.affinities);
+		CHECK_EQ(built.statuses.size(), fought.statuses.size());
+	}
+	// The scout's sling replaces the basic attack; the mystic's rod and charm give the element and the resistance.
+	CHECK_EQ(memberCombatant(db, setup.party[kScout]).basicAttack, std::string("scatter_shot"));
+	const Combatant mystic = memberCombatant(db, setup.party[kMystic]);
+	CHECK(mystic.attackElement == Element::Heat);
+	CHECK_EQ(mystic.resistance("sleep"), 100);
+}

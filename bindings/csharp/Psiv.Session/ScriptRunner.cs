@@ -64,6 +64,7 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 				NoticeKind.Action => "  (" + n.Text + ")",
 				NoticeKind.Warning => "! " + n.Text,
 				NoticeKind.Autosave => "[" + n.Text + "]",
+				NoticeKind.Ambient => "~ " + n.Text,
 				_ => n.Text,
 			});
 		}

@@ -120,3 +120,69 @@ TEST(finishingTheStoryWritesTheClearDataRecord) {
 	CHECK_EQ(record.value->roster[0].level, 30);
 	CHECK(!parseClearRecord(serializeSave(s.makeSave(false))).ok());
 }
+
+namespace {
+
+// Walks out of the area through its exit to `area`.
+void walkOut(Session& s, const std::string& area) {
+	for (const Exit& e : s.area()->exits) {
+		if (e.toArea == area) {
+			PathWalk walk = s.beginWalk(e.at);
+			while (s.walkStep(walk) == WalkStatus::Walking) {
+				test::confirmLines(s);
+			}
+			return;
+		}
+	}
+}
+
+int ambientLines(const std::vector<Output>& output) {
+	return static_cast<int>(std::count_if(output.begin(), output.end(), [](const Output& o) { return o.kind == OutputKind::Ambient; }));
+}
+
+}
+
+TEST(partyTalkComesUpByItselfOnceAnAreaUnderEachSet) {
+	Session s(test::data(), SessionOptions());
+	test::placeParty(s, "tidewater", "east_gate", Facing::East);
+	World& w = s.world();
+	w.flags["tidewater.met_guide"] = true;
+	w.flags["reed.scout_joined"] = true;
+	for (const std::string& id : {"mystic", "medic"}) {
+		w.roster.push_back(rules::makePartyMember(test::data().db, *test::data().db.character(id), 3));
+		w.lineup.push_back(id);
+	}
+	walkOut(s, "reed_path");
+	CHECK_EQ(s.world().area, std::string("reed_path"));
+	const std::vector<Output> arrived = s.drainOutput();
+	CHECK_EQ(ambientLines(arrived), 2);
+	CHECK(test::outputHas(arrived, "Test Mystic: Every step out here squelches."));
+	CHECK(s.mode() == Mode::Field && s.world().playerControl);
+	CHECK(s.world().ambientHeard.count("reeds@reed_path"));
+
+	// Back and in again: the reeds set has been heard; Tidewater falls under the chapter set, heard once there.
+	walkOut(s, "tidewater");
+	CHECK_EQ(ambientLines(s.drainOutput()), 1);
+	walkOut(s, "reed_path");
+	CHECK_EQ(ambientLines(s.drainOutput()), 0);
+	CHECK(s.world().ambientHeard == (std::set<std::string>{"chapter_one@tidewater", "reeds@reed_path"}));
+	rules::Result<SaveFile> saved = parseSave(serializeSave(s.makeSave(false)));
+	CHECK(saved.ok() && saved.value->world.ambientHeard == s.world().ambientHeard);
+	// Asked for, party talk still plays the same set.
+	CHECK(s.partyTalk().empty());
+	CHECK_EQ(ambientLines(s.drainOutput()), 0);
+
+	// Turned off in the profile, nothing comes up.
+	Session quiet(test::data(), SessionOptions());
+	Profile p = quiet.profile();
+	p.ambientTalk = false;
+	CHECK(quiet.setProfile(p).empty());
+	test::placeParty(quiet, "tidewater", "east_gate", Facing::East);
+	quiet.world().flags["tidewater.met_guide"] = true;
+	quiet.world().lineup.push_back("mystic");
+	quiet.world().roster.push_back(rules::makePartyMember(test::data().db, *test::data().db.character("mystic"), 3));
+	walkOut(quiet, "reed_path");
+	CHECK_EQ(quiet.world().area, std::string("reed_path"));
+	CHECK_EQ(ambientLines(quiet.drainOutput()), 0);
+	CHECK(quiet.world().ambientHeard.empty());
+}

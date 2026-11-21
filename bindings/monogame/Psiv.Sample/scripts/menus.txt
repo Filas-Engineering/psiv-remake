@@ -28,6 +28,7 @@ shot build/shots/menu_stats.png
 press Right
 expect state page abilities
 expect state selected Rally Cry
+expect state description A shout that raises the whole party's strength.
 press Down
 expect state selected Focus Shot
 shot build/shots/menu_abilities.png
@@ -52,6 +53,8 @@ expect state page members
 press Right
 expect state tab Items
 expect state selected Tonic x3
+expect state description A bitter herbal draught. Restores 30 HP to one ally.
+shot build/shots/menu_items.png
 press Enter
 expect state page target
 press Down
@@ -74,6 +77,28 @@ press Enter
 expect state page slots
 expect state selected weapon: -
 shot build/shots/menu_equip_change.png
+press Enter
+expect state selected Copper Blade x1
+expect statehas description beaten copper
+expect statehas compare Strength
+expect statehas compare Critical
+shot build/shots/menu_equip_compare.png
+press Escape
+press Escape
+expect state page members
+
+# The mystic cannot wear the blade: it is marked, and the comparison says so.
+press Down
+press Enter
+press Enter
+expect state page pieces
+expect state selected Copper Blade x1  (cannot wear)
+expect state compare cannot wear
+shot build/shots/menu_equip_cannot.png
+press Escape
+press Escape
+press Up
+press Enter
 press Enter
 expect state selected Copper Blade x1
 press Enter
@@ -198,8 +223,12 @@ press Up
 press Right 3
 expect state volumes 80 80 80
 press Down 3
-expect state selected Difficulty: original
+expect state selected Difficulty: Original
+shot build/shots/menu_options_difficulty.png
 press Right
+expect state difficulty hard
+expect state selected Difficulty: Hard
+press Left
 expect state difficulty original
 press Down
 press Right
@@ -212,5 +241,37 @@ shot build/shots/menu_options.png
 press Escape
 expect screen Menu
 expect state tab Options
+press Escape
+expect screen Field
+
+# Items: three kinds bought at the stall, then the page sorted by kind, name and count and back to id order.
+cmd walk stall_front
+press Up
+wait 3
+press Enter
+expect screen Shop
+cmd buy clear_gel 2
+cmd buy spark_flask 1
+press Escape
+expect screen Field
+press M
+press Right
+expect state tab Items
+expect state itemsort id
+expect state selected Clear Gel x2
+press T
+expect state itemsort kind
+expect state selected Clear Gel x2
+press Down 2
+expect state selected Spark Flask x1  (battle only)
+press T
+expect state itemsort name
+expect state selected Clear Gel x2
+press T
+expect state itemsort count
+expect state selected Tonic x3
+shot build/shots/menu_items_sorted.png
+press T
+expect state itemsort id
 press Escape
 expect screen Field

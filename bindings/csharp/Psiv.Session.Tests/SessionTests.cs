@@ -155,6 +155,10 @@ public class NativeLayoutTests
 		Same<PsivStatusResist>("psiv_status_resist");
 		Same<PsivMemberDetail>("psiv_member_detail");
 		Same<PsivComboEntry>("psiv_combo_entry");
+		Same<PsivCombatView>("psiv_combat_view");
+		Same<PsivEquipPreview>("psiv_equip_preview");
+		Same<PsivDifficulty>("psiv_difficulty");
+		Same<PsivCamera>("psiv_camera");
 		Assert.Equal(0u, Native.SizeOf("no_such_struct"));
 	}
 
@@ -586,5 +590,163 @@ public class SessionTests
 		Assert.Equal(("twin_arc", "Twin Arc"), (twin.Recipe, twin.ResultName));
 		Assert.Equal(["medic", "mystic"], twin.Participants);
 		Assert.Equal(["Glint", "Spark"], twin.AbilityNames);
+
+		if (s.Mode == Mode.Battle)
+		{
+			s.PlayBattle();
+		}
+		Settle(s);
+		Assert.Equal(Mode.Field, s.Mode);
+		Assert.True(s.OpenMenu().Ok);
+		Assert.Equal("game.refuse.combo_not_found", s.MacroFromCombo("storm_spark", "Storm").Error!.Key);
+		Assert.True(s.MacroFromCombo(twin.Recipe, "Twin").Ok);
+		Macro made = s.MacroList().Single(m => m.Name == "Twin");
+		Assert.Equal([("medic", "glint"), ("mystic", "spark")], made.Steps.Select(x => (x.Member, x.Id)));
+	}
+
+	private static GameSession AfterGuide(string saves)
+	{
+		GameSession s = NewSession(Paths.FreshDirectory(saves));
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "guide_front"));
+		Assert.True(s.Face(Direction.North).Ok);
+		Assert.True(s.Interact().Ok);
+		Settle(s);
+		Assert.True(s.EnterName("Bryn").Ok);
+		Settle(s);
+		Assert.Equal(Mode.Field, s.Mode);
+		return s;
+	}
+
+	[Fact]
+	public void EquipmentIsComparedBeforeItGoesOn()
+	{
+		using GameSession s = AfterGuide("preview");
+		EquipPreview plate = s.EquipPreview("fighter", "rivet_plate")!;
+		Assert.Equal(("Rivet Plate", EquipSlot.Body, "padded_coat", true), (plate.PieceName, plate.Slot, plate.Replaces, plate.CanWear));
+		Assert.Equal((6, 20, -2), (plate.Bonus.Defense, plate.Bonus.MaxHp, plate.Bonus.Agility));
+		Assert.Equal(3, plate.After.Stats.Defense - plate.Before.Stats.Defense);
+		Assert.Equal(["Bryn"], plate.WearerNames);
+		Assert.Null(plate.Refusal);
+		Assert.Equal(s.MemberDetail("fighter")!.Critical, plate.Before.Stats.Critical);
+
+		EquipPreview ring = s.EquipPreview("mystic", "spark_ring")!;
+		Assert.Equal(["Glint"], ring.GrantedNames);
+		Assert.Contains("glint", ring.After.Abilities);
+		Assert.DoesNotContain("glint", ring.Before.Abilities);
+		Assert.Equal(new StatusResist("sleep", "Sleep", 100), Assert.Single(ring.Before.StatusResists));
+		Assert.Empty(ring.After.StatusResists);
+
+		EquipPreview sling = s.EquipPreview("fighter", "volley_sling")!;
+		Assert.False(sling.CanWear);
+		Assert.Equal("equip.wrong_category", sling.Refusal!.Key);
+		Assert.Equal((sling.Before.Stats, sling.Before.BasicAttack), (sling.After.Stats, sling.After.BasicAttack));
+		Assert.Equal("Scatter Shot", sling.AttackName);
+		Assert.Null(s.EquipPreview("scout", "tin_cap"));
+		Assert.Null(s.EquipPreview("fighter", "tonic"));
+	}
+
+	[Fact]
+	public void DescriptionsFollowTheProfileLanguage()
+	{
+		using GameSession s = NewSession();
+		Assert.Equal("A bitter herbal draught. Restores 30 HP to one ally.", s.Description(DescriptionKind.Item, "tonic"));
+		Assert.Equal("A snap of lightning at one foe.", s.Description(DescriptionKind.Ability, "spark"));
+		Assert.Contains("Gear Lock", s.Description(DescriptionKind.Item, "loosen_oil"));
+		Assert.NotEmpty(s.Description(DescriptionKind.Enemy, "brass_warden")!);
+		Assert.Null(s.Description(DescriptionKind.Enemy, "tonic"));
+		Assert.Equal("difficulty", GameSession.NameOf(NameKind.DescriptionKind, (int)DescriptionKind.Difficulty));
+		Assert.True(s.SetProfileValue("text_language", "ja").Ok);
+		Assert.Equal("なめらかな石のお守り。眠らされなくなる。", s.Description(DescriptionKind.Equipment, "calm_charm"));
+	}
+
+	[Fact]
+	public void TheBagIsListedInFixedOrders()
+	{
+		using GameSession s = AfterGuide("sort");
+		Assert.True(s.OpenMenu().Ok);
+		Assert.True(s.Unequip("fighter", EquipSlot.Weapon).Ok);
+		Assert.True(s.Unequip("fighter", EquipSlot.Head).Ok);
+		Assert.Equal(["tonic", "copper_blade", "tin_cap"], s.Inventory().Select(i => i.Id));
+		Assert.Equal(["Copper Blade", "Tin Cap", "Tonic"], s.Inventory(ItemSort.Name).Select(i => i.Name));
+		Assert.Equal(["tonic", "copper_blade", "tin_cap"], s.Inventory(ItemSort.Count).Select(i => i.Id));
+		Assert.Equal([false, true, true], s.Inventory(ItemSort.Kind).Select(i => i.IsEquipment));
+		Assert.Equal("count", GameSession.NameOf(NameKind.ItemSort, (int)ItemSort.Count));
+	}
+
+	[Fact]
+	public void DifficultyPresetsAreListedAndChangeOnlyInAGame()
+	{
+		using GameSession s = NewSession();
+		Difficulties at = s.Difficulties();
+		Assert.False(at.CanChange);
+		Assert.Equal(["hard", "original"], at.Presets.Select(d => d.Id));
+		Assert.Equal(("Hard", 120), (at.Presets[0].Name, at.Presets[0].RewardPercent));
+		Assert.Contains("smarter", at.Presets[0].Description);
+		Assert.Equal("game.refuse.settings_no_game", s.SetSettings("hard", RewardMultiplier.X1).Error!.Key);
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.True(s.Difficulties().CanChange);
+		Assert.True(s.SetSettings("hard", RewardMultiplier.X1).Ok);
+		Assert.Equal("hard", s.Settings().Difficulty);
+	}
+
+	[Fact]
+	public void CamerasMusicAndDurationsComeFromTheData()
+	{
+		using GameSession s = NewSession();
+		Camera east = s.Cameras().Single(c => c.Id == "lookout_east");
+		Assert.Equal((CameraTarget.Marker, "reed_path", "lookout_east", 1.25), (east.Target, east.Area, east.Marker, east.Zoom));
+		Camera peddler = s.Cameras().Single(c => c.Id == "peddler");
+		Assert.Equal((CameraTarget.Follow, "peddler", 1.5), (peddler.Target, peddler.Follow, peddler.Zoom));
+		GameInfo info = s.GameInfo();
+		Assert.Equal(("title_harbor_dawn", "victory_bright_sail", "defeat_low_tide"), (info.TitleMusic, info.VictoryMusic, info.DefeatMusic));
+		Assert.True(s.NewGame().Ok);
+		IReadOnlyList<PresentationAction> arrival = s.PollActions();
+		Assert.Equal(1.0, arrival.First(a => a.Type == ActionType.FadeIn).Duration);
+		Settle(s);
+		Assert.Equal("town_tide_bells", s.FieldInfo()!.Music);
+		Assert.Equal("leader", GameSession.NameOf(NameKind.CameraTarget, (int)CameraTarget.Leader));
+
+		// Onto the reed path: its own track, and the lookout on the wall in its corner, talked to from below.
+		FieldExit gate = s.Field()!.Exits.Single(x => x.ToArea == "reed_path");
+		Assert.True(s.WalkTo(gate.X, gate.Y).Ok);
+		while (s.WalkStep() == WalkStatus.Walking)
+		{
+			Settle(s);
+		}
+		Settle(s);
+		FieldView reeds = s.Field()!;
+		Assert.Equal(("reed_path", "field_marsh_reeds"), (reeds.Info.AreaId, reeds.Info.Music));
+		Assert.Equal(CellFlags.Wall, reeds.Cell(1, 1) & CellFlags.TerrainMask);
+		Assert.Contains(reeds.Points, p => p.Kind == PointKind.Talk && p.Id == "lookout" && (p.X, p.Y) == (1, 1));
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "lookout_front"));
+		Assert.True(s.Face(Direction.North).Ok);
+		s.PollActions();
+		Assert.True(s.Interact().Ok);
+		Settle(s);
+		Assert.Equal(Mode.Battle, s.Mode);
+		Assert.Equal("battle_marsh_ambush", s.BattleInfo()!.Music);
+		Assert.Equal(0.5, s.PollActions().Single(a => a.Type == ActionType.PanelShow && a.Subject == "ladder").Duration);
+	}
+
+	[Fact]
+	public void PartyTalkComesUpByItselfOnArrival()
+	{
+		using GameSession s = AfterGuide("ambient");
+		s.DrainNotices();
+		FieldExit gate = s.Field()!.Exits.Single(x => x.ToArea == "reed_path");
+		Assert.True(s.WalkTo(gate.X, gate.Y).Ok);
+		while (s.WalkStep() == WalkStatus.Walking)
+		{
+			Settle(s);
+		}
+		Settle(s);
+		Notice[] ambient = s.DrainNotices().Where(n => n.Kind == NoticeKind.Ambient).ToArray();
+		Assert.Equal(["talk.reeds.1", "talk.reeds.2"], ambient.Select(n => n.Key));
+		Assert.StartsWith("Test Mystic: ", ambient[0].Text);
+		Assert.Equal(Mode.Field, s.Mode);
+		Assert.Equal("ambient", GameSession.NameOf(NameKind.NoticeKind, (int)NoticeKind.Ambient));
 	}
 }

@@ -1,4 +1,5 @@
 # The reed path's lookout: comic panels over the dimmed field, each showing the live scene through a named camera,
+# framed where game.json aims it at its zoom (cells of 48 px times the zoom, a third more for the scene's camera),
 # with the dialogue box over them, a camera move that pushes one panel in, a shake, and a battle in the middle of
 # the scene. The event waits on each panel's transition; a skip and a load of the pre-battle autosave put the same
 # panels, camera and sound back as watching left them. With --window the shot lines save screenshots under
@@ -33,6 +34,7 @@ wait 10
 shot build/shots/panels_1_sliding.png
 wait 14
 expect state panels west top_left lookout_west, east top_right lookout_east
+expect state paneltiles west 48, east 60
 expect statehas line Tidewater's lamps
 # Over two top panels the box keeps to the bottom, clear of both.
 expect state dialogue bottom
@@ -42,6 +44,7 @@ shot build/shots/panels_2_two.png
 press Enter
 wait 30
 expect state panels west top_left lookout_west, east top_right lookout_east, cart wide_bottom peddler
+expect state paneltiles west 48, east 60, cart 72
 expect pose peddler wave
 expect state line -
 shot build/shots/panels_3_cart.png
@@ -60,6 +63,7 @@ expect state panels west top_left lookout_west, east top_right lookout_east
 shot build/shots/panels_5_moving.png
 wait 50
 expect state camera lookout_east
+expect state paneltiles west 48, east 80
 expect statehas line The skimmer's boiler
 shot build/shots/panels_6_pushed_in.png
 # A creak and a shake of strength 0.6 together: the view moves up to 6 pixels, easing off over 0.8 seconds, so 5 a few
@@ -72,11 +76,12 @@ shot build/shots/panels_7_shake.png
 wait 50
 expect state shake 0
 expect statehas line Grab the rail
-# Cleared, then one panel in the middle on the ladder. The box covers the center panel either way, so it keeps to
-# the bottom.
+# Cleared, then one panel in the middle on the ladder, which game.json gives half a second to come in. The box covers
+# the center panel either way, so it keeps to the bottom.
 press Enter
-wait 50
+wait 60
 expect state panels ladder center lookout_front
+expect state paneltiles ladder 36
 expect statehas line far too many legs
 expect state dialogue bottom
 shot build/shots/panels_8_center.png
@@ -91,7 +96,7 @@ wait 2
 expect screen Title
 expect state panels none
 expect state camera -
-expect state music title
+expect state music title_harbor_dawn
 cmd load auto_2
 wait 2
 expect screen Battle
@@ -119,7 +124,7 @@ press Enter
 wait 2
 expect screen Field
 expect state camera -
-expect state music field_reed_path
+expect state music field_marsh_reeds
 
 # Again from the save at the lookout with the profile's reduced flash on, which damps the shake to a quarter, and
 # skipped while it shakes: the skip stops at the battle with the same panel, camera and sound as watching, and the
@@ -129,7 +134,7 @@ cmd load manual_0
 cmd set reduced_flash on
 wait 2
 expect screen Field
-expect state music field_reed_path
+expect state music field_marsh_reeds
 press Enter
 wait 2
 press Enter
@@ -156,4 +161,4 @@ expect state panels ladder center lookout_front
 shot build/shots/panels_10_skipped.png
 pressuntil Enter Field 400
 expect state panels none
-expect state music field_reed_path
+expect state music field_marsh_reeds

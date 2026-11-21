@@ -52,6 +52,8 @@ press Up
 wait 3
 press Enter
 expect screen Shop
+expect state selected Tonic
+expect statehas description bitter herbal draught
 press Enter
 press Right
 press Enter
@@ -75,9 +77,11 @@ expect screen Battle
 dump
 # Fighter attacks the first enemy, the mystic uses a technique, then auto-battle takes over.
 press Enter
+expect statehas description wobbling lump
 press Enter
 press Down
 press Enter
+expect statehas description lightning
 press Enter
 press Enter
 press Up

@@ -228,6 +228,14 @@ std::string questsChunk(const World& w) {
 	return o.str();
 }
 
+std::string talkChunk(const World& w) {
+	Writer o;
+	for (const std::string& key : w.ambientHeard) {
+		o.key("heard").text(key).end();
+	}
+	return o.str();
+}
+
 std::string unlocksChunk(const World& w) {
 	Writer o;
 	for (const std::string& id : w.unlocked) {
@@ -549,6 +557,20 @@ bool readUnlocks(const std::string& payload, World& w, std::string& error) {
 	return error.empty();
 }
 
+bool readTalk(const std::string& payload, World& w, std::string& error) {
+	Lines in("talk", payload);
+	w.ambientHeard.clear();
+	for (const auto& l : in.lines()) {
+		if (l[0] == "heard" && in.need(l, 1)) {
+			w.ambientHeard.insert(in.text(l[1]));
+		} else {
+			in.fail("unknown line '" + l[0] + "'");
+		}
+	}
+	error = in.error;
+	return error.empty();
+}
+
 bool readActors(const std::string& payload, World& w, std::string& error) {
 	Lines in("actors", payload);
 	w.actors.clear();
@@ -592,6 +614,7 @@ const KnownChunk kWorldChunks[] = {
 	{"quests", 1, questsChunk, readQuests},
 	{"unlocks", 1, unlocksChunk, readUnlocks},
 	{"actors", 1, actorsChunk, readActors},
+	{"talk", 1, talkChunk, readTalk},
 };
 
 // The clear-data record holds these, from the same writers.
@@ -756,6 +779,12 @@ bool migrate2to3(std::vector<Chunk>& chunks, std::string&) {
 	return true;
 }
 
+// Schema 3 to 4: the talk chunk starts empty, so party talk can come up by itself once more in each area.
+bool migrate3to4(std::vector<Chunk>& chunks, std::string&) {
+	chunks.push_back({"talk", 1, ""});
+	return true;
+}
+
 struct Migration {
 	int from;
 	bool (*apply)(std::vector<Chunk>& chunks, std::string& error);
@@ -765,6 +794,7 @@ struct Migration {
 const Migration kMigrations[] = {
 	{1, migrate1to2},
 	{2, migrate2to3},
+	{3, migrate3to4},
 };
 
 std::string headerChunk(const SaveFile& save) {

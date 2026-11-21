@@ -82,11 +82,36 @@ All in `game/data/` (or the directory `--check` names). Full reference: [game/RE
 
 ### game.json
 
-Everything about the adventure that is not an area, a script or battle data: the file lists, languages, actors, presentation names, every flag and variable, the start, join levels, prices, caps and timings, and the bosses. Reference: [game.json](../game/README.md#gamejson).
+Everything about the adventure that is not an area, a script or battle data: the file lists, languages, actors, presentation names and data, every flag and variable, the start, join levels, prices, caps and timings, and the bosses. Reference: [game.json](../game/README.md#gamejson).
+
+Optional presentation data, none of which is part of the content hash, so it can be filled in or changed without touching saves or records:
+
+* Cameras: each entry of `presentation.cameras` is a name, as before, or an object that also says what the camera looks at and how close. `area` and `marker` aim it at a marker; `follow` follows an actor or a character, or the party leader with `"leader"`; `zoom` (0.25 to 4, default 1) is its scale against the field's.
+
+  ```json
+  "cameras": [
+  	"wide_shot",
+  	{"id": "lookout_east", "area": "reed_path", "marker": "lookout_east", "zoom": 1.25},
+  	{"id": "peddler", "follow": "peddler", "zoom": 1.5},
+  	{"id": "party", "follow": "leader"}
+  ]
+  ```
+
+* Music outside scripts: `presentation.music` with an optional `title`, `victory` (a won battle's result), `defeat` (a game over) and `encounters` (encounter id to track). Every track must also be in `presentation.audio`.
+
+  ```json
+  "music": {"title": "title_harbor_dawn", "victory": "victory_bright_sail", "defeat": "defeat_low_tide", "encounters": {"warden": "battle_brass_warden"}}
+  ```
+
+* Action durations: `presentation.durations`, the table `event_cli time` reads from its timing configuration, so the game reports each presentation action's authored seconds to the engine. `action` names an action as timing files do, `subject` (optional) one actor, camera, panel or track, `seconds` 0 to 60.
+
+  ```json
+  "durations": [{"action": "panel_show", "seconds": 0.35}, {"action": "move", "subject": "dockhand", "seconds": 0.9}]
+  ```
 
 ### Areas
 
-One JSON file per area: the cell grid, markers, exits, hooks, shops, rest points, chests and encounter zones. Reference: [Areas](../game/README.md#areas). Draw them in Tiled and convert with [tools/maps](../tools/maps/README.md), or write the JSON directly. The display name is the text key `area.<id>`. Give a person's interact hook the id of its actor in `game.json`'s `actors`: the actor then stands on that cell until a script moves it (see [Actors](../game/README.md#actors)).
+One JSON file per area: the cell grid, markers, exits, hooks, shops, rest points, chests and encounter zones, and an optional `music` track (`"music": "town_tide_bells"`, an id from `presentation.audio`; the Tiled map property of the same name). Reference: [Areas](../game/README.md#areas). Draw them in Tiled and convert with [tools/maps](../tools/maps/README.md), or write the JSON directly. The display name is the text key `area.<id>`. An interact hook may stand on a wall or water cell (a sign, a ladder): the party uses it from a floor cell beside it, which the check makes sure it can reach. Give a person's interact hook the id of its actor in `game.json`'s `actors`: the actor then stands on that cell until a script moves it (see [Actors](../game/README.md#actors)).
 
 ### Events
 
@@ -98,7 +123,15 @@ A route (`routes/*.route`) is a list of terminal commands the pacing bot plays f
 
 ### Text tables
 
-Per language, a dialogue string table `text/<code>.strings` (format: [events/FORMAT.md, "String tables"](../events/FORMAT.md#string-tables)) and a text table `text/<code>.json` (core's `{"text": {...}}` format). Every language must have the source language's keys. Speaker names (`speaker.<actor>`), journal text and the yes/no answers are in the dialogue tables; area names and the game's own messages in the text tables. Reference: [Languages](../game/README.md#languages). The journal (`journal.json`, reference: [journal.json](../game/README.md#journaljson)) and the name glossary (`text/glossary.txt`, reference: [events/FORMAT.md, "Name glossary"](../events/FORMAT.md#name-glossary)) refer to these tables.
+Per language, a dialogue string table `text/<code>.strings` (format: [events/FORMAT.md, "String tables"](../events/FORMAT.md#string-tables)) and a text table `text/<code>.json` (core's `{"text": {...}}` format). Every language must have the source language's keys, except descriptions.
+
+Descriptions (UI-007) are optional keys of the text tables: `desc.<kind>.<id>`, where kind is `item`, `equipment`, `ability`, `status`, `enemy` or `difficulty` and id is an id of that kind in the battle data. Each language has its own or none; a missing one shows as empty. They are left out of the content hash. `python3 -I tools/text/cli.py descriptions --text game/data/text/en.json --text game/data/text/ja.json --core core/data` counts them per kind and lists what has none.
+
+```json
+"desc.item.tonic": "A bitter herbal draught. Restores 30 HP to one ally.",
+"desc.status.sleep": "Cannot act. Ends with an even chance at each round's end, or when hurt.",
+"desc.difficulty.hard": "Built on smarter enemies: bosses learn new moves and resist sleep, healing techniques are weaker, and rewards rise by a fifth."
+``` Speaker names (`speaker.<actor>`), journal text and the yes/no answers are in the dialogue tables; area names and the game's own messages in the text tables. Reference: [Languages](../game/README.md#languages). The journal (`journal.json`, reference: [journal.json](../game/README.md#journaljson)) and the name glossary (`text/glossary.txt`, reference: [events/FORMAT.md, "Name glossary"](../events/FORMAT.md#name-glossary)) refer to these tables.
 
 ## Common mistakes the check reports
 
@@ -108,7 +141,7 @@ These are the messages a converter usually trips first. The line number points a
 * `names missing ability 'bite'` (core): a reference to an id defined nowhere, or defined in a file that loads later. Core files refer only to the files before them.
 * `needs exactly 8 slots` (enemies): every enemy lists eight AI slots, each its basic attack or one of its abilities.
 * `missing message key 'status.burn.applied'`: a new status or ability brought keys core emits that `text_en.json` lacks.
-* `marker 'gate' is not on a floor cell`: markers, exits, hooks, shops, rest points, chests and spawn points must sit on `.` cells. A converter that is off by one, or swaps x and y, shows up here first: cells are `[x, y]` from the top left.
+* `marker 'gate' is not on a floor cell`: markers, exits, step hooks, shops, rest points, chests and spawn points must sit on `.` cells; interact hooks only inside the map (`hook 'sign' is outside the map`). A converter that is off by one, or swaps x and y, shows up here first: cells are `[x, y]` from the top left.
 * `marker 'gate' is on the cell of chest 'box', which is solid, so the party would stand inside it`: shops, rest points, chests and interact hooks make their cell solid.
 * `the exit to 'cave' at [12, 0] cannot be walked to from any way into the area`, `chest 'box' has no floor cell beside it that the party can walk to`: a wall or a solid object cuts it off from every marker an exit, a warp or the start leads to.
 * `exit leads to area 'cave', which no file in game.json's areas defines`, `exit leads to missing marker 'cave west_gate'`: the target area is not listed in `game.json`, or has no such marker.
@@ -117,6 +150,10 @@ These are the messages a converter usually trips first. The line number points a
 * `shop 'stall' stocks 'potion', which is unknown or has no price`: everything a shop stocks needs a price in `game.json`.
 * `text 'area.cave' is not in the text table`, `key 'area.cave' of the 'en' table is missing`: every area needs a display name, in every language.
 * `string 'speaker.smith' is not in the dialogue table`: every actor needs a speaker name string.
+* `'desc.item.potion' describes nothing`: a description for an id the battle data does not have, or of an unknown kind (`desc.weapon.x`). Rename it to the id, or drop it.
+* `the camera looks at marker 'gate' of area 'cave', which does not exist`, `the camera follows 'smith', which is no actor or character`, `camera 'x' names a marker or an area without the other`: a camera's target names something the data lacks.
+* `music 'cave_theme' is not one of game.json's presentation audio ids`, `music is given for encounter 'bats', which the battle data does not have`: list every track in `presentation.audio`, and give music only to encounters that exist.
+* `unknown action 'panel show'`: durations write actions with underscores (`panel_show`), as timing files do.
 * `hook 'door' runs unknown event 'cave_door'`, `zone 'hall' lists unknown encounter 'bats'`: a name the scripts or the battle data do not define.
 * `inline text in say in event 'cave_door': player-facing text must be a string ID (@id) from the string tables` and `the name "Bell Warden" is typed out`: the scripts' strict check. Every line is a string ID, and glossary names are written as name tokens.
 * `string ID 'cave.old_line' is not used by any script or by the game`: a dialogue string left over, or one language has a key another lacks. The strict check treats warnings as problems.

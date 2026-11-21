@@ -1,13 +1,14 @@
-# What the sample plays, read from the recording audio layer's call log: the title's and each area's music, the
-# battle's track and the area's back after it, the cues of menu actions, refusals, saves, footsteps and battle events,
+# What the sample plays, read from the recording audio layer's call log: the title's and each area's music as the data
+# names them, the battle's track (derived, since the training encounter names none), the victory track on the result
+# screen and the area's back after it, the cues of menu actions, refusals, saves, footsteps and battle events,
 # volume changes from Options applied at once, and a scene's music and wind after a skip and after a load. Each
 # `audio mark` starts a new window of calls for the `expect audio` and `expect noaudio` lines after it.
 
 cmd set text instant
 wait 1
 expect screen Title
-expect state music title
-expect audio music title fade 800
+expect state music title_harbor_dawn
+expect audio music title_harbor_dawn fade 800
 expect audio volumes 80 80 80
 audio mark
 press Down
@@ -17,8 +18,8 @@ audio mark
 press Enter
 expect audio cue confirm
 wait 2
-expect state music town_tidewater
-expect audio music town_tidewater fade 800
+expect state music town_tide_bells
+expect audio music town_tide_bells fade 800
 pressuntil Enter Field 400
 expect audio cue line
 
@@ -76,11 +77,11 @@ press Enter
 pressuntil Enter Field 400
 expect state party Test Fighter, Test Mystic, Test Medic
 
-# The reed path's own track, a visible battle's track and its cues, then the reed path's track again.
+# The reed path's own track (field_marsh_reeds in its area file), a visible battle's track and its cues, then the reed path's track again.
 cmd walk 13 4
 wait 2
-expect state music field_reed_path
-expect audio music field_reed_path fade 800
+expect state music field_marsh_reeds
+expect audio music field_marsh_reeds fade 800
 audio mark
 cmd walk cache_front
 expect mode Battle
@@ -93,8 +94,9 @@ press Enter
 pressuntil Enter Field 4000
 expect audio cue hit
 expect audio cue victory
-expect state music field_reed_path
-expect audio music field_reed_path fade 800
+expect audio music victory_bright_sail fade 800
+expect state music field_marsh_reeds
+expect audio music field_marsh_reeds fade 800
 
 # The lookout: the scene's wind and music crossfade in; a skip stops at the battle with them as watching leaves them
 # and drops the creak.
@@ -121,7 +123,7 @@ expect noaudio stop
 # The title has its own music; the autosave written as the battle began brings the scene's back at once.
 cmd title
 wait 2
-expect state music title
+expect state music title_harbor_dawn
 expect state ambient -
 audio mark
 cmd load auto_0
@@ -141,5 +143,5 @@ expect audio ambient stop fade 150
 press Enter
 wait 2
 expect screen Field
-expect state music field_reed_path
-expect audio music field_reed_path fade 800
+expect state music field_marsh_reeds
+expect audio music field_marsh_reeds fade 800

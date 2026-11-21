@@ -13,7 +13,7 @@ public static class Program
 	private const string Usage =
 		"Psiv.Sample: plays the placeholder adventure through libpsiv_session\n" +
 		"\n" +
-		"  Psiv.Sample [--data DIR] [--saves DIR] [--seed N] [--font FILE] [--exit-after-ms N] [--screenshot FILE.png] [--mute]\n" +
+		"  Psiv.Sample [--data DIR] [--saves DIR] [--seed N] [--font FILE] [--exit-after-ms N] [--screenshot FILE.png] [--mute] [--window-size WxH] [--fullscreen]\n" +
 		"  Psiv.Sample --window --script FILE ...   the window, with keys from the script instead of the keyboard\n" +
 		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N]   headless, no window, no sound\n" +
 		"  Psiv.Sample --dump-audio DIR   writes a generated track and three cues as WAV files and checks every generated sound\n" +
@@ -24,7 +24,8 @@ public static class Program
 		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | expect actor ID X Y [FACING]|walking|hidden | expect pose ID POSE [marked] |\n" +
 		"expect label none | expect toast none|TEXT | expect notoast TEXT | expect binding ACTION KEYS \"|\" BUTTONS |\n" +
 		"expect state KEY VALUE | expect statehas KEY TEXT | expect audio TEXT | expect noaudio TEXT | audio mark|log |\n" +
-		"savefile damage SLOT | dump | shot FILE.png (window only) | # comment.\n" +
+		"savefile damage SLOT | click X Y | clickcell X Y | expect letterbox W H X Y WIDTH HEIGHT PERCENT | window W H | window fullscreen |\n" +
+		"dump | shot FILE.png (window only) | # comment.\n" +
 		"Keys are MonoGame Keys names, buttons MonoGame Buttons names, actions the sample's GameAction names.\n" +
 		"Exit codes: 0 done, 1 a failure, 2 bad arguments.\n";
 
@@ -39,6 +40,8 @@ public static class Program
 		ulong seed = 1;
 		bool window = false;
 		bool mute = false;
+		bool fullscreen = false;
+		(int, int)? windowSize = null;
 		string? screenshot = null;
 		string? dumpAudio = null;
 		for (int i = 0; i < args.Length; i++)
@@ -51,6 +54,11 @@ public static class Program
 			case "--font": font = Next(); break;
 			case "--window": window = true; break;
 			case "--mute": mute = true; break;
+			case "--fullscreen": fullscreen = true; break;
+			case "--window-size" when Next()?.Split('x') is [string ws, string hs] && int.TryParse(ws, CultureInfo.InvariantCulture, out int sw) &&
+				int.TryParse(hs, CultureInfo.InvariantCulture, out int sh):
+				windowSize = (sw, sh);
+				break;
 			case "--dump-audio": dumpAudio = Next(); break;
 			case "--screenshot": screenshot = Next(); break;
 			case "--script": script = Next(); break;
@@ -107,7 +115,7 @@ public static class Program
 			}
 			try
 			{
-				using var game = new SampleGame(session, font, exitAfterMs, saves, script, screenshot, mute);
+				using var game = new SampleGame(session, font, exitAfterMs, saves, script, screenshot, mute, windowSize, fullscreen);
 				game.Run();
 				return game.Failures == 0 ? 0 : 1;
 			}
@@ -120,7 +128,7 @@ public static class Program
 	}
 
 	// One generated track and three cues as WAV files, then the synthesizer's self-check over every sound the sample
-	// and the placeholder scripts name, and over the tracks derived for areas and battles.
+	// and the placeholder scripts name, the placeholder data's tracks, and the tracks derived where data names none.
 	private static int DumpAudio(string dir)
 	{
 		Directory.CreateDirectory(dir);
@@ -133,7 +141,9 @@ public static class Program
 			Console.WriteLine($"audio: {path}, {pcm.Length} samples ({pcm.Length * 1000 / Synth.Rate} ms), peak {pcm.Max(v => Math.Abs((int)v))}");
 		}
 		List<(SoundKind, string)> all = Synth.SampleCues.Select(c => (SoundKind.Cue, c))
-			.Concat(new[] { "title", "town_tidewater", "field_reed_path", "dungeon_bell_cove", "battle_field", "battle_dungeon", "battle_scripted", "brass_alarm", "reed_lookout" }
+			.Concat(new[] { "title", "town_tidewater", "field_reed_path", "dungeon_bell_cove", "battle_field", "battle_dungeon", "battle_scripted", "brass_alarm", "reed_lookout",
+				"title_harbor_dawn", "town_tide_bells", "field_marsh_reeds", "dungeon_kiln_halls", "battle_marsh_ambush", "battle_brass_warden", "victory_bright_sail",
+				"defeat_low_tide" }
 				.Select(t => (SoundKind.Music, t)))
 			.Append((SoundKind.Ambient, "marsh_wind"))
 			.Append((SoundKind.Cue, "lookout_creak"))
@@ -165,7 +175,7 @@ public static class Program
 }
 
 // The keys and gamepad buttons held for one frame.
-public readonly record struct InputFrame(Keys[] Keys, Buttons[] Buttons)
+public readonly record struct InputFrame(Keys[] Keys, Buttons[] Buttons, (int X, int Y)? Click = null)
 {
 	public static readonly InputFrame None = new([], []);
 }
@@ -183,6 +193,7 @@ public sealed class ScriptPlayer
 	private readonly Func<int> _frame;
 	private readonly Action<string>? _shot;
 	private readonly string? _saves;
+	private readonly Action<int, int, bool>? _resize;
 	private readonly string _name;
 	private readonly string[] _lines;
 	private int _next;
@@ -193,9 +204,10 @@ public sealed class ScriptPlayer
 	// `shot` saves the next drawn frame to a file; null (headless) skips shot lines. `restart` makes a new controller
 	// for `controls restart`.
 	public ScriptPlayer(GameSession session, SampleController controller, string path, Func<IReadOnlyList<string>> frameText, Func<int> frame,
-		Action<string>? shot = null, Func<SampleController>? restart = null, string? saves = null)
+		Action<string>? shot = null, Func<SampleController>? restart = null, string? saves = null, Action<int, int, bool>? resize = null)
 	{
 		_shot = shot;
+		_resize = resize;
 		_saves = saves;
 		_restart = restart;
 		_session = session;
@@ -303,6 +315,27 @@ public sealed class ScriptPlayer
 			case "padstick" when w.Length == 4 && float.TryParse(w[1], CultureInfo.InvariantCulture, out float stickX) &&
 				float.TryParse(w[2], CultureInfo.InvariantCulture, out float stickY):
 				return Repeat(Stick(stickX, stickY), int.Parse(w[3], CultureInfo.InvariantCulture)).GetEnumerator();
+			case "click" when w.Length == 3 && int.TryParse(w[1], CultureInfo.InvariantCulture, out int clickX) &&
+				int.TryParse(w[2], CultureInfo.InvariantCulture, out int clickY):
+				return Press(new([], [], (clickX, clickY)), 1).GetEnumerator();
+			case "clickcell" when w.Length == 3 && int.TryParse(w[1], CultureInfo.InvariantCulture, out int cellX) &&
+				int.TryParse(w[2], CultureInfo.InvariantCulture, out int cellY):
+				return Press(new([], [], _controller.CellCenter(cellX, cellY)), 1).GetEnumerator();
+			case "expect" when w.Length == 9 && w[1] == "letterbox":
+				int[] n = w[2..].Select(v => int.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+				Letterbox box = Letterbox.Fit(n[0], n[1]);
+				if ((box.X, box.Y, box.Width, box.Height, (int)MathF.Round(box.Scale * 100)) != (n[2], n[3], n[4], n[5], n[6]))
+				{
+					Fail($"{source}: a {n[0]}x{n[1]} window letterboxes to {box.X} {box.Y} {box.Width} {box.Height} at {box.Scale * 100:0}%");
+				}
+				break;
+			case "window" when w.Length == 3 && int.TryParse(w[1], CultureInfo.InvariantCulture, out int windowW) &&
+				int.TryParse(w[2], CultureInfo.InvariantCulture, out int windowH):
+				_resize?.Invoke(windowW, windowH, false);
+				return Repeat(InputFrame.None, 2).GetEnumerator();
+			case "window" when w.Length == 2 && w[1] == "fullscreen":
+				_resize?.Invoke(0, 0, true);
+				return Repeat(InputFrame.None, 2).GetEnumerator();
 			case "controls" when w.Length >= 2:
 				Controls(w, actionOk ? action : null, source);
 				break;
@@ -589,7 +622,7 @@ public static class Headless
 			{
 				InputFrame next = player.Next();
 				controller = player.Controller;
-				input.Set(next.Keys, next.Buttons);
+				input.Set(next.Keys, next.Buttons, click: next.Click);
 				controller.Update(FrameMs, input);
 				surface.BeginFrame();
 				controller.Draw(surface);

@@ -216,8 +216,9 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		reader.fail(json, "data.area_object", {});
 		return rules::Result<Area>::failure(reader.problems(), reader.errors());
 	}
-	reader.only(json, {"id", "kind", "encounter_mode", "step_ms", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "zones"});
+	reader.only(json, {"id", "kind", "encounter_mode", "step_ms", "music", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "zones"});
 	reader.text(json, "id", area.id, true);
+	reader.text(json, "music", area.music, false);
 	std::string kind = "field";
 	reader.text(json, "kind", kind, false);
 	if (kind == "town") {
@@ -295,7 +296,14 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			} else if (trigger != "interact") {
 				reader.fail(h, "data.bad_trigger", {});
 			}
-			if (hook.trigger == HookTrigger::Interact || hook.trigger == HookTrigger::Step) {
+			if (hook.trigger == HookTrigger::Interact) {
+				// A sign on a wall or a ladder up a cliff is used from the floor beside it (FLD-030), so an interact hook
+				// may stand on any cell; the data check makes sure the party can reach one beside it.
+				reader.cellField(h, "at", hook.at, true);
+				if (!area.inside(hook.at)) {
+					reader.fail(h, "data.not_on_map", {"hook '" + hook.id + "'"});
+				}
+			} else if (hook.trigger == HookTrigger::Step) {
 				reader.cellField(h, "at", hook.at, true);
 				checkCell(h, hook.at, "hook '" + hook.id + "'");
 			}

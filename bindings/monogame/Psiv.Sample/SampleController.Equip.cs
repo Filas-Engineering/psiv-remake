@@ -2,8 +2,9 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-// The menu's Equip page: a member, a slot, then the pieces that fit it or removing what is worn. The session reports
-// the worn pieces' bonuses but not those of pieces in the bag, so a piece's change is shown once it is on.
+// The menu's Equip page: a member, a slot, then the bag's pieces for it (those the member cannot wear marked) or removing
+// what is worn. Browsing a piece shows the session's comparison: the piece's bonuses and the member's stats before and
+// after, as a battle would use them.
 public sealed partial class SampleController
 {
 	private int? _equipSlot;
@@ -21,16 +22,86 @@ public sealed partial class SampleController
 
 	private static int[] Values(StatBonus b) => [b.MaxHp, b.MaxTp, b.Strength, b.Mental, b.Agility, b.Dexterity, b.Defense, b.Critical, b.Evasion];
 
-	// What can go in the slot: the bag's pieces for it, then taking off the one worn.
-	private List<(string Label, string? Piece)> EquipChoices(string memberId, int slot)
+	// What can go in the slot: the bag's pieces for it, marked when the member cannot wear them, then taking off the one worn.
+	private List<(string Label, string? Piece, bool Wearable)> EquipChoices(string memberId, int slot)
 	{
-		var choices = _s.Inventory().Where(i => i.IsEquipment && (int)i.Slot == slot).Select(i => ($"{i.Name} x{i.Count}", (string?)i.Id)).ToList();
+		var choices = _s.Inventory().Where(i => i.IsEquipment && (int)i.Slot == slot).Select(i =>
+		{
+			bool wearable = _s.EquipPreview(memberId, i.Id)?.CanWear ?? false;
+			return ($"{i.Name} x{i.Count}" + (wearable ? "" : "  (cannot wear)"), (string?)i.Id, wearable);
+		}).ToList();
 		Member? m = _s.Party().FirstOrDefault(x => x.Id == memberId);
 		if (m is not null && m.Equipment[slot].Length > 0)
 		{
-			choices.Add(($"Remove {m.EquipmentNames[slot]}", null));
+			choices.Add(($"Remove {m.EquipmentNames[slot]}", null, true));
 		}
 		return choices;
+	}
+
+	// The comparison of a piece on the member: its own effects in words, who can wear it, then each stat and effect that
+	// would change, before and after.
+	private void DrawPreview(IDrawSurface s, EquipPreview p, int x, int y, int w)
+	{
+		int rowH = Px(24);
+		DrawDescription(s, _s.Description(DescriptionKind.Equipment, p.Piece), x, y, w);
+		int ly = y + Px(50);
+		var effects = new List<string> { BonusText(p.Bonus) };
+		if (p.Element != Element.None)
+		{
+			effects.Add($"{Words(GameSession.NameOf(NameKind.Element, (int)p.Element))} attacks");
+		}
+		if (p.AttackName.Length > 0)
+		{
+			effects.Add($"attacks with {p.AttackName}");
+		}
+		effects.AddRange(p.GrantedNames.Select(n => $"grants {n}"));
+		effects.AddRange(p.PieceResists.Select(r => $"resists {r.Name} {r.Percent}%"));
+		foreach (string l in Style.Wrap(s, string.Join(", ", effects), w, Style.Small))
+		{
+			s.Text(l, x, ly, Style.Text, Style.Small);
+			ly += rowH;
+		}
+		s.Text(Style.Fit(s, "Can wear: " + (p.WearerNames.Count == 0 ? "nobody in the party" : string.Join(", ", p.WearerNames)), w, Style.Small), x, ly, Style.Dim, Style.Small);
+		ly += rowH + Px(6);
+		if (!p.CanWear)
+		{
+			s.Text(Style.Fit(s, p.Refusal?.Text ?? "Cannot wear this.", w, Style.Small), x, ly, Style.Bad, Style.Small);
+			_probeCompare = "cannot wear";
+			return;
+		}
+		s.Text(Style.Fit(s, p.ReplacesName.Length > 0 ? $"With it on, in place of {p.ReplacesName}" : "With it on", w), x, ly, Style.Accent);
+		ly += Px(32);
+		int[] before = Values(p.Before.Stats);
+		int[] after = Values(p.After.Stats);
+		var rows = CompareLabels.Select((l, i) => (l, before[i], after[i])).Where(r => r.Item2 != r.Item3).ToList();
+		Widgets.Compare(s, x, ly, w, rowH, rows.Count > 0 ? rows : [("No stat changes", 0, 0)]);
+		_probeCompare = rows.Count == 0 ? "none" : string.Join(", ", rows.Select(r => $"{r.Item1} {r.Item2}>{r.Item3}"));
+		ly += rowH * Math.Max(1, rows.Count) + Px(6);
+		var notes = new List<string>();
+		if (p.Before.AttackElement != p.After.AttackElement)
+		{
+			notes.Add($"Element: {Words(GameSession.NameOf(NameKind.Element, (int)p.Before.AttackElement))} -> {Words(GameSession.NameOf(NameKind.Element, (int)p.After.AttackElement))}");
+		}
+		if (p.Before.BasicAttack != p.After.BasicAttack)
+		{
+			notes.Add($"Attack: {p.Before.BasicAttackName} -> {p.After.BasicAttackName}");
+		}
+		notes.AddRange(p.After.AbilityNames.Except(p.Before.AbilityNames).Select(n => $"Learns {n}"));
+		notes.AddRange(p.Before.AbilityNames.Except(p.After.AbilityNames).Select(n => $"Loses {n}"));
+		foreach (string status in p.Before.StatusResists.Select(r => r.Name).Union(p.After.StatusResists.Select(r => r.Name)))
+		{
+			int was = p.Before.StatusResists.FirstOrDefault(r => r.Name == status)?.Percent ?? 0;
+			int now = p.After.StatusResists.FirstOrDefault(r => r.Name == status)?.Percent ?? 0;
+			if (was != now)
+			{
+				notes.Add($"{status} resistance: {was}% -> {now}%");
+			}
+		}
+		foreach (string note in notes)
+		{
+			s.Text(Style.Fit(s, note, w, Style.Small), x, ly, Style.Text, Style.Small);
+			ly += rowH;
+		}
 	}
 
 	private void UpdateEquip(ActionInput input)
@@ -61,7 +132,7 @@ public sealed partial class SampleController
 			}
 			return;
 		}
-		List<(string Label, string? Piece)> choices = EquipChoices(_pickMember, slot);
+		List<(string Label, string? Piece, bool Wearable)> choices = EquipChoices(_pickMember, slot);
 		_third.Move(input, choices.Count);
 		if (input.Back)
 		{
@@ -69,7 +140,7 @@ public sealed partial class SampleController
 		}
 		else if (input.Confirm && choices.Count > 0)
 		{
-			(string label, string? piece) = choices[_third.Cursor];
+			(string label, string? piece, _) = choices[_third.Cursor];
 			int[]? before = Totals(_pickMember);
 			PsivResult result = piece is null ? _s.Unequip(_pickMember, (EquipSlot)slot) : _s.Equip(_pickMember, piece);
 			Report(result);
@@ -118,18 +189,18 @@ public sealed partial class SampleController
 			return;
 		}
 		int py = y + Px(36) + Px(30) * slots.Count + Px(20);
-		List<(string Label, string? Piece)> choices = EquipChoices(member.Id, chosen);
+		List<(string Label, string? Piece, bool Wearable)> choices = EquipChoices(member.Id, chosen);
 		s.Text($"For the {Words(GameSession.NameOf(NameKind.EquipSlot, chosen))} slot", x, py, Style.Accent);
 		if (choices.Count == 0)
 		{
 			s.Text("Nothing in the bag fits here.", x + 14, py + Px(36), Style.Dim);
 		}
-		DrawItems(s, _third, x, py + Px(36), listW, y + h - py - Px(36), choices.Select(c => c.Label).ToList());
+		DrawItems(s, _third, x, py + Px(36), listW, y + h - py - Px(36), choices.Select(c => c.Label).ToList(), enabled: choices.Select(c => c.Wearable).ToList());
 		if (choices.Count == 0)
 		{
 			return;
 		}
-		(string label, string? piece) = choices[_third.Cursor];
+		(string label, string? piece, _) = choices[_third.Cursor];
 		int[] worn = Values(detail.EquipmentBonus[chosen]);
 		s.Text("Worn now", rx, y, Style.Accent);
 		s.Text(Style.Fit(s, member.Equipment[chosen].Length > 0 ? $"{member.EquipmentNames[chosen]}: {BonusText(detail.EquipmentBonus[chosen])}" : "Nothing", rw, Style.Small),
@@ -140,15 +211,10 @@ public sealed partial class SampleController
 			var rows = CompareLabels.Select((l, i) => (l, totals[i], totals[i] - worn[i])).Where(r => r.Item2 != r.Item3).ToList();
 			Widgets.Compare(s, rx, y + Px(104), rw, rowH, rows.Count > 0 ? rows : [("No stat changes", 0, 0)]);
 		}
-		else
+		else if (_s.EquipPreview(member.Id, piece) is { } preview)
 		{
-			s.Text(Style.Fit(s, label, rw), rx, y + Px(70), Style.Accent);
-			int ly = y + Px(104);
-			foreach (string l in Style.Wrap(s, "The session does not report this piece's bonuses; the change shows here once it is on.", rw, Style.Small))
-			{
-				s.Text(l, rx, ly, Style.Dim, Style.Small);
-				ly += rowH;
-			}
+			s.Text(Style.Fit(s, preview.PieceName, rw), rx, y + Px(70), Style.Accent);
+			DrawPreview(s, preview, rx, y + Px(104), rw);
 		}
 	}
 }

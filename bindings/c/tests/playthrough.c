@@ -118,6 +118,9 @@ static void printNotices(const psiv_notice* notices, int32_t count) {
 		case PSIV_NOTICE_AUTOSAVE:
 			print("[%s]", notices[i].text);
 			break;
+		case PSIV_NOTICE_AMBIENT:
+			print("~ %s", notices[i].text);
+			break;
 		default:
 			print("%s", notices[i].text);
 			break;

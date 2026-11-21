@@ -12,7 +12,7 @@ class AreaToTiledTest(TempCase):
 	def test_map_properties_terrain_and_object_classes(self):
 		tmj = sample_tmj()
 		props = {p["name"]: (p["type"], p["value"]) for p in tmj["properties"]}
-		self.assertEqual({"id": ("string", "sample"), "kind": ("string", "dungeon"), "encounter_mode": ("string", "random"), "step_ms": ("int", 200)}, props)
+		self.assertEqual({"id": ("string", "sample"), "kind": ("string", "dungeon"), "encounter_mode": ("string", "random"), "step_ms": ("int", 200), "music": ("string", "dungeon_sample")}, props)
 		self.assertEqual((6, 4, 16, 16), (tmj["width"], tmj["height"], tmj["tilewidth"], tmj["tileheight"]))
 		self.assertEqual([{"firstgid": 1, "source": "cells.tsj"}], tmj["tilesets"])
 		# Tile ids 0, 1, 2 are floor, wall, water; gids start at 1.
