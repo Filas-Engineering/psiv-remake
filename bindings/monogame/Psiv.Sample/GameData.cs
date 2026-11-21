@@ -68,6 +68,11 @@ public sealed partial class GameData
 	// which a summoned or changed enemy shows from its first step.
 	public Dictionary<string, Targeting> AbilityTargeting { get; } = [];
 	public Dictionary<string, string> PieceUses { get; } = [];
+	// Weapons by id: their category, and whether they take both hands.
+	public Dictionary<string, string> EquipmentCategories { get; } = [];
+	public HashSet<string> TwoHanded { get; } = [];
+	// Combination recipes by id: the ability they make and the abilities that make it.
+	public Dictionary<string, (string Result, List<string> Abilities)> Recipes { get; } = [];
 	public Dictionary<string, List<string>> EnemyStatuses { get; } = [];
 	// Where each event a hook starts begins: the hook's area and cell, for the event previewer.
 	public Dictionary<string, (string Area, int X, int Y)> EventStarts { get; } = [];
@@ -204,6 +209,24 @@ public sealed partial class GameData
 		foreach (JsonElement piece in Array(equipment.RootElement, "equipment").Where(x => x.TryGetProperty("use", out _)))
 		{
 			d.PieceUses[piece.GetProperty("id").GetString()!] = piece.GetProperty("use").GetString()!;
+		}
+		foreach (JsonElement piece in Array(equipment.RootElement, "equipment").Where(x => x.TryGetProperty("slot", out JsonElement slot) && slot.GetString() == "weapon"))
+		{
+			string id = piece.GetProperty("id").GetString()!;
+			d.EquipmentCategories[id] = piece.TryGetProperty("category", out JsonElement category) ? category.GetString()! : "weapon";
+			if (piece.TryGetProperty("hands", out JsonElement hands) && hands.ValueKind == JsonValueKind.Number && hands.GetInt32() == 2)
+			{
+				d.TwoHanded.Add(id);
+			}
+		}
+		if (File.Exists(Path.Combine(core, "combos.json")))
+		{
+			using JsonDocument combos = JsonDocument.Parse(File.ReadAllText(Path.Combine(core, "combos.json")));
+			foreach (JsonElement combo in Array(combos.RootElement, "combos"))
+			{
+				d.Recipes[combo.GetProperty("id").GetString()!] = (combo.GetProperty("result").GetString()!,
+					[.. Array(combo, "abilities").Select(a => a.ValueKind == JsonValueKind.String ? a.GetString()! : a.GetProperty("ability").GetString()!)]);
+			}
 		}
 		return d;
 	}

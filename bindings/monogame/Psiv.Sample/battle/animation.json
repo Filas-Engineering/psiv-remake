@@ -1,0 +1,123 @@
+{
+	"version": 1,
+	"settings": {"rate": 60, "log_timing": "step"},
+	"select": {
+		"battle:backdrop": "battle.none",
+		"battle:transition_in": "battle.none",
+		"battle:transition_out": "battle.none",
+		"change:join": "change.join",
+		"change:leave": "change.leave",
+		"change:merge": "change.merge",
+		"change:transform": "change.transform",
+		"default": "turn.default",
+		"react:critical": "react.critical",
+		"react:damage": "react.hurt",
+		"react:instant_defeat": "react.instant_defeat",
+		"step:cancel": "step.cancel",
+		"step:intro": "step.banner",
+		"step:notice": "step.banner",
+		"step:opening": "step.banner",
+		"step:outcome": "step.banner",
+		"step:recover": "step.banner",
+		"step:retarget": "step.retarget",
+		"step:round": "step.banner",
+		"step:roundend": "step.roundend",
+		"step:sync": "step.sync",
+		"turn:escape": "turn.escape"
+	},
+	"scripts": {
+		"battle.none": {"phases": {"cover": 0, "hold": 0, "reveal": 0}, "tracks": []},
+		"change.join": {
+			"phases": {"change": "$look.effect_ms"},
+			"tracks": [
+				{"id": "effect", "type": "sprite", "effect": "$look.effect", "spawn": "changed", "anchor": "center", "scale": "large", "length": "$phase"},
+				{"id": "cue", "type": "sound", "cue": "$look.cue"},
+				{"id": "enter", "type": "state", "on": "changed", "state": "join"},
+				{"id": "flash", "type": "flash", "if": "$look.flash"},
+				{"id": "shake", "type": "shake", "amplitude": "$look.shake"}
+			]
+		},
+		"change.leave": {
+			"phases": {"change": "$look.effect_ms"},
+			"tracks": [
+				{"id": "cue", "type": "sound", "cue": "$look.cue"},
+				{"id": "flash", "type": "flash", "if": "$look.flash"},
+				{"id": "shake", "type": "shake", "amplitude": "$look.shake"}
+			]
+		},
+		"change.merge": {
+			"phases": {"change": "$look.effect_ms"},
+			"tracks": [
+				{"id": "effect", "type": "sprite", "effect": "$look.effect", "spawn": "changed", "anchor": "center", "scale": "large", "length": "$phase"},
+				{"id": "cue", "type": "sound", "cue": "$look.cue"},
+				{"id": "slide", "type": "state", "on": "from", "state": "merge_away"},
+				{"id": "form", "type": "state", "on": "changed", "state": "transform_in"},
+				{"id": "flash", "type": "flash", "if": "$look.flash"},
+				{"id": "shake", "type": "shake", "amplitude": "$look.shake"}
+			]
+		},
+		"change.transform": {
+			"phases": {"change": "$look.effect_ms"},
+			"tracks": [
+				{"id": "effect", "type": "sprite", "effect": "$look.effect", "spawn": "changed", "anchor": "center", "scale": "large", "length": "$phase"},
+				{"id": "cue", "type": "sound", "cue": "$look.cue"},
+				{"id": "form", "type": "state", "on": "changed", "state": "transform_in"},
+				{"id": "flash", "type": "flash", "if": "$look.flash"},
+				{"id": "shake", "type": "shake", "amplitude": "$look.shake"}
+			]
+		},
+		"react.critical": {"length": "$rest", "tracks": [{"id": "shake", "type": "shake", "amplitude": 6, "length": "$rest"}]},
+		"react.hurt": {"length": "$rest", "tracks": [{"id": "hurt", "type": "state", "on": "self", "state": "hurt", "length": "$rest"}]},
+		"react.instant_defeat": {"length": "$rest", "tracks": [
+			{"id": "mark", "type": "sprite", "effect": "$look.effect", "spawn": "self", "anchor": "center", "scale": "large", "loops": -1, "length": "$rest",
+				"layer": "over_labels", "fade_out": "15%"}
+		]},
+		"step.banner": {"phases": {"step": "$step"}, "tracks": []},
+		"step.cancel": {"phases": {"step": "$step"}, "tracks": []},
+		"step.retarget": {"phases": {"step": "$timing.retarget"}, "tracks": []},
+		"step.roundend": {"phases": {"step": "$timing.roundend"}, "tracks": []},
+		"step.sync": {"phases": {"step": "$step"}, "tracks": []},
+		"turn.default": {
+			"phases": {"forward": "$timing.forward", "banner": "$timing.banner", "animate": "$look.animate_ms", "effect": "$look.effect_ms", "result": "$timing.result",
+				"back": "$timing.back"},
+			"tracks": [
+				{"id": "step_in", "type": "move", "on": "actor", "at": "forward", "kind": "forward", "distance": "1f", "ease": "smooth"},
+				{"id": "action", "type": "state", "on": "actor", "at": "animate", "state": "$look.animation"},
+				{"id": "effect", "type": "sprite", "at": "effect", "effect": "$look.effect", "spawn": "targets", "anchor": "auto",
+					"stagger": {"front": "sweep", "side": 0}, "order": {"front": "left_to_right", "side": "event"}, "length": "$phase"},
+				{"id": "cue", "type": "sound", "at": "effect", "cue": "$look.cue"},
+				{"id": "flash", "type": "flash", "at": "effect", "if": "$look.flash"},
+				{"id": "shake", "type": "shake", "at": "effect", "amplitude": "$look.shake"},
+				{"id": "step_out", "type": "move", "on": "actor", "at": "back", "kind": "home", "ease": "smooth"}
+			]
+		},
+		"turn.escape": {"extends": "turn.default"}
+	},
+	"figures": {
+		"enemy": {"states": {
+			"attack": {"pose": "attack", "motion": {"kind": "forward", "distance": {"front": 10, "side": 16}, "ease": "sine"}},
+			"cast": {"pose": "cast", "color": {"mode": "set", "to": {"tint": "$look.element_color", "amount": 0.5}, "ease": "sine"}},
+			"defeat": {"kind": "fade", "pose": "defeat", "length": "$rest"},
+			"defend": {"pose": "defend"},
+			"hurt": {"pose": "hurt", "motion": {"kind": "shake", "amplitude": 6, "frequency": 40, "decay": "linear", "axis": "x"},
+				"color": {"mode": "set", "to": {"tint": "#ff786e", "amount": 0.7}, "length": "40%"}},
+			"item": {"pose": "item", "color": {"mode": "set", "to": {"tint": "$look.element_color", "amount": 0.5}, "ease": "sine"}},
+			"join": {"opacity": {"from": 0, "to": 1, "speed": 1.6, "ease": "smooth"}, "motion": {"kind": "enter", "by": [0, 36], "ease": "smooth"}},
+			"merge_away": {"motion": {"kind": "to", "to": "to:place", "axis": "x", "speed": 1.4, "ease": "smooth"}},
+			"rise": {"opacity": {"from": 0, "to": 1}, "length": "$rest"},
+			"transform_in": {"previous": "crossfade", "ease": "smooth"}
+		}},
+		"party": {"states": {
+			"attack": {"pose": "attack", "motion": {"kind": "forward", "distance": {"front": 10, "side": 16}, "ease": "sine"}},
+			"cast": {"pose": "cast", "color": {"mode": "set", "to": {"tint": "$look.element_color", "amount": 0.5}, "ease": "sine"}},
+			"choosing": {"motion": {"kind": "forward", "distance": {"front": 12, "side": 0}, "length": 0}},
+			"defeat": {"kind": "fade", "pose": "defeat", "color": {"multiply": "#9696aa"}, "length": "$rest"},
+			"defend": {"pose": "defend"},
+			"fallen": {"pose": "defeat", "color": {"multiply": "#9696aa"}},
+			"hurt": {"pose": "hurt", "motion": {"kind": "shake", "amplitude": 6, "frequency": 40, "decay": "linear", "axis": "x"},
+				"color": {"mode": "set", "to": {"tint": "#ff786e", "amount": 0.7}, "length": "40%"}},
+			"item": {"pose": "item", "color": {"mode": "set", "to": {"tint": "$look.element_color", "amount": 0.5}, "ease": "sine"}},
+			"rise": {"opacity": {"from": 0, "to": 1}, "length": "$rest"}
+		}}
+	}
+}

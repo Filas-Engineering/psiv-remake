@@ -46,6 +46,7 @@ Every field is checked: unknown fields, wrong types, unknown ids and files that 
 	"ui": {},
 	"audio": [],
 	"battle_presentation": "battle_presentation.json",
+	"battle_animation": "battle_animation.json",
 	"battle_figures": {},
 	"maps": {},
 	"objects": [],
@@ -520,7 +521,7 @@ Text without spaces (Japanese) wraps between characters where it reaches the edg
 * Poses: an `animation` that names no standard animation is a figure pose (any figure's `animations` name: `"focus_shot": {"animation": "flourish"}`). A figure that has the pose plays its frames with the motion of the animation the entry would have had without it (its fallback's: `attack` for Focus Shot); one that lacks it plays that animation, and the transcript says so once per figure and pose, when it first plays: `pose: figure:party:fighter has no pose 'flourish': its attack animation plays`. `--check-assets` reports a pose no figure of the manifest has (`actions.focus_shot: no figure has a pose 'flourish': the attack animation plays`), and in `enemies` one the enemy's own figure lacks (a generated figure has only the standard ones); the entry then plays its animation. The presentation step keeps the animation's name (`animate Test Fighter attack`).
 * The battle speed scales every step; Confirm finishes the current step, holding fast-forward plays the round to its end. With the profile's reduced flash there is no flash and shakes go a quarter as far.
 
-Data-driven battle animation scripts, which would time each action, effect, figure state, intro and outro frame by frame on top of this table, are designed (not built) in [`battle-animation.md`](battle-animation.md).
+`battle_animation` names the battle animation scripts' file ([`battle-animation.md`](battle-animation.md)), which time each action, effect, figure state, release, intro and outro frame by frame over this table; without it the built-in set plays, which reads every field of the table, so the table keeps working with no change. The export writes the built-in set in full. `--check-assets` adds `N battle animation scripts (M keys)` to its summary, or `the built-in battle animations`; F5 reloads the file and the files it includes, applied from the next round.
 
 ## Hot reload
 

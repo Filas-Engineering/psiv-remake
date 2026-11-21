@@ -1,0 +1,38 @@
+# The example animation set (scripts/make_anim_assets.py) over the example layout sets: 640x480 and 320x224, on the
+# front data copy with --dev. The blade's hit on frame 42 and Frost Pane's releases on frames 53, 59 and 65 keep their
+# script frames at every logical resolution; forward units, figure-relative distances and screen percentages follow
+# the layout's params. With --window the shot lines save screenshots under build/shots/.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev level fighter 30
+dev level mystic 60
+dev level medic 20
+animlog mark
+dev battle training
+waitstate 300 battlephase Command
+press Enter
+press Enter
+press Down
+press Enter
+press Down 2
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 anim ex.frost.three ability:frostbite/count:3
+waitstate 120 animframe 56
+shot build/shots/anim_layout_frost.png
+waitstate 900 battlephase Ended
+expect animloghas phase result @53 | release Gel Mite A -60 resisted @53
+expect animloghas release Rust Hound -90 @65
+expect statehas battlesync all match
+press Enter
+wait 60
+expect screen Field

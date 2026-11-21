@@ -29,6 +29,11 @@ public interface IDrawSurface
 	void UseFont(string? file, float scale);
 	// Text in this bitmap font from now on, its missing glyphs in the font UseFont set; null goes back to that font alone.
 	void UseBitmapFont(BitmapFont? font);
+	// A picture mirrored left to right; a tint with alpha 0 draws it additively (the pixels are premultiplied).
+	void ImageEx(int image, int x, int y, int w, int h, Color tint, bool flipX) => Image(image, x, y, w, h, tint);
+	// A picture made from another's pixels (width, height, premultiplied), made once per key; a surface that keeps no
+	// pixels returns the picture itself.
+	int Derive(int image, string key, Func<Color[], int, int, Color[]> make) => image;
 }
 
 public static class Style
@@ -276,6 +281,8 @@ public sealed class ScaledSurface(IDrawSurface inner, float scale) : IDrawSurfac
 	public void ClearImages() => inner.ClearImages();
 	public void UseFont(string? file, float scale) => inner.UseFont(file, scale);
 	public void UseBitmapFont(BitmapFont? font) => inner.UseBitmapFont(font);
+	public void ImageEx(int image, int x, int y, int w, int h, Color tint, bool flipX) => inner.ImageEx(image, x, y, w, h, tint, flipX);
+	public int Derive(int image, string key, Func<Color[], int, int, Color[]> make) => inner.Derive(image, key, make);
 }
 
 public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, FontSystem fonts) : IDrawSurface, IDisposable
@@ -377,6 +384,7 @@ public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, Fo
 			texture.Dispose();
 		}
 		_images.Clear();
+		_derived.Clear();
 	}
 
 	public int CreateImage(int width, int height, Color[] pixels)
@@ -388,6 +396,23 @@ public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, Fo
 	}
 
 	public void Image(int image, int x, int y, int w, int h, Color tint) => batch.Draw(_images[image], new Rectangle(x, y, w, h), tint);
+
+	public void ImageEx(int image, int x, int y, int w, int h, Color tint, bool flipX) =>
+		batch.Draw(_images[image], new Rectangle(x, y, w, h), null, tint, 0f, Vector2.Zero, flipX ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0f);
+
+	private readonly Dictionary<(int, string), int> _derived = [];
+
+	public int Derive(int image, string key, Func<Color[], int, int, Color[]> make)
+	{
+		if (!_derived.TryGetValue((image, key), out int made))
+		{
+			Texture2D source = _images[image];
+			var pixels = new Color[source.Width * source.Height];
+			source.GetData(pixels);
+			made = _derived[(image, key)] = CreateImage(source.Width, source.Height, make(pixels, source.Width, source.Height));
+		}
+		return made;
+	}
 
 	// The scissor rectangle applies to a whole batch, so a clip ends the batch drawn so far and starts another.
 	public void Clip(int x, int y, int w, int h)
@@ -426,6 +451,8 @@ public sealed class RecordingSurface : IDrawSurface
 	public int Texts { get; private set; }
 	public int Images { get; private set; }
 	private readonly List<ulong> _contents = [];
+	private readonly List<(int W, int H, Color[] Pixels)> _pixels = [];
+	private readonly Dictionary<(int, string), int> _derived = [];
 	private bool _clipped;
 	private float _fontScale = 1f;
 	private ulong _digest;
@@ -492,7 +519,28 @@ public sealed class RecordingSurface : IDrawSurface
 			h = (h ^ v) * 1099511628211ul;
 		}
 		_contents.Add(h);
+		_pixels.Add((width, height, pixels));
 		return _contents.Count - 1;
+	}
+
+	public void ImageEx(int image, int x, int y, int w, int h, Color tint, bool flipX)
+	{
+		if (image < 0 || image >= _contents.Count)
+		{
+			throw new ArgumentOutOfRangeException(nameof(image));
+		}
+		Images++;
+		Mix(9, (long)_contents[image], x, y, w, h, tint.PackedValue, flipX ? 1 : 0);
+	}
+
+	public int Derive(int image, string key, Func<Color[], int, int, Color[]> make)
+	{
+		if (!_derived.TryGetValue((image, key), out int made))
+		{
+			(int w, int h, Color[] pixels) = _pixels[image];
+			made = _derived[(image, key)] = CreateImage(w, h, make(pixels, w, h));
+		}
+		return made;
 	}
 
 	public void Image(int image, int x, int y, int w, int h, Color tint)
@@ -527,7 +575,12 @@ public sealed class RecordingSurface : IDrawSurface
 
 	public Color[] ReadImage(string path, out int width, out int height) => Png.Read(path, out width, out height);
 
-	public void ClearImages() => _contents.Clear();
+	public void ClearImages()
+	{
+		_contents.Clear();
+		_pixels.Clear();
+		_derived.Clear();
+	}
 
 	public void UseFont(string? file, float scale)
 	{

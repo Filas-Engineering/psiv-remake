@@ -338,11 +338,12 @@ public sealed partial class SampleController
 		{
 			_confirm.Update(input);
 		}
-		else
+		else if (!(UpdateOutro(dtMs) && screen is Screen.Field or Screen.Battle))
 		{
 			UpdateScreen(screen, dtMs, input);
 		}
 		TakeNotices();
+		UpdateFx();
 		UpdateAudio(dtMs, screen, Screen, input);
 	}
 
@@ -492,6 +493,7 @@ public sealed partial class SampleController
 				}
 			}
 			_rebuildArt = false;
+			_animImages.Clear();
 			_art = new Art(s, _assets?.Manifest);
 			Style.Skin = _art.Skin;
 		}
@@ -524,6 +526,9 @@ public sealed partial class SampleController
 		case Screen.Title: DrawTitle(s, t, art); break;
 		case Screen.Field: DrawFieldScreen(s, t, art); break;
 		case Screen.Dialogue: DrawDialogue(s, t, art); break;
+		case Screen.Battle when _timeline.Current is { Kind: StepKind.Transition, Run: { } intro } && TransitionPhase(intro, _timeline.Elapsed).Phase != "reveal" && _battle.Phase == BattlePhase.Playback:
+			DrawField(s, art);
+			break;
 		case Screen.Battle: DrawBattle(s, art); break;
 		case Screen.Menu: DrawMenu(s, t, art); break;
 		case Screen.Shop: DrawShop(s, t, art); break;
@@ -546,6 +551,15 @@ public sealed partial class SampleController
 				.Set("log", (UiSlot)((x, y, w, h) => DrawTextLog(s, t, x, y, w, h))));
 			break;
 		}
+		if (Screen == Screen.Battle && _battle.Phase == BattlePhase.Playback && _timeline.Current is { Kind: StepKind.Transition, Run: { } coverIn })
+		{
+			DrawTransition(s, coverIn, _timeline.Elapsed);
+		}
+		if (_outro is { } coverOut)
+		{
+			DrawTransition(s, coverOut, (long)_outroMs * coverOut.RateMilli);
+		}
+		DrawFx(s);
 		DrawConfirm(s, t);
 		DrawAnimations(s);
 		if (_dev)

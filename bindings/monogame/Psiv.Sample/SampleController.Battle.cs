@@ -14,6 +14,8 @@ public sealed partial class SampleController
 		_ => 1f,
 	};
 
+	private int SpeedPercent() => (int)MathF.Round(SpeedOf(_s.Profile().BattleSpeed) * 100);
+
 	private enum BattlePhase { Command, Option, Target, Macro, Playback, Ended }
 
 	private sealed class BattleUi
@@ -93,8 +95,7 @@ public sealed partial class SampleController
 
 	private BattleContext Context()
 	{
-		int partyCount = StageInfo()?.PartyCount ?? 0;
-		return new BattleContext(_s, _battle.Labels, PresentationTable, _data, e => BattleCue(e, partyCount), T);
+		return new BattleContext(_s, _battle.Labels, PresentationTable, _data, T);
 	}
 
 	private void StartBattle()
@@ -113,10 +114,19 @@ public sealed partial class SampleController
 			_ => "",
 		} : "";
 		_battleCell = _s.Field() is { } at ? (at.Info.LeaderX, at.Info.LeaderY) : (-1, -1);
+		_backdropRun = BattleRun("backdrop");
+		_persistBackdrop = null;
+		_backdropStartMs = _clockMs;
 		string enemies = ListText(_s.Combatants().Where(c => c.Side == Side.Enemy).Select(c => c.Label));
 		BattleStep intro = Context().Step(StepKind.Intro, enemies, "intro " + enemies, []);
 		intro.Lines.Add(T("ui.battle.log.enemies", enemies));
+		intro.LineEvents.Add(-1);
 		intro.Cues.Add("battle_start");
+		AttachScripts([intro]);
+		if (TransitionStep() is { } transition)
+		{
+			_timeline.Add([transition]);
+		}
 		_timeline.Add([intro]);
 		_battle.Phase = BattlePhase.Playback;
 	}
@@ -126,10 +136,13 @@ public sealed partial class SampleController
 	{
 		BattleStep step = Context().Step(StepKind.Notice, n.Text, "notice " + n.Text, []);
 		step.Lines.Add(n.Text);
+		step.LineEvents.Add(-1);
+		step.Sub = n.Key;
 		if (NoticeCue(n) is { } cue)
 		{
 			step.Cues.Add(cue);
 		}
+		AttachScripts([step]);
 		_timeline.Add([step]);
 	}
 
@@ -163,36 +176,11 @@ public sealed partial class SampleController
 			NextActor(0);
 			return;
 		}
-		_timeline.Add(BattleTimeline.Build(_s.ResolveRound(), Context()));
+		List<BattleStep> round = BattleTimeline.Build(_s.ResolveRound(), Context());
+		AttachScripts(round);
+		_timeline.Add(round);
 		TakeNotices();
 		_battle.Phase = BattlePhase.Playback;
-	}
-
-	// A step starts: its log lines, its cues (none while fast-forwarding) and what it changes on the stage.
-	private void PlayStep(BattleStep step, bool quiet)
-	{
-		PresentedSteps.Add(step.Description);
-		_log("present: " + step.Description);
-		foreach (string line in step.Lines)
-		{
-			_battle.Log.Add(line);
-			_log("battle: " + line);
-		}
-		if (!quiet)
-		{
-			foreach (string cue in step.Cues)
-			{
-				_audio.PlayCue(cue);
-			}
-		}
-		if (step.Kind == StepKind.Sync)
-		{
-			_show.Sync(step, StageCombatants());
-		}
-		else
-		{
-			_show.Apply(step, StageCombatants(), id => _data.EnemyStatuses.GetValueOrDefault(id) ?? []);
-		}
 	}
 
 	private void SetAndAdvance(CommandKind kind, string? id, int target)
@@ -239,12 +227,7 @@ public sealed partial class SampleController
 				_s.CancelAuto();
 				b.Log.Add(T("ui.battle.log.auto_stops"));
 			}
-			bool fast = input.Down(GameAction.FastForward);
-			List<BattleStep> started = fast ? _timeline.SkipAll() : input.Confirm ? _timeline.Hurry() : _timeline.Advance(dtMs * SpeedOf(_s.Profile().BattleSpeed));
-			foreach (BattleStep step in started)
-			{
-				PlayStep(step, quiet: fast);
-			}
+			PlaybackTimeline(dtMs, input.Down(GameAction.FastForward), input.Confirm);
 			if (_timeline.Done)
 			{
 				_syncChecks++;
@@ -269,9 +252,9 @@ public sealed partial class SampleController
 			}
 			break;
 		case BattlePhase.Ended:
-			if (input.Confirm || input.Back)
+			if (_outro is null && (input.Confirm || input.Back))
 			{
-				b.Active = false;
+				EndBattleScreen();
 			}
 			break;
 		case BattlePhase.Command:
@@ -459,6 +442,6 @@ public sealed partial class SampleController
 		"enemymarks" => _probeEnemyMarks,
 		// Each party figure drawn: its name, the middle x and the feet's y.
 		"partyplaces" => _probePlaces,
-		_ => FrontState(key),
+		_ => AnimState(key) is var anim && anim != "?" ? anim : FrontState(key),
 	};
 }

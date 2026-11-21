@@ -1,0 +1,27 @@
+# Run with --dev and --assets on a copy of build/anim_assets (scripts/make_anim_assets.py) on the copy
+# scripts/make_tag_data.py writes: the dialogue layout swapped in maps the `flash` tag to the `fx` action (the example
+# set's red flash over the whole frame and its dusk tint, and a name no fx script has, logged once), and `hush` and
+# `resume` to `music_pause` and `music_resume`. With --window the shot lines save screenshots under build/shots/.
+
+expect screen Title
+assets swap ui/dialogue.json alt/dialogue_fx.json
+press Enter
+pressuntil Enter Field 800
+audio mark
+dev event dialogue_fx
+wait 2
+expect screen Dialogue
+wait 4
+shot build/shots/dialogue_fx_red.png
+waitstatehas 200 tags flash:dusk
+wait 20
+shot build/shots/dialogue_fx_dusk.png
+waitstatehas 200 tags flash:smoke
+expect audio cue ex_charge
+press Enter
+wait 2
+waitstatehas 200 tags hush
+expect audio music pause
+waitstatehas 200 tags resume
+expect audio music resume
+pressuntil Enter Field 200

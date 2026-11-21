@@ -41,6 +41,10 @@ public sealed partial class Art
 	private readonly Dictionary<string, Figure> _fieldEnemies = [];
 	private readonly Dictionary<string, int> _backdrops = [];
 	private readonly Dictionary<string, int> _namedBackdrops = [];
+
+	// A backdrop by its key (kind:, area:, encounter:, terrain:, id:), or null.
+	public int? BackdropByKey(string key) => key.StartsWith("id:", StringComparison.Ordinal) ? _namedBackdrops.TryGetValue(key[3..], out int named) ? named : null
+		: _backdrops.TryGetValue(key, out int image) ? image : null;
 	// The backdrops chosen by a flag, in the manifest's order: the flag, the area it is limited to, and the key.
 	private readonly List<(string Flag, string? Area, string Key)> _flagBackdrops = [];
 	private readonly Dictionary<string, BackdropMap> _backdropMaps = [];

@@ -15,6 +15,9 @@ public interface IAudioOut
 	// A new track fades in over `fadeMs` while the one before fades out; 0 switches at once.
 	void PlayMusic(string track, int fadeMs);
 	void StopMusic(int fadeMs);
+	// Holds the music where it is, and lets it go on from there.
+	void PauseMusic();
+	void ResumeMusic();
 	void PlayAmbient(string sound, int fadeMs);
 	void StopAmbient(int fadeMs);
 	void PlayCue(string cue);
@@ -61,6 +64,26 @@ public class RecordingAudio : IAudioOut
 		{
 			Music = track;
 			Record($"music {track} fade {fadeMs}");
+		}
+	}
+
+	public bool MusicPaused { get; private set; }
+
+	public virtual void PauseMusic()
+	{
+		if (!MusicPaused)
+		{
+			MusicPaused = true;
+			Record("music pause");
+		}
+	}
+
+	public virtual void ResumeMusic()
+	{
+		if (MusicPaused)
+		{
+			MusicPaused = false;
+			Record("music resume");
 		}
 	}
 
@@ -254,6 +277,18 @@ public sealed class MonoGameAudio : RecordingAudio, IDisposable
 	{
 		base.StopMusic(fadeMs);
 		FadeOutAll(_music, fadeMs);
+	}
+
+	public override void PauseMusic()
+	{
+		base.PauseMusic();
+		Guard(() => _music.ForEach(loop => loop.Instance.Pause()));
+	}
+
+	public override void ResumeMusic()
+	{
+		base.ResumeMusic();
+		Guard(() => _music.ForEach(loop => loop.Instance.Resume()));
 	}
 
 	public override void PlayAmbient(string sound, int fadeMs)

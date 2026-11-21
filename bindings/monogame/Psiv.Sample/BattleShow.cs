@@ -20,11 +20,16 @@ public sealed class ShownCombatant(Combatant c, int position)
 	public int TpFrom = c.Tp;
 	public BattleStep? BarStep;
 	public BattleStep? AliveStep;
+	// When in its step (clock units) the bar started running and the figure fell or rose.
+	public long BarAt;
+	public long AliveAt;
+	// The step's release that felled it was an instant defeat.
+	public bool FelledInstantly;
 	// The step that brought this enemy in or changed its form, and the form it had before.
 	public BattleStep? ChangeStep;
 	public string PreviousId = "";
-	public readonly Dictionary<string, BattleStep> Appeared = [];
-	public readonly List<(string Id, BattleStep Step)> Leaving = [];
+	public readonly Dictionary<string, (BattleStep Step, long At)> Appeared = [];
+	public readonly List<(string Id, BattleStep Step, long At)> Leaving = [];
 }
 
 // The battle as the playback has shown it so far. It starts from the session's combatants and changes only by the
@@ -62,43 +67,48 @@ public sealed class BattleShow
 
 	// `session` gives a joining or changed enemy's maximums and label, which the events do not carry; `startStatuses`
 	// the statuses its form starts with.
-	public void Apply(BattleStep step, IReadOnlyList<Combatant> session, Func<string, IEnumerable<string>> startStatuses)
+	// `events` are the step's events a release lets out at `at` (clock units into the step).
+	public void Apply(BattleStep step, IEnumerable<BattleEvent> events, long at, IReadOnlyList<Combatant> session, Func<string, IEnumerable<string>> startStatuses)
 	{
-		foreach (BattleEvent e in step.Events)
+		foreach (BattleEvent e in events)
 		{
 			ShownCombatant? target = e.Target >= 0 && e.Target < All.Count ? All[e.Target] : null;
 			ShownCombatant? actor = e.Actor >= 0 && e.Actor < All.Count ? All[e.Actor] : null;
 			switch (e.Type)
 			{
 			case BattleEventType.ResourceSpent when e.Resource == ResourceKind.Tp && actor is not null:
-				Bar(actor, step);
+				Bar(actor, step, at);
 				actor.Tp = Math.Max(0, actor.Tp - e.Amount);
 				break;
 			case BattleEventType.Healed when e.Resource == ResourceKind.Tp && target is not null:
-				Bar(target, step);
+				Bar(target, step, at);
 				target.Tp = Math.Min(target.MaxTp, target.Tp + e.Amount);
 				break;
 			case BattleEventType.DamageDealt or BattleEventType.Healed when target is not null:
-				Bar(target, step);
+				Bar(target, step, at);
 				target.Hp = e.Hp;
 				break;
 			case BattleEventType.Revived when target is not null:
-				Bar(target, step);
+				Bar(target, step, at);
 				target.Hp = e.Hp;
 				target.Alive = true;
 				target.AliveStep = step;
+				target.AliveAt = at;
 				break;
 			case BattleEventType.CombatantDefeated when target is not null:
 				// An instant defeat fells without a hit, so the bar empties here.
-				Bar(target, step);
+				Bar(target, step, at);
 				target.Hp = 0;
 				target.Alive = false;
 				target.AliveStep = step;
+				target.AliveAt = at;
+				target.FelledInstantly = step.Events.Any(m => m.Type == BattleEventType.Message && m.Message == "battle.instant_defeat" && m.Target == e.Target);
 				break;
 			case BattleEventType.EnemyLeft when target is not null:
 				target.Hp = 0;
 				target.Alive = false;
 				target.AliveStep = step;
+				target.AliveAt = at;
 				break;
 			case BattleEventType.EnemyJoined when e.Target == All.Count && e.Target < session.Count:
 				_positions[e.Target] = e.Amount;
@@ -109,10 +119,10 @@ public sealed class BattleShow
 				break;
 			case BattleEventType.StatusApplied when target is not null && e.Status != "defeated" && !target.Statuses.Contains(e.Status):
 				target.Statuses.Add(e.Status);
-				target.Appeared[e.Status] = step;
+				target.Appeared[e.Status] = (step, at);
 				break;
 			case BattleEventType.StatusRemoved when target is not null && target.Statuses.Remove(e.Status):
-				target.Leaving.Add((e.Status, step));
+				target.Leaving.Add((e.Status, step, at));
 				break;
 			}
 		}
@@ -138,7 +148,7 @@ public sealed class BattleShow
 			Combatant c = session[i];
 			if (s.Hp != c.Hp || s.Tp != c.Tp)
 			{
-				Bar(s, step);
+				Bar(s, step, 0);
 				s.Hp = c.Hp;
 				s.Tp = c.Tp;
 			}
@@ -146,28 +156,30 @@ public sealed class BattleShow
 			{
 				s.Alive = c.Alive;
 				s.AliveStep = step;
+				s.AliveAt = 0;
 			}
 			var statuses = c.Statuses.Where(x => x.Id != "defeated").Select(x => x.Id).ToList();
 			foreach (string gone in s.Statuses.Except(statuses).ToList())
 			{
 				s.Statuses.Remove(gone);
-				s.Leaving.Add((gone, step));
+				s.Leaving.Add((gone, step, 0));
 			}
 			foreach (string added in statuses.Except(s.Statuses).ToList())
 			{
 				s.Statuses.Add(added);
-				s.Appeared[added] = step;
+				s.Appeared[added] = (step, 0);
 			}
 		}
 	}
 
-	private static void Bar(ShownCombatant c, BattleStep step)
+	private static void Bar(ShownCombatant c, BattleStep step, long at)
 	{
-		if (c.BarStep != step)
+		if (c.BarStep != step || c.BarAt != at)
 		{
 			c.HpFrom = c.Hp;
 			c.TpFrom = c.Tp;
 			c.BarStep = step;
+			c.BarAt = at;
 		}
 	}
 

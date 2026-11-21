@@ -312,6 +312,18 @@ public sealed partial class SampleController
 			_scriptMusic = "";
 			_audio.StopMusic(StopFadeMs);
 			break;
+		case "music_pause":
+			_audio.PauseMusic();
+			break;
+		case "music_resume":
+			_audio.ResumeMusic();
+			break;
+		case "fx" when Anim.FxProblem(id) is null:
+			StartFx(id);
+			break;
+		case "fx":
+			TagProblem(tag, Anim.FxProblem(id)!);
+			break;
 		case "panel_show" when _data.Cameras.Contains(id) || _data.Actors.Contains(id) || _data.Characters.Contains(id):
 			_panels.RemoveAll(p => p.Id == id);
 			_panels.Add(new Panel(id, id, KnownSlot(hook.Slot ?? DefaultSlot)));

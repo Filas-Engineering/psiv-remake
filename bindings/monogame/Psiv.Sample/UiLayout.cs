@@ -724,7 +724,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 				}
 			}
 			string? fallback = Str(p.Value, "default", entry);
-			if ((values is not null || fallback is not null) && action is "music_stop" or "panel_clear" or "picture_clear" or "portrait_off" or "log")
+			if ((values is not null || fallback is not null) && action is "music_stop" or "music_pause" or "music_resume" or "panel_clear" or "picture_clear" or "portrait_off" or "log")
 			{
 				Problem(entry, $"fields 'values' and 'default' are for an action that takes an id, not {action}");
 			}

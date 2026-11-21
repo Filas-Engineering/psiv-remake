@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Microsoft.Xna.Framework;
 
 using Psiv.Session;
@@ -131,18 +133,18 @@ public sealed partial class SampleController
 		// The figures' steps, lunges, shakes and hovering, and the screen's shake, in percent of the 1280x720 distances.
 		float motion = Ui.Param(screen, "motion_percent", ui, 100) / 100f;
 
-		// The screen shakes with a heavy effect, a critical hit and a heavy change of form, easing off over the step; reduced
-		// flash damps it.
-		float shake = step switch
+		var ctx = new StageCtx
 		{
-			{ Kind: StepKind.Effect, Turn.Look.Shake: > 0 } => step.Turn!.Look!.Shake * (1f - p),
-			{ Change.Shake: > 0 } => step.Change!.Shake * (1f - p),
-			{ Kind: StepKind.Result } when step.Events.Any(e => e.Type == BattleEventType.Critical) => 6f * (1f - p),
-			_ => 0f,
+			Step = step, Elapsed = _timeline.Elapsed, Front = front, Motion = motion, Reduced = reduced, PartyCount = partyCount, Vehicle = vehicle, All = all,
+			EffectScale = effectScale, EffectScaleLarge = effectScaleLarge, StageBottom = stageBottom, Width = s.Width, Height = s.Height,
 		};
-		if (reduced)
+		// The screen shakes by the largest of the scripts' shakes (reduced flash damps them), in percent of the layout's motion.
+		float shake = Shake(ctx, out Point backdropShift, out Point figureShift);
+		if (step is { Kind: StepKind.Transition, Run: { } split })
 		{
-			shake /= 4f;
+			(int bx, int fx) = SplitShift(split, _timeline.Elapsed);
+			backdropShift.X += bx;
+			figureShift.X += fx;
 		}
 		shake *= motion;
 		_probeShake = (int)MathF.Round(shake);
@@ -172,16 +174,24 @@ public sealed partial class SampleController
 			else if (!enemyPlaces.TryGetValue(shown[i].Position, out f))
 			{
 				f = enemyPlaces[shown[i].Position] = PlaceEnemy(screen, rules, ui, shown[i].Position, enemyCount);
+				if (Placement(info?.Encounter ?? "", enemyCount, shown[i].Position, front) is { } placed && Ui.Param(screen, $"enemy_slot_{shown[i].Position}_x", ui, -1) < 0)
+				{
+					f = enemyPlaces[shown[i].Position] = (placed.X, placed.Foot, f.Size);
+				}
 			}
 			return centers.TryGetValue(i, out int cx) ? (cx, f.Foot, f.Size) : f;
 		}
-		var bodies = new Dictionary<int, Rectangle>();
+		ctx.Where = Where;
+		var bodies = ctx.Bodies;
 		var figures = new List<string>();
 		var posed = new List<string>();
 		var hovering = new List<string>();
 		// The figures' pictures go on the stage when the layout draws its `stage` slot; where each lands is known now.
 		var pictures = new List<Action>();
 		void Picture(int image, int x, int y, int w, int h, Color tint) => pictures.Add(() => s.Image(image, x, y, w, h, tint));
+		bool Behind(int i) => front && i < partyCount;
+		ctx.Behind = Behind;
+		_probeFigureLooks.Clear();
 		var order = Enumerable.Range(0, Math.Min(all.Count, shown.Count)).OrderBy(i => Where(i).Foot).ToList();
 		foreach (int i in order)
 		{
@@ -195,85 +205,25 @@ public sealed partial class SampleController
 				continue;
 			}
 			(int x, int foot, int size) = Where(i);
-			float alpha = 1f;
-			bool fading = sc.AliveStep is not null && sc.AliveStep == step;
-			if (!sc.Alive)
+			FigureLook fl = Figure(i, sc, ctx, front && !enemy && commanding && i == b.Actor);
+			if (fl.Hidden)
 			{
-				if (fading)
-				{
-					alpha = 1f - p;
-				}
-				else if (enemy)
-				{
-					continue;
-				}
+				continue;
 			}
-			else if (fading)
+			if (fl.PlaceOf >= 0 && fl.PlaceOf < shown.Count)
 			{
-				alpha = p;
-			}
-			// A joining enemy fades in rising into its place; one merging away slides into the enemy it merges with.
-			bool changing = enemy && sc.ChangeStep is not null && sc.ChangeStep == step;
-			float changeDx = 0, changeDy = 0;
-			if (changing && step!.Kind == StepKind.Join)
-			{
-				alpha = Ease(Math.Min(1f, p * 1.6f));
-				changeDy = 36 * motion * (1f - Ease(p));
-			}
-			if (step is { Kind: StepKind.Merge } && i == step.From && step.To >= 0 && step.To < shown.Count)
-			{
-				changeDx = (Where(step.To).X - x) * Ease(Math.Min(1f, p * 1.4f));
+				(int px, int pf, _) = Where(fl.PlaceOf);
+				(x, foot) = (px + (int)MathF.Round(fl.PlaceDx), pf + (int)MathF.Round(fl.PlaceDy));
 			}
 			// In the side layout a figure steps toward the other side; in the front one an enemy comes toward the camera
-			// and a member rises out of the line, the member choosing a command already a little.
+			// and a member rises out of the line.
 			int toward = enemy ? 1 : -1;
-			float reach = (front ? (enemy ? 20 : c.Id == vehicle ? 12 : 24) : enemy ? 24 : 44) * motion;
-			float move = front && !enemy && commanding && i == b.Actor ? 12 * motion : 0;
-			string animation = "idle";
-			Color tint = Color.White;
-			if (turn is not null && turn.Actors.Contains(i))
-			{
-				move = reach * step!.Kind switch
-				{
-					StepKind.Forward => Ease(p),
-					StepKind.Back => 1f - Ease(p),
-					_ => 1f,
-				};
-				if (step.Kind == StepKind.Animate && turn.Look is { } look)
-				{
-					animation = look.Animation;
-					if (look.Animation == "attack")
-					{
-						move += (front ? 10 : 16) * motion * MathF.Sin(MathF.PI * p);
-					}
-					else if (look.Animation is "cast" or "item")
-					{
-						string element = look.Effect.Contains('_') ? look.Effect[(look.Effect.IndexOf('_') + 1)..] : "none";
-						tint = Color.Lerp(Color.White, Art.ElementColor(element), 0.5f * MathF.Sin(MathF.PI * p));
-					}
-				}
-			}
-			float dx = (front ? 0 : toward * move) + changeDx, dy = (front ? toward * move : 0) + changeDy;
-			bool hurt = step is { Kind: StepKind.Result } && step.Events.Any(e => e.Type == BattleEventType.DamageDealt && e.Target == i);
-			if (hurt)
-			{
-				animation = "hurt";
-				dx += MathF.Sin(p * 40f) * 6f * motion * (1f - p);
-				if (p < 0.4f)
-				{
-					tint = Color.Lerp(Color.White, new Color(255, 120, 110), 0.7f);
-				}
-			}
-			if (!sc.Alive && !enemy)
-			{
-				animation = "defeat";
-				tint = new Color(150, 150, 170);
-			}
-			// An enemy plays its fallen pose, when it has one, while it fades.
-			else if (!sc.Alive && fading)
-			{
-				animation = "defeat";
-			}
+			float dx = (front ? 0 : toward * fl.Fwd) + fl.Sx, dy = (front ? toward * fl.Fwd : 0) + fl.Sy;
+			dx += fl.AddX;
+			dy += fl.AddY;
+			string animation = fl.Pose;
+			Color tint = fl.Tint;
+			float alpha = fl.Alpha;
 			Figure figure = enemy ? art.BattleFigure(id, true)
 				: c.Id == vehicle ? (front ? art.VehicleBackFigure(c.Id) : art.VehicleFigure(c.Id))
 				: front ? art.BackFigure(c.Id) : art.BattleFigure(c.Id, false);
@@ -282,7 +232,7 @@ public sealed partial class SampleController
 				figures.Add($"{c.Id} {(c.Id == vehicle ? "vehicle " : "")}{(front ? "back" : "side")}");
 			}
 			// An action's own pose, when the figure has it; else the action's animation plays, said once per figure and pose.
-			if (step is { Kind: StepKind.Animate } && turn is { Look: { Pose: { } pose } actionLook } && turn.Actors.Contains(i) && animation == actionLook.Animation)
+			if (fl.LookPose is { } pose)
 			{
 				if (figure.Animations.ContainsKey(pose))
 				{
@@ -299,11 +249,13 @@ public sealed partial class SampleController
 			}
 			FrameRun run = figure.Animations.GetValueOrDefault(animation) ?? figure.Idle;
 			bool idle = run == figure.Idle;
-			int image = figure.Images[run.FrameAt(idle ? _clockMs + i * 137 : _timeline.ElapsedMs, loop: idle)];
-			int left = x - size / 2 + (int)MathF.Round(dx) + jolt.X, top = foot - size + (int)MathF.Round(dy) + jolt.Y;
+			int cell = fl.Frame >= 0 ? -1 : run.FrameAt(idle ? _clockMs + i * 137 : fl.PoseMs < 0 ? _timeline.ElapsedMs : fl.PoseMs, loop: idle || fl.PoseLoop);
+			int image = fl.Frame >= 0 ? figure.Images[Math.Clamp(fl.Frame, 0, figure.Images.Length - 1)] : figure.Images[cell];
+			int left = x - size / 2 + (int)MathF.Round(dx) + jolt.X + figureShift.X, top = foot - size + (int)MathF.Round(dy) + jolt.Y + figureShift.Y;
 			// In the front layout a flying enemy hovers over its place, bobbing, while its shadow stays on the ground.
 			int hover = front && enemy && c.Flying ? size / 5 + (int)MathF.Round(5 * motion * MathF.Sin((_clockMs + i * 211) / 420f)) : 0;
-			Rectangle body = art.Stand(image, left, top - hover, size);
+			int lift = (int)MathF.Round(fl.Lift);
+			Rectangle body = art.Stand(image, left, top - hover - lift, size);
 			bodies[i] = body;
 			// The members seen from behind stand in the strip's shadow, so only the others cast one.
 			if ((!front || enemy) && figure.Shadow)
@@ -316,18 +268,25 @@ public sealed partial class SampleController
 			{
 				hovering.Add(c.Label);
 			}
-			// A change of form: the old form fades out as the new one, lit white, fades in.
-			if (changing && step!.Kind is StepKind.Transform or StepKind.Merge && sc.PreviousId.Length > 0)
+			// A change of form: the old form fades out as the new one fades in.
+			if (fl.Crossfade >= 0 && sc.PreviousId.Length > 0)
 			{
 				Figure old = art.BattleFigure(sc.PreviousId, true);
 				int oldImage = old.Images[old.Idle.FrameAt(_clockMs + i * 137, loop: true)];
 				Rectangle was = art.Stand(oldImage, left, top, size);
-				Picture(oldImage, was.X, was.Y, was.Width, was.Height, Color.White * (alpha * (1f - Ease(p))));
-				tint = Color.Lerp(Color.White * 4f, tint, Ease(p));
-				alpha *= Ease(p);
+				Picture(oldImage, was.X, was.Y, was.Width, was.Height, Color.White * (alpha * (1f - fl.Crossfade)));
+				tint = Color.Lerp(Color.White * 4f, tint, fl.Crossfade);
+				alpha *= fl.Crossfade;
 			}
-			Picture(image, body.X, body.Y, body.Width, body.Height, tint * alpha);
+			if (fl.Palette is { Count: > 0 } palette)
+			{
+				image = s.Derive(image, "palette:" + string.Join(",", palette.Select(p => $"{p.From.PackedValue:x}>{p.To.PackedValue:x}")), (px, _, _) => Recolor(px, palette));
+			}
+			FigurePicture(s, pictures, image, body, tint * alpha, fl, foot + (int)MathF.Round(dy) + jolt.Y + figureShift.Y, i);
+			_probeFigureLooks[c.Label] = $"pose {animation} frame {(fl.Frame >= 0 ? fl.Frame : cell)} offset {(int)MathF.Round(dx)},{(int)MathF.Round(dy)}" +
+				$" color #{tint.R:x2}{tint.G:x2}{tint.B:x2} alpha {alpha.ToString("0.00", CultureInfo.InvariantCulture)}" + (fl.Life.Length > 0 ? " " + fl.Life : "");
 		}
+		_lastBodies = new Dictionary<int, Rectangle>(bodies);
 		_probeFigures = figures.Count == 0 ? "none" : string.Join(", ", figures);
 		_probeFigurePoses = posed.Count == 0 ? "none" : string.Join(", ", posed);
 		_probeBodies = string.Join(", ", bodies.OrderBy(x => x.Key).Select(x => $"{all[x.Key].Label} {x.Value.Width}x{x.Value.Height} {x.Value.Bottom - Where(x.Key).Foot}"));
@@ -346,45 +305,13 @@ public sealed partial class SampleController
 		// strip's `anchor` slots add those as the layout draws them).
 		var anchors = new Dictionary<int, Rectangle>(bodies);
 		var labels = new Dictionary<string, Rectangle>();
-		bool Behind(int i) => front && i < partyCount;
-		bool flash = (step is { Kind: StepKind.Effect, Turn.Look.Flash: true } || step is { Change.Flash: true }) && !reduced && p < 0.25f;
+		List<(Rectangle Area, Color Color)> stageFills = Fills(ctx, "stage", out bool flash);
 		_probeFlash = flash;
+		ctx.Anchors = anchors;
 
 		void DrawEffects()
 		{
-			// A change of the formation plays its effect on the enemy it brings or changes.
-			if (step is { Change: { } change, To: >= 0 } && art.Effect(change.Effect) is { } changeFx && anchors.TryGetValue(step.To, out Rectangle into))
-			{
-				int frame = changeFx.Images[changeFx.Idle.FrameAt(_timeline.ElapsedMs, loop: false)];
-				(int ew, int eh) = art.DrawnEffectSize(frame, effectScaleLarge);
-				s.Image(frame, into.Center.X - ew / 2, into.Center.Y - eh / 2, ew, eh, Color.White);
-			}
-
-			// The effect on each target, centered on its body (on a member seen from behind, its head); in the front layout an
-			// effect on several targets sweeps along them.
-			if (step is { Kind: StepKind.Effect, Turn.Look: { } fx } && art.Effect(fx.Effect) is { } effect)
-			{
-				List<int> hit = [.. turn!.Targets.Where(anchors.ContainsKey)];
-				if (front)
-				{
-					hit = [.. hit.OrderBy(t => anchors[t].Center.X)];
-				}
-				int stagger = front && hit.Count > 1 ? Math.Min(90, fx.EffectMs / (2 * hit.Count)) : 0;
-				for (int k = 0; k < hit.Count; k++)
-				{
-					int ms = _timeline.ElapsedMs - k * stagger;
-					if (ms < 0)
-					{
-						continue;
-					}
-					int frame = effect.Images[effect.Idle.FrameAt(ms, loop: false)];
-					(int ew, int eh) = art.DrawnEffectSize(frame, front && !Behind(hit[k]) ? effectScaleLarge : effectScale);
-					Rectangle r = anchors[hit[k]];
-					int cy = Behind(hit[k]) ? r.Y + r.Height * 3 / 8 : r.Center.Y;
-					s.Image(frame, r.Center.X - ew / 2, cy - eh / 2, ew, eh, Color.White);
-					_probeEffectSize = $"{ew}x{eh}";
-				}
-			}
+			DrawSprites(s, art, ctx, "effects");
 
 			// Labels, statuses and HP bars under the enemies, as before: one per enemy, its group's name and number.
 			// An enemy merging away takes no label: it is sliding into the other one.
@@ -396,6 +323,7 @@ public sealed partial class SampleController
 				&& !(step is { Kind: StepKind.Merge } && i == step.From)))
 			{
 				(int x, int foot, _) = Where(i);
+				x += figureShift.X;
 				bool targeted = i == target;
 				string label = Style.Fit(s, shown[i].Label, labelWidth, Style.Small);
 				int lw = s.Measure(label, Style.Small);
@@ -407,10 +335,10 @@ public sealed partial class SampleController
 				}
 				if (showBars)
 				{
-					Style.Bar(s, x - barW / 2, foot + barY, barW, barH, Shown(shown[i], step, p).Hp, shown[i].MaxHp, Style.Bad);
+					Style.Bar(s, x - barW / 2, foot + barY, barW, barH, Shown(shown[i], step).Hp, shown[i].MaxHp, Style.Bad);
 					barsDrawn++;
 				}
-				DrawIcons(s, art, icons, shown[i], step, p, x - barW / 2, foot + iconsY);
+				DrawIcons(s, art, icons, shown[i], step, x - barW / 2, foot + iconsY);
 				// Without its label the enemy's mark is its bar and icons.
 				int lx = showLabels ? Math.Min(x - lw / 2 - labelPad, x - barW / 2) : x - barW / 2;
 				int ly = showLabels ? labelY : showBars ? barY : iconsY;
@@ -437,23 +365,7 @@ public sealed partial class SampleController
 			// Floating numbers and words over each target: damage, critical, misses, weak and resisted hits, healing, statuses.
 			// Over a member seen from behind they rise from its head, clear of the enemies' labels.
 			var marks = new List<string>();
-			if (step is { Kind: StepKind.Result } && art.Effect(PresentationTable.ChangeFor("instant_defeat", "").Effect) is not null)
-			{
-				// The instant defeat's mark, stamped on the enemy it felled for the whole step.
-				foreach (BattleEvent e in step.Events.Where(e => e.Type == BattleEventType.Message && e.Message == "battle.instant_defeat" && anchors.ContainsKey(e.Target)))
-				{
-					string enemyId = e.Target < shown.Count ? shown[e.Target].Id : "";
-					if (art.Effect(PresentationTable.ChangeFor("instant_defeat", enemyId).Effect) is not { } mark)
-					{
-						continue;
-					}
-					int frame = mark.Images[mark.Idle.FrameAt(_timeline.ElapsedMs, loop: true)];
-					(int ew, int eh) = art.DrawnEffectSize(frame, effectScaleLarge);
-					Rectangle r = anchors[e.Target];
-					s.Image(frame, r.Center.X - ew / 2, r.Center.Y - eh / 2, ew, eh, Color.White * (p < 0.85f ? 1f : (1f - p) / 0.15f));
-					marks.Add(e.Target < shown.Count ? shown[e.Target].Label : "?");
-				}
-			}
+			DrawSprites(s, art, ctx, "over_labels", marks);
 			_probeMarks = marks.Count == 0 ? "none" : string.Join(", ", marks);
 			if (step is { Kind: StepKind.Result or StepKind.RoundEnd })
 			{
@@ -464,7 +376,15 @@ public sealed partial class SampleController
 				BattleEvent? previous = null;
 				foreach (BattleEvent e in step.Events)
 				{
+					ReleaseUnit? unit = step.Units.FirstOrDefault(u => u.Events.Contains(e));
+					if (unit is { Released: false })
+					{
+						previous = e;
+						continue;
+					}
+					float p = Since(step, unit is null ? 0 : unit.Forced ? step.Length : unit.At);
 					int t = e.Type == BattleEventType.ItemHadNoEffect ? e.Actor : e.Target;
+					BattleEvent? previousEvent = previous;
 					if (!anchors.TryGetValue(t, out Rectangle r) || Floating(e, previous, sizes) is not { } floating)
 					{
 						previous = e;
@@ -473,37 +393,40 @@ public sealed partial class SampleController
 					previous = e;
 					int n = stacked.GetValueOrDefault(t);
 					stacked[t] = n + 1;
-					float fade = p < 0.7f ? 1f : (1f - p) / 0.3f;
-					int rise = (int)(numberRise * Ease(Math.Min(1f, p * 2f)));
-					int w = s.Measure(floating.Text, floating.Size);
-					int fy = (Behind(t) ? r.Y + numberMemberY : r.Y - numberY) - rise - n * (floating.Size + numberGap);
-					s.Text(floating.Text, r.Center.X - w / 2 + 2, fy + 2, Color.Black * (0.8f * fade), floating.Size);
-					s.Text(floating.Text, r.Center.X - w / 2, fy, floating.Color * fade, floating.Size);
+					DrawNumber(s, e, floating, p, r, Behind(t), n, numberY, numberMemberY, numberRise, numberGap, NumberKind(e, previousEvent),
+						_timeline.Elapsed - (unit is null ? 0 : unit.At));
 				}
 				UseTextRole(s, TextRole.Menu);
 			}
+			DrawSprites(s, art, ctx, "top");
 
-			// A full-screen flash at the start of a big effect, left out with reduced flash.
-			if (flash)
+			// The scripts' flashes and fills over the stage.
+			foreach ((Rectangle area, Color color) in stageFills)
 			{
-				s.Fill(0, 0, s.Width, stageBottom, Color.White * (0.55f * (1f - p * 4f)));
+				s.Fill(area.X, area.Y, area.Width, area.Height, color);
 			}
 		}
 
 		ui.Set("stage", (UiSlot)((_, _, _, _) =>
 		{
-			if (front)
+			var shifted = new Point(jolt.X + backdropShift.X, jolt.Y + backdropShift.Y);
+			if (!DrawScriptedBackdrop(s, art, ctx, backdrop, shifted, front, Param("backdrop_h"), Param("ground_h")))
 			{
-				DrawFrontBackdrop(s, backdrop, jolt, Param("backdrop_h"), Param("ground_h"));
+				if (front)
+				{
+					DrawFrontBackdrop(s, backdrop, shifted, Param("backdrop_h"), Param("ground_h"));
+				}
+				else
+				{
+					s.Image(backdrop, shifted.X - 8, shifted.Y - 8, s.Width + 16, stageBottom + 8, Color.White);
+				}
 			}
-			else
-			{
-				s.Image(backdrop, jolt.X - 8, jolt.Y - 8, s.Width + 16, stageBottom + 8, Color.White);
-			}
+			DrawSprites(s, art, ctx, "under_figures");
 			foreach (Action picture in pictures)
 			{
 				picture();
 			}
+			DrawSprites(s, art, ctx, "over_figures");
 		}));
 		ui.Set("effects", (UiSlot)((_, _, _, _) => DrawEffects()));
 		// A member being targeted may stand behind the command window: its pointer stays on top.
@@ -524,7 +447,7 @@ public sealed partial class SampleController
 		UiContext Member(Combatant c)
 		{
 			ShownCombatant sc = shown.ElementAtOrDefault(c.Index) ?? new ShownCombatant(c, -1);
-			(int hp, int tp) = Shown(sc, step, p);
+			(int hp, int tp) = Shown(sc, step);
 			string? next = NextCommand(c);
 			string statusColor = sc.Statuses.Select(id => looks.GetValueOrDefault(id)).Where(l => l?.Color is not null).OrderByDescending(l => l!.Priority).FirstOrDefault()?.Color ?? "";
 			List<string> iconed = [.. Iconed(sc.Statuses, looks)];
@@ -541,7 +464,7 @@ public sealed partial class SampleController
 				.Set("alive", sc.Alive)
 				.Set("acting", commanding ? c.Index == b.Actor : turn?.Actors.Contains(c.Index) == true)
 				.Set("targeted", c.Index == target || (step?.Kind is StepKind.Effect or StepKind.Result && turn?.Targets.Contains(c.Index) == true))
-				.Set("hit", step is { Kind: StepKind.Result } && step.Events.Any(e => e.Type == BattleEventType.DamageDealt && e.Target == c.Index))
+				.Set("hit", step is { Kind: StepKind.Result } && step.Units.Any(u => u.Released && u.Events.Any(e => e.Type == BattleEventType.DamageDealt && e.Target == c.Index)))
 				.Set("hp", hp)
 				.Set("max_hp", sc.MaxHp)
 				.Set("hp_low", hp * 4 <= sc.MaxHp)
@@ -552,7 +475,7 @@ public sealed partial class SampleController
 				.Set("status_color", statusColor)
 				.Set("icon_count", iconed.Count + sc.Leaving.Count(l => l.Step == step && looks.GetValueOrDefault(l.Id)?.Icon != false))
 				.Set("portrait", c.Id == vehicle ? art.VehicleFrame(c.Id, Direction.South, 0) : art.Portrait("", c.Id))
-				.Set("icons", (UiSlot)((x, y, _, _) => DrawIcons(s, art, icons, sc, step, p, x, y, looks)))
+				.Set("icons", (UiSlot)((x, y, _, _) => DrawIcons(s, art, icons, sc, step, x, y, looks)))
 				.Set("anchor", (UiSlot)((x, y, w, h) => anchors.TryAdd(c.Index, new Rectangle(x, y, w, h))))
 				.Set("command", command)
 				.Set("command_icon", command.Length > 0 ? art.CommandIcon(command) : -1)
@@ -642,6 +565,10 @@ public sealed partial class SampleController
 			.Set("banner_big", step?.Kind is StepKind.Outcome or StepKind.Opening or StepKind.Round)
 			.Set("banner_cancel", step?.Kind == StepKind.Cancel)
 			.Set("banner_alpha", turnName ? 1f : Math.Clamp(Math.Min(_timeline.Progress * 6f, (1f - _timeline.Progress) * 6f), 0f, 1f));
+		if (NameWindow(step) is float nameAlpha && step?.Turn is { } named)
+		{
+			ui.Set("banner", nameAlpha > 0 ? named.Name : "").Set("banner_plate", true).Set("banner_alpha", nameAlpha);
+		}
 
 		// The log's newest lines: its last entries wrapped to the log window, the newest entry's lines bright.
 		ui.Set("log_shown", b.LogShown);
@@ -719,28 +646,39 @@ public sealed partial class SampleController
 		return null;
 	}
 
-	// A bar's numbers while the step that changed them plays, else where it left them.
-	private static (int Hp, int Tp) Shown(ShownCombatant c, BattleStep? step, float p) => c.BarStep is not null && c.BarStep == step
-		? ((int)MathF.Round(MathHelper.Lerp(c.HpFrom, c.Hp, Ease(p))), (int)MathF.Round(MathHelper.Lerp(c.TpFrom, c.Tp, Ease(p))))
-		: (c.Hp, c.Tp);
+	// How far a step is past `at` (clock units into it) toward its end, 0 to 1: the step's progress for what started with it.
+	private float Since(BattleStep? step, long at) => step is null || step != _timeline.Current ? 1f
+		: Math.Clamp(BattleClock.Ratio(_timeline.Elapsed - at, step.Length - at), 0f, 1f);
+
+	// A bar's numbers while the release that changed them plays, else where it left them.
+	private (int Hp, int Tp) Shown(ShownCombatant c, BattleStep? step)
+	{
+		if (c.BarStep is null || c.BarStep != step)
+		{
+			return (c.Hp, c.Tp);
+		}
+		float p = Since(step, c.BarAt);
+		return ((int)MathF.Round(MathHelper.Lerp(c.HpFrom, c.Hp, Ease(p))), (int)MathF.Round(MathHelper.Lerp(c.TpFrom, c.Tp, Ease(p))));
+	}
 
 	// The status icons' size and the gap between them (the battle layout's `icon_size` and `icon_gap`).
 	private readonly record struct Icons(int Size, int Gap);
 
 	// Status icons in a row: a new one grows in, one that ends blinks out while its step plays. `looks` (the party's
 	// slots) leaves out the statuses shown without an icon and puts the rest in priority order.
-	private static void DrawIcons(IDrawSurface s, Art art, Icons icons, ShownCombatant c, BattleStep? step, float p, int x, int y, Dictionary<string, UiStatusLook>? looks = null)
+	private void DrawIcons(IDrawSurface s, Art art, Icons icons, ShownCombatant c, BattleStep? step, int x, int y, Dictionary<string, UiStatusLook>? looks = null)
 	{
 		int icon = icons.Size;
 		int at = 0;
 		foreach (string id in Iconed(c.Statuses, looks ?? []))
 		{
-			int grow = c.Appeared.GetValueOrDefault(id) is { } appeared && appeared == step ? (int)(icon * (0.4f + 0.6f * Ease(p))) : icon;
+			int grow = c.Appeared.TryGetValue(id, out (BattleStep Step, long At) appeared) && appeared.Step == step ? (int)(icon * (0.4f + 0.6f * Ease(Since(step, appeared.At)))) : icon;
 			s.Image(art.StatusIcon(id), x + at + (icon - grow) / 2, y + (icon - grow) / 2, grow, grow, Color.White);
 			at += icon + icons.Gap;
 		}
-		foreach ((string id, BattleStep leaving) in c.Leaving.Where(l => l.Step == step && looks?.GetValueOrDefault(l.Id)?.Icon != false))
+		foreach ((string id, BattleStep _, long leftAt) in c.Leaving.Where(l => l.Step == step && looks?.GetValueOrDefault(l.Id)?.Icon != false))
 		{
+			float p = Since(step, leftAt);
 			if ((int)(p * 8) % 2 == 0)
 			{
 				s.Image(art.StatusIcon(id), x + at, y, icon, icon, Color.White * (1f - p));

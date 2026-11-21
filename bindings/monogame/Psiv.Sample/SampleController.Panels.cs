@@ -250,7 +250,7 @@ public sealed partial class SampleController
 	{
 		if (_shake is null)
 		{
-			return 0;
+			return FxShake();
 		}
 		// The styles' `field_shake`: pixels a shake of strength 1 moves the view; the profile's reduced flash damps it to a quarter.
 		float pixels = Layout.Styles.Param("field_shake") * (float)Math.Max(0.0, _shake.Action.Strength) * (1f - _shake.Progress);

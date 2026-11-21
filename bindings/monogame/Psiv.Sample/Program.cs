@@ -40,7 +40,7 @@ public static class Program
 		"savefile damage SLOT | click X Y | clickcell X Y | expect letterbox W H X Y WIDTH HEIGHT PERCENT | window W H | window fullscreen |\n" +
 		"assets reload | assets swap FILE WITH | expect asset KEY file|generated | present mark | expect present STEP \"|\" ... | expect presenthas TEXT |\n" +
 		"waitstate MAXFRAMES KEY VALUE | waitstatehas MAXFRAMES KEY TEXT | dev CONSOLE_COMMAND | devrefused CONSOLE_COMMAND | datafile swap FILE WITH |\n" +
-			"battlelayout front|side|data |\n" +
+			"battlelayout front|side|data | animlog mark | expect animlog ENTRY \"|\" ... | expect animloghas TEXT |\n" +
 		"dump | shot FILE.png (window only) | # comment.\n" +
 		"Keys are MonoGame Keys names, buttons MonoGame Buttons names, actions the sample's GameAction names.\n" +
 		"Exit codes: 0 done, 1 a failure, 2 bad arguments.\n";
@@ -209,7 +209,7 @@ public static class Program
 		Console.WriteLine($"assets: {m.Tilesets.Count} tilesets, {m.Characters.Count} characters, {m.Portraits.Count} portraits, {m.Figures.Count} figures, " +
 			$"{m.FieldEnemies.Count} field enemies, {m.Vehicles.Count} vehicles, {m.Backdrops.Count} backdrops, {m.Effects.Count} effects, {m.Sprites.Count} sprites, {m.StatusIcons.Count} status icons, " +
 			$"{(m.Ui is null ? "no UI skin" : m.Ui.Enabled ? "a UI skin" : "a UI skin turned off")}, {m.Audio.Count} sounds, " +
-			$"{(m.BattlePresentation is null ? "the built-in battle presentation" : "a battle presentation table")}, " +
+			$"{(m.BattlePresentation is null ? "the built-in battle presentation" : "a battle presentation table")}, {assets.Animation.Summary()}, " +
 			$"{(m.MapsEnabled ? $"{m.Maps.Count} area pictures" : "area pictures turned off")}, {m.Objects.Count} objects, {m.VehicleOverlays.Count} vehicle overlays" +
 			(m.BitmapFontsEnabled switch { true => $", {m.BitmapFonts.Count} bitmap fonts", false => ", bitmap fonts turned off", null => "" }) +
 			(m.BackdropMaps.Count > 0 ? $", {m.BackdropMaps.Count} backdrop maps" : "") + (m.TitleArt is null ? "" : ", title art") +
@@ -594,6 +594,18 @@ public sealed class ScriptPlayer
 				break;
 			case "waitstate" or "waitstatehas" when w.Length >= 4 && int.TryParse(w[1], CultureInfo.InvariantCulture, out int maxWait):
 				return WaitState(w[2], string.Join(" ", w[3..]), w[0] == "waitstatehas", maxWait, source).GetEnumerator();
+			case "animlog" when w.Length == 2 && w[1] == "mark":
+				_controller.MarkAnimLog();
+				break;
+			case "expect" when w.Length >= 3 && w[1] is "animlog" or "animloghas":
+				// The animation events since the last `animlog mark`, joined by " | ": all of them, or holding the text.
+				string anims = string.Join(" | ", _controller.AnimLogSinceMark);
+				string wantAnims = string.Join(" ", w[2..]);
+				if (w[1] == "animlog" ? anims != wantAnims : !anims.Contains(wantAnims, StringComparison.Ordinal))
+				{
+					Fail($"{source}: animation log [{anims}], expected {(w[1] == "animlog" ? "" : "it to hold ")}[{wantAnims}]");
+				}
+				break;
 			case "present" when w.Length == 2 && w[1] == "mark":
 				_presentMark = _controller.PresentedSteps.Count;
 				break;

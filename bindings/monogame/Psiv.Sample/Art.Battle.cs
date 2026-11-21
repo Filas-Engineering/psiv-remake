@@ -12,7 +12,7 @@ public sealed partial class Art
 	public const int BackdropWidth = 320;
 	public const int BackdropHeight = 105;
 	private const int Horizon = 60;
-	private const int EffectFrames = 6;
+	public const int EffectFrames = 6;
 	private const int EffectFrameMs = 60;
 
 	private readonly Dictionary<Theme, int> _generatedBackdrops = [];

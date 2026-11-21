@@ -876,6 +876,9 @@ value `{"action": ACTION, "id": ID, "slot": SLOT, "values": {VALUE: ID, ...}, "d
 | `cue` | plays the audio cue | the tag's value, or `id` |
 | `music` | plays the music track as the scene's music (as `music play`) | the tag's value, or `id` |
 | `music_stop` | stops the scene's music | - |
+| `music_pause` | holds the music track where it is | - |
+| `music_resume` | lets a held music track go on | - |
+| `fx` | plays a screen effect: a step script of the battle animation set with only flash, color on stage or frame, shake and sound tracks, over the whole screen ([`battle-animation.md`](battle-animation.md), "The dialogue's fx tag"); `--check-assets` reports a name in the table that is no such script | the tag's value, or `id` |
 | `panel_show` | shows a live panel at once, named and filmed by the id (a camera, actor or character), on `slot` (default `center`) | the tag's value, or `id` |
 | `panel_hide` | takes the panel away at once | the tag's value, or `id` |
 | `panel_clear` | takes every panel away at once | - |

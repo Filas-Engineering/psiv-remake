@@ -294,6 +294,7 @@ dotnet-test: dotnet
 	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/test_assets
 	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/font_assets
 	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/layout_assets
+	python3 -I $(SAMPLE_SCRIPTS)/make_anim_assets.py --broken $(BUILD)/broken_assets
 	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/broken_assets > $(BUILD)/check_assets_broken.txt
 	diff $(SAMPLE_SCRIPTS)/check_assets_broken.expected $(BUILD)/check_assets_broken.txt
 	# The broken copy's layouts (a screen file that does not parse, one with every kind of problem, a missing one, broken
@@ -326,10 +327,39 @@ dotnet-test: dotnet
 	$(call small_run,small_field,1100)
 	$(call small_run,small_menus,700)
 	$(call small_run,small_battle,1100)
+	# The example battle animation set (make_anim_assets.py: every track type on the placeholder abilities and figures) on
+	# the front data copy with --dev, on a copy of its directory since the run swaps in the 59.92 Hz file; then over the
+	# 640x480 and 320x224 layout sets.
+	python3 -I $(SAMPLE_SCRIPTS)/make_anim_assets.py $(BUILD)/export $(BUILD)/anim_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --check-assets --assets $(BUILD)/anim_assets
+	rm -rf $(BUILD)/sample_battle_anim_saves $(BUILD)/battle_anim_assets
+	cp -R $(BUILD)/anim_assets $(BUILD)/battle_anim_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_battle_anim_saves --assets $(BUILD)/battle_anim_assets \
+		--script $(SAMPLE_SCRIPTS)/battle_anim.txt --frames 6000 > $(BUILD)/sample_battle_anim_headless.txt || (cat $(BUILD)/sample_battle_anim_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_battle_anim_headless.txt
+	@for set in layout_assets small_assets; do \
+		rm -rf $(BUILD)/sample_anim_$${set}_saves; \
+		python3 -I $(SAMPLE_SCRIPTS)/make_anim_assets.py $(BUILD)/export $(BUILD)/anim_$$set $(BUILD)/$$set || exit 1; \
+		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_anim_$${set}_saves --assets $(BUILD)/anim_$$set \
+			--script $(SAMPLE_SCRIPTS)/battle_anim_layouts.txt --frames 3000 > $(BUILD)/sample_anim_$${set}_headless.txt || { cat $(BUILD)/sample_anim_$${set}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_anim_$${set}_headless.txt; \
+	done
 	# The dialogue's control tags in English and Japanese, on a data copy with a scene that uses every one.
 	python3 -I $(SAMPLE_SCRIPTS)/make_tag_data.py $(GAME)/data $(CORE)/data $(BUILD)/tag_data
 	$(call tag_run,dialogue_tags,)
 	$(call tag_run,dialogue_tags_ja,--language ja --strict-text)
+	# The dialogue's fx, music_pause and music_resume tags with the example animation set, on a copy since the run swaps in
+	# a dialogue layout; and a layout whose fx tag names a script that is not a screen effect, or none, as problems.
+	rm -rf $(BUILD)/sample_dialogue_fx_saves $(BUILD)/dialogue_fx_assets $(BUILD)/dialogue_fx_broken_assets
+	cp -R $(BUILD)/anim_assets $(BUILD)/dialogue_fx_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/tag_data/game/data --dev --saves $(BUILD)/sample_dialogue_fx_saves --assets $(BUILD)/dialogue_fx_assets \
+		--script $(SAMPLE_SCRIPTS)/dialogue_fx.txt --frames 900 > $(BUILD)/sample_dialogue_fx_headless.txt || (cat $(BUILD)/sample_dialogue_fx_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_dialogue_fx_headless.txt
+	cp -R $(BUILD)/anim_assets $(BUILD)/dialogue_fx_broken_assets
+	cp $(BUILD)/dialogue_fx_broken_assets/alt/dialogue_fx_broken.json $(BUILD)/dialogue_fx_broken_assets/ui/dialogue.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/dialogue_fx_broken_assets > $(BUILD)/check_assets_fx.txt
+	grep -q "tags.glow: fx script 'turn.default' has phases other than step" $(BUILD)/check_assets_fx.txt
+	grep -q "tags.glow: no fx script 'no.such_fx'" $(BUILD)/check_assets_fx.txt
 	# The real-time field input (fieldinput realtime): walking, run and the stick with --dev, interaction and its prompt,
 	# the prompt in the example layout set, and script actors through the built-in animations on a data copy with an
 	# actor named after an encounter.

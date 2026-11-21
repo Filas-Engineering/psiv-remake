@@ -70,7 +70,7 @@ public static class UiFields
 	// What a `tags` table may map a control tag to: an audio cue or a music track by id (the tag's value, or the entry's
 	// `id`), the music stopped, a live panel shown (on the entry's `slot`), hidden or all cleared, the speaker's portrait
 	// taken away, or only a transcript line.
-	public static readonly string[] TagActions = ["cue", "music", "music_stop", "panel_show", "panel_hide", "panel_clear", "picture", "picture_hide", "picture_clear",
+	public static readonly string[] TagActions = ["cue", "fx", "music", "music_pause", "music_resume", "music_stop", "panel_show", "panel_hide", "panel_clear", "picture", "picture_hide", "picture_clear",
 		"portrait_off", "log"];
 
 	// The tags a line's host acts on itself (events/FORMAT.md "Control tags") and the name tokens the session resolves,

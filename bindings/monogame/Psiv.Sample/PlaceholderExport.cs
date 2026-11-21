@@ -322,6 +322,8 @@ public static class PlaceholderExport
 
 		BattlePresentation.Defaults().Write(Path.Combine(dir, BattlePresentation.FileName));
 		manifest["battle_presentation"] = BattlePresentation.FileName;
+		BattleAnimation.Builtin().Write(Path.Combine(dir, BattleAnimation.FileName));
+		manifest["battle_animation"] = BattleAnimation.FileName;
 		File.WriteAllText(Path.Combine(dir, AssetManifest.FileName),
 			manifest.ToJsonString(new JsonSerializerOptions { WriteIndented = true, IndentCharacter = '\t', IndentSize = 1 }) + "\n");
 

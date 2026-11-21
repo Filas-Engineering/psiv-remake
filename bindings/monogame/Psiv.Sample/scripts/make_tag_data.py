@@ -9,7 +9,9 @@ scripts/assets_portraits.txt, naming one expression the test assets lack in both
 `dialogue_pictures`, for scripts/dialogue_pictures.txt, shows the test assets' still pictures with the `picture` tags (a
 chart, then a bell tower in its place, one the assets lack, a hide naming the picture that is not up, then a clear) and
 rings a `bell` tag whose values a swapped-in dialogue layout maps to cues (two values it maps, one it leaves to its
-default).
+default). A fourth, `dialogue_fx`, for scripts/dialogue_fx.txt, plays the example animation set's screen effects with
+`flash` tags (a red flash, a dusk tint, one name no script has) and holds and resumes the music with `hush` and `resume`
+tags, which a swapped-in dialogue layout maps to the `fx`, `music_pause` and `music_resume` actions.
 
 Usage: make_tag_data.py GAME_DATA CORE_DATA OUT
 
@@ -43,6 +45,12 @@ event dialogue_pictures skippable
 	say guide @pictures.swap
 	narrate @pictures.hide
 end
+
+# Test-only (scripts/make_tag_data.py): screen effects from the animation set, and the music held and resumed.
+event dialogue_fx skippable
+	say guide @fx.flash
+	say guide @fx.hush
+end
 """
 
 STRINGS = {
@@ -65,6 +73,8 @@ STRINGS = {
 		"pictures.show": "{picture:chart}Here is the cove on the old chart.{bell:1} Hear the pier answer?",
 		"pictures.swap": "{picture:tower}And this is the bell tower.{bell:2} It rang again.{bell:9}{picture:lantern}",
 		"pictures.hide": "{picture_hide:chart}That is all I know.{picture_hide:tower} Off you go.{pictures_clear}",
+		"fx.flash": "{flash:red}The beacon flares red!{wait:40}{flash:dusk} And the sky darkens.{flash:smoke}",
+		"fx.hush": "{hush}Quiet... listen.{wait:30}{resume} There, the tune again.",
 	},
 	"ja": {
 		"tags.portrait": "もう戻ったのかい？{portrait:guide}なら、これを聞いておくといい。{page}"
@@ -86,6 +96,8 @@ STRINGS = {
 		"pictures.show": "{picture:chart}古い海図の入り江だ。{bell:1}桟橋が応えたのが聞こえる？",
 		"pictures.swap": "{picture:tower}これが鐘楼だ。{bell:2}また鳴った。{bell:9}{picture:lantern}",
 		"pictures.hide": "{picture_hide:chart}知っているのはこれだけ。{picture_hide:tower}さあ、行っておいで。{pictures_clear}",
+		"fx.flash": "{flash:red}灯台が赤く光った！{wait:40}{flash:dusk}空が暗くなる。{flash:smoke}",
+		"fx.hush": "{hush}静かに……聞いて。{wait:30}{resume}ほら、また曲が。",
 	},
 }
 

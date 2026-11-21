@@ -91,6 +91,38 @@ assets: battle_presentation.json: changes.transform: unknown effect 'smoke': not
 assets: battle_presentation.json: changes.join.nobody: unknown change: join, merge, transform, instant_defeat, each alone or with .ENEMY for an enemy of the game data
 assets: battle_presentation.json: actions.strike: no figure has a pose 'moonwalk': the attack animation plays
 assets: battle_presentation.json: enemies.rust_hound.attack: the figure of rust_hound has no pose 'pounce': the attack animation plays
+assets: battle_animation.json: -: unknown field 'scirpts'
+assets: battle_animation.json: version: must be 1
+assets: battle_animation.json: include[0]: missing file
+assets: animation/broken_extras.json: -: unknown field 'version'
+assets: battle_animation.json: settings.rate: must be a number from 1 to 240
+assets: battle_animation.json: settings.log_timing: must be one of step, release
+assets: battle_animation.json: scripts.spark.bolt.tracks[1].at: unknown phase or mark 'impakt': forward, banner, animate, effect, result, back, end
+assets: battle_animation.json: scripts.spark.bolt.tracks[1].effect: unknown effect 'sprak.orb': not an effect animation, an effect in assets.json, a generated effect or $look.effect
+assets: battle_animation.json: scripts.spark.bolt.tracks[2]: release at frame 30 is before the result phase (frame 746); it is released at frame 746
+assets: battle_animation.json: scripts.spark.bolt.tracks[3].if: unknown condition 'crit': hit, miss, critical, weak, resisted, immune, defeat, multi, single, party_actor, enemy_actor, vehicle, combo, escaped, layout:front, layout:side, element:ID, $look.flash or a $param
+assets: battle_animation.json: scripts.spark.bolt.tracks[4]: 'multiply' cannot be used on 'stage': use tint and amount
+assets: battle_animation.json: scripts.spark.bolt.tracks[5].type: unknown track type 'wobble': backdrop, call, color, flash, move, name_window, pose, react, release, shake, sound, sprite, state, transition
+assets: battle_animation.json: scripts.loop.a.extends: 'loop.b' extends 'loop.a': a cycle
+assets: battle_animation.json: scripts.loop.b.extends: 'loop.a' extends 'loop.b': a cycle
+assets: battle_animation.json: scripts.Bad Id: an id is lower-case letters, digits, '_' and '.', 1 to 64 characters
+assets: battle_animation.json: effects.spark.orb.sheet: unknown effect sheet 'no_such_sheet': an effect in assets.json or a generated effect
+assets: battle_animation.json: effects.spark.orb.frames: must be a list of frame indexes, -1 drawing nothing
+assets: battle_animation.json: transitions.blocks.kind: unknown transition kind 'mosaic': flash, fade, wipe, iris, tiles, spiral, split
+assets: battle_animation.json: transitions.dots.tile: must be a whole number from 8 to 160
+assets: battle_animation.json: numbers.critical.color: unknown color 'gold': a styles.json color name or #rrggbb
+assets: battle_animation.json: numbers.huge: unknown result kind 'huge': damage, critical, weak, resisted, immune, miss, heal, tp, revive, status, status_resisted, status_ends, stat_up, stat_down, stat_normal, no_effect, felled, felling_resisted
+assets: battle_animation.json: select.ability:sparkk: unknown ability or item 'sparkk': not in the game data
+assets: battle_animation.json: select.weapon:axe: unknown weapon class 'axe': blade, greatblade, rod, sling
+assets: battle_animation.json: select.combo:twin_arcs: unknown combination recipe 'twin_arcs': not in combos.json
+assets: battle_animation.json: select.ability:spark: unknown script 'spark.bolts'
+assets: battle_animation.json: select.step:notice.Game Lvl: unknown notice key 'Game Lvl'
+assets: battle_animation.json: select.status:poison/wobble: status:ID/idle or status:ID/tick
+assets: battle_animation.json: figures.enemy.states.defeat.kind: must be one of fade, blink, bands, slide, sink, flash_fade, frames
+assets: battle_animation.json: figures.monster: unknown scope 'monster': party, enemy, vehicle, or one of them with :ID
+assets: battle_animation.json: weapon_classes.category:axe: unknown key: equipment:ID or category:NAME, with an equipment piece or weapon category of the game data
+assets: battle_animation.json: placements.count:9: unknown key: count:1 to count:5 (5 is five or more enemies) or encounter:ID
+assets: animation/broken_extras.json: fragments.cast_glow: calls nest deeper than 8, or call themselves
 assets: ui/menu.json: -: missing file: the built-in layout stands in
 assets: ui/styles.json: resolution: field 'width' must be a whole number from 160 to 7680
 assets: ui/styles.json: colors.mud: must be #rrggbb or #rrggbbaa
@@ -138,5 +170,5 @@ assets: ui/panels.json: params.zoom: unknown param: bottom, gutter, margin, slid
 assets: ui/panels.json: -: the built-in layout of this screen stands in
 assets: ui/title.json: -: not valid JSON: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 27.
 assets: ui/title.json: -: the built-in layout of this screen stands in
-assets: 0 tilesets, 14 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 4 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 23 layout files (1280x720)
-FAILED: 140 problems.
+assets: 0 tilesets, 14 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 4 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 23 layout files (1280x720)
+FAILED: 172 problems.

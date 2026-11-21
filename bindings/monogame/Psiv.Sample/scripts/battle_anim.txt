@@ -1,0 +1,304 @@
+# The battle animation scripts (docs/battle-animation.md) with the example set scripts/make_anim_assets.py writes, on the
+# front data copy with --dev. Seed 1. Each moment's script frames are asserted from the animation log: the stepped
+# fade and split reveal into battle, the blade attack's hit on frame 42, the heal, the hound pulling a member under it,
+# a status's tick, the staff's teleport and the boss's next form with its recolor and backdrop swap, the frost's three
+# releases six frames apart with its column and hit-all effects, the combination, a two-blade and a two-handed attack,
+# the instant defeat's mark and bands, a hurry and a fast-forward, the side layout, the previewer, `anim expand`, and
+# the same scripts at 59.92 Hz with log lines on their release frames after a reload mid-battle. After each round the
+# playback matches the session (battlesync). With --window the shot lines save screenshots under build/shots/.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev level fighter 30
+dev level mystic 60
+dev level medic 20
+
+# Into battle: four fade levels three frames apart over the field, then the backdrop and the figures slide in.
+animlog mark
+present mark
+dev battle training
+expect mode Battle
+waitstatehas 60 transition split cover 6/
+shot build/shots/anim_intro_cover.png
+waitstatehas 60 transition split reveal 4/
+shot build/shots/anim_intro_split.png
+waitstate 300 battlephase Command
+expect presenthas transition split | intro
+expect animloghas start ex.intro (battle:transition_in) @0
+
+# The fighter's blade (one hand), the mystic's Hush on the hound, the medic's Mend on the fighter; the hound bites.
+animlog mark
+press Enter
+press Enter
+press Down
+press Enter
+press Down 3
+press Enter
+press Down 2
+press Enter
+press Down
+press Enter
+press Enter
+press Enter
+waitstatehas 600 anim ex.blade.one weapon:blade/one
+expect statehas animkey ability:strike - | weapon:blade/one/character:fighter/encounter:training - | weapon:blade/one/character:fighter/count:3 -
+expect statehas animkey weapon:blade/one/count:3 - | weapon:blade/one ex.blade.one
+waitstate 120 animframe 30
+expect statehas animtracks swing state 4/10, lunge move 4/10
+shot build/shots/anim_blade_swing.png
+waitstate 60 animframe 43
+expect statehas released 1/1 Gel Mite A -60 @42
+waitstatehas 600 anim ex.mend ability:mend
+waitstate 120 animframe 70
+shot build/shots/anim_mend_window.png
+waitstatehas 600 anim ex.hound enemy:rust_hound/attack
+waitstate 120 animframe 30
+expect statehas figure.Test_Fighter pose hurt
+shot build/shots/anim_hound_pull.png
+waitstate 900 battlephase Command
+expect animloghas start ex.blade.one (weapon:blade/one) @0 | phase forward @0 | phase banner @8 | phase animate @26 | cue ex_swing @30 | phase effect @36 | phase result @42 | release Gel Mite A -60 @42 | phase back @72 | end @80
+expect animloghas start ex.mend (ability:mend) @0 | phase forward @0 | phase banner @8 | phase animate @26 | phase effect @42 | phase result @62
+expect animloghas start ex.hound (enemy:rust_hound/attack) @0 | phase forward @0 | phase banner @6 | phase animate @20 | phase effect @34 | cue ex_snap @34 | phase result @38
+expect animloghas release Rust Hound +silence @74
+expect statehas battlesync all match
+
+# The next round's banner ticks the hound's silence; everyone defends.
+animlog mark
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 120 anim step.banner step:round
+shot build/shots/anim_silence_tick.png
+waitstate 900 battlephase Command
+expect animloghas start step.banner (step:round) @0 | tick silence Rust Hound @0 | cue ex_tick @0 | end @28
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+expect screen Field
+
+# The boss: the mystic's staff teleports beside it; in the second round its next form recolors the old one, darkens
+# and swaps the backdrop for the rest of the battle, and replaces it on frame 48.
+animlog mark
+dev battle colossus
+waitstate 300 battlephase Command
+press Enter 6
+waitstatehas 600 anim ex.rod weapon:rod
+waitstate 60 animframe 34
+expect statehas figure.Test_Mystic pose attack
+shot build/shots/anim_rod_teleport.png
+waitstate 900 battlephase Command
+press Enter 6
+waitstatehas 900 anim ex.core change:transform.tide_colossus_core
+waitstate 60 animframe 30
+expect statehas backdropfx tint
+shot build/shots/anim_core_recolor.png
+waitstate 60 animframe 50
+expect statehas released 1/1 Tide Colossus Core becomes Tide Colossus Core @48
+expect statehas shown Tide Colossus Core
+waitstate 60 animframe 70
+expect statehas backdropfx swap
+shot build/shots/anim_core_swap.png
+waitstate 900 battlephase Command
+expect animloghas start ex.rod (weapon:rod) @0 | phase forward @0 | phase banner @8 | phase animate @26 | phase effect @40 | phase result @48
+expect animloghas start ex.core (change:transform.tide_colossus_core) @0 | cue ex_quake @0 | release Tide Colossus Core becomes Tide Colossus Core @48 | cue critical @48 | end @96
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+expect statehas backdropfx swap
+press Enter
+wait 60
+expect screen Field
+
+# Frost Pane on three enemies: the bursts six frames apart from frame 44, the releases with them from frame 53, the
+# column rings and the burst laid over all three; the backdrop chills and ripples and the layers shake apart.
+animlog mark
+dev battle training
+waitstate 300 battlephase Command
+press Down 4
+press Enter
+press Down
+press Enter
+press Down 2
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 anim ex.frost.three ability:frostbite/count:3
+# 50 runner frames of 16 ms from the turn's first frame: 48 script frames at 60 Hz.
+wait 50
+expect state animframe 48
+waitstate 120 animframe 50
+expect statehas backdropfx tint, wave
+shot build/shots/anim_frost_bursts.png
+waitstate 60 animframe 60
+expect statehas released 2/3 Gel Mite A -60 resisted @53, Gel Mite B -60 resisted @59
+shot build/shots/anim_frost_release.png
+waitstate 900 battlephase Ended
+expect animloghas phase effect @44 | cue ex_crack @44 | cue ex_crack @50 | phase result @53 | release Gel Mite A -60 resisted @53 | cue ex_crack @56 | release Gel Mite B -60 resisted @59 | release Rust Hound -90 @65 | phase back @93 | end @101
+expect animloghas start ex.victory (step:outcome.victory) @0 | end @72
+expect statehas battlesync all match
+press Enter
+waitstatehas 60 transition tiles cover
+shot build/shots/anim_outro_tiles.png
+wait 60
+expect screen Field
+
+# An instant defeat on the lone ooze, placed by the file at the stage's middle: the ring, the mark, the bands.
+animlog mark
+dev battle lone_ooze
+waitstate 300 battlephase Command
+press Down 4
+press Enter
+press Down
+press Enter
+press Up
+press Enter
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 anim ex.unmake ability:unmake
+waitstatehas 120 step result Twin Ooze felled
+wait 20
+expect statehas marks Twin Ooze
+expect statehas figure.Twin_Ooze defeat:instant
+shot build/shots/anim_unmake_bands.png
+waitstate 900 battlephase Ended
+expect animloghas start ex.unmake (ability:unmake) @0
+expect animloghas cue ex_void @52 | phase result @76
+expect animloghas cue ex_stamp
+expect statehas battlesync all match
+press Enter
+wait 60
+
+# A hurry cuts the step and releases what it holds; a fast-forward skips the rest of the round silently.
+animlog mark
+dev battle training
+waitstate 300 battlephase Command
+press Down 4
+press Enter
+press Down
+press Enter
+press Down 2
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 step effect burst_chill
+press Enter
+waitstatehas 60 step result
+expect animloghas hurry @44>53
+hold F 30
+waitstate 300 battlephase Ended
+expect animloghas skip
+expect statehas battlesync all match
+press Enter
+wait 60
+
+# The side layout: the blade attack across the stage.
+battlelayout side
+animlog mark
+dev battle training
+waitstate 300 battlephase Command
+press Enter
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 anim ex.blade.one weapon:blade/one
+waitstate 120 animframe 30
+shot build/shots/anim_side_blade.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+battlelayout data
+
+# The previewer: Frost Pane on dummies, seeking to frame 59 and stepping back one frame; and `anim expand`.
+dev preview anim ability:frostbite
+waitstatehas 300 preview anim ability:frostbite frame
+dev anim seek 59
+expect state preview anim ability:frostbite frame 59
+expect statehas released 2/3
+shot build/shots/anim_preview_seek.png
+dev anim step -1
+expect state preview anim ability:frostbite frame 58
+expect statehas released 1/3
+dev preview stop
+# The combination on two dummy casters: the projectiles meet on frame 82, the release.
+dev preview anim combo:twin_arc
+waitstatehas 300 preview anim combo:twin_arc frame
+dev anim seek 74
+expect statehas anim ex.twin preview frame 74/132 effect
+shot build/shots/anim_twin_converge.png
+dev anim seek 84
+expect statehas released 3/3
+shot build/shots/anim_twin_nova.png
+dev preview stop
+# Two blades and a two-handed blade (the class table maps greatblade to heavy): the hit on frames 45 and 54.
+dev preview anim weapon:blade/both
+waitstatehas 300 preview anim weapon:blade/both frame
+dev anim seek 40
+expect statehas animtracks cut2 sprite 1/20, plate name_window
+shot build/shots/anim_blade_both.png
+dev anim seek 46
+expect statehas released 1/1 Dummy A -24 @45
+dev preview stop
+dev preview anim weapon:heavy/both
+waitstatehas 300 preview anim weapon:heavy/both frame
+dev anim seek 38
+shot build/shots/anim_heavy_leap.png
+dev anim seek 55
+expect statehas released 1/1 Dummy A -24 @54
+dev preview stop
+dev anim expand ability:spark
+expect statehas consolelast {"ex.spark":{"phases":{"forward":8,"banner":20,"animate":18,"effect":16,"result":32,"back":8}
+dev anim why ability:spark
+expect statehas consolelast ability:spark -> ex.spark
+dev resume
+
+# The same scripts at 59.92 Hz, with log lines on their release frames, read in mid-battle: the next round has them.
+dev battle training
+waitstate 300 battlephase Command
+assets swap battle_animation.json alt/battle_animation_ntsc.json
+assets reload
+animlog mark
+press Down 4
+press Enter
+press Down
+press Enter
+press Down 2
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 anim ex.frost.three ability:frostbite/count:3
+# At 59.92 Hz the same 50 runner frames are 47 script frames; the releases keep their script frames.
+wait 50
+expect state animframe 47
+waitstatehas 600 step result
+expect state battlelines 5
+waitstate 30 animframe 60
+expect state battlelines 7
+waitstate 30 animframe 66
+expect state battlelines 9
+waitstate 900 battlephase Ended
+expect animloghas phase result @53 | release Gel Mite A -60 resisted @53 | cue ex_crack @56 | release Gel Mite B -60 resisted @59 | release Rust Hound -90 @65
+expect statehas battlesync all match
+press Enter
+wait 60
+expect screen Field

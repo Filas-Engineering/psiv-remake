@@ -4,7 +4,7 @@ namespace Psiv.Sample;
 
 // Join, Merge and Transform show the enemy formation changing; Sync brings the stage to the session's state when a
 // developer command ended the battle outside the events.
-public enum StepKind { Intro, Opening, Round, Forward, Retarget, Banner, Animate, Effect, Result, Back, Cancel, RoundEnd, Notice, Outcome, Join, Merge, Transform, Sync }
+public enum StepKind { Intro, Opening, Round, Forward, Retarget, Banner, Animate, Effect, Result, Back, Cancel, RoundEnd, Notice, Outcome, Join, Merge, Transform, Sync, Transition }
 
 // One action as the stage shows it: who moves (every participant of a combination), whom it reaches, and its look.
 public sealed class BattleTurn
@@ -14,6 +14,36 @@ public sealed class BattleTurn
 	public ActionLook? Look;
 	// The action's name, shown over the turn's steps.
 	public string Name = "";
+	// What chooses its animation script: the command, the ability or item, the acting enemy's id, the combination's
+	// recipe, and the action's shape.
+	public CommandKind Command;
+	public string Ability = "";
+	public string EnemyActor = "";
+	public string Recipe = "";
+	public bool Combo;
+	public bool Escape;
+	public bool Escaped;
+	public ActionShape? Shape;
+}
+
+// Results a script releases together: their frame within the step (clock units from its start) and, once released,
+// whether the step's end forced them.
+public sealed class ReleaseUnit
+{
+	public List<BattleEvent> Events = [];
+	public int Target = -1;
+	public long At;
+	public bool Released;
+	public bool Forced;
+}
+
+// A reaction script playing on one figure from a release, until its step ends.
+public sealed class Reaction
+{
+	public required AnimRun Run;
+	public required string Key;
+	public int Figure;
+	public long Start;
 }
 
 // One staged step of a round's playback. The events it presents change what the stage shows when it starts; its log
@@ -22,6 +52,8 @@ public sealed class BattleStep
 {
 	public StepKind Kind;
 	public int LengthMs;
+	// In clock units (BattleClock); -1 until the timeline takes the step, which then derives it from LengthMs.
+	public long Length = -1;
 	public string Text = "";
 	public string Description = "";
 	public BattleTurn? Turn;
@@ -31,7 +63,20 @@ public sealed class BattleStep
 	public ActionLook? Change;
 	public List<BattleEvent> Events = [];
 	public List<string> Lines = [];
+	// Per line, the index of the event it tells of in Events, -1 for the step's own.
+	public List<int> LineEvents = [];
 	public List<string> Cues = [];
+	// The key's detail for step scripts: the opening, notice key, outcome or cancel reason.
+	public string Sub = "";
+	// The script playing this step and the script time the step starts at; for a retarget or change step inside a turn,
+	// the turn's script held at its time.
+	public AnimRun? Run;
+	public long At;
+	public AnimRun? Held;
+	public long HeldAt;
+	public List<ReleaseUnit> Units = [];
+	public List<Reaction> Reactions = [];
+	public List<string> Lookup = [];
 }
 
 // Plays steps on the controller's clock: the current step runs for its length, scaled by the battle speed, and the next
@@ -40,18 +85,26 @@ public sealed class BattleStep
 public sealed class BattleTimeline
 {
 	private readonly Queue<BattleStep> _pending = new();
-	private float _elapsedMs;
+	private long _carry;
 
 	public BattleStep? Current { get; private set; }
 	public bool Done => Current is null && _pending.Count == 0;
-	// How far through the current step, 0 to 1, and its milliseconds at 1x so far.
-	public float Progress => Current is null || Current.LengthMs == 0 ? 1f : Math.Clamp(_elapsedMs / Current.LengthMs, 0f, 1f);
-	public int ElapsedMs => (int)_elapsedMs;
+	// Script frames a second, in thousandths (60000 is 60 Hz); a frame is a million clock units.
+	public int RateMilli { get; set; } = BattleClock.DefaultRateMilli;
+	// How far through the current step, 0 to 1, its milliseconds at 1x so far, and its clock units so far.
+	public float Progress => Current is null || Current.Length == 0 ? 1f : Math.Clamp(BattleClock.Ratio(Elapsed, Current.Length), 0f, 1f);
+	public int ElapsedMs => (int)(Elapsed / RateMilli);
+	public long Elapsed { get; private set; }
+	public IEnumerable<BattleStep> Pending => _pending;
 
 	public void Add(IEnumerable<BattleStep> steps)
 	{
 		foreach (BattleStep step in steps)
 		{
+			if (step.Length < 0)
+			{
+				step.Length = (long)step.LengthMs * RateMilli;
+			}
 			_pending.Enqueue(step);
 		}
 	}
@@ -60,21 +113,25 @@ public sealed class BattleTimeline
 	{
 		_pending.Clear();
 		Current = null;
-		_elapsedMs = 0;
+		Elapsed = 0;
+		_carry = 0;
 	}
 
-	// The steps that started, in order. `scaledMs` is the frame time times the battle speed.
-	public List<BattleStep> Advance(float scaledMs)
+	// The steps that started, in order. `speedPercent` is the battle speed (100, 150, 200, 300): the clock moves by the
+	// frame's milliseconds times the speed in whole clock units, the remainder carried, so it never rounds.
+	public List<BattleStep> Advance(int dtMs, int speedPercent)
 	{
 		var started = new List<BattleStep>();
 		if (Current is null && !Next(started))
 		{
 			return started;
 		}
-		_elapsedMs += scaledMs;
-		while (Current is not null && _elapsedMs >= Current.LengthMs)
+		long units = (long)dtMs * speedPercent * RateMilli + _carry;
+		Elapsed += units / 100;
+		_carry = units % 100;
+		while (Current is not null && Elapsed >= Current.Length)
 		{
-			_elapsedMs -= Current.LengthMs;
+			Elapsed -= Current.Length;
 			Current = null;
 			Next(started);
 		}
@@ -85,7 +142,7 @@ public sealed class BattleTimeline
 	{
 		if (!_pending.TryDequeue(out BattleStep? step))
 		{
-			_elapsedMs = 0;
+			Elapsed = 0;
 			return false;
 		}
 		Current = step;
@@ -93,11 +150,18 @@ public sealed class BattleTimeline
 		return true;
 	}
 
+	// The previewer's seek: the current step at `elapsed` clock units.
+	public void Seek(long elapsed)
+	{
+		Elapsed = elapsed;
+		_carry = 0;
+	}
+
 	public List<BattleStep> Hurry()
 	{
 		var started = new List<BattleStep>();
 		Current = null;
-		_elapsedMs = 0;
+		Elapsed = 0;
 		Next(started);
 		return started;
 	}
@@ -107,7 +171,7 @@ public sealed class BattleTimeline
 		var started = new List<BattleStep>(_pending);
 		_pending.Clear();
 		Current = null;
-		_elapsedMs = 0;
+		Elapsed = 0;
 		return started;
 	}
 
@@ -141,14 +205,18 @@ public sealed class BattleTimeline
 				}
 				break;
 			case BattleEventType.Message when e.Message.StartsWith("battle.opening.", StringComparison.Ordinal):
-				steps.Add(c.Step(StepKind.Opening, e.Text, "opening " + e.Message["battle.opening.".Length..], [e]));
+				BattleStep opening = c.Step(StepKind.Opening, e.Text, "opening " + e.Message["battle.opening.".Length..], [e]);
+				opening.Sub = e.Message["battle.opening.".Length..];
+				steps.Add(opening);
 				break;
 			case BattleEventType.Message when e.Message.StartsWith("battle.instant_defeat", StringComparison.Ordinal):
 				turn.Add(e);
 				break;
 			case BattleEventType.Message:
 				Flush();
-				steps.Add(c.Step(StepKind.Notice, e.Text, "notice " + e.Text, [e]));
+				BattleStep notice = c.Step(StepKind.Notice, e.Text, "notice " + e.Text, [e]);
+				notice.Sub = e.Message;
+				steps.Add(notice);
 				break;
 			case BattleEventType.RoundStarted:
 				steps.Add(c.Step(StepKind.Round, c.T("ui.battle.round", e.Round), $"round {e.Round}", [e]));
@@ -167,7 +235,9 @@ public sealed class BattleTimeline
 				break;
 			case BattleEventType.BattleEnded:
 				Flush();
-				steps.Add(c.Step(StepKind.Outcome, c.OutcomeText(e.Outcome), "outcome " + GameSession.NameOf(NameKind.Outcome, (int)e.Outcome), [e]));
+				BattleStep outcome = c.Step(StepKind.Outcome, c.OutcomeText(e.Outcome), "outcome " + GameSession.NameOf(NameKind.Outcome, (int)e.Outcome), [e]);
+				outcome.Sub = GameSession.NameOf(NameKind.Outcome, (int)e.Outcome);
+				steps.Add(outcome);
 				break;
 			case BattleEventType.Revived when e.Actor < 0:
 				// A fallen machine member standing up after the battle.
@@ -225,12 +295,16 @@ public sealed class BattleTimeline
 			// A cancelled action shows its reason; one cancelled because the actor is down takes no time.
 			bool down = head is { Cancel: CancelReason.ActorUnable } && head.Status == "defeated";
 			string text = head is null ? "" : head.Text;
-			yield return c.Step(StepKind.Cancel, text, $"cancel {c.Label(actor)}: {text.TrimEnd('.')}", events, t, down ? 0 : -1);
+			BattleStep cancel = c.Step(StepKind.Cancel, text, $"cancel {c.Label(actor)}: {text.TrimEnd('.')}", events, t, down ? 0 : -1);
+			cancel.Sub = head is null ? "" : GameSession.NameOf(NameKind.CancelReason, (int)head.Cancel);
+			yield return cancel;
 			yield break;
 		}
 		if (head.Type == BattleEventType.EscapeAttempted)
 		{
 			t.Actors = [actor];
+			t.Escape = true;
+			t.Escaped = head.Succeeded;
 			yield return c.Step(StepKind.Forward, "", "forward " + c.Label(actor), [], t);
 			string escape = c.T("ui.battle.command.escape");
 			yield return c.Step(StepKind.Banner, escape, "banner " + escape, heads, t);
@@ -272,6 +346,17 @@ public sealed class BattleTimeline
 				commands.TryGetValue(p, out RecordedCommand? part) && part.Id.Length > 0 ? c.T("ui.battle.combo_part", c.Label(p), c.Name(part.Id)) : c.Label(p))))
 			: head.Command switch { CommandKind.Defend => c.T("ui.battle.command.defend"), CommandKind.Attack => c.T("ui.battle.command.attack"), _ => c.Name(head.Ability) };
 		t.Name = name;
+		t.Command = head.Command;
+		t.Ability = head.Ability;
+		t.Shape = shape;
+		t.Combo = head.Type == BattleEventType.ComboTriggered;
+		t.EnemyActor = t.Combo ? "" : c.EnemyId(actor);
+		if (t.Combo)
+		{
+			var parts = head.Participants.Select(p => commands.TryGetValue(p, out RecordedCommand? part) ? part.Id : "").Order(StringComparer.Ordinal).ToList();
+			t.Recipe = c.Data.Recipes.Where(r => r.Value.Result == head.Ability).OrderByDescending(r => r.Value.Abilities.Order(StringComparer.Ordinal).SequenceEqual(parts))
+				.Select(r => r.Key).FirstOrDefault() ?? "";
+		}
 		string actors = string.Join("+", t.Actors.Select(c.Label));
 		yield return c.Step(StepKind.Forward, "", "forward " + actors, [], t);
 		foreach (BattleEvent r in retargets)
@@ -285,12 +370,7 @@ public sealed class BattleTimeline
 		yield return c.Step(StepKind.Animate, "", $"animate {actors} {t.Look.Animation}", [], t, t.Look.AnimateMs);
 		if (results.Count > 0 || changes.Count > 0 || head.Command == CommandKind.Defend)
 		{
-			BattleStep effect = c.Step(StepKind.Effect, "", $"effect {t.Look.Effect} on {string.Join(", ", t.Targets.Select(c.Label))}", [], t, t.Look.EffectMs);
-			if (t.Look.Cue.Length > 0)
-			{
-				effect.Cues.Add(t.Look.Cue);
-			}
-			yield return effect;
+			yield return c.Step(StepKind.Effect, "", $"effect {t.Look.Effect} on {string.Join(", ", t.Targets.Select(c.Label))}", [], t, t.Look.EffectMs);
 		}
 		if (results.Count > 0)
 		{
@@ -342,10 +422,6 @@ public sealed class BattleTimeline
 				step = c.Step(StepKind.Merge, "", $"leave {c.Label(e.Target)}", [e], t, look.EffectMs);
 				(step.From, step.Change) = (e.Target, look);
 			}
-			if (look.Cue.Length > 0)
-			{
-				step.Cues.Add(look.Cue);
-			}
 			yield return step;
 		}
 	}
@@ -354,8 +430,7 @@ public sealed class BattleTimeline
 // What building steps needs from the session and the data: names, log lines and cues for events, the presentation
 // table, the action shapes and the text tables. `labels` grows and changes with the enemies that join or change form
 // as the steps are built, so each step's lines name them as they were then.
-public sealed class BattleContext(GameSession session, List<string> labels, BattlePresentation table, GameData data, Func<BattleEvent, string?> cue,
-	Func<string, object[], string> text)
+public sealed class BattleContext(GameSession session, List<string> labels, BattlePresentation table, GameData data, Func<string, object[], string> text)
 {
 	private readonly IReadOnlyList<Combatant> _final = session.Combatants();
 
@@ -397,14 +472,11 @@ public sealed class BattleContext(GameSession session, List<string> labels, Batt
 			if (Describe(e) is { } line)
 			{
 				step.Lines.Add(line);
+				step.LineEvents.Add(step.Events.IndexOf(e));
 			}
 			if (e.Type == BattleEventType.EnemyTransformed && e.Target < labels.Count)
 			{
 				labels[e.Target] = FinalLabel(e.Target);
-			}
-			if (cue(e) is { } sound)
-			{
-				step.Cues.Add(sound);
 			}
 		}
 		return step;
@@ -477,5 +549,39 @@ public sealed class BattleContext(GameSession session, List<string> labels, Batt
 			BattleEventType.Message => $"{Label(e.Target)} resists felling",
 			_ => "",
 		};
+	}
+}
+
+// The battle's clock: a script frame is a million units, so a millisecond at R thousandths of a hertz is R units and
+// every millisecond and frame length is whole.
+public static class BattleClock
+{
+	public const int DefaultRateMilli = 60000;
+	public const long Frame = 1_000_000;
+
+	// a / b as the float of the reduced fraction, so two lengths in different units that stand in the same ratio give
+	// the same float (a step of 180 ms at 16 ms frames reads as 16f / 180f did).
+	public static float Ratio(long a, long b)
+	{
+		if (b == 0)
+		{
+			return 1f;
+		}
+		long g = Gcd(Math.Abs(a), Math.Abs(b));
+		if (g > 1)
+		{
+			a /= g;
+			b /= g;
+		}
+		return Math.Abs(a) < (1 << 24) && Math.Abs(b) < (1 << 24) ? (float)a / b : (float)((double)a / b);
+	}
+
+	private static long Gcd(long a, long b)
+	{
+		while (b != 0)
+		{
+			(a, b) = (b, a % b);
+		}
+		return a == 0 ? 1 : a;
 	}
 }

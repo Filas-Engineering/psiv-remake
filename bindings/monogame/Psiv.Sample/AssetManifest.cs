@@ -179,6 +179,7 @@ public sealed class AssetManifest
 	public UiEntry? Ui { get; private set; }
 	public List<AudioEntry> Audio { get; } = [];
 	public string? BattlePresentation { get; private set; }
+	public string? BattleAnimation { get; private set; }
 	// False when the manifest turns the whole-area pictures off, which also stops the maps/ file convention.
 	public bool MapsEnabled { get; private set; } = true;
 	public List<MapEntry> Maps { get; } = [];
@@ -218,6 +219,7 @@ public sealed class AssetManifest
 				.Concat(title.Layers.Select(l => l.Image.Path)))
 			.Concat(Ui is null ? [] : new[] { Ui.Frame?.Path, Ui.BattleFrame?.Path, Ui.Cursor, Ui.BarTrack, Ui.BarFill }.OfType<string>().Concat(Ui.PanelFrames.Select(p => p.Path)).Concat(Ui.Fonts.Values.Select(f => f.File)))
 			.Concat(BattlePresentation is null ? [] : [BattlePresentation])
+			.Concat(BattleAnimation is null ? [] : [BattleAnimation])
 			.Concat(UiLayoutEnabled == false ? [] : UiLayoutSet.FilesIn(Directory))
 			.Distinct();
 
@@ -569,7 +571,7 @@ public sealed class AssetManifest
 				return;
 			}
 			Fields(root, "-", "version", "tilesets", "characters", "portraits", "figures", "field_enemies", "vehicles", "backdrops", "effects", "sprites", "status_icons", "ui",
-				"audio", "battle_presentation", "maps", "objects", "field", "vehicle_overlays", "battle_figures", "bitmap_fonts", "ui_layout", "backdrop_maps", "title_art",
+				"audio", "battle_presentation", "battle_animation", "maps", "objects", "field", "vehicle_overlays", "battle_figures", "bitmap_fonts", "ui_layout", "backdrop_maps", "title_art",
 				"command_icons", "pictures", "keepers");
 			if (Int(root, "version", "-", 0, 0, int.MaxValue) != Version)
 			{
@@ -763,6 +765,17 @@ public sealed class AssetManifest
 			Once(m.Audio, a => $"{a.Kind.ToString().ToLowerInvariant()} {a.Id}", "audio");
 			Once(m.Objects, o => o.Key, "objects");
 			Once(m.VehicleOverlays, o => o.Vehicle ?? "the overlay for every vehicle", "vehicle_overlays");
+			if (root.TryGetProperty("battle_animation", out _) && Str(root, "battle_animation", "-") is { } animation)
+			{
+				if (!File.Exists(m.Full(animation)))
+				{
+					Problem("battle_animation", "missing file", animation);
+				}
+				else
+				{
+					m.BattleAnimation = animation;
+				}
+			}
 			if (root.TryGetProperty("battle_presentation", out _) && Str(root, "battle_presentation", "-") is { } table)
 			{
 				if (!File.Exists(m.Full(table)))

@@ -17,6 +17,7 @@
 
 	<ItemGroup>
 		<EmbeddedResource Include="ui/*.json" LogicalName="ui/%(Filename)%(Extension)" />
+		<EmbeddedResource Include="battle/animation.json" LogicalName="battle/animation.json" />
 	</ItemGroup>
 
 	<ItemGroup>

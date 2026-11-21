@@ -166,6 +166,10 @@ public sealed partial class SampleController
 			_paused = true;
 			_stepsPending++;
 		}
+		if (raw.Pressed(StepBackKey) && _animPreview is not null)
+		{
+			AnimSeek(PreviewFrame() - BattleClock.Frame);
+		}
 		if (_preview is not null || _stage is not null)
 		{
 			if (raw.Pressed(Keys.End))
@@ -173,7 +177,11 @@ public sealed partial class SampleController
 				StopPreview();
 				return false;
 			}
-			if (raw.Pressed(Keys.PageDown))
+			if (raw.Pressed(Keys.PageDown) && _animPreview is { } replay)
+			{
+				StartAnimPreview(replay);
+			}
+			else if (raw.Pressed(Keys.PageDown))
 			{
 				PreviewNext();
 			}
@@ -344,6 +352,7 @@ public sealed partial class SampleController
 				List<BattleStep> ending = BattleTimeline.Build(events, Context());
 				int outcome = ending.FindIndex(x => x.Kind == StepKind.Outcome);
 				ending.Insert(outcome < 0 ? ending.Count : outcome, Context().Step(StepKind.Sync, "", "sync", [], lengthMs: DevSyncMs));
+				AttachScripts(ending);
 				_timeline.Add(ending);
 				_battle.Phase = BattlePhase.Playback;
 			}
@@ -388,6 +397,9 @@ public sealed partial class SampleController
 			return true;
 		case "reload" when w.Length == 1:
 			return ReloadData();
+		case "anim":
+		case "preview" when w.Length >= 3 && w[1] == "anim":
+			return AnimCommand(w);
 		case "preview" when w.Length == 1:
 			OpenPicker();
 			return true;
@@ -709,6 +721,9 @@ public sealed partial class SampleController
 			_stage = null;
 			_stageInfo = null;
 			_stageEntry = null;
+			_animPreview = null;
+			_forcedReaction = null;
+			_overlays.Remove("anim");
 			_battle.Active = false;
 			_timeline.Clear();
 			DevLog(T("ui.dev.preview_stopped"));
@@ -717,7 +732,8 @@ public sealed partial class SampleController
 
 	// A battle presentation entry played on dummy targets: synthetic typed events of one turn by the first lineup member,
 	// built into steps by BattleTimeline as a round's are; no session battle runs.
-	private bool StartStagePreview(string entry)
+	// `change` (`transform.ENEMY`) adds a change of form after the results; `dummy` names the dummies' enemy.
+	private bool StartStagePreview(string entry, string? change = null, string? dummy = null, bool combo = false)
 	{
 		if (_s.Mode == Mode.Battle)
 		{
@@ -749,7 +765,7 @@ public sealed partial class SampleController
 		CommandKind command = shape.Kind switch { "item" => CommandKind.Item, "defend" => CommandKind.Defend, "attack" => CommandKind.Attack, _ => CommandKind.Ability };
 		List<string> lineup = _s.Mode == Mode.Title ? [] : Lineup();
 		List<string> characters = [.. lineup.Concat(_data.Characters.Order(StringComparer.Ordinal)).Distinct()];
-		string enemy = _data.Enemies.Order(StringComparer.Ordinal).FirstOrDefault() ?? "dummy";
+		string enemy = dummy is not null && _data.Enemies.Contains(dummy) ? dummy : _data.Enemies.Order(StringComparer.Ordinal).FirstOrDefault() ?? "dummy";
 		string status = _data.Statuses.Order(StringComparer.Ordinal).FirstOrDefault() ?? "";
 		Combatant Make(int index, string id, string label, Side side, int hp, IReadOnlyList<ActiveStatus> statuses) =>
 			new(index, id, label, label, side, side == Side.Enemy ? "dummy" : "", hp, 100, 50, 50, hp > 0, false, statuses, CommandKind.None, "", -1);
@@ -771,6 +787,20 @@ public sealed partial class SampleController
 			_ => [2, 3, 4],
 		};
 		_stageEvents = StageEvents(command, ability, shape, targets, status);
+		// A combination's turn: the first two members cast it together.
+		int head = _stageEvents.FindIndex(e => e.Type == BattleEventType.ActionStarted);
+		if (combo && head >= 0)
+		{
+			_stageEvents[head] = _stageEvents[head] with { Type = BattleEventType.ComboTriggered, Participants = [0, 1] };
+		}
+		if (change is not null && _stageEvents.Count > 0)
+		{
+			string[] ce = change.Split('.', 2);
+			string into = ce.Length > 1 && _data.Enemies.Contains(ce[1]) ? ce[1] : enemy;
+			BattleEvent last = _stageEvents[^1];
+			_stageEvents.Insert(_stageEvents.Count - 1, last with { Type = ce[0] == "join" ? BattleEventType.EnemyJoined : BattleEventType.EnemyTransformed, Actor = 0, Target = ce[0] == "join" ? 5 : 2,
+				Ids = [into], Hp = 100, Amount = 3 });
+		}
 		_stage = stage;
 		_stageInfo = new BattleInfo(true, "", BattleSource.Event, 1, 2, stage.Count, Outcome.Ongoing, false, false, false, false, "", "");
 		_stageEntry = entry;
@@ -780,7 +810,9 @@ public sealed partial class SampleController
 		_battle.Phase = BattlePhase.Playback;
 		_show.Start(stage, 2);
 		_timeline.Clear();
-		_timeline.Add(BattleTimeline.Build(_stageEvents, Context()));
+		List<BattleStep> previewSteps = BattleTimeline.Build(_stageEvents, Context());
+		AttachScripts(previewSteps);
+		_timeline.Add(previewSteps);
 		DevLog(T("ui.dev.previewing_battle", entry));
 		return true;
 	}
@@ -843,12 +875,7 @@ public sealed partial class SampleController
 	// The preview of a battle presentation entry plays like a round's playback, on the dev speed, and holds its last step.
 	private void UpdateStagePreview(int dtMs, ActionInput input)
 	{
-		bool fast = input.Down(GameAction.FastForward);
-		List<BattleStep> started = fast ? _timeline.SkipAll() : input.Confirm ? _timeline.Hurry() : _timeline.Advance(dtMs * SpeedOf(_s.Profile().BattleSpeed));
-		foreach (BattleStep step in started)
-		{
-			PlayStep(step, quiet: fast);
-		}
+		PlaybackTimeline(dtMs, input.Down(GameAction.FastForward), input.Confirm);
 		if (input.Back)
 		{
 			StopPreview();
@@ -862,6 +889,7 @@ public sealed partial class SampleController
 		{
 			DrawWindowOverlay(s);
 		}
+		DrawAnimRuler(s);
 		int y = 52;
 		if (_overlays.Contains("fps"))
 		{
@@ -1117,6 +1145,7 @@ public sealed partial class SampleController
 			"leader" => _s.FieldInfo() is { } f ? $"{f.AreaId} {f.LeaderX} {f.LeaderY}" : "-",
 			"preview" => _picker ? "picker"
 				: _preview is { } p ? $"event {p.Id} panels {p.Controller._panelShows}"
+				: _animPreview is { } animKey ? $"anim {animKey} frame {Frames(PreviewFrame())}"
 				: _stageEntry is { } entry ? $"battle {entry} step {(_timeline.Done ? "done" : _timeline.Current?.Description ?? "starting")}"
 				: "-",
 			_ => "?",
