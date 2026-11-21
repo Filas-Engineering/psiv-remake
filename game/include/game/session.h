@@ -619,6 +619,8 @@ private:
 	void parkVehicle(const std::string& id, const std::string& area, Cell cell);
 	// Off the ridden vehicle onto its cell, or the nearest cell the party can walk on.
 	void dismount();
+	void healMachinesOnStep();
+	void shareWithMembersOutside(const std::vector<rules::PartyMember>& fought, const rules::Rewards& rewards);
 	void arrive(Cell cell);
 	void settleField();
 	const TalkSet* talkSet() const;

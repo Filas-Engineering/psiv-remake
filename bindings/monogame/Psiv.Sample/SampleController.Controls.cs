@@ -76,9 +76,9 @@ public sealed partial class SampleController
 	{
 		IReadOnlyList<Keys> keys = _bindings.KeysOf(action);
 		IReadOnlyList<Buttons> buttons = _bindings.ButtonsOf(action);
-		return _usingGamepad && buttons.Count > 0 ? Bindings.ButtonName(buttons[0])
-			: keys.Count > 0 ? Bindings.KeyName(keys[0])
-			: buttons.Count > 0 ? Bindings.ButtonName(buttons[0])
+		return _usingGamepad && buttons.Count > 0 ? ButtonText(buttons[0])
+			: keys.Count > 0 ? KeyText(keys[0])
+			: buttons.Count > 0 ? ButtonText(buttons[0])
 			: "-";
 	}
 
@@ -90,11 +90,11 @@ public sealed partial class SampleController
 		bool padShown = _usingGamepad && directions.Any(a => _bindings.ButtonsOf(a).Count > 0);
 		if (padShown && directions.Select((a, i) => _bindings.ButtonsOf(a).FirstOrDefault() == dpad[i]).All(x => x))
 		{
-			return "D-pad";
+			return T("ui.hint.d_pad");
 		}
 		if (!padShown && directions.Select((a, i) => _bindings.KeysOf(a).FirstOrDefault() == arrows[i]).All(x => x))
 		{
-			return "Arrows";
+			return T("ui.hint.arrows");
 		}
 		return string.Join("/", directions.Select(Hint));
 	}

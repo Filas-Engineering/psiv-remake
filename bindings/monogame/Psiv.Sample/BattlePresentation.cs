@@ -11,11 +11,12 @@ public sealed record ActionLook(string Animation, string Effect, string Cue, int
 // facing each other across the screen.
 public enum BattleLayout { Front, Side }
 
-// The battle presentation table: the stage's layout (per encounter or area too), step lengths, and a look per ability or
-// item id. An id the table does not name takes the fallback for its kind, effect and element (`technique.damage.shock`,
-// then `technique.damage`, then `technique`), so every action looks reasonable with nothing authored. The built-in
-// defaults cover every fallback key; the asset directory's table (battle_presentation.json) overrides any field of any
-// entry.
+// The battle presentation table: the stage's layout (per encounter or area too), step lengths, a look per ability or
+// item id, and a look for each way the enemy formation changes. An id the table does not name takes the fallback for its
+// kind, effect and element (`technique.damage.shock`, then `technique.damage`, then `technique`), so every action looks
+// reasonable with nothing authored; a change takes its entry for the enemy it brings (`transform.ENEMY`), else the
+// change's own. The built-in defaults cover every fallback key and change; the asset directory's table
+// (battle_presentation.json) overrides any field of any entry.
 public sealed class BattlePresentation
 {
 	public const string FileName = "battle_presentation.json";
@@ -24,7 +25,10 @@ public sealed class BattlePresentation
 	public static readonly string[] Animations = ["none", "attack", "cast", "item", "defend"];
 	public static readonly string[] Kinds = ["attack", "technique", "skill", "combo", "item", "defend"];
 	public static readonly string[] Effects = ["damage", "heal", "revive", "status", "cure", "stat", "other"];
-	public static readonly string[] Elements = ["none", "heat", "chill", "shock", "gale"];
+	public static readonly string[] Elements = ["none", "heat", "chill", "shock", "gale", "holy"];
+	// An enemy joining (a summon or a replacement), two merging into one, one taking its next form, and the mark of an
+	// instant defeat landing.
+	public static readonly string[] Changes = ["join", "merge", "transform", "instant_defeat"];
 
 	private static readonly Dictionary<string, int> DefaultTimings = new()
 	{
@@ -35,6 +39,8 @@ public sealed class BattlePresentation
 	public Dictionary<string, int> Timings { get; } = new(DefaultTimings);
 	public Dictionary<string, ActionLook> Fallbacks { get; } = [];
 	public Dictionary<string, ActionLook> Actions { get; } = [];
+	// By change, and by `CHANGE.ENEMY` for the enemy it brings or marks.
+	public Dictionary<string, ActionLook> ChangeLooks { get; } = [];
 	public BattleLayout Layout { get; private set; } = BattleLayout.Front;
 	// By `encounter:ID` and `area:ID`, over Layout.
 	public Dictionary<string, BattleLayout> Layouts { get; } = [];
@@ -44,7 +50,8 @@ public sealed class BattlePresentation
 	// The generated effects Art draws, by id: a style and an element.
 	public static IEnumerable<string> GeneratedEffects =>
 		new[] { "slash", "burst", "nova" }.SelectMany(style => Elements.Select(e => e == "none" ? style : $"{style}_{e}"))
-			.Concat(["ring_status", "ring_stat", "ring_cure", "motes_heal", "motes_revive", "motes_item", "shield"]);
+			.Concat(["ring_status", "ring_stat", "ring_cure", "motes_heal", "motes_revive", "motes_item", "shield", "motes_join", "ring_merge", "nova_transform",
+				"mark_defeat"]);
 
 	public BattleLayout LayoutFor(string encounter, string area) =>
 		Layouts.TryGetValue("encounter:" + encounter, out BattleLayout layout) || Layouts.TryGetValue("area:" + area, out layout) ? layout : Layout;
@@ -67,8 +74,16 @@ public sealed class BattlePresentation
 				}
 			}
 		}
+		// The step's length is the effect's; the other fields are an action's.
+		p.ChangeLooks["join"] = new ActionLook("none", "motes_join", "", 0, 720, 0, false);
+		p.ChangeLooks["merge"] = new ActionLook("none", "ring_merge", "", 0, 900, 2, false);
+		p.ChangeLooks["transform"] = new ActionLook("none", "nova_transform", "", 0, 960, 5, true);
+		p.ChangeLooks["instant_defeat"] = new ActionLook("none", "mark_defeat", "", 0, 0, 0, false);
 		return p;
 	}
+
+	// The look for a change: the enemy's own entry, else the change's.
+	public ActionLook ChangeFor(string change, string enemy) => ChangeLooks.GetValueOrDefault($"{change}.{enemy}") ?? ChangeLooks[change];
 
 	private static ActionLook DefaultLook(string kind, string effect, string element)
 	{
@@ -126,7 +141,7 @@ public sealed class BattlePresentation
 		}
 		foreach ((string name, JsonNode? node) in root)
 		{
-			if (name is not ("timings" or "fallbacks" or "actions" or "layout" or "layouts"))
+			if (name is not ("timings" or "fallbacks" or "actions" or "changes" or "layout" or "layouts"))
 			{
 				Problem("-", $"unknown field '{name}'");
 			}
@@ -208,6 +223,19 @@ public sealed class BattlePresentation
 				p.Actions[id] = Merge(p.For(id, shape), value, $"actions.{id}", effects, Problem);
 			}
 		}
+		if (root["changes"] is JsonObject changes)
+		{
+			foreach ((string key, JsonNode? value) in changes)
+			{
+				string[] parts = key.Split('.', 2);
+				if (!Changes.Contains(parts[0]) || (parts.Length == 2 && !data.Enemies.Contains(parts[1])))
+				{
+					Problem($"changes.{key}", $"unknown change: {string.Join(", ", Changes)}, each alone or with .ENEMY for an enemy of the game data");
+					continue;
+				}
+				p.ChangeLooks[key] = Merge(p.ChangeFor(parts[0], parts.Length == 2 ? parts[1] : ""), value, $"changes.{key}", effects, Problem);
+			}
+		}
 		return p;
 	}
 
@@ -279,6 +307,7 @@ public sealed class BattlePresentation
 			["timings"] = new JsonObject(Timings.Select(t => KeyValuePair.Create(t.Key, (JsonNode?)t.Value))),
 			["fallbacks"] = new JsonObject(Fallbacks.OrderBy(f => f.Key, StringComparer.Ordinal).Select(f => KeyValuePair.Create(f.Key, (JsonNode?)Look(f.Value)))),
 			["actions"] = new JsonObject(Actions.OrderBy(a => a.Key, StringComparer.Ordinal).Select(a => KeyValuePair.Create(a.Key, (JsonNode?)Look(a.Value)))),
+			["changes"] = new JsonObject(ChangeLooks.OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => KeyValuePair.Create(c.Key, (JsonNode?)Look(c.Value)))),
 		};
 		File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true, IndentCharacter = '\t', IndentSize = 1 }) + "\n");
 	}

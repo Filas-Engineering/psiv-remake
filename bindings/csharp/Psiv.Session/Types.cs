@@ -15,7 +15,7 @@ public enum EnemyState { Idle, Chasing, Returning }
 public enum PointKind { Talk, Step, Chest, Shop, Rest, Port }
 // From a port to another open port, back to a visited town of the region, out of a dungeon.
 public enum TravelKind { Port, Town, DungeonExit }
-public enum JobState { Available, Accepted, Completed }
+public enum JobState { Available, Accepted, Completed, Missed }
 public enum TextSpeed { Slow, Normal, Fast, Instant }
 public enum BattleSpeed { X1, X1_5, X2, X3 }
 public enum RewardMultiplier { X1, X1_5, X2 }
@@ -31,14 +31,16 @@ public enum BattleEventType
 {
 	BattleStarted, RoundStarted, CommandsLocked, OrderResolved, Retargeted, ActionStarted, ActionCancelled, ComboTriggered,
 	ComboDiscovered, ResourceSpent, ItemHadNoEffect, Hit, Missed, Critical, DamageDealt, Healed, Revived, StatusApplied,
-	StatusResisted, StatusRemoved, StatModified, CombatantDefeated, EscapeAttempted, Message, RoundEnded, BattleEnded,
+	StatusResisted, StatusRemoved, StatModified, CombatantDefeated, EscapeAttempted, Message, RoundEnded, BattleEnded, EnemyJoined,
+	EnemyLeft, EnemyTransformed,
 }
 
 public enum CancelReason { None, ActorUnable, Silenced, NotEnoughTp, NoUsesLeft, NoItem, NoTarget }
 public enum Effectiveness { Normal, Weak, Resisted, Immune }
 public enum StatusEnd { Cured, Duration, Recovered, WokeOnDamage, Defeated }
 public enum ResourceKind { None, Tp, SkillUse, Item }
-public enum Element { None, Heat, Chill, Shock, Gale }
+public enum Element { None, Heat, Chill, Shock, Gale, Holy }
+public enum CreatureKind { Living, Spirit, Machine }
 public enum Stat { Strength, Mental, Agility, Dexterity, Defense }
 public enum Opening { Normal, PartyFirst, EnemyFirst }
 public enum AutoStop { None, Cancelled, MemberFell, CannotPay, BattleEnded }
@@ -74,7 +76,7 @@ public enum NameKind
 	Mode, MenuKind, Direction, NoticeKind, AreaKind, EncounterMode, EnemyState, PointKind, JobState, TextSpeed, BattleSpeed,
 	RewardMultiplier, BattleSource, Side, CommandKind, AbilityKind, Targeting, EquipSlot, Outcome, EventType, CancelReason,
 	Effectiveness, StatusEnd, ResourceKind, Element, Stat, Opening, AutoStop, MacroStepStatus, MacroIssue, ActionType, MacroTargetKind,
-	DescriptionKind, ItemSort, CameraTarget, TravelKind, DevList,
+	DescriptionKind, ItemSort, CameraTarget, TravelKind, DevList, CreatureKind,
 }
 
 // The id lists of DevIds: what the developer commands take. Markers are "area:marker".

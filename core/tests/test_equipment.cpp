@@ -143,7 +143,7 @@ TEST(abilitiesAreLearnedByLevel) {
 	wide.characters["medic"].learns.push_back({6, "flare_burst"});
 	PartyMember medic = makePartyMember(wide, wide.characters.at("medic"), 1);
 	const LevelUp levelUp = grantExperience(medic, wide, 100000);
-	CHECK_EQ(levelUp.learned, (std::vector<std::string>{"renew", "flare_burst"}));
+	CHECK_EQ(levelUp.learned, (std::vector<std::string>{"renew", "renewal", "flare_burst"}));
 	CHECK_EQ(medic.skillUses.at("flare_burst"), 1);
 	CHECK(grantExperience(medic, wide, 100000).learned.empty());
 }

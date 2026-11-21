@@ -20,6 +20,8 @@ struct EquipmentDef {
 	std::string attack;
 	std::vector<std::string> abilities;
 	StatusResists statusResist;
+	// An ability the wearer casts through the Item command at no cost, without using the piece up (P12).
+	std::string use = {};
 };
 
 }

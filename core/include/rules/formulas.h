@@ -6,7 +6,7 @@
 // They are pure so tests can pin the math.
 namespace rules::formulas {
 
-constexpr int kMaxLevel = 50;
+constexpr int kMaxLevel = 99;
 // A chance roll is 0 to 63.
 constexpr int kChanceRollMax = 63;
 // A basic attack misses at or below the floor and is critical above the ceiling.

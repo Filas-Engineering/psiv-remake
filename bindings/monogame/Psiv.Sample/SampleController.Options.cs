@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 
 using Psiv.Session;
 
@@ -8,8 +9,7 @@ namespace Psiv.Sample;
 // reward multiplier, and a Controls page over the bindings. Left and Right (or Confirm) change the selected value.
 public sealed partial class SampleController
 {
-	private const string ControlsRow = "Controls";
-	private const string ResetRow = "Reset to defaults";
+	private string ControlsRow => T("ui.options.controls");
 
 	private readonly ScrollList _optList = new();
 	private readonly ScrollList _optSub = new();
@@ -34,22 +34,20 @@ public sealed partial class SampleController
 		return all[(Array.IndexOf(all, value) + by + all.Length) % all.Length];
 	}
 
-	private static string OnOff(bool on) => on ? "On" : "Off";
-
-	private static string SpeedName(BattleSpeed speed) => speed switch
+	private string SpeedName(BattleSpeed speed) => T(speed switch
 	{
-		BattleSpeed.X1 => "1x",
-		BattleSpeed.X1_5 => "1.5x",
-		BattleSpeed.X2 => "2x",
-		_ => "3x",
-	};
+		BattleSpeed.X1 => "ui.multiplier.x1",
+		BattleSpeed.X1_5 => "ui.multiplier.x1_5",
+		BattleSpeed.X2 => "ui.multiplier.x2",
+		_ => "ui.multiplier.x3",
+	});
 
-	private static string RewardName(RewardMultiplier reward) => reward switch
+	private string RewardName(RewardMultiplier reward) => T(reward switch
 	{
-		RewardMultiplier.X1 => "1x",
-		RewardMultiplier.X1_5 => "1.5x",
-		_ => "2x",
-	};
+		RewardMultiplier.X1 => "ui.multiplier.x1",
+		RewardMultiplier.X1_5 => "ui.multiplier.x1_5",
+		_ => "ui.multiplier.x2",
+	});
 
 	// The save's difficulty: stepped through the session's presets while a game is in progress outside battle, shown
 	// only otherwise. Its description is the preset's own, which says what it changes (UI-014).
@@ -58,8 +56,8 @@ public sealed partial class SampleController
 		Difficulties d = _s.Difficulties();
 		int at = Math.Max(0, d.Presets.ToList().FindIndex(x => x.Id == settings.Difficulty));
 		Difficulty current = d.Presets[at];
-		string kept = d.CanChange ? "Kept in each save; applies from the next battle." : "Kept in each save; it changes during a game, outside battle.";
-		return new("Difficulty", current.Name, $"{kept} {current.Description}".Trim(),
+		string kept = T(d.CanChange ? "ui.options.difficulty_kept" : "ui.options.difficulty_fixed");
+		return new(T("ui.options.difficulty"), current.Name, $"{kept} {current.Description}".Trim(),
 			d.CanChange ? by => _s.SetSettings(d.Presets[(at + by + d.Presets.Count) % d.Presets.Count].Id, settings.RewardMultiplier) : null);
 	}
 
@@ -71,32 +69,32 @@ public sealed partial class SampleController
 		static int Volume(int value, int by) => Math.Clamp(value + 10 * by, 0, 100);
 		return
 		[
-			new("Text speed", p.TextSpeed.ToString(), "How fast dialogue text appears. Confirm shows the rest of a line at once.",
+			new(T("ui.options.text_speed"), T(NameKind.TextSpeed, (int)p.TextSpeed), T("ui.options.text_speed_help"),
 				by => _s.SetProfile(p with { TextSpeed = Step(p.TextSpeed, by) })),
-			new("Auto-advance", OnOff(p.AutoAdvance), "Dialogue moves on by itself after a pause that grows with the line's length.",
+			new(T("ui.options.auto_advance"), OnOffText(p.AutoAdvance), T("ui.options.auto_advance_help"),
 				_ => _s.SetProfile(p with { AutoAdvance = !p.AutoAdvance })),
-			new("Text size", $"{p.TextSizePercent}%", "The size of dialogue and menu text, from 100% to 150%.",
+			new(T("ui.options.text_size"), $"{p.TextSizePercent}%", T("ui.options.text_size_help"),
 				by => _s.SetProfile(p with { TextSizePercent = Math.Clamp(p.TextSizePercent + 10 * by, 100, 150) })),
-			new("Battle speed", SpeedName(p.BattleSpeed), "How fast the battle's presentation plays.",
+			new(T("ui.options.battle_speed"), SpeedName(p.BattleSpeed), T("ui.options.battle_speed_help"),
 				by => _s.SetProfile(p with { BattleSpeed = Step(p.BattleSpeed, by) })),
-			new("Reduced flash", OnOff(p.ReducedFlash), "Damps screen shakes to a quarter and leaves out the battle's flashes.",
+			new(T("ui.options.reduced_flash"), OnOffText(p.ReducedFlash), T("ui.options.reduced_flash_help"),
 				_ => _s.SetProfile(p with { ReducedFlash = !p.ReducedFlash })),
-			new("Ambient party talk", OnOff(p.AmbientTalk), "Party members remark on places as you arrive, without stopping play.",
+			new(T("ui.options.ambient_talk"), OnOffText(p.AmbientTalk), T("ui.options.ambient_talk_help"),
 				_ => _s.SetProfile(p with { AmbientTalk = !p.AmbientTalk })),
-			new("Names", p.ShowShippedNames ? "Shipped" : "Restored", "Show names as they first shipped, or restored to their full form.",
+			new(T("ui.options.names"), T(p.ShowShippedNames ? "ui.options.names_shipped" : "ui.options.names_restored"), T("ui.options.names_help"),
 				_ => _s.SetProfile(p with { ShowShippedNames = !p.ShowShippedNames })),
-			new("Text language", p.TextLanguage, "The language of every line and menu label the game provides.",
+			new(T("ui.options.language"), p.TextLanguage, T("ui.options.language_help"),
 				by => _s.SetProfile(p with { TextLanguage = languages[(Math.Max(0, languages.ToList().IndexOf(p.TextLanguage)) + by + languages.Count) % languages.Count] })),
-			new("Music volume", $"{p.MusicVolume}", "The loudness of the music, applied at once.",
+			new(T("ui.options.music_volume"), $"{p.MusicVolume}", T("ui.options.music_volume_help"),
 				by => _s.SetProfile(p with { MusicVolume = Volume(p.MusicVolume, by) })),
-			new("Ambient volume", $"{p.AmbientVolume}", "The loudness of background loops such as wind and surf.",
+			new(T("ui.options.ambient_volume"), $"{p.AmbientVolume}", T("ui.options.ambient_volume_help"),
 				by => _s.SetProfile(p with { AmbientVolume = Volume(p.AmbientVolume, by) })),
-			new("Effects volume", $"{p.EffectsVolume}", "The loudness of menu, dialogue and battle sounds.",
+			new(T("ui.options.effects_volume"), $"{p.EffectsVolume}", T("ui.options.effects_volume_help"),
 				by => _s.SetProfile(p with { EffectsVolume = Volume(p.EffectsVolume, by) })),
 			DifficultyRow(settings),
-			new("Reward multiplier", RewardName(settings.RewardMultiplier), "Multiplies the experience and money battles pay. 1x is the original amount.",
+			new(T("ui.options.reward"), RewardName(settings.RewardMultiplier), T("ui.options.reward_help"),
 				_s.Difficulties().CanChange ? by => _s.SetSettings(settings.Difficulty, Step(settings.RewardMultiplier, by)) : null),
-			new(ControlsRow, "", "Rebind each action's keys and gamepad buttons.", null),
+			new(ControlsRow, "", T("ui.options.controls_help"), null),
 		];
 	}
 
@@ -147,7 +145,7 @@ public sealed partial class SampleController
 				}
 				else if (!ClearBinding(action))
 				{
-					Say($"{action} is needed to use the menus, so it cannot be left unbound.");
+					Say(T("ui.options.required", ActionText(action)));
 				}
 			}
 			return;
@@ -159,12 +157,12 @@ public sealed partial class SampleController
 			_optList.Cursor = OptionRows().FindIndex(r => r.Label == ControlsRow);
 			if (SaveControls())
 			{
-				Say("Controls saved.");
+				Say(T("ui.options.controls_saved"));
 			}
 		}
 		else if (input.Confirm && _optSub.Cursor == actions.Length)
 		{
-			_confirm.Ask("Reset every control to its default?", ResetControls);
+			_confirm.Ask(T("ui.options.reset_confirm"), ResetControls);
 		}
 		else if (input.Confirm)
 		{
@@ -188,7 +186,7 @@ public sealed partial class SampleController
 		int w = s.Width - 160;
 		int y = 50;
 		int h = s.Height - 100;
-		Style.Window(s, x, y, w, h, _controlsPage ? "Controls" : "Options");
+		Style.Window(s, x, y, w, h, T(_controlsPage ? "ui.options.controls" : "ui.options.title"));
 		int footH = Px(64);
 		int listY = y + Px(30);
 		int listH = h - (listY - y) - footH - 10;
@@ -219,31 +217,33 @@ public sealed partial class SampleController
 		}
 		DrawToasts(s, x + 24, y + h - footH - Px(20), right: true);
 		Widgets.Hints(s, ix, y + h - Px(24) - 10, iw, _controlsPage
-			? $"{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} change   {Hint(GameAction.Back)} save and back"
-			: $"{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Left)}/{Hint(GameAction.Right)} or {Hint(GameAction.Confirm)} change   {Hint(GameAction.Back)} back");
+			? T("ui.options.hint_controls", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm), Hint(GameAction.Back))
+			: T("ui.options.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Left), Hint(GameAction.Right), Hint(GameAction.Confirm), Hint(GameAction.Back)));
 	}
 
 	private void DrawControlsPage(IDrawSurface s, int x, int y, int w, int h)
 	{
 		GameAction[] actions = Enum.GetValues<GameAction>();
-		IReadOnlyList<ControlBinding> controls = Controls();
+		string resetRow = T("ui.options.reset");
 		int keysX = x + w * 26 / 100;
 		int buttonsX = x + w * 60 / 100;
-		s.Text("Keys", keysX, y, Style.Dim, Style.Small);
-		s.Text("Gamepad", buttonsX, y, Style.Dim, Style.Small);
+		s.Text(T("ui.options.keys"), keysX, y, Style.Dim, Style.Small);
+		s.Text(T("ui.options.gamepad"), buttonsX, y, Style.Dim, Style.Small);
 		int listY = y + Px(28);
 		_optSub.Draw(s, x, listY, w, h - Px(28), Px(30), actions.Length + 1, (i, ry, on) =>
 		{
 			if (i == actions.Length)
 			{
-				Style.ListRow(s, ResetRow, x, ry, w - 14, on, height: Px(28));
+				Style.ListRow(s, resetRow, x, ry, w - 14, on, height: Px(28));
 				return;
 			}
-			Style.ListRow(s, actions[i].ToString(), x, ry, w - 14, on, height: Px(28));
-			s.Text(Style.Fit(s, controls[i].KeyNames, buttonsX - keysX - 20, Style.Small), keysX, ry + Px(2), on ? Style.Accent : Style.Text, Style.Small);
-			s.Text(Style.Fit(s, controls[i].ButtonNames, x + w - buttonsX - 30, Style.Small), buttonsX, ry + Px(2), on ? Style.Accent : Style.Text, Style.Small);
+			string keys = BindingsText(_bindings.KeysOf(actions[i]).Select(KeyText));
+			string buttons = BindingsText(_bindings.ButtonsOf(actions[i]).Select(ButtonText));
+			Style.ListRow(s, ActionText(actions[i]), x, ry, w - 14, on, height: Px(28));
+			s.Text(Style.Fit(s, keys, buttonsX - keysX - 20, Style.Small), keysX, ry + Px(2), on ? Style.Accent : Style.Text, Style.Small);
+			s.Text(Style.Fit(s, buttons, x + w - buttonsX - 30, Style.Small), buttonsX, ry + Px(2), on ? Style.Accent : Style.Text, Style.Small);
 		}, _optAction is null && Capturing is null);
-		_probeSelected = _optSub.Cursor == actions.Length ? ResetRow : actions[_optSub.Cursor].ToString();
+		_probeSelected = _optSub.Cursor == actions.Length ? resetRow : ActionText(actions[_optSub.Cursor]);
 		_probeTop = _optSub.Top;
 		if (_optAction is { } action)
 		{
@@ -251,20 +251,20 @@ public sealed partial class SampleController
 			int bh = Px(110);
 			int bx = x + w - bw - 20;
 			int by = y + Px(40);
-			Style.Window(s, bx, by, bw, bh, action.ToString());
+			Style.Window(s, bx, by, bw, bh, ActionText(action));
 			for (int i = 0; i < 2; i++)
 			{
-				Style.ListRow(s, i == 0 ? "Rebind" : "Clear", bx + 30, by + Px(28) + i * Px(32), bw - 50, i == _optList.Cursor, height: Px(28));
+				Style.ListRow(s, T(i == 0 ? "ui.options.rebind" : "ui.options.clear"), bx + 30, by + Px(28) + i * Px(32), bw - 50, i == _optList.Cursor, height: Px(28));
 			}
-			_probeSelected = _optList.Cursor == 0 ? "Rebind" : "Clear";
+			_probeSelected = T(_optList.Cursor == 0 ? "ui.options.rebind" : "ui.options.clear");
 		}
 		if (Capturing is { } capturing)
 		{
-			string ask = $"Press a key or a gamepad button for {capturing}. Esc cancels.";
+			string ask = T("ui.options.press_for", ActionText(capturing), KeyText(Keys.Escape));
 			int bw = s.Measure(ask) + Px(60);
 			int bx = (s.Width - bw) / 2;
 			int by = s.Height / 2 - Px(40);
-			Style.Window(s, bx, by, bw, Px(80), "Rebind");
+			Style.Window(s, bx, by, bw, Px(80), T("ui.options.rebind"));
 			s.Text(ask, bx + Px(30), by + Px(28), Style.Text);
 		}
 	}

@@ -13,7 +13,7 @@
 			{"type": "physical_damage", "power": 0}
 		]},
 
-		{"id": "spark", "name": "Spark", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
+		{"id": "spark", "name": "Spark", "kind": "technique", "cost": 3, "target": "one_enemy", "family": "spark", "effects": [
 			{"type": "elemental_damage", "power": 13, "element": "shock"}
 		]},
 		{"id": "ember", "name": "Ember Fan", "kind": "technique", "cost": 4, "target": "enemy_group", "effects": [
@@ -32,16 +32,16 @@
 			{"type": "modify_stat", "stat": "defense", "direction": "down", "threshold": 40}
 		]},
 		{"id": "mend", "name": "Mend", "kind": "technique", "cost": 3, "target": "one_ally", "field": true, "effects": [
-			{"type": "heal", "power": 28}
+			{"type": "heal", "kinds": ["living"], "power": 28}
 		]},
 		{"id": "wide_mend", "name": "Wide Mend", "kind": "technique", "cost": 8, "target": "all_allies", "field": true, "effects": [
-			{"type": "heal", "power": 18}
+			{"type": "heal", "kinds": ["living"], "power": 18}
 		]},
 		{"id": "purge", "name": "Purge", "kind": "technique", "cost": 2, "target": "one_ally", "field": true, "effects": [
 			{"type": "cure_status", "status": "poison"}
 		]},
 		{"id": "rekindle", "name": "Rekindle", "kind": "technique", "cost": 10, "target": "one_fallen_ally", "field": true, "effects": [
-			{"type": "revive", "power": 50}
+			{"type": "revive", "kinds": ["living"], "power": 50}
 		]},
 		{"id": "rally", "name": "Rally Cry", "kind": "technique", "cost": 4, "target": "all_allies", "effects": [
 			{"type": "modify_stat", "stat": "strength", "direction": "up"}
@@ -53,7 +53,7 @@
 			{"type": "physical_damage", "power": 0}
 		]},
 		{"id": "renew", "name": "Renew", "kind": "technique", "cost": 6, "target": "one_ally", "field": true, "effects": [
-			{"type": "heal", "power": 45}
+			{"type": "heal", "kinds": ["living"], "power": 45}
 		]},
 		{"id": "glint", "name": "Glint", "kind": "technique", "cost": 2, "target": "one_enemy", "effects": [
 			{"type": "elemental_damage", "power": 9, "element": "shock"}
@@ -89,7 +89,7 @@
 			{"type": "modify_stat", "stat": "agility", "direction": "down", "threshold": 40}
 		]},
 		{"id": "mending_chorus", "name": "Mending Chorus", "kind": "combo", "target": "all_allies", "effects": [
-			{"type": "heal", "power": 30},
+			{"type": "heal", "kinds": ["living"], "power": 30},
 			{"type": "modify_stat", "stat": "strength", "direction": "up"}
 		]},
 		{"id": "cinder_gale", "name": "Cinder Gale", "kind": "combo", "target": "enemy_group", "effects": [
@@ -114,14 +114,14 @@
 		]},
 		{"id": "clean_slate", "name": "Clean Slate", "kind": "combo", "target": "all_allies", "effects": [
 			{"type": "cure_status", "status": "poison"},
-			{"type": "heal", "power": 16}
+			{"type": "heal", "kinds": ["living"], "power": 16}
 		]},
 		{"id": "surge_step", "name": "Surge Step", "kind": "combo", "target": "all_allies", "effects": [
 			{"type": "modify_stat", "stat": "agility", "direction": "up"}
 		]},
 		{"id": "dawn_call", "name": "Dawn Call", "kind": "combo", "target": "all_allies", "effects": [
-			{"type": "revive", "power": 30},
-			{"type": "heal", "power": 12}
+			{"type": "revive", "kinds": ["living"], "power": 30},
+			{"type": "heal", "kinds": ["living"], "power": 12}
 		]},
 		{"id": "kiln_roar", "name": "Kiln Roar", "kind": "combo", "target": "all_enemies", "effects": [
 			{"type": "elemental_damage", "element": "heat"}
@@ -163,6 +163,55 @@
 		]},
 		{"id": "muddle_spores", "name": "Muddle Spores", "kind": "technique", "cost": 5, "target": "enemy_group", "effects": [
 			{"type": "apply_status", "status": "jumble", "threshold": 150}
+		]},
+		{"id": "bright_spark", "name": "Bright Spark", "kind": "technique", "family": "spark", "cost": 6, "target": "one_enemy", "effects": [
+			{"type": "elemental_damage", "power": 24, "element": "shock"}
+		]},
+		{"id": "hallow", "name": "Hallow", "kind": "technique", "cost": 5, "target": "one_enemy", "effects": [
+			{"type": "elemental_damage", "power": 16, "element": "holy"}
+		]},
+		{"id": "unmake", "name": "Unmake", "kind": "technique", "cost": 8, "target": "one_enemy", "effects": [
+			{"type": "instant_defeat", "threshold": 160}
+		]},
+		{"id": "calm_tide", "name": "Calm Tide", "kind": "skill", "uses": 2, "target": "all_allies", "effects": [
+			{"type": "restore_tp", "power": 10}
+		]},
+		{"id": "renewal", "name": "Renewal", "kind": "technique", "cost": 20, "target": "one_fallen_ally", "field": true, "effects": [
+			{"type": "revive", "kinds": ["living"], "power": 100}
+		]},
+		{"id": "self_repair", "name": "Self Repair", "kind": "skill", "uses": 3, "target": "self", "effects": [
+			{"type": "heal", "kinds": ["machine"], "power": 40}
+		]},
+		{"id": "disc_throw", "name": "Disc Throw", "kind": "attack", "target": "all_enemies", "effects": [
+			{"type": "physical_damage", "power": 0}
+		]},
+		{"id": "dispel_howl", "name": "Dispel Howl", "kind": "technique", "cost": 4, "target": "all_enemies", "effects": [
+			{"type": "strip_modifiers"}
+		]},
+		{"id": "hamstring", "name": "Hamstring", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
+			{"type": "modify_stat", "stat": "agility", "direction": "down", "threshold": 100}
+		]},
+		{"id": "sap_strength", "name": "Sap Strength", "kind": "technique", "cost": 3, "target": "one_enemy", "effects": [
+			{"type": "modify_stat", "stat": "strength", "direction": "down", "threshold": 100}
+		]},
+		{"id": "daze_blow", "name": "Daze Blow", "kind": "technique", "cost": 2, "target": "one_enemy", "effects": [
+			{"type": "physical_damage", "power": 0},
+			{"type": "apply_status", "status": "daze", "threshold": 90}
+		]},
+		{"id": "call_kin", "name": "Call Kin", "kind": "technique", "cost": 0, "target": "self", "effects": [
+			{"type": "summon"}
+		]},
+		{"id": "meld", "name": "Meld", "kind": "technique", "cost": 0, "target": "self", "effects": [
+			{"type": "merge"}
+		]},
+		{"id": "crushing_claw", "name": "Crushing Claw", "kind": "technique", "cost": 0, "target": "all_enemies", "effects": [
+			{"type": "physical_damage", "power": 18}
+		]},
+		{"id": "twin_chorus", "name": "Twin Chorus", "kind": "technique", "cost": 0, "target": "all_enemies", "effects": [
+			{"type": "elemental_damage", "power": 20, "element": "gale"}
+		]},
+		{"id": "core_flare", "name": "Core Flare", "kind": "technique", "cost": 0, "target": "all_enemies", "effects": [
+			{"type": "elemental_damage", "power": 26, "element": "heat"}
 		]}
 	]
 }

@@ -22,6 +22,17 @@ enum class AiConditionKind {
 	HitByAbility,
 	HitByTechnique,
 	TechniquesBlocked,
+	// A party ability aimed at a whole group or every enemy landed damage on it since an override last read the hits.
+	HitByGroup,
+	// Its first turn after a Party first opening; fires once per enemy.
+	Ambushed,
+	// Another living enemy of the override's `enemy` kind is (or is not) in the battle.
+	AllyPresent,
+	AllyAbsent,
+	// A formation position next to it is free, for a summon.
+	FreeSlotBeside,
+	// Every enemy that started the battle in its group is still standing.
+	GroupIntact,
 };
 
 // How an action picks its single target. Default: a foe drawn by party order when the round's order is resolved,
@@ -39,6 +50,8 @@ struct AiOverride {
 	AiConditionKind when = AiConditionKind::SelfHpHalf;
 	std::string ability;
 	AiTarget target = {};
+	// AllyPresent and AllyAbsent: the enemy id looked for.
+	std::string enemy = {};
 };
 
 // An encounter's item drop: one roll of 0 to 127 per won battle must come out below the rate.
@@ -60,6 +73,17 @@ struct EnemyDef {
 	std::vector<AiOverride> overrides;
 	int experience = 0;
 	int currency = 0;
+	CreatureKind kind = CreatureKind::Living;
+	// Instant-defeat effects work only on a vulnerable target (B7).
+	bool vulnerable = false;
+	// Statuses it starts every battle with, such as a shield (B11).
+	std::vector<std::string> statuses = {};
+	// The enemy its Summon effect calls up beside it (B13).
+	std::string summons = {};
+	// What its Merge effect makes of it and another living enemy of its own id (B14).
+	std::string mergesInto = {};
+	// The form it takes when it falls, at full hit points, in place of being defeated (B16).
+	std::string nextForm = {};
 };
 
 // One position in an enemy group's formation. Group targeting hits every living enemy with the same group.
@@ -79,6 +103,8 @@ struct Encounter {
 	int escapeRating = 0;
 	// No item when empty.
 	ItemDrop drop;
+	// A fallen enemy is replaced at once by a fresh one of its kind, so only escape or defeat ends the battle (B12).
+	bool replaceFallen = false;
 };
 
 }

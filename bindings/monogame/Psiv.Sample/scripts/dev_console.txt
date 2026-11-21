@@ -57,8 +57,8 @@ devrefused flag no.such.flag on
 dev give tonic 3
 devrefused give tonic 0
 dev level fighter 9
-devrefused level fighter 99
-expect statehas consolelast Levels go from 1 to 50
+devrefused level fighter 100
+expect statehas consolelast Levels go from 1 to 99
 dev vehicle reed_skimmer reed_path skimmer_front
 wait 2
 expect statehas vehicles reed_skimmer 17 6

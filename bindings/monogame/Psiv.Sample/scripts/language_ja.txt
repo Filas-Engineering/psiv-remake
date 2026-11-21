@@ -1,0 +1,377 @@
+# Every screen of the sample in Japanese, for a run with --language ja --strict-text, which fails on any text key the
+# Japanese table lacks: the title, dialogue and a name entry, the quest and text logs, every page of the field menu (a
+# macro made, given a step and deleted at the confirm, the options and the controls page), the shop, the inn, the pause
+# overlay, a battle at the reed path's cache, the save prompt at Bell Cove's campfire, the way to the ferry's
+# destination screen and a Homing Shell's, then the title's Load screen and options. The language stays Japanese throughout.
+
+cmd set text instant
+expect screen Title
+wait 1
+expect state language ja
+expect state selected はじめから
+press Enter
+pressuntil Enter Field 800
+press Q
+expect screen QuestLog
+press Escape
+press L
+expect screen TextLog
+press Escape
+expect screen Field
+
+# The guide's talk ends in a name entry; a typed name erased again keeps the name.
+cmd walk guide_front
+press Up
+wait 3
+pressuntil Enter NameEntry 800
+press R
+press I
+expect state buffer Ri
+press Back 2
+expect state buffer
+press Enter
+pressuntil Enter Field 800
+
+# Status: stats, abilities, and the medic's Mend asking for a target.
+press M
+expect screen Menu
+expect state tab Status
+press Enter
+expect state page stats
+press Right
+expect state page abilities
+press Escape
+press Down 2
+press Enter
+press Right
+press Enter
+expect state page target
+expect statehas selected Test Fighter
+press Escape
+press Escape
+expect state page members
+
+# Items: a target asked for, then every sort order.
+press Right
+expect state tab Items
+expect statehas selected x3
+press Enter
+expect state page target
+press Escape
+press T
+expect state itemsort kind
+press T
+press T
+press T
+expect state itemsort id
+
+# Equip: the fighter's weapon slot and taking the blade off, not done.
+press Right
+expect state tab Equip
+press Enter
+expect statehas selected 武器:
+press Enter
+expect state page pieces
+expect statehas selected を外す
+press Escape
+press Escape
+expect state page members
+
+# Save: an empty slot saves at once; saving again asks first.
+press Right
+expect state tab Save
+press Enter
+expect state selected manual_0 tidewater
+press Enter
+expect state prompt manual_0に上書きしますか？
+press Escape
+expect state prompt none
+
+# Order: a member picked and put back where it was.
+press Right
+expect state tab Order
+press Enter
+expect state page swap
+press Enter
+expect state page lineup
+
+# Macros: one made and named, given an attack step, then deleted.
+press Right
+expect state tab Macros
+press Down 3
+expect state selected + 新しいマクロ
+press Enter
+expect state page name
+press J
+press A
+expect state buffer Ja
+press Enter
+expect state page list
+expect state selected Ja
+press Enter
+expect state selected 手順を編集
+press Enter
+expect state selected + 手順を追加
+press Enter
+expect state page member
+press Enter
+expect state selected 攻撃
+press Enter
+expect state selected おまかせ
+press Enter
+expect state page steps
+expect state macro.Ja Test Fighter: 攻撃 -> おまかせ
+press Enter
+expect state page stepactions
+expect state selected 変更
+press Escape
+press Escape
+expect state page list
+press Enter
+press Down 5
+expect state selected 削除
+press Enter
+expect state prompt マクロ「Ja」を削除しますか？
+press Up
+press Enter
+expect toast Jaを削除した。
+
+# Combos, quests, codex and the log.
+press Right
+expect state tab Combos
+expect state selected ？？？（未発見）
+press Right
+expect state tab Quests
+press Right
+expect state tab Codex
+press Right
+expect state tab Log
+
+# Options and the controls page: an action's rebind menu, the reset asked and declined, the controls saved on the way out.
+press Right
+expect state tab Options
+expect state selected オプションを開く
+press Enter
+expect screen Options
+expect state selected 文字の速さ: 瞬時
+press Down 13
+expect state selected 操作設定
+press Enter
+expect state page controls
+expect state selected 上
+press Down 7
+expect state selected クエストログ
+press Enter
+expect state selected 割り当て
+press Escape
+press Down 8
+expect state selected 初期設定に戻す
+press Enter
+expect state prompt すべての操作を初期設定に戻しますか？
+press Escape
+press Escape
+expect state page options
+expect toast 操作設定を保存した。
+press Escape
+expect screen Menu
+press Escape
+expect screen Field
+
+# The stall: one bought, then the sell list.
+cmd walk stall_front
+press Up
+wait 3
+press Enter
+expect screen Shop
+press Enter
+press Right
+press Escape
+expect screen Field
+
+# The inn.
+cmd walk inn_front
+press Left
+wait 3
+press Enter
+expect screen Inn
+press Enter
+expect screen Field
+
+# The pause overlay: options from it, and the quit asked and declined.
+press P
+expect screen Pause
+expect state selected 再開
+press Down
+press Enter
+expect screen Options
+press Escape
+expect screen Pause
+press Down
+expect state selected タイトルへ戻る
+press Enter
+expect state prompt タイトルへ戻りますか？最後のセーブ以降の進行は失われます。
+press Escape
+press Escape
+expect screen Field
+
+# A battle at the reed path's cache: the command window, a technique's description, the target list, the playback
+# with its log shown, and the result window.
+cmd walk 13 4
+cmd walk cache_front
+expect mode Battle
+waitstate 120 battlephase Command
+expect state battlemenu [攻撃] | テクニック | スキル | アイテム | 防御 | 逃げる | マクロ | オート
+shot build/shots/ja_battle_command.png
+press Down
+press Enter
+expect state battlephase Option
+expect statehas description
+shot build/shots/ja_battle_options.png
+press Escape
+press Enter
+expect state battlephase Target
+press Enter
+press Enter
+press Enter
+press Enter
+press Enter
+expect state battlephase Playback
+press L
+expect state battlelogshown on
+waitstatehas 900 step result
+wait 10
+shot build/shots/ja_battle_playback.png
+press L
+hold F 30
+waitstate 900 battlephase Command
+press Enter 6
+hold F 30
+waitstate 900 battlephase Command
+press Enter 6
+hold F 30
+waitstate 900 battlephase Command
+press Enter 6
+hold F 30
+expect state battlephase Ended
+shot build/shots/ja_battle_result.png
+expect statehas battlesync all match
+press Enter
+expect screen Field
+
+# Through the reeds, where the scout joins on the way, to Bell Cove, where the campfire's rest ends in a save prompt.
+cmd walk 13 4
+cmd walk 19 4
+expect state area 鐘の入り江
+cmd walk camp_front
+press Up
+wait 3
+press Enter
+pressuntil Enter SavePrompt 400
+expect screen SavePrompt
+press Up
+expect state selected セーブしない
+press Enter
+pressuntil Enter Field 400
+
+# North to the market and west to the flats: the skimmer, the crossing, the crate and the beacon that opens the ferry.
+cmd walk 6 0
+wait 30
+cmd walk 0 10
+wait 40
+expect state area 塩の干潟
+cmd walk post_front
+press Right
+wait 3
+press Enter
+pressuntil Enter Field 200
+cmd walk 6 4
+press Right
+wait 3
+press Enter
+wait 4
+expect state aboard reed_skimmer
+clickcell 19 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+clickcell 19 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+clickcell 19 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+clickcell 19 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+expect state vehicles reed_skimmer 19 4 aboard
+wait 20
+press Enter
+wait 20
+cmd walk 21 2
+press Up
+wait 3
+press Enter
+wait 4
+cmd walk 22 4
+press Right
+wait 3
+press Enter
+pressuntil Enter Field 200
+cmd walk 20 4
+press Left
+wait 3
+press Enter
+wait 4
+clickcell 1 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+clickcell 1 4
+waitstate 600 walk -
+pressuntil Enter Field 4000
+hold Left 12
+wait 40
+expect state area 塩草の市場
+
+# The ferry's destination screen, then a Homing Shell's from Ember Steps.
+cmd walk pier_front
+press Up
+wait 3
+press Enter
+wait 4
+expect screen Travel
+expect state destinations cinder_quay
+expect state selected 燃えさしの波止場   （isles）
+press Enter
+wait 40
+expect state area 燃えさしの波止場
+cmd walk 13 4
+wait 40
+expect state area 残り火の段々
+press M
+press Right
+expect state tab Items
+press Enter
+wait 4
+expect screen Travel
+expect state destinations cinder_quay
+press Down
+expect state selected キャンセル
+press Escape
+press Escape
+expect screen Field
+
+# The title's Load screen and its options.
+cmd title
+expect screen Title
+press Down 2
+expect state selected ロード
+press Enter
+expect screen LoadGame
+expect state selected manual_0 tidewater
+press Escape
+expect screen Title
+press Down
+expect state selected オプション
+press Enter
+expect screen Options
+press Escape
+expect screen Title

@@ -44,12 +44,13 @@ const char* toString(JobState state) {
 	case JobState::Available: return "available";
 	case JobState::Accepted: return "accepted";
 	case JobState::Completed: return "completed";
+	case JobState::Missed: return "missed";
 	}
 	return "available";
 }
 
 bool parseJobState(const std::string& text, JobState& out) {
-	for (JobState s : {JobState::Available, JobState::Accepted, JobState::Completed}) {
+	for (JobState s : {JobState::Available, JobState::Accepted, JobState::Completed, JobState::Missed}) {
 		if (text == toString(s)) {
 			out = s;
 			return true;
@@ -111,7 +112,7 @@ bool sameStatuses(const std::vector<rules::ActiveStatus>& a, const std::vector<r
 
 bool sameMember(const rules::PartyMember& a, const rules::PartyMember& b) {
 	return a.characterId == b.characterId && a.level == b.level && a.experience == b.experience && a.hp == b.hp &&
-		a.tp == b.tp && a.skillUses == b.skillUses && a.equipment == b.equipment && sameStatuses(a.statuses, b.statuses);
+		a.tp == b.tp && a.skillUses == b.skillUses && a.equipment == b.equipment && sameStatuses(a.statuses, b.statuses) && a.taught == b.taught;
 }
 
 bool sameMacro(const rules::Macro& a, const rules::Macro& b) {
@@ -185,11 +186,12 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 	auto sameVehicles = [](const std::map<std::string, VehiclePlace>& x, const std::map<std::string, VehiclePlace>& y) {
 		return std::equal(x.begin(), x.end(), y.begin(), y.end(), [](const auto& p, const auto& q) {
 			return p.first == q.first && p.second.area == q.second.area && p.second.cell == q.second.cell && p.second.facing == q.second.facing &&
-				p.second.homeArea == q.second.homeArea && p.second.home == q.second.home;
+				p.second.homeArea == q.second.homeArea && p.second.home == q.second.home && p.second.skillUses == q.second.skillUses;
 		});
 	};
 	if (!sameVehicles(a.vehicles, b.vehicles)) return differs("vehicles");
 	if (a.aboard != b.aboard) return differs("aboard");
+	if (a.follower != b.follower) return differs("follower");
 	if (a.dungeonExitArea != b.dungeonExitArea) return differs("dungeonExitArea");
 	if (a.dungeonExitCell != b.dungeonExitCell) return differs("dungeonExitCell");
 	if (a.graceMs != b.graceMs) return differs("graceMs");

@@ -1,5 +1,6 @@
 #include "support.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <initializer_list>
 #include <string>
@@ -43,7 +44,7 @@ ACC_CHECK(acc_sav_02, "ACC-SAV-02", "SAV-020, SAV-021") {
 		t.expect(w.comboLog.entries().size() == 1 && w.comboLog.entries()[0].recipe == "storm_spark", "the schema 1 combo line did not migrate to the combo log");
 		t.expect(migrated.value->midEvent.empty(), "the schema 1 mid-event state, which no build can resume, was kept");
 		const std::string text = serializeSave(*migrated.value);
-		t.expect(text.compare(0, 11, "PSR-SAVE 6\n") == 0, "a migrated save is not written in the current schema");
+		t.expect(text.compare(0, 11, "PSR-SAVE 7\n") == 0, "a migrated save is not written in the current schema");
 		rules::Result<SaveFile> again = parseSave(text);
 		std::string diff;
 		t.expect(again.ok() && serializeSave(*again.value) == text && sameWorld(again.value->world, w, &diff), "a migrated save does not round-trip: " + diff);
@@ -74,9 +75,17 @@ ACC_CHECK(acc_sav_02, "ACC-SAV-02", "SAV-020, SAV-021") {
 	auto older = [&](int schema, std::initializer_list<const char*> dropped) {
 		std::string text = written;
 		text.replace(0, 10, "PSR-SAVE " + std::to_string(schema));
-		text.replace(text.find("schema 6\n"), 9, "schema " + std::to_string(schema) + "\n");
+		text.replace(text.find("schema 7\n"), 9, "schema " + std::to_string(schema) + "\n");
+		if (schema <= 6) {
+			for (const char* chunk : {"party 3", "world 2", "travel 2"}) {
+				const std::size_t at = text.find(std::string("chunk ") + chunk + " ");
+				if (at != std::string::npos) {
+					text[at + 6 + std::string(chunk).size() - 1] -= 1;
+				}
+			}
+		}
 		for (const char* type : dropped) {
-			const std::size_t at = text.find(std::string("chunk ") + type + " 1 ");
+			const std::size_t at = text.find(std::string("chunk ") + type + " ");
 			if (!t.expect(at != std::string::npos, std::string("a written save has no ") + type + " chunk")) {
 				return rules::Result<SaveFile>::failure("setup");
 			}
@@ -85,7 +94,7 @@ ACC_CHECK(acc_sav_02, "ACC-SAV-02", "SAV-020, SAV-021") {
 		}
 		rules::Result<SaveFile> migrated = parseSave(support::resign(text));
 		const std::string name = "a schema " + std::to_string(schema) + " save";
-		t.expect(migrated.ok() && serializeSave(*migrated.value).compare(0, 11, "PSR-SAVE 6\n") == 0, name + " does not migrate: " + (migrated.ok() ? "" : migrated.error));
+		t.expect(migrated.ok() && serializeSave(*migrated.value).compare(0, 11, "PSR-SAVE 7\n") == 0, name + " does not migrate: " + (migrated.ok() ? "" : migrated.error));
 		if (migrated.ok()) {
 			std::string diff;
 			rules::Result<SaveFile> again = parseSave(serializeSave(*migrated.value));
@@ -93,6 +102,9 @@ ACC_CHECK(acc_sav_02, "ACC-SAV-02", "SAV-020, SAV-021") {
 		}
 		return migrated;
 	};
+	rules::Result<SaveFile> six = older(6, {});
+	t.expect(!six.ok() || (six.value->world.follower.empty() && std::all_of(six.value->world.roster.begin(), six.value->world.roster.end(), [](const rules::PartyMember& m) { return m.taught.empty(); })),
+		"a schema 6 save does not load with no follower and nothing taught");
 	rules::Result<SaveFile> five = older(5, {"dev"});
 	t.expect(!five.ok() || !five.value->world.devMarked, "a schema 5 save does not load unmarked by developer tools");
 	rules::Result<SaveFile> four = older(4, {"travel", "dev"});
@@ -105,10 +117,10 @@ ACC_CHECK(acc_sav_02, "ACC-SAV-02", "SAV-020, SAV-021") {
 
 	// Newer saves are refused with a message, by schema and by chunk version.
 	std::string newerSchema = written;
-	newerSchema.replace(0, 10, "PSR-SAVE 7");
+	newerSchema.replace(0, 10, "PSR-SAVE 8");
 	std::string newerChunk = written;
-	newerChunk.replace(newerChunk.find("chunk party 2"), 13, "chunk party 3");
-	for (const auto& [what, text] : {std::make_pair(std::string("schema 7"), newerSchema), std::make_pair(std::string("a party chunk of version 3"), newerChunk)}) {
+	newerChunk.replace(newerChunk.find("chunk party 3"), 13, "chunk party 4");
+	for (const auto& [what, text] : {std::make_pair(std::string("schema 8"), newerSchema), std::make_pair(std::string("a party chunk of version 4"), newerChunk)}) {
 		rules::Result<SaveFile> refused = parseSave(support::resign(text));
 		t.expect(!refused.ok() && refused.error.find("newer build") != std::string::npos, "a save with " + what + " was not refused as from a newer build");
 	}

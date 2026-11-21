@@ -340,10 +340,11 @@ public sealed partial class Art
 		"chill" => new Color(120, 210, 255),
 		"shock" => new Color(255, 230, 80),
 		"gale" => new Color(130, 230, 140),
+		"holy" => new Color(255, 246, 196),
 		_ => new Color(240, 240, 240),
 	};
 
-	// One frame of a generated effect: a style (slash, burst, nova, ring, motes or shield) in a color from its element
+	// One frame of a generated effect: a style (slash, burst, nova, ring, motes, mark or shield) in a color from its element
 	// or purpose, growing over the frames and fading over the last ones.
 	public static Color[] EffectPixels(string id, int frame)
 	{
@@ -357,6 +358,10 @@ public sealed partial class Art
 			"heal" => new Color(120, 240, 150),
 			"revive" => new Color(255, 226, 120),
 			"item" => new Color(150, 210, 255),
+			"join" => new Color(170, 140, 255),
+			"merge" => new Color(110, 230, 200),
+			"transform" => new Color(255, 120, 200),
+			"defeat" => new Color(255, 70, 70),
 			_ when style == "shield" => new Color(120, 180, 255),
 			_ => ElementColor(rest),
 		};
@@ -424,6 +429,18 @@ public sealed partial class Art
 				Dot(x, y + 1, edge);
 				Dot(x - 1, y + 1, edge * 0.6f);
 				Dot(x + 1, y + 1, edge * 0.6f);
+			}
+			break;
+		case "mark":
+			// Two crossed strokes inside a ring, stamped at full size at once and pulsing.
+			Ring(Dot, mid, mid - 2, edge);
+			for (int i = 6; i < EffectSize - 6; i++)
+			{
+				for (int w = -1; w <= 1; w++)
+				{
+					Dot(i + w, i, frame % 2 == 0 ? core : edge);
+					Dot(EffectSize - 1 - i + w, i, frame % 2 == 0 ? core : edge);
+				}
 			}
 			break;
 		default:

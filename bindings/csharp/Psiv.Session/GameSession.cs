@@ -1043,4 +1043,35 @@ public sealed unsafe class GameSession : IDisposable
 		}
 		return Result(status);
 	}
+
+	// The actor walking with the party without joining it, "" for none.
+	public string Follower()
+	{
+		Must(Native.Follower(_handle, out IntPtr actor));
+		return Native.Str(actor);
+	}
+
+	public CreatureKind CharacterKind(string character)
+	{
+		Must(Native.CharacterKind(_handle, character, out int kind));
+		return (CreatureKind)kind;
+	}
+
+	// A vehicle's uses left of one of its skills, or null when the party does not have it or it has no such skill.
+	public int? VehicleSkillUses(string vehicle, string skill) =>
+		Read(Native.VehicleSkillUses(_handle, vehicle, skill, out int uses)) ? uses : null;
+
+	// Whether the save directory holds a readable clear-data record: the story was finished.
+	public bool ClearRecordExists()
+	{
+		Must(Native.ClearRecordExists(_handle, out int exists));
+		return exists != 0;
+	}
+
+	// Every audio id the data lists, for a sound test.
+	public IReadOnlyList<string> AudioIds()
+	{
+		Must(Native.AudioIds(_handle, out IntPtr p, out int count));
+		return Native.Strs(p, count);
+	}
 }

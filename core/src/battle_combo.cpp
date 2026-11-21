@@ -7,21 +7,30 @@ namespace rules {
 
 namespace {
 
-bool componentMatches(const ComboRecipe& recipe, std::size_t component, const std::string& ability, const std::string& character) {
+// An ability fills a component it names, or one whose ability is of the same family (B3).
+bool componentMatches(const Database& db, const ComboRecipe& recipe, std::size_t component, const std::string& ability, const std::string& character) {
 	const bool tied = component < recipe.characters.size() && !recipe.characters[component].empty();
-	return recipe.abilities[component] == ability && (!tied || recipe.characters[component] == character);
+	if (tied && recipe.characters[component] != character) {
+		return false;
+	}
+	if (recipe.abilities[component] == ability) {
+		return true;
+	}
+	const AbilityDef* used = db.ability(ability);
+	const AbilityDef* named = db.ability(recipe.abilities[component]);
+	return used && named && !used->family.empty() && used->family == named->family;
 }
 
 // Participant k used abilities[k] and is characters[k]. An ordered recipe, and every four-member one, maps
 // participant k to component k; an unordered one accepts any one-to-one mapping.
-bool recipeMatches(const ComboRecipe& recipe, const std::vector<std::string>& abilities, const std::vector<std::string>& characters) {
+bool recipeMatches(const Database& db, const ComboRecipe& recipe, const std::vector<std::string>& abilities, const std::vector<std::string>& characters) {
 	const bool ordered = recipe.ordered || recipe.abilities.size() == static_cast<std::size_t>(kMaxComboParticipants);
 	std::vector<std::size_t> assignment(recipe.abilities.size());
 	std::iota(assignment.begin(), assignment.end(), std::size_t(0));
 	do {
 		bool all = true;
 		for (std::size_t k = 0; k < assignment.size() && all; ++k) {
-			all = componentMatches(recipe, assignment[k], abilities[k], characters[k]);
+			all = componentMatches(db, recipe, assignment[k], abilities[k], characters[k]);
 		}
 		if (all) {
 			return true;
@@ -41,17 +50,22 @@ int damagePower(const AbilityDef& ability) {
 
 }
 
-// At the start of each actor's turn (BAT-061): up to four queued turns from this actor, stopping at an enemy, a
-// member who cannot act, a command that is not a technique or skill, or one that cannot be paid for. The first
-// recipe in data order that matches the first turns fires, and the other participants' turns are spent on it.
-// Returns how many queued turns the combo consumed, or 0 when none fires.
+// At the start of each actor's turn (BAT-061): up to four queued turns from this actor, stopping at a living enemy, a
+// member who cannot act, a command that is not a technique or skill, or one that cannot be paid for. An enemy that
+// fell earlier in the round no longer stands between two parts. The first recipe in data order that matches the
+// first turns fires, and the other participants' turns are spent on it. Returns how many queued turns the combo
+// consumed, fallen enemies between its parts included, or 0 when none fires.
 int Battle::tryCombo(const std::vector<int>& order, std::size_t index, std::vector<Event>& out) {
 	std::vector<int> participants;
+	std::vector<std::size_t> queuePlaces;
 	std::vector<std::string> used;
 	std::vector<std::string> characters;
 	for (std::size_t k = index; k < order.size() && participants.size() < static_cast<std::size_t>(kMaxComboParticipants); ++k) {
 		const int actor = order[k];
 		const Command& command = commands_[actor];
+		if (!isParty(actor) && !combatants_[actor].alive() && k > index) {
+			continue;
+		}
 		if (!isParty(actor) || !combatants_[actor].alive() || command.kind != CommandKind::Ability || statusWith(actor, StatusAction::CannotAct)) {
 			break;
 		}
@@ -60,12 +74,13 @@ int Battle::tryCombo(const std::vector<int>& order, std::size_t index, std::vect
 			break;
 		}
 		participants.push_back(actor);
+		queuePlaces.push_back(k);
 		used.push_back(command.id);
 		characters.push_back(combatants_[actor].defId);
 	}
 	for (const ComboRecipe& recipe : db_->combos) {
 		const std::size_t size = recipe.abilities.size();
-		if (size > participants.size() || !recipeMatches(recipe, used, characters)) {
+		if (size > participants.size() || !recipeMatches(*db_, recipe, used, characters)) {
 			continue;
 		}
 		participants.resize(size);
@@ -105,8 +120,9 @@ int Battle::tryCombo(const std::vector<int>& order, std::size_t index, std::vect
 		team.dexterity /= count;
 		team.critical /= count;
 		team.changeAmount = team.comboAttack;
+		team.groupTarget = combo.targeting == Targeting::EnemyGroup || combo.targeting == Targeting::AllEnemies;
 		applyEffects(lead, team, combo.id, combo.effects, targets, false, out);
-		return static_cast<int>(size);
+		return static_cast<int>(queuePlaces[size - 1] - index + 1);
 	}
 	return 0;
 }

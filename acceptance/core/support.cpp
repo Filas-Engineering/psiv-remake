@@ -168,7 +168,9 @@ BattleState capture(const Battle& battle) {
 			s.statuses.insert(status.id);
 		}
 		for (const ActiveModifier& modifier : c.modifiers) {
-			s.modifiers[modifier.stat] = modifier.amount;
+			if (modifier.amount != 0) {
+				s.modifiers[modifier.stat] = modifier.amount;
+			}
 		}
 		state.combatants.push_back(s);
 	}
@@ -237,6 +239,10 @@ std::string apply(const Database& db, BattleState& state, const Event& e, int pa
 		if (!target) {
 			return type + " without a target";
 		}
+		if (e.resource == ResourceKind::Tp) {
+			target->tp += e.amount;
+			return "";
+		}
 		target->hp += e.amount;
 		return resulting(*target);
 	case EventType::Revived:
@@ -261,7 +267,11 @@ std::string apply(const Database& db, BattleState& state, const Event& e, int pa
 		if (!target) {
 			return type + " without a target";
 		}
-		target->modifiers[e.stat] = e.amount;
+		if (e.amount == 0) {
+			target->modifiers.erase(e.stat);
+		} else {
+			target->modifiers[e.stat] = e.amount;
+		}
 		return "";
 	case EventType::CombatantDefeated:
 		if (!target) {
@@ -283,6 +293,41 @@ std::string apply(const Database& db, BattleState& state, const Event& e, int pa
 		return "";
 	case EventType::BattleEnded:
 		state.outcome = e.outcome;
+		return "";
+	case EventType::EnemyJoined:
+	case EventType::EnemyTransformed: {
+		const EnemyDef* def = e.ids.size() == 1 ? db.enemy(e.ids[0]) : nullptr;
+		if (!def) {
+			return type + " names no known enemy";
+		}
+		CombatantState fresh;
+		fresh.hp = def->stats.maxHp;
+		fresh.tp = def->stats.maxTp;
+		for (const std::string& id : def->abilities) {
+			const AbilityDef* ability = db.ability(id);
+			if (ability && ability->kind == AbilityKind::Skill) {
+				fresh.skillUses[id] = ability->uses;
+			}
+		}
+		fresh.statuses.insert(def->statuses.begin(), def->statuses.end());
+		if (e.type == EventType::EnemyJoined) {
+			if (e.target != count) {
+				return type + " does not add the next combatant index";
+			}
+			state.combatants.push_back(fresh);
+			return resulting(state.combatants.back());
+		}
+		if (!target || !target->statuses.empty()) {
+			return type + " leaves statuses that got no StatusRemoved event";
+		}
+		*target = fresh;
+		return resulting(*target);
+	}
+	case EventType::EnemyLeft:
+		if (!target) {
+			return type + " without a target";
+		}
+		target->hp = 0;
 		return "";
 	}
 	return "unknown event type";

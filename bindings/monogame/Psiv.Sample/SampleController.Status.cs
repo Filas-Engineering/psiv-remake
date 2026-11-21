@@ -14,29 +14,27 @@ public sealed partial class SampleController
 
 	private static string Signed(int value) => value.ToString("+0;-0;0", CultureInfo.InvariantCulture);
 
-	private static string BonusText(StatBonus b)
+	private string BonusText(StatBonus b)
 	{
 		var parts = new List<string>();
-		void Add(string name, int value)
+		void Add(string stat, int value)
 		{
 			if (value != 0)
 			{
-				parts.Add($"{name} {Signed(value)}");
+				parts.Add($"{T("ui.stat_short." + stat)} {Signed(value)}");
 			}
 		}
-		Add("HP", b.MaxHp);
-		Add("TP", b.MaxTp);
-		Add("Str", b.Strength);
-		Add("Men", b.Mental);
-		Add("Agi", b.Agility);
-		Add("Dex", b.Dexterity);
-		Add("Def", b.Defense);
-		Add("Crit", b.Critical);
-		Add("Eva", b.Evasion);
-		return parts.Count == 0 ? "no bonus" : string.Join(", ", parts);
+		Add("hp", b.MaxHp);
+		Add("tp", b.MaxTp);
+		Add("str", b.Strength);
+		Add("men", b.Mental);
+		Add("agi", b.Agility);
+		Add("dex", b.Dexterity);
+		Add("def", b.Defense);
+		Add("crit", b.Critical);
+		Add("eva", b.Evasion);
+		return parts.Count == 0 ? T("ui.status.no_bonus") : ListText(parts);
 	}
-
-	private static string Words(string name) => name.Replace('_', ' ');
 
 	private void UpdateStatus(ActionInput input)
 	{
@@ -119,47 +117,47 @@ public sealed partial class SampleController
 			int sum = d.EquipmentBonus.Sum(bonus);
 			return total.ToString(CultureInfo.InvariantCulture) + (sum != 0 ? $" ({Signed(sum)})" : "");
 		}
-		left.Add(("Stats", ""));
-		left.Add(("Strength", Stat(m.Strength, b => b.Strength)));
-		left.Add(("Mental", Stat(m.Mental, b => b.Mental)));
-		left.Add(("Agility", Stat(m.Agility, b => b.Agility)));
-		left.Add(("Dexterity", Stat(m.Dexterity, b => b.Dexterity)));
-		left.Add(("Defense", Stat(m.Defense, b => b.Defense)));
-		left.Add(("Critical", Stat(d.Critical, b => b.Critical)));
-		left.Add(("Evasion", Stat(d.Evasion, b => b.Evasion)));
-		left.Add(("Attack element", d.AttackElement == Element.None ? "none" : Words(GameSession.NameOf(NameKind.Element, (int)d.AttackElement))));
-		left.Add(("Element affinities", ""));
+		left.Add((T("ui.status.stats"), ""));
+		left.Add((T("ui.stat.strength"), Stat(m.Strength, b => b.Strength)));
+		left.Add((T("ui.stat.mental"), Stat(m.Mental, b => b.Mental)));
+		left.Add((T("ui.stat.agility"), Stat(m.Agility, b => b.Agility)));
+		left.Add((T("ui.stat.dexterity"), Stat(m.Dexterity, b => b.Dexterity)));
+		left.Add((T("ui.stat.defense"), Stat(m.Defense, b => b.Defense)));
+		left.Add((T("ui.stat.critical"), Stat(d.Critical, b => b.Critical)));
+		left.Add((T("ui.stat.evasion"), Stat(d.Evasion, b => b.Evasion)));
+		left.Add((T("ui.status.attack_element"), T(NameKind.Element, (int)d.AttackElement)));
+		left.Add((T("ui.status.affinities"), ""));
 		foreach ((Element element, int percent) in d.Affinities)
 		{
-			left.Add((Words(GameSession.NameOf(NameKind.Element, (int)element)), $"{percent}%"));
+			left.Add((T(NameKind.Element, (int)element), $"{percent}%"));
 		}
-		left.Add(("Status resistances", ""));
+		left.Add((T("ui.status.resistances"), ""));
 		if (d.StatusResists.Count == 0)
 		{
-			left.Add(("none", "-"));
+			left.Add((T("ui.status.none"), "-"));
 		}
 		foreach (StatusResist r in d.StatusResists)
 		{
 			left.Add((r.Name, $"{r.Percent}%"));
 		}
-		right.Add(("Equipment", ""));
+		right.Add((T("ui.status.equipment"), ""));
 		for (int slot = 0; slot < m.Equipment.Count; slot++)
 		{
 			string piece = m.EquipmentNames[slot].Length > 0 ? m.EquipmentNames[slot] : "-";
-			right.Add((Words(GameSession.NameOf(NameKind.EquipSlot, slot)), piece));
+			right.Add((T(NameKind.EquipSlot, slot), piece));
 			if (m.Equipment[slot].Length > 0 && slot < d.EquipmentBonus.Count)
 			{
 				right.Add(("", BonusText(d.EquipmentBonus[slot])));
 			}
 		}
-		right.Add(("Statuses", ""));
+		right.Add((T("ui.status.statuses"), ""));
 		if (m.Statuses.Count == 0)
 		{
-			right.Add(("none", "-"));
+			right.Add((T("ui.status.none"), "-"));
 		}
 		foreach (ActiveStatus st in m.Statuses)
 		{
-			right.Add((st.Name, st.Remaining > 0 ? $"{st.Remaining} left" : "-"));
+			right.Add((st.Name, st.Remaining > 0 ? T("ui.status.remaining", st.Remaining) : "-"));
 		}
 		return (left, right);
 	}
@@ -175,7 +173,7 @@ public sealed partial class SampleController
 		List<Member> lineup = LineupMembers();
 		if (_pickMember is null)
 		{
-			DrawItems(s, _list, x, y, w, h, lineup.Select(m => $"{m.Name}  Lv{m.Level}  HP {m.Hp}/{m.MaxHp}  TP {m.Tp}/{m.MaxTp}  EXP {m.Experience}" +
+			DrawItems(s, _list, x, y, w, h, lineup.Select(m => $"{MemberRow(m)}  {T("ui.status.exp", m.Experience)}" +
 				string.Concat(m.Statuses.Select(st => $" [{st.Name}]"))).ToList());
 			return;
 		}
@@ -189,13 +187,13 @@ public sealed partial class SampleController
 		s.Fill(x, y, 84, 84, Style.Track);
 		s.Image(art.Portrait("", member.Id), x + 2, y + 2, 80, 80, Color.White);
 		int hx = x + 104;
-		s.Text($"{member.Name}   Lv {member.Level}", hx, y, Style.Accent);
-		s.Text($"EXP {member.Experience}   next level in {detail.ExperienceToNext}", hx, y + Px(30), Style.Dim, Style.Small);
+		s.Text(T("ui.status.header", member.Name, member.Level), hx, y, Style.Accent);
+		s.Text(T("ui.status.exp_next", member.Experience, detail.ExperienceToNext), hx, y + Px(30), Style.Dim, Style.Small);
 		int barW = Math.Min(300, (w - 104) / 2 - 30);
 		int barsY = y + Px(56);
-		Widgets.ValueBar(s, hx, barsY, barW, "HP", member.Hp, member.MaxHp, member.Hp * 4 <= member.MaxHp ? Style.Bad : Style.Good, Px(20), 8);
-		Widgets.ValueBar(s, hx + barW + 40, barsY, barW, "TP", member.Tp, member.MaxTp, Style.Tp, Px(20), 8);
-		Widgets.Tabs(s, x + w - Px(300), y, Px(300), ["Stats", "Abilities"], _statusPage, Px);
+		Widgets.ValueBar(s, hx, barsY, barW, T("ui.stat_short.hp"), member.Hp, member.MaxHp, member.Hp * 4 <= member.MaxHp ? Style.Bad : Style.Good, Px(20), 8);
+		Widgets.ValueBar(s, hx + barW + 40, barsY, barW, T("ui.stat_short.tp"), member.Tp, member.MaxTp, Style.Tp, Px(20), 8);
+		Widgets.Tabs(s, x + w - Px(300), y, Px(300), [T("ui.status.stats"), T("ui.status.abilities")], _statusPage, Px);
 		int top = Math.Max(y + 96, barsY + Px(20) + 18);
 		int bodyH = y + h - top;
 		if (_statusPage == 0)
@@ -232,24 +230,24 @@ public sealed partial class SampleController
 		IReadOnlyList<AbilityInfo> abilities = _s.MemberAbilities(member.Id);
 		if (abilities.Count == 0)
 		{
-			s.Text("No abilities.", x + 14, top, Style.Dim);
+			s.Text(T("ui.status.no_abilities"), x + 14, top, Style.Dim);
 			return;
 		}
 		int listW = _pickAction is null ? w : w * 3 / 5;
 		int kindX = x + listW * 45 / 100;
 		int costX = x + listW * 62 / 100;
 		int usesX = x + listW * 76 / 100;
-		s.Text("Kind", kindX, top, Style.Dim, Style.Small);
-		s.Text("Cost", costX, top, Style.Dim, Style.Small);
-		s.Text("Uses", usesX, top, Style.Dim, Style.Small);
+		s.Text(T("ui.status.kind"), kindX, top, Style.Dim, Style.Small);
+		s.Text(T("ui.status.cost"), costX, top, Style.Dim, Style.Small);
+		s.Text(T("ui.status.uses"), usesX, top, Style.Dim, Style.Small);
 		int listTop = top + Px(28);
 		int descH = Px(56);
 		_sub.Draw(s, x, listTop, listW, y + h - listTop - descH, Px(30), abilities.Count, (i, ry, on) =>
 		{
 			AbilityInfo a = abilities[i];
 			Style.ListRow(s, Style.Fit(s, a.Name + (a.Field ? "  *" : ""), kindX - x - 30), x, ry, listW - 14, on, a.Field, height: Px(28));
-			s.Text(Words(GameSession.NameOf(NameKind.AbilityKind, (int)a.Kind)), kindX, ry, Style.Dim, Style.Small);
-			s.Text(a.Cost > 0 ? $"{a.Cost} TP" : "-", costX, ry, Style.Text, Style.Small);
+			s.Text(T(NameKind.AbilityKind, (int)a.Kind), kindX, ry, Style.Dim, Style.Small);
+			s.Text(a.Cost > 0 ? T("ui.common.tp_cost", a.Cost) : "-", costX, ry, Style.Text, Style.Small);
 			s.Text(a.MaxUses >= 0 ? $"{a.Uses}/{a.MaxUses}" : "-", usesX, ry, Style.Text, Style.Small);
 		}, _pickAction is null);
 		s.Fill(x, y + h - descH, listW - 14, 1, Style.PanelEdge * 0.4f);
@@ -258,13 +256,14 @@ public sealed partial class SampleController
 		{
 			_probeSelected = abilities[_sub.Cursor].Name;
 			_probeTop = _sub.Top;
-			s.Text("* usable here", x + w - s.Measure("* usable here", Style.Small) - 20, top, Style.Dim, Style.Small);
+			string usable = T("ui.status.usable_here");
+			s.Text(usable, x + w - s.Measure(usable, Style.Small) - 20, top, Style.Dim, Style.Small);
 		}
 		else
 		{
 			int tx = x + listW + 20;
-			s.Text($"Use {_s.DisplayName(_pickAction)} on whom?", tx, top, Style.Accent);
-			DrawItems(s, _third, tx, listTop + Px(12), w - listW - 20, y + h - listTop - Px(12), lineup.Select(m => $"{m.Name}  HP {m.Hp}/{m.MaxHp}").ToList());
+			s.Text(T("ui.menu.use_on_whom", _s.DisplayName(_pickAction)), tx, top, Style.Accent);
+			DrawItems(s, _third, tx, listTop + Px(12), w - listW - 20, y + h - listTop - Px(12), lineup.Select(m => T("ui.status.member_hp", m.Name, m.Hp, m.MaxHp)).ToList());
 		}
 	}
 }

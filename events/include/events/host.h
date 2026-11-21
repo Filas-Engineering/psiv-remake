@@ -175,6 +175,10 @@ public:
 	virtual void remove_vehicle(const std::string& vehicle);
 	virtual bool has_vehicle(const std::string& vehicle);
 	virtual bool aboard_vehicle(const std::string& vehicle);
+	// The member learns the ability for good.
+	virtual void teach_ability(const std::string& member, const std::string& ability);
+	// A character who walks with the party without joining it; empty for none.
+	virtual void set_follower(const std::string& actor);
 };
 
 const char* action_type_name(ActionType type);

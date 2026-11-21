@@ -8,7 +8,7 @@ namespace Psiv.Sample;
 // moves and play time stops.
 public sealed partial class SampleController
 {
-	private static readonly string[] PauseRows = ["Resume", "Options", "Quit to title"];
+	private string[] PauseRows => [T("ui.pause.resume"), T("ui.pause.options"), T("ui.pause.quit")];
 
 	private readonly ScrollList _pauseList = new();
 
@@ -31,7 +31,7 @@ public sealed partial class SampleController
 		}
 		else if (input.Confirm)
 		{
-			_confirm.Ask("Quit to the title? Play since the last save is lost.", () => Report(_s.QuitToTitle()));
+			_confirm.Ask(T("ui.pause.quit_confirm"), () => Report(_s.QuitToTitle()));
 		}
 	}
 
@@ -52,12 +52,13 @@ public sealed partial class SampleController
 		int h = Px(40) + PauseRows.Length * rowH + Px(20);
 		int x = (s.Width - w) / 2;
 		int y = (s.Height - h) / 2;
-		Style.Window(t, x, y, w, h, "Paused");
-		for (int i = 0; i < PauseRows.Length; i++)
+		Style.Window(t, x, y, w, h, T("ui.pause.title"));
+		string[] rows = PauseRows;
+		for (int i = 0; i < rows.Length; i++)
 		{
-			Style.ListRow(t, PauseRows[i], x + Px(40), y + Px(34) + i * rowH, w - Px(70), i == _pauseList.Cursor, height: Px(28));
+			Style.ListRow(t, rows[i], x + Px(40), y + Px(34) + i * rowH, w - Px(70), i == _pauseList.Cursor, height: Px(28));
 		}
-		_probeSelected = PauseRows[_pauseList.Cursor];
-		DrawHint(t, $"{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} confirm   {Hint(GameAction.Back)} resume");
+		_probeSelected = rows[_pauseList.Cursor];
+		DrawHint(t, T("ui.pause.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm), Hint(GameAction.Back)));
 	}
 }

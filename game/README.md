@@ -111,7 +111,7 @@ Party members are not tracked. The world keeps one place for the party, the lead
 
 ### game.json
 
-`title`, `core_data` (battle data directory, relative to `data/`; `DataDirectories::core` overrides it), `areas`, `events`, `glossary`, `languages` (see [Languages](#languages)), `journal`, `actors` (script actors that are not characters; each needs a `speaker.<id>` string), `presentation` (the `audio`, `cameras`, `layouts`, `animations` and `portraits` the scripts may name, and the optional `music` and `durations`, below), `flags` (every flag a script, hook or journal entry uses; chest flags are declared by their chests), `vars` (name to starting value), `clear_flag`, `start` (`area`, `marker`, `facing`, `lineup`, `level`, `money`, `items`), `join_levels` (level a character has when an event first adds it), `prices` (buy price per item or equipment id; sell price is the shop's `sell_percent` of it), `item_cap`, `money_cap`, `tick_ms`, `grace_ms`, `round_ms`, `autosave_slots`, `manual_slots`, `bosses` (`encounter` and the `flag` its event sets; pacing keys M5 and M6 by it), `vehicles` (below). Unknown fields are errors.
+`title`, `core_data` (battle data directory, relative to `data/`; `DataDirectories::core` overrides it), `areas`, `events`, `glossary`, `languages` (see [Languages](#languages)), `journal`, `actors` (script actors that are not characters; each needs a `speaker.<id>` string), `presentation` (the `audio`, `cameras`, `layouts`, `animations` and `portraits` the scripts may name, and the optional `music` and `durations`, below), `flags` (every flag a script, hook or journal entry uses; chest flags are declared by their chests), `vars` (name to starting value), `clear_flag`, `start` (`area`, `marker`, `facing`, `lineup`, `level`, `money`, `items`), `join_levels` (level a character has when an event first adds it), `prices` (buy price per item or equipment id; sell price is the shop's `sell_percent` of it), `item_cap`, `money_cap`, `tick_ms`, `grace_ms`, `round_ms`, `autosave_slots`, `manual_slots`, `bosses` (`encounter` and the `flag` its event sets; pacing keys M5 and M6 by it), `vehicles` (below), `machine_step_heal` (0 to 999: hit points a standing machine member of the party regains with each step, P6) and `outside_experience_until` (a flag: until it is set, every member who has joined and is out of the battle gets the share each member standing got, SAV-032; left out, they get none). Unknown fields are errors.
 
 ```json
 "vehicles": [{"id": "reed_skimmer", "crosses": ["floor", "water"], "speed_percent": 200, "encounters": [{"encounter": "marsh", "weight": 1}, {"encounter": "training", "weight": 1}]}]
@@ -151,7 +151,7 @@ Party members are not tracked. The world keeps one place for the party, the lead
 
 * Texts are string IDs of the dialogue tables, so writers translate them with the scripts and the glossary check covers them. A flag range holds while `after` is set (or left out) and `until` is not set (or left out).
 * Objectives (UI-012): the last listed one whose range holds is the quest log's line.
-* Jobs: available once `available` is set (or from the start), accepted when `accepted` is set, completed when `completed` is set. Scripts set the flags; the state never moves back.
+* Jobs: available once `available` is set (or from the start), accepted when `accepted` is set, completed when `completed` is set, and missed for good when the optional `missed` flag is set while the job was never accepted. Scripts set the flags; the state never moves back. Batches are jobs with later `available` flags; a board script that offers a new job only when none is open makes them one at a time (Ember Steps' `steps_board`).
 * Encyclopedia entries (TXT-041) unlock when their flag is first set and stay unlocked.
 * Party talk sets (FLD-072): a set with an `area` is for that area, one without is a chapter set. Among the sets whose area and range hold, an area set beats a chapter set, then the set with more range bounds wins, then the first listed. Speakers are characters.
 
@@ -213,18 +213,18 @@ Shop and rest point ids are unique across areas, so a script names them without 
 A text file, platform independent:
 
 ```
-PSR-SAVE 6
+PSR-SAVE 7
 chunk header 1 <payload bytes>
-schema 6
+schema 7
 ...
 chunk location 1 <n>
 ...
 end <FNV-1a 64 of everything before this line, 16 hex digits>
 ```
 
-Chunks and versions: `header` 1 (schema, build, rules version, content hash, write time, sequence, autosave, play time, area, party, difficulty, and `dev 1` for a game developer tools marked: enough for the slot list), `location` 1, `party` 2 (members with statuses that persist outside battle, chosen names), `inventory` 1, `world` 1 (flags, variables, visited areas, control lock, visible enemies of the current area, grace, random counter, play time), `battle` 2 (the auto macro, then core's `serializeMacros` and `serializeComboLog` blocks), `random` 1 (the encounter stream's `rules::Rng` state), `difficulty` 1, `quests` 1 (job states), `unlocks` 1 (encyclopedia entries), `actors` 1 (one `actor` line per actor a script touched: id, area or `-`, x, y, facing, visible), `talk` 1 (one `heard` line per party talk set that came up by itself in an area, as `<set>@<area>`), `travel` 1 (`aboard` and the vehicle the party rides or `-`; one `vehicle` line per vehicle the party has: id, area, x, y, facing, then the area and cell of its last boarding point; `dungeon_exit` and the area and cell the way out of the dungeon leads to, `-` when there is none), `dev` 1 (`marked 1` when developer tools marked the game, empty otherwise; [`docs/dev-tools.md`](../docs/dev-tools.md), "The dev mark"), and `midevent` 1 (in the autosave before an event battle, and in `Session::saveText` while an event runs: `events::save_state_to_text`, `events-save 3`). Every known chunk but `midevent` must be present. Values are tokens with letters, digits, `_` and `.` kept and every other byte as `%XX`; empty is `-`. Unknown chunks are kept in `World::unknownChunks` and written back unchanged after the known ones. A known chunk with a higher version, or a higher schema, is refused as "from a newer build". A checksum mismatch is refused as damaged and listed as damaged. Writes go to `slot.sav.tmp` and are renamed over the slot.
+Chunks and versions (a chunk is read from the oldest version listed up to the current, since the newer ones only add lines): `header` 1 (schema, build, rules version, content hash, write time, sequence, autosave, play time, area, party, difficulty, and `dev 1` for a game developer tools marked: enough for the slot list), `location` 1, `party` 3 (members with statuses that persist outside battle, chosen names, and from version 3 `taught` lines: abilities learned for good; read from 2), `inventory` 1, `world` 2 (flags, variables, visited areas, control lock, visible enemies of the current area, grace, random counter, play time, and from version 2 the `follower`; read from 1), `battle` 2 (the auto macro, then core's `serializeMacros` and `serializeComboLog` blocks), `random` 1 (the encounter stream's `rules::Rng` state), `difficulty` 1, `quests` 1 (job states), `unlocks` 1 (encyclopedia entries), `actors` 1 (one `actor` line per actor a script touched: id, area or `-`, x, y, facing, visible), `talk` 1 (one `heard` line per party talk set that came up by itself in an area, as `<set>@<area>`), `travel` 2 (`aboard` and the vehicle the party rides or `-`; one `vehicle` line per vehicle the party has: id, area, x, y, facing, then the area and cell of its last boarding point, each followed from version 2 by `uses` lines, its skill uses left; read from 1; `dungeon_exit` and the area and cell the way out of the dungeon leads to, `-` when there is none), `dev` 1 (`marked 1` when developer tools marked the game, empty otherwise; [`docs/dev-tools.md`](../docs/dev-tools.md), "The dev mark"), and `midevent` 1 (in the autosave before an event battle, and in `Session::saveText` while an event runs: `events::save_state_to_text`, `events-save 3`). Every known chunk but `midevent` must be present. Values are tokens with letters, digits, `_` and `.` kept and every other byte as `%XX`; empty is `-`. Unknown chunks are kept in `World::unknownChunks` and written back unchanged after the known ones. A known chunk with a higher version, or a higher schema, is refused as "from a newer build". A checksum mismatch is refused as damaged and listed as damaged. Writes go to `slot.sav.tmp` and are renamed over the slot.
 
-Migrations (SAV-021) run in order on the chunk list before it is read. Schema 1 to 2: the battle chunk's own macro and combo lines become core's blocks (combinations found before get play time 0 and no participants), the party chunk moves to version 2 unchanged, empty `quests` and `unlocks` chunks are added and filled from the flags on load, and a `midevent` chunk is dropped, because its `events-save 2` text no longer loads; such a save continues in the field. Schema 2 to 3: an empty `actors` chunk is added, so every actor stands at its talk point; a `midevent` chunk stays, and the resumed event rebuilds the actors it had moved. Schema 3 to 4: an empty `talk` chunk is added, so party talk can come up by itself once more in each area. Schema 4 to 5: an empty `travel` chunk is added: no vehicle, on foot, no way out of a dungeon known. Schema 5 to 6: an empty `dev` chunk is added: the game is not marked. Tests load a hand-written schema 1 save, one written without the `actors`, `talk`, `travel` and `dev` chunks as schema 2, and the acceptance check also one without the `talk`, `travel` and `dev` chunks as schema 3, one without the `travel` and `dev` chunks as schema 4, and one without the `dev` chunk as schema 5.
+Migrations (SAV-021) run in order on the chunk list before it is read. Schema 1 to 2: the battle chunk's own macro and combo lines become core's blocks (combinations found before get play time 0 and no participants), the party chunk moves to version 2 unchanged, empty `quests` and `unlocks` chunks are added and filled from the flags on load, and a `midevent` chunk is dropped, because its `events-save 2` text no longer loads; such a save continues in the field. Schema 2 to 3: an empty `actors` chunk is added, so every actor stands at its talk point; a `midevent` chunk stays, and the resumed event rebuilds the actors it had moved. Schema 3 to 4: an empty `talk` chunk is added, so party talk can come up by itself once more in each area. Schema 4 to 5: an empty `travel` chunk is added: no vehicle, on foot, no way out of a dungeon known. Schema 5 to 6: an empty `dev` chunk is added: the game is not marked. Schema 6 to 7 changes nothing: its party, world and travel chunks simply lack the new lines (nothing taught, no follower, every vehicle skill full). Tests load a hand-written schema 1 save, one written without the `actors`, `talk`, `travel` and `dev` chunks as schema 2, and the acceptance check also one without the `talk`, `travel` and `dev` chunks as schema 3, one without the `travel` and `dev` chunks as schema 4, and one without the `dev` chunk as schema 5.
 
 Slots are `manual_0` .. `manual_9` and `auto_0` .. `auto_2` in the save directory. An autosave writes an empty or damaged autosave slot, otherwise the one with the lowest sequence number. Continue loads the newest undamaged save by write time.
 
@@ -245,7 +245,11 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Autosaves (FLOW-050): area entry when the area was not visited since the last autosave, event end when the script changed any flag, before every event battle (written from inside `start_battle`, with interpreter state), after rest (inn or script). The pre-battle autosave holds the encounter stream from before the battle seed was drawn, so loading it sets up the same battle; setting that battle up again from its own autosave writes no second one.
 * Rest (FLD-034/035): `rules::rest` for the whole roster, active or not, which cures the statuses with `rest_cures`. A script's `rest` with no rest point is free; with one it charges the point's cost, and without the money the party does not rest and the script carries on.
 * Statuses that persist outside battle stay on the members between battles, show in `status`, are saved, and are cured by rest or by field items and techniques.
-* Experience goes to the active party only (SAV-032). A member who leaves stays in the roster with its equipment and comes back as it left (SAV-035).
+* Experience (SAV-032, read from the disassembly in original-battle-rules.md section 5): members who have joined and are out of the battle get the full share a standing member got until `outside_experience_until` is set, then nothing; the placeholder sets it to `saltgrass.kiln_done`. The roster is exactly the members who have joined, which is the original's per-character flag. A member who leaves stays in the roster wearing its pieces, so they go with it, and comes back at the level that experience gave it (SAV-035 is to measure).
+* Machine members (P6): a standing one regains `machine_step_heal` hit points with each step the party takes (placeholder 1; nothing published gives the number); core stands a fallen one up after a won or escaped battle.
+* Vehicle skill uses (B19) carry from battle to battle in the save's travel chunk; rest (inn or script) refills them with the party, as nothing published says when the original refills them.
+* `learn` adds an ability to a member who has joined (a notice; nothing when it already knows it); `follower` sets the actor who walks with the party, saved; where it is drawn is the front end's business (the sample puts it last in the walking line). A script hides the actor's talk-point figure while it follows (Ember Steps).
+* Encounter mode (F1): the spec keeps visible enemies as the design (ENC-001) and random battles as a per-area option (ENC-002), so the placeholder default stays `visible`; the Drowned Kiln's lower floor and Ember Steps are `random`.
 * Inventory caps (SAV-036): `item_cap` per id, `money_cap`. Worn pieces cannot be sold.
 * Field items and techniques go through core's `useItemOutsideBattle` and `useAbilityOutsideBattle`, on the active party. An item that changes nothing is not used up.
 * Manual saves (SAV-003/004): from the field menu, anywhere, never during an event. A script's `save prompt` writes an ordinary save without interpreter state and with player control on, so loading it returns to a playable field.
@@ -288,6 +292,19 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 
 ## Changes in this round
 
+* Rules read from the original and the published guides: members out of the party share experience until a flag (`outside_experience_until`), machine members heal per step (`machine_step_heal`), vehicle skill uses carry between battles and rest refills them, jobs can be missed for good (`missed`, `JobState::Missed`, notice `game.job.missed`), and the script commands `learn` and `follower` (with `World::follower` and the notices `game.follower_joined` and `game.follower_left`). The registry lists techniques and skills as `ability` names.
+* Builds against core rules version 11 (the effects, kinds and enemy rules in `../core/README.md`). The level cap is 99, and `join_levels` and `start.level` go up to it.
+* Save schema 7: party chunk 3 (`taught`), world chunk 2 (`follower`), travel chunk 2 (`uses`). Schema 6 saves load unchanged.
+* The placeholder adventure: Ember Steps (random encounters with the summoner, the oozes, the crab and the twins) has a wayfarer who teaches the fighter Hallow and follows the party, a supply console, a job board with two jobs (the first missed once the sentinel's trial is over), a tinker whose cog (the machine Cogwright) joins, a free spring, and a sentinel whose wrong answer starts a battle the party cannot win (`events/steps.ev`); Cinder Quay has a free rest point (`quay_home`). 23 new dialogue lines, two job titles, the speaker `wayfarer`, the game's new keys in `en` and `ja`.
+* `tests/expected/travel.txt` was re-recorded: the skimmer's second vehicle battle now has the skill uses the first one left, and the ferry's opening announces the first Ember Steps job. The scripted playthrough is unchanged, and so are the bot's runs and every seed.
+
+### Changes a host must make
+
+* `world.h`: `JobState::Missed` (appended), `VehiclePlace::skillUses`, `World::follower` (both compared by `sameWorld`). `data.h`: `GameConfig::machineStepHeal`, `outsideExperienceUntil`, `Job::missedFlag`. `save.h`: `kSaveSchemaVersion` 7.
+* Text tables: every language needs `game.follower_joined`, `game.follower_left` and `game.job.missed`.
+
+## Changes in the round before
+
 * Developer tools for front ends ([`docs/dev-tools.md`](../docs/dev-tools.md)): `Session::devList`, `devWarp`, `devWarpCell`, `devSetFlag`, `devGive`, `devMoney`, `devSetLevel`, `devBattle`, `devEndBattle`, `devVehicle`, `devEncounters` and `encountersOn`, `devRunEvent`, `devMark` and `devMarked`; the running event's position (`eventPosition`, from the new `events::Interpreter::position`); the game as save text (`saveText`, `loadSaveText`). See "Rules this library chose" for their rules.
 * Save schema 6 with the `dev` chunk and the header's `dev` line; schemas 1 to 5 migrate unmarked.
 * The scripted playthrough and the vehicle and travel script are unchanged, byte for byte, and so are the bot's runs and every seed. No rule changed; core's rules version stays 10.
@@ -298,7 +315,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Text tables: every language needs `game.clear_not_recorded`, `game.dev_marked`, `game.loaded_text` and `game.refuse.no_game`, `dev_bad_cell`, `dev_bad_count`, `dev_bad_level`, `dev_field_only`, `dev_in_battle`, `dev_unknown_area`, `dev_unknown_encounter`, `dev_unknown_event`, `dev_unknown_flag`, `dev_unknown_marker`, `dev_unknown_member`, `dev_unknown_thing`, `dev_unknown_vehicle` and `dev_vehicle_outdoors` (the loader checks them). The placeholder `glyphs_ja.txt` gains the five kanji their Japanese text uses.
 * Saves are written as schema 6 (`PSR-SAVE 6`, `kSaveSchemaVersion` 6) with the `dev` chunk, which a schema 6 save must have; older builds refuse them as from a newer build. `serializeWorldChunks` (the event-start snapshot) includes it.
 
-## Changes in the previous round
+## Changes two rounds ago
 
 * Vehicles in the field and travel (see "Rules this library chose" for every rule, and which ones the spec asked for): `game.json` `vehicles`; areas `region`, `arrival` and `ports`; script commands `vehicle give|place|remove` and the conditions `vehicle <id>` and `aboard <id>`; `Session::vehiclesHere`, `riding`, `board`, `leaveVehicle`, `port`, `travelDestinations` and `travel`; the field moves the leader aboard at the vehicle's speed over what it crosses, battles aboard are vehicle battles from the vehicle's table, exits park it outside towns and dungeons, and a vehicle left out of reach goes back to its last boarding point.
 * Builds against core rules version 10, whose `travel` effect makes the placeholder's Homing Shell and Homeward (to a visited town of the region) and Waymark Chalk and Outpath (out of a dungeon).
@@ -315,7 +332,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * `problemText()` has the new keys `data.arrival_marker_missing`, `data.arrival_not_town`, `data.port_id_taken`, `data.port_marker_missing`, `data.unknown_terrain`, `data.vehicle_listed_twice`, `data.vehicle_needs_terrain`, `data.vehicle_not_field`, `data.vehicle_not_outdoors` and `data.vehicle_unknown`.
 * `runner.h`'s command language adds `board`, `disembark`, `destinations` and `travel`; `look` draws ports and vehicles and `status` says when the party is aboard.
 
-## Changes two rounds ago
+## Changes three rounds ago
 
 * Equipment comparison (`equipPreview`), descriptions (`description`, the `desc.*` text keys), bag sorting (`bag`), difficulty presets (`difficulties`, `canChangeSettings`), make macro from the combo log (`macroFromCombo`) and ambient party talk, for the front end's screens; see "Rules this library chose".
 * Data: cameras with targets and zooms, music by situation and per encounter, and action durations in `game.json`'s `presentation`; music per area; interact hooks on solid cells. Old `game.json` files with camera names only still load.
@@ -332,7 +349,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * The content hash value changes once, since it is now built from parsed data without presentation; nothing reads it on load.
 * `problemText()` has the new keys `data.camera_*`, `data.description_unknown`, `data.music_*`, `data.not_on_map`, `data.number_out_of_range` and `data.unknown_action`.
 
-## Changes three rounds ago
+## Changes four rounds ago
 
 * The field menu's missing operations, for the front end's screens: party order (`swapLineup`), the macro editor (`macroViews`, `createMacro`, `renameMacro`, `deleteMacro`, `moveMacro`, `setMacroStep`, `removeMacroStep`, `moveMacroStep`), the combo log joined with its recipes (`comboLog`) and status screen data (`memberDetail`). See "Rules this library chose" for their rules. The scripted playthrough does not use them; its transcript and the seeds are unchanged.
 
@@ -343,13 +360,13 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Core: `rules::macroTargetFits` (macro.h) is public; the loader uses it as before. No rule changed.
 * Saves are unchanged (schema 3).
 
-## Changes four rounds ago
+## Changes five rounds ago
 
 * The placeholder adventure has a tide chart on a post in Tidewater Landing (`tidewater_chart`, hook `chart`, open once the guide's apprentices have joined): the apprentices walk up to it and turn, the leader steps back and turns, people nod, shake their heads, startle, wave (looping), bow, jump and shrug, and a crab comes out for an event battle with a `lose` section. `game.json` lists those animations in `presentation.animations` and the flag `tidewater.chart_read`; tidewater gains the markers `chart_front`, `chart_left`, `chart_right` and `chart_back`; the dialogue is in `en` and `ja` (five more kanji in `glyphs_ja.txt`). It is there for the MonoGame sample's party and pose presentation; the scripted playthrough does not read the chart, so its transcript changes only in the `look` map of tidewater, and the seeds stay.
 * The placeholder adventure has a board by the inn in Tidewater Landing (`tidewater_board`, hook `board`, open once the guide's apprentices have joined): before they are in the party, the engineer walks in from the east gate, turns toward the leader and waves, and the scout, with no move first, turns toward the leader and nods; then both join, so the party is full. The scene sets `reed.scout_joined`, so the scout's step hook on the reed path stays shut afterwards. `game.json` lists the flag `tidewater.board_read`; tidewater gains the markers `board_front`, `board_below` and `board_beside` (no longer used); the dialogue is in `en` and `ja`. Like the chart, it is there for the MonoGame sample's party presentation; the scripted playthrough does not read the board, so its transcript changes only in the `look` map of tidewater, and the seeds stay.
 * Party members a script moves or turns stay presentation (see [Actors](#actors)); no API or save change.
 
-## Changes five rounds ago
+## Changes six rounds ago
 
 * Script actors are game state: the session follows the end state of every `move`, `face`, `show` and `hide` of a `game.json` actor (see [Actors](#actors)), `actorsHere()` lists the actors in the party's area, and an actor no script touched stands at the talk point named after it.
 * Save schema 3 adds the `actors` chunk; schema 2 saves migrate with every actor at its talk point.
@@ -361,7 +378,7 @@ Where the spec is "To measure" the proposed default is implemented and kept in d
 * Saves are written as schema 3 (`PSR-SAVE 3`, `kSaveSchemaVersion` 3) with the `actors` chunk, which a schema 3 save must have. Older builds refuse them as from a newer build. `serializeWorldChunks` (the event-start snapshot) includes it.
 * A renderer that drew talk points as people can draw the actors from `actorsHere()` instead, and should move them when a script does.
 
-## Changes six rounds ago
+## Changes seven rounds ago
 
 * Front ends stop touching the world: `face()` and `setAutoMacro()` replace writing `World::facing` and `World::autoMacro`, and the terminal front end uses them.
 * Structured event text: `line()` gives the pending line as data and `choiceView()` the pending choice, with an ask's answers from the dialogue tables (`choice.yes`, `choice.no`, in `en` and `ja`).

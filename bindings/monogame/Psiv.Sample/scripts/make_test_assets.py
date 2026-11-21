@@ -159,6 +159,8 @@ def main():
 	table["actions"]["unknown_move"] = {}
 	table["layout"] = "diagonal"
 	table["layouts"] = {"encounter:nowhere": "side"}
+	table["changes"]["join.nobody"] = {}
+	table["changes"]["transform"] = {"effect": "smoke"}
 	(broken / "battle_presentation.json").write_text(json.dumps(table, indent="\t") + "\n")
 
 

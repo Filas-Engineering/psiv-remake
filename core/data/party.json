@@ -18,7 +18,7 @@
 			"growth": {"hp": 4, "tp": 3, "strength": 0, "mental": 2, "agility": 1, "dexterity": 1, "defense": 0},
 			"basic_attack": "strike",
 			"abilities": ["spark", "ember", "frostbite", "hush"],
-			"learns": [{"level": 9, "ability": "homeward"}],
+			"learns": [{"level": 9, "ability": "homeward"}, {"level": 11, "ability": "bright_spark"}, {"level": 15, "ability": "unmake"}],
 			"affinities": {"shock": 50},
 			"equip": ["rod", "light_armor", "charm"],
 			"equipment": ["ember_rod", "calm_charm"]
@@ -41,7 +41,7 @@
 			"growth": {"hp": 5, "tp": 3, "strength": 0, "mental": 2, "agility": 1, "dexterity": 1, "defense": 0},
 			"basic_attack": "strike",
 			"abilities": ["mend", "wide_mend", "purge", "rekindle"],
-			"learns": [{"level": 4, "ability": "renew"}],
+			"learns": [{"level": 4, "ability": "renew"}, {"level": 14, "ability": "renewal"}],
 			"equip": ["rod", "light_armor", "charm"],
 			"equipment": ["tin_cap", "spark_ring"]
 		},
@@ -56,6 +56,17 @@
 			"status_resist": {"paralysis": 50},
 			"equip": ["blade", "light_armor", "heavy_armor"],
 			"equipment": ["rivet_plate", "grip_bands"]
+		},
+		{
+			"id": "cogwright",
+			"name": "Test Cogwright",
+			"kind": "machine",
+			"base": {"hp": 70, "tp": 0, "strength": 15, "mental": 2, "agility": 7, "dexterity": 11, "defense": 12},
+			"growth": {"hp": 8, "tp": 0, "strength": 2, "mental": 0, "agility": 1, "dexterity": 1, "defense": 2},
+			"basic_attack": "strike",
+			"abilities": ["self_repair", "calm_tide"],
+			"equip": ["blade", "heavy_armor"],
+			"equipment": ["copper_blade", "rivet_plate"]
 		}
 	],
 	"vehicles": [

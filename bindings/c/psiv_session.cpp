@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-#define PSIV_BINDING_VERSION "0.8.0"
+#define PSIV_BINDING_VERSION "0.9.0"
 
 static_assert(PSIV_MODE_SHOP == static_cast<int>(game::Mode::Shop), "psiv_mode");
 static_assert(PSIV_MENU_PORT == static_cast<int>(game::MenuKind::Port), "psiv_menu_kind");
@@ -522,7 +522,7 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 	case PSIV_NAME_POINT_KIND:
 		return fromList(pointKinds, 6, value);
 	case PSIV_NAME_JOB_STATE:
-		return value >= 0 && value <= PSIV_JOB_COMPLETED ? game::toString(static_cast<game::JobState>(value)) : "";
+		return value >= 0 && value <= PSIV_JOB_MISSED ? game::toString(static_cast<game::JobState>(value)) : "";
 	case PSIV_NAME_TEXT_SPEED:
 		return value >= 0 && value <= PSIV_TEXT_INSTANT ? game::toString(static_cast<game::TextSpeed>(value)) : "";
 	case PSIV_NAME_BATTLE_SPEED:
@@ -544,7 +544,7 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 	case PSIV_NAME_OUTCOME:
 		return value >= 0 && value <= PSIV_OUTCOME_SCRIPTED_END ? rules::toString(static_cast<rules::Outcome>(value)) : "";
 	case PSIV_NAME_EVENT_TYPE:
-		return value >= 0 && value <= PSIV_EVENT_BATTLE_ENDED ? rules::toString(static_cast<rules::EventType>(value)) : "";
+		return value >= 0 && value <= PSIV_EVENT_ENEMY_TRANSFORMED ? rules::toString(static_cast<rules::EventType>(value)) : "";
 	case PSIV_NAME_CANCEL_REASON:
 		return value >= 0 && value <= PSIV_CANCEL_NO_TARGET ? rules::toString(static_cast<rules::CancelReason>(value)) : "";
 	case PSIV_NAME_EFFECTIVENESS:
@@ -554,7 +554,7 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 	case PSIV_NAME_RESOURCE_KIND:
 		return value >= 0 && value <= PSIV_RESOURCE_ITEM ? rules::toString(static_cast<rules::ResourceKind>(value)) : "";
 	case PSIV_NAME_ELEMENT:
-		return value >= 0 && value <= PSIV_ELEMENT_GALE ? rules::toString(static_cast<rules::Element>(value)) : "";
+		return value >= 0 && value <= PSIV_ELEMENT_HOLY ? rules::toString(static_cast<rules::Element>(value)) : "";
 	case PSIV_NAME_STAT:
 		return value >= 0 && value <= PSIV_STAT_DEFENSE ? rules::toString(static_cast<rules::Stat>(value)) : "";
 	case PSIV_NAME_OPENING:
@@ -579,6 +579,8 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 		return value >= 0 && value <= PSIV_TRAVEL_DUNGEON_EXIT ? game::toString(static_cast<game::TravelKind>(value)) : "";
 	case PSIV_NAME_DEV_LIST:
 		return value >= 0 && value <= PSIV_DEV_CHARACTERS ? game::toString(static_cast<game::DevList>(value)) : "";
+	case PSIV_NAME_CREATURE_KIND:
+		return value >= 0 && value <= PSIV_CREATURE_MACHINE ? rules::toString(static_cast<rules::CreatureKind>(value)) : "";
 	default:
 		return "";
 	}
@@ -2905,6 +2907,76 @@ psiv_status psiv_session_reload(psiv_session* session) {
 		session->session = std::move(next);
 		session->data = std::move(data);
 		forgetRun(*session);
+		return PSIV_OK;
+	});
+}
+
+// Followers, kinds, vehicle skill uses, the clear-data record and the audio list
+
+psiv_status psiv_follower(psiv_session* session, const char** out) {
+	return guard(session, false, [&] {
+		if (!out) {
+			return nullArgument(session, "out");
+		}
+		*out = session->arena.str(session->session->world().follower);
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_character_kind(psiv_session* session, const char* character, int32_t* out) {
+	return guard(session, false, [&] {
+		if (!character || !out) {
+			return nullArgument(session, character ? "out" : "character");
+		}
+		const rules::CharacterDef* def = session->data->db.character(character);
+		if (!def) {
+			return notFound(session, "character");
+		}
+		*out = static_cast<int32_t>(def->kind);
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_vehicle_skill_uses(psiv_session* session, const char* vehicle, const char* skill, int32_t* out) {
+	return guard(session, false, [&] {
+		if (!vehicle || !skill || !out) {
+			return nullArgument(session, !vehicle ? "vehicle" : (!skill ? "skill" : "out"));
+		}
+		const game::World& world = session->session->world();
+		const auto place = world.vehicles.find(vehicle);
+		const rules::VehicleDef* def = session->data->db.vehicle(vehicle);
+		const rules::AbilityDef* ability = session->data->db.ability(skill);
+		if (place == world.vehicles.end() || !def || !ability || std::find(def->abilities.begin(), def->abilities.end(), skill) == def->abilities.end()) {
+			return notFound(session, "vehicle skill");
+		}
+		const auto left = place->second.skillUses.find(skill);
+		*out = left == place->second.skillUses.end() ? ability->uses : left->second;
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_clear_record_exists(psiv_session* session, int32_t* out) {
+	return guard(session, false, [&] {
+		if (!out) {
+			return nullArgument(session, "out");
+		}
+		*out = 0;
+		if (const game::SaveStore* store = session->session->store()) {
+			std::string text;
+			*out = game::readFile(store->clearRecordPath(), text) && game::parseClearRecord(text).ok() ? 1 : 0;
+		}
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_audio_ids(psiv_session* session, const char* const** out, int32_t* count) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		const std::vector<std::string>& audio = session->data->config.presentation.audio;
+		*out = session->arena.strs(audio);
+		*count = static_cast<int32_t>(audio.size());
 		return PSIV_OK;
 	});
 }

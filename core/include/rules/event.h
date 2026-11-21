@@ -37,6 +37,13 @@ enum class EventType {
 	Message,
 	RoundEnded,
 	BattleEnded,
+	// A new enemy enters the formation: a summon, a merge's result or a replacement. Carries its id and group in
+	// ids and groups and its formation position in amount.
+	EnemyJoined,
+	// An enemy leaves without being defeated (merged into another).
+	EnemyLeft,
+	// An enemy takes another form in place (ids holds the new id), at full hit points.
+	EnemyTransformed,
 };
 
 // ActorUnable carries the cause in Event::status: a status that stops the actor, or "defeated".

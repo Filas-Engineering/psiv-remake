@@ -31,13 +31,21 @@ std::map<std::string, double> expectedShares(const Database& db, const EnemyDef&
 		case AiConditionKind::SelfHpQuarterOnce:
 			holds = hpPercent <= 25;
 			break;
+		// A lone enemy at position 0 is the last one standing, its whole group, with no other kind beside it and a free
+		// place next to it.
 		case AiConditionKind::LastStanding:
+		case AiConditionKind::AllyAbsent:
+		case AiConditionKind::FreeSlotBeside:
+		case AiConditionKind::GroupIntact:
 			holds = true;
 			break;
 		case AiConditionKind::HitByAttack:
 		case AiConditionKind::HitByAbility:
 		case AiConditionKind::HitByTechnique:
+		case AiConditionKind::HitByGroup:
 		case AiConditionKind::TechniquesBlocked:
+		case AiConditionKind::Ambushed:
+		case AiConditionKind::AllyPresent:
 			break;
 		}
 		if (holds) {

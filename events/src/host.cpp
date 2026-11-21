@@ -253,4 +253,8 @@ bool Host::aboard_vehicle(const std::string&) {
 	return false;
 }
 
+void Host::teach_ability(const std::string&, const std::string&) {}
+
+void Host::set_follower(const std::string&) {}
+
 }

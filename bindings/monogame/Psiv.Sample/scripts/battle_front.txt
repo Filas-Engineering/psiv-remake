@@ -290,8 +290,24 @@ expect state overlaps none
 shot build/shots/front_vehicle_hit.png
 hold F 1
 waitstate 300 battlephase Command
-press Down 7
+# The vehicle's menu holds only what a vehicle has: its attack, its skills with their uses, and escape. Hull Vent hits
+# the whole group with no target to pick; then the developer win ends the battle, and the stage resyncs before the
+# outcome.
+expect statehas battlemenu [Attack] | Hull Vent x
+expect statehas battlemenu | Hull Patch x
+expect statehas battlemenu | Escape
+expect state overlaps none
+shot build/shots/front_vehicle_menu.png
+press Down
+present mark
 press Enter
+expect state battlephase Playback
+hold F 60
+waitstate 300 battlephase Command
+expect presenthas banner Hull Vent
+dev win
+waitstatehas 300 step sync
+expect state battlephase Playback
 hold F 60
 expect state battlephase Ended
 expect statehas battlesync all match

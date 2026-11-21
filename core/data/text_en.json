@@ -1,5 +1,9 @@
 {
 	"text": {
+		"battle.instant_defeat": "{0} is struck down in one blow!",
+		"battle.instant_defeat_immune": "{0} cannot be struck down that way.",
+		"battle.instant_defeat_resisted": "{0} withstands the blow.",
+		"battle.machine_recovered": "{0} starts up again.",
 		"battle.opening.enemy_first": "The enemies catch the party off guard!",
 		"battle.opening.party_first": "The party catches the enemies off guard!",
 		"battle.stat_resisted": "{0} holds steady.",
@@ -22,6 +26,7 @@
 		"equip.unknown_equipment": "There is no such equipment as {0}.",
 		"equip.wrong_category": "{0} cannot equip {1}.",
 
+		"field.learned": "{0} learned {1}.",
 		"field.no_stock": "No {0} left.",
 		"field.no_target": "{0} has nobody to work on.",
 		"field.no_uses_left": "{0} has no uses of {1} left.",
@@ -34,6 +39,16 @@
 		"field.unknown_member": "{0} is not a party member.",
 		"field.user_down": "{0} is down.",
 
+		"status.aegis.applied": "{0} is wrapped in an aegis!",
+		"status.aegis.immune": "{0} cannot be shielded.",
+		"status.aegis.removed": "The aegis around {0} shatters!",
+		"status.aegis.resisted": "The aegis slides off {0}.",
+		"status.aegis.unchanged": "{0} is already shielded.",
+		"status.daze.applied": "{0} is dazed!",
+		"status.daze.immune": "{0} cannot be dazed.",
+		"status.daze.removed": "{0} shakes off the daze.",
+		"status.daze.resisted": "{0} stays steady.",
+		"status.daze.unchanged": "{0} is already dazed.",
 		"status.gear_lock.applied": "{0} seizes up with {1}!",
 		"status.gear_lock.immune": "{0} cannot be locked up.",
 		"status.gear_lock.removed": "{0} moves freely again.",

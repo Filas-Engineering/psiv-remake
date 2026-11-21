@@ -6,7 +6,7 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-public enum Screen { Title, Field, Dialogue, Battle, Menu, Shop, Inn, SavePrompt, NameEntry, QuestLog, TextLog, Options, Pause, LoadGame, Travel }
+public enum Screen { Title, Field, Dialogue, Battle, Menu, Shop, Inn, SavePrompt, NameEntry, QuestLog, TextLog, Options, Pause, LoadGame, Travel, SoundTest }
 
 // The sample's screens: reads the session after each update and draws it through the surface with the
 // sample's own generated pictures (Art), rectangles and text. Holds no game state of its own beyond cursors,
@@ -42,6 +42,7 @@ public sealed partial class SampleController
 	private bool _pause;
 	private bool _optionsOverlay;
 	private bool _loadOverlay;
+	private bool _soundTestOverlay;
 	private int _cursor;
 	private int _tab;
 	private string? _pickMember;
@@ -152,6 +153,7 @@ public sealed partial class SampleController
 			return _s.Mode switch
 			{
 				Mode.Title when _loadOverlay => Screen.LoadGame,
+				Mode.Title when _soundTestOverlay => Screen.SoundTest,
 				Mode.Title => Screen.Title,
 				Mode.Field when _questOverlay => Screen.QuestLog,
 				Mode.Field when _logOverlay => Screen.TextLog,
@@ -173,7 +175,7 @@ public sealed partial class SampleController
 		}
 	}
 
-	private static bool IsOverlay(Screen screen) => screen is Screen.Options or Screen.Pause or Screen.LoadGame;
+	private static bool IsOverlay(Screen screen) => screen is Screen.Options or Screen.Pause or Screen.LoadGame or Screen.SoundTest;
 
 	private int Px(int value) => (int)MathF.Round(value * _scale);
 
@@ -264,7 +266,9 @@ public sealed partial class SampleController
 		_list.Reset();
 		_sub.Reset();
 		_confirm.Close();
-		_pause = _optionsOverlay = _loadOverlay = false;
+		_pause = _optionsOverlay = _loadOverlay = _soundTestOverlay = false;
+		_soundTestTrack = "";
+		_clearRecord = null;
 		ResetMenuPages();
 		_nameEntry.Reset();
 	}
@@ -355,6 +359,7 @@ public sealed partial class SampleController
 		case Screen.Options: UpdateOptions(input); break;
 		case Screen.Pause: UpdatePause(input); break;
 		case Screen.LoadGame: UpdateLoadGame(input); break;
+		case Screen.SoundTest: UpdateSoundTest(input); break;
 		case Screen.Travel: UpdateTravel(input); break;
 		case Screen.QuestLog:
 		case Screen.TextLog:
@@ -432,7 +437,7 @@ public sealed partial class SampleController
 	{
 		_probeDescription = string.IsNullOrEmpty(text) ? "-" : text;
 		int ly = y;
-		foreach (string l in Style.Wrap(s, string.IsNullOrEmpty(text) ? "No description." : text, w, Style.Small).Take(2))
+		foreach (string l in Style.Wrap(s, string.IsNullOrEmpty(text) ? T("ui.common.no_description") : text, w, Style.Small).Take(2))
 		{
 			s.Text(l, x, ly, string.IsNullOrEmpty(text) ? Style.Dim : Style.Text, Style.Small);
 			ly += Px(22);
@@ -499,10 +504,11 @@ public sealed partial class SampleController
 		case Screen.Field:
 			DrawField(s, art);
 			DrawHud(s);
-			_field.DrawBanner(s);
+			_field.DrawBanner(s, AreaKindText);
 			DrawToasts(s, 16, s.Height - 40);
-			DrawHint(s, $"{Walk()} {(_s.FieldInfo()?.Aboard.Length > 0 ? "drive" : "walk")}   {Hint(GameAction.Confirm)} {(_s.FieldInfo()?.Aboard.Length > 0 ? "step off" : "talk")}   {Hint(GameAction.Menu)} menu   {Hint(GameAction.QuestLog)} quests   " +
-				$"{Hint(GameAction.PartyTalk)} party talk   {Hint(GameAction.TextLog)} log   {Hint(GameAction.Pause)} pause");
+			bool aboard = _s.FieldInfo()?.Aboard.Length > 0;
+			DrawHint(s, T("ui.hint.field", Walk(), T(aboard ? "ui.hint.drive" : "ui.hint.walk"), Hint(GameAction.Confirm), T(aboard ? "ui.hint.step_off" : "ui.hint.talk"),
+				Hint(GameAction.Menu), Hint(GameAction.QuestLog), Hint(GameAction.PartyTalk), Hint(GameAction.TextLog), Hint(GameAction.Pause)));
 			break;
 		case Screen.Dialogue: DrawDialogue(s, t, art); break;
 		case Screen.Battle: DrawBattle(s, art); break;
@@ -517,22 +523,23 @@ public sealed partial class SampleController
 		case Screen.Options: DrawOptions(t, art); break;
 		case Screen.Pause: DrawPause(s, t, art); break;
 		case Screen.LoadGame: DrawLoadGame(t, art); break;
+		case Screen.SoundTest: DrawSoundTest(t, art); break;
 		case Screen.Travel:
 			DrawTravel(t, art);
 			DrawToasts(s, 48, s.Height - 92, right: true);
 			break;
 		case Screen.QuestLog:
 			DrawBackdrop(t, art);
-			Style.Window(t, 24, 40, s.Width - 48, s.Height - 72, "Quest log");
+			Style.Window(t, 24, 40, s.Width - 48, s.Height - 72, T("ui.quest_log.title"));
 			DrawQuestLog(t, 56, 72, s.Width - 112, s.Height - 120);
 			break;
 		case Screen.TextLog:
 			DrawBackdrop(t, art);
-			Style.Window(t, 24, 40, s.Width - 48, s.Height - 72, "Text log");
+			Style.Window(t, 24, 40, s.Width - 48, s.Height - 72, T("ui.text_log.title"));
 			DrawTextLog(t, 56, 72, s.Width - 112, s.Height - 140);
 			break;
 		}
-		_confirm.Draw(t, Px);
+		_confirm.Draw(t, Px, T("ui.confirm.title"), T("ui.confirm.yes"), T("ui.confirm.no"));
 		DrawAnimations(s);
 		if (_dev)
 		{
@@ -573,6 +580,7 @@ public sealed partial class SampleController
 			"shake" => ShakeAmplitude().ToString(CultureInfo.InvariantCulture),
 			"dialogue" => _dialogueAt,
 			"music" => _audio.Music.Length == 0 ? "-" : _audio.Music,
+			"follower" => _s.Follower() is { Length: > 0 } follower ? follower : "-",
 			"ambient" => _audio.Ambient.Length == 0 ? "-" : _audio.Ambient,
 			"text_speed" => GameSession.NameOf(NameKind.TextSpeed, (int)p.TextSpeed),
 			"auto_advance" => OnOff(p.AutoAdvance),

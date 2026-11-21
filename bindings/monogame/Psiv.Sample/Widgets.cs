@@ -134,7 +134,7 @@ public sealed class ConfirmPrompt
 		}
 	}
 
-	public void Draw(IDrawSurface s, Func<int, int> px)
+	public void Draw(IDrawSurface s, Func<int, int> px, string title, string yes, string no)
 	{
 		if (Question is null)
 		{
@@ -146,10 +146,10 @@ public sealed class ConfirmPrompt
 		int x = (s.Width - w) / 2;
 		int y = (s.Height - h) / 2;
 		s.Fill(0, 0, s.Width, s.Height, Color.Black * 0.4f);
-		Style.Window(s, x, y, w, h, "Confirm");
+		Style.Window(s, x, y, w, h, title);
 		s.Text(Question, x + px(28), y + px(26), Style.Text);
-		Style.ListRow(s, "Yes", x + px(48), y + px(64), px(160), _onYes, height: px(28));
-		Style.ListRow(s, "No", x + px(48), y + px(64) + rowH, px(160), !_onYes, height: px(28));
+		Style.ListRow(s, yes, x + px(48), y + px(64), px(160), _onYes, height: px(28));
+		Style.ListRow(s, no, x + px(48), y + px(64) + rowH, px(160), !_onYes, height: px(28));
 	}
 }
 
@@ -262,8 +262,8 @@ public sealed class TextEntry(int maxLength)
 		return null;
 	}
 
-	// The text box and the grid under it; returns the height used.
-	public int Draw(IDrawSurface s, int x, int y, int w, int clockMs, Func<int, int> px)
+	// The text box and the grid under it, its last row's cells worded as `labels` says; returns the height used.
+	public int Draw(IDrawSurface s, int x, int y, int w, int clockMs, Func<int, int> px, (string Space, string Erase, string Done) labels)
 	{
 		int boxH = px(50);
 		s.Fill(x, y, w, boxH, Style.Track);
@@ -286,7 +286,7 @@ public sealed class TextEntry(int maxLength)
 					s.Fill(cx + 1, cy + 1, width - 2, cellH - 2, Style.Row);
 					Style.Frame(s, cx + 1, cy + 1, width - 2, cellH - 2, Style.Accent);
 				}
-				string label = Grid[r][c];
+				string label = Grid[r][c] switch { Space => labels.Space, Erase => labels.Erase, Done => labels.Done, string cell => cell };
 				s.Text(label, cx + (width - s.Measure(label)) / 2, cy + (cellH - px(24)) / 2, on ? Style.Accent : Style.Text);
 			}
 		}

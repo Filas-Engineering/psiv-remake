@@ -2,10 +2,10 @@ assets: tilesets/dungeon.png: tilesets[2]: 17x17 does not divide into 16x16 fram
 assets: assets.json: characters[0].animations.dance: unknown animation 'dance': not in game.json's presentation animations
 assets: assets.json: characters[1].animations.nod: unknown pose 'twirl': not one of this character's poses
 assets: assets.json: characters[1].poses.nod: no animation plays this pose: map script animation names to it in 'animations'
-assets: assets.json: characters[11]: unknown character 'nobody': not a party member or actor in the game data
+assets: assets.json: characters[13]: unknown character 'nobody': not a party member or actor in the game data
 assets: portraits/guide.png: portraits.guide: missing file
 assets: assets.json: figures[0].animations.juggle: unknown animation 'juggle': attack, cast, item, defend, hurt, defeat
-assets: assets.json: figures[6]: view 'back' is for party members and vehicles only
+assets: assets.json: figures[7]: view 'back' is for party members and vehicles only
 assets: assets.json: vehicles[1]: unknown vehicle 'hovercart': not in the game data
 assets: assets.json: vehicles[1]: 'facings' needs north, east, south and west, each at least one frame
 assets: assets.json: backdrops[3]: unknown area 'atlantis': not in the game data
@@ -18,5 +18,7 @@ assets: battle_presentation.json: layouts.encounter:nowhere: unknown key: encoun
 assets: battle_presentation.json: actions.strike: unknown effect 'fireworks': not a generated effect, an effect in assets.json or none
 assets: battle_presentation.json: actions.strike: unknown animation 'moonwalk': none, attack, cast, item, defend
 assets: battle_presentation.json: actions.unknown_move: unknown ability or item 'unknown_move': not in the game data
-assets: 2 tilesets, 9 characters, 10 portraits, 14 figures, 3 field enemies, 1 vehicles, 3 backdrops, 22 effects, 5 sprites, 6 status icons, a UI skin turned off, 47 sounds, a battle presentation table
-FAILED: 20 problems.
+assets: battle_presentation.json: changes.transform: unknown effect 'smoke': not a generated effect, an effect in assets.json or none
+assets: battle_presentation.json: changes.join.nobody: unknown change: join, merge, transform, instant_defeat, each alone or with .ENEMY for an enemy of the game data
+assets: 2 tilesets, 11 characters, 12 portraits, 24 figures, 10 field enemies, 1 vehicles, 3 backdrops, 29 effects, 5 sprites, 8 status icons, a UI skin turned off, 47 sounds, a battle presentation table
+FAILED: 22 problems.

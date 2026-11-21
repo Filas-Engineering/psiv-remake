@@ -5,7 +5,7 @@
 
 namespace rules {
 
-enum class Element { None, Heat, Chill, Shock, Gale };
+enum class Element { None, Heat, Chill, Shock, Gale, Holy };
 
 enum class Stat { Strength, Mental, Agility, Dexterity, Defense };
 
@@ -15,7 +15,9 @@ enum class Targeting { OneEnemy, EnemyGroup, AllEnemies, OneAlly, AllAllies, Sel
 
 enum class AbilityKind { Attack, Technique, Skill, Combo };
 
-enum class EffectKind { PhysicalDamage, ElementalDamage, Heal, ApplyStatus, CureStatus, ModifyStat, Revive, Travel };
+enum class EffectKind { PhysicalDamage, ElementalDamage, Heal, ApplyStatus, CureStatus, ModifyStat, Revive, Travel, InstantDefeat, RestoreTp, StripModifiers, Summon, Merge, Teach };
+// What a combatant is (B6, P6). Spirit is a kind of living being: an effect aimed at the living reaches it too.
+enum class CreatureKind { Living, Spirit, Machine };
 
 // Where a Travel effect takes the party (FLD-051): a town visited before, or out of the dungeon it is in.
 enum class TravelTarget { Town, DungeonExit };

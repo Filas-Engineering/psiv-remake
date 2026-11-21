@@ -44,7 +44,9 @@ ACC_CHECK(acc_bat_08, "ACC-BAT-08", "BAT-083") {
 			removed += e.type == EventType::StatusRemoved ? 1 : 0;
 			byDefeat += e.type == EventType::StatusRemoved && e.statusEnd == StatusEnd::Defeated ? 1 : 0;
 			if (statusEvent(e.type)) {
-				t.expect(!e.status.empty() && db.status(e.status), std::string(toString(e.type)) + " without a known status id");
+				// A lowered stat the target resists is a StatusResisted that names the stat and no status.
+				const bool statResisted = e.type == EventType::StatusResisted && e.status.empty() && e.message == "battle.stat_resisted";
+				t.expect(statResisted || (!e.status.empty() && db.status(e.status)), std::string(toString(e.type)) + " without a known status id");
 				t.expect(!e.message.empty() && table.count(e.message) == 1, std::string(toString(e.type)) + " for " + e.status + " carries message key '" + e.message + "', which the string table lacks");
 			}
 			if (e.type == EventType::CombatantDefeated) {

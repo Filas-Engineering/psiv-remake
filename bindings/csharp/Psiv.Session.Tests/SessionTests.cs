@@ -413,7 +413,7 @@ public class SessionTests
 		Assert.Equal(new FieldActor("dockhand", "Dockhand", 10, 2, Direction.South, true, true), view.Actors[0]);
 		Assert.Equal(new FieldActor("guide", "Harbor Guide", 5, 2, Direction.South, true, false), view.Actors[1]);
 		// Every actor is in the ids; those standing on the reed path or in Saltgrass are not in this area's view.
-		Assert.Equal(["dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler"], s.ActorIds());
+		Assert.Equal(["dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler", "wayfarer"], s.ActorIds());
 		Assert.DoesNotContain(view.Actors, a => a.Id == "peddler");
 		Assert.True(s.OpenMenu().Ok);
 		Member fighter = s.Party().Single();
@@ -864,6 +864,30 @@ public class DevToolsTests
 		{
 			File.Copy(file, Path.Combine(to, Path.GetRelativePath(from, file)));
 		}
+	}
+
+	[Fact]
+	public void FollowersKindsVehicleUsesAndTheSoundTestList()
+	{
+		string saves = Paths.FreshDirectory("follow");
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = saves, Seed = 285 });
+		Assert.False(s.ClearRecordExists());
+		Assert.Contains("title_harbor_dawn", s.AudioIds());
+		Assert.Equal(CreatureKind.Machine, s.CharacterKind("cogwright"));
+		Assert.Equal(CreatureKind.Living, s.CharacterKind("fighter"));
+		Assert.Equal("missed", GameSession.NameOf(NameKind.JobState, (int)JobState.Missed));
+		Assert.Equal("enemy_joined", GameSession.NameOf(NameKind.EventType, (int)BattleEventType.EnemyJoined));
+		Assert.Equal("holy", GameSession.NameOf(NameKind.Element, (int)Element.Holy));
+		s.NewGame().ThrowIfFailed();
+		Settle(s);
+		Assert.Equal("", s.Follower());
+		s.DevWarp("ember_steps", "west_gate").ThrowIfFailed();
+		s.DevRunEvent("steps_wayfarer").ThrowIfFailed();
+		Settle(s);
+		Assert.Equal("wayfarer", s.Follower());
+		Assert.Null(s.VehicleSkillUses("reed_skimmer", "hull_vent"));
+		s.DevVehicle("reed_skimmer", "reed_path", "skimmer_front").ThrowIfFailed();
+		Assert.Equal(3, s.VehicleSkillUses("reed_skimmer", "hull_vent"));
 	}
 
 	[Fact]

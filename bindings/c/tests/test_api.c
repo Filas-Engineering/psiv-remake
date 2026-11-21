@@ -896,7 +896,7 @@ static void testActors(void) {
 	CHECK(psiv_actor_ids(s, &ids, NULL) == PSIV_INVALID_ARGUMENT);
 	CHECK(psiv_actor_ids(NULL, &ids, &idCount) == PSIV_INVALID_ARGUMENT);
 	CHECK_OK(psiv_actor_ids(s, &ids, &idCount));
-	CHECK(idCount == 6);
+	CHECK(idCount == 7);
 	for (int32_t i = 0; i < idCount && i < 6; ++i) {
 		CHECK(strcmp(ids[i], allActors[i]) == 0);
 	}
@@ -956,7 +956,7 @@ static void testActors(void) {
 	CHECK(count == 1 && strcmp(actors[0].id, "peddler") == 0 && actors[0].x == 10 && actors[0].y == 7 && !actors[0].scripted);
 	/* The dockhand and the guide are actors in another area: in the ids, not among the field's actors. */
 	CHECK_OK(psiv_actor_ids(s, &ids, &idCount));
-	CHECK(idCount == 6 && strcmp(ids[0], "dockhand") == 0 && strcmp(ids[2], "guide") == 0);
+	CHECK(idCount == 7 && strcmp(ids[0], "dockhand") == 0 && strcmp(ids[2], "guide") == 0);
 	CHECK(!findActor(actors, count, "dockhand") && !findActor(actors, count, "guide"));
 	psiv_session_destroy(s);
 }
@@ -1711,6 +1711,58 @@ static void testDevTools(void) {
 	psiv_session_destroy(s);
 }
 
+static void testFollowersKindsAndUses(void) {
+	char saves[512];
+	char clearPath[600];
+	snprintf(saves, sizeof saves, "%s/follow", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	snprintf(clearPath, sizeof clearPath, "%s/clear.sav", saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	int32_t value = -1;
+	CHECK_OK(psiv_clear_record_exists(s, &value));
+	CHECK(value == 0);
+	FILE* damaged = fopen(clearPath, "wb");
+	if (damaged) {
+		fputs("PSR-CLEAR 1\nnot a record\n", damaged);
+		fclose(damaged);
+	}
+	CHECK_OK(psiv_clear_record_exists(s, &value));
+	CHECK(value == 0);
+	const char* const* ids = NULL;
+	int32_t count = 0;
+	CHECK_OK(psiv_audio_ids(s, &ids, &count));
+	CHECK(count > 0 && hasName(ids, count, "title_harbor_dawn"));
+	CHECK_OK(psiv_character_kind(s, "cogwright", &value));
+	CHECK(value == PSIV_CREATURE_MACHINE);
+	CHECK_OK(psiv_character_kind(s, "fighter", &value));
+	CHECK(value == PSIV_CREATURE_LIVING);
+	CHECK(psiv_character_kind(s, "nobody", &value) == PSIV_NOT_FOUND);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_CREATURE_KIND, PSIV_CREATURE_SPIRIT), "spirit") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_JOB_STATE, PSIV_JOB_MISSED), "missed") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_ELEMENT, PSIV_ELEMENT_HOLY), "holy") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_EVENT_TYPE, PSIV_EVENT_ENEMY_TRANSFORMED), "enemy_transformed") == 0);
+
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	const char* follower = NULL;
+	CHECK_OK(psiv_follower(s, &follower));
+	CHECK(follower && follower[0] == '\0');
+	CHECK_OK(psiv_dev_warp(s, "ember_steps", "west_gate"));
+	settle(s);
+	CHECK_OK(psiv_dev_run_event(s, "steps_wayfarer"));
+	settle(s);
+	CHECK_OK(psiv_follower(s, &follower));
+	CHECK(follower && strcmp(follower, "wayfarer") == 0);
+
+	CHECK(psiv_vehicle_skill_uses(s, "reed_skimmer", "hull_vent", &value) == PSIV_NOT_FOUND);
+	CHECK_OK(psiv_dev_vehicle(s, "reed_skimmer", "reed_path", "skimmer_front"));
+	CHECK_OK(psiv_vehicle_skill_uses(s, "reed_skimmer", "hull_vent", &value));
+	CHECK(value == 3);
+	CHECK(psiv_vehicle_skill_uses(s, "reed_skimmer", "spark", &value) == PSIV_NOT_FOUND);
+	psiv_session_destroy(s);
+}
+
 int main(int argc, char** argv) {
 	for (int i = 1; i + 1 < argc; i += 2) {
 		if (strcmp(argv[i], "--data") == 0) {
@@ -1739,6 +1791,7 @@ int main(int argc, char** argv) {
 	testAmbientTalk();
 	testVehiclesAndTravel();
 	testDevTools();
+	testFollowersKindsAndUses();
 	if (failures) {
 		fprintf(stderr, "%d of %d checks failed\n", failures, checks);
 		return 1;

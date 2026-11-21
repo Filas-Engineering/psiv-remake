@@ -40,15 +40,16 @@ public sealed partial class SampleController
 
 	private BattleLayout StageLayout() => _layoutOverride ?? PresentationTable.LayoutFor(StageInfo()?.Encounter ?? "", _s.FieldInfo()?.AreaId ?? "");
 
-	// Where a combatant stands in the side layout: its center x, the y of its feet and its size. Enemies fill the left in
-	// one row, or in two ranks from five on, the first ones in front; the party stands in a diagonal on the right.
-	private static (int X, int Foot, int Size) Place(int index, int partyCount, int enemyCount)
+	// Where a combatant stands in the side layout: its center x, the y of its feet and its size. Enemies fill the left by
+	// formation position over `enemyCount` places, in one row, or in two ranks from five on, the first ones in front; the
+	// party stands in a diagonal on the right.
+	private static (int X, int Foot, int Size) Place(int index, int partyCount, int position, int enemyCount)
 	{
 		if (index < partyCount)
 		{
 			return (912 + index * 68, 236 + index * 40, 80);
 		}
-		int j = index - partyCount;
+		int j = position;
 		int size = enemyCount <= 3 ? 112 : enemyCount <= 5 ? 96 : 80;
 		if (enemyCount <= 4)
 		{
@@ -68,7 +69,7 @@ public sealed partial class SampleController
 		IReadOnlyList<Combatant> all = StageCombatants();
 		BattleInfo? info = StageInfo();
 		int partyCount = info?.PartyCount ?? all.Count(c => c.Side == Side.Party);
-		int enemyCount = all.Count - partyCount;
+		int enemyCount = Math.Max(1, _show.Slots);
 		bool commanding = b.Phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro;
 		int target = b.Phase == BattlePhase.Target && b.Targets.Count > 0 ? b.Targets[Math.Clamp(_cursor, 0, b.Targets.Count - 1)] : -1;
 		float pulse = 0.5f + 0.5f * MathF.Sin(_clockMs / 140f);
@@ -81,10 +82,12 @@ public sealed partial class SampleController
 		bool front = _stageLayout == BattleLayout.Front;
 		int stageBottom = front ? StripTop : BattlePanelTop;
 
-		// The screen shakes with a heavy effect and with a critical hit, easing off over the step; reduced flash damps it.
+		// The screen shakes with a heavy effect, a critical hit and a heavy change of form, easing off over the step; reduced
+		// flash damps it.
 		float shake = step switch
 		{
 			{ Kind: StepKind.Effect, Turn.Look.Shake: > 0 } => step.Turn!.Look!.Shake * (1f - p),
+			{ Change.Shake: > 0 } => step.Change!.Shake * (1f - p),
 			{ Kind: StepKind.Result } when step.Events.Any(e => e.Type == BattleEventType.Critical) => 6f * (1f - p),
 			_ => 0f,
 		};
@@ -109,9 +112,21 @@ public sealed partial class SampleController
 		// Each figure's picture, offset and tint for the step playing, drawn back to front. In the front layout a vehicle
 		// stands left of the middle, clear of the action's name plate.
 		string vehicle = info?.Vehicle ?? "";
-		(int X, int Foot, int Size) Where(int i) => vehicle.Length > 0 && all[i].Id == vehicle
-			? (front ? (SlotX(1) + SlotWidth / 2, StripTop + 8, 160) : (1012, 336, 128))
-			: front ? PlaceFront(i, partyCount, enemyCount) : Place(i, partyCount, enemyCount);
+		// In the front layout the members step aside for the command window, so it hides none of them.
+		Dictionary<int, int> centers = front ? FrontMemberCenters(all, vehicle, commanding && MenuRows(all) is not null ? b.Actor : -1, out _commandX) : [];
+		(int X, int Foot, int Size) Where(int i)
+		{
+			if (vehicle.Length > 0 && all[i].Id == vehicle)
+			{
+				return front ? (SlotX(1) + SlotWidth / 2, StripTop + 8, 160) : (1012, 336, 128);
+			}
+			if (!front)
+			{
+				return Place(i, partyCount, shown[i].Position, enemyCount);
+			}
+			(int X, int Foot, int Size) f = PlaceFront(i, partyCount, shown[i].Position, enemyCount);
+			return centers.TryGetValue(i, out int cx) ? (cx, f.Foot, f.Size) : f;
+		}
 		var bodies = new Dictionary<int, Rectangle>();
 		var figures = new List<string>();
 		var order = Enumerable.Range(0, Math.Min(all.Count, shown.Count)).OrderBy(i => Where(i).Foot).ToList();
@@ -120,6 +135,7 @@ public sealed partial class SampleController
 			Combatant c = all[i];
 			ShownCombatant sc = shown[i];
 			bool enemy = c.Side == Side.Enemy;
+			string id = enemy ? sc.Id : c.Id;
 			// In a vehicle battle the members ride inside it: only the vehicle stands on the field, at the party's middle.
 			if (vehicle.Length > 0 && !enemy && c.Id != vehicle)
 			{
@@ -142,6 +158,18 @@ public sealed partial class SampleController
 			else if (fading)
 			{
 				alpha = p;
+			}
+			// A joining enemy fades in rising into its place; one merging away slides into the enemy it merges with.
+			bool changing = enemy && sc.ChangeStep is not null && sc.ChangeStep == step;
+			float changeDx = 0, changeDy = 0;
+			if (changing && step!.Kind == StepKind.Join)
+			{
+				alpha = Ease(Math.Min(1f, p * 1.6f));
+				changeDy = 36 * (1f - Ease(p));
+			}
+			if (step is { Kind: StepKind.Merge } && i == step.From && step.To >= 0 && step.To < shown.Count)
+			{
+				changeDx = (Where(step.To).X - x) * Ease(Math.Min(1f, p * 1.4f));
 			}
 			// In the side layout a figure steps toward the other side; in the front one an enemy comes toward the camera
 			// and a member rises out of the line, the member choosing a command already a little.
@@ -172,7 +200,7 @@ public sealed partial class SampleController
 					}
 				}
 			}
-			float dx = front ? 0 : toward * move, dy = front ? toward * move : 0;
+			float dx = (front ? 0 : toward * move) + changeDx, dy = (front ? toward * move : 0) + changeDy;
 			bool hurt = step is { Kind: StepKind.Result } && step.Events.Any(e => e.Type == BattleEventType.DamageDealt && e.Target == i);
 			if (hurt)
 			{
@@ -188,7 +216,7 @@ public sealed partial class SampleController
 				animation = "defeat";
 				tint = new Color(150, 150, 170);
 			}
-			Figure figure = enemy ? art.BattleFigure(c.Id, true)
+			Figure figure = enemy ? art.BattleFigure(id, true)
 				: c.Id == vehicle ? (front ? art.VehicleBackFigure(c.Id) : art.VehicleFigure(c.Id))
 				: front ? art.BackFigure(c.Id) : art.BattleFigure(c.Id, false);
 			if (!enemy)
@@ -205,6 +233,16 @@ public sealed partial class SampleController
 			if (!front || enemy)
 			{
 				s.Image(art.Shadow, left, top + size / 6, size, size, Color.White * alpha);
+			}
+			// A change of form: the old form fades out as the new one, lit white, fades in.
+			if (changing && step!.Kind is StepKind.Transform or StepKind.Merge && sc.PreviousId.Length > 0)
+			{
+				Figure old = art.BattleFigure(sc.PreviousId, true);
+				int oldImage = old.Images[old.Idle.FrameAt(_clockMs + i * 137, loop: true)];
+				Rectangle was = art.Stand(oldImage, left, top, size);
+				s.Image(oldImage, was.X, was.Y, was.Width, was.Height, Color.White * (alpha * (1f - Ease(p))));
+				tint = Color.Lerp(Color.White * 4f, tint, Ease(p));
+				alpha *= Ease(p);
 			}
 			s.Image(image, body.X, body.Y, body.Width, body.Height, tint * alpha);
 		}
@@ -223,6 +261,15 @@ public sealed partial class SampleController
 			stage.Banner = DrawBanner(s, step, p, 0, front, aboveStrip: true);
 		}
 		bool Behind(int i) => front && i < partyCount;
+
+		// A change of the formation plays its effect on the enemy it brings or changes.
+		if (step is { Change: { } change, To: >= 0 } && art.Effect(change.Effect) is { } changeFx && anchors.TryGetValue(step.To, out Rectangle into))
+		{
+			int frame = changeFx.Images[changeFx.Idle.FrameAt(_timeline.ElapsedMs, loop: false)];
+			(int ew, int eh) = art.SizeOf(frame);
+			int scale = EffectScale + 1;
+			s.Image(frame, into.Center.X - ew * scale / 2, into.Center.Y - eh * scale / 2, ew * scale, eh * scale, Color.White);
+		}
 
 		// The effect on each target, centered on its body (on a member seen from behind, its head); in the front layout an
 		// effect on several targets sweeps along them.
@@ -251,18 +298,20 @@ public sealed partial class SampleController
 		}
 
 		// Labels, statuses and HP bars under the enemies, as before: one per enemy, its group's name and number.
-		foreach (int i in order.Where(i => all[i].Side == Side.Enemy && (shown[i].Alive || (shown[i].AliveStep is not null && shown[i].AliveStep == step))))
+		// An enemy merging away takes no label: it is sliding into the other one.
+		foreach (int i in order.Where(i => all[i].Side == Side.Enemy && (shown[i].Alive || (shown[i].AliveStep is not null && shown[i].AliveStep == step))
+			&& !(step is { Kind: StepKind.Merge } && i == step.From)))
 		{
 			(int x, int foot, _) = Where(i);
 			bool targeted = i == target;
-			string label = Style.Fit(s, all[i].Label, 190, Style.Small);
+			string label = Style.Fit(s, shown[i].Label, 190, Style.Small);
 			int lw = s.Measure(label, Style.Small);
 			s.Fill(x - lw / 2 - 8, foot + 6, lw + 16, 24, Color.Black * 0.6f);
 			s.Text(label, x - lw / 2, foot + 9, targeted ? Style.Accent : Style.Text, Style.Small);
 			Style.Bar(s, x - 50, foot + 34, 100, 6, Shown(shown[i], step, p).Hp, shown[i].MaxHp, Style.Bad);
 			DrawIcons(s, art, shown[i], step, p, x - 50, foot + 44);
 			int lx = Math.Min(x - lw / 2 - 8, x - 50);
-			stage.Labels[all[i].Label] = new Rectangle(lx, foot + 6, Math.Max(x - lx, lw / 2 + 8) * 2, 58);
+			stage.Labels[shown[i].Label] = new Rectangle(lx, foot + 6, Math.Max(x - lx, lw / 2 + 8) * 2, 58);
 		}
 
 		// The target cursor over the figure being chosen (a member seen from behind gets it over the command window), and
@@ -281,6 +330,26 @@ public sealed partial class SampleController
 
 		// Floating numbers and words over each target: damage, critical, misses, weak and resisted hits, healing, statuses.
 		// Over a member seen from behind they rise from its head, clear of the enemies' labels.
+		var marks = new List<string>();
+		if (step is { Kind: StepKind.Result } && art.Effect(PresentationTable.ChangeFor("instant_defeat", "").Effect) is not null)
+		{
+			// The instant defeat's mark, stamped on the enemy it felled for the whole step.
+			foreach (BattleEvent e in step.Events.Where(e => e.Type == BattleEventType.Message && e.Message == "battle.instant_defeat" && anchors.ContainsKey(e.Target)))
+			{
+				string enemyId = e.Target < shown.Count ? shown[e.Target].Id : "";
+				if (art.Effect(PresentationTable.ChangeFor("instant_defeat", enemyId).Effect) is not { } mark)
+				{
+					continue;
+				}
+				int frame = mark.Images[mark.Idle.FrameAt(_timeline.ElapsedMs, loop: true)];
+				(int ew, int eh) = art.SizeOf(frame);
+				int scale = EffectScale + 1;
+				Rectangle r = anchors[e.Target];
+				s.Image(frame, r.Center.X - ew * scale / 2, r.Center.Y - eh * scale / 2, ew * scale, eh * scale, Color.White * (p < 0.85f ? 1f : (1f - p) / 0.15f));
+				marks.Add(e.Target < shown.Count ? shown[e.Target].Label : "?");
+			}
+		}
+		_probeMarks = marks.Count == 0 ? "none" : string.Join(", ", marks);
 		if (step is { Kind: StepKind.Result or StepKind.RoundEnd })
 		{
 			var stacked = new Dictionary<int, int>();
@@ -307,7 +376,7 @@ public sealed partial class SampleController
 
 		// A full-screen flash at the start of a big effect, left out with reduced flash.
 		_probeFlash = false;
-		if (step is { Kind: StepKind.Effect, Turn.Look.Flash: true } && !reduced && p < 0.25f)
+		if ((step is { Kind: StepKind.Effect, Turn.Look.Flash: true } || step is { Change.Flash: true }) && !reduced && p < 0.25f)
 		{
 			_probeFlash = true;
 			s.Fill(0, 0, s.Width, stageBottom, Color.White * (0.55f * (1f - p * 4f)));
@@ -346,7 +415,7 @@ public sealed partial class SampleController
 		for (int i = 0; i < party.Count; i++)
 		{
 			Combatant c = party[i];
-			ShownCombatant sc = shown.ElementAtOrDefault(c.Index) ?? new ShownCombatant(c);
+			ShownCombatant sc = shown.ElementAtOrDefault(c.Index) ?? new ShownCombatant(c, -1);
 			int cx = 24 + i * colW;
 			int cy = BattlePanelTop + 10;
 			int cw = colW - 8;
@@ -372,11 +441,11 @@ public sealed partial class SampleController
 			}
 			(int hp, int tp) = Shown(sc, step, p);
 			int bw = cw - 24;
-			Widgets.ValueBar(s, cx + 12, cy + 86, bw, "HP", hp, sc.MaxHp, hp * 4 <= sc.MaxHp ? Style.Bad : Style.Good);
-			Widgets.ValueBar(s, cx + 12, cy + 130, bw, "TP", tp, sc.MaxTp, Style.Tp);
+			Widgets.ValueBar(s, cx + 12, cy + 86, bw, T("ui.battle.hp"), hp, sc.MaxHp, hp * 4 <= sc.MaxHp ? Style.Bad : Style.Good);
+			Widgets.ValueBar(s, cx + 12, cy + 130, bw, T("ui.battle.tp"), tp, sc.MaxTp, Style.Tp);
 			if (NextCommand(c) is { } command)
 			{
-				s.Text(Style.Fit(s, "Next: " + command, bw, Style.Small), cx + 12, cy + 180, Style.Dim, Style.Small);
+				s.Text(Style.Fit(s, T("ui.battle.next", command), bw, Style.Small), cx + 12, cy + 180, Style.Dim, Style.Small);
 			}
 		}
 
@@ -396,18 +465,18 @@ public sealed partial class SampleController
 		switch (b.Phase)
 		{
 		case BattlePhase.Playback:
-			s.Text(b.Auto ? "Auto-battle" : "...", mx + 24, BattlePanelTop + 34, Style.Text);
+			s.Text(b.Auto ? T("ui.battle.auto") : T("ui.battle.playing"), mx + 24, BattlePanelTop + 34, Style.Text);
 			if (b.Auto)
 			{
-				s.Text(Style.Fit(s, $"{Hint(GameAction.Back)} stops after this round", BattleMenuWidth - 48, Style.Small), mx + 24, BattlePanelTop + 64, Style.Dim, Style.Small);
+				s.Text(Style.Fit(s, T("ui.battle.hint.auto_stops", Hint(GameAction.Back)), BattleMenuWidth - 48, Style.Small), mx + 24, BattlePanelTop + 64, Style.Dim, Style.Small);
 			}
-			s.Text(Style.Fit(s, $"{Hint(GameAction.Confirm)} hurries", BattleMenuWidth - 48, Style.Small), mx + 24, BattlePanelTop + panelH - 82, Style.Dim, Style.Small);
-			s.Text(Style.Fit(s, $"{Hint(GameAction.FastForward)} (hold) skips the round", BattleMenuWidth - 48, Style.Small), mx + 24, BattlePanelTop + panelH - 58, Style.Dim, Style.Small);
-			s.Text(Style.Fit(s, $"{Hint(GameAction.TextLog)} log", BattleMenuWidth - 48, Style.Small), mx + 24, BattlePanelTop + panelH - 34, Style.Dim, Style.Small);
+			s.Text(Style.Fit(s, T("ui.battle.hint.hurry", Hint(GameAction.Confirm)), BattleMenuWidth - 48, Style.Small), mx + 24, BattlePanelTop + panelH - 82, Style.Dim, Style.Small);
+			s.Text(Style.Fit(s, T("ui.battle.hint.skip", Hint(GameAction.FastForward)), BattleMenuWidth - 48, Style.Small), mx + 24, BattlePanelTop + panelH - 58, Style.Dim, Style.Small);
+			s.Text(Style.Fit(s, T("ui.battle.hint.log", Hint(GameAction.TextLog)), BattleMenuWidth - 48, Style.Small), mx + 24, BattlePanelTop + panelH - 34, Style.Dim, Style.Small);
 			break;
 		case BattlePhase.Ended:
-			s.Text(BattleTimeline.OutcomeText(info?.Outcome ?? Outcome.Ongoing), mx + 24, BattlePanelTop + 34, Style.Accent, Style.Title);
-			s.Text($"{Hint(GameAction.Confirm)}: continue", mx + 24, BattlePanelTop + 84, Style.Text);
+			s.Text(OutcomeText(info?.Outcome ?? Outcome.Ongoing), mx + 24, BattlePanelTop + 34, Style.Accent, Style.Title);
+			s.Text(T("ui.battle.hint.continue", Hint(GameAction.Confirm)), mx + 24, BattlePanelTop + 84, Style.Text);
 			DrawResult(s, info, BattlePanelTop);
 			break;
 		}
@@ -415,19 +484,21 @@ public sealed partial class SampleController
 
 	// A member's state under its name: fallen, defending and its statuses.
 	private string MemberState(Combatant c, ShownCombatant sc) =>
-		!sc.Alive ? "Fallen" : ((c.Defending ? "Defending " : "") + string.Join(" ", sc.Statuses.Select(_s.DisplayName))).Trim();
+		!sc.Alive ? T("ui.battle.fallen") : string.Join(" ", sc.Statuses.Select(_s.DisplayName).Prepend(c.Defending ? T("ui.battle.defending") : "").Where(x => x.Length > 0));
 
 	private string? NextCommand(Combatant c) => c.CommandKind == CommandKind.None ? null
-		: c.CommandId.Length > 0 ? _s.DisplayName(c.CommandId) : GameSession.NameOf(NameKind.CommandKind, (int)c.CommandKind);
+		: c.CommandId.Length > 0 ? _s.DisplayName(c.CommandId) : T(NameKind.CommandKind, (int)c.CommandKind);
+
+	private string OutcomeText(Outcome outcome) => outcome == Outcome.Ongoing ? "" : T("ui.battle.outcome." + GameSession.NameOf(NameKind.Outcome, (int)outcome));
 
 	private string MenuTitle(IReadOnlyList<Combatant> all) => _battle.Phase switch
 	{
 		BattlePhase.Command => _battle.Actor < all.Count ? all[_battle.Actor].Name : "",
-		BattlePhase.Option => _battle.MenuChoice,
-		BattlePhase.Target => "Target",
-		BattlePhase.Macro => "Macro",
-		BattlePhase.Ended => "Battle over",
-		_ => "Battle",
+		BattlePhase.Option => T("ui.battle.command." + _battle.MenuChoice),
+		BattlePhase.Target => T("ui.battle.title.target"),
+		BattlePhase.Macro => T("ui.battle.title.macro"),
+		BattlePhase.Ended => T("ui.battle.title.over"),
+		_ => T("ui.battle.title.battle"),
 	};
 
 	// The command menu's rows for the phase, and which can be chosen; null outside the menus.
@@ -436,8 +507,8 @@ public sealed partial class SampleController
 		BattleUi b = _battle;
 		return b.Phase switch
 		{
-			BattlePhase.Command => ([.. CommandMenu], null),
-			BattlePhase.Option => (b.Options.Select(o => o.Name + (o.Cost > 0 ? $" ({o.Cost} TP)" : "") + (o.Uses >= 0 ? $" x{o.Uses}" : "")).ToList(), b.Options.Select(o => o.Usable).ToList()),
+			BattlePhase.Command when CommandRows() is var rows => ([.. rows.Select(r => r.Text)], [.. rows.Select(r => r.Usable)]),
+			BattlePhase.Option => (b.Options.Select(OptionText).ToList(), b.Options.Select(o => o.Usable).ToList()),
 			BattlePhase.Target => (b.Targets.Select(t => t < all.Count ? (all[t].Side == Side.Party ? all[t].Name : all[t].Label) : "?").ToList(), null),
 			BattlePhase.Macro => ([.. _s.Macros()], null),
 			_ => null,
@@ -451,6 +522,11 @@ public sealed partial class SampleController
 		if (b.Phase == BattlePhase.Option && b.Options.Count > 0)
 		{
 			BattleOption option = b.Options[Math.Clamp(_cursor, 0, b.Options.Count - 1)];
+			if (b.Worn.Contains(option.Id))
+			{
+				string? piece = _s.Description(DescriptionKind.Equipment, option.Id);
+				return BattleDescription(s, T("ui.battle.worn_note") + (piece is { Length: > 0 } ? " " + piece : ""));
+			}
 			return BattleDescription(s, _s.Description(option.Command == CommandKind.Item ? DescriptionKind.Item : DescriptionKind.Ability, option.Id));
 		}
 		if (b.Phase == BattlePhase.Target && target >= 0 && target < all.Count && all[target].Side == Side.Enemy)
@@ -494,22 +570,30 @@ public sealed partial class SampleController
 	// What floats over a target for one event; `previous` tells a critical hit's damage.
 	private FloatingText? Floating(BattleEvent e, BattleEvent? previous)
 	{
-		Color weak = new(255, 168, 80), resisted = new(150, 200, 255), status = new(206, 160, 255);
+		Color weak = new(255, 168, 80), resisted = new(150, 200, 255), status = new(206, 160, 255), felled = new(255, 80, 80);
+		string stat = T("ui.battle.stat." + GameSession.NameOf(NameKind.Stat, (int)e.Stat));
 		return e.Type switch
 		{
-			BattleEventType.DamageDealt when previous is { Type: BattleEventType.Critical } => new($"{e.Amount}!", Style.Accent, NumberSize + 8),
-			BattleEventType.DamageDealt when e.Effectiveness == Effectiveness.Immune => new("Immune", Style.Dim, Style.Body),
-			BattleEventType.DamageDealt when e.Effectiveness == Effectiveness.Weak => new($"{e.Amount} Weak", weak, NumberSize),
-			BattleEventType.DamageDealt when e.Effectiveness == Effectiveness.Resisted => new($"{e.Amount} Resisted", resisted, NumberSize),
+			BattleEventType.DamageDealt when previous is { Type: BattleEventType.Critical } => new(T("ui.battle.float.critical", e.Amount), Style.Accent, NumberSize + 8),
+			BattleEventType.DamageDealt when e.Effectiveness == Effectiveness.Immune => new(T("ui.battle.float.immune"), Style.Dim, Style.Body),
+			BattleEventType.DamageDealt when e.Effectiveness == Effectiveness.Weak => new(T("ui.battle.float.weak", e.Amount), weak, NumberSize),
+			BattleEventType.DamageDealt when e.Effectiveness == Effectiveness.Resisted => new(T("ui.battle.float.resisted_damage", e.Amount), resisted, NumberSize),
 			BattleEventType.DamageDealt => new(e.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture), Style.Text, NumberSize),
-			BattleEventType.Missed => new("Miss", Style.Dim, Style.Body),
+			BattleEventType.Missed => new(T("ui.battle.float.miss"), Style.Dim, Style.Body),
+			// Technique points restored float in the TP bar's color, with their unit, apart from hit points' green numbers.
+			BattleEventType.Healed when e.Resource == ResourceKind.Tp && e.Amount == 0 => null,
+			BattleEventType.Healed when e.Resource == ResourceKind.Tp => new(T("ui.battle.float.tp", e.Amount), Style.Tp, NumberSize - 4),
 			BattleEventType.Healed => new($"+{e.Amount}", Style.Good, NumberSize),
-			BattleEventType.Revived => new($"Revived +{e.Amount}", Style.Good, Style.Body),
+			BattleEventType.Revived => new(T("ui.battle.float.revived", e.Amount), Style.Good, Style.Body),
 			BattleEventType.StatusApplied => new(_s.DisplayName(e.Status), status, Style.Body),
-			BattleEventType.StatusResisted => new(e.Effectiveness == Effectiveness.Immune ? "Immune" : "Resisted", Style.Dim, Style.Body),
-			BattleEventType.StatusRemoved when e.StatusEnd != StatusEnd.Defeated => new(_s.DisplayName(e.Status) + " ends", Style.Dim, Style.Body),
-			BattleEventType.StatModified => new($"{GameSession.NameOf(NameKind.Stat, (int)e.Stat)} {(e.Amount > 0 ? "up" : "down")}", e.Amount > 0 ? Style.Good : weak, Style.Body),
-			BattleEventType.ItemHadNoEffect => new("No effect", Style.Dim, Style.Body),
+			BattleEventType.StatusResisted => new(T(e.Effectiveness == Effectiveness.Immune ? "ui.battle.float.immune" : "ui.battle.float.resisted"), Style.Dim, Style.Body),
+			BattleEventType.StatusRemoved when e.StatusEnd != StatusEnd.Defeated => new(T("ui.battle.float.ends", _s.DisplayName(e.Status)), Style.Dim, Style.Body),
+			BattleEventType.StatModified => new(T(e.Amount > 0 ? "ui.battle.float.stat_up" : e.Amount < 0 ? "ui.battle.float.stat_down" : "ui.battle.float.stat_normal", stat),
+				e.Amount > 0 ? Style.Good : e.Amount < 0 ? weak : Style.Dim, Style.Body),
+			BattleEventType.ItemHadNoEffect => new(T("ui.battle.float.no_effect"), Style.Dim, Style.Body),
+			BattleEventType.Message when e.Message == "battle.instant_defeat" => new(T("ui.battle.float.felled"), felled, NumberSize),
+			BattleEventType.Message when e.Message.StartsWith("battle.instant_defeat", StringComparison.Ordinal) =>
+				new(T(e.Effectiveness == Effectiveness.Immune ? "ui.battle.float.immune" : "ui.battle.float.resisted"), Style.Dim, Style.Body),
 			_ => null,
 		};
 	}
@@ -561,30 +645,30 @@ public sealed partial class SampleController
 		var lines = new List<(string Text, Color Color)>();
 		if (result is not null && result.Outcome is Outcome.Victory or Outcome.ScriptedEnd)
 		{
-			lines.Add(($"Experience {result.Experience}", Style.Text));
-			lines.Add(($"Money {result.Money}", Style.Text));
+			lines.Add((T("ui.battle.result.experience", result.Experience), Style.Text));
+			lines.Add((T("ui.battle.result.money", result.Money), Style.Text));
 			if (result.Drops.Count > 0)
 			{
-				lines.Add(("Found " + string.Join(", ", result.Drops.Select(d => d.Value > 1 ? $"{_s.DisplayName(d.Key)} x{d.Value}" : _s.DisplayName(d.Key))), Style.Text));
+				lines.Add((T("ui.battle.result.found", ListText(result.Drops.Select(d => d.Value > 1 ? T("ui.common.item_count", _s.DisplayName(d.Key), d.Value) : _s.DisplayName(d.Key)))), Style.Text));
 			}
 			foreach (LevelUp up in result.LevelUps)
 			{
-				lines.Add(($"{up.Name} reached level {up.Level}!", Style.Accent));
+				lines.Add((T("ui.battle.result.level_up", up.Name, up.Level), Style.Accent));
 				if (up.Learned.Count > 0)
 				{
-					lines.Add(("  Learned " + string.Join(", ", up.Learned.Select(_s.DisplayName)), Style.Good));
+					lines.Add(("  " + T("ui.battle.result.learned", ListText(up.Learned.Select(_s.DisplayName))), Style.Good));
 				}
 			}
 		}
 		else if (info?.GameOver == true)
 		{
-			lines.Add(("The party has fallen.", Style.Bad));
+			lines.Add((T("ui.battle.result.fallen"), Style.Bad));
 		}
-		string heading = BattleTimeline.OutcomeText(info?.Outcome ?? Outcome.Ongoing);
+		string heading = OutcomeText(info?.Outcome ?? Outcome.Ongoing);
 		_probeVictory = string.Join(" / ", lines.Select(l => l.Text.Trim()).Prepend(heading));
 		int w = 640, h = 84 + lines.Count * 30;
 		int x = (s.Width - w) / 2, y = Math.Max(24, (stageBottom - h) / 2);
-		Style.Window(s, x, y, w, h, "Result");
+		Style.Window(s, x, y, w, h, T("ui.battle.result.title"));
 		s.Text(heading, x + (w - s.Measure(heading, Style.Title)) / 2, y + 22, Style.Accent, Style.Title);
 		for (int i = 0; i < lines.Count; i++)
 		{

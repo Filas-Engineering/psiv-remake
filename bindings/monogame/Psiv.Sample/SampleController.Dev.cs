@@ -44,7 +44,7 @@ public sealed partial class SampleController
 	private readonly string? _dataDir;
 	private bool _console;
 	private string _consoleInput = "";
-	private readonly List<string> _consoleOut = [];
+	private readonly List<(string Text, bool Bad)> _consoleOut = [];
 	private readonly List<string> _consoleHistory = [];
 	private int _historyAt;
 	private readonly HashSet<string> _overlays = [];
@@ -86,13 +86,16 @@ public sealed partial class SampleController
 	private float Speed => Speeds[_speedIndex];
 
 	// What the battle stage draws: the battle presentation preview's dummies, else the session's battle.
+	private const int DevSyncMs = 600;
+
 	private IReadOnlyList<Combatant> StageCombatants() => _stage ?? _s.Combatants();
 
 	private BattleInfo? StageInfo() => _stage is null ? _s.BattleInfo() : _stageInfo;
 
-	private void DevLog(string line)
+	// `bad` shows the line as a refusal or an error.
+	private void DevLog(string line, bool bad = false)
 	{
-		_consoleOut.Add(line);
+		_consoleOut.Add((line, bad));
 		if (_consoleOut.Count > 200)
 		{
 			_consoleOut.RemoveAt(0);
@@ -148,12 +151,12 @@ public sealed partial class SampleController
 		if (raw.Pressed(SlowerKey) || raw.Pressed(FasterKey))
 		{
 			_speedIndex = Math.Clamp(_speedIndex + (raw.Pressed(FasterKey) ? 1 : -1), 0, Speeds.Length - 1);
-			DevLog($"speed x{Speed.ToString(CultureInfo.InvariantCulture)}");
+			DevLog(T("ui.dev.speed", Speed));
 		}
 		if (raw.Pressed(PauseKey))
 		{
 			_paused = !_paused;
-			DevLog(_paused ? "paused" : "resumed");
+			DevLog(T(_paused ? "ui.dev.paused" : "ui.dev.resumed"));
 		}
 		if (raw.Pressed(StepKey))
 		{
@@ -273,7 +276,7 @@ public sealed partial class SampleController
 		{
 			if (result.Error is { } error)
 			{
-				DevLog("refused: " + error.Text + $" ({error.Key})");
+				DevLog(T("ui.dev.refused_key", error.Text, error.Key), bad: true);
 				return false;
 			}
 			DevLog(done);
@@ -306,38 +309,43 @@ public sealed partial class SampleController
 			}
 			return true;
 		case "warp" when w.Length == 3:
-			return Result(_s.DevWarp(w[1], w[2]), $"warped to {w[1]} {w[2]}");
+			return Result(_s.DevWarp(w[1], w[2]), T("ui.dev.warped", $"{w[1]} {w[2]}"));
 		case "warp" when w.Length == 4 && Number(w[2], out int x) && Number(w[3], out int y):
-			return Result(_s.DevWarpCell(w[1], x, y), $"warped to {w[1]} {x} {y}");
+			return Result(_s.DevWarpCell(w[1], x, y), T("ui.dev.warped", $"{w[1]} {x} {y}"));
 		case "flag" when w.Length == 3 && OnOff(w[2], out bool flagOn):
-			return Result(_s.DevSetFlag(w[1], flagOn), $"{w[1]} {w[2]}");
+			return Result(_s.DevSetFlag(w[1], flagOn), T("ui.dev.flag", w[1], T(flagOn ? "ui.dev.on" : "ui.dev.off")));
 		case "give" when w.Length is 2 or 3:
 			int count = 1;
 			if (w.Length == 3 && !Number(w[2], out count))
 			{
 				break;
 			}
-			return Result(_s.DevGive(w[1], count), $"gave {count} {w[1]}");
+			return Result(_s.DevGive(w[1], count), T("ui.dev.gave", count, w[1]));
 		case "money" when w.Length == 2 && Number(w[1], out int amount):
-			return Result(_s.DevMoney(amount), $"money {_s.WorldInfo().Money}");
+			return Result(_s.DevMoney(amount), T("ui.dev.money", _s.WorldInfo().Money));
 		case "level" when w.Length == 3 && Number(w[2], out int level):
-			return Result(_s.DevSetLevel(w[1], level), $"{w[1]} is level {level}");
+			return Result(_s.DevSetLevel(w[1], level), T("ui.dev.level", w[1], level));
 		case "battle" when w.Length == 2:
-			return Result(_s.DevBattle(w[1]), $"battle {w[1]}");
+			return Result(_s.DevBattle(w[1]), T("ui.dev.battle", w[1]));
 		case "win" or "lose" when w.Length == 1:
 			(PsivResult ended, IReadOnlyList<BattleEvent> events) = _s.DevEndBattle(w[0] == "win");
 			if (ended.Ok && _battle.Active && _stage is null)
 			{
-				_timeline.Add(BattleTimeline.Build(events, Context()));
+				// The command set hit points outside the events, so a step brings the stage to the session's state before
+				// the outcome shows.
+				List<BattleStep> ending = BattleTimeline.Build(events, Context());
+				int outcome = ending.FindIndex(x => x.Kind == StepKind.Outcome);
+				ending.Insert(outcome < 0 ? ending.Count : outcome, Context().Step(StepKind.Sync, "", "sync", [], lengthMs: DevSyncMs));
+				_timeline.Add(ending);
 				_battle.Phase = BattlePhase.Playback;
 			}
-			return Result(ended, w[0] == "win" ? "the battle is won" : "the battle is lost");
+			return Result(ended, T(w[0] == "win" ? "ui.dev.won" : "ui.dev.lost"));
 		case "vehicle" when w.Length == 4:
-			return Result(_s.DevVehicle(w[1], w[2], w[3]), $"{w[1]} at {w[2]} {w[3]}");
+			return Result(_s.DevVehicle(w[1], w[2], w[3]), T("ui.dev.vehicle", w[1], $"{w[2]} {w[3]}"));
 		case "encounters" when w.Length == 2 && OnOff(w[1], out bool encountersOn):
-			return Result(_s.DevEncounters(encountersOn), "encounters " + w[1]);
+			return Result(_s.DevEncounters(encountersOn), T("ui.dev.encounters", T(encountersOn ? "ui.dev.on" : "ui.dev.off")));
 		case "event" when w.Length == 2:
-			return Result(_s.DevRunEvent(w[1]), $"event {w[1]}");
+			return Result(_s.DevRunEvent(w[1]), T("ui.dev.event", w[1]));
 		case "overlay" when w.Length == 2 && w[1] is "all" or "none":
 			foreach ((string name, _) in OverlayKeys)
 			{
@@ -354,11 +362,11 @@ public sealed partial class SampleController
 			return true;
 		case "speed" when w.Length == 2 && Array.FindIndex(Speeds, v => v.ToString(CultureInfo.InvariantCulture) == w[1]) is >= 0 and int index:
 			_speedIndex = index;
-			DevLog($"speed x{w[1]}");
+			DevLog(T("ui.dev.speed", w[1]));
 			return true;
 		case "pause" or "resume" when w.Length == 1:
 			_paused = w[0] == "pause";
-			DevLog(_paused ? "paused" : "resumed");
+			DevLog(T(_paused ? "ui.dev.paused" : "ui.dev.resumed"));
 			return true;
 		case "step" when w.Length is 1 or 2:
 			int steps = 1;
@@ -368,7 +376,7 @@ public sealed partial class SampleController
 			}
 			_paused = true;
 			_stepsPending += steps;
-			DevLog($"stepping {steps} frame{(steps == 1 ? "" : "s")}");
+			DevLog(T(steps == 1 ? "ui.dev.stepping_one" : "ui.dev.stepping", steps));
 			return true;
 		case "reload" when w.Length == 1:
 			return ReloadData();
@@ -382,7 +390,7 @@ public sealed partial class SampleController
 		case "preview" when w.Length == 2 && w[1] is "next" or "prev" or "stop":
 			if (_preview is null && _stage is null)
 			{
-				DevLog("refused: nothing is being previewed");
+				DevLog(T("ui.dev.refused", T("ui.dev.nothing_previewed")), bad: true);
 				return false;
 			}
 			if (w[1] == "stop")
@@ -399,7 +407,7 @@ public sealed partial class SampleController
 			}
 			return true;
 		}
-		DevLog("cannot read that; try help");
+		DevLog(T("ui.dev.unreadable"), bad: true);
 		return false;
 	}
 
@@ -407,7 +415,7 @@ public sealed partial class SampleController
 	{
 		if (on ? _overlays.Add(name) : _overlays.Remove(name))
 		{
-			DevLog($"overlay {name} {(on ? "on" : "off")}");
+			DevLog(T("ui.dev.overlay", name, T(on ? "ui.dev.on" : "ui.dev.off")));
 		}
 	}
 
@@ -427,13 +435,13 @@ public sealed partial class SampleController
 		catch (PsivDataException e)
 		{
 			_reloadResult = "error";
-			ShowDevError(["The data did not load; the game goes on with the data it had.", .. e.Problems.Select(p => p.Text)]);
+			ShowDevError([T("ui.dev.data_not_loaded"), .. e.Problems.Select(p => p.Text)]);
 			return false;
 		}
 		if (result.Error is { } error)
 		{
 			_reloadResult = "refused";
-			ShowDevError(["The game does not fit the changed data; it goes on with the data it had.", error.Text]);
+			ShowDevError([T("ui.dev.data_not_fitting"), error.Text]);
 			return false;
 		}
 		if (_dataDir is not null)
@@ -455,7 +463,7 @@ public sealed partial class SampleController
 		_timeline.Clear();
 		_devError = [];
 		_reloadResult = "ok";
-		DevLog("data reloaded" + (_s.FieldInfo() is { } f ? $": {f.AreaId} {f.LeaderX} {f.LeaderY}" : ""));
+		DevLog(_s.FieldInfo() is { } f ? T("ui.dev.reloaded_at", $"{f.AreaId} {f.LeaderX} {f.LeaderY}") : T("ui.dev.reloaded"));
 		TakeNotices();
 		return true;
 	}
@@ -467,11 +475,11 @@ public sealed partial class SampleController
 		_devErrorMs = ErrorShownMs;
 		foreach (string line in lines.Take(12))
 		{
-			DevLog("error: " + line);
+			DevLog(T("ui.dev.error", line), bad: true);
 		}
 		if (lines.Count > 12)
 		{
-			DevLog($"error: and {lines.Count - 12} more");
+			DevLog(T("ui.dev.error", T("ui.dev.more", lines.Count - 12)), bad: true);
 		}
 	}
 
@@ -484,7 +492,7 @@ public sealed partial class SampleController
 	{
 		_picker = true;
 		_pickerList.Reset();
-		DevLog("previewer: pick an event or a battle presentation entry");
+		DevLog(T("ui.dev.picker_opened"));
 	}
 
 	private void UpdatePicker(ActionInput input)
@@ -523,12 +531,12 @@ public sealed partial class SampleController
 	{
 		if (_dataDir is null)
 		{
-			DevLog("refused: the data directory is not known");
+			DevLog(T("ui.dev.refused", T("ui.dev.no_data_directory")), bad: true);
 			return false;
 		}
 		if (!_s.DevIds(DevList.Events).Contains(id))
 		{
-			DevLog($"refused: there is no event {id}");
+			DevLog(T("ui.dev.refused", T("ui.dev.no_event", id)), bad: true);
 			return false;
 		}
 		StopPreview();
@@ -559,12 +567,13 @@ public sealed partial class SampleController
 		if (started.Error is { } error)
 		{
 			scratch.Dispose();
-			DevLog("refused: " + error.Text);
+			DevLog(T("ui.dev.refused", error.Text), bad: true);
 			return false;
 		}
-		var controller = new SampleController(scratch, _data, _log, null, new RecordingAudio(), _assetDir, battleLayout: _layoutOverride);
+		scratch.SetProfile(scratch.Profile() with { TextLanguage = _s.Profile().TextLanguage });
+		var controller = new SampleController(scratch, _data, _log, null, new RecordingAudio(), _assetDir, battleLayout: _layoutOverride) { MissingText = MissingText };
 		_preview = new EventPreview(id, scratch, controller);
-		DevLog($"previewing event {id}: PageDown next panel, PageUp previous, End stop");
+		DevLog(T("ui.dev.previewing_event", id));
 		return true;
 	}
 
@@ -643,7 +652,7 @@ public sealed partial class SampleController
 		}
 		_paused = true;
 		_stepsPending = 0;
-		DevLog(p.Controller._panelShows >= target ? $"panel {target} of {p.Id}" : $"{p.Id} shows no panel {target}");
+		DevLog(T(p.Controller._panelShows >= target ? "ui.dev.panel_reached" : "ui.dev.panel_missing", target, p.Id));
 	}
 
 	private void PreviewNext()
@@ -685,7 +694,7 @@ public sealed partial class SampleController
 		{
 			p.Session.Dispose();
 			_preview = null;
-			DevLog("preview stopped");
+			DevLog(T("ui.dev.preview_stopped"));
 		}
 		if (_stage is not null)
 		{
@@ -694,7 +703,7 @@ public sealed partial class SampleController
 			_stageEntry = null;
 			_battle.Active = false;
 			_timeline.Clear();
-			DevLog("preview stopped");
+			DevLog(T("ui.dev.preview_stopped"));
 		}
 	}
 
@@ -704,13 +713,13 @@ public sealed partial class SampleController
 	{
 		if (_s.Mode == Mode.Battle)
 		{
-			DevLog("refused: finish the battle first");
+			DevLog(T("ui.dev.refused", T("ui.dev.finish_battle")), bad: true);
 			return false;
 		}
 		bool action = PresentationTable.Actions.ContainsKey(entry);
 		if (!action && !PresentationTable.Fallbacks.ContainsKey(entry))
 		{
-			DevLog($"refused: the battle presentation has no entry {entry}");
+			DevLog(T("ui.dev.refused", T("ui.dev.no_entry", entry)), bad: true);
 			return false;
 		}
 		StopPreview();
@@ -744,7 +753,7 @@ public sealed partial class SampleController
 		};
 		for (int i = 0; i < 3; i++)
 		{
-			stage.Add(Make(2 + i, enemy, "Dummy " + (char)('A' + i), Side.Enemy, 100, []));
+			stage.Add(Make(2 + i, enemy, T("ui.dev.dummy", (char)('A' + i)), Side.Enemy, 100, []));
 		}
 		List<int> targets = shape.Effect switch
 		{
@@ -761,10 +770,10 @@ public sealed partial class SampleController
 		_battle.Labels = [.. stage.Select(c => c.Label)];
 		_battle.Log.Clear();
 		_battle.Phase = BattlePhase.Playback;
-		_show.Reset(stage);
+		_show.Start(stage, 2);
 		_timeline.Clear();
 		_timeline.Add(BattleTimeline.Build(_stageEvents, Context()));
-		DevLog($"previewing battle presentation {entry}: PageDown plays it again, End stop");
+		DevLog(T("ui.dev.previewing_battle", entry));
 		return true;
 	}
 
@@ -845,14 +854,15 @@ public sealed partial class SampleController
 		if (_overlays.Contains("fps"))
 		{
 			double average = _frameTimes.Count == 0 ? 0 : _frameTimes.Average();
-			string fps = string.Create(CultureInfo.InvariantCulture, $"{(average > 0 ? 1000 / average : 0):0.0} fps  {average:0.0} ms  x{Speed}{(_paused ? " paused" : "")}");
+			string fps = T(_paused ? "ui.dev.fps_paused" : "ui.dev.fps", (average > 0 ? 1000 / average : 0).ToString("0.0", CultureInfo.InvariantCulture),
+				average.ToString("0.0", CultureInfo.InvariantCulture), Speed);
 			_overlayDrawn["fps"] = fps;
 			Style.Plate(s, fps, s.Width - s.Measure(fps, Style.Small) - 40, y, Style.Good);
 		}
 		if (_overlays.Contains("event"))
 		{
 			EventPosition? at = (_preview?.Session ?? _s).EventPosition();
-			string text = at is null ? "no event" : $"event {at.Event}  {at.File}:{at.Line}";
+			string text = at is null ? T("ui.dev.no_event_running") : T("ui.dev.event_at", at.Event, $"{at.File}:{at.Line}");
 			_overlayDrawn["event"] = at is null ? "-" : $"{at.Event} {at.File}:{at.Line}";
 			Style.Plate(s, text, 16, y, Style.Accent);
 		}
@@ -877,19 +887,20 @@ public sealed partial class SampleController
 		bool marked = _s.Mode != Mode.Title && _s.WorldInfo().Dev;
 		_hudMarkDrawn = marked;
 		// While previewing, the badge also says what plays and how to move through it; the game itself is not marked by it.
-		string badge = (marked ? "DEV  marked" : "DEV") + (_preview is { } p
-			? $"   preview: event {p.Id}, panels shown {p.Controller._panelShows}   PgDn next panel   PgUp previous   End stop"
-			: _stageEntry is { } entry ? $"   preview: battle presentation {entry}   PgDn play again   End stop" : "");
+		string badge = T(marked ? "ui.dev.badge_marked" : "ui.dev.badge") + (_preview is { } p
+			? "   " + T("ui.dev.badge_event", p.Id, p.Controller._panelShows)
+			: _stageEntry is { } entry ? "   " + T("ui.dev.badge_battle", entry) : "");
 		// The battle's banners take the top middle, so there the badge sits at the right: in the side layout just above the
 		// party panels, in the front one in the keys' line under the strip, or at the top while a preview's long badge
 		// would run into the keys.
 		bool battle = Screen == Screen.Battle;
 		int x = battle ? s.Width - s.Measure(badge, Style.Small) - 40 : (s.Width - s.Measure(badge, Style.Small)) / 2 - 12;
-		int y = !battle ? 12 : _stageLayout == BattleLayout.Side ? BattlePanelTop - 44 : badge.Length > 12 ? 12 : s.Height - HintBarHeight + 1;
-		Style.Plate(s, badge, x, y, marked ? Style.Bad : badge.Length > 12 ? Style.Accent : Style.Dim);
+		bool previewing = _preview is not null || _stageEntry is not null;
+		int y = !battle ? 12 : _stageLayout == BattleLayout.Side ? BattlePanelTop - 44 : previewing ? 12 : s.Height - HintBarHeight + 1;
+		Style.Plate(s, badge, x, y, marked ? Style.Bad : previewing ? Style.Accent : Style.Dim);
 		if (_paused || Speed != 1f)
 		{
-			string speed = _paused ? $"PAUSED   {Key(StepKey)} step   {Key(PauseKey)} resume" : $"speed x{Speed.ToString(CultureInfo.InvariantCulture)}";
+			string speed = _paused ? T("ui.dev.paused_banner", Key(StepKey), Key(PauseKey)) : T("ui.dev.speed", Speed);
 			Style.Plate(s, speed, (s.Width - s.Measure(speed, Style.Body)) / 2 - 12, 52, Style.Accent, Style.Body);
 		}
 	}
@@ -965,7 +976,7 @@ public sealed partial class SampleController
 					(int px, int py) = Corner(spawnX, spawnY);
 					s.Fill(px + tile / 2 - 5, py + tile / 2 - 5, 10, 10, color);
 				}
-				Label($"zone {z.Id}: " + string.Join(", ", z.Table.Select(t => $"{t.Encounter} x{t.Weight}")), zx + 4, zy + 4, color);
+				Label(T("ui.dev.zone", z.Id, ListText(z.Table.Select(t => T("ui.common.item_count", t.Encounter, t.Weight)))), zx + 4, zy + 4, color);
 			}
 			_overlayDrawn["zones"] = zones.Count == 0 ? "none" : string.Join(", ", zones.Select(z => z.Id));
 		}
@@ -987,8 +998,7 @@ public sealed partial class SampleController
 				(int px, int py) = Corner(p.X, p.Y);
 				Color color = p.Active ? Style.Good : Style.Dim;
 				Style.Frame(s, px + 2, py + 2, tile - 4, tile - 4, color, 3);
-				string kind = GameSession.NameOf(NameKind.PointKind, (int)p.Kind);
-				Label($"{kind} {p.Id}" + (p.Event.Length > 0 ? $" > {p.Event}" : ""), px, py - OverlayText - 4, color);
+				Label($"{T(NameKind.PointKind, (int)p.Kind)} {p.Id}" + (p.Event.Length > 0 ? $" > {p.Event}" : ""), px, py - OverlayText - 4, color);
 			}
 			_overlayDrawn["hooks"] = $"{view.Points.Count} points, {view.Exits.Count} exits, {view.Markers.Count} markers";
 		}
@@ -1013,9 +1023,8 @@ public sealed partial class SampleController
 			s.Fill(cx - 16, cy - 1, 32, 3, Style.Accent);
 			s.Fill(cx - 1, cy - 16, 3, 32, Style.Accent);
 			Style.Frame(s, cx - 10, cy - 10, 20, 20, Style.Accent);
-			string name = _camera ?? "leader";
-			_overlayDrawn["camera"] = name;
-			Label("camera " + name, cx + 14, cy + 10, Style.Accent);
+			_overlayDrawn["camera"] = _camera ?? "leader";
+			Label(T("ui.dev.camera", _camera ?? T("ui.dev.camera_leader")), cx + 14, cy + 10, Style.Accent);
 		}
 	}
 
@@ -1025,13 +1034,13 @@ public sealed partial class SampleController
 		List<string> lines = [.. _devError.SelectMany(l => Style.Wrap(s, l, w - 40, Style.Small)).Take(8)];
 		if (_devError.Count > 8)
 		{
-			lines.Add($"and {_devError.Count - 8} more");
+			lines.Add(T("ui.dev.more", _devError.Count - 8));
 		}
 		int h = 24 + lines.Count * 22 + 30;
 		int x = 80, y = s.Height - 40 - h;
 		Style.Box(s, x, y, w, h, 0.95f);
 		Style.Frame(s, x, y, w, h, Style.Bad, 3);
-		s.Text("Data reload failed (F6 retries)", x + 20, y + 10, Style.Bad, Style.Body);
+		s.Text(T("ui.dev.reload_failed", KeyText(ReloadKey)), x + 20, y + 10, Style.Bad, Style.Body);
 		for (int i = 0; i < lines.Count; i++)
 		{
 			s.Text(lines[i], x + 20, y + 40 + i * 22, i == 0 ? Style.Text : Style.Dim, Style.Small);
@@ -1042,12 +1051,13 @@ public sealed partial class SampleController
 	{
 		int x = 200, y = 70, w = s.Width - 400, h = s.Height - 140;
 		s.Fill(0, 0, s.Width, s.Height, Color.Black * 0.5f);
-		Style.Window(s, x, y, w, h, "Previewer");
-		Style.Tabs(s, x + 24, y + 44, ["Events", "Battle presentation"], _pickerTab);
+		Style.Window(s, x, y, w, h, T("ui.dev.previewer"));
+		Style.Tabs(s, x + 24, y + 44, [T("ui.dev.events"), T("ui.dev.battle_presentation")], _pickerTab);
 		List<string> entries = PickerEntries();
 		int fallbacks = _pickerTab == 1 ? PresentationTable.Actions.Count : int.MaxValue;
-		DrawItems(s, _pickerList, x + 24, y + 90, w - 48, h - 150, [.. entries.Select((e, i) => i >= fallbacks ? "fallback " + e : e)]);
-		Widgets.Hints(s, x + 24, y + h - 44, w - 48, $"{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Left)}/{Hint(GameAction.Right)} list   {Hint(GameAction.Confirm)} play   {Hint(GameAction.Back)} close");
+		DrawItems(s, _pickerList, x + 24, y + 90, w - 48, h - 150, [.. entries.Select((e, i) => i >= fallbacks ? T("ui.dev.fallback", e) : e)]);
+		Widgets.Hints(s, x + 24, y + h - 44, w - 48, T("ui.dev.picker_hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Left), Hint(GameAction.Right),
+			Hint(GameAction.Confirm), Hint(GameAction.Back)));
 	}
 
 	private void DrawConsole(IDrawSurface s)
@@ -1055,12 +1065,12 @@ public sealed partial class SampleController
 		int h = 34 + ConsoleLines * 22 + 40;
 		s.Fill(0, 0, s.Width, h, new Color(8, 10, 18));
 		s.Fill(0, h, s.Width, 2, Style.Accent);
-		s.Text("Developer console   (` closes, Enter runs, help lists commands)", 16, 8, Style.Dim, Style.Small);
-		List<string> shown = [.. _consoleOut.TakeLast(ConsoleLines)];
+		s.Text(T("ui.dev.console_title", Key(ConsoleKey), KeyText(Keys.Enter)), 16, 8, Style.Dim, Style.Small);
+		List<(string Text, bool Bad)> shown = [.. _consoleOut.TakeLast(ConsoleLines)];
 		for (int i = 0; i < shown.Count; i++)
 		{
-			string line = Style.Fit(s, shown[i], s.Width - 32, Style.Small);
-			s.Text(line, 16, 34 + i * 22, shown[i].StartsWith("refused", StringComparison.Ordinal) || shown[i].StartsWith("error", StringComparison.Ordinal) ? Style.Bad : shown[i].StartsWith('>') ? Style.Accent : Style.Text, Style.Small);
+			string line = Style.Fit(s, shown[i].Text, s.Width - 32, Style.Small);
+			s.Text(line, 16, 34 + i * 22, shown[i].Bad ? Style.Bad : shown[i].Text.StartsWith('>') ? Style.Accent : Style.Text, Style.Small);
 		}
 		bool caret = _devClockMs / 400 % 2 == 0;
 		s.Text("> " + _consoleInput + (caret ? "_" : ""), 16, h - 32, Style.Accent, Style.Body);
@@ -1082,7 +1092,7 @@ public sealed partial class SampleController
 			"devmark" => _s.Mode != Mode.Title && _s.WorldInfo().Dev ? "yes" : "no",
 			"hudmark" => _hudMarkDrawn ? "yes" : "no",
 			"console" => _console ? "open" : "closed",
-			"consolelast" => _consoleOut.Count == 0 ? "-" : _consoleOut[^1],
+			"consolelast" => _consoleOut.Count == 0 ? "-" : _consoleOut[^1].Text,
 			"overlays" => _overlays.Count == 0 ? "none" : string.Join(", ", OverlayKeys.Select(o => o.Name).Where(_overlays.Contains)),
 			"speed" => "x" + Speed.ToString(CultureInfo.InvariantCulture),
 			"paused" => _paused ? "yes" : "no",

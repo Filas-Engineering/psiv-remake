@@ -14,15 +14,17 @@ public static class Program
 		"Psiv.Sample: plays the placeholder adventure through libpsiv_session\n" +
 		"\n" +
 		"  Psiv.Sample [--data DIR] [--saves DIR] [--seed N] [--font FILE] [--exit-after-ms N] [--screenshot FILE.png] [--mute] [--window-size WxH] [--fullscreen]\n" +
-		"              [--assets DIR] [--watch-assets] [--dev]\n" +
+		"              [--assets DIR] [--watch-assets] [--dev] [--battle-layout front|side] [--language CODE]\n" +
 		"  Psiv.Sample --window --script FILE ...   the window, with keys from the script instead of the keyboard\n" +
-		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N] [--assets DIR] [--frame-digests FILE]   headless, no window, no sound\n" +
+		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N] [--assets DIR] [--frame-digests FILE] [--language CODE] [--strict-text]\n" +
+		"              headless, no window, no sound\n" +
 		"  Psiv.Sample --dump-audio DIR   writes a generated track and three cues as WAV files and checks every generated sound\n" +
 		"  Psiv.Sample --check-assets [--assets DIR]   checks the asset directory's manifest and files against the data\n" +
 		"  Psiv.Sample --export-placeholders DIR   writes every generated picture and sound and a manifest that reproduces them\n" +
 		"  Psiv.Sample --version   prints the library version\n" +
 		"\n" +
 		"The asset directory defaults to assets/ beside the data directory, when there is one; F5 in the window reloads it.\n" +
+		"--language sets the profile's text language at start; --strict-text fails a headless run on a text key that language lacks.\n" +
 		"--dev turns on the developer tools (docs/dev-tools.md): ` console, F6 data reload, F2-F4 and F7-F10 overlays, F12 previewer,\n" +
 		"[ ] speed, \\ pause, . step.\n" +
 		"\n" +
@@ -62,6 +64,8 @@ public static class Program
 		bool watchAssets = false;
 		bool dev = false;
 		BattleLayout? battleLayout = null;
+		string? language = null;
+		bool strictText = false;
 		for (int i = 0; i < args.Length; i++)
 		{
 			string? Next() => i + 1 < args.Length ? args[++i] : null;
@@ -83,6 +87,8 @@ public static class Program
 			case "--watch-assets": watchAssets = true; break;
 			case "--dev": dev = true; break;
 			case "--battle-layout" when BattlePresentation.ParseLayout(Next()) is { } layout: battleLayout = layout; break;
+			case "--language": language = Next(); break;
+			case "--strict-text": strictText = true; break;
 			case "--export-placeholders": export = Next(); break;
 			case "--frame-digests": digests = Next(); break;
 			case "--screenshot": screenshot = Next(); break;
@@ -143,6 +149,19 @@ public static class Program
 		}
 		using (session)
 		{
+			if (language is not null)
+			{
+				if (!session.GameInfo().Languages.Contains(language))
+				{
+					Console.Error.WriteLine($"the data has no text language {language}; it has {string.Join(", ", session.GameInfo().Languages)}");
+					return 2;
+				}
+				if (session.SetProfile(session.Profile() with { TextLanguage = language }).Error is { } error)
+				{
+					Console.Error.WriteLine(error.Text);
+					return 1;
+				}
+			}
 			GameData gameData = GameData.Load(session, data);
 			if (checkAssets)
 			{
@@ -154,7 +173,7 @@ public static class Program
 			}
 			if (script is not null && !window)
 			{
-				return Headless.Run(session, gameData, script, frames, saves, assets, digests, dev, data, battleLayout);
+				return Headless.Run(session, gameData, script, frames, saves, assets, digests, dev, data, battleLayout, strictText);
 			}
 			try
 			{
@@ -739,15 +758,25 @@ public static class Headless
 {
 	public const int FrameMs = 16;
 
+	// With `strictText`, each text key the profile's language lacks fails the run once.
 	public static int Run(GameSession session, GameData data, string scriptPath, int frames, string? saves, string? assets, string? digests, bool dev = false,
-		string? dataDir = null, BattleLayout? battleLayout = null)
+		string? dataDir = null, BattleLayout? battleLayout = null, bool strictText = false)
 	{
 		int frame = 0;
 		int failures = 0;
 		var surface = new RecordingSurface();
 		string? controls = saves is null ? null : Path.Combine(saves, SampleGame.ControlsFile);
 		var audio = new RecordingAudio();
-		SampleController NewController() => new(session, data, line => Console.WriteLine($"[{frame}] {line}"), controls, audio, assets, dev, dataDir, battleLayout);
+		var missing = new HashSet<string>();
+		void MissingText(string key)
+		{
+			if (strictText && missing.Add(key))
+			{
+				failures++;
+				Console.WriteLine($"[{frame}] FAIL: no text {key} in language {session.Profile().TextLanguage}");
+			}
+		}
+		SampleController NewController() => new(session, data, line => Console.WriteLine($"[{frame}] {line}"), controls, audio, assets, dev, dataDir, battleLayout) { MissingText = MissingText };
 		SampleController controller = NewController();
 		var input = new InputState();
 		try

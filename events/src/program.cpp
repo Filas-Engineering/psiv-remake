@@ -92,6 +92,10 @@ const char* op_name(Op op) {
 		return "vehicle give";
 	case Op::vehicle_place:
 		return "vehicle place";
+	case Op::learn:
+		return "learn";
+	case Op::follower:
+		return "follower";
 	case Op::vehicle_remove:
 		return "vehicle remove";
 	}

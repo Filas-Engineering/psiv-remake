@@ -22,6 +22,9 @@ public sealed partial class SampleController
 	private string _probeRanks = "-";
 	private string _probeFigures = "-";
 	private string _probeOverlaps = "-";
+	private string _probeMarks = "none";
+	// Where the command window's middle goes, from the members' arrangement; -1 to place it by the actor.
+	private int _commandX = -1;
 
 	// What the front layout drew that later parts place themselves by: each member's slot, the enemies' labels and the
 	// action's name plate.
@@ -34,15 +37,18 @@ public sealed partial class SampleController
 
 	private static int SlotX(int slot) => 16 + slot * (SlotWidth + SlotGap);
 
-	// A member stands over its slot in marching order, head and shoulders above the strip. Enemies stand in one row across
-	// the middle, or from five on in two ranks: the first ones in front, the rest smaller and further back, in the gaps.
-	private static (int X, int Foot, int Size) PlaceFront(int index, int partyCount, int enemyCount)
+	private const int BackFigureSize = 144;
+
+	// A member stands over its slot in marching order, head and shoulders above the strip. Enemies stand by formation
+	// position over `enemyCount` places in one row across the middle, or from five on in two ranks: the first ones in
+	// front, the rest smaller and further back, in the gaps.
+	private static (int X, int Foot, int Size) PlaceFront(int index, int partyCount, int position, int enemyCount)
 	{
 		if (index < partyCount)
 		{
-			return (SlotX(index) + SlotWidth / 2, StripTop + 8, 144);
+			return (SlotX(index) + SlotWidth / 2, StripTop + 8, BackFigureSize);
 		}
-		int j = index - partyCount;
+		int j = position;
 		if (enemyCount <= 4)
 		{
 			int spacing = Math.Min(280, 1040 / enemyCount);
@@ -53,6 +59,50 @@ public sealed partial class SampleController
 		int place = back ? 2 * (j - front) + 1 : 2 * j;
 		float gap = 1100f / enemyCount;
 		return (640 + (int)((place - (enemyCount - 1) / 2f) * gap), back ? 282 : 360, back ? 112 : 136);
+	}
+
+	// While the command window is open the members make room for it: the window goes beside the member choosing, toward
+	// the screen's middle, and the members on that side step along past it, as close to their slots as the screen allows,
+	// so the window hides no one. `actor` is the member choosing, -1 with no window. Returns each member's middle;
+	// `windowX` the window's middle, or -1 when there is none.
+	private static Dictionary<int, int> FrontMemberCenters(IReadOnlyList<Combatant> all, string vehicle, int actor, out int windowX)
+	{
+		var members = all.Where(c => c.Side == Side.Party && c.Id != vehicle).Select(c => c.Index).ToList();
+		Dictionary<int, int> centers = members.Select((index, slot) => (index, slot)).ToDictionary(m => m.index, m => SlotX(m.slot) + SlotWidth / 2);
+		windowX = -1;
+		if (!centers.ContainsKey(actor))
+		{
+			return centers;
+		}
+		const int gap = 8;
+		var row = members.Select(m => (Key: m, Width: BackFigureSize, Pref: centers[m])).ToList();
+		int at = row.FindIndex(m => m.Key == actor);
+		bool right = centers[actor] <= 640;
+		int windowPref = centers[actor] + (right ? 1 : -1) * (BackFigureSize / 2 + gap + CommandWidth / 2);
+		row.Insert(right ? at + 1 : at, (-1, CommandWidth, windowPref));
+		var x = row.Select(m => m.Pref).ToArray();
+		for (int k = 0; k < row.Count; k++)
+		{
+			int least = k == 0 ? 16 + row[k].Width / 2 : x[k - 1] + (row[k - 1].Width + row[k].Width) / 2 + gap;
+			x[k] = Math.Max(x[k], least);
+		}
+		for (int k = row.Count - 1; k >= 0; k--)
+		{
+			int most = k == row.Count - 1 ? 1264 - row[k].Width / 2 : x[k + 1] - (row[k + 1].Width + row[k].Width) / 2 - gap;
+			x[k] = Math.Min(x[k], most);
+		}
+		for (int k = 0; k < row.Count; k++)
+		{
+			if (row[k].Key < 0)
+			{
+				windowX = x[k];
+			}
+			else
+			{
+				centers[row[k].Key] = x[k];
+			}
+		}
+		return centers;
 	}
 
 	// The backdrop over the stage, its ground (below 62% of its height, past the generated horizon's shadow) drawn again,
@@ -109,7 +159,7 @@ public sealed partial class SampleController
 				continue;
 			}
 			Combatant c = members[slot];
-			ShownCombatant sc = shown.ElementAtOrDefault(c.Index) ?? new ShownCombatant(c);
+			ShownCombatant sc = shown.ElementAtOrDefault(c.Index) ?? new ShownCombatant(c, -1);
 			(bool Acting, bool Targeted, bool Hit) m = Marks(c.Index);
 			Style.Box(s, x, StripTop, SlotWidth, StripHeight);
 			Highlight(x, StripTop, SlotWidth, StripHeight, m);
@@ -117,9 +167,9 @@ public sealed partial class SampleController
 			s.Text(Style.Fit(s, c.Name, SlotWidth - 24 - icons, Style.Body), x + 12, StripTop + 9, !sc.Alive ? Style.Dim : m.Acting ? Style.Accent : Style.Text, Style.Body);
 			DrawIcons(s, art, sc, step, p, x + SlotWidth - 10 - icons, StripTop + 10);
 			(int hp, int tp) = Shown(sc, step, p);
-			StripBar(s, x + 12, StripTop + 38, SlotWidth - 24, "HP", hp, sc.MaxHp, hp * 4 <= sc.MaxHp ? Style.Bad : Style.Good);
-			StripBar(s, x + 12, StripTop + 60, SlotWidth - 24, "TP", tp, sc.MaxTp, Style.Tp);
-			string state = sc.Alive && NextCommand(c) is { } command ? "Next: " + command : MemberState(c, sc);
+			StripBar(s, x + 12, StripTop + 38, SlotWidth - 24, T("ui.battle.hp"), hp, sc.MaxHp, hp * 4 <= sc.MaxHp ? Style.Bad : Style.Good);
+			StripBar(s, x + 12, StripTop + 60, SlotWidth - 24, T("ui.battle.tp"), tp, sc.MaxTp, Style.Tp);
+			string state = sc.Alive && NextCommand(c) is { } command ? T("ui.battle.next", command) : MemberState(c, sc);
 			if (state.Length > 0)
 			{
 				s.Text(Style.Fit(s, state, SlotWidth - 24, Style.Small), x + 12, StripTop + 82, sc.Alive ? Style.Dim : Style.Bad, Style.Small);
@@ -131,14 +181,14 @@ public sealed partial class SampleController
 		{
 			const int w = 320, h = 64;
 			int y = StripTop - h - 8, x0 = s.Width - 16 - w;
-			ShownCombatant sc = shown.ElementAtOrDefault(ride.Index) ?? new ShownCombatant(ride);
+			ShownCombatant sc = shown.ElementAtOrDefault(ride.Index) ?? new ShownCombatant(ride, -1);
 			(bool Acting, bool Targeted, bool Hit) m = Marks(ride.Index);
 			Style.Box(s, x0, y, w, h);
 			Highlight(x0, y, w, h, m);
 			s.Text(Style.Fit(s, ride.Name, w - 24, Style.Small), x0 + 12, y + 8, m.Acting ? Style.Accent : Style.Text, Style.Small);
 			(int hp, int tp) = Shown(sc, step, p);
-			StripBar(s, x0 + 12, y + 26, w / 2 - 20, "HP", hp, sc.MaxHp, hp * 4 <= sc.MaxHp ? Style.Bad : Style.Good);
-			StripBar(s, x0 + w / 2 + 4, y + 26, w / 2 - 16, "TP", tp, sc.MaxTp, Style.Tp);
+			StripBar(s, x0 + 12, y + 26, w / 2 - 20, T("ui.battle.hp"), hp, sc.MaxHp, hp * 4 <= sc.MaxHp ? Style.Bad : Style.Good);
+			StripBar(s, x0 + w / 2 + 4, y + 26, w / 2 - 16, T("ui.battle.tp"), tp, sc.MaxTp, Style.Tp);
 			probe.Add("vehicle " + ride.Name + (m.Acting ? " acting" : "") + (m.Hit ? " hit" : ""));
 		}
 		_probeStrip = string.Join(" | ", probe);
@@ -155,9 +205,9 @@ public sealed partial class SampleController
 		Style.Bar(s, x + 32, y + 6, Math.Max(8, w - 32 - nw - 10), 8, value, max, color);
 	}
 
-	// The command window beside the member choosing (on the side of the screen's middle, so the member stays in sight),
-	// in two columns of four rows over the strip's top edge and under the enemies' labels; the description strip; the
-	// keys' line under the strip; the result window; and the probe of what covers the labels or the member acting.
+	// The command window beside the member choosing (on the side of the screen's middle, where the members made room for
+	// it), in two columns of four rows over the strip's top edge and under the enemies' labels; the description strip;
+	// the keys' line under the strip; the result window; and the probe of what covers the labels or a party figure.
 	private void DrawFrontMenus(IDrawSurface s, IReadOnlyList<Combatant> all, BattleInfo? info, Dictionary<int, Rectangle> bodies, int target, FrontStage stage)
 	{
 		BattleUi b = _battle;
@@ -166,7 +216,8 @@ public sealed partial class SampleController
 		{
 			Rectangle actor = bodies.TryGetValue(b.Actor, out Rectangle body) ? body : stage.Slots.GetValueOrDefault(b.Actor, new Rectangle(s.Width / 2 - 64, StripTop - 64, 128, 128));
 			int y = StripTop - CommandHeight - 4;
-			int x = Math.Clamp(actor.Center.X <= s.Width / 2 ? actor.Right + 8 : actor.Left - 8 - CommandWidth, 16, s.Width - 16 - CommandWidth);
+			int x = _commandX >= 0 ? _commandX - CommandWidth / 2
+				: Math.Clamp(actor.Center.X <= s.Width / 2 ? actor.Right + 8 : actor.Left - 8 - CommandWidth, 16, s.Width - 16 - CommandWidth);
 			Style.Window(s, x, y, CommandWidth, CommandHeight, MenuTitle(all));
 			int colW = (CommandWidth - 32) / 2;
 			int first = _cursor / 8 * 8;
@@ -178,7 +229,7 @@ public sealed partial class SampleController
 			}
 			if (menu.Items.Count > 8)
 			{
-				string pages = $"{first / 8 + 1}/{(menu.Items.Count + 7) / 8}";
+				string pages = T("ui.battle.pages", first / 8 + 1, (menu.Items.Count + 7) / 8);
 				s.Text(pages, x + CommandWidth - 14 - s.Measure(pages, Style.Small), y + 4, Style.Dim, Style.Small);
 			}
 			covers.Add(("command window", new Rectangle(x, y - 14, CommandWidth, CommandHeight + 14)));
@@ -194,10 +245,10 @@ public sealed partial class SampleController
 		}
 		string hint = b.Phase switch
 		{
-			BattlePhase.Playback => $"{Hint(GameAction.Confirm)} hurries   {Hint(GameAction.FastForward)} (hold) skips the round   {Hint(GameAction.TextLog)} log" +
-				(b.Auto ? $"   Auto-battle: {Hint(GameAction.Back)} stops it after this round" : ""),
-			BattlePhase.Ended => $"{Hint(GameAction.Confirm)}: continue",
-			_ => $"{Hint(GameAction.Confirm)} choose   {Hint(GameAction.Back)} back   {Hint(GameAction.TextLog)} log   {Hint(GameAction.Pause)} pause",
+			BattlePhase.Playback => T("ui.battle.hint.playback", Hint(GameAction.Confirm), Hint(GameAction.FastForward), Hint(GameAction.TextLog)) +
+				(b.Auto ? T("ui.battle.hint.playback_auto", Hint(GameAction.Back)) : ""),
+			BattlePhase.Ended => T("ui.battle.hint.continue", Hint(GameAction.Confirm)),
+			_ => T("ui.battle.hint.command", Hint(GameAction.Confirm), Hint(GameAction.Back), Hint(GameAction.TextLog), Hint(GameAction.Pause)),
 		};
 		s.Fill(0, s.Height - HintBarHeight, s.Width, HintBarHeight, Color.Black * 0.6f);
 		hint = Style.Fit(s, hint, s.Width - 32, Style.Small);
@@ -208,11 +259,9 @@ public sealed partial class SampleController
 			DrawResult(s, info, StripTop);
 		}
 
-		// The member acting as far as it shows above the strip.
-		IEnumerable<int> acting = b.Phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro ? [b.Actor]
-			: _timeline.Current?.Turn?.Actors ?? [];
+		// Every party figure as far as it shows above the strip: the member acting and the others beside it.
 		var targets = stage.Labels.Select(l => (Name: l.Key + " label", Box: l.Value)).ToList();
-		foreach (int i in acting.Where(i => i < all.Count && all[i].Side == Side.Party && bodies.ContainsKey(i)))
+		foreach (int i in bodies.Keys.Where(i => i < all.Count && all[i].Side == Side.Party).Order())
 		{
 			Rectangle r = bodies[i];
 			targets.Add((all[i].Name, new Rectangle(r.X, r.Y, r.Width, Math.Max(0, StripTop - r.Y))));
@@ -220,7 +269,7 @@ public sealed partial class SampleController
 		var overlaps = covers.SelectMany(c => targets.Where(t => c.Box.Intersects(t.Box)).Select(t => $"{c.Name} over {t.Name}")).ToList();
 		overlaps.AddRange(stage.Labels.Where(l => !stage.Banner.IsEmpty && stage.Banner.Intersects(l.Value)).Select(l => $"name plate over {l.Key} label"));
 		_probeOverlaps = overlaps.Count == 0 ? "none" : string.Join(", ", overlaps);
-		int enemies = all.Count - (info?.PartyCount ?? all.Count(c => c.Side == Side.Party));
+		int enemies = Math.Max(1, _show.Slots);
 		_probeRanks = enemies <= 4 ? enemies.ToString(System.Globalization.CultureInfo.InvariantCulture) : $"{(enemies + 1) / 2}+{enemies / 2}";
 	}
 
@@ -232,6 +281,7 @@ public sealed partial class SampleController
 		"ranks" => _probeRanks,
 		"figures" => _probeFigures,
 		"overlaps" => _probeOverlaps,
+		"marks" => _probeMarks,
 		_ => "?",
 	};
 }

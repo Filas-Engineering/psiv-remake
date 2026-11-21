@@ -358,6 +358,12 @@ void Interpreter::execute(Thread& thread) {
 	case Op::vehicle_remove:
 		host_.remove_vehicle(ins.name);
 		break;
+	case Op::learn:
+		host_.teach_ability(ins.name, ins.action.subject);
+		break;
+	case Op::follower:
+		host_.set_follower(ins.name);
+		break;
 	case Op::take:
 		host_.take_item(ins.name, static_cast<int>(ins.number));
 		break;

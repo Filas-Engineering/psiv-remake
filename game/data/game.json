@@ -3,14 +3,14 @@
 	"core_data": "../../core/data",
 	"areas": ["areas/tidewater.json", "areas/reed_path.json", "areas/bell_cove.json", "areas/saltgrass.json", "areas/kiln_upper.json", "areas/kiln_lower.json", "areas/brine_flats.json",
 		"areas/cinder_quay.json", "areas/ember_steps.json"],
-	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev", "events/saltgrass.ev", "events/kiln.ev", "events/flats.ev"],
+	"events": ["events/tidewater.ev", "events/reed_path.ev", "events/bell_cove.ev", "events/saltgrass.ev", "events/kiln.ev", "events/flats.ev", "events/steps.ev"],
 	"glossary": "text/glossary.txt",
 	"languages": [
 		{"code": "en", "strings": "text/en.strings", "text": "text/en.json"},
 		{"code": "ja", "strings": "text/ja.strings", "text": "text/ja.json"}
 	],
 	"journal": "journal.json",
-	"actors": ["dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler"],
+	"actors": ["dockhand", "ferrywoman", "guide", "kilnwright", "lamplighter", "peddler", "wayfarer"],
 	"presentation": {
 		"animations": ["bow", "jump", "nod", "shake", "shrug", "startle", "wave"],
 		"audio": ["battle_brass_warden", "battle_marsh_ambush", "brass_alarm", "defeat_low_tide", "dungeon_firing_floor", "dungeon_kiln_halls",
@@ -45,6 +45,10 @@
 		"cove.warden_seen",
 		"job.lost_cache.accepted",
 		"job.lost_cache.done",
+		"job.steps_courier.accepted",
+		"job.steps_courier.done",
+		"job.steps_lamps.accepted",
+		"job.steps_lamps.done",
 		"kiln.draft_felt",
 		"kiln.ember_taken",
 		"kiln.upper_seen",
@@ -53,6 +57,9 @@
 		"reed.skimmer_cleared",
 		"saltgrass.kiln_asked",
 		"saltgrass.kiln_done",
+		"steps.cog_joined",
+		"steps.trial_survived",
+		"steps.wayfarer_walking",
 		"tidewater.arrived",
 		"tidewater.board_read",
 		"tidewater.chart_read",
@@ -97,6 +104,8 @@
 	"autosave_slots": 3,
 	"manual_slots": 10,
 	"bosses": [{"encounter": "warden", "flag": "cove.warden_beaten"}],
+	"machine_step_heal": 1,
+	"outside_experience_until": "saltgrass.kiln_done",
 	"vehicles": [
 		{"id": "reed_skimmer", "crosses": ["floor", "water"], "speed_percent": 200, "encounters": [{"encounter": "marsh", "weight": 1}, {"encounter": "training", "weight": 1}]}
 	]

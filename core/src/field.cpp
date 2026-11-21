@@ -88,6 +88,38 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 		use.events.push_back(spent);
 		return use;
 	}
+	if (const Effect* teach = teachEffect(item->effects)) {
+		PartyMember& learner = party[static_cast<std::size_t>(target)];
+		const std::vector<std::string> known = knownAbilities(db, learner);
+		if (std::find(known.begin(), known.end(), teach->ability) != known.end()) {
+			Event kept;
+			kept.type = EventType::ItemHadNoEffect;
+			kept.ability = item->id;
+			use.events.push_back(kept);
+			return use;
+		}
+		learner.taught.push_back(teach->ability);
+		const AbilityDef* taught = db.ability(teach->ability);
+		if (taught && taught->kind == AbilityKind::Skill && !learner.skillUses.count(taught->id)) {
+			learner.skillUses[taught->id] = taught->uses;
+		}
+		if (--stock->second == 0) {
+			inventory.erase(stock);
+		}
+		Event learned;
+		learned.type = EventType::Message;
+		learned.target = target;
+		learned.message = "field.learned";
+		learned.params = {learner.characterId, teach->ability};
+		use.events.push_back(learned);
+		Event spent;
+		spent.type = EventType::ResourceSpent;
+		spent.ability = item->id;
+		spent.resource = ResourceKind::Item;
+		spent.amount = 1;
+		use.events.push_back(spent);
+		return use;
+	}
 	Battle battle = Battle::partyOnly(db, party);
 	const int user = chosen ? target : 0;
 	const std::vector<int> targets = battle.resolveTargets(user, item->targeting, target, effectsRevive(item->effects));

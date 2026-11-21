@@ -1,7 +1,7 @@
 {
 	"id": "ember_steps",
 	"kind": "field",
-	"encounter_mode": "visible",
+	"encounter_mode": "random",
 	"step_ms": 250,
 	"music": "field_ember_steps",
 	"region": "isles",
@@ -17,5 +17,22 @@
 	},
 	"exits": [
 		{"at": [0, 2], "to": "cinder_quay", "marker": "east_gate"}
+	],
+	"hooks": [
+		{"id": "wayfarer", "at": [3, 1], "event": "steps_wayfarer"},
+		{"id": "steps_console", "at": [5, 1], "event": "steps_console"},
+		{"id": "steps_board", "at": [7, 1], "event": "steps_board"},
+		{"id": "steps_tinker", "at": [3, 3], "event": "steps_tinker"},
+		{"id": "steps_sentinel", "at": [8, 2], "event": "steps_sentinel"}
+	],
+	"rests": [{"id": "steps_spring", "at": [6, 3], "cost": 0}],
+	"zones": [
+		{
+			"id": "steps",
+			"from": [1, 1],
+			"to": [8, 3],
+			"table": [{"encounter": "hive", "weight": 1}, {"encounter": "oozes", "weight": 1}, {"encounter": "crabs", "weight": 1}, {"encounter": "echoes", "weight": 1}],
+			"random": {"min_steps": 6, "max_steps": 10}
+		}
 	]
 }

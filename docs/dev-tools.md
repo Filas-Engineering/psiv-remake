@@ -47,7 +47,7 @@ Every developer command that changes the game marks it (`World::devMarked` in `g
 
 ## Console
 
-Opened with the backquote key. Type a command and press Enter; Up and Down recall earlier ones, Backspace erases, Escape or the backquote key closes it. Every command's outcome goes to the console and to the log (`dev: ...`). A refusal shows the game's own message and key, in the profile's language, for example `refused: 0, 0 is not a walkable cell of Reed Path. (game.refuse.dev_bad_cell)`. At the title only the lists, the overlays, the speed and the previewer work; the game commands say `Start or load a game first.`
+Opened with the backquote key. Type a command and press Enter; Up and Down recall earlier ones, Backspace erases, Escape or the backquote key closes it. Every command's outcome goes to the console and to the log (`dev: ...`). A refusal shows the game's own message and key, in the profile's language, for example `refused: 0, 0 is not a walkable cell of Reed Path. (game.refuse.dev_bad_cell)`. The console's own words, the overlays' labels, the badge and the previewer come from the text tables' `ui.dev.` keys in that language too; the commands and the `help` lines are the command language and stay as they are. At the title only the lists, the overlays, the speed and the previewer work; the game commands say `Start or load a game first.`
 
 | Command | What it does |
 | --- | --- |
@@ -58,9 +58,9 @@ Opened with the backquote key. Type a command and press Enter; Up and Down recal
 | `flag NAME on\|off` | Sets or clears a declared flag (`flag travel.isles_open on`); the area's flag hooks run as when a script sets it |
 | `give ID [COUNT]` | Adds items or equipment pieces, 1 by default, capped like any gain; a negative count takes them away (`give homing_shell 3`, `give tonic -1`). Not during a battle |
 | `money AMOUNT` | Adds money, or takes it away when negative, kept between 0 and the cap (`money 500`) |
-| `level MEMBER LEVEL` | Sets a roster member's level, 1 to 50, with no experience into it, and refills it as a rest does, reviving it (`level fighter 12`) |
+| `level MEMBER LEVEL` | Sets a roster member's level, 1 to 99, with no experience into it, and refills it as a rest does, reviving it (`level fighter 12`) |
 | `battle ENCOUNTER` | From the field, a battle with that encounter as a random battle; while riding, a vehicle battle (`battle warden`) |
-| `win`, `lose` | Ends the live battle: every enemy, or every party combatant, falls, then a round resolves, so the battle ends as that outcome leads (rewards, an event's `win` or `lose` branch, a game over). The round plays through the battle presentation |
+| `win`, `lose` | Ends the live battle: every enemy, or every party combatant, falls, then a round resolves, so the battle ends as that outcome leads (rewards, an event's `win` or `lose` branch, a game over). The round plays through the battle presentation, with a step before its outcome that brings the stage to the session's numbers and falls, since the command sets them outside the events, so the playback still matches the session (`battlesync`) |
 | `vehicle ID AREA MARKER` | From the field, gives the party a vehicle with field rules, or moves one it has, to a marker of a field area (`vehicle reed_skimmer reed_path skimmer_front`) |
 | `encounters on\|off` | Random battles, battles aboard and visible enemies' battles off or on for this session (not saved; a data reload keeps the switch) |
 | `event ID` | From the field, runs an event as a hook would (`event tidewater_chart`) |

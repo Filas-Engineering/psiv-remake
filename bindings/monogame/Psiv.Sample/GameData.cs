@@ -36,6 +36,11 @@ public sealed partial class GameData
 	public HashSet<string> Ambient { get; } = [];
 	public HashSet<string> Cues { get; } = [];
 	public Dictionary<string, ActionShape> Actions { get; } = [];
+	// Each ability's targeting, each equipment piece's battle use (an ability), and the statuses each enemy starts with,
+	// which a summoned or changed enemy shows from its first step.
+	public Dictionary<string, Targeting> AbilityTargeting { get; } = [];
+	public Dictionary<string, string> PieceUses { get; } = [];
+	public Dictionary<string, List<string>> EnemyStatuses { get; } = [];
 	// Where each event a hook starts begins: the hook's area and cell, for the event previewer.
 	public Dictionary<string, (string Area, int X, int Y)> EventStarts { get; } = [];
 
@@ -93,7 +98,12 @@ public sealed partial class GameData
 		d.Characters.UnionWith(Array(party.RootElement, "characters").Select(c => c.GetProperty("id").GetString()!));
 		d.Vehicles.UnionWith(Array(party.RootElement, "vehicles").Select(c => c.GetProperty("id").GetString()!));
 		using JsonDocument enemies = JsonDocument.Parse(File.ReadAllText(Path.Combine(core, "enemies.json")));
-		d.Enemies.UnionWith(Array(enemies.RootElement, "enemies").Select(c => c.GetProperty("id").GetString()!));
+		foreach (JsonElement e in Array(enemies.RootElement, "enemies"))
+		{
+			string id = e.GetProperty("id").GetString()!;
+			d.Enemies.Add(id);
+			d.EnemyStatuses[id] = [.. Array(e, "statuses").Select(x => x.GetString()!)];
+		}
 		d.Encounters.UnionWith(Array(enemies.RootElement, "encounters").Select(c => c.GetProperty("id").GetString()!));
 		using JsonDocument statuses = JsonDocument.Parse(File.ReadAllText(Path.Combine(core, "statuses.json")));
 		d.Statuses.UnionWith(Array(statuses.RootElement, "statuses").Select(c => c.GetProperty("id").GetString()!));
@@ -101,11 +111,20 @@ public sealed partial class GameData
 		foreach (JsonElement a in Array(abilities.RootElement, "abilities"))
 		{
 			d.Actions[a.GetProperty("id").GetString()!] = Shape(a.GetProperty("kind").GetString()!, a);
+			if (a.TryGetProperty("target", out JsonElement targeting) && GameSession.ParseName(NameKind.Targeting, targeting.GetString()!) is { } t)
+			{
+				d.AbilityTargeting[a.GetProperty("id").GetString()!] = (Targeting)t;
+			}
 		}
 		using JsonDocument items = JsonDocument.Parse(File.ReadAllText(Path.Combine(core, "items.json")));
 		foreach (JsonElement i in Array(items.RootElement, "items"))
 		{
 			d.Actions[i.GetProperty("id").GetString()!] = Shape("item", i);
+		}
+		using JsonDocument equipment = JsonDocument.Parse(File.ReadAllText(Path.Combine(core, "equipment.json")));
+		foreach (JsonElement piece in Array(equipment.RootElement, "equipment").Where(x => x.TryGetProperty("use", out _)))
+		{
+			d.PieceUses[piece.GetProperty("id").GetString()!] = piece.GetProperty("use").GetString()!;
 		}
 		return d;
 	}
@@ -120,7 +139,7 @@ public sealed partial class GameData
 		string effect = type switch
 		{
 			"physical_damage" or "elemental_damage" => "damage",
-			"heal" => "heal",
+			"heal" or "restore_tp" => "heal",
 			"revive" => "revive",
 			"apply_status" => "status",
 			"cure_status" => "cure",

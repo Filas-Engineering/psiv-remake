@@ -92,12 +92,13 @@ TEST(comboLogRoundTripsThroughText) {
 }
 
 TEST(everyPublicEnumHasAParser) {
-	CHECK_EQ(checkNames(parseElement), 5);
+	CHECK_EQ(checkNames(parseElement), 6);
 	CHECK_EQ(checkNames(parseStat), 5);
 	CHECK_EQ(checkNames(parseSide), 2);
 	CHECK_EQ(checkNames(parseTargeting), 8);
 	CHECK_EQ(checkNames(parseAbilityKind), 4);
-	CHECK_EQ(checkNames(parseEffectKind), 8);
+	CHECK_EQ(checkNames(parseEffectKind), 14);
+	CHECK_EQ(checkNames(parseCreatureKind), 3);
 	CHECK_EQ(checkNames(parseTravelTarget), 2);
 	CHECK_EQ(checkNames(parseEquipSlot), 5);
 	CHECK_EQ(checkNames(parseOpening), 3);
@@ -105,7 +106,7 @@ TEST(everyPublicEnumHasAParser) {
 	CHECK_EQ(checkNames(parseStatusAction), 3);
 	CHECK_EQ(checkNames(parseForcedTarget), 3);
 	CHECK_EQ(checkNames(parseStatusStacking), 3);
-	CHECK_EQ(checkNames(parseAiConditionKind), 8);
+	CHECK_EQ(checkNames(parseAiConditionKind), 14);
 	CHECK_EQ(checkNames(parseAiTargetRule), 7);
 	CHECK_EQ(checkNames(parseCommandKind), 6);
 	CHECK_EQ(checkNames(parseMacroTargetKind), 5);
@@ -113,7 +114,7 @@ TEST(everyPublicEnumHasAParser) {
 	CHECK_EQ(checkNames(parseMacroIssue), 14);
 	CHECK_EQ(checkNames(parseScriptedEndKind), 3);
 	CHECK_EQ(checkNames(parseAutoStop), 5);
-	CHECK_EQ(checkNames(parseEventType), 26);
+	CHECK_EQ(checkNames(parseEventType), 29);
 	CHECK_EQ(checkNames(parseOutcome), 5);
 	CHECK_EQ(checkNames(parseCancelReason), 7);
 	CHECK_EQ(checkNames(parseEffectiveness), 4);

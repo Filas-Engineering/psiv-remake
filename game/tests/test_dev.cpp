@@ -36,7 +36,7 @@ TEST(devCommandsRefuseAtTheTitleAndInTheWrongMode) {
 	CHECK_EQ(s.devGive("tonic", 0).key, std::string("game.refuse.dev_bad_count"));
 	CHECK_EQ(s.devGive("moonstone", 1).key, std::string("game.refuse.dev_unknown_thing"));
 	CHECK_EQ(s.devSetLevel("medic", 5).key, std::string("game.refuse.dev_unknown_member"));
-	CHECK_EQ(s.devSetLevel("fighter", 51).key, std::string("game.refuse.dev_bad_level"));
+	CHECK_EQ(s.devSetLevel("fighter", 100).key, std::string("game.refuse.dev_bad_level"));
 	CHECK_EQ(s.devBattle("nothing").key, std::string("game.refuse.dev_unknown_encounter"));
 	CHECK_EQ(s.devEndBattle(true).key, std::string("game.refuse.no_battle"));
 	CHECK_EQ(s.devVehicle("reed_skimmer", "tidewater", "start").key, std::string("game.refuse.dev_vehicle_outdoors"));

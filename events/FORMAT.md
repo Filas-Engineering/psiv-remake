@@ -228,10 +228,12 @@ Inside `together` and `race` you can use only actor, camera, panel, screen and a
 | `vehicle give <vehicle> <map> <marker>` | `vehicle give skiff harbor pier_end` (the party now has it, standing there) |
 | `vehicle place <vehicle> <map> <marker>` | `vehicle place skiff harbor pier_end` (moves a vehicle the party has) |
 | `vehicle remove <vehicle>` | `vehicle remove skiff` (the party no longer has it) |
+| `learn <member> <ability>` | `learn guide ward_song` (the member learns a technique or skill for good) |
+| `follower <actor>` | `follower peddler` (walks with the party without joining it); `follower none` ends it |
 | `lock player` | stops player input during the scene |
 | `unlock player` | gives control back |
 
-The `vehicle` commands change the game at once, like `give`, and apply while skipping. With a registry the vehicle must be listed on a `vehicle` line and the marker must be on the map, as for `warp`; they do not change the map the party is on. Where a vehicle may stand, and what happens to a party riding one that a script moves or removes, is the game's business (`../game/README.md`).
+The `vehicle`, `learn` and `follower` commands change the game at once, like `give`, and apply while skipping. With a registry, `learn` names a listed `member` and `ability`, and `follower` a listed `actor`. With a registry the vehicle must be listed on a `vehicle` line and the marker must be on the map, as for `warp`; they do not change the map the party is on. Where a vehicle may stand, and what happens to a party riding one that a script moves or removes, is the game's business (`../game/README.md`).
 
 ## Menus and rests
 
@@ -432,7 +434,7 @@ var harbor.first_stop
 var market.offer local default 30
 ```
 
-- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `face` and `anim` subject), `marker` (`move`, `face` and `warp` targets), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation`, `portrait` (the `as` of `say`), `item`, `member` (`party` and `name entry`), `encounter`, `enemy` (`until defeat`), `vehicle` (`battle ... aboard`, the `vehicle` commands and the `vehicle` and `aboard` tests), `map`, `shop` and `rest`. Panel IDs are not listed; each scene names its own.
+- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `face` and `anim` subject), `marker` (`move`, `face` and `warp` targets), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation`, `portrait` (the `as` of `say`), `item`, `member` (`party` and `name entry`), `encounter`, `enemy` (`until defeat`), `vehicle` (`battle ... aboard`, the `vehicle` commands and the `vehicle` and `aboard` tests), `ability` (`learn`), `map`, `shop` and `rest`. Panel IDs are not listed; each scene names its own.
 - `map_markers <map> <marker>...` lists the markers on one map; they count as listed markers. A marker on several maps is listed for each. `warp <map> <marker>` to a marker that is not on that map is an error. The checker also follows the map the party is on through each event, from its last `warp` (and from the start, see `event_map`), so a `move` to a marker on another map is an error too. Where the map cannot be known (after a branch that warps on one side only, a `call`, a `label`, or in a loop that warps), nothing more is checked until the next `warp`.
 - `event_map <map> <event>...` says the game starts those events on that map, for example from a hook in that area. An event listed for one map starts the move check on it; one listed for several, or none, starts with the map unknown.
 - `enemy <name>...` lists the enemies a `battle ... until defeat` may name.

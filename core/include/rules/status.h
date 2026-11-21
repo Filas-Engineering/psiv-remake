@@ -42,6 +42,8 @@ struct StatusDef {
 	// Kept when its holder is defeated, and so after a revive.
 	bool survivesDefeat = false;
 	bool restCures = true;
+	// When nonzero, no hit takes more than this from the holder (B11).
+	int damageCap = 0;
 };
 
 struct ActiveStatus {

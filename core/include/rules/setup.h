@@ -5,6 +5,7 @@
 #include "rules/types.h"
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,8 @@ struct BattleSetup {
 	ScriptedEnd scriptedEnd;
 	// With flags.vehicleBattle: the vehicle that fights for the party. The party rides aboard it.
 	std::string vehicle;
+	// The vehicle's skill uses left from earlier battles; a skill left out starts full (B19).
+	std::map<std::string, int> vehicleSkillUses = {};
 	// Difficulty id; empty applies no overlay.
 	std::string difficulty;
 	RewardMultiplier rewardMultiplier = RewardMultiplier::X1;

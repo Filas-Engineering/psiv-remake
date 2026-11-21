@@ -37,7 +37,7 @@ struct Settings {
 };
 
 // A guild job's state only moves forward (UI-012); a job that is not yet available has no entry.
-enum class JobState { Available, Accepted, Completed };
+enum class JobState { Available, Accepted, Completed, Missed };
 
 const char* toString(JobState state);
 bool parseJobState(const std::string& text, JobState& out);
@@ -80,6 +80,8 @@ struct VehiclePlace {
 	// reach it (FLD-063).
 	std::string homeArea;
 	Cell home;
+	// Its skill uses left from earlier battles (B19); a skill left out is full. Rest fills them all.
+	std::map<std::string, int> skillUses = {};
 };
 
 // A save chunk this build does not know, kept and written back unchanged (SAV-020).
@@ -119,6 +121,8 @@ struct World {
 	// The vehicles the party has, by vehicle id, and the one it rides (empty for none).
 	std::map<std::string, VehiclePlace> vehicles;
 	std::string aboard;
+	// An actor who walks with the party without joining it (F14); empty for none.
+	std::string follower;
 	// Where the party stood outside the dungeon it is in, which leaving the dungeon at once returns to (FLD-051); the
 	// area is empty when the party is not in a dungeon or came in by a script's warp from another dungeon.
 	std::string dungeonExitArea;

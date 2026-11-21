@@ -30,6 +30,7 @@ const Keyword keywords[] = {
 	{"rest", NameKind::rest_point},
 	{"enemy", NameKind::enemy},
 	{"vehicle", NameKind::vehicle},
+	{"ability", NameKind::ability},
 };
 
 bool parse_integer(const std::string& word, std::int64_t& out) {
@@ -239,6 +240,8 @@ const char* name_kind_name(NameKind kind) {
 		return "enemy";
 	case NameKind::vehicle:
 		return "vehicle";
+	case NameKind::ability:
+		return "ability";
 	}
 	return "name";
 }

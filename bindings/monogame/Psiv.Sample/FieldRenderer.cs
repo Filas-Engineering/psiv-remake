@@ -14,8 +14,9 @@ public sealed class FieldRenderer
 {
 	private const int Tile = Art.Tile;
 	private const int BannerMs = 2600;
-	// Every member of a full lineup (rules::kMaxPartySize, 5) walks behind the leader.
-	private const int Followers = 4;
+	// Every member of a full lineup (rules::kMaxPartySize, 5) walks behind the leader, and a follower who is not a
+	// member walks last.
+	private const int Followers = 5;
 
 	// A position that slides from where it was drawn to the cell the game reports.
 	private sealed class Glide
@@ -192,7 +193,7 @@ public sealed class FieldRenderer
 	private string _area = "";
 	private int _lastClock = -1;
 	private readonly Glide _leader = new();
-	private readonly Glide[] _followers = [new(), new(), new(), new()];
+	private readonly Glide[] _followers = [new(), new(), new(), new(), new()];
 	private readonly List<(int X, int Y)> _trail = [];
 	private readonly Dictionary<int, Glide> _enemies = [];
 	private readonly Dictionary<string, ActorWalk> _actors = [];
@@ -207,7 +208,7 @@ public sealed class FieldRenderer
 	private readonly Dictionary<string, PoseRun> _poseRuns = [];
 	private int _bannerLeftMs;
 	private string _bannerTitle = "";
-	private string _bannerKind = "";
+	private AreaKind _bannerKind;
 
 	public int CameraX { get; private set; }
 	public int CameraY { get; private set; }
@@ -525,7 +526,7 @@ public sealed class FieldRenderer
 			ClearScene();
 			_bannerLeftMs = BannerMs;
 			_bannerTitle = f.AreaName;
-			_bannerKind = KindName(f.AreaKind);
+			_bannerKind = f.AreaKind;
 			dt = 0;
 		}
 		_bannerLeftMs = Math.Max(0, _bannerLeftMs - dt);
@@ -999,8 +1000,8 @@ public sealed class FieldRenderer
 		}
 	}
 
-	// The area's name, shown for a moment after arriving.
-	public void DrawBanner(IDrawSurface s)
+	// The area's name and its kind as `kindName` words it, shown for a moment after arriving.
+	public void DrawBanner(IDrawSurface s, Func<AreaKind, string> kindName)
 	{
 		if (_bannerLeftMs <= 0)
 		{
@@ -1008,11 +1009,12 @@ public sealed class FieldRenderer
 		}
 		int shown = BannerMs - _bannerLeftMs;
 		float alpha = Math.Clamp(Math.Min(shown / 300f, _bannerLeftMs / 500f), 0f, 1f);
-		int w = Math.Max(s.Measure(_bannerTitle, Style.Title), s.Measure(_bannerKind, Style.Small)) + 80;
+		string kind = kindName(_bannerKind);
+		int w = Math.Max(s.Measure(_bannerTitle, Style.Title), s.Measure(kind, Style.Small)) + 80;
 		int x = (s.Width - w) / 2;
 		int y = 70 - (int)((1f - alpha) * 16);
 		Style.Box(s, x, y, w, 86, alpha);
-		s.Text(_bannerKind, (s.Width - s.Measure(_bannerKind, Style.Small)) / 2, y + 14, Style.Dim * alpha, Style.Small);
+		s.Text(kind, (s.Width - s.Measure(kind, Style.Small)) / 2, y + 14, Style.Dim * alpha, Style.Small);
 		s.Text(_bannerTitle, (s.Width - s.Measure(_bannerTitle, Style.Title)) / 2, y + 38, Style.Accent * alpha, Style.Title);
 	}
 }

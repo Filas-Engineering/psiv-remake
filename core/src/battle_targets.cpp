@@ -104,17 +104,25 @@ int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const
 		return actor;
 	case EffectKind::Heal:
 		break;
+	// The original's pick for a one-ally raise never moves off the first member in line, whatever that member's state.
+	case EffectKind::ModifyStat:
+		return party.empty() ? requested : party.front();
 	case EffectKind::PhysicalDamage:
 	case EffectKind::ElementalDamage:
 	case EffectKind::ApplyStatus:
-	case EffectKind::ModifyStat:
 	case EffectKind::Travel:
+	case EffectKind::InstantDefeat:
+	case EffectKind::RestoreTp:
+	case EffectKind::StripModifiers:
+	case EffectKind::Summon:
+	case EffectKind::Merge:
+	case EffectKind::Teach:
 		return requested;
 	}
 	int best = -1;
 	for (int ally : party) {
 		const Combatant& c = combatants_[ally];
-		if (c.alive() && (best < 0 || c.stats.maxHp - c.hp >= combatants_[best].stats.maxHp - combatants_[best].hp)) {
+		if (c.alive() && effects.front().reaches(c.kind) && (best < 0 || c.stats.maxHp - c.hp >= combatants_[best].stats.maxHp - combatants_[best].hp)) {
 			best = ally;
 		}
 	}

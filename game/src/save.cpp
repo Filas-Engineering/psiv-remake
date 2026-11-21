@@ -150,6 +150,9 @@ std::string partyChunk(const World& w) {
 		for (const rules::ActiveStatus& status : m.statuses) {
 			o.key("status").text(status.id).num(status.remaining).end();
 		}
+		for (const std::string& ability : m.taught) {
+			o.key("taught").text(ability).end();
+		}
 	}
 	for (const auto& [id, name] : w.memberNames) {
 		o.key("named").text(id).text(name).end();
@@ -189,6 +192,9 @@ std::string worldChunk(const World& w) {
 	o.key("grace").num(w.graceMs).end();
 	o.key("random").num(w.randomCounter).num(w.randomThreshold).end();
 	o.key("play").num(w.playTimeMs).end();
+	if (!w.follower.empty()) {
+		o.key("follower").text(w.follower).end();
+	}
 	return o.str();
 }
 
@@ -241,6 +247,9 @@ std::string travelChunk(const World& w) {
 	o.key("aboard").text(w.aboard).end();
 	for (const auto& [id, v] : w.vehicles) {
 		o.key("vehicle").text(id).text(v.area).num(v.cell.x).num(v.cell.y).text(toString(v.facing)).text(v.homeArea).num(v.home.x).num(v.home.y).end();
+		for (const auto& [skill, uses] : v.skillUses) {
+			o.key("uses").text(id).text(skill).num(uses).end();
+		}
 	}
 	o.key("dungeon_exit").text(w.dungeonExitArea).num(w.dungeonExitCell.x).num(w.dungeonExitCell.y).end();
 	return o.str();
@@ -396,6 +405,12 @@ bool readParty(const std::string& payload, World& w, std::string& error) {
 			} else {
 				w.roster.back().statuses.push_back({in.text(l[1]), static_cast<int>(in.num(l[2]))});
 			}
+		} else if (k == "taught" && in.need(l, 1)) {
+			if (w.roster.empty()) {
+				in.fail("'taught' before any member");
+			} else {
+				w.roster.back().taught.push_back(in.text(l[1]));
+			}
 		} else if (k == "named" && in.need(l, 2)) {
 			w.memberNames[in.text(l[1])] = in.text(l[2]);
 		} else if (k != "lineup") {
@@ -432,6 +447,7 @@ bool readWorld(const std::string& payload, World& w, std::string& error) {
 	w.vars.clear();
 	w.visitedAreas.clear();
 	w.enemies.clear();
+	w.follower.clear();
 	for (const auto& l : in.lines()) {
 		const std::string& k = l[0];
 		if (k == "flag" && in.need(l, 2)) {
@@ -464,6 +480,8 @@ bool readWorld(const std::string& payload, World& w, std::string& error) {
 			w.randomThreshold = static_cast<int>(in.num(l[2]));
 		} else if (k == "play" && in.need(l, 1)) {
 			w.playTimeMs = in.num(l[1]);
+		} else if (k == "follower" && in.need(l, 1)) {
+			w.follower = in.text(l[1]);
 		} else {
 			in.fail("unknown line '" + k + "'");
 		}
@@ -609,6 +627,13 @@ bool readTravel(const std::string& payload, World& w, std::string& error) {
 			place.homeArea = in.text(l[6]);
 			place.home = {static_cast<int>(in.num(l[7])), static_cast<int>(in.num(l[8]))};
 			w.vehicles[in.text(l[1])] = place;
+		} else if (l[0] == "uses" && in.need(l, 3)) {
+			auto vehicle = w.vehicles.find(in.text(l[1]));
+			if (vehicle == w.vehicles.end()) {
+				in.fail("'uses' for a vehicle the party does not have");
+			} else {
+				vehicle->second.skillUses[in.text(l[2])] = static_cast<int>(in.num(l[3]));
+			}
 		} else if (l[0] == "dungeon_exit" && in.need(l, 3)) {
 			w.dungeonExitArea = in.text(l[1]);
 			w.dungeonExitCell = {static_cast<int>(in.num(l[2])), static_cast<int>(in.num(l[3]))};
@@ -661,28 +686,30 @@ bool readActors(const std::string& payload, World& w, std::string& error) {
 using ChunkReader = bool (*)(const std::string&, World&, std::string&);
 using ChunkWriter = std::string (*)(const World&);
 
+// A chunk from `oldest` up to `version` reads directly: the newer versions only add lines.
 struct KnownChunk {
 	const char* type;
 	int version;
 	ChunkWriter write;
 	ChunkReader read;
+	int oldest;
 };
 
 // In the order they are written.
 const KnownChunk kWorldChunks[] = {
-	{"location", 1, locationChunk, readLocation},
-	{"party", 2, partyChunk, readParty},
-	{"inventory", 1, inventoryChunk, readInventory},
-	{"world", 1, worldChunk, readWorld},
-	{"battle", 2, battleChunk, readBattle},
-	{"random", 1, randomChunk, readRandom},
-	{"difficulty", 1, difficultyChunk, readDifficulty},
-	{"quests", 1, questsChunk, readQuests},
-	{"unlocks", 1, unlocksChunk, readUnlocks},
-	{"actors", 1, actorsChunk, readActors},
-	{"talk", 1, talkChunk, readTalk},
-	{"travel", 1, travelChunk, readTravel},
-	{"dev", 1, devChunk, readDev},
+	{"location", 1, locationChunk, readLocation, 1},
+	{"party", 3, partyChunk, readParty, 2},
+	{"inventory", 1, inventoryChunk, readInventory, 1},
+	{"world", 2, worldChunk, readWorld, 1},
+	{"battle", 2, battleChunk, readBattle, 2},
+	{"random", 1, randomChunk, readRandom, 1},
+	{"difficulty", 1, difficultyChunk, readDifficulty, 1},
+	{"quests", 1, questsChunk, readQuests, 1},
+	{"unlocks", 1, unlocksChunk, readUnlocks, 1},
+	{"actors", 1, actorsChunk, readActors, 1},
+	{"talk", 1, talkChunk, readTalk, 1},
+	{"travel", 2, travelChunk, readTravel, 1},
+	{"dev", 1, devChunk, readDev, 1},
 };
 
 // The clear-data record holds these, from the same writers.
@@ -757,7 +784,7 @@ bool applyChunks(const std::vector<Chunk>& chunks, World& w, const std::vector<s
 			error = "chunk '" + c.type + "' is from a newer build (version " + std::to_string(c.version) + ")";
 			return false;
 		}
-		if (c.version < known->version) {
+		if (c.version < known->oldest) {
 			error = "chunk '" + c.type + "' has version " + std::to_string(c.version) + ", which no migration produces";
 			return false;
 		}
@@ -865,6 +892,12 @@ bool migrate5to6(std::vector<Chunk>& chunks, std::string&) {
 	return true;
 }
 
+// Schema 6 to 7: the party, world and travel chunks gain lines (abilities taught, the follower, vehicle skill uses),
+// which a schema 6 save simply lacks.
+bool migrate6to7(std::vector<Chunk>&, std::string&) {
+	return true;
+}
+
 struct Migration {
 	int from;
 	bool (*apply)(std::vector<Chunk>& chunks, std::string& error);
@@ -877,6 +910,7 @@ const Migration kMigrations[] = {
 	{3, migrate3to4},
 	{4, migrate4to5},
 	{5, migrate5to6},
+	{6, migrate6to7},
 };
 
 std::string headerChunk(const SaveFile& save) {

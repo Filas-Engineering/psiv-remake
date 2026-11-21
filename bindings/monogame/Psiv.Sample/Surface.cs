@@ -574,6 +574,8 @@ public static class Fonts
 			Path.Combine(windows, "segoeui.ttf"),
 			Path.Combine(windows, "arial.ttf"),
 			Path.Combine(windows, "tahoma.ttf"),
+			// The Hiragino collection below draws no Japanese glyphs through FontStashSharp on macOS; Arial Unicode does.
+			"/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
 			"/System/Library/Fonts/Hiragino Sans GB.ttc",
 			"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
 			"/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",

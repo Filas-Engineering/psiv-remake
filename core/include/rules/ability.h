@@ -19,6 +19,11 @@ struct Effect {
 	// ModifyStat: raises the stat rather than lowering it.
 	bool raises = false;
 	TravelTarget travel = TravelTarget::Town;
+	// The kinds of target the effect works on; empty works on every kind.
+	std::vector<CreatureKind> kinds = {};
+	// Teach: the ability the target learns for good.
+	std::string ability = {};
+	bool reaches(CreatureKind kind) const;
 };
 
 struct AbilityDef {
@@ -31,6 +36,8 @@ struct AbilityDef {
 	std::vector<Effect> effects;
 	// Usable on party members outside battle.
 	bool field = false;
+	// A combination component names an ability or a family; any ability of that family fills it (B3).
+	std::string family = {};
 
 	bool revives() const;
 	bool hasEffect(EffectKind kind) const;
@@ -45,6 +52,8 @@ struct ItemDef {
 };
 
 bool effectsRevive(const std::vector<Effect>& effects);
+// The Teach effect of a field item, or null. Like travel, it acts on the party between battles only.
+const Effect* teachEffect(const std::vector<Effect>& effects);
 // The Travel effect of a field item or technique, or null. The game moves the party; core only takes the cost, and a
 // battle refuses the command.
 const Effect* travelEffect(const std::vector<Effect>& effects);

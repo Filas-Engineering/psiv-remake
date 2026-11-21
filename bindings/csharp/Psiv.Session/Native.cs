@@ -356,7 +356,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 9;
+	public const uint AbiVersion = 10;
 
 	[LibraryImport(Library, EntryPoint = "psiv_abi_version")] public static partial uint AbiVersionOf();
 	[LibraryImport(Library, EntryPoint = "psiv_version")] public static partial IntPtr Version();
@@ -511,6 +511,11 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_save_text")] public static partial int SaveText(SessionHandle s, out IntPtr text);
 	[LibraryImport(Library, EntryPoint = "psiv_load_text", StringMarshalling = StringMarshalling.Utf8)] public static partial int LoadText(SessionHandle s, string text);
 	[LibraryImport(Library, EntryPoint = "psiv_session_reload")] public static partial int SessionReload(SessionHandle s);
+	[LibraryImport(Library, EntryPoint = "psiv_follower")] public static partial int Follower(SessionHandle s, out IntPtr actor);
+	[LibraryImport(Library, EntryPoint = "psiv_character_kind", StringMarshalling = StringMarshalling.Utf8)] public static partial int CharacterKind(SessionHandle s, string character, out int kind);
+	[LibraryImport(Library, EntryPoint = "psiv_vehicle_skill_uses", StringMarshalling = StringMarshalling.Utf8)] public static partial int VehicleSkillUses(SessionHandle s, string vehicle, string skill, out int uses);
+	[LibraryImport(Library, EntryPoint = "psiv_clear_record_exists")] public static partial int ClearRecordExists(SessionHandle s, out int exists);
+	[LibraryImport(Library, EntryPoint = "psiv_audio_ids")] public static partial int AudioIds(SessionHandle s, out IntPtr ids, out int count);
 
 	public static string Str(IntPtr p) => p == IntPtr.Zero ? "" : Marshal.PtrToStringUTF8(p) ?? "";
 

@@ -120,7 +120,12 @@ ACC_CHECK(acc_bat_17, "ACC-BAT-17", "BAT-103, BAT-104") {
 			battle.resolveRound();
 			++rounds;
 		}
-		t.expect(battle.outcome() != Outcome::Ongoing, id + ": an auto-battle did not end within 60 rounds");
+		// A battle that replaces its fallen ends only by escape, which the auto macro has no step for.
+		if (encounter.replaceFallen) {
+			t.expect(battle.outcome() != Outcome::Victory, id + ": a battle that replaces its fallen was won");
+		} else {
+			t.expect(battle.outcome() != Outcome::Ongoing, id + ": an auto-battle did not end within 60 rounds");
+		}
 		++encounters;
 	}
 

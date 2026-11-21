@@ -44,8 +44,17 @@ struct Combatant {
 	bool hitByAttack = false;
 	bool hitByAbility = false;
 	bool hitByTechnique = false;
+	bool hitByGroup = false;
+	// Enemies after a Party first opening, until the Ambushed override reads it.
+	bool ambushed = false;
 	// A party member riding a vehicle in a vehicle battle: it takes no command and cannot be targeted.
 	bool aboard = false;
+	CreatureKind kind = CreatureKind::Living;
+	bool vulnerable = false;
+	// Enemies: the formation position, 0 to 7, for what stands beside what.
+	int position = -1;
+	// An enemy that merged into another: out of the battle without being defeated.
+	bool gone = false;
 
 	bool alive() const { return hp > 0; }
 	bool knows(const std::string& abilityId) const;

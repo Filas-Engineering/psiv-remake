@@ -14,6 +14,10 @@ namespace {
 
 // Keys core returns from setCommand, canEquip, equip and the out-of-battle functions, or emits in Message events.
 const char* const kFixedKeys[] = {
+	"battle.instant_defeat",
+	"battle.instant_defeat_immune",
+	"battle.instant_defeat_resisted",
+	"battle.machine_recovered",
 	"battle.opening.enemy_first",
 	"battle.opening.party_first",
 	"battle.stat_resisted",
@@ -42,6 +46,7 @@ const char* const kFixedKeys[] = {
 	"field.silenced",
 	"field.unknown_ability",
 	"field.unknown_item",
+	"field.learned",
 	"field.unknown_member",
 	"field.user_down",
 };

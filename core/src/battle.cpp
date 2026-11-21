@@ -25,6 +25,12 @@ Combatant fromEnemy(const Database& db, const EnemyDef& def, const std::string& 
 	c.abilities = def.abilities;
 	c.affinities = def.affinities;
 	c.statusResist = def.statusResist;
+	c.kind = def.kind;
+	c.vulnerable = def.vulnerable;
+	for (const std::string& id : def.statuses) {
+		const StatusDef* status = db.status(id);
+		c.statuses.push_back({id, status ? status->enemyDuration > 0 ? status->enemyDuration : status->duration : 0});
+	}
 	for (const std::string& id : def.abilities) {
 		const AbilityDef* ability = db.ability(id);
 		if (ability && ability->kind == AbilityKind::Skill) {
@@ -34,8 +40,9 @@ Combatant fromEnemy(const Database& db, const EnemyDef& def, const std::string& 
 	return c;
 }
 
-Combatant fromVehicle(const Database& db, const VehicleDef& def) {
+Combatant fromVehicle(const Database& db, const VehicleDef& def, const std::map<std::string, int>& usesLeft) {
 	Combatant c;
+	c.kind = CreatureKind::Machine;
 	c.defId = def.id;
 	c.name = def.name;
 	c.side = Side::Party;
@@ -50,7 +57,8 @@ Combatant fromVehicle(const Database& db, const VehicleDef& def) {
 	for (const std::string& id : def.abilities) {
 		const AbilityDef* ability = db.ability(id);
 		if (ability && ability->kind == AbilityKind::Skill) {
-			c.skillUses[id] = ability->uses;
+			const auto left = usesLeft.find(id);
+			c.skillUses[id] = left == usesLeft.end() ? ability->uses : std::clamp(left->second, 0, ability->uses);
 		}
 	}
 	return c;
@@ -95,6 +103,7 @@ Combatant memberCombatant(const Database& db, const PartyMember& member) {
 	c.skillUses = member.skillUses;
 	c.affinities = def.affinities;
 	c.statusResist = def.statusResist;
+	c.kind = def.kind;
 	for (const auto& [slot, id] : member.equipment) {
 		const EquipmentDef& piece = *db.equipmentPiece(id);
 		if (!piece.attack.empty()) {
@@ -187,7 +196,7 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 	}
 	if (const VehicleDef* vehicle = setup.flags.vehicleBattle ? rulesDb.vehicle(setup.vehicle) : nullptr) {
 		battle.vehicleIndex_ = static_cast<int>(battle.combatants_.size());
-		battle.combatants_.push_back(fromVehicle(rulesDb, *vehicle));
+		battle.combatants_.push_back(fromVehicle(rulesDb, *vehicle, setup.vehicleSkillUses));
 	}
 	for (const FormationSlot& slot : setup.enemies) {
 		const EnemyDef* def = rulesDb.enemy(slot.enemy);
@@ -195,7 +204,11 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 			return Result<Battle>::failure("unknown enemy '" + slot.enemy + "'");
 		}
 		battle.combatants_.push_back(fromEnemy(rulesDb, *def, slot.group));
+		battle.combatants_.back().position = static_cast<int>(battle.combatants_.size()) - 1 - battle.partyCount_;
+		battle.combatants_.back().ambushed = setup.opening == Opening::PartyFirst;
 	}
+	battle.startingCount_ = static_cast<int>(battle.combatants_.size());
+	battle.rewards_.memberExperience.assign(setup.party.size(), 0);
 	BattleSetup& kept = battle.record_.setup;
 	if (kept.escapeRating < 0) {
 		for (int i = battle.partyCount_; i < static_cast<int>(battle.combatants_.size()); ++i) {
@@ -275,10 +288,13 @@ Message Battle::setCommand(int actor, const Command& command) {
 		break;
 	}
 	case CommandKind::Item:
+		if (wornPiece(actor, command.id)) {
+			break;
+		}
 		if (!db_->item(command.id)) {
 			return {"command.unknown_item", {command.id}};
 		}
-		if (travelEffect(db_->item(command.id)->effects)) {
+		if (travelEffect(db_->item(command.id)->effects) || teachEffect(db_->item(command.id)->effects)) {
 			return {"command.field_only", {command.id}};
 		}
 		if (actor == vehicleIndex_) {
@@ -468,7 +484,9 @@ std::vector<Event> Battle::resolveRound() {
 	emit(out, EventType::RoundEnded);
 	if (outcome_ != Outcome::Ongoing) {
 		drawDrops();
-		const Rewards earned = rewards();
+		rewards_ = computeRewards();
+		recoverMachines(out);
+		const Rewards& earned = rewards_;
 		Event& ended = emit(out, EventType::BattleEnded);
 		ended.outcome = outcome_;
 		ended.experience = earned.experience;
@@ -561,7 +579,7 @@ void Battle::drawDrops() {
 // Totals are scaled once and rounded down, so a 1.5x multiplier never loses more than one point. A vehicle battle
 // halves the experience. Each party member who is not defeated gets an even share, rounded down; in a vehicle
 // battle those are the members aboard, and the vehicle gets none.
-Rewards Battle::rewards() const {
+Rewards Battle::computeRewards() const {
 	Rewards rewards;
 	const int members = static_cast<int>(record_.setup.party.size());
 	rewards.memberExperience.assign(static_cast<std::size_t>(members), 0);
@@ -573,7 +591,7 @@ Rewards Battle::rewards() const {
 	long long currency = 0;
 	for (int i = partyCount_; i < static_cast<int>(combatants_.size()); ++i) {
 		const EnemyDef* def = db_->enemy(combatants_[i].defId);
-		if (def && (outcome_ == Outcome::Victory || !combatants_[i].alive())) {
+		if (def && !combatants_[i].gone && (outcome_ == Outcome::Victory || !combatants_[i].alive())) {
 			experience += def->experience;
 			currency += def->currency;
 		}
@@ -590,6 +608,88 @@ Rewards Battle::rewards() const {
 		rewards.memberExperience[i] = combatants_[i].alive() ? rewards.experience / std::max(1, living) : 0;
 	}
 	return rewards;
+}
+
+// After a won or escaped battle every fallen machine member stands up with the rules' hit points (P6), once the
+// experience has been shared out among those standing.
+void Battle::recoverMachines(std::vector<Event>& out) {
+	const int recoverHp = db_->battleRules.machineRecoverHp;
+	if (recoverHp <= 0 || outcome_ == Outcome::Defeat) {
+		return;
+	}
+	for (int i = 0; i < static_cast<int>(record_.setup.party.size()); ++i) {
+		Combatant& c = combatants_[i];
+		if (c.kind != CreatureKind::Machine || c.alive()) {
+			continue;
+		}
+		c.hp = std::min(recoverHp, c.stats.maxHp);
+		removeStatus(i, kDefeatedStatus);
+		Event& e = emit(out, EventType::Revived);
+		e.target = i;
+		e.amount = c.hp;
+		e.hp = c.hp;
+		e.message = "battle.machine_recovered";
+	}
+}
+
+std::map<std::string, int> Battle::vehicleSkillUses() const {
+	return vehicleIndex_ >= 0 ? combatants_[vehicleIndex_].skillUses : std::map<std::string, int>();
+}
+
+int Battle::addEnemy(const EnemyDef& def, const std::string& group, int position, int actor, std::vector<Event>& out) {
+	combatants_.push_back(fromEnemy(*db_, def, group));
+	const int index = static_cast<int>(combatants_.size()) - 1;
+	combatants_.back().position = position;
+	commands_.emplace_back();
+	lastCommands_.emplace_back();
+	forced_.push_back(false);
+	aiTurn_.push_back(false);
+	syncPins(index);
+	Event& e = emit(out, EventType::EnemyJoined);
+	e.actor = actor;
+	e.target = index;
+	e.ids = {combatants_.back().defId};
+	e.groups = {combatants_.back().group};
+	e.amount = position;
+	e.hp = combatants_.back().hp;
+	return index;
+}
+
+// The combatant takes the new form at full hit points with that form's statuses; its place, side and group stay.
+void Battle::transform(int target, const EnemyDef& def, std::vector<Event>& out) {
+	const std::vector<ActiveStatus> statuses = combatants_[target].statuses;
+	for (const ActiveStatus& active : statuses) {
+		emitStatusRemoved(-1, target, active.id, StatusEnd::Defeated, out);
+	}
+	const Combatant before = combatants_[target];
+	combatants_[target] = fromEnemy(*db_, def, before.group);
+	combatants_[target].position = before.position;
+	combatants_[target].lastAttacker = before.lastAttacker;
+	syncPins(target);
+	Event& e = emit(out, EventType::EnemyTransformed);
+	e.target = target;
+	e.ids = {def.id};
+	e.groups = {before.group};
+	e.hp = combatants_[target].hp;
+}
+
+// A free position is inside the formation and holds no enemy still in the battle.
+std::vector<int> Battle::freeSlotsBeside(int actor) const {
+	const int position = combatants_[actor].position;
+	std::vector<int> free;
+	for (int candidate : {position - 1, position + 1}) {
+		if (candidate < 0 || candidate >= kMaxEnemies) {
+			continue;
+		}
+		bool taken = false;
+		for (int i = partyCount_; i < static_cast<int>(combatants_.size()); ++i) {
+			taken = taken || (combatants_[i].alive() && combatants_[i].position == candidate);
+		}
+		if (!taken) {
+			free.push_back(candidate);
+		}
+	}
+	return free;
 }
 
 std::vector<PartyMember> Battle::partyState() const {

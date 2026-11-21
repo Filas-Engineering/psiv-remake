@@ -113,7 +113,7 @@ public sealed partial class SampleController
 		int y = DialogueTop(s, field);
 		if (y > s.Height / 2 && _panels.Count == 0)
 		{
-			_field.DrawBanner(s);
+			_field.DrawBanner(s, AreaKindText);
 		}
 		int x = 24;
 		int w = s.Width - 48;
@@ -152,7 +152,7 @@ public sealed partial class SampleController
 				left -= l.Length + 1;
 				ty += Px(Style.LineHeight);
 			}
-			string hint = $"{Hint(GameAction.Confirm)} next" + (_s.CanSkip ? $"   {Hint(GameAction.Skip)} skip" : "");
+			string hint = T("ui.dialogue.next", Hint(GameAction.Confirm)) + (_s.CanSkip ? "   " + T("ui.dialogue.skip", Hint(GameAction.Skip)) : "");
 			t.Text(hint, x + w - t.Measure(hint, Style.Small) - 58, y + DialogueHeight - Px(32), Style.Dim, Style.Small);
 			if (all)
 			{
@@ -161,7 +161,7 @@ public sealed partial class SampleController
 		}
 		else if (_s.Choice() is { } choice)
 		{
-			t.Text(choice.Prompt.Length == 0 ? "Choose:" : choice.Prompt, x + 26, y + Px(22), Style.Accent);
+			t.Text(choice.Prompt.Length == 0 ? T("ui.dialogue.choose") : choice.Prompt, x + 26, y + Px(22), Style.Accent);
 			for (int i = 0; i < choice.Options.Count; i++)
 			{
 				Style.ListRow(t, choice.Options[i], x + 44, y + Px(62) + i * Px(30), 420, i == _cursor, height: Px(28));

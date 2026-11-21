@@ -28,10 +28,11 @@
 		{
 			"id": "bog_wisp",
 			"name": "Bog Wisp",
+			"kind": "spirit",
 			"stats": {"hp": 70, "tp": 20, "strength": 8, "mental": 12, "agility": 9, "dexterity": 9, "defense": 4, "level": 2, "evasion": 10},
 			"basic_attack": "bite",
 			"abilities": ["lullaby", "patch", "numbing_sting"],
-			"affinities": {"shock": 0, "gale": 150},
+			"affinities": {"shock": 0, "gale": 150, "holy": 200},
 			"slots": ["lullaby", "numbing_sting", "bite", "numbing_sting", "lullaby", "bite", "numbing_sting", "bite"],
 			"overrides": [
 				{"when": "any_ally_hp_half", "ability": "patch"}
@@ -42,6 +43,7 @@
 		{
 			"id": "brass_warden",
 			"name": "Brass Warden",
+			"kind": "machine",
 			"stats": {"hp": 280, "tp": 30, "strength": 18, "mental": 10, "agility": 7, "dexterity": 12, "defense": 12, "level": 6},
 			"basic_attack": "bite",
 			"abilities": ["gear_slam", "rouse", "steam_vent"],
@@ -53,6 +55,109 @@
 			],
 			"experience": 60,
 			"currency": 50
+		},
+		{
+			"id": "hive_lantern",
+			"name": "Hive Lantern",
+			"stats": {"hp": 320, "tp": 0, "strength": 10, "mental": 8, "agility": 4, "dexterity": 8, "defense": 6, "level": 3},
+			"basic_attack": "bite",
+			"abilities": ["call_kin"],
+			"summons": "gel_mite",
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"overrides": [
+				{"when": "free_slot_beside", "ability": "call_kin"}
+			],
+			"experience": 20,
+			"currency": 12
+		},
+		{
+			"id": "twin_ooze",
+			"name": "Twin Ooze",
+			"vulnerable": true,
+			"stats": {"hp": 50, "tp": 0, "strength": 9, "mental": 3, "agility": 6, "dexterity": 7, "defense": 3, "level": 2},
+			"basic_attack": "bite",
+			"abilities": ["meld"],
+			"merges_into": "grand_ooze",
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"overrides": [
+				{"when": "ally_present", "enemy": "twin_ooze", "ability": "meld"}
+			],
+			"experience": 5,
+			"currency": 3
+		},
+		{
+			"id": "grand_ooze",
+			"name": "Grand Ooze",
+			"stats": {"hp": 160, "tp": 0, "strength": 16, "mental": 5, "agility": 5, "dexterity": 9, "defense": 7, "level": 4},
+			"basic_attack": "bite",
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"experience": 30,
+			"currency": 20
+		},
+		{
+			"id": "mirror_crab",
+			"name": "Mirror Crab",
+			"stats": {"hp": 110, "tp": 0, "strength": 15, "mental": 6, "agility": 6, "dexterity": 10, "defense": 10, "level": 3},
+			"basic_attack": "bite",
+			"abilities": ["crushing_claw"],
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"overrides": [
+				{"when": "hit_by_group", "ability": "crushing_claw"}
+			],
+			"experience": 18,
+			"currency": 10
+		},
+		{
+			"id": "tide_colossus",
+			"name": "Tide Colossus",
+			"kind": "machine",
+			"stats": {"hp": 200, "tp": 0, "strength": 17, "mental": 8, "agility": 6, "dexterity": 10, "defense": 11, "level": 6},
+			"basic_attack": "bite",
+			"next_form": "tide_colossus_core",
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"experience": 10,
+			"currency": 10
+		},
+		{
+			"id": "tide_colossus_core",
+			"name": "Tide Colossus Core",
+			"kind": "machine",
+			"stats": {"hp": 140, "tp": 0, "strength": 14, "mental": 16, "agility": 9, "dexterity": 12, "defense": 8, "level": 7},
+			"basic_attack": "bite",
+			"abilities": ["core_flare"],
+			"slots": ["core_flare", "bite", "core_flare", "bite", "core_flare", "bite", "core_flare", "bite"],
+			"experience": 80,
+			"currency": 60
+		},
+		{
+			"id": "aegis_sentinel",
+			"name": "Aegis Sentinel",
+			"kind": "machine",
+			"stats": {"hp": 150, "tp": 30, "strength": 13, "mental": 12, "agility": 7, "dexterity": 11, "defense": 9, "level": 5},
+			"basic_attack": "bite",
+			"abilities": ["daze_blow", "dispel_howl", "hamstring", "sap_strength"],
+			"statuses": ["aegis"],
+			"slots": ["bite", "daze_blow", "sap_strength", "bite", "dispel_howl", "hamstring", "bite", "daze_blow"],
+			"overrides": [
+				{"when": "ambushed", "ability": "hamstring"}
+			],
+			"experience": 40,
+			"currency": 30
+		},
+		{
+			"id": "echo_twin",
+			"name": "Echo Twin",
+			"kind": "spirit",
+			"stats": {"hp": 80, "tp": 0, "strength": 10, "mental": 11, "agility": 8, "dexterity": 9, "defense": 5, "level": 3},
+			"basic_attack": "bite",
+			"abilities": ["twin_chorus"],
+			"affinities": {"holy": 200},
+			"slots": ["bite", "bite", "bite", "bite", "bite", "bite", "bite", "bite"],
+			"overrides": [
+				{"when": "group_intact", "ability": "twin_chorus"}
+			],
+			"experience": 14,
+			"currency": 8
 		}
 	],
 	"encounters": [
@@ -62,6 +167,13 @@
 			{"enemy": "bog_wisp", "group": "wisps"},
 			"gel_mite"
 		], "drop": {"item": "wake_chime", "rate": 45}},
-		{"id": "warden", "enemies": ["brass_warden", "bog_wisp"], "escape": false, "drop": {"item": "loosen_oil", "rate": 127}}
+		{"id": "warden", "enemies": ["brass_warden", "bog_wisp"], "escape": false, "drop": {"item": "loosen_oil", "rate": 127}},
+		{"id": "hive", "enemies": ["hive_lantern"]},
+		{"id": "oozes", "enemies": ["twin_ooze", "twin_ooze"]},
+		{"id": "crabs", "enemies": ["mirror_crab", "gel_mite"]},
+		{"id": "colossus", "enemies": ["tide_colossus"], "escape": false},
+		{"id": "sentinel", "enemies": ["aegis_sentinel"], "escape": false},
+		{"id": "endless", "enemies": ["gel_mite", "gel_mite"], "replace_fallen": true},
+		{"id": "echoes", "enemies": ["echo_twin", "echo_twin"]}
 	]
 }

@@ -26,16 +26,16 @@ public sealed partial class SampleController
 		list.Draw(s, x, y, w, h, rowH, slots.Count, (i, ry, on) =>
 		{
 			SaveSummary? save = saves.FirstOrDefault(v => v.Slot == slots[i]);
-			string name = slots[i] + (save is { Autosave: true } ? " (autosave)" : "") + (_dev && save is { Dev: true } ? " [dev]" : "");
-			string head = save is null ? $"{name}   (empty)"
-				: save.Damaged ? $"{name}   (damaged)"
+			string name = slots[i] + (save is { Autosave: true } ? " " + T("ui.saves.autosave") : "") + (_dev && save is { Dev: true } ? " " + T("ui.saves.dev") : "");
+			string head = save is null ? $"{name}   {T("ui.saves.empty")}"
+				: save.Damaged ? $"{name}   {T("ui.saves.damaged")}"
 				: $"{name}   {_s.DisplayName(save.Area)}   {Clock(save.PlayTimeMs)}   {_s.DisplayName(save.Difficulty)}";
 			Style.ListRow(s, Style.Fit(s, head, w - 40), x, ry, w - 14, on, save is not { Damaged: true }, height: rowH - Px(6));
 			if (save is { Damaged: false })
 			{
-				string party = string.Join(", ", save.Party.Select(p => p.Split(':') is [string id, string level] ? $"{_s.DisplayName(id)} Lv{level}" : p));
+				string party = string.Join(", ", save.Party.Select(p => p.Split(':') is [string id, string level] ? $"{_s.DisplayName(id)} {T("ui.common.level_short", level)}" : p));
 				string written = save.WriteTime >= UnixYear2000 ? DateTimeOffset.FromUnixTimeSeconds(save.WriteTime).ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) : "-";
-				s.Text(Style.Fit(s, $"{party}   written {written}", w - 60, Style.Small), x + 34, ry + Px(26), Style.Dim, Style.Small);
+				s.Text(Style.Fit(s, T("ui.saves.written", party, written), w - 60, Style.Small), x + 34, ry + Px(26), Style.Dim, Style.Small);
 			}
 			else if (save is { Damaged: true } && save.Error.Length > 0)
 			{
@@ -64,7 +64,7 @@ public sealed partial class SampleController
 		}
 		if (_s.Saves()?.Any(v => v.Slot == slot) == true)
 		{
-			_confirm.Ask($"Overwrite {slot}?", Write);
+			_confirm.Ask(T("ui.saves.overwrite", slot), Write);
 		}
 		else
 		{
@@ -88,7 +88,7 @@ public sealed partial class SampleController
 			SaveSummary save = saves[_list.Cursor];
 			if (save.Damaged)
 			{
-				Say($"{save.Slot} is damaged and cannot be loaded.");
+				Say(T("ui.saves.cannot_load", save.Slot));
 			}
 			else
 			{
@@ -103,14 +103,14 @@ public sealed partial class SampleController
 		s.Fill(0, 0, s.Width, s.Height, Microsoft.Xna.Framework.Color.Black * 0.5f);
 		int x = 120;
 		int w = s.Width - 240;
-		Style.Window(s, x, 50, w, s.Height - 100, "Load");
+		Style.Window(s, x, 50, w, s.Height - 100, T("ui.saves.load_title"));
 		List<SaveSummary> saves = LoadableSaves();
 		if (saves.Count == 0)
 		{
-			s.Text("No saves yet.", x + 40, 90, Style.Dim);
+			s.Text(T("ui.saves.none"), x + 40, 90, Style.Dim);
 		}
 		DrawSlots(s, _list, x + 40, 84, w - 70, s.Height - 190, saves.Select(v => v.Slot).ToList(), saves);
 		DrawToasts(s, x + 24, s.Height - 92, right: true);
-		Widgets.Hints(s, x + 24, s.Height - 50 - Px(36), w - 48, $"{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} load   {Hint(GameAction.Back)} back");
+		Widgets.Hints(s, x + 24, s.Height - 50 - Px(36), w - 48, T("ui.saves.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm), Hint(GameAction.Back)));
 	}
 }

@@ -23,6 +23,8 @@ public sealed partial class SampleController
 		public int Actor;
 		public string MenuChoice = "";
 		public List<BattleOption> Options = [];
+		// The worn pieces among the options, cast without being used up.
+		public HashSet<string> Worn = [];
 		public BattleOption? Option;
 		public List<int> Targets = [];
 		public List<string> Labels = [];
@@ -41,12 +43,49 @@ public sealed partial class SampleController
 	// Every presentation step started, by its description, for headless expectations.
 	public List<string> PresentedSteps { get; } = [];
 
-	private static readonly string[] CommandMenu = ["Attack", "Technique", "Skill", "Item", "Defend", "Escape", "Macro", "Auto"];
+	private static readonly string[] CommandMenu = ["attack", "technique", "skill", "item", "defend", "escape", "macro", "auto"];
+
+	// A row of the command menu: a command, or in a vehicle battle one of the vehicle's skills.
+	private sealed record CommandRow(string Command, string Text, BattleOption? Option = null)
+	{
+		public bool Usable => Option?.Usable ?? true;
+	}
+
+	// A vehicle has only its attack, its skills and escape; the members have the whole menu.
+	private List<CommandRow> CommandRows()
+	{
+		IReadOnlyList<Combatant> all = StageCombatants();
+		string vehicle = StageInfo()?.Vehicle ?? "";
+		if (vehicle.Length > 0 && _battle.Actor < all.Count && all[_battle.Actor].Id == vehicle && _stage is null)
+		{
+			return [new("attack", T("ui.battle.command.attack")),
+				.. _s.BattleOptions(_battle.Actor).Where(o => o.AbilityKind == AbilityKind.Skill).Select(o => new CommandRow("skill", OptionText(o), o)),
+				new("escape", T("ui.battle.command.escape"))];
+		}
+		return [.. CommandMenu.Select(c => new CommandRow(c, T("ui.battle.command." + c)))];
+	}
+
+	private string OptionText(BattleOption o) => _battle.Worn.Contains(o.Id) ? T("ui.battle.worn_row", o.Name)
+		: o.Name + (o.Cost > 0 ? " " + T("ui.battle.cost", o.Cost) : "") + (o.Uses >= 0 ? " " + T("ui.common.count", o.Uses) : "");
+
+	// The actor's worn pieces that have a battle use, as Item options: nothing is paid and the piece stays on.
+	private IEnumerable<BattleOption> WornOptions(int actor)
+	{
+		string member = actor < StageCombatants().Count ? StageCombatants()[actor].Id : "";
+		Member? m = _s.Party().FirstOrDefault(x => x.Id == member);
+		foreach (string piece in m?.Equipment.Where(e => e.Length > 0) ?? [])
+		{
+			if (_data.PieceUses.TryGetValue(piece, out string? use))
+			{
+				yield return new BattleOption(piece, _s.DisplayName(piece), CommandKind.Item, null, _data.AbilityTargeting.GetValueOrDefault(use), 0, -1, CancelReason.None);
+			}
+		}
+	}
 
 	private BattleContext Context()
 	{
 		int partyCount = StageInfo()?.PartyCount ?? 0;
-		return new BattleContext(_s, _battle.Labels, PresentationTable, _data, e => BattleCue(e, partyCount));
+		return new BattleContext(_s, _battle.Labels, PresentationTable, _data, e => BattleCue(e, partyCount), T);
 	}
 
 	private void StartBattle()
@@ -56,10 +95,10 @@ public sealed partial class SampleController
 		_battle.Log.Clear();
 		_battle.Auto = false;
 		_timeline.Clear();
-		_show.Reset(_s.Combatants());
-		string enemies = string.Join(", ", _s.Combatants().Where(c => c.Side == Side.Enemy).Select(c => c.Label));
+		_show.Start(_s.Combatants(), _s.BattleInfo()?.PartyCount ?? 0);
+		string enemies = ListText(_s.Combatants().Where(c => c.Side == Side.Enemy).Select(c => c.Label));
 		BattleStep intro = Context().Step(StepKind.Intro, enemies, "intro " + enemies, []);
-		intro.Lines.Add($"Enemies: {enemies}.");
+		intro.Lines.Add(T("ui.battle.log.enemies", enemies));
 		intro.Cues.Add("battle_start");
 		_timeline.Add([intro]);
 		_battle.Phase = BattlePhase.Playback;
@@ -129,7 +168,14 @@ public sealed partial class SampleController
 				_audio.PlayCue(cue);
 			}
 		}
-		_show.Apply(step);
+		if (step.Kind == StepKind.Sync)
+		{
+			_show.Sync(step, StageCombatants());
+		}
+		else
+		{
+			_show.Apply(step, StageCombatants(), id => _data.EnemyStatuses.GetValueOrDefault(id) ?? []);
+		}
 	}
 
 	private void SetAndAdvance(CommandKind kind, string? id, int target)
@@ -137,7 +183,7 @@ public sealed partial class SampleController
 		PsivResult result = _s.SetCommand(_battle.Actor, kind, id, target);
 		if (!result.Ok)
 		{
-			_battle.Log.Add("! " + result.Error!.Text);
+			_battle.Log.Add(T("ui.battle.log.refused", result.Error!.Text));
 			_battle.Phase = BattlePhase.Command;
 			return;
 		}
@@ -174,7 +220,7 @@ public sealed partial class SampleController
 			if (b.Auto && input.Back)
 			{
 				_s.CancelAuto();
-				b.Log.Add("Auto-battle will stop after this round.");
+				b.Log.Add(T("ui.battle.log.auto_stops"));
 			}
 			bool fast = input.Down(GameAction.FastForward);
 			List<BattleStep> started = fast ? _timeline.SkipAll() : input.Confirm ? _timeline.Hurry() : _timeline.Advance(dtMs * SpeedOf(_s.Profile().BattleSpeed));
@@ -212,45 +258,61 @@ public sealed partial class SampleController
 			}
 			break;
 		case BattlePhase.Command:
-			Move(input, CommandMenu.Length);
+			List<CommandRow> rows = CommandRows();
+			Move(input, rows.Count);
 			if (!input.Confirm)
 			{
 				break;
 			}
-			b.MenuChoice = CommandMenu[_cursor];
+			CommandRow row = rows[Math.Clamp(_cursor, 0, rows.Count - 1)];
+			b.MenuChoice = row.Command;
 			_cursor = 0;
+			if (row.Option is { } skill)
+			{
+				ChooseOption(skill);
+				break;
+			}
 			switch (b.MenuChoice)
 			{
-			case "Attack":
+			case "attack":
 				ChooseTargets(Targeting.OneEnemy);
 				b.Option = null;
 				b.Phase = BattlePhase.Target;
 				break;
-			case "Technique":
-			case "Skill":
-			case "Item":
+			case "technique":
+			case "skill":
+			case "item":
 				b.Options = _s.BattleOptions(b.Actor).Where(o => b.MenuChoice switch
 				{
-					"Technique" => o.AbilityKind == AbilityKind.Technique,
-					"Skill" => o.AbilityKind == AbilityKind.Skill,
+					"technique" => o.AbilityKind == AbilityKind.Technique,
+					"skill" => o.AbilityKind == AbilityKind.Skill,
 					_ => o.Command == CommandKind.Item,
 				}).ToList();
+				b.Worn.Clear();
+				if (b.MenuChoice == "item")
+				{
+					foreach (BattleOption worn in WornOptions(b.Actor))
+					{
+						b.Worn.Add(worn.Id);
+						b.Options.Add(worn);
+					}
+				}
 				b.Phase = b.Options.Count > 0 ? BattlePhase.Option : BattlePhase.Command;
 				if (b.Options.Count == 0)
 				{
-					b.Log.Add($"No {b.MenuChoice.ToLowerInvariant()} to use.");
+					b.Log.Add(T("ui.battle.log.nothing_to_use." + b.MenuChoice));
 				}
 				break;
-			case "Defend":
+			case "defend":
 				SetAndAdvance(CommandKind.Defend, null, -1);
 				break;
-			case "Escape":
+			case "escape":
 				SetAndAdvance(CommandKind.Escape, null, -1);
 				break;
-			case "Macro":
+			case "macro":
 				b.Phase = BattlePhase.Macro;
 				break;
-			case "Auto":
+			case "auto":
 				if (_s.Settings().AutoMacro.Length == 0 && _s.Macros().Count > 0)
 				{
 					Report(_s.SetAutoMacro(_s.Macros()[0]));
@@ -264,7 +326,7 @@ public sealed partial class SampleController
 				}
 				else
 				{
-					b.Log.Add("! " + auto.Error!.Text);
+					b.Log.Add(T("ui.battle.log.refused", auto.Error!.Text));
 				}
 				break;
 			}
@@ -277,17 +339,7 @@ public sealed partial class SampleController
 			}
 			else if (input.Confirm)
 			{
-				b.Option = b.Options[_cursor];
-				_cursor = 0;
-				ChooseTargets(b.Option.Targeting);
-				if (b.Targets.Count == 0 && b.Option.Targeting is not (Targeting.OneEnemy or Targeting.OneAlly or Targeting.OneFallenAlly))
-				{
-					SetAndAdvance(b.Option.Command, b.Option.Id, -1);
-				}
-				else
-				{
-					b.Phase = BattlePhase.Target;
-				}
+				ChooseOption(b.Options[_cursor]);
 			}
 			break;
 		case BattlePhase.Target:
@@ -321,19 +373,34 @@ public sealed partial class SampleController
 				PsivResult applied = _s.ApplyMacro(macros[_cursor], out IReadOnlyList<MacroStepResult> steps);
 				if (!applied.Ok)
 				{
-					b.Log.Add("! " + applied.Error!.Text);
+					b.Log.Add(T("ui.battle.log.refused", applied.Error!.Text));
 					b.Phase = BattlePhase.Command;
 				}
 				else
 				{
 					foreach (MacroStepResult step in steps.Where(x => x.Status != MacroStepStatus.Applied))
 					{
-						b.Log.Add($"  {step.Member}: {GameSession.NameOf(NameKind.MacroStepStatus, (int)step.Status)} ({GameSession.NameOf(NameKind.MacroIssue, (int)step.Issue)})");
+						b.Log.Add(T("ui.battle.log.macro_step", step.Member, T(NameKind.MacroStepStatus, (int)step.Status), T(NameKind.MacroIssue, (int)step.Issue)));
 					}
 					Resolve();
 				}
 			}
 			break;
+		}
+	}
+
+	private void ChooseOption(BattleOption option)
+	{
+		_battle.Option = option;
+		_cursor = 0;
+		ChooseTargets(option.Targeting);
+		if (_battle.Targets.Count == 0 && option.Targeting is not (Targeting.OneEnemy or Targeting.OneAlly or Targeting.OneFallenAlly))
+		{
+			SetAndAdvance(option.Command, option.Id, -1);
+		}
+		else
+		{
+			_battle.Phase = BattlePhase.Target;
 		}
 	}
 
@@ -352,6 +419,9 @@ public sealed partial class SampleController
 		"shown" => string.Join(", ", _show.All.Select((c, i) => $"{(i < _battle.Labels.Count ? _battle.Labels[i] : "?")} {c.Hp}/{c.MaxHp} {c.Tp}/{c.MaxTp}" +
 			(c.Statuses.Count > 0 ? " " + string.Join(" ", c.Statuses) : "") + (c.Alive ? "" : " down"))),
 		"victory" => _probeVictory,
+		// The command menu's rows for the phase, the one under the cursor in brackets.
+		"battlemenu" => _battle.Active && MenuRows(StageCombatants()) is { } menu
+			? string.Join(" | ", menu.Items.Select((item, i) => i == _cursor ? $"[{item}]" : item)) : "-",
 		_ => FrontState(key),
 	};
 }

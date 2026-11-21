@@ -9,6 +9,8 @@
 		{"id": "grip_bands", "name": "Grip Bands", "slot": "arms", "category": "light_armor", "stats": {"dexterity": 2, "critical": 5}},
 		{"id": "calm_charm", "name": "Calm Charm", "slot": "accessory", "category": "charm", "status_resist": {"sleep": 100}},
 		{"id": "spark_ring", "name": "Spark Ring", "slot": "accessory", "category": "charm", "abilities": ["glint"]},
-		{"id": "drift_feather", "name": "Drift Feather", "slot": "accessory", "category": "charm", "stats": {"evasion": 10, "agility": 2}}
+		{"id": "drift_feather", "name": "Drift Feather", "slot": "accessory", "category": "charm", "stats": {"evasion": 10, "agility": 2}},
+		{"id": "arc_disc", "name": "Arc Disc", "slot": "weapon", "category": "sling", "attack": "disc_throw"},
+		{"id": "storm_rod", "name": "Storm Rod", "slot": "weapon", "category": "rod", "use": "gust", "stats": {"mental": 2}}
 	]
 }

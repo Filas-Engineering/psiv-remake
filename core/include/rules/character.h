@@ -27,6 +27,8 @@ struct CharacterDef {
 	StatusResists statusResist;
 	std::vector<std::string> equipCategories;
 	std::vector<std::string> startingEquipment;
+	// A machine is reached only by effects that name machines, and stands up after a won or escaped battle (P6).
+	CreatureKind kind = CreatureKind::Living;
 };
 
 // The persistent state of a party member between battles. The host owns it.
@@ -42,6 +44,8 @@ struct PartyMember {
 	std::map<EquipSlot, std::string> equipment;
 	// Only statuses that persist outside battle.
 	std::vector<ActiveStatus> statuses = {};
+	// Abilities learned for good outside the level table, from a story event or a found object (P8).
+	std::vector<std::string> taught = {};
 };
 
 }

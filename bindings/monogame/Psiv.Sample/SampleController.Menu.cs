@@ -1,5 +1,7 @@
 using System.Globalization;
 
+using Microsoft.Xna.Framework.Input;
+
 using Psiv.Session;
 
 namespace Psiv.Sample;
@@ -183,10 +185,10 @@ public sealed partial class SampleController
 	private void DrawMenu(IDrawSurface s, Art art)
 	{
 		DrawBackdrop(s, art);
-		Style.Window(s, 24, 56, s.Width - 48, s.Height - 72, "Menu");
-		string money = $"Money {_s.WorldInfo().Money}";
+		Style.Window(s, 24, 56, s.Width - 48, s.Height - 72, T("ui.menu.title"));
+		string money = T("ui.common.money", _s.WorldInfo().Money);
 		int moneyX = s.Width - 64 - s.Measure(money);
-		Widgets.Tabs(s, 48, 64, moneyX - 72, MenuTabs, _tab, Px);
+		Widgets.Tabs(s, 48, 64, moneyX - 72, [.. MenuTabs.Select(tab => T("ui.menu.tab." + tab.ToLowerInvariant()))], _tab, Px);
 		s.Text(money, moneyX, 64 + Px(5), Style.Text);
 		int x = 56;
 		int y = 64 + Px(60);
@@ -200,7 +202,7 @@ public sealed partial class SampleController
 		case "Order":
 			List<Member> lineup = LineupMembers();
 			DrawItems(s, _list, x, y, w, h, lineup.Select((m, i) => (_orderFrom == i ? "> " : "") +
-				$"{i + 1}. {m.Name}  Lv{m.Level}  HP {m.Hp}/{m.MaxHp}  TP {m.Tp}/{m.MaxTp}" + string.Concat(m.Statuses.Select(st => $" [{st.Name}]"))).ToList());
+				$"{i + 1}. {MemberRow(m)}" + string.Concat(m.Statuses.Select(st => $" [{st.Name}]"))).ToList());
 			break;
 		case "Macros": DrawMacros(s, x, y, w, h); break;
 		case "Combos": DrawCombos(s, x, y, w, h); break;
@@ -209,9 +211,9 @@ public sealed partial class SampleController
 		case "Log": DrawTextLog(s, x, y, w, h); break;
 		case "Save": DrawSlots(s, _list, x, y, w, h, ManualSlots(), _s.Saves() ?? []); break;
 		case "Options":
-			s.Text("Text, battle, sound and difficulty settings, and the controls.", x, y, Style.Text);
-			Style.ListRow(s, "Open options", x + 20, y + Px(44), Px(260), true, height: Px(28));
-			_probeSelected = "Open options";
+			s.Text(T("ui.menu.options_about"), x, y, Style.Text);
+			Style.ListRow(s, T("ui.menu.open_options"), x + 20, y + Px(44), Px(260), true, height: Px(28));
+			_probeSelected = T("ui.menu.open_options");
 			break;
 		}
 		Widgets.Hints(s, x, s.Height - 66, w, MenuHint());
@@ -219,33 +221,38 @@ public sealed partial class SampleController
 
 	private string MenuHint()
 	{
-		string tabs = MenuAtTop() ? $"{Hint(GameAction.PagePrev)}/{Hint(GameAction.PageNext)} tab   " : "";
-		string back = $"{Hint(GameAction.Back)} " + (MenuAtTop() ? "close" : "back");
-		return MenuTabs[_tab] switch
+		string[] tabs = MenuAtTop() ? [T("ui.menu.hint.tab", Hint(GameAction.PagePrev), Hint(GameAction.PageNext))] : [];
+		string back = T(MenuAtTop() ? "ui.menu.hint.close" : "ui.menu.hint.back", Hint(GameAction.Back));
+		string scroll = T("ui.menu.hint.scroll", Hint(GameAction.Up), Hint(GameAction.Down));
+		string choose = T("ui.menu.hint.choose", Hint(GameAction.Up), Hint(GameAction.Down));
+		string use = T("ui.menu.hint.use", Hint(GameAction.Confirm));
+		string[] page = MenuTabs[_tab] switch
 		{
 			"Status" when _pickMember is not null && _pickAction is null =>
-				$"{Hint(GameAction.PagePrev)}/{Hint(GameAction.PageNext)} stats or abilities   {Hint(GameAction.Up)}/{Hint(GameAction.Down)} " +
-				(_statusPage == 0 ? "scroll" : $"choose   {Hint(GameAction.Confirm)} use") + $"   {back}",
-			"Quests" or "Log" => $"{tabs}{Hint(GameAction.Up)}/{Hint(GameAction.Down)} scroll   {back}",
-			"Order" => $"{tabs}{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} " + (_orderFrom is null ? "pick" : "swap") + $"   {back}",
-			"Items" when _pickAction is null => $"{tabs}{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} use   {Hint(GameAction.PartyTalk)} sort   {back}",
-			"Macros" when _macroStage == MacroStage.Name => $"{Hint(GameAction.Confirm)} type   Enter or {Hint(GameAction.Menu)} confirm   Esc cancel",
-			_ => $"{tabs}{Hint(GameAction.Up)}/{Hint(GameAction.Down)} choose   {Hint(GameAction.Confirm)} use   {back}",
+				[T("ui.menu.hint.stats_or_abilities", Hint(GameAction.PagePrev), Hint(GameAction.PageNext)), .. _statusPage == 0 ? [scroll] : new[] { choose, use }, back],
+			"Quests" or "Log" => [.. tabs, scroll, back],
+			"Order" => [.. tabs, choose, T(_orderFrom is null ? "ui.menu.hint.pick" : "ui.menu.hint.swap", Hint(GameAction.Confirm)), back],
+			"Items" when _pickAction is null => [.. tabs, choose, use, T("ui.menu.hint.sort", Hint(GameAction.PartyTalk)), back],
+			"Macros" when _macroStage == MacroStage.Name =>
+				[T("ui.menu.hint.type", Hint(GameAction.Confirm)), T("ui.menu.hint.name_confirm", KeyText(Keys.Enter), Hint(GameAction.Menu)), T("ui.menu.hint.cancel", KeyText(Keys.Escape))],
+			_ => [.. tabs, choose, use, back],
 		};
+		return string.Join("   ", page);
 	}
 
 	private void DrawItemsPage(IDrawSurface s, int x, int y, int w, int h)
 	{
 		var items = _s.Inventory(_itemSort).Where(i => !i.IsEquipment).ToList();
 		int listW = _pickAction is null ? w : w / 2 - 20;
-		s.Text($"Sorted by {GameSession.NameOf(NameKind.ItemSort, (int)_itemSort)}", x, y - Px(26), Style.Dim, Style.Small);
-		s.Text($"{items.Count} kinds, {items.Sum(i => i.Count)} in all", x + listW - s.Measure($"{items.Count} kinds, {items.Sum(i => i.Count)} in all", Style.Small) - 20, y - Px(26), Style.Dim, Style.Small);
+		s.Text(T("ui.items.sorted_by", T(NameKind.ItemSort, (int)_itemSort)), x, y - Px(26), Style.Dim, Style.Small);
+		string totals = T("ui.items.totals", items.Count, items.Sum(i => i.Count));
+		s.Text(totals, x + listW - s.Measure(totals, Style.Small) - 20, y - Px(26), Style.Dim, Style.Small);
 		if (items.Count == 0)
 		{
-			s.Text("No items.", x + 14, y, Style.Dim);
+			s.Text(T("ui.items.none"), x + 14, y, Style.Dim);
 		}
 		int descH = Px(56);
-		DrawItems(s, _list, x, y, listW, h - descH, items.Select(i => $"{i.Name} x{i.Count}" + (i.Field ? "" : "  (battle only)")).ToList(), _pickAction is null);
+		DrawItems(s, _list, x, y, listW, h - descH, items.Select(i => T("ui.common.item_count", i.Name, i.Count) + (i.Field ? "" : "  " + T("ui.items.battle_only"))).ToList(), _pickAction is null);
 		if (items.Count > 0)
 		{
 			s.Fill(x, y + h - descH, listW - 14, 1, Style.PanelEdge * 0.4f);
@@ -253,8 +260,8 @@ public sealed partial class SampleController
 		}
 		if (_pickAction is not null)
 		{
-			s.Text($"Use {_s.DisplayName(_pickAction)} on whom?", x + w / 2, y, Style.Accent);
-			DrawItems(s, _sub, x + w / 2, y + Px(40), w / 2, h - Px(40), LineupMembers().Select(m => $"{m.Name}  HP {m.Hp}/{m.MaxHp}  TP {m.Tp}/{m.MaxTp}").ToList());
+			s.Text(T("ui.menu.use_on_whom", _s.DisplayName(_pickAction)), x + w / 2, y, Style.Accent);
+			DrawItems(s, _sub, x + w / 2, y + Px(40), w / 2, h - Px(40), LineupMembers().Select(m => T("ui.menu.member_points", m.Name, m.Hp, m.MaxHp, m.Tp, m.MaxTp)).ToList());
 		}
 	}
 
@@ -270,7 +277,7 @@ public sealed partial class SampleController
 		Report(result);
 		if (result.Ok)
 		{
-			Say($"Made the macro {name.Trim()}.");
+			Say(T("ui.combos.made_macro", name.Trim()));
 		}
 	}
 
@@ -278,23 +285,23 @@ public sealed partial class SampleController
 	{
 		ComboLog log = _s.ComboLog();
 		int total = Math.Max(log.Total, log.Entries.Count);
-		s.Text($"Discovered {log.Entries.Count} of {log.Total}", x, y, Style.Accent);
+		s.Text(T("ui.combos.discovered", log.Entries.Count, log.Total), x, y, Style.Accent);
 		int detailH = Px(96);
-		var rows = log.Entries.Select(e => $"{e.ResultName}  ({string.Join(" + ", e.ParticipantNames)})")
-			.Concat(Enumerable.Repeat("??? (not discovered yet)", total - log.Entries.Count)).ToList();
+		var rows = log.Entries.Select(e => T("ui.combos.row", e.ResultName, string.Join(" + ", e.ParticipantNames)))
+			.Concat(Enumerable.Repeat(T("ui.combos.unknown"), total - log.Entries.Count)).ToList();
 		DrawItems(s, _list, x, y + Px(36), w, h - Px(36) - detailH, rows, enabled: rows.Select((_, i) => i < log.Entries.Count).ToList());
 		int dy = y + h - detailH + Px(8);
 		s.Fill(x, dy - Px(8), w, 1, Style.PanelEdge * 0.4f);
 		if (_list.Cursor < log.Entries.Count)
 		{
 			ComboEntry e = log.Entries[_list.Cursor];
-			s.Text(Style.Fit(s, $"Members: {string.Join(", ", e.ParticipantNames)}", w, Style.Small), x, dy, Style.Text, Style.Small);
-			s.Text(Style.Fit(s, $"Abilities: {string.Join(", ", e.AbilityNames)}", w, Style.Small), x, dy + Px(26), Style.Text, Style.Small);
-			s.Text($"First found at {Clock(e.PlayTimeMs)} of play   {Hint(GameAction.Confirm)}: make a macro from it", x, dy + Px(52), Style.Dim, Style.Small);
+			s.Text(Style.Fit(s, T("ui.combos.members", ListText(e.ParticipantNames)), w, Style.Small), x, dy, Style.Text, Style.Small);
+			s.Text(Style.Fit(s, T("ui.combos.abilities", ListText(e.AbilityNames)), w, Style.Small), x, dy + Px(26), Style.Text, Style.Small);
+			s.Text(T("ui.combos.first_found", Clock(e.PlayTimeMs), Hint(GameAction.Confirm)), x, dy + Px(52), Style.Dim, Style.Small);
 		}
 		else if (total > 0)
 		{
-			s.Text("Not discovered yet: try techniques and skills in a row in battle.", x, dy, Style.Dim, Style.Small);
+			s.Text(T("ui.combos.not_discovered"), x, dy, Style.Dim, Style.Small);
 		}
 	}
 
@@ -304,7 +311,7 @@ public sealed partial class SampleController
 		int listW = w / 3;
 		if (entries.Count == 0)
 		{
-			s.Text("No entries yet.", x + 14, y, Style.Dim);
+			s.Text(T("ui.codex.none"), x + 14, y, Style.Dim);
 			return;
 		}
 		DrawItems(s, _list, x, y, listW, h, entries.Select(e => e.Title).ToList());
@@ -327,8 +334,8 @@ public sealed partial class SampleController
 	private List<(string Text, bool Heading)> QuestRows()
 	{
 		QuestLog log = _s.QuestLog();
-		var rows = new List<(string, bool)> { ("Objective", true), (log.Objective.Length == 0 ? "-" : log.Objective, false), ("", false), ("Jobs", true) };
-		rows.AddRange(log.Jobs.Select(j => ($"{j.Title} ({GameSession.NameOf(NameKind.JobState, (int)j.State)})", false)));
+		var rows = new List<(string, bool)> { (T("ui.quests.objective"), true), (log.Objective.Length == 0 ? "-" : log.Objective, false), ("", false), (T("ui.quests.jobs"), true) };
+		rows.AddRange(log.Jobs.Select(j => (T("ui.quests.job", j.Title, T(NameKind.JobState, (int)j.State)), false)));
 		return rows;
 	}
 

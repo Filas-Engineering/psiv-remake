@@ -1,0 +1,99 @@
+# The Ember Steps east of Cinder Quay: a wayfarer who walks with the party, a supply console, a job board, a
+# tinker's walking cog, a warm spring and a sentinel whose riddle has a wrong answer.
+
+event steps_wayfarer unskippable
+	lock player
+	if steps.wayfarer_walking
+		say wayfarer @steps.wayfarer.parting
+		follower none
+		show wayfarer
+		clear steps.wayfarer_walking
+	else
+		say wayfarer @steps.wayfarer.greeting
+		learn fighter hallow
+		say wayfarer @steps.wayfarer.lesson
+		follower wayfarer
+		hide wayfarer
+		set steps.wayfarer_walking
+	end
+	unlock player
+end
+
+event steps_console unskippable
+	narrate @steps.console.hum
+	give tonic
+end
+
+event steps_board unskippable
+	lock player
+	if job.steps_courier.accepted and not job.steps_courier.done
+		narrate @steps.board.paid
+		give gear_salve
+		set job.steps_courier.done
+	else if job.steps_lamps.accepted and not job.steps_lamps.done
+		narrate @steps.board.paid
+		give tonic 2
+		set job.steps_lamps.done
+	else if steps.trial_survived and not job.steps_lamps.accepted
+		ask @steps.board.offer_lamps
+		yes
+			set job.steps_lamps.accepted
+			narrate @steps.board.taken
+		no
+			narrate @steps.board.later
+		end
+	else if not steps.trial_survived and not job.steps_courier.accepted
+		ask @steps.board.offer_courier
+		yes
+			set job.steps_courier.accepted
+			narrate @steps.board.taken
+		no
+			narrate @steps.board.later
+		end
+	else
+		narrate @steps.board.empty
+	end
+	unlock player
+end
+
+event steps_tinker unskippable
+	lock player
+	if steps.cog_joined
+		narrate @steps.tinker.done
+	else
+		narrate @steps.tinker.offer
+		ask @steps.tinker.ask
+		yes
+			party add cogwright
+			give gear_salve
+			set steps.cog_joined
+		no
+			narrate @steps.tinker.later
+		end
+	end
+	unlock player
+end
+
+event steps_sentinel unskippable
+	lock player
+	if steps.trial_survived
+		narrate @steps.sentinel.still
+	else
+		narrate @steps.sentinel.wakes
+		ask @steps.sentinel.ask
+		yes
+			narrate @steps.sentinel.wrong
+			battle sentinel until survive 3
+			win
+				narrate @steps.sentinel.held
+				set steps.trial_survived
+			lose
+				narrate @steps.sentinel.thrown
+			end
+		no
+			narrate @steps.sentinel.right
+			set steps.trial_survived
+		end
+	end
+	unlock player
+end

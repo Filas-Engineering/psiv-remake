@@ -241,7 +241,7 @@ std::string describe(const Battle& battle, const TextTable& text, const Event& e
 		s << ".";
 		break;
 	case EventType::Healed:
-		s << target << " recovers " << e.amount << " HP.";
+		s << target << " recovers " << e.amount << (e.resource == ResourceKind::Tp ? " TP." : " HP.");
 		break;
 	case EventType::Revived:
 		s << target << " is back on their feet with " << e.amount << " HP.";
@@ -268,6 +268,15 @@ std::string describe(const Battle& battle, const TextTable& text, const Event& e
 		break;
 	case EventType::BattleEnded:
 		s << "Battle over: " << outcomeText(e.outcome) << ".";
+		break;
+	case EventType::EnemyJoined:
+		s << target << " joins the fight.";
+		break;
+	case EventType::EnemyLeft:
+		s << target << " merges into " << actor << ".";
+		break;
+	case EventType::EnemyTransformed:
+		s << "The foe takes a new form: " << target << ".";
 		break;
 	}
 	return s.str();

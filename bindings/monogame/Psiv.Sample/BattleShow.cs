@@ -2,33 +2,59 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-// A combatant as the stage shows it: the numbers and statuses the steps played so far have reached, and the steps that
-// changed them, so bars, icons and the fall animate while those steps run.
-public sealed class ShownCombatant(Combatant c)
+// A combatant as the stage shows it: who it is, where in the enemy formation it stands, the numbers and statuses the
+// steps played so far have reached, and the steps that changed them, so bars, icons, the fall and a change of form
+// animate while those steps run.
+public sealed class ShownCombatant(Combatant c, int position)
 {
+	public string Id = c.Id;
+	public string Label = c.Label;
+	public readonly int Position = position;
 	public int Hp = c.Hp;
 	public int Tp = c.Tp;
-	public readonly int MaxHp = c.MaxHp;
-	public readonly int MaxTp = c.MaxTp;
+	public int MaxHp = c.MaxHp;
+	public int MaxTp = c.MaxTp;
 	public bool Alive = c.Alive;
 	public readonly List<string> Statuses = [.. c.Statuses.Where(s => s.Id != "defeated").Select(s => s.Id)];
 	public int HpFrom = c.Hp;
 	public int TpFrom = c.Tp;
 	public BattleStep? BarStep;
 	public BattleStep? AliveStep;
+	// The step that brought this enemy in or changed its form, and the form it had before.
+	public BattleStep? ChangeStep;
+	public string PreviousId = "";
 	public readonly Dictionary<string, BattleStep> Appeared = [];
 	public readonly List<(string Id, BattleStep Step)> Leaving = [];
 }
 
 // The battle as the playback has shown it so far. It starts from the session's combatants and changes only by the
-// events of each step as it starts, so when a round's playback ends it must match the session again.
+// events of each step as it starts, so when a round's playback ends it must match the session again. Enemies that join
+// mid-battle come after the others, in a formation position of their own; positions outlive each round's reset.
 public sealed class BattleShow
 {
+	private readonly Dictionary<int, int> _positions = [];
+	private int _partyCount;
+	private int _startingEnemies;
+
 	public List<ShownCombatant> All { get; private set; } = [];
+	// How many formation places the stage spreads the enemies over: the starting ones, and any a joining enemy took.
+	public int Slots => Math.Max(_startingEnemies, _positions.Values.DefaultIfEmpty(-1).Max() + 1);
 
-	public void Reset(IReadOnlyList<Combatant> combatants) => All = [.. combatants.Select(c => new ShownCombatant(c))];
+	public void Start(IReadOnlyList<Combatant> combatants, int partyCount)
+	{
+		_positions.Clear();
+		_partyCount = partyCount;
+		_startingEnemies = combatants.Count - partyCount;
+		Reset(combatants);
+	}
 
-	public void Apply(BattleStep step)
+	public void Reset(IReadOnlyList<Combatant> combatants) => All = [.. combatants.Select((c, i) => new ShownCombatant(c, PositionOf(i)))];
+
+	private int PositionOf(int index) => index < _partyCount ? -1 : _positions.TryGetValue(index, out int p) ? p : index - _partyCount;
+
+	// `session` gives a joining or changed enemy's maximums and label, which the events do not carry; `startStatuses`
+	// the statuses its form starts with.
+	public void Apply(BattleStep step, IReadOnlyList<Combatant> session, Func<string, IEnumerable<string>> startStatuses)
 	{
 		foreach (BattleEvent e in step.Events)
 		{
@@ -39,6 +65,10 @@ public sealed class BattleShow
 			case BattleEventType.ResourceSpent when e.Resource == ResourceKind.Tp && actor is not null:
 				Bar(actor, step);
 				actor.Tp = Math.Max(0, actor.Tp - e.Amount);
+				break;
+			case BattleEventType.Healed when e.Resource == ResourceKind.Tp && target is not null:
+				Bar(target, step);
+				target.Tp = Math.Min(target.MaxTp, target.Tp + e.Amount);
 				break;
 			case BattleEventType.DamageDealt or BattleEventType.Healed when target is not null:
 				Bar(target, step);
@@ -51,8 +81,23 @@ public sealed class BattleShow
 				target.AliveStep = step;
 				break;
 			case BattleEventType.CombatantDefeated when target is not null:
+				// An instant defeat fells without a hit, so the bar empties here.
+				Bar(target, step);
+				target.Hp = 0;
 				target.Alive = false;
 				target.AliveStep = step;
+				break;
+			case BattleEventType.EnemyLeft when target is not null:
+				target.Hp = 0;
+				target.Alive = false;
+				target.AliveStep = step;
+				break;
+			case BattleEventType.EnemyJoined when e.Target == All.Count && e.Target < session.Count:
+				_positions[e.Target] = e.Amount;
+				All.Add(Changed(session[e.Target], e, step, "", startStatuses));
+				break;
+			case BattleEventType.EnemyTransformed when target is not null && e.Target < session.Count:
+				All[e.Target] = Changed(session[e.Target], e, step, target.Id, startStatuses);
 				break;
 			case BattleEventType.StatusApplied when target is not null && e.Status != "defeated" && !target.Statuses.Contains(e.Status):
 				target.Statuses.Add(e.Status);
@@ -61,6 +106,49 @@ public sealed class BattleShow
 			case BattleEventType.StatusRemoved when target is not null && target.Statuses.Remove(e.Status):
 				target.Leaving.Add((e.Status, step));
 				break;
+			}
+		}
+	}
+
+	// An enemy in a new form, or new to the battle: the form's numbers at full, its starting statuses.
+	private ShownCombatant Changed(Combatant c, BattleEvent e, BattleStep step, string previous, Func<string, IEnumerable<string>> startStatuses)
+	{
+		string id = e.Ids.Count > 0 ? e.Ids[0] : c.Id;
+		var shown = new ShownCombatant(c, PositionOf(e.Target)) { Id = id, Hp = e.Hp, HpFrom = e.Hp, Tp = c.MaxTp, TpFrom = c.MaxTp, Alive = true, ChangeStep = step, PreviousId = previous };
+		shown.Statuses.Clear();
+		shown.Statuses.AddRange(startStatuses(id));
+		return shown;
+	}
+
+	// Brings every combatant to the session's state at once, as the step starts, with the bars, falls and statuses
+	// animating over it: for a battle a developer command ended outside the events.
+	public void Sync(BattleStep step, IReadOnlyList<Combatant> session)
+	{
+		for (int i = 0; i < Math.Min(All.Count, session.Count); i++)
+		{
+			ShownCombatant s = All[i];
+			Combatant c = session[i];
+			if (s.Hp != c.Hp || s.Tp != c.Tp)
+			{
+				Bar(s, step);
+				s.Hp = c.Hp;
+				s.Tp = c.Tp;
+			}
+			if (s.Alive != c.Alive)
+			{
+				s.Alive = c.Alive;
+				s.AliveStep = step;
+			}
+			var statuses = c.Statuses.Where(x => x.Id != "defeated").Select(x => x.Id).ToList();
+			foreach (string gone in s.Statuses.Except(statuses).ToList())
+			{
+				s.Statuses.Remove(gone);
+				s.Leaving.Add((gone, step));
+			}
+			foreach (string added in statuses.Except(s.Statuses).ToList())
+			{
+				s.Statuses.Add(added);
+				s.Appeared[added] = step;
 			}
 		}
 	}
@@ -79,15 +167,19 @@ public sealed class BattleShow
 	public string Differences(IReadOnlyList<Combatant> session, IReadOnlyList<string> labels)
 	{
 		var differences = new List<string>();
+		if (All.Count != session.Count)
+		{
+			differences.Add($"{All.Count} combatants shown, the session has {session.Count}");
+		}
 		for (int i = 0; i < Math.Min(All.Count, session.Count); i++)
 		{
 			ShownCombatant s = All[i];
 			Combatant c = session[i];
 			string statuses = string.Join(" ", c.Statuses.Where(x => x.Id != "defeated").Select(x => x.Id).Order(StringComparer.Ordinal));
 			string shown = string.Join(" ", s.Statuses.Order(StringComparer.Ordinal));
-			if (s.Hp != c.Hp || s.Tp != c.Tp || s.Alive != c.Alive || statuses != shown)
+			if (s.Id != c.Id || s.Hp != c.Hp || s.Tp != c.Tp || s.Alive != c.Alive || statuses != shown)
 			{
-				differences.Add($"{labels[i]} shows {s.Hp} HP {s.Tp} TP {(s.Alive ? "up" : "down")} [{shown}], the session has {c.Hp} HP {c.Tp} TP {(c.Alive ? "up" : "down")} [{statuses}]");
+				differences.Add($"{(i < labels.Count ? labels[i] : c.Label)} shows {s.Id} {s.Hp} HP {s.Tp} TP {(s.Alive ? "up" : "down")} [{shown}], the session has {c.Id} {c.Hp} HP {c.Tp} TP {(c.Alive ? "up" : "down")} [{statuses}]");
 			}
 		}
 		return string.Join("; ", differences);

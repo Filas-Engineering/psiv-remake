@@ -35,6 +35,27 @@ const Effect* travelEffect(const std::vector<Effect>& effects) {
 	return nullptr;
 }
 
+const Effect* teachEffect(const std::vector<Effect>& effects) {
+	for (const Effect& effect : effects) {
+		if (effect.kind == EffectKind::Teach) {
+			return &effect;
+		}
+	}
+	return nullptr;
+}
+
+bool Effect::reaches(CreatureKind kind) const {
+	if (kinds.empty()) {
+		return true;
+	}
+	for (CreatureKind wanted : kinds) {
+		if (wanted == kind || (wanted == CreatureKind::Living && kind == CreatureKind::Spirit)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 bool AbilityDef::revives() const {
 	return effectsRevive(effects);
 }

@@ -47,6 +47,8 @@ struct Job {
 	std::string availableFlag;
 	std::string acceptedFlag;
 	std::string completedFlag;
+	// Once set, a job not yet accepted is missed for good.
+	std::string missedFlag = {};
 };
 
 struct EncyclopediaEntry {
@@ -188,6 +190,11 @@ struct GameConfig {
 	int manualSlots = 10;
 	std::vector<Boss> bosses;
 	std::vector<FieldVehicle> vehicles;
+	// Hit points a machine member regains with each step the party takes in the field (P6).
+	int machineStepHeal = 0;
+	// Members who have joined and are out of the party get the same experience share as those in it until this flag
+	// is set (SAV-032); empty gives them none.
+	std::string outsideExperienceUntil = {};
 };
 
 struct LanguageTables {

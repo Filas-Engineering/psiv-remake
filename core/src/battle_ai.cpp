@@ -16,9 +16,9 @@ bool lowerHpShare(const Combatant& a, const Combatant& b) {
 
 }
 
-bool Battle::overrideHolds(AiConditionKind when, int actor) const {
+bool Battle::overrideHolds(const AiOverride& entry, int actor) const {
 	const Combatant& self = combatants_[actor];
-	switch (when) {
+	switch (entry.when) {
 	case AiConditionKind::SelfHpHalf:
 		return atMostPercent(self, 50);
 	case AiConditionKind::SelfHpQuarterOnce:
@@ -51,6 +51,27 @@ bool Battle::overrideHolds(AiConditionKind when, int actor) const {
 			}
 		}
 		return false;
+	case AiConditionKind::HitByGroup:
+		return self.hitByGroup;
+	case AiConditionKind::Ambushed:
+		return self.ambushed;
+	case AiConditionKind::AllyPresent:
+	case AiConditionKind::AllyAbsent: {
+		bool present = false;
+		for (int ally : allies(actor)) {
+			present = present || (ally != actor && combatants_[ally].alive() && combatants_[ally].defId == entry.enemy);
+		}
+		return present == (entry.when == AiConditionKind::AllyPresent);
+	}
+	case AiConditionKind::FreeSlotBeside:
+		return !freeSlotsBeside(actor).empty();
+	case AiConditionKind::GroupIntact:
+		for (int i = partyCount_; i < startingCount_; ++i) {
+			if (combatants_[i].group == self.group && !combatants_[i].alive()) {
+				return false;
+			}
+		}
+		return true;
 	}
 	return false;
 }
@@ -199,7 +220,7 @@ void Battle::chooseEnemyAction(int actor, std::vector<Event>& out) {
 	AiTarget rule;
 	for (const AiOverride& entry : def->overrides) {
 		const AbilityDef* ability = db_->ability(entry.ability);
-		if (!ability || !overrideHolds(entry.when, actor) || aiCandidates(actor, *ability, entry.target).empty()) {
+		if (!ability || !overrideHolds(entry, actor) || aiCandidates(actor, *ability, entry.target).empty()) {
 			continue;
 		}
 		Combatant& self = combatants_[actor];
@@ -210,18 +231,25 @@ void Battle::chooseEnemyAction(int actor, std::vector<Event>& out) {
 		case AiConditionKind::HitByAttack:
 		case AiConditionKind::HitByAbility:
 		case AiConditionKind::HitByTechnique:
-			self.hitByAttack = self.hitByAbility = self.hitByTechnique = false;
+		case AiConditionKind::HitByGroup:
+			self.hitByAttack = self.hitByAbility = self.hitByTechnique = self.hitByGroup = false;
 			break;
 		case AiConditionKind::SelfHpHalf:
 		case AiConditionKind::AnyAllyHpHalf:
 		case AiConditionKind::LastStanding:
 		case AiConditionKind::TechniquesBlocked:
+		case AiConditionKind::Ambushed:
+		case AiConditionKind::AllyPresent:
+		case AiConditionKind::AllyAbsent:
+		case AiConditionKind::FreeSlotBeside:
+		case AiConditionKind::GroupIntact:
 			break;
 		}
 		chosen = ability;
 		rule = entry.target;
 		break;
 	}
+	combatants_[actor].ambushed = false;
 	const CancelReason why = chosen ? checkUsable(actor, *chosen) : CancelReason::None;
 	if (!chosen || why == CancelReason::NotEnoughTp || why == CancelReason::NoUsesLeft || aiCandidates(actor, *chosen, rule).empty()) {
 		command = Command::attack(command.target);

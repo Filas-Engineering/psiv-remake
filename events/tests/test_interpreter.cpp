@@ -581,3 +581,27 @@ end
 	CHECK_EQ(events::describe(p.code[0].condition), std::string("not vehicle skiff"));
 	check_clean(host);
 }
+
+TEST(learn_and_follower_reach_the_host_and_apply_while_skipping) {
+	Program p = test::compile_ok(R"(event a skippable
+	learn medic hallow
+	follower peddler
+	say guide "walk with us"
+	follower none
+end
+)");
+	RecordingHost host;
+	Interpreter it(p, host);
+	CHECK(it.start("a"));
+	CHECK(it.skip());
+	test::run(it, host);
+	CHECK(it.status() == Status::finished);
+	const std::vector<std::string> expected = {"learn medic hallow", "follower peddler", "follower none"};
+	std::vector<std::string> seen;
+	for (const std::string& line : host.trace) {
+		if (line.rfind("learn ", 0) == 0 || line.rfind("follower ", 0) == 0) {
+			seen.push_back(line);
+		}
+	}
+	CHECK(seen == expected);
+}

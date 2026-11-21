@@ -199,6 +199,14 @@ void RecordingHost::remove_vehicle(const std::string& vehicle) {
 	vehicles.erase(vehicle);
 }
 
+void RecordingHost::teach_ability(const std::string& member, const std::string& ability) {
+	trace.push_back("learn " + member + " " + ability);
+}
+
+void RecordingHost::set_follower(const std::string& actor) {
+	trace.push_back("follower " + (actor.empty() ? std::string("none") : actor));
+}
+
 bool RecordingHost::has_vehicle(const std::string& vehicle) {
 	const bool held = vehicles.count(vehicle) > 0;
 	trace.push_back("has_vehicle " + vehicle + " -> " + (held ? "true" : "false"));

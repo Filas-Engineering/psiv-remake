@@ -6,7 +6,9 @@
 		{"id": "done", "text": "objective.done", "after": "tidewater.reported"}
 	],
 	"jobs": [
-		{"id": "lost_cache", "title": "job.lost_cache", "available": "tidewater.arrived", "accepted": "job.lost_cache.accepted", "completed": "job.lost_cache.done"}
+		{"id": "lost_cache", "title": "job.lost_cache", "available": "tidewater.arrived", "accepted": "job.lost_cache.accepted", "completed": "job.lost_cache.done"},
+		{"id": "steps_courier", "title": "job.steps_courier", "available": "travel.isles_open", "accepted": "job.steps_courier.accepted", "completed": "job.steps_courier.done", "missed": "steps.trial_survived"},
+		{"id": "steps_lamps", "title": "job.steps_lamps", "available": "steps.trial_survived", "accepted": "job.steps_lamps.accepted", "completed": "job.steps_lamps.done"}
 	],
 	"encyclopedia": [
 		{"id": "tidewater", "title": "codex.tidewater.title", "text": "codex.tidewater.text", "flag": "tidewater.arrived"},

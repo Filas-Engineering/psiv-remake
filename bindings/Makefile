@@ -69,6 +69,7 @@ SAMPLE_AUDIO_SCRIPT = monogame/Psiv.Sample/scripts/audio.txt
 SAMPLE_WINDOW_SCRIPT = monogame/Psiv.Sample/scripts/window.txt
 SAMPLE_BATTLE_SCRIPT = monogame/Psiv.Sample/scripts/battle.txt
 SAMPLE_BATTLE_FRONT_SCRIPT = monogame/Psiv.Sample/scripts/battle_front.txt
+SAMPLE_BATTLE_CHANGES_SCRIPT = monogame/Psiv.Sample/scripts/battle_changes.txt
 SAMPLE_VEHICLES_SCRIPT = monogame/Psiv.Sample/scripts/vehicles.txt
 SAMPLE_ASSETS_SCRIPT = monogame/Psiv.Sample/scripts/assets.txt
 SAMPLE_RELOAD_SCRIPT = monogame/Psiv.Sample/scripts/hot_reload.txt
@@ -205,17 +206,30 @@ dotnet-test: dotnet
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_battle_saves --script $(SAMPLE_BATTLE_SCRIPT) --frames 5200 --frame-digests $(BUILD)/digests_battle.txt > $(BUILD)/sample_battle_headless.txt \
 		|| (cat $(BUILD)/sample_battle_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_battle_headless.txt
-	# The front layout's run needs an encounter of six enemies, so it plays a copy of the data with one added, and --dev
-	# for the commands that reach its moments.
+	# The front layout's run needs an encounter of six enemies and the changes run a lone Twin Ooze, so they play a copy
+	# of the data with those added, and --dev for the commands that reach their moments.
 	rm -rf $(BUILD)/sample_battle_front_saves
 	python3 -I $(SAMPLE_SCRIPTS)/make_front_data.py $(GAME)/data $(CORE)/data $(BUILD)/front_data
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_battle_front_saves \
 		--script $(SAMPLE_BATTLE_FRONT_SCRIPT) --frames 5600 > $(BUILD)/sample_battle_front_headless.txt || (cat $(BUILD)/sample_battle_front_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_battle_front_headless.txt
+	rm -rf $(BUILD)/sample_battle_changes_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_battle_changes_saves \
+		--script $(SAMPLE_BATTLE_CHANGES_SCRIPT) --frames 9600 > $(BUILD)/sample_battle_changes_headless.txt || (cat $(BUILD)/sample_battle_changes_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_battle_changes_headless.txt
 	rm -rf $(BUILD)/sample_vehicles_saves
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_vehicles_saves --script $(SAMPLE_VEHICLES_SCRIPT) --frames 3200 --frame-digests $(BUILD)/digests_vehicles.txt > $(BUILD)/sample_vehicles_headless.txt \
 		|| (cat $(BUILD)/sample_vehicles_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_vehicles_headless.txt
+	rm -rf $(BUILD)/sample_language_ja_saves
+	$(SAMPLE_RUN) --saves $(BUILD)/sample_language_ja_saves --script $(SAMPLE_SCRIPTS)/language_ja.txt --frames 3200 --language ja --strict-text > $(BUILD)/sample_language_ja_headless.txt \
+		|| (cat $(BUILD)/sample_language_ja_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_language_ja_headless.txt
+	rm -rf $(BUILD)/sample_cleared_saves
+	$(GAME_CLI) --data $(GAME)/data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/sample_cleared_saves > /dev/null
+	$(SAMPLE_RUN) --saves $(BUILD)/sample_cleared_saves --script $(SAMPLE_SCRIPTS)/cleared.txt --frames 900 --dev > $(BUILD)/sample_cleared_headless.txt \
+		|| (cat $(BUILD)/sample_cleared_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_cleared_headless.txt
 	rm -rf $(BUILD)/export
 	$(SAMPLE_RUN) --export-placeholders $(BUILD)/export
 	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/export

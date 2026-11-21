@@ -1,0 +1,32 @@
+# After a finished story (the Makefile writes a clear-data record into the save directory first): the title offers the
+# sound test, which plays a chosen track and gives the title its own music back on leaving; then, with developer tools,
+# the wayfarer of Ember Steps walks at the end of the party's line as a follower and leaves again.
+# With --window, the shot lines save screenshots under build/shots/ (run from bindings/); headless runs write nothing.
+
+cmd set text instant
+expect screen Title
+press Down 3
+expect state selected Sound test
+press Enter
+expect screen SoundTest
+press Down
+press Enter
+expect state music battle_marsh_ambush
+shot build/shots/sound_test.png
+press Escape
+expect screen Title
+expect state music title_harbor_dawn
+press Up 3
+press Enter
+pressuntil Enter Field 400
+expect state follower -
+dev warp ember_steps west_gate
+dev event steps_wayfarer
+pressuntil Enter Field 200
+expect state follower wayfarer
+hold Right 30
+wait 20
+shot build/shots/follower.png
+dev event steps_wayfarer
+pressuntil Enter Field 200
+expect state follower -

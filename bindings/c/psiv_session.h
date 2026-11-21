@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 9
+#define PSIV_ABI_VERSION 10
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -121,7 +121,7 @@ typedef enum psiv_enemy_state { PSIV_ENEMY_IDLE, PSIV_ENEMY_CHASING, PSIV_ENEMY_
 typedef enum psiv_point_kind { PSIV_POINT_TALK, PSIV_POINT_STEP, PSIV_POINT_CHEST, PSIV_POINT_SHOP, PSIV_POINT_REST, PSIV_POINT_PORT } psiv_point_kind;
 /* Ways to travel at once: from a port to another open port, back to a visited town of the region, out of a dungeon. */
 typedef enum psiv_travel_kind { PSIV_TRAVEL_PORT, PSIV_TRAVEL_TOWN, PSIV_TRAVEL_DUNGEON_EXIT } psiv_travel_kind;
-typedef enum psiv_job_state { PSIV_JOB_AVAILABLE, PSIV_JOB_ACCEPTED, PSIV_JOB_COMPLETED } psiv_job_state;
+typedef enum psiv_job_state { PSIV_JOB_AVAILABLE, PSIV_JOB_ACCEPTED, PSIV_JOB_COMPLETED, PSIV_JOB_MISSED } psiv_job_state;
 typedef enum psiv_text_speed { PSIV_TEXT_SLOW, PSIV_TEXT_NORMAL, PSIV_TEXT_FAST, PSIV_TEXT_INSTANT } psiv_text_speed;
 typedef enum psiv_battle_speed { PSIV_BATTLE_X1, PSIV_BATTLE_X1_5, PSIV_BATTLE_X2, PSIV_BATTLE_X3 } psiv_battle_speed;
 typedef enum psiv_reward_multiplier { PSIV_REWARD_X1, PSIV_REWARD_X1_5, PSIV_REWARD_X2 } psiv_reward_multiplier;
@@ -140,13 +140,16 @@ typedef enum psiv_event_type {
 	PSIV_EVENT_ACTION_STARTED, PSIV_EVENT_ACTION_CANCELLED, PSIV_EVENT_COMBO_TRIGGERED, PSIV_EVENT_COMBO_DISCOVERED, PSIV_EVENT_RESOURCE_SPENT,
 	PSIV_EVENT_ITEM_HAD_NO_EFFECT, PSIV_EVENT_HIT, PSIV_EVENT_MISSED, PSIV_EVENT_CRITICAL, PSIV_EVENT_DAMAGE_DEALT, PSIV_EVENT_HEALED,
 	PSIV_EVENT_REVIVED, PSIV_EVENT_STATUS_APPLIED, PSIV_EVENT_STATUS_RESISTED, PSIV_EVENT_STATUS_REMOVED, PSIV_EVENT_STAT_MODIFIED,
-	PSIV_EVENT_COMBATANT_DEFEATED, PSIV_EVENT_ESCAPE_ATTEMPTED, PSIV_EVENT_MESSAGE, PSIV_EVENT_ROUND_ENDED, PSIV_EVENT_BATTLE_ENDED
+	PSIV_EVENT_COMBATANT_DEFEATED, PSIV_EVENT_ESCAPE_ATTEMPTED, PSIV_EVENT_MESSAGE, PSIV_EVENT_ROUND_ENDED, PSIV_EVENT_BATTLE_ENDED,
+	PSIV_EVENT_ENEMY_JOINED, PSIV_EVENT_ENEMY_LEFT, PSIV_EVENT_ENEMY_TRANSFORMED
 } psiv_event_type;
 typedef enum psiv_cancel_reason { PSIV_CANCEL_NONE, PSIV_CANCEL_ACTOR_UNABLE, PSIV_CANCEL_SILENCED, PSIV_CANCEL_NOT_ENOUGH_TP, PSIV_CANCEL_NO_USES_LEFT, PSIV_CANCEL_NO_ITEM, PSIV_CANCEL_NO_TARGET } psiv_cancel_reason;
 typedef enum psiv_effectiveness { PSIV_EFFECT_NORMAL, PSIV_EFFECT_WEAK, PSIV_EFFECT_RESISTED, PSIV_EFFECT_IMMUNE } psiv_effectiveness;
 typedef enum psiv_status_end { PSIV_STATUS_END_CURED, PSIV_STATUS_END_DURATION, PSIV_STATUS_END_RECOVERED, PSIV_STATUS_END_WOKE_ON_DAMAGE, PSIV_STATUS_END_DEFEATED } psiv_status_end;
 typedef enum psiv_resource_kind { PSIV_RESOURCE_NONE, PSIV_RESOURCE_TP, PSIV_RESOURCE_SKILL_USE, PSIV_RESOURCE_ITEM } psiv_resource_kind;
-typedef enum psiv_element { PSIV_ELEMENT_NONE, PSIV_ELEMENT_HEAT, PSIV_ELEMENT_CHILL, PSIV_ELEMENT_SHOCK, PSIV_ELEMENT_GALE } psiv_element;
+typedef enum psiv_element { PSIV_ELEMENT_NONE, PSIV_ELEMENT_HEAT, PSIV_ELEMENT_CHILL, PSIV_ELEMENT_SHOCK, PSIV_ELEMENT_GALE, PSIV_ELEMENT_HOLY } psiv_element;
+/* What a character or enemy is: a machine takes only healing that names machines (core/README.md). */
+typedef enum psiv_creature_kind { PSIV_CREATURE_LIVING, PSIV_CREATURE_SPIRIT, PSIV_CREATURE_MACHINE } psiv_creature_kind;
 typedef enum psiv_stat { PSIV_STAT_STRENGTH, PSIV_STAT_MENTAL, PSIV_STAT_AGILITY, PSIV_STAT_DEXTERITY, PSIV_STAT_DEFENSE } psiv_stat;
 typedef enum psiv_opening { PSIV_OPENING_NORMAL, PSIV_OPENING_PARTY_FIRST, PSIV_OPENING_ENEMY_FIRST } psiv_opening;
 typedef enum psiv_auto_stop { PSIV_AUTO_STOP_NONE, PSIV_AUTO_STOP_CANCELLED, PSIV_AUTO_STOP_MEMBER_FELL, PSIV_AUTO_STOP_CANNOT_PAY, PSIV_AUTO_STOP_BATTLE_ENDED } psiv_auto_stop;
@@ -195,7 +198,7 @@ typedef enum psiv_name_kind {
 	PSIV_NAME_OUTCOME, PSIV_NAME_EVENT_TYPE, PSIV_NAME_CANCEL_REASON, PSIV_NAME_EFFECTIVENESS, PSIV_NAME_STATUS_END, PSIV_NAME_RESOURCE_KIND,
 	PSIV_NAME_ELEMENT, PSIV_NAME_STAT, PSIV_NAME_OPENING, PSIV_NAME_AUTO_STOP, PSIV_NAME_MACRO_STEP_STATUS, PSIV_NAME_MACRO_ISSUE,
 	PSIV_NAME_ACTION_TYPE, PSIV_NAME_MACRO_TARGET_KIND, PSIV_NAME_DESCRIPTION_KIND, PSIV_NAME_ITEM_SORT, PSIV_NAME_CAMERA_TARGET,
-	PSIV_NAME_TRAVEL_KIND, PSIV_NAME_DEV_LIST
+	PSIV_NAME_TRAVEL_KIND, PSIV_NAME_DEV_LIST, PSIV_NAME_CREATURE_KIND
 } psiv_name_kind;
 
 /* The stable name of an enum value as the C++ libraries spell it, lowercase with underscores ("field",
@@ -1251,7 +1254,7 @@ PSIV_API psiv_status psiv_dev_set_flag(psiv_session* session, const char* flag, 
 PSIV_API psiv_status psiv_dev_give(psiv_session* session, const char* id, int32_t count);
 /* MUTATES. Adds amount to the money (negative takes it away), kept between 0 and the cap. Not in a battle. */
 PSIV_API psiv_status psiv_dev_money(psiv_session* session, int32_t amount);
-/* MUTATES. Sets a roster member's level (1 to 50) with no experience into it and refills it as a rest does, reviving it. */
+/* MUTATES. Sets a roster member's level (1 to 99) with no experience into it and refills it as a rest does, reviving it. */
 PSIV_API psiv_status psiv_dev_set_level(psiv_session* session, const char* member, int32_t level);
 /* MUTATES. From the field, a battle with the encounter as a random battle (a vehicle battle while riding). */
 PSIV_API psiv_status psiv_dev_battle(psiv_session* session, const char* encounter);
@@ -1316,6 +1319,21 @@ PSIV_API psiv_status psiv_load_text(psiv_session* session, const char* text);
  * queue (actions in flight are rebuilt as instant ones) and a game over. An event whose scripts changed starts again
  * from its first command with the world it started with. */
 PSIV_API psiv_status psiv_session_reload(psiv_session* session);
+
+/* ------------------------------------------------------------------------------------------------------ */
+/* Followers, kinds, vehicle skill uses, the clear-data record and the audio list.                          */
+
+/* The actor walking with the party without joining it (a script's follower command), "" for none. */
+PSIV_API psiv_status psiv_follower(psiv_session* session, const char** out);
+/* A character's kind (a psiv_creature_kind). PSIV_NOT_FOUND for an unknown character. */
+PSIV_API psiv_status psiv_character_kind(psiv_session* session, const char* character, int32_t* out);
+/* A vehicle's uses left of one of its skills, carried from battle to battle and refilled by rest. PSIV_NOT_FOUND when
+ * the party does not have the vehicle or the vehicle has no such skill. */
+PSIV_API psiv_status psiv_vehicle_skill_uses(psiv_session* session, const char* vehicle, const char* skill, int32_t* out);
+/* 1 when the save directory holds a readable clear-data record (the story was finished), else 0. Works at the title. */
+PSIV_API psiv_status psiv_clear_record_exists(psiv_session* session, int32_t* out);
+/* Every audio id game.json's presentation lists, in data order, for a sound test. Works at the title. */
+PSIV_API psiv_status psiv_audio_ids(psiv_session* session, const char* const** out, int32_t* count);
 
 #ifdef __cplusplus
 }

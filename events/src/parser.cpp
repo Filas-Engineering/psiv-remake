@@ -692,8 +692,8 @@ private:
 		}
 
 		static const std::initializer_list<const char*> known = {
-			"ambient", "anim", "ask", "battle", "call", "camera", "choice", "clear", "face", "fade", "give", "goto", "hide",
-			"if", "label", "lock", "move", "music", "name", "narrate", "panel", "party", "race", "rest", "return", "save",
+			"ambient", "anim", "ask", "battle", "call", "camera", "choice", "clear", "face", "fade", "follower", "give", "goto", "hide",
+			"if", "label", "learn", "lock", "move", "music", "name", "narrate", "panel", "party", "race", "rest", "return", "save",
 			"say", "sequence", "set", "shake", "shop", "show", "sound", "sync", "take", "together", "unlock", "var", "vehicle",
 			"wait", "warp", "while",
 		};
@@ -947,6 +947,15 @@ private:
 			s = action(ActionType::warp);
 			a.name(s.ins.action.subject, "a map name");
 			a.name(s.ins.action.target, "a marker name");
+		} else if (cmd == "learn") {
+			s = simple(Op::learn);
+			a.name(s.ins.name, "a party member name");
+			a.name(s.ins.action.subject, "an ability name");
+		} else if (cmd == "follower") {
+			s = simple(Op::follower);
+			if (!a.keyword("none")) {
+				a.name(s.ins.name, "an actor name or 'none'");
+			}
 		} else if (cmd == "vehicle") {
 			s = simple(Op::vehicle_give);
 			if (a.keyword("place")) {

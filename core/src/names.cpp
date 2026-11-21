@@ -22,12 +22,13 @@ bool parseName(const char* const (&names)[N], const std::string& text, E& out) {
 }
 
 // Order matches the enum declarations.
-const char* const kElements[] = {"none", "heat", "chill", "shock", "gale"};
+const char* const kElements[] = {"none", "heat", "chill", "shock", "gale", "holy"};
 const char* const kStats[] = {"strength", "mental", "agility", "dexterity", "defense"};
 const char* const kSides[] = {"party", "enemy"};
 const char* const kTargetings[] = {"one_enemy", "enemy_group", "all_enemies", "one_ally", "all_allies", "self", "one_fallen_ally", "random_enemy"};
 const char* const kAbilityKinds[] = {"attack", "technique", "skill", "combo"};
-const char* const kEffectKinds[] = {"physical_damage", "elemental_damage", "heal", "apply_status", "cure_status", "modify_stat", "revive", "travel"};
+const char* const kEffectKinds[] = {"physical_damage", "elemental_damage", "heal", "apply_status", "cure_status", "modify_stat", "revive", "travel", "instant_defeat", "restore_tp", "strip_modifiers", "summon", "merge", "teach"};
+const char* const kCreatureKinds[] = {"living", "spirit", "machine"};
 const char* const kTravelTargets[] = {"town", "dungeon_exit"};
 const char* const kEquipSlots[] = {"weapon", "head", "body", "arms", "accessory"};
 const char* const kOpenings[] = {"normal", "party_first", "enemy_first"};
@@ -38,7 +39,7 @@ const char* const kForcedTargets[] = {"random_any", "random_ally", "random_foe"}
 const char* const kStatusStackings[] = {"refresh", "extend", "keep"};
 const char* const kAiConditions[] = {
 	"self_hp_half", "self_hp_quarter_once", "any_ally_hp_half", "last_standing", "hit_by_attack", "hit_by_ability", "hit_by_technique",
-	"techniques_blocked"};
+	"techniques_blocked", "hit_by_group", "ambushed", "ally_present", "ally_absent", "free_slot_beside", "group_intact"};
 const char* const kAiTargetRules[] = {"default", "random", "lowest_hp", "highest_hp", "has_status", "lacks_status", "last_attacker"};
 const char* const kCommandKinds[] = {"none", "attack", "ability", "item", "defend", "escape"};
 const char* const kMacroTargets[] = {"default", "self", "member", "enemy", "all"};
@@ -52,7 +53,7 @@ const char* const kEventTypes[] = {
 	"battle_started", "round_started", "commands_locked", "order_resolved", "retargeted", "action_started",
 	"action_cancelled", "combo_triggered", "combo_discovered", "resource_spent", "item_had_no_effect", "hit", "missed",
 	"critical", "damage_dealt", "healed", "revived", "status_applied", "status_resisted", "status_removed",
-	"stat_modified", "combatant_defeated", "escape_attempted", "message", "round_ended", "battle_ended"};
+	"stat_modified", "combatant_defeated", "escape_attempted", "message", "round_ended", "battle_ended", "enemy_joined", "enemy_left", "enemy_transformed"};
 // The spellings record and event text files used before the names were unified.
 const char* const kEventTypesBefore[] = {
 	"BattleStarted", "RoundStarted", "CommandsLocked", "OrderResolved", "Retargeted", "ActionStarted", "ActionCancelled",
@@ -73,6 +74,7 @@ const char* toString(Side value) { return nameOf(kSides, value); }
 const char* toString(Targeting value) { return nameOf(kTargetings, value); }
 const char* toString(AbilityKind value) { return nameOf(kAbilityKinds, value); }
 const char* toString(EffectKind value) { return nameOf(kEffectKinds, value); }
+const char* toString(CreatureKind value) { return nameOf(kCreatureKinds, value); }
 const char* toString(TravelTarget value) { return nameOf(kTravelTargets, value); }
 const char* toString(EquipSlot value) { return nameOf(kEquipSlots, value); }
 const char* toString(Opening value) { return nameOf(kOpenings, value); }
@@ -101,6 +103,7 @@ bool parseSide(const std::string& text, Side& out) { return parseName(kSides, te
 bool parseTargeting(const std::string& text, Targeting& out) { return parseName(kTargetings, text, out); }
 bool parseAbilityKind(const std::string& text, AbilityKind& out) { return parseName(kAbilityKinds, text, out); }
 bool parseEffectKind(const std::string& text, EffectKind& out) { return parseName(kEffectKinds, text, out); }
+bool parseCreatureKind(const std::string& text, CreatureKind& out) { return parseName(kCreatureKinds, text, out); }
 bool parseTravelTarget(const std::string& text, TravelTarget& out) { return parseName(kTravelTargets, text, out); }
 bool parseEquipSlot(const std::string& text, EquipSlot& out) { return parseName(kEquipSlots, text, out); }
 bool parseOpening(const std::string& text, Opening& out) { return parseName(kOpenings, text, out); }

@@ -290,6 +290,8 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.event_cannot_resume",
 		"game.event_damaged",
 		"game.fallen",
+		"game.follower_joined",
+		"game.follower_left",
 		"game.found",
 		"game.found_money",
 		"game.game_over",
@@ -299,6 +301,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.job.accepted",
 		"game.job.available",
 		"game.job.completed",
+		"game.job.missed",
 		"game.joins",
 		"game.learned",
 		"game.left_vehicle",
@@ -623,6 +626,32 @@ public:
 	}
 
 	void set_player_control(bool enabled) override { s_.world_.playerControl = enabled; }
+
+	void teach_ability(const std::string& member, const std::string& ability) override {
+		rules::PartyMember* m = s_.world_.member(member);
+		if (!m) {
+			s_.warn("'" + member + "' cannot learn '" + ability + "' before joining");
+			return;
+		}
+		const std::vector<std::string> known = rules::knownAbilities(s_.data_.db, *m);
+		if (std::find(known.begin(), known.end(), ability) != known.end()) {
+			return;
+		}
+		m->taught.push_back(ability);
+		const rules::AbilityDef* def = s_.data_.db.ability(ability);
+		if (def && def->kind == rules::AbilityKind::Skill && !m->skillUses.count(ability)) {
+			m->skillUses[ability] = def->uses;
+		}
+		s_.emit(OutputKind::Notice, "game.learned", {member, ability});
+	}
+
+	void set_follower(const std::string& actor) override {
+		if (s_.world_.follower == actor) {
+			return;
+		}
+		s_.world_.follower = actor;
+		s_.emit(OutputKind::Notice, actor.empty() ? "game.follower_left" : "game.follower_joined", {actor.empty() ? std::string("-") : actor});
+	}
 
 	void give_vehicle(const std::string& vehicle, const std::string& map, const std::string& marker) override {
 		const bool had = s_.world_.vehicles.count(vehicle) > 0;
@@ -998,6 +1027,8 @@ void Session::refreshJournal(bool announce) {
 			next = JobState::Completed;
 		} else if (world_.flag(job.acceptedFlag)) {
 			next = JobState::Accepted;
+		} else if (!job.missedFlag.empty() && world_.flag(job.missedFlag)) {
+			next = JobState::Missed;
 		} else if (job.availableFlag.empty() || world_.flag(job.availableFlag)) {
 			next = JobState::Available;
 		}
@@ -1283,6 +1314,20 @@ void Session::tickField(const FieldInput& input) {
 	}
 }
 
+// P6: a machine member still standing regains hit points with each step.
+void Session::healMachinesOnStep() {
+	if (data_.config.machineStepHeal <= 0) {
+		return;
+	}
+	for (const std::string& id : world_.lineup) {
+		rules::PartyMember* m = world_.member(id);
+		const rules::CharacterDef* character = data_.db.character(id);
+		if (m && character && character->kind == rules::CreatureKind::Machine && m->hp > 0) {
+			m->hp = std::min(m->hp + data_.config.machineStepHeal, rules::memberStats(data_.db, *m).maxHp);
+		}
+	}
+}
+
 void Session::arrive(Cell cell) {
 	const Cell from = world_.position;
 	world_.position = cell;
@@ -1292,6 +1337,7 @@ void Session::arrive(Cell cell) {
 	if (pacingOn()) {
 		pacing_.step();
 	}
+	healMachinesOnStep();
 	const Area& a = *area();
 	if (const Exit* exit = a.exitAt(cell)) {
 		const Exit e = *exit;
@@ -2083,6 +2129,9 @@ std::string Session::startBattle(const std::string& encounter, rules::Opening op
 	setup.inventory = world_.items;
 	setup.vehicle = vehicle;
 	setup.flags.vehicleBattle = !vehicle.empty();
+	if (auto place = world_.vehicles.find(vehicle); place != world_.vehicles.end()) {
+		setup.vehicleSkillUses = place->second.skillUses;
+	}
 	const std::string error = rules::useEncounter(setup, data_.db, encounter);
 	if (!error.empty()) {
 		return error;
@@ -2240,6 +2289,34 @@ std::vector<rules::Event> Session::resolveRound() {
 	return events;
 }
 
+// SAV-032: until the configured flag is set, every member who has joined and is not in the battle gets the share
+// each member standing got.
+void Session::shareWithMembersOutside(const std::vector<rules::PartyMember>& fought, const rules::Rewards& rewards) {
+	if (data_.config.outsideExperienceUntil.empty() || world_.flag(data_.config.outsideExperienceUntil)) {
+		return;
+	}
+	int share = 0;
+	for (int amount : rewards.memberExperience) {
+		share = std::max(share, amount);
+	}
+	if (share <= 0) {
+		return;
+	}
+	for (rules::PartyMember& member : world_.roster) {
+		const bool inBattle = std::any_of(fought.begin(), fought.end(), [&](const rules::PartyMember& m) { return m.characterId == member.characterId; });
+		if (inBattle) {
+			continue;
+		}
+		const rules::LevelUp up = rules::grantExperience(member, data_.db, share);
+		if (up.levelsGained > 0) {
+			emit(OutputKind::Notice, "game.level_up", {member.characterId, std::to_string(member.level)});
+		}
+		for (const std::string& ability : up.learned) {
+			emit(OutputKind::Notice, "game.learned", {member.characterId, ability});
+		}
+	}
+}
+
 void Session::finishBattle() {
 	const rules::Outcome outcome = battle_->outcome();
 	const rules::Rewards rewards = battle_->rewards();
@@ -2251,6 +2328,9 @@ void Session::finishBattle() {
 		}
 	}
 	const bool gameOver = battle_->gameOver();
+	if (auto place = world_.vehicles.find(battle_->setup().vehicle); place != world_.vehicles.end()) {
+		place->second.skillUses = battle_->vehicleSkillUses();
+	}
 	ended_.emplace(EndedBattle{std::move(*battle_), battleEncounter_, battleSource_, outcome, gameOver, rules::Rewards(), {}});
 	battle_.reset();
 	for (const rules::PartyMember& m : state) {
@@ -2285,6 +2365,7 @@ void Session::finishBattle() {
 				emit(OutputKind::Notice, "game.learned", {member->characterId, ability});
 			}
 		}
+		shareWithMembersOutside(state, rewards);
 	} else if (outcome == rules::Outcome::Escaped) {
 		emit(OutputKind::Notice, "game.got_away");
 	} else {
@@ -2539,6 +2620,9 @@ rules::Message Session::payRest(const RestPoint* point) {
 	world_.money -= cost;
 	for (rules::PartyMember& m : world_.roster) {
 		rules::rest(m, data_.db);
+	}
+	for (auto& [id, place] : world_.vehicles) {
+		place.skillUses.clear();
 	}
 	emit(OutputKind::Notice, "game.rested");
 	if (autosaveReason_.empty()) {

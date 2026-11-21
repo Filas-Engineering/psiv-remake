@@ -26,15 +26,15 @@ public sealed partial class SampleController
 		int h = s.Height - 120;
 		int x = (s.Width - w) / 2;
 		int y = 60;
-		Style.Window(s, x, y, w, h, "Save");
-		s.Text("Save your progress?", x + 28, y + Px(28), Style.Accent);
+		Style.Window(s, x, y, w, h, T("ui.save_prompt.title"));
+		s.Text(T("ui.save_prompt.question"), x + 28, y + Px(28), Style.Accent);
 		int listTop = y + Px(72);
 		int leave = Px(40);
 		DrawSlots(s, _list, x + 40, listTop, w - 70, h - (listTop - y) - leave - 20, slots, _s.Saves() ?? [], _list.Cursor < slots.Count);
-		Style.ListRow(s, "Don't save", x + 40, y + h - leave - 10, w - 84, _list.Cursor == slots.Count, height: Px(28));
+		Style.ListRow(s, T("ui.save_prompt.dont_save"), x + 40, y + h - leave - 10, w - 84, _list.Cursor == slots.Count, height: Px(28));
 		if (_list.Cursor == slots.Count)
 		{
-			_probeSelected = "Don't save";
+			_probeSelected = T("ui.save_prompt.dont_save");
 		}
 	}
 }

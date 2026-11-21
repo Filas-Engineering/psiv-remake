@@ -201,7 +201,7 @@ TEST(vehicleStateRoundTripsThroughSavesAboardAndOnFoot) {
 		}
 		const SaveFile save = s.makeSave(false);
 		const std::string text = serializeSave(save);
-		CHECK(text.find("chunk travel 1 ") != std::string::npos);
+		CHECK(text.find("chunk travel 2 ") != std::string::npos);
 		rules::Result<SaveFile> parsed = parseSave(text);
 		std::string diff;
 		CHECK(parsed.ok() && sameWorld(parsed.value->world, save.world, &diff));

@@ -1,7 +1,7 @@
 {
 	"items": [
 		{"id": "tonic", "name": "Tonic", "target": "one_ally", "field": true, "effects": [
-			{"type": "heal", "power": 30}
+			{"type": "heal", "kinds": ["living"], "power": 30}
 		]},
 		{"id": "clear_gel", "name": "Clear Gel", "target": "one_ally", "field": true, "effects": [
 			{"type": "cure_status", "status": "poison"}
@@ -11,7 +11,7 @@
 			{"type": "cure_status", "status": "paralysis"}
 		]},
 		{"id": "second_wind", "name": "Second Wind", "target": "one_fallen_ally", "field": true, "effects": [
-			{"type": "revive", "power": 30}
+			{"type": "revive", "kinds": ["living"], "power": 30}
 		]},
 		{"id": "spark_flask", "name": "Spark Flask", "target": "one_enemy", "effects": [
 			{"type": "elemental_damage", "power": 25, "element": "shock"}
@@ -27,6 +27,22 @@
 		]},
 		{"id": "waymark_chalk", "name": "Waymark Chalk", "target": "all_allies", "field": true, "effects": [
 			{"type": "travel", "to": "dungeon_exit"}
+		]},
+		{"id": "gear_salve", "name": "Gear Salve", "target": "one_ally", "field": true, "effects": [
+			{"type": "heal", "kinds": ["machine"], "power": 999}
+		]},
+		{"id": "kindle_salts", "name": "Kindle Salts", "target": "one_fallen_ally", "field": true, "effects": [
+			{"type": "revive", "kinds": ["living"], "power": 100},
+			{"type": "cure_status", "status": "silence"}
+		]},
+		{"id": "null_dust", "name": "Null Dust", "target": "one_enemy", "effects": [
+			{"type": "strip_modifiers"}
+		]},
+		{"id": "sunstone", "name": "Sunstone", "target": "one_enemy", "effects": [
+			{"type": "cure_status", "status": "aegis"}
+		]},
+		{"id": "hallow_scroll", "name": "Hallow Scroll", "target": "one_ally", "field": true, "effects": [
+			{"type": "teach", "ability": "hallow"}
 		]}
 	]
 }

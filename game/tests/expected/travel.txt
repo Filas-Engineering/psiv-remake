@@ -241,6 +241,7 @@ field> walk 22 4
 field> face east
 field> talk
 A cold beacon stands on the rock. You strike its flint and the oil catches.
+New job: A courier to the far stair.
 Far to the west a second light answers. By morning the ferry will run to the isles.
 [Autosaved to auto_2 (event end).]
 field> walk 20 4
@@ -277,64 +278,73 @@ Bog Wisp A uses Drone Hum on Reed Skimmer.
   Reed Skimmer stays awake.
 Gel Mite uses Bite on Reed Skimmer.
   Reed Skimmer takes 6 damage.
-Reed Skimmer uses Hull Vent on Gel Mite.
-  Gel Mite takes 52 damage.
+Reed Skimmer uses Ram on Gel Mite.
+  Gel Mite takes 40 damage.
 -- round 4 --
-Bog Wisp B uses Patch Up on Gel Mite.
+Bog Wisp A uses Patch Up on Gel Mite.
   Gel Mite recovers 31.
-Bog Wisp A uses Drone Hum on Reed Skimmer.
-  Reed Skimmer stays awake.
-Reed Skimmer uses Hull Vent on Gel Mite.
-  Gel Mite takes 39 damage.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 12 damage.
+Reed Skimmer uses Ram on Gel Mite.
+  Gel Mite takes 45 damage.
+-- round 5 --
+Bog Wisp B uses Patch Up on Gel Mite.
+  Gel Mite recovers 32.
+Bog Wisp A uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer uses Ram on Gel Mite.
+  Gel Mite takes 38 damage.
   Gel Mite falls.
 Gel Mite cannot act (Defeated).
--- round 5 --
-Bog Wisp B uses Numbing Sting on Reed Skimmer.
-  Reed Skimmer takes 2 damage.
-  Reed Skimmer cannot be paralyzed.
-Bog Wisp A uses Drone Hum on Reed Skimmer.
-  Reed Skimmer falls asleep!
-Reed Skimmer cannot act (Sleep).
-  Reed Skimmer wakes up.
 -- round 6 --
-Bog Wisp A uses Drone Hum on Reed Skimmer.
-  Reed Skimmer falls asleep!
 Bog Wisp B uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 7 damage.
+Bog Wisp A uses Numbing Sting on Reed Skimmer.
   Reed Skimmer takes 1 damage.
-Reed Skimmer cannot act (Sleep).
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 46 damage.
 -- round 7 --
-Bog Wisp B uses Bite on Reed Skimmer.
-  Reed Skimmer takes 1 damage.
-Bog Wisp A uses Bite on Reed Skimmer.
-  Reed Skimmer takes 3 damage.
+Bog Wisp A uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 33.
+Bog Wisp B uses Drone Hum on Reed Skimmer.
+  Reed Skimmer falls asleep!
 Reed Skimmer cannot act (Sleep).
   Reed Skimmer wakes up.
 -- round 8 --
 Bog Wisp A uses Bite on Reed Skimmer.
-  Reed Skimmer takes 3 damage.
+  Reed Skimmer takes 2 damage.
 Bog Wisp B uses Bite on Reed Skimmer.
-  Reed Skimmer takes 1 damage.
-Reed Skimmer uses Hull Vent.
-  Bog Wisp A takes 27 damage.
-  Bog Wisp B takes 25 damage.
+  Reed Skimmer takes 2 damage.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 45 damage.
 -- round 9 --
 Bog Wisp A uses Bite on Reed Skimmer.
-  Reed Skimmer takes 4 damage.
-Bog Wisp B uses Numbing Sting on Reed Skimmer.
-  Reed Skimmer takes 2 damage.
-  Reed Skimmer cannot be paralyzed.
+  Reed Skimmer takes 5 damage.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 5 damage.
 Reed Skimmer uses Ram on Bog Wisp A.
-  Bog Wisp A takes 43 damage.
+  Bog Wisp A takes 12 damage.
   Bog Wisp A falls.
 -- round 10 --
 Bog Wisp B uses Bite on Reed Skimmer.
-  Reed Skimmer takes 3 damage.
+  Reed Skimmer takes 1 damage.
 Reed Skimmer uses Ram on Bog Wisp B.
-  Bog Wisp B takes 45 damage.
+  Bog Wisp B takes 44 damage.
+-- round 11 --
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 26 damage.
   Bog Wisp B falls.
 Outcome: victory
 Victory. 15 experience, 22 money.
-The enemies dropped 1 Wake Chime.
 field> menu
 menu> save manual_0
 Saved to manual_0.
@@ -344,12 +354,12 @@ The Reed Skimmer waits outside.
 You arrive at Saltgrass Market.
 [Autosaved to auto_0 (area entry).]
 field> status
-Mode field, Saltgrass Market (1,10) facing west, play time 0:02:06.
+Mode field, Saltgrass Market (1,10) facing west, play time 0:02:10.
   Bryn Lv3 HP 86/86 TP 8/8 EXP 13
   Test Mystic Lv3 HP 30/46 TP 27/30 EXP 13
   Test Medic Lv3 HP 30/52 TP 30/32 EXP 13
   Test Scout Lv4 HP 60/60 TP 18/18 EXP 6
-  Money 134. Items: homing_shell x2, tonic x3, wake_chime x1, waymark_chalk x2.
+  Money 134. Items: homing_shell x2, tonic x3, waymark_chalk x2.
 field> walk pier_front
 field> face north
 field> talk
@@ -361,12 +371,12 @@ You arrive at Cinder Quay.
 ~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
 [Autosaved to auto_1 (area entry).]
 field> status
-Mode field, Cinder Quay (6,5) facing north, play time 0:02:16.
+Mode field, Cinder Quay (6,5) facing north, play time 0:02:20.
   Bryn Lv3 HP 86/86 TP 8/8 EXP 13
   Test Mystic Lv3 HP 30/46 TP 27/30 EXP 13
   Test Medic Lv3 HP 30/52 TP 30/32 EXP 13
   Test Scout Lv4 HP 60/60 TP 18/18 EXP 6
-  Money 134. Items: homing_shell x2, tonic x3, wake_chime x1, waymark_chalk x2.
+  Money 134. Items: homing_shell x2, tonic x3, waymark_chalk x2.
 field> menu
 menu> destinations town
 menu> close
@@ -401,12 +411,12 @@ Used Waymark Chalk.
 You arrive at Saltgrass Market.
 [Autosaved to auto_0 (area entry).]
 field> status
-Mode field, Saltgrass Market (46,12) facing east, play time 0:02:24.
+Mode field, Saltgrass Market (46,12) facing east, play time 0:02:28.
   Bryn Lv3 HP 86/86 TP 8/8 EXP 13
   Test Mystic Lv3 HP 30/46 TP 27/30 EXP 13
   Test Medic Lv3 HP 30/52 TP 30/32 EXP 13
   Test Scout Lv4 HP 60/60 TP 18/18 EXP 6
-  Money 134. Items: homing_shell x1, tonic x3, wake_chime x1, waymark_chalk x1.
+  Money 134. Items: homing_shell x1, tonic x3, waymark_chalk x1.
 field> menu
 menu> destinations dungeon_exit
 menu> travel town tidewater homing_shell
@@ -415,22 +425,22 @@ You arrive at Tidewater Landing.
 ~ Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
 [Autosaved to auto_1 (area entry).]
 field> status
-Mode field, Tidewater Landing (3,4) facing east, play time 0:02:24.
+Mode field, Tidewater Landing (3,4) facing east, play time 0:02:28.
   Bryn Lv3 HP 86/86 TP 8/8 EXP 13
   Test Mystic Lv3 HP 30/46 TP 27/30 EXP 13
   Test Medic Lv3 HP 30/52 TP 30/32 EXP 13
   Test Scout Lv4 HP 60/60 TP 18/18 EXP 6
-  Money 134. Items: tonic x3, wake_chime x1, waymark_chalk x1.
+  Money 134. Items: tonic x3, waymark_chalk x1.
 field> title
 title> load manual_0
 Loaded manual_0.
 field> status
-Mode field, Brine Flats (8,4) facing west, play time 0:02:05.
+Mode field, Brine Flats (8,4) facing west, play time 0:02:09.
   Bryn Lv3 HP 86/86 TP 8/8 EXP 13
   Test Mystic Lv3 HP 30/46 TP 27/30 EXP 13
   Test Medic Lv3 HP 30/52 TP 30/32 EXP 13
   Test Scout Lv4 HP 60/60 TP 18/18 EXP 6
-  Money 134. Items: homing_shell x2, tonic x3, wake_chime x1, waymark_chalk x2.
+  Money 134. Items: homing_shell x2, tonic x3, waymark_chalk x2.
   Aboard the Reed Skimmer.
 field> look
   ########################
@@ -448,10 +458,10 @@ field> title
 title> continue
 Loaded auto_1.
 field> status
-Mode field, Tidewater Landing (3,4) facing east, play time 0:02:24.
+Mode field, Tidewater Landing (3,4) facing east, play time 0:02:28.
   Bryn Lv3 HP 86/86 TP 8/8 EXP 13
   Test Mystic Lv3 HP 30/46 TP 27/30 EXP 13
   Test Medic Lv3 HP 30/52 TP 30/32 EXP 13
   Test Scout Lv4 HP 60/60 TP 18/18 EXP 6
-  Money 134. Items: tonic x3, wake_chime x1, waymark_chalk x1.
+  Money 134. Items: tonic x3, waymark_chalk x1.
 End of script.

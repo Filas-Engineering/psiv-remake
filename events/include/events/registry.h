@@ -28,6 +28,7 @@ enum class NameKind {
 	rest_point,
 	enemy,
 	vehicle,
+	ability,
 };
 
 // The game's content, so the compiler can reject names it does not know

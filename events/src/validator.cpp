@@ -234,6 +234,15 @@ private:
 		case Op::vehicle_remove:
 			name(NameKind::vehicle, ins.name, s.line);
 			break;
+		case Op::learn:
+			name(NameKind::member, ins.name, s.line);
+			name(NameKind::ability, ins.action.subject, s.line);
+			break;
+		case Op::follower:
+			if (!ins.name.empty()) {
+				name(NameKind::actor, ins.name, s.line);
+			}
+			break;
 		case Op::rest:
 			name(NameKind::rest_point, ins.name, s.line);
 			break;

@@ -14,6 +14,7 @@
 #include "rules/setup.h"
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -97,7 +98,9 @@ public:
 
 	// Victory: every enemy's rewards. Scripted end: the rewards of the enemies that fell. Otherwise none.
 	// The encounter's drop is rolled once, from the battle's generator, when the battle ends in Victory.
-	Rewards rewards() const;
+	Rewards rewards() const { return rewards_; }
+	// The vehicle's skill uses after the battle, to carry into the next one (B19). Empty outside vehicle battles.
+	std::map<std::string, int> vehicleSkillUses() const;
 	// Hit points, technique points, skill uses, equipment and the statuses that persist outside battle.
 	std::vector<PartyMember> partyState() const;
 
@@ -122,6 +125,8 @@ private:
 		// An attack aimed at a group is never critical, however many targets are left.
 		bool singleTarget = false;
 		bool technique = false;
+		// Aimed at a whole group or every enemy, for the HitByGroup override.
+		bool groupTarget = false;
 		// How far a stat change moves the stat: mental for a technique, strength for a skill.
 		int changeAmount = 0;
 		// A combo's damage uses its participants' summed stats and damage powers in place of its own.
@@ -139,11 +144,18 @@ private:
 	const StatusDef* statusWith(int actor, StatusAction action) const;
 	bool countsAsDown(int index) const;
 	void drawDrops();
+	Rewards computeRewards() const;
+	void recoverMachines(std::vector<Event>& out);
+	int addEnemy(const EnemyDef& def, const std::string& group, int position, int actor, std::vector<Event>& out);
+	void transform(int target, const EnemyDef& def, std::vector<Event>& out);
+	std::vector<int> freeSlotsBeside(int actor) const;
+	const EquipmentDef* wornPiece(int actor, const std::string& id) const;
+	void useWornPiece(int actor, const Command& command, const EquipmentDef& piece, std::vector<Event>& out);
 	void fillMissingCommands();
 	Command forcedCommand(int actor, const StatusDef& status);
 	int drawFoeByPartyOrder(int actor);
 	void chooseEnemyAction(int actor, std::vector<Event>& out);
-	bool overrideHolds(AiConditionKind when, int actor) const;
+	bool overrideHolds(const AiOverride& entry, int actor) const;
 	std::vector<int> aiCandidates(int actor, const AbilityDef& ability, const AiTarget& target) const;
 	int aiTarget(int actor, const AbilityDef& ability, const AiTarget& target);
 
@@ -200,6 +212,9 @@ private:
 	Outcome outcome_ = Outcome::Ongoing;
 	int round_ = 0;
 	int partyCount_ = 0;
+	// Combatants the battle started with; enemies that join later come after them.
+	int startingCount_ = 0;
+	Rewards rewards_;
 	int rewardPercent_ = 100;
 	std::int64_t playTimeMs_ = 0;
 	Macro autoMacro_;

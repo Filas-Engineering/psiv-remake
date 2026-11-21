@@ -22,43 +22,42 @@ public sealed partial class SampleController
 	private CommandKind _draftKind;
 	private string? _draftId;
 
-	private static string Words(MacroIssue issue) => Words(GameSession.NameOf(NameKind.MacroIssue, (int)issue));
-
-	private static string StepText(MacroStep step)
+	private string StepText(MacroStep step)
 	{
-		string command = step.Id.Length > 0 ? step.IdName : Words(GameSession.NameOf(NameKind.CommandKind, (int)step.CommandKind));
+		string command = step.Id.Length > 0 ? step.IdName : T(NameKind.CommandKind, (int)step.CommandKind);
 		string target = step.TargetKind switch
 		{
 			MacroTargetKind.Member => step.TargetMemberName,
-			MacroTargetKind.Enemy => $"enemy {step.TargetEnemy + 1}",
-			_ => Words(GameSession.NameOf(NameKind.MacroTargetKind, (int)step.TargetKind)),
+			MacroTargetKind.Enemy => T("ui.macros.enemy_target", step.TargetEnemy + 1),
+			_ => T(NameKind.MacroTargetKind, (int)step.TargetKind),
 		};
-		return $"{step.MemberName}: {command} -> {target}" + (step.Issue != MacroIssue.None ? $"  [{Words(step.Issue)}]" : "");
+		return T("ui.macros.step", step.MemberName, command, target) + (step.Issue != MacroIssue.None ? $"  [{T(NameKind.MacroIssue, (int)step.Issue)}]" : "");
 	}
 
 	private List<string> MacroActions(string name) =>
-		["Edit steps", "Rename", "Move up", "Move down", _s.Settings().AutoMacro == name ? "Stop using for auto-battle" : "Use for auto-battle", "Delete"];
+		[.. new[] { "edit_steps", "rename", "move_up", "move_down", _s.Settings().AutoMacro == name ? "stop_auto" : "use_auto", "delete" }.Select(a => T("ui.macros." + a))];
 
-	private static string[] StepActions => ["Change", "Move up", "Move down", "Remove"];
+	private string[] StepActions => [.. new[] { "change", "move_up", "move_down", "remove" }.Select(a => T("ui.macros." + a))];
 
 	// Each macro, marked when it is the auto macro and when a step cannot run now, then a row to make a new one.
 	private List<string> MacroRows(IReadOnlyList<Macro> macros) =>
-		[.. macros.Select(m => m.Name + (m.Name == _s.Settings().AutoMacro ? "  (auto)" : "") + (m.Steps.Any(st => st.Issue != MacroIssue.None) ? "  !" : "")), "+ New macro"];
+		[.. macros.Select(m => m.Name + (m.Name == _s.Settings().AutoMacro ? "  " + T("ui.macros.auto_mark") : "") + (m.Steps.Any(st => st.Issue != MacroIssue.None) ? "  !" : "")),
+			T("ui.macros.new")];
 
 	// The rows of the stage's own list, for its cursor and its drawing.
 	private List<string> StageRows(IReadOnlyList<Macro> macros, Macro? macro) => _macroStage switch
 	{
 		MacroStage.List => MacroRows(macros),
 		MacroStage.Actions when macro is not null => MacroActions(macro.Name),
-		MacroStage.Steps when macro is not null => [.. macro.Steps.Select(StepText), "+ Add step"],
+		MacroStage.Steps when macro is not null => [.. macro.Steps.Select(StepText), T("ui.macros.add_step")],
 		MacroStage.StepActions => [.. StepActions],
 		MacroStage.Member or MacroStage.TargetMember => [.. _s.Party().Select(m => m.Name)],
-		MacroStage.Command => [.. StepCommands.Select(k => Words(GameSession.NameOf(NameKind.CommandKind, (int)k)))],
+		MacroStage.Command => [.. StepCommands.Select(k => T(NameKind.CommandKind, (int)k))],
 		MacroStage.Pick => _draftKind == CommandKind.Ability
-			? [.. _s.MemberAbilities(_draftMember).Select(a => a.Name + (a.Cost > 0 ? $"  {a.Cost} TP" : "") + (a.MaxUses >= 0 ? $"  {a.Uses}/{a.MaxUses}" : ""))]
-			: [.. _s.Inventory().Where(i => !i.IsEquipment).Select(i => $"{i.Name} x{i.Count}")],
-		MacroStage.Target => [.. StepTargets.Select(t => Words(GameSession.NameOf(NameKind.MacroTargetKind, (int)t)))],
-		MacroStage.TargetEnemy => [.. Enumerable.Range(1, EnemyPositions).Select(i => $"Enemy {i}")],
+			? [.. _s.MemberAbilities(_draftMember).Select(a => a.Name + (a.Cost > 0 ? "  " + T("ui.common.tp_cost", a.Cost) : "") + (a.MaxUses >= 0 ? $"  {a.Uses}/{a.MaxUses}" : ""))]
+			: [.. _s.Inventory().Where(i => !i.IsEquipment).Select(i => T("ui.common.item_count", i.Name, i.Count))],
+		MacroStage.Target => [.. StepTargets.Select(t => T(NameKind.MacroTargetKind, (int)t))],
+		MacroStage.TargetEnemy => [.. Enumerable.Range(1, EnemyPositions).Select(i => T("ui.macros.enemy_position", i))],
 		_ => [],
 	};
 
@@ -204,13 +203,13 @@ public sealed partial class SampleController
 			Report(_s.SetAutoMacro(_s.Settings().AutoMacro == macro.Name ? null : macro.Name));
 			break;
 		case 5:
-			_confirm.Ask($"Delete the macro {macro.Name}?", () =>
+			_confirm.Ask(T("ui.macros.delete_confirm", macro.Name), () =>
 			{
 				PsivResult deleted = _s.DeleteMacro(macro.Name);
 				Report(deleted);
 				if (deleted.Ok)
 				{
-					Say($"Deleted {macro.Name}.");
+					Say(T("ui.macros.deleted", macro.Name));
 					Stage(MacroStage.List);
 				}
 			});
@@ -261,11 +260,11 @@ public sealed partial class SampleController
 		int rx = x + leftW + 30;
 		int rw = w - leftW - 30;
 		MacroStage stage = _macroStage;
-		s.Text($"Macros ({macros.Count})", x, y, Style.Accent, Style.Small);
+		s.Text(T("ui.macros.count", macros.Count), x, y, Style.Accent, Style.Small);
 		DrawItems(s, _list, x, y + Px(30), leftW, h - Px(30), MacroRows(macros), stage == MacroStage.List);
 		if (macro is null)
 		{
-			s.Text("A new macro starts empty; add a step per member.", rx, y + Px(30), Style.Dim, Style.Small);
+			s.Text(T("ui.macros.new_help"), rx, y + Px(30), Style.Dim, Style.Small);
 			if (stage == MacroStage.Name)
 			{
 				DrawMacroName(s, rx, y, rw);
@@ -273,7 +272,7 @@ public sealed partial class SampleController
 			return;
 		}
 		// The macro's steps, or its actions, on the right; the step being built under them.
-		string title = macro.Name + (macro.Name == _s.Settings().AutoMacro ? "  (used for auto-battle)" : "");
+		string title = macro.Name + (macro.Name == _s.Settings().AutoMacro ? "  " + T("ui.macros.used_for_auto") : "");
 		s.Text(Style.Fit(s, title, rw, Style.Small), rx, y, Style.Accent, Style.Small);
 		if (stage == MacroStage.Name)
 		{
@@ -292,7 +291,7 @@ public sealed partial class SampleController
 			}
 			return;
 		}
-		List<string> steps = [.. macro.Steps.Select(StepText), "+ Add step"];
+		List<string> steps = [.. macro.Steps.Select(StepText), T("ui.macros.add_step")];
 		bool onSteps = stage == MacroStage.Steps || stage == MacroStage.List;
 		DrawItems(s, _sub, rx, y + Px(30), rw, stage == MacroStage.List ? h - Px(30) : stepsH, steps, stage == MacroStage.Steps,
 			steps.Select((_, i) => i >= macro.Steps.Count || macro.Steps[i].Issue == MacroIssue.None).ToList());
@@ -303,13 +302,13 @@ public sealed partial class SampleController
 		int by = y + Px(30) + stepsH + Px(14);
 		string what = stage switch
 		{
-			MacroStage.StepActions => $"Step {_stepIndex + 1}",
-			MacroStage.Member => "Who acts?",
-			MacroStage.Command => $"{_s.DisplayName(_draftMember)} does what?",
-			MacroStage.Pick => _draftKind == CommandKind.Ability ? "Which ability?" : "Which item?",
-			MacroStage.Target => "Aimed at?",
-			MacroStage.TargetMember => "Which member?",
-			_ => "Which enemy position?",
+			MacroStage.StepActions => T("ui.macros.step_number", _stepIndex + 1),
+			MacroStage.Member => T("ui.macros.who"),
+			MacroStage.Command => T("ui.macros.does_what", _s.DisplayName(_draftMember)),
+			MacroStage.Pick => T(_draftKind == CommandKind.Ability ? "ui.macros.which_ability" : "ui.macros.which_item"),
+			MacroStage.Target => T("ui.macros.aimed_at"),
+			MacroStage.TargetMember => T("ui.macros.which_member"),
+			_ => T("ui.macros.which_enemy"),
 		};
 		s.Fill(rx, by - Px(6), rw, 1, Style.PanelEdge * 0.4f);
 		s.Text(what, rx, by, Style.Accent, Style.Small);
@@ -318,7 +317,7 @@ public sealed partial class SampleController
 
 	private void DrawMacroName(IDrawSurface s, int x, int y, int w)
 	{
-		s.Text(_renaming is null ? "Name the new macro:" : $"Rename {_renaming} to:", x, y + Px(64), Style.Accent);
-		_macroName.Draw(s, x, y + Px(100), w - 20, _clockMs, Px);
+		s.Text(_renaming is null ? T("ui.macros.name_new") : T("ui.macros.rename_to", _renaming), x, y + Px(64), Style.Accent);
+		_macroName.Draw(s, x, y + Px(100), w - 20, _clockMs, Px, PadLabels());
 	}
 }

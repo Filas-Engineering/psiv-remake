@@ -64,18 +64,18 @@ Player-facing results are `Message` values: a stable key and parameters (ids or 
 2. The side that lost the opening (Party first: enemies; Enemy first: the party) gets no commands for the first `surprise_rounds` rounds.
 3. Every other living combatant gets a command. A status whose action is `forced` replaces it with a basic attack on a random target from its pool (BAT-012), drawn in combatant index order. An enemy without a command gets a basic attack with no target: its AI decides when its turn comes. For the whole round a defender takes a quarter of a physical hit that has no weapon element, before defense is subtracted. Defend does nothing against anything else. `CommandsLocked` lists every command and the macro used.
 4. Turn order: each combatant rolls an initiative of agility plus a random number from 0 to just under half the highest agility among those acting; a combatant with 0 agility gets no roll. Ties go to the party, then to the lower index. A macro then takes its members in pairs, in step order: a member who would act before the member listed ahead of it is moved to act right after that member, and one already acting later stays put. So an enemy can stay between two macro steps and break a combination, and listing the slowest member first keeps the others directly behind it. `OrderResolved` lists the order. Then every enemy its AI drives draws its foe, in index order (see [Enemy AI](#enemy-ai)).
-5. At each queue position, an actor that cannot act (defeated, or a `cannot_act` status) loses the turn and pays nothing: one `ActionCancelled` with `actor_unable` and the cause (`defeated` or the status). Otherwise an enemy its AI drives picks its action, and a party member's turn checks for a combination: up to four queued turns from this actor, stopping at an enemy, a member who cannot act, a command that is not a technique or skill, or one that cannot be paid for (technique points, skill uses, blocked techniques). The recipes are compared in data order and the first whose components match the first collected turns fires (in any order, in the listed order for an `ordered` recipe or one with four components, with each tied component used by its character). The other participants' turns are spent on it, and every participant pays its own cost. The combo aims at all enemies if its result does, otherwise at the first participant's target, replaced by that participant's own rule if it fell. Its damage uses the sum, over the participants, of mental for a technique component and strength for a skill component as the attack, and the sum of the components' damage powers as the bonus; it always lands. Its other effects read the participants' average strength, mental, dexterity and critical chance, and its stat changes move by the summed stat. The first time a recipe fires the log records it and the battle emits `ComboDiscovered`.
+5. At each queue position, an actor that cannot act (defeated, or a `cannot_act` status) loses the turn and pays nothing: one `ActionCancelled` with `actor_unable` and the cause (`defeated` or the status). Otherwise an enemy its AI drives picks its action, and a party member's turn checks for a combination: up to four queued turns from this actor, passing over an enemy that fell earlier in the round and stopping at a living enemy, a member who cannot act, a command that is not a technique or skill, or one that cannot be paid for (technique points, skill uses, blocked techniques). The recipes are compared in data order and the first whose components match the first collected turns fires (in any order, in the listed order for an `ordered` recipe or one with four components, with each tied component used by its character, and an ability of the same `family` filling a component's place). The other participants' turns are spent on it, and every participant pays its own cost. The combo aims at all enemies if its result does, otherwise at the first participant's target, replaced by that participant's own rule if it fell. Its damage uses the sum, over the participants, of mental for a technique component and strength for a skill component as the attack, and the sum of the components' damage powers as the bonus; it always lands. Its other effects read the participants' average strength, mental, dexterity and critical chance, and its stat changes move by the summed stat. The first time a recipe fires the log records it and the battle emits `ComboDiscovered`.
 6. Otherwise the actor takes a normal turn. Every action is validated when it runs (BAT-015); a failed check is one `ActionCancelled` with a `cancel` reason:
    * Technique points, skill uses and item stock are checked: `not_enough_tp`, `no_uses_left`, `no_item`, at no cost. A technique whose user has a status that blocks techniques spends its points first, then cancels as `silenced`.
    * Targets are resolved, and a change emits `Retargeted` before `ActionStarted`:
      * A single foe target that is gone is replaced. A party member's action whose first effect is damage (basic attacks included) turns to the living enemy missing the most hit points, any other to the one missing the fewest; each later tied enemy takes the place on a coin flip. An enemy draws again by party order. A party member's target of -1 is the first enemy.
-     * In a macro round a single-foe action ignores its target and picks by that rule every time, and a one-ally action picks for itself: a heal the member, not defeated, missing the most hit points (ties to the later member), a cure the first living member with a status it cures (or the actor), a revive the first defeated member (or the heal pick).
+     * In a macro round a single-foe action ignores its target and picks by that rule every time, and a one-ally action picks for itself: a heal the member, not defeated and of a kind it reaches, missing the most hit points (ties to the later member), a one-ally raise the first member in line (the original's pick never moves off it), a cure the first living member with a status it cures (or the actor), a revive the first defeated member (or the heal pick).
      * A single ally target is never replaced: on a defeated ally a non-revive action does nothing, and its cost is still paid (an item is used up). A `one_fallen_ally` target that is back up cancels with `no_target`; with no chosen ally it takes the first fallen one. `random_enemy` draws one living foe at execution.
    * Group targeting (`enemy_group`) hits every living foe in the target's group. Enemies take their group from the encounter (by default their enemy id). The whole party is one group, so an enemy's group ability hits every living party member.
    * Effects apply in order. A physical hit emits `Hit`; a miss emits `Missed` and skips the rest of that ability's effects on that target.
    * An item whose effects changed nothing (a heal at full hit points, a cure for a status the target lacks, a resisted status, immune damage) is not used up, and the battle emits `ItemHadNoEffect`. The spec does not say what happens; this is the chosen rule. The one exception is a one-ally item on a defeated ally, which is used up.
 7. Escape resolves at its place in the order. On success the battle ends at once with `Escaped`, later actions are dropped and there are no rewards. On failure the round continues.
-8. The battle ends as soon as one side has nobody standing, the party escapes, or the scripted end condition holds. A party member counts as down when defeated or held by a status that `counts_toward_defeat`; an enemy only when defeated. A party that is only asleep plays on, and only the enemies act. Victory and Defeat take precedence over a scripted end that happens at the same time.
+8. The battle ends as soon as one side has nobody standing (in an encounter that replaces its fallen, a fallen enemy's replacement joins at once, so the enemies never run out), the party escapes, or the scripted end condition holds. A party member counts as down when defeated or held by a status that `counts_toward_defeat`; an enemy only when defeated. A party that is only asleep plays on, and only the enemies act. Victory and Defeat take precedence over a scripted end that happens at the same time.
 9. At the end of the round statuses with a `recover_chance` roll to end, in combatant index order. Then status durations count down and expire; a status that runs out leaves the stats it held at 1 for the rest of the battle, with a `StatModified` for each. A `survive_rounds` scripted end is checked last.
 
 The RNG (`Rng`, SplitMix64) belongs to the battle and is seeded from the setup. `state()` and `restore()` save and continue a generator. The same setup, data and commands always give the same event stream. The order of random draws is part of the rules version: forced-command targets, in combatant index order; initiative rolls, in combatant index order; enemy foes, one draw per enemy its AI drives, in index order. Then per turn: for an enemy its AI drives, a fresh foe if its foe fell, then its action slot; per action, a replacement for a gone foe (a party member's coin flips on ties, an enemy's party-order draw), then a `random_enemy` target; per effect: for a basic attack's physical damage the hit roll, then for any damage or in-battle heal the sixteen spread rolls; for a status or a lowered foe stat one roll, unless the target is immune; for an escape one roll, only when an enemy can act. At round end the recovery rolls. When the battle ends in Victory, one drop roll comes last, if the encounter has a drop.
@@ -100,12 +100,14 @@ Rules that wait on measurements of the original game. All fields are required.
 ```json
 {
 	"surprise_rounds": 1,
-	"rest_revives": true
+	"rest_revives": true,
+	"machine_recover_hp": 1
 }
 ```
 
 * `surprise_rounds` (0 to 9): rounds the surprised side loses after a Party first or Enemy first opening.
 * `rest_revives`: whether `rest` stands a fallen member up (FLD-035 is to measure; true keeps the earlier behavior).
+* `machine_recover_hp` (0 to 9999): the hit points a fallen machine member (party.json `kind`) stands up with when a battle ends in anything but Defeat, after the experience is shared out, with a `Revived` event (message `battle.machine_recovered`). The original sets 1 (original-battle-rules.md section 5); 0 leaves it down.
 
 ### statuses.json
 
@@ -129,6 +131,7 @@ Optional fields, which cover BAT-081:
 * Stacking rule: `stacking` is `refresh` (default; reapplying restarts the duration), `extend` (adds the duration to what is left, up to 99) or `keep` (a reapplication changes nothing and makes no roll; it emits `StatusResisted` with the `unchanged` key).
 * `counts_toward_defeat` (bool): a party member with it counts as down when the battle checks for Defeat (BAT-014). It does not apply to enemies: an enemy is down only when defeated.
 * `survives_defeat` (bool): defeat leaves it in place, so it is still there after a revive. Defeat clears every other status.
+* `damage_cap` (0 to 999): when nonzero, no hit takes more than this from the holder, so a shield of 1 holds every attack to minimal damage until something cures it (the placeholder `aegis` and the Sunstone item).
 
 A status with id `defeated` is required, with only an id and a name. The battle adds it when hit points reach 0. Effects cannot apply it and nothing can resist it.
 
@@ -150,16 +153,24 @@ The placeholder `poison` has no effect in battle and no round limit; it only per
   * `skill`: needs `uses`, which refill on rest.
   * `combo`: only reachable through a combo recipe.
 * `target` is one of `one_enemy`, `enemy_group`, `all_enemies`, `one_ally`, `all_allies`, `self`, `one_fallen_ally` or `random_enemy`.
-* `field` (optional bool): usable outside battle. Only techniques and skills with a party target and only heal, cure_status, revive and travel effects qualify.
+* `field` (optional bool): usable outside battle. Only techniques and skills with a party target and only heal, cure_status, revive, travel and (items) teach effects qualify.
+* `family` (optional): a name shared by abilities that stand in for each other in combination recipes: an ability fills a component that names it, or one whose ability has the same family (B3).
+* Every effect may carry `kinds` (a list of `living`, `spirit`, `machine`): it then works only on targets of those kinds, and `living` covers `spirit`. Leaving it out works on every kind. The placeholder heals and revives for the party name `living`, so they pass a machine member by; Gear Salve and Self Repair name `machine`.
 * Effects:
   * `{"type": "physical_damage", "power": N}`. `power` (0 to 9999) is the bonus in the damage formula; a plain attack has 0.
-  * `{"type": "elemental_damage", "power": N, "element": "heat|chill|shock|gale"}`
+  * `{"type": "elemental_damage", "power": N, "element": "heat|chill|shock|gale|holy"}`
   * A combo's damage effects have no `power`: the participants' components give it (see [Round resolution](#round-resolution)). The loader rejects one.
   * `{"type": "heal", "power": N}`
   * `{"type": "apply_status", "status": ID, "threshold": 0-255}`. `threshold` is optional (default 0): the score the status roll must beat.
   * `{"type": "cure_status", "status": ID}`
   * `{"type": "modify_stat", "stat": "strength|mental|agility|dexterity|defense", "direction": "up|down", "threshold": 0-255}`. The stat's battle value becomes its base plus or minus the user's mental for a technique, or strength for a skill or basic attack (a combo's summed stat). Each change is worked out from the base, so the latest one replaces the earlier. Lowering floors agility and dexterity at 1 and the others at 0. A change lasts until the battle ends. Lowering a foe's stat rolls like a status against the optional `threshold` (`down` only); raising always lands.
   * `{"type": "revive", "power": percent of max hit points}`. The target must be `one_fallen_ally` or `all_allies`, and `one_fallen_ally` needs a revive effect.
+  * `{"type": "instant_defeat", "threshold": 0-255}` (B7): rolls like a status (mental against mental); it works only on a `vulnerable` target, and an enemy is vulnerable only when its data says so, so bosses are immune. A landed one emits the `battle.instant_defeat` message (the mark a renderer shows) and defeats the target; a miss emits `battle.instant_defeat_resisted`, an immune target `battle.instant_defeat_immune` (with `effectiveness` Immune), both as `Message` events.
+  * `{"type": "restore_tp", "power": N}` (B20): restores N technique points, emitted as `Healed` with `resource` tp. Not allowed on field abilities, so it works in battle only.
+  * `{"type": "strip_modifiers"}` (B10): removes every stat change on the target, one `StatModified` with amount 0 per stat.
+  * `{"type": "summon"}` (B13, an enemy's own ability with target `self`): calls up the enemy its data names in `summons` in a free formation position beside it (a coin flip when both sides are free), as a new combatant (`EnemyJoined`). Nothing happens without a free place.
+  * `{"type": "merge"}` (B14, an enemy's own ability with target `self`): another living enemy of the user's id leaves the battle (`EnemyLeft`, no rewards) and the user takes the form its data names in `merges_into` at full hit points (`EnemyTransformed`).
+  * `{"type": "teach", "ability": ID}` (P8, items only): the target learns a technique or skill for good (`PartyMember::taught`). It must be the only effect of a field item aimed at `one_ally`; a battle refuses it like travel, and `useItemOutsideBattle` keeps the item when the member already knows the ability.
   * `{"type": "travel", "to": "town|dungeon_exit"}` (FLD-051): takes the party back to a town it has visited, or out of the dungeon it is in. It must be the only effect, on a `field` technique, skill or item that targets `all_allies`; enemies, vehicles and combinations cannot have one. Core moves nobody: `travelEffect(effects)` finds it for the host, which checks where the party may go and moves it (`../game`, "Rules this library chose"). In battle `setCommand` refuses it with `command.field_only`; outside battle `useAbilityOutsideBattle` and `useItemOutsideBattle` only take the cost (technique points, a skill use or the item) and report `ResourceSpent`.
 
 ### items.json
@@ -189,6 +200,7 @@ Items use the same effects and targets, but their power is flat: user stats do n
   * `attack`: an ability of kind `attack` that replaces the wearer's basic attack.
 * `abilities` (optional): techniques and skills the wearer knows while wearing it. A granted skill starts with full uses the first time and keeps its remaining uses when the piece comes off, so swapping never refills it; rest refills it.
 * `status_resist` (optional): added to the wearer's own resistances, capped at 100.
+* `use` (optional): a battle ability (not a combo, travel, summon or merge) the wearer casts through the Item command with the piece's id (`Command::item("storm_rod", target)`), with the wearer's stats, at no cost and without using the piece up (P12). Only the member wearing it can.
 
 ### party.json
 
@@ -202,6 +214,7 @@ Items use the same effects and targets, but their power is flat: user stats do n
   * `status_resist` (optional): status id to a percent that scales down the status roll's factor; 100 is immunity.
   * `equip` (optional): the equipment categories the character can wear. Each must be used by some piece.
   * `equipment` (optional): starting equipment, which `makePartyMember` puts on.
+  * `kind` (optional): `living` (default), `spirit` or `machine` (P6). See effect `kinds` and `machine_recover_hp`.
 * `vehicles` (optional): see [Vehicle battles](#vehicle-battles).
 * `lineup`: 1 to 5 character ids.
 * `inventory`: item id to count.
@@ -251,8 +264,16 @@ When a macro step cannot run as written (BAT-053):
   * `last_standing`: it is the only enemy left.
   * `hit_by_attack`, `hit_by_ability`, `hit_by_technique`: a party basic attack, any party technique, skill, item or combo, or a party technique landed damage on it since an override last read these. Whichever fires clears all three.
   * `techniques_blocked`: it has a status that blocks techniques.
+  * `hit_by_group`: a party ability aimed at a whole group or every enemy landed damage on it; read and cleared with the three above.
+  * `ambushed`: its first turn after a Party first opening; the flag is spent at that turn whether or not the override fires. The original's setter of this bit is unknown (original-battle-rules.md); this is the chosen reading.
+  * `ally_present`, `ally_absent` (with `enemy`): another living enemy of that id is, or is not, in the battle.
+  * `free_slot_beside`: a formation position next to it is free (for a summon).
+  * `group_intact`: every enemy that started the battle in its group still stands, so a group's joint ability stops once one falls (B4 as data).
 * Override target rules (optional `target`, BAT-090/091): `default`, `random`, `lowest_hp`, `highest_hp` (current hit points, ties to the lower index), `has_status` and `lacks_status` (with `target_status`; a random match), and `last_attacker` (the foe that last damaged this enemy). They need a single-target ability, and `last_attacker` one aimed at foes. An override whose rule finds no target does not fire that turn.
+* `kind` (optional): `living` (default), `spirit` or `machine` (B6). `vulnerable` (bool): instant defeat can work on it. `statuses`: statuses it starts every battle with (a boss shield). `summons`, `merges_into` (enemy ids, needed by an ability with a summon or merge effect) and `next_form` (the enemy it becomes at full hit points when it falls, in place of being defeated, B16; a chain of forms must end). These may name any enemy of the file.
+* Combatants added during a battle (summons, replacements) take the next indexes after the starting ones, so indexes stay stable; their formation position is in `EnemyJoined`'s `amount`.
 * An encounter is an enemy group: 1 to 8 enemies in formation order. An entry is an enemy id, or `{"enemy", "group"}` to set the group label group targeting uses (default: the enemy id). `escape: false` forbids escape, for bosses. `awareness` and `escape_rating` (optional, 0 to 255) are the numbers the opening and escape rolls run against; each defaults to the highest agility among the encounter's enemies. An `escape_rating` of 240 or more forbids escape.
+* `replace_fallen` (optional bool, B12): a fallen enemy is replaced at once by a fresh one of its kind in its place, so the battle is never won; escape or defeat ends it.
 * `drop` (optional): `{"item", "rate"}`, the encounter's item drop (SAV-031). After a Victory one roll of 0 to 127 must come out below `rate` (0 to 127) for one of the item to drop. The battle finds the encounter by `BattleSetup::enemyGroup`, which `useEncounter` sets.
 
 ### combos.json
@@ -305,11 +326,11 @@ A vehicle is a combatant defined in `party.json` (BAT-140); BAT-141's rules foll
 * `stats`, `basic_attack`, `abilities`, `affinities` and `status_resist` work as for enemies. The abilities must be skills.
 * A vehicle id may not also be a character id.
 
-With `flags.vehicleBattle` set, `BattleSetup::vehicle` names the vehicle, and `Battle::create` refuses an unknown one, or a vehicle without the flag. The party side is then the members of `setup.party`, in lineup order and marked `Combatant::aboard`, followed by the vehicle; enemies follow as usual, so `partyCount()` is one more than the party. Members aboard take no command (`setCommand` refuses with `command.aboard`), are skipped by macros, cannot be targeted by either side, and do not count for Victory or Defeat. The vehicle attacks, uses its skills or escapes; `setCommand` refuses Defend and items with `command.vehicle_cannot`. It starts each battle at full hit points, and when it falls every member aboard is defeated with it, so the battle is lost. `rewards()` halves the experience, and `memberExperience` has one entry per member aboard, split among those not defeated; the vehicle gets none. `partyState()` returns the members aboard. Nothing about the vehicle is carried out of the battle, its skill uses included.
+With `flags.vehicleBattle` set, `BattleSetup::vehicle` names the vehicle, and `Battle::create` refuses an unknown one, or a vehicle without the flag. The party side is then the members of `setup.party`, in lineup order and marked `Combatant::aboard`, followed by the vehicle; enemies follow as usual, so `partyCount()` is one more than the party. Members aboard take no command (`setCommand` refuses with `command.aboard`), are skipped by macros, cannot be targeted by either side, and do not count for Victory or Defeat. The vehicle attacks, uses its skills or escapes; `setCommand` refuses Defend and items with `command.vehicle_cannot`. It starts each battle at full hit points, and when it falls every member aboard is defeated with it, so the battle is lost. `rewards()` halves the experience, and `memberExperience` has one entry per member aboard, split among those not defeated; the vehicle gets none. `partyState()` returns the members aboard. The vehicle's skill uses carry from battle to battle as the original's do (B19): `BattleSetup::vehicleSkillUses` gives what is left (a skill left out starts full) and `Battle::vehicleSkillUses()` returns it after the battle; its hit points are full at every start.
 
 ## Battle records
 
-`serializeRecord` writes a line-based text record (format 5): format version, rules version, event schema version, content hash of the loaded data, the full setup (seed, difficulty, reward multiplier, opening, flags, escape rating, vehicle, scripted end, enemy group and formation, inventory, each member's level, experience, hit points, technique points, skill uses, equipment, carried statuses and chosen name), the combo log entries already known, and per round the play time, the macro name, the commands the host set and the macro block order. Commands the battle filled in itself are not recorded, because it fills them the same way on replay. Auto-battle commands are set before `resolveRound`, so they are recorded like the host's. Ids are written with letters, digits and `_` kept and every other byte as `%XX`; an empty value is `-`.
+`serializeRecord` writes a line-based text record (format 6; `parseRecord` still reads 3, 4 and 5): format version, rules version, event schema version, content hash of the loaded data, the full setup (seed, difficulty, reward multiplier, opening, flags, escape rating, vehicle, scripted end, enemy group and formation, inventory, the vehicle's skill uses left, each member's level, experience, hit points, technique points, skill uses, equipment, carried statuses, chosen name and taught abilities), the combo log entries already known, and per round the play time, the macro name, the commands the host set and the macro block order. Commands the battle filled in itself are not recorded, because it fills them the same way on replay. Auto-battle commands are set before `resolveRound`, so they are recorded like the host's. Ids are written with letters, digits and `_` kept and every other byte as `%XX`; an empty value is `-`.
 
 The last line is `checksum <FNV-1a 64 of everything before it>`. `parseRecord` refuses a record whose checksum is missing or does not match (SAV-014), so a damaged record is never replayed. It is a guard against accidental damage, not tampering.
 
@@ -341,6 +362,9 @@ The last line is `checksum <FNV-1a 64 of everything before it>`. `parseRecord` r
 * `EscapeAttempted`: `succeeded`.
 * `Message`: `message`, `params`.
 * `BattleEnded`: `outcome`, `experience`, `currency`, `items` (the drops, item id to count), `gameOver`.
+* `EnemyJoined`: `target` (the new index), `actor` (the summoner, or -1 for a replacement), `ids` and `groups` (its id and group), `amount` (its formation position), `hp`.
+* `EnemyLeft`: `target` leaves without being defeated (merged into `actor`); it no longer counts or pays.
+* `EnemyTransformed`: `target` takes the form in `ids` at full `hp`, after a `StatusRemoved` for each status it had.
 
 ## Formulas
 
@@ -366,15 +390,16 @@ Every row follows the original as read from the community disassembly except rev
 | Enemy foe | one roll over the party members not defeated, in party order, weighted `count - position` |
 | Enemy action | one of 8 slots, never the index any enemy drew last (1 in 8 for the battle's first draw, then 1 in 7) |
 | Escape | succeeds when no living enemy can act. Otherwise the chance score of the highest living party agility against the battle's escape rating must be above 40 |
-| Experience to next level | `15 * level^2 + 10`. Carried-over experience counts toward the next level. Maximum level 50. A level-up raises the maximums and leaves current hit points and technique points alone |
+| Experience to next level | `15 * level^2 + 10`. Carried-over experience counts toward the next level. Maximum level 99, the published cap. A level-up raises the maximums and leaves current hit points and technique points alone |
 | Stats at a level | `base + growth * (level - 1)`, plus equipment bonuses |
 | Rewards | Victory: every enemy's experience and currency; scripted end: the fallen enemies' only. Times `reward_percent * multiplier / 10000` (multiplier 100, 150 or 200), rounded down once. A vehicle battle halves the experience. Each party member not defeated gets the experience divided by their number, rounded down; currency is paid in full |
 | Drops | Victory only: one roll of 0 to 127 below the encounter's `rate` drops one of its item. Neither the reward multiplier nor `reward_percent` scales it |
 
 ## Not built yet
 
-* The original carries a vehicle's skill uses from one battle to the next; here they refill each battle. Vehicles in the field and their encounter tables (ENC-007) are the host's business (`../game`).
-* The original's AI conditions on particular other enemy kinds, on a free slot beside the enemy (for spawning) and on an ambush reaction.
+* Vehicles in the field and their encounter tables (ENC-007) are the host's business (`../game`).
+* Enemy combination recipes that spend several enemies' turns (`group_intact` gives one enemy a group ability only while the group stands).
+* Two hand slots (two weapons, weapon and shield, two-handed weapons): a member has one `weapon` slot.
 * Presentation keys and type tags on abilities and combinations (BAT-040, BAT-060).
 * Equipment drops: an encounter's drop is an item.
 * Per-character ability tuning in difficulty overlays; ability overlays apply to every user of the ability.
@@ -383,7 +408,18 @@ Every row follows the original as read from the community disassembly except rev
 
 ## Changes a host must make
 
-This round: rules version 10 (a battle now refuses a command whose ability or item travels), event schema 6 and record format 5 unchanged. No battle of the existing data plays differently and no record of it replays differently, but `replayBattle` refuses records of rules version 9, since the version changed.
+This round: rules version 11, event schema 7, record format 6 (`parseRecord` still reads 3 to 5; `replayBattle` refuses records of rules version 10 and event schema 6). Battles of the earlier placeholder data play as before except vehicle battles, whose skill uses now carry over, and combinations whose parts had a fallen enemy between them.
+
+* `types.h`: `Element::Holy`, new `EffectKind` values `InstantDefeat`, `RestoreTp`, `StripModifiers`, `Summon`, `Merge`, `Teach` (appended), new `CreatureKind` (`names.h`: `toString`, `parseCreatureKind`). A `switch` over `EffectKind` or `Element` needs the new cases.
+* `ability.h`: `Effect::kinds`, `Effect::ability`, `Effect::reaches(kind)`, `AbilityDef::family` (after `field`), `teachEffect(effects)`.
+* `enemy.h`: `AiConditionKind` adds `HitByGroup`, `Ambushed`, `AllyPresent`, `AllyAbsent`, `FreeSlotBeside`, `GroupIntact`; `AiOverride::enemy`; `EnemyDef::kind`, `vulnerable`, `statuses`, `summons`, `mergesInto`, `nextForm`; `Encounter::replaceFallen`.
+* `character.h`: `CharacterDef::kind`, `PartyMember::taught` (known abilities include them; records and the game's saves keep them). `status.h`: `StatusDef::damageCap`. `battle_rules.h`: `machineRecoverHp` (`rules.json` requires `machine_recover_hp`). `equipment.h`: `EquipmentDef::use`. `setup.h`: `BattleSetup::vehicleSkillUses`. `combatant.h`: `kind`, `vulnerable`, `position`, `gone`, `hitByGroup`, `ambushed`.
+* `battle.h`: `Battle::vehicleSkillUses()`; `rewards()` is fixed when the battle ends (before fallen machines stand up). Combatants can be added during a battle, after the starting ones: size per-combatant arrays from `combatants()` each round. `formulas.h`: `kMaxLevel` 99.
+* `event.h`: `EventType::EnemyJoined`, `EnemyLeft`, `EnemyTransformed` (appended). `Healed` with `resource` tp restores technique points.
+* `text.h`: `messageKeys` adds `battle.instant_defeat`, `battle.instant_defeat_immune`, `battle.instant_defeat_resisted`, `battle.machine_recovered` and `field.learned`; `text_en.json` has them and the `aegis` and `daze` status keys.
+* Data: the effects, fields and conditions above; placeholder content to exercise them (the Cogwright, Gear Salve, Kindle Salts, Null Dust, Sunstone, Hallow Scroll, Arc Disc, Storm Rod, the techniques Bright Spark, Hallow, Unmake, Renewal and skills Calm Tide and Self Repair, the statuses Daze and Aegis, and the enemies Hive Lantern, Twin and Grand Ooze, Mirror Crab, Tide Colossus and its core, Aegis Sentinel and Echo Twin in the encounters `hive`, `oozes`, `crabs`, `colossus`, `sentinel`, `endless` and `echoes`). The mystic learns Bright Spark at 11 and Unmake at 15, the medic Renewal at 14. The content hash changes with the data.
+
+The round before: rules version 10 (a battle now refuses a command whose ability or item travels), event schema 6 and record format 5 unchanged. No battle of the existing data plays differently and no record of it replays differently, but `replayBattle` refuses records of rules version 9, since the version changed.
 
 * `types.h`: `EffectKind::Travel` (appended; name `travel`) and `enum class TravelTarget { Town, DungeonExit }` (names `town`, `dungeon_exit`; `names.h`: `toString(TravelTarget)`, `parseTravelTarget`). `ability.h`: `Effect::travel` and `travelEffect(effects)`. A `switch` over `EffectKind` needs the new case.
 * `Battle::setCommand` refuses an ability or item with a travel effect (`command.field_only`, in `messageKeys` and `text_en.json`). `useItemOutsideBattle` spends a travel item without applying anything; `useAbilityOutsideBattle` pays a travel technique's cost as before.

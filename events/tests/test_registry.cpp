@@ -366,3 +366,23 @@ end
 	CHECK(test::has_diagnostic(bad, 4, "unknown vehicle 'raft'"));
 	CHECK(test::has_diagnostic(bad, 7, "expected 'give', 'place' or 'remove'"));
 }
+
+TEST(learn_names_a_member_and_an_ability_and_follower_an_actor) {
+	Registry r = registry_ok();
+	r.add(NameKind::member, "medic");
+	r.add(NameKind::ability, "hallow");
+	r.add(NameKind::actor, "peddler");
+	CHECK(compile_with(r, R"(event e unskippable
+	learn medic hallow
+	follower peddler
+	follower none
+end
+)").empty());
+	auto bad = compile_with(r, R"(event e unskippable
+	learn medic hollow
+	follower stranger
+end
+)");
+	CHECK(test::has_diagnostic(bad, 2, "unknown ability 'hollow'"));
+	CHECK(test::has_diagnostic(bad, 3, "unknown actor 'stranger'"));
+}

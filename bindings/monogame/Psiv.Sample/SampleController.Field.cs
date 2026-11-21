@@ -48,7 +48,7 @@ public sealed partial class SampleController
 			{
 				if (status == WalkStatus.NoPath)
 				{
-					Say("There is no way there.");
+					Say(T("ui.field.no_way"));
 				}
 				_clickWalk = null;
 			}
@@ -104,6 +104,11 @@ public sealed partial class SampleController
 			return false;
 		}
 		List<string> lineup = Lineup();
+		string follower = _s.Follower();
+		if (follower.Length > 0)
+		{
+			lineup.Add(follower);
+		}
 		_field.Track(view, _clockMs, lineup);
 		_field.Draw(s, art, view, _clockMs, lineup, _camera is null ? null : CameraFocus(view), ShakeOffset());
 		if (_clickWalk is { } goal)
@@ -130,7 +135,7 @@ public sealed partial class SampleController
 		WorldInfo w = _s.WorldInfo();
 		long seconds = w.PlayTimeMs / 1000;
 		Style.Plate(s, f.AreaName, 16, 12, Style.Accent);
-		string status = $"Money {w.Money}    {seconds / 3600}:{seconds / 60 % 60:00}:{seconds % 60:00}";
+		string status = $"{T("ui.common.money", w.Money)}    {seconds / 3600}:{seconds / 60 % 60:00}:{seconds % 60:00}";
 		Style.Plate(s, status, s.Width - s.Measure(status, Style.Small) - 40, 12, Style.Text);
 	}
 }

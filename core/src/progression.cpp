@@ -104,6 +104,9 @@ std::vector<std::string> knownAbilities(const Database& db, const PartyMember& m
 			addUnique(known, learned.ability);
 		}
 	}
+	for (const std::string& id : member.taught) {
+		addUnique(known, id);
+	}
 	for (const auto& [slot, id] : member.equipment) {
 		if (const EquipmentDef* piece = db.equipmentPiece(id)) {
 			for (const std::string& ability : piece->abilities) {

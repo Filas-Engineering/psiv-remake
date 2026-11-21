@@ -4,6 +4,7 @@
 
 #include "events/compiler.h"
 #include "events/glossary.h"
+#include "rules/formulas.h"
 #include "rules/loader.h"
 
 #include "json_read.h"
@@ -260,7 +261,7 @@ void readCameras(JsonReader& reader, const JsonValue& presentation, std::vector<
 void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.only(json, {"title", "core_data", "areas", "events", "glossary", "languages", "journal", "actors", "presentation", "flags",
 		"vars", "clear_flag", "start", "join_levels", "prices", "item_cap", "money_cap", "tick_ms", "grace_ms", "round_ms",
-		"autosave_slots", "manual_slots", "bosses", "vehicles"});
+		"autosave_slots", "manual_slots", "bosses", "vehicles", "machine_step_heal", "outside_experience_until"});
 	reader.text(json, "title", c.title, true);
 	reader.text(json, "core_data", c.coreData, true);
 	reader.texts(json, "areas", c.areaFiles, true);
@@ -341,14 +342,14 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 			reader.fail(*start, "data.bad_facing", {});
 		}
 		reader.texts(*start, "lineup", c.startLineup, true);
-		reader.integer(*start, "level", c.startLevel, false, 1, 50);
+		reader.integer(*start, "level", c.startLevel, false, 1, rules::formulas::kMaxLevel);
 		reader.integer(*start, "money", c.startMoney, false, 0, 999999);
 		reader.counts(*start, "items", c.startItems, false, 1, 99);
 		if (c.startLineup.empty() || c.startLineup.size() > 5) {
 			reader.fail(*start, "data.start_lineup_size", {});
 		}
 	}
-	reader.counts(json, "join_levels", c.joinLevels, false, 1, 50);
+	reader.counts(json, "join_levels", c.joinLevels, false, 1, rules::formulas::kMaxLevel);
 	reader.counts(json, "prices", c.prices, false, 1, 999999);
 	reader.integer(json, "item_cap", c.itemCap, false, 1, 9999);
 	reader.integer(json, "money_cap", c.moneyCap, false, 1, 99999999);
@@ -357,6 +358,8 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.integer(json, "round_ms", c.roundMs, false, 0, 60000);
 	reader.integer(json, "autosave_slots", c.autosaveSlots, false, 1, 9);
 	reader.integer(json, "manual_slots", c.manualSlots, false, 1, 99);
+	reader.integer(json, "machine_step_heal", c.machineStepHeal, false, 0, 999);
+	reader.text(json, "outside_experience_until", c.outsideExperienceUntil, false);
 	if (const JsonValue* bosses = reader.field(json, "bosses", JsonValue::Type::Array, false)) {
 		for (const JsonValue& b : bosses->items) {
 			reader.only(b, {"encounter", "flag"});
@@ -428,13 +431,14 @@ void readJournal(JsonReader& reader, const JsonValue& json, Journal& j) {
 	}
 	if (const JsonValue* list = reader.field(json, "jobs", JsonValue::Type::Array, false)) {
 		for (const JsonValue& o : list->items) {
-			reader.only(o, {"id", "title", "available", "accepted", "completed"});
+			reader.only(o, {"id", "title", "available", "accepted", "completed", "missed"});
 			Job job;
 			reader.text(o, "id", job.id, true);
 			reader.text(o, "title", job.title, true);
 			reader.text(o, "available", job.availableFlag, false);
 			reader.text(o, "accepted", job.acceptedFlag, true);
 			reader.text(o, "completed", job.completedFlag, true);
+			reader.text(o, "missed", job.missedFlag, false);
 			j.jobs.push_back(job);
 		}
 	}
@@ -502,6 +506,11 @@ events::Registry buildRegistry(const GameData& data, Problems& problems) {
 	}
 	for (const auto& [id, vehicle] : data.db.vehicles) {
 		r.add(events::NameKind::vehicle, id);
+	}
+	for (const auto& [id, ability] : data.db.abilities) {
+		if (ability.kind == rules::AbilityKind::Technique || ability.kind == rules::AbilityKind::Skill) {
+			r.add(events::NameKind::ability, id);
+		}
 	}
 	for (const std::string& n : c.presentation.audio) r.add(events::NameKind::audio, n);
 	for (const CameraDef& n : c.presentation.cameras) r.add(events::NameKind::camera, n.id);
@@ -753,6 +762,7 @@ void checkReferences(const GameData& data, Problems& problems) {
 		flagDeclared("journal job '" + job.id + "'", job.availableFlag);
 		flagDeclared("journal job '" + job.id + "'", job.acceptedFlag);
 		flagDeclared("journal job '" + job.id + "'", job.completedFlag);
+		flagDeclared("journal job '" + job.id + "'", job.missedFlag);
 	}
 	for (const EncyclopediaEntry& e : j.encyclopedia) {
 		stringExists("journal entry '" + e.id + "'", e.title);
@@ -1032,7 +1042,7 @@ std::string registryText(const events::Registry& registry) {
 		{events::NameKind::layout, "layout"}, {events::NameKind::audio, "audio"}, {events::NameKind::animation, "animation"},
 		{events::NameKind::portrait, "portrait"}, {events::NameKind::item, "item"}, {events::NameKind::member, "member"},
 		{events::NameKind::encounter, "encounter"}, {events::NameKind::map, "map"}, {events::NameKind::shop, "shop"},
-		{events::NameKind::rest_point, "rest"}, {events::NameKind::enemy, "enemy"}, {events::NameKind::vehicle, "vehicle"},
+		{events::NameKind::rest_point, "rest"}, {events::NameKind::enemy, "enemy"}, {events::NameKind::vehicle, "vehicle"}, {events::NameKind::ability, "ability"},
 	};
 	for (const auto& [kind, word] : kinds) {
 		auto it = registry.names.find(kind);

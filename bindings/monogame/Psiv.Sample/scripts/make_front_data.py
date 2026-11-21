@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Copies the placeholder data for scripts/battle_front.txt and adds an encounter of six enemies, more than any of the
-placeholder's encounters has, so the front battle layout's two ranks can be checked.
+"""Copies the placeholder data for scripts/battle_front.txt and scripts/battle_changes.txt and adds two encounters: six
+enemies, more than any of the placeholder's encounters has, so the front battle layout's two ranks can be checked, and
+a lone Twin Ooze, which has no partner to merge with, for an instant defeat that lands on it.
 
 Usage: make_front_data.py GAME_DATA CORE_DATA OUT
 
-OUT gets game/data and core/data side by side, where game.json's core_data looks. The added encounter, `horde`, is in no
-zone table: the script starts it with the `dev battle` command.
+OUT gets game/data and core/data side by side, where game.json's core_data looks. The added encounters, `horde` and
+`lone_ooze`, are in no zone table: the scripts start them with the `dev battle` command.
 """
 
 import json
@@ -27,6 +28,7 @@ def main():
 		"enemies": ["gel_mite", "rust_hound", "gel_mite", "rust_hound", "gel_mite", "brass_warden"],
 		"drop": {"item": "tonic", "rate": 50},
 	})
+	enemies["encounters"].append({"id": "lone_ooze", "enemies": ["twin_ooze"]})
 	enemies_file.write_text(json.dumps(enemies, indent="\t") + "\n")
 
 

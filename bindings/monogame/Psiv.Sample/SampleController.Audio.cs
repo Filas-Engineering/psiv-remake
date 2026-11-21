@@ -27,7 +27,7 @@ public sealed partial class SampleController
 	public IAudioOut Audio => _audio;
 
 	private static readonly Screen[] MenuScreens =
-		[Screen.Menu, Screen.Shop, Screen.Inn, Screen.SavePrompt, Screen.NameEntry, Screen.QuestLog, Screen.TextLog, Screen.Options, Screen.Pause, Screen.LoadGame];
+		[Screen.Menu, Screen.Shop, Screen.Inn, Screen.SavePrompt, Screen.NameEntry, Screen.QuestLog, Screen.TextLog, Screen.Options, Screen.Pause, Screen.LoadGame, Screen.SoundTest];
 
 	// The cue for a battle event, played as its line shows.
 	private static string? BattleCue(BattleEvent e, int partyCount) => e.Type switch
@@ -94,6 +94,10 @@ public sealed partial class SampleController
 		GameInfo game = _gameInfo ??= _s.GameInfo();
 		if (_s.Mode == Mode.Title && !_battle.Active)
 		{
+			if (_soundTestTrack.Length > 0)
+			{
+				return _soundTestTrack;
+			}
 			return game.TitleMusic.Length > 0 ? game.TitleMusic : "title";
 		}
 		if (_scriptMusic is not null)

@@ -1,0 +1,291 @@
+# The battle screen under the newer rules, on the data copy scripts/make_front_data.py writes, with --dev for the
+# commands that reach each moment. Seed 1. In the front layout: the Hive Lantern calling a Gel Mite into the place beside
+# it (the stage spreads over the new place, the label, bar and target pointer follow), two Twin Oozes merging into one,
+# the Tide Colossus taking its next form, the arena's replacements stepping into a fallen mite's place, an instant defeat
+# landing on a lone Twin Ooze with its mark and being shrugged off by the shielded boss, whose shield the Sunstone takes
+# away; the Cogwright's Calm Tide restoring technique points, shown as TP; the mystic's worn Storm Rod listed among the
+# items and cast without being used up; and in the side layout the summon and the next form again. After each round the
+# playback matches the session (battlesync), and the developer win resyncs the stage. With --window the shot lines save
+# screenshots under build/shots/ (run from bindings/); headless runs write nothing for them.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev level fighter 30
+dev level mystic 60
+dev level medic 20
+
+# The summon: everyone defends while the lantern calls a mite into the free place beside it. The stage spreads from
+# one place to two as the mite rises in.
+dev battle hive
+expect mode Battle
+waitstate 120 battlephase Command
+expect state ranks 1
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+present mark
+waitstatehas 600 step join
+wait 12
+expect state ranks 2
+expect state overlaps none
+shot build/shots/changes_join.png
+waitstate 900 battlephase Command
+expect presenthas banner Call Kin
+expect presenthas join Gel Mite
+expect statehas battlesync all match
+# The new enemy is in the target list, and the pointer stands over it.
+press Enter
+expect state battlephase Target
+expect statehas battlemenu Gel Mite
+press Down
+expect statehas battlemenu [Gel Mite
+expect state overlaps none
+shot build/shots/changes_join_target.png
+press Escape
+dev win
+hold F 60
+expect state battlephase Ended
+expect statehas battlesync all match
+press Enter
+expect screen Field
+
+# The merge: one ooze melds with the other, which slides into it, and the two become the Grand Ooze.
+dev battle oozes
+waitstate 120 battlephase Command
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 step merge
+wait 20
+expect state overlaps none
+shot build/shots/changes_merge.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+expect statehas shown Grand Ooze
+dev win
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+
+# The next form: the colossus falls to the party's attacks in the second round and stands up again as its core, at
+# full hit points.
+dev battle colossus
+waitstate 120 battlephase Command
+press Enter 6
+waitstate 900 battlephase Command
+press Enter 6
+waitstatehas 900 step transform
+wait 24
+expect state overlaps none
+shot build/shots/changes_transform.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+expect statehas shown Tide Colossus Core
+dev win
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+
+# Replacements: each mite that falls in the arena has a fresh one take its place.
+dev battle endless
+waitstate 120 battlephase Command
+press Enter
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 step join
+wait 12
+shot build/shots/changes_replace.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+expect state ranks 2
+dev win
+hold F 60
+expect state battlephase Ended
+press Enter
+expect screen Field
+
+# An instant defeat: the mystic's Unmake fells the lone ooze, which takes the mark as it fades.
+dev battle lone_ooze
+waitstate 120 battlephase Command
+press Down 4
+press Enter
+press Down
+press Enter
+expect state battlephase Option
+press Up
+expect statehas description
+press Enter
+expect state battlephase Target
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 step result Twin Ooze felled
+wait 10
+expect statehas marks Twin Ooze
+shot build/shots/changes_instant_defeat.png
+waitstate 900 battlephase Ended
+expect statehas battlesync all match
+press Enter
+expect screen Field
+
+# The shielded boss: Unmake does nothing to it, every hit is held to 1 until the Sunstone takes the shield away.
+dev give sunstone 1
+dev battle sentinel
+waitstate 120 battlephase Command
+expect statehas shown Aegis Sentinel 150/150 30/30 aegis
+press Enter
+press Enter
+press Down
+press Enter
+press Up
+press Enter
+press Enter
+press Down 3
+press Enter
+expect statehas battlemenu [Sunstone x1]
+press Enter
+press Enter
+waitstatehas 900 step result Aegis Sentinel immune to felling
+wait 10
+expect state marks none
+shot build/shots/changes_immune.png
+waitstatehas 900 step result Aegis Sentinel -aegis
+shot build/shots/changes_shield_off.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+dev win
+hold F 60
+press Enter
+expect screen Field
+
+# Technique points: with the Cogwright in the party, the mystic spends some on a Spark, then Calm Tide restores them,
+# the TP bar running up and the number floating in the bar's color.
+dev warp ember_steps west_gate
+dev event steps_tinker
+pressuntil Enter Field 200
+expect statehas party Test Cogwright
+dev battle training
+waitstate 120 battlephase Command
+press Down 4
+press Enter
+press Down
+press Enter
+press Enter
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstate 900 battlephase Command
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 2
+press Enter
+expect statehas battlemenu Calm Tide
+press Down
+press Enter
+waitstatehas 900 step TP
+wait 10
+shot build/shots/changes_tp.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+dev win
+hold F 60
+press Enter
+expect screen Field
+
+# The worn Storm Rod among the mystic's items: marked as not used up, cast as Gust, and still listed after.
+dev give storm_rod 1
+press M
+cmd equip mystic storm_rod
+press Escape
+expect screen Field
+dev battle training
+waitstate 120 battlephase Command
+press Down 4
+press Enter
+press Down 3
+press Enter
+expect statehas battlemenu Storm Rod (worn)
+press Up
+expect statehas description cast without being used up
+shot build/shots/changes_worn.png
+press Enter
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 step banner Storm Rod
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+press Down 4
+press Enter
+press Down 3
+press Enter
+expect statehas battlemenu Storm Rod (worn)
+press Escape
+press Escape
+dev win
+hold F 60
+press Enter
+expect screen Field
+
+# The side layout: the summon and the next form again.
+battlelayout side
+dev battle hive
+waitstate 120 battlephase Command
+expect state battlelayout side
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 step join
+wait 12
+shot build/shots/changes_side_join.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+dev win
+hold F 60
+press Enter
+dev battle colossus
+waitstate 120 battlephase Command
+press Enter 8
+waitstate 900 battlephase Command
+press Enter 8
+waitstatehas 900 step transform
+wait 24
+shot build/shots/changes_side_transform.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+dev win
+hold F 60
+press Enter
+expect screen Field
+battlelayout data

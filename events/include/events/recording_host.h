@@ -78,6 +78,8 @@ public:
 	void place_vehicle(const std::string& vehicle, const std::string& map, const std::string& marker) override;
 	void remove_vehicle(const std::string& vehicle) override;
 	bool has_vehicle(const std::string& vehicle) override;
+	void teach_ability(const std::string& member, const std::string& ability) override;
+	void set_follower(const std::string& actor) override;
 
 protected:
 	// Hooks for hosts built on this one (TimingHost). The defaults use the

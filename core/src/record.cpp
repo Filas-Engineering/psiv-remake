@@ -69,6 +69,9 @@ std::string serializeRecord(const BattleRecord& record) {
 	s << "flags escape=" << setup.flags.escapeAllowed << " defeat_branch=" << setup.flags.defeatHasBranch
 		<< " vehicle=" << setup.flags.vehicleBattle << '\n';
 	s << "vehicle " << text::encode(setup.vehicle) << '\n';
+	for (const auto& [id, uses] : setup.vehicleSkillUses) {
+		s << "vehicle_uses " << text::encode(id) << ' ' << uses << '\n';
+	}
 	s << "escape_rating " << setup.escapeRating << '\n';
 	s << "scripted_end " << toString(setup.scriptedEnd.kind) << ' ' << setup.scriptedEnd.rounds << ' ' << setup.scriptedEnd.enemySlot << '\n';
 	s << "enemy_group " << text::encode(setup.enemyGroup) << '\n';
@@ -92,6 +95,9 @@ std::string serializeRecord(const BattleRecord& record) {
 		}
 		for (const ActiveStatus& status : member.statuses) {
 			s << "member_status " << text::encode(status.id) << ' ' << status.remaining << '\n';
+		}
+		for (const std::string& id : member.taught) {
+			s << "member_taught " << text::encode(id) << '\n';
 		}
 	}
 	for (const ComboLogEntry& entry : record.knownCombos) {
@@ -151,7 +157,7 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 				return fail("expected 'battle_record <version>'");
 			}
 			// Format 4 differs only in having no escape rating, and format 3 also has no member names.
-			if (version != kRecordFormatVersion && version != 4 && version != 3) {
+			if (version != kRecordFormatVersion && version != 5 && version != 4 && version != 3) {
 				return fail("record format " + t[1] + " is not supported (this build reads " + std::to_string(kRecordFormatVersion) + ")");
 			}
 			sawHeader = true;
@@ -180,6 +186,18 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 				&& parseBool(a, setup.flags.escapeAllowed) && parseBool(b, setup.flags.defeatHasBranch) && parseBool(c, setup.flags.vehicleBattle);
 		} else if (key == "vehicle" && n == 2) {
 			ok = text::decode(t[1], setup.vehicle);
+		} else if (key == "vehicle_uses" && n == 3) {
+			std::string id;
+			int uses = 0;
+			ok = text::decode(t[1], id) && parseInt(t[2], uses) && !id.empty();
+			setup.vehicleSkillUses[id] = uses;
+		} else if (key == "member_taught" && n == 2) {
+			if (setup.party.empty()) {
+				return fail("'member_taught' before any 'member'");
+			}
+			std::string id;
+			ok = text::decode(t[1], id) && !id.empty();
+			setup.party.back().taught.push_back(id);
 		} else if (key == "escape_rating" && n == 2) {
 			ok = parseInt(t[1], setup.escapeRating);
 		} else if (key == "scripted_end" && n == 4) {
@@ -291,9 +309,10 @@ Result<Battle> replayBattle(const Database& db, const BattleRecord& record, Comb
 		return created;
 	}
 	Battle& battle = *created.value;
-	const int count = static_cast<int>(battle.combatants_.size());
 	for (std::size_t r = 0; r < record.rounds.size(); ++r) {
 		const RoundInput& round = record.rounds[r];
+		// Enemies that joined in earlier rounds can be named from then on.
+		const int count = static_cast<int>(battle.combatants_.size());
 		const std::string where = "round " + std::to_string(r + 1) + ": ";
 		if (battle.outcome() != Outcome::Ongoing) {
 			return Result<Battle>::failure(where + "the battle had already ended");

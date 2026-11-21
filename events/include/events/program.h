@@ -65,6 +65,8 @@ enum class Op {
 	vehicle_give,
 	vehicle_place,
 	vehicle_remove,
+	learn,
+	follower,
 };
 
 const char* op_name(Op op);
@@ -76,7 +78,8 @@ struct Instruction {
 	// choice: the variable (choice) or flag (ask) the answer is written to,
 	// if any. shop, rest, name_entry: the shop, rest point or party member.
 	// vehicle_*: the vehicle; vehicle_give and vehicle_place keep the map in
-	// action.subject and the marker in action.target.
+	// action.subject and the marker in action.target. learn: the member, with
+	// the ability in action.subject. follower: the actor, empty for none.
 	std::string name;
 	// fork: 1 for a `race`, which ends when its first branch does.
 	std::int64_t number = 0;
