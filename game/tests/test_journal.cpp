@@ -5,6 +5,7 @@
 #include "game/session.h"
 #include "rules/progression.h"
 
+#include <algorithm>
 #include <filesystem>
 
 using namespace game;
@@ -148,7 +149,7 @@ TEST(partyTalkComesUpByItselfOnceAnAreaUnderEachSet) {
 	World& w = s.world();
 	w.flags["tidewater.met_guide"] = true;
 	w.flags["reed.scout_joined"] = true;
-	for (const std::string& id : {"mystic", "medic"}) {
+	for (const std::string id : {"mystic", "medic"}) {
 		w.roster.push_back(rules::makePartyMember(test::data().db, *test::data().db.character(id), 3));
 		w.lineup.push_back(id);
 	}

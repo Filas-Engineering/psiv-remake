@@ -4,6 +4,8 @@
 #include "rules/formulas.h"
 #include "rules/progression.h"
 
+#include <algorithm>
+
 using namespace game;
 
 namespace {
@@ -157,7 +159,7 @@ TEST(macroStepsAreValidatedAndShownWithNamesAndIssues) {
 	CHECK(sameWorld(reloaded(s), s.world()));
 
 	setParty(s, {"fighter", "mystic", "medic", "scout", "engineer"}, 3);
-	for (const std::string& member : {"fighter", "scout", "engineer"}) {
+	for (const std::string member : {"fighter", "scout", "engineer"}) {
 		CHECK(s.setMacroStep("pair", static_cast<int>(s.world().macros.back().steps.size()), step(member, K::Defend)).empty());
 	}
 	const rules::Message full = s.setMacroStep("pair", 5, step("fighter", K::Attack));
