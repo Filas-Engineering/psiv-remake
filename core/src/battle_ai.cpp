@@ -16,7 +16,7 @@ bool lowerHpShare(const Combatant& a, const Combatant& b) {
 
 }
 
-bool Battle::overrideHolds(const AiOverride& entry, int actor) const {
+bool Battle::overrideHolds(const AiCondition& entry, int actor) const {
 	const Combatant& self = combatants_[actor];
 	switch (entry.when) {
 	case AiConditionKind::SelfHpHalf:
@@ -57,11 +57,23 @@ bool Battle::overrideHolds(const AiOverride& entry, int actor) const {
 		return self.ambushed;
 	case AiConditionKind::AllyPresent:
 	case AiConditionKind::AllyAbsent: {
-		bool present = false;
+		int present = 0;
 		for (int ally : allies(actor)) {
-			present = present || (ally != actor && combatants_[ally].alive() && combatants_[ally].defId == entry.enemy);
+			present += ally != actor && combatants_[ally].alive() && combatants_[ally].defId == entry.enemy ? 1 : 0;
 		}
-		return present == (entry.when == AiConditionKind::AllyPresent);
+		if (entry.when == AiConditionKind::AllyAbsent) {
+			return present == 0;
+		}
+		const int count = entry.count.value_or(1);
+		switch (entry.compare) {
+		case AiCount::AtLeast:
+			return present >= count;
+		case AiCount::Exactly:
+			return present == count;
+		case AiCount::AtMost:
+			return present <= count;
+		}
+		return false;
 	}
 	case AiConditionKind::FreeSlotBeside:
 		return !freeSlotsBeside(actor).empty();
@@ -74,8 +86,26 @@ bool Battle::overrideHolds(const AiOverride& entry, int actor) const {
 			}
 		}
 		return true;
+	case AiConditionKind::All:
+		return std::all_of(entry.parts.begin(), entry.parts.end(), [&](const AiCondition& part) { return overrideHolds(part, actor); });
+	case AiConditionKind::Any:
+		return std::any_of(entry.parts.begin(), entry.parts.end(), [&](const AiCondition& part) { return overrideHolds(part, actor); });
 	}
 	return false;
+}
+
+// The conditions that made an override fire: every part of an All, the parts of an Any that hold. They are gathered
+// before any is spent, since spending the hit marks would change what the others read.
+void Battle::heldConditions(const AiCondition& entry, int actor, std::vector<const AiCondition*>& out) const {
+	if (entry.when != AiConditionKind::All && entry.when != AiConditionKind::Any) {
+		out.push_back(&entry);
+		return;
+	}
+	for (const AiCondition& part : entry.parts) {
+		if (entry.when == AiConditionKind::All || overrideHolds(part, actor)) {
+			heldConditions(part, actor, out);
+		}
+	}
 }
 
 // The combatants an action may aim at. Empty means it has no target.
@@ -232,29 +262,35 @@ void Battle::chooseEnemyAction(int actor, std::vector<Event>& out) {
 			continue;
 		}
 		Combatant& self = combatants_[actor];
-		switch (entry.when) {
-		case AiConditionKind::SelfHpQuarterOnce:
-			quarterOverrideUsed_ = true;
-			break;
-		case AiConditionKind::HitByAttack:
-		case AiConditionKind::HitByAbility:
-		case AiConditionKind::HitByTechnique:
-		case AiConditionKind::HitByGroup:
-			self.hitByAttack = self.hitByAbility = self.hitByTechnique = self.hitByGroup = false;
-			break;
-		case AiConditionKind::Ambushed:
-			self.ambushed = false;
-			break;
-		case AiConditionKind::SelfHpHalf:
-		case AiConditionKind::AnyAllyHpHalf:
-		case AiConditionKind::LastStanding:
-		case AiConditionKind::TechniquesBlocked:
-		case AiConditionKind::AfterTurns:
-		case AiConditionKind::AllyPresent:
-		case AiConditionKind::AllyAbsent:
-		case AiConditionKind::FreeSlotBeside:
-		case AiConditionKind::GroupIntact:
-			break;
+		std::vector<const AiCondition*> held;
+		heldConditions(entry, actor, held);
+		for (const AiCondition* condition : held) {
+			switch (condition->when) {
+			case AiConditionKind::SelfHpQuarterOnce:
+				quarterOverrideUsed_ = true;
+				break;
+			case AiConditionKind::HitByAttack:
+			case AiConditionKind::HitByAbility:
+			case AiConditionKind::HitByTechnique:
+			case AiConditionKind::HitByGroup:
+				self.hitByAttack = self.hitByAbility = self.hitByTechnique = self.hitByGroup = false;
+				break;
+			case AiConditionKind::Ambushed:
+				self.ambushed = false;
+				break;
+			case AiConditionKind::SelfHpHalf:
+			case AiConditionKind::AnyAllyHpHalf:
+			case AiConditionKind::LastStanding:
+			case AiConditionKind::TechniquesBlocked:
+			case AiConditionKind::AfterTurns:
+			case AiConditionKind::AllyPresent:
+			case AiConditionKind::AllyAbsent:
+			case AiConditionKind::FreeSlotBeside:
+			case AiConditionKind::GroupIntact:
+			case AiConditionKind::All:
+			case AiConditionKind::Any:
+				break;
+			}
 		}
 		chosen = ability;
 		rule = entry.target;

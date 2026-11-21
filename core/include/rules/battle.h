@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -139,6 +140,8 @@ private:
 		bool combo = false;
 		int comboAttack = 0;
 		int comboBonus = 0;
+		// The ability's own variance, which wins over the rules'.
+		std::optional<DamageVariance> variance = {};
 	};
 
 	Battle() : rng_(0) {}
@@ -166,7 +169,8 @@ private:
 	Command forcedCommand(int actor, const StatusDef& status);
 	int drawFoeByPartyOrder(int actor);
 	void chooseEnemyAction(int actor, std::vector<Event>& out);
-	bool overrideHolds(const AiOverride& entry, int actor) const;
+	bool overrideHolds(const AiCondition& entry, int actor) const;
+	void heldConditions(const AiCondition& entry, int actor, std::vector<const AiCondition*>& out) const;
 	std::vector<int> aiCandidates(int actor, const AbilityDef& ability, const AiTarget& target) const;
 	int aiTarget(int actor, const AbilityDef& ability, const AiTarget& target);
 
@@ -188,6 +192,9 @@ private:
 	void useItem(int actor, const Command& command, std::vector<Event>& out);
 	void attemptEscape(int actor, std::vector<Event>& out);
 	int rollSpread();
+	// The damage formula with the original's spread, or the variance the ability or the rules give.
+	int rollDamage(int attack, int defense, int bonus, int affinity, const Attacker& attacker);
+	void removeBeside(int actor, bool pays, std::vector<Event>& out);
 	void payCost(int actor, const AbilityDef& ability, std::vector<Event>& out);
 	// Returns whether any effect changed the battle state.
 	bool applyEffects(int user, const Attacker& attacker, const std::string& source, const std::vector<Effect>& effects, const std::vector<int>& targets, bool flatPower, std::vector<Event>& out);

@@ -211,6 +211,8 @@ struct GameConfig {
 	LeaveEquipment leaveEquipment = LeaveEquipment::Keep;
 	// Every area plays in random mode (F1, ENC-002): one switch for the whole game, off in the placeholder.
 	bool randomEncountersEverywhere = false;
+	// Every zone's grace steps start again after every battle, as a zone's grace_after_battle does.
+	bool graceAfterBattle = false;
 };
 
 struct LanguageTables {

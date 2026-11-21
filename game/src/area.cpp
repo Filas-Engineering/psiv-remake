@@ -261,11 +261,15 @@ void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 	}
 	if (const JsonValue* v = reader.field(z, "random", JsonValue::Type::Object, false)) {
 		RandomRules& r = zone.random;
-		reader.only(*v, {"min_steps", "max_steps", "step_distance", "grace_steps", "step_chance", "vehicle_step_chance", "safe_near_exits"});
+		reader.only(*v, {"min_steps", "max_steps", "step_distance", "grace_steps", "step_chance", "vehicle_step_chance", "safe_near_exits", "grace_after_battle"});
 		reader.integer(*v, "grace_steps", r.graceSteps, false, 0, 1000);
 		reader.integer(*v, "step_chance", r.stepChance, false, 1, 10000);
 		reader.integer(*v, "vehicle_step_chance", r.vehicleStepChance, false, 1, 10000);
 		reader.boolean(*v, "safe_near_exits", r.safeNearExits, false);
+		reader.boolean(*v, "grace_after_battle", r.graceAfterBattle, false);
+		if (r.graceAfterBattle && r.graceSteps == 0) {
+			reader.fail(*v, "data.grace_after_battle_needs_grace", {});
+		}
 		reader.integer(*v, "min_steps", r.minSteps, false, 1, 1000);
 		reader.integer(*v, "max_steps", r.maxSteps, false, 1, 1000);
 		reader.integer(*v, "step_distance", r.stepDistance, false, 1, 100);

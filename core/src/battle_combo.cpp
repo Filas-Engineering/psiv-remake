@@ -135,6 +135,7 @@ Battle::Attacker Battle::comboTeam(const std::vector<int>& participants, const s
 	team.critical /= count;
 	team.changeAmount = team.comboAttack;
 	team.groupTarget = combo.targeting == Targeting::EnemyGroup || combo.targeting == Targeting::AllEnemies;
+	team.variance = combo.variance;
 	return team;
 }
 

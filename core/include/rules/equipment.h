@@ -28,6 +28,10 @@ struct EquipmentDef {
 	bool useFromBag = false;
 	// Percents that scale the wearer's affinity per element.
 	Affinities affinities = {};
+	// Affinities the wearer takes outright per element; they win over every piece's scaling, and the lowest wins.
+	Affinities setAffinities = {};
+	// The piece's own power, cast as the attacking stat of `use` in place of the wearer's stats or the flat item rule.
+	int usePower = 0;
 };
 
 }

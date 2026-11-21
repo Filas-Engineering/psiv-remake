@@ -30,6 +30,14 @@ int damage(int attack, int defense, int bonus, int affinity, int spread, int div
 	return std::clamp(raw * affinity / divisor - defense, 1, kMaxDamage);
 }
 
+int variedDamage(int attack, int defense, int bonus, int affinity, int scaleNumerator, int scaleDenominator, int divisor) {
+	if (affinity <= 0) {
+		return 0;
+	}
+	const long long raw = static_cast<long long>(attack * 2 + bonus * 2) * scaleNumerator / scaleDenominator;
+	return static_cast<int>(std::clamp<long long>(raw * affinity / divisor - defense, 1, kMaxDamage));
+}
+
 int healAmount(int power, int mental, int spread) {
 	return (mental * spread / 64 + mental + power * 2) / 2;
 }

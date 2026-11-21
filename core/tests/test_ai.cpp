@@ -14,7 +14,11 @@ std::optional<Event> enemyAction(const std::vector<Event>& events, int enemy) {
 }
 
 AiOverride when(AiConditionKind kind, const char* ability, AiTargetRule rule = AiTargetRule::Default, const char* status = "") {
-	return {kind, ability, {rule, status}};
+	AiOverride entry;
+	entry.when = kind;
+	entry.ability = ability;
+	entry.target = {rule, status};
+	return entry;
 }
 
 // Eight slots of the basic attack, then the given overrides.

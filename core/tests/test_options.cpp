@@ -7,6 +7,7 @@
 #include "test.h"
 
 #include <algorithm>
+#include <set>
 
 using namespace rules;
 using namespace fixtures;
@@ -61,7 +62,11 @@ TEST(theAmbushMarkCanFollowTheEnemyOpeningAndLastUntilRead) {
 	CHECK(data().battleRules.ambushOpening == Opening::PartyFirst);
 	EnemyDef& sentinel = db.enemies["aegis_sentinel"];
 	sentinel.slots.assign(static_cast<std::size_t>(kAiSlots), "bite");
-	sentinel.overrides = {{AiConditionKind::LastStanding, "bite", {}, ""}, {AiConditionKind::Ambushed, "hamstring", {}, ""}};
+	sentinel.overrides.assign(2, AiOverride());
+	sentinel.overrides[0].when = AiConditionKind::LastStanding;
+	sentinel.overrides[0].ability = "bite";
+	sentinel.overrides[1].when = AiConditionKind::Ambushed;
+	sentinel.overrides[1].ability = "hamstring";
 
 	BattleSetup partyFirst = makeSetup(db, {"aegis_sentinel"}, 12);
 	partyFirst.opening = Opening::PartyFirst;
@@ -676,5 +681,451 @@ TEST(aCharacterCanCarryItsOwnExperienceAndStatTables) {
 		std::map<std::string, std::string> bad = texts;
 		replaceOnce(bad["party.json"], from, to);
 		CHECK(!loadDatabaseFromTexts(bad).ok());
+	}
+}
+
+namespace {
+
+AbilityDef transformingAbility(const std::string& id, Targeting targeting) {
+	AbilityDef ability;
+	ability.id = id;
+	ability.name = id;
+	ability.kind = AbilityKind::Technique;
+	ability.targeting = targeting;
+	Effect effect;
+	effect.kind = EffectKind::Transform;
+	ability.effects = {effect};
+	return ability;
+}
+
+}
+
+// R37: a piece's use may transform, aimed by the ability's own targeting, worn or cast from the bag; a use that
+// transforms its user is refused, since a member has no form to take.
+TEST(aPieceUseCanTransformItsTarget) {
+	Database db = data();
+	db.abilities["hasten_molt"] = transformingAbility("hasten_molt", Targeting::OneEnemy);
+	db.equipment["storm_rod"].use = "hasten_molt";
+	db.equipment["squall_fan"].use = "hasten_molt";
+	const int pupa = kFirstEnemy + 1;
+	for (bool fromBag : {false, true}) {
+		BattleSetup setup = makeSetup(db, {"gel_mite", "moss_pupa"}, 3);
+		const int user = fromBag ? kFighter : kMystic;
+		if (fromBag) {
+			setup.pieces["squall_fan"] = 1;
+		} else {
+			setup.party[kMystic].equipment[EquipSlot::Weapon] = "storm_rod";
+		}
+		Battle battle = makeBattle(db, setup);
+		sturdyParty(battle);
+		CHECK(battle.setCommand(user, Command::item(fromBag ? "squall_fan" : "storm_rod", pupa)).empty());
+		othersDefend(battle);
+		const std::vector<Event> changed = ofType(battle.resolveRound(), EventType::EnemyTransformed);
+		CHECK(changed.size() == 1 && changed[0].target == pupa);
+		CHECK_EQ(battle.combatant(pupa).defId, std::string("moss_moth"));
+	}
+
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["equipment.json"], "\"use\": \"gust\", \"stats\": {\"mental\": 2}", "\"use\": \"molt\", \"stats\": {\"mental\": 2}");
+	const Result<Database> refused = loadDatabaseFromTexts(texts);
+	CHECK(!refused.ok() && refused.error.find("use 'molt' transforms its user") != std::string::npos);
+	replaceOnce(texts["abilities.json"], "\"id\": \"molt\", \"name\": \"Molt\", \"kind\": \"technique\", \"cost\": 0, \"target\": \"self\"",
+		"\"id\": \"molt\", \"name\": \"Molt\", \"kind\": \"technique\", \"cost\": 0, \"target\": \"one_enemy\"");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok() && loaded.value->equipment.at("storm_rod").use == "molt");
+}
+
+namespace {
+
+AiCondition leaf(AiConditionKind kind) {
+	AiCondition condition;
+	condition.when = kind;
+	return condition;
+}
+
+AiCondition hounds(int count, AiCount compare) {
+	AiCondition condition = leaf(AiConditionKind::AllyPresent);
+	condition.enemy = "rust_hound";
+	condition.count = count;
+	condition.compare = compare;
+	return condition;
+}
+
+// The lead hound's action in one round, with every slot its bite and the one override given.
+std::string leadHoundAction(const Database& base, const AiOverride& entry, int othersStanding, bool halfHp, bool hitFirst) {
+	Database db = base;
+	EnemyDef& hound = db.enemies["rust_hound"];
+	hound.slots.assign(static_cast<std::size_t>(kAiSlots), "bite");
+	hound.overrides = {entry};
+	Battle battle = makeBattle(db, {"rust_hound", "rust_hound", "rust_hound"}, 5);
+	sturdyParty(battle);
+	for (int i = othersStanding; i < 2; ++i) {
+		battle.combatant(kFirstEnemy + 2 - i).hp = 0;
+	}
+	if (halfHp) {
+		battle.combatant(kFirstEnemy).hp = battle.combatant(kFirstEnemy).stats.maxHp / 2;
+	}
+	battle.combatant(kFirstEnemy).hitByAttack = hitFirst;
+	for (int i = kFirstEnemy + 1; i < static_cast<int>(battle.combatants().size()); ++i) {
+		if (battle.combatant(i).alive()) {
+			battle.setCommand(i, Command::defend());
+		}
+	}
+	partyDefends(battle);
+	const std::optional<Event> action = firstBy(battle.resolveRound(), EventType::ActionStarted, kFirstEnemy);
+	const std::string id = action ? action->ability : std::string();
+	return battle.combatant(kFirstEnemy).hitByAttack ? id + "+marked" : id;
+}
+
+}
+
+// R38: an override's condition may be several held together (all) or any of several, nested, and ally_present may
+// count the others of its kind, so a trigger can need an exact grouping. An any spends the marks of the parts that held.
+TEST(overridesCanCombineConditionsAndCountAllies) {
+	const Database& db = data();
+	AiOverride exact;
+	exact.ability = "venom_spit";
+	exact.when = AiConditionKind::All;
+	exact.parts = {hounds(2, AiCount::Exactly), leaf(AiConditionKind::SelfHpHalf)};
+	CHECK_EQ(leadHoundAction(db, exact, 2, false, false), std::string("bite"));
+	CHECK_EQ(leadHoundAction(db, exact, 2, true, false), std::string("venom_spit"));
+	CHECK_EQ(leadHoundAction(db, exact, 1, true, false), std::string("bite"));
+	exact.parts[0] = hounds(1, AiCount::AtMost);
+	CHECK_EQ(leadHoundAction(db, exact, 1, true, false), std::string("venom_spit"));
+	CHECK_EQ(leadHoundAction(db, exact, 2, true, false), std::string("bite"));
+	exact.parts[0] = hounds(2, AiCount::AtLeast);
+	CHECK_EQ(leadHoundAction(db, exact, 2, true, false), std::string("venom_spit"));
+
+	AiOverride either;
+	either.ability = "venom_spit";
+	either.when = AiConditionKind::Any;
+	either.parts = {leaf(AiConditionKind::LastStanding), leaf(AiConditionKind::HitByAttack)};
+	CHECK_EQ(leadHoundAction(db, either, 2, false, false), std::string("bite"));
+	CHECK_EQ(leadHoundAction(db, either, 0, false, false), std::string("venom_spit"));
+	CHECK_EQ(leadHoundAction(db, either, 2, false, true), std::string("venom_spit"));
+	CHECK_EQ(leadHoundAction(db, either, 0, false, true), std::string("venom_spit"));
+	either.parts[0] = leaf(AiConditionKind::LastStanding);
+	either.parts[1] = exact;
+	CHECK_EQ(leadHoundAction(db, either, 2, true, false), std::string("venom_spit"));
+	CHECK_EQ(leadHoundAction(db, either, 1, true, false), std::string("bite"));
+	exact.parts[1] = leaf(AiConditionKind::HitByAttack);
+	CHECK_EQ(leadHoundAction(db, exact, 2, false, true), std::string("venom_spit"));
+	CHECK_EQ(leadHoundAction(db, exact, 1, false, true), std::string("bite+marked"));
+
+	const std::string from = "{\"when\": \"self_hp_half\", \"ability\": \"venom_spit\"}";
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["enemies.json"], from, "{\"all\": [{\"when\": \"ally_present\", \"enemy\": \"gel_mite\", \"count\": 2, \"compare\": \"exactly\"},"
+		" {\"any\": [{\"when\": \"self_hp_half\"}, {\"when\": \"last_standing\"}]}], \"ability\": \"venom_spit\"}");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok());
+	if (loaded.ok()) {
+		const AiOverride& read = loaded.value->enemies.at("rust_hound").overrides.at(0);
+		CHECK(read.when == AiConditionKind::All && read.parts.size() == 2);
+		CHECK(read.parts[0].count == 2 && read.parts[0].compare == AiCount::Exactly && read.parts[0].enemy == "gel_mite");
+		CHECK(read.parts[1].when == AiConditionKind::Any && read.parts[1].parts.size() == 2);
+		CHECK(!read.parts[0].parts.size() && !read.parts[1].parts[0].count);
+	}
+	const std::pair<const char*, const char*> refusals[] = {
+		{"{\"when\": \"self_hp_half\", \"all\": [{\"when\": \"self_hp_half\"}, {\"when\": \"last_standing\"}], \"ability\": \"venom_spit\"}", "exactly one of when, all and any"},
+		{"{\"any\": [{\"when\": \"self_hp_half\"}], \"ability\": \"venom_spit\"}", "take 2 to 8 conditions"},
+		{"{\"when\": \"all\", \"ability\": \"venom_spit\"}", "unknown AI condition 'all'"},
+		{"{\"when\": \"self_hp_half\", \"count\": 1, \"ability\": \"venom_spit\"}", "only ally_present has count"},
+		{"{\"when\": \"ally_present\", \"enemy\": \"gel_mite\", \"compare\": \"exactly\", \"ability\": \"venom_spit\"}", "compare needs a count"},
+		{"{\"when\": \"ally_present\", \"enemy\": \"gel_mite\", \"count\": 0, \"ability\": \"venom_spit\"}", "count"},
+		{"{\"when\": \"ally_present\", \"enemy\": \"gel_mite\", \"count\": 1, \"compare\": \"most\", \"ability\": \"venom_spit\"}", "unknown compare 'most'"},
+		{"{\"all\": [{\"when\": \"ally_present\", \"enemy\": \"nobody\"}, {\"when\": \"last_standing\"}], \"ability\": \"venom_spit\"}", "nobody"},
+		{"{\"all\": [{\"when\": \"self_hp_half\", \"ability\": \"bite\"}, {\"when\": \"last_standing\"}], \"ability\": \"venom_spit\"}", "unknown field 'ability'"},
+		{"{\"all\": [{\"when\": \"self_hp_half\"}, {\"when\": \"last_standing\"}], \"turns\": 2, \"ability\": \"venom_spit\"}", "'turns' goes on one of them"},
+	};
+	for (const auto& [entry, message] : refusals) {
+		std::map<std::string, std::string> bad = dataTexts();
+		replaceOnce(bad["enemies.json"], from, entry);
+		const Result<Database> refused = loadDatabaseFromTexts(bad);
+		CHECK(!refused.ok() && refused.error.find(message) != std::string::npos);
+	}
+}
+
+namespace {
+
+// Enemies at the given formation places, an empty id a free place.
+BattleSetup formation(const Database& db, const std::vector<std::string>& places, std::uint64_t seed) {
+	BattleSetup setup = makeSetup(db, {}, seed);
+	for (const std::string& id : places) {
+		setup.enemies.push_back({id, id});
+	}
+	return setup;
+}
+
+}
+
+// R39: remove_beside takes the enemies standing in the places right beside the user out of the battle, a free place
+// stopping the reach on its side, paying only with rewards; with self_destruct the user goes too.
+TEST(anEnemyCanSweepAwayItsNeighbors) {
+	for (bool pays : {false, true}) {
+		Database db = data();
+		AbilityDef sweep;
+		sweep.id = "sweeping_burst";
+		sweep.name = "Sweeping Burst";
+		sweep.kind = AbilityKind::Technique;
+		sweep.targeting = Targeting::AllEnemies;
+		Effect blast;
+		blast.kind = EffectKind::PhysicalDamage;
+		blast.power = 5;
+		Effect remove;
+		remove.kind = EffectKind::RemoveBeside;
+		remove.rewards = pays;
+		Effect leave;
+		leave.kind = EffectKind::SelfDestruct;
+		sweep.effects = {blast, remove, leave};
+		db.abilities[sweep.id] = sweep;
+		EnemyDef& beetle = db.enemies["fuse_beetle"];
+		beetle.abilities.push_back(sweep.id);
+		beetle.slots.assign(static_cast<std::size_t>(kAiSlots), sweep.id);
+		beetle.overrides.clear();
+		Battle battle = makeBattle(db, formation(db, {"gel_mite", "fuse_beetle", "", "rust_hound"}, 7));
+		sturdyParty(battle);
+		const int mite = kFirstEnemy;
+		const int beetleIndex = kFirstEnemy + 1;
+		const int hound = kFirstEnemy + 2;
+		battle.setCommand(mite, Command::defend());
+		battle.setCommand(hound, Command::defend());
+		partyDefends(battle);
+		const std::vector<Event> events = battle.resolveRound();
+		const std::vector<Event> left = ofType(events, EventType::EnemyLeft);
+		CHECK(left.size() == 2 && left[0].target == mite && left[0].actor == -1 && left[1].target == beetleIndex);
+		const std::vector<Event> messages = ofType(events, EventType::Message);
+		CHECK(std::any_of(messages.begin(), messages.end(), [&](const Event& e) {
+			return e.message == "battle.removed_beside" && e.actor == beetleIndex && e.target == mite && e.params == std::vector<std::string>{"gel_mite"};
+		}));
+		CHECK(!ofType(events, EventType::DamageDealt).empty());
+		CHECK(battle.combatant(hound).alive() && !battle.combatant(hound).gone);
+		battle.combatant(hound).hp = 1;
+		playToEnd(battle, 10);
+		CHECK(battle.outcome() == Outcome::Victory);
+		CHECK_EQ(battle.rewards().currency, db.enemies.at("rust_hound").currency + (pays ? db.enemies.at("gel_mite").currency : 0));
+	}
+
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["abilities.json"], "{\"type\": \"self_destruct\"}", "{\"type\": \"remove_beside\", \"rewards\": true},\n\t\t\t{\"type\": \"self_destruct\"}");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok() && loaded.value->abilities.at("cinder_burst").hasEffect(EffectKind::RemoveBeside));
+	replaceOnce(texts["items.json"], "\"items\": [", "\"items\": [\n\t\t{\"id\": \"broom\", \"name\": \"Broom\", \"target\": \"self\", \"effects\": [{\"type\": \"remove_beside\"}]},");
+	const Result<Database> refused = loadDatabaseFromTexts(texts);
+	CHECK(!refused.ok() && refused.error.find("remove_beside") != std::string::npos);
+}
+
+// R40: use_power makes a piece's own power the attacking stat of its use in the normal formula, worn or from the bag.
+TEST(aPieceCanCastItsUseWithItsOwnPower) {
+	Database db = data();
+	db.equipment["storm_rod"].usePower = 60;
+	db.equipment["squall_fan"].usePower = 60;
+	const int power = db.abilities.at("gust").effects[0].power;
+	for (bool fromBag : {false, true}) {
+		BattleSetup setup = makeSetup(db, {"gel_mite"}, 6);
+		const int user = fromBag ? kFighter : kMystic;
+		if (fromBag) {
+			setup.pieces["squall_fan"] = 1;
+		} else {
+			setup.party[kMystic].equipment[EquipSlot::Weapon] = "storm_rod";
+		}
+		Battle battle = makeBattle(db, setup);
+		sturdyParty(battle);
+		sturdy(battle, kFirstEnemy);
+		battle.setCommand(user, Command::item(fromBag ? "squall_fan" : "storm_rod", kFirstEnemy));
+		othersDefend(battle);
+		const std::optional<Event> hit = firstBy(battle.resolveRound(), EventType::DamageDealt, user);
+		const int guard = battle.combatant(kFirstEnemy).effective(Stat::Mental);
+		CHECK(hit && hit->amount >= formulas::damage(60, guard, power, 100, formulas::kSpreadMin, 100) && hit->amount <= formulas::damage(60, guard, power, 100, formulas::kSpreadMax, 100));
+	}
+
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["equipment.json"], "\"use\": \"gust\", \"use_from_bag\": true", "\"use\": \"gust\", \"use_from_bag\": true, \"use_power\": 60");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok() && loaded.value->equipment.at("squall_fan").usePower == 60);
+	CHECK_EQ(data().equipment.at("squall_fan").usePower, 0);
+	replaceOnce(texts["equipment.json"], "\"use\": \"gust\", \"use_from_bag\": true, \"use_power\": 60", "\"use_power\": 60");
+	const Result<Database> refused = loadDatabaseFromTexts(texts);
+	CHECK(!refused.ok() && refused.error.find("use_power needs a use") != std::string::npos);
+}
+
+// R41: a piece's affinity may set the element outright ({"set": N}); a set wins over every piece's scaling, and the
+// lowest set wins.
+TEST(armorCanSetAnAffinityOutright) {
+	Database db = data();
+	PartyMember member = makePartyMember(db, *db.character("fighter"), 1);
+	member.equipment[EquipSlot::Body] = "ember_mail";
+	member.equipment[EquipSlot::Accessory] = "calm_charm";
+	db.equipment["calm_charm"].setAffinities[Element::Heat] = 80;
+	CHECK_EQ(memberCombatant(db, member).affinity(Element::Heat), 80);
+	CHECK_EQ(memberCombatant(db, member).affinity(Element::Chill), 150);
+	db.equipment["tin_cap"].setAffinities[Element::Heat] = 30;
+	CHECK_EQ(memberCombatant(db, member).affinity(Element::Heat), 30);
+	db.equipment["tin_cap"].setAffinities[Element::Heat] = 300;
+	CHECK_EQ(memberCombatant(db, member).affinity(Element::Heat), 80);
+
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["equipment.json"], "\"affinities\": {\"heat\": 50, \"chill\": 150}", "\"affinities\": {\"heat\": {\"set\": 20}, \"chill\": 150}");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok() && loaded.value->equipment.at("ember_mail").setAffinities.at(Element::Heat) == 20 && !loaded.value->equipment.at("ember_mail").affinities.count(Element::Heat));
+	for (const char* bad : {"{\"set\": 20, \"scale\": 50}", "{\"set\": 401}", "{}"}) {
+		std::map<std::string, std::string> refused = texts;
+		replaceOnce(refused["equipment.json"], "{\"set\": 20}", bad);
+		CHECK(!loadDatabaseFromTexts(refused).ok());
+	}
+}
+
+// R42: a damage effect's stat_percent scales the user's attacking stat and its power may be negative; a variance (per
+// ability, else rules.json's damage_variance) replaces the original's spread with an even or bell-shaped spread around
+// the mean damage. Without one the spread is the original's.
+TEST(damageCanScaleTheStatTakeANegativePowerAndVary) {
+	CHECK_EQ(formulas::variedDamage(50, 10, 5, 100, 1, 1, 100), 100);
+	CHECK_EQ(formulas::variedDamage(50, 10, 5, 100, 90, 100, 100), 89);
+	CHECK_EQ(formulas::variedDamage(50, 10, -60, 100, 1, 1, 100), 1);
+	CHECK_EQ(formulas::variedDamage(50, 10, 5, 0, 1, 1, 100), 0);
+
+	Database db = strongFighter();
+	Effect& strike = db.abilities["strike"].effects[0];
+	strike.statPercent = 50;
+	strike.power = -10;
+	auto fighterHit = [&](const Database& use, std::uint64_t seed, bool& critical) {
+		Battle battle = makeBattle(use, {"gel_mite"}, seed);
+		sturdy(battle, kFirstEnemy);
+		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+		battle.setCommand(kFirstEnemy, Command::attack(kEngineer));
+		othersDefend(battle);
+		const std::vector<Event> events = battle.resolveRound();
+		critical = firstBy(events, EventType::Critical, kFighter).has_value();
+		const std::optional<Event> hit = firstBy(events, EventType::DamageDealt, kFighter);
+		return hit ? hit->amount : -1;
+	};
+	const Combatant fighter = memberCombatant(db, makePartyMember(db, *db.character("fighter"), 1));
+	const int attack = fighter.stats.strength / 2;
+	const int defense = db.enemies.at("gel_mite").stats.defense;
+	bool critical = false;
+	for (std::uint64_t seed = 1; seed <= 8; ++seed) {
+		const int amount = fighterHit(db, seed, critical);
+		const int bonus = -10 + (critical ? formulas::criticalBonus(attack) : 0);
+		CHECK(amount >= formulas::damage(attack, defense, bonus, 100, formulas::kSpreadMin, 100) && amount <= formulas::damage(attack, defense, bonus, 100, formulas::kSpreadMax, 100));
+	}
+
+	db.battleRules.damageVariance = DamageVariance{0, VarianceShape::Uniform};
+	for (std::uint64_t seed = 1; seed <= 4; ++seed) {
+		const int amount = fighterHit(db, seed, critical);
+		const int bonus = -10 + (critical ? formulas::criticalBonus(attack) : 0);
+		CHECK_EQ(amount, formulas::variedDamage(attack, defense, bonus, 100, 1, 1, 100));
+	}
+	for (VarianceShape shape : {VarianceShape::Uniform, VarianceShape::Bell}) {
+		db.battleRules.damageVariance = DamageVariance{50, VarianceShape::Uniform};
+		db.abilities["strike"].variance = DamageVariance{20, shape};
+		std::set<int> seen;
+		for (std::uint64_t seed = 1; seed <= 40; ++seed) {
+			const int amount = fighterHit(db, seed, critical);
+			const int bonus = -10 + (critical ? formulas::criticalBonus(attack) : 0);
+			CHECK(amount >= formulas::variedDamage(attack, defense, bonus, 100, 80, 100, 100) && amount <= formulas::variedDamage(attack, defense, bonus, 100, 120, 100, 100));
+			seen.insert(amount);
+		}
+		CHECK(seen.size() > 3);
+	}
+
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["rules.json"], "\"elements\"", "\"damage_variance\": {\"percent\": 15, \"distribution\": \"bell\"}, \"elements\"");
+	replaceOnce(texts["abilities.json"], "{\"type\": \"physical_damage\", \"power\": 11}", "{\"type\": \"physical_damage\", \"power\": -11, \"stat_percent\": 150}");
+	replaceOnce(texts["abilities.json"], "\"id\": \"focus_shot\",", "\"id\": \"focus_shot\", \"variance\": {\"percent\": 5},");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok());
+	if (loaded.ok()) {
+		const Database& read = *loaded.value;
+		CHECK(read.battleRules.damageVariance && read.battleRules.damageVariance->percent == 15 && read.battleRules.damageVariance->shape == VarianceShape::Bell);
+		const AbilityDef& shot = read.abilities.at("focus_shot");
+		CHECK(shot.variance && shot.variance->percent == 5 && shot.variance->shape == VarianceShape::Uniform);
+		CHECK(shot.effects[0].power == -11 && shot.effects[0].statPercent == 150);
+	}
+	CHECK(!data().battleRules.damageVariance && !data().abilities.at("focus_shot").variance);
+	const std::pair<std::string, std::string> refusals[] = {
+		{"\"percent\": 5}", "\"percent\": 101}"},
+		{"\"percent\": 5}", "\"percent\": 5, \"distribution\": \"normal\"}"},
+		{"\"stat_percent\": 150}", "\"stat_percent\": 1001}"},
+	};
+	for (const auto& [from, to] : refusals) {
+		std::map<std::string, std::string> bad = texts;
+		replaceOnce(bad["abilities.json"], from, to);
+		CHECK(!loadDatabaseFromTexts(bad).ok());
+	}
+	std::map<std::string, std::string> item = dataTexts();
+	replaceOnce(item["items.json"], "\"items\": [", "\"items\": [\n\t\t{\"id\": \"sling_stone\", \"name\": \"Sling Stone\", \"target\": \"one_enemy\", \"effects\": [{\"type\": \"physical_damage\", \"power\": 9, \"stat_percent\": 50}]},");
+	const Result<Database> flat = loadDatabaseFromTexts(item);
+	CHECK(!flat.ok() && flat.error.find("no stat_percent") != std::string::npos);
+	replaceOnce(item["items.json"], "\"power\": 9, \"stat_percent\": 50", "\"power\": -9");
+	CHECK(!loadDatabaseFromTexts(item).ok());
+}
+
+// R43: element "weapon" on a physical effect takes the user's weapon element as the basic attack does: the right
+// hand's, else the left hand's, else none.
+TEST(aPhysicalSkillCanTakeTheWeaponsElement) {
+	Database db = strongFighter();
+	db.abilities["focus_shot"].effects[0].weaponElement = true;
+	auto shot = [&](const std::string& right, const std::string& left) {
+		BattleSetup setup = makeSetup(db, {"gel_mite"}, 3);
+		setup.party[kFighter].equipment[EquipSlot::Weapon] = right;
+		if (!left.empty()) {
+			setup.party[kFighter].equipment[EquipSlot::LeftHand] = left;
+		}
+		Battle battle = makeBattle(db, setup);
+		sturdy(battle, kFirstEnemy);
+		battle.setCommand(kFighter, Command::ability("focus_shot", kFirstEnemy));
+		othersDefend(battle);
+		const std::optional<Event> hit = firstBy(battle.resolveRound(), EventType::DamageDealt, kFighter);
+		return hit ? std::make_pair(hit->element, hit->effectiveness) : std::make_pair(Element("?"), Effectiveness::Normal);
+	};
+	CHECK(shot("copper_blade", "") == std::make_pair(Element::None, Effectiveness::Normal));
+	db.equipment["copper_blade"].element = Element::Heat;
+	db.equipment["gill_knife"].element = Element::Chill;
+	CHECK(shot("copper_blade", "") == std::make_pair(Element::Heat, Effectiveness::Weak));
+	CHECK(shot("copper_blade", "gill_knife") == std::make_pair(Element::Heat, Effectiveness::Weak));
+	CHECK(shot("gill_knife", "copper_blade") == std::make_pair(Element::Chill, Effectiveness::Resisted));
+	db.equipment["gill_knife"].element = Element::None;
+	CHECK(shot("gill_knife", "copper_blade") == std::make_pair(Element::Heat, Effectiveness::Weak));
+
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["abilities.json"], "{\"type\": \"physical_damage\", \"power\": 11}", "{\"type\": \"physical_damage\", \"power\": 11, \"element\": \"weapon\"}");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok() && loaded.value->abilities.at("focus_shot").effects[0].weaponElement && loaded.value->abilities.at("focus_shot").effects[0].element == Element::None);
+	std::map<std::string, std::string> item = dataTexts();
+	replaceOnce(item["items.json"], "\"items\": [", "\"items\": [\n\t\t{\"id\": \"sling_stone\", \"name\": \"Sling Stone\", \"target\": \"one_enemy\", \"effects\": [{\"type\": \"physical_damage\", \"power\": 9, \"element\": \"weapon\"}]},");
+	const Result<Database> refused = loadDatabaseFromTexts(item);
+	CHECK(!refused.ok() && refused.error.find("element 'weapon'") != std::string::npos);
+	std::map<std::string, std::string> declared = dataTexts();
+	replaceOnce(declared["rules.json"], "\"tide\"", "\"tide\", \"weapon\"");
+	CHECK(!loadDatabaseFromTexts(declared).ok());
+}
+
+// R44: rules.json defend_elements lists the elements Defend reaches, "none" for hits without one; defend_affinity and
+// defend_elemental stay the shorthand for none alone and for every element.
+TEST(defendCanReachNamedElementsOnly) {
+	Database db = strongFighter();
+	db.battleRules.defendAffinity = 10;
+	db.battleRules.defendElements = std::vector<Element>{Element::Heat};
+	CHECK(fighterHitsAt(db, true, 100, Effectiveness::Normal));
+	db.abilities["strike"].effects[0].element = Element::Heat;
+	CHECK(fighterHitsAt(db, true, 10, Effectiveness::Resisted));
+	db.abilities["strike"].effects[0].element = Element::Chill;
+	CHECK(fighterHitsAt(db, true, 50, Effectiveness::Resisted));
+	db.battleRules.defendElements = std::vector<Element>{Element::None, Element::Chill};
+	CHECK(fighterHitsAt(db, true, 10, Effectiveness::Resisted));
+	db.abilities["strike"].effects[0].element = Element::None;
+	CHECK(fighterHitsAt(db, true, 10, Effectiveness::Normal));
+	db.battleRules.defendElements = std::vector<Element>{};
+	CHECK(fighterHitsAt(db, true, 100, Effectiveness::Normal));
+
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["rules.json"], "\"elements\"", "\"defend_elements\": [\"none\", \"tide\"], \"elements\"");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok() && loaded.value->battleRules.defendElements == std::vector<Element>({Element::None, Element("tide")}));
+	CHECK(loaded.ok() && loaded.value->battleRules.defends(Element::None) && !loaded.value->battleRules.defends(Element::Heat));
+	CHECK(!data().battleRules.defendElements && data().battleRules.defends(Element::None) && !data().battleRules.defends(Element::Heat));
+	for (const char* bad : {"\"defend_elements\": [\"none\", \"none\"],", "\"defend_elements\": [\"magma\"],", "\"defend_elements\": [\"heat\"], \"defend_elemental\": true,"}) {
+		std::map<std::string, std::string> refused = dataTexts();
+		replaceOnce(refused["rules.json"], "\"elements\"", std::string(bad) + " \"elements\"");
+		CHECK(!loadDatabaseFromTexts(refused).ok());
 	}
 }

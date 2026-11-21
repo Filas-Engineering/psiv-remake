@@ -6,6 +6,7 @@
 		"battle.machine_recovered": "{0} starts up again.",
 		"battle.opening.enemy_first": "The enemies catch the party off guard!",
 		"battle.opening.party_first": "The party catches the enemies off guard!",
+		"battle.removed_beside": "{0} is swept from the field!",
 		"battle.self_destruct": "{0} bursts apart and is gone!",
 		"battle.stat_resisted": "{0} holds steady.",
 

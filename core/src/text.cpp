@@ -20,6 +20,7 @@ const char* const kFixedKeys[] = {
 	"battle.machine_recovered",
 	"battle.opening.enemy_first",
 	"battle.opening.party_first",
+	"battle.removed_beside",
 	"battle.self_destruct",
 	"battle.stat_resisted",
 	"command.aboard",

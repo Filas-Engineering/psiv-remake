@@ -2875,6 +2875,12 @@ void Session::finishBattle() {
 		}
 	}
 	world_.graceMs = data_.config.graceMs;
+	if (const Area* here = area()) {
+		const Zone* zone = here->zoneAt(world_.position);
+		if (data_.config.graceAfterBattle || (zone && zone->random.graceAfterBattle)) {
+			world_.areaSteps = 0;
+		}
+	}
 
 	if (battleSource_ == BattleSource::Visible) {
 		auto it = std::find_if(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.id == battleEnemyId_; });

@@ -26,8 +26,12 @@ struct Effect {
 	std::string ability = {};
 	// Split: how many enemies the user becomes.
 	int count = 0;
-	// SelfDestruct: the enemy that leaves still pays its experience and currency.
+	// SelfDestruct and RemoveBeside: the enemies that leave still pay their experience and currency.
 	bool rewards = false;
+	// Damage: the percent of the user's attacking stat the formula attacks with.
+	int statPercent = 100;
+	// PhysicalDamage: the hit takes the user's attack element (a member's weapon, an enemy's attack_element).
+	bool weaponElement = false;
 	bool reaches(CreatureKind kind) const;
 };
 
@@ -46,6 +50,8 @@ struct AbilityDef {
 	// The user's stat the ability attacks, heals and rolls with, and moves stats by; unset uses mental for techniques
 	// and strength otherwise, as before.
 	std::optional<Stat> attackStat = {};
+	// In place of the rules' variance or the original's spread for this ability's damage.
+	std::optional<DamageVariance> variance = {};
 
 	bool revives() const;
 	bool hasEffect(EffectKind kind) const;

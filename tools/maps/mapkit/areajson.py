@@ -20,7 +20,7 @@ ENTRY_FIELDS = {
 STOCK_FIELDS = ["id", "require_flag", "block_flag"]
 TABLE_FIELDS = ["encounter", "weight"]
 VISIBLE_FIELDS = ["spawns", "cap", "detection_radius", "leash_radius", "chase_speed_percent", "chase_ms", "wander_speed_percent", "wander_percent"]
-RANDOM_FIELDS = ["min_steps", "max_steps", "step_distance", "grace_steps", "step_chance", "vehicle_step_chance", "safe_near_exits"]
+RANDOM_FIELDS = ["min_steps", "max_steps", "step_distance", "grace_steps", "step_chance", "vehicle_step_chance", "safe_near_exits", "grace_after_battle"]
 CELL_CHARACTERS = {".": "floor", "#": "wall", "~": "water", ":": "soft", "%": "barrier"}
 
 

@@ -236,6 +236,81 @@ TEST(theFirstRandomBattleComesTheStepAfterTheGrace) {
 	}
 }
 
+namespace {
+
+// One step along the Cogway's row; a battle it starts is won or escaped, never lost.
+bool paceAndEnd(Session& s, int y, bool escape) {
+	const Cell at = s.world().position;
+	const Facing direction = at.x >= 9 ? Facing::West : at.x <= 2 ? Facing::East : s.world().facing;
+	if (!stepFor(s, direction)) {
+		return false;
+	}
+	if (escape) {
+		for (int round = 0; round < 10 && s.mode() == Mode::Battle; ++round) {
+			CHECK(s.setCommand(s.battle()->partyCount() - 1, rules::Command::escape()).empty());
+			s.resolveRound();
+			test::confirmLines(s);
+		}
+		CHECK(s.endedBattle() && s.endedBattle()->outcome == rules::Outcome::Escaped);
+	} else {
+		CHECK(s.devEndBattle(true).empty());
+		test::confirmLines(s);
+	}
+	CHECK(s.mode() == Mode::Field);
+	CHECK_EQ(s.world().position.y, y);
+	return true;
+}
+
+}
+
+// R45: with grace_after_battle (on the zone, or for every zone in game.json) the grace steps start again after every
+// battle, won or escaped, on foot and aboard; without it the next step rolls at once.
+TEST(theGraceStepsCanStartAgainAfterEveryBattle) {
+	for (int mode = 0; mode < 3; ++mode) {
+		GameData d = cogwayRolls(3, 1, 1, 0);
+		for (auto& [id, character] : d.db.characters) {
+			character.base.agility = 250;
+		}
+		for (auto& [id, vehicle] : d.db.vehicles) {
+			vehicle.stats.agility = 250;
+		}
+		d.areas.at("cogway").zones.at(0).random.graceAfterBattle = mode == 1;
+		d.config.graceAfterBattle = mode == 2;
+		for (bool aboard : {false, true}) {
+			for (bool escape : {false, true}) {
+				Session s(d, SessionOptions());
+				cogway(s, {6, 4}, Facing::South, true);
+				if (aboard) {
+					CHECK(s.devVehicle("reed_skimmer", "cogway", "entry").empty());
+					CHECK(s.board().empty());
+				}
+				s.face(Facing::East);
+				const int y = s.world().position.y;
+				for (int step = 1; step <= 3; ++step) {
+					CHECK(!paceAndEnd(s, y, escape));
+				}
+				CHECK(paceAndEnd(s, y, escape));
+				if (mode == 0) {
+					CHECK(paceAndEnd(s, y, escape));
+					continue;
+				}
+				CHECK_EQ(s.world().areaSteps, 0);
+				for (int step = 1; step <= 3; ++step) {
+					CHECK(!paceAndEnd(s, y, escape));
+				}
+				CHECK(paceAndEnd(s, y, escape));
+				CHECK_EQ(s.world().areaSteps, 0);
+			}
+		}
+	}
+	const std::string zone = "{\"id\": \"a\", \"kind\": \"field\", \"map\": [\"...\"], \"markers\": {\"m\": [0, 0]}, \"zones\": [{\"id\": \"z\", \"from\": [0, 0], \"to\": [2, 0], "
+		"\"table\": [{\"encounter\": \"training\", \"weight\": 1}], \"random\": {";
+	const rules::Result<Area> graced = parseArea("a.json", zone + "\"grace_steps\": 2, \"grace_after_battle\": true}}]}");
+	CHECK(graced.ok() && graced.value->zones[0].random.graceAfterBattle);
+	const rules::Result<Area> refused = parseArea("a.json", zone + "\"grace_after_battle\": true}}]}");
+	CHECK(!refused.ok() && refused.problems.size() == 1 && refused.problems[0].message.key == "data.grace_after_battle_needs_grace");
+}
+
 // R18: past the grace, battles come at 1 in step_chance per step on foot and 1 in vehicle_step_chance aboard, over seeds.
 TEST(randomBattlesComeAtTheirChancePerStepOverSeeds) {
 	const GameData d = cogwayRolls(3, 6, 12, 0);

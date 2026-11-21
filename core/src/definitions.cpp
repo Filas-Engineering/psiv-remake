@@ -129,6 +129,13 @@ int BattleRules::defendedAffinity() const {
 	return defendAffinity.value_or(formulas::kDefendedAffinity * affinityDivisor / 100);
 }
 
+bool BattleRules::defends(const Element& element) const {
+	if (defendElements) {
+		return std::find(defendElements->begin(), defendElements->end(), element) != defendElements->end();
+	}
+	return element == Element::None || defendElemental;
+}
+
 int Combatant::affinity(Element element) const {
 	const auto it = affinities.find(element);
 	return it == affinities.end() ? neutralAffinity : it->second;

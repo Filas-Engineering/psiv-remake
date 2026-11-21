@@ -280,7 +280,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.only(json, {"title", "core_data", "areas", "events", "glossary", "languages", "journal", "actors", "presentation", "flags",
 		"vars", "clear_flag", "start", "join_levels", "prices", "item_cap", "money_cap", "tick_ms", "grace_ms", "round_ms",
 		"autosave_slots", "manual_slots", "bosses", "vehicles", "machine_step_heal", "outside_experience_until", "leave_equipment", "random_encounters_everywhere",
-		"nameless_actors"});
+		"nameless_actors", "grace_after_battle"});
 	reader.text(json, "title", c.title, true);
 	reader.text(json, "core_data", c.coreData, true);
 	reader.texts(json, "areas", c.areaFiles, true);
@@ -388,6 +388,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 		reader.fail(json, "data.bad_leave_equipment", {leaving});
 	}
 	reader.boolean(json, "random_encounters_everywhere", c.randomEncountersEverywhere, false);
+	reader.boolean(json, "grace_after_battle", c.graceAfterBattle, false);
 	if (const JsonValue* bosses = reader.field(json, "bosses", JsonValue::Type::Array, false)) {
 		for (const JsonValue& b : bosses->items) {
 			reader.only(b, {"encounter", "flag"});

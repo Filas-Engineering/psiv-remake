@@ -18,9 +18,9 @@ Planning documents, engine-neutral C++17 libraries and tooling for a 3D remake o
 | `docs/dev-tools.md` | The MonoGame sample's developer tools (`--dev`): console commands, data hot reload and its limits, overlays, the panel and scene previewer, frame step and speed, the dev mark that marks games they touch, and the session API behind them |
 | `docs/assets.md` | The MonoGame sample's asset directory: the manifest that puts pictures and sounds in place of the generated ones, the battle presentation table, the export, the check and hot reload |
 | `docs/research/original-battle-rules.md` | The original's battle rules as read from the disassembly: AI, targeting, combinations, rewards, statuses, end conditions, vehicles |
-| `core/` | Battle rules library (`librules.a`), placeholder data, `battle_cli`, 239 tests |
+| `core/` | Battle rules library (`librules.a`), placeholder data, `battle_cli`, 247 tests |
 | `events/` | Event script format, compiler and resumable interpreter, `event_cli`, 102 tests |
-| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles, vehicles in the field, travel (ports between regions, returns to a town, the way out of a dungeon), the field menu's party order, macro editor (and make macro from the combo log), member detail, equipment comparison, bag sorting, descriptions, difficulty presets, ambient party talk, developer commands and the game as save text. `game_cli` (play, bot, `--check` for data), 143 tests |
+| `game/` | Session layer: areas, encounters, shops, saves, joins events to battles, vehicles in the field, travel (ports between regions, returns to a town, the way out of a dungeon), the field menu's party order, macro editor (and make macro from the combo log), member detail, equipment comparison, bag sorting, descriptions, difficulty presets, ambient party talk, developer commands and the game as save text. `game_cli` (play, bot, `--check` for data), 145 tests |
 | `tools/text/` | Line database, glossary, rename review, localization export and the descriptions report (Python, 101 tests) |
 | `tools/maps/` | Tiled maps to area files and back, and the canonical area text every area file is kept in (Python, 54 tests) |
 | `acceptance/` | The spec's automatable checks, run against the libraries. `report.md` maps every requirement to a status |
@@ -63,9 +63,9 @@ Bringing in real data: [`data-import.md`](data-import.md). Pictures and sounds f
 
 | Suite | Result |
 | --- | --- |
-| core | 239 tests pass |
+| core | 247 tests pass |
 | events | 102 tests pass |
-| game | 143 tests pass, data check passes, area files match their Tiled sources, scripted playthrough, the vehicle and travel script and the Ashen Fells script match their expected transcripts, bot finishes both encounter modes on the main route and the kiln route |
+| game | 145 tests pass, data check passes, area files match their Tiled sources, scripted playthrough, the vehicle and travel script and the Ashen Fells script match their expected transcripts, bot finishes both encounter modes on the main route and the kiln route |
 | text tooling | 101 tests pass |
 | map tooling | 54 tests pass (every area file in the canonical form) |
 | acceptance | PASS 26, FAIL 0, NOT IMPLEMENTED 12, NOT AUTOMATABLE 26 |
@@ -78,6 +78,7 @@ Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch
 
 ## Versions
 
+* This round changed no version: rules version 14, event schema 7, battle record format 8, `PSIV_ABI_VERSION` 12 and save schema 9. Every option is data with today's behavior as the default (no default battle plays, draws or replays differently), the C API did not change, and grace after battle reuses the step count world chunk 3 already saves.
 * Rules version 14 and event schema 7 (`core/include/rules/version.h`). Version 14 makes a combination component's `attack_stat` the stat its participant adds to the combination's attack; no placeholder battle changes. Battle record format 8, C API `PSIV_ABI_VERSION` 12 and save schema 9 are unchanged this round.
 * Before that: rules version 13 and event schema 7. Version 13 makes the affinity divisor the normal affinity (at a divisor other than 100 ordinary hits were halved and labeled resisted); every other option of the round is data with today's behavior as the default. The event's `element` is now an element id, its text form unchanged.
 * Battle record format 8 (`piece` lines for bag pieces members can cast, and free formation places as `enemy -`). `parseRecord` still reads 3 to 7.
@@ -95,7 +96,16 @@ Platforms where all of the above pass: macOS arm64 (Apple clang 21), Linux aarch
 
 Built this round, each optional data with today's behavior as the default, so every existing data file loads unchanged and the three golden transcripts, the bot's runs and every seed are byte-identical; `docs/research/feature-checklist.md` rows R5 to R28 say what each is, what exercises it and what the research says. In `core/`: `rules.json` `ambush_opening` (R5) and `elements` (R17, the placeholder's `tide`), `merges_with`, `transform` and `after_turns` (R6), free formation places (`null`, R7), `split` and `self_destruct` (R8), a stat change's `power` (R9) and stat `magic_defense` (R15), items' `consumed` and equipment's `use_from_bag` (R10), `teachable` (R11), equipment `affinities` and drops (R12), `attack_stat` (R14), enemies' `attack_element` (R16), and the divisor fix (R13, rules version 13). In `events/`: `money give|take` and the `money` test, `equip`, `unequip`, `music area`. In `game/`: zone `grace_steps`, `step_chance`, `vehicle_step_chance`, `safe_near_exits` (R18), gated exits and ports (R19), hooks solid while active (R20), once flag hooks (R24), tile step hooks and conveyors (R25), `nameless_actors` (R26), the terminal naming joined enemies (R27), save schema 9 and the save checked against the data (R28); sand stays soft ground (R22). The placeholder content is new core enemies, items, pieces and techniques and the Cogway (`game/data/events/cogway.ev`, reached by developer warps); `bindings/monogame/Psiv.Sample/scripts/cogway.txt` shows it. Every area file is in the canonical form `tools/maps` writes, which its tests check. The status screen lists each element the data knows with a non-normal affinity, which replaces the four fixed elements that left out holy.
 
-## Rule fixes and options (this round)
+## Data options for imported content (this round)
+
+Each optional data with today's behavior as the default; the three golden transcripts, the bot's runs, the acceptance report and every seed are unchanged. `docs/research/feature-checklist.md` rows R37 to R46 say what each is, what tests it and what the research says.
+
+* In `core/`: a piece's `use` may transform another combatant (R37); AI overrides with `all` / `any` and `ally_present` `count` / `compare` (R38); the effect `remove_beside` with `rewards` (R39); equipment `use_power` (R40); equipment affinities `{"set": N}`, a set winning over scaling and the lowest set winning (R41); damage effects' `stat_percent` and negative `power`, ability `variance` and `rules.json` `damage_variance` (R42); `physical_damage` `"element": "weapon"` (R43); `rules.json` `defend_elements` (R44). The message key `battle.removed_beside`.
+* In `game/`: zone `random` `grace_after_battle` and `game.json` `grace_after_battle` (R45); the data check counts a `solid: "while_active"` hook that can switch off as passable (R46). `tools/maps` keeps the new zone field in the canonical order.
+* Research: the original's damage spread is a bell-shaped sum of sixteen rolls, not an even roll, so the default spread stays and `bell` reproduces its shape (R42). `original-battle-rules.md` carries a labeled, unverified note from the data-import work on the neutral value of hits without an element.
+* No C API or C# change. The MonoGame sample was not touched: its battle log already shows the removed enemy leaving (`ui.battle.log.gone`), but `BattleTimeline.cs`'s step summary has no case for the `battle.removed_beside` message and would fall through to its "resists felling" line; no placeholder data uses the effect.
+
+## Rule fixes and options (the round before)
 
 Each new option is optional data with today's behavior as the default; the three golden transcripts, the bot's runs, the acceptance report and every seed are unchanged. `docs/research/feature-checklist.md` rows R18 and R29 to R36 say what each is, what tests it and what the research says.
 

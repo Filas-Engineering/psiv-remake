@@ -136,6 +136,26 @@ TEST(anExitCellIsNoPlaceToOpenAnObjectFrom) {
 	CHECK_EQ(count(r, "/areas/ledge.json", 13, "check.exit_not_reached"), 0);
 }
 
+// R46: a hook solid only while active that its flags or its actor can switch off may stand aside, so what lies behind
+// it counts as reached. One that can never switch off (no flags, no actor) blocks as before.
+TEST(aHookThatStandsAsideDoesNotCutTheAreaOff) {
+	const std::string dir = copyData("alley", {"alley.json"});
+	replaceIn(dir + "/game.json", "\"area\": \"tidewater\",\n\t\t\"marker\": \"start\"", "\"area\": \"alley\",\n\t\t\"marker\": \"start\"");
+	const CheckReport r = checkData(DataDirectories{dir, "../core/data"});
+	CHECK_EQ(count(r, "/text/en.json", 0, "data.text_not_in_table"), 1);
+	CHECK_EQ(r.problems.size(), 1u);
+
+	replaceIn(dir + "/areas/alley.json", "\"block_flag\": \"cogway.swept\", ", "");
+	const CheckReport fixed = checkData(DataDirectories{dir, "../core/data"});
+	CHECK_EQ(count(fixed, "/areas/alley.json", 9, "check.marker_not_reached"), 1);
+	CHECK_EQ(count(fixed, "/areas/alley.json", 11, "check.exit_not_reached"), 1);
+	CHECK_EQ(count(fixed, "/areas/alley.json", 15, "check.object_not_reached"), 1);
+	CHECK_EQ(fixed.problems.size(), 4u);
+
+	replaceIn(dir + "/areas/alley.json", "\"id\": \"sweeper\"", "\"id\": \"dockhand\"");
+	CHECK_EQ(checkData(DataDirectories{dir, "../core/data"}).problems.size(), 1u);
+}
+
 TEST(checkKeepsGoingPastBrokenBattleData) {
 	const std::string dir = copyData("core", {"islet.json", "rock.json"});
 	const std::string core = dir + "/../core";

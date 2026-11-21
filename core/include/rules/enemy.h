@@ -3,6 +3,7 @@
 #include "rules/stats.h"
 #include "rules/types.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,7 @@ namespace rules {
 // An enemy draws one of its eight action slots each turn, then the first override whose condition holds replaces it.
 inline constexpr int kAiSlots = 8;
 inline constexpr int kMaxAiOverrides = 4;
+inline constexpr int kMaxAiConditionParts = 8;
 
 enum class AiConditionKind {
 	SelfHpHalf,
@@ -35,7 +37,13 @@ enum class AiConditionKind {
 	GroupIntact,
 	// It has taken at least the override's `turns` turns before this one.
 	AfterTurns,
+	// Every one, or at least one, of the condition's parts holds.
+	All,
+	Any,
 };
+
+// How AllyPresent compares the number of other living enemies of its kind with its count.
+enum class AiCount { AtLeast, Exactly, AtMost };
 
 // How an action picks its single target. Default: a foe drawn by party order when the round's order is resolved,
 // the ally with the lowest hit point share for heals, an ally with the status for cures, the first fallen ally for
@@ -48,14 +56,22 @@ struct AiTarget {
 	std::string status;
 };
 
-struct AiOverride {
+struct AiCondition {
 	AiConditionKind when = AiConditionKind::SelfHpHalf;
-	std::string ability;
-	AiTarget target = {};
 	// AllyPresent and AllyAbsent: the enemy id looked for.
 	std::string enemy = {};
 	// AfterTurns.
 	int turns = 0;
+	// AllyPresent: how many others of that id it needs; unset, at least one.
+	std::optional<int> count = {};
+	AiCount compare = AiCount::AtLeast;
+	// All and Any.
+	std::vector<AiCondition> parts = {};
+};
+
+struct AiOverride : AiCondition {
+	std::string ability;
+	AiTarget target = {};
 };
 
 // An encounter's item drop: one roll of 0 to 127 per won battle must come out below the rate.

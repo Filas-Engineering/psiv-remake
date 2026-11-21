@@ -1,0 +1,17 @@
+{
+	"id": "alley",
+	"kind": "town",
+	"map": [
+		"######",
+		"#.....",
+		"######"
+	],
+	"markers": {"start": [1, 1], "beyond": [3, 1]},
+	"exits": [
+		{"at": [5, 1], "to": "tidewater", "marker": "start"}
+	],
+	"hooks": [
+		{"id": "sweeper", "at": [2, 1], "event": "cogway_sweeper", "block_flag": "cogway.swept", "solid": "while_active"},
+		{"id": "statue", "at": [4, 0], "event": "cove_quiet"}
+	]
+}

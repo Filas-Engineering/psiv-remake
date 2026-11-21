@@ -114,6 +114,7 @@ Combatant memberCombatant(const Database& db, const PartyMember& member) {
 	c.kind = def.kind;
 	const std::vector<CreatureKind>& felled = db.battleRules.instantDefeatKinds;
 	c.vulnerable = def.vulnerable || std::find(felled.begin(), felled.end(), def.kind) != felled.end();
+	Affinities set;
 	for (const auto& [slot, id] : member.equipment) {
 		for (const auto& [status, percent] : db.equipmentPiece(id)->statusResist) {
 			c.statusResist[status] = std::min(100, c.resistance(status) + percent);
@@ -121,6 +122,13 @@ Combatant memberCombatant(const Database& db, const PartyMember& member) {
 		for (const auto& [element, percent] : db.equipmentPiece(id)->affinities) {
 			c.affinities[element] = c.affinity(element) * percent / 100;
 		}
+		for (const auto& [element, affinity] : db.equipmentPiece(id)->setAffinities) {
+			const auto earlier = set.find(element);
+			set[element] = earlier == set.end() ? affinity : std::min(earlier->second, affinity);
+		}
+	}
+	for (const auto& [element, affinity] : set) {
+		c.affinities[element] = affinity;
 	}
 	// The right hand's weapon gives the attack and its element, the left hand's what the right lacks. A weapon that
 	// reaches more than one enemy in either hand makes the attack reach them (original-battle-rules.md, section 2).

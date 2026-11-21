@@ -37,6 +37,8 @@ int chanceScore(int roll, int actorStat, int targetStat);
 int criticalBonus(int attack);
 // The attack scaled by the spread, plus the attack and twice the bonus, scaled by affinity, less defense. 1 to 999; 0 when immune.
 int damage(int attack, int defense, int bonus, int affinity, int spread, int divisor = 100);
+// The damage at the spread's mean, times scaleNumerator / scaleDenominator, then as damage(): data's own variance.
+int variedDamage(int attack, int defense, int bonus, int affinity, int scaleNumerator, int scaleDenominator, int divisor);
 int healAmount(int power, int mental, int spread);
 int reviveHp(int maxHp, int percent);
 // A status is resisted when the score is at or below the effect's threshold.

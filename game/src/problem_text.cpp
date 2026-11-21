@@ -74,6 +74,7 @@ const rules::TextTable& problemText() {
 			{"data.list_at_least_one_language", "list at least one language"},
 			{"data.map_rows_differ", "every map row must have the same width"},
 			{"data.max_steps_below_min_steps", "max_steps is below min_steps"},
+			{"data.grace_after_battle_needs_grace", "grace_after_battle needs grace_steps"},
 			{"data.missing_field", "missing field '{0}'"},
 			{"data.missing_message_key", "missing message key '{0}'"},
 			{"data.music_not_audio", "music '{0}' is not one of game.json's presentation audio ids"},

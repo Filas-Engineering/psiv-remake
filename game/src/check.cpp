@@ -36,7 +36,7 @@ struct Solid {
 	int line = 0;
 };
 
-void checkArea(const Area& area, const std::set<std::string>& entrances, const std::vector<FieldVehicle>& vehicles, Found& found) {
+void checkArea(const Area& area, const std::set<std::string>& entrances, const std::vector<FieldVehicle>& vehicles, const std::vector<std::string>& actors, Found& found) {
 	const std::string& file = area.file;
 	std::map<Cell, Solid> solids;
 	auto addSolid = [&](Cell c, const std::string& what, int line) {
@@ -138,44 +138,60 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 		found.add(file, 0, "check.area_no_entrance", {area.id});
 		return;
 	}
+	// A hook solid only while active whose flags or actor can turn it off may stand aside, so reach is worked out with
+	// such hooks aside: a thing reached while one stands is reached with it aside too. Such a hook is used while it
+	// stands, and the first cell beside it a walk reaches never needs a way through the hook itself.
+	std::set<Cell> switchable;
+	for (const Hook& h : area.hooks) {
+		const bool changes = !h.requireFlag.empty() || !h.blockFlag.empty() || std::find(actors.begin(), actors.end(), h.id) != actors.end();
+		if (h.trigger == HookTrigger::Interact && h.solidWhileActive && changes) {
+			switchable.insert(h.at);
+		}
+	}
 	// The cells the party can walk to from a way in. Exit cells are reached but never walked through, since
 	// stepping on one leaves the area. In a field area a vehicle may carry the party over terrain it crosses, and a
 	// cell that a flag's change turns to floor counts as floor.
-	auto crossable = [&](Cell c) {
-		if (area.walkable(c)) {
-			return true;
-		}
-		const bool opened = std::any_of(area.changes.begin(), area.changes.end(), [&](const CellChange& change) {
-			return change.tile == '.' && std::find(change.cells.begin(), change.cells.end(), c) != change.cells.end();
-		});
-		if (opened && !solids.count(c)) {
-			return true;
-		}
-		if (area.kind != AreaKind::Field || !area.inside(c) || solids.count(c)) {
-			return false;
-		}
-		return std::any_of(vehicles.begin(), vehicles.end(), [&](const FieldVehicle& v) { return v.canCross(area.rows[c.y][c.x]); });
-	};
-	std::set<Cell> reached;
-	std::deque<Cell> queue;
-	for (const std::string& marker : entrances) {
-		auto it = area.markers.find(marker);
-		if (it != area.markers.end() && reached.insert(it->second).second) {
-			queue.push_back(it->second);
-		}
-	}
-	while (!queue.empty()) {
-		const Cell c = queue.front();
-		queue.pop_front();
-		if (exitCells.count(c)) {
-			continue;
-		}
-		for (Cell step : {Cell{c.x, c.y - 1}, Cell{c.x + 1, c.y}, Cell{c.x, c.y + 1}, Cell{c.x - 1, c.y}}) {
-			if (crossable(step) && reached.insert(step).second) {
-				queue.push_back(step);
+	Area view = area;
+	view.passable = switchable;
+	const std::set<Cell> reached = [&] {
+		auto solidHere = [&](Cell c) { return solids.count(c) && !switchable.count(c); };
+		auto crossable = [&](Cell c) {
+			if (view.walkable(c)) {
+				return true;
+			}
+			const bool opened = std::any_of(area.changes.begin(), area.changes.end(), [&](const CellChange& change) {
+				return change.tile == '.' && std::find(change.cells.begin(), change.cells.end(), c) != change.cells.end();
+			});
+			if (opened && !solidHere(c)) {
+				return true;
+			}
+			if (area.kind != AreaKind::Field || !area.inside(c) || solidHere(c)) {
+				return false;
+			}
+			return std::any_of(vehicles.begin(), vehicles.end(), [&](const FieldVehicle& v) { return v.canCross(area.rows[c.y][c.x]); });
+		};
+		std::set<Cell> cells;
+		std::deque<Cell> queue;
+		for (const std::string& marker : entrances) {
+			auto it = area.markers.find(marker);
+			if (it != area.markers.end() && cells.insert(it->second).second) {
+				queue.push_back(it->second);
 			}
 		}
-	}
+		while (!queue.empty()) {
+			const Cell c = queue.front();
+			queue.pop_front();
+			if (exitCells.count(c)) {
+				continue;
+			}
+			for (Cell step : {Cell{c.x, c.y - 1}, Cell{c.x + 1, c.y}, Cell{c.x, c.y + 1}, Cell{c.x - 1, c.y}}) {
+				if (crossable(step) && cells.insert(step).second) {
+					queue.push_back(step);
+				}
+			}
+		}
+		return cells;
+	}();
 	for (const Exit& e : area.exits) {
 		if (!reached.count(e.at)) {
 			found.add(file, e.line, "check.exit_not_reached", {e.toArea, cellText(e.at)});
@@ -197,13 +213,12 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 		}
 	}
 	// Standing on an exit or a gangway leaves the area, so the party cannot face an object from there.
-	auto standable = [&](Cell c) {
-		return reached.count(c) && !exitCells.count(c) && std::find(area.gangway.begin(), area.gangway.end(), c) == area.gangway.end();
+	auto standable = [&](Cell at) {
+		return reached.count(at) && !exitCells.count(at) && std::find(area.gangway.begin(), area.gangway.end(), at) == area.gangway.end();
 	};
 	for (const auto& [cell, solid] : solids) {
 		const Cell c = cell;
-		const bool besideReached = standable({c.x, c.y - 1}) || standable({c.x + 1, c.y}) || standable({c.x, c.y + 1}) || standable({c.x - 1, c.y});
-		if (!besideReached) {
+		if (!standable({c.x, c.y - 1}) && !standable({c.x + 1, c.y}) && !standable({c.x, c.y + 1}) && !standable({c.x - 1, c.y})) {
 			found.add(file, solid.line, "check.object_not_reached", {solid.what});
 		}
 	}
@@ -279,7 +294,7 @@ std::vector<rules::Problem> crossCheck(const GameData& data, bool loaderChecked)
 			}
 		}
 		auto in = entrances.find(id);
-		checkArea(area, in == entrances.end() ? std::set<std::string>() : in->second, c.vehicles, found);
+		checkArea(area, in == entrances.end() ? std::set<std::string>() : in->second, c.vehicles, c.actors, found);
 	}
 
 	// Areas reachable from the start through exits. A script warp can run anywhere, so its target counts as reached.

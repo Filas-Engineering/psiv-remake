@@ -212,6 +212,9 @@ Confidence: high.
 - No durations or timers exist. Buffs and debuffs last until the end of the battle. Battle stats are reset from base at the start of every battle (`FillBattleStats` ~11271). Nothing at round end resets them except Defend.
 Confidence: high.
 
+### Note: reported by the data-import work, not verified here
+- The data-import work reports that hits without an element use half the divisor as their neutral value, and that Defend changes only the physical property: on the remake's scale, `neutral_affinity` 100 at `affinity_divisor` 200. This reads differently from the element factors above and in section 9, where the physical factor's normal value is 4, the divisor itself. Nothing in this file was re-read to check it, and it replaces nothing here; `rules.json` can express either reading.
+
 ## 7. Defeat and victory checks (after every action, `loc_672C` ~9739-9777)
 
 - Party "out": status has paralyzed, dead or android-dead (mask $46). Sleep does not count. Confidence: high.
@@ -251,7 +254,7 @@ Confidence: high.
    - Combo participants' later turns are skipped.
 5. After each action: effect messages, then the defeat and victory checks (section 7).
 6. Round end (`loc_5366` → `Battle_RestoreStatsAtTurnEnd`):
-   - Defend's physical factor is restored.
+   - Defend's physical factor is restored. (See the note at the end of section 6: the data-import work reports a different neutral value for hits without an element; not verified here.)
    - Each sleeper (either flag), party or enemy, wakes on a coin flip, which also restores agility.
    - Enemies lose paralysis (their agility and dexterity stay at 1).
    - The per-fighter effect-message buffer is cleared.

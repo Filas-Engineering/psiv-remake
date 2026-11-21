@@ -43,7 +43,7 @@ enum class Targeting { OneEnemy, EnemyGroup, AllEnemies, OneAlly, AllAllies, Sel
 
 enum class AbilityKind { Attack, Technique, Skill, Combo };
 
-enum class EffectKind { PhysicalDamage, ElementalDamage, Heal, ApplyStatus, CureStatus, ModifyStat, Revive, Travel, InstantDefeat, RestoreTp, StripModifiers, Summon, Merge, Teach, Transform, Split, SelfDestruct };
+enum class EffectKind { PhysicalDamage, ElementalDamage, Heal, ApplyStatus, CureStatus, ModifyStat, Revive, Travel, InstantDefeat, RestoreTp, StripModifiers, Summon, Merge, Teach, Transform, Split, SelfDestruct, RemoveBeside };
 // What a combatant is (B6, P6). Spirit is a kind of living being: an effect aimed at the living reaches it too.
 enum class CreatureKind { Living, Spirit, Machine };
 
@@ -55,6 +55,16 @@ enum class TravelTarget { Town, DungeonExit };
 enum class EquipSlot { Weapon, Head, Body, Arms, Accessory, Shield, LeftHand };
 
 enum class Opening { Normal, PartyFirst, EnemyFirst };
+
+// How a damage roll varies when data sets a variance in place of the original's spread: one even roll over the range,
+// or the original's sixteen-roll shape scaled to it.
+enum class VarianceShape { Uniform, Bell };
+
+// The pre-defense damage, worked out at the spread's mean, moves up to `percent` either way.
+struct DamageVariance {
+	int percent = 0;
+	VarianceShape shape = VarianceShape::Uniform;
+};
 
 enum class RewardMultiplier { X1, X1_5, X2 };
 

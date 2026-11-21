@@ -24,7 +24,7 @@ Effectiveness effectivenessOf(int affinity, int divisor) {
 int Battle::elementAffinity(const Combatant& target, const Element& element) const {
 	const int affinity = target.affinity(element);
 	const BattleRules& rules = db_->battleRules;
-	return target.defending && rules.defendElemental ? std::min(affinity, rules.defendedAffinity()) : affinity;
+	return target.defending && rules.defends(element) ? std::min(affinity, rules.defendedAffinity()) : affinity;
 }
 
 CancelReason Battle::checkUsable(int actor, const AbilityDef& ability) const {
@@ -167,7 +167,13 @@ void Battle::useAbility(int actor, const AbilityDef& ability, int target, Comman
 	if (kind == CommandKind::Attack) {
 		attacker.element = combatants_[actor].attackElement;
 	}
+	attacker.variance = ability.variance;
 	applyEffects(actor, attacker, ability.id, ability.effects, targets, false, out);
+	for (const Effect& effect : ability.effects) {
+		if (effect.kind == EffectKind::RemoveBeside && !isParty(actor) && !combatants_[actor].gone && combatants_[actor].alive()) {
+			removeBeside(actor, effect.rewards, out);
+		}
+	}
 	for (const Effect& effect : ability.effects) {
 		if (effect.kind == EffectKind::SelfDestruct && !isParty(actor) && !combatants_[actor].gone && combatants_[actor].alive()) {
 			Event& e = emit(out, EventType::Message);
@@ -176,6 +182,25 @@ void Battle::useAbility(int actor, const AbilityDef& ability, int target, Comman
 			e.params = {combatants_[actor].defId};
 			leaveBattle(actor, -1, effect.rewards, out);
 			break;
+		}
+	}
+}
+
+// The enemies standing in the formation places right beside the user leave the battle; a free place beside it stops
+// the reach on that side.
+void Battle::removeBeside(int actor, bool pays, std::vector<Event>& out) {
+	const int position = combatants_[actor].position;
+	for (int place : {position - 1, position + 1}) {
+		for (int i = partyCount_; i < static_cast<int>(combatants_.size()); ++i) {
+			if (i == actor || !combatants_[i].alive() || combatants_[i].gone || combatants_[i].position != place) {
+				continue;
+			}
+			Event& e = emit(out, EventType::Message);
+			e.actor = actor;
+			e.target = i;
+			e.message = "battle.removed_beside";
+			e.params = {combatants_[i].defId};
+			leaveBattle(i, -1, pays, out);
 		}
 	}
 }
@@ -230,9 +255,13 @@ void Battle::useWornPiece(int actor, const Command& command, const EquipmentDef&
 	if (ability->attackStat) {
 		attacker.strength = attacker.mental = attacker.changeAmount = combatants_[actor].effective(*ability->attackStat);
 	}
-	if (fromBag) {
+	attacker.variance = ability->variance;
+	if (piece.usePower > 0) {
+		attacker.strength = attacker.mental = attacker.changeAmount = piece.usePower;
+	} else if (fromBag) {
 		Attacker flat;
 		flat.groupTarget = attacker.groupTarget;
+		flat.variance = attacker.variance;
 		applyEffects(actor, flat, ability->id, ability->effects, targets, true, out);
 		return;
 	}
@@ -291,6 +320,25 @@ int Battle::rollSpread() {
 		spread += rng_.range(0, formulas::kSpreadRollMax);
 	}
 	return spread;
+}
+
+int Battle::rollDamage(int attack, int defense, int bonus, int affinity, const Attacker& attacker) {
+	const BattleRules& rules = db_->battleRules;
+	const std::optional<DamageVariance>& variance = attacker.variance ? attacker.variance : rules.damageVariance;
+	if (!variance) {
+		return formulas::damage(attack, defense, bonus, affinity, rollSpread(), rules.affinityDivisor);
+	}
+	int offset = 0;
+	int scale = 100;
+	if (variance->percent > 0 && variance->shape == VarianceShape::Uniform) {
+		offset = rng_.range(-variance->percent, variance->percent);
+	} else if (variance->percent > 0) {
+		// The original's spread around its mean, -56 to 56, scaled so that its ends reach the percent.
+		const int half = formulas::kSpreadMean - formulas::kSpreadBase;
+		offset = variance->percent * (rollSpread() - formulas::kSpreadMean);
+		scale = 100 * half;
+	}
+	return formulas::variedDamage(attack, defense, bonus, affinity, scale + offset, scale, rules.affinityDivisor);
 }
 
 void Battle::attemptEscape(int actor, std::vector<Event>& out) {
@@ -353,7 +401,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				hit.actor = user;
 				hit.target = target;
 				hit.ability = source;
-				const int attack = flatPower ? effect.power : (attacker.combo ? attacker.comboAttack : attacker.strength);
+				const int attack = flatPower ? std::max(0, effect.power) : (attacker.combo ? attacker.comboAttack : attacker.strength) * effect.statPercent / 100;
 				int bonus = flatPower ? 0 : (attacker.combo ? attacker.comboBonus : effect.power);
 				if (critical) {
 					bonus += formulas::criticalBonus(attack);
@@ -363,9 +411,10 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 					e.ability = source;
 				}
 				const BattleRules& rules = db_->battleRules;
-				const Element element = effect.element != Element::None ? effect.element : attacker.element;
-				const int affinity = element != Element::None ? elementAffinity(t, element) : (t.defending ? rules.defendedAffinity() : rules.elementlessHitAffinity());
-				const int damage = formulas::damage(attack, t.effective(Stat::Defense), bonus, affinity, rollSpread(), rules.affinityDivisor);
+				const Element weapon = effect.weaponElement && user >= 0 ? combatants_[user].attackElement : Element::None;
+				const Element element = effect.weaponElement ? weapon : effect.element != Element::None ? effect.element : attacker.element;
+				const int affinity = element != Element::None ? elementAffinity(t, element) : (t.defending && rules.defends(Element::None) ? rules.defendedAffinity() : rules.elementlessHitAffinity());
+				const int damage = rollDamage(attack, t.effective(Stat::Defense), bonus, affinity, attacker);
 				const Effectiveness effectiveness = element != Element::None ? effectivenessOf(affinity, rules.affinityDivisor) : Effectiveness::Normal;
 				changed = dealDamage(user, target, damage, element, effectiveness, out) > 0 || changed;
 				noteHit(user, target, attacker, flatPower);
@@ -373,11 +422,11 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 			}
 			case EffectKind::ElementalDamage: {
 				const int affinity = elementAffinity(t, effect.element);
-				const int attack = flatPower ? effect.power : (attacker.combo ? attacker.comboAttack : attacker.mental);
+				const int attack = flatPower ? std::max(0, effect.power) : (attacker.combo ? attacker.comboAttack : attacker.mental) * effect.statPercent / 100;
 				const int bonus = flatPower ? 0 : (attacker.combo ? attacker.comboBonus : effect.power);
 				const BattleRules& rules = db_->battleRules;
 				const int guard = t.effective(rules.magicDefense ? Stat::MagicDefense : Stat::Mental);
-				const int damage = formulas::damage(attack, guard, bonus, affinity, rollSpread(), rules.affinityDivisor);
+				const int damage = rollDamage(attack, guard, bonus, affinity, attacker);
 				changed = dealDamage(user, target, damage, effect.element, effectivenessOf(affinity, rules.affinityDivisor), out) > 0 || changed;
 				noteHit(user, target, attacker, flatPower);
 				break;
@@ -579,6 +628,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				break;
 			}
 			case EffectKind::SelfDestruct:
+			case EffectKind::RemoveBeside:
 				break;
 			case EffectKind::Revive:
 				if (!t.alive()) {

@@ -47,6 +47,8 @@ std::map<std::string, double> expectedShares(const Database& db, const EnemyDef&
 		case AiConditionKind::Ambushed:
 		case AiConditionKind::AllyPresent:
 		case AiConditionKind::AfterTurns:
+		case AiConditionKind::All:
+		case AiConditionKind::Any:
 			break;
 		}
 		if (holds) {
@@ -185,7 +187,11 @@ ACC_CHECK(acc_bat_09, "ACC-BAT-09", "BAT-090, BAT-092") {
 		Database ruled = db;
 		auto onlyRule = [&](AiTargetRule rule, const std::string& status) {
 			ruled.enemies["rust_hound"].slots.assign(kAiSlots, "bite");
-			ruled.enemies["rust_hound"].overrides = {{AiConditionKind::LastStanding, "bite", {rule, status}}};
+			AiOverride entry;
+			entry.when = AiConditionKind::LastStanding;
+			entry.ability = "bite";
+			entry.target = {rule, status};
+			ruled.enemies["rust_hound"].overrides = {entry};
 		};
 		auto oneRound = [&](std::uint64_t seed, void (*prepare)(Battle&)) {
 			Battle battle = targetBattle(ruled, seed);

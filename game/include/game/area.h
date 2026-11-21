@@ -175,6 +175,8 @@ struct RandomRules {
 	int vehicleStepChance = 0;
 	// No roll while the leader stands on or next to an exit.
 	bool safeNearExits = false;
+	// The grace steps start again after every battle fought in the zone, as after entering the area.
+	bool graceAfterBattle = false;
 };
 
 struct Zone {

@@ -23,6 +23,10 @@ struct BattleRules {
 	std::optional<int> defendAffinity;
 	// Defend also holds an elemental hit's affinity at most at the defended one.
 	bool defendElemental = false;
+	// The elements Defend reaches, None for a hit without one; unset, as defendElemental says.
+	std::optional<std::vector<Element>> defendElements;
+	// Every damage roll's variance in place of the original's spread, unless the ability has its own.
+	std::optional<DamageVariance> damageVariance;
 	// Elemental damage subtracts the target's magic defense in place of its mental.
 	bool magicDefense = false;
 	// Party members of these kinds can be felled by instant-defeat effects, besides characters marked `vulnerable`.
@@ -36,6 +40,7 @@ struct BattleRules {
 	int neutralAffinity() const { return affinityDivisor; }
 	int elementlessHitAffinity() const { return elementlessAffinity.value_or(affinityDivisor); }
 	int defendedAffinity() const;
+	bool defends(const Element& element) const;
 };
 
 }
