@@ -1,0 +1,74 @@
+# Repeating macros in trouble, in Wren Loft on the generated data copy, reached by a developer warp. The ledger gathers
+# four members and `pair` gives three of them a step; the engineer's one use of Flare Burst makes its step fail from the second round. A save
+# before the reed grass lets the same seeded battle play three times: `autobattle random pair continue` retries the
+# macro every round with per-step fallback, `recover` hands every member to core's choice in each round trouble holds,
+# and `stop` follows core's stop rules and then core's policy (`trouble on` prints each round's trouble). Then the macro's
+# own options (`macro option`), `macro check` in a battle the script plays by hand, a step that loses its turn and
+# `fight` with failed steps attacking. Run with --seed 6.
+new
+dev warp wren_loft loft_door
+walk ledger_front
+face north
+talk
+dev level fighter 1
+dev level scout 1
+dev level medic 1
+dev level engineer 1
+menu
+macro create pair
+macro step pair 0 engineer ability drowse e1
+macro step pair 1 scout ability gust e0
+macro step pair 2 medic ability mend
+macros
+save manual_1
+close
+trouble on
+autobattle random pair continue
+walk 2 3
+walk 7 3
+walk 2 3
+status
+title
+load manual_1
+autobattle random pair recover
+walk 2 3
+walk 7 3
+walk 2 3
+status
+title
+load manual_1
+autobattle random pair stop
+walk 2 3
+walk 7 3
+walk 2 3
+status
+title
+load manual_1
+menu
+macro option pair on_trouble recover
+macro option pair recover_who uncovered
+macro option pair unnamed none
+refused macro option pair unnamed later
+macros
+close
+autobattle random pair
+walk 2 3
+walk 7 3
+walk 2 3
+status
+title
+load manual_1
+autobattle off
+walk 2 3
+walk 7 3
+macro check pair
+macro pair
+round
+macro pair automatic
+round
+macro check pair
+macro pair lose_turn
+round
+fight pair attack
+status
+quit

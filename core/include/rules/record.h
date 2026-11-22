@@ -19,6 +19,8 @@ struct RoundInput {
 	std::vector<int> macroBlock;
 	std::string macroName;
 	std::int64_t playTimeMs = 0;
+	// Party combatants that did nothing by choice (Battle::passing); written only when there are any.
+	std::vector<int> passed;
 };
 
 struct BattleRecord {

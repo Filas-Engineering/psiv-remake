@@ -55,6 +55,7 @@ const rules::TextTable& problemText() {
 			{"data.bad_interact", "interact must be faced or nearby, not '{0}'"},
 			{"data.bad_arrive_notice", "arrive_notice '{0}' must be always, walked or never"},
 			{"data.bad_leave_equipment", "leave_equipment '{0}' must be keep or bag"},
+			{"data.bad_machine_step_heal_fallen", "machine_step_heal_fallen '{0}' must be off, heal, stand, true or false"},
 			{"data.bad_map_character", "map rows use '.' for floor, '#' for wall, '~' for water, ':' for soft ground, '%' for a barrier and '=' for a counter"},
 			{"data.bad_shop_kind", "shop kind '{0}' must be general, weapon, armor, tool or gift"},
 			{"data.bad_step_timing", "step_timing '{0}' must be ticks or exact"},

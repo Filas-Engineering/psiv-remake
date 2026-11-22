@@ -675,7 +675,16 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.integer(json, "autosave_slots", c.autosaveSlots, false, 1, 9);
 	reader.integer(json, "manual_slots", c.manualSlots, false, 1, 99);
 	reader.integer(json, "machine_step_heal", c.machineStepHeal, false, 0, 999);
-	reader.boolean(json, "machine_step_heal_fallen", c.machineStepHealFallen, false);
+	// A boolean is the key's first form: true stands machines up.
+	if (const JsonValue* fallen = json.find("machine_step_heal_fallen")) {
+		const int index = fallen->is(JsonValue::Type::Bool) ? (fallen->boolean ? 2 : 0)
+			: fallen->is(JsonValue::Type::String) ? gameEnumIndex("machine_step_heal_fallen", fallen->string) : -1;
+		if (index >= 0) {
+			c.machineStepHealFallen = static_cast<MachineFallenHeal>(index);
+		} else {
+			reader.fail(json, "data.bad_machine_step_heal_fallen", {fallen->is(JsonValue::Type::String) ? fallen->string : ""});
+		}
+	}
 	reader.text(json, "outside_experience_until", c.outsideExperienceUntil, false);
 	std::string leaving = "keep";
 	reader.text(json, "leave_equipment", leaving, false);

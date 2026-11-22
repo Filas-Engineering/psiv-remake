@@ -67,12 +67,11 @@ bool macroTargetFits(MacroTargetKind target, CommandKind command, Targeting targ
 // A step whose cost cannot be paid, or that has no target yet, keeps its command: the battle validates it at
 // execution (BAT-015, BAT-053). Only a command the battle would refuse outright (an ability the member does not
 // know, an escape the battle forbids) falls back to a basic attack on the intended enemy, or the first living one.
-// With MacroFallback::Automatic every one of those takes autoCommand's choice instead. With rules.json's macro_ally_pick
-// would_change, a one-ally step with the default target that would change nobody falls back in the same way.
-std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro, MacroFallback fallback) {
+// With MacroFallback::Automatic every one of those takes autoCommand's choice instead, with Attack a basic attack, and with
+// LoseTurn the member does nothing. With rules.json's macro_ally_pick would_change, a one-ally step with the default target
+// that would change nobody falls back in the same way.
+std::vector<MacroStepResult> Battle::planMacro(const Macro& macro, MacroFallback fallback) const {
 	std::vector<MacroStepResult> results;
-	forcedOrder_.clear();
-	macroName_ = macro.name;
 	Inventory reserved;
 	const bool caughtOffGuard = !sideActsNextRound(Side::Party);
 
@@ -199,6 +198,19 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro, MacroFallbac
 		}
 
 		const bool automatic = fallback == MacroFallback::Automatic;
+		const bool failing = fallback == MacroFallback::Attack || fallback == MacroFallback::LoseTurn;
+		const auto fail = [&](MacroIssue why) {
+			result.issue = why;
+			if (fallback == MacroFallback::LoseTurn) {
+				result.status = MacroStepStatus::LostTurn;
+				command = Command();
+				return;
+			}
+			result.status = MacroStepStatus::FellBack;
+			const std::vector<int> foes = livingFoes(actor);
+			const bool intended = enemyThere && combatants_[enemyIndex].alive();
+			command = Command::attack(intended ? enemyIndex : (foes.empty() ? -1 : foes.front()));
+		};
 		bool nobodyToChange = false;
 		if (db_->battleRules.macroAllyWouldChange && step.target.kind == MacroTargetKind::Default && effects &&
 			(targeting == Targeting::OneAlly || targeting == Targeting::OneFallenAlly)) {
@@ -209,18 +221,19 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro, MacroFallbac
 			result.status = MacroStepStatus::Automatic;
 			result.issue = refused || isCostIssue(issue) ? issue : MacroIssue::NoTarget;
 			command = autoCommand(*this, actor);
+		} else if (failing && (refused || isCostIssue(issue) || nobodyToChange)) {
+			fail(refused || isCostIssue(issue) ? issue : MacroIssue::NoTarget);
 		} else if (refused || nobodyToChange) {
-			result.status = MacroStepStatus::FellBack;
-			result.issue = refused ? issue : MacroIssue::NoTarget;
-			const std::vector<int> foes = livingFoes(actor);
-			const bool intended = enemyThere && combatants_[enemyIndex].alive();
-			command = Command::attack(intended ? enemyIndex : (foes.empty() ? -1 : foes.front()));
+			fail(refused ? issue : MacroIssue::NoTarget);
 		} else if (aimed) {
 			const std::vector<int> targets = resolveTargets(actor, targeting, requested, revives);
 			if (targets.empty() && automatic) {
 				result.status = MacroStepStatus::Automatic;
 				issue = MacroIssue::NoTarget;
 				command = autoCommand(*this, actor);
+			} else if (targets.empty() && failing) {
+				fail(MacroIssue::NoTarget);
+				issue = MacroIssue::None;
 			} else if (targets.empty()) {
 				issue = issue == MacroIssue::None ? MacroIssue::NoTarget : issue;
 			} else if (singleTarget(targeting)) {
@@ -241,12 +254,140 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro, MacroFallbac
 		if (command.kind == CommandKind::Item && !step.piece) {
 			++reserved[command.id];
 		}
-		commands_[actor] = command;
-		forcedOrder_.push_back(actor);
 		result.command = command;
 		results.push_back(result);
 	}
 	return results;
+}
+
+std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro, MacroFallback fallback) {
+	std::vector<MacroStepResult> results = planMacro(macro, fallback);
+	forcedOrder_.clear();
+	macroName_ = macro.name;
+	std::vector<bool> named(static_cast<std::size_t>(partyCount_), false);
+	for (const MacroStepResult& result : results) {
+		if (result.actor >= 0) {
+			named[static_cast<std::size_t>(result.actor)] = true;
+		}
+		if (result.status == MacroStepStatus::Skipped) {
+			continue;
+		}
+		commands_[result.actor] = result.command;
+		passing_[result.actor] = result.status == MacroStepStatus::LostTurn;
+		if (!passing_[result.actor]) {
+			forcedOrder_.push_back(result.actor);
+		}
+	}
+	const MacroUnnamed unnamed = macro.unnamed != MacroUnnamed::Default ? macro.unnamed : db_->battleRules.macroUnnamed;
+	if (unnamed == MacroUnnamed::Attack || !sideActsNextRound(Side::Party)) {
+		return results;
+	}
+	for (int i = 0; i < partyCount_; ++i) {
+		const Combatant& c = combatants_[i];
+		if (named[i] || c.aboard || !c.alive() || commands_[i].kind != CommandKind::None || statusWith(i, StatusAction::Forced)) {
+			continue;
+		}
+		if (unnamed == MacroUnnamed::None) {
+			passing_[i] = true;
+		} else {
+			commands_[i] = autoCommand(*this, i);
+		}
+	}
+	return results;
+}
+
+bool stepTroubled(const MacroStepResult& result) {
+	switch (result.status) {
+	case MacroStepStatus::FellBack:
+	case MacroStepStatus::Automatic:
+	case MacroStepStatus::LostTurn:
+		return true;
+	case MacroStepStatus::Skipped:
+		return result.issue == MacroIssue::ActorDefeated || result.issue == MacroIssue::CannotAct || result.issue == MacroIssue::ForcedByStatus;
+	case MacroStepStatus::Applied:
+	case MacroStepStatus::Retargeted:
+		return isCostIssue(result.issue) || result.issue == MacroIssue::NoTarget;
+	}
+	return false;
+}
+
+MacroTroubleReport Battle::macroTrouble(const Macro& macro, const std::vector<MacroStepResult>& results) const {
+	MacroTroubleReport report;
+	for (int i = 0; i < partyCount_; ++i) {
+		if (!combatants_[i].aboard && !combatants_[i].alive()) {
+			report.fallen.push_back(i);
+		}
+	}
+	for (std::size_t k = 0; k < results.size() && k < macro.steps.size(); ++k) {
+		if (stepTroubled(results[k])) {
+			report.troubledSteps.push_back(static_cast<int>(k));
+			if (results[k].actor >= 0) {
+				report.troubledMembers.push_back(results[k].actor);
+			}
+		}
+	}
+	report.holds = !report.fallen.empty() || !report.troubledSteps.empty();
+	return report;
+}
+
+MacroTroubleReport Battle::macroTrouble(const Macro& macro) const {
+	return macroTrouble(macro, planMacro(macro, MacroFallback::Automatic));
+}
+
+MacroTroubleReport Battle::applyMacroRound(const Macro& macro, MacroTrouble mode) {
+	const std::vector<MacroStepResult> results = applyMacro(macro, MacroFallback::Automatic);
+	MacroTroubleReport report = macroTrouble(macro, results);
+	report.mode = mode;
+	if (mode != MacroTrouble::Recover || !report.holds) {
+		return report;
+	}
+	const MacroRecoverWho who = macro.recoverWho != MacroRecoverWho::Default ? macro.recoverWho : db_->battleRules.macroRecoverWho;
+	if (who == MacroRecoverWho::Troubled) {
+		for (const MacroStepResult& result : results) {
+			if (result.status == MacroStepStatus::Automatic) {
+				report.recovered.push_back(result.actor);
+			}
+		}
+		return report;
+	}
+	for (int i = 0; i < partyCount_; ++i) {
+		const bool covered = std::any_of(results.begin(), results.end(), [i](const MacroStepResult& r) { return r.actor == i; });
+		if ((who == MacroRecoverWho::Uncovered && covered) || !combatants_[i].alive()) {
+			continue;
+		}
+		if (setCommand(i, autoCommand(*this, i)).empty()) {
+			report.recovered.push_back(i);
+		}
+	}
+	if (who == MacroRecoverWho::All) {
+		forcedOrder_.clear();
+		macroName_.clear();
+	}
+	return report;
+}
+
+std::vector<MacroStepCheck> Battle::checkMacro(const Macro& macro) const {
+	const std::vector<MacroStepResult> results = planMacro(macro, MacroFallback::BasicAttack);
+	std::vector<MacroStepCheck> checks;
+	for (std::size_t k = 0; k < results.size(); ++k) {
+		const MacroStepResult& result = results[k];
+		const MacroStep& step = macro.steps[k];
+		MacroStepCheck check;
+		check.member = result.member;
+		check.actor = result.actor;
+		check.issue = result.issue;
+		if (result.issue == MacroIssue::CannotAct || result.issue == MacroIssue::ForcedByStatus) {
+			const StatusDef* status = statusWith(result.actor, result.issue == MacroIssue::CannotAct ? StatusAction::CannotAct : StatusAction::Forced);
+			check.status = status ? status->id : "";
+		}
+		const bool asWritten = result.status == MacroStepStatus::Applied || result.status == MacroStepStatus::Retargeted;
+		if (result.actor >= 0 && result.status != MacroStepStatus::Skipped && !(step.piece && result.issue == MacroIssue::NoItem)) {
+			check.refusal = checkCommand(result.actor, {step.kind, step.id, asWritten ? result.command.target : -1});
+		}
+		check.ok = (check.issue == MacroIssue::None || check.issue == MacroIssue::TargetGone) && check.refusal.empty();
+		checks.push_back(check);
+	}
+	return checks;
 }
 
 }

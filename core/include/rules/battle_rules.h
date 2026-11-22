@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rules/macro.h"
 #include "rules/types.h"
 
 #include <map>
@@ -68,6 +69,13 @@ struct BattleRules {
 	// Automatic choices weigh each attack by its expected effect on the foes (rules.json auto_policy expected) in place of
 	// taking the largest damage power.
 	bool autoExpected = false;
+	// The trouble mode of the save's auto macro and of a named auto play macro when neither the macro nor the caller sets
+	// one; what a recover round hands to core's choice; what a member a macro has no step for does (rules.json
+	// auto_macro_on_trouble, named_macro_on_trouble, macro_recover_who, macro_unnamed).
+	MacroTrouble autoMacroOnTrouble = MacroTrouble::Stop;
+	MacroTrouble namedMacroOnTrouble = MacroTrouble::Continue;
+	MacroRecoverWho macroRecoverWho = MacroRecoverWho::All;
+	MacroUnnamed macroUnnamed = MacroUnnamed::Attack;
 	// What weak, resisted and immune labels compare an elemental hit's affinity with, in place of the divisor; damage
 	// still divides by the divisor. elementBaselines wins for its elements.
 	std::optional<int> effectivenessBaseline;

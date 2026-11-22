@@ -299,6 +299,9 @@ enum class LeaveEquipment { Keep, Bag };
 enum class InteractReach { Faced, Nearby };
 
 // game.json: everything about the adventure that is not an area, a script or battle data.
+// game.json `machine_step_heal_fallen`; the order is the word set's.
+enum class MachineFallenHeal { Off, Heal, Stand };
+
 struct GameConfig {
 	std::string title;
 	std::string coreData;
@@ -352,8 +355,9 @@ struct GameConfig {
 	std::vector<FieldVehicle> vehicles;
 	// Hit points a machine member regains with each step the party takes in the field (P6).
 	int machineStepHeal = 0;
-	// The step heal also reaches fallen machine members, which so stand up (game.json `machine_step_heal_fallen`).
-	bool machineStepHealFallen = false;
+	// What the step heal does for fallen machine members (game.json `machine_step_heal_fallen`): nothing, bank the hit points
+	// while the member stays down (added once something stands it up), or stand it up.
+	MachineFallenHeal machineStepHealFallen = MachineFallenHeal::Off;
 	// Members who have joined and are out of the party get the same experience share as those in it until this flag
 	// is set (SAV-032); empty gives them none.
 	std::string outsideExperienceUntil = {};

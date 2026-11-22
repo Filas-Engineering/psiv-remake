@@ -275,6 +275,7 @@ Result<Battle> Battle::create(const Database& db, const BattleSetup& setup, Comb
 	battle.lastCommands_.resize(battle.combatants_.size());
 	battle.forced_.assign(battle.combatants_.size(), false);
 	battle.aiTurn_.assign(battle.combatants_.size(), false);
+	battle.passing_.assign(static_cast<std::size_t>(battle.partyCount_), false);
 	for (int i = 0; i < static_cast<int>(battle.combatants_.size()); ++i) {
 		battle.syncPins(i);
 	}
@@ -293,6 +294,7 @@ Battle Battle::partyOnly(const Database& db, const std::vector<PartyMember>& par
 	battle.commands_.resize(battle.combatants_.size());
 	battle.forced_.assign(battle.combatants_.size(), false);
 	battle.aiTurn_.assign(battle.combatants_.size(), false);
+	battle.passing_.assign(static_cast<std::size_t>(battle.partyCount_), false);
 	return battle;
 }
 
@@ -319,6 +321,17 @@ Message Battle::checkAllyTarget(int actor, Targeting targeting, const std::vecto
 }
 
 Message Battle::setCommand(int actor, const Command& command) {
+	Message refused = checkCommand(actor, command);
+	if (refused.empty()) {
+		commands_[actor] = command;
+		if (actor < static_cast<int>(passing_.size())) {
+			passing_[actor] = false;
+		}
+	}
+	return refused;
+}
+
+Message Battle::checkCommand(int actor, const Command& command) const {
 	if (actor < 0 || actor >= static_cast<int>(combatants_.size())) {
 		return {"command.no_combatant", {std::to_string(actor)}};
 	}
@@ -389,15 +402,16 @@ Message Battle::setCommand(int actor, const Command& command) {
 	case CommandKind::Attack:
 		break;
 	}
-	commands_[actor] = command;
 	return {};
 }
 
-bool Battle::startAuto(const Macro& macro) {
+bool Battle::startAuto(const Macro& macro, MacroTrouble mode) {
 	if (outcome_ != Outcome::Ongoing) {
 		return false;
 	}
 	autoMacro_ = macro;
+	autoMode_ = mode == MacroTrouble::Default ? MacroTrouble::Stop : mode;
+	lastAutoTrouble_ = MacroTroubleReport();
 	autoActive_ = true;
 	autoCancelRequested_ = false;
 	autoMemberFell_ = false;
@@ -414,10 +428,15 @@ bool Battle::fillFromAuto() {
 		stop = AutoStop::BattleEnded;
 	} else if (autoCancelRequested_) {
 		stop = AutoStop::Cancelled;
+	} else if (autoMode_ != MacroTrouble::Stop) {
+		lastAutoTrouble_ = applyMacroRound(autoMacro_, autoMode_);
 	} else if (autoMemberFell_) {
 		stop = AutoStop::MemberFell;
 	} else {
-		for (const MacroStepResult& result : applyMacro(autoMacro_)) {
+		const std::vector<MacroStepResult> results = applyMacro(autoMacro_);
+		lastAutoTrouble_ = macroTrouble(autoMacro_, results);
+		lastAutoTrouble_.mode = MacroTrouble::Stop;
+		for (const MacroStepResult& result : results) {
 			if (isCostIssue(result.issue)) {
 				stop = AutoStop::CannotPay;
 			}
@@ -426,6 +445,7 @@ bool Battle::fillFromAuto() {
 			for (int i = 0; i < partyCount_; ++i) {
 				commands_[i] = Command();
 			}
+			std::fill(passing_.begin(), passing_.end(), false);
 			forcedOrder_.clear();
 			macroName_.clear();
 		}
@@ -451,7 +471,7 @@ void Battle::fillMissingCommands() {
 			forced_[i] = true;
 			continue;
 		}
-		if (commands_[i].kind == CommandKind::None) {
+		if (commands_[i].kind == CommandKind::None && !passing(i)) {
 			commands_[i] = Command::attack(-1);
 			aiTurn_[i] = !isParty(i);
 		}
@@ -486,6 +506,11 @@ std::vector<Event> Battle::resolveRound() {
 	for (int i = 0; i < static_cast<int>(commands_.size()); ++i) {
 		if (commands_[i].kind != CommandKind::None) {
 			input.commands.push_back({i, commands_[i]});
+		}
+	}
+	for (int i = 0; i < partyCount_; ++i) {
+		if (passing_[i] && commands_[i].kind == CommandKind::None) {
+			input.passed.push_back(i);
 		}
 	}
 	input.macroBlock = forcedOrder_;
@@ -575,6 +600,7 @@ std::vector<Event> Battle::resolveRound() {
 		c.defending = false;
 	}
 	std::fill(commands_.begin(), commands_.end(), Command());
+	std::fill(passing_.begin(), passing_.end(), false);
 	forcedOrder_.clear();
 	macroName_.clear();
 	return out;

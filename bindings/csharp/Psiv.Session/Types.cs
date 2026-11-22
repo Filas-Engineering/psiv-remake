@@ -49,13 +49,19 @@ public enum StatusEnd { Cured, Duration, Recovered, WokeOnDamage, Defeated }
 public enum ResourceKind { None, Tp, SkillUse, Item }
 public enum Element { None, Heat, Chill, Shock, Gale, Holy }
 public enum CreatureKind { Living, Spirit, Machine }
-public enum Stat { Strength, Mental, Agility, Dexterity, Defense, MagicDefense }
+public enum Stat { Strength, Mental, Agility, Dexterity, Defense, MagicDefense, Attack }
 public enum Opening { Normal, PartyFirst, EnemyFirst }
 public enum AutoStop { None, Cancelled, MemberFell, CannotPay, BattleEnded }
-public enum MacroStepStatus { Applied, Retargeted, FellBack, Skipped, Automatic }
+public enum MacroStepStatus { Applied, Retargeted, FellBack, Skipped, Automatic, LostTurn }
 // What ApplyMacro does with a step that cannot run as written: BasicAttack is core's default; Automatic gives the member core's
-// automatic choice for the round instead (MacroStepStatus.Automatic).
-public enum MacroFallback { BasicAttack, Automatic }
+// automatic choice for the round instead (MacroStepStatus.Automatic); Attack a basic attack; LoseTurn nothing this round, at no cost.
+public enum MacroFallback { BasicAttack, Automatic, Attack, LoseTurn }
+// A repeating macro's mode in a round where trouble holds; Default leaves it to the caller, the macro, then rules.json.
+public enum MacroTrouble { Default, Continue, Recover, Stop }
+// Who takes core's automatic choice in a recover round.
+public enum MacroRecoverWho { Default, All, Uncovered, Troubled }
+// What a member the macro has no step for does.
+public enum MacroUnnamed { Default, Attack, None, Auto }
 public enum MacroTargetKind { Default, Self, Member, Enemy, All }
 
 public enum MacroIssue
@@ -95,7 +101,7 @@ public enum NameKind
 	RewardMultiplier, BattleSource, Side, CommandKind, AbilityKind, Targeting, EquipSlot, Outcome, EventType, CancelReason,
 	Effectiveness, StatusEnd, ResourceKind, Element, Stat, Opening, AutoStop, MacroStepStatus, MacroIssue, ActionType, MacroTargetKind,
 	DescriptionKind, ItemSort, CameraTarget, TravelKind, DevList, CreatureKind, ShopKind, ActorVanish, ActorRemoval, AnimationEnd,
-	InteractKind,
+	InteractKind, MacroFallback, MacroTrouble, MacroRecoverWho, MacroUnnamed,
 }
 
 // The id lists of DevIds: what the developer commands take. Markers are "area:marker".
@@ -354,7 +360,17 @@ public sealed record EquipPreview(string Member, string Piece, string PieceName,
 public sealed record MacroStep(string Member, string MemberName, CommandKind CommandKind, string Id, string IdName, MacroTargetKind TargetKind,
 	string TargetMember, string TargetMemberName, int TargetEnemy, MacroIssue Issue, bool Piece = false);
 
-public sealed record Macro(string Name, IReadOnlyList<MacroStep> Steps);
+public sealed record Macro(string Name, IReadOnlyList<MacroStep> Steps, MacroTrouble OnTrouble = MacroTrouble.Default,
+	MacroRecoverWho RecoverWho = MacroRecoverWho.Default, MacroUnnamed Unnamed = MacroUnnamed.Default);
+
+// One step's state this round (psiv_battle_macro_check): Ok, or the issue, the status behind it and what setting it by hand
+// would be refused with.
+public sealed record MacroStepCheck(string Member, int Actor, MacroIssue Issue, string Status, string RefusalKey, string RefusalText, bool Ok);
+
+// Macro trouble (psiv_battle_macro_trouble): fallen party combatants, troubled steps and their members, who a recover round
+// handed to core's choice.
+public sealed record MacroTroubleReport(bool Holds, MacroTrouble Mode, IReadOnlyList<int> Fallen, IReadOnlyList<int> TroubledSteps,
+	IReadOnlyList<int> TroubledMembers, IReadOnlyList<int> Recovered);
 
 public sealed record ComboEntry(string Recipe, string Result, string ResultName, long PlayTimeMs, IReadOnlyList<string> Participants,
 	IReadOnlyList<string> ParticipantNames, IReadOnlyList<string> Abilities, IReadOnlyList<string> AbilityNames);
@@ -400,7 +416,7 @@ public sealed record LevelUp(string Member, string Name, int Level, IReadOnlyLis
 public sealed record BattleResult(string Encounter, BattleSource Source, Outcome Outcome, bool GameOver, int Experience, int Money,
 	IReadOnlyDictionary<string, int> Drops, IReadOnlyList<LevelUp> LevelUps);
 
-public sealed record AutoRound(IReadOnlyList<Notice> Notices, IReadOnlyList<BattleEvent> Events);
+public sealed record AutoRound(IReadOnlyList<Notice> Notices, IReadOnlyList<BattleEvent> Events, MacroTroubleReport? Trouble = null);
 
 // Refusal is why auto-battle with the auto macro did not start, or null.
 public sealed record AutoBattle(PsivError? Refusal, IReadOnlyList<AutoRound> Rounds, bool Ended);

@@ -3,13 +3,14 @@
 #include "rules/names.h"
 #include "text_encoding.h"
 
+#include <algorithm>
 #include <sstream>
 
 namespace rules {
 
 namespace {
 
-constexpr int kMacrosVersion = 2;
+constexpr int kMacrosVersion = 3;
 constexpr int kComboLogVersion = 1;
 
 // Reads "<kind> <version>" ... "end", calling `line` for every line between. Returns an error or "". Versions from
@@ -59,10 +60,17 @@ std::string readVersioned(const std::string& text, const char* kind, int oldest,
 }
 
 std::string serializeMacros(const std::vector<Macro>& macros) {
+	const auto hasOptions = [](const Macro& m) {
+		return m.onTrouble != MacroTrouble::Default || m.recoverWho != MacroRecoverWho::Default || m.unnamed != MacroUnnamed::Default;
+	};
 	std::ostringstream s;
-	s << "macros " << kMacrosVersion << '\n';
+	// Version 3 only adds the options line, so text without options stays version 2 for older builds.
+	s << "macros " << (std::any_of(macros.begin(), macros.end(), hasOptions) ? kMacrosVersion : 2) << '\n';
 	for (const Macro& macro : macros) {
 		s << "macro " << text::encode(macro.name) << '\n';
+		if (hasOptions(macro)) {
+			s << "options " << toString(macro.onTrouble) << ' ' << toString(macro.recoverWho) << ' ' << toString(macro.unnamed) << '\n';
+		}
 		for (const MacroStep& step : macro.steps) {
 			s << "step " << text::encode(step.member) << ' ' << (step.piece ? "piece" : toString(step.kind)) << ' ' << text::encode(step.id) << ' '
 				<< toString(step.target.kind) << ' ' << text::encode(step.target.member) << ' ' << step.target.enemySlot << '\n';
@@ -83,6 +91,16 @@ Result<std::vector<Macro>> parseMacros(const std::string& text) {
 				return "bad macro name";
 			}
 			macros.push_back(macro);
+			return "";
+		}
+		if (t[0] == "options" && t.size() == 4 && version >= 3) {
+			if (macros.empty()) {
+				return "'options' before any 'macro'";
+			}
+			Macro& macro = macros.back();
+			if (!parseMacroTrouble(t[1], macro.onTrouble) || !parseMacroRecoverWho(t[2], macro.recoverWho) || !parseMacroUnnamed(t[3], macro.unnamed)) {
+				return "bad options";
+			}
 			return "";
 		}
 		if (t[0] == "step" && t.size() == 7) {

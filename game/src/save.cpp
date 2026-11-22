@@ -162,6 +162,9 @@ std::string partyChunk(const World& w) {
 	for (const auto& [id, name] : w.memberNames) {
 		o.key("named").text(id).text(name).end();
 	}
+	for (const auto& [id, hp] : w.machineBank) {
+		o.key("machine_bank").text(id).num(hp).end();
+	}
 	for (const auto& [name, snapshot] : w.partySnapshots) {
 		o.key("snapshot").text(name).num(static_cast<long long>(snapshot.lineup.size()));
 		for (const std::string& id : snapshot.lineup) {
@@ -511,6 +514,8 @@ bool readParty(const std::string& payload, World& w, std::string& error) {
 			}
 		} else if (k == "named" && in.need(l, 2)) {
 			w.memberNames[in.text(l[1])] = in.text(l[2]);
+		} else if (k == "machine_bank" && in.need(l, 2)) {
+			w.machineBank[in.text(l[1])] = in.integer(l[2]);
 		} else if (k == "snapshot") {
 			const long long lineup = l.size() >= 3 ? in.num(l[2]) : -1;
 			if (lineup < 0 || lineup > static_cast<long long>(l.size()) - 3) {

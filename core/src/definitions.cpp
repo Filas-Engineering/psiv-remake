@@ -110,7 +110,11 @@ int Combatant::base(Stat stat) const {
 
 int Combatant::effective(Stat stat) const {
 	if (stat == Stat::Attack) {
-		return std::max(0, effective(Stat::Strength) + attackBonus);
+		int raised = 0;
+		for (const ActiveModifier& modifier : modifiers) {
+			raised += modifier.stat == Stat::Attack ? modifier.amount : 0;
+		}
+		return std::max(0, effective(Stat::Strength) + attackBonus + raised);
 	}
 	if (std::find(pinned.begin(), pinned.end(), stat) != pinned.end()) {
 		return 1;

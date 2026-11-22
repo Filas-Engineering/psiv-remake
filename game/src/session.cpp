@@ -3051,16 +3051,37 @@ void Session::healMachinesOnStep() {
 	if (data_.config.machineStepHeal <= 0) {
 		return;
 	}
+	settleMachineBank();
 	for (const std::string& id : world_.lineup) {
 		rules::PartyMember* m = world_.member(id);
 		const rules::CharacterDef* character = data_.db.character(id);
-		if (m && character && character->kind == rules::CreatureKind::Machine && (m->hp > 0 || data_.config.machineStepHealFallen)) {
+		if (m && character && character->kind == rules::CreatureKind::Machine && m->hp == 0 && data_.config.machineStepHealFallen == MachineFallenHeal::Heal) {
+			int& banked = world_.machineBank[id];
+			banked = std::min(banked + data_.config.machineStepHeal, rules::memberStats(data_.db, *m).maxHp);
+			continue;
+		}
+		if (m && character && character->kind == rules::CreatureKind::Machine && (m->hp > 0 || data_.config.machineStepHealFallen == MachineFallenHeal::Stand)) {
 			if (m->hp == 0) {
 				m->statuses.clear();
 				emit(OutputKind::Notice, "game.machine_stood_up", {id});
 			}
 			m->hp = std::min(m->hp + data_.config.machineStepHeal, rules::memberStats(data_.db, *m).maxHp);
 		}
+	}
+}
+
+// Banked step heal goes to a machine member once it stands again, whatever stood it up.
+void Session::settleMachineBank() {
+	for (auto it = world_.machineBank.begin(); it != world_.machineBank.end();) {
+		rules::PartyMember* m = world_.member(it->first);
+		if (m && m->hp == 0) {
+			++it;
+			continue;
+		}
+		if (m) {
+			m->hp = std::min(m->hp + it->second, rules::memberStats(data_.db, *m).maxHp);
+		}
+		it = world_.machineBank.erase(it);
 	}
 }
 
@@ -4406,6 +4427,7 @@ std::string Session::startBattle(const std::string& encounter, rules::Opening op
 	ended_.reset();
 	battleEncounter_ = encounter;
 	battleRounds_ = 0;
+	lastMacroTrouble_ = rules::MacroTroubleReport();
 	battleDefeatHandled_ = defeatHasBranch;
 	const Boss* boss = data_.boss(encounter);
 	battleIsBoss_ = boss != nullptr;
@@ -4443,6 +4465,10 @@ rules::Message Session::applyMacro(const std::string& name, std::vector<rules::M
 }
 
 rules::Message Session::startAuto() {
+	return startAuto(rules::MacroTrouble::Default);
+}
+
+rules::Message Session::startAuto(rules::MacroTrouble trouble) {
 	if (!battle_) {
 		return refusal("no_battle");
 	}
@@ -4451,7 +4477,9 @@ rules::Message Session::startAuto() {
 	}
 	for (const rules::Macro& m : world_.macros) {
 		if (m.name == world_.autoMacro) {
-			battle_->startAuto(m);
+			const rules::MacroTrouble mode = trouble != rules::MacroTrouble::Default ? trouble
+				: m.onTrouble != rules::MacroTrouble::Default ? m.onTrouble : data_.db.battleRules.autoMacroOnTrouble;
+			battle_->startAuto(m, mode);
 			emit(OutputKind::Notice, "game.auto_on", {m.name});
 			return {};
 		}
@@ -4474,6 +4502,7 @@ bool Session::fillFromAuto() {
 		return false;
 	}
 	if (battle_->fillFromAuto()) {
+		lastMacroTrouble_ = battle_->lastAutoTrouble();
 		return true;
 	}
 	emit(OutputKind::Notice, std::string("auto.stopped.") + rules::toString(battle_->autoStop()));
@@ -4492,10 +4521,39 @@ void Session::fillFromPolicy() {
 }
 
 rules::Message Session::setAutoPlayMacro(const std::string& name) {
+	return setAutoPlayMacro(name, rules::MacroTrouble::Default);
+}
+
+rules::Message Session::setAutoPlayMacro(const std::string& name, rules::MacroTrouble trouble) {
 	if (!name.empty() && std::none_of(world_.macros.begin(), world_.macros.end(), [&](const rules::Macro& m) { return m.name == name; })) {
 		return refusal("no_macro", {name});
 	}
 	autoPlayMacro_ = name;
+	autoPlayTrouble_ = trouble;
+	return {};
+}
+
+rules::Message Session::macroTrouble(const std::string& name, rules::MacroTroubleReport& out) const {
+	if (!battle_) {
+		return refusal("no_battle");
+	}
+	const auto macro = std::find_if(world_.macros.begin(), world_.macros.end(), [&](const rules::Macro& m) { return m.name == name; });
+	if (macro == world_.macros.end()) {
+		return refusal("no_macro", {name});
+	}
+	out = battle_->macroTrouble(*macro);
+	return {};
+}
+
+rules::Message Session::checkMacro(const std::string& name, std::vector<rules::MacroStepCheck>& out) const {
+	if (!battle_) {
+		return refusal("no_battle");
+	}
+	const auto macro = std::find_if(world_.macros.begin(), world_.macros.end(), [&](const rules::Macro& m) { return m.name == name; });
+	if (macro == world_.macros.end()) {
+		return refusal("no_macro", {name});
+	}
+	out = battle_->checkMacro(*macro);
 	return {};
 }
 
@@ -4503,15 +4561,28 @@ rules::Message Session::fillAutoRound() {
 	if (!battle_) {
 		return refusal("no_battle");
 	}
+	lastMacroTrouble_ = rules::MacroTroubleReport();
 	rules::Message refused;
-	if (!autoPlayMacro_.empty()) {
-		refused = applyMacro(autoPlayMacro_, nullptr, rules::MacroFallback::Automatic);
-		if (refused.empty()) {
+	const auto named = std::find_if(world_.macros.begin(), world_.macros.end(), [&](const rules::Macro& m) { return m.name == autoPlayMacro_; });
+	if (!autoPlayMacro_.empty() && named == world_.macros.end()) {
+		refused = refusal("no_macro", {autoPlayMacro_});
+	} else if (!autoPlayMacro_.empty()) {
+		const rules::MacroTrouble mode = autoPlayTrouble_ != rules::MacroTrouble::Default ? autoPlayTrouble_
+			: named->onTrouble != rules::MacroTrouble::Default ? named->onTrouble : data_.db.battleRules.namedMacroOnTrouble;
+		if (mode != rules::MacroTrouble::Stop) {
+			lastMacroTrouble_ = battle_->applyMacroRound(*named, mode);
 			return {};
 		}
+		if (!battle_->autoActive() && battle_->autoStop() == rules::AutoStop::None && battle_->startAuto(*named, mode)) {
+			emit(OutputKind::Notice, "game.auto_on", {named->name});
+		}
+		if (!fillFromAuto()) {
+			fillFromPolicy();
+		}
+		return {};
 	}
 	if (!world_.autoMacro.empty() && battle_->round() == 0 && !battle_->autoActive()) {
-		const rules::Message notStarted = startAuto();
+		const rules::Message notStarted = startAuto(autoPlayMacro_.empty() ? autoPlayTrouble_ : rules::MacroTrouble::Default);
 		refused = refused.empty() ? notStarted : refused;
 	}
 	if (!fillFromAuto()) {
@@ -4528,6 +4599,7 @@ AutoBattle Session::playBattle(int maxRounds) {
 			played.refusal = refused;
 		}
 		AutoRound r;
+		r.trouble = lastMacroTrouble_;
 		r.output = drainOutput();
 		r.events = resolveRound();
 		played.rounds.push_back(std::move(r));
@@ -4605,6 +4677,7 @@ void Session::finishBattle() {
 			member->name.clear();
 		}
 	}
+	settleMachineBank();
 	int experience = 0;
 	int money = 0;
 	if (outcome == rules::Outcome::Victory || outcome == rules::Outcome::ScriptedEnd) {
@@ -4941,6 +5014,7 @@ rules::Message Session::rest() {
 	if (!problem.empty()) {
 		return problem;
 	}
+	settleMachineBank();
 	closeMenu();
 	return {};
 }
@@ -4996,6 +5070,7 @@ rules::Message Session::useItem(const std::string& item, const std::string& memb
 	}
 	emit(OutputKind::Notice, "game.used", {item});
 	reportFieldUse(use.events, party);
+	settleMachineBank();
 	return {};
 }
 
@@ -5026,6 +5101,7 @@ rules::Message Session::useAbility(const std::string& user, const std::string& a
 	}
 	emit(OutputKind::Notice, "game.used_ability", {user, ability});
 	reportFieldUse(use.events, party);
+	settleMachineBank();
 	return {};
 }
 
@@ -5161,6 +5237,9 @@ std::vector<MacroView> Session::macroViews() const {
 			v.issue = stepIssue(data_.db, world_, step);
 			view.steps.push_back(std::move(v));
 		}
+		view.onTrouble = macro.onTrouble;
+		view.recoverWho = macro.recoverWho;
+		view.unnamed = macro.unnamed;
 		out.push_back(std::move(view));
 	}
 	return out;
@@ -5220,6 +5299,20 @@ rules::Message Session::deleteMacro(const std::string& name) {
 		world_.autoMacro.clear();
 		emit(OutputKind::Notice, "game.auto_macro_cleared", {name});
 	}
+	return {};
+}
+
+rules::Message Session::setMacroOptions(const std::string& name, rules::MacroTrouble onTrouble, rules::MacroRecoverWho recoverWho, rules::MacroUnnamed unnamed) {
+	if (menuKind() != MenuKind::Field) {
+		return refusal("macro_menu_only");
+	}
+	auto macro = findMacro(world_.macros, name);
+	if (macro == world_.macros.end()) {
+		return refusal("no_macro", {name});
+	}
+	macro->onTrouble = onTrouble;
+	macro->recoverWho = recoverWho;
+	macro->unnamed = unnamed;
 	return {};
 }
 

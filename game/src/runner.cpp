@@ -225,7 +225,7 @@ void Runner::settle() {
 			if (!options_.autoBattle || (options_.autoBattleEncountersOnly && session_.battleSource() == BattleSource::Event)) {
 				return;
 			}
-			finishBattleAuto(options_.autoBattleMacro);
+			finishBattleAuto(options_.autoBattleMacro, options_.autoBattleTrouble);
 			continue;
 		}
 		battleNames_.clear();
@@ -250,13 +250,14 @@ void Runner::settle() {
 	error("the game did not settle");
 }
 
-void Runner::finishBattleAuto(const std::string& macro) {
-	report(session_.setAutoPlayMacro(macro));
+void Runner::finishBattleAuto(const std::string& macro, rules::MacroTrouble trouble) {
+	report(session_.setAutoPlayMacro(macro, trouble));
 	const AutoBattle played = session_.playBattle();
 	session_.setAutoPlayMacro("");
 	report(played.refusal);
 	for (const AutoRound& round : played.rounds) {
 		printOutput(round.output);
+		printTrouble(round.trouble);
 		printEvents(round.events);
 	}
 	if (!played.ended) {
@@ -265,11 +266,49 @@ void Runner::finishBattleAuto(const std::string& macro) {
 	flushOutput();
 }
 
-// Plays the battle round by round with the macro, each member whose step cannot run taking core's automatic choice.
-void Runner::fight(const std::string& macro) {
+void Runner::printTrouble(const rules::MacroTroubleReport& trouble) {
+	if (!options_.printTrouble || !trouble.holds) {
+		return;
+	}
+	auto names = [this](const std::vector<int>& indexes) {
+		std::string text;
+		for (int index : indexes) {
+			text += (text.empty() ? "" : ", ") + battleName(index);
+		}
+		return text.empty() ? std::string("-") : text;
+	};
+	std::string steps;
+	for (int step : trouble.troubledSteps) {
+		steps += (steps.empty() ? "" : " ") + std::to_string(step);
+	}
+	print("Trouble (" + std::string(rules::toString(trouble.mode)) + "): steps " + (steps.empty() ? "-" : steps) + " (" + names(trouble.troubledMembers) + "); fallen " + names(trouble.fallen) +
+		"; core's choice for " + names(trouble.recovered) + ".");
+}
+
+void Runner::checkMacro(const std::string& name) {
+	std::vector<rules::MacroStepCheck> checks;
+	const rules::Message refused = session_.checkMacro(name, checks);
+	if (!refused.empty()) {
+		report(refused);
+		return;
+	}
+	for (std::size_t i = 0; i < checks.size(); ++i) {
+		const rules::MacroStepCheck& c = checks[i];
+		std::string text = "    " + std::to_string(i) + " " + c.member + ": " + (c.ok ? "ok" : rules::toString(c.issue));
+		text += c.status.empty() ? "" : " (" + c.status + ")";
+		text += c.refusal.empty() ? "" : ", refused: " + session_.render(c.refusal);
+		print(text);
+	}
+	rules::MacroTroubleReport trouble;
+	session_.macroTrouble(name, trouble);
+	print(std::string("    trouble: ") + (trouble.holds ? "yes" : "no"));
+}
+
+// Plays the battle round by round with the macro; a step that cannot run follows `fallback`.
+void Runner::fight(const std::string& macro, rules::MacroFallback fallback) {
 	for (int round = 0; round < 60 && session_.battle(); ++round) {
 		flushOutput();
-		const rules::Message refused = session_.applyMacro(macro, nullptr, rules::MacroFallback::Automatic);
+		const rules::Message refused = session_.applyMacro(macro, nullptr, fallback);
 		if (!refused.empty()) {
 			report(refused);
 			return;
@@ -283,7 +322,17 @@ void Runner::fight(const std::string& macro) {
 
 void Runner::listMacros() {
 	for (const MacroView& view : session_.macroViews()) {
-		print("  " + view.name + (view.name == session_.world().autoMacro ? " (auto)" : ""));
+		std::string options;
+		if (view.onTrouble != rules::MacroTrouble::Default) {
+			options += std::string("on_trouble ") + rules::toString(view.onTrouble);
+		}
+		if (view.recoverWho != rules::MacroRecoverWho::Default) {
+			options += std::string(options.empty() ? "" : ", ") + "recover_who " + rules::toString(view.recoverWho);
+		}
+		if (view.unnamed != rules::MacroUnnamed::Default) {
+			options += std::string(options.empty() ? "" : ", ") + "unnamed " + rules::toString(view.unnamed);
+		}
+		print("  " + view.name + (view.name == session_.world().autoMacro ? " (auto)" : "") + (options.empty() ? "" : " [" + options + "]"));
 		for (std::size_t i = 0; i < view.steps.size(); ++i) {
 			const rules::MacroStep& step = view.steps[i].step;
 			std::string text = "    " + std::to_string(i) + " " + step.member + " " + (step.piece ? "piece" : rules::toString(step.kind));
@@ -328,6 +377,29 @@ void Runner::macro(const std::vector<std::string>& w) {
 		report(session_.moveMacroStep(w[2], a, b));
 	} else if (w[1] == "combo" && w.size() == 4) {
 		report(session_.macroFromCombo(w[2], w[3]));
+	} else if (w[1] == "check" && w.size() == 3) {
+		checkMacro(w[2]);
+	} else if (w[1] == "option" && w.size() == 5) {
+		const std::vector<MacroView> views = session_.macroViews();
+		const auto found = std::find_if(views.begin(), views.end(), [&](const MacroView& v) { return v.name == w[2]; });
+		rules::MacroTrouble trouble = found == views.end() ? rules::MacroTrouble::Default : found->onTrouble;
+		rules::MacroRecoverWho who = found == views.end() ? rules::MacroRecoverWho::Default : found->recoverWho;
+		rules::MacroUnnamed unnamed = found == views.end() ? rules::MacroUnnamed::Default : found->unnamed;
+		const bool ok = w[3] == "on_trouble" ? rules::parseMacroTrouble(w[4], trouble)
+			: w[3] == "recover_who" ? rules::parseMacroRecoverWho(w[4], who)
+			: w[3] == "unnamed" && rules::parseMacroUnnamed(w[4], unnamed);
+		if (!ok) {
+			error("macro option NAME on_trouble|recover_who|unnamed VALUE");
+			return;
+		}
+		report(session_.setMacroOptions(w[2], trouble, who, unnamed));
+	} else if (w.size() == 3 && session_.mode() == Mode::Battle) {
+		rules::MacroFallback fallback = rules::MacroFallback::BasicAttack;
+		if (!rules::parseMacroFallback(w[2], fallback) || fallback == rules::MacroFallback::BasicAttack) {
+			error("macro NAME [automatic|attack|lose_turn]");
+			return;
+		}
+		report(session_.applyMacro(w[1], nullptr, fallback));
 	} else if (w[1] == "step" && w.size() >= 6 && w.size() <= 8 && toInt(w[3], a)) {
 		rules::MacroStep step;
 		step.member = w[4];
@@ -597,16 +669,32 @@ bool Runner::execute(const std::string& rawLine) {
 		} else {
 			report(session_.setCommand(actor, cmd == "defend" ? rules::Command::defend() : rules::Command::escape()));
 		}
-	} else if (mode == Mode::Battle && cmd == "fight" && w.size() == 2) {
-		fight(w[1]);
+	} else if (mode == Mode::Battle && cmd == "fight" && (w.size() == 2 || w.size() == 3)) {
+		rules::MacroFallback fallback = rules::MacroFallback::Automatic;
+		if (w.size() == 3 && (!rules::parseMacroFallback(w[2], fallback) || fallback == rules::MacroFallback::BasicAttack)) {
+			error("fight NAME [automatic|attack|lose_turn]");
+		} else {
+			fight(w[1], fallback);
+		}
 	} else if (cmd == "macros" && w.size() == 1) {
 		listMacros();
 	} else if (cmd == "macro" && w.size() >= 3) {
 		macro(w);
-	} else if (cmd == "autobattle" && (w.size() == 2 || (w.size() == 3 && w[1] != "off")) && (w[1] == "on" || w[1] == "off" || w[1] == "random")) {
+	} else if (cmd == "autobattle" && (w.size() == 2 || (w.size() <= 4 && w[1] != "off")) && (w[1] == "on" || w[1] == "off" || w[1] == "random")) {
 		options_.autoBattle = w[1] != "off";
 		options_.autoBattleEncountersOnly = w[1] == "random";
-		options_.autoBattleMacro = w.size() == 3 ? w[2] : "";
+		std::vector<std::string> rest(w.begin() + 2, w.end());
+		options_.autoBattleTrouble = rules::MacroTrouble::Default;
+		if (!rest.empty() && rules::parseMacroTrouble(rest.back(), options_.autoBattleTrouble) && options_.autoBattleTrouble != rules::MacroTrouble::Default) {
+			rest.pop_back();
+		} else {
+			options_.autoBattleTrouble = rules::MacroTrouble::Default;
+		}
+		if (rest.size() > 1) {
+			error("autobattle on|random [MACRO] [continue|recover|stop]");
+			rest.clear();
+		}
+		options_.autoBattleMacro = rest.empty() ? "" : rest[0];
 		if (!options_.autoBattleMacro.empty() && std::none_of(session_.world().macros.begin(), session_.world().macros.end(), [&](const rules::Macro& m) { return m.name == options_.autoBattleMacro; })) {
 			error("no macro named '" + options_.autoBattleMacro + "'");
 			options_.autoBattleMacro.clear();
@@ -616,8 +704,15 @@ bool Runner::execute(const std::string& rawLine) {
 		report(session_.applyMacro(w[1], &results));
 	} else if (mode == Mode::Battle && cmd == "round") {
 		printEvents(session_.resolveRound());
-	} else if (mode == Mode::Battle && cmd == "auto") {
-		finishBattleAuto();
+	} else if (mode == Mode::Battle && cmd == "auto" && w.size() <= 2) {
+		rules::MacroTrouble trouble = rules::MacroTrouble::Default;
+		if (w.size() == 2 && (!rules::parseMacroTrouble(w[1], trouble) || trouble == rules::MacroTrouble::Default)) {
+			error("auto [continue|recover|stop]");
+		} else {
+			finishBattleAuto("", trouble);
+		}
+	} else if (cmd == "trouble" && w.size() == 2 && (w[1] == "on" || w[1] == "off")) {
+		options_.printTrouble = w[1] == "on";
 	} else if (mode == Mode::Battle && cmd == "cancel") {
 		session_.cancelAuto();
 	} else if (cmd == "menu") {

@@ -407,3 +407,101 @@ TEST(anAutoPlayMacroStaysForTheWholeBattle) {
 	}
 	CHECK(vents == 2 && automatic > 0);
 }
+
+// Trouble modes for repeating macros (R151): the named macro's Recover hands every member to core's choice in a round where
+// a member is down and plays the macro in full otherwise; Stop on a named macro follows the stop rules; the save's auto macro
+// under Continue never stops; a vehicle's failing step aboard is trouble too. The options are saved with the macro.
+TEST(troubleModesForRepeatingMacros) {
+	auto step = [](const char* member, rules::CommandKind kind, const char* id) {
+		rules::MacroStep made;
+		made.member = member;
+		made.kind = kind;
+		made.id = id;
+		return made;
+	};
+	auto sameCommand = [](const rules::Command& a, const rules::Command& b) { return a.kind == b.kind && a.id == b.id && a.target == b.target; };
+
+	Session recover(test::data(), SessionOptions());
+	test::placeParty(recover, "tidewater", "guide_front", Facing::North);
+	setParty(recover, {"fighter", "mystic", "medic"}, 6);
+	recover.world().member("fighter")->hp = 0;
+	recover.world().macros.push_back({"steady", {step("mystic", rules::CommandKind::Attack, ""), step("medic", rules::CommandKind::Defend, "")}});
+	CHECK(recover.devBattle("endless").empty());
+	CHECK(recover.setAutoPlayMacro("steady", rules::MacroTrouble::Recover).empty());
+	bool recovered = false;
+	bool calm = false;
+	for (int round = 0; round < 12 && recover.battle(); ++round) {
+		CHECK(recover.fillAutoRound().empty());
+		const rules::Battle& b = *recover.battle();
+		const rules::MacroTroubleReport& trouble = recover.lastMacroTrouble();
+		CHECK(trouble.mode == rules::MacroTrouble::Recover);
+		CHECK_EQ(trouble.holds, !b.combatant(0).alive() || !b.combatant(1).alive() || !b.combatant(2).alive());
+		if (trouble.holds) {
+			recovered = true;
+			for (int i = 0; i < 3; ++i) {
+				CHECK(!b.combatant(i).alive() || sameCommand(b.command(i), rules::autoCommand(b, i)));
+			}
+		} else {
+			calm = true;
+			CHECK(b.command(1).kind == rules::CommandKind::Attack && b.command(2).kind == rules::CommandKind::Defend);
+		}
+		recover.resolveRound();
+	}
+	CHECK(recovered && calm);
+
+	Session stop(test::data(), SessionOptions());
+	test::placeParty(stop, "tidewater", "guide_front", Facing::North);
+	setParty(stop, {"fighter", "mystic"}, 6);
+	stop.world().member("mystic")->tp = 0;
+	stop.world().macros.push_back({"sparks", {step("mystic", rules::CommandKind::Ability, "spark")}});
+	CHECK(stop.devBattle("endless").empty());
+	CHECK(stop.setAutoPlayMacro("sparks", rules::MacroTrouble::Stop).empty());
+	CHECK(stop.fillAutoRound().empty());
+	CHECK(!stop.battle()->autoActive() && stop.battle()->autoStop() == rules::AutoStop::CannotPay);
+	CHECK(test::outputHas(stop.drainOutput(), "cannot be paid"));
+	CHECK(sameCommand(stop.battle()->command(1), rules::autoCommand(*stop.battle(), 1)));
+
+	Session saved(test::data(), SessionOptions());
+	test::placeParty(saved, "tidewater", "guide_front", Facing::North);
+	setParty(saved, {"fighter", "mystic"}, 6);
+	saved.world().member("mystic")->tp = 0;
+	saved.world().macros.push_back({"sparks", {step("mystic", rules::CommandKind::Ability, "spark")}});
+	CHECK(saved.setAutoMacro("sparks").empty());
+	CHECK(saved.devBattle("endless").empty());
+	CHECK(saved.setAutoPlayMacro("", rules::MacroTrouble::Continue).empty());
+	for (int round = 0; round < 3 && saved.battle(); ++round) {
+		CHECK(saved.fillAutoRound().empty());
+		CHECK(saved.battle()->autoActive() && saved.lastMacroTrouble().holds && saved.lastMacroTrouble().mode == rules::MacroTrouble::Continue);
+		saved.resolveRound();
+	}
+
+	Session aboard(test::data(), SessionOptions());
+	test::placeParty(aboard, "reed_path", "skimmer_front", Facing::North);
+	setParty(aboard, {"fighter", "mystic"}, 6);
+	CHECK(aboard.devVehicle("reed_skimmer", "reed_path", "skimmer_front").empty());
+	aboard.world().aboard = "reed_skimmer";
+	aboard.world().vehicles["reed_skimmer"].skillUses = {{"hull_vent", 0}};
+	aboard.world().macros.push_back({"hull", {step("reed_skimmer", rules::CommandKind::Ability, "hull_vent")}});
+	aboard.world().macros.back().onTrouble = rules::MacroTrouble::Recover;
+	CHECK(aboard.devBattle("endless").empty());
+	CHECK(aboard.setAutoPlayMacro("hull").empty());
+	CHECK(aboard.fillAutoRound().empty());
+	const int vehicle = aboard.battle()->partyCount() - 1;
+	CHECK(aboard.lastMacroTrouble().holds && aboard.lastMacroTrouble().troubledMembers == std::vector<int>{vehicle});
+	CHECK(aboard.lastMacroTrouble().recovered == std::vector<int>{vehicle});
+	CHECK(sameCommand(aboard.battle()->command(vehicle), rules::autoCommand(*aboard.battle(), vehicle)));
+
+	Session options(test::data(), SessionOptions());
+	test::placeParty(options, "tidewater", "guide_front", Facing::North);
+	options.world().macros.push_back({"sparks", {step("fighter", rules::CommandKind::Attack, "")}});
+	CHECK_EQ(options.setMacroOptions("sparks", rules::MacroTrouble::Stop, rules::MacroRecoverWho::Default, rules::MacroUnnamed::Auto).key, std::string("game.refuse.macro_menu_only"));
+	CHECK(options.openMenu().empty());
+	CHECK(options.setMacroOptions("sparks", rules::MacroTrouble::Stop, rules::MacroRecoverWho::Default, rules::MacroUnnamed::Auto).empty());
+	std::string text;
+	CHECK(options.saveText(text).empty());
+	Session loaded(test::data(), SessionOptions());
+	CHECK(loaded.loadSaveText(text).empty());
+	const std::vector<MacroView> views = loaded.macroViews();
+	CHECK(!views.empty() && views.back().onTrouble == rules::MacroTrouble::Stop && views.back().unnamed == rules::MacroUnnamed::Auto &&
+		views.back().recoverWho == rules::MacroRecoverWho::Default);
+}

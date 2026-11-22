@@ -56,6 +56,7 @@ TRAVEL_SCRIPT = $(GAME)/data/scripts/travel.txt
 MACROS_SCRIPT = $(GAME)/data/scripts/macros.txt
 ACTORS_SCRIPT = $(GAME)/data/scripts/actors.txt
 PARTY_SCRIPT = $(GAME)/data/scripts/party.txt
+TROUBLE_SCRIPT = $(GAME)/data/scripts/trouble.txt
 INTERACT_SCRIPT = $(GAME)/data/scripts/interact.txt
 BACKGROUND_SCRIPT = $(GAME)/data/scripts/background.txt
 SCENE_SCRIPT = $(GAME)/data/scripts/scene.txt
@@ -239,6 +240,13 @@ native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI) $(ACTOR_DATA) $(INTERACT
 	cmp $(BUILD)/party_c.txt $(GAME)/tests/expected/party.txt
 	diff -r $(BUILD)/party_saves_c $(BUILD)/party_saves_cpp
 	@echo "C party script matches the C++ session: transcript and every save file"
+	rm -rf $(BUILD)/trouble_saves_cpp $(BUILD)/trouble_saves_c
+	$(GAME_CLI) --data $(ACTOR_DATA) --seed 6 --script $(TROUBLE_SCRIPT) --saves $(BUILD)/trouble_saves_cpp > $(BUILD)/trouble_cpp.txt
+	./$(PLAYTHROUGH) --data $(ACTOR_DATA) --seed 6 --script $(TROUBLE_SCRIPT) --saves $(BUILD)/trouble_saves_c > $(BUILD)/trouble_c.txt
+	cmp $(BUILD)/trouble_c.txt $(BUILD)/trouble_cpp.txt
+	cmp $(BUILD)/trouble_c.txt $(GAME)/tests/expected/trouble.txt
+	diff -r $(BUILD)/trouble_saves_c $(BUILD)/trouble_saves_cpp
+	@echo "C trouble script matches the C++ session: transcript and every save file"
 	rm -rf $(BUILD)/interact_saves_cpp $(BUILD)/interact_saves_c
 	$(GAME_CLI) --data $(INTERACT_DATA) --seed 6 --script $(INTERACT_SCRIPT) --saves $(BUILD)/interact_saves_cpp > $(BUILD)/interact_cpp.txt
 	./$(PLAYTHROUGH) --data $(INTERACT_DATA) --seed 6 --script $(INTERACT_SCRIPT) --saves $(BUILD)/interact_saves_c > $(BUILD)/interact_c.txt

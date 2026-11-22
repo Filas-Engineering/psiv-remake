@@ -92,7 +92,19 @@ TEST(macrosRoundTripThroughText) {
 	const Result<std::vector<Macro>> older = parseMacros("macros 1\nmacro a\nstep fighter item tonic default - -1\nend\n");
 	CHECK(older.ok() && older.value->at(0).steps[0].kind == CommandKind::Item && !older.value->at(0).steps[0].piece);
 	CHECK(parseMacros("macros 1\nmacro a\nstep fighter piece squall_fan default - -1\nend\n").error.find("bad step") != std::string::npos);
-	CHECK(parseMacros("macros 3\nend\n").error.find("version 3 is not supported") != std::string::npos);
+	CHECK(parseMacros("macros 4\nend\n").error.find("version 4 is not supported") != std::string::npos);
+	// Version 3 adds a macro's options line; text without options is still written as version 2.
+	std::vector<Macro> optioned = {{"a", {}}, {"b", {}}};
+	CHECK_EQ(serializeMacros(optioned), std::string("macros 2\nmacro a\nmacro b\nend\n"));
+	optioned[1].onTrouble = MacroTrouble::Recover;
+	optioned[1].unnamed = MacroUnnamed::None;
+	const std::string withOptions = serializeMacros(optioned);
+	CHECK_EQ(withOptions, std::string("macros 3\nmacro a\nmacro b\noptions recover default none\nend\n"));
+	const Result<std::vector<Macro>> reread = parseMacros(withOptions);
+	CHECK(reread.ok() && reread.value->at(0).onTrouble == MacroTrouble::Default && reread.value->at(1).onTrouble == MacroTrouble::Recover &&
+		reread.value->at(1).recoverWho == MacroRecoverWho::Default && reread.value->at(1).unnamed == MacroUnnamed::None);
+	CHECK(!parseMacros("macros 2\nmacro a\noptions recover default none\nend\n").ok());
+	CHECK(parseMacros("macros 3\nmacro a\noptions later default none\nend\n").error.find("bad options") != std::string::npos);
 	CHECK(parseMacros("macros 1\nstep fighter attack - default - -1\nend\n").error.find("'step' before any 'macro'") != std::string::npos);
 	CHECK(parseMacros("macros 1\nmacro a\n").error.find("without 'end'") != std::string::npos);
 	CHECK(parseMacros("macros 1\nmacro a\nstep fighter swing - default - -1\nend\n").error.find("line 3: bad step") != std::string::npos);
@@ -120,7 +132,7 @@ TEST(everyPublicEnumHasAParser) {
 	CHECK_EQ(checkNames(parseSide), 2);
 	CHECK_EQ(checkNames(parseTargeting), 8);
 	CHECK_EQ(checkNames(parseAbilityKind), 4);
-	CHECK_EQ(checkNames(parseEffectKind), 20);
+	CHECK_EQ(checkNames(parseEffectKind), 21);
 	CHECK_EQ(checkNames(parseCreatureKind), 3);
 	CHECK_EQ(checkNames(parseTravelTarget), 2);
 	CHECK_EQ(checkNames(parseEquipSlot), 7);
@@ -133,7 +145,11 @@ TEST(everyPublicEnumHasAParser) {
 	CHECK_EQ(checkNames(parseAiTargetRule), 7);
 	CHECK_EQ(checkNames(parseCommandKind), 6);
 	CHECK_EQ(checkNames(parseMacroTargetKind), 5);
-	CHECK_EQ(checkNames(parseMacroStepStatus), 5);
+	CHECK_EQ(checkNames(parseMacroStepStatus), 6);
+	CHECK_EQ(checkNames(parseMacroTrouble), 4);
+	CHECK_EQ(checkNames(parseMacroRecoverWho), 4);
+	CHECK_EQ(checkNames(parseMacroUnnamed), 4);
+	CHECK_EQ(checkNames(parseMacroFallback), 4);
 	CHECK_EQ(checkNames(parseMacroIssue), 14);
 	CHECK_EQ(checkNames(parseScriptedEndKind), 3);
 	CHECK_EQ(checkNames(parseAutoStop), 5);

@@ -28,7 +28,7 @@ const char* const kStats[] = {"strength", "mental", "agility", "dexterity", "def
 const char* const kSides[] = {"party", "enemy"};
 const char* const kTargetings[] = {"one_enemy", "enemy_group", "all_enemies", "one_ally", "all_allies", "self", "one_fallen_ally", "random_enemy"};
 const char* const kAbilityKinds[] = {"attack", "technique", "skill", "combo"};
-const char* const kEffectKinds[] = {"physical_damage", "elemental_damage", "heal", "apply_status", "cure_status", "modify_stat", "revive", "travel", "instant_defeat", "restore_tp", "strip_modifiers", "summon", "merge", "teach", "transform", "split", "self_destruct", "remove_beside", "set_hp_percent", "grant_affinity"};
+const char* const kEffectKinds[] = {"physical_damage", "elemental_damage", "heal", "apply_status", "cure_status", "modify_stat", "revive", "travel", "instant_defeat", "restore_tp", "strip_modifiers", "summon", "merge", "teach", "transform", "split", "self_destruct", "remove_beside", "set_hp_percent", "grant_affinity", "reset_stat"};
 const char* const kCreatureKinds[] = {"living", "spirit", "machine"};
 const char* const kTravelTargets[] = {"town", "dungeon_exit"};
 const char* const kEquipSlots[] = {"weapon", "head", "body", "arms", "accessory", "shield", "left_hand"};
@@ -44,7 +44,15 @@ const char* const kAiConditions[] = {
 const char* const kAiTargetRules[] = {"default", "random", "lowest_hp", "highest_hp", "has_status", "lacks_status", "last_attacker"};
 const char* const kCommandKinds[] = {"none", "attack", "ability", "item", "defend", "escape"};
 const char* const kMacroTargets[] = {"default", "self", "member", "enemy", "all"};
-const char* const kMacroStepStatuses[] = {"applied", "retargeted", "fell_back", "skipped", "automatic"};
+const char* const kMacroStepStatuses[] = {"applied", "retargeted", "fell_back", "skipped", "automatic", "lost_turn"};
+const char* const kMacroTroubles[] = {"default", "continue", "recover", "stop"};
+const char* const kMacroRecoverWho[] = {"default", "all", "uncovered", "troubled"};
+const char* const kMacroUnnamed[] = {"default", "attack", "none", "auto"};
+// The choices data may name: everything but "default".
+const char* const kMacroTroubleChoices[] = {"continue", "recover", "stop"};
+const char* const kMacroRecoverWhoChoices[] = {"all", "uncovered", "troubled"};
+const char* const kMacroUnnamedChoices[] = {"attack", "none", "auto"};
+const char* const kMacroFallbacks[] = {"basic_attack", "automatic", "attack", "lose_turn"};
 const char* const kMacroIssues[] = {
 	"none", "not_in_party", "actor_defeated", "caught_off_guard", "cannot_act", "forced_by_status", "unknown_ability",
 	"silenced", "not_enough_tp", "no_uses_left", "no_item", "escape_not_allowed", "target_gone", "no_target"};
@@ -89,6 +97,10 @@ const char* toString(CommandKind value) { return nameOf(kCommandKinds, value); }
 const char* toString(MacroTargetKind value) { return nameOf(kMacroTargets, value); }
 const char* toString(MacroStepStatus value) { return nameOf(kMacroStepStatuses, value); }
 const char* toString(MacroIssue value) { return nameOf(kMacroIssues, value); }
+const char* toString(MacroTrouble value) { return nameOf(kMacroTroubles, value); }
+const char* toString(MacroRecoverWho value) { return nameOf(kMacroRecoverWho, value); }
+const char* toString(MacroUnnamed value) { return nameOf(kMacroUnnamed, value); }
+const char* toString(MacroFallback value) { return nameOf(kMacroFallbacks, value); }
 const char* toString(ScriptedEndKind value) { return nameOf(kScriptedEndKinds, value); }
 const char* toString(AutoStop value) { return nameOf(kAutoStops, value); }
 const char* toString(EventType value) { return nameOf(kEventTypes, value); }
@@ -132,6 +144,10 @@ bool parseCommandKind(const std::string& text, CommandKind& out) { return parseN
 bool parseMacroTargetKind(const std::string& text, MacroTargetKind& out) { return parseName(kMacroTargets, text, out); }
 bool parseMacroStepStatus(const std::string& text, MacroStepStatus& out) { return parseName(kMacroStepStatuses, text, out); }
 bool parseMacroIssue(const std::string& text, MacroIssue& out) { return parseName(kMacroIssues, text, out); }
+bool parseMacroTrouble(const std::string& text, MacroTrouble& out) { return parseName(kMacroTroubles, text, out); }
+bool parseMacroRecoverWho(const std::string& text, MacroRecoverWho& out) { return parseName(kMacroRecoverWho, text, out); }
+bool parseMacroUnnamed(const std::string& text, MacroUnnamed& out) { return parseName(kMacroUnnamed, text, out); }
+bool parseMacroFallback(const std::string& text, MacroFallback& out) { return parseName(kMacroFallbacks, text, out); }
 bool parseScriptedEndKind(const std::string& text, ScriptedEndKind& out) { return parseName(kScriptedEndKinds, text, out); }
 bool parseAutoStop(const std::string& text, AutoStop& out) { return parseName(kAutoStops, text, out); }
 bool parseEventType(const std::string& text, EventType& out) {
@@ -158,6 +174,9 @@ const std::vector<DataEnum>& coreDataEnums() {
 		enumOf("equip_slot", kEquipSlots),
 		enumOf("forced_target", kForcedTargets),
 		enumOf("macro_command", kCommandKinds),
+		enumOf("macro_on_trouble", kMacroTroubleChoices),
+		enumOf("macro_recover_who", kMacroRecoverWhoChoices),
+		enumOf("macro_unnamed", kMacroUnnamedChoices),
 		enumOf("macro_target", kMacroTargets),
 		enumOf("opening", kOpenings),
 		enumOf("stat", kStats),

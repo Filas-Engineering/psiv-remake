@@ -347,8 +347,6 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 			std::string text;
 			if (reader.string(*entry, "stat", text) && !parseStat(text, effect.stat)) {
 				reader.fail(*entry->find("stat"), "load.unknown_stat", {text});
-			} else if (effect.stat == Stat::Attack) {
-				reader.fail(*entry->find("stat"), "load.attack_is_derived", {"stat"});
 			}
 			if (reader.string(*entry, "direction", text)) {
 				if (text != "up" && text != "down") {
@@ -369,7 +367,7 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 		}
 		case EffectKind::Revive:
 			reader.integer(*entry, "hp", effect.flatHp, false, 1, 99999);
-			reader.integer(*entry, "power", effect.power, effect.flatHp == 0, 1, 100);
+			reader.integer(*entry, "power", effect.power, effect.flatHp == 0, 0, 100);
 			if (effect.flatHp > 0 && entry->find("power")) {
 				reader.fail(*entry->find("power"), "load.revive_hp_or_power", {});
 			}
@@ -408,6 +406,13 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 		case EffectKind::StripModifiers:
 			reader.boolean(*entry, "equipment_affinities", effect.equipmentAffinities);
 			break;
+		case EffectKind::ResetStat: {
+			std::string text;
+			if (reader.string(*entry, "stat", text) && !parseStat(text, effect.stat)) {
+				reader.fail(*entry->find("stat"), "load.unknown_stat", {text});
+			}
+			break;
+		}
 		case EffectKind::Summon:
 		case EffectKind::Merge:
 		case EffectKind::Transform:
@@ -530,6 +535,22 @@ void parseRules(Reader& reader, const JsonValue& root, Database& db) {
 		if (choice != "expected" && choice != "power") {
 			reader.fail(*root.find("auto_policy"), "load.unknown_choice", {"auto_policy", choice, "power, expected"});
 		}
+	}
+	if (reader.string(root, "auto_macro_on_trouble", choice, false) && (!parseMacroTrouble(choice, rules.autoMacroOnTrouble) || rules.autoMacroOnTrouble == MacroTrouble::Default)) {
+		reader.fail(*root.find("auto_macro_on_trouble"), "load.unknown_choice", {"auto_macro_on_trouble", choice, "continue, recover, stop"});
+		rules.autoMacroOnTrouble = MacroTrouble::Stop;
+	}
+	if (reader.string(root, "named_macro_on_trouble", choice, false) && (!parseMacroTrouble(choice, rules.namedMacroOnTrouble) || rules.namedMacroOnTrouble == MacroTrouble::Default)) {
+		reader.fail(*root.find("named_macro_on_trouble"), "load.unknown_choice", {"named_macro_on_trouble", choice, "continue, recover, stop"});
+		rules.namedMacroOnTrouble = MacroTrouble::Continue;
+	}
+	if (reader.string(root, "macro_recover_who", choice, false) && (!parseMacroRecoverWho(choice, rules.macroRecoverWho) || rules.macroRecoverWho == MacroRecoverWho::Default)) {
+		reader.fail(*root.find("macro_recover_who"), "load.unknown_choice", {"macro_recover_who", choice, "all, uncovered, troubled"});
+		rules.macroRecoverWho = MacroRecoverWho::All;
+	}
+	if (reader.string(root, "macro_unnamed", choice, false) && (!parseMacroUnnamed(choice, rules.macroUnnamed) || rules.macroUnnamed == MacroUnnamed::Default)) {
+		reader.fail(*root.find("macro_unnamed"), "load.unknown_choice", {"macro_unnamed", choice, "attack, none, auto"});
+		rules.macroUnnamed = MacroUnnamed::Attack;
 	}
 	reader.boolean(root, "immune_min_damage", rules.immuneMinDamage);
 	reader.boolean(root, "damage_wraparound", rules.damageWraparound);
@@ -1364,6 +1385,19 @@ void parseParty(Reader& reader, const JsonValue& root, Database& db) {
 		reader.rejectUnknownKeys(*entry, dataKeys("party.json", "macros[]"));
 		if (db.macro(macro.name)) {
 			reader.fail(*entry, "load.duplicate_macro_name", {macro.name});
+		}
+		std::string choice;
+		if (reader.string(*entry, "on_trouble", choice, false) && (!parseMacroTrouble(choice, macro.onTrouble) || macro.onTrouble == MacroTrouble::Default)) {
+			reader.fail(*entry->find("on_trouble"), "load.unknown_choice", {"on_trouble", choice, "continue, recover, stop"});
+			macro.onTrouble = MacroTrouble::Default;
+		}
+		if (reader.string(*entry, "recover_who", choice, false) && (!parseMacroRecoverWho(choice, macro.recoverWho) || macro.recoverWho == MacroRecoverWho::Default)) {
+			reader.fail(*entry->find("recover_who"), "load.unknown_choice", {"recover_who", choice, "all, uncovered, troubled"});
+			macro.recoverWho = MacroRecoverWho::Default;
+		}
+		if (reader.string(*entry, "unnamed", choice, false) && (!parseMacroUnnamed(choice, macro.unnamed) || macro.unnamed == MacroUnnamed::Default)) {
+			reader.fail(*entry->find("unnamed"), "load.unknown_choice", {"unnamed", choice, "attack, none, auto"});
+			macro.unnamed = MacroUnnamed::Default;
 		}
 		std::set<std::string> members;
 		for (const JsonValue* stepEntry : reader.objects(*entry, "steps", true)) {

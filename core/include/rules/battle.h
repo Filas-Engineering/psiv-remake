@@ -80,15 +80,36 @@ public:
 
 	// Returns an empty message on success, otherwise why the command was rejected.
 	Message setCommand(int actor, const Command& command);
+	// What setCommand would answer, without setting anything.
+	Message checkCommand(int actor, const Command& command) const;
+	// A party member that does nothing this round: a macro step that lost its turn, or an unnamed member under `none`.
+	bool passing(int actor) const { return actor >= 0 && actor < static_cast<int>(passing_.size()) && passing_[actor]; }
 
-	// Sets commands for the macro's members and makes each one act no earlier than the member listed ahead of it.
+	// Sets commands for the macro's members and makes each one act no earlier than the member listed ahead of it. Members
+	// the macro has no step for and no command yet then follow the macro's `unnamed` (or rules.json macro_unnamed).
 	std::vector<MacroStepResult> applyMacro(const Macro& macro, MacroFallback fallback = MacroFallback::BasicAttack);
+	// What applyMacro would do with the steps now, without setting anything; one result per step, in step order.
+	std::vector<MacroStepResult> planMacro(const Macro& macro, MacroFallback fallback) const;
+	// Each step's state this round, for a host marking a macro before the player confirms it.
+	std::vector<MacroStepCheck> checkMacro(const Macro& macro) const;
+	// The one definition of trouble (stepTroubled, MacroTroubleReport): judged on the results of applying `macro`, or on
+	// what applying it with MacroFallback::Automatic would give now.
+	MacroTroubleReport macroTrouble(const Macro& macro, const std::vector<MacroStepResult>& results) const;
+	MacroTroubleReport macroTrouble(const Macro& macro) const;
+	// One round of a repeating macro under Continue or Recover: the macro applied with MacroFallback::Automatic; in a
+	// Recover round where trouble holds, the members the macro's recover_who (or rules.json macro_recover_who) names take
+	// autoCommand's choice instead, and with All the round keeps no macro order or name.
+	MacroTroubleReport applyMacroRound(const Macro& macro, MacroTrouble mode);
 
 	// The host's play time, stored in the combo log when a combination is first discovered.
 	void setPlayTime(std::int64_t playTimeMs) { playTimeMs_ = playTimeMs; }
 
-	// Turns auto-battle on with this macro. Returns false when the battle has already ended.
-	bool startAuto(const Macro& macro);
+	// Turns auto-battle on with this macro. Returns false when the battle has already ended. Stop keeps the stop rules
+	// (BAT-104); Continue and Recover fill every round with applyMacroRound and stop only on a cancel or the battle's end.
+	bool startAuto(const Macro& macro, MacroTrouble mode = MacroTrouble::Stop);
+	MacroTrouble autoTrouble() const { return autoMode_; }
+	// The trouble of the last round fillFromAuto filled from the macro.
+	const MacroTroubleReport& lastAutoTrouble() const { return lastAutoTrouble_; }
 	// The player's cancel: auto-battle stops at the next command phase.
 	void cancelAuto() { autoCancelRequested_ = true; }
 	// Call at each command phase. While auto-battle is on and no stop rule applies, fills the round from the
@@ -237,6 +258,8 @@ private:
 	std::string macroName_;
 	// Per combatant: whether a status supplied this round's command.
 	std::vector<bool> forced_;
+	// Per party combatant: no command this round and none to be filled in.
+	std::vector<bool> passing_;
 	// Per combatant: whether the enemy AI picks this round's action when the enemy's turn comes.
 	std::vector<bool> aiTurn_;
 	// The action slot the AI drew last, for every enemy; -1 before the first draw.
@@ -261,6 +284,8 @@ private:
 	bool autoCancelRequested_ = false;
 	bool autoMemberFell_ = false;
 	AutoStop autoStop_ = AutoStop::None;
+	MacroTrouble autoMode_ = MacroTrouble::Stop;
+	MacroTroubleReport lastAutoTrouble_;
 
 	friend Result<Battle> replayBattle(const Database& db, const BattleRecord& record, ComboLog& log, std::vector<Event>& events);
 	friend FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& party, Inventory& inventory, const std::string& itemId, int target);

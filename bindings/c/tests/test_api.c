@@ -105,7 +105,7 @@ static void settle(psiv_session* s) {
 static void testVersion(void) {
 	const char* capabilities = psiv_capabilities();
 	CHECK(capabilities && capabilities == psiv_capabilities() && strncmp(capabilities, "{\"capabilities_schema\": 1, \"versions\": {\"library\": \"", 52) == 0);
-	CHECK(strstr(capabilities, "\"abi\": 16,") && strstr(capabilities, "\"save_schema\": 13,") && strstr(capabilities, "\"picture show <picture>\""));
+	CHECK(strstr(capabilities, "\"abi\": 17,") && strstr(capabilities, "\"save_schema\": 14,") && strstr(capabilities, "\"picture show <picture>\""));
 	CHECK(psiv_abi_version() == PSIV_ABI_VERSION);
 	CHECK(strstr(psiv_version(), "psiv-bindings") != NULL);
 	CHECK(strstr(psiv_version(), "game-0.2") != NULL);
@@ -1364,7 +1364,7 @@ static void testMenus(void) {
 	removeFiles(saves);
 	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
 	const psiv_member* party;
-	const psiv_macro* macros;
+	const psiv_macro* macros = NULL;
 	const psiv_notice* notices;
 	int32_t count;
 	CHECK_OK(psiv_new_game(s));
@@ -2532,7 +2532,7 @@ static void testVehicleBattleFromAMenu(void) {
 	psiv_session* loaded = create(saves, -1, PSIV_PRESENTATION_INSTANT);
 	dataDir = shipped;
 	CHECK_OK(psiv_load_text(loaded, text));
-	const psiv_macro* macros;
+	const psiv_macro* macros = NULL;
 	CHECK_OK(psiv_macro_list(loaded, &macros, &count));
 	const psiv_macro* hull = NULL;
 	for (int32_t i = 0; i < count; ++i) {
@@ -2573,6 +2573,61 @@ static void testVehicleBattleFromAMenu(void) {
 }
 
 /* Wren Mill: a patrol, a pixel path with a footprint, the triggered raft carrying the party, and their field info. */
+/* Macro options, trouble modes, a step check and the trouble report, on the shipped data's training battle. */
+static void testMacroTrouble(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/macro_trouble", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK_OK(psiv_open_menu(s));
+	CHECK_OK(psiv_macro_create(s, "solo"));
+	CHECK_OK(psiv_macro_set_step(s, "solo", 0, "fighter", PSIV_COMMAND_ATTACK, NULL, PSIV_MACRO_TARGET_ENEMY, NULL, 0));
+	CHECK(psiv_macro_set_options(s, "solo", 9, PSIV_RECOVER_DEFAULT, PSIV_UNNAMED_DEFAULT) == PSIV_INVALID_ARGUMENT);
+	CHECK(psiv_macro_set_options(s, "nosuch", PSIV_MACRO_TROUBLE_RECOVER, PSIV_RECOVER_DEFAULT, PSIV_UNNAMED_DEFAULT) == PSIV_REFUSED);
+	CHECK_OK(psiv_macro_set_options(s, "solo", PSIV_MACRO_TROUBLE_RECOVER, PSIV_RECOVER_UNCOVERED, PSIV_UNNAMED_NONE));
+	const psiv_macro* macros = NULL;
+	int32_t count = 0;
+	CHECK_OK(psiv_macro_list(s, &macros, &count));
+	CHECK(count > 0 && strcmp(macros[count - 1].name, "solo") == 0 && macros[count - 1].on_trouble == PSIV_MACRO_TROUBLE_RECOVER &&
+		macros[count - 1].recover_who == PSIV_RECOVER_UNCOVERED && macros[count - 1].unnamed == PSIV_UNNAMED_NONE);
+	const char* text = NULL;
+	CHECK_OK(psiv_save_text(s, &text));
+	CHECK(text && strstr(text, "macros 3\n") && strstr(text, "options recover uncovered none\n"));
+	CHECK_OK(psiv_close_menu(s));
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_MACRO_TROUBLE, PSIV_MACRO_TROUBLE_STOP), "stop") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_MACRO_RECOVER_WHO, PSIV_RECOVER_UNCOVERED), "uncovered") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_MACRO_UNNAMED, PSIV_UNNAMED_AUTO), "auto") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_MACRO_FALLBACK, PSIV_MACRO_FALLBACK_LOSE_TURN), "lose_turn") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_MACRO_STEP_STATUS, PSIV_MACRO_LOST_TURN), "lost_turn") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_STAT, PSIV_STAT_ATTACK), "attack") == 0);
+
+	CHECK_OK(psiv_dev_battle(s, "training"));
+	CHECK(psiv_mode_get(s) == PSIV_MODE_BATTLE);
+	const psiv_macro_step_check* stepChecks = NULL;
+	CHECK(psiv_battle_macro_check(s, "nosuch", &stepChecks, &count) == PSIV_REFUSED);
+	CHECK_OK(psiv_battle_macro_check(s, "solo", &stepChecks, &count));
+	CHECK(count == 1 && stepChecks[0].ok == 1 && stepChecks[0].actor == 0 && stepChecks[0].issue == PSIV_ISSUE_NONE && strcmp(stepChecks[0].refusal_key, "") == 0);
+	psiv_macro_trouble_report trouble;
+	CHECK_OK(psiv_battle_macro_trouble(s, "solo", &trouble));
+	CHECK(trouble.holds == 0 && trouble.mode == PSIV_MACRO_TROUBLE_DEFAULT && trouble.troubled_step_count == 0);
+	CHECK(psiv_battle_set_auto_play_macro_trouble(s, "solo", 7) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_battle_set_auto_play_macro_trouble(s, "solo", PSIV_MACRO_TROUBLE_CONTINUE));
+	CHECK_OK(psiv_battle_fill_auto_round(s));
+	CHECK_OK(psiv_battle_macro_trouble(s, NULL, &trouble));
+	CHECK(trouble.holds == 0 && trouble.mode == PSIV_MACRO_TROUBLE_CONTINUE);
+	const psiv_macro_step_result* results = NULL;
+	CHECK_OK(psiv_battle_apply_macro_fallback(s, "solo", PSIV_MACRO_FALLBACK_LOSE_TURN, &results, &count));
+	CHECK(count == 1 && results[0].status == PSIV_MACRO_APPLIED);
+	psiv_auto_battle played;
+	CHECK_OK(psiv_battle_play(s, 60, &played));
+	CHECK(played.ended && played.round_count > 0 && played.rounds[0].trouble.mode == PSIV_MACRO_TROUBLE_CONTINUE);
+	CHECK_OK(psiv_battle_set_auto_play_macro_trouble(s, NULL, PSIV_MACRO_TROUBLE_DEFAULT));
+	psiv_session_destroy(s);
+}
+
 static void testMotion(void) {
 	char saves[512];
 	snprintf(saves, sizeof saves, "%s/motion", scratch);
@@ -2709,6 +2764,7 @@ int main(int argc, char** argv) {
 		testMotion();
 	}
 	testLoadKeysAndDetail();
+	testMacroTrouble();
 	if (backgroundDataDir[0]) {
 		testBackground();
 		testDenAndCredits();

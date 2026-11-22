@@ -34,13 +34,16 @@ void commands() {
 	std::cout << "title:  new | continue | load SLOT | retry | quit\n"
 				 "field:  n|e|s|w [COUNT] | walk MARKER | walk X Y | face DIR | talk | chat | menu | look | status | wait MS\n"
 				 "event:  choose N | skip\n"
-				 "battle: attack M [eN] | use M ABILITY [eN|pN] | item M ITEM [eN|pN] | defend M | escape M | macro NAME | fight NAME | round | auto | cancel\n"
+				 "battle: attack M [eN] | use M ABILITY [eN|pN] | item M ITEM [eN|pN] | defend M | escape M | macro NAME [automatic|attack|lose_turn]\n"
+				 "        fight NAME [automatic|attack|lose_turn] | macro check NAME | round | auto [continue|recover|stop] | cancel\n"
 				 "menu:   item ITEM [MEMBER] | tech USER ABILITY [MEMBER] | equip MEMBER PIECE | unequip MEMBER SLOT | save manual_N | saves | close\n"
 				 "shop:   buy ID [N] | sell ID [N] | leave      inn: rest | close      name entry: name TEXT\n"
 				 "macros: macros | macro create|delete NAME | macro rename NAME NEW | macro move NAME POS | macro combo RECIPE NAME\n"
 				 "        macro step NAME INDEX MEMBER attack|defend|escape|ability ID|item ID|piece ID [default|self|all|eN|MEMBER]\n"
-				 "        macro removestep NAME INDEX | macro movestep NAME FROM TO   (changes from the field menu)\n"
-				 "any:    set difficulty|reward|auto|text|battle|shipped|PROFILE_KEY VALUE | autobattle on|off|random | quests | codex | log | pacing | title\n";
+				 "        macro removestep NAME INDEX | macro movestep NAME FROM TO | macro option NAME on_trouble|recover_who|unnamed VALUE\n"
+				 "        (changes from the field menu)\n"
+				 "any:    set difficulty|reward|auto|text|battle|shipped|PROFILE_KEY VALUE | autobattle on|off|random [MACRO] [continue|recover|stop]\n"
+				 "        trouble on|off | quests | codex | log | pacing | title\n";
 }
 
 bool parseSeed(const std::string& text, std::uint64_t& out) {

@@ -22,6 +22,10 @@ static int autoBattle;
 static int autoEncountersOnly;
 /* With autoBattle, the macro those battles play every round (`autobattle on|random MACRO`), "" for none. */
 static char autoMacro[NAME_SIZE];
+/* With autoBattle, a psiv_macro_trouble in place of the macro's and the rules' (`autobattle on|random [MACRO] MODE`). */
+static int32_t autoTrouble = PSIV_MACRO_TROUBLE_DEFAULT;
+/* Print a line for each auto round in which macro trouble holds (`trouble on|off`). */
+static int printTroubleLines;
 static int echo = 1;
 static char battleNames[MAX_COMBATANTS][NAME_SIZE];
 static int battleNameCount;
@@ -245,9 +249,38 @@ static void resolveAndPrint(void) {
 	}
 }
 
-static void finishBattleAuto(const char* macro) {
+static void names(Buffer* text, const int32_t* indexes, int32_t count) {
+	for (int32_t i = 0; i < count; ++i) {
+		badd(text, "%s%s", i ? ", " : "", indexes[i] >= 0 && indexes[i] < battleNameCount ? battleNames[indexes[i]] : "?");
+	}
+	if (count == 0) {
+		badd(text, "-");
+	}
+}
+
+static void printTrouble(const psiv_macro_trouble_report* trouble) {
+	if (!printTroubleLines || !trouble->holds) {
+		return;
+	}
+	Buffer line;
+	bclear(&line);
+	badd(&line, "Trouble (%s): steps ", psiv_name_of(PSIV_NAME_MACRO_TROUBLE, trouble->mode));
+	for (int32_t i = 0; i < trouble->troubled_step_count; ++i) {
+		badd(&line, "%s%d", i ? " " : "", trouble->troubled_steps[i]);
+	}
+	badd(&line, "%s (", trouble->troubled_step_count ? "" : "-");
+	names(&line, trouble->troubled_members, trouble->troubled_member_count);
+	badd(&line, "); fallen ");
+	names(&line, trouble->fallen, trouble->fallen_count);
+	badd(&line, "; core's choice for ");
+	names(&line, trouble->recovered, trouble->recovered_count);
+	badd(&line, ".");
+	print("%s", line.text);
+}
+
+static void finishBattleAuto(const char* macro, int32_t trouble) {
 	psiv_auto_battle played;
-	report(psiv_battle_set_auto_play_macro(S, macro));
+	report(psiv_battle_set_auto_play_macro_trouble(S, macro, trouble));
 	const psiv_status status = psiv_battle_play(S, 60, &played);
 	if (status != PSIV_OK) {
 		psiv_battle_set_auto_play_macro(S, "");
@@ -258,6 +291,7 @@ static void finishBattleAuto(const char* macro) {
 	}
 	for (int32_t i = 0; i < played.round_count; ++i) {
 		printNotices(played.rounds[i].notices, played.rounds[i].notice_count);
+		printTrouble(&played.rounds[i].trouble);
 		printEvents(played.rounds[i].events, played.rounds[i].event_count);
 	}
 	/* Clearing the macro frees what psiv_battle_play returned, so it waits until the rounds are printed. */
@@ -292,7 +326,7 @@ static void settle(void) {
 			if (!autoBattle || (autoEncountersOnly && psiv_battle_info_get(S, &info) == PSIV_OK && info.source == PSIV_BATTLE_EVENT)) {
 				return;
 			}
-			finishBattleAuto(autoMacro);
+			finishBattleAuto(autoMacro, autoTrouble);
 			continue;
 		}
 		battleNameCount = 0;
@@ -323,11 +357,11 @@ static void settle(void) {
 	error("the game did not settle");
 }
 
-/* Plays the battle round by round with the macro, each member whose step cannot run taking core's automatic choice. */
-static void fight(const char* macro) {
+/* Plays the battle round by round with the macro; a step that cannot run follows `fallback`. */
+static void fight(const char* macro, int32_t fallback) {
 	for (int round = 0; round < 60 && psiv_mode_get(S) == PSIV_MODE_BATTLE; ++round) {
 		flushOutput();
-		if (psiv_battle_apply_macro_fallback(S, macro, PSIV_MACRO_FALLBACK_AUTOMATIC, NULL, NULL) != PSIV_OK) {
+		if (psiv_battle_apply_macro_fallback(S, macro, fallback, NULL, NULL) != PSIV_OK) {
 			report(PSIV_REFUSED);
 			return;
 		}
@@ -377,7 +411,19 @@ static void listMacros(void) {
 		return;
 	}
 	for (int32_t i = 0; i < count; ++i) {
-		print("  %s%s", macros[i].name, strcmp(macros[i].name, settings.auto_macro) == 0 ? " (auto)" : "");
+		Buffer options;
+		bclear(&options);
+		if (macros[i].on_trouble != PSIV_MACRO_TROUBLE_DEFAULT) {
+			badd(&options, "on_trouble %s", psiv_name_of(PSIV_NAME_MACRO_TROUBLE, macros[i].on_trouble));
+		}
+		if (macros[i].recover_who != PSIV_RECOVER_DEFAULT) {
+			badd(&options, "%srecover_who %s", options.length ? ", " : "", psiv_name_of(PSIV_NAME_MACRO_RECOVER_WHO, macros[i].recover_who));
+		}
+		if (macros[i].unnamed != PSIV_UNNAMED_DEFAULT) {
+			badd(&options, "%sunnamed %s", options.length ? ", " : "", psiv_name_of(PSIV_NAME_MACRO_UNNAMED, macros[i].unnamed));
+		}
+		print("  %s%s%s%s%s", macros[i].name, strcmp(macros[i].name, settings.auto_macro) == 0 ? " (auto)" : "", options.length ? " [" : "", options.text,
+			options.length ? "]" : "");
 		for (int32_t j = 0; j < macros[i].step_count; ++j) {
 			const psiv_macro_step* step = &macros[i].steps[j];
 			Buffer line;
@@ -401,6 +447,31 @@ static void listMacros(void) {
 	}
 }
 
+static void checkMacro(const char* name) {
+	const psiv_macro_step_check* checks;
+	int32_t count = 0;
+	const psiv_status status = psiv_battle_macro_check(S, name, &checks, &count);
+	if (status != PSIV_OK) {
+		report(status);
+		return;
+	}
+	for (int32_t i = 0; i < count; ++i) {
+		Buffer line;
+		bclear(&line);
+		badd(&line, "    %d %s: %s", i, checks[i].member, checks[i].ok ? "ok" : psiv_name_of(PSIV_NAME_MACRO_ISSUE, checks[i].issue));
+		if (checks[i].status[0]) {
+			badd(&line, " (%s)", checks[i].status);
+		}
+		if (checks[i].refusal_key[0]) {
+			badd(&line, ", refused: %s", checks[i].refusal_text);
+		}
+		print("%s", line.text);
+	}
+	psiv_macro_trouble_report trouble;
+	psiv_battle_macro_trouble(S, name, &trouble);
+	print("    trouble: %s", trouble.holds ? "yes" : "no");
+}
+
 /* The macro editor's commands: create, rename, delete, move, step, removestep, movestep and combo. */
 static void macro(char words[][LINE_SIZE], int wordCount) {
 	int a = 0;
@@ -419,6 +490,34 @@ static void macro(char words[][LINE_SIZE], int wordCount) {
 		report(psiv_macro_move_step(S, words[2], a, b));
 	} else if (strcmp(words[1], "combo") == 0 && wordCount == 4) {
 		report(psiv_macro_from_combo(S, words[2], words[3]));
+	} else if (strcmp(words[1], "check") == 0 && wordCount == 3) {
+		checkMacro(words[2]);
+	} else if (strcmp(words[1], "option") == 0 && wordCount == 5) {
+		const psiv_macro* macros;
+		int32_t count = 0;
+		int32_t values[3] = {PSIV_MACRO_TROUBLE_DEFAULT, PSIV_RECOVER_DEFAULT, PSIV_UNNAMED_DEFAULT};
+		psiv_macro_list(S, &macros, &count);
+		for (int32_t i = 0; i < count; ++i) {
+			if (strcmp(macros[i].name, words[2]) == 0) {
+				values[0] = macros[i].on_trouble;
+				values[1] = macros[i].recover_who;
+				values[2] = macros[i].unnamed;
+			}
+		}
+		const int key = strcmp(words[3], "on_trouble") == 0 ? 0 : strcmp(words[3], "recover_who") == 0 ? 1 : strcmp(words[3], "unnamed") == 0 ? 2 : -1;
+		const int32_t kinds[3] = {PSIV_NAME_MACRO_TROUBLE, PSIV_NAME_MACRO_RECOVER_WHO, PSIV_NAME_MACRO_UNNAMED};
+		if (key < 0 || psiv_parse_name(kinds[key], words[4], &values[key]) != PSIV_OK) {
+			error("macro option NAME on_trouble|recover_who|unnamed VALUE");
+			return;
+		}
+		report(psiv_macro_set_options(S, words[2], values[0], values[1], values[2]));
+	} else if (wordCount == 3 && psiv_mode_get(S) == PSIV_MODE_BATTLE) {
+		int32_t fallback = PSIV_MACRO_FALLBACK_BASIC_ATTACK;
+		if (psiv_parse_name(PSIV_NAME_MACRO_FALLBACK, words[2], &fallback) != PSIV_OK || fallback == PSIV_MACRO_FALLBACK_BASIC_ATTACK) {
+			error("macro NAME [automatic|attack|lose_turn]");
+			return;
+		}
+		report(psiv_battle_apply_macro_fallback(S, words[1], fallback, NULL, NULL));
 	} else if (strcmp(words[1], "step") == 0 && wordCount >= 6 && wordCount <= 8 && toInt(words[3], &a)) {
 		const int piece = strcmp(words[5], "piece") == 0;
 		int32_t kind = PSIV_COMMAND_ITEM;
@@ -1011,17 +1110,33 @@ static int execute(const char* rawLine) {
 		} else {
 			report(psiv_battle_set_command(S, actor, strcmp(cmd, "defend") == 0 ? PSIV_COMMAND_DEFEND : PSIV_COMMAND_ESCAPE, "", -1));
 		}
-	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "fight") == 0 && wordCount == 2) {
-		fight(words[1]);
+	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "fight") == 0 && (wordCount == 2 || wordCount == 3)) {
+		int32_t fallback = PSIV_MACRO_FALLBACK_AUTOMATIC;
+		if (wordCount == 3 && (psiv_parse_name(PSIV_NAME_MACRO_FALLBACK, words[2], &fallback) != PSIV_OK || fallback == PSIV_MACRO_FALLBACK_BASIC_ATTACK)) {
+			error("fight NAME [automatic|attack|lose_turn]");
+		} else {
+			fight(words[1], fallback);
+		}
 	} else if (strcmp(cmd, "macros") == 0 && wordCount == 1) {
 		listMacros();
 	} else if (strcmp(cmd, "macro") == 0 && wordCount >= 3) {
 		macro(words, wordCount);
-	} else if (strcmp(cmd, "autobattle") == 0 && (wordCount == 2 || (wordCount == 3 && strcmp(words[1], "off") != 0)) &&
+	} else if (strcmp(cmd, "autobattle") == 0 && (wordCount == 2 || (wordCount <= 4 && strcmp(words[1], "off") != 0)) &&
 		(strcmp(words[1], "on") == 0 || strcmp(words[1], "off") == 0 || strcmp(words[1], "random") == 0)) {
 		autoBattle = strcmp(words[1], "off") != 0;
 		autoEncountersOnly = strcmp(words[1], "random") == 0;
-		snprintf(autoMacro, sizeof autoMacro, "%.*s", NAME_SIZE - 1, wordCount == 3 ? words[2] : "");
+		int rest = wordCount - 2;
+		autoTrouble = PSIV_MACRO_TROUBLE_DEFAULT;
+		if (rest > 0 && psiv_parse_name(PSIV_NAME_MACRO_TROUBLE, words[wordCount - 1], &autoTrouble) == PSIV_OK && autoTrouble != PSIV_MACRO_TROUBLE_DEFAULT) {
+			--rest;
+		} else {
+			autoTrouble = PSIV_MACRO_TROUBLE_DEFAULT;
+		}
+		if (rest > 1) {
+			error("autobattle on|random [MACRO] [continue|recover|stop]");
+			rest = 0;
+		}
+		snprintf(autoMacro, sizeof autoMacro, "%.*s", NAME_SIZE - 1, rest == 1 ? words[2] : "");
 		if (autoMacro[0] && !hasMacro(autoMacro)) {
 			char message[LINE_SIZE];
 			snprintf(message, sizeof message, "no macro named '%s'", autoMacro);
@@ -1034,8 +1149,15 @@ static int execute(const char* rawLine) {
 		report(psiv_battle_apply_macro(S, words[1], NULL, NULL));
 	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "round") == 0) {
 		resolveAndPrint();
-	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "auto") == 0) {
-		finishBattleAuto("");
+	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "auto") == 0 && wordCount <= 2) {
+		int32_t trouble = PSIV_MACRO_TROUBLE_DEFAULT;
+		if (wordCount == 2 && (psiv_parse_name(PSIV_NAME_MACRO_TROUBLE, words[1], &trouble) != PSIV_OK || trouble == PSIV_MACRO_TROUBLE_DEFAULT)) {
+			error("auto [continue|recover|stop]");
+		} else {
+			finishBattleAuto("", trouble);
+		}
+	} else if (strcmp(cmd, "trouble") == 0 && wordCount == 2 && (strcmp(words[1], "on") == 0 || strcmp(words[1], "off") == 0)) {
+		printTroubleLines = strcmp(words[1], "on") == 0;
 	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "cancel") == 0) {
 		psiv_battle_cancel_auto(S);
 	} else if (strcmp(cmd, "menu") == 0) {

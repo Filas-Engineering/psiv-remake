@@ -237,6 +237,8 @@ public class NativeLayoutTests
 		Same<PsivRouteCell>("psiv_route_cell");
 		Same<PsivInteractTarget>("psiv_interact_target");
 		Same<PsivFieldInput>("psiv_field_input");
+		Same<PsivMacroStepCheck>("psiv_macro_step_check");
+		Same<PsivMacroTroubleReport>("psiv_macro_trouble_report");
 		Assert.Equal(0u, Native.SizeOf("no_such_struct"));
 	}
 
@@ -256,6 +258,12 @@ public class NativeLayoutTests
 		Assert.Equal("for_good", GameSession.NameOf(NameKind.ActorRemoval, (int)ActorRemoval.ForGood));
 		Assert.Equal("shown", GameSession.NameOf(NameKind.AnimationEnd, (int)AnimationEnd.Shown));
 		Assert.Equal("member", GameSession.NameOf(NameKind.MacroTargetKind, (int)MacroTargetKind.Member));
+		Assert.Equal("lose_turn", GameSession.NameOf(NameKind.MacroFallback, (int)MacroFallback.LoseTurn));
+		Assert.Equal("recover", GameSession.NameOf(NameKind.MacroTrouble, (int)MacroTrouble.Recover));
+		Assert.Equal("uncovered", GameSession.NameOf(NameKind.MacroRecoverWho, (int)MacroRecoverWho.Uncovered));
+		Assert.Equal("none", GameSession.NameOf(NameKind.MacroUnnamed, (int)MacroUnnamed.None));
+		Assert.Equal("lost_turn", GameSession.NameOf(NameKind.MacroStepStatus, (int)MacroStepStatus.LostTurn));
+		Assert.Equal("attack", GameSession.NameOf(NameKind.Stat, (int)Stat.Attack));
 		Assert.Equal("", GameSession.NameOf(NameKind.Outcome, 99));
 	}
 }
@@ -939,6 +947,34 @@ public class SessionTests
 		Assert.True(s.MacroFromCombo(twin.Recipe, "Twin").Ok);
 		Macro made = s.MacroList().Single(m => m.Name == "Twin");
 		Assert.Equal([("medic", "glint"), ("mystic", "spark")], made.Steps.Select(x => (x.Member, x.Id)));
+	}
+
+	// Macro options, trouble modes, the step check and each round's trouble report through the wrapper.
+	[Fact]
+	public void MacroTroubleWorksThroughTheWrapper()
+	{
+		using GameSession s = NewSession(Paths.FreshDirectory("trouble"));
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.True(s.OpenMenu().Ok);
+		Assert.True(s.CreateMacro("solo").Ok);
+		Assert.True(s.SetMacroStep("solo", 0, "fighter", CommandKind.Attack, target: MacroTargetKind.Enemy, targetEnemy: 0).Ok);
+		Assert.True(s.SetMacroOptions("solo", MacroTrouble.Recover, MacroRecoverWho.Uncovered, MacroUnnamed.None).Ok);
+		Macro solo = s.MacroList().Single(m => m.Name == "solo");
+		Assert.Equal((MacroTrouble.Recover, MacroRecoverWho.Uncovered, MacroUnnamed.None), (solo.OnTrouble, solo.RecoverWho, solo.Unnamed));
+		Assert.True(s.CloseMenu().Ok);
+		Assert.True(s.DevBattle("training").Ok);
+		Assert.True(s.CheckMacro("solo", out IReadOnlyList<MacroStepCheck> checks).Ok);
+		MacroStepCheck check = Assert.Single(checks);
+		Assert.True(check.Ok);
+		Assert.Equal(("fighter", 0, MacroIssue.None), (check.Member, check.Actor, check.Issue));
+		Assert.True(s.TroubleReport("solo", out MacroTroubleReport now).Ok);
+		Assert.False(now.Holds);
+		Assert.True(s.SetAutoPlayMacro("solo", MacroTrouble.Continue).Ok);
+		AutoBattle played = s.PlayBattle();
+		Assert.True(played.Ended);
+		Assert.Equal(MacroTrouble.Continue, played.Rounds[0].Trouble!.Mode);
+		Assert.True(s.SetAutoPlayMacro(null).Ok);
 	}
 
 	private static GameSession AfterGuide(string saves)

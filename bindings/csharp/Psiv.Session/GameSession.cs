@@ -259,12 +259,15 @@ public sealed unsafe class GameSession : IDisposable
 				steps.Add(new MacroStep(Native.Str(s.Member), Native.Str(s.MemberName), (CommandKind)s.CommandKind, Native.Str(s.Id), Native.Str(s.IdName),
 					(MacroTargetKind)s.TargetKind, Native.Str(s.TargetMember), Native.Str(s.TargetMemberName), s.TargetEnemy, (MacroIssue)s.Issue, s.Piece != 0));
 			}
-			list.Add(new Macro(Native.Str(m.Name), steps));
+			list.Add(new Macro(Native.Str(m.Name), steps, (MacroTrouble)m.OnTrouble, (MacroRecoverWho)m.RecoverWho, (MacroUnnamed)m.Unnamed));
 		}
 		return list;
 	}
 
 	public PsivResult CreateMacro(string name) => Result(Native.MacroCreate(_handle, name));
+	// The macro's on_trouble, recover_who and unnamed; Default leaves each to the caller and rules.json. Saved with the macro.
+	public PsivResult SetMacroOptions(string macro, MacroTrouble onTrouble, MacroRecoverWho recoverWho, MacroUnnamed unnamed) =>
+		Result(Native.MacroSetOptions(_handle, macro, (int)onTrouble, (int)recoverWho, (int)unnamed));
 	public PsivResult RenameMacro(string name, string newName) => Result(Native.MacroRename(_handle, name, newName));
 	public PsivResult DeleteMacro(string name) => Result(Native.MacroDelete(_handle, name));
 	public PsivResult MoveMacro(string name, int position) => Result(Native.MacroMove(_handle, name, position));
@@ -670,6 +673,35 @@ public sealed unsafe class GameSession : IDisposable
 	// automatic choice; null or "" plays as before. Not saved.
 	public PsivResult SetAutoPlayMacro(string? macro) => Result(Native.BattleSetAutoPlayMacro(_handle, macro ?? ""));
 
+	// As SetAutoPlayMacro with a trouble mode that wins over the macro's and rules.json; with null or "" it applies to the
+	// save's auto macro.
+	public PsivResult SetAutoPlayMacro(string? macro, MacroTrouble trouble) => Result(Native.BattleSetAutoPlayMacroTrouble(_handle, macro ?? "", (int)trouble));
+
+	// Each step's state this round, for marking a macro before the player confirms it.
+	public PsivResult CheckMacro(string macro, out IReadOnlyList<MacroStepCheck> steps)
+	{
+		PsivResult result = Result(Native.BattleMacroCheck(_handle, macro, out IntPtr p, out int count));
+		var list = new List<MacroStepCheck>(count);
+		foreach (PsivMacroStepCheck c in Native.Span<PsivMacroStepCheck>(p, count))
+		{
+			list.Add(new MacroStepCheck(Native.Str(c.Member), c.Actor, (MacroIssue)c.Issue, Native.Str(c.Status), Native.Str(c.RefusalKey), Native.Str(c.RefusalText), c.Ok != 0));
+		}
+		steps = list;
+		return result;
+	}
+
+	// With a macro name, the trouble a round of it would meet now; with null, the round FillAutoRound filled last.
+	public PsivResult TroubleReport(string? macro, out MacroTroubleReport report)
+	{
+		PsivResult result = Result(Native.BattleMacroTrouble(_handle, macro, out PsivMacroTroubleReport r));
+		report = Trouble(r);
+		return result;
+	}
+
+	private static MacroTroubleReport Trouble(PsivMacroTroubleReport r) => new(r.Holds != 0, (MacroTrouble)r.Mode,
+		Native.Span<int>(r.Fallen, r.FallenCount).ToArray(), Native.Span<int>(r.TroubledSteps, r.TroubledStepCount).ToArray(),
+		Native.Span<int>(r.TroubledMembers, r.TroubledMemberCount).ToArray(), Native.Span<int>(r.Recovered, r.RecoveredCount).ToArray());
+
 	private static IReadOnlyList<Notice> Notices(IntPtr p, int count)
 	{
 		var list = new List<Notice>(count);
@@ -687,7 +719,7 @@ public sealed unsafe class GameSession : IDisposable
 		var rounds = new List<AutoRound>(a.RoundCount);
 		foreach (PsivAutoRound r in Native.Span<PsivAutoRound>(a.Rounds, a.RoundCount))
 		{
-			rounds.Add(new AutoRound(Notices(r.Notices, r.NoticeCount), Events(r.Events, r.EventCount)));
+			rounds.Add(new AutoRound(Notices(r.Notices, r.NoticeCount), Events(r.Events, r.EventCount), Trouble(r.Trouble)));
 		}
 		string key = Native.Str(a.RefusalKey);
 		PsivError? refusal = key.Length == 0 ? null : new PsivError(PsivStatus.Refused, key, Native.Strs(a.RefusalParams, a.RefusalParamCount), Native.Str(a.RefusalText));

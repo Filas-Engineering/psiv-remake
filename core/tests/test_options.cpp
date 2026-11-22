@@ -1729,8 +1729,7 @@ TEST(theAttackStatAddsBothHandsWeaponAttackBonuses) {
 	CHECK(shield.ok() && shield.value->equipmentPiece("driftwood_buckler")->attackBonus == 2);
 	std::map<std::string, std::string> lowered = texts;
 	replaceOnce(lowered["abilities.json"], "\"stat\": \"strength\", \"direction\": \"up\"", "\"stat\": \"attack\", \"direction\": \"up\"");
-	const Result<Database> changed = loadDatabaseFromTexts(lowered);
-	CHECK(!changed.ok() && changed.error.find("attack is strength plus the worn pieces' attack bonuses (or an enemy's or vehicle's own attack), which stat cannot change") != std::string::npos);
+	CHECK(loadDatabaseFromTexts(lowered).ok());
 	std::map<std::string, std::string> wrapped = texts;
 	replaceOnce(wrapped["rules.json"], "{", "{\"stat_wraparound\": [\"attack\"],");
 	CHECK(!loadDatabaseFromTexts(wrapped).ok());

@@ -204,6 +204,8 @@ struct EndedBattle {
 struct AutoRound {
 	std::vector<Output> output;
 	std::vector<rules::Event> events;
+	// The round's macro trouble (Session::lastMacroTrouble), empty when no macro filled it.
+	rules::MacroTroubleReport trouble;
 };
 
 struct AutoBattle {
@@ -231,6 +233,10 @@ struct MacroStepView {
 struct MacroView {
 	std::string name;
 	std::vector<MacroStepView> steps;
+	// The macro's own options, Default where it leaves the choice to the rules or the caller (setMacroOptions).
+	rules::MacroTrouble onTrouble = rules::MacroTrouble::Default;
+	rules::MacroRecoverWho recoverWho = rules::MacroRecoverWho::Default;
+	rules::MacroUnnamed unnamed = rules::MacroUnnamed::Default;
 };
 
 // One combo log entry joined with its recipe (UI-011).
@@ -680,6 +686,9 @@ public:
 	// Auto-battle (BAT-103, BAT-104) with the save's auto macro. fillFromAuto fills the round and returns true
 	// while it runs; once a stop rule fires it returns false and reports why.
 	rules::Message startAuto();
+	// With a trouble mode in place of the macro's on_trouble or, failing that, rules.json auto_macro_on_trouble (default
+	// Stop, the stop rules). Continue and Recover never stop by themselves (rules::Battle::startAuto).
+	rules::Message startAuto(rules::MacroTrouble trouble);
 	void cancelAuto();
 	bool autoActive() const;
 	bool fillFromAuto();
@@ -695,6 +704,18 @@ public:
 	// the rest of the macro stands. Empty, the default, plays as before. Kept for the session, not saved; refuses a
 	// name no macro has. A macro deleted or renamed later is refused at the next round, which plays as before.
 	rules::Message setAutoPlayMacro(const std::string& name);
+	// `trouble`, unless Default, wins over the macro's on_trouble and the rules' default for the path: for the named macro
+	// (named_macro_on_trouble, default Continue) or, with an empty name, for the save's auto macro (auto_macro_on_trouble,
+	// default Stop). Stop on a named macro plays it under the stop rules, then core's policy.
+	rules::Message setAutoPlayMacro(const std::string& name, rules::MacroTrouble trouble);
+	rules::MacroTrouble autoPlayTrouble() const { return autoPlayTrouble_; }
+	// The trouble of the round fillAutoRound filled last, with the mode played and who took core's choice
+	// (rules::MacroTroubleReport); empty when no macro filled it.
+	const rules::MacroTroubleReport& lastMacroTrouble() const { return lastMacroTrouble_; }
+	// The trouble a round of the macro would meet now, without setting anything.
+	rules::Message macroTrouble(const std::string& name, rules::MacroTroubleReport& out) const;
+	// Each step's state this round (rules::Battle::checkMacro), for a host marking steps before the player confirms.
+	rules::Message checkMacro(const std::string& name, std::vector<rules::MacroStepCheck>& out) const;
 	const std::string& autoPlayMacro() const { return autoPlayMacro_; }
 	// Plays the battle to its end with fillAutoRound and resolveRound, at most `maxRounds` rounds.
 	AutoBattle playBattle(int maxRounds = 60);
@@ -760,6 +781,8 @@ public:
 	rules::Message setMacroStep(const std::string& name, int index, const rules::MacroStep& step);
 	rules::Message removeMacroStep(const std::string& name, int index);
 	rules::Message moveMacroStep(const std::string& name, int from, int to);
+	// The macro's on_trouble, recover_who and unnamed; Default leaves each to the caller and rules.json. Saved with it.
+	rules::Message setMacroOptions(const std::string& name, rules::MacroTrouble onTrouble, rules::MacroRecoverWho recoverWho, rules::MacroUnnamed unnamed);
 	// A new macro named `name` from a discovered combination (BAT-065, UI-011): one ability step per component, in the
 	// recipe's order, which is a valid order for an ordered recipe too, each with its default target. Each component goes
 	// to a lineup member who knows the ability now (the character a component is tied to), trying the members the log
@@ -867,6 +890,7 @@ private:
 	// Off the ridden vehicle onto its cell, or the nearest cell the party can walk on.
 	void dismount();
 	void healMachinesOnStep();
+	void settleMachineBank();
 	void shareWithMembersOutside(const std::vector<rules::PartyMember>& fought, const rules::Rewards& rewards);
 	void arrive(Cell cell);
 	void settleField();
@@ -1029,6 +1053,8 @@ private:
 	// The slot a mid-event save was loaded from, until its battle is set up again.
 	std::string resumedSlot_;
 	std::string autoPlayMacro_;
+	rules::MacroTrouble autoPlayTrouble_ = rules::MacroTrouble::Default;
+	rules::MacroTroubleReport lastMacroTrouble_;
 
 	std::optional<rules::Battle> battle_;
 	std::optional<EndedBattle> ended_;

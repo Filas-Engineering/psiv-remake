@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 16
+#define PSIV_ABI_VERSION 17
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -161,12 +161,20 @@ typedef enum psiv_resource_kind { PSIV_RESOURCE_NONE, PSIV_RESOURCE_TP, PSIV_RES
 typedef enum psiv_element { PSIV_ELEMENT_NONE, PSIV_ELEMENT_HEAT, PSIV_ELEMENT_CHILL, PSIV_ELEMENT_SHOCK, PSIV_ELEMENT_GALE, PSIV_ELEMENT_HOLY } psiv_element;
 /* What a character or enemy is: a machine takes only healing that names machines (core/README.md). */
 typedef enum psiv_creature_kind { PSIV_CREATURE_LIVING, PSIV_CREATURE_SPIRIT, PSIV_CREATURE_MACHINE } psiv_creature_kind;
-typedef enum psiv_stat { PSIV_STAT_STRENGTH, PSIV_STAT_MENTAL, PSIV_STAT_AGILITY, PSIV_STAT_DEXTERITY, PSIV_STAT_DEFENSE, PSIV_STAT_MAGIC_DEFENSE } psiv_stat;
+typedef enum psiv_stat { PSIV_STAT_STRENGTH, PSIV_STAT_MENTAL, PSIV_STAT_AGILITY, PSIV_STAT_DEXTERITY, PSIV_STAT_DEFENSE, PSIV_STAT_MAGIC_DEFENSE, PSIV_STAT_ATTACK } psiv_stat;
 typedef enum psiv_opening { PSIV_OPENING_NORMAL, PSIV_OPENING_PARTY_FIRST, PSIV_OPENING_ENEMY_FIRST } psiv_opening;
 typedef enum psiv_auto_stop { PSIV_AUTO_STOP_NONE, PSIV_AUTO_STOP_CANCELLED, PSIV_AUTO_STOP_MEMBER_FELL, PSIV_AUTO_STOP_CANNOT_PAY, PSIV_AUTO_STOP_BATTLE_ENDED } psiv_auto_stop;
-typedef enum psiv_macro_step_status { PSIV_MACRO_APPLIED, PSIV_MACRO_RETARGETED, PSIV_MACRO_FELL_BACK, PSIV_MACRO_SKIPPED, PSIV_MACRO_AUTOMATIC } psiv_macro_step_status;
-/* What psiv_battle_apply_macro_fallback does with a step that cannot run as written (core's rules::MacroFallback). */
-typedef enum psiv_macro_fallback { PSIV_MACRO_FALLBACK_BASIC_ATTACK, PSIV_MACRO_FALLBACK_AUTOMATIC } psiv_macro_fallback;
+typedef enum psiv_macro_step_status { PSIV_MACRO_APPLIED, PSIV_MACRO_RETARGETED, PSIV_MACRO_FELL_BACK, PSIV_MACRO_SKIPPED, PSIV_MACRO_AUTOMATIC, PSIV_MACRO_LOST_TURN } psiv_macro_step_status;
+/* What psiv_battle_apply_macro_fallback does with a step that cannot run as written (core's rules::MacroFallback). ATTACK:
+ * a basic attack on the intended or first living foe; LOSE_TURN: the member does nothing this round and pays nothing. */
+typedef enum psiv_macro_fallback { PSIV_MACRO_FALLBACK_BASIC_ATTACK, PSIV_MACRO_FALLBACK_AUTOMATIC, PSIV_MACRO_FALLBACK_ATTACK, PSIV_MACRO_FALLBACK_LOSE_TURN } psiv_macro_fallback;
+/* A repeating macro's mode in a round where trouble holds (core's rules::MacroTrouble); DEFAULT leaves it to the next
+ * level: the caller, then the macro, then rules.json. */
+typedef enum psiv_macro_trouble { PSIV_MACRO_TROUBLE_DEFAULT, PSIV_MACRO_TROUBLE_CONTINUE, PSIV_MACRO_TROUBLE_RECOVER, PSIV_MACRO_TROUBLE_STOP } psiv_macro_trouble;
+/* Who takes core's automatic choice in a recover round (rules::MacroRecoverWho). */
+typedef enum psiv_macro_recover_who { PSIV_RECOVER_DEFAULT, PSIV_RECOVER_ALL, PSIV_RECOVER_UNCOVERED, PSIV_RECOVER_TROUBLED } psiv_macro_recover_who;
+/* What a member the macro has no step for does (rules::MacroUnnamed). */
+typedef enum psiv_macro_unnamed { PSIV_UNNAMED_DEFAULT, PSIV_UNNAMED_ATTACK, PSIV_UNNAMED_NONE, PSIV_UNNAMED_AUTO } psiv_macro_unnamed;
 typedef enum psiv_macro_issue {
 	PSIV_ISSUE_NONE, PSIV_ISSUE_NOT_IN_PARTY, PSIV_ISSUE_ACTOR_DEFEATED, PSIV_ISSUE_CAUGHT_OFF_GUARD, PSIV_ISSUE_CANNOT_ACT,
 	PSIV_ISSUE_FORCED_BY_STATUS, PSIV_ISSUE_UNKNOWN_ABILITY, PSIV_ISSUE_SILENCED, PSIV_ISSUE_NOT_ENOUGH_TP, PSIV_ISSUE_NO_USES_LEFT,
@@ -224,7 +232,8 @@ typedef enum psiv_name_kind {
 	PSIV_NAME_ELEMENT, PSIV_NAME_STAT, PSIV_NAME_OPENING, PSIV_NAME_AUTO_STOP, PSIV_NAME_MACRO_STEP_STATUS, PSIV_NAME_MACRO_ISSUE,
 	PSIV_NAME_ACTION_TYPE, PSIV_NAME_MACRO_TARGET_KIND, PSIV_NAME_DESCRIPTION_KIND, PSIV_NAME_ITEM_SORT, PSIV_NAME_CAMERA_TARGET,
 	PSIV_NAME_TRAVEL_KIND, PSIV_NAME_DEV_LIST, PSIV_NAME_CREATURE_KIND, PSIV_NAME_SHOP_KIND, PSIV_NAME_ACTOR_VANISH, PSIV_NAME_ACTOR_REMOVAL,
-	PSIV_NAME_ANIMATION_END, PSIV_NAME_INTERACT_KIND
+	PSIV_NAME_ANIMATION_END, PSIV_NAME_INTERACT_KIND, PSIV_NAME_MACRO_FALLBACK, PSIV_NAME_MACRO_TROUBLE, PSIV_NAME_MACRO_RECOVER_WHO,
+	PSIV_NAME_MACRO_UNNAMED
 } psiv_name_kind;
 
 /* The stable name of an enum value as the C++ libraries spell it, lowercase with underscores ("field",
@@ -391,6 +400,11 @@ typedef struct psiv_macro {
 	const char* name;
 	int32_t step_count;
 	const psiv_macro_step* steps;
+	/* The macro's own options: a psiv_macro_trouble, psiv_macro_recover_who and psiv_macro_unnamed, DEFAULT where it
+	 * leaves the choice to the caller and rules.json. */
+	int32_t on_trouble;
+	int32_t recover_who;
+	int32_t unnamed;
 } psiv_macro;
 
 /* The save's macros in order, with their steps. */
@@ -423,6 +437,9 @@ PSIV_API psiv_status psiv_macro_set_piece_step(psiv_session* session, const char
 PSIV_API psiv_status psiv_macro_remove_step(psiv_session* session, const char* macro, int32_t index);
 /* MUTATES. Moves step `from` to `to`. */
 PSIV_API psiv_status psiv_macro_move_step(psiv_session* session, const char* macro, int32_t from, int32_t to);
+/* MUTATES. The macro's on_trouble (psiv_macro_trouble), recover_who (psiv_macro_recover_who) and unnamed
+ * (psiv_macro_unnamed); DEFAULT leaves each to the caller and rules.json. Saved with the macro. */
+PSIV_API psiv_status psiv_macro_set_options(psiv_session* session, const char* macro, int32_t on_trouble, int32_t recover_who, int32_t unnamed);
 /* MUTATES. A new macro named `name` from a discovered combination (its psiv_combo_entry recipe): one ability step per
  * component in the recipe's order, default targets, each component given to a lineup member who knows the ability now
  * (the character it is tied to; the members the log recorded are tried first). Refusals: the name rules of
@@ -1118,6 +1135,51 @@ PSIV_API psiv_status psiv_battle_fill_auto_round(psiv_session* session);
  * "" plays as before (the default). Kept for the session, not saved. "game.refuse.no_macro" for a name no macro has;
  * a macro deleted or renamed later makes the next round PSIV_REFUSED with that refusal, filled as before. */
 PSIV_API psiv_status psiv_battle_set_auto_play_macro(psiv_session* session, const char* macro);
+/* MUTATES. As psiv_battle_set_auto_play_macro with a psiv_macro_trouble that wins over the macro's on_trouble and
+ * rules.json: for the named macro, or with NULL or "" for the save's auto macro. CONTINUE retries the macro in full every
+ * round with per-step fallback; RECOVER gives the members recover_who names core's automatic choice in a round where
+ * trouble holds; STOP follows core's stop rules, then core's policy. */
+PSIV_API psiv_status psiv_battle_set_auto_play_macro_trouble(psiv_session* session, const char* macro, int32_t trouble);
+
+/* One step's state this round, for marking a macro before the player confirms it (rules::Battle::checkMacro). */
+typedef struct psiv_macro_step_check {
+	const char* member;
+	/* The combatant index, or -1 for a member outside the battle. */
+	int32_t actor;
+	/* A psiv_macro_issue: PSIV_ISSUE_NONE, or why the step cannot run as written (PSIV_ISSUE_TARGET_GONE: it runs on
+	 * another target). */
+	int32_t issue;
+	/* The status behind PSIV_ISSUE_CANNOT_ACT or PSIV_ISSUE_FORCED_BY_STATUS ("sleep", "paralysis"), else "". */
+	const char* status;
+	/* What setting the step's command by hand would be refused with: a message key and its text, "" when none. */
+	const char* refusal_key;
+	const char* refusal_text;
+	/* 1 when the step runs as written this round. */
+	int32_t ok;
+} psiv_macro_step_check;
+
+PSIV_API psiv_status psiv_battle_macro_check(psiv_session* session, const char* macro, const psiv_macro_step_check** out, int32_t* count);
+
+/* Macro trouble (rules::MacroTroubleReport): a party combatant taking part is down, or a step cannot run as written. */
+typedef struct psiv_macro_trouble_report {
+	int32_t holds;
+	/* The psiv_macro_trouble the round played, PSIV_MACRO_TROUBLE_DEFAULT for a report of what would happen now. */
+	int32_t mode;
+	const int32_t* fallen;
+	int32_t fallen_count;
+	/* Indexes into the macro's steps, and the combatants whose steps they are. */
+	const int32_t* troubled_steps;
+	int32_t troubled_step_count;
+	const int32_t* troubled_members;
+	int32_t troubled_member_count;
+	/* Combatants a recover round handed to core's automatic choice. */
+	const int32_t* recovered;
+	int32_t recovered_count;
+} psiv_macro_trouble_report;
+
+/* With a macro name, the trouble a round of it would meet now; with NULL or "", the round psiv_battle_fill_auto_round
+ * filled last (holds 0 when no macro filled it). */
+PSIV_API psiv_status psiv_battle_macro_trouble(psiv_session* session, const char* macro, psiv_macro_trouble_report* out);
 
 
 typedef struct psiv_recorded_command {
@@ -1195,6 +1257,8 @@ typedef struct psiv_auto_round {
 	const psiv_notice* notices;
 	int32_t event_count;
 	const psiv_battle_event* events;
+	/* The round's macro trouble, holds 0 when no macro filled it (psiv_battle_macro_trouble). */
+	psiv_macro_trouble_report trouble;
 } psiv_auto_round;
 typedef struct psiv_auto_battle {
 	/* Why auto-battle with the auto macro did not start, or "" with no parameters. */

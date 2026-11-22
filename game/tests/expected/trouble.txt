@@ -1,0 +1,451 @@
+The Bell at Tidewater (seed 6)
+title> new
+You arrive at Tidewater Landing.
+  (fade in 1)
+The ferry bumps against the pilings of Tidewater Landing.
+  (move dockhand to dock_front)
+  (move dockhand to greet_spot)
+  (face dockhand fighter)
+Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  (move dockhand to dock_front)
+  (move dockhand to 10 0 2)
+  (face dockhand dock_front)
+New job: The dockhand's lost crate.
+New encyclopedia entry: Tidewater Landing.
+[Autosaved to auto_0 (event end).]
+field> dev warp wren_loft loft_door
+Developer tools changed this game. It and its saves are marked.
+You arrive at Wren Loft.
+[Autosaved to auto_1 (area entry).]
+field> walk ledger_front
+field> face north
+field> talk
+The loft's ledger lists everyone who signed in today.
+Test Mystic joins the party.
+Test Scout joins the party.
+Test Medic joins the party.
+Some of you take the long road now; the rest wait here.
+Test Scout leaves the party.
+Test Scout takes Test Mystic's place in the party.
+Test Mystic hands back what they wore.
+! cannot party swap medic engineer: 'engineer' has not joined the party
+Test Engineer joins the party.
+! cannot party swap medic engineer: 'engineer' is already in the lineup
+! cannot party swap 5 lancer: lineup slot 5 is empty
+field> dev level fighter 1
+field> dev level scout 1
+field> dev level medic 1
+field> dev level engineer 1
+field> menu
+menu> macro create pair
+menu> macro step pair 0 engineer ability drowse e1
+menu> macro step pair 1 scout ability gust e0
+menu> macro step pair 2 medic ability mend
+menu> macros
+  opener
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0
+    2 fighter attack e0
+    3 engineer ability drowse e1
+    4 medic ability mend fighter
+  tempest
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0
+    2 engineer ability flare_burst all
+    3 fighter attack e0
+    4 medic defend
+  regroup
+    0 medic ability mend fighter
+    1 fighter ability rally all
+    2 mystic ability frostbite (not_in_party)
+    3 scout attack e0
+    4 engineer item tonic mystic
+  pair
+    0 engineer ability drowse e1
+    1 scout ability gust e0
+    2 medic ability mend
+menu> save manual_1
+Saved to manual_1.
+menu> close
+field> trouble on
+field> autobattle random pair continue
+field> walk 2 3
+field> walk 7 3
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+-- round 1 --
+Test Fighter uses Strike on Gel Mite A.
+  Gel Mite A takes 33 damage.
+Gel Mite B uses Bite on Test Scout.
+  Test Scout evades.
+Rust Hound uses Venom Spit on Test Medic.
+  Test Medic takes 20 damage.
+  Test Medic resists the poison.
+Gel Mite A uses Bite on Test Fighter.
+  Test Fighter takes 9 damage.
+Test Engineer uses Drowse.
+  Gel Mite A falls asleep!
+  Gel Mite B falls asleep!
+Test Scout uses Gust on Gel Mite A.
+  Gel Mite A takes 27 damage.
+  Gel Mite A wakes up.
+  Gel Mite A falls.
+Test Medic uses Mend on Test Medic.
+  Test Medic recovers 20.
+  Gel Mite B wakes up.
+-- round 2 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 16 damage.
+Test Fighter uses Strike on Rust Hound.
+  Rust Hound takes 28 damage.
+Gel Mite B uses Bite on Test Engineer.
+  Test Engineer takes 5 damage.
+Test Engineer uses Drowse on Gel Mite B.
+  Gel Mite B stays awake.
+Test Scout turns from Gel Mite B to Rust Hound.
+Test Scout uses Gust on Rust Hound.
+  Rust Hound takes 36 damage.
+Test Medic turns from Test Medic to Test Fighter.
+Test Medic uses Mend on Test Fighter.
+  Test Fighter recovers 25.
+Trouble (continue): steps 0 (Test Engineer); fallen -; core's choice for -.
+-- round 3 --
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter takes 17 damage.
+  Test Fighter resists the poison.
+Test Engineer uses Flare Burst.
+  Gel Mite B takes 60 damage.
+  Gel Mite B falls.
+  Rust Hound takes 26 damage.
+  Rust Hound falls.
+Outcome: victory
+Victory. 22 experience, 15 money.
+The enemies dropped 1 Tonic.
+field> walk 2 3
+field> status
+Mode field, Wren Loft (2,3) facing west, play time 0:00:16.
+  Test Fighter Lv1 HP 53/70 TP 6/6 EXP 5
+  Test Scout Lv1 HP 45/45 TP 6/12 EXP 5
+  Test Medic Lv1 HP 42/42 TP 20/26 EXP 5
+  Test Engineer Lv1 HP 70/75 TP 0/8 EXP 5
+  Money 65. Items: tonic x2, calm_charm x1, ember_rod x1.
+field> title
+title> load manual_1
+Loaded manual_1.
+field> autobattle random pair recover
+field> walk 2 3
+field> walk 7 3
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+-- round 1 --
+Test Fighter uses Strike on Gel Mite A.
+  Gel Mite A takes 33 damage.
+Gel Mite B uses Bite on Test Scout.
+  Test Scout evades.
+Rust Hound uses Venom Spit on Test Medic.
+  Test Medic takes 20 damage.
+  Test Medic resists the poison.
+Gel Mite A uses Bite on Test Fighter.
+  Test Fighter takes 9 damage.
+Test Engineer uses Drowse.
+  Gel Mite A falls asleep!
+  Gel Mite B falls asleep!
+Test Scout uses Gust on Gel Mite A.
+  Gel Mite A takes 27 damage.
+  Gel Mite A wakes up.
+  Gel Mite A falls.
+Test Medic uses Mend on Test Medic.
+  Test Medic recovers 20.
+  Gel Mite B wakes up.
+-- round 2 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 16 damage.
+Test Fighter uses Strike on Rust Hound.
+  Rust Hound takes 28 damage.
+Gel Mite B uses Bite on Test Engineer.
+  Test Engineer takes 5 damage.
+Test Engineer uses Drowse on Gel Mite B.
+  Gel Mite B stays awake.
+Test Scout turns from Gel Mite B to Rust Hound.
+Test Scout uses Gust on Rust Hound.
+  Rust Hound takes 36 damage.
+Test Medic turns from Test Medic to Test Fighter.
+Test Medic uses Mend on Test Fighter.
+  Test Fighter recovers 25.
+Trouble (recover): steps 0 (Test Engineer); fallen -; core's choice for Test Fighter, Test Scout, Test Medic, Test Engineer.
+-- round 3 --
+Test Scout uses Gust on Rust Hound.
+  Rust Hound takes 26 damage.
+  Rust Hound falls.
+Rust Hound cannot act (Defeated).
+Test Medic turns from Rust Hound to Gel Mite B.
+Test Medic uses Glint on Gel Mite B.
+  Gel Mite B takes 40 damage.
+Test Engineer uses Flare Burst on Gel Mite B.
+  Gel Mite B takes 20 damage.
+  Gel Mite B falls.
+Outcome: victory
+Victory. 22 experience, 15 money.
+The enemies dropped 1 Tonic.
+field> walk 2 3
+field> status
+Mode field, Wren Loft (2,3) facing west, play time 0:00:16.
+  Test Fighter Lv1 HP 70/70 TP 6/6 EXP 5
+  Test Scout Lv1 HP 45/45 TP 3/12 EXP 5
+  Test Medic Lv1 HP 42/42 TP 18/26 EXP 5
+  Test Engineer Lv1 HP 70/75 TP 0/8 EXP 5
+  Money 65. Items: tonic x2, calm_charm x1, ember_rod x1.
+field> title
+title> load manual_1
+Loaded manual_1.
+field> autobattle random pair stop
+field> walk 2 3
+field> walk 7 3
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+Auto-battle on with pair.
+-- round 1 --
+Test Fighter uses Strike on Gel Mite A.
+  Gel Mite A takes 33 damage.
+Gel Mite B uses Bite on Test Scout.
+  Test Scout evades.
+Rust Hound uses Venom Spit on Test Medic.
+  Test Medic takes 20 damage.
+  Test Medic resists the poison.
+Gel Mite A uses Bite on Test Fighter.
+  Test Fighter takes 9 damage.
+Test Engineer uses Drowse.
+  Gel Mite A falls asleep!
+  Gel Mite B falls asleep!
+Test Scout uses Gust on Gel Mite A.
+  Gel Mite A takes 27 damage.
+  Gel Mite A wakes up.
+  Gel Mite A falls.
+Test Medic uses Mend on Test Medic.
+  Test Medic recovers 20.
+  Gel Mite B wakes up.
+-- round 2 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 16 damage.
+Test Fighter uses Strike on Rust Hound.
+  Rust Hound takes 28 damage.
+Gel Mite B uses Bite on Test Engineer.
+  Test Engineer takes 5 damage.
+Test Engineer uses Drowse on Gel Mite B.
+  Gel Mite B stays awake.
+Test Scout turns from Gel Mite B to Rust Hound.
+Test Scout uses Gust on Rust Hound.
+  Rust Hound takes 36 damage.
+Test Medic turns from Test Medic to Test Fighter.
+Test Medic uses Mend on Test Fighter.
+  Test Fighter recovers 25.
+Auto-battle stops: a macro entry cannot be paid.
+-- round 3 --
+Test Scout uses Gust on Rust Hound.
+  Rust Hound takes 26 damage.
+  Rust Hound falls.
+Rust Hound cannot act (Defeated).
+Test Medic turns from Rust Hound to Gel Mite B.
+Test Medic uses Glint on Gel Mite B.
+  Gel Mite B takes 40 damage.
+Test Engineer uses Flare Burst on Gel Mite B.
+  Gel Mite B takes 20 damage.
+  Gel Mite B falls.
+Outcome: victory
+Victory. 22 experience, 15 money.
+The enemies dropped 1 Tonic.
+field> walk 2 3
+field> status
+Mode field, Wren Loft (2,3) facing west, play time 0:00:16.
+  Test Fighter Lv1 HP 70/70 TP 6/6 EXP 5
+  Test Scout Lv1 HP 45/45 TP 3/12 EXP 5
+  Test Medic Lv1 HP 42/42 TP 18/26 EXP 5
+  Test Engineer Lv1 HP 70/75 TP 0/8 EXP 5
+  Money 65. Items: tonic x2, calm_charm x1, ember_rod x1.
+field> title
+title> load manual_1
+Loaded manual_1.
+field> menu
+menu> macro option pair on_trouble recover
+menu> macro option pair recover_who uncovered
+menu> macro option pair unnamed none
+menu> refused macro option pair unnamed later
+! macro option NAME on_trouble|recover_who|unnamed VALUE
+menu> macros
+  opener
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0
+    2 fighter attack e0
+    3 engineer ability drowse e1
+    4 medic ability mend fighter
+  tempest
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0
+    2 engineer ability flare_burst all
+    3 fighter attack e0
+    4 medic defend
+  regroup
+    0 medic ability mend fighter
+    1 fighter ability rally all
+    2 mystic ability frostbite (not_in_party)
+    3 scout attack e0
+    4 engineer item tonic mystic
+  pair [on_trouble recover, recover_who uncovered, unnamed none]
+    0 engineer ability drowse e1
+    1 scout ability gust e0
+    2 medic ability mend
+menu> close
+field> autobattle random pair
+field> walk 2 3
+field> walk 7 3
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+-- round 1 --
+Rust Hound uses Bite on Test Scout.
+  Test Scout evades.
+Test Engineer turns from Gel Mite B to Gel Mite A.
+Test Engineer uses Drowse.
+  Gel Mite A falls asleep!
+  Gel Mite B falls asleep!
+Test Scout turns from Gel Mite A to Rust Hound.
+Test Scout uses Gust on Rust Hound.
+  Rust Hound takes 35 damage.
+Gel Mite B cannot act (Sleep).
+Test Medic turns from Test Medic to Test Engineer.
+Test Medic uses Mend on Test Engineer.
+  Test Engineer recovers 0.
+Gel Mite A cannot act (Sleep).
+  Gel Mite B wakes up.
+-- round 2 --
+Rust Hound uses Bite on Test Scout.
+  Test Scout evades.
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 7 damage.
+Test Engineer uses Drowse.
+  Gel Mite A falls asleep!
+  Gel Mite B stays awake.
+Test Scout turns from Gel Mite A to Rust Hound.
+Test Scout uses Gust on Rust Hound.
+  Rust Hound takes 40 damage.
+Test Medic turns from Test Medic to Test Fighter.
+Test Medic uses Mend on Test Fighter.
+  Test Fighter recovers 7.
+Gel Mite A cannot act (Sleep).
+  Gel Mite A wakes up.
+Trouble (recover): steps 0 (Test Engineer); fallen -; core's choice for Test Fighter.
+-- round 3 --
+Rust Hound uses Venom Spit on Test Medic.
+  Test Medic takes 20 damage.
+  Test Medic is poisoned!
+Gel Mite A uses Bite on Test Medic.
+  Test Medic takes 14 damage.
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 7 damage.
+Test Engineer uses Flare Burst.
+  Gel Mite A takes 60 damage.
+  Gel Mite A falls.
+  Gel Mite B takes 60 damage.
+  Gel Mite B falls.
+  Rust Hound takes 15 damage.
+  Rust Hound falls.
+Outcome: victory
+Victory. 22 experience, 15 money.
+field> walk 2 3
+field> status
+Mode field, Wren Loft (2,3) facing west, play time 0:00:16.
+  Test Fighter Lv1 HP 63/70 TP 6/6 EXP 5
+  Test Scout Lv1 HP 45/45 TP 6/12 EXP 5
+  Test Medic Lv1 HP 8/42 TP 20/26 EXP 5 [Poison]
+  Test Engineer Lv1 HP 75/75 TP 0/8 EXP 5
+  Money 65. Items: tonic x1, calm_charm x1, ember_rod x1.
+field> title
+title> load manual_1
+Loaded manual_1.
+field> autobattle off
+field> walk 2 3
+field> walk 7 3
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+battle> macro check pair
+    0 engineer: ok
+    1 scout: ok
+    2 medic: ok
+    trouble: no
+battle> macro pair
+battle> round
+-- round 1 --
+Test Fighter uses Strike on Gel Mite A.
+  Gel Mite A takes 33 damage.
+Gel Mite B uses Bite on Test Scout.
+  Test Scout evades.
+Rust Hound uses Venom Spit on Test Medic.
+  Test Medic takes 20 damage.
+  Test Medic resists the poison.
+Gel Mite A uses Bite on Test Fighter.
+  Test Fighter takes 9 damage.
+Test Engineer uses Drowse.
+  Gel Mite A falls asleep!
+  Gel Mite B falls asleep!
+Test Scout uses Gust on Gel Mite A.
+  Gel Mite A takes 27 damage.
+  Gel Mite A wakes up.
+  Gel Mite A falls.
+Test Medic uses Mend on Test Medic.
+  Test Medic recovers 20.
+  Gel Mite B wakes up.
+battle> macro pair automatic
+battle> round
+-- round 2 --
+Rust Hound uses Bite on Test Fighter.
+  Test Fighter takes 16 damage.
+Test Fighter uses Strike on Rust Hound.
+  Rust Hound takes 28 damage.
+Gel Mite B uses Bite on Test Engineer.
+  Test Engineer takes 5 damage.
+Test Engineer uses Drowse on Gel Mite B.
+  Gel Mite B stays awake.
+Test Scout turns from Gel Mite B to Rust Hound.
+Test Scout uses Gust on Rust Hound.
+  Rust Hound takes 36 damage.
+Test Medic turns from Test Medic to Test Fighter.
+Test Medic uses Mend on Test Fighter.
+  Test Fighter recovers 25.
+battle> macro check pair
+    0 engineer: not_enough_tp
+    1 scout: ok
+    2 medic: ok
+    trouble: yes
+battle> macro pair lose_turn
+battle> round
+-- round 3 --
+Test Scout turns from Gel Mite B to Rust Hound.
+Test Scout uses Gust on Rust Hound.
+  Rust Hound takes 26 damage.
+  Rust Hound falls.
+Rust Hound cannot act (Defeated).
+Test Medic turns from Test Medic to Test Engineer.
+Test Medic uses Mend on Test Engineer.
+  Test Engineer recovers 5.
+Gel Mite B uses Bite on Test Engineer.
+  Test Engineer takes 6 damage.
+Test Fighter uses Strike on Gel Mite B.
+  Gel Mite B takes 33 damage.
+battle> fight pair attack
+-- round 4 --
+Test Engineer uses Strike on Gel Mite B.
+  Gel Mite B takes 23 damage.
+Test Scout uses Gust on Gel Mite B.
+  Gel Mite B takes 4 damage.
+  Gel Mite B falls.
+Outcome: victory
+Victory. 22 experience, 15 money.
+The enemies dropped 1 Tonic.
+field> status
+Mode field, Wren Loft (3,3) facing east, play time 0:00:18.
+  Test Fighter Lv1 HP 70/70 TP 6/6 EXP 5
+  Test Scout Lv1 HP 45/45 TP 0/12 EXP 5
+  Test Medic Lv1 HP 42/42 TP 17/26 EXP 5
+  Test Engineer Lv1 HP 69/75 TP 0/8 EXP 5
+  Money 65. Items: tonic x2, calm_charm x1, ember_rod x1.
+field> quit
+End of script.

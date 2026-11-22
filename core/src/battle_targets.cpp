@@ -90,6 +90,11 @@ bool Battle::wouldChange(int target, const std::vector<Effect>& effects) const {
 				return true;
 			}
 			break;
+		case EffectKind::ResetStat:
+			if (std::any_of(t.modifiers.begin(), t.modifiers.end(), [&](const ActiveModifier& m) { return m.stat == effect.stat; })) {
+				return true;
+			}
+			break;
 		}
 	}
 	return false;
@@ -223,6 +228,7 @@ int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const
 	case EffectKind::RemoveBeside:
 	case EffectKind::SetHpPercent:
 	case EffectKind::GrantAffinity:
+	case EffectKind::ResetStat:
 		return requested;
 	}
 	int best = -1;

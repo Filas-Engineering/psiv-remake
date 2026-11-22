@@ -52,8 +52,8 @@ maps-check:
 	@echo "data/areas matches data/maps ($(words $(MAP_SOURCES)) maps)"
 
 # Re-records the golden transcripts of the scripted playthrough, the vehicle and travel script, the Ashen Fells
-# script, the macro script, the actor script, the party script, the interaction script, the background script, the
-# scene script and the motion script after a deliberate change.
+# script, the macro script, the actor script, the party script, the trouble script, the interaction script, the
+# background script, the scene script and the motion script after a deliberate change.
 expected: all
 	rm -rf $(BUILD)/cli_saves
 	./$(CLI) --seed 6 --auto-battle --script data/scripts/playthrough.txt --saves $(BUILD)/cli_saves > tests/expected/playthrough.txt
@@ -68,6 +68,8 @@ expected: all
 	./$(CLI) --data $(ACTOR_DATA) --seed 6 --script data/scripts/actors.txt --saves $(BUILD)/actors_saves > tests/expected/actors.txt
 	rm -rf $(BUILD)/party_saves
 	./$(CLI) --data $(ACTOR_DATA) --seed 6 --script data/scripts/party.txt --saves $(BUILD)/party_saves > tests/expected/party.txt
+	rm -rf $(BUILD)/trouble_saves
+	./$(CLI) --data $(ACTOR_DATA) --seed 6 --script data/scripts/trouble.txt --saves $(BUILD)/trouble_saves > tests/expected/trouble.txt
 	./$(MAKE_ACTOR_DATA) data ../core/data tests/fixtures/actors $(BUILD)/interact_data interact
 	rm -rf $(BUILD)/interact_saves
 	./$(CLI) --data $(INTERACT_DATA) --seed 6 --script data/scripts/interact.txt --saves $(BUILD)/interact_saves > tests/expected/interact.txt
@@ -117,6 +119,10 @@ test: all maps-check
 	./$(CLI) --data $(ACTOR_DATA) --seed 6 --script data/scripts/party.txt --saves $(BUILD)/party_saves > $(BUILD)/party.log
 	cmp $(BUILD)/party.log tests/expected/party.txt
 	@echo "party script matches tests/expected/party.txt"
+	rm -rf $(BUILD)/trouble_saves
+	./$(CLI) --data $(ACTOR_DATA) --seed 6 --script data/scripts/trouble.txt --saves $(BUILD)/trouble_saves > $(BUILD)/trouble.log
+	cmp $(BUILD)/trouble.log tests/expected/trouble.txt
+	@echo "trouble script matches tests/expected/trouble.txt"
 	./$(MAKE_ACTOR_DATA) data ../core/data tests/fixtures/actors $(BUILD)/interact_data interact
 	./$(CLI) --check $(INTERACT_DATA) > $(BUILD)/check_interact.log || (cat $(BUILD)/check_interact.log; exit 1)
 	@tail -n 1 $(BUILD)/check_interact.log

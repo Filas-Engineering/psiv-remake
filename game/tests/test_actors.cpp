@@ -100,7 +100,7 @@ TEST(actorPlacesAreSavedAndMigrated) {
 	test::confirmLines(s);
 	const SaveFile save = s.makeSave(false);
 	const std::string text = serializeSave(save);
-	CHECK(text.compare(0, 12, "PSR-SAVE 13\n") == 0);
+	CHECK(text.compare(0, 12, "PSR-SAVE 14\n") == 0);
 	CHECK(text.find("actor guide tidewater 8 3 west 1\n") != std::string::npos);
 	rules::Result<SaveFile> parsed = parseSave(text);
 	CHECK(parsed.ok());
@@ -111,7 +111,7 @@ TEST(actorPlacesAreSavedAndMigrated) {
 	// A schema 2 save has no actors chunk (nor the talk, travel and dev chunks after it); it loads with every actor at its talk point.
 	std::string old = text;
 	old.replace(0, 11, "PSR-SAVE 2");
-	old.replace(old.find("schema 13\n"), 10, "schema 2\n");
+	old.replace(old.find("schema 14\n"), 10, "schema 2\n");
 	// The header chunk's payload is a byte shorter.
 	const std::size_t size = old.find("chunk header 1 ") + 15;
 	old.replace(size, old.find('\n', size) - size, std::to_string(std::stoi(old.substr(size)) - 1));
@@ -283,7 +283,7 @@ TEST(actorStateMidAnimationIsSavedAndOlderSavesLoad) {
 	plain.world().actors["guide"] = ActorPlace{"tidewater", {8, 3}, Facing::West, false};
 	std::string old = serializeSave(plain.makeSave(false));
 	old.replace(0, 11, "PSR-SAVE 10");
-	old.replace(old.find("schema 13\n"), 10, "schema 10\n");
+	old.replace(old.find("schema 14\n"), 10, "schema 10\n");
 	old.replace(old.find("chunk actors 2 "), 15, "chunk actors 1 ");
 	const std::string body = old.substr(0, old.rfind("\nend ") + 1);
 	std::uint64_t hash = 1469598103934665603ULL;

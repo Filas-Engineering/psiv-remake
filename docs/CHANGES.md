@@ -2,6 +2,24 @@
 
 One line per feature, newest first: name, kind, meaning. Each pass adds its lines at the top.
 
+* macro `on_trouble` (`continue`, `recover`, `stop`; data macros, saves, `Session::setMacroOptions`, `psiv_macro_set_options`, `macro option`): what repeating the macro does in a round where trouble holds (R151).
+* rules.json `auto_macro_on_trouble` (default `stop`) and `named_macro_on_trouble` (default `continue`) (data keys): the trouble mode of the save's auto macro and of a named auto play macro (R151).
+* `Session::setAutoPlayMacro(name, trouble)`, `psiv_battle_set_auto_play_macro_trouble`, `autobattle on|random [NAME] [continue|recover|stop]`, `auto [MODE]` (session, C API, tool): the caller's trouble mode, over the macro's and the rules' (R151).
+* macro `recover_who`, rules.json `macro_recover_who` (`all` default, `uncovered`, `troubled`): who takes core's choice in a recover round (`Battle::applyMacroRound`) (R151).
+* `Battle::startAuto(macro, mode)` (core): auto-battle under `continue` or `recover` stops only on a cancel or the battle's end (R151).
+* `rules::stepTroubled`, `Battle::macroTrouble`, `MacroTroubleReport`, `Session::lastMacroTrouble`, `Session::macroTrouble`, `AutoRound::trouble`, `psiv_battle_macro_trouble`, `psiv_auto_round.trouble`, `trouble on|off` (core, session, C API, tool): the one definition of trouble and each round's report (R152).
+* macro `unnamed`, rules.json `macro_unnamed` (`attack` default, `none`, `auto`): what a member the macro has no step for does; `Battle::passing`, records' `pass` line (R153).
+* `MacroFallback::Attack`, `LoseTurn`, `MacroStepStatus::LostTurn`, `PSIV_MACRO_FALLBACK_ATTACK`, `_LOSE_TURN`, `PSIV_MACRO_LOST_TURN`, `macro NAME MODE`, `fight NAME MODE` (core, C API, tool): a failed step attacks or loses the turn at no cost; defaults unchanged (R154).
+* `Battle::planMacro`, `Battle::checkMacro`, `Battle::checkCommand`, `Session::checkMacro`, `psiv_battle_macro_check`, `macro check NAME` (core, session, C API, tool): each step's state this round (R155).
+* one macro round per selection (checked): `applyMacro` already plays exactly one round; the host keeps the chosen macro and cursor (R156).
+* effect `reset_stat` (data key): takes one stat's battle change away (R157).
+* `modify_stat` `stat: "attack"` (data key): moves only the attack value; strength changes still move attack (R158).
+* `revive` `power: 0` (data key): stands the target up at the floor of 1; `hp: N` checked exact (R159).
+* game.json `machine_step_heal_fallen` `off`|`heal`|`stand` (data key, booleans still read): `heal` banks the step heal on a fallen machine until it stands; party chunk `machine_bank` (R160).
+* `PSIV_STAT_ATTACK`, `PSIV_NAME_MACRO_FALLBACK`, `_TROUBLE`, `_RECOVER_WHO`, `_UNNAMED`, `psiv_macro.on_trouble`, `.recover_who`, `.unnamed` (C API).
+* save schema 14, macros block 3 (written only with options), `PSIV_ABI_VERSION` 17, library 0.16.0 (versions).
+* `data/scripts/trouble.txt` (script, golden `tests/expected/trouble.txt`): continue, recover and stop on the same seeded battle in Wren Loft on the `make_actor_data` copy.
+
 * ways in on exit cells (data check fix): the reach walk leaves from an arrival marker standing on an exit cell, so rooms behind such doors count as reached (R150).
 * doors (area rule): an `interact` hook on a gated exit's cell answers while the exit is shut; once open the exit takes the cell (R145).
 * `flags` entries `{"id", "reset": "area"}` (game.json key): flags that clear whenever the party enters an area (R146).
@@ -33,7 +51,6 @@ One line per feature, newest first: name, kind, meaning. Each pass adds its line
 
 * saves with a vehicle's macro step (fix): a save, autosave or event-start world holding a macro with a vehicle's step loads again, saves already written included; the load check takes a vehicle as a step's member, counts only member steps toward five and refuses an unknown vehicle or a vehicle step with an item, piece, defend or member target; save schema 12 unchanged.
 * auto play macro across a battle (checked): `Session::setAutoPlayMacro`, `autobattle on|random MACRO` and `psiv_battle_set_auto_play_macro` try the macro in full every round, a fallen member's step passed by and a stuck step taking core's choice that round only, in party and vehicle battles, as `fight MACRO` does; the save's auto macro without a named one still stops by core's stop rules.
-||||||| parent of ca6785b (feat: actor patrols, paths and moving platforms; enemy attack stat, skill uses by level, revive and combo options, field statuses, door hooks, area-reset flags, script state tests, area name variants, rolled amounts; fix revive targeting and the data check for arrivals on exit cells)
 * `game_cli --capabilities`, `psiv_capabilities`, `GameSession.Capabilities` (tool, C API, C#): what the build supports as JSON, read from the loaders' and the compiler's own tables (game/README.md, "Capabilities").
 * `rules::DataKeySet`, `game::gameDataKeys`, `events::script_commands` (library): the accepted data keys and script commands as tables both the loaders and the report read.
 * `picture show|hide|clear` (script command): a saved stack of story pictures; `presentation.pictures` (game.json key) lists the names when declared (R117).

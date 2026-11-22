@@ -5,6 +5,8 @@
 #include "rules/progression.h"
 
 #include <algorithm>
+#include <filesystem>
+#include <utility>
 
 using namespace game;
 
@@ -87,7 +89,7 @@ TEST(machineMembersRegainHitPointsAsThePartyWalks) {
 TEST(fallenMachineMembersStandUpWithTheStepHealWhenTheDataSaysSo) {
 	GameData data = test::data();
 	data.config.machineStepHeal = 2;
-	data.config.machineStepHealFallen = true;
+	data.config.machineStepHealFallen = MachineFallenHeal::Stand;
 	Session s(data, SessionOptions());
 	toField(s);
 	addMember(s, "cogwright", true);
@@ -97,6 +99,57 @@ TEST(fallenMachineMembersStandUpWithTheStepHealWhenTheDataSaysSo) {
 	if (s.world().position != start) {
 		CHECK_EQ(s.world().member("cogwright")->hp, 2);
 		CHECK(test::outputHas(s.drainOutput(), "starts up again"));
+	}
+}
+
+// machine_step_heal_fallen `heal`: a fallen machine member banks the step heal and stays down; the bank, saved, is added once
+// something stands it up. The first form of the key, a boolean, still reads.
+TEST(fallenMachineMembersCanBankTheStepHealWhileDown) {
+	GameData data = test::data();
+	data.config.machineStepHeal = 2;
+	data.config.machineStepHealFallen = MachineFallenHeal::Heal;
+	Session s(data, SessionOptions());
+	toField(s);
+	addMember(s, "cogwright", true);
+	s.world().member("cogwright")->hp = 0;
+	const Cell start = s.world().position;
+	s.walk(Facing::East);
+	s.walk(Facing::West);
+	CHECK(s.world().position == start);
+	CHECK_EQ(s.world().member("cogwright")->hp, 0);
+	CHECK(s.world().machineBank.count("cogwright") == 1 && s.world().machineBank["cogwright"] == 4);
+	const int banked = s.world().machineBank["cogwright"];
+	std::string text;
+	CHECK(s.saveText(text).empty());
+	CHECK(text.find("machine_bank cogwright " + std::to_string(banked)) != std::string::npos);
+	Session loaded(data, SessionOptions());
+	CHECK(loaded.loadSaveText(text).empty());
+	CHECK_EQ(loaded.world().machineBank["cogwright"], banked);
+	s.world().member("cogwright")->hp = 1;
+	s.walk(Facing::East);
+	CHECK(s.world().machineBank.empty());
+	CHECK(s.world().member("cogwright")->hp >= 1 + banked);
+
+	namespace fs = std::filesystem;
+	const std::string root = test::freshDirectory("machine_fallen_words");
+	std::error_code error;
+	fs::create_directories(root + "/game", error);
+	fs::create_directories(root + "/core", error);
+	fs::copy("data", root + "/game/data", fs::copy_options::recursive, error);
+	fs::copy("../core/data", root + "/core/data", fs::copy_options::recursive, error);
+	std::string original;
+	CHECK(readFile(root + "/game/data/game.json", original));
+	const std::pair<const char*, int> cases[] = {{"true", 2}, {"\"stand\"", 2}, {"\"heal\"", 1}, {"false", 0}, {"\"later\"", -1}};
+	for (const auto& [value, expected] : cases) {
+		std::string text = original;
+		text.insert(text.find('{') + 1, "\"machine_step_heal_fallen\": " + std::string(value) + ", ");
+		std::string problem;
+		CHECK(writeFileAtomic(root + "/game/data/game.json", text, problem));
+		const rules::Result<GameData> read = loadGameData(root + "/game/data");
+		CHECK_EQ(read.ok(), expected >= 0);
+		if (read.ok()) {
+			CHECK_EQ(static_cast<int>(read.value->config.machineStepHealFallen), expected);
+		}
 	}
 }
 

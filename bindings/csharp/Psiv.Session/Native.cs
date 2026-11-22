@@ -294,7 +294,24 @@ public struct PsivMacroStep
 }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivMacro { public IntPtr Name; public int StepCount; public IntPtr Steps; }
+public struct PsivMacro { public IntPtr Name; public int StepCount; public IntPtr Steps; public int OnTrouble, RecoverWho, Unnamed; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivMacroStepCheck { public IntPtr Member; public int Actor, Issue; public IntPtr Status, RefusalKey, RefusalText; public int Ok; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivMacroTroubleReport
+{
+	public int Holds, Mode;
+	public IntPtr Fallen;
+	public int FallenCount;
+	public IntPtr TroubledSteps;
+	public int TroubledStepCount;
+	public IntPtr TroubledMembers;
+	public int TroubledMemberCount;
+	public IntPtr Recovered;
+	public int RecoveredCount;
+}
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivStatBonus { public int MaxHp, MaxTp, Strength, Mental, Agility, Dexterity, Defense, Critical, Evasion, MagicDefense; }
@@ -415,7 +432,7 @@ public struct PsivBattleResult
 }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivAutoRound { public int NoticeCount; public IntPtr Notices; public int EventCount; public IntPtr Events; }
+public struct PsivAutoRound { public int NoticeCount; public IntPtr Notices; public int EventCount; public IntPtr Events; public PsivMacroTroubleReport Trouble; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivAutoBattle
@@ -444,7 +461,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 16;
+	public const uint AbiVersion = 17;
 	// PSIV_SLOT_COUNT: the places a member wears equipment, which the member structs index by psiv_equip_slot.
 	public const int SlotCount = 7;
 
@@ -481,6 +498,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_macro_remove_step", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroRemoveStep(SessionHandle s, string macro, int index);
 	[LibraryImport(Library, EntryPoint = "psiv_macro_move_step", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroMoveStep(SessionHandle s, string macro, int from, int to);
 	[LibraryImport(Library, EntryPoint = "psiv_macro_from_combo", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroFromCombo(SessionHandle s, string recipe, string name);
+	[LibraryImport(Library, EntryPoint = "psiv_macro_set_options", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroSetOptions(SessionHandle s, string macro, int onTrouble, int recoverWho, int unnamed);
 
 	[LibraryImport(Library, EntryPoint = "psiv_new_game")] public static partial int NewGame(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_continue_game")] public static partial int ContinueGame(SessionHandle s);
@@ -550,6 +568,9 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_battle_fill_from_policy")] public static partial int BattleFillFromPolicy(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_fill_auto_round")] public static partial int BattleFillAutoRound(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_set_auto_play_macro", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleSetAutoPlayMacro(SessionHandle s, string macro);
+	[LibraryImport(Library, EntryPoint = "psiv_battle_set_auto_play_macro_trouble", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleSetAutoPlayMacroTrouble(SessionHandle s, string macro, int trouble);
+	[LibraryImport(Library, EntryPoint = "psiv_battle_macro_check", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleMacroCheck(SessionHandle s, string macro, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_battle_macro_trouble", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleMacroTrouble(SessionHandle s, string? macro, out PsivMacroTroubleReport report);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_play")] public static partial int BattlePlay(SessionHandle s, int maxRounds, out PsivAutoBattle played);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_result_get")] public static partial int BattleResultGet(SessionHandle s, out PsivBattleResult result);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_dismiss")] public static partial int BattleDismiss(SessionHandle s);

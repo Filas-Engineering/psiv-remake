@@ -4,9 +4,9 @@
 # * the C API as a DLL (bindings/c), checked to export exactly the header's PSIV_API functions, with the C tests
 #   linked against it;
 # * the C playthrough and game_cli.exe on the scripted playthrough, the macro script, the actor script, the party
-#   script, the interaction script, the background script, the scene script and the motion script, compared the way bindings/Makefile does: the two
+#   script, the trouble script, the interaction script, the background script, the scene script and the motion script, compared the way bindings/Makefile does: the two
 #   transcripts byte for byte, the golden transcript (line ends aside: standard output writes CR LF on Windows), and every
-#   save file the two runs wrote; the actor, party, interaction, background, scene and motion scripts play the data
+#   save file the two runs wrote; the actor, party, trouble, interaction, background, scene and motion scripts play the data
 #   make_actor_data.exe writes (the placeholder data with Wren Hollow and Wren Loft added, for the interaction script Wren
 #   Cellar and the interaction rules, for the background script Wren Yard, for the scene script Wren Gallery, and for the
 #   motion script Wren Mill).
@@ -92,6 +92,12 @@ docker run --rm --platform linux/amd64 -v "$ROOT":/src:ro "$IMAGE" sh -euc '
 	cmp build/party_c.txt build/party_cpp.txt
 	tr -d "\r" < build/party_c.txt | cmp - ../game/tests/expected/party.txt
 	diff -r build/party_saves_c build/party_saves_cpp
+	script=../game/data/scripts/trouble.txt
+	wine ../game/game_cli.exe --data ../game/build/actor_data/game/data --seed 6 --script $script --saves build/trouble_saves_cpp > build/trouble_cpp.txt
+	wine build/c_playthrough.exe --data ../game/build/actor_data/game/data --seed 6 --script $script --saves build/trouble_saves_c > build/trouble_c.txt
+	cmp build/trouble_c.txt build/trouble_cpp.txt
+	tr -d "\r" < build/trouble_c.txt | cmp - ../game/tests/expected/trouble.txt
+	diff -r build/trouble_saves_c build/trouble_saves_cpp
 	script=../game/data/scripts/interact.txt
 	wine ../game/game_cli.exe --data ../game/build/interact_data/game/data --seed 6 --script $script --saves build/interact_saves_cpp > build/interact_cpp.txt
 	wine build/c_playthrough.exe --data ../game/build/interact_data/game/data --seed 6 --script $script --saves build/interact_saves_c > build/interact_c.txt
@@ -116,5 +122,5 @@ docker run --rm --platform linux/amd64 -v "$ROOT":/src:ro "$IMAGE" sh -euc '
 	cmp build/motion_c.txt build/motion_cpp.txt
 	tr -d "\r" < build/motion_c.txt | cmp - ../game/tests/expected/motion.txt
 	diff -r build/motion_saves_c build/motion_saves_cpp
-	echo "== windows: C API tests passed; the C playthrough, macro script, actor script, party script, interaction script, background script, scene script and motion script match game_cli.exe and their golden transcripts, saves included"
+	echo "== windows: C API tests passed; the C playthrough, macro script, actor script, party script, trouble script, interaction script, background script, scene script and motion script match game_cli.exe and their golden transcripts, saves included"
 '

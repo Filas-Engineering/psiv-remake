@@ -55,11 +55,14 @@ static_assert(PSIV_CANCEL_NO_TARGET == static_cast<int>(rules::CancelReason::NoT
 static_assert(PSIV_EFFECT_IMMUNE == static_cast<int>(rules::Effectiveness::Immune), "psiv_effectiveness");
 static_assert(PSIV_STATUS_END_DEFEATED == static_cast<int>(rules::StatusEnd::Defeated), "psiv_status_end");
 static_assert(PSIV_RESOURCE_ITEM == static_cast<int>(rules::ResourceKind::Item), "psiv_resource_kind");
-static_assert(PSIV_STAT_MAGIC_DEFENSE == static_cast<int>(rules::Stat::MagicDefense), "psiv_stat");
+static_assert(PSIV_STAT_ATTACK == static_cast<int>(rules::Stat::Attack), "psiv_stat");
 static_assert(PSIV_OPENING_ENEMY_FIRST == static_cast<int>(rules::Opening::EnemyFirst), "psiv_opening");
 static_assert(PSIV_AUTO_STOP_BATTLE_ENDED == static_cast<int>(rules::AutoStop::BattleEnded), "psiv_auto_stop");
-static_assert(PSIV_MACRO_AUTOMATIC == static_cast<int>(rules::MacroStepStatus::Automatic), "psiv_macro_step_status");
-static_assert(PSIV_MACRO_FALLBACK_AUTOMATIC == static_cast<int>(rules::MacroFallback::Automatic), "psiv_macro_fallback");
+static_assert(PSIV_MACRO_LOST_TURN == static_cast<int>(rules::MacroStepStatus::LostTurn), "psiv_macro_step_status");
+static_assert(PSIV_MACRO_FALLBACK_LOSE_TURN == static_cast<int>(rules::MacroFallback::LoseTurn), "psiv_macro_fallback");
+static_assert(PSIV_MACRO_TROUBLE_STOP == static_cast<int>(rules::MacroTrouble::Stop), "psiv_macro_trouble");
+static_assert(PSIV_RECOVER_TROUBLED == static_cast<int>(rules::MacroRecoverWho::Troubled), "psiv_macro_recover_who");
+static_assert(PSIV_UNNAMED_AUTO == static_cast<int>(rules::MacroUnnamed::Auto), "psiv_macro_unnamed");
 static_assert(PSIV_ISSUE_NO_TARGET == static_cast<int>(rules::MacroIssue::NoTarget), "psiv_macro_issue");
 static_assert(PSIV_MACRO_TARGET_ALL == static_cast<int>(rules::MacroTargetKind::All), "psiv_macro_target_kind");
 static_assert(PSIV_ACTION_PLACE == static_cast<int>(events::ActionType::place_actor), "psiv_action_type");
@@ -515,7 +518,7 @@ uint32_t psiv_sizeof(const char* struct_name) {
 		PSIV_SIZE(psiv_member_detail), PSIV_SIZE(psiv_combo_entry), PSIV_SIZE(psiv_combat_view), PSIV_SIZE(psiv_equip_preview), PSIV_SIZE(psiv_difficulty), PSIV_SIZE(psiv_camera),
 		PSIV_SIZE(psiv_vehicle), PSIV_SIZE(psiv_travel_destination), PSIV_SIZE(psiv_event_position), PSIV_SIZE(psiv_zone), PSIV_SIZE(psiv_element_info),
 		PSIV_SIZE(psiv_route_cell), PSIV_SIZE(psiv_interact_target), PSIV_SIZE(psiv_field_input), PSIV_SIZE(psiv_profile_row), PSIV_SIZE(psiv_scene_camera),
-		PSIV_SIZE(psiv_platform), PSIV_SIZE(psiv_battle_keys),
+		PSIV_SIZE(psiv_platform), PSIV_SIZE(psiv_battle_keys), PSIV_SIZE(psiv_macro_step_check), PSIV_SIZE(psiv_macro_trouble_report),
 	};
 #undef PSIV_SIZE
 	if (!struct_name) {
@@ -593,13 +596,13 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 	case PSIV_NAME_ELEMENT:
 		return value == PSIV_ELEMENT_NONE ? "none" : value >= PSIV_ELEMENT_HEAT && value <= PSIV_ELEMENT_HOLY ? rules::kBuiltInElements[value - 1] : "";
 	case PSIV_NAME_STAT:
-		return value >= 0 && value <= PSIV_STAT_MAGIC_DEFENSE ? rules::toString(static_cast<rules::Stat>(value)) : "";
+		return value >= 0 && value <= PSIV_STAT_ATTACK ? rules::toString(static_cast<rules::Stat>(value)) : "";
 	case PSIV_NAME_OPENING:
 		return value >= 0 && value <= PSIV_OPENING_ENEMY_FIRST ? rules::toString(static_cast<rules::Opening>(value)) : "";
 	case PSIV_NAME_AUTO_STOP:
 		return value >= 0 && value <= PSIV_AUTO_STOP_BATTLE_ENDED ? rules::toString(static_cast<rules::AutoStop>(value)) : "";
 	case PSIV_NAME_MACRO_STEP_STATUS:
-		return value >= 0 && value <= PSIV_MACRO_AUTOMATIC ? rules::toString(static_cast<rules::MacroStepStatus>(value)) : "";
+		return value >= 0 && value <= PSIV_MACRO_LOST_TURN ? rules::toString(static_cast<rules::MacroStepStatus>(value)) : "";
 	case PSIV_NAME_MACRO_ISSUE:
 		return value >= 0 && value <= PSIV_ISSUE_NO_TARGET ? rules::toString(static_cast<rules::MacroIssue>(value)) : "";
 	case PSIV_NAME_ACTION_TYPE:
@@ -628,6 +631,14 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 		return fromList(animationEnds, 3, value);
 	case PSIV_NAME_INTERACT_KIND:
 		return value >= 0 && value <= PSIV_INTERACT_REST ? game::toString(static_cast<game::InteractKind>(value)) : "";
+	case PSIV_NAME_MACRO_FALLBACK:
+		return value >= 0 && value <= PSIV_MACRO_FALLBACK_LOSE_TURN ? rules::toString(static_cast<rules::MacroFallback>(value)) : "";
+	case PSIV_NAME_MACRO_TROUBLE:
+		return value >= 0 && value <= PSIV_MACRO_TROUBLE_STOP ? rules::toString(static_cast<rules::MacroTrouble>(value)) : "";
+	case PSIV_NAME_MACRO_RECOVER_WHO:
+		return value >= 0 && value <= PSIV_RECOVER_TROUBLED ? rules::toString(static_cast<rules::MacroRecoverWho>(value)) : "";
+	case PSIV_NAME_MACRO_UNNAMED:
+		return value >= 0 && value <= PSIV_UNNAMED_AUTO ? rules::toString(static_cast<rules::MacroUnnamed>(value)) : "";
 	default:
 		return "";
 	}
@@ -977,6 +988,9 @@ psiv_status psiv_macro_list(psiv_session* session, const psiv_macro** out, int32
 			list[i].name = a.str(view.name);
 			list[i].step_count = static_cast<int32_t>(view.steps.size());
 			list[i].steps = steps;
+			list[i].on_trouble = static_cast<int32_t>(view.onTrouble);
+			list[i].recover_who = static_cast<int32_t>(view.recoverWho);
+			list[i].unnamed = static_cast<int32_t>(view.unnamed);
 		}
 		*out = list;
 		*count = static_cast<int32_t>(views.size());
@@ -1088,6 +1102,26 @@ psiv_status psiv_macro_move_step(psiv_session* session, const char* macro, int32
 			return nullArgument(session, "macro");
 		}
 		return refused(session, session->session->moveMacroStep(name, from, to));
+	});
+}
+
+psiv_status psiv_macro_set_options(psiv_session* session, const char* macro, int32_t on_trouble, int32_t recover_who, int32_t unnamed) {
+	const std::string name = str(macro);
+	return guard(session, true, [&] {
+		if (!macro) {
+			return nullArgument(session, "macro");
+		}
+		if (on_trouble < PSIV_MACRO_TROUBLE_DEFAULT || on_trouble > PSIV_MACRO_TROUBLE_STOP) {
+			return outOfRange(session, "on_trouble", on_trouble);
+		}
+		if (recover_who < PSIV_RECOVER_DEFAULT || recover_who > PSIV_RECOVER_TROUBLED) {
+			return outOfRange(session, "recover_who", recover_who);
+		}
+		if (unnamed < PSIV_UNNAMED_DEFAULT || unnamed > PSIV_UNNAMED_AUTO) {
+			return outOfRange(session, "unnamed", unnamed);
+		}
+		return refused(session, session->session->setMacroOptions(name, static_cast<rules::MacroTrouble>(on_trouble),
+			static_cast<rules::MacroRecoverWho>(recover_who), static_cast<rules::MacroUnnamed>(unnamed)));
 	});
 }
 
@@ -2117,7 +2151,7 @@ psiv_status psiv_battle_apply_macro_fallback(psiv_session* session, const char* 
 		if (!macro) {
 			return nullArgument(session, "macro");
 		}
-		if (fallback < PSIV_MACRO_FALLBACK_BASIC_ATTACK || fallback > PSIV_MACRO_FALLBACK_AUTOMATIC) {
+		if (fallback < PSIV_MACRO_FALLBACK_BASIC_ATTACK || fallback > PSIV_MACRO_FALLBACK_LOSE_TURN) {
 			return outOfRange(session, "fallback", fallback);
 		}
 		std::vector<rules::MacroStepResult> results;
@@ -2193,6 +2227,67 @@ psiv_status psiv_battle_set_auto_play_macro(psiv_session* session, const char* m
 	});
 }
 
+static psiv_macro_trouble_report fillTrouble(Arena& a, const rules::MacroTroubleReport& report) {
+	auto ints = [&a](const std::vector<int>& values) {
+		int32_t* list = a.array<int32_t>(values.size());
+		for (std::size_t i = 0; i < values.size(); ++i) {
+			list[i] = values[i];
+		}
+		return list;
+	};
+	return {report.holds ? 1 : 0, static_cast<int32_t>(report.mode), ints(report.fallen), static_cast<int32_t>(report.fallen.size()),
+		ints(report.troubledSteps), static_cast<int32_t>(report.troubledSteps.size()), ints(report.troubledMembers),
+		static_cast<int32_t>(report.troubledMembers.size()), ints(report.recovered), static_cast<int32_t>(report.recovered.size())};
+}
+
+psiv_status psiv_battle_set_auto_play_macro_trouble(psiv_session* session, const char* macro, int32_t trouble) {
+	const std::string name = str(macro);
+	return guard(session, true, [&] {
+		if (trouble < PSIV_MACRO_TROUBLE_DEFAULT || trouble > PSIV_MACRO_TROUBLE_STOP) {
+			return outOfRange(session, "trouble", trouble);
+		}
+		return refused(session, session->session->setAutoPlayMacro(name, static_cast<rules::MacroTrouble>(trouble)));
+	});
+}
+
+psiv_status psiv_battle_macro_check(psiv_session* session, const char* macro, const psiv_macro_step_check** out, int32_t* count) {
+	const std::string name = str(macro);
+	return guard(session, false, [&] {
+		if (!macro || !out || !count) {
+			return nullArgument(session, !macro ? "macro" : out ? "count" : "out");
+		}
+		std::vector<rules::MacroStepCheck> checks;
+		const psiv_status status = refused(session, session->session->checkMacro(name, checks));
+		Arena& a = session->arena;
+		psiv_macro_step_check* list = a.array<psiv_macro_step_check>(checks.size());
+		for (std::size_t i = 0; i < checks.size(); ++i) {
+			const rules::MacroStepCheck& c = checks[i];
+			list[i] = {a.str(c.member), c.actor, static_cast<int32_t>(c.issue), a.str(c.status), a.str(c.refusal.key),
+				a.str(c.refusal.empty() ? std::string() : session->session->render(c.refusal)), c.ok ? 1 : 0};
+		}
+		*out = list;
+		*count = static_cast<int32_t>(checks.size());
+		return status;
+	});
+}
+
+psiv_status psiv_battle_macro_trouble(psiv_session* session, const char* macro, psiv_macro_trouble_report* out) {
+	const std::string name = str(macro);
+	return guard(session, false, [&] {
+		if (!out) {
+			return nullArgument(session, "out");
+		}
+		rules::MacroTroubleReport report = session->session->lastMacroTrouble();
+		psiv_status status = PSIV_OK;
+		if (!name.empty()) {
+			report = rules::MacroTroubleReport();
+			status = refused(session, session->session->macroTrouble(name, report));
+		}
+		*out = fillTrouble(session->arena, report);
+		return status;
+	});
+}
+
 psiv_status psiv_battle_resolve_round(psiv_session* session, const psiv_battle_event** out, int32_t* count) {
 	return guard(session, true, [&] {
 		if (!out || !count) {
@@ -2237,6 +2332,7 @@ psiv_status psiv_battle_play(psiv_session* session, int32_t max_rounds, psiv_aut
 		for (std::size_t i = 0; i < played.rounds.size(); ++i) {
 			rounds[i].notices = fillNotices(*session, played.rounds[i].output, &rounds[i].notice_count);
 			rounds[i].events = fillEvents(*session, played.rounds[i].events, names, &rounds[i].event_count);
+			rounds[i].trouble = fillTrouble(a, played.rounds[i].trouble);
 		}
 		out->round_count = static_cast<int32_t>(played.rounds.size());
 		out->rounds = rounds;

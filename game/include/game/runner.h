@@ -16,6 +16,11 @@ struct RunnerOptions {
 	// With autoBattle, the macro those battles play every round (Session::setAutoPlayMacro); empty plays them as
 	// Session::playBattle does by default. `autobattle on|random MACRO` sets it.
 	std::string autoBattleMacro;
+	// With autoBattle, the trouble mode in place of the macro's and the rules' (Session::setAutoPlayMacro);
+	// `autobattle on|random [MACRO] continue|recover|stop` sets it.
+	rules::MacroTrouble autoBattleTrouble = rules::MacroTrouble::Default;
+	// Print a line for each auto round in which macro trouble holds (`trouble on|off`).
+	bool printTrouble = false;
 	// Print each command before running it, so a scripted run reads as a transcript.
 	bool echo = true;
 };
@@ -44,8 +49,10 @@ private:
 	void printOutput(const std::vector<Output>& outputs);
 	void flushOutput();
 	void printEvents(const std::vector<rules::Event>& events);
-	void finishBattleAuto(const std::string& macro = "");
-	void fight(const std::string& macro);
+	void finishBattleAuto(const std::string& macro = "", rules::MacroTrouble trouble = rules::MacroTrouble::Default);
+	void fight(const std::string& macro, rules::MacroFallback fallback);
+	void printTrouble(const rules::MacroTroubleReport& trouble);
+	void checkMacro(const std::string& name);
 	void listMacros();
 	void macro(const std::vector<std::string>& w);
 	void status();

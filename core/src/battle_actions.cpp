@@ -640,6 +640,20 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				}
 				break;
 			}
+			case EffectKind::ResetStat: {
+				const auto modifier = std::find_if(t.modifiers.begin(), t.modifiers.end(), [&](const ActiveModifier& m) { return m.stat == effect.stat; });
+				if (modifier == t.modifiers.end()) {
+					break;
+				}
+				t.modifiers.erase(modifier);
+				Event& e = emit(out, EventType::StatModified);
+				e.actor = user;
+				e.target = target;
+				e.stat = effect.stat;
+				e.amount = 0;
+				changed = true;
+				break;
+			}
 			case EffectKind::Summon: {
 				const EnemyDef* self = db_->enemy(t.defId);
 				const EnemyDef* summoned = self ? db_->enemy(self->summons) : nullptr;
