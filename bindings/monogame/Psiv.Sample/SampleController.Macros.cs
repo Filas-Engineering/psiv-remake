@@ -337,7 +337,7 @@ public sealed partial class SampleController
 			.Set("building", building)
 			.Set("has_macro", macro is not null)
 			.Set("name_prompt", _renaming is null ? T("ui.macros.name_new") : T("ui.macros.rename_to", _renaming))
-			.Set("name_pad", (UiSlot)((nx, ny, nw, _) => _macroName.Draw(t, nx, ny, nw, _clockMs, Px, PadLabels(), Timing("caret_ms"))))
+			.Set("name_pad", (UiSlot)((nx, ny, nw, _) => _macroName.Draw(t, nx, ny, nw, _clockMs, Px, Pad("menu_macros", UiArea(x, y, w, h)), PadLabels(), Timing("caret_ms"))))
 			.Set("sub_list", _sub)
 			.Set("stage_list", _third);
 		if (macro is not null)

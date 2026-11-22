@@ -55,6 +55,7 @@ public static class UiFields
 		["list_repeat_delay_ms"] = 0,
 		["list_repeat_ms"] = 0,
 		["run_speed_percent"] = 200,
+		["music_fade_ms"] = 800,
 	};
 
 	// Numbers the code's own drawing reads (styles.json `params`), with the sample's values as defaults: the field's cell
@@ -64,6 +65,9 @@ public static class UiFields
 		["field_cell"] = Art.Tile,
 		["dev_draw"] = 1,
 		["dev_scale"] = 100,
+		["dev_scale_bitmap"] = 0,
+		["dev_badge_x"] = -1,
+		["dev_badge_y"] = 12,
 		["field_shake"] = 10,
 		["toast_gap"] = 6,
 		["toast_h"] = 32,
@@ -119,7 +123,7 @@ public static class UiFields
 
 	// The tags a line's host acts on itself (events/FORMAT.md "Control tags") and the name tokens the session resolves,
 	// which a `tags` table cannot map.
-	public static readonly string[] BuiltInTags = ["page", "wait", "portrait", "var", "name", "name_upper", "name_lower"];
+	public static readonly string[] BuiltInTags = ["page", "wait", "portrait", "var", "name", "name_upper", "name_lower", "narration"];
 
 	// Tables of timings: characters a second per text speed, and the pause after each punctuation character.
 	public static readonly Dictionary<string, string[]> TimingTables = new()
@@ -131,11 +135,15 @@ public static class UiFields
 	// The opacity of the black over the field that a `backdrop` slot draws, 0 to 1 (0.55 when the files leave it out).
 	public const string BackdropDim = "backdrop_dim";
 
+	// A name pad's sizes (name_entry and menu_macros params).
+	public static readonly string[] PadParams = ["pad_box_h", "pad_cell_h", "pad_cell_w", "pad_entry_size", "pad_gap", "pad_label_size", "pad_label_y", "pad_text_x", "pad_text_y"];
+
 	// The battle's two layouts (the presentation table's `front` and `side`) read the same fields and params.
 	private static readonly string[] BattleData = ["action_chosen", "action_command", "actor_center", "actor_left", "actor_right", "actor_slot", "auto", "banner", "banner_alpha", "banner_big",
 		"banner_cancel", "banner_plate", "command_center", "cursor", "description", "description_shown", "enemy_back", "enemy_count", "enemy_groups", "hint", "hit_fade",
 		"hit_flash", "key_back", "key_confirm", "key_fast_forward", "key_text_log", "list_index", "list_kind", "log_lines", "log_shown", "members", "menu_items", "menu_shown",
-		"menu_title", "outcome", "party", "phase", "result_lines", "result_more", "result_page", "result_pages", "target_pulse", "vehicle"];
+		"menu_title", "outcome", "page_arrow", "party", "phase", "result_lines", "result_more", "result_page", "result_pages", "result_step", "target_pulse",
+		"transition_playing", "vehicle"];
 
 	private static readonly string[] BattleItems = ["acting", "alive", "command", "command_icon", "cost", "fallen", "hit", "icon", "hp", "hp_low", "icon_count", "kind", "level",
 		"max_hp", "max_tp", "name", "newest", "next", "number", "portrait", "slot", "state", "status_color", "targeted", "tp", "usable", "uses"];
@@ -163,7 +171,7 @@ public static class UiFields
 		["battle_side"] = new("battle_side", BattleData, BattleItems, BattleSlots, ["log"], BattleParams, statuses: true),
 		["title"] = new("title",
 			["title", "subtitle", "game_over", "options", "cursor", "version", "hint", "hero_frame", "creature_frame", "logo", "logo_w", "logo_h", "hero_w", "hero_h",
-				"creature_w", "creature_h", "art_scale", "start", "start_hint", "option_ids", "erasing", "erase_rows", "erase_cursor"],
+				"creature_w", "creature_h", "art_scale", "start", "start_hint", "option_ids", "erasing", "erase_rows", "erase_cursor", "has_save", "save_count", "has_clear"],
 			slots: ["scene", "toasts"], title: true,
 			parameters: ["erase"]),
 		["credits"] = new("credits",
@@ -188,9 +196,9 @@ public static class UiFields
 		["dialogue"] = new("dialogue",
 			["banner_visible", "banner_title", "banner_kind", "banner_alpha", "banner_drop", "banner_ms", "banner_left_ms", "top", "box_visible", "has_line", "speaker",
 				"portrait", "line", "revealed", "all_shown", "line_step", "hint", "next_arrow_ms", "arrow", "has_choice", "prompt", "options", "cursor", "picture",
-				"picture_w", "picture_h", "pictures", "narration_visible", "narration_rows", "narration_all_shown"],
+				"picture_w", "picture_h", "pictures", "narration_visible", "narration_rows", "narration_all_shown", "shown_ms", "line_key", "picture_top", "picture_names", "page_arrow"],
 			itemFields: ["picture", "picture_w", "picture_h", "text", "full", "shown"],
-			parameters: ["box_h", "box_margin", "box_top", "picture_stack", "narration_lines", "narration_cps", "narration_delay_ms", "narration_width"],
+			parameters: ["box_h", "box_margin", "box_top", "picture_stack", "narration_lines", "narration_cps", "narration_delay_ms", "narration_width", "narration_when"],
 			tags: true),
 		["pause"] = new("pause",
 			["hud", "area", "status", "rows", "cursor", "hint"],
@@ -200,14 +208,15 @@ public static class UiFields
 			slots: ["backdrop", "toasts"],
 			parameters: [BackdropDim]),
 		["shop"] = new("shop",
-			["title", "open", "tab", "tabs", "money", "stall", "rows", "list", "description", "description_missing", "compare", "hint", "money_value", "keeper", "voice_line"],
+			["title", "open", "tab", "tabs", "money", "stall", "rows", "list", "description", "description_missing", "compare", "hint", "money_value", "keeper", "voice_line",
+				"step", "choices", "choice_cursor", "quantity", "quantity_max", "unit_price", "total", "result_text", "result_ok"],
 			itemFields: ["text", "price", "have"],
 			slots: ["backdrop", "toasts"],
-			parameters: [BackdropDim]),
+			parameters: [BackdropDim, "steps"]),
 		["name_entry"] = new("name_entry",
 			["portrait", "member_name", "entry_h", "hint"],
 			slots: ["backdrop", "entry"],
-			parameters: [BackdropDim]),
+			parameters: [BackdropDim, .. PadParams]),
 		["panels"] = new("panels",
 			["dim", "panels"],
 			itemFields: ["left", "top", "width", "height", "shown", "shadow_alpha", "skinned"],
@@ -253,7 +262,8 @@ public static class UiFields
 			[.. Area, "macro_count", "macro_rows", "list", "stage", "building", "has_macro", "title", "name_prompt", "sub_list", "actions", "step_notes", "steps",
 				"what", "stage_rows", "stage_list"],
 			itemFields: ["ok", "enabled"],
-			slots: ["name_pad"]),
+			slots: ["name_pad"],
+			parameters: PadParams),
 		["menu_combos"] = new("menu_combos",
 			[.. Area, "discovered", "log_total", "total", "rows", "list", "has_entry", "members_text", "abilities_text", "found_time", "make_key"],
 			itemFields: ["enabled"]),

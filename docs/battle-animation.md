@@ -191,7 +191,7 @@ Brightening uses `add`; darkening uses `multiply`. A transform with an `add` ter
 
 `if` takes one condition or a list (all must hold). Each is evaluated on the turn's already-resolved events and can only choose what is drawn:
 
-`hit` (a target took damage), `miss`, `critical`, `weak`, `resisted`, `immune`, `defeat` (a target fell), `multi` (more than one target), `single`, `party_actor`, `enemy_actor`, `vehicle` (a vehicle battle), `combo`, `escaped`, `element:ID` (the damage's element), `layout:front`, `layout:side`, a boolean parameter (`"$look.flash"`, `"$param.NAME"`), each negated with a leading `!`.
+`hit` (a target took damage), `miss`, `critical`, `weak`, `resisted`, `immune`, `defeat` (a target fell), `multi` (more than one target), `single`, `party_actor`, `enemy_actor`, `vehicle` (a vehicle battle), `combo`, `escaped`, `element:ID` (the damage's element), `layout:front`, `layout:side`, `result_step` (the result screen is up), `transition_playing` (a battle-in or battle-out transition script runs), a boolean parameter (`"$look.flash"`, `"$param.NAME"`), each negated with a leading `!`.
 
 ### Per-layout values
 

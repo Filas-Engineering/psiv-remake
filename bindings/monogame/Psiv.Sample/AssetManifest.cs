@@ -126,9 +126,9 @@ public sealed record NineSlice(string? Camera, string Path, int Border, int Scal
 
 public sealed record FontEntry(string File, float Scale);
 
-// BattleFrame: the battle's windows, in place of Frame there.
+// BattleFrame: the battle's windows, in place of Frame there. PageArrow: the picture the layouts' `page_arrow` field gives.
 public sealed record UiEntry(bool Enabled, NineSlice? Frame, List<NineSlice> PanelFrames, string? Cursor, string? BarTrack, string? BarFill, Dictionary<string, FontEntry> Fonts,
-	NineSlice? BattleFrame = null);
+	NineSlice? BattleFrame = null, string? PageArrow = null);
 
 public sealed record AudioEntry(SoundKind Kind, string Id, string Path, int LoopStart, int LoopEnd, float Gain);
 
@@ -147,6 +147,50 @@ public sealed class AssetManifest
 	public static readonly string[] Facings = ["north", "east", "south", "west"];
 	public static readonly string[] ObjectNames = ["door", "chest_closed", "chest_open", "stall", "bed", "sign", "rune", "exit_north", "exit_east", "exit_south", "exit_west"];
 	public static readonly string[] SpriteNames = ["shadow", "bubble", "alert", "pointer", "pier"];
+
+	// The fields each kind of entry takes, by its place in the file (`-` the top level, `[]` a list's entry, `{}` a map's
+	// value): the check refuses any other, and `--capabilities` reports these.
+	public static readonly Dictionary<string, string[]> Schema = new()
+	{
+		["frame_run"] = ["frames", "ms"],
+		["-"] = ["version", "tilesets", "characters", "portraits", "figures", "field_enemies", "vehicles", "backdrops", "effects", "sprites", "status_icons", "ui", "audio", "battle_presentation", "battle_animation", "maps", "objects", "field", "vehicle_overlays", "battle_figures", "bitmap_fonts", "ui_layout", "backdrop_maps", "title_art", "command_icons", "pictures", "keepers"],
+		["field_enemies[]"] = ["encounter", "image", "frame", "scale", "foot", "frames", "ms"],
+		["vehicles[]"] = ["id", "image", "frame", "scale", "foot", "facings", "ms"],
+		["backdrops[]"] = ["id", "kind", "area", "encounter", "terrain", "flag", "image"],
+		["effects[]"] = ["id", "image", "frame", "scale", "frames", "ms"],
+		["ui_layout"] = ["enabled"],
+		["battle_figures"] = ["reference_height", "shadows"],
+		["vehicle_overlays[]"] = ["vehicle", "image"],
+		["portraits{}"] = ["image", "expressions"],
+		["backdrop_maps[]"] = ["area", "image", "colors", "regions"],
+		["backdrop_maps[].regions{}"] = ["rect", "backdrop"],
+		["title_art"] = ["background", "logo", "layers", "traveler", "creature", "reference_height"],
+		["title_art.traveler"] = ["image", "frame", "frames", "ms"],
+		["title_art.layers[]"] = ["image", "frame", "frames", "ms", "at", "scale", "scroll"],
+		["maps"] = ["enabled", "cell", "areas"],
+		["maps.areas[]"] = ["area", "image", "above", "cell", "changes"],
+		["objects[].state"] = ["image", "frame", "frames", "ms", "size", "anchor"],
+		["objects[]"] = ["area", "point", "at", "image", "frame", "frames", "ms", "size", "anchor", "open", "open_flag", "character", "facing"],
+		["field"] = ["wall_shadows", "water_foam", "conveyors", "tile_hooks", "conveyor_overlay", "tile_hook_overlay", "areas"],
+		["field.areas{}"] = ["wall_shadows", "water_foam", "conveyors", "tile_hooks"],
+		["field.conveyor_overlay"] = ["image", "frame", "facings", "ms"],
+		["field.tile_hook_overlay"] = ["image", "frame", "frames", "ms"],
+		["bitmap_fonts"] = ["enabled", "fonts"],
+		["bitmap_fonts.fonts[]"] = ["language", "role", "image", "metrics", "scale"],
+		["tilesets[]"] = ["kind", "area", "image", "tile", "scale", "floor", "decor", "decor_one_in", "wall_top", "wall_top_alt_one_in", "wall_face", "wall_face_alt_one_in", "water", "water_frame_ms", "edge", "bank", "objects", "animated"],
+		["tilesets[].animated[]"] = ["tile", "frames", "ms"],
+		["characters[]"] = ["id", "image", "frame", "scale", "foot", "shadow", "walk", "poses", "animations", "facing"],
+		["characters[].facing"] = ["mirror", "fallback", "start"],
+		["characters[].poses{}"] = ["frames", "ms", "motion"],
+		["figures[]"] = ["id", "side", "view", "image", "frame", "scale", "foot", "shadow", "natural", "idle", "animations"],
+		["ui"] = ["enabled", "frame", "battle_frame", "panel_frames", "cursor", "bar_track", "bar_fill", "fonts", "page_arrow"],
+		["ui.fonts{}"] = ["file", "scale"],
+		["audio[]"] = ["kind", "id", "file", "loop_start", "loop_end", "gain"],
+		["facings"] = Facings,
+		["tilesets[].objects"] = ObjectNames,
+		["nine_slice"] = ["image", "border", "scale"],
+		["nine_slice_camera"] = ["camera", "image", "border", "scale"],
+	};
 	// The poses every figure has, its own frames or `idle`'s; a figure may name more (IsPoseName) for the presentation table.
 	public static readonly string[] FigureAnimations = ["attack", "cast", "item", "defend", "hurt", "defeat"];
 	// The terrain under the party, as a battle backdrop's scope: floor, water and soft ground.
@@ -217,7 +261,7 @@ public sealed class AssetManifest
 			.Concat(BackdropMaps.Select(b => b.Image).OfType<string>())
 			.Concat(TitleArt is not { } title ? [] : new[] { title.Background, title.Logo, title.Traveler?.Image.Path, title.Creature?.Image.Path }.OfType<string>()
 				.Concat(title.Layers.Select(l => l.Image.Path)))
-			.Concat(Ui is null ? [] : new[] { Ui.Frame?.Path, Ui.BattleFrame?.Path, Ui.Cursor, Ui.BarTrack, Ui.BarFill }.OfType<string>().Concat(Ui.PanelFrames.Select(p => p.Path)).Concat(Ui.Fonts.Values.Select(f => f.File)))
+			.Concat(Ui is null ? [] : new[] { Ui.Frame?.Path, Ui.BattleFrame?.Path, Ui.Cursor, Ui.BarTrack, Ui.BarFill, Ui.PageArrow }.OfType<string>().Concat(Ui.PanelFrames.Select(p => p.Path)).Concat(Ui.Fonts.Values.Select(f => f.File)))
 			.Concat(BattlePresentation is null ? [] : [BattlePresentation])
 			.Concat(BattleAnimation is null ? [] : [BattleAnimation])
 			.Concat(UiLayoutEnabled == false ? [] : UiLayoutSet.FilesIn(Directory))
@@ -255,7 +299,7 @@ public sealed class AssetManifest
 
 		private void Problem(string entry, string reason, string? file = null) => m.Problems.Add(new AssetProblem(file ?? FileName, entry, reason));
 
-		private void Fields(JsonElement e, string entry, params string[] known)
+		private void Fields(JsonElement e, string entry, string[] known)
 		{
 			foreach (JsonProperty p in e.EnumerateObject().Where(p => !known.Contains(p.Name)))
 			{
@@ -474,7 +518,7 @@ public sealed class AssetManifest
 			}
 			if (!inline)
 			{
-				Fields(e, entry, "frames", "ms");
+				Fields(e, entry, Schema["frame_run"]);
 			}
 			int[] frames = Cells(Ints(e, "frames", entry, required: true), image, entry, "'frames'");
 			int[] ms = e.TryGetProperty("ms", out JsonElement msValue) && msValue.ValueKind == JsonValueKind.Number
@@ -495,7 +539,7 @@ public sealed class AssetManifest
 			{
 				return result;
 			}
-			Fields(e, entry, Facings);
+			Fields(e, entry, Schema["facings"]);
 			for (int i = 0; i < Facings.Length; i++)
 			{
 				if (e.TryGetProperty(Facings[i], out _))
@@ -571,9 +615,7 @@ public sealed class AssetManifest
 			{
 				return;
 			}
-			Fields(root, "-", "version", "tilesets", "characters", "portraits", "figures", "field_enemies", "vehicles", "backdrops", "effects", "sprites", "status_icons", "ui",
-				"audio", "battle_presentation", "battle_animation", "maps", "objects", "field", "vehicle_overlays", "battle_figures", "bitmap_fonts", "ui_layout", "backdrop_maps", "title_art",
-				"command_icons", "pictures", "keepers");
+			Fields(root, "-", Schema["-"]);
 			if (Int(root, "version", "-", 0, 0, int.MaxValue) != Version)
 			{
 				Problem("-", $"field 'version' must be {Version}");
@@ -594,7 +636,7 @@ public sealed class AssetManifest
 			foreach ((JsonElement e, string entry) in List(root, "field_enemies"))
 			{
 				int before = m.Problems.Count;
-				Fields(e, entry, "encounter", "image", "frame", "scale", "foot", "frames", "ms");
+				Fields(e, entry, Schema["field_enemies[]"]);
 				string? encounter = Str(e, "encounter", entry);
 				Known(encounter, data.Encounters, entry, "encounter");
 				GridImage? image = Grid(e, entry, Pixels.Size, scaled: true);
@@ -606,7 +648,7 @@ public sealed class AssetManifest
 			foreach ((JsonElement e, string entry) in List(root, "vehicles"))
 			{
 				int before = m.Problems.Count;
-				Fields(e, entry, "id", "image", "frame", "scale", "foot", "facings", "ms");
+				Fields(e, entry, Schema["vehicles[]"]);
 				string? id = Str(e, "id", entry);
 				Known(id, data.FieldVehicles, entry, "vehicle");
 				GridImage? image = Grid(e, entry, Pixels.Size, scaled: true);
@@ -624,7 +666,7 @@ public sealed class AssetManifest
 			foreach ((JsonElement e, string entry) in List(root, "backdrops"))
 			{
 				int before = m.Problems.Count;
-				Fields(e, entry, "id", "kind", "area", "encounter", "terrain", "flag", "image");
+				Fields(e, entry, Schema["backdrops[]"]);
 				(string? kind, string? area, string? encounter, string? terrain, string? flag) = Scope(e, entry, backdrop: true);
 				string? id = Str(e, "id", entry, required: false);
 				if (Picture(e, "image", entry) is { } file && m.Problems.Count == before)
@@ -639,7 +681,7 @@ public sealed class AssetManifest
 			foreach ((JsonElement e, string entry) in List(root, "effects"))
 			{
 				int before = m.Problems.Count;
-				Fields(e, entry, "id", "image", "frame", "scale", "frames", "ms");
+				Fields(e, entry, Schema["effects[]"]);
 				string? id = Str(e, "id", entry);
 				GridImage? image = Grid(e, entry, Art.EffectSize, scaled: true, footed: false);
 				if (Run(e, entry, image, 60, inline: true) is { } run && id is not null && image is not null && m.Problems.Count == before)
@@ -701,12 +743,12 @@ public sealed class AssetManifest
 			}
 			if (root.TryGetProperty("ui_layout", out JsonElement ul) && IsObject(ul, "ui_layout"))
 			{
-				Fields(ul, "ui_layout", "enabled");
+				Fields(ul, "ui_layout", Schema["ui_layout"]);
 				m.UiLayoutEnabled = Bool(ul, "enabled", "ui_layout", true);
 			}
 			if (root.TryGetProperty("battle_figures", out JsonElement bf) && IsObject(bf, "battle_figures"))
 			{
-				Fields(bf, "battle_figures", "reference_height", "shadows");
+				Fields(bf, "battle_figures", Schema["battle_figures"]);
 				int reference = Int(bf, "reference_height", "battle_figures", 0, 1, 720);
 				m.ReferenceHeight = reference > 0 ? reference : null;
 				m.FigureShadows = Bool(bf, "shadows", "battle_figures", true);
@@ -736,7 +778,7 @@ public sealed class AssetManifest
 			foreach ((JsonElement e, string entry) in List(root, "vehicle_overlays"))
 			{
 				int before = m.Problems.Count;
-				Fields(e, entry, "vehicle", "image");
+				Fields(e, entry, Schema["vehicle_overlays[]"]);
 				string? vehicle = Str(e, "vehicle", entry, required: false);
 				if (vehicle is not null && !data.Vehicles.Contains(vehicle))
 				{
@@ -843,7 +885,7 @@ public sealed class AssetManifest
 				}
 				else if (p.Value.ValueKind == JsonValueKind.Object)
 				{
-					Fields(p.Value, entry, "image", "expressions");
+					Fields(p.Value, entry, Schema["portraits{}"]);
 					if (Picture(p.Value, "image", entry, required: false) is { } image)
 					{
 						files[p.Name] = image;
@@ -891,7 +933,7 @@ public sealed class AssetManifest
 		private void BackdropMapEntry(JsonElement e, string entry)
 		{
 			int before = m.Problems.Count;
-			Fields(e, entry, "area", "image", "colors", "regions");
+			Fields(e, entry, Schema["backdrop_maps[]"]);
 			string? area = Str(e, "area", entry);
 			Known(area, data.Areas, entry, "area");
 			AreaMap? map = area is null ? null : data.Maps.GetValueOrDefault(area);
@@ -977,7 +1019,7 @@ public sealed class AssetManifest
 					{
 						continue;
 					}
-					Fields(r.Value, rEntry, "rect", "backdrop");
+					Fields(r.Value, rEntry, Schema["backdrop_maps[].regions{}"]);
 					int[] rect = Ints(r.Value, "rect", rEntry, required: true);
 					string? id = r.Value.TryGetProperty("backdrop", out JsonElement b) ? Backdrop(b, rEntry) : Str(r.Value, "backdrop", rEntry);
 					if (rect.Length != 4 || rect[2] == 0 || rect[3] == 0)
@@ -1018,7 +1060,7 @@ public sealed class AssetManifest
 				return;
 			}
 			int before = m.Problems.Count;
-			Fields(e, "title_art", "background", "logo", "layers", "traveler", "creature", "reference_height");
+			Fields(e, "title_art", Schema["title_art"]);
 			(float X, float Y) Signed(JsonElement owner, string name, string entry)
 			{
 				if (!owner.TryGetProperty(name, out JsonElement v))
@@ -1039,7 +1081,7 @@ public sealed class AssetManifest
 				{
 					return null;
 				}
-				Fields(f, entry, "image", "frame", "frames", "ms");
+				Fields(f, entry, Schema["title_art.traveler"]);
 				GridImage? image = Grid(f, entry, Pixels.Size);
 				return Run(f, entry, image, defaultMs, inline: true) is { } run && image is not null ? (image, run) : null;
 			}
@@ -1047,7 +1089,7 @@ public sealed class AssetManifest
 			foreach ((JsonElement l, string listEntry) in List(e, "layers"))
 			{
 				string entry = "title_art." + listEntry;
-				Fields(l, entry, "image", "frame", "frames", "ms", "at", "scale", "scroll");
+				Fields(l, entry, Schema["title_art.layers[]"]);
 				GridImage? image = Grid(l, entry, Pixels.Size);
 				FrameRun? run = Run(l, entry, image, 200, inline: true);
 				(float x, float y) = Signed(l, "at", entry);
@@ -1126,13 +1168,13 @@ public sealed class AssetManifest
 			var explicitAreas = new HashSet<string>();
 			if (root.TryGetProperty("maps", out JsonElement maps) && IsObject(maps, "maps"))
 			{
-				Fields(maps, "maps", "enabled", "cell", "areas");
+				Fields(maps, "maps", Schema["maps"]);
 				m.MapsEnabled = Bool(maps, "enabled", "maps", true);
 				cell = Int(maps, "cell", "maps", Pixels.Size, 1, 256);
 				foreach ((JsonElement e, string entry) in List(maps, "areas"))
 				{
 					string full = "maps." + entry;
-					Fields(e, full, "area", "image", "above", "cell", "changes");
+					Fields(e, full, Schema["maps.areas[]"]);
 					string? area = Str(e, "area", full);
 					Known(area, data.Areas, full, "area");
 					string? ground = Str(e, "image", full, required: false);
@@ -1189,7 +1231,7 @@ public sealed class AssetManifest
 		{
 			if (!inline)
 			{
-				Fields(e, entry, "image", "frame", "frames", "ms", "size", "anchor");
+				Fields(e, entry, Schema["objects[].state"]);
 			}
 			GridImage? image = inherit is not null && !e.TryGetProperty("image", out _) ? inherit.Image : Grid(e, entry, Pixels.Size);
 			FrameRun? run = Run(e, entry, image, 400, inline: true);
@@ -1208,7 +1250,7 @@ public sealed class AssetManifest
 		private void Object(JsonElement e, string entry)
 		{
 			int before = m.Problems.Count;
-			Fields(e, entry, "area", "point", "at", "image", "frame", "frames", "ms", "size", "anchor", "open", "open_flag", "character", "facing");
+			Fields(e, entry, Schema["objects[]"]);
 			string? area = Str(e, "area", entry);
 			Known(area, data.Areas, entry, "area");
 			AreaMap? map = area is null ? null : data.Maps.GetValueOrDefault(area);
@@ -1278,7 +1320,7 @@ public sealed class AssetManifest
 			{
 				return;
 			}
-			Fields(e, "field", "wall_shadows", "water_foam", "conveyors", "tile_hooks", "conveyor_overlay", "tile_hook_overlay", "areas");
+			Fields(e, "field", Schema["field"]);
 			m.Field = new FieldLook(Bool(e, "wall_shadows", "field", true), Bool(e, "water_foam", "field", true), Bool(e, "conveyors", "field", true),
 				Bool(e, "tile_hooks", "field", true));
 			if (e.TryGetProperty("areas", out JsonElement areas) && IsObject(areas, "field.areas"))
@@ -1289,7 +1331,7 @@ public sealed class AssetManifest
 					Known(p.Name, data.Areas, entry, "area");
 					if (IsObject(p.Value, entry))
 					{
-						Fields(p.Value, entry, "wall_shadows", "water_foam", "conveyors", "tile_hooks");
+						Fields(p.Value, entry, Schema["field.areas{}"]);
 						m.FieldAreas[p.Name] = new FieldLook(Bool(p.Value, "wall_shadows", entry, m.Field.WallShadows), Bool(p.Value, "water_foam", entry, m.Field.WaterFoam),
 							Bool(p.Value, "conveyors", entry, m.Field.Conveyors), Bool(p.Value, "tile_hooks", entry, m.Field.TileHooks));
 					}
@@ -1299,7 +1341,7 @@ public sealed class AssetManifest
 			{
 				const string entry = "field.conveyor_overlay";
 				int before = m.Problems.Count;
-				Fields(belt, entry, "image", "frame", "facings", "ms");
+				Fields(belt, entry, Schema["field.conveyor_overlay"]);
 				GridImage? image = Grid(belt, entry, Pixels.Size);
 				Dictionary<Direction, int[]> facings = belt.TryGetProperty("facings", out JsonElement f) ? Facing(f, entry + ".facings", image, "facings") : [];
 				if (facings.Count != 4 || facings.Values.Any(v => v.Length == 0))
@@ -1316,7 +1358,7 @@ public sealed class AssetManifest
 			{
 				const string entry = "field.tile_hook_overlay";
 				int before = m.Problems.Count;
-				Fields(pad, entry, "image", "frame", "frames", "ms");
+				Fields(pad, entry, Schema["field.tile_hook_overlay"]);
 				GridImage? image = Grid(pad, entry, Pixels.Size);
 				if (Run(pad, entry, image, 300, inline: true) is { } run && image is not null && m.Problems.Count == before)
 				{
@@ -1333,13 +1375,13 @@ public sealed class AssetManifest
 			{
 				return;
 			}
-			Fields(e, "bitmap_fonts", "enabled", "fonts");
+			Fields(e, "bitmap_fonts", Schema["bitmap_fonts"]);
 			m.BitmapFontsEnabled = Bool(e, "enabled", "bitmap_fonts", true);
 			foreach ((JsonElement f, string listEntry) in List(e, "fonts"))
 			{
 				string entry = "bitmap_fonts." + listEntry;
 				int before = m.Problems.Count;
-				Fields(f, entry, "language", "role", "image", "metrics", "scale");
+				Fields(f, entry, Schema["bitmap_fonts.fonts[]"]);
 				string? language = Str(f, "language", entry);
 				Known(language, data.Languages, entry, "language");
 				string? roleName = Str(f, "role", entry, required: false);
@@ -1398,8 +1440,7 @@ public sealed class AssetManifest
 		private void Tileset(JsonElement e, string entry)
 		{
 			int before = m.Problems.Count;
-			Fields(e, entry, "kind", "area", "image", "tile", "scale", "floor", "decor", "decor_one_in", "wall_top", "wall_top_alt_one_in", "wall_face",
-				"wall_face_alt_one_in", "water", "water_frame_ms", "edge", "bank", "objects", "animated");
+			Fields(e, entry, Schema["tilesets[]"]);
 			(string? kind, string? area, _, _, _) = Scope(e, entry, backdrop: false);
 			GridImage? image = Grid(e, entry, Pixels.Size, scaled: true, footed: false);
 			// Tiles lie edge to edge, so a scaled tile must come out exactly a cell wide at its snapped factor: the cell's
@@ -1424,7 +1465,7 @@ public sealed class AssetManifest
 			var objects = new Dictionary<string, int>();
 			if (e.TryGetProperty("objects", out JsonElement o) && IsObject(o, entry + ".objects"))
 			{
-				Fields(o, entry + ".objects", ObjectNames);
+				Fields(o, entry + ".objects", Schema["tilesets[].objects"]);
 				foreach (string name in ObjectNames.Where(n => o.TryGetProperty(n, out _)))
 				{
 					int cell = Int(o, name, entry + ".objects", -1, 0, int.MaxValue);
@@ -1438,7 +1479,7 @@ public sealed class AssetManifest
 			int[] stills = [.. floor, .. decor, .. wallTop, .. wallFace];
 			foreach ((JsonElement a, string animEntry) in List(e, "animated").Select(x => (x.Item, $"{entry}.{x.Entry}")))
 			{
-				Fields(a, animEntry, "tile", "frames", "ms");
+				Fields(a, animEntry, Schema["tilesets[].animated[]"]);
 				int tile = Int(a, "tile", animEntry, -1, 0, int.MaxValue);
 				if (tile < 0)
 				{
@@ -1470,7 +1511,7 @@ public sealed class AssetManifest
 		private void Character(JsonElement e, string entry)
 		{
 			int before = m.Problems.Count;
-			Fields(e, entry, "id", "image", "frame", "scale", "foot", "shadow", "walk", "poses", "animations", "facing");
+			Fields(e, entry, Schema["characters[]"]);
 			string? id = Str(e, "id", entry);
 			if (id is not null && !data.Characters.Contains(id) && !data.Actors.Contains(id))
 			{
@@ -1482,7 +1523,7 @@ public sealed class AssetManifest
 			if (e.TryGetProperty("facing", out JsonElement fa) && IsObject(fa, entry + ".facing"))
 			{
 				string faEntry = entry + ".facing";
-				Fields(fa, faEntry, "mirror", "fallback", "start");
+				Fields(fa, faEntry, Schema["characters[].facing"]);
 				Direction? Named(string? name, string field)
 				{
 					int index = name is null ? -1 : Array.IndexOf(Facings, name);
@@ -1543,7 +1584,7 @@ public sealed class AssetManifest
 					{
 						continue;
 					}
-					Fields(pose.Value, poseEntry, "frames", "ms", "motion");
+					Fields(pose.Value, poseEntry, Schema["characters[].poses{}"]);
 					Dictionary<Direction, int[]> frames = pose.Value.TryGetProperty("frames", out JsonElement f) ? Facing(f, poseEntry + ".frames", image, "frames") : [];
 					int[] ms = Ints(pose.Value, "ms", poseEntry, required: true);
 					if (frames.Count == 0 || frames.Values.Any(v => v.Length != ms.Length) || ms.Length == 0 || ms.Any(v => v == 0))
@@ -1590,7 +1631,7 @@ public sealed class AssetManifest
 		private void Figure(JsonElement e, string entry)
 		{
 			int before = m.Problems.Count;
-			Fields(e, entry, "id", "side", "view", "image", "frame", "scale", "foot", "shadow", "natural", "idle", "animations");
+			Fields(e, entry, Schema["figures[]"]);
 			string? id = Str(e, "id", entry);
 			string? side = Str(e, "side", entry);
 			string view = Str(e, "view", entry, required: false) ?? "side";
@@ -1659,7 +1700,7 @@ public sealed class AssetManifest
 			{
 				return null;
 			}
-			Fields(e, entry, camera ? ["camera", "image", "border", "scale"] : ["image", "border", "scale"]);
+			Fields(e, entry, camera ? Schema["nine_slice_camera"] : Schema["nine_slice"]);
 			string? cam = camera ? Str(e, "camera", entry, required: false) : null;
 			Known(cam, data.Cameras, entry, "camera");
 			string? file = Str(e, "image", entry);
@@ -1683,7 +1724,7 @@ public sealed class AssetManifest
 			{
 				return;
 			}
-			Fields(e, "ui", "enabled", "frame", "battle_frame", "panel_frames", "cursor", "bar_track", "bar_fill", "fonts");
+			Fields(e, "ui", Schema["ui"]);
 			bool enabled = !e.TryGetProperty("enabled", out JsonElement en) || en.ValueKind != JsonValueKind.False;
 			if (e.TryGetProperty("enabled", out en) && en.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
 			{
@@ -1710,7 +1751,7 @@ public sealed class AssetManifest
 					{
 						continue;
 					}
-					Fields(font.Value, entry, "file", "scale");
+					Fields(font.Value, entry, Schema["ui.fonts{}"]);
 					string? file = Str(font.Value, "file", entry);
 					if (file is not null && !File.Exists(m.Full(file)))
 					{
@@ -1724,13 +1765,13 @@ public sealed class AssetManifest
 				}
 			}
 			m.Ui = new UiEntry(enabled, frame, panels, Picture(e, "cursor", "ui", required: false), Picture(e, "bar_track", "ui", required: false),
-				Picture(e, "bar_fill", "ui", required: false), fonts, battleFrame);
+				Picture(e, "bar_fill", "ui", required: false), fonts, battleFrame, Picture(e, "page_arrow", "ui", required: false));
 		}
 
 		private void Audio(JsonElement e, string entry)
 		{
 			int before = m.Problems.Count;
-			Fields(e, entry, "kind", "id", "file", "loop_start", "loop_end", "gain");
+			Fields(e, entry, Schema["audio[]"]);
 			string? kindName = Str(e, "kind", entry);
 			string? id = Str(e, "id", entry);
 			string? file = Str(e, "file", entry);

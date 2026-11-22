@@ -26,8 +26,14 @@ public sealed partial class SampleController
 	{
 		var options = new List<(string, string, Func<PsivResult>)>();
 		_clearRecord ??= _s.ClearRecordExists();
-		foreach (string id in Layout.Screen("title").Options ?? [.. UiFields.TitleEntries])
+		UiScreenLayout layout = Layout.Screen("title");
+		UiContext? fields = layout.OptionWhen.Count > 0 ? TitleSaveFields(UiData()) : null;
+		foreach (string id in layout.Options ?? [.. UiFields.TitleEntries])
 		{
+			if (layout.OptionWhen.GetValueOrDefault(id) is { } when && !Ui.Holds(when, fields!))
+			{
+				continue;
+			}
 			switch (id)
 			{
 			case "retry" when _s.WorldInfo().CanRetry:
@@ -82,6 +88,12 @@ public sealed partial class SampleController
 			}
 		}
 		return options;
+	}
+
+	private UiContext TitleSaveFields(UiContext ctx)
+	{
+		int saves = _s.Saves()?.Count ?? 0;
+		return ctx.Set("has_save", saves > 0).Set("save_count", saves).Set("has_clear", _clearRecord == true);
 	}
 
 	// Any key or button but the window's and the developer tools' own function keys.
@@ -241,7 +253,7 @@ public sealed partial class SampleController
 		logoW *= Math.Max(1, multiple);
 		logoH *= Math.Max(1, multiple);
 		_probeTitleSizes = $"logo {logoW}x{logoH} traveler {heroW}x{heroH} creature {creatureW}x{creatureH} scale {multiple}";
-		Ui.Draw("title", s, t, UiData()
+		Ui.Draw("title", s, t, TitleSaveFields(UiData())
 			.Set("scene", (UiSlot)((x, y, w, h) => DrawTitleScene(t, art, x, y, w, h)))
 			.Set("title", _s.GameInfo().Title)
 			.Set("subtitle", T("ui.title.subtitle"))

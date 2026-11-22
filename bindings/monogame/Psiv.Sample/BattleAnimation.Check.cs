@@ -6,9 +6,24 @@ namespace Psiv.Sample;
 public sealed partial class BattleAnimation
 {
 	// Checks a file's entries and keeps the ones without a problem. Each check returns the reason, or null.
+	// The fields each track type, number style, figure state, motion and color track takes, as the checker reads them.
+	public static Dictionary<string, IEnumerable<string>> FieldTables(AnimCheckContext ctx) => new Checker(ctx, Builtin(), (_, _, _) => { }).Tables();
+
 	private sealed class Checker(AnimCheckContext ctx, BattleAnimation set, Action<string, string, string> problem)
 	{
 		private delegate string? Check(JsonNode? node);
+
+		public Dictionary<string, IEnumerable<string>> Tables()
+		{
+			var tables = TrackTypes.ToDictionary(t => "track." + t, t => (IEnumerable<string>)TrackFields(t).Keys);
+			tables["numbers"] = NumberFields().Keys;
+			tables["states"] = StateFields().Keys;
+			tables["move"] = MoveFields().Keys;
+			tables["color"] = ColorTrackFields().Keys;
+			tables["settings"] = SettingsFields().Keys;
+			tables["-"] = Sections;
+			return tables;
+		}
 
 		public string Display = "";
 		private readonly HashSet<string> _scripts = new(set.Scripts.Keys, StringComparer.Ordinal);
@@ -79,12 +94,7 @@ public sealed partial class BattleAnimation
 			if (root["settings"] is JsonNode settings)
 			{
 				var s = new JsonObject();
-				Fields(settings, "settings", new()
-				{
-					["rate"] = Num(1, 240), ["log_timing"] = Enum("step", "release"), ["event_cues_off"] = CuesOffProblem,
-					["flash_limit"] = n => n is JsonValue v && v.TryGetValue(out bool b) && !b || n is JsonObject o && o.All(p => p.Key is "count" or "frames")
-						&& Int(1, 60)(o["count"] ?? 3) is null && Int(1, 3600)(o["frames"] ?? 60) is null ? null : "must be false or {count: 1 to 60, frames: 1 to 3600}",
-				}, s);
+				Fields(settings, "settings", SettingsFields(), s);
 				clean["settings"] = s;
 			}
 			Entries(root, "scripts", clean, CheckScript);
@@ -573,6 +583,13 @@ public sealed partial class BattleAnimation
 			}
 			return o.ContainsKey("frames") ? null : "needs frames";
 		}
+
+		private Dictionary<string, Check> SettingsFields() => new()
+		{
+			["rate"] = Num(1, 240), ["log_timing"] = Enum("step", "release"), ["event_cues_off"] = CuesOffProblem,
+			["flash_limit"] = n => n is JsonValue v && v.TryGetValue(out bool b) && !b || n is JsonObject o && o.All(p => p.Key is "count" or "frames")
+				&& Int(1, 60)(o["count"] ?? 3) is null && Int(1, 3600)(o["frames"] ?? 60) is null ? null : "must be false or {count: 1 to 60, frames: 1 to 3600}",
+		};
 
 		private Dictionary<string, Check> MoveFields() => new()
 		{

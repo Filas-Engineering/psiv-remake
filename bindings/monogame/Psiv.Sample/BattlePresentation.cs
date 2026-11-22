@@ -23,6 +23,7 @@ public sealed class BattlePresentation
 {
 	public const string FileName = "battle_presentation.json";
 
+	public static readonly string[] Sections = ["timings", "fallbacks", "actions", "changes", "layout", "layouts", "enemies"];
 	public static readonly string[] Steps = ["intro", "opening", "round", "forward", "retarget", "banner", "animate", "effect", "result", "back", "cancel", "roundend", "notice", "outcome"];
 	public static readonly string[] Animations = ["none", "attack", "cast", "item", "defend"];
 	public static readonly string[] Kinds = ["attack", "technique", "skill", "combo", "item", "defend"];
@@ -148,7 +149,7 @@ public sealed class BattlePresentation
 		}
 		foreach ((string name, JsonNode? node) in root)
 		{
-			if (name is not ("timings" or "fallbacks" or "actions" or "changes" or "layout" or "layouts" or "enemies"))
+			if (!Sections.Contains(name))
 			{
 				Problem("-", $"unknown field '{name}'");
 			}

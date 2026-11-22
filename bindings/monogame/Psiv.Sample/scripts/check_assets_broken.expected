@@ -49,6 +49,7 @@ assets: assets.json: keepers.no_such_shop: unknown shop or rest point 'no_such_s
 assets: assets.json: keepers.tidewater_inn: unknown portrait 'nobody': not a portrait, character or actor in the game data
 assets: assets.json: keepers.tidewater_stall: must be a portrait id
 assets: ui/no_battle_frame.png: ui.battle_frame: missing file
+assets: ui/no_arrow.png: ui: missing file
 assets: audio/music/battle_brass_warden.wav: audio[0]: bad loop points 0 to 99999999: the file has 280320 frames, and the start must come before the end
 assets: audio/ambient/marsh_wind.wav: audio[33]: bad loop points 2 to 1: the file has 88200 frames, and the start must come before the end
 assets: assets.json: audio[55]: unknown music 'not_a_track': not an id the game or the sample plays as music
@@ -103,7 +104,7 @@ assets: battle_animation.json: scripts.spark.bolt.event_cues_off: must be true, 
 assets: battle_animation.json: scripts.spark.bolt.tracks[1].at: unknown phase or mark 'impakt': forward, banner, animate, effect, result, back, end
 assets: battle_animation.json: scripts.spark.bolt.tracks[1].effect: unknown effect 'sprak.orb': not an effect animation, an effect in assets.json, a generated effect or $look.effect
 assets: battle_animation.json: scripts.spark.bolt.tracks[2]: release at frame 30 is before the result phase (frame 746); it is released at frame 746
-assets: battle_animation.json: scripts.spark.bolt.tracks[3].if: unknown condition 'crit': hit, miss, critical, weak, resisted, immune, defeat, multi, single, party_actor, enemy_actor, vehicle, combo, escaped, layout:front, layout:side, element:ID, $look.flash or a $param
+assets: battle_animation.json: scripts.spark.bolt.tracks[3].if: unknown condition 'crit': hit, miss, critical, weak, resisted, immune, defeat, multi, single, party_actor, enemy_actor, vehicle, combo, escaped, layout:front, layout:side, result_step, transition_playing, element:ID, $look.flash or a $param
 assets: battle_animation.json: scripts.spark.bolt.tracks[4]: 'multiply' cannot be used on 'stage': use tint and amount
 assets: battle_animation.json: scripts.spark.bolt.tracks[5].type: unknown track type 'wobble': backdrop, call, color, flash, move, name_window, pose, react, release, shake, sound, sprite, state, transition
 assets: battle_animation.json: scripts.spark.bolt.tracks[6].by: must be pixels, "Npx" (never scaled), "Nm" (scaled by motion_percent), "Nf" (forward units), "Nh" or "Nw" (of the figure's height or width)
@@ -144,11 +145,14 @@ assets: ui/styles.json: resolution: field 'width' must be a whole number from 16
 assets: ui/styles.json: colors.mud: must be #rrggbb or #rrggbbaa
 assets: ui/styles.json: frames.battle: field 'skin' must be one of menu, battle
 assets: ui/styles.json: frames.ink: 'skin' is for a generated frame only
+assets: ui/styles.json: timings: field 'music_fade_ms' must be a whole number from 0 to 100000
 assets: ui/styles.json: params: unknown field 'toast_size'
 assets: ui/styles.json: params: field 'toast_h' must be a whole number from 0 to 4096
 assets: ui/styles.json: params: field 'field_cell' must be a whole number from 8 to 256
 assets: ui/styles.json: params: field 'dev_scale' must be a whole number from 10 to 100
 assets: ui/styles.json: params: field 'dev_draw' must be a whole number from 0 to 1
+assets: ui/styles.json: params: field 'dev_badge_x' must be a whole number from -1 to 4096
+assets: ui/styles.json: params: field 'dev_scale_bitmap' must be a whole number from 0 to 1
 assets: ui/styles.json: -: the built-in styles stand in
 assets: ui/battle_front.json: params.party_slot_5_x: unknown param: backdrop_h, command_axis, command_top, critical_marks, critical_marks_enemy, critical_marks_party, dev_badge_y, effect_scale, effect_scale_large, effectiveness_marks, effectiveness_marks_enemy, effectiveness_marks_party, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_statuses, enemy_x, ground_h, icon_gap, icon_size, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, miss_marks, miss_marks_enemy, miss_marks_party, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, result_page_lines, stage_bottom, step_aside, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
 assets: ui/battle_front.json: params.command_axis: must be "column" or "row": the keys that move the command cursor
@@ -169,8 +173,9 @@ assets: ui/battle_side.json: -: the built-in layout of this screen stands in
 assets: ui/confirm.json: params.backdrop_dim: the screen takes no params
 assets: ui/confirm.json: -: the built-in layout of this screen stands in
 assets: ui/dialogue.json: params.box_h: field 'box_h': expected ')' at character 4 of '(70'
-assets: ui/dialogue.json: params.box_width: unknown param: box_h, box_margin, box_top, picture_stack, narration_lines, narration_cps, narration_delay_ms, narration_width
+assets: ui/dialogue.json: params.box_width: unknown param: box_h, box_margin, box_top, picture_stack, narration_lines, narration_cps, narration_delay_ms, narration_width, narration_when
 assets: ui/dialogue.json: params.narration_cps: field 'narration_cps' reads 'speed_of_sound', which is not a field of the dialogue screen, a window or a variable
+assets: ui/dialogue.json: params.narration_when: field 'narration_when': starts_with takes 2 arguments at character 22 of 'starts_with(line_key)'
 assets: ui/dialogue.json: tags.bell.values.1: must be a non-empty string: the id the tag's value stands for
 assets: ui/dialogue.json: tags.bell.values.2: must be a non-empty string: the id the tag's value stands for
 assets: ui/dialogue.json: tags.bell: field 'id' leaves the tag's value unread: give 'values' and 'default' without it
@@ -215,14 +220,18 @@ assets: ui/menu_status.json: -: the built-in layout of this screen stands in
 assets: ui/menu_system.json: rows[1]: must be one of save, quit, text_speed, battle_speed, flashing, auto_advance, text_size
 assets: ui/menu_system.json: rows[2]: 'save' is listed twice
 assets: ui/menu_system.json: -: the built-in layout of this screen stands in
+assets: ui/name_entry.json: params.pad_cell_w: field 'pad_cell_w' reads 'cell_size', which is not a field of the name_entry screen, a window or a variable
+assets: ui/name_entry.json: params.pad_spacing: unknown param: backdrop_dim, pad_box_h, pad_cell_h, pad_cell_w, pad_entry_size, pad_gap, pad_label_size, pad_label_y, pad_text_x, pad_text_y
+assets: ui/name_entry.json: -: the built-in layout of this screen stands in
 assets: ui/nonsense.json: -: unknown screen 'nonsense': battle_front, battle_side, confirm, controls, credits, dialogue, extras, field, inn, load_game, menu, menu_abilities, menu_codex, menu_combos, menu_equip, menu_items, menu_log, menu_macros, menu_options, menu_order, menu_quests, menu_status, menu_system, name_entry, options, panels, pause, quest_log, save_prompt, save_slots, shop, sound_test, text_log, title, travel or styles
 assets: ui/panels.json: params.zoom: unknown param: bottom, gutter, margin, slide
 assets: ui/panels.json: -: the built-in layout of this screen stands in
+assets: ui/shop.json: params.steps: field 'steps' reads 'flow', which is not a field of the shop screen, a window or a variable
 assets: ui/shop.json: entries: only the menu and extras screens take 'entries'
 assets: ui/shop.json: -: the built-in layout of this screen stands in
 assets: ui/sound_test.json: start: only the title screen takes 'start' and 'options'
 assets: ui/sound_test.json: -: the built-in layout of this screen stands in
 assets: ui/title.json: -: not valid JSON: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 27.
 assets: ui/title.json: -: the built-in layout of this screen stands in
-assets: 0 tilesets, 14 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 4 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 20 layout files (1280x720)
-FAILED: 226 problems.
+assets: 0 tilesets, 14 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 4 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 19 layout files (1280x720)
+FAILED: 235 problems.

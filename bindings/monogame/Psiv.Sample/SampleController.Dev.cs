@@ -934,10 +934,13 @@ public sealed partial class SampleController
 		// (built in: just above the side layout's party panels, in the front one's keys' line under the strip), or in the
 		// front layout at the top while a preview's long badge would run into the keys.
 		bool battle = Screen == Screen.Battle;
-		int x = battle ? s.Width - s.Measure(badge, Style.Small) - 40 : (s.Width - s.Measure(badge, Style.Small)) / 2 - 12;
+		// Off the battle, the styles' `dev_badge_x` (-1: centered) and `dev_badge_y` place it, in the tools' units (the
+		// frame's pixels over `dev_scale`).
+		int badgeX = Layout.Styles.Param("dev_badge_x");
+		int x = battle ? s.Width - s.Measure(badge, Style.Small) - 40 : badgeX < 0 ? (s.Width - s.Measure(badge, Style.Small)) / 2 - 12 : badgeX;
 		bool previewing = _preview is not null || _stageEntry is not null;
 		bool side = _stageLayout == BattleLayout.Side;
-		int y = !battle || (!side && previewing) ? 12 : Ui.Param(side ? "battle_side" : "battle_front", "dev_badge_y", UiData(), 0);
+		int y = !battle ? Layout.Styles.Param("dev_badge_y") : !side && previewing ? 12 : Ui.Param(side ? "battle_side" : "battle_front", "dev_badge_y", UiData(), 0);
 		if (s is ZoomSurface zoomed && battle && !(!side && previewing))
 		{
 			y = (int)MathF.Round(y / zoomed.Zoom);

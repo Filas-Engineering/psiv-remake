@@ -1,0 +1,44 @@
+# The small example set's screens without their own sizes (make_screens_assets.py's SMALL set, 320x224, with --dev):
+# a name entry whose pad takes its cell and text sizes from the layout's `pad_*` params and fits the frame; the
+# built-in pause laid out by the styles' sizes; then styles with the developer badge at the bottom left, the tools at
+# half size with the bitmap font shrunk too, and the music cut on an area change (`music_fade_ms` 0). With --window the
+# shot lines save screenshots under build/shots/small/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+cmd walk guide_front
+press Up
+wait 3
+pressuntil Enter NameEntry 800
+wait 2
+expect state window.name_entry/box name_entry/box 4 4 312x216
+shot build/shots/small/name_pad.png
+press Enter
+wait 2
+pressuntil Enter Field 800
+
+# The built-in pause at 320x224.
+press P
+wait 2
+expect screen Pause
+expect state window.pause/box pause/box 8 34 304x156
+expect state window.pause/hint pause/hint 0 194 320x30
+shot build/shots/small/pause_builtin.png
+press Escape
+wait 2
+
+# The developer badge and the music fade from the styles.
+audio mark
+dev warp reed_path 2 2
+wait 2
+expect audio music field_marsh_reeds fade 800
+assets swap ui/styles.json alt/styles_badge.json
+wait 2
+audio mark
+dev warp tidewater 4 2
+wait 2
+expect audio music town_tide_bells fade 0
+shot build/shots/small/dev_badge.png

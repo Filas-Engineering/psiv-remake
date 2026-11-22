@@ -97,6 +97,16 @@ public sealed class UiRenderer
 		return e is null ? fallback : e.Eval(new Scope(this, ctx, null, null)).Text;
 	}
 
+	// A condition the screen's code tests outside drawing, such as a title entry's `when`.
+	public bool Holds(UiExpr condition, UiContext ctx) => condition.Eval(new Scope(this, ctx, null, null)).Truth;
+
+	// A screen's param as the value it gives, words included: the file's, else the built-in layout's, else `fallback`.
+	public UiValue ParamValue(string screen, string name, UiContext ctx, UiValue fallback)
+	{
+		UiExpr? e = Set.Screen(screen).Params.GetValueOrDefault(name) ?? UiLayoutSet.Defaults.Screen(screen).Params.GetValueOrDefault(name);
+		return e is null ? fallback : e.Eval(new Scope(this, ctx, null, null));
+	}
+
 	// A screen's param as a number with a fraction (an opacity, say): the file's, else the built-in layout's, else `fallback`.
 	public double ParamNumber(string screen, string name, UiContext ctx, double fallback)
 	{

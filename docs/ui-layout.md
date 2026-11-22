@@ -85,11 +85,14 @@ Milliseconds unless said. Defaults are the sample's values.
 | `toast_ms`, `toast_fade_ms` | 4000, 400 | how long a notice stays, and its fade at the end |
 | `panel_transition_ms` | 350 | a comic panel's slide when its action names no duration |
 | `list_repeat_delay_ms`, `list_repeat_ms` | 0, 0 | a held direction repeats in every screen but the field and dialogue after the delay, then every `list_repeat_ms` (0: no repeat) |
+| `music_fade_ms` | 800 | a track's cross-fade into the next on an area change, a script's music, a battle's start and end, and the dialogue's `music` tag (also the ambient loop's); 0 cuts (`"timings": {"music_fade_ms": 0}`). Stopping the music keeps its 150 ms fade |
 | `run_speed_percent` | 200 | the real-time field input's run: a step takes the area's (or vehicle's) step time times 100 over this, 100 at least (`"timings": {"run_speed_percent": 250}`) |
 
 ### Params
 
-Numbers the code's own drawing reads, in whole logical pixels; a key left out takes the default, the sample's value. Several screens draw the notices through their `toasts` slot (title, Load, options, the field menu, shop, travel); the field draws them from its own layout.
+Numbers the code's own drawing reads, in whole logical pixels; a key left out takes the default, the sample's value. Several screens draw the notices through their `toasts` slot (title, Load, options, the field menu, shop, travel, Extras); the field draws them from its own layout.
+
+Each notice is drawn once, by the topmost screen with a `toasts` slot: while the Extras menu is up over the title or the field menu, the screen under it (its `scene` slot) leaves its notices out when the Extras layout has a `toasts` slot element, and the Extras menu draws them over everything; an Extras layout without one leaves them to the screen under it. The confirm box draws none, so the screen under it keeps them. The pause draws the field without its HUD and notices, as before.
 
 | Key | Default | What |
 | --- | --- | --- |
@@ -373,6 +376,16 @@ Fields:
 * `cursor` (int): the option under the cursor.
 * `picture` (image): the still picture the `picture` tags show (below, "The `tags` table"), -1 for none. `picture_w`,
   `picture_h` (int): its size in pixels, 0 for none.
+* `shown_ms` (int): milliseconds since the box's text was all shown, 0 while it reveals (`"visible": "shown_ms > 400"`).
+* `line_key` (string): the line's text key (`harbor.welcome`), empty without a line.
+* `picture_top` (string): the name of the picture on top (the one `picture` shows), empty for none; `picture_names`
+  (list of strings): the stack's names, the top last.
+* `page_arrow` (image): the UI skin's `page_arrow` picture ([`assets.md`](assets.md), ui), else the generated pointer
+  the `arrow` field gives; the battle layouts have it too, for `result_more`.
+
+```json
+{"type": "image", "visible": "all_shown", "image": "page_arrow", "x": "cw - 48", "y": "ch - 40 + clock_ms / max(1, next_arrow_ms) % 2 * 3", "w": 24, "h": 24}
+```
 
 Params (the code's, with these defaults; the built-in file leaves them out): `box_h` (176, the box's height at 100% text size, scaled with the text size option), `box_margin` (16, from the screen's bottom edge to the box at the bottom), `box_top` (36, the box's top while the leader would be covered). `top` is the screen's height less the scaled `box_h` and `box_margin`, or `box_top`; the inn's `top` and the comic panels' room at the bottom (below) follow them. Expressions of the common names (`W`, `H`, `dev`...).
 
@@ -407,6 +420,17 @@ gamepad).
 
 Slots: `backdrop`, `entry` (the text box and grid, drawn at the slot's x, y and width).
 
+Params, the name pad's sizes in logical pixels (also `menu_macros`' params for its `name_pad` slot); each left out keeps
+the built-in size at the text size option: `pad_box_h` (the text box's height, 50), `pad_gap` (between the box and the
+grid, 14), `pad_cell_w` (a letter cell's width; 0 or left out: the slot's width over 13, 44 at most), `pad_cell_h` (36),
+`pad_entry_size` (the typed name's text size, 28), `pad_label_size` (the cells' text size, 20), `pad_text_x`, `pad_text_y`
+(the typed name's inset, 16 and 8), `pad_label_y` (a label's top in its cell; left out: centered for a 20-pixel text).
+`entry_h` follows them. Text sizes still scale with the text size option, as the surface draws them.
+
+```json
+"params": {"pad_box_h": 22, "pad_gap": 4, "pad_cell_w": 22, "pad_cell_h": 17, "pad_entry_size": 16, "pad_label_size": 16, "pad_text_x": 4, "pad_text_y": 3, "pad_label_y": 1}
+```
+
 ## Pause (`ui/pause.json`)
 
 Windows:
@@ -421,6 +445,10 @@ Fields: `hud`, `area`, `status` as on the field (`hud` is false over a battle); 
 options, quit; `cursor` (int) the row under the cursor; `hint` (string).
 
 Slots: `scene`. The `selected` probe stays in code.
+
+The built-in file takes its sizes from the styles' `size_body` and `size_small` (the box `t(size_body * 18)` wide, at most
+`W - 16`, rows `t(size_body + 12)` apart; the hint bar `t(size_small + 14)` high), so a set at another resolution that
+leaves `pause.json` out gets a pause that fits; with the built-in sizes it is the 1280x720 one as before.
 
 ## Travel (`ui/travel.json`)
 
@@ -465,6 +493,40 @@ Item fields of `rows`: `text` (the name; the list's row text), `price` (int: the
 tab), `have` (int: how many the party has). `count` is not used for it: inside a list row it names the row count.
 
 Slots: `backdrop`, `toasts`. The list has `probe: false`: the code sets `selected` (and leaves `top`) as before.
+
+### The shop in steps
+
+Param `steps` (0 or 1, default 0: the two tabs as before). With 1 the shop goes in steps, and the field `step` says which
+(`choose`, `list`, `quantity`, `result`; `tabs` without steps):
+
+* `choose`: Buy or Sell (`choices`, list of strings; `choice_cursor`, int); Up or Down switch, Confirm opens the list
+  (`tab` follows), Back leaves the shop. The keeper says `welcome`.
+* `list`: the stock or the sellable items as on the tabs; Back goes back to the choice, Confirm takes the row.
+* `quantity`: how many (`quantity`, int, from 1), at most `quantity_max` (what the money buys, at least 1 so a refusal can
+  show, or what is held; 99 at most); Right or Up adds one, Left or Down takes one, wrapping; `unit_price` and `total`
+  (int) the price each and times the quantity. The keeper says `confirm`. Confirm trades the quantity at once
+  (`psiv_shop_buy` and `psiv_shop_sell` with a count), Back goes back to the list.
+* `result`: the trade's outcome; the keeper says `thanks` or `cannot_afford`. Confirm or Back goes back to the list.
+
+The keeper's line is `voice_line` (VOICE.MOMENT, else `ui.shop.MOMENT`). `result_text` (string) is the last trade's
+outcome, the session's notice (`Bought 3 Tonic for 24.`) or refusal, and `result_ok` (bool) whether it went through.
+When the layout shows `result_text` (any element reads it), trade outcomes and the shop's other notices go there and
+to the log instead of the notices, in steps or on the tabs.
+
+```json
+{"version": 1, "params": {"steps": 1}, "windows": [
+	{"name": "quantity", "visible": "open && step == 'quantity'", "anchor": "center", "w": 420, "h": 150, "frame": "panel", "elements": [
+		{"type": "text", "value": "'x ' + quantity + ' / ' + quantity_max", "w": "cw", "align": "center", "style": "title"},
+		{"type": "text", "value": "'Total ' + total", "y": 76, "w": "cw", "align": "center", "color": "accent"}]},
+	{"name": "result", "visible": "open && step == 'result'", "anchor": "center", "w": 520, "h": 110, "frame": "panel", "elements": [
+		{"type": "text", "value": "result_text", "wrap": true, "lines": 2, "color": "result_ok ? 'text' : 'bad'"}]}
+]}
+```
+
+`scripts/make_shop_assets.py` writes a test asset copy with such a layout (choice, list, quantity, result, the keeper's
+line on top) and `alt/shop_tabs.json`, the built-in tabs with a `result_text` line; `scripts/shop_steps.txt` buys three,
+is refused for money, sells all held, then buys one on the tabs, with no notice shown; screenshots under
+`build/shots/shop/`.
 
 ## Comic panels (`ui/panels.json`)
 
@@ -715,17 +777,17 @@ Windows: `page` (the area: column heads and one row per action, then reset), `ac
 
 Fields:
 - area fields.
-- `actions` (list of items): item fields `label`, `keys`, `buttons` (strings), `reset` (bool: the reset row, which has no bindings). With the real-time field input on, `Interact`, `Run` and `RunToggle` come after `FastForward`, before the reset row; with it off they are left out, so the page is as it was. `Extras` comes last, before the reset row, only with the param `list_extras` 1 (default 0, so the page is as it was).
+- `actions` (list of items): item fields `label`, `keys`, `buttons` (strings), `reset` (bool: the reset row, which has no bindings). With the real-time field input on, `Interact`, `Run` and `RunToggle` come after `FastForward`, before the reset row; with it off they are left out, so the page is as it was. `Extras` comes last, before the reset row, unless the param `list_extras` is 0.
 - `list` (scroll list), `active` (bool).
 - `picking` (bool), `action_name` (string), `choices` (list of strings), `choice` (int): the `action` box.
 - `capturing` (bool), `ask` (string): the `capture` box.
 
 The probes (`selected`, `top`) of this page stay in code; its list has `probe: false`.
 
-Param: `list_extras` (0 or 1, default 0): the page lists the `Extras` action.
+Param: `list_extras` (0 or 1, default 1): the page lists the `Extras` action.
 
 ```json
-{"version": 1, "params": {"list_extras": 1}, "windows": [...]}
+{"version": 1, "params": {"list_extras": 0}, "windows": [...]}
 ```
 
 ## Battle: `battle_front` and `battle_side`
@@ -891,6 +953,8 @@ Screen fields of `battle_front` and `battle_side`:
 * `actor_slot` int: the marching slot of the member choosing, or of the party member acting in the turn playing; -1 for none (an enemy's turn, the top-level step, between turns).
 * `action_command` string: the command of the turn playing, as the `command` item field names it (`attack`, `technique`, `skill`, `combo`, `item`, `defend`, `escape`), `''` between turns. `action_chosen` bool: a party member acts with anything but a plain attack, for a name window shown only then.
 * `result_page`, `result_pages` int and `result_more` bool: the result window's page (1-based), how many, and whether one follows (below, `result_page_lines`).
+* `result_step` bool: the result (and level-up) screen is up. `transition_playing` bool: a battle-in or battle-out transition script runs ([`battle-animation.md`](battle-animation.md), transitions). Both are also animation script conditions, so a layout and the scripts can hide the party panel or the figures while they last: `"visible": "!result_step && !transition_playing"`.
+* `page_arrow` image: as the dialogue's, for a next-page mark under `result_more`: `{"type": "image", "visible": "result_more", "image": "page_arrow", "x": "cw - 28", "y": "ch - 24", "w": 16, "h": 16}`.
 
 Item fields of `party`, `members` and `vehicle`: `fallen` (bool, shown as down), `slot` (int, its index: the marching slot), and one `status_ID` bool per status of the game data (`status_poison`, `status_sleep`, ...; `defeated` excluded), true while the playback shows it. A name that is not `status_` and a status of the data is a problem. `menu_items` items gain `command` (the command row's id, `fight`/`macro`/`run` on the top-level step, `''` in lists) and `icon` (the command's picture from `command_icons` or generated, -1 off the command rows).
 
@@ -928,7 +992,11 @@ The words of the top-level step are the text tables' `ui.battle.top.fight`, `.ma
 Two top-level fields of `title.json` (only that file takes them):
 
 * `start` (true or false, default false): the title opens on a start state: the field `start` is true and the menu takes no input until any key or button (not a function key or the console key) is pressed, then `start` is false. It comes back each time the title does (not after its overlays). `start_hint` is the prompt's words (the text tables' `ui.title.press_start`).
-* `options` (a list): the menu's entries in order, from `retry`, `new_game`, `continue`, `load`, `sound_test`, `erase`, `options`, `quit` (default: that order). An entry still shows only when it can be chosen: `retry` after a lost battle that allows one, `sound_test` after a finished story, `erase` always (the erase list, above, under Title). An unknown or repeated entry is a problem. The field `option_ids` lists the ids shown.
+* `options` (a list): the menu's entries in order, from `retry`, `new_game`, `continue`, `load`, `sound_test`, `erase`, `options`, `quit` (default: that order). An entry still shows only when it can be chosen: `retry` after a lost battle that allows one, `sound_test` after a finished story, `erase` always (the erase list, above, under Title). An unknown or repeated entry is a problem. The field `option_ids` lists the ids shown. An entry may be an object `{"id": ID, "when": CONDITION}`: it shows only while the condition holds too (an expression over the title's fields: `has_save` (bool, a save of any kind exists), `save_count` (int), `has_clear` (bool, a finished story's record exists); every title layout may read them).
+
+```json
+"options": [{"id": "continue", "when": "has_save"}, "new_game", {"id": "load", "when": "save_count > 1"}, "options", "quit"]
+```
 
 ```json
 {"version": 1, "start": true, "options": ["continue", "new_game", "load", "erase", "options", "quit"], "windows": [
@@ -948,7 +1016,7 @@ Three optional fields; the export writes none of them, and without them the menu
   * `party_talk`: one row (the `menu_options` layout); Confirm closes the menu and starts the party talk.
   * `extras`: one row; Confirm opens the Extras menu over the field menu.
 * `rows` (`menu_system.json`): the system page's rows in order from `save`, `quit`, `text_speed`, `battle_speed`, `flashing`, `auto_advance`, `text_size` (default `save`, `text_speed`, `battle_speed`, `auto_advance`).
-* `entries` (`extras.json`): the Extras menu's entries, the same shape, from the field menu's pages but `extras`, and `controls` (the Controls page; Back leaves it for the Extras menu), `photosensitivity` (the flashing notice, `ui.options.flashing_notice`, in the box), `dev` (the developer console; shown only with `--dev`), and the settings rows above (Left, Right or Confirm change them in place). Default: `options`, `controls`. A field menu page opens the field menu on that page, and shows only when the menu's entries have it; on the title the field menu's pages but `options` are left out; in a battle only `text_speed`, `battle_speed` and `flashing` show.
+* `entries` (`extras.json`): the Extras menu's entries, the same shape, from the field menu's pages but `extras`, and `controls` (the Controls page; Back leaves it for the Extras menu), `photosensitivity` (the flashing notice, `ui.options.flashing_notice`, in the box), `dev` (the developer console; shown only with `--dev`), and the settings rows above (Left, Right or Confirm change them in place). Default: `options`, `controls`. A field menu page opens the field menu on that page; when the menu's entries leave the page out, the field menu opens with that page as its only tab, until it closes (the menu opened again shows its own entries). On the title the field menu's pages but `options` are left out; in a battle only `text_speed`, `battle_speed` and `flashing` show.
 
 An unknown or repeated page or row, a missing `page`, an unknown field, or `entries` or `rows` on another screen is a problem.
 
@@ -986,6 +1054,14 @@ Fields: `narration_visible` (bool, the window has lines), `narration_rows` (item
 ]}
 ```
 
+`narration_when` (param) chooses which lines go to the window: `"all"` (the default: every line without a speaker), `"tagged"` (only lines that start with `{narration}`; the tag draws nothing) or an expression over the dialogue's fields, read as the line shows: `line_key`, `speaker`, `picture_top`, `picture_names` and the common names (`"starts_with(line_key, 'tale.') || picture_top == 'tower'"`). Whatever the mode, a line starting with `{narration:on}` goes to the window and one starting with `{narration:off}` to the box. Lines not routed use the box as usual. `starts_with(a, b)` is an expression function on every screen. `narration` is a built-in tag, which a `tags` table cannot map.
+
+```json
+"params": {"narration_when": "tagged"}
+```
+
+`make_narration_data.py --routing` adds an event `routing` (a plain line, a `{narration}` one, a speaker's `{narration:on}`, a `{narration:off}`, lines under the stacked pictures, a `tale.` key) and `make_narration_assets.py --route` an asset copy with `alt/dialogue_tagged.json`, `alt/dialogue_expr.json`, a UI skin `page_arrow` and `shown_ms` in the box; `scripts/narration_route.txt` checks each mode (swapping the files in, so hot reload too); screenshots under `build/shots/narration/route_*.png`.
+
 The built-in file has no `narration` window, so narration stays in the box. `scripts/make_narration_data.py` writes a data copy with the event `narration` (five narration lines, the first two showing still pictures, then the guide's line) and `make_narration_assets.py` an asset copy whose dialogue layout keeps the pictures as a stack side by side and has the window above (with a 0.45 black fill behind the rows); `scripts/narration.txt` and `narration_ja.txt` (`--language ja --strict-text`) check four lines shown together without a box over both pictures, the 200 ms delay and 40 characters a second (8 characters 416 ms into a line), the fifth line starting afresh and the guide's line back in the box; screenshots under `build/shots/narration/`.
 
 ### Dialogue: cases and the picture stack
@@ -1002,7 +1078,7 @@ A `tags` entry may have `cases`, tried in order before the entry's own action; t
 
 Cue and music ids a tags table names (an entry's or case's `id`, `ids`, `values` and `default`) count as played: `--check-assets` accepts an `audio` entry for such an id though no data plays it, and the line plays it ([`assets.md`](assets.md), audio).
 
-The dialogue param `picture_stack` (default 0): 1 keeps the still pictures as a stack: `picture` puts one on top (moving it up if it is already there), `picture_hide` takes that one off wherever it is (the one under it shows again), `picture_clear` takes all. Without it a picture replaces the one up, as before. The field `pictures` lists the stack bottom first, each item with `picture`, `picture_w`, `picture_h`; `picture` stays the top one. Probe: `pictures` (`chart tower`, `-`).
+The dialogue param `picture_stack` (default 0): 1 keeps the still pictures as a stack: `picture` puts one on top (moving it up if it is already there), `picture_hide` takes that one off wherever it is (the one under it shows again), a `picture_hide` with no id (no value and no `id`, `values` or `default` in its entry) takes the top one off, and only `picture_clear` takes all. Without the stack a `picture_hide` with no id hides the picture up. Without it a picture replaces the one up, as before. The field `pictures` lists the stack bottom first, each item with `picture`, `picture_w`, `picture_h`; `picture` stays the top one. Probe: `pictures` (`chart tower`, `-`).
 
 ```json
 "params": {"picture_stack": 1}
@@ -1085,10 +1161,10 @@ The words are the text tables' `ui.options.flashing`, `ui.options.flashing.reduc
 
 ### The developer tools at small resolutions
 
-Two `styles.json` params: `dev_scale` (10 to 100, default 100) draws every developer tool (badge, console, picker, overlays, the frame ruler, the windows overlay's labels) at that percent of its 1280x720 sizes, laid out in a frame of the logical size over that percent; `dev_draw` (0 or 1, default 1) at 0 draws none of them, while their keys and commands still work. A 320x224 set with `"dev_scale": 60` draws the tools' text at 10 pixels, its own text size ([`dev-tools.md`](dev-tools.md)).
+Two `styles.json` params: `dev_scale` (10 to 100, default 100) draws every developer tool (badge, console, picker, overlays, the frame ruler, the windows overlay's labels) at that percent of its 1280x720 sizes, laid out in a frame of the logical size over that percent; `dev_draw` (0 or 1, default 1) at 0 draws none of them, while their keys and commands still work. A 320x224 set with `"dev_scale": 60` draws the tools' text at 10 pixels, its own text size ([`dev-tools.md`](dev-tools.md)). `dev_scale_bitmap` (0 or 1, default 0) at 1 scales a bitmap font's text by `dev_scale` too (it snaps to the font's whole multiples, 1 at least). Off the battle the badge sits at `dev_badge_x` (-1, the default: centered) and `dev_badge_y` (default 12), in the tools' units (the frame's pixels times 100 over `dev_scale`); in battle the battle layouts' `dev_badge_y` places it as before.
 
 ```json
-"params": {"field_cell": 16, "dev_scale": 60}
+"params": {"field_cell": 16, "dev_scale": 50, "dev_scale_bitmap": 1, "dev_badge_x": 4, "dev_badge_y": 420}
 ```
 
 ### The item runs

@@ -417,6 +417,7 @@ Conveyors and tile step hooks have no picture of their own in the area's tiles o
 * `battle_frame` (optional): the battle's windows (the layouts' frame style `battle`, [`ui-layout.md`](ui-layout.md), "Frames and cursors"), the same way, so the battle can be skinned apart from the menus; without it they take `frame`. Asset key `ui:battle_frame`.
 * `panel_frames`: the border around comic panels, one with no `camera` for all and one per camera id (`game.json`'s `presentation.cameras`) for its panels.
 * `cursor`: the menu cursor; `bar_track` and `bar_fill`: HP and TP bars, the fill tinted with the bar's color and stretched to its value's width.
+* `page_arrow` (optional): a picture the dialogue and battle layouts read as their `page_arrow` image field (the dialogue's next mark, the battle result's `result_more`; [`ui-layout.md`](ui-layout.md)); without it the field gives the generated pointer. Nothing draws it unless a layout does, and the export leaves it out. Asset key `ui:page_arrow`. `"page_arrow": "ui/page_arrow.png"`
 * `fonts`: per language (`game.json`'s `languages`) a TrueType or OpenType file, with the system faces after it for glyphs it lacks, and a `scale` for every text size. A bitmap font for the language ([bitmap_fonts](#bitmap_fonts)) draws before it; this font then draws the glyphs the bitmap font lacks.
 * `"enabled": false` keeps the generated look and loads nothing of the section (the export writes it that way, see [Round trip](#round-trip)).
 

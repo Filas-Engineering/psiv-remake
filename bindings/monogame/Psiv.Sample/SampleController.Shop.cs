@@ -4,8 +4,38 @@ namespace Psiv.Sample;
 
 public sealed partial class SampleController
 {
+	// The shop layout's `steps` 1: a buy or sell choice, the list, a quantity with its total and a confirm, then the result;
+	// Back goes a step back, and leaves from the choice. Without it the two tabs as before.
+	private enum ShopStep { Choose, List, Quantity, Result }
+
+	private ShopStep _shopStep;
+	private int _shopChoice;
+	private int _shopCount = 1;
+	// The last trade's outcome in the steps (the session's notice or refusal) and whether it went through.
+	private string _shopResult = "";
+	private bool _shopResultOk;
+
+	private bool ShopSteps => Ui.Param("shop", "steps", UiData(), 0) != 0;
+
+	// A layout that shows `result_text` takes the trades' outcomes there instead of the notices.
+	private bool ShopResultShown => Layout.Screen("shop").Reads("result_text");
+
+	private List<InventoryEntry> ShopRows(ShopInfo shop) => _tab == 0 ? shop.Stock.ToList() : _s.Inventory().Where(i => i.Price >= 0).ToList();
+
+	private int ShopPrice(ShopInfo shop, InventoryEntry entry) => _tab == 0 ? entry.Price : entry.Price * shop.SellPercent / 100;
+
+	// The most of the row one trade may take: what the money buys (at least 1, so a refusal can show), or what is held.
+	private int ShopMost(ShopInfo shop, InventoryEntry entry) =>
+		Math.Clamp(_tab == 0 ? _s.WorldInfo().Money / Math.Max(1, entry.Price) : entry.Count, 1, 99);
+
 	private void UpdateShop(ActionInput input)
 	{
+		ShopInfo? shop = _s.Shop();
+		if (ShopSteps)
+		{
+			UpdateShopSteps(input, shop);
+			return;
+		}
 		if (input.Pressed(GameAction.PagePrev) || input.Pressed(GameAction.PageNext))
 		{
 			_tab = 1 - _tab;
@@ -17,19 +47,115 @@ public sealed partial class SampleController
 			Report(_s.CloseMenu());
 			return;
 		}
-		ShopInfo? shop = _s.Shop();
 		KeeperOpened(shop?.Id, "welcome");
 		if (shop is null)
 		{
 			return;
 		}
-		var list = _tab == 0 ? shop.Stock.ToList() : _s.Inventory().Where(i => i.Price >= 0).ToList();
+		var list = ShopRows(shop);
 		_list.Move(input, list.Count);
 		if (input.Confirm && list.Count > 0)
 		{
 			PsivResult traded = _tab == 0 ? _s.Buy(list[_list.Cursor].Id) : _s.Sell(list[_list.Cursor].Id);
 			KeeperAnswered(traded);
-			Report(traded);
+			ShopReport(traded);
+		}
+	}
+
+	// A refusal to the layout's `result_text` when it shows one, else to the notices; a trade's own notice follows the
+	// same way (TakeNotices).
+	private void ShopReport(PsivResult traded)
+	{
+		_shopResult = "";
+		_shopResultOk = traded.Ok;
+		if (traded.Error is { } error && ShopResultShown)
+		{
+			_shopResult = error.Text;
+			_log("notice: " + error.Text);
+			_refused = true;
+			return;
+		}
+		Report(traded);
+	}
+
+	private void UpdateShopSteps(ActionInput input, ShopInfo? shop)
+	{
+		if (shop is null || shop.Id != _keeperPoint)
+		{
+			_shopStep = ShopStep.Choose;
+			_shopChoice = 0;
+		}
+		KeeperOpened(shop?.Id, "welcome");
+		if (shop is null)
+		{
+			return;
+		}
+		List<InventoryEntry> rows = ShopRows(shop);
+		switch (_shopStep)
+		{
+		case ShopStep.Choose:
+			if (input.Back)
+			{
+				_keeperPoint = null;
+				Report(_s.CloseMenu());
+				return;
+			}
+			if (input.Pressed(GameAction.Up) || input.Pressed(GameAction.Down))
+			{
+				_shopChoice = 1 - _shopChoice;
+			}
+			if (input.Confirm)
+			{
+				_tab = _shopChoice;
+				_list.Reset();
+				_shopStep = ShopStep.List;
+			}
+			break;
+		case ShopStep.List:
+			if (input.Back)
+			{
+				_shopStep = ShopStep.Choose;
+				_keeperMoment = "welcome";
+				return;
+			}
+			_list.Move(input, rows.Count);
+			if (input.Confirm && rows.Count > 0)
+			{
+				_shopCount = 1;
+				_shopStep = ShopStep.Quantity;
+				_keeperMoment = "confirm";
+			}
+			break;
+		case ShopStep.Quantity when rows.Count == 0:
+			_shopStep = ShopStep.List;
+			break;
+		case ShopStep.Quantity:
+			InventoryEntry entry = rows[Math.Clamp(_list.Cursor, 0, rows.Count - 1)];
+			int most = ShopMost(shop, entry);
+			if (input.Back)
+			{
+				_shopStep = ShopStep.List;
+				_keeperMoment = "welcome";
+				return;
+			}
+			int by = input.Pressed(GameAction.Right) || input.Pressed(GameAction.Up) ? 1 : input.Pressed(GameAction.Left) || input.Pressed(GameAction.Down) ? -1 : 0;
+			_shopCount = (_shopCount - 1 + by + most) % most + 1;
+			if (input.Confirm)
+			{
+				PsivResult traded = _tab == 0 ? _s.Buy(entry.Id, _shopCount) : _s.Sell(entry.Id, _shopCount);
+				KeeperAnswered(traded);
+				ShopReport(traded);
+				_shopStep = ShopStep.Result;
+			}
+			break;
+		case ShopStep.Result:
+			if (input.Confirm || input.Back)
+			{
+				_shopStep = ShopStep.List;
+				_keeperMoment = "welcome";
+				_list.Move(input, ShopRows(shop).Count);
+			}
+			break;
 		}
 	}
 
@@ -45,7 +171,7 @@ public sealed partial class SampleController
 			.Set("money_value", _s.WorldInfo().Money)
 			.Set("keeper", shop is null ? -1 : Keeper(art, shop.Id))
 			.Set("voice_line", shop is null ? "" : VoiceLine(shop.Voice, "shop", _keeperMoment));
-		List<InventoryEntry> entries = shop is null ? [] : _tab == 0 ? shop.Stock.ToList() : _s.Inventory().Where(i => i.Price >= 0).ToList();
+		List<InventoryEntry> entries = shop is null ? [] : ShopRows(shop);
 		if (shop is not null)
 		{
 			ctx.Set("tabs", new List<string> { T("ui.shop.buy"), T("ui.shop.sell") })
@@ -54,9 +180,20 @@ public sealed partial class SampleController
 				.Set("hint", T("ui.shop.hint", Hint(GameAction.PagePrev), Hint(GameAction.PageNext), Hint(GameAction.Confirm), Hint(GameAction.Back)))
 				.Set("toasts", (UiSlot)((x, y, _, _) => DrawToasts(t, x, y, right: true)));
 		}
-		ctx.Set("rows", entries.Select(i => new UiContext(ctx).Set("text", i.Name).Set("price", _tab == 0 ? i.Price : i.Price * shop!.SellPercent / 100).Set("have", i.Count)).ToList())
+		ctx.Set("rows", entries.Select(i => new UiContext(ctx).Set("text", i.Name).Set("price", ShopPrice(shop!, i)).Set("have", i.Count)).ToList())
 			.Set("list", _list)
 			.Set("compare", "");
+		InventoryEntry? at = entries.Count > 0 ? entries[Math.Clamp(_list.Cursor, 0, entries.Count - 1)] : null;
+		bool steps = ShopSteps;
+		ctx.Set("step", !steps ? "tabs" : _shopStep.ToString().ToLowerInvariant())
+			.Set("choices", new List<string> { T("ui.shop.buy"), T("ui.shop.sell") })
+			.Set("choice_cursor", _shopChoice)
+			.Set("quantity", steps ? _shopCount : 1)
+			.Set("quantity_max", shop is not null && at is not null ? ShopMost(shop, at) : 0)
+			.Set("unit_price", shop is not null && at is not null ? ShopPrice(shop, at) : 0)
+			.Set("total", shop is not null && at is not null ? ShopPrice(shop, at) * (steps ? _shopCount : 1) : 0)
+			.Set("result_text", _shopResult)
+			.Set("result_ok", _shopResultOk);
 		if (entries.Count > 0)
 		{
 			InventoryEntry selected = entries[Math.Clamp(_list.Cursor, 0, entries.Count - 1)];

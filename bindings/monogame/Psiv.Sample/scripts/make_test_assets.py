@@ -230,6 +230,7 @@ def main():
 	looks_broken(broken)
 	items_broken(broken)
 	menus_broken(broken)
+	dialogue_items_broken(broken)
 	bitmap_fonts(export, fonts)
 	if len(sys.argv) > 5:
 		subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("make_layout_assets.py")), str(export), str(fonts), sys.argv[5]], check=True)
@@ -716,6 +717,30 @@ def menus_broken(broken):
 	change("shop", lambda d: d.update({"entries": [{"page": "items"}]}))
 	change("menu_system", lambda d: d.update({"rows": ["save", "teleport", "save"]}))
 	change("battle_side", lambda d: d.update({"command_rows": {"top": ["fight", "dance"], "member": [], "side": 1}}))
+
+
+def dialogue_items_broken(broken):
+	"""One problem of each kind the name pad's sizes, the shop's steps, the narration routing, the developer badge, the music fade and the
+	page arrow can have, in BROKEN (docs/ui-layout.md)."""
+	ui = broken / "ui"
+
+	def change(name, edit):
+		data = json.loads((ui / f"{name}.json").read_text())
+		edit(data)
+		(ui / f"{name}.json").write_text(json.dumps(data, indent="\t") + "\n")
+
+	change("name_entry", lambda d: d.update({"params": {"pad_cell_w": "cell_size", "pad_spacing": 3}}))
+	change("shop", lambda d: d.update({"params": {"steps": "flow"}}))
+	change("dialogue", lambda d: d["params"].update({"narration_when": "starts_with(line_key)"}))
+
+	def styles(d):
+		d["params"]["dev_badge_x"] = -5
+		d["params"]["dev_scale_bitmap"] = 2
+		d["timings"]["music_fade_ms"] = -1
+	change("styles", styles)
+	m = json.loads((broken / "assets.json").read_text())
+	m["ui"]["page_arrow"] = "ui/no_arrow.png"
+	(broken / "assets.json").write_text(json.dumps(m, indent="\t") + "\n")
 
 
 def broken_layouts(broken):

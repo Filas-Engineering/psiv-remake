@@ -11,6 +11,13 @@ namespace Psiv.Sample;
 public sealed partial class SampleController
 {
 	private UiRenderer? _uiRenderer;
+
+	// The UI skin's page arrow, else the generated pointer: the dialogue's and the battle result's `page_arrow` field.
+	private int PageArrow => _art?.Skin?.PageArrow ?? _art?.Pointer ?? -1;
+
+	// A battle's intro or outro transition script is running.
+	private bool TransitionPlaying => _outro is not null || _battle.Phase == BattlePhase.Playback && _timeline.Current is { Kind: StepKind.Transition };
+
 	// The notices' boxes the code drew this frame through the screens' `toasts` slots.
 	private readonly List<Rectangle> _toastBoxes = [];
 

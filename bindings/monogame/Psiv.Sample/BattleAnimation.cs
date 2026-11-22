@@ -20,12 +20,14 @@ public sealed partial class BattleAnimation
 	// A sanity limit, not a design limit: a script longer than ten minutes at 60 Hz is a problem.
 	public const int MaxFrames = 36000;
 
+	public static readonly string[] Sections = ["version", "include", "settings", "select", "scripts", "fragments", "effects", "figures", "numbers", "transitions", "reduced_flash",
+		"weapon_classes", "placements"];
 	public static readonly string[] TurnPhases = ["forward", "banner", "animate", "effect", "result", "back"];
 	public static readonly string[] BattlePhases = ["cover", "hold", "reveal"];
 	public static readonly string[] TrackTypes = ["backdrop", "call", "color", "flash", "move", "name_window", "pose", "react", "release", "shake", "sound", "sprite", "state", "transition"];
 	public static readonly string[] Eases = ["linear", "in", "out", "in_out", "smooth", "sine", "step"];
 	public static readonly string[] Conditions = ["hit", "miss", "critical", "weak", "resisted", "immune", "defeat", "multi", "single", "party_actor", "enemy_actor", "vehicle", "combo",
-		"escaped", "layout:front", "layout:side"];
+		"escaped", "layout:front", "layout:side", "result_step", "transition_playing"];
 	public static readonly string[] NumberKinds = ["damage", "critical", "weak", "resisted", "immune", "miss", "heal", "tp", "revive", "status", "status_resisted", "status_ends", "stat_up",
 		"stat_down", "stat_normal", "no_effect", "felled", "felling_resisted"];
 	public static readonly string[] DefeatKinds = ["fade", "blink", "bands", "slide", "sink", "flash_fade", "frames"];
@@ -122,8 +124,7 @@ public sealed partial class BattleAnimation
 		var files = new List<(JsonObject Root, string Display)> { (root, file) };
 		foreach ((string name, JsonNode? _) in root)
 		{
-			if (name is not ("version" or "include" or "settings" or "select" or "scripts" or "fragments" or "effects" or "figures" or "numbers" or "transitions" or "reduced_flash"
-				or "weapon_classes" or "placements"))
+			if (!Sections.Contains(name))
 			{
 				Problem(file, "-", $"unknown field '{name}'");
 			}
@@ -156,8 +157,7 @@ public sealed partial class BattleAnimation
 					}
 					foreach ((string field, JsonNode? _) in inc)
 					{
-						if (field is "version" or "include" || !root.ContainsKey(field) && field is not ("settings" or "select" or "scripts" or "fragments" or "effects" or "figures"
-							or "numbers" or "transitions" or "reduced_flash" or "weapon_classes" or "placements"))
+						if (field is "version" or "include" || !root.ContainsKey(field) && !Sections.Contains(field))
 						{
 							Problem(name, "-", $"unknown field '{field}'");
 						}

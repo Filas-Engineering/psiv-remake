@@ -370,6 +370,9 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	python3 -I $(SAMPLE_SCRIPTS)/make_anim_assets.py --broken $(BUILD)/broken_assets
 	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/broken_assets > $(BUILD)/check_assets_broken.txt
 	diff $(SAMPLE_SCRIPTS)/check_assets_broken.expected $(BUILD)/check_assets_broken.txt
+	# The capabilities report lists every field the broken copy's check exercises.
+	$(SAMPLE_RUN) --capabilities > $(BUILD)/capabilities.json
+	python3 -I $(SAMPLE_SCRIPTS)/check_capabilities.py $(BUILD)/capabilities.json $(BUILD)/check_assets_broken.txt
 	# The broken copy's layouts (a screen file that does not parse, one with every kind of problem, a missing one, broken
 	# styles, and a hostile but valid pause layout) must leave the sample running: the saves run passes on them.
 	rm -rf $(BUILD)/sample_broken_layouts_saves
@@ -604,6 +607,38 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 			> $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
 		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
 	done
+	# Screens over screens and screens at small sizes (make_screens_assets.py): the notices drawn once by the topmost
+	# screen with a toasts slot, a page the field menu leaves out opened from Extras, title entries by `when`, Controls
+	# without Extras; the name pad's sizes, the built-in pause at 320x224, the developer badge's place and the music cut.
+	python3 -I $(SAMPLE_SCRIPTS)/make_screens_assets.py $(BUILD)/export $(BUILD)/menu_assets $(BUILD)/small_assets $(BUILD)/stack_assets $(BUILD)/small_screens_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/stack_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/small_screens_assets
+	@for run in stacked_screens:stack_assets small_screens:small_screens_assets; do \
+		name=$${run%%:*}; set=$${run#*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves $(BUILD)/$${name}_run; \
+		cp -R $(BUILD)/$$set $(BUILD)/$${name}_run; \
+		$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_$${name}_saves --assets $(BUILD)/$${name}_run --script $(SAMPLE_SCRIPTS)/$$name.txt --frames 1500 \
+			> $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
+	# Where narration goes by `narration_when`, the picture stack's hide and clear, the page arrow and shown_ms.
+	python3 -I $(SAMPLE_SCRIPTS)/make_narration_data.py $(GAME)/data $(CORE)/data $(BUILD)/route_data --routing
+	python3 -I $(SAMPLE_SCRIPTS)/make_narration_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/route_assets --route
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/route_data/game/data --check-assets --assets $(BUILD)/route_assets
+	rm -rf $(BUILD)/sample_narration_route_saves $(BUILD)/route_run
+	cp -R $(BUILD)/route_assets $(BUILD)/route_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/route_data/game/data --dev --saves $(BUILD)/sample_narration_route_saves --assets $(BUILD)/route_run \
+		--script $(SAMPLE_SCRIPTS)/narration_route.txt --frames 2000 > $(BUILD)/sample_narration_route_headless.txt || (cat $(BUILD)/sample_narration_route_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_narration_route_headless.txt
+	# The shop in steps (make_shop_assets.py): choice, list, quantity with its total, result, keeper lines and outcomes in
+	# result_text; then the tab layout with a result line.
+	python3 -I $(SAMPLE_SCRIPTS)/make_shop_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/shop_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/shop_assets
+	rm -rf $(BUILD)/sample_shop_steps_saves $(BUILD)/shop_run
+	cp -R $(BUILD)/shop_assets $(BUILD)/shop_run
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_shop_steps_saves --assets $(BUILD)/shop_run --script $(SAMPLE_SCRIPTS)/shop_steps.txt --frames 1500 \
+		> $(BUILD)/sample_shop_steps_headless.txt || (cat $(BUILD)/sample_shop_steps_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_shop_steps_headless.txt
 	# Flashes by their effect (make_flash_assets.py): a stepped stage strobe past the limit is dropped, a two-step whiteout
 	# is held to a fifth under reduced flash, a slow tint is untouched.
 	python3 -I $(SAMPLE_SCRIPTS)/make_flash_assets.py $(BUILD)/export $(BUILD)/flash_assets

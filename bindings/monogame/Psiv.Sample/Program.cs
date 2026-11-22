@@ -24,6 +24,7 @@ public static class Program
 		"  Psiv.Sample --dump-audio DIR   writes a generated track and three cues as WAV files and checks every generated sound\n" +
 		"  Psiv.Sample --check-assets [--assets DIR]   checks the asset directory's manifest and files against the data\n" +
 		"  Psiv.Sample --export-placeholders DIR   writes every generated picture and sound and a manifest that reproduces them\n" +
+		"  Psiv.Sample --capabilities   prints, as JSON, every asset, layout, animation and script name this build accepts\n" +
 		"  Psiv.Sample --version   prints the library version\n" +
 		"\n" +
 		"The asset directory defaults to assets/ beside the data directory, when there is one; F5 in the window reloads it.\n" +
@@ -65,6 +66,7 @@ public static class Program
 		string? export = null;
 		string? digests = null;
 		bool checkAssets = false;
+		bool capabilities = false;
 		bool watchAssets = false;
 		bool dev = false;
 		bool realtime = false;
@@ -91,6 +93,7 @@ public static class Program
 			case "--dump-audio": dumpAudio = Next(); break;
 			case "--assets": assets = Next(); break;
 			case "--check-assets": checkAssets = true; break;
+			case "--capabilities": capabilities = true; break;
 			case "--watch-assets": watchAssets = true; break;
 			case "--dev": dev = true; break;
 			case "--realtime": realtime = true; break;
@@ -179,6 +182,11 @@ public static class Program
 			if (newProfile && (script is null || playDefaults))
 			{
 				SampleController.NewProfile = true;
+			}
+			if (capabilities)
+			{
+				Console.Write(Capabilities.Report(gameData));
+				return 0;
 			}
 			if (checkAssets)
 			{
@@ -437,6 +445,12 @@ public sealed class ScriptPlayer
 			bool buttonOk = w.Length > 1 && Enum.TryParse(w[1], ignoreCase: true, out button) && Enum.IsDefined(button);
 			GameAction action = default;
 			bool actionOk = w.Length > 2 && Enum.TryParse(w[2], ignoreCase: true, out action) && Enum.IsDefined(action);
+			// The verbs `--capabilities` reports are the only ones the player reads.
+			if (!Capabilities.Verbs.Contains(w[0]) || w[0] == "expect" && (w.Length < 2 || !Capabilities.ExpectKinds.Contains(w[1])))
+			{
+				Fail($"{source}: cannot read '{line.Trim()}'");
+				continue;
+			}
 			switch (w[0])
 			{
 			case "press" when keyOk:

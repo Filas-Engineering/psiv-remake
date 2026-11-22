@@ -1,0 +1,84 @@
+# Where narration goes (make_narration_data.py --routing, make_narration_assets.py --route), with --dev and Instant text:
+# with `narration_when` left out (all) every line without a speaker joins the narration window, a speaker's line
+# starting with `{narration:on}` too, and one starting with `{narration:off}` takes the box; `tagged` routes only lines
+# starting with `{narration}` (or :on); an expression routes by the line's key (`starts_with(line_key, 'route.t')`) or
+# while the tower is on top of the picture stack (`picture_top`). A `picture_hide` without an id takes the top picture
+# only; `picture_clear` takes them all. The box's page arrow is the UI skin's `page_arrow`, and `shown_ms` counts from
+# the line all shown. With --window the shot lines save screenshots under build/shots/narration/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+
+# all
+dev event routing
+waitstate 20 narration A plain line without a speaker.
+expect state uifield.dialogue.box_visible false
+expect state uifield.dialogue.line_key route.plain
+press Enter
+waitstatehas 20 narration A line tagged as narration.
+press Enter
+waitstatehas 20 narration The guide speaks, sent to narration.
+press Enter
+waitstate 20 pagetext A plain line kept in the box.
+expect state uifield.dialogue.box_visible true
+wait 10
+expect state uifield.dialogue.shown_ms 160
+shot build/shots/narration/route_boxed.png
+press Enter
+waitstatehas 20 narration The chart goes up.
+expect state pictures chart
+press Enter
+waitstatehas 20 narration The tower goes over it.
+expect state pictures chart tower
+expect state uifield.dialogue.picture_top tower
+press Enter
+waitstatehas 20 narration The tower comes down; the chart stays.
+expect state pictures chart
+press Enter
+waitstatehas 20 narration A tale line, the chart gone too.
+expect state pictures -
+press Enter
+waitstate 20 pagetext That was the whole stack.
+expect state pictures -
+pressuntil Enter Field 30
+
+# tagged
+assets swap ui/dialogue.json alt/dialogue_tagged.json
+dev event routing
+waitstate 20 pagetext A plain line without a speaker.
+expect state narration none
+press Enter
+waitstatehas 20 narration A line tagged as narration.
+press Enter
+waitstatehas 20 narration The guide speaks, sent to narration.
+press Enter
+waitstate 20 pagetext A plain line kept in the box.
+press Enter
+waitstate 20 pagetext The chart goes up.
+shot build/shots/narration/route_tagged_box.png
+pressuntil Enter Field 30
+
+# an expression: a route.t key, or the tower on top of the stack
+assets swap ui/dialogue.json alt/dialogue_expr.json
+dev event routing
+waitstate 20 pagetext A plain line without a speaker.
+press Enter
+waitstatehas 20 narration A line tagged as narration.
+press Enter
+waitstatehas 20 narration The guide speaks, sent to narration.
+press Enter
+waitstate 20 pagetext A plain line kept in the box.
+press Enter
+waitstate 20 pagetext The chart goes up.
+press Enter
+waitstatehas 20 narration The tower goes over it.
+expect state uifield.dialogue.picture_top tower
+expect state uifield.dialogue.picture_names 2
+shot build/shots/narration/route_expr_tower.png
+press Enter
+waitstate 20 pagetext The tower comes down; the chart stays.
+wait 2
+expect state uifield.dialogue.picture_top chart
+pressuntil Enter Field 30

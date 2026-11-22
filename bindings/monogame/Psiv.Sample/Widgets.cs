@@ -279,19 +279,21 @@ public sealed class TextEntry(int maxLength)
 	}
 
 	// The height the text box and the grid take.
-	public static int Height(Func<int, int> px) => px(50) + px(14) + Grid.Length * px(36);
+	public static int Height(PadMetrics m) => m.BoxH + m.Gap + Grid.Length * m.CellH;
+
+	public static PadMetrics DefaultMetrics(Func<int, int> px) => new(px(50), px(14), 0, px(36), Style.Title, Style.Body, px(16), px(8), -1);
 
 	// The text box and the grid under it, its last row's cells worded as `labels` says; returns the height used.
-	public int Draw(IDrawSurface s, int x, int y, int w, int clockMs, Func<int, int> px, (string Space, string Erase, string Done) labels, int caretMs = 400)
+	public int Draw(IDrawSurface s, int x, int y, int w, int clockMs, Func<int, int> px, PadMetrics m, (string Space, string Erase, string Done) labels, int caretMs = 400)
 	{
-		int boxH = px(50);
+		int boxH = m.BoxH;
 		s.Fill(x, y, w, boxH, Style.Track);
 		Style.Frame(s, x, y, w, boxH, Style.PanelEdge);
 		string caret = clockMs / Math.Max(1, caretMs) % 2 == 0 ? "_" : " ";
-		s.Text(Buffer + caret, x + px(16), y + px(8), Style.Text, Style.Title);
-		int cellW = Math.Min(px(44), w / Grid[0].Length);
-		int cellH = px(36);
-		int gy = y + boxH + px(14);
+		s.Text(Buffer + caret, x + m.TextX, y + m.TextY, Style.Text, m.EntrySize);
+		int cellW = m.CellW > 0 ? m.CellW : Math.Min(px(44), w / Grid[0].Length);
+		int cellH = m.CellH;
+		int gy = y + boxH + m.Gap;
 		for (int r = 0; r < Grid.Length; r++)
 		{
 			int width = r == Grid.Length - 1 ? cellW * Grid[0].Length / Grid[r].Length : cellW;
@@ -306,12 +308,17 @@ public sealed class TextEntry(int maxLength)
 					Style.Frame(s, cx + 1, cy + 1, width - 2, cellH - 2, Style.Accent);
 				}
 				string label = Grid[r][c] switch { Space => labels.Space, Erase => labels.Erase, Done => labels.Done, string cell => cell };
-				s.Text(label, cx + (width - s.Measure(label)) / 2, cy + (cellH - px(24)) / 2, on ? Style.Accent : Style.Text);
+				s.Text(label, cx + (width - s.Measure(label, m.LabelSize)) / 2, cy + (m.LabelY >= 0 ? m.LabelY : (cellH - px(24)) / 2), on ? Style.Accent : Style.Text, m.LabelSize);
 			}
 		}
-		return Height(px);
+		return Height(m);
 	}
 }
+
+// A name pad's sizes in logical pixels: the text box's height, the gap under it, a cell (CellW 0: the width shared out,
+// 44 at most), the typed text's and the cells' text sizes, the typed text's inset, and a cell label's top in its cell
+// (-1: centered for the body size).
+public sealed record PadMetrics(int BoxH, int Gap, int CellW, int CellH, int EntrySize, int LabelSize, int TextX, int TextY, int LabelY);
 
 public static class Widgets
 {

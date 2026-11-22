@@ -8,7 +8,12 @@ namespace Psiv.Sample;
 // their own files; the technique, skill and system pages are in SampleController.MenuPages.
 public sealed partial class SampleController
 {
-	private string[] MenuTabs => [.. Layout.Screen("menu").Entries?.Select(e => e.Page) ?? UiFields.MenuDefault];
+	// The layout's entries; while Extras has opened a page they leave out, that page alone, until the menu closes.
+	private string[] MenuTabs => _menuOnly is { } only ? [only] : MenuEntries;
+
+	private string[] MenuEntries => [.. Layout.Screen("menu").Entries?.Select(e => e.Page) ?? UiFields.MenuDefault];
+
+	private string? _menuOnly;
 
 	private string MenuLabel(string page) => Layout.Screen("menu").Entries?.FirstOrDefault(e => e.Page == page).Label ?? "ui.menu.tab." + page;
 

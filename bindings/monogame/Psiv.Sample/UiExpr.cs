@@ -211,6 +211,8 @@ public sealed class UiExpr
 				return Arg(0).Raw is double d ? new(Math.Abs(d)) : new(Math.Abs(Arg(0).Int));
 			case "fit":
 				return new(Fit(scope, Arg(0).Text, (int)Arg(1).Int, (int)Arg(2).Int));
+			case "starts_with":
+				return new(Arg(0).Text.StartsWith(Arg(1).Text, StringComparison.Ordinal));
 			}
 			List<UiValue> values = [.. args.Select(a => a.Eval(scope))];
 			bool real = values.Any(v => v.Raw is double);
@@ -242,7 +244,7 @@ public sealed class UiExpr
 		}
 	}
 
-	private static readonly Dictionary<string, int> Arity = new() { ["t"] = 1, ["if"] = 3, ["len"] = 1, ["abs"] = 1, ["min"] = -2, ["max"] = -2, ["clamp"] = 3, ["measure"] = 2, ["measure_unscaled"] = 2, ["fit"] = 3 };
+	public static readonly Dictionary<string, int> Arity = new() { ["t"] = 1, ["if"] = 3, ["len"] = 1, ["abs"] = 1, ["min"] = -2, ["max"] = -2, ["clamp"] = 3, ["measure"] = 2, ["measure_unscaled"] = 2, ["fit"] = 3, ["starts_with"] = 2 };
 
 	private sealed class Parser(string text, List<string> names)
 	{

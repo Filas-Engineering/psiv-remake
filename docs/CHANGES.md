@@ -22,6 +22,23 @@ One line per feature, newest first: name, kind, meaning. Each pass adds its line
 
 Newest first. The MonoGame sample (`bindings/monogame/Psiv.Sample`) only.
 
+* `--capabilities` (sample option) and `check_capabilities.py` (make check): every asset, layout, dialogue, animation, presentation, action and script name this build accepts, as JSON with `schema_version`; the script player refuses verbs and `expect state` keys it does not list.
+* `shop_steps.txt`, `make_shop_assets.py` (headless run): the shop in steps and on the tabs.
+* `result_text`, `result_ok` (shop fields): a trade's outcome; a layout that reads `result_text` takes the shop's notices there instead of the toasts.
+* `steps` (shop param) with `step`, `choices`, `choice_cursor`, `quantity`, `quantity_max`, `unit_price`, `total` (shop fields): Buy or Sell, the list, a quantity with its total and the keeper's confirm line, then the result.
+* `stacked_screens.txt`, `small_screens.txt`, `narration_route.txt`, `make_screens_assets.py`, `make_narration_data.py --routing`, `make_narration_assets.py --route` (headless runs): the items below played.
+* Extras menu pages (behavior): a field menu page the menu's `entries` leave out opens the field menu with that page as its only tab, until it closes; Extras lists every page of its entries off the title.
+* `options` objects with `when`, `has_save`, `save_count`, `has_clear` (title layout entry field and fields): a title entry shows only while its condition holds.
+* `list_extras` (controls param): default 1, so the Controls page lists `Extras`; 0 leaves it off.
+* `music_fade_ms` (timing, default 800): the music's cross-fade on area changes and script music; 0 cuts.
+* `dev_badge_x`, `dev_badge_y`, `dev_scale_bitmap` (styles params): the developer badge's place off the battle, and `dev_scale` shrinking bitmap-font text.
+* Built-in pause (layout): sized by the styles' `size_body` and `size_small`, unchanged at the built-in sizes.
+* `page_arrow` (UI skin picture and dialogue and battle image field): a next-page mark for the dialogue and `result_more`.
+* `result_step`, `transition_playing` (battle fields and animation conditions): the result screen and a transition script.
+* `narration_when` (dialogue param: `all`, `tagged` or an expression), `{narration}`, `{narration:on}`, `{narration:off}` (built-in tags), `starts_with` (expression function): which lines the narration window takes.
+* `shown_ms`, `line_key`, `picture_top`, `picture_names` (dialogue fields); a `picture_hide` without an id takes the top picture only (picture stack rule).
+* `pad_box_h`, `pad_gap`, `pad_cell_w`, `pad_cell_h`, `pad_entry_size`, `pad_label_size`, `pad_text_x`, `pad_text_y`, `pad_label_y` (name_entry and menu_macros params): the name pad's sizes.
+* Notices drawn once (fix): the topmost screen with a `toasts` slot draws them; the screen under the Extras menu leaves them out.
 * `command_rows` (battle layout field, `top` and `member` lists): with `command_top`, which commands the top-level step and the members' rows show.
 * `list_extras` (controls param): the Controls page lists the `Extras` action.
 * `Extras` (game action, default C): opens the Extras menu from the title, the field and a battle's command menus.

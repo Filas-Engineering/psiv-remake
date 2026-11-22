@@ -87,6 +87,8 @@ expect state selected Controls
 press Enter
 expect state page controls
 press Up 2
+expect state selected Extras
+press Up
 expect state selected Toggle run
 press Up
 expect state selected Run

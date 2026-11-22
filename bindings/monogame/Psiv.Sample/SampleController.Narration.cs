@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 using Psiv.Session;
 
@@ -13,7 +14,36 @@ public sealed partial class SampleController
 
 	private bool NarrationWindow => Layout.Screen("dialogue").Windows.Any(w => w.Name == "narration");
 
-	private bool IsNarration(Line line) => line.SpeakerId.Length == 0 && line.SpeakerName.Length == 0 && NarrationWindow;
+	// Which lines the narration window takes, by the dialogue layout's `narration_when`: `all` (every line without a
+	// speaker), `tagged` (a line that starts with `{narration}`) or an expression over the line's fields. A line starting
+	// with `{narration:on}` or `{narration:off}` goes there or to the box whatever the mode.
+	private bool IsNarration(Line line)
+	{
+		if (!NarrationWindow)
+		{
+			return false;
+		}
+		Match lead = ControlTag().Match(line.Text);
+		string? tag = lead.Success && lead.Index == 0 && lead.Groups[1].Value == "narration" ? lead.Groups[2].Value : null;
+		if (tag is "on" or "off")
+		{
+			return tag == "on";
+		}
+		UiValue when = Ui.ParamValue("dialogue", "narration_when", RouteFields(UiData(), line), new UiValue("all"));
+		return when.Raw switch
+		{
+			"all" => line.SpeakerId.Length == 0 && line.SpeakerName.Length == 0,
+			"tagged" => tag == "",
+			_ => when.Truth,
+		};
+	}
+
+	// The fields a `narration_when` expression and the layout read about the line and the picture stack.
+	private UiContext RouteFields(UiContext ctx, Line? line) => ctx
+		.Set("line_key", line?.TextId ?? "")
+		.Set("speaker", line?.SpeakerName ?? "")
+		.Set("picture_top", _picture)
+		.Set("picture_names", _pictureStack.ToList());
 
 	private string NarrationText(Line line) =>
 		string.Join(" ", PagesOf(line).Select(page => page.Text.Trim()).Where(text => text.Length > 0));

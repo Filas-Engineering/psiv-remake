@@ -112,6 +112,15 @@ public sealed partial class SampleController
 
 	private string AreaKindText(AreaKind kind) => T(NameKind.AreaKind, (int)kind);
 
+	// A name pad's sizes from the screen's `pad_*` params, each left out at the built-in size.
+	private PadMetrics Pad(string screen, UiContext ctx)
+	{
+		PadMetrics d = TextEntry.DefaultMetrics(Px);
+		int P(string name, int fallback) => Ui.Param(screen, name, ctx, fallback);
+		return new PadMetrics(P("pad_box_h", d.BoxH), P("pad_gap", d.Gap), P("pad_cell_w", d.CellW), P("pad_cell_h", d.CellH), P("pad_entry_size", d.EntrySize),
+			P("pad_label_size", d.LabelSize), P("pad_text_x", d.TextX), P("pad_text_y", d.TextY), P("pad_label_y", d.LabelY));
+	}
+
 	private (string Space, string Erase, string Done) PadLabels() => (T("ui.name_pad.space"), T("ui.name_pad.erase"), T("ui.name_pad.done"));
 
 	private string ListText(IEnumerable<string> items) => string.Join(T("ui.common.separator"), items);

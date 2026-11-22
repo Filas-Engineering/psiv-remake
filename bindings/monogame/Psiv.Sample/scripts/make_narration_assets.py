@@ -4,12 +4,19 @@
 style; and a dialogue layout with the still pictures kept as a stack (`picture_stack`), drawn side by side at the top,
 and a `narration` window without a frame under them, holding four lines, with its own reveal speed and line delay.
 
-Usage: make_narration_assets.py EXPORT TEST OUT
+With --route (scripts/narration_route.txt): the same, plus a 16x16 page arrow picture as the UI skin's `page_arrow`
+(drawn at the box's right by the `page_arrow` field once the line is all shown, with `shown_ms` at its left), and two dialogue
+files to swap in: alt/dialogue_tagged.json (`narration_when: tagged`) and alt/dialogue_expr.json (an expression: a
+`route.t` key or the tower on top of the picture stack).
+
+Usage: make_narration_assets.py EXPORT TEST OUT [--route]
 """
 
 import json
 import shutil
+import struct
 import sys
+import zlib
 from pathlib import Path
 
 
@@ -20,6 +27,35 @@ def load(path):
 def save(path, data):
 	path.parent.mkdir(parents=True, exist_ok=True)
 	path.write_text(json.dumps(data, indent="\t", ensure_ascii=False) + "\n")
+
+
+def write_png(path, width, height, pixel):
+	raw = b"".join(b"\0" + b"".join(bytes(pixel(x, y)) for x in range(width)) for y in range(height))
+
+	def chunk(kind, body):
+		return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
+
+	path.parent.mkdir(parents=True, exist_ok=True)
+	path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+		+ chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+
+
+def route(out, dialogue):
+	# A down-pointing teal triangle on a clear ground.
+	write_png(out / "ui" / "page_arrow.png", 16, 16, lambda x, y: (40, 200, 190, 255) if 2 + y // 2 <= x <= 13 - y // 2 and y < 12 else (0, 0, 0, 0))
+	manifest = load(out / "assets.json")
+	manifest["ui"]["page_arrow"] = "ui/page_arrow.png"
+	save(out / "assets.json", manifest)
+	box = next(w for w in dialogue["windows"] if w["name"] == "box")
+	box["elements"].append({"type": "image", "name": "page_arrow", "visible": "all_shown", "image": "page_arrow", "x": "cw - 84", "y": "ch - 36", "w": 24, "h": 24})
+	box["elements"].append({"type": "text", "name": "shown_ms", "visible": "all_shown", "value": "shown_ms", "x": 24, "y": "ch - 32",
+		"style": "small_dim"})
+	save(out / "ui" / "dialogue.json", dialogue)
+	tagged = dict(dialogue, params=dict(dialogue["params"], narration_when="tagged"))
+	save(out / "alt" / "dialogue_tagged.json", tagged)
+	expr = dict(dialogue, params=dict(dialogue["params"], narration_when="starts_with(line_key, 'route.t') || picture_top == 'tower'"))
+	save(out / "alt" / "dialogue_expr.json", expr)
+	save(out / "alt" / "dialogue_all.json", dialogue)
 
 
 def main():
@@ -51,6 +87,8 @@ def main():
 		]},
 	]
 	save(out / "ui" / "dialogue.json", dialogue)
+	if "--route" in sys.argv[4:]:
+		route(out, dialogue)
 
 
 if __name__ == "__main__":

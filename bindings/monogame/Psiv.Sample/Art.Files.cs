@@ -24,7 +24,7 @@ public sealed record TitlePictures(int? Background, int? Logo, IReadOnlyList<(Ti
 
 // The UI skin from the asset directory: any part left out keeps the generated look, drawn with rectangles.
 public sealed record UiSkin(NineSliceImage? Frame, NineSliceImage? PanelFrame, IReadOnlyDictionary<string, NineSliceImage> CameraFrames, int? Cursor, int? BarTrack, int? BarFill,
-	NineSliceImage? BattleFrame = null);
+	NineSliceImage? BattleFrame = null, int? PageArrow = null);
 
 // The pictures the asset directory's manifest names, cut into the same images the generated ones are, so every screen
 // draws them the same way. Loaded once when the art is built; FromFile says which ids they replaced.
@@ -516,7 +516,8 @@ public sealed partial class Art
 			NineSliceImage? frame = ui.Frame is null ? null : Slice(ui.Frame);
 			NineSliceImage? panel = ui.PanelFrames.FirstOrDefault(p => p.Camera is null) is { } any ? Slice(any) : null;
 			Skin = new UiSkin(frame, panel, ui.PanelFrames.Where(p => p.Camera is not null).ToDictionary(p => p.Camera!, Slice),
-				Picture(ui.Cursor, "cursor"), Picture(ui.BarTrack, "bar_track"), Picture(ui.BarFill, "bar_fill"), ui.BattleFrame is null ? null : Slice(ui.BattleFrame));
+				Picture(ui.Cursor, "cursor"), Picture(ui.BarTrack, "bar_track"), Picture(ui.BarFill, "bar_fill"), ui.BattleFrame is null ? null : Slice(ui.BattleFrame),
+				Picture(ui.PageArrow, "page_arrow"));
 			if (frame is not null)
 			{
 				_fromFile["ui:frame"] = ui.Frame!.Path;

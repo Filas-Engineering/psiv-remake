@@ -6,7 +6,7 @@ namespace Psiv.Sample;
 // command menus, or by the field menu's `extras` entry. Its entries come from the layout's `entries`: settings rows change
 // in place, the options and controls open over it, the photosensitivity notice shows in it, the developer tools' console
 // opens with --dev, and a field menu page opens the field menu there. The title leaves out the field menu's pages, a
-// battle shows only UiFields.BattleExtras.
+// battle shows only UiFields.BattleExtras. A page the field menu's entries leave out opens the field menu on that page alone.
 public sealed partial class SampleController
 {
 	private bool _extrasOverlay;
@@ -15,6 +15,8 @@ public sealed partial class SampleController
 	private bool _controlsOnly;
 	// The field menu's tab the next ResetUi starts on, for a page Extras opens.
 	private int _menuTabNext;
+	// A page the field menu's entries leave out, which the next ResetUi opens the menu on alone.
+	private string? _menuOnlyNext;
 	private readonly ScrollList _extrasList = new();
 
 	private void OpenExtras()
@@ -32,7 +34,7 @@ public sealed partial class SampleController
 			bool page = UiFields.MenuPages.Contains(id) && id != "options";
 			bool shown = _battle.Active ? UiFields.BattleExtras.Contains(id)
 				: id == "dev" ? _dev
-				: !page || (_s.Mode != Mode.Title && MenuTabs.Contains(id));
+				: !page || _s.Mode != Mode.Title;
 			if (shown)
 			{
 				rows.Add((id, label ?? id switch
@@ -99,8 +101,10 @@ public sealed partial class SampleController
 			break;
 		default:
 			_extrasOverlay = false;
+			bool listed = MenuEntries.Contains(id);
 			if (_beforeOverlay == Screen.Menu)
 			{
+				_menuOnly = listed ? null : id;
 				_tab = Array.IndexOf(MenuTabs, id);
 				_pickMember = null;
 				_pickAction = null;
@@ -110,7 +114,8 @@ public sealed partial class SampleController
 			}
 			else
 			{
-				_menuTabNext = Array.IndexOf(MenuTabs, id);
+				_menuOnlyNext = listed ? null : id;
+				_menuTabNext = listed ? Array.IndexOf(MenuEntries, id) : 0;
 				Report(_s.OpenMenu());
 			}
 			break;
@@ -127,7 +132,7 @@ public sealed partial class SampleController
 			description = SettingRow(at).Description;
 		}
 		Ui.Draw("extras", s, t, data
-			.Set("scene", (UiSlot)((_, _, _, _) =>
+			.Set("scene", (UiSlot)((_, _, _, _) => DrawUnder("extras", () =>
 			{
 				switch (_beforeOverlay)
 				{
@@ -136,7 +141,7 @@ public sealed partial class SampleController
 				case Screen.Battle: DrawBattle(s, art); break;
 				default: DrawField(s, art); break;
 				}
-			}))
+			})))
 			.Set("rows", rows.Select(r => UiFields.SettingRows.Contains(r.Id) ? SettingItem(data, r.Id) : new UiContext(data).Set("id", r.Id).Set("text", T(r.Label))
 				.Set("label", T(r.Label)).Set("value", "").Set("changeable", false)).ToList())
 			.Set("list", _extrasList)

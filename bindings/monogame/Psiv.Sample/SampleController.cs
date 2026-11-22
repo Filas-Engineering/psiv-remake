@@ -222,6 +222,11 @@ public sealed partial class SampleController
 				// toasts and only reaches the log.
 				_log("notice: (" + n.Text + ")");
 			}
+			else if (Screen == Screen.Shop && ShopResultShown)
+			{
+				_shopResult = n.Text;
+				_log("notice: " + n.Text);
+			}
 			else if (n.Key == "game.arrive" && Ui.Param("field", "arrive_toast", UiData(), 1) == 0)
 			{
 				// The field layout's `arrive_toast` 0: the arrival is logged as ever but shows no notice.
@@ -279,6 +284,8 @@ public sealed partial class SampleController
 		_cursor = 0;
 		_tab = _menuTabNext;
 		_menuTabNext = 0;
+		_menuOnly = _menuOnlyNext;
+		_menuOnlyNext = null;
 		_pickMember = null;
 		_pickAction = null;
 		_list.Reset();
@@ -443,6 +450,18 @@ public sealed partial class SampleController
 		}
 	}
 
+	// A screen over this one draws the notices through its own `toasts` slot, so the screen under it leaves them out.
+	private bool _toastsAbove;
+
+	// Draws the screen under an overlay: when the overlay's layout has a `toasts` slot, the notices are its alone.
+	private void DrawUnder(string overlay, Action draw)
+	{
+		bool was = _toastsAbove;
+		_toastsAbove |= Layout.Screen(overlay).HasSlot("toasts");
+		draw();
+		_toastsAbove = was;
+	}
+
 	// The opacity of the last frame's backdrop dimming, `-` when no backdrop slot drew the field.
 	private string _probeBackdropDim = "-";
 
@@ -450,6 +469,10 @@ public sealed partial class SampleController
 	// `x` is the margin from the right edge, so they stay clear of a menu's lists.
 	private void DrawToasts(IDrawSurface s, int x, int bottom, int most = 4, bool right = false)
 	{
+		if (_toastsAbove)
+		{
+			return;
+		}
 		s = s is ScaledSurface scaled ? scaled.Inner : s;
 		UiStyles st = Layout.Styles;
 		int h = st.Param("toast_h");
@@ -630,7 +653,7 @@ public sealed partial class SampleController
 				// At a fraction of their size the tools take the layout set's menu font, which a small set draws legibly.
 				UseTextRole(s, TextRole.Menu);
 			}
-			DrawDev(devScale == 100 ? s : new ZoomSurface(s, devScale / 100f, text: _bitmapFont is null), art);
+			DrawDev(devScale == 100 ? s : new ZoomSurface(s, devScale / 100f, text: _bitmapFont is null || Layout.Styles.Param("dev_scale_bitmap") != 0), art);
 		}
 	}
 
@@ -638,6 +661,10 @@ public sealed partial class SampleController
 	public string State(string key)
 	{
 		static string OnOff(bool on) => on ? "on" : "off";
+		if (!Capabilities.IsProbe(key))
+		{
+			return "?";
+		}
 		Profile p = _s.Profile();
 		Settings settings = _s.Settings();
 		return key switch

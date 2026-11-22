@@ -567,7 +567,10 @@ public sealed partial class SampleController
 		ui.Set("result_lines", b.Phase == BattlePhase.Ended ? ResultPage(ResultLines(info), screen, out page, out pages) : [])
 			.Set("result_page", b.Phase == BattlePhase.Ended ? page + 1 : 0)
 			.Set("result_pages", b.Phase == BattlePhase.Ended ? pages : 0)
-			.Set("result_more", b.Phase == BattlePhase.Ended && page + 1 < pages);
+			.Set("result_more", b.Phase == BattlePhase.Ended && page + 1 < pages)
+			.Set("result_step", b.Phase == BattlePhase.Ended)
+			.Set("transition_playing", TransitionPlaying)
+			.Set("page_arrow", PageArrow);
 		// The list open and the command row it came from; the member choosing or acting; and whether the turn playing is a
 		// command a member chose from a list rather than a plain attack.
 		bool listed = b.Phase is BattlePhase.Option or BattlePhase.Macro or BattlePhase.Target;

@@ -19,7 +19,9 @@ public sealed partial class SampleController
 	private void DrawNameEntry(IDrawSurface s, IDrawSurface t, Art art)
 	{
 		string member = _s.NameEntryMember;
-		Ui.Draw("name_entry", s, t, UiData()
+		UiContext data = UiData();
+		PadMetrics pad = Pad("name_entry", data);
+		Ui.Draw("name_entry", s, t, data
 			.Set("backdrop", (UiSlot)((_, _, _, _) =>
 			{
 				DrawBackdrop(t, art, "name_entry");
@@ -27,8 +29,8 @@ public sealed partial class SampleController
 			}))
 			.Set("portrait", art.Portrait("", member))
 			.Set("member_name", _s.DisplayName(member))
-			.Set("entry", (UiSlot)((x, y, w, _) => _nameEntry.Draw(t, x, y, w, _clockMs, Px, PadLabels(), Timing("caret_ms"))))
-			.Set("entry_h", TextEntry.Height(Px))
+			.Set("entry", (UiSlot)((x, y, w, _) => _nameEntry.Draw(t, x, y, w, _clockMs, Px, pad, PadLabels(), Timing("caret_ms"))))
+			.Set("entry_h", TextEntry.Height(pad))
 			.Set("hint", _usingGamepad
 				? T("ui.name_entry.hint_pad", Hint(GameAction.Confirm), Hint(GameAction.Back), Hint(GameAction.Menu), T("ui.name_pad.done"))
 				: T("ui.name_entry.hint_keys", KeyText(Keys.Back), KeyText(Keys.Enter))));

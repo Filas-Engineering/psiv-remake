@@ -558,6 +558,8 @@ public sealed partial class SampleController
 			"escaped" => run.In.Turn?.Escaped == true,
 			"layout:front" => run.In.Front,
 			"layout:side" => !run.In.Front,
+			"result_step" => _battle.Phase == BattlePhase.Ended,
+			"transition_playing" => TransitionPlaying,
 			"$look.flash" => run.In.Look?.Flash == true,
 			_ when name.StartsWith("element:", StringComparison.Ordinal) => ev.Any(e => e.Type == BattleEventType.DamageDealt && GameSession.NameOf(NameKind.Element, (int)e.Element) == name[8..]),
 			_ => false,

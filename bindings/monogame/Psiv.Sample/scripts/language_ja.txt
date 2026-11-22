@@ -164,7 +164,7 @@ expect state selected クエストログ
 press Enter
 expect state selected 割り当て
 press Escape
-press Down 8
+press Down 9
 expect state selected 初期設定に戻す
 press Enter
 expect state prompt すべての操作を初期設定に戻しますか？

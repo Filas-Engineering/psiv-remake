@@ -181,8 +181,26 @@ dotnet run --project monogame/Psiv.Sample -- --window --script FILE [--screensho
 dotnet run --project monogame/Psiv.Sample -- --dump-audio DIR   # a generated track and three cues as WAV files, and the synthesizer's self-check
 dotnet run --project monogame/Psiv.Sample -- --check-assets [--assets DIR]   # every problem in the asset directory; exit 1 on any
 dotnet run --project monogame/Psiv.Sample -- --export-placeholders DIR   # every generated picture and sound, with a manifest that reproduces them
+dotnet run --project monogame/Psiv.Sample -- --capabilities   # every name this build accepts, as JSON; no window
 dotnet run --project monogame/Psiv.Sample -- --version   # the library version, as psiv_version() reports it; no window
 ```
+
+`--capabilities` prints what this build accepts as one JSON object, keys in a fixed order and every list sorted, from the same tables the checks and the script player read, so it cannot say more or less than they accept:
+
+* `schema_version` (1, raised when the report's shape changes), `library_version`.
+* `assets`: each manifest entry's fields by its place in `assets.json` (`-` the top level and so its sections, `characters[]` a list's entry, `portraits{}` a map's value, `characters[].poses{}`...).
+* `ui_layout`: `files` (the styles' and screen files' objects: `styles`, `styles.frames{}`, `styles.cursors{}`, `styles.text_styles{}`, `screen`, `window`, `transition`, `screen.tags{}`, ...), `element_common` and `elements` (each element type's properties), `anchors`, `transition_kinds`, `transition_from`, `frame_types`, `scaling_modes`, `scaling_filters`, `functions`, `variables`, `item_variables`, `window_edges`, `common_fields`, `timings`, `timing_tables`, `style_params`, `text_roles`, the entry and row sets (`title_entries`, `menu_pages`, `extras_entries`, `system_rows`, `equip_places`, `profile_rows`, `top_commands`, `member_commands`) and `screens` (per screen key: `fields`, `item_fields`, `slots`, `windows`, `params`, and whether it takes a `tags`, `statuses` or title table).
+* `dialogue`: `tag_actions`, `built_in_tags`.
+* `battle_animation`: `track_types`, `fields` (`-` the file's sections, `settings`, `track.TYPE` per track type, `numbers`, `states`, `move`, `color`), `turn_phases`, `battle_phases`, `subjects`, `anchors`, `conditions`, `eases`, `number_kinds`, `defeat_kinds`, `transition_kinds`, `layers`, `cancel_reasons`, `reaction_keys`, `event_cues`, `changes`, `outcomes`.
+* `battle_presentation`: the table's `sections`, `steps`, `animations`, `kinds`, `effects`, `elements`, `changes`.
+* `game_actions`: the actions in snake case.
+* `script`: the headless `verbs` (a line with another first word fails), the `expect` kinds, the state `probes` and `probe_prefixes` (`expect state` answers `?` for another key).
+
+```json
+{"schema_version": 1, "library_version": "...", "assets": {"-": ["audio", "backdrop_maps", ...], "ui": ["bar_fill", "bar_track", "battle_frame", "cursor", "enabled", "fonts", "frame", "page_arrow", "panel_frames"], ...}, ...}
+```
+
+`make bindings` writes it to `build/capabilities.json` and `scripts/check_capabilities.py` checks that it lists every field the broken copy's check gives a bad value for (`field 'NAME' must ...`, a known param's problem).
 
 With `PSIV_DIGEST_DIR=DIR` set, every headless run without `--frame-digests` writes its frame digests to `DIR/SCRIPT-HASH.txt`, the hash taken over the run's arguments, so `PSIV_DIGEST_DIR=DIR make bindings` before and after a change compares every run's frames, not only the ones the Makefile digests.
 
@@ -208,7 +226,7 @@ Screens read game actions, not keys. Each action has a list of keyboard keys and
 | `Interact` (the real-time field input only: as Confirm in the field) | E | - |
 | `Run` (the real-time field input only: held, walks at the run speed; with Always run on, held, walks) | Left Shift | left shoulder |
 | `RunToggle` (the real-time field input only: Always run on or off) | Caps Lock | left stick press |
-| `Extras` (the Extras menu from the title, the field and a battle's command menus; listed on the Controls page only with the controls layout's `list_extras`, so the page is as it was without it) | C | - (Select is taken by `Skip` and `Pause`, F2 by a developer overlay) |
+| `Extras` (the Extras menu from the title, the field and a battle's command menus; listed on the Controls page unless the controls layout's `list_extras` is 0) | C | - (Select is taken by `Skip` and `Pause`, F2 by a developer overlay) |
 
 The field has two inputs. The classic one, every script's unless it says `fieldinput realtime`, sends the held direction to the session as it is (a tap turns the leader, a hold walks a cell per `step_ms` of it) and is what every existing run plays. The real-time one, the window's when no script plays it and on `--realtime`, leads the walk itself (`SampleController.Field.cs`): a step starts on the frame a direction is wanted when its cell can be entered (the map's walkable cells on foot, what the vehicle crosses aboard, no parked vehicle or visible enemy), the leader glides from that frame over the step time, and the session is held that way on the same clock, so it puts the leader there by the time the glide ends; the frame is split where a step ends, so the next starts at once with no stop between cells. A tap walks exactly one cell. A direction pressed during a step goes next, even if let go; otherwise the latest pressed of those held goes on, and letting it go falls back to the one still held. A wall or a visible enemy gets the direction as before (a turn, a battle). Aboard, steps take `leader_step_ms`; on a running conveyor input is ignored and each carry glides over the conveyor's own `step_ms`. `Run` held (or Always run, toggled by `RunToggle` or on the options page) shortens the step to the layouts' `run_speed_percent` (200% by default; [`../docs/ui-layout.md`](../docs/ui-layout.md)) by giving the session the step's milliseconds that much faster, so play time and visible enemies run faster during a running step (the session has no run of its own). The stick snaps to four directions with hysteresis (in past half its travel, out under 0.35, the other axis taking over only when 1.3 times as strong). Confirm and `Interact` act on the faced cell, or else on a neighboring cell that answers (the sides, clockwise first, before the back), turning the leader to it first; pressed during a step they act when it ends. With the `Interaction prompt` option on (the default) the field layout's `prompt` window names the key and what it does, and the `pointer` sprite bobs over the target, while the leader stands. The two options live in `controls.json`'s `field` object (`{"always_run": false, "interact_prompt": true}`). With the real-time input on, the options page shows them before Controls and the Controls page lists `Interact`, `Run` and `RunToggle`; with it off both pages are as they were. Something across a counter cannot be reached: the session interacts only with the faced neighbor.
 

@@ -3,7 +3,12 @@
 on no hook: five narration lines (the first two show still pictures with `picture` tags), then a speaker's line, in
 English and Japanese. The scripts start it with the `dev event` command.
 
-Usage: make_narration_data.py GAME_DATA CORE_DATA OUT
+With --routing (scripts/narration_route.txt) a second event, `routing`, plays lines that test where narration goes:
+a plain line, one starting with `{narration}`, a speaker's line with `{narration:on}`, a plain one with
+`{narration:off}`, lines under the still pictures `chart` and `tower` with `picture_hide` taking the top one at a time,
+and a `tale.` key.
+
+Usage: make_narration_data.py GAME_DATA CORE_DATA OUT [--routing]
 
 OUT gets game/data and core/data side by side, where game.json's core_data looks.
 """
@@ -45,21 +50,61 @@ STRINGS = {
 }
 
 
+ROUTING_EVENT = """
+# Test-only (scripts/make_narration_data.py --routing): lines for each narration_when mode and the picture stack.
+event routing skippable
+	narrate @route.plain
+	narrate @route.tagged
+	say guide @route.forced
+	narrate @route.boxed
+	narrate @route.chart
+	narrate @route.tower
+	narrate @route.pop
+	narrate @tale.close
+	say guide @route.clear
+end
+"""
+
+ROUTING_STRINGS = {"en": {
+	"route.plain": "A plain line without a speaker.",
+	"route.tagged": "{narration}A line tagged as narration.",
+	"route.forced": "{narration:on}The guide speaks, sent to narration.",
+	"route.boxed": "{narration:off}A plain line kept in the box.",
+	"route.chart": "{picture:chart}The chart goes up.",
+	"route.tower": "{picture:tower}The tower goes over it.",
+	"route.pop": "{picture_hide}The tower comes down; the chart stays.",
+	"tale.close": "{picture_hide}A tale line, the chart gone too.",
+	"route.clear": "{pictures_clear}That was the whole stack.",
+}, "ja": {
+	"route.plain": "話し手のいない普通の行。",
+	"route.tagged": "{narration}語りの印のある行。",
+	"route.forced": "{narration:on}案内人の言葉を語りに回す。",
+	"route.boxed": "{narration:off}箱に残す普通の行。",
+	"route.chart": "{picture:chart}海図が上がる。",
+	"route.tower": "{picture:tower}その上に鐘楼。",
+	"route.pop": "{picture_hide}鐘楼が下り、海図が残る。",
+	"tale.close": "{picture_hide}物語の行、海図も消えた。",
+	"route.clear": "{pictures_clear}これで全部だった。",
+}}
+
+
 def main():
 	game, core, out = (Path(a) for a in sys.argv[1:4])
+	routing = "--routing" in sys.argv[4:]
 	if out.exists():
 		shutil.rmtree(out)
 	shutil.copytree(game, out / "game" / "data")
 	shutil.copytree(core, out / "core" / "data")
 	data = out / "game" / "data"
-	(data / "events" / "narration.ev").write_text(EVENT.lstrip("\n"))
+	(data / "events" / "narration.ev").write_text(EVENT.lstrip("\n") + (ROUTING_EVENT if routing else ""))
 	game_file = data / "game.json"
 	game_json = json.loads(game_file.read_text())
 	game_json["events"].append("events/narration.ev")
 	game_file.write_text(json.dumps(game_json, indent="\t", ensure_ascii=False) + "\n")
 	for language in game_json["languages"]:
 		table = data / language["strings"]
-		lines = "".join(f"{key} = {text}\n" for key, text in STRINGS[language["code"]].items())
+		strings = dict(STRINGS[language["code"]], **(ROUTING_STRINGS[language["code"]] if routing else {}))
+		lines = "".join(f"{key} = {text}\n" for key, text in strings.items())
 		table.write_text(table.read_text().rstrip("\n") + "\n\n" + lines)
 
 

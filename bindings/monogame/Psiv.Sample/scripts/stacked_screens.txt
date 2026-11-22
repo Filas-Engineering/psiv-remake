@@ -1,0 +1,109 @@
+# Screens over screens (make_screens_assets.py's STACK set, with --dev): the notices draw once, by the topmost screen
+# with a `toasts` slot (the Extras menu over the field menu and over the field; the pause shows the field without them);
+# the Extras menu opens the codex, which the field menu's entries leave out, as the field menu's only page; the title's
+# entries follow their `when` conditions; a Controls layout with `list_extras` 0 leaves Extras off the page. With
+# --window the shot lines save screenshots under build/shots/screens/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 2
+expect state uifield.title.has_save false
+expect state uifield.title.option_ids 3
+expect state selected New game
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev give clear_gel
+wait 2
+
+# The Extras menu over the field menu: the field menu's toasts slot gives way to the Extras menu's.
+press M
+expect screen Menu
+wait 2
+expect state toastboxes text 16: 650 590 582x32, 923 552 309x32, 835 514 397x32, 896 476 336x32
+press Right 8
+wait 2
+expect state tab Extras
+press Enter
+wait 2
+expect screen Extras
+expect state toastboxes text 16: 650 642 582x32, 923 604 309x32, 835 566 397x32, 896 528 336x32
+shot build/shots/screens/extras_over_menu.png
+
+# The codex from Extras: the field menu opens on it alone.
+press Up
+wait 2
+expect state selected Codex
+press Enter
+wait 2
+expect screen Menu
+expect state uifield.menu.page_ids 1
+expect state tab Codex
+shot build/shots/screens/codex_alone.png
+press Escape
+wait 2
+expect screen Field
+
+# Extras over the field, then the codex from there; the field menu opened afterwards has its own entries again.
+press C
+wait 2
+expect screen Extras
+expect state toastboxes text 16: 650 642 582x32, 923 604 309x32, 835 566 397x32, 896 528 336x32
+shot build/shots/screens/extras_over_field.png
+press Up
+wait 2
+press Enter
+wait 2
+expect screen Menu
+expect state uifield.menu.page_ids 1
+press Escape
+wait 2
+press M
+wait 2
+expect state uifield.menu.page_ids 10
+press Escape
+wait 2
+
+# The pause over the field draws the field without its notices, and the confirm box over it adds none.
+press P
+wait 2
+expect screen Pause
+expect state toastboxes none
+press Down 2
+press Enter
+wait 2
+expect state prompt Quit to the title? Play since the last save is lost.
+expect state toastboxes none
+press Up
+press Enter
+expect screen Title
+wait 2
+expect state uifield.title.has_save true
+expect state uifield.title.option_ids 4
+expect state selected Continue
+shot build/shots/screens/title_with_save.png
+
+# The Controls page from the title's options: Extras listed (the set's own list_extras 1), then a layout with
+# list_extras 0 leaves it off.
+press Down 2
+press Enter
+wait 2
+expect screen Options
+press Up
+wait 2
+expect state selected Controls
+press Enter
+wait 2
+expect state page controls
+expect state uifield.controls.actions 17
+expect state uifield.controls.actions.15.label Extras
+assets swap ui/controls.json alt/controls_no_extras.json
+wait 2
+expect state uifield.controls.actions 16
+expect state uifield.controls.actions.15.label Reset to defaults
+shot build/shots/screens/controls_no_extras.png
+press Escape
+wait 2
+press Escape
+wait 2
+expect screen Title

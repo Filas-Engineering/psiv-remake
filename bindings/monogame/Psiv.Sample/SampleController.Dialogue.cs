@@ -278,6 +278,7 @@ public sealed partial class SampleController
 		{
 		case "wait":
 		case "var":
+		case "narration":
 			return;
 		case "portrait":
 			_portraitId = tag.Value;
@@ -358,8 +359,10 @@ public sealed partial class SampleController
 		case "picture":
 			TagProblem(tag, $"no picture '{id}' in the assets' pictures");
 			break;
+		// Without an id the top one goes; only picture_clear takes them all.
+		case "picture_hide" when id.Length == 0 && _picture.Length > 0:
 		case "picture_hide" when PictureStack ? _pictureStack.Contains(id) : _picture == id:
-			_pictureStack.Remove(id);
+			_pictureStack.Remove(id.Length == 0 ? _picture : id);
 			_picture = PictureStack && _pictureStack.Count > 0 ? _pictureStack[^1] : "";
 			if (!PictureStack)
 			{
@@ -542,14 +545,16 @@ public sealed partial class SampleController
 				? art.Portrait(portrait, line.SpeakerId.Length > 0 ? line.SpeakerId : line.SpeakerName) : -1)
 			.Set("revealed", revealed)
 			.Set("all_shown", line is not null && done)
+			.Set("shown_ms", line is not null && done ? _shownMs : 0)
 			.Set("hint", line is null ? "" : T("ui.dialogue.next", Hint(GameAction.Confirm)) + (_s.CanSkip ? "   " + T("ui.dialogue.skip", Hint(GameAction.Skip)) : ""))
 			.Set("arrow", art.Pointer)
+			.Set("page_arrow", PageArrow)
 			.Set("has_choice", choice is not null)
 			.Set("prompt", choice is null ? "" : choice.Prompt.Length == 0 ? T("ui.dialogue.choose") : choice.Prompt)
 			.Set("options", choice?.Options.ToList() ?? [])
 			.Set("cursor", _cursor);
 		int picture = _picture.Length > 0 ? art.NamedPicture(_picture) ?? -1 : -1;
-		ctx.Set("picture", picture)
+		RouteFields(ctx, _s.Line()).Set("picture", picture)
 			.Set("picture_w", picture >= 0 ? art.SizeOf(picture).W : 0)
 			.Set("picture_h", picture >= 0 ? art.SizeOf(picture).H : 0)
 			.Set("pictures", _pictureStack.Select(name => art.NamedPicture(name) ?? -1).Where(image => image >= 0).Select(image => new UiContext()

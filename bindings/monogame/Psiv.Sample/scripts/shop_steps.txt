@@ -1,0 +1,98 @@
+# The shop in steps (make_shop_assets.py, with --dev): Buy or Sell, the list, a quantity with its total and the keeper's
+# confirm line, then the result with the keeper's thanks or cannot-afford line; the trades' outcomes go to the layout's
+# `result_text`, not the notices; Back goes a step back and leaves from the choice. Then the tab layout with a
+# `result_text` line (alt/shop_tabs.json). With --window the shot lines save screenshots under build/shots/shop/ (run
+# from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+wait 300
+cmd walk stall_front
+press Up
+wait 3
+press Enter
+expect screen Shop
+wait 2
+expect state uifield.shop.step choose
+expect state voice ui.shop.welcome
+shot build/shots/shop/choose.png
+press Enter
+wait 2
+expect state uifield.shop.step list
+expect state selected Tonic
+press Enter
+wait 2
+expect state uifield.shop.step quantity
+expect state voice ui.shop.confirm
+press Right 2
+wait 2
+expect state uifield.shop.quantity 3
+expect state uifield.shop.total 24
+shot build/shots/shop/quantity.png
+press Enter
+wait 2
+expect state uifield.shop.step result
+expect state uifield.shop.result_text Bought 3 Tonic for 24.
+expect state voice ui.shop.thanks
+expect toast none
+shot build/shots/shop/result.png
+press Enter
+wait 2
+expect state uifield.shop.step list
+expect state uifield.shop.rows 5
+press Down 2
+wait 2
+expect state uifield.shop.unit_price 30
+press Enter
+wait 2
+expect state uifield.shop.quantity_max 1
+press Enter
+wait 2
+expect state uifield.shop.step result
+expect state uifield.shop.result_ok false
+expect state uifield.shop.result_text There is not enough money.
+expect state voice ui.shop.cannot_afford
+expect toast none
+shot build/shots/shop/cannot_afford.png
+press Escape
+wait 2
+press Escape
+wait 2
+expect state uifield.shop.step choose
+
+# Selling: the quantity wraps from 1 to all held.
+press Down
+press Enter
+wait 2
+expect state uifield.shop.step list
+press Enter
+wait 2
+press Left
+wait 2
+expect state uifield.shop.quantity 4
+press Enter
+wait 2
+expect state uifield.shop.result_text Sold 4 Tonic for 16.
+press Escape
+press Escape
+press Escape
+wait 2
+expect screen Field
+
+# The tab layout with a result line: one bought, the outcome under the list and no notice.
+assets swap ui/shop.json alt/shop_tabs.json
+press Enter
+wait 2
+expect screen Shop
+expect state uifield.shop.step tabs
+press Enter
+wait 2
+expect state uifield.shop.result_text Bought 1 Tonic for 8.
+expect toast none
+shot build/shots/shop/tabs_result.png
+press Escape
+wait 2
+expect screen Field
