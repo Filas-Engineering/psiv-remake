@@ -28,12 +28,13 @@ public sealed partial class SampleController
 		var members = all.Where(c => c.Side == Side.Party && c.Id != vehicle).Select(c => c.Index).ToList();
 		Dictionary<int, int> centers = members.Select((index, slot) => (index, slot)).ToDictionary(m => m.index, m => rules.MemberX(m.slot));
 		windowX = -1;
-		if (!centers.ContainsKey(actor))
+		if (!centers.ContainsKey(actor) || !rules.StepAside)
 		{
 			return centers;
 		}
 		int gap = rules.StepGap;
-		var row = members.Select(m => (Key: m, Width: rules.PartySize, Pref: centers[m])).ToList();
+		// Left to right as the slots stand, whatever the marching order.
+		var row = members.Select(m => (Key: m, Width: rules.PartySize, Pref: centers[m])).OrderBy(m => m.Pref).ToList();
 		int at = row.FindIndex(m => m.Key == actor);
 		bool right = centers[actor] <= screenWidth / 2;
 		int windowPref = centers[actor] + (right ? 1 : -1) * (rules.PartySize / 2 + gap + windowWidth / 2);

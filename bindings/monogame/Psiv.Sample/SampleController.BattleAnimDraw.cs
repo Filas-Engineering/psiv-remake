@@ -440,6 +440,8 @@ public sealed partial class SampleController
 				fl.Sy += y;
 				fl.Lift += l;
 			}
+			// A hidden figure shows again when a pose track that starts after the hiding one plays on it.
+			long hiddenAt = -1, shownAt = -1;
 			foreach (AnimTrack t in run.Tracks.Where(t => t.Active(now) && t.Type is "state" or "pose" or "color" && On(run, t, i) && Holds(run, t.Def)))
 			{
 				long local = now - t.Start;
@@ -465,10 +467,11 @@ public sealed partial class SampleController
 				case "pose":
 					if (BattleAnimationRun.Str(t.Def["pose"]) == "hidden")
 					{
-						fl.Hidden = true;
+						hiddenAt = Math.Max(hiddenAt, t.Start);
 						break;
 					}
-					if (BattleAnimationRun.Str(t.Def["pose"]) is { } pose)
+					shownAt = Math.Max(shownAt, t.Start);
+					if (BattleAnimationRun.Str(t.Def["pose"]) is { } pose && pose != "shown")
 					{
 						fl.Pose = pose;
 						fl.PoseMs = (int)(local / Math.Max(1, _timeline.RateMilli));
@@ -494,33 +497,62 @@ public sealed partial class SampleController
 					break;
 				}
 			}
+			if (hiddenAt >= 0 && hiddenAt >= shownAt)
+			{
+				fl.Hidden = true;
+			}
 		}
-		// The battle's own states: a member down, an enemy falling, a combatant rising, a status shown.
+		// The battle's own states: a member down, an enemy falling, a combatant rising, a status shown. A defeat state with
+		// `outlast` runs that long from its release, on through the steps after its own.
 		if (step is not null && sc.AliveStep == step || !sc.Alive)
 		{
 			bool falling = !sc.Alive && step is not null && sc.AliveStep == step;
-			string life = !sc.Alive ? falling ? (sc.FelledInstantly ? "defeat:instant" : "defeat") : "fallen" : "rise";
+			bool instant = sc.FelledInstantly;
+			long lingering = -1;
 			if (!sc.Alive && !falling && c.All[i].Side == Side.Enemy)
 			{
-				fl.Hidden = true;
-				fl.Life = "gone";
-				return fl;
+				if (_falls.TryGetValue(i, out (string Id, long At, bool Instant) fall) && fall.Id == sc.Id
+					&& !_show.All.Any(o => o != sc && o.Alive && o.Position == sc.Position))
+				{
+					lingering = _timeline.Played - fall.At;
+					instant = fall.Instant;
+				}
+				JsonObject? after = StateDef(i, c, instant ? "defeat:instant" : "defeat");
+				long outlast = after?["outlast"] is JsonNode on ? BattleAnimationRun.Time(on, StatusRun(i)) : 0;
+				if (lingering < 0 || lingering >= outlast)
+				{
+					fl.Hidden = true;
+					fl.Life = "gone";
+					return fl;
+				}
+				falling = true;
 			}
+			string life = !sc.Alive ? falling ? (instant ? "defeat:instant" : "defeat") : "fallen" : "rise";
 			JsonObject? def = StateDef(i, c, life);
+			AnimRun? timing = lingering >= 0 ? StatusRun(i) : step?.Run;
 			long len = step?.Length ?? 0;
-			long local = life == "fallen" ? 0 : c.Elapsed - sc.AliveAt;
+			long local = life == "fallen" ? 0 : lingering >= 0 ? lingering : c.Elapsed - sc.AliveAt;
 			long rest = Math.Max(0, len - sc.AliveAt);
-			long length = def?["length"] is JsonNode ln && step?.Run is { } r ? BattleAnimationRun.Time(ln, r, rest, rest, out _) ?? rest : rest;
+			long length = def?["length"] is JsonNode ln && timing is { } r ? BattleAnimationRun.Time(ln, r, rest, rest, out _) ?? rest : rest;
 			float t = life == "fallen" ? 1f : Math.Clamp(length == rest ? BattleClock.Ratio(c.Elapsed - sc.AliveAt, rest) : BattleClock.Ratio(local, length), 0f, 1f);
+			if (falling && def?["outlast"] is JsonNode outlastNode && timing is not null)
+			{
+				length = BattleAnimationRun.Time(outlastNode, timing);
+				t = Math.Clamp(BattleClock.Ratio(local, Math.Max(1, length)), 0f, 1f);
+				if (lingering < 0)
+				{
+					_falls[i] = (sc.Id, _timeline.Played - _timeline.Elapsed + sc.AliveAt, sc.FelledInstantly);
+				}
+			}
 			fl.Life = life;
-			ApplyState(fl, def, life, t, local, length, step?.Run, null, c);
+			ApplyState(fl, def, life, t, local, length, timing, null, c);
 			if (life == "fallen")
 			{
 				fl.PoseMs = _timeline.ElapsedMs;
 			}
 			if (def is not null && BattleAnimationRun.Str(def["kind"]) is { } kind && falling)
 			{
-				long delay = def["delay"] is JsonNode dn && step?.Run is { } dr ? BattleAnimationRun.Time(dn, dr) : 0;
+				long delay = def["delay"] is JsonNode dn && timing is { } dr ? BattleAnimationRun.Time(dn, dr) : 0;
 				float dt = delay > 0 ? Math.Clamp(BattleClock.Ratio(local - delay, Math.Max(1, length - delay)), 0f, 1f) : t;
 				fl.Defeat = def;
 				fl.DefeatT = dt;
@@ -531,7 +563,7 @@ public sealed partial class SampleController
 					fl.Alpha = 1f - dt;
 					break;
 				case "flash_fade":
-					long flash = def["flash"] is JsonNode fn && step?.Run is { } fr ? BattleAnimationRun.Time(fn, fr) : 0;
+					long flash = def["flash"] is JsonNode fn && timing is { } fr ? BattleAnimationRun.Time(fn, fr) : 0;
 					if (local < flash)
 					{
 						fl.Add = Color.White;
@@ -545,7 +577,7 @@ public sealed partial class SampleController
 					fl.Alpha = 1f - dt;
 					break;
 				case "blink":
-					long period = Math.Max(4 * BattleClock.Frame, def["period"] is JsonNode pn && step?.Run is { } pr ? BattleAnimationRun.Time(pn, pr) : 4 * BattleClock.Frame);
+					long period = Math.Max(4 * BattleClock.Frame, def["period"] is JsonNode pn && timing is { } pr ? BattleAnimationRun.Time(pn, pr) : 4 * BattleClock.Frame);
 					fl.Alpha = dt >= 1f || local / period % 2 == 1 ? 0f : 1f;
 					break;
 				case "slide":
@@ -593,8 +625,9 @@ public sealed partial class SampleController
 		float value;
 		if (BattleAnimationRun.Str(d["kind"]) == "shake")
 		{
-			float amp = (float)(BattleAnimationRun.Num(d["amplitude"]) ?? 0), freq = (float)(BattleAnimationRun.Num(d["frequency"]) ?? 40);
-			value = BattleAnimationRun.Str(d["decay"]) == "none" ? MathF.Sin(t * freq) * amp * c.Motion : MathF.Sin(t * freq) * amp * c.Motion * (1f - t);
+			float amp = BattleAnimationEval.Px(d["amplitude"]) ?? 0, freq = (float)(BattleAnimationRun.Num(d["frequency"]) ?? 40);
+			float motion = BattleAnimationRun.Str(d["amplitude"])?.EndsWith("px", StringComparison.Ordinal) == true ? 1f : c.Motion;
+			value = BattleAnimationRun.Str(d["decay"]) == "none" ? MathF.Sin(t * freq) * amp * motion : MathF.Sin(t * freq) * amp * motion * (1f - t);
 		}
 		else
 		{
@@ -617,7 +650,8 @@ public sealed partial class SampleController
 		}
 	}
 
-	// The screen's shake: the largest of the shakes playing, damped with reduced flash, in percent of the layout's motion.
+	// The screen's shake: the largest of the shakes playing, damped with reduced flash, in percent of the layout's motion
+	// unless given in "Npx".
 	private float Shake(StageCtx c, out Point backdrop, out Point figures)
 	{
 		float shake = 0f;
@@ -636,7 +670,8 @@ public sealed partial class SampleController
 					continue;
 				}
 				JsonNode? a = BattleAnimationRun.Pick(t.Def["amplitude"], c.Front);
-				float amp = BattleAnimationRun.Str(a) == "$look.shake" ? run.In.Look?.Shake ?? 0 : (float)(BattleAnimationRun.Num(a) ?? 0);
+				bool logical = BattleAnimationRun.Str(a)?.EndsWith("px", StringComparison.Ordinal) == true;
+				float amp = BattleAnimationRun.Str(a) == "$look.shake" ? run.In.Look?.Shake ?? 0 : BattleAnimationEval.Px(a) ?? 0;
 				if (t.Def["offsets"] is JsonObject offsets)
 				{
 					long frame = (now - t.Start) / BattleClock.Frame;
@@ -670,10 +705,56 @@ public sealed partial class SampleController
 				{
 					v *= Anim.Damp;
 				}
-				shake = Math.Max(shake, v);
+				shake = Math.Max(shake, logical ? v : v * c.Motion);
 			}
 		}
 		return shake;
+	}
+
+	// Enemies whose defeat state outlasts its step: the timeline's played clock at the fall's release.
+	private readonly Dictionary<int, (string Id, long At, bool Instant)> _falls = [];
+
+	// Screen-wide flashes started on the controller's clock, and each flash track's verdict the first frame it drew.
+	private readonly List<int> _flashStarts = [];
+	private readonly Dictionary<(AnimRun Run, int Track), bool> _flashVerdicts = [];
+
+	// The flash limit: a flash starting while the set's count already started inside its window is dropped, with one
+	// log line per script.
+	private bool FlashAllowed(AnimRun run, int track)
+	{
+		if (Anim.FlashLimit is not (int count, int frames))
+		{
+			return true;
+		}
+		if (_flashVerdicts.TryGetValue((run, track), out bool known))
+		{
+			return known;
+		}
+		int window = frames * 1000 / 60;
+		_flashStarts.RemoveAll(ms => _clockMs - ms >= window);
+		bool ok = _flashStarts.Count < count;
+		if (ok)
+		{
+			_flashStarts.Add(_clockMs);
+		}
+		else if (!_flashVerdicts.Any(v => v.Key.Run.ScriptId == run.ScriptId && !v.Value))
+		{
+			_log($"animation: {run.ScriptId}: flash dropped, more than {count} in {frames} frames");
+		}
+		_flashVerdicts[(run, track)] = ok;
+		return ok;
+	}
+
+	// A color track counts as a screen-wide flash when it is a flash on the backdrop, the stage or the frame whose added
+	// light peaks above 64 or whose fill is above 0.25.
+	private static bool BrightFlash(JsonObject def)
+	{
+		if (BattleAnimationRun.Str(def["mode"]) != "flash" || def["to"] is not JsonObject to)
+		{
+			return false;
+		}
+		Color add = BattleAnimationRun.Str(to["add"]) is { } a ? BattleAnimationEval.ParseColor(a, _ => Color.White) : Color.Transparent;
+		return Math.Max(add.R, Math.Max(add.G, add.B)) > 64 || to["tint"] is not null && (BattleAnimationRun.Num(to["amount"]) ?? 1) > 0.25;
 	}
 
 	// The track's reduced flash policy: its own, the file's for its type, else the built-in one.
@@ -702,7 +783,7 @@ public sealed partial class SampleController
 				float tt = t.T(now);
 				if (t.Type == "flash")
 				{
-					if (c.Reduced && Reduced(t, "drop") == "drop")
+					if (c.Reduced && Reduced(t, "drop") == "drop" || !FlashAllowed(run, t.Index))
 					{
 						continue;
 					}
@@ -713,7 +794,7 @@ public sealed partial class SampleController
 					continue;
 				}
 				string mode = BattleAnimationRun.Str(t.Def["mode"]) ?? "set";
-				if (c.Reduced && mode == "flash" && Reduced(t, "drop") == "drop")
+				if (c.Reduced && mode == "flash" && Reduced(t, "drop") == "drop" || BrightFlash(t.Def) && !FlashAllowed(run, t.Index))
 				{
 					continue;
 				}

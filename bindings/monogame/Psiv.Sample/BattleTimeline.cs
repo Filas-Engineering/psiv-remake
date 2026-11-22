@@ -86,6 +86,8 @@ public sealed class BattleTimeline
 {
 	private readonly Queue<BattleStep> _pending = new();
 	private long _carry;
+	// Clock units of the steps already over, so `Played` counts across steps and rounds.
+	private long _done;
 
 	public BattleStep? Current { get; private set; }
 	public bool Done => Current is null && _pending.Count == 0;
@@ -95,6 +97,7 @@ public sealed class BattleTimeline
 	public float Progress => Current is null || Current.Length == 0 ? 1f : Math.Clamp(BattleClock.Ratio(Elapsed, Current.Length), 0f, 1f);
 	public int ElapsedMs => (int)(Elapsed / RateMilli);
 	public long Elapsed { get; private set; }
+	public long Played => _done + Elapsed;
 	public IEnumerable<BattleStep> Pending => _pending;
 
 	public void Add(IEnumerable<BattleStep> steps)
@@ -115,6 +118,7 @@ public sealed class BattleTimeline
 		Current = null;
 		Elapsed = 0;
 		_carry = 0;
+		_done = 0;
 	}
 
 	// The steps that started, in order. `speedPercent` is the battle speed (100, 150, 200, 300): the clock moves by the
@@ -131,6 +135,7 @@ public sealed class BattleTimeline
 		_carry = units % 100;
 		while (Current is not null && Elapsed >= Current.Length)
 		{
+			_done += Current.Length;
 			Elapsed -= Current.Length;
 			Current = null;
 			Next(started);
@@ -160,6 +165,7 @@ public sealed class BattleTimeline
 	public List<BattleStep> Hurry()
 	{
 		var started = new List<BattleStep>();
+		_done += Current?.Length ?? 0;
 		Current = null;
 		Elapsed = 0;
 		Next(started);
@@ -169,6 +175,7 @@ public sealed class BattleTimeline
 	public List<BattleStep> SkipAll()
 	{
 		var started = new List<BattleStep>(_pending);
+		_done += (Current?.Length ?? 0) + _pending.Sum(s => Math.Max(0, s.Length));
 		_pending.Clear();
 		Current = null;
 		Elapsed = 0;
@@ -430,7 +437,8 @@ public sealed class BattleTimeline
 // What building steps needs from the session and the data: names, log lines and cues for events, the presentation
 // table, the action shapes and the text tables. `labels` grows and changes with the enemies that join or change form
 // as the steps are built, so each step's lines name them as they were then.
-public sealed class BattleContext(GameSession session, List<string> labels, BattlePresentation table, GameData data, Func<string, object[], string> text)
+public sealed class BattleContext(GameSession session, List<string> labels, BattlePresentation table, GameData data, Func<string, object[], string> text,
+	Func<int, bool>? criticalLine = null)
 {
 	private readonly IReadOnlyList<Combatant> _final = session.Combatants();
 
@@ -502,6 +510,7 @@ public sealed class BattleContext(GameSession session, List<string> labels, Batt
 			BattleEventType.ComboDiscovered => T("ui.battle.log.combo_found"),
 			BattleEventType.ItemHadNoEffect => T("ui.battle.log.no_effect", Name(e.Ability)),
 			BattleEventType.Missed => T("ui.battle.log.evades", Label(e.Target)),
+			BattleEventType.Critical when criticalLine?.Invoke(e.Target) == false => null,
 			BattleEventType.Critical => T("ui.battle.log.critical"),
 			BattleEventType.DamageDealt => T("ui.battle.log.damage", Label(e.Target), e.Amount),
 			BattleEventType.Healed when e.Resource == ResourceKind.Tp => T("ui.battle.log.recovers_tp", Label(e.Target), e.Amount),

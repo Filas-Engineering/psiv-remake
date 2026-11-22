@@ -49,9 +49,10 @@ public sealed partial class SampleController
 	// ranks, the first ones in front, either interleaved over `enemy_rank_span` or each rank spread on its own and the back
 	// one shifted half a place.
 	// SlotX and SlotFoot: the file's `party_slot_N_x` and `party_slot_N_foot` per marching place, -1 keeping the computed one.
+	// StepAside: the members beside the open command window step aside for it (`step_aside`, 0 turns it off).
 	private sealed record StageRules(int StageBottom, int PartyX, int PartyDx, int PartyFoot, int PartyDy, int PartySize, int VehicleX, int VehicleFoot,
 		int VehicleSize, int StepGap, int StepMargin, int EnemyX, int RowMax, int RowSpan, int RowSpacingMax, int RowFoot, int RowStagger, bool RanksInterleaved,
-		int RankSpan, int RankSpacingMax, int FrontFoot, int BackFoot, int[] SlotX, int[] SlotFoot)
+		int RankSpan, int RankSpacingMax, int FrontFoot, int BackFoot, int[] SlotX, int[] SlotFoot, bool StepAside)
 	{
 		public int MemberX(int slot) => slot < SlotX.Length && SlotX[slot] >= 0 ? SlotX[slot] : PartyX + slot * PartyDx;
 
@@ -65,7 +66,8 @@ public sealed partial class SampleController
 		return new StageRules(P("stage_bottom"), P("party_x"), P("party_dx"), P("party_foot"), P("party_dy"), P("party_size"), P("vehicle_x"), P("vehicle_foot"),
 			P("vehicle_size"), P("step_gap"), P("step_margin"), P("enemy_x"), P("enemy_row_max"), P("enemy_row_span"), P("enemy_row_spacing_max"), P("enemy_row_foot"),
 			P("enemy_row_stagger"), P("enemy_ranks_interleaved") != 0, P("enemy_rank_span"), P("enemy_rank_spacing_max"), P("enemy_front_foot"), P("enemy_back_foot"),
-			[.. Enumerable.Range(0, 5).Select(n => Ui.Param(screen, $"party_slot_{n}_x", ctx, -1))], [.. Enumerable.Range(0, 5).Select(n => Ui.Param(screen, $"party_slot_{n}_foot", ctx, -1))]);
+			[.. Enumerable.Range(0, 5).Select(n => Ui.Param(screen, $"party_slot_{n}_x", ctx, -1))], [.. Enumerable.Range(0, 5).Select(n => Ui.Param(screen, $"party_slot_{n}_foot", ctx, -1))],
+			Ui.Param(screen, "step_aside", ctx, 1) != 0);
 	}
 
 	// Where the enemy at formation position `j` of `n` places stands: its center x, the y of its feet and its size. The
@@ -140,13 +142,23 @@ public sealed partial class SampleController
 		};
 		// The screen shakes by the largest of the scripts' shakes (reduced flash damps them), in percent of the layout's motion.
 		float shake = Shake(ctx, out Point backdropShift, out Point figureShift);
+		// A vertical split reveal brings the enemies' labels up with their figures.
+		int splitY = 0;
 		if (step is { Kind: StepKind.Transition, Run: { } split })
 		{
-			(int bx, int fx) = SplitShift(split, _timeline.Elapsed);
-			backdropShift.X += bx;
-			figureShift.X += fx;
+			(int bx, int fx, bool vertical) = SplitShift(split, _timeline.Elapsed);
+			if (vertical)
+			{
+				backdropShift.Y += bx;
+				figureShift.Y += fx;
+				splitY = fx;
+			}
+			else
+			{
+				backdropShift.X += bx;
+				figureShift.X += fx;
+			}
 		}
-		shake *= motion;
 		_probeShake = (int)MathF.Round(shake);
 		var jolt = new Point((int)MathF.Round(shake * MathF.Sin(_clockMs * 0.09f)), (int)MathF.Round(shake * MathF.Cos(_clockMs * 0.13f)));
 
@@ -324,6 +336,7 @@ public sealed partial class SampleController
 			{
 				(int x, int foot, _) = Where(i);
 				x += figureShift.X;
+				foot += splitY;
 				bool targeted = i == target;
 				string label = Style.Fit(s, shown[i].Label, labelWidth, Style.Small);
 				int lw = s.Measure(label, Style.Small);
@@ -373,6 +386,7 @@ public sealed partial class SampleController
 				var sizes = new NumberSizes(Param("number_size"), Param("number_critical_size"), Param("number_tp_size"), Param("number_word_size"));
 				int numberY = Param("number_y"), numberMemberY = Param("number_member_y"), numberRise = Param("number_rise"), numberGap = Param("number_gap");
 				var stacked = new Dictionary<int, int>();
+				_probeNumbers.Clear();
 				BattleEvent? previous = null;
 				foreach (BattleEvent e in step.Events)
 				{
@@ -384,8 +398,9 @@ public sealed partial class SampleController
 					}
 					float p = Since(step, unit is null ? 0 : unit.Forced ? step.Length : unit.At);
 					int t = e.Type == BattleEventType.ItemHadNoEffect ? e.Actor : e.Target;
-					BattleEvent? previousEvent = previous;
-					if (!anchors.TryGetValue(t, out Rectangle r) || Floating(e, previous, sizes) is not { } floating)
+					(BattleEvent plain, BattleEvent? previousEvent) = Plain(e, previous, screen, ui);
+					if (!anchors.TryGetValue(t, out Rectangle r) || e.Type == BattleEventType.Missed && !Marked(screen, ui, "miss", t)
+						|| Floating(plain, previousEvent, sizes) is not { } floating)
 					{
 						previous = e;
 						continue;
@@ -393,7 +408,8 @@ public sealed partial class SampleController
 					previous = e;
 					int n = stacked.GetValueOrDefault(t);
 					stacked[t] = n + 1;
-					DrawNumber(s, e, floating, p, r, Behind(t), n, numberY, numberMemberY, numberRise, numberGap, NumberKind(e, previousEvent),
+					_probeNumbers.Add($"{_show.All.ElementAtOrDefault(t)?.Label ?? "?"} {floating.Text} {NumberKind(plain, previousEvent)}");
+					DrawNumber(s, e, floating, p, r, Behind(t), n, numberY, numberMemberY, numberRise, numberGap, NumberKind(plain, previousEvent),
 						_timeline.Elapsed - (unit is null ? 0 : unit.At));
 				}
 				UseTextRole(s, TextRole.Menu);
@@ -695,6 +711,33 @@ public sealed partial class SampleController
 	// The floating numbers' text sizes (the battle layout's `number_size`, `number_critical_size`, `number_tp_size` and
 	// `number_word_size`, the last for the words).
 	private readonly record struct NumberSizes(int Number, int Critical, int Tp, int Word);
+
+	// The floating texts the last frame drew: each target's label, the text and its number style.
+	private readonly List<string> _probeNumbers = [];
+
+	// Whether the battle layout shows a result's mark (`effectiveness`, `critical`, `miss`) on a target: the param for its
+	// side (`NAME_marks_party`, `NAME_marks_enemy`), else `NAME_marks`, else on.
+	private bool Marked(string screen, UiContext ui, string what, int target) =>
+		Ui.Param(screen, $"{what}_marks_{(target < (StageInfo()?.PartyCount ?? 0) ? "party" : "enemy")}", ui, Ui.Param(screen, $"{what}_marks", ui, 1)) != 0;
+
+	// A damage event as its number shows it: without its weak, resisted or immune mark, and without the critical hit
+	// before it, where the layout turns those marks off.
+	private (BattleEvent Event, BattleEvent? Previous) Plain(BattleEvent e, BattleEvent? previous, string screen, UiContext ui)
+	{
+		if (e.Type != BattleEventType.DamageDealt)
+		{
+			return (e, previous);
+		}
+		if (e.Effectiveness != Effectiveness.Normal && !Marked(screen, ui, "effectiveness", e.Target))
+		{
+			e = e with { Effectiveness = Effectiveness.Normal };
+		}
+		if (previous is { Type: BattleEventType.Critical } && !Marked(screen, ui, "critical", e.Target))
+		{
+			previous = null;
+		}
+		return (e, previous);
+	}
 
 	// What floats over a target for one event; `previous` tells a critical hit's damage.
 	private FloatingText? Floating(BattleEvent e, BattleEvent? previous, NumberSizes sizes)

@@ -1,0 +1,195 @@
+# The battle animation additions with the set `make_anim_assets.py --more` writes, on the front data copy with --dev.
+# Its battle layout moves at half the distances (motion_percent 50). The fighter's blade script: the fighter slides
+# 40 logical pixels ("40px", never scaled) while the other members drop 40 scaled pixels (20 at 50%), hides from the
+# banner and shows again from `animate` (a later pose lifts `hidden`), warms the backdrop with added light and opacity,
+# starts five flashes inside a second of which the limit keeps three, shakes 6 logical pixels, and turns its release
+# cues off; the felled enemy fades on into the next turn (`outlast`). Then the layout's slots out of marching order
+# with and without the step-aside, the effectiveness, critical and miss marks turned off, reduced flash dropping a
+# sprite and replacing a flash, and a worn piece's `item:` key. With --window the shot lines save screenshots under
+# build/shots/more/.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev level fighter 30
+
+dev battle training
+expect mode Battle
+waitstate 300 battlephase Command
+expect state overlaps none
+expect state partyplaces Test Fighter 136 588, Test Mystic 656 588, Test Medic 808 588
+shot build/shots/more/command.png
+
+# Slots out of marching order (900, 300, 600): the members beside the command window step aside left to right as they
+# stand, so the window covers none of them; with step_aside 0 they keep their slots.
+assets swap ui/battle_front.json alt/battle_front_slots.json
+wait 6
+expect state overlaps none
+expect state partyplaces Test Fighter 1120 588, Test Mystic 300 588, Test Medic 600 588
+shot build/shots/more/slots_step_aside.png
+assets swap ui/battle_front.json alt/battle_front_still.json
+wait 6
+expect state partyplaces Test Fighter 900 588, Test Mystic 300 588, Test Medic 600 588
+shot build/shots/more/slots_still.png
+assets swap ui/battle_front.json alt/battle_front_base.json
+wait 6
+
+# The round: the fighter's blade on Gel Mite A, the mystic's Frost Pane (resisted by the mites), the medic defends.
+press Enter
+press Enter
+press Down
+press Enter
+press Down 2
+expect state description A sheet of frost settles on every foe.
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 anim more.blade weapon:blade/one
+audio mark
+animlog mark
+waitstate 60 animframe 9
+expect statehas figure.Test_Mystic offset 0,20
+expect statehas figure.Test_Medic offset 0,20
+expect state figures mystic back, medic back
+shot build/shots/more/hidden.png
+waitstate 60 animframe 29
+expect state figures fighter back, mystic back, medic back
+expect statehas figure.Test_Fighter offset 40,0
+waitstate 60 animframe 40
+expect state backdropfx tint
+expect statehas animtracks spark sprite
+expect state flash on
+shot build/shots/more/backdrop_warm.png
+waitstate 60 animframe 49
+expect state battleshake 6
+expect statehas released 1/1 Gel Mite A -60 @48
+expect state numbers Gel Mite A 60 damage
+shot build/shots/more/release.png
+waitstate 60 animframe 55
+expect state flash off
+waitstate 60 animframe 60
+expect noaudio cue hit
+expect noaudio cue enemy_down
+# After the blade's turn the felled mite is still fading: its defeat outlasts the result step by 90 frames.
+waitstatehas 300 anim turn.default
+expect statehas figure.Gel_Mite_A defeat
+shot build/shots/more/outlast.png
+waitstatehas 600 step result Gel Mite B
+expect statehas numbers Gel Mite B
+expect statehas numbers Resisted resisted
+shot build/shots/more/resisted.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+
+# The same technique with the layout's effectiveness, critical and miss marks off: the resisted damage floats as a
+# plain number in the plain style; the log's lines read as before.
+assets swap ui/battle_front.json alt/battle_front_plain.json
+wait 6
+press Down 4
+press Enter
+press Down
+press Enter
+press Down 2
+expect state description A sheet of frost settles on every foe.
+press Enter
+press Down 4
+press Enter
+# The fighter's defend takes the shape key with its character.
+waitstatehas 600 anim more.defend
+expect statehas animkey shape:defend/character:fighter more.defend
+waitstatehas 600 step result Gel Mite B
+wait 4
+expect statehas numbers Gel Mite B
+expect statenot numbers Resisted
+shot build/shots/more/plain.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+assets swap ui/battle_front.json alt/battle_front_base.json
+wait 6
+
+# Reduced flash: the blade's sprite is dropped and its flash is replaced by a soft tint (`calm`).
+cmd set reduced_flash on
+press Enter
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 anim more.blade weapon:blade/one
+waitstate 60 animframe 39
+expect statehas animtracks calm color
+expect statenot animtracks spark sprite
+expect statenot animtracks bright
+shot build/shots/more/reduced.png
+waitstate 900 battlephase Ended
+cmd set reduced_flash off
+hold F 60
+press Enter
+expect screen Field
+
+# A worn piece cast through Item takes its `item:PIECE` key, which turns the hit cue off.
+dev give storm_rod 1
+press M
+cmd equip mystic storm_rod
+press Escape
+expect screen Field
+dev battle training
+waitstate 120 battlephase Command
+press Down 4
+press Enter
+press Down 3
+press Enter
+expect statehas battlemenu Storm Rod (worn)
+press Up
+press Enter
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 anim more.rod item:storm_rod
+expect statehas animkey item:storm_rod/encounter:training - | item:storm_rod/count:
+expect statehas animkey item:storm_rod more.rod
+audio mark
+waitstatehas 600 step back
+expect noaudio cue hit
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+dev win
+hold F 60
+press Enter
+expect screen Field
+
+# Aboard the skimmer: a vertical split into the battle (the cover in steps of 2 frames, the reveal in steps of 5, the
+# backdrop dropping in from above and the figures rising from below), and the vehicle's attack by its vehicle key.
+dev encounters off
+dev vehicle reed_skimmer reed_path skimmer_front
+dev warp reed_path 16 6
+press Right
+wait 3
+press Enter
+wait 4
+expect state aboard reed_skimmer
+animlog mark
+dev battle training
+expect mode Battle
+waitstatehas 60 transition split cover
+shot build/shots/more/split_cover.png
+waitstatehas 60 transition split reveal 6/
+shot build/shots/more/split_reveal.png
+waitstate 300 battlephase Command
+expect animloghas start more.intro (battle:transition_in/vehicle) @0
+press Enter
+press Enter
+waitstatehas 900 anim more.vehicle
+expect statehas animkey shape:attack/vehicle:reed_skimmer more.vehicle
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+dev win
+hold F 60
+press Enter
+expect screen Field

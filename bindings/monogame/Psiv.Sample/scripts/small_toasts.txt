@@ -1,0 +1,55 @@
+# The small example layout set's notices on the menu, the shop and the Load screen (make_layout_assets.py --small,
+# 320x224): their text takes the styles' `small` text size, as the field's notices do: 16 in the set's styles, then 10
+# with a styles file whose small size is 10. With --window the shot lines save screenshots under build/shots/small/
+# (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+wait 10
+shot build/shots/small/toasts_field.png
+press M
+expect screen Menu
+waitstatehas 120 toastboxes text 16:
+shot build/shots/small/toasts_menu.png
+assets swap ui/styles.json alt/styles_small10.json
+waitstatehas 30 toastboxes text 10:
+shot build/shots/small/toasts_menu_small10.png
+press Escape
+expect screen Field
+cmd walk stall_front
+press Up
+wait 3
+press Enter
+expect screen Shop
+cmd buy clear_gel 1
+waitstatehas 60 toastboxes text 10:
+shot build/shots/small/toasts_shop_small10.png
+press Escape
+expect screen Field
+
+# The Load screen's notice: a damaged autosave refused.
+press P
+expect screen Pause
+press Down 2
+press Enter
+press Up
+press Enter
+expect screen Title
+press Down 2
+expect state selected Load
+press Enter
+expect screen LoadGame
+savefile damage auto_0
+wait 1
+expect state selected auto_0 damaged
+press Enter
+waitstatehas 30 toastboxes text 10:
+shot build/shots/small/toasts_load_small10.png

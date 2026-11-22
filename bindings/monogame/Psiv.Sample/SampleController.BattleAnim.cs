@@ -35,6 +35,7 @@ public sealed partial class SampleController
 		{
 			Turn = turn, Look = look, Events = events, Timings = PresentationTable.Timings, StepLength = stepLength, Combo = turn?.Combo == true, Vehicle = (info?.Vehicle ?? "").Length > 0,
 			Front = StageLayout() == BattleLayout.Front, PartyCount = info?.PartyCount ?? StageCombatants().Count(c => c.Side == Side.Party),
+			Reduced = _s.Profile().ReducedFlash,
 		};
 	}
 
@@ -103,6 +104,8 @@ public sealed partial class SampleController
 		IReadOnlyList<Combatant> all = StageCombatants();
 		string character = t.Actors.Count > 0 && t.Actors[0] < all.Count && all[t.Actors[0]].Side == Side.Party ? all[t.Actors[0]].Id : "";
 		(string Class, string Hands)? weapon = t.Combo ? null : WeaponOf(t.Actors.FirstOrDefault(-1));
+		string vehicle = StageInfo()?.Vehicle ?? "";
+		bool aboard = vehicle.Length > 0 && character == vehicle;
 		if (t.EnemyActor.Length > 0)
 		{
 			string action = t.Command switch { CommandKind.Attack => "attack", CommandKind.Defend => "defend", _ => t.Ability };
@@ -115,7 +118,7 @@ public sealed partial class SampleController
 		}
 		if (t.Ability.Length > 0 && t.Command != CommandKind.Defend)
 		{
-			string kind = _data.Actions.GetValueOrDefault(t.Ability)?.Kind == "item" ? "item" : "ability";
+			string kind = _data.Actions.GetValueOrDefault(t.Ability)?.Kind == "item" || t.Command == CommandKind.Item ? "item" : "ability";
 			if (character.Length > 0)
 			{
 				Q($"{kind}:{t.Ability}/character:{character}");
@@ -123,6 +126,10 @@ public sealed partial class SampleController
 			if (weapon is { } w)
 			{
 				Q($"{kind}:{t.Ability}/weapon:{w.Class}");
+			}
+			if (aboard)
+			{
+				Q($"{kind}:{t.Ability}/vehicle:{vehicle}");
 			}
 			Q($"{kind}:{t.Ability}");
 		}
@@ -135,6 +142,12 @@ public sealed partial class SampleController
 		}
 		if (t.Shape is { } shape)
 		{
+			// A member's defend and a vehicle's actions take their actor as a qualifier on the shape keys too.
+			string actor = aboard ? "vehicle:" + vehicle : t.Command == CommandKind.Defend && character.Length > 0 ? "character:" + character : "";
+			if (actor.Length > 0)
+			{
+				Q($"shape:{shape.Kind}/{actor}");
+			}
 			Q($"shape:{shape.Kind}.{shape.Effect}.{shape.Element}");
 			Q($"shape:{shape.Kind}.{shape.Effect}");
 			Q($"shape:{shape.Kind}");
@@ -226,6 +239,10 @@ public sealed partial class SampleController
 	{
 		_timeline.RateMilli = Anim.RateMilli;
 		int rate = Anim.RateMilli;
+		if (_flashVerdicts.Count > 256)
+		{
+			_flashVerdicts.Clear();
+		}
 		for (int i = 0; i < steps.Count;)
 		{
 			BattleStep step = steps[i];
@@ -455,6 +472,9 @@ public sealed partial class SampleController
 			"party" => Side(Psiv.Session.Side.Party),
 			"enemies" => Side(Psiv.Session.Side.Enemy),
 			"all" => Side(Psiv.Session.Side.Party).Concat(Side(Psiv.Session.Side.Enemy)),
+			"party_others" => Side(Psiv.Session.Side.Party).Where(i => !actors.Contains(i)),
+			"enemies_others" => Side(Psiv.Session.Side.Enemy).Where(i => !actors.Contains(i)),
+			"allies" => actors.Count == 0 || actors[0] >= all.Count ? [] : Side(all[actors[0]].Side).Where(i => !actors.Contains(i)),
 			"changed" or "previous_form" => [a.Changed],
 			"from" => [a.From],
 			"to" => [a.To],
@@ -640,7 +660,7 @@ public sealed partial class SampleController
 			Release(step, u, quiet: true, at);
 			if (!quiet)
 			{
-				foreach (string cue in u.Events.Select(e => BattleCue(e, StageInfo()?.PartyCount ?? 0)).OfType<string>())
+				foreach (string cue in u.Events.Select(e => BattleCue(e, StageInfo()?.PartyCount ?? 0)).OfType<string>().Where(c => EventCueOn(step, c)))
 				{
 					if (played.Add(cue))
 					{
@@ -650,6 +670,9 @@ public sealed partial class SampleController
 			}
 		}
 	}
+
+	// A release's event cue plays unless the step's script, else the set's settings, turns it off.
+	private bool EventCueOn(BattleStep step, string cue) => !(step.Run?.CuesOff ?? Anim.EventCuesOff).Contains(cue);
 
 	private void ReleaseDue(BattleStep step, long now, bool quiet)
 	{
@@ -681,7 +704,7 @@ public sealed partial class SampleController
 		}
 		if (!quiet)
 		{
-			foreach (string cue in unit.Events.Select(e => BattleCue(e, StageInfo()?.PartyCount ?? 0)).OfType<string>())
+			foreach (string cue in unit.Events.Select(e => BattleCue(e, StageInfo()?.PartyCount ?? 0)).OfType<string>().Where(c => EventCueOn(step, c)))
 			{
 				_audio.PlayCue(cue);
 			}

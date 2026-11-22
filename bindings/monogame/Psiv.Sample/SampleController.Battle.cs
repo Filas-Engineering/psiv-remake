@@ -95,7 +95,8 @@ public sealed partial class SampleController
 
 	private BattleContext Context()
 	{
-		return new BattleContext(_s, _battle.Labels, PresentationTable, _data, T);
+		string screen = StageLayout() == BattleLayout.Front ? "battle_front" : "battle_side";
+		return new BattleContext(_s, _battle.Labels, PresentationTable, _data, T, target => Marked(screen, new UiContext(), "critical", target));
 	}
 
 	private void StartBattle()
@@ -105,6 +106,7 @@ public sealed partial class SampleController
 		_battle.Log.Clear();
 		_battle.Auto = false;
 		_timeline.Clear();
+		_falls.Clear();
 		_show.Start(_s.Combatants(), _s.BattleInfo()?.PartyCount ?? 0, _s.BattleInfo()?.FormationSize ?? 0);
 		_battleTerrain = _s.Field() is { } view ? (view.Cell(view.Info.LeaderX, view.Info.LeaderY) & CellFlags.TerrainMask) switch
 		{
@@ -442,6 +444,8 @@ public sealed partial class SampleController
 		"enemymarks" => _probeEnemyMarks,
 		// Each party figure drawn: its name, the middle x and the feet's y.
 		"partyplaces" => _probePlaces,
+		// The floating texts the last frame drew: `Gel Mite A 13 damage, Gel Mite B 24 Resisted resisted`.
+		"numbers" => _probeNumbers.Count == 0 ? "none" : string.Join(", ", _probeNumbers),
 		_ => AnimState(key) is var anim && anim != "?" ? anim : FrontState(key),
 	};
 }

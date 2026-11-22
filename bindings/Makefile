@@ -344,6 +344,24 @@ dotnet-test: dotnet
 			--script $(SAMPLE_SCRIPTS)/battle_anim_layouts.txt --frames 3000 > $(BUILD)/sample_anim_$${set}_headless.txt || { cat $(BUILD)/sample_anim_$${set}_headless.txt; exit 1; }; \
 		tail -n 1 $(BUILD)/sample_anim_$${set}_headless.txt; \
 	done
+	# The animation additions (make_anim_assets.py --more: logical-pixel distances under a 50% motion layout, party_others,
+	# a lifted hidden pose, backdrop color light, reduced flash drops and replacements, the flash limit, release cues
+	# off, a defeat outlasting its step, item:PIECE, actor qualifiers, a vertical split; the layout's slots out of order
+	# with and without the step-aside, and without effectiveness marks), on a copy since the run swaps layouts.
+	python3 -I $(SAMPLE_SCRIPTS)/make_anim_assets.py --more $(BUILD)/export $(BUILD)/anim_more_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --check-assets --assets $(BUILD)/anim_more_assets
+	rm -rf $(BUILD)/sample_anim_more_saves $(BUILD)/anim_more_run
+	cp -R $(BUILD)/anim_more_assets $(BUILD)/anim_more_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_anim_more_saves --assets $(BUILD)/anim_more_run \
+		--script $(SAMPLE_SCRIPTS)/battle_anim_more.txt --frames 3500 > $(BUILD)/sample_anim_more_headless.txt || (cat $(BUILD)/sample_anim_more_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_anim_more_headless.txt
+	grep -q "animation: more.blade: flash dropped, more than 3 in 60 frames" $(BUILD)/sample_anim_more_headless.txt
+	# The small set's notices on the menu, the shop and the Load screen take the styles' small text size.
+	rm -rf $(BUILD)/sample_small_toasts_saves $(BUILD)/small_toasts_assets
+	cp -R $(BUILD)/small_assets $(BUILD)/small_toasts_assets
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_small_toasts_saves --assets $(BUILD)/small_toasts_assets --script $(SAMPLE_SCRIPTS)/small_toasts.txt --frames 600 \
+		> $(BUILD)/sample_small_toasts_headless.txt || (cat $(BUILD)/sample_small_toasts_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_small_toasts_headless.txt
 	# The dialogue's control tags in English and Japanese, on a data copy with a scene that uses every one.
 	python3 -I $(SAMPLE_SCRIPTS)/make_tag_data.py $(GAME)/data $(CORE)/data $(BUILD)/tag_data
 	$(call tag_run,dialogue_tags,)

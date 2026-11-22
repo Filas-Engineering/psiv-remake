@@ -543,13 +543,14 @@ public sealed class ScriptPlayer
 					Fail($"{source}: expected toast {wanted}, showing [{string.Join(" | ", toasts)}]");
 				}
 				break;
-			case "expect" when w.Length >= 3 && w[1] is "state" or "statehas":
-				// Runs of spaces read as one, as the script's own words do.
+			case "expect" when w.Length >= 3 && w[1] is "state" or "statehas" or "statenot":
+				// Runs of spaces read as one, as the script's own words do; `statenot` expects the text nowhere in the value.
 				string value = string.Join(" ", _controller.State(w[2]).Split(' ', StringSplitOptions.RemoveEmptyEntries));
 				string want = string.Join(" ", w[3..]);
-				if (value == "?" || (w[1] == "state" ? value != want : !value.Contains(want, StringComparison.Ordinal)))
+				bool met = w[1] switch { "state" => value == want, "statehas" => value.Contains(want, StringComparison.Ordinal), _ => !value.Contains(want, StringComparison.Ordinal) };
+				if (value == "?" || !met)
 				{
-					Fail($"{source}: {w[2]} is '{value}', expected " + (w[1] == "state" ? "" : "it to hold ") + $"'{want}'");
+					Fail($"{source}: {w[2]} is '{value}', expected " + (w[1] switch { "state" => "", "statehas" => "it to hold ", _ => "it not to hold " }) + $"'{want}'");
 				}
 				break;
 			case "savefile" when w.Length == 3 && w[1] == "damage" && _saves is not null:

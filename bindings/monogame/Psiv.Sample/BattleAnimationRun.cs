@@ -22,6 +22,8 @@ public sealed class AnimInputs
 	public bool Vehicle;
 	public bool Front;
 	public int PartyCount;
+	// The profile's reduced flash when the script was instantiated: tracks with a replacement `reduced` object take it.
+	public bool Reduced;
 
 	public IEnumerable<int> Targets => Turn?.Targets ?? [];
 	public IEnumerable<int> Actors => Turn?.Actors ?? [];
@@ -77,6 +79,8 @@ public sealed class AnimRun
 	// A looping script repeats this length.
 	public long Loop;
 	public List<string> Problems = [];
+	// The release event cues this script turns off (its own `event_cues_off` or a parent's); null leaves it to the set.
+	public HashSet<string>? CuesOff;
 
 	public (string Name, long Start, long Length) PhaseAt(long t)
 	{
@@ -145,6 +149,16 @@ public static class BattleAnimationRun
 		long reactionLength = 0)
 	{
 		var run = new AnimRun { ScriptId = scriptId, Key = key, Kind = kind, In = inputs, RateMilli = set.RateMilli };
+		var walked = new List<JsonObject>();
+		for (string? cur = scriptId; cur is not null && set.Scripts.TryGetValue(cur, out JsonObject? s) && walked.Count < 9 && !walked.Contains(s); cur = Str(s["extends"]))
+		{
+			walked.Add(s);
+			if (s["event_cues_off"] is JsonNode off)
+			{
+				run.CuesOff = [.. BattleAnimation.CuesOff(off)];
+				break;
+			}
+		}
 		(JsonObject phasesDef, JsonObject marksDef, JsonObject paramsDef, JsonNode? lengthDef, List<JsonObject> tracks) = Flatten(set, scriptId);
 		long at = 0;
 		foreach ((string name, long def, bool present) in phases)
@@ -270,7 +284,20 @@ public static class BattleAnimationRun
 		foreach (JsonObject raw in tracks)
 		{
 			JsonObject t = (JsonObject)Substitute(raw, parameters, bind)!;
+			if (run.In.Reduced && t["reduced"] is JsonObject replacement)
+			{
+				var swapped = (JsonObject)replacement.DeepClone();
+				if (!swapped.ContainsKey("at") && t["at"] is JsonNode inherited)
+				{
+					swapped["at"] = inherited.DeepClone();
+				}
+				t = swapped;
+			}
 			string type = Str(t["type"]) ?? "";
+			if (run.In.Reduced && type == "sprite" && (Str(t["reduced"]) ?? set.ReducedPolicy.GetValueOrDefault("sprite")) == "drop")
+			{
+				continue;
+			}
 			long? start;
 			string? phase;
 			List<long> ats = [];

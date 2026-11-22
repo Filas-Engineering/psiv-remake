@@ -191,8 +191,8 @@ public static class BattleAnimationEval
 		return seq[^1];
 	}
 
-	// A distance in pixels: a number (scaled by the layout's motion), forward units, or a share of the figure's height
-	// or width.
+	// A distance: a number or "Nm" in pixels scaled by the layout's motion, "Npx" in logical pixels never scaled, forward
+	// units, or a share of the figure's height or width.
 	public static float Dist(JsonNode? n, float forwardUnit, Rectangle figure, float motion)
 	{
 		if (BattleAnimationRun.Num(n) is double px)
@@ -200,17 +200,32 @@ public static class BattleAnimationEval
 			return (float)px * motion;
 		}
 		string? s = BattleAnimationRun.Str(n);
+		if (s is not null && s.EndsWith("px", StringComparison.Ordinal))
+		{
+			return double.TryParse(s[..^2], CultureInfo.InvariantCulture, out double logical) ? (float)logical : 0;
+		}
 		if (s is null || s.Length < 2 || !double.TryParse(s[..^1], CultureInfo.InvariantCulture, out double v))
 		{
 			return 0;
 		}
 		return s[^1] switch
 		{
+			'm' => (float)v * motion,
 			'f' => (float)v * forwardUnit,
 			'h' => (float)v * figure.Height,
 			'w' => (float)v * figure.Width,
 			_ => 0,
 		};
+	}
+
+	// A length in logical pixels that is never scaled: a number or "Npx".
+	public static float? Px(JsonNode? n)
+	{
+		if (BattleAnimationRun.Num(n) is double px)
+		{
+			return (float)px;
+		}
+		return BattleAnimationRun.Str(n) is { } s && s.EndsWith("px", StringComparison.Ordinal) && double.TryParse(s[..^2], CultureInfo.InvariantCulture, out double v) ? (float)v : null;
 	}
 
 	public static float Hash(string a, int b, int c)

@@ -31,17 +31,22 @@ public sealed partial class BattleAnimation
 	public static readonly string[] DefeatKinds = ["fade", "blink", "bands", "slide", "sink", "flash_fade", "frames"];
 	public static readonly string[] TransitionKinds = ["flash", "fade", "wipe", "iris", "tiles", "spiral", "split"];
 	public static readonly string[] Layers = ["under_figures", "over_figures", "effects", "over_labels", "top"];
-	public static readonly string[] SubjectNames = ["actor", "user", "targets", "hit_targets", "fallen_targets", "party", "enemies", "all", "changed", "previous_form", "from", "to", "self"];
+	public static readonly string[] SubjectNames = ["actor", "user", "targets", "hit_targets", "fallen_targets", "party", "enemies", "all", "party_others", "enemies_others", "allies", "changed", "previous_form", "from", "to", "self"];
 	public static readonly string[] Anchors = ["center", "feet", "head", "top", "left", "right", "auto", "place"];
 	public static readonly string[] CancelReasons = ["actor_unable", "silenced", "not_enough_tp", "no_uses_left", "no_item", "no_target"];
 	public static readonly string[] NoticeKeys = ["game.level_up", "game.saved", "game.learned", "battle.opening.normal"];
 	public static readonly string[] Outcomes = ["victory", "defeat", "escaped", "scripted_end"];
 	public static readonly string[] ReactionKeys = ["damage", "critical", "miss", "heal", "revive", "status", "status_resisted", "status_ends", "stat", "defeat", "instant_defeat",
 		"felling_resisted", "no_effect", "tp"];
+	public static readonly string[] EventCues = ["hit", "miss", "critical", "heal", "status", "enemy_down"];
 	public static readonly string[] Changes = ["join", "merge", "transform", "split", "split_piece", "leave", "self_destruct", "remove_beside"];
 
 	public int RateMilli { get; private set; } = BattleClock.DefaultRateMilli;
 	public bool LogRelease { get; private set; }
+	// At most Count screen-wide flashes may start in any Frames frames of the controller's clock; null turns it off.
+	public (int Count, int Frames)? FlashLimit { get; private set; } = (3, 60);
+	// Event cues a release plays that the whole set turns off: every one (`true`) or the listed ones.
+	public HashSet<string> EventCuesOff { get; } = new(StringComparer.Ordinal);
 	public Dictionary<string, string> Select { get; } = new(StringComparer.Ordinal);
 	public Dictionary<string, JsonObject> Scripts { get; } = new(StringComparer.Ordinal);
 	public Dictionary<string, JsonObject> Fragments { get; } = new(StringComparer.Ordinal);
@@ -202,6 +207,15 @@ public sealed partial class BattleAnimation
 			{
 				LogRelease = t == "release";
 			}
+			if (settings["flash_limit"] is JsonNode limit)
+			{
+				FlashLimit = limit is JsonObject l ? ((int)(BattleAnimationRun.Num(l["count"]) ?? 3), (int)(BattleAnimationRun.Num(l["frames"]) ?? 60)) : null;
+			}
+			if (settings["event_cues_off"] is JsonNode off)
+			{
+				EventCuesOff.Clear();
+				EventCuesOff.UnionWith(CuesOff(off));
+			}
 		}
 		void Section(string name, Dictionary<string, JsonObject> into, bool count = false)
 		{
@@ -293,6 +307,10 @@ public sealed partial class BattleAnimation
 		}
 	}
 
+	// An `event_cues_off` value: true for every event cue, or the list of them.
+	public static IEnumerable<string> CuesOff(JsonNode? n) => BattleAnimationRun.Bool(n) == true ? EventCues
+		: n is JsonArray a ? a.Select(BattleAnimationRun.Str).OfType<string>() : [];
+
 	// The whole set as one file, for the placeholder export: every key, script, fragment, effect, state, style and
 	// transition, so the export plays as the built-in set does.
 	public void Write(string path)
@@ -360,6 +378,6 @@ public sealed partial class BattleAnimation
 	[GeneratedRegex(@"^-?\d+(\.\d+)?%$")]
 	private static partial Regex PercentPattern();
 
-	[GeneratedRegex(@"^-?\d+(\.\d+)?[fhw]$")]
+	[GeneratedRegex(@"^-?\d+(\.\d+)?([fhwm]|px)$")]
 	private static partial Regex DistPattern();
 }

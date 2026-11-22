@@ -436,9 +436,30 @@ public sealed partial class SampleController
 			y -= h + st.Param("toast_gap");
 			int bx = right ? s.Width - x - boxW : x;
 			Style.Box(s, bx, y, boxW, h, alpha * 0.95f);
-			s.Text(shown, bx + st.Param("toast_pad"), y + st.Param("toast_text_y"), Style.Text * alpha, Style.Small);
+			s.Text(shown, bx + st.Param("toast_pad"), y + st.Param("toast_text_y"), Style.Text * alpha, ToastTextSize());
 			_toastBoxes.Add(new Rectangle(bx, y, boxW, h));
 		}
+	}
+
+	// The styles' `small` text size: the notices' text on every screen, as the field's layout draws it.
+	private int ToastTextSize() =>
+		Layout.Styles.TextStyles.TryGetValue("small", out UiTextStyle? ts) && ts.Size is not null ? ts.Size.Int(new StylesScope(Layout.Styles)) : Style.Small;
+
+	// Names a styles-only expression reads: the sizes and the logical frame.
+	private sealed class StylesScope(UiStyles st) : IUiScope
+	{
+		public bool TryGet(string name, out UiValue value)
+		{
+			bool found = name is "W" or "H" || name.StartsWith("size_", StringComparison.Ordinal) && st.Sizes.ContainsKey(name[5..]);
+			value = !found ? UiValue.Zero : name is "W" or "H" ? new UiValue((long)(name == "W" ? st.Width : st.Height)) : new UiValue((long)st.Sizes[name[5..]]);
+			return found;
+		}
+
+		public int TextScaled(int value) => value;
+
+		public int Measure(string text, int size) => 0;
+
+		public int MeasureUnscaled(string text, int size) => 0;
 	}
 
 	// The newest notices first, each cut to the width between margins of `x`, with its opacity and its box's width.
@@ -449,8 +470,8 @@ public sealed partial class SampleController
 			(string text, int msLeft) = _ticker[i];
 			float alpha = Math.Clamp(msLeft / (float)Math.Max(1, Timing("toast_fade_ms")), 0f, 1f);
 			int pad = 2 * Layout.Styles.Param("toast_pad");
-			string shown = Style.Fit(s, text, s.Width - 2 * x - pad, Style.Small);
-			yield return (shown, alpha, s.Measure(shown, Style.Small) + pad);
+			string shown = Style.Fit(s, text, s.Width - 2 * x - pad, ToastTextSize());
+			yield return (shown, alpha, s.Measure(shown, ToastTextSize()) + pad);
 		}
 	}
 
@@ -630,6 +651,8 @@ public sealed partial class SampleController
 			"camera" => (_camera ?? "-") + (_cameraMove is null ? "" : "~"),
 			"paneltiles" => _panels.Count == 0 ? "none" : string.Join(", ", _panels.Select(x => $"{x.Id} {PanelTileSize(x)}")),
 			"shake" => ShakeAmplitude().ToString(CultureInfo.InvariantCulture),
+			// The notices' boxes the code drew last frame (menu, shop, Load screen...) and the size of their text.
+			"toastboxes" => _toastBoxes.Count == 0 ? "none" : $"text {ToastTextSize()}: " + string.Join(", ", _toastBoxes.Select(r => $"{r.X} {r.Y} {r.Width}x{r.Height}")),
 			"dialogue" => _dialogueAt,
 			"music" => _audio.Music.Length == 0 ? "-" : _audio.Music,
 			"follower" => _s.Follower() is { Length: > 0 } follower ? follower : "-",

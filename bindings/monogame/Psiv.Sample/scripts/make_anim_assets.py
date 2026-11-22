@@ -12,6 +12,14 @@ their release frames. It also writes an fx script for the dialogue's `fx` tag.
 make_anim_assets.py EXPORT OUT BASE copies BASE instead of EXPORT (another layout set) and adds the same files.
 
 make_anim_assets.py --broken DIR adds broken animation files to the broken copy DIR, one problem of each kind.
+
+make_anim_assets.py --more EXPORT OUT writes OUT: a copy of EXPORT whose battle layout moves at half the distances
+(`motion_percent` 50) and whose animation file uses the units, subjects, flashes, cues and defeat states added after the
+example set: distances in "Npx" and scaled ones side by side, `party_others`, a hidden pose lifted, a backdrop color
+with added light and opacity, a sprite dropped and a flash replaced under reduced flash, the flash limit, release cues
+turned off, a defeat that outlasts its step, a worn piece's `item:` key, a member's defend and a vehicle's attack by
+their actor qualifiers, and a vertical split into vehicle battles stepping at its own rate each way; and in alt/ the battle layouts with the
+slots out of marching order, without the step-aside, and without effectiveness, critical and miss marks.
 """
 
 import json
@@ -300,6 +308,9 @@ def main():
 	if sys.argv[1] == "--broken":
 		broken(Path(sys.argv[2]))
 		return
+	if sys.argv[1] == "--more":
+		more(Path(sys.argv[2]), Path(sys.argv[3]))
+		return
 	export, out = Path(sys.argv[1]), Path(sys.argv[2])
 	base = Path(sys.argv[3]) if len(sys.argv) > 3 else export
 	shutil.rmtree(out, ignore_errors=True)
@@ -345,16 +356,74 @@ def main():
 		write(out / "alt/dialogue_fx_broken.json", dialogue)
 
 
+def more(export, out):
+	"""The later additions' example set, on a copy of the export."""
+	shutil.rmtree(out, ignore_errors=True)
+	shutil.copytree(export, out)
+	front = json.loads((out / "ui/battle_front.json").read_text())
+	front.setdefault("params", {})["motion_percent"] = 50
+	write(out / "ui/battle_front.json", front)
+	write(out / "alt/battle_front_base.json", front)
+	slots = json.loads(json.dumps(front))
+	slots["params"].update({"party_slot_0_x": 900, "party_slot_1_x": 300, "party_slot_2_x": 600})
+	write(out / "alt/battle_front_slots.json", slots)
+	still = json.loads(json.dumps(slots))
+	still["params"]["step_aside"] = 0
+	write(out / "alt/battle_front_still.json", still)
+	plain = json.loads(json.dumps(front))
+	plain["params"].update({"effectiveness_marks_enemy": 0, "critical_marks": 0, "miss_marks": 0})
+	write(out / "alt/battle_front_plain.json", plain)
+	flashes = [{"id": "f%d" % k, "type": "flash", "at": "result+%d" % (3 * k), "length": 2} for k in range(4)]
+	write(out / "battle_animation.json", {
+		"version": 1,
+		"settings": {"rate": 60, "log_timing": "step", "flash_limit": {"count": 3, "frames": 60}, "event_cues_off": False},
+		"select": {"weapon:blade/one": "more.blade", "item:storm_rod": "more.rod", "shape:defend/character:fighter": "more.defend",
+			"shape:attack/vehicle:reed_skimmer": "more.vehicle", "battle:transition_in/vehicle": "more.intro"},
+		"transitions": {"more.split": {"kind": "split", "axis": "vertical", "color": "#000000", "steps": 4, "cover_step_frames": 2, "reveal_step_frames": 5,
+			"speed": 12, "frames": 20}},
+		"scripts": {
+			"more.blade": {
+				"event_cues_off": True,
+				"phases": {"forward": 8, "banner": 20, "animate": 10, "effect": 10, "result": 40, "back": 8},
+				"tracks": [
+					{"id": "slide", "type": "move", "on": "actor", "at": "forward", "kind": "offset", "by": ["40px", 0], "length": 8},
+					{"id": "others", "type": "move", "on": "party_others", "at": "forward", "kind": "offset", "by": [0, 40], "length": 8},
+					{"id": "hide", "type": "pose", "on": "actor", "at": "banner", "pose": "hidden", "length": 80},
+					{"id": "lift", "type": "pose", "on": "actor", "at": "animate", "pose": "shown", "length": 30},
+					{"id": "warm", "type": "color", "on": "backdrop", "at": "effect", "mode": "set", "to": {"add": "#603000", "alpha": 0.85}, "length": 50},
+					{"id": "spark", "type": "sprite", "at": "effect", "effect": "slash", "spawn": "target:0", "reduced": "drop"},
+					{"id": "bright", "type": "flash", "at": "effect", "length": 4,
+						"reduced": {"id": "calm", "type": "color", "on": "stage", "mode": "tint", "to": {"tint": "#4060a0", "amount": 0.2}, "in": 2, "hold": 4, "out": 2}},
+					*flashes,
+					{"id": "jolt", "type": "shake", "at": "result", "amplitude": "6px", "decay": "none", "length": 10},
+					{"type": "release", "at": "result"},
+					{"id": "home", "type": "move", "on": "actor", "at": "back", "kind": "home"},
+					{"id": "others_home", "type": "move", "on": "party_others", "at": "back", "kind": "home"},
+				],
+			},
+			"more.rod": {"extends": "turn.default", "event_cues_off": ["hit"]},
+			"more.defend": {"extends": "turn.default"},
+			"more.vehicle": {"extends": "turn.default"},
+			"more.intro": {"phases": {"cover": 12, "hold": 4, "reveal": 24}, "tracks": [{"type": "transition", "transition": "more.split"}]},
+		},
+		"figures": {"enemy": {"states": {"defeat": {"kind": "fade", "outlast": 90}}}},
+		"numbers": {"damage": {"rise": "12px", "stack": "4px"}},
+	})
+	manifest = json.loads((out / "assets.json").read_text())
+	manifest["battle_animation"] = "battle_animation.json"
+	write(out / "assets.json", manifest)
+
+
 def broken(out):
 	"""Broken animation files beside the broken copy's other broken files: one of each kind of problem."""
 	write(out / "battle_animation.json", {
 		"version": 2,
 		"include": ["animation/missing.json", "animation/broken_extras.json"],
 		"scirpts": {},
-		"settings": {"rate": 500, "log_timing": "sometimes"},
+		"settings": {"rate": 500, "log_timing": "sometimes", "flash_limit": {"count": 0}, "event_cues_off": ["boom"]},
 		"select": {
 			"ability:sparkk": "turn.default", "weapon:axe": "turn.default", "combo:twin_arcs": "turn.default", "ability:spark": "spark.bolts",
-			"step:notice.Game Lvl": "step.banner", "status:poison/wobble": "turn.default",
+			"step:notice.Game Lvl": "step.banner", "status:poison/wobble": "turn.default", "item:no_such_piece": "turn.default",
 		},
 		"scripts": {
 			"spark.bolt": {
@@ -366,15 +435,19 @@ def broken(out):
 					{"type": "flash", "if": "crit"},
 					{"type": "color", "on": "stage", "to": {"multiply": "#808080"}},
 					{"type": "wobble"},
+					{"type": "move", "on": "party_others", "kind": "offset", "by": ["4pz", 0]},
+					{"type": "flash", "reduced": {"type": "wobble"}},
+					{"type": "shake", "amplitude": "40px"},
 				],
+				"event_cues_off": "sometimes",
 			},
 			"loop.a": {"extends": "loop.b", "tracks": []},
 			"loop.b": {"extends": "loop.a", "tracks": []},
 			"Bad Id": {"tracks": []},
 		},
 		"effects": {"spark.orb": {"sheet": "no_such_sheet", "frames": [0, -2]}},
-		"figures": {"enemy": {"states": {"defeat": {"kind": "explode"}}}, "monster": {"states": {}}},
-		"numbers": {"critical": {"color": "gold"}, "huge": {}},
+		"figures": {"enemy": {"states": {"defeat": {"kind": "explode"}, "defeat:instant": {"outlast": "soon"}}}, "monster": {"states": {}}},
+		"numbers": {"critical": {"color": "gold"}, "huge": {}, "damage": {"rise": "3h", "pad": "200px"}},
 		"transitions": {"blocks": {"kind": "mosaic", "block": 4}, "dots": {"kind": "tiles", "tile": 2}},
 		"weapon_classes": {"category:axe": "chop"},
 		"placements": {"count:9": [[1, 2]]},

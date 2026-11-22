@@ -79,7 +79,12 @@ public sealed partial class BattleAnimation
 			if (root["settings"] is JsonNode settings)
 			{
 				var s = new JsonObject();
-				Fields(settings, "settings", new() { ["rate"] = Num(1, 240), ["log_timing"] = Enum("step", "release") }, s);
+				Fields(settings, "settings", new()
+				{
+					["rate"] = Num(1, 240), ["log_timing"] = Enum("step", "release"), ["event_cues_off"] = CuesOffProblem,
+					["flash_limit"] = n => n is JsonValue v && v.TryGetValue(out bool b) && !b || n is JsonObject o && o.All(p => p.Key is "count" or "frames")
+						&& Int(1, 60)(o["count"] ?? 3) is null && Int(1, 3600)(o["frames"] ?? 60) is null ? null : "must be false or {count: 1 to 60, frames: 1 to 3600}",
+				}, s);
 				clean["settings"] = s;
 			}
 			Entries(root, "scripts", clean, CheckScript);
@@ -383,9 +388,17 @@ public sealed partial class BattleAnimation
 		});
 
 		private static string? DistProblem(JsonNode? n) => Number(n) is double d ? (d is >= -4000 and <= 4000 ? null : "must be pixels from -4000 to 4000")
-			: Text(n) is { } s && (DistPattern().IsMatch(s) || IsParam(s)) ? null : "must be pixels, \"Nf\" (forward units), \"Nh\" or \"Nw\" (of the figure's height or width)";
+			: Text(n) is { } s && (DistPattern().IsMatch(s) || IsParam(s)) ? null : "must be pixels, \"Npx\" (never scaled), \"Nm\" (scaled by motion_percent), \"Nf\" (forward units), \"Nh\" or \"Nw\" (of the figure's height or width)";
 
 		private static Check Dist() => L(DistProblem);
+
+		private static string? CuesOffProblem(JsonNode? n) => n is JsonValue v && v.TryGetValue(out bool _) || n is JsonArray a && a.All(x => Text(x) is { } c && EventCues.Contains(c))
+			? null : $"must be true, false or a list of event cues: {string.Join(", ", EventCues)}";
+
+		// Logical pixels never scaled: a number or "Npx".
+		private static Check Px(double min, double max) => L(n => (Number(n) ?? (Text(n) is { } s && s.EndsWith("px", StringComparison.Ordinal)
+			&& double.TryParse(s[..^2], CultureInfo.InvariantCulture, out double v) ? v : null)) is double d && d >= min && d <= max || IsParam(Text(n)) ? null
+			: $"must be logical pixels from {Fmt(min)} to {Fmt(max)}, a number or \"Npx\"");
 
 		private static Check DistPair() => L(n => n is JsonArray a && a.Count == 2 ? DistProblem(a[0]) ?? DistProblem(a[1]) : "must be [dx, dy]");
 
@@ -573,7 +586,7 @@ public sealed partial class BattleAnimation
 		private Dictionary<string, Check> StateFields() => new()
 		{
 			["pose"] = Name(), ["loop"] = Bool(), ["length"] = Time(), ["kind"] = Enum(DefeatKinds), ["bands"] = Int(2, 32), ["period"] = Time(), ["by"] = DistPair(), ["delay"] = Time(),
-			["flash"] = Time(), ["ease"] = Ease(), ["previous"] = Enum("crossfade"),
+			["flash"] = Time(), ["ease"] = Ease(), ["previous"] = Enum("crossfade"), ["outlast"] = Time(),
 			["motion"] = n => Fields(n, "motion", MoveFields(), null) ? null : "has a problem",
 			["color"] = n => n is JsonObject o && o.ContainsKey("mode") ? Fields(n, "color", ColorTrackFields(), null) ? null : "has a problem" : CtProblem(n),
 			["opacity"] = n => n is JsonObject o && o.All(p => p.Key is "from" or "to" or "speed" or "ease") ? null : "must be {from, to, speed, ease}",
@@ -582,8 +595,8 @@ public sealed partial class BattleAnimation
 		private Dictionary<string, Check> NumberFields() => new()
 		{
 			["color"] = Color(), ["size"] = L(n => Text(n) == "layout" ? null : Int(6, 200)(n)), ["motion"] = Enum("rise", "pop", "bounce", "float", "none", "window"),
-			["rise"] = L(n => Text(n) == "layout" ? null : DistProblem(n)), ["rise_time"] = Time(), ["pop"] = Num(0.1, 8), ["pop_time"] = Time(), ["bounces"] = Int(0, 8),
-			["life"] = Time(), ["fade"] = Time(), ["delay"] = Time(), ["stack"] = Int(0, 200), ["from"] = Enum("top"), ["row"] = Int(0, 4000), ["open"] = Time(), ["pad"] = Int(0, 64),
+			["rise"] = L(n => Text(n) == "layout" ? null : Px(-4000, 4000)(n)), ["rise_time"] = Time(), ["pop"] = Num(0.1, 8), ["pop_time"] = Time(), ["bounces"] = Int(0, 8),
+			["life"] = Time(), ["fade"] = Time(), ["delay"] = Time(), ["stack"] = Px(0, 200), ["from"] = Enum("top"), ["row"] = Px(0, 4000), ["open"] = Time(), ["pad"] = Px(0, 64),
 			["shadow"] = n => n is JsonValue v && v.TryGetValue(out bool b) && !b || n is JsonArray a && a.Count == 3 && Number(a[0]) is not null && Number(a[1]) is not null && ColorProblem(a[2]) is null
 				? null : "must be false or [dx, dy, color]",
 		};
@@ -631,7 +644,7 @@ public sealed partial class BattleAnimation
 			case "shake":
 				Add(new()
 				{
-					["amplitude"] = L(n => Text(n) == "$look.shake" ? null : Num(0, 32)(n)), ["decay"] = Enum("linear", "none", "out"), ["axis"] = Enum("both", "x", "y"), ["pattern"] = Enum("clock", "script"),
+					["amplitude"] = L(n => Text(n) == "$look.shake" ? null : Px(0, 32)(n)), ["decay"] = Enum("linear", "none", "out"), ["axis"] = Enum("both", "x", "y"), ["pattern"] = Enum("clock", "script"),
 					["offsets"] = n => n is JsonObject o && o.Count > 0 && o.All(p => p.Key is "backdrop" or "figures" or "screen" && p.Value is JsonArray list && list.Count is >= 1 and <= 600
 						&& list.All(xy => xy is JsonArray pair && pair.Count == 2 && pair.All(v => Number(v) is >= -64 and <= 64))) ? null : "must be per-frame [dx, dy] lists for backdrop, figures and screen",
 				});
@@ -709,6 +722,7 @@ public sealed partial class BattleAnimation
 				["marks"] = n => n is JsonObject ? null : "must be an object of names to starts",
 				["length"] = Time(), ["tracks"] = n => n is JsonArray ? null : "must be a list of tracks",
 				["remove"] = n => n is JsonArray a && a.All(x => Text(x) is not null) ? null : "must be a list of track ids",
+				["event_cues_off"] = CuesOffProblem,
 			}, null);
 			string kind = KindOf(s, _allScripts);
 			// The chain: a cycle or more than 8 parents is a problem.
@@ -863,6 +877,10 @@ public sealed partial class BattleAnimation
 					continue;
 				}
 				Fields(t, te, TrackFields(type), null);
+				if (t["reduced"] is JsonObject replacement)
+				{
+					CheckTracks([replacement.DeepClone()], te + ".reduced", marks, kind, starts, phases);
+				}
 				if (Text(t["id"]) is { } tid && !ids.Add(tid))
 				{
 					Problem(te + ".id", $"id '{tid}' used twice in the script");
@@ -928,7 +946,8 @@ public sealed partial class BattleAnimation
 				["from"] = Enum("left", "right", "top", "bottom", "top_left", "top_right", "bottom_left", "bottom_right", "center", "edge"), ["edge"] = Int(0, 512),
 				["shape"] = Enum("circle", "diamond", "square"), ["center"] = Point(), ["tile"] = Int(8, 160), ["grow"] = Time(),
 				["order"] = Enum("rows", "columns", "checker", "diagonal", "random", "spiral", "spiral_in"), ["turn"] = Enum("cw", "ccw"),
-				["steps"] = Int(2, 32), ["step_frames"] = Time(), ["speed"] = Num(1, 4000), ["frames"] = Time(),
+				["steps"] = Int(2, 32), ["step_frames"] = Time(), ["cover_step_frames"] = Time(), ["reveal_step_frames"] = Time(), ["speed"] = Num(1, 4000), ["frames"] = Time(),
+				["axis"] = Enum("horizontal", "vertical"),
 			}, null);
 			return true;
 		}
@@ -954,6 +973,7 @@ public sealed partial class BattleAnimation
 						"terrain" => kv.ElementAtOrDefault(1) is "floor" or "water" or "soft" ? null : "terrain: floor, water or soft",
 						"kind" => kv.ElementAtOrDefault(1) is "town" or "field" or "dungeon" ? null : "kind: town, field or dungeon",
 						"opening" => kv.ElementAtOrDefault(1) is "enemy_first" or "party_first" ? null : "opening: enemy_first or party_first",
+						"vehicle" when kv.Length == 2 => ctx.Data.Vehicles.Contains(kv[1]) ? null : $"unknown vehicle '{kv[1]}': not in the game data",
 						"one" or "both" or "boss" or "vehicle" => kv.Length == 1 ? null : $"'{kv[0]}' takes no value",
 						_ => null,
 					};
@@ -973,8 +993,10 @@ public sealed partial class BattleAnimation
 				return Qualifiers(parts[1..], turnQualifiers);
 			case "turn" when value == "escape":
 				return Qualifiers(parts[1..], turnQualifiers);
+			case "item" when ctx.Data.EquipmentCategories.ContainsKey(value):
+				return Qualifiers(parts[1..], "character", "weapon", "count", "encounter");
 			case "ability" or "item":
-				return ctx.Data.Actions.ContainsKey(value) ? Qualifiers(parts[1..], "character", "weapon", "count", "encounter") : $"unknown ability or item '{value}': not in the game data";
+				return ctx.Data.Actions.ContainsKey(value) ? Qualifiers(parts[1..], "character", "weapon", "vehicle", "count", "encounter") : $"unknown ability or item '{value}': not in the game data";
 			case "combo":
 				return ctx.Data.Recipes.ContainsKey(value) ? Qualifiers(parts[1..], turnQualifiers) : $"unknown combination recipe '{value}': not in combos.json";
 			case "weapon":
@@ -983,7 +1005,7 @@ public sealed partial class BattleAnimation
 			case "shape":
 				string[] shape = value.Split('.');
 				return shape.Length is >= 1 and <= 3 && BattlePresentation.Kinds.Contains(shape[0]) && (shape.Length < 2 || BattlePresentation.Effects.Contains(shape[1]))
-					&& (shape.Length < 3 || BattlePresentation.Elements.Contains(shape[2])) ? Qualifiers(parts[1..], turnQualifiers) : $"unknown shape '{value}': KIND, KIND.EFFECT or KIND.EFFECT.ELEMENT";
+					&& (shape.Length < 3 || BattlePresentation.Elements.Contains(shape[2])) ? Qualifiers(parts[1..], "character", "vehicle", "count", "encounter") : $"unknown shape '{value}': KIND, KIND.EFFECT or KIND.EFFECT.ELEMENT";
 			case "enemy":
 				if (!ctx.Data.Enemies.Contains(value))
 				{

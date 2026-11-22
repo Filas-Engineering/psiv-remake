@@ -98,6 +98,8 @@ Numbers the code's own drawing reads, in whole logical pixels; a key left out ta
 | `toast_h` | 32 | a notice's box height |
 | `toast_gap` | 6 | the gap between two stacked boxes |
 | `toast_pad` | 14 | the text's inset from the box's left edge; a box is the text's width plus twice this, and the text is cut to the room between the margins less twice this |
+
+Every screen's notices (the field's through its layout, the menu, shop, travel, options, title and Load screen through their `toasts` slots) draw their text at the size of the styles' `small` text style, so a set whose `sizes.small` is not 16 gets it on every screen. The state probe `toastboxes` reads the boxes the code drew in the last frame and that size: `text 10: 120 180 190x14, ...`, or `none`.
 | `toast_text_y` | 7 | the text's top below the box's |
 
 ```json
@@ -781,7 +783,8 @@ The stage's placement; a param a file leaves out takes the built-in file's value
 * `stage_bottom`: the stage's bottom (the overlay's and the flash's height; the side backdrop's height less 8).
 * `party_x`, `party_dx`, `party_foot`, `party_dy`, `party_size`: member `i` stands centered at `party_x + i * party_dx`, feet at `party_foot + i * party_dy`, `party_size` square.
 * `vehicle_x`, `vehicle_foot`, `vehicle_size`: the vehicle's place and size.
-* `step_gap`, `step_margin` (front): while the command window is open the members on its side step along past it, `step_gap` apart, at least `step_margin` from the screen's edges; the window's width comes from the `command` window.
+* `step_gap`, `step_margin` (front): while the command window is open the members on its side step along past it, `step_gap` apart, at least `step_margin` from the screen's edges; the window's width comes from the `command` window. The members are taken left to right as their slots stand (`party_slot_N_x` may put marching place 0 at the right), not in marching order.
+* `step_aside` (front, built-in 1): 0 keeps every member on its slot while the command window is open (the window may then cover one; `overlaps` says so).
 * `enemy_x`: the enemies' middle. Up to `enemy_row_max` enemies stand in one row, `min(enemy_row_spacing_max, enemy_row_span / n)` apart, feet at `enemy_row_foot` less `enemy_row_stagger` for each odd position. From one more on, two ranks (the first `(n + 1) / 2` positions in front, feet at `enemy_front_foot`; the rest at `enemy_back_foot`): with `enemy_ranks_interleaved` 1 the ranks interleave over `enemy_rank_span`, else each rank spreads `min(enemy_rank_spacing_max, enemy_rank_span / m)` apart and the back one shifts half a place.
 * `enemy_size`: an expression of `enemy_count` and `enemy_back`, the enemy's square size.
 * `enemy_slot_N_x`, `enemy_slot_N_foot` (N 0 to 7): formation position N's place, overriding the computed one; absent or -1 keeps it.
@@ -801,7 +804,12 @@ The stage's placement; a param a file leaves out takes the built-in file's value
 * `number_y`, `number_member_y`, `number_rise`, `number_gap`: a number starts `number_y` over an enemy's figure, or `number_member_y` down a member seen from behind (front), rises `number_rise`, and the next on the same target stands its size and `number_gap` higher.
 * `effect_scale`, `effect_scale_large`: the effects' factor: `effect_scale` on targets in the side layout and on members in the front one, `effect_scale_large` on enemies in the front layout, for formation changes and for the instant defeat's mark.
 * `dev_badge_y`: with `--dev`, the developer badge's top, at the screen's right (the front layout's badge moves to the top while a preview plays).
-* `motion_percent` (default 100, not in the built-in files): the figures' motion in percent of the 1280x720 distances: a step toward the foe and back, the chooser's rise, an attack's lunge, a hit's shake, a joining enemy's rise, a flier's bob, and the screen's shake (`battleshake` reads it scaled). The backdrop, overlay and flash take the screen's width and `stage_bottom`; figure sizes are `party_size`, `vehicle_size` and `enemy_size`.
+* `effectiveness_marks`, `critical_marks`, `miss_marks` (default 1, not in the built-in files), each also per side as `NAME_party` (results on party members) and `NAME_enemy` (results on enemies), the side's param winning: 0 leaves out the mark. Without `effectiveness_marks` a weak, resisted or immune hit floats its plain number in the `damage` number style (`23`, not `23 Resisted`); without `critical_marks` a critical hit floats in the `damage` style and the log leaves out its `Critical hit!` line; without `miss_marks` a miss floats no word (its `evades` log line stays). The log's damage lines carry no effectiveness word in either case. The state probe `numbers` reads the floating texts the last frame drew as `LABEL TEXT STYLE`: `Gel Mite B 23 Resisted resisted, Rust Hound 52 damage`.
+
+```json
+"params": {"effectiveness_marks_enemy": 0, "critical_marks": 0, "miss_marks_party": 0}
+```
+* `motion_percent` (default 100, not in the built-in files): the figures' motion in percent of the 1280x720 distances: a step toward the foe and back, the chooser's rise, an attack's lunge, a hit's shake, a joining enemy's rise, a flier's bob, and the screen's shake (`battleshake` reads it scaled). Animation scripts' bare numbers and `"Nm"` distances are scaled by it; their `"Npx"` distances are not ([`battle-animation.md`](battle-animation.md), "Distances"). The backdrop, overlay and flash take the screen's width and `stage_bottom`; figure sizes are `party_size`, `vehicle_size` and `enemy_size`.
 
 ```json
 "params": {"stage_bottom": 180, "party_size": 48, "vehicle_size": 64, "motion_percent": 25}

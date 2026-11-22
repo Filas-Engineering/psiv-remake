@@ -4,7 +4,7 @@
 		"stage_bottom": 580,
 		"party_x": 136, "party_dx": 252, "party_foot": 588, "party_dy": 0, "party_size": 144,
 		"vehicle_x": 388, "vehicle_foot": 588, "vehicle_size": 160,
-		"step_gap": 8, "step_margin": 16,
+		"step_aside": 1, "step_gap": 8, "step_margin": 16,
 		"enemy_x": 640, "enemy_row_max": 4, "enemy_row_span": 1040, "enemy_row_spacing_max": 280, "enemy_row_foot": 356, "enemy_row_stagger": 0,
 		"enemy_ranks_interleaved": 1, "enemy_rank_span": 1100, "enemy_front_foot": 360, "enemy_back_foot": 282,
 		"enemy_size": "enemy_count <= 3 ? 176 : enemy_count <= 4 ? 160 : enemy_back ? 112 : 136",

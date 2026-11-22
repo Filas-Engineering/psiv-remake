@@ -1331,6 +1331,8 @@ def main_small(export, fonts, test, out):
 	# A 20-pixel cell, at which the test assets' tileset of 48-pixel tiles at scale 3 cannot fill a cell: a check problem.
 	(out / "alt").mkdir(exist_ok=True)
 	(out / "alt/styles_cell20.json").write_text(json.dumps(dict(styles, params=dict(styles["params"], field_cell=20)), indent="\t") + "\n")
+	# Smaller small text, which every screen's notices take (small_toasts.txt).
+	(out / "alt/styles_small10.json").write_text(json.dumps(dict(styles, sizes=dict(styles["sizes"], small=10)), indent="\t") + "\n")
 	for name, layout in sorted(small_screens(builtin).items()):
 		dump(out / "ui" / f"{name}.json", layout)
 

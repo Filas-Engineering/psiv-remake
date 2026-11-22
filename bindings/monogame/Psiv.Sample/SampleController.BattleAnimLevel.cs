@@ -92,7 +92,7 @@ public sealed partial class SampleController
 			float cover = phase switch { "cover" => u, "hold" => 1f, _ => 1f - u };
 			Color color = BattleAnimationRun.Str(def["color"]) is { } c ? AnimColor(c, null) : Color.Black;
 			_probeTransition = $"{kind} {phase} {Frames(local)}/{Frames(len)}";
-			if (kind == "flash" && reduced)
+			if (kind == "flash" && (reduced || !FlashAllowed(run, t.Index)))
 			{
 				kind = "fade";
 			}
@@ -102,7 +102,9 @@ public sealed partial class SampleController
 			case "split" when phase != "reveal":
 				if (def["steps"] is JsonValue sv && sv.TryGetValue(out int steps))
 				{
-					long each = Math.Max(1, BattleAnimationRun.Time(def["step_frames"] ?? JsonValue.Create(4), run));
+					// The cover and the reveal may step at their own rates.
+					JsonNode? stepFrames = phase == "reveal" ? def["reveal_step_frames"] ?? def["step_frames"] : def["cover_step_frames"] ?? def["step_frames"];
+					long each = Math.Max(1, BattleAnimationRun.Time(stepFrames ?? JsonValue.Create(4), run));
 					int level = (int)Math.Min(steps, local / each);
 					cover = phase switch { "cover" => level / (float)steps, "hold" => 1f, _ => 1f - level / (float)steps };
 				}
@@ -206,24 +208,25 @@ public sealed partial class SampleController
 	}
 
 	// The split reveal: the backdrop slides in from one side and the figures from the other.
-	private (int Backdrop, int Figures) SplitShift(AnimRun run, long now)
+	private (int Backdrop, int Figures, bool Vertical) SplitShift(AnimRun run, long now)
 	{
 		foreach (AnimTrack t in run.Tracks.Where(t => t.Type == "transition"))
 		{
 			if (Anim.Transitions.GetValueOrDefault(BattleAnimationRun.Str(t.Def["transition"]) ?? "") is { } def && BattleAnimationRun.Str(def["kind"]) == "split")
 			{
 				(string phase, long local) = TransitionPhase(run, now);
+				bool vertical = BattleAnimationRun.Str(def["axis"]) == "vertical";
 				if (phase != "reveal")
 				{
-					return (0, 0);
+					return (0, 0, vertical);
 				}
 				float speed = (float)(BattleAnimationRun.Num(def["speed"]) ?? 16);
 				long frames = BattleAnimationRun.Time(def["frames"] ?? JsonValue.Create(20), run);
 				float left = Math.Max(0, (frames - local) / (float)BattleClock.Frame) * speed;
-				return (-(int)left, (int)left);
+				return (-(int)left, (int)left, vertical);
 			}
 		}
-		return (0, 0);
+		return (0, 0, false);
 	}
 
 	// The name plate's opacity when the step's script shapes it with name_window tracks; null leaves it to the layout.

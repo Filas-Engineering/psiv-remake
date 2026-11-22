@@ -121,12 +121,13 @@ public sealed partial class SampleController
 				{
 					continue;
 				}
-				DrawSprite(s, art, c, run, t, now, marks);
+				string policy = Reduced(t, "keep");
+				DrawSprite(s, art, c, run, t, now, marks, c.Reduced && policy == "damp" ? Anim.Damp : 1f);
 			}
 		}
 	}
 
-	private void DrawSprite(IDrawSurface s, Art art, StageCtx c, AnimRun run, AnimTrack t, long now, List<string>? marks)
+	private void DrawSprite(IDrawSurface s, Art art, StageCtx c, AnimRun run, AnimTrack t, long now, List<string>? marks, float damp)
 	{
 		bool front = c.Front;
 		string effect = BattleAnimationRun.Str(BattleAnimationRun.Pick(t.Def["effect"], front)) ?? "none";
@@ -332,6 +333,10 @@ public sealed partial class SampleController
 				float u = BattleClock.Ratio(local, t.Length);
 				alpha *= u < (float)(1 - share) ? 1f : (1f - u) / (float)share;
 			}
+			if (damp != 1f)
+			{
+				alpha *= damp;
+			}
 			bool additive = BattleAnimationRun.Str(F("blend")) == "additive";
 			string flip = BattleAnimationRun.Str(F("flip")) ?? "auto";
 			bool flipX = flip == "x";
@@ -444,8 +449,8 @@ public sealed partial class SampleController
 		int width = s.Measure(floating.Text, size);
 		if (motion == "window")
 		{
-			int pad = (int)(BattleAnimationRun.Num(style["pad"]) ?? 6);
-			int row = (int)(BattleAnimationRun.Num(style["row"]) ?? 40);
+			int pad = (int)(BattleAnimationEval.Px(style["pad"]) ?? 6);
+			int row = (int)(BattleAnimationEval.Px(style["row"]) ?? 40);
 			long open = Math.Max(1, BattleAnimationRun.Time(style["open"] ?? JsonValue.Create(6), timing));
 			int full = width + 2 * pad, h = size + 2 * pad;
 			int wNow = Math.Max(2, (int)(full * Math.Min(1f, BattleClock.Ratio(local - delay, open))));
@@ -460,7 +465,7 @@ public sealed partial class SampleController
 		}
 		double fadeShare = BattleAnimationRun.Str(style["fade"]) is { } f && f.EndsWith('%') ? double.Parse(f[..^1], CultureInfo.InvariantCulture) / 100 : 0.3;
 		float alpha = fadeShare <= 0 || p < (float)(1 - fadeShare) ? 1f : (1f - p) / (float)fadeShare;
-		float riseBy = BattleAnimationRun.Str(style["rise"]) is "layout" or null && style["rise"] is not JsonValue { } ? numberRise : (float)(BattleAnimationRun.Num(style["rise"]) ?? numberRise);
+		float riseBy = BattleAnimationRun.Str(style["rise"]) is "layout" or null && style["rise"] is not JsonValue { } ? numberRise : BattleAnimationEval.Px(style["rise"]) ?? numberRise;
 		double riseShare = BattleAnimationRun.Str(style["rise_time"]) is { } rt && rt.EndsWith('%') ? double.Parse(rt[..^1], CultureInfo.InvariantCulture) / 100 : 0.5;
 		float scale = 1f;
 		float lift = motion switch
@@ -478,7 +483,7 @@ public sealed partial class SampleController
 		}
 		int drawSize = Math.Max(4, (int)MathF.Round(size * scale));
 		int dw = s.Measure(floating.Text, drawSize);
-		int stack = style["stack"] is JsonValue st && st.TryGetValue(out int sp) ? sp : numberGap;
+		int stack = BattleAnimationEval.Px(style["stack"]) is float sp ? (int)sp : numberGap;
 		int y = (behind ? r.Y + numberMemberY : r.Y - numberY) - (int)lift - n * (size + stack);
 		if (style["shadow"] is not JsonValue { } noShadow || noShadow.TryGetValue(out bool on) && on)
 		{
@@ -509,6 +514,9 @@ public sealed partial class SampleController
 	{
 		var effects = new List<string>();
 		Color tint = Color.White;
+		float tintAlpha = 1f;
+		Color tintAdd = Color.Transparent;
+		IReadOnlyList<(Color From, Color To)>? tintPalette = null;
 		float ox = 0, oy = 0;
 		int image = _persistBackdrop ?? backdrop;
 		if (_persistBackdrop is not null)
@@ -534,13 +542,20 @@ public sealed partial class SampleController
 						continue;
 					}
 					string mode = BattleAnimationRun.Str(t.Def["mode"]) ?? "set";
-					if (c.Reduced && mode == "flash" && Reduced(t, "drop") == "drop")
+					if (c.Reduced && mode == "flash" && Reduced(t, "drop") == "drop" || BrightFlash(t.Def) && !FlashAllowed(run, t.Index))
 					{
 						continue;
 					}
 					if (BattleAnimationEval.ColorAt(t.Def, t.T(now), local, t.Length, run, n => AnimColor(n, run.In.Look)) is { } ct)
 					{
+						if (c.Reduced && mode == "cycle" && BattleAnimationEval.Ct((t.Def["colors"] as JsonArray)?.FirstOrDefault(), n => AnimColor(n, run.In.Look)) is var first)
+						{
+							ct = first;
+						}
 						tint = ct.Multiply;
+						tintAlpha = ct.Alpha;
+						tintAdd = ct.Add;
+						tintPalette = ct.Palette;
 						effects.Add("tint");
 					}
 					continue;
@@ -621,6 +636,21 @@ public sealed partial class SampleController
 			return false;
 		}
 		int w = s.Width + 16, h = front ? height : c.StageBottom + 8;
+		// A color track's whole transform: the multiply in the tint, then its opacity, palette and added light.
+		if (tintAlpha != 1f)
+		{
+			tint *= tintAlpha;
+		}
+		string paletteKey = tintPalette is { Count: > 0 } ? "palette:" + string.Join(",", tintPalette.Select(p => $"{p.From.PackedValue:x}>{p.To.PackedValue:x}")) : "";
+		void Draw(int img, int x, int y, int dw, int dh, Color color)
+		{
+			s.Image(paletteKey.Length > 0 ? s.Derive(img, paletteKey, (px, _, _) => Recolor(px, tintPalette!)) : img, x, y, dw, dh, color);
+			if (tintAdd.R > 0 || tintAdd.G > 0 || tintAdd.B > 0)
+			{
+				float a = color.A / 255f;
+				s.ImageEx(s.Derive(img, "silhouette", Silhouette), x, y, dw, dh, new Color((byte)(tintAdd.R * a), (byte)(tintAdd.G * a), (byte)(tintAdd.B * a), (byte)0), false);
+			}
+		}
 		void Plane(int img, Color color)
 		{
 			int x0 = shift.X - 8 + (int)MathF.Round(ox % w), y0 = shift.Y - 8 + (int)MathF.Round(oy);
@@ -635,23 +665,23 @@ public sealed partial class SampleController
 						continue;
 					}
 					s.Clip(0, Math.Max(0, y0 + y), s.Width, Math.Max(1, Math.Min(wv.Band, s.Height - Math.Max(0, y0 + y))));
-					s.Image(img, x0 + dx, y0, w, h, color);
+					Draw(img, x0 + dx, y0, w, h, color);
 					s.Unclip();
 				}
 			}
 			else
 			{
-				s.Image(img, x0, y0, w, h, color);
+				Draw(img, x0, y0, w, h, color);
 				if (ox % w != 0)
 				{
-					s.Image(img, x0 + (ox > 0 ? -w : w), y0, w, h, color);
+					Draw(img, x0 + (ox > 0 ? -w : w), y0, w, h, color);
 				}
 			}
 			if (front && s.Height > height - 8)
 			{
 				int bottom = height - 8;
 				s.Clip(0, bottom, s.Width, s.Height - bottom);
-				s.Image(img, shift.X - 8, shift.Y + bottom - ground * 62 / 100, s.Width + 16, ground, color);
+				Draw(img, shift.X - 8, shift.Y + bottom - ground * 62 / 100, s.Width + 16, ground, color);
 				s.Unclip();
 			}
 		}

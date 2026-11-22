@@ -98,15 +98,15 @@ public static class UiFields
 
 	private static readonly string[] BattleSlots = ["anchor", "effects", "icons", "stage", "target_pointer"];
 
-	private static readonly string[] BattleParams = ["backdrop_h", "dev_badge_y", "effect_scale", "effect_scale_large", "enemy_back_foot", "enemy_bar_h",
+	private static readonly string[] BattleParams = ["backdrop_h", "critical_marks", "critical_marks_enemy", "critical_marks_party", "dev_badge_y", "effect_scale", "effect_scale_large", "effectiveness_marks", "effectiveness_marks_enemy", "effectiveness_marks_party", "enemy_back_foot", "enemy_bar_h",
 		"enemy_bar_w", "enemy_bar_y", "enemy_bars", "enemy_front_foot", "enemy_icons_y", "enemy_labels", "enemy_rank_spacing_max", "enemy_rank_span", "enemy_ranks_interleaved",
 		"enemy_row_foot", "enemy_row_max", "enemy_row_spacing_max", "enemy_row_span", "enemy_row_stagger", "enemy_size",
 		.. Enumerable.Range(0, 8).SelectMany(n => new[] { $"enemy_slot_{n}_foot", $"enemy_slot_{n}_x" }),
 		"enemy_x", "ground_h", "icon_gap", "icon_size", "label_h", "label_max_width", "label_pad", "label_text_y", "label_y", "log_rows", "log_wrap_margin",
-		"motion_percent", "number_critical_size", "number_gap", "number_member_y", "number_rise", "number_size", "number_tp_size", "number_word_size", "number_y", "party_dx",
+		"miss_marks", "miss_marks_enemy", "miss_marks_party", "motion_percent", "number_critical_size", "number_gap", "number_member_y", "number_rise", "number_size", "number_tp_size", "number_word_size", "number_y", "party_dx",
 		"party_dy", "party_foot", "party_size",
 		.. Enumerable.Range(0, 5).SelectMany(n => new[] { $"party_slot_{n}_foot", $"party_slot_{n}_x" }),
-		"party_x", "pointer_bob", "pointer_member_y", "pointer_size", "pointer_y", "stage_bottom", "step_gap",
+		"party_x", "pointer_bob", "pointer_member_y", "pointer_size", "pointer_y", "stage_bottom", "step_aside", "step_gap",
 		"step_margin", "vehicle_foot", "vehicle_size", "vehicle_x"];
 
 	public static readonly Dictionary<string, ScreenFields> Screens = new()

@@ -97,12 +97,18 @@ assets: battle_animation.json: include[0]: missing file
 assets: animation/broken_extras.json: -: unknown field 'version'
 assets: battle_animation.json: settings.rate: must be a number from 1 to 240
 assets: battle_animation.json: settings.log_timing: must be one of step, release
+assets: battle_animation.json: settings.flash_limit: must be false or {count: 1 to 60, frames: 1 to 3600}
+assets: battle_animation.json: settings.event_cues_off: must be true, false or a list of event cues: hit, miss, critical, heal, status, enemy_down
+assets: battle_animation.json: scripts.spark.bolt.event_cues_off: must be true, false or a list of event cues: hit, miss, critical, heal, status, enemy_down
 assets: battle_animation.json: scripts.spark.bolt.tracks[1].at: unknown phase or mark 'impakt': forward, banner, animate, effect, result, back, end
 assets: battle_animation.json: scripts.spark.bolt.tracks[1].effect: unknown effect 'sprak.orb': not an effect animation, an effect in assets.json, a generated effect or $look.effect
 assets: battle_animation.json: scripts.spark.bolt.tracks[2]: release at frame 30 is before the result phase (frame 746); it is released at frame 746
 assets: battle_animation.json: scripts.spark.bolt.tracks[3].if: unknown condition 'crit': hit, miss, critical, weak, resisted, immune, defeat, multi, single, party_actor, enemy_actor, vehicle, combo, escaped, layout:front, layout:side, element:ID, $look.flash or a $param
 assets: battle_animation.json: scripts.spark.bolt.tracks[4]: 'multiply' cannot be used on 'stage': use tint and amount
 assets: battle_animation.json: scripts.spark.bolt.tracks[5].type: unknown track type 'wobble': backdrop, call, color, flash, move, name_window, pose, react, release, shake, sound, sprite, state, transition
+assets: battle_animation.json: scripts.spark.bolt.tracks[6].by: must be pixels, "Npx" (never scaled), "Nm" (scaled by motion_percent), "Nf" (forward units), "Nh" or "Nw" (of the figure's height or width)
+assets: battle_animation.json: scripts.spark.bolt.tracks[7].reduced[0].type: unknown track type 'wobble': backdrop, call, color, flash, move, name_window, pose, react, release, shake, sound, sprite, state, transition
+assets: battle_animation.json: scripts.spark.bolt.tracks[8].amplitude: must be logical pixels from 0 to 32, a number or "Npx"
 assets: battle_animation.json: scripts.loop.a.extends: 'loop.b' extends 'loop.a': a cycle
 assets: battle_animation.json: scripts.loop.b.extends: 'loop.a' extends 'loop.b': a cycle
 assets: battle_animation.json: scripts.Bad Id: an id is lower-case letters, digits, '_' and '.', 1 to 64 characters
@@ -112,13 +118,17 @@ assets: battle_animation.json: transitions.blocks.kind: unknown transition kind 
 assets: battle_animation.json: transitions.dots.tile: must be a whole number from 8 to 160
 assets: battle_animation.json: numbers.critical.color: unknown color 'gold': a styles.json color name or #rrggbb
 assets: battle_animation.json: numbers.huge: unknown result kind 'huge': damage, critical, weak, resisted, immune, miss, heal, tp, revive, status, status_resisted, status_ends, stat_up, stat_down, stat_normal, no_effect, felled, felling_resisted
+assets: battle_animation.json: numbers.damage.rise: must be logical pixels from -4000 to 4000, a number or "Npx"
+assets: battle_animation.json: numbers.damage.pad: must be logical pixels from 0 to 64, a number or "Npx"
 assets: battle_animation.json: select.ability:sparkk: unknown ability or item 'sparkk': not in the game data
 assets: battle_animation.json: select.weapon:axe: unknown weapon class 'axe': blade, greatblade, rod, sling
 assets: battle_animation.json: select.combo:twin_arcs: unknown combination recipe 'twin_arcs': not in combos.json
 assets: battle_animation.json: select.ability:spark: unknown script 'spark.bolts'
 assets: battle_animation.json: select.step:notice.Game Lvl: unknown notice key 'Game Lvl'
 assets: battle_animation.json: select.status:poison/wobble: status:ID/idle or status:ID/tick
+assets: battle_animation.json: select.item:no_such_piece: unknown ability or item 'no_such_piece': not in the game data
 assets: battle_animation.json: figures.enemy.states.defeat.kind: must be one of fade, blink, bands, slide, sink, flash_fade, frames
+assets: battle_animation.json: figures.enemy.states.defeat:instant.outlast: must be frames from 0 to 36000, "Nms", "N%", or a $timing, $look, $param, $step, $phase or $rest reference
 assets: battle_animation.json: figures.monster: unknown scope 'monster': party, enemy, vehicle, or one of them with :ID
 assets: battle_animation.json: weapon_classes.category:axe: unknown key: equipment:ID or category:NAME, with an equipment piece or weapon category of the game data
 assets: battle_animation.json: placements.count:9: unknown key: count:1 to count:5 (5 is five or more enemies) or encounter:ID
@@ -132,7 +142,7 @@ assets: ui/styles.json: params: unknown field 'toast_size'
 assets: ui/styles.json: params: field 'toast_h' must be a whole number from 0 to 4096
 assets: ui/styles.json: params: field 'field_cell' must be a whole number from 8 to 256
 assets: ui/styles.json: -: the built-in styles stand in
-assets: ui/battle_front.json: params.party_slot_5_x: unknown param: backdrop_h, dev_badge_y, effect_scale, effect_scale_large, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_x, ground_h, icon_gap, icon_size, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, stage_bottom, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
+assets: ui/battle_front.json: params.party_slot_5_x: unknown param: backdrop_h, critical_marks, critical_marks_enemy, critical_marks_party, dev_badge_y, effect_scale, effect_scale_large, effectiveness_marks, effectiveness_marks_enemy, effectiveness_marks_party, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_x, ground_h, icon_gap, icon_size, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, miss_marks, miss_marks_enemy, miss_marks_party, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, stage_bottom, step_aside, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
 assets: ui/battle_front.json: -: the built-in layout of this screen stands in
 assets: ui/battle_side.json: params.motion_percent: field 'motion_percent' reads 'speed', which is not a field of the battle_side screen, a window or a variable
 assets: ui/battle_side.json: statuses.nausea: unknown status 'nausea': not a status of the game data the party's slots show
@@ -171,4 +181,4 @@ assets: ui/panels.json: -: the built-in layout of this screen stands in
 assets: ui/title.json: -: not valid JSON: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 27.
 assets: ui/title.json: -: the built-in layout of this screen stands in
 assets: 0 tilesets, 14 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 4 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 23 layout files (1280x720)
-FAILED: 172 problems.
+FAILED: 182 problems.
