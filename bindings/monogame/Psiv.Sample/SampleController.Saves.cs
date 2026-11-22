@@ -57,7 +57,9 @@ public sealed partial class SampleController
 				.Set("party_text", party)
 				.Set("leader", save is { Damaged: false, Party: [string first, ..] } ? _s.DisplayName(first.Split(':')[0]) : "")
 				.Set("level", save is { Damaged: false, Party: [string lead, ..] } && lead.Split(':') is [_, string lv] && int.TryParse(lv, CultureInfo.InvariantCulture, out int n) ? n : 0)
-				.Set("written", written);
+				.Set("written", written)
+				.Set("newest", save is { Newest: true })
+				.Set("write_time", save?.WriteTime ?? 0);
 		}
 		Ui.Draw("save_slots", s, s, data
 			.Set("slots", slots.Select(Row).ToList())
@@ -152,6 +154,18 @@ public sealed partial class SampleController
 	private bool AutosaveOn => (_gameInfo ??= _s.GameInfo()).Autosave;
 
 	private List<SaveSummary> LoadableSaves() => [.. (_s.Saves() ?? []).OrderBy(v => v.Autosave)];
+
+	// The Load list opens on its first row, or on the save Continue would load (SaveSummary.Newest) when it opens for the
+	// title's Continue (`continue` "choose") or the load_game layout's `select_newest` is on.
+	private void OpenLoadList(bool newest)
+	{
+		_loadOverlay = true;
+		_list.Reset();
+		if (newest || Ui.Param("load_game", "select_newest", UiData(), 0) != 0)
+		{
+			_list.Cursor = Math.Max(0, LoadableSaves().FindIndex(v => v.Newest));
+		}
+	}
 
 	private void UpdateLoadGame(ActionInput input)
 	{

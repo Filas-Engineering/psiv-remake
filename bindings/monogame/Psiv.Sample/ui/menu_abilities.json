@@ -29,7 +29,7 @@
 			{"type": "text", "visible": "len(abilities) > 0 && !picking", "key": "ui.status.usable_here", "w": "cw - 20", "align": "right", "style": "small_dim"},
 			{"type": "group", "visible": "len(abilities) > 0 && picking", "x": "cw * 3 / 5 + 20", "y": "t(40)", "elements": [
 				{"type": "text", "key": "ui.menu.use_on_whom", "args": ["target_name"], "color": "accent"},
-				{"type": "list", "items": "targets", "state": "target_list", "y": "t(28) + t(12)", "w": "cw - cw * 3 / 5 - 20", "h": "ch - t(40) - t(28) - t(12)"}
+				{"type": "list", "items": "target_rows", "state": "target_list", "enabled": "reachable", "y": "t(28) + t(12)", "w": "cw - cw * 3 / 5 - 20", "h": "ch - t(40) - t(28) - t(12)"}
 			]}
 		]}
 	]

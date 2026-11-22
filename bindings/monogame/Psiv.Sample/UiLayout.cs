@@ -77,6 +77,10 @@ public sealed class UiScreenLayout
 	// The menu entries and children with `immediate`: a one-row page that acts as soon as it opens, or a tab whose one
 	// child opens in place of the list.
 	public HashSet<string> Immediate { get; } = [];
+	// A child's `when` (left out of the list while it does not hold) and `enabled` (listed dimmed, not opened, while it
+	// does not hold), by `PARENT/CHILD`.
+	public Dictionary<string, UiExpr> ChildWhen { get; } = [];
+	public Dictionary<string, UiExpr> ChildEnabled { get; } = [];
 	// The system page's rows in order (`rows`; null: UiFields.SystemDefault).
 	public List<string>? Rows { get; set; }
 	// A battle layout's command rows per step with `command_top` (`command_rows`: `top`, `member`; a step left out lists all).
@@ -336,7 +340,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["screen"] = ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows"],
 		["screen.places[]"] = ["slot", "label"],
 		["screen.entries[]"] = ["page", "label", "children", "immediate"],
-		["screen.entries[].children[]"] = ["page", "label", "immediate"],
+		["screen.entries[].children[]"] = ["page", "label", "immediate", "when", "enabled"],
 		["screen.command_rows"] = ["top", "member", "vehicle"],
 		["screen.options[]"] = ["id", "when"],
 		["screen.tags{}"] = ["action", "id", "slot", "values", "default", "cases"],
@@ -838,6 +842,11 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		{
 			Problem("params.actions", "no element draws the field 'actions', so the action list an item opens would not show");
 		}
+		if (fields.Screen == "menu_items" && screen.Params.TryGetValue("discard", out UiExpr? discard) && discard.Names.Count == 0 && discard.Eval(null!).Int != 0
+			&& !screen.Reads("discard_text"))
+		{
+			Problem("params.discard", "no element draws the field 'discard_text', so Discard's count and confirm would not show");
+		}
 		foreach (UiWindow w in screen.Windows.Where(w => w.RelativeTo is not null && !_windowNames.Contains(w.RelativeTo)))
 		{
 			Problem($"windows.{w.Name}", $"field 'relative_to' names no window of this screen: '{w.RelativeTo}'");
@@ -1083,6 +1092,14 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 			{
 				list.Add((child, Str(c, "label", at)));
 				ImmediateEntry(c, at, child, screen, false);
+				if (c.TryGetProperty("when", out JsonElement when) && Expr(when, at, "when") is { } shown)
+				{
+					screen.ChildWhen[$"{page}/{child}"] = shown;
+				}
+				if (c.TryGetProperty("enabled", out JsonElement enabled) && Expr(enabled, at, "enabled") is { } usable)
+				{
+					screen.ChildEnabled[$"{page}/{child}"] = usable;
+				}
 			}
 		}
 		screen.Children[page] = list;

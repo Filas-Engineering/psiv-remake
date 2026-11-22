@@ -278,6 +278,9 @@ public sealed class FieldRenderer
 
 	// The platforms the last frame drew: `ID PX PY` in the data's pixels (CellPixels a cell), with `carrying` for the one ridden.
 	public string DrawnPlatforms { get; private set; } = "-";
+	// Each exit the last frame drew: `X Y closed`, or `X Y FIRES` and `marker` (the field's exit_markers picture), `arrow`
+	// or `door`.
+	public string DrawnExits { get; private set; } = "-";
 
 	// The people drawn in the last frame, actors and party members, by id: where, whether between cells, facing, pose.
 	public Dictionary<string, DrawnPerson> DrawnActors { get; } = [];
@@ -1020,6 +1023,7 @@ public sealed class FieldRenderer
 		}
 
 		float pulse = 0.6f + 0.4f * MathF.Sin(clockMs / 260f);
+		var exitsDrawn = new List<string>();
 		foreach (FieldExit e in view.Exits)
 		{
 			int sx = ox + e.X * tile, sy = oy + e.Y * tile;
@@ -1031,18 +1035,31 @@ public sealed class FieldRenderer
 				{
 					s.Image(tiles.Door, sx, sy, tile, tile, Color.White);
 				}
+				exitsDrawn.Add($"{e.X} {e.Y} closed");
 				continue;
 			}
 			int dir = e.X == 0 ? 3 : e.X == f.Width - 1 ? 1 : e.Y == 0 ? 0 : e.Y == f.Height - 1 ? 2 : -1;
-			if (dir < 0)
+			string fires = Art.ExitFiresName(e.Fires);
+			if (art.ExitMarker(e.Fires, clockMs) is { } marker)
+			{
+				s.Image(marker, sx, sy, tile, tile, Color.White);
+				exitsDrawn.Add($"{e.X} {e.Y} {fires} marker");
+			}
+			else if (dir < 0)
 			{
 				s.Image(tiles.Door, sx, sy, tile, tile, Color.White);
+				exitsDrawn.Add($"{e.X} {e.Y} {fires} door");
 			}
 			else
 			{
 				s.Fill(sx + Px(4), sy + Px(4), tile - Px(8), tile - Px(8), new Color(120, 240, 160) * (0.18f * pulse));
 				s.Image(tiles.ExitArrow[dir], sx, sy, tile, tile, Color.White * pulse);
+				exitsDrawn.Add($"{e.X} {e.Y} {fires} arrow");
 			}
+		}
+		if (record)
+		{
+			DrawnExits = exitsDrawn.Count == 0 ? "none" : string.Join(", ", exitsDrawn);
 		}
 		// Platforms lie on the ground layer at their pixel places; what stands on them is drawn over them.
 		var platformsDrawn = new List<string>();

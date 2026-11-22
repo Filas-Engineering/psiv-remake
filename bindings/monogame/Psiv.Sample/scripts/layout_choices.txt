@@ -101,7 +101,7 @@ expect state page items
 press Escape
 expect screen Field
 
-# The title's Continue opens the Load list; with the built-in title it loads the newest save, the event's autosave.
+# The title's Continue opens the Load list on the newest save (SaveSummary.Newest); with the built-in title it loads it.
 cmd title
 wait 2
 expect screen Title
@@ -109,7 +109,7 @@ press Down
 expect state selected Continue
 press Enter
 expect screen LoadGame
-expect statehas selected auto_0
+expect statehas selected auto_1
 shot build/shots/choices/title_continue.png
 press Escape
 expect screen Title

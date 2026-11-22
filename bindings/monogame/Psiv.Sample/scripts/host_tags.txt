@@ -1,0 +1,85 @@
+# Control tags in text shown outside the dialogue box (make_host_data.py tags a party talk line, the Tidewater codex
+# entry, the quest objectives, the Tonic's description, the discard notice and the stall keeper's welcome), from saves
+# of the scripted playthrough, with --dev: each screen shows the text with its tags acted on, a `{page}` as a break and
+# `{var:money}` filled, and no `{` reaches the frame: the party talk as a notice in the field and on its page, the keeper's
+# line and the description in the shop, the Items page's description, look and result line, the quest log, the codex
+# and the text log.
+
+cmd set text instant
+expect screen Title
+wait 2
+cmd load manual_1
+wait 4
+expect screen Field
+dev encounters off
+
+# The party talk as notices in the field, then on the menu's page.
+press T
+wait 2
+expect toast A bell that rings by itself.
+expect toast (121)
+expect notext {
+press M
+press Right
+press Enter
+wait 1
+expect state uifield.menu_options.talking true
+expect notext {
+shot build/shots/host/tags_talk_page.png
+
+# The Items page: the Tonic's description, its look and the discard notice on the result line.
+press Left
+press Down 3
+expect statehas description A bitter herbal draught. Restores 30 HP
+expect notext {
+press Enter
+press Down
+press Enter
+expect state page look
+expect notext {
+press Enter
+press Down
+press Enter
+press Enter
+press Enter
+expect state uifield.menu_items.result_text Threw away 1 Tonic.
+expect notext {
+shot build/shots/host/tags_items.png
+
+# The quest log (its objective), the codex entry's two pages as one text, then the text log.
+press Right 2
+expect state page quests
+expect notext {
+press Right
+press Enter
+expect state page codex
+expect notext {
+shot build/shots/host/tags_codex.png
+press Escape
+press Escape
+expect screen Field
+press L
+wait 2
+expect notext {
+press Escape
+wait 2
+
+# The keeper's welcome and the shop's description.
+dev warp tidewater stall_front
+wait 2
+press Up
+wait 3
+press Enter
+wait 4
+expect screen Shop
+expect state voice voice.host_stall.welcome
+expect notext {
+press Enter
+wait 2
+expect notext {
+shot build/shots/host/tags_shop.png
+press Escape
+press Escape
+press Escape
+wait 2
+expect screen Field

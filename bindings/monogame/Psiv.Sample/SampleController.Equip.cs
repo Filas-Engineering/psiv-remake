@@ -201,7 +201,7 @@ public sealed partial class SampleController
 	// The comparison's fields; returns its stat rows.
 	private List<(string Label, int Before, int After)> PreviewData(IDrawSurface t, UiContext data, EquipPreview p)
 	{
-		string description = _s.Description(DescriptionKind.Equipment, p.Piece) ?? "";
+		string description = Description(DescriptionKind.Equipment, p.Piece) ?? "";
 		_probeDescription = description.Length == 0 ? "-" : description;
 		var effects = new List<string> { BonusText(p.Bonus) };
 		if (p.Element != Element.None)

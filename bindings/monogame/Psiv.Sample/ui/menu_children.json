@@ -3,7 +3,7 @@
 	"windows": [
 		{"name": "list", "x": "max(area_x, min(tab_x - 16, area_x + area_w - (list_w > 0 ? list_w : t(300))))", "y": "area_y", "w": "list_w > 0 ? list_w : t(300)",
 			"h": "min(len(children), rows_max) * (row_h > 0 ? row_h : t(30)) + t(8) + 2 * list_pad", "frame": "panel", "elements": [
-			{"type": "list", "items": "children", "state": "list", "x": "list_pad", "y": "list_pad", "w": "cw - 2 * list_pad",
+			{"type": "list", "items": "child_rows", "state": "list", "enabled": "enabled", "x": "list_pad", "y": "list_pad", "w": "cw - 2 * list_pad",
 				"h": "min(len(children), rows_max) * (row_h > 0 ? row_h : t(30)) + t(8)", "row_height": "row_h > 0 ? row_h : t(30)",
 				"height": "row_h > 0 ? row_h - 2 : t(28)", "size": "text_size > 0 ? text_size : 20"}
 		]}

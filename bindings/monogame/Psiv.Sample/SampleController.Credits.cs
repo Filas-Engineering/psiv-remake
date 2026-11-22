@@ -35,7 +35,7 @@ public sealed partial class SampleController
 		{
 			CreditsEntry entry = credits.Entries[i];
 			y += entry.Gap * line;
-			lines.Add(new UiContext(data).Set("text", entry.Text).Set("heading", entry.Kind == CreditsEntryKind.Heading).Set("y", y));
+			lines.Add(new UiContext(data).Set("text", Shown(entry.Text)).Set("heading", entry.Kind == CreditsEntryKind.Heading).Set("y", y));
 			y += entry.Kind == CreditsEntryKind.Heading ? line + Px(12) : line;
 		}
 		// Scrolled so the newest line stays inside the layout's `roll` window.

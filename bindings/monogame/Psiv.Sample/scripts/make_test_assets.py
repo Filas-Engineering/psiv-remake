@@ -234,6 +234,7 @@ def main():
 	motion_broken(broken)
 	motion_more_broken(broken)
 	choices_broken(broken)
+	host_broken(broken)
 	bitmap_fonts(export, fonts)
 	if len(sys.argv) > 5:
 		subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("make_layout_assets.py")), str(export), str(fonts), sys.argv[5]], check=True)
@@ -803,6 +804,22 @@ def choices_broken(broken):
 	items = json.loads((ui / "menu_items.json").read_text())
 	items["params"] = {"actions": 1}
 	(ui / "menu_items.json").write_text(json.dumps(items, indent="\t") + "\n")
+
+
+def host_broken(broken):
+	"""A bad value of each field the host-call adoption added: the Items page's Discard with nothing that draws its steps,
+	the Load list's `select_newest` reading no field, and the field's exit markers with a missing picture, a bad frame time
+	and an unknown way of firing (docs/ui-layout.md, docs/assets.md "field")."""
+	ui = broken / "ui"
+	items = json.loads((ui / "menu_items.json").read_text())
+	items["params"]["discard"] = 1
+	(ui / "menu_items.json").write_text(json.dumps(items, indent="\t") + "\n")
+	load = json.loads((ui / "load_game.json").read_text())
+	load["params"] = {"select_newest": "yes"}
+	(ui / "load_game.json").write_text(json.dumps(load, indent="\t") + "\n")
+	m = json.loads((broken / "assets.json").read_text())
+	m.setdefault("field", {})["exit_markers"] = {"always": {"image": "overlays/no_exit.png", "frames": [0], "ms": 0}, "sometimes": {}}
+	(broken / "assets.json").write_text(json.dumps(m, indent="\t") + "\n")
 
 
 def broken_layouts(broken):

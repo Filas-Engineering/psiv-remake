@@ -621,7 +621,7 @@ The list a field menu entry's `children` open under its tab ("Menu entries", bel
 
 Window: `list`.
 
-Fields: area fields; `label` (string, the tab's name); `children` (list of strings, the children's names); `list` (scroll list); `tab_x`, `tab_w` (int: the selected tab's left edge and width as the `tabs` element drew it, on the same surface); `list_w`, `row_h`, `rows_max`, `list_pad`, `text_size` (int: the params below, 0 for `list_w`, `row_h` and `text_size` when not given).
+Fields: area fields; `label` (string, the tab's name); `children` (list of strings, the children's names); `child_rows` (list of items: `text`, the name, and `enabled`, false for a child its `enabled` turns off, which the built-in file dims); `list` (scroll list); `tab_x`, `tab_w` (int: the selected tab's left edge and width as the `tabs` element drew it, on the same surface); `list_w`, `row_h`, `rows_max`, `list_pad`, `text_size` (int: the params below, 0 for `list_w`, `row_h` and `text_size` when not given).
 
 Params, for small resolutions (each left out keeps the built-in size): `list_w` (the list's width; `t(300)`), `row_h` (a row's height, the highlight 2 pixels less; `t(30)`), `rows` (the rows shown before it scrolls; 8), `pad` (the frame's padding; 24), `text_size` (the rows' text size; the body size).
 
@@ -629,7 +629,7 @@ Params, for small resolutions (each left out keeps the built-in size): `list_w` 
 {"version": 1, "params": {"list_w": 110, "row_h": 14, "rows": 5, "pad": 6, "text_size": 16}, "windows": [
 	{"name": "list", "x": "max(area_x, min(tab_x - 16, area_x + area_w - (list_w > 0 ? list_w : t(300))))", "y": "area_y", "w": "list_w > 0 ? list_w : t(300)",
 		"h": "min(len(children), rows_max) * (row_h > 0 ? row_h : t(30)) + t(8) + 2 * list_pad", "frame": "panel", "elements": [
-		{"type": "list", "items": "children", "state": "list", "x": "list_pad", "y": "list_pad", "w": "cw - 2 * list_pad",
+		{"type": "list", "items": "child_rows", "state": "list", "enabled": "enabled", "x": "list_pad", "y": "list_pad", "w": "cw - 2 * list_pad",
 			"h": "min(len(children), rows_max) * (row_h > 0 ? row_h : t(30)) + t(8)", "row_height": "row_h > 0 ? row_h : t(30)",
 			"height": "row_h > 0 ? row_h - 2 : t(28)", "size": "text_size > 0 ? text_size : 20"}]}
 ]}
@@ -651,6 +651,7 @@ Fields:
 - `abilities` (list of items): item fields `text` (the name, for the probe), `label` (the name with ` *` for field abilities), `usable` (bool, field ability), `kind`, `cost`, `uses` (strings).
 - `description` (string): the highlighted ability's description, empty when it has none.
 - `target_name` (string), `targets` (list of strings), `target_list` (scroll list): the target choice.
+- `target_rows` (list of items): the same choice as items, `text` (as in `targets`), `name` and `reachable` (false for a member the ability cannot reach, `AlliesOutOfReach`, greyed before the pick; Confirm on one does nothing). The built-in files draw `target_rows` with `"enabled": "reachable"`, and so does the Items page's `member_rows`.
 
 The stats rows fit the label to the column less the value's width, then the value to what the fitted label leaves (`fit()` in the expression).
 
@@ -665,13 +666,25 @@ Fields:
 - `item_count` (int), `item_total` (int): the kinds of items and their sum.
 - `items` (list of strings), `list` (scroll list): the bag.
 - `description` (string): the highlighted item's description, empty when it has none.
-- `target_name` (string), `members` (list of strings), `member_list` (scroll list): the target choice.
-- `acting` (bool), `actions` (list of strings), `action_ids` (list of strings), `action_list` (scroll list): the highlighted item's actions while they are open (param `actions`): `use` and `look`, as the sample's words `Use` and `Look` (keys `ui.items.action.use`, `ui.items.action.look`). There is no `discard`: the session has no call that throws an item away.
+- `target_name` (string), `members` (list of strings), `member_list` (scroll list): the target choice; `member_rows` (list of items: `text`, `name`, `reachable`) the same choice with the members the item cannot reach (`AlliesOutOfReach`) greyed before the pick.
+- `acting` (bool), `actions` (list of strings), `action_ids` (list of strings), `action_list` (scroll list): the highlighted item's actions while they are open (param `actions`): `use`, `look` and, with the param `discard`, `discard` for an item the data lets the bag throw away (`InventoryEntry.Discardable`), as the sample's words `Use`, `Look` and `Discard` (keys `ui.items.action.use`, `.look`, `.discard`).
+- `discarding` (bool), `discard_step` (string: `count`, `confirm` or `''`), `discard_count`, `discard_max` (int: how many are chosen, of the stack), `discard_text` (string: the step's line, `ui.items.discard_count` "Throw away how many Tonic?  3 of 8" or `ui.items.discard_confirm` "Throw away 3 Tonic?  Enter yes, Esc no", the sample's words): Discard's steps.
 - `looking` (bool), `look_text` (string): the item's description (or `ui.common.no_description`) while `look` shows it, `''` otherwise.
 - `bag_used`, `bag_slots` (int), `bag` (string): the bag's slots as in the shop; the built-in file draws `bag` in the middle of the line over the list when the bag has a limit.
 - `result_text` (string), `result_ok` (bool): the last use's outcome, the session's notice (the last one when it gives several) or its refusal, and whether the use went through. A file that reads `result_text` takes the uses' outcomes there instead of the notices, as the shop does.
 
 Param `actions` (an expression, default 0): not 0, Confirm on an item opens its actions instead of using it. `use` goes on as Confirm did before (the target choice for an item used on one ally, the travel choice for a travel item, else the use); `look` shows the description until Confirm or Back; Back closes the actions, as does the item running out. A file that turns `actions` on with a number but draws no element that reads `actions` is a problem (the list would not show). The page's `page` probe reads `actions` and `look` for the two steps.
+
+Param `discard` (an expression, default 0): not 0, the actions of a discardable item end with `discard`. For a stack it asks how many first (`discard_step` `count`: Up and Right one more, Down and Left one fewer, 1 to the count held; Confirm goes on, Back returns to the actions), then for a confirm (`confirm`: Confirm throws them away through `Discard(id, count)`, Back returns to the count, or to the actions for a single item). The session's notice (`game.discarded`) or refusal (`game.refuse.discard_not_held` and the others) goes to `result_text` when the file reads it, else to the notices, as a use's does. A file that turns `discard` on with a number but draws no element that reads `discard_text` is a problem. The `page` probe reads `discard_count` and `discard_confirm` for the two steps. `make_host_assets.py` draws them:
+
+```json
+{"version": 1, "params": {"actions": 1, "discard": 1}, "windows": [
+	...,
+	{"name": "discard", "visible": "discarding", "x": "area_x + 40", "y": "area_y + t(150)", "w": "area_w - 80", "h": "t(70)", "z": 6, "frame": "panel", "elements": [
+		{"type": "text", "value": "discard_text", "w": "cw", "color": "discard_step == 'confirm' ? 'bad' : 'accent'"},
+		{"type": "bar", "visible": "discard_step == 'count'", "value": "discard_count", "max": "discard_max", "y": "t(30)", "w": "cw", "h": 6}]}
+]}
+```
 
 ```json
 {"version": 1, "params": {"actions": 1}, "windows": [
@@ -716,14 +729,18 @@ Window: `slots` (the area).
 
 Fields:
 - area fields.
-- `slots` (list of items): item fields `text` (the probe: slot and area, `empty` or `damaged`), `head` (the first line), `enabled` (false when damaged), `detail` (the second line, empty for none), `detail_color` (color name: `dim`, or `bad` for a damaged save's error).
+- `slots` (list of items): item fields `text` (the probe: slot and area, `empty` or `damaged`), `head` (the first line), `enabled` (false when damaged), `detail` (the second line, empty for none), `detail_color` (color name: `dim`, or `bad` for a damaged save's error), `newest` (bool: the save Continue loads, `SaveSummary.Newest`), `write_time` (int: the save's `WriteTime`, Unix seconds, or the session's counter without the wall clock; 0 for an empty slot).
+
+```json
+{"type": "text", "visible": "newest", "key": "ui.title.continue", "x": "cw - 150", "w": 120, "align": "right", "style": "small", "color": "'good'"}
+```
 - `list` (scroll list), `active` (bool): whether the list has the cursor.
 
 ### menu_abilities, menu_system (`ui/menu_abilities.json`, `ui/menu_system.json`)
 
 The technique, skill and ability pages and the system page ("Menu entries", below).
 
-- menu_abilities. Windows `members`, `abilities` (the area). Fields: area fields, `view` (`members` or `list`), `kind` (`techniques`, `skills` or `abilities`), `members` (list of strings), `list` (scroll list), `name` (string, the member), `abilities` (list of items: `text`, `label` (the name with `  *` when usable here), `usable` (bool), `kind`, `cost`, `uses` (strings)), `sub_list`, `description`, `picking` (bool), `target_name`, `targets` (list of strings), `target_list`.
+- menu_abilities. Windows `members`, `abilities` (the area). Fields: area fields, `view` (`members` or `list`), `kind` (`techniques`, `skills` or `abilities`), `members` (list of strings), `list` (scroll list), `name` (string, the member), `abilities` (list of items: `text`, `label` (the name with `  *` when usable here), `usable` (bool), `kind`, `cost`, `uses` (strings)), `sub_list`, `description`, `picking` (bool), `target_name`, `targets` (list of strings), `target_rows` (as menu_status's), `target_list`.
 - menu_system. Window `page` (the area). Fields: area fields, `rows` (list of items: `id`, `text` (label and value), `label`, `value` (strings), `changeable` (bool)), `list` (scroll list), `description` (a settings row's help). The slot list draws through `save_slots`.
 
 Params:
@@ -749,7 +766,7 @@ Window: `page` (the area).
 - menu_order: `rows` (list of strings), `list` (scroll list): the lineup.
 - menu_options: `options` (list of strings): the one "open options" row, always selected.
 
-The `party_talk` page draws through menu_options too. Its param `party_talk` is `"close"` (default: Confirm closes the menu and starts the party talk, its lines shown as notices, as before) or `"page"` (the menu stays open on the page and the lines show there; no notice). With `"page"` the page also gets `talking` (bool: lines to show), `talk` (list of items: `speaker` (the member's name), `line` (what they say), `text` (both, as the notice reads)) and the slot `talk_box`, which draws each speaker's name in the accent color and their line wrapped under it, as many rows as fit its rectangle. Its sizes come from the layout: the styles' text styles `talk` (the lines) and `talk_name` (the names), size and color, when styles.json defines them, and the menu_options params `talk_size` and `talk_name_size` (text sizes; the body size without them), `talk_row_h` (the step between rows; the line height for the size), `talk_pad` (room inside the slot; 0) and `talk_rows` (at most this many rows; 0: as many as fit). `make_small_more_assets.py` sets them for 320x224 (`"talk_pad": 2, "talk_row_h": 11, "talk_rows": 6`, styles `talk` and `talk_name` at `size_small`). The lines stay until the tab changes, the menu closes or Confirm talks again; a refusal (`nobody_talks`) is a notice as before. The built-in file draws none of them, so a layout that turns the page on adds the box:
+The `party_talk` page draws through menu_options too. Its param `party_talk` is `"close"` (default: Confirm closes the menu and starts the party talk, its lines shown as notices, as before) or `"page"` (the menu stays open on the page and the lines show there, from `PartyTalkLines()`, which shows and marks nothing; the field's party talk still goes through `PartyTalk()`). With `"page"` the page also gets `talking` (bool: lines to show), `talk` (list of items: `speaker` (the member's name), `speaker_id` (the character id), `portrait` (image: the speaker's portrait), `line` (what they say), `pages` (list of strings: the line's pages), `text` (name and line, as the notice reads)) and the slot `talk_box`, which draws each speaker's name in the accent color and their line wrapped under it, each of its pages starting a row of its own, as many rows as fit its rectangle (`talk_rows` cuts the rest; the box does not page with Confirm, which talks again). A line's control tags are acted on as the text log does: `{var:...}` filled, presentation tags dropped, `{page}` the break between pages. Its sizes come from the layout: the styles' text styles `talk` (the lines) and `talk_name` (the names), size and color, when styles.json defines them, and the menu_options params `talk_size` and `talk_name_size` (text sizes; the body size without them), `talk_row_h` (the step between rows; the line height for the size), `talk_pad` (room inside the slot; 0) and `talk_rows` (at most this many rows; 0: as many as fit). `make_small_more_assets.py` sets them for 320x224 (`"talk_pad": 2, "talk_row_h": 11, "talk_rows": 6`, styles `talk` and `talk_name` at `size_small`). The lines stay until the tab changes, the menu closes or Confirm talks again; with nobody to talk, `game.refuse.nobody_talks` is a notice with the refusal cue. The built-in file draws none of them, so a layout that turns the page on adds the box:
 
 ```json
 {"version": 1, "params": {"party_talk": "page"}, "windows": [
@@ -850,6 +867,12 @@ Windows: `scene` (the title's scene, darkened), `box` (the panel, the slot list,
 Fields: `has_saves` (bool), `hint` (string).
 
 Slots: `scene`, `slot_list` (draws `save_slots` into its rectangle), `toasts`.
+
+Param `select_newest` (an expression, default 0): not 0, the list opens on the save Continue would load (`SaveSummary.Newest`) instead of its first row. The list the title's Continue opens under `continue` "choose" always opens there.
+
+```json
+{"version": 1, "params": {"select_newest": 1}, "windows": [...]}
+```
 
 ### options (`ui/options.json`)
 
@@ -1339,6 +1362,10 @@ Two `styles.json` params: `dev_scale` (10 to 100, default 100) draws every devel
 `make_choices_assets.py EXPORT TEST OUT` copies the test assets with a title whose Continue opens the Load list, a front battle layout with `item_order` `"equipment_then_items"` and `macro_auto_first`, and an Items page with `actions` and a `result_text` line; `alt/` holds the built-in title and battle files for the run to swap in, and `alt/title_broken.json` and `alt/menu_items_broken.json`, which the Makefile checks on a copy. `layout_choices.txt` (front data copy, `--dev`): the worn Storm Rod before the Tonic and `tempest (auto)` first, then the built-in order after the swap; the Items page's look, a use and a refusal on the result line with no notice; Continue opening the Load list, then loading the newest save with the built-in title. Screenshots under `build/shots/choices/` with `--window`.
 
 `make_library_data.py GAME CORE OUT [--bag] [--no-autosave]` copies the data with game.json's `followers_arrive` "behind", Tidewater's stall and inn named (the stall with a voice whose welcome takes the name as `{0}`), two test yards with a 2x2 block of exits each (`exit_yard_a` with `field_poison`, `exit_yard_b` with `field_paralysis`), rules.json's field poison and paralysis, and test items that poison, paralyze and drain; `--bag` adds `bag_slots` 4 and `--no-autosave` `autosave` false. `make_library_assets.py EXPORT TEST OUT` copies the test assets with the Macros page's `options`, a front battle layout with `macro_check`, `macro_failed` "lose_turn", `macro_flow` "remember" and `auto_choose`, and an Extras menu with the `auto_trouble` and `auto_policy` rows; `alt/battle_front_broken.json` and `alt/menu_macros_broken.json` are checked on a copy. Runs, with `--dev`: `library_followers.txt` (playthrough saves: the session's follower placing after warps and the trail, `dev rest`), `exit_block.txt` (the block crossed and left with keys and clicks in both field inputs), `library_shop.txt` (`--bag`: names, the keeper's `{0}`, the bag line in the shop and on the Items page, a refused purchase, the cache staying shut, the inn's title), `library_autosave.txt` (`--no-autosave`: no autosave marks, no retry), `field_status.txt` (from the save `field_status_cli.txt` writes with game_cli: `game.poison_fell` and `game.paralysis_worn_off`) and `library_macros.txt` (shipped data: the options stepped, the step checks, a macro's round with the menus back on Macro and the last macro, the Extras rows in battle, the Auto row's choice). Screenshots under `build/shots/library/` with `--window`.
+
+`make_host_data.py GAME CORE OUT [--consume]` copies the data with an item the bag may not throw away (`host_charm`, `discardable` false), Tidewater's east exit firing `always`, the stall's keeper voice with a two-page welcome, and control tags in a party talk line, the Tidewater codex entry, the quest objectives, the Tonic's description and the discard notice; `--consume` adds core's `item_no_reach` "consume" and the Tonic's `consume_when_no_effect`. `make_host_assets.py EXPORT TEST OUT` copies the test assets with the menu's Journal and Records tabs (children with `when`, `enabled` and `immediate`), the Items page's `discard`, the party talk page with portraits, the `newest` mark and `write_time` in the slot rows, `select_newest`, Continue "choose", the field's `exit_markers` and a palette track on the `shadow` sprite; `alt/menu_broken.json` is checked on a copy. Runs, from playthrough saves, with `--dev`: `host_menus.txt` (the newest save preselected, the children, Discard with its count, confirm, result and a refusal, the party talk page, Mend and the Tonic greyed on the Cogwright before the pick, the exit markers, the shadow stepping in battle, `combo` on the console), `host_tags.txt` (`expect notext {` on each screen that shows the tagged text: the party talk as a notice and on its page, the Items page's description, look and result, the quest log, the codex, the text log and the shop's keeper line and description) and `host_reach.txt` (`--consume`: the Tonic selectable on the Cogwright and spent, Mend still greyed, in the field and in battle). Screenshots under `build/shots/host/` with `--window`.
+
+Text from the game's tables shown outside the dialogue box, narration and their logs (notices, the party talk page, keeper lines, shop and Items results, descriptions, the quest log, the codex, credits, a choice's prompt and answers, the battle's own event lines) goes through the same reading as the text log (`Shown` in `SampleController.Text.cs`): `{var:...}` filled, presentation tags dropped, `{page}` a break (a space, or a row of its own on the party talk page), a `{name}` token the glossary lacks kept as written. Text with no `{` is shown as it is.
 
 ## Dialogue control tags (`ui/dialogue.json`, `SampleController.Dialogue.cs`)
 

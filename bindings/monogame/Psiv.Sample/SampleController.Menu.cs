@@ -23,9 +23,28 @@ public sealed partial class SampleController
 
 	private string MenuPage => _menuChild ?? OnlyChild ?? MenuTab;
 
-	// An `immediate` entry's single child, which opens in place of the children's list.
-	private string? OnlyChild => _menuOnly is null && Layout.Screen("menu") is var menu && menu.Immediate.Contains(MenuTab)
-		&& menu.Children.GetValueOrDefault(MenuTab) is [var only] ? only.Page : null;
+	// An `immediate` entry's one usable child (listed by its `when` and `enabled`), which opens in place of the children's
+	// list.
+	private string? OnlyChild => _menuOnly is null && Layout.Screen("menu").Immediate.Contains(MenuTab)
+		&& ShownChildren(MenuTab).Where(c => ChildEnabled(MenuTab, c.Page)).ToList() is [var only] ? only.Page : null;
+
+	// A tab's children its list shows: those whose `when` holds.
+	private List<(string Page, string? Label)> ShownChildren(string tab) =>
+		[.. (Layout.Screen("menu").Children.GetValueOrDefault(tab) ?? []).Where(c => Layout.Screen("menu").ChildWhen.GetValueOrDefault($"{tab}/{c.Page}") is not { } when || Ui.Holds(when, MenuFields()))];
+
+	private bool ChildEnabled(string tab, string page) => Layout.Screen("menu").ChildEnabled.GetValueOrDefault($"{tab}/{page}") is not { } enabled || Ui.Holds(enabled, MenuFields());
+
+	// The menu screen's fields a child's `when` and `enabled` read.
+	private UiContext MenuFields() => UiData()
+		.Set("tabs", MenuEntries.Select(tab => T(MenuLabel(tab))).ToList())
+		.Set("page_ids", MenuEntries.ToList())
+		.Set("tab", _tab)
+		.Set("money", T("ui.common.money", _s.WorldInfo().Money))
+		.Set("money_value", _s.WorldInfo().Money)
+		.Set("item_count", _s.Inventory(ItemSort.Id).Count(i => !i.IsEquipment))
+		.Set("macro_count", _s.Macros().Count)
+		.Set("party", LineupMembers().Select(m => new UiContext().Set("name", m.Name).Set("level", m.Level).Set("hp", m.Hp).Set("max_hp", m.MaxHp)
+			.Set("tp", m.Tp).Set("max_tp", m.MaxTp).Set("alive", m.Hp > 0)).ToList());
 
 	// The page an `immediate` entry acted on last, with its tab, so it acts once each time it opens.
 	private string? _immediateActed;
@@ -47,7 +66,7 @@ public sealed partial class SampleController
 
 	// The selected tab's children while they are listed, before one is chosen.
 	private List<(string Page, string? Label)>? MenuChildren =>
-		_menuOnly is null && _menuChild is null && OnlyChild is null && Layout.Screen("menu").Children.GetValueOrDefault(MenuTab) is { } children ? children : null;
+		_menuOnly is null && _menuChild is null && OnlyChild is null && Layout.Screen("menu").Children.ContainsKey(MenuTab) ? ShownChildren(MenuTab) : null;
 
 	private void ResetMenuChild()
 	{
@@ -56,19 +75,22 @@ public sealed partial class SampleController
 		_childList.Reset();
 	}
 
-	// The party talk's lines the page shows with the menu_options layout's `party_talk` "page".
-	private List<(string Speaker, string Line, string Text)> _talkLines = [];
-	// The notices of the party talk now starting go to _talkLines.
-	private bool _talkToPage;
+	// The party talk's lines the page shows with the menu_options layout's `party_talk` "page" (PartyTalkLines), each as its
+	// pages with the control tags acted on.
+	private List<(TalkLine Line, List<string> Pages)> _talkLines = [];
 
 	private bool PartyTalkOnPage => Ui.ParamText("menu_options", "party_talk", UiData(), "close") == "page";
 
 	private readonly ScrollList _third = new();
 	// The Items page's order; the bag has none of its own, so this is the sample's own choice and is not saved.
 	private ItemSort _itemSort = ItemSort.Id;
-	// The menu_items layout's `actions` 1: Confirm on an item opens these for it instead of using it. The session has no
-	// call that throws an item away, so there is no discard.
-	private static readonly string[] ItemActions = ["use", "look"];
+	// The menu_items layout's `actions` 1: Confirm on an item opens these for it instead of using it; with its `discard` 1
+	// also Discard, for an item the data lets the bag throw away.
+	private string[] ItemActions(InventoryEntry? item) => item is { Discardable: true } && Ui.Param("menu_items", "discard", UiData(), 0) != 0
+		? ["use", "look", "discard"] : ["use", "look"];
+	// Discard's steps: `count` (how many, for a stack) and `confirm`; null while the actions are listed.
+	private string? _discardStep;
+	private int _discardCount;
 	// The item whose actions are open, and whether its description shows (look).
 	private string? _itemActing;
 	private bool _itemLooking;
@@ -102,6 +124,7 @@ public sealed partial class SampleController
 		_itemActing = null;
 		_itemLooking = false;
 		_itemResult = "";
+		_discardStep = null;
 	}
 
 	// Where the page is, for headless expectations.
@@ -111,7 +134,7 @@ public sealed partial class SampleController
 		Screen.Menu => MenuPage switch
 		{
 			"status" => _pickMember is null ? "members" : _pickAction is not null ? "target" : _statusPage == 0 ? "stats" : "abilities",
-			"items" => _pickAction is not null ? "target" : _itemLooking ? "look" : _itemActing is not null ? "actions" : "items",
+			"items" => _pickAction is not null ? "target" : _itemLooking ? "look" : _discardStep is { } step ? "discard_" + step : _itemActing is not null ? "actions" : "items",
 			"equip" => _pickMember is null ? "members" : _equipSlot is null ? "slots" : "pieces",
 			"order" => _orderFrom is null ? "lineup" : "swap",
 			"macros" => _macroStage.ToString().ToLowerInvariant(),
@@ -170,7 +193,11 @@ public sealed partial class SampleController
 		if (MenuChildren is { } children)
 		{
 			_childList.Move(input, children.Count);
-			if (input.Confirm)
+			if (input.Confirm && (children.Count == 0 || !ChildEnabled(MenuTab, children[_childList.Cursor].Page)))
+			{
+				_audio.PlayCue("refuse");
+			}
+			else if (input.Confirm)
 			{
 				_menuChild = children[_childList.Cursor].Page;
 				_pickMember = null;
@@ -255,11 +282,26 @@ public sealed partial class SampleController
 		{
 			_pickAction = null;
 		}
+		else if (input.Confirm && lineup.Count > 0 && OutOfReach(CommandKind.Item, null).Contains(lineup[_sub.Cursor].Id))
+		{
+			_audio.PlayCue("refuse");
+		}
 		else if (input.Confirm && lineup.Count > 0)
 		{
 			ItemReport(_s.UseItem(_pickAction, lineup[_sub.Cursor].Id));
 			_pickAction = null;
 		}
+	}
+
+	// The lineup members the item or ability being used cannot reach (AlliesOutOfReach), greyed before the pick; Confirm on
+	// one does nothing.
+	private HashSet<string> OutOfReach(CommandKind kind, string? user) => _pickAction is null ? [] : [.. _s.AlliesOutOfReach(kind, _pickAction, user)];
+
+	// The target choice as items: `text` as the plain list shows it, `name`, and `reachable`.
+	private List<UiContext> TargetRows(UiContext data, CommandKind kind, string? user, Func<Member, string> text)
+	{
+		HashSet<string> unreachable = OutOfReach(kind, user);
+		return _pickAction is null ? [] : [.. LineupMembers().Select(m => new UiContext(data).Set("text", text(m)).Set("name", m.Name).Set("reachable", !unreachable.Contains(m.Id)))];
 	}
 
 	private void UseItem(InventoryEntry item)
@@ -279,7 +321,8 @@ public sealed partial class SampleController
 		}
 	}
 
-	// An item's actions: Back closes them, as does the item running out; look shows its description until Confirm or Back.
+	// An item's actions: Back closes them, as does the item running out; look shows its description until Confirm or Back;
+	// discard asks how many of a stack (Up and Right more, Down and Left fewer), then for a confirm, and Back steps back.
 	private void UpdateItemActions(ActionInput input, InventoryEntry? item)
 	{
 		if (_itemLooking)
@@ -287,14 +330,42 @@ public sealed partial class SampleController
 			_itemLooking = !input.Confirm && !input.Back;
 			return;
 		}
-		_itemActionList.Move(input, ItemActions.Length);
+		if (_discardStep == "confirm")
+		{
+			if (input.Confirm)
+			{
+				ItemReport(_s.Discard(_itemActing!, _discardCount));
+				_itemActing = null;
+				_discardStep = null;
+			}
+			else if (input.Back)
+			{
+				_discardStep = item is { Count: > 1 } ? "count" : null;
+			}
+			return;
+		}
+		if (_discardStep == "count" && item is not null)
+		{
+			int step = input.Pressed(GameAction.Up) || input.Pressed(GameAction.Right) ? 1 : input.Pressed(GameAction.Down) || input.Pressed(GameAction.Left) ? -1 : 0;
+			_discardCount = Math.Clamp(_discardCount + step, 1, item.Count);
+			_discardStep = input.Confirm ? "confirm" : input.Back ? null : _discardStep;
+			return;
+		}
+		_discardStep = null;
+		string[] actions = ItemActions(item);
+		_itemActionList.Move(input, actions.Length);
 		if (input.Back || item is null)
 		{
 			_itemActing = null;
 		}
-		else if (input.Confirm && ItemActions[_itemActionList.Cursor] == "look")
+		else if (input.Confirm && actions[_itemActionList.Cursor] == "look")
 		{
 			_itemLooking = true;
+		}
+		else if (input.Confirm && actions[_itemActionList.Cursor] == "discard")
+		{
+			_discardCount = 1;
+			_discardStep = item.Count > 1 ? "count" : "confirm";
 		}
 		else if (input.Confirm)
 		{
@@ -311,7 +382,7 @@ public sealed partial class SampleController
 		_itemResultOk = used.Ok;
 		if (used.Error is { } error && ItemResultShown)
 		{
-			_itemResult = error.Text;
+			_itemResult = Shown(error.Text);
 			_log("notice: " + error.Text);
 			_refused = true;
 			return;
@@ -356,6 +427,8 @@ public sealed partial class SampleController
 			.Set("hint", MenuHint())
 			.Set("toasts", (UiSlot)((x, y, w, h) => DrawToasts(s, s.Width - x - w, y + h, right: true)))
 			.Set("money_value", _s.WorldInfo().Money)
+			.Set("item_count", _s.Inventory(ItemSort.Id).Count(i => !i.IsEquipment))
+			.Set("macro_count", _s.Macros().Count)
 			.Set("party", LineupMembers().Select(m => new UiContext().Set("name", m.Name).Set("level", m.Level).Set("hp", m.Hp).Set("max_hp", m.MaxHp)
 				.Set("tp", m.Tp).Set("max_tp", m.MaxTp).Set("portrait", art.Portrait("", m.Id)).Set("alive", m.Hp > 0)).ToList()));
 	}
@@ -371,6 +444,7 @@ public sealed partial class SampleController
 			Ui.Draw("menu_children", s, t, UiArea(x, y, w, h)
 				.Set("label", T(MenuLabel(MenuTab)))
 				.Set("children", children.Select(c => T(c.Label ?? "ui.menu.tab." + c.Page)).ToList())
+				.Set("child_rows", children.Select(c => new UiContext().Set("text", T(c.Label ?? "ui.menu.tab." + c.Page)).Set("enabled", ChildEnabled(MenuTab, c.Page))).ToList())
 				.Set("list", _childList)
 				.Set("tab_x", tabX)
 				.Set("tab_w", tabW)
@@ -393,7 +467,9 @@ public sealed partial class SampleController
 			Ui.Draw("menu_options", s, t, data
 				.Set("options", new List<string> { T("ui.menu.party_talk") })
 				.Set("talking", _talkLines.Count > 0)
-				.Set("talk", _talkLines.Select(l => new UiContext(data).Set("text", l.Text).Set("speaker", l.Speaker).Set("line", l.Line)).ToList())
+				.Set("talk", _talkLines.Select(l => new UiContext(data).Set("text", (l.Line.SpeakerName.Length > 0 ? l.Line.SpeakerName + ": " : "") + string.Join(" ", l.Pages))
+					.Set("speaker", l.Line.SpeakerName).Set("speaker_id", l.Line.Speaker).Set("portrait", art.Portrait("", l.Line.Speaker))
+					.Set("line", string.Join(" ", l.Pages)).Set("pages", l.Pages)).ToList())
 				.Set("talk_box", (UiSlot)((bx, by, bw, bh) => DrawTalkBox(t, bx, by, bw, bh))));
 			_probeSelected = T("ui.menu.party_talk");
 			break;
@@ -423,11 +499,10 @@ public sealed partial class SampleController
 		}
 	}
 
-	// The party talk's lines in the slot's rectangle: each speaker's name, then the line wrapped under it.
 	// The party talk's lines in the slot: speaker names in the styles' text style `talk_name` and lines in `talk` (size and
 	// color; accent and text without them), sized again by the menu_options params `talk_name_size` and `talk_size`, rows
 	// `talk_row_h` apart (else the line height for the size), inside `talk_pad` and at most `talk_rows` rows (0: as many
-	// as fit).
+	// as fit). Each of a line's pages starts a row of its own.
 	private void DrawTalkBox(IDrawSurface t, int x, int y, int w, int h)
 	{
 		UiContext ctx = UiData();
@@ -442,15 +517,15 @@ public sealed partial class SampleController
 		(x, y, w, h) = (x + pad, y + pad, Math.Max(1, w - 2 * pad), h - 2 * pad);
 		int ty = y, rows = 0;
 		bool Fits() => ty + line <= y + h && (most <= 0 || rows < most);
-		foreach ((string speaker, string said, _) in _talkLines)
+		foreach ((TalkLine talk, List<string> pages) in _talkLines)
 		{
-			if (speaker.Length > 0 && Fits())
+			if (talk.SpeakerName.Length > 0 && Fits())
 			{
-				t.Text(speaker, x, ty, nameColor, nameAt);
+				t.Text(talk.SpeakerName, x, ty, nameColor, nameAt);
 				ty += line;
 				rows++;
 			}
-			foreach (string row in Style.Wrap(t, said, w, size).TakeWhile(_ => Fits()))
+			foreach (string row in pages.SelectMany(page => Style.Wrap(t, page, w, size)).TakeWhile(_ => Fits()))
 			{
 				t.Text(row, x, ty, lineColor, size);
 				ty += line;
@@ -471,24 +546,24 @@ public sealed partial class SampleController
 			OpenExtras();
 			return;
 		}
-		Report(_s.CloseMenu());
 		if (PartyTalkOnPage)
 		{
-			// The session talks only in the field, so the menu closes for the talk and opens again where it was.
-			_talkLines = [];
-			_talkToPage = true;
-			Report(_s.PartyTalk());
-			Report(_s.OpenMenu());
+			// The lines come from PartyTalkLines, which shows and marks nothing, so the menu stays open; the field's
+			// action still goes through PartyTalk.
+			_talkLines = [.. _s.PartyTalkLines().Select(l => (l, ShownPages(l.Text)))];
+			foreach ((TalkLine talk, List<string> pages) in _talkLines)
+			{
+				_log($"talk: {talk.SpeakerName}: {string.Join(" ", pages)}");
+			}
+			if (_talkLines.Count == 0)
+			{
+				Say(T("game.refuse.nobody_talks"));
+				_audio.PlayCue("refuse");
+			}
 			return;
 		}
+		Report(_s.CloseMenu());
 		Report(_s.PartyTalk());
-	}
-
-	// A party talk line as the page shows it: the speaker is the lineup member whose name starts the notice.
-	private void TakeTalkLine(Notice n)
-	{
-		string? speaker = LineupMembers().Select(m => m.Name).FirstOrDefault(name => n.Text.StartsWith(name + ": ", StringComparison.Ordinal));
-		_talkLines.Add(speaker is null ? ("", n.Text, n.Text) : (speaker, n.Text[(speaker.Length + 2)..], n.Text));
 	}
 
 	// A page that is one row, always selected, which Confirm acts on: the menu_options layout.
@@ -528,7 +603,9 @@ public sealed partial class SampleController
 			description = DescriptionOf(items[Math.Clamp(_list.Cursor, 0, items.Count - 1)]) ?? "";
 			_probeDescription = description.Length == 0 ? "-" : description;
 		}
-		InventoryEntry? looked = _itemLooking ? items.FirstOrDefault(i => i.Id == _itemActing) : null;
+		InventoryEntry? acting = items.FirstOrDefault(i => i.Id == _itemActing);
+		InventoryEntry? looked = _itemLooking ? acting : null;
+		string[] actions = ItemActions(acting);
 		Ui.Draw("menu_items", s, t, SetBag(UiArea(x, y, w, h))
 			.Set("picking", _pickAction is not null)
 			.Set("sort_name", T(NameKind.ItemSort, (int)_itemSort))
@@ -540,10 +617,21 @@ public sealed partial class SampleController
 			.Set("description", description)
 			.Set("target_name", _pickAction is null ? "" : _s.DisplayName(_pickAction))
 			.Set("members", _pickAction is null ? new List<string>() : LineupMembers().Select(m => T("ui.menu.member_points", m.Name, m.Hp, m.MaxHp, m.Tp, m.MaxTp)).ToList())
+			.Set("member_rows", TargetRows(UiArea(x, y, w, h), CommandKind.Item, null, m => T("ui.menu.member_points", m.Name, m.Hp, m.MaxHp, m.Tp, m.MaxTp)))
 			.Set("member_list", _sub)
 			.Set("acting", _itemActing is not null)
-			.Set("actions", ItemActions.Select(a => T("ui.items.action." + a)).ToList())
-			.Set("action_ids", ItemActions.ToList())
+			.Set("actions", actions.Select(a => T("ui.items.action." + a)).ToList())
+			.Set("action_ids", actions.ToList())
+			.Set("discarding", _discardStep is not null)
+			.Set("discard_step", _discardStep ?? "")
+			.Set("discard_count", _discardCount)
+			.Set("discard_max", acting?.Count ?? 0)
+			.Set("discard_text", _discardStep switch
+			{
+				"count" => T("ui.items.discard_count", acting?.Name ?? "", _discardCount, acting?.Count ?? 0),
+				"confirm" => T("ui.items.discard_confirm", _s.DisplayName(_itemActing ?? ""), _discardCount, Hint(GameAction.Confirm), Hint(GameAction.Back)),
+				_ => "",
+			})
 			.Set("action_list", _itemActionList)
 			.Set("looking", looked is not null)
 			.Set("look_text", looked is null ? "" : DescriptionOf(looked) is { Length: > 0 } looks ? looks : T("ui.common.no_description"))
@@ -594,18 +682,18 @@ public sealed partial class SampleController
 		IReadOnlyList<CodexEntry> entries = _s.Encyclopedia();
 		CodexEntry? entry = entries.Count > 0 ? entries[Math.Clamp(_list.Cursor, 0, entries.Count - 1)] : null;
 		Ui.Draw("menu_codex", s, t, UiArea(x, y, w, h)
-			.Set("titles", entries.Select(e => e.Title).ToList())
+			.Set("titles", entries.Select(e => Shown(e.Title)).ToList())
 			.Set("list", _list)
-			.Set("title", entry?.Title ?? "")
-			.Set("body", entry?.Text ?? ""));
+			.Set("title", Shown(entry?.Title ?? ""))
+			.Set("body", Shown(entry?.Text ?? "")));
 	}
 
 	// The quest log as rows: headings, the objective and each job, with blank rows between the parts.
 	private List<(string Text, bool Heading)> QuestRows()
 	{
 		QuestLog log = _s.QuestLog();
-		var rows = new List<(string, bool)> { (T("ui.quests.objective"), true), (log.Objective.Length == 0 ? "-" : log.Objective, false), ("", false), (T("ui.quests.jobs"), true) };
-		rows.AddRange(log.Jobs.Select(j => (T("ui.quests.job", j.Title, T(NameKind.JobState, (int)j.State)), false)));
+		var rows = new List<(string, bool)> { (T("ui.quests.objective"), true), (log.Objective.Length == 0 ? "-" : Shown(log.Objective), false), ("", false), (T("ui.quests.jobs"), true) };
+		rows.AddRange(log.Jobs.Select(j => (T("ui.quests.job", Shown(j.Title), T(NameKind.JobState, (int)j.State)), false)));
 		return rows;
 	}
 
@@ -638,7 +726,7 @@ public sealed partial class SampleController
 		int rows = Math.Max(1, Ui.Param("menu_log", "rows", data, h / Px(22)));
 		// The log keeps each line as written; its control tags are acted on in the dialogue, not shown here.
 		List<string> lines = _s.TextLog()
-			.Select(entry => string.Join(" ", Parse(entry, null).Select(page => page.Text.Trim()).Where(text => text.Length > 0)))
+			.Select(entry => Shown(entry).Trim())
 			.SelectMany(entry => Style.Wrap(t, entry, width, ToastTextSize())).ToList();
 		int back = Math.Clamp(_list.Cursor, 0, Math.Max(0, lines.Count - rows));
 		_list.Cursor = back;

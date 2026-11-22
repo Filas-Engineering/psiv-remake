@@ -1,0 +1,212 @@
+# The host calls the sample adopts (make_host_data.py, make_host_assets.py), from saves of the scripted playthrough on
+# that data copy, with --dev: the title's Continue opening the Load list on the save SaveSummary.Newest marks, and the
+# Load entry too under `select_newest` (the first row with the built-in file); the field menu's Journal tab opening its
+# one usable child at once (`immediate`, a hidden and a disabled child not counted) and the Records tab's list without
+# its hidden child, a disabled one refused; the Items page's Discard (`Discard`, `Discardable`) with its count, confirm,
+# result and a refusal on the page; the party talk page filled from PartyTalkLines with portraits; the dev console's
+# `combo`; Mend's and the Tonic's unreachable ally greyed before the pick on the Techniques and Items pages; the exits
+# drawn by how they fire; the shadow's palette track stepping in battle. With --window the shot lines save screenshots
+# under build/shots/host/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 20
+
+# Continue opens the Load list on the newest save, auto_2, marked by the layout's `newest` field; so does Load with
+# `select_newest`, and with the built-in load_game file Load opens on the first row.
+press Down
+expect state selected Continue
+press Enter
+wait 2
+expect screen LoadGame
+expect state selected auto_2 tidewater
+shot build/shots/host/continue_newest.png
+press Escape
+wait 1
+press Down
+press Enter
+wait 2
+expect screen LoadGame
+expect state selected auto_2 tidewater
+press Escape
+wait 1
+assets swap ui/load_game.json alt/load_game_plain.json
+wait 2
+press Enter
+wait 2
+expect state selected manual_0 tidewater
+press Escape
+wait 1
+cmd load manual_1
+wait 4
+expect screen Field
+dev encounters off
+dev give host_charm 1
+
+# The Journal tab's children: the codex hidden by its `when`, the text log disabled by its `enabled`, so the quest log,
+# the one usable child, opens at once. The Records tab lists the codex and the disabled log (the save page hidden);
+# Confirm on the log does nothing, on the codex opens it.
+press M
+expect screen Menu
+press Right 2
+expect state tab Quests
+expect state page quests
+press Right
+expect state page children
+expect state selected Codex
+press Down
+expect state selected Log
+shot build/shots/host/children_disabled.png
+press Enter
+expect state page children
+press Up
+press Enter
+expect state tab Codex
+expect state page codex
+press Escape
+expect state page children
+press Left 3
+expect state tab Items
+
+# Discard: the Tonic's actions end with Discard, the charm's (not discardable) do not. Three of the stack: the count
+# goes up with Up and Right and down with Down, Back from the confirm returns to the count, and the session's notice
+# lands on the result line, not as a notice.
+press Down
+press Enter
+expect state page actions
+expect state uifield.menu_items.action_ids 2
+press Escape
+press Down 3
+press Enter
+expect state uifield.menu_items.action_ids 3
+press Down 2
+expect state selected Discard
+press Enter
+expect state page discard_count
+expect state uifield.menu_items.discard_count 1
+press Up
+press Right
+press Up
+press Down
+expect state uifield.menu_items.discard_count 3
+expect state uifield.menu_items.discard_text Throw away how many Tonic?  3 of 8
+shot build/shots/host/discard_count.png
+press Enter
+expect state page discard_confirm
+expect statehas uifield.menu_items.discard_text Throw away 3 Tonic?
+shot build/shots/host/discard_confirm.png
+press Escape
+expect state page discard_count
+press Enter
+press Enter
+expect state page items
+expect state uifield.menu_items.result_text Threw away 3 Tonic.
+expect state uifield.menu_items.result_ok true
+expect notoast Threw away
+expect notext {
+shot build/shots/host/discard_result.png
+# A refusal: two chosen, then all but one taken away before the confirm.
+press Enter
+press Down 2
+press Enter
+press Up
+press Enter
+expect state page discard_confirm
+dev give tonic -4
+press Enter
+expect state page items
+expect state uifield.menu_items.result_text You do not have that many Tonic. Worn equipment cannot be thrown away.
+expect state uifield.menu_items.result_ok false
+shot build/shots/host/discard_refused.png
+press Escape
+expect screen Field
+dev give tonic 6
+
+# The party talk page from PartyTalkLines: each line with its speaker's portrait and name; the menu stays open and the
+# field's party talk is not marked heard.
+press M
+press Right
+expect state tab Party_talk
+press Enter
+wait 1
+expect screen Menu
+expect state uifield.menu_options.talking true
+expect notext {
+shot build/shots/host/talk_page.png
+press Escape
+expect screen Field
+
+# The Cogwright joins. Mend cannot reach it, nor can the Tonic: both greyed before the pick, Confirm on it doing nothing.
+dev warp ember_steps west_gate
+wait 2
+dev event steps_tinker
+pressuntil Enter Field 100
+press M
+press Right 5
+expect state tab Techniques
+press Down 2
+press Enter
+expect state page list
+press Enter
+expect state page target
+press Down 4
+expect state selected Test Cogwright  HP 106/106
+shot build/shots/host/mend_greyed.png
+press Enter
+expect state page target
+press Escape
+press Escape
+press Left 5
+expect state tab Items
+press Down 4
+press Enter
+press Enter
+expect state page target
+press Down 4
+press Enter
+expect state page target
+shot build/shots/host/tonic_greyed.png
+press Escape
+press Escape
+press Escape
+press Escape
+expect screen Field
+
+# The exits by how they fire: Tidewater's east exit fires always (the gold ring), the reed path's from the floor (the
+# blue ring); without the markers both are the generated arrows.
+dev warp tidewater east_gate
+wait 2
+expect state exitmarks 13 4 always marker
+shot build/shots/host/exit_always.png
+dev warp reed_path west_gate
+wait 2
+expect statehas exitmarks from_floor marker
+expect statenot exitmarks always
+assets swap assets.json alt/assets_plain.json
+wait 2
+expect statenot exitmarks marker
+dev warp tidewater east_gate
+wait 2
+expect state exitmarks 13 4 always arrow
+assets swap assets.json alt/assets_host.json
+wait 2
+
+# In battle the shadow's palette track steps on the battle's clock; `combo` on the console makes Twin Arc lead the round.
+dev battle training
+waitstate 300 battlephase Command
+waitstatehas 20 spritesteps shadow:1
+waitstatehas 20 spritesteps shadow:2
+waitstatehas 20 spritesteps shadow:0
+shot build/shots/host/battle_shadow.png
+dev combo twin_arc
+expect statehas consolelast combination twin_arc leads the round
+waitstatehas 900 battlelog Combo: Twin Arc.
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+devrefused combo no_such_combo
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 2
+expect screen Field

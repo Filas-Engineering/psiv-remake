@@ -51,6 +51,13 @@ public sealed partial class SampleController
 		})
 		.Select(r => $"{Snake(r.ToString())} {_art?.BitmapFontFor(_s.Profile().TextLanguage, r)?.Key ?? "-"}"));
 
+	// Text from the game's tables as a screen other than the dialogue box shows it: control tags acted on as the text log
+	// does (a `{var:...}` filled with its value, presentation tags dropped, a `{name}` token the glossary lacks kept as
+	// written), the pages joined by a space. ShownPages keeps each `{page}`'s text apart.
+	private string Shown(string text) => text.Contains('{') ? string.Join(" ", ShownPages(text)) : text;
+
+	private List<string> ShownPages(string text) => [.. Parse(text, null).Select(page => page.Text.Trim()).Where(page => page.Length > 0)];
+
 	private string T(string key, params object[] parameters)
 	{
 		string text = _s.FormatText(key, [.. parameters.Select(p => Convert.ToString(p, CultureInfo.InvariantCulture) ?? "")]);
@@ -82,14 +89,12 @@ public sealed partial class SampleController
 
 	// The sample's words for keys the game's text tables do not carry: the field options' help, the credits screen, the
 	// macro editor's auto play, fallback and option actions, the macro option values, the automatic and lost-turn step
-	// statuses, the title's empty erase list, the field menu's newer pages, the Items page's actions, the battle's auto
-	// macro mark, macro check, trouble and auto mode lines, the attack and magic defense stat words, the bag line, the auto
-	// mode settings, `dev rest`, the Extras menu and the camera overlay's scene camera. T takes a table's own text for the
-	// key when it has one, else this English, without counting the key as missing.
+	// statuses, the title's empty erase list, the Items page's actions and discard, the battle's auto macro mark, macro
+	// check, trouble and auto mode lines, the bag line, the auto mode settings, `dev rest` and `combo`, and the camera
+	// overlay's scene camera. T takes a table's own text for the key when it has one, else this English, without counting
+	// the key as missing.
 	private static readonly Dictionary<string, string> SampleWords = new()
 	{
-		["ui.action.extras"] = "Extras",
-		["ui.action.system"] = "System",
 		["ui.battle.auto_macro_row"] = "{0} (auto)",
 		["ui.battle.log.auto_mode"] = "Auto-battle: {0} in trouble, {1} choices.",
 		["ui.battle.log.auto_play"] = "Auto-battle plays {0} every round.",
@@ -97,20 +102,19 @@ public sealed partial class SampleController
 		["ui.battle.log.trouble_nobody"] = "nobody",
 		["ui.battle.macro_step_issue"] = "{0}: {1}",
 		["ui.battle.macro_trouble"] = "This round would be in trouble.",
-		["ui.battle.stat.attack"] = "attack",
-		["ui.battle.stat.magic_defense"] = "magic defense",
 		["ui.battle.title.auto_policy"] = "Choices",
 		["ui.battle.title.auto_trouble"] = "In trouble",
 		["ui.common.bag"] = "Bag {0}/{1}",
 		["ui.credits.hint"] = "{0} end the credits",
 		["ui.dev.camera_scene"] = "scene at {0}",
 		["ui.dev.camera_scene_back"] = "scene, back to the leader",
+		["ui.dev.combo"] = "combination {0} leads the round",
 		["ui.dev.rested"] = "rested: hit and technique points refilled",
-		["ui.extras.dev"] = "Developer console",
-		["ui.extras.photosensitivity"] = "Photosensitivity notice",
-		["ui.extras.title"] = "Extras",
+		["ui.items.action.discard"] = "Discard",
 		["ui.items.action.look"] = "Look",
 		["ui.items.action.use"] = "Use",
+		["ui.items.discard_confirm"] = "Throw away {1} {0}?  {2} yes, {3} no",
+		["ui.items.discard_count"] = "Throw away how many {0}?  {1} of {2}",
 		["ui.macro_policy.default"] = "as the rules say",
 		["ui.macro_policy.expected"] = "expected",
 		["ui.macro_policy.power"] = "power",
@@ -138,14 +142,6 @@ public sealed partial class SampleController
 		["ui.macros.options_title"] = "The macro's options",
 		["ui.macros.stop_auto_play"] = "Stop auto-battle playing it every round",
 		["ui.macros.use_auto_play"] = "Auto-battle plays it every round",
-		["ui.menu.open_extras"] = "Open extras",
-		["ui.menu.party_talk"] = "Talk with the party",
-		["ui.menu.tab.abilities"] = "Abilities",
-		["ui.menu.tab.extras"] = "Extras",
-		["ui.menu.tab.party_talk"] = "Talk",
-		["ui.menu.tab.skills"] = "Skills",
-		["ui.menu.tab.system"] = "System",
-		["ui.menu.tab.techniques"] = "Techniques",
 		["ui.options.always_run_help"] = "Walk at running pace without holding Run; holding Run then walks.",
 		["ui.options.auto_policy"] = "Auto-battle choices",
 		["ui.options.auto_policy_help"] = "How auto-battle's automatic choices pick: by power, by the damage expected, or as the macro and rules say.",

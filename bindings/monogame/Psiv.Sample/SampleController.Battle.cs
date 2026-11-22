@@ -76,7 +76,7 @@ public sealed partial class SampleController
 		public HashSet<string> Worn = [];
 		public BattleOption? Option;
 		public List<int> Targets = [];
-		// Allies among the targets the session refused for the option with `command.no_effect_on_target`, greyed out.
+		// Allies among the targets the option cannot reach (AlliesOutOfReach), greyed out before the pick.
 		public HashSet<int> Refused = [];
 		public List<string> Labels = [];
 		public readonly List<string> Log = [];
@@ -150,7 +150,7 @@ public sealed partial class SampleController
 	private BattleContext Context()
 	{
 		string screen = StageLayout() == BattleLayout.Front ? "battle_front" : "battle_side";
-		return new BattleContext(_s, _battle.Labels, PresentationTable, _data, T, target => Marked(screen, new UiContext(), "critical", target));
+		return new BattleContext(_s, _battle.Labels, PresentationTable, _data, T, target => Marked(screen, new UiContext(), "critical", target)) { Shown = Shown };
 	}
 
 	private void StartBattle()
@@ -265,38 +265,21 @@ public sealed partial class SampleController
 		return result.Ok ? null : result.Error!.Text;
 	}
 
-	// The script verb `combo RECIPE` while the members choose: each of the recipe's abilities set as the command of a
-	// member who knows it (on the first enemy standing, or on the member for an ally's ability), the rest defending, and
-	// the round resolved; null when it starts, else why not.
+	// The script verb and console command `combo RECIPE` while the members choose: DevCombo makes the recipe's parts this
+	// round's leading commands, the members left without one defend, and the round resolves; null when it starts, else why
+	// not.
 	public string? ScriptCombo(string recipe)
 	{
 		if (!_battle.Active || _battle.Phase is not (BattlePhase.Command or BattlePhase.Top))
 		{
 			return "the members are not choosing commands";
 		}
-		if (!_data.Recipes.TryGetValue(recipe, out var combo))
+		PsivResult set = _s.DevCombo(recipe);
+		if (!set.Ok)
 		{
-			return $"unknown combination recipe '{recipe}'";
+			return set.Error!.Text;
 		}
-		IReadOnlyList<Combatant> all = _s.Combatants();
-		int enemy = all.FirstOrDefault(c => c.Side == Side.Enemy && c.Alive)?.Index ?? -1;
-		var used = new HashSet<int>();
-		foreach (string ability in combo.Abilities)
-		{
-			Combatant? member = all.FirstOrDefault(c => c.Side == Side.Party && c.Alive && !used.Contains(c.Index) && _s.MemberAbilities(c.Id).Any(a => a.Id == ability));
-			if (member is null)
-			{
-				return $"no member who can act knows '{ability}'";
-			}
-			int target = _s.MemberAbilities(member.Id).First(a => a.Id == ability).Targeting switch { Targeting.OneEnemy => enemy, Targeting.OneAlly => member.Index, _ => -1 };
-			PsivResult set = _s.SetCommand(member.Index, CommandKind.Ability, ability, target);
-			if (!set.Ok)
-			{
-				return set.Error!.Text;
-			}
-			used.Add(member.Index);
-		}
-		foreach (Combatant c in all.Where(c => c.Side == Side.Party && c.Alive && !used.Contains(c.Index)))
+		foreach (Combatant c in _s.Combatants().Where(c => c.Side == Side.Party && c.Alive && c.CommandKind == CommandKind.None))
 		{
 			_s.SetCommand(c.Index, CommandKind.Defend);
 		}
@@ -307,13 +290,6 @@ public sealed partial class SampleController
 	private void SetAndAdvance(CommandKind kind, string? id, int target)
 	{
 		PsivResult result = _s.SetCommand(_battle.Actor, kind, id, target);
-		if (result.Error is { Key: "command.no_effect_on_target" } && _battle.Phase == BattlePhase.Target)
-		{
-			// An ally none of the ability's or item's effects can reach (R142): the picker stays open with that ally greyed out.
-			_battle.Log.Add(T("ui.battle.log.refused", result.Error.Text));
-			_battle.Refused.Add(target);
-			return;
-		}
 		if (!result.Ok)
 		{
 			_battle.Log.Add(T("ui.battle.log.refused", result.Error!.Text));
@@ -334,6 +310,11 @@ public sealed partial class SampleController
 			_ => [],
 		};
 		_battle.Refused.Clear();
+		if (_battle.Option is { } option && targeting is Targeting.OneAlly or Targeting.OneFallenAlly && _battle.Actor < all.Count)
+		{
+			IReadOnlyList<string> unreachable = _s.AlliesOutOfReach(option.Command, option.Id, all[_battle.Actor].Id);
+			_battle.Refused.UnionWith(_battle.Targets.Where(t => unreachable.Contains(all[t].Id)));
+		}
 	}
 
 	private void UpdateBattle(int dtMs, ActionInput input)

@@ -318,7 +318,7 @@ The title screen's own pictures:
 "status_icons": {"sleep": "status_icons/sleep.png", "poison": "status_icons/poison.png"}
 ```
 
-A sprite may instead be an object of its `image` and `palettes`, palette tracks as an area's ([Motion](#motion)) over its picture, on the controller's clock, with the field's flags and area entry: `"shadow": {"image": "sprites/shadow.png", "palettes": [{"colors": {"band": "#202020"}, "steps": [{}, {"band": "#c02020"}], "ticks": 20}]}`. The field sets the clock each frame it draws, so screens drawn without the field (battle) show the step the field last drew.
+A sprite may instead be an object of its `image` and `palettes`, palette tracks as an area's ([Motion](#motion)) over its picture, on the controller's clock, with the field's flags and area entry: `"shadow": {"image": "sprites/shadow.png", "palettes": [{"colors": {"band": "#202020"}, "steps": [{}, {"band": "#c02020"}], "ticks": 20}]}`. The field sets the clock each frame it draws; the battle sets it each frame it draws, on its own clock with the session's flags, an entry track (`clock: entry`) counting from the battle's start. The state probe `spritesteps` reads each such sprite's track steps as the last frame left them (`shadow:2`), field or battle.
 
 The shadow under everyone, the speech bubble over talk points, the `!` over chasing enemies and startled people, the pointer over targets, finished dialogue lines and what the real-time field input's interaction prompt points at ([`ui-layout.md`](ui-layout.md), Field), the pier a port stands on (greyed while the port is closed), a moving platform (`Platforms()`, drawn a cell large at its pixel place, `PixelX` and `PixelY` scaled from `GameInfo.CellPixels` to the field's cell, under whatever stands on it); and an icon per status id (from core's `statuses.json`), drawn in the battle's panels and under the enemies, growing in when a status lands and blinking out when it ends.
 
@@ -470,7 +470,13 @@ Conveyors and tile step hooks have no picture of their own in the area's tiles o
 * `conveyors` (default true): draw each conveyor cell; without `conveyor_overlay` as generated belt slats that run toward its direction while its flags hold and stand still otherwise. `conveyor_overlay` (optional) draws a picture instead: per direction a frame run, every facing at least one frame, looping at `ms` (default 120) a frame while the belt runs and showing its first frame while it stands. Each fills its cell, on the ground under everyone.
 * `tile_hooks` (default true): draw the step rune (the tileset's `rune`) on every cell of a tile step hook while its flags hold, as a step hook at a point shows it; `tile_hook_overlay` (optional: `image`, `frame`, `frames`, `ms`, default 300 a frame, looping) draws its frames instead. The cells are those the area file's map writes with the hook's character.
 * `false` for either leaves the marks to the art: a whole-area picture with the belts and pads painted in (the belts then do not move). Both take a per-area value in `areas`.
-* Asset keys: `conveyor_overlay`, `tile_hook_overlay`. The state probes `fieldmarks` (`belts generated|overlay|off pads generated|overlay|off` for the area shown), `conveyors` (`RUNNING/CELLS`) and `tilehooks` (`ACTIVE/CELLS`, the tile step hooks' cells whose flags hold).
+* `exit_markers` (optional): `{"always": OVERLAY, "from_floor": OVERLAY}`, each with `image`, `frame`, `frames` and `ms` (default 300) as `tile_hook_overlay`: the picture drawn on an open exit whose `FieldExit.Fires` is that way (game.json's `exit_fires` or the exit's own `fires`), in place of the generated arrow (on the map's edge) or doorway (inside it); a way left out keeps the generated marker. A closed exit is drawn as before (its tile, with a door over a tile that is not a wall). The state probe `exitmarks` lists each exit the last frame drew as `X Y closed` or `X Y always|from_floor marker|arrow|door`.
+
+```json
+"field": {"exit_markers": {"always": {"image": "overlays/exit_always.png", "frame": [16, 16], "frames": [0, 1], "ms": 250}}}
+```
+
+* Asset keys: `conveyor_overlay`, `tile_hook_overlay`, `exit_marker:always`, `exit_marker:from_floor`. The state probes `fieldmarks` (`belts generated|overlay|off pads generated|overlay|off` for the area shown), `conveyors` (`RUNNING/CELLS`) and `tilehooks` (`ACTIVE/CELLS`, the tile step hooks' cells whose flags hold).
 
 ### ui
 

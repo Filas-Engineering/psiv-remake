@@ -109,6 +109,10 @@ public sealed partial class SampleController
 
 	private void DrawBattle(IDrawSurface s, Art art)
 	{
+		// Sprites with palette tracks (the shadow, the pointer) step on the battle's clock, an entry track from the battle's
+		// start, as the field steps them on its own.
+		int clock = _clockMs, began = _backdropStartMs;
+		art.MotionTime = w => w.Flag is { } flag && !_s.Flag(flag) || w.UnlessFlag is { } unless && _s.Flag(unless) ? null : w.Entry ? Math.Max(0, clock - began) : clock;
 		BattleUi b = _battle;
 		IReadOnlyList<Combatant> all = StageCombatants();
 		BattleInfo? info = StageInfo();
@@ -784,10 +788,10 @@ public sealed partial class SampleController
 			BattleOption option = b.Options[Math.Clamp(_cursor, 0, b.Options.Count - 1)];
 			if (b.Worn.Contains(option.Id))
 			{
-				string? piece = _s.Description(DescriptionKind.Equipment, option.Id);
+				string? piece = Description(DescriptionKind.Equipment, option.Id);
 				return T("ui.battle.worn_note") + (piece is { Length: > 0 } ? " " + piece : "");
 			}
-			return _s.Description(option.Command == CommandKind.Item ? DescriptionKind.Item : DescriptionKind.Ability, option.Id);
+			return Description(option.Command == CommandKind.Item ? DescriptionKind.Item : DescriptionKind.Ability, option.Id);
 		}
 		// The top-level step's Macro says so when there are none to choose.
 		if (b.Phase == BattlePhase.Top && TopMenu is var top && _cursor < top.Length && top[_cursor] == "macro" && _s.Macros().Count == 0)
@@ -796,7 +800,7 @@ public sealed partial class SampleController
 		}
 		if (b.Phase == BattlePhase.Target && target >= 0 && target < all.Count && all[target].Side == Side.Enemy)
 		{
-			return _s.Description(DescriptionKind.Enemy, all[target].Id);
+			return Description(DescriptionKind.Enemy, all[target].Id);
 		}
 		described = false;
 		return null;

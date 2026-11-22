@@ -111,6 +111,9 @@ assets: assets.json: field.areas.tidewater: field 'conveyors' must be true or fa
 assets: assets.json: field.areas.tidewater: field 'tile_hooks' must be true or false
 assets: assets.json: field.conveyor_overlay: 'facings' needs north, east, south and west, each at least one frame
 assets: sprites/shadow.png: field.tile_hook_overlay: 'frames' names frame 3, but the image has 1 frames of 16x16
+assets: assets.json: field.exit_markers: unknown field 'sometimes'
+assets: overlays/no_exit.png: field.exit_markers.always: missing file
+assets: assets.json: field.exit_markers.always: field 'ms' must be a whole number from 1 to 60000
 assets: assets.json: vehicle_overlays[0]: unknown vehicle 'hovercart': not a vehicle in the game data
 assets: battle_presentation.json: layout: must be front or side
 assets: battle_presentation.json: layouts.encounter:nowhere: unknown key: encounter:ID or area:ID, with an encounter or area of the game data
@@ -267,6 +270,8 @@ assets: ui/inn.json: windows.box.elements[5]: missing field 'color'
 assets: ui/inn.json: windows.box.elements[6]: the inn screen has no slots
 assets: ui/inn.json: windows.box: field 'relative_to' names no window of this screen: 'missing'
 assets: ui/inn.json: -: the built-in layout of this screen stands in
+assets: ui/load_game.json: params.select_newest: field 'select_newest' reads 'yes', which is not a field of the load_game screen, a window or a variable
+assets: ui/load_game.json: -: the built-in layout of this screen stands in
 assets: ui/menu_abilities.json: params.unusable: must be "dim" or "hide": whether abilities not usable in the field show dimmed or not at all
 assets: ui/menu_abilities.json: -: the built-in layout of this screen stands in
 assets: ui/menu_equip.json: places[0]: field 'slot' must be one of weapon, left_hand, head, body, arms, accessory
@@ -275,6 +280,7 @@ assets: ui/menu_equip.json: places[2]: 'head' is listed twice
 assets: ui/menu_equip.json: places[3]: missing field 'slot'
 assets: ui/menu_equip.json: -: the built-in layout of this screen stands in
 assets: ui/menu_items.json: params.actions: no element draws the field 'actions', so the action list an item opens would not show
+assets: ui/menu_items.json: params.discard: no element draws the field 'discard_text', so Discard's count and confirm would not show
 assets: ui/menu_items.json: -: the built-in layout of this screen stands in
 assets: ui/menu_macros.json: params.options: field 'options' reads 'yes', which is not a field of the menu_macros screen, a window or a variable
 assets: ui/menu_macros.json: -: the built-in layout of this screen stands in
@@ -302,5 +308,5 @@ assets: ui/sound_test.json: start: only the title screen takes 'start' and 'opti
 assets: ui/sound_test.json: -: the built-in layout of this screen stands in
 assets: ui/title.json: -: not valid JSON: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 27.
 assets: ui/title.json: -: the built-in layout of this screen stands in
-assets: 0 tilesets, 14 characters, 18 portraits, 41 figures, 18 field enemies, 3 vehicles, 4 backdrops, 27 effects, 4 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 16 layout files (1280x720)
-FAILED: 304 problems.
+assets: 0 tilesets, 14 characters, 18 portraits, 41 figures, 18 field enemies, 3 vehicles, 4 backdrops, 27 effects, 4 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 15 layout files (1280x720)
+FAILED: 310 problems.

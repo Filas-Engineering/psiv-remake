@@ -47,8 +47,7 @@ public sealed partial class SampleController
 			case "continue" when Ui.ParamText("title", "continue", UiData(), "newest") == "choose" && (_s.Saves()?.Count ?? 0) > 0:
 				options.Add((id, T("ui.title.continue"), () =>
 				{
-					_loadOverlay = true;
-					_list.Reset();
+					OpenLoadList(newest: true);
 					return PsivResult.Success;
 				}));
 				break;
@@ -59,8 +58,7 @@ public sealed partial class SampleController
 			case "load" when _s.CanLoad:
 				options.Add((id, T("ui.title.load"), () =>
 				{
-					_loadOverlay = true;
-					_list.Reset();
+					OpenLoadList(newest: false);
 					return PsivResult.Success;
 				}));
 				break;

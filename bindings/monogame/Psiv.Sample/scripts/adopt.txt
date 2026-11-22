@@ -1,8 +1,8 @@
 # Library state the sample now follows (make_adopt_data.py, make_adopt_assets.py), from saves of the scripted playthrough
 # on that data copy, with --dev: the title's Load by CanLoad, Reed Path's name variant in the arrival banner, the status
 # page's member detail fields (attack, base stats, kind, total experience and the experience bar of ExperienceForLevel),
-# a skill's maximum uses beside its uses, the target picker greying out the ally the session refused (Mend cannot reach
-# the machine Cogwright), floating numbers as applied (the default: Mend on a full fighter floats +0) and, with
+# a skill's maximum uses beside its uses, the target picker greying out before the pick the ally the session says Mend
+# cannot reach (AlliesOutOfReach: the machine Cogwright), floating numbers as applied (the default: Mend on a full fighter floats +0) and, with
 # alt/battle_front_rolled.json swapped in, as rolled; then a script's walk of the leader (`lead_walk`) with the members
 # trailing it; a warp half way through a step. With --window the shot lines save screenshots under
 # build/shots/adopt/ (run from bindings/).
@@ -40,8 +40,8 @@ press Escape
 wait 2
 expect screen Field
 
-# The Cogwright joins; in battle the fighter's skill shows its uses of its maximum; the session refuses the medic's Mend
-# on it, and the picker stays open with it greyed out (Confirm on it again does nothing).
+# The Cogwright joins; in battle the fighter's skill shows its uses of its maximum; the medic's Mend cannot reach it, so
+# the picker opens with it greyed out and Confirm on it does nothing.
 dev warp ember_steps west_gate
 wait 2
 dev event steps_tinker
@@ -61,13 +61,13 @@ press Enter
 expect statehas battlemenu [Mend (3 TP)]
 press Enter
 expect state battlemenu [Bryn] | Test Mystic | Test Medic | Test Scout | Test Cogwright
-expect state battleunusable -
+expect state battleunusable Test Cogwright
 press Down 4
 press Enter
 wait 1
 expect state battlephase Target
 expect state battleunusable Test Cogwright
-expect statehas battlelog Mend would do nothing to Test Cogwright.
+expect statenot battlelog Mend would do nothing
 shot build/shots/adopt/target_refused.png
 press Enter
 expect state battlephase Target

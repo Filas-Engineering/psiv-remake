@@ -212,7 +212,7 @@ public sealed class BattleTimeline
 				}
 				break;
 			case BattleEventType.Message when e.Message.StartsWith("battle.opening.", StringComparison.Ordinal):
-				BattleStep opening = c.Step(StepKind.Opening, e.Text, "opening " + e.Message["battle.opening.".Length..], [e]);
+				BattleStep opening = c.Step(StepKind.Opening, c.Shown(e.Text), "opening " + e.Message["battle.opening.".Length..], [e]);
 				opening.Sub = e.Message["battle.opening.".Length..];
 				steps.Add(opening);
 				break;
@@ -221,7 +221,7 @@ public sealed class BattleTimeline
 				break;
 			case BattleEventType.Message:
 				Flush();
-				BattleStep notice = c.Step(StepKind.Notice, e.Text, "notice " + e.Text, [e]);
+				BattleStep notice = c.Step(StepKind.Notice, c.Shown(e.Text), "notice " + c.Shown(e.Text), [e]);
 				notice.Sub = e.Message;
 				steps.Add(notice);
 				break;
@@ -447,6 +447,9 @@ public sealed class BattleContext(GameSession session, List<string> labels, Batt
 
 	public string T(string key, params object[] parameters) => text(key, parameters);
 
+	// The game's own text of an event with its control tags acted on, as the screens outside the dialogue show it.
+	public Func<string, string> Shown { get; init; } = text => text;
+
 	public string Label(int index) => index >= 0 && index < labels.Count ? labels[index] : "?";
 
 	// The label the session gives a combatant after the round.
@@ -505,7 +508,7 @@ public sealed class BattleContext(GameSession session, List<string> labels, Batt
 			BattleEventType.Message when e.Message is "battle.instant_defeat" or "battle.instant_defeat_immune" or "battle.instant_defeat_resisted"
 				=> T("ui." + e.Message.Insert("battle.".Length, "log."), Label(e.Target)),
 			BattleEventType.Message when e.Message == "battle.self_destruct" => T("ui.battle.log.self_destruct", Label(e.Actor)),
-			BattleEventType.ActionCancelled or BattleEventType.Message => e.Text,
+			BattleEventType.ActionCancelled or BattleEventType.Message => Shown(e.Text),
 			BattleEventType.ComboTriggered => T("ui.battle.log.combo", Name(e.Ability)),
 			BattleEventType.ComboDiscovered => T("ui.battle.log.combo_found"),
 			BattleEventType.ItemHadNoEffect => T("ui.battle.log.no_effect", Name(e.Ability)),
@@ -515,9 +518,9 @@ public sealed class BattleContext(GameSession session, List<string> labels, Batt
 			BattleEventType.DamageDealt => T("ui.battle.log.damage", Label(e.Target), e.Amount),
 			BattleEventType.Healed when e.Resource == ResourceKind.Tp => T("ui.battle.log.recovers_tp", Label(e.Target), e.Amount),
 			BattleEventType.Healed => T("ui.battle.log.recovers", Label(e.Target), e.Amount),
-			BattleEventType.Revived when e.Message.Length > 0 => "  " + e.Text,
+			BattleEventType.Revived when e.Message.Length > 0 => "  " + Shown(e.Text),
 			BattleEventType.Revived => T("ui.battle.log.revived", Label(e.Target)),
-			BattleEventType.StatusApplied or BattleEventType.StatusResisted or BattleEventType.StatusRemoved => "  " + e.Text,
+			BattleEventType.StatusApplied or BattleEventType.StatusResisted or BattleEventType.StatusRemoved => "  " + Shown(e.Text),
 			BattleEventType.StatModified => T(e.Amount > 0 ? "ui.battle.log.stat_rises" : e.Amount < 0 ? "ui.battle.log.stat_falls" : "ui.battle.log.stat_normal", Label(e.Target), Stat()),
 			BattleEventType.CombatantDefeated => T("ui.battle.log.falls", Label(e.Target)),
 			BattleEventType.EscapeAttempted => T(e.Succeeded ? "ui.battle.log.escaped" : "ui.battle.log.no_escape"),

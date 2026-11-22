@@ -62,6 +62,7 @@ Opened with the backquote key. Type a command and press Enter; Up and Down recal
 | `money AMOUNT` | Adds money, or takes it away when negative, kept between 0 and the cap (`money 500`) |
 | `level MEMBER LEVEL` | Sets a roster member's level, 1 to 99, with no experience into it, and refills it as a rest does, reviving it (`level fighter 12`) |
 | `rest` | A free rest for testing (`DevRest`): every roster member refilled as a rest does, vehicles' skill uses back, at no cost and anywhere a game is running, marking the game |
+| `combo RECIPE` | In a battle while the members choose, the combination's parts become this round's leading commands of the members who know them (`DevCombo`), the members left without a command defend, and the round resolves, so the combination fires unless a part cannot be paid for (`combo twin_arc`); refused outside a battle or for a recipe not found yet. The script verb `combo RECIPE` does the same. Marks the game |
 | `battle ENCOUNTER` | From the field, a battle with that encounter as a random battle; while riding, a vehicle battle (`battle warden`) |
 | `win`, `lose` | Ends the live battle: every enemy, or every party combatant, falls, then a round resolves, so the battle ends as that outcome leads (rewards, an event's `win` or `lose` branch, a game over). The round plays through the battle presentation, with a step before its outcome that brings the stage to the session's numbers and falls, since the command sets them outside the events, so the playback still matches the session (`battlesync`) |
 | `vehicle ID AREA MARKER` | From the field, gives the party a vehicle with field rules, or moves one it has, to a marker of a field area (`vehicle reed_skimmer reed_path skimmer_front`) |
@@ -149,6 +150,7 @@ The tools stand on calls any front end can make (`game/README.md` and `bindings/
 | `devSetFlag`, `devGive`, `devMoney`, `devSetLevel` | `psiv_dev_set_flag`, `psiv_dev_give`, `psiv_dev_money`, `psiv_dev_set_level` | `DevSetFlag`, `DevGive`, `DevMoney`, `DevSetLevel` |
 | `devBattle`, `devEndBattle` | `psiv_dev_battle`, `psiv_dev_end_battle` | `DevBattle`, `DevEndBattle` |
 | `devRest` | `psiv_dev_rest` | `DevRest` |
+| `devCombo` | `psiv_dev_combo` | `DevCombo` |
 | `devVehicle`, `devEncounters`, `devRunEvent`, `devMark` | `psiv_dev_vehicle`, `psiv_dev_encounters`, `psiv_dev_run_event`, `psiv_dev_mark` | `DevVehicle`, `DevEncounters`, `DevRunEvent`, `DevMark` |
 | `devMarked`, `encountersOn` | `psiv_world_info.dev`, `.encounters` | `WorldInfo.Dev`, `.Encounters` |
 | `eventPosition` | `psiv_event_position_get` | `EventPosition` |

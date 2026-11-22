@@ -110,6 +110,17 @@ One line per feature, newest first: name, kind, meaning. Each pass adds its line
 
 Newest first. The MonoGame sample (`bindings/monogame/Psiv.Sample`) only.
 
+* `make_host_data.py`, `make_host_assets.py`, `host_menus.txt`, `host_tags.txt`, `host_reach.txt` (scripts), `expect notext TEXT` (script expectation): the items below on generated data copies, and no `{` on any screen showing tagged text.
+* control tags outside the dialogue (behavior): notices, the party talk page, keeper lines, shop and Items results, descriptions, the quest log, the codex, credits, choices and the battle's event lines act on tags as the text log does.
+* `ui.action.extras` ... `ui.menu.tab.techniques`, `ui.battle.stat.attack`, `ui.battle.stat.magic_defense` (sample words): dropped, the text tables carry them.
+* `combo RECIPE` (dev console command): `DevCombo`, the combination leading the round; the script verb `combo` goes through it too.
+* `exit_markers` (manifest `field` key) and probe `exitmarks`: an open exit's marker by `FieldExit.Fires` (`always`, `from_floor`).
+* `spritesteps` (probe) and palette tracks in battle (behavior): sprites step on the battle's clock instead of keeping the field's last step.
+* `when`, `enabled` (menu child keys), `child_rows`, `item_count`, `macro_count` (fields): hidden and disabled children; `immediate` opens a tab's one usable child.
+* `talk` items `speaker_id`, `portrait`, `pages` (menu_options fields): the party talk page from `PartyTalkLines()`, the menu kept open, each page a row.
+* `newest`, `write_time` (save_slots item fields), `select_newest` (load_game param): the save Continue loads marked and preselected in the Continue chooser, and in the Load list with the param.
+* `member_rows`, `target_rows` with `reachable` (menu_items, menu_abilities, menu_status fields): allies out of reach greyed before the pick (`AlliesOutOfReach`), in battle too, in place of learning them from a refusal.
+* `discard` (menu_items param), `discarding`, `discard_step`, `discard_count`, `discard_max`, `discard_text` (fields): Discard among an item's actions for `Discardable` entries, with a count picker, a confirm and the outcome on the result line.
 * `make_small_more_assets.py`, `small_more.txt`, `make_motion_more_assets.py`, `motion_more.txt` (scripts): the slots below at 320x224, and the motion and previewer additions.
 * the animation previewer's enemy dummies (behavior): they attack with the data's `basic_attack`, which the log names.
 * `encounter:ENC` keys (animation previewer): a key that names an encounter plays in it, on its enemies, with its placements.

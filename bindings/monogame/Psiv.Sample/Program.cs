@@ -562,6 +562,14 @@ public sealed class ScriptPlayer
 					Fail($"{source}: labels show [{string.Join(" | ", _controller.Labels)}]");
 				}
 				break;
+			// No text the last frame drew holds TEXT (`expect notext {` checks that no control tag reached the screen).
+			case "expect" when w.Length >= 3 && w[1] == "notext":
+				string absent = string.Join(" ", w[2..]);
+				if (_frameText().FirstOrDefault(t => t.Contains(absent, StringComparison.Ordinal)) is { } drawn)
+				{
+					Fail($"{source}: the frame draws {absent}: {drawn}");
+				}
+				break;
 			case "expect" when w.Length >= 3 && w[1] == "notoast":
 				string unwanted = string.Join(" ", w[2..]);
 				if (_controller.Toasts.FirstOrDefault(t => t.Contains(unwanted, StringComparison.Ordinal)) is { } shown)

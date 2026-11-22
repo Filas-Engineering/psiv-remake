@@ -827,6 +827,33 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --dev --saves $(BUILD)/sample_motion_more_saves --assets $(BUILD)/motion_more_run \
 		--script $(SAMPLE_SCRIPTS)/motion_more.txt --frames 800 > $(BUILD)/sample_motion_more_headless.txt || (cat $(BUILD)/sample_motion_more_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_motion_more_headless.txt
+	# The host calls the sample adopts (make_host_data.py, make_host_assets.py), from saves of the scripted playthrough on
+	# the host data copy: the newest save preselected, menu children by `when` and `enabled` with `immediate`, Discard,
+	# the party talk page from PartyTalkLines, `combo` on the console, allies out of reach greyed before the pick, exit
+	# markers by how the exit fires and the shadow's palette in battle (host_menus); control tags in text outside the
+	# dialogue box (host_tags); allies out of reach under `item_no_reach` "consume" (host_reach); a copy with bad
+	# children `when` and `enabled` reports both.
+	python3 -I $(SAMPLE_SCRIPTS)/make_host_data.py $(GAME)/data $(CORE)/data $(BUILD)/host_data
+	python3 -I $(SAMPLE_SCRIPTS)/make_host_data.py $(GAME)/data $(CORE)/data $(BUILD)/host_consume_data --consume
+	python3 -I $(SAMPLE_SCRIPTS)/make_host_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/host_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/host_data/game/data --check-assets --assets $(BUILD)/host_assets
+	rm -rf $(BUILD)/host_broken_assets
+	cp -R $(BUILD)/host_assets $(BUILD)/host_broken_assets
+	cp $(BUILD)/host_broken_assets/alt/menu_broken.json $(BUILD)/host_broken_assets/ui/menu.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/host_broken_assets > $(BUILD)/check_assets_host.txt
+	grep -qF "children[0]: field 'when' reads 'nonsense', which is not a field of the menu screen" $(BUILD)/check_assets_host.txt
+	grep -qF "children[1]: field 'enabled' must be an expression (a number or a string)" $(BUILD)/check_assets_host.txt
+	rm -rf $(BUILD)/sample_host_saves
+	$(GAME_CLI) --data $(BUILD)/host_data/game/data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/sample_host_saves > /dev/null
+	@for run in host_menus:host_data:3000 host_tags:host_data:1200 host_reach:host_consume_data:1500; do \
+		name=$${run%%:*}; rest=$${run#*:}; data=$${rest%%:*}; frames=$${rest#*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves $(BUILD)/$${name}_run_assets; \
+		cp -R $(BUILD)/sample_host_saves $(BUILD)/sample_$${name}_saves; \
+		cp -R $(BUILD)/host_assets $(BUILD)/$${name}_run_assets; \
+		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/$$data/game/data --dev --saves $(BUILD)/sample_$${name}_saves --assets $(BUILD)/$${name}_run_assets \
+			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
 	# Screens over screens and screens at small sizes (make_screens_assets.py): the notices drawn once by the topmost
 	# screen with a toasts slot, a page the field menu leaves out opened from Extras, title entries by `when`, Controls
 	# without Extras; the name pad's sizes, the built-in pause at 320x224, the developer badge's place and the music cut.

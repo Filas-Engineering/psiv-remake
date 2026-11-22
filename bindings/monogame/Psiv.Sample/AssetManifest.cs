@@ -239,10 +239,13 @@ public sealed class AssetManifest
 		["sprites{}"] = ["image", "palettes"],
 		["objects[].state"] = ["image", "frame", "frames", "ms", "size", "anchor"],
 		["objects[]"] = ["area", "point", "at", "image", "frame", "frames", "ms", "size", "anchor", "open", "open_flag", "character", "facing"],
-		["field"] = ["wall_shadows", "water_foam", "conveyors", "tile_hooks", "conveyor_overlay", "tile_hook_overlay", "areas"],
+		["field"] = ["wall_shadows", "water_foam", "conveyors", "tile_hooks", "conveyor_overlay", "tile_hook_overlay", "exit_markers", "areas"],
 		["field.areas{}"] = ["wall_shadows", "water_foam", "conveyors", "tile_hooks"],
 		["field.conveyor_overlay"] = ["image", "frame", "facings", "ms"],
 		["field.tile_hook_overlay"] = ["image", "frame", "frames", "ms"],
+		["field.exit_markers"] = ["always", "from_floor"],
+		["field.exit_markers.always"] = ["image", "frame", "frames", "ms"],
+		["field.exit_markers.from_floor"] = ["image", "frame", "frames", "ms"],
 		["bitmap_fonts"] = ["enabled", "fonts"],
 		["bitmap_fonts.fonts[]"] = ["language", "role", "image", "metrics", "scale"],
 		["tilesets[]"] = ["kind", "area", "image", "tile", "scale", "floor", "decor", "decor_one_in", "wall_top", "wall_top_alt_one_in", "wall_face", "wall_face_alt_one_in", "water", "water_frame_ms", "edge", "bank", "objects", "animated", "palettes"],
@@ -305,6 +308,8 @@ public sealed class AssetManifest
 	public ConveyorOverlay? ConveyorOverlay { get; private set; }
 	// The picture drawn on each cell of an active tile step hook in place of the generated rune.
 	public (GridImage Image, FrameRun Run)? TileHookOverlay { get; private set; }
+	// The picture drawn on an open exit in place of the generated arrow or doorway, by how the exit fires (FieldExit.Fires).
+	public Dictionary<ExitFires, (GridImage Image, FrameRun Run)> ExitMarkers { get; } = [];
 	// Null without a bitmap_fonts section; false when the section turns the fonts off (nothing of it is used then).
 	public bool? BitmapFontsEnabled { get; private set; }
 	public List<BitmapFontEntry> BitmapFonts { get; } = [];
@@ -329,7 +334,7 @@ public sealed class AssetManifest
 			.Concat(Maps.SelectMany(a => new[] { a.Ground, a.Above }.OfType<string>().Concat(a.Patches.Select(p => p.Path))))
 			.Concat(AreaMotions.Values.SelectMany(a => a.Runs.Select(r => r.Image.Path).Concat(a.Layers.Select(l => l.Image))))
 			.Concat(Objects.SelectMany(o => new[] { o.Closed?.Image.Path, o.Open?.Image.Path }).OfType<string>()).Concat(VehicleOverlays.Select(o => o.Path))
-			.Concat(new[] { ConveyorOverlay?.Image.Path, TileHookOverlay?.Image.Path }.OfType<string>())
+			.Concat(new[] { ConveyorOverlay?.Image.Path, TileHookOverlay?.Image.Path }.OfType<string>()).Concat(ExitMarkers.Values.Select(x => x.Image.Path))
 			.Concat(BitmapFonts.SelectMany(f => new[] { f.Image, f.MetricsFile }))
 			.Concat(BackdropMaps.Select(b => b.Image).OfType<string>())
 			.Concat(TitleArt is not { } title ? [] : new[] { title.Background, title.Logo, title.Traveler?.Image.Path, title.Creature?.Image.Path }.OfType<string>()
@@ -1784,6 +1789,25 @@ public sealed class AssetManifest
 				if (Run(pad, entry, image, 300, inline: true) is { } run && image is not null && m.Problems.Count == before)
 				{
 					m.TileHookOverlay = (image, run);
+				}
+			}
+			if (e.TryGetProperty("exit_markers", out JsonElement exits) && IsObject(exits, "field.exit_markers"))
+			{
+				Fields(exits, "field.exit_markers", Schema["field.exit_markers"]);
+				foreach ((string name, ExitFires fires) in new[] { ("always", ExitFires.Always), ("from_floor", ExitFires.FromFloor) })
+				{
+					string entry = "field.exit_markers." + name;
+					if (!exits.TryGetProperty(name, out JsonElement marker) || !IsObject(marker, entry))
+					{
+						continue;
+					}
+					int before = m.Problems.Count;
+					Fields(marker, entry, Schema[entry]);
+					GridImage? image = Grid(marker, entry, Pixels.Size);
+					if (Run(marker, entry, image, 300, inline: true) is { } run && image is not null && m.Problems.Count == before)
+					{
+						m.ExitMarkers[fires] = (image, run);
+					}
 				}
 			}
 		}

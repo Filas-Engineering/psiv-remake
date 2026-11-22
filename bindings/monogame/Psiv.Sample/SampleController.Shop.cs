@@ -71,7 +71,7 @@ public sealed partial class SampleController
 		_shopResultOk = traded.Ok;
 		if (traded.Error is { } error && ShopResultShown)
 		{
-			_shopResult = error.Text;
+			_shopResult = Shown(error.Text);
 			_log("notice: " + error.Text);
 			_refused = true;
 			return;
@@ -256,7 +256,7 @@ public sealed partial class SampleController
 				if (_s.FormatText(key, values) is var text && text != key)
 				{
 					_probeVoice = key;
-					return text;
+					return Shown(text);
 				}
 			}
 		}

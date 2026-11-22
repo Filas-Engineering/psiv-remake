@@ -201,6 +201,7 @@ public sealed partial class SampleController
 
 	private void Say(string text)
 	{
+		text = Shown(text);
 		_ticker.Add((text, Timing("toast_ms")));
 		if (_ticker.Count > 6)
 		{
@@ -226,11 +227,6 @@ public sealed partial class SampleController
 			{
 				AddBattleNotice(n);
 			}
-			else if (_talkToPage && n.Kind == NoticeKind.Line)
-			{
-				TakeTalkLine(n);
-				_log("notice: " + n.Text);
-			}
 			else if (n.Kind == NoticeKind.Action)
 			{
 				// Every script action plays on screen (on a sprite, as a fade or as a label), so it stays out of the
@@ -239,13 +235,13 @@ public sealed partial class SampleController
 			}
 			else if (Screen == Screen.Shop && ShopResultShown)
 			{
-				_shopResult = n.Text;
-				_log("notice: " + n.Text);
+				_shopResult = Shown(n.Text);
+				_log("notice: " + _shopResult);
 			}
 			else if (Screen == Screen.Menu && MenuPage == "items" && ItemResultShown)
 			{
-				_itemResult = n.Text;
-				_log("notice: " + n.Text);
+				_itemResult = Shown(n.Text);
+				_log("notice: " + _itemResult);
 			}
 			else if (n.Key == "game.arrive" && Ui.Param("field", "arrive_toast", UiData(), 1) == 0)
 			{
@@ -261,7 +257,6 @@ public sealed partial class SampleController
 				}
 			}
 		}
-		_talkToPage = false;
 		IReadOnlyList<PresentationAction> actions = _s.PollActions();
 		if (actions.Count > 0)
 		{
@@ -544,7 +539,9 @@ public sealed partial class SampleController
 		}
 	}
 
-	private string? DescriptionOf(InventoryEntry entry) => _s.Description(entry.IsEquipment ? DescriptionKind.Equipment : DescriptionKind.Item, entry.Id);
+	private string? DescriptionOf(InventoryEntry entry) => Description(entry.IsEquipment ? DescriptionKind.Equipment : DescriptionKind.Item, entry.Id);
+
+	private string? Description(DescriptionKind kind, string id) => _s.Description(kind, id) is { } text ? Shown(text) : null;
 
 	// Text rows in a box, scrolling when they do not fit; the list with the cursor is the one headless runs probe.
 	private void DrawItems(IDrawSurface s, ScrollList list, int x, int y, int w, int h, IReadOnlyList<string> items, bool active = true,
@@ -786,6 +783,9 @@ public sealed partial class SampleController
 			_ when key.StartsWith("actorroute.", StringComparison.Ordinal) => _field.RouteProbe(key["actorroute.".Length..]),
 			"tilehooks" => $"{_field.ActiveTileHooks}/{_field.DrawnTileHooks}",
 			"platforms" => _field.DrawnPlatforms,
+			"exitmarks" => _field.DrawnExits,
+			// Each sprite with palette tracks and its tracks' steps as the last frame set their clock, field or battle.
+			"spritesteps" => _art is null || _art.SpriteSteps().ToList() is not { Count: > 0 } steps ? "-" : string.Join(" ", steps),
 			// Where the last frame drew a person (`actorpos.ID`), in the data's pixels (GameInfo.CellPixels a cell), `-` when not drawn.
 			_ when key.StartsWith("actorpos.", StringComparison.Ordinal) => _field.DrawnActors.TryGetValue(key["actorpos.".Length..], out DrawnPerson placed)
 				? FormattableString.Invariant($"{placed.X * _field.CellPixels:0.#} {placed.Y * _field.CellPixels:0.#}") : "-",

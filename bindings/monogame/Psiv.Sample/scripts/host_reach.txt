@@ -1,0 +1,74 @@
+# Allies out of reach under core's rules.json `item_no_reach` "consume" (make_host_data.py --consume), from saves of the
+# scripted playthrough, with --dev: AlliesOutOfReach names the Cogwright for Mend still, greyed before the pick on the
+# Techniques page and in battle, but no longer for the Tonic, which the library spends on it with no effect: selectable on
+# the Items page, used up there with the session's notice on the result line, and selectable in battle.
+
+cmd set text instant
+expect screen Title
+wait 2
+cmd load manual_1
+wait 4
+expect screen Field
+dev encounters off
+dev warp ember_steps west_gate
+wait 2
+dev event steps_tinker
+pressuntil Enter Field 100
+
+press M
+press Right 5
+expect state tab Techniques
+press Down 2
+press Enter
+press Enter
+press Down 4
+press Enter
+expect state page target
+press Escape
+press Escape
+press Left 5
+expect state tab Items
+press Down 4
+expect state selected Tonic x8
+press Enter
+press Enter
+press Down 4
+expect state selected Test Cogwright  HP 106/106  TP 0/0
+shot build/shots/host/reach_tonic.png
+press Enter
+wait 2
+expect state page items
+expect statehas uifield.menu_items.result_text Tonic
+expect state selected Tonic x7
+press Escape
+expect screen Field
+
+# In battle: Mend's picker greys the Cogwright, the Tonic's does not.
+dev battle training
+waitstate 300 battlephase Command
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down
+press Enter
+expect statehas battlemenu [Mend (3 TP)]
+press Enter
+expect state battlephase Target
+expect state battleunusable Test Cogwright
+shot build/shots/host/reach_mend_battle.png
+press Escape
+expect state battlephase Command
+press Down 3
+press Enter
+press Down 4
+expect statehas battlemenu [Tonic x7]
+press Enter
+expect state battlephase Target
+expect state battleunusable -
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 2
+expect screen Field

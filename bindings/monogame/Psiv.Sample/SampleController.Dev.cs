@@ -38,7 +38,7 @@ public sealed partial class SampleController
 	private static readonly string[] Help =
 	[
 		"warp AREA MARKER | warp AREA X Y      flag NAME on|off      give ID [COUNT]      money AMOUNT",
-		"level MEMBER LEVEL      rest      battle ENCOUNTER      win | lose      vehicle ID AREA MARKER",
+		"level MEMBER LEVEL      rest      battle ENCOUNTER      win | lose      combo RECIPE      vehicle ID AREA MARKER",
 		"encounters on|off      event ID      list KIND      reload      clear",
 		"overlay NAME [on|off] | overlay all|none   (collision hooks zones actors camera fps event)",
 		"speed 0.25|0.5|1|2|4|8      pause | resume | step [N]",
@@ -345,6 +345,14 @@ public sealed partial class SampleController
 			return Result(_s.DevSetLevel(w[1], level), T("ui.dev.level", w[1], level));
 		case "rest" when w.Length == 1:
 			return Result(_s.DevRest(), T("ui.dev.rested"));
+		case "combo" when w.Length == 2:
+			if (ScriptCombo(w[1]) is { } why)
+			{
+				DevLog(T("ui.dev.refused", why), bad: true);
+				return false;
+			}
+			DevLog(T("ui.dev.combo", w[1]));
+			return true;
 		case "battle" when w.Length == 2:
 			return Result(_s.DevBattle(w[1]), T("ui.dev.battle", w[1]));
 		case "win" or "lose" when w.Length == 1:

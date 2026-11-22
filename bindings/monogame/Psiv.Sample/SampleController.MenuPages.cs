@@ -38,6 +38,10 @@ public sealed partial class SampleController
 			{
 				_pickAction = null;
 			}
+			else if (input.Confirm && lineup.Count > 0 && OutOfReach(CommandKind.Ability, _pickMember).Contains(lineup[_third.Cursor].Id))
+			{
+				_audio.PlayCue("refuse");
+			}
 			else if (input.Confirm && lineup.Count > 0)
 			{
 				Report(_s.UseAbility(_pickMember, _pickAction, lineup[_third.Cursor].Id));
@@ -87,7 +91,7 @@ public sealed partial class SampleController
 		string description = "";
 		if (abilities.Count > 0)
 		{
-			description = _s.Description(DescriptionKind.Ability, abilities[Math.Clamp(_sub.Cursor, 0, abilities.Count - 1)].Id) ?? "";
+			description = Description(DescriptionKind.Ability, abilities[Math.Clamp(_sub.Cursor, 0, abilities.Count - 1)].Id) ?? "";
 			_probeDescription = description.Length == 0 ? "-" : description;
 		}
 		Ui.Draw("menu_abilities", s, t, data
@@ -105,6 +109,7 @@ public sealed partial class SampleController
 			.Set("description", description)
 			.Set("target_name", _pickAction is null ? "" : _s.DisplayName(_pickAction))
 			.Set("targets", _pickAction is null ? new List<string>() : lineup.Select(m => T("ui.status.member_hp", m.Name, m.Hp, m.MaxHp)).ToList())
+			.Set("target_rows", TargetRows(data, CommandKind.Ability, _pickMember, m => T("ui.status.member_hp", m.Name, m.Hp, m.MaxHp)))
 			.Set("target_list", _third));
 	}
 

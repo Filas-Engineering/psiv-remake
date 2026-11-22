@@ -80,6 +80,7 @@ public sealed partial class Art
 	private readonly Dictionary<int, float> _effectScales = [];
 	private readonly Dictionary<(string Language, TextRole? Role), BitmapFont> _bitmapFonts = [];
 	private Figure? _tileHookOverlay;
+	private readonly Dictionary<ExitFires, Figure> _exitMarkers = [];
 	private (Dictionary<Direction, int[]> Facings, int Ms, int[] Images)? _conveyorOverlay;
 	private readonly Dictionary<string, string> _fromFile = [];
 	private readonly string _assetDir = "";
@@ -150,6 +151,11 @@ public sealed partial class Art
 
 	// The picture on a cell of an active tile step hook, from the field's overlay, or null for the generated rune.
 	public int? TileHookOverlay(int clockMs) => _tileHookOverlay is { } o ? o.Images[o.Idle.FrameAt(clockMs, loop: true)] : null;
+
+	public static string ExitFiresName(ExitFires fires) => fires == ExitFires.Always ? "always" : "from_floor";
+
+	// The picture on an open exit that fires that way, from the field's `exit_markers`, or null for the generated marker.
+	public int? ExitMarker(ExitFires fires, int clockMs) => _exitMarkers.TryGetValue(fires, out Figure? o) ? o.Images[o.Idle.FrameAt(clockMs, loop: true)] : null;
 
 	// The picture on a conveyor cell from the field's overlay (its direction's run while it runs, the first frame while it
 	// stands), or null for the generated belt.
@@ -490,6 +496,11 @@ public sealed partial class Art
 		{
 			_vehicleOverlays[o.Vehicle ?? ""] = Whole(o.Path);
 			_fromFile["vehicle_overlay" + (o.Vehicle is null ? "" : ":" + o.Vehicle)] = o.Path;
+		}
+		foreach ((ExitFires fires, (GridImage image, FrameRun run)) in m.ExitMarkers)
+		{
+			_exitMarkers[fires] = new Figure(Cut(image), run, new Dictionary<string, FrameRun>());
+			_fromFile["exit_marker:" + ExitFiresName(fires)] = image.Path;
 		}
 		if (m.TileHookOverlay is { } pad)
 		{
