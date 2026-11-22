@@ -887,7 +887,7 @@ public sealed partial class SampleController
 	{
 		if (_overlays.Contains(WindowsOverlay))
 		{
-			DrawWindowOverlay(s);
+			DrawWindowOverlay(s is ZoomSurface z ? z.Inner : s, s is ZoomSurface zoom ? zoom.Zoom : 1f);
 		}
 		DrawAnimRuler(s);
 		int y = 52;
@@ -938,6 +938,10 @@ public sealed partial class SampleController
 		bool previewing = _preview is not null || _stageEntry is not null;
 		bool side = _stageLayout == BattleLayout.Side;
 		int y = !battle || (!side && previewing) ? 12 : Ui.Param(side ? "battle_side" : "battle_front", "dev_badge_y", UiData(), 0);
+		if (s is ZoomSurface zoomed && battle && !(!side && previewing))
+		{
+			y = (int)MathF.Round(y / zoomed.Zoom);
+		}
 		Style.Plate(s, badge, x, y, marked ? Style.Bad : previewing ? Style.Accent : Style.Dim);
 		if (_paused || Speed != 1f)
 		{
@@ -1117,8 +1121,15 @@ public sealed partial class SampleController
 		s.Text("> " + _consoleInput + (caret ? "_" : ""), 16, h - 32, Style.Accent, Style.Body);
 	}
 
+	// `devdraw`: the size the last frame drew the developer tools at, `off` when it drew none.
+	private string _probeDevDraw = "off";
+
 	private string DevState(string key)
 	{
+		if (key == "devdraw")
+		{
+			return _probeDevDraw;
+		}
 		if (key.StartsWith("preview.", StringComparison.Ordinal))
 		{
 			return _preview?.Controller.State(key["preview.".Length..]) ?? "-";

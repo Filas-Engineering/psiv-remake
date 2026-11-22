@@ -832,7 +832,177 @@ The built-in values, which both files share but for the front-only ones (`side` 
 
 Fields a layout might want that the C# `GameSession` does not expose, so no screen offers them: the actor who keeps a
 shop or rest point (`FieldPoint` and `ShopInfo` name none; the assets' `keepers` map points to portraits instead), and
-an enemy's level (`Combatant` has none; enemies have no portraits in the data either).
+an enemy's level (`Combatant` has none; enemies have no portraits in the data either). Also: deleting a save (the title's `erase` entry needs a call such as `psiv_save_delete(session, slot)` /
+`GameSession.DeleteSave(slot)`), loading a save away from the title (a load entry on the Save page's system menu), and
+member profile fields beyond `Member`, `MemberDetail` and the creature kind (age, home, a biography: a member
+key/value list such as `psiv_member_profile(session, member)` returning text keys and values); the flashing level and
+the notice seen as profile fields (`psiv_profile`'s `flashing` and `flash_notice_seen`, kept in `controls.json` until
+then); the data's default flashing level in `game.json` (`presentation.flash_default`); and the game's switches for the
+arrival notice and banner per area, on script warps and for the starting area (a field such as `psiv_field_info`'s
+`arrival_notice`, `area_banner`, or a notice flag the sample can read with the arrival).
+
+## Layout items: optional fields, params and row models
+
+Each of these is optional: a layout set without them draws and behaves as before (every existing run's transcript and frame digests are unchanged), and the export writes none of them. `--check-assets` checks each, F5 reloads them, and `scripts/make_items_assets.py` writes a set that uses them all, played by `scripts/items_battle.txt`, `items_menus.txt` and `items_dialogue.txt` (below, "The item runs").
+
+The probe `uifield.SCREEN.NAME` reads any field as the screen was last drawn with it (`uifield.battle_front.actor_slot`), `uifield.SCREEN.LIST.N.FIELD` a field of a list's item (`uifield.battle_front.members.0.status_sleep`); a list reads as its length, a missing field as `-`.
+
+### Battle fields
+
+Screen fields of `battle_front` and `battle_side`:
+
+* `list_kind` string: what the menu lists now: `top`, `command`, `technique`, `skill`, `item`, `macro`, `target`, or `''` outside the menus.
+* `list_index` int: the command row whose list is open (in the option, macro and target phases), -1 otherwise; with `list_kind` a window can take a size per list.
+* `actor_slot` int: the marching slot of the member choosing, or of the party member acting in the turn playing; -1 for none (an enemy's turn, the top-level step, between turns).
+* `action_command` string: the command of the turn playing, as the `command` item field names it (`attack`, `technique`, `skill`, `combo`, `item`, `defend`, `escape`), `''` between turns. `action_chosen` bool: a party member acts with anything but a plain attack, for a name window shown only then.
+* `result_page`, `result_pages` int and `result_more` bool: the result window's page (1-based), how many, and whether one follows (below, `result_page_lines`).
+
+Item fields of `party`, `members` and `vehicle`: `fallen` (bool, shown as down), `slot` (int, its index: the marching slot), and one `status_ID` bool per status of the game data (`status_poison`, `status_sleep`, ...; `defeated` excluded), true while the playback shows it. A name that is not `status_` and a status of the data is a problem. `menu_items` items gain `command` (the command row's id, `fight`/`macro`/`run` on the top-level step, `''` in lists) and `icon` (the command's picture from `command_icons` or generated, -1 off the command rows).
+
+```json
+{"name": "chosen", "visible": "phase == 'playback' && action_chosen", "x": "W - 236", "y": 16, "w": 220, "h": 34, "frame": "battle", "elements": [
+	{"type": "text", "value": "'chosen ' + action_command", "style": "small"}]},
+{"type": "plate", "visible": "status_sleep", "value": "'Zz'", "x": 180, "y": -14, "color": "tp"}
+```
+
+Params (numbers but `command_axis`):
+
+| Param | Default | What |
+| --- | --- | --- |
+| `enemy_statuses` | 1 | the enemies' status icons follow the file's `statuses` table (icon `none` hides one, priority orders them); 0 keeps them off it (every icon, the old order) |
+| `command_axis` | `"column"` | `"row"`: Left and Right move the command cursor (wrapping) and Up and Down do nothing; Confirm picks the highlighted command either way. A plain string, not an expression |
+| `command_top` | 0 | 1: each round opens on a top-level step (phase `top`): `fight` (the members' commands, from which Back on the first member returns here), `macro` (the macro list for the party; with no macros the description strip and the log say so and the step stays), `run` (every member who takes commands is set to escape, one choice for the party) |
+| `result_page_lines` | 0 | above 0: the result window shows that many lines a page; Confirm turns the page, and on the last page ends the battle; Back ends it at once |
+
+A battle file that lays the menu's rows out across, a `repeater` over `menu_items` in a row (no `dy`) or grid, or `rows` over it with `per_column` 1, without `"command_axis": "row"` is a problem (`windows.icons: lays the menu's rows out across: set the param 'command_axis' to "row" so Left and Right move the cursor`): the cursor would not follow the keys the layout shows.
+
+```json
+"params": {"command_axis": "row", "command_top": 1, "result_page_lines": 2, "enemy_statuses": 1}
+```
+
+The words of the top-level step (`ui.battle.top.fight`, `.macro`, `.run`, `ui.battle.title.top`, `ui.battle.no_macros`) come from the text tables when they have them, else built-in English, not counted as missing. Probe: `enemyicons` reads the icons the last frame drew under each enemy with a status (`Gel Mite B sleep`, `none`).
+
+### Title start state and entries
+
+Two top-level fields of `title.json` (only that file takes them):
+
+* `start` (true or false, default false): the title opens on a start state: the field `start` is true and the menu takes no input until any key or button (not a function key or the console key) is pressed, then `start` is false. It comes back each time the title does (not after its overlays). `start_hint` is the prompt's words (`ui.title.press_start`, built-in "Press any key").
+* `options` (a list): the menu's entries in order, from `retry`, `new_game`, `continue`, `load`, `sound_test`, `erase`, `options`, `quit` (default: that order). An entry still shows only when it can be chosen: `retry` after a lost battle that allows one, `sound_test` after a finished story, `erase` never, since the session has no call that deletes a save (below, "Fields the session cannot give yet"). An unknown or repeated entry is a problem. The field `option_ids` lists the ids shown.
+
+```json
+{"version": 1, "start": true, "options": ["continue", "new_game", "load", "erase", "options", "quit"], "windows": [
+	{"name": "press", "visible": "start", "anchor": "center", "w": 420, "h": 120, "frame": "panel", "elements": [
+		{"type": "text", "visible": "clock_ms / 500 % 2 == 0", "value": "start_hint", "y": 76, "w": "cw", "align": "center"}]},
+	{"name": "box", "visible": "!start", "anchor": "center", "w": 600, "h": 400, "frame": "panel", "elements": []}
+]}
+```
+
+### Dialogue: cases and the picture stack
+
+A `tags` entry may have `cases`, tried in order before the entry's own action; the first that holds the tag's value acts instead. A case is `{"value": TEXT}` or a whole-number range `{"from": N, "to": M}` (both ends in, -1000000 to 1000000), with `action` (any tag action), `id`, `ids` (on a range: the id for each value from `from` on; past the list, `id` or the value) and `slot` (`panel_show`). An entry with cases may leave out `action`: a value no case holds is then logged as `tag: NAME VALUE`. A case with no value or range, both, `from` past `to`, or an id on an action that takes none, is a problem.
+
+```json
+"tags": {"snd": {"cases": [
+	{"value": "0", "action": "music_stop"},
+	{"from": 1, "to": 2, "action": "music", "ids": ["tag_theme", "title"]},
+	{"from": 10, "to": 19, "action": "cue", "id": "tag_gong"}
+]}}
+```
+
+Cue and music ids a tags table names (an entry's or case's `id`, `ids`, `values` and `default`) count as played: `--check-assets` accepts an `audio` entry for such an id though no data plays it, and the line plays it ([`assets.md`](assets.md), audio).
+
+The dialogue param `picture_stack` (default 0): 1 keeps the still pictures as a stack: `picture` puts one on top (moving it up if it is already there), `picture_hide` takes that one off wherever it is (the one under it shows again), `picture_clear` takes all. Without it a picture replaces the one up, as before. The field `pictures` lists the stack bottom first, each item with `picture`, `picture_w`, `picture_h`; `picture` stays the top one. Probe: `pictures` (`chart tower`, `-`).
+
+```json
+"params": {"picture_stack": 1}
+```
+
+### Draw order: the scripts' fades
+
+A script's `fade out` and `fade in` paint black over the screen. The order, back to front: the field (map, people, overlays) and its comic panels; the fade; then, on the dialogue, name entry and text log screens, those screens' layouts (box, speaker plate, portrait, choices, the area banner, the entry grid, the log); then the confirm prompt and the developer tools. On every other screen (field HUD and notices, menus, shop, battle) the fade covers the whole screen as before. A fade of 0 seconds applies at once (before, at least 150 ms). Probe: `darkness` (`1.00 under dialogue`, `none`).
+
+### Field: arrival notice and banner
+
+Params of `field.json`: `arrive_toast` (default 1; 0: the arrival notice, `game.arrive`, is logged but shows no notice) and `area_banner` (default 1; 0: the area banner shows on neither the field nor the dialogue). Both are expressions of the common names.
+
+```json
+{"version": 1, "params": {"arrive_toast": 0, "area_banner": 0}, "windows": []}
+```
+
+### Row models
+
+`save_slots`:
+
+* Item fields of `slots`: `number` (1-based), `slot` (its id), `empty`, `damaged` (bool), `area`, `play_time`, `difficulty`, `party_text`, `leader` (strings, `''` for an empty or damaged slot), `level` (the leader's, 0 for none), `written` (the time written, `-` without one).
+* Param `system_menu` (default 0): 1 opens the field menu's Save page on a system menu, `save` (then the slots; Back returns) and `quit` (to the title after the quit question). Fields `system` (bool, the system menu is up), `system_rows`, `system_cursor`, `mode` (`save` or `''`). The session loads saves only from the title, so the system menu has no load entry. The save prompt and the Load screen do not use it.
+
+```json
+{"version": 1, "params": {"system_menu": 1}, "windows": [
+	{"name": "slots", "visible": "!system", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+		{"type": "list", "items": "slots", "state": "list", "active": "active", "row_height": "t(32)", "row": [
+			{"type": "text", "value": "number + '.'", "x": 8},
+			{"type": "text", "value": "empty ? '-' : area + '   ' + play_time + '   ' + leader + ' ' + level", "x": 48}]}]},
+	{"name": "system", "visible": "system", "x": "area_x", "y": "area_y", "w": 260, "h": 84, "frame": "panel", "elements": [
+		{"type": "rows", "items": "system_rows", "selected": "system_cursor"}]}
+]}
+```
+
+`menu_equip`:
+
+* Top-level `places`: the places offered, in order, each `{"slot": PLACE, "label": TEXT_KEY}` (`label` optional, else the place's own name), PLACE one of `weapon` (the right hand), `left_hand`, `head`, `body`, `arms`, `accessory`; a repeated or unknown place is a problem. The field `places` lists them with `slot`, `label`, `piece` (the worn piece's name), `worn` (bool) and `text` (the row as `slot_rows` has it); `slot_rows` follows them.
+* Param `members_first` (default 1): 0 opens the page on the first member's places: the tab keys still turn the tabs and Back closes the menu; the PartyTalk key (the Items page's sort key) goes to the next member. Fields `member_index`, `member_count`.
+* Param `stats_preview_only` (default 0): 1 leaves the last change out of the places view (`has_change` false, no `compare_rows`), so the stats show only while a piece is browsed.
+
+```json
+{"version": 1, "params": {"members_first": 0, "stats_preview_only": 1}, "places": [{"slot": "body"}, {"slot": "weapon"}, {"slot": "head"}, {"slot": "accessory", "label": "ui.equip_slot.accessory"}], "windows": []}
+```
+
+`menu_order`: the field `lineup`, one item per member with `name`, `level`, `hp`, `max_hp`, `tp`, `max_tp`, `number` (1-based), `picked` (the first of a swap) and `statuses` (their names) and `text` (the row without its number), for rows formatted by the layout:
+
+```json
+{"type": "list", "items": "lineup", "state": "list", "text": "(picked ? '> ' : '') + name + ' L' + level + ' ' + hp + '/' + max_hp"}
+```
+
+`menu_status`:
+
+* Param `stat_bonus` (default 1): 0 leaves the equipment bonus out of each stat's `value`. The cells of `stat_rows` gain `total` (the stat's number) and `bonus` (the equipment's, signed, `''` for none) either way.
+* Fields `portrait_w`, `portrait_h`: the portrait's size in pixels, for a portrait drawn at a whole multiple.
+* Top-level `profile`: the profile rows, in order, from `name`, `level`, `experience`, `experience_next`, `kind`, `hp`, `max_hp`, `tp`, `max_tp`, `strength`, `mental`, `agility`, `dexterity`, `defense`, `critical`, `evasion`, `magic_defense`, `attack_element` (default: all); the field `profile` lists them with `key`, `label` and `value`. These are every member detail the session gives (`Member`, `MemberDetail`, the creature kind); keys the text tables lack (`ui.status.profile.*`) are built-in English.
+
+```json
+{"version": 1, "params": {"stat_bonus": 0}, "profile": ["name", "level", "kind", "experience_next", "attack_element"], "windows": [
+	{"name": "profile", "visible": "view == 'stats'", "x": "area_x + area_w - 280", "y": "area_y", "w": 280, "h": 280, "frame": "panel", "elements": [
+		{"type": "image", "image": "portrait", "w": "portrait_w * 2", "h": "portrait_h * 2"},
+		{"type": "repeater", "items": "profile", "y": "portrait_h * 2 + 8", "dy": "t(22)", "template": [
+			{"type": "text", "value": "label"}, {"type": "text", "value": "value", "w": "cw", "align": "right"}]}]}
+]}
+```
+
+### Flashing
+
+The options' Flashing row replaces the Reduced flash row: `Reduced` (the profile's reduced flash on: the animation scripts' `reduced` replacements and damping, and the flash limit), `Standard` (the flash limit, no replacements: the old setting off) and `As authored` (no limit, no replacements). An old profile maps reduced flash on to Reduced and off to Standard. The level beside the profile's switch, and whether the photosensitivity warning was answered, live in `controls.json` (`"flashing": {"level": "original", "original_confirmed": true}`), written only once a level is chosen; the session's profile has no field for them (below, "Fields the session cannot give yet").
+
+* Choosing As authored asks the photosensitivity question (`ui.options.flashing_warning`) until it has been answered yes once, or the notice below has been seen.
+* The options layout's param `flashing_original` (default 1) at 0, or the data's `flashing.json` `"original": false`, leaves As authored out of the row.
+* A new profile in normal play (no script; or a scripted run with `--play-defaults`) starts at the data's default: `flashing.json` in the game data directory, `{"default": "reduced" | "standard" | "original", "original": true}`, which only the sample reads (the game's loader refuses unknown keys in `game.json`; `presentation.flash_default` there is the key to move it to once that loader takes it). Without the file the default is Reduced, and the title says once where the option is (`ui.title.flashing_notice`). With `original` (and the choice not hidden) the photosensitivity notice comes first, on black before the title or anything that moves: the game has flashing effects, the setting is under Options > Flashing, and three answers, Reduced (the cursor's start: one Confirm), Standard, Continue as authored (also Back). It is drawn through the `confirm` layout, so a layout restyles it but cannot leave it out, and the data cannot skip it; seeing it counts as the warning's answer. `--check-assets` reports a bad `flashing.json` as `data: flashing.json: ...`.
+* Scripted runs (headless or in the window) start at the profile's default, Standard, so every transcript and digest stays as before; that is the difference from normal play. The probe `flashing` reads `reduced`, `standard` or `original` (`original notice` while the notice is up).
+* The confirm layout gains the field `cursor` (the answer under the cursor; Yes 0 and No 1 for a question) and `options` holds the notice's three answers; the built-in file sizes its box by `len(options)` and highlights `cursor`, which draws a yes/no question as before.
+
+Words the text tables do not carry yet, built-in English until they do: `ui.options.flashing`, `ui.options.flashing.reduced`, `ui.options.flashing.standard`, `ui.options.flashing.original`, `ui.options.flashing_help`, `ui.options.flashing_warning`, `ui.options.flashing_notice`, `ui.options.flashing_keep`, `ui.title.flashing_notice` (and, from the items above, `ui.battle.top.fight`, `ui.battle.top.macro`, `ui.battle.top.run`, `ui.battle.title.top`, `ui.battle.no_macros`, `ui.title.press_start`, `ui.saves.system.save`, `ui.saves.system.quit`, `ui.status.profile.name`, `.level`, `.experience`, `.experience_next`, `.kind`, `.hp`, `.tp`).
+
+`scripts/flash_safety.txt` asserts the three levels on a strobing script; `make_flash_data.py` writes a data copy whose default is original, on which `flashing_notice.txt` (Standard chosen) and `flashing_notice_keep.txt` (Back keeps it, Original later asks nothing) run with `--play-defaults`, and `flashing_new.txt` the shipped data's Reduced default with its notice and the warning.
+
+### The developer tools at small resolutions
+
+Two `styles.json` params: `dev_scale` (10 to 100, default 100) draws every developer tool (badge, console, picker, overlays, the frame ruler, the windows overlay's labels) at that percent of its 1280x720 sizes, laid out in a frame of the logical size over that percent; `dev_draw` (0 or 1, default 1) at 0 draws none of them, while their keys and commands still work. A 320x224 set with `"dev_scale": 60` draws the tools' text at 10 pixels, its own text size ([`dev-tools.md`](dev-tools.md)).
+
+```json
+"params": {"field_cell": 16, "dev_scale": 60}
+```
+
+### The item runs
+
+`make_items_assets.py EXPORT TEST OUT` copies the test assets with `alt/assets_more.json` as the manifest, a cue `tag_gong` and a track `tag_theme` that only the tags play, and the item layouts; `make_items_data.py` writes a data copy with the event `dialogue_items` and no party macros. `items_battle.txt` (front data copy): the title's start state and entries, the top-level step, the command row walked with Left and Right, the item and technique lists' sizes, the actor's slot, the chosen-command window, the fallen and status flags, the enemies' icons by the table and (side) off it, Run for the party, the result in two pages. `items_menus.txt`: the profile rows, the Equip page on the first member, the system menu and numbered slots, the unnumbered lineup. `items_dialogue.txt` (item data copy): a line while faded out, the cases, the picture stack, the top-level Macro without macros, a warp without notice or banner. `small_dev.txt`: the small set with `dev_scale` and `dev_draw`. Screenshots under `build/shots/items/` with `--window`.
 
 ## Dialogue control tags (`ui/dialogue.json`, `SampleController.Dialogue.cs`)
 

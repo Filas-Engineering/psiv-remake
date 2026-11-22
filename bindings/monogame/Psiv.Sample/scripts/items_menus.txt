@@ -1,0 +1,111 @@
+# The layout items' row models (make_items_assets.py), with --dev: the title's start state and chosen entries; the status
+# page's stats without the bonus, its portrait at twice its size and its profile rows; the Equip page opening on the
+# first member's places (its own places and labels, the PartyTalk key going to the next member, the stats only as a
+# preview); the Save page's system menu (save, quit) and numbered slots with a save; the order page without numbers. With --window the shot lines save screenshots under build/shots/items/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 3
+expect state uifield.title.start true
+press Enter
+wait 2
+expect state uifield.title.start false
+expect state selected Continue
+press Down
+wait 2
+expect state selected New game
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+press M
+expect screen Menu
+
+# Status: the profile rows and the stats without their bonus.
+press Enter
+wait 2
+expect state page stats
+expect state uifield.menu_status.profile 5
+expect state uifield.menu_status.profile.0.value Test Fighter
+expect state uifield.menu_status.profile.2.key kind
+expect state uifield.menu_status.profile.2.value living
+expect state uifield.menu_status.stat_rows.1.cells.0.value 22
+expect state uifield.menu_status.stat_rows.1.cells.0.total 22
+expect state uifield.menu_status.stat_rows.1.cells.0.bonus +4
+expect statehas windows menu_status/profile
+shot build/shots/items/status_profile.png
+press Escape
+
+# Equip: straight on the first member's places, in the layout's order.
+press Right 2
+expect state tab Equip
+wait 2
+expect state page slots
+expect state uifield.menu_equip.places 4
+expect state uifield.menu_equip.places.0.slot body
+expect state uifield.menu_equip.member_index 0
+expect state uifield.menu_equip.member_count 3
+expect statehas selected body
+shot build/shots/items/equip_places.png
+press T
+wait 3
+expect state uifield.menu_equip.member_index 1
+expect state uifield.menu_equip.member_name Test Mystic
+press T 2
+wait 3
+expect state uifield.menu_equip.member_index 0
+press Down
+press Enter
+expect state page pieces
+press Enter
+expect state page slots
+wait 2
+expect state uifield.menu_equip.has_change false
+press Enter
+press Enter
+expect state page slots
+
+# Save: the system menu first, then the numbered slots.
+press Right
+expect state tab Save
+wait 2
+expect state uifield.save_slots.system true
+expect state selected Save
+shot build/shots/items/save_system.png
+press Enter
+wait 2
+expect state uifield.save_slots.system false
+expect state uifield.save_slots.mode save
+expect state uifield.save_slots.slots.0.number 1
+expect state uifield.save_slots.slots.0.empty true
+press Enter
+wait 2
+expect state uifield.save_slots.slots.0.empty false
+expect state uifield.save_slots.slots.0.area Tidewater Landing
+expect state uifield.save_slots.slots.0.leader Test Fighter
+shot build/shots/items/save_slots.png
+press Escape
+wait 2
+expect state uifield.save_slots.system true
+press Down
+wait 2
+expect state selected Quit
+press Enter
+expect statenot prompt none
+press Escape
+expect state prompt none
+expect screen Menu
+
+# Order: the lineup without numbers.
+press Right
+expect state tab Order
+wait 2
+expect state uifield.menu_order.lineup 3
+expect state uifield.menu_order.lineup.0.number 1
+expect state selected Test Fighter L3 86/86
+shot build/shots/items/order.png
+press Escape
+expect screen Field

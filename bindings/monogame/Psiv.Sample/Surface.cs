@@ -285,6 +285,35 @@ public sealed class ScaledSurface(IDrawSurface inner, float scale) : IDrawSurfac
 	public int Derive(int image, string key, Func<Color[], int, int, Color[]> make) => inner.Derive(image, key, make);
 }
 
+// Another surface seen as a frame `zoom` times its size: every position and size drawn is multiplied by it, so drawing
+// laid out for a large frame lands smaller on a small one (the developer tools on a small logical resolution). Text sizes
+// too, unless `text` is false: a bitmap font already draws at its own scale.
+public sealed class ZoomSurface(IDrawSurface inner, float zoom, bool text = true) : IDrawSurface
+{
+	private int Z(int v) => (int)MathF.Round(v * zoom);
+
+	private int T(int size) => text ? Math.Max(1, Z(size)) : size;
+
+	public IDrawSurface Inner => inner;
+	public float Zoom => zoom;
+
+	public int Width => (int)MathF.Round(inner.Width / zoom);
+	public int Height => (int)MathF.Round(inner.Height / zoom);
+	public void Fill(int x, int y, int w, int h, Color color) => inner.Fill(Z(x), Z(y), Math.Max(1, Z(w)), Math.Max(1, Z(h)), color);
+	public void Text(string text, int x, int y, Color color, int size = Style.Body) => inner.Text(text, Z(x), Z(y), color, T(size));
+	public int Measure(string text, int size = Style.Body) => (int)MathF.Round(inner.Measure(text, T(size)) / zoom);
+	public int CreateImage(int width, int height, Color[] pixels) => inner.CreateImage(width, height, pixels);
+	public void Image(int image, int x, int y, int w, int h, Color tint) => inner.Image(image, Z(x), Z(y), Z(w), Z(h), tint);
+	public void Clip(int x, int y, int w, int h) => inner.Clip(Z(x), Z(y), Z(w), Z(h));
+	public void Unclip() => inner.Unclip();
+	public Color[] ReadImage(string path, out int width, out int height) => inner.ReadImage(path, out width, out height);
+	public void ClearImages() => inner.ClearImages();
+	public void UseFont(string? file, float scale) => inner.UseFont(file, scale);
+	public void UseBitmapFont(BitmapFont? font) => inner.UseBitmapFont(font);
+	public void ImageEx(int image, int x, int y, int w, int h, Color tint, bool flipX) => inner.ImageEx(image, Z(x), Z(y), Z(w), Z(h), tint, flipX);
+	public int Derive(int image, string key, Func<Color[], int, int, Color[]> make) => inner.Derive(image, key, make);
+}
+
 public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, FontSystem fonts) : IDrawSurface, IDisposable
 {
 	private static readonly RasterizerState Scissor = new() { CullMode = CullMode.None, ScissorTestEnable = true };

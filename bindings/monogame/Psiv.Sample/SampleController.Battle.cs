@@ -16,7 +16,21 @@ public sealed partial class SampleController
 
 	private int SpeedPercent() => (int)MathF.Round(SpeedOf(_s.Profile().BattleSpeed) * 100);
 
-	private enum BattlePhase { Command, Option, Target, Macro, Playback, Ended }
+	private enum BattlePhase { Command, Option, Target, Macro, Playback, Ended, Top }
+
+	// The phases with a menu to choose from.
+	private static bool Choosing(BattlePhase phase) => phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro or BattlePhase.Top;
+
+	// The top-level step's rows, before the members' commands when the battle layout's `command_top` is on.
+	private static readonly string[] TopMenu = ["fight", "macro", "run"];
+
+	// The battle layout's command navigation: `command_axis` "row" makes Left and Right walk the command rows (Up and Down
+	// then do nothing), and `command_top` puts the top-level step (fight, macro, run) before the members' commands each round.
+	private string BattleScreen => StageLayout() == BattleLayout.Front ? "battle_front" : "battle_side";
+
+	private bool LayoutSwitch(string name) => Ui.Param(BattleScreen, name, UiData(), 0) != 0;
+
+	private bool CommandRowAxis => Ui.ParamText(BattleScreen, "command_axis", UiData(), "column") == "row";
 
 	private sealed class BattleUi
 	{
@@ -24,6 +38,12 @@ public sealed partial class SampleController
 		public BattlePhase Phase;
 		public int Actor;
 		public string MenuChoice = "";
+		// The command row MenuChoice came from.
+		public int MenuIndex = -1;
+		// The macro list was opened from the top-level step, not by a member.
+		public bool FromTop;
+		// The result window's page, when the battle layout's `result_page_lines` pages it.
+		public int ResultPage;
 		public List<BattleOption> Options = [];
 		// The worn pieces among the options, cast without being used up.
 		public HashSet<string> Worn = [];
@@ -49,6 +69,7 @@ public sealed partial class SampleController
 	private string _probeEnemyGroups = "none";
 	private string _probeCommands = "-";
 	private string _probeEnemyMarks = "-";
+	private string _probeEnemyIcons = "none";
 	private string _probePlaces = "none";
 
 	// Every presentation step started, by its description, for headless expectations.
@@ -154,6 +175,12 @@ public sealed partial class SampleController
 		BattleInfo? info = _s.BattleInfo();
 		if (info is not null && info.Live && info.PartyActsNextRound)
 		{
+			if (from == 0 && _battle.Phase != BattlePhase.Top && LayoutSwitch("command_top"))
+			{
+				_battle.Phase = BattlePhase.Top;
+				_cursor = 0;
+				return;
+			}
 			for (int i = from; i < info.PartyCount; i++)
 			{
 				// In a vehicle battle the vehicle takes the commands and the members ride along.
@@ -216,7 +243,7 @@ public sealed partial class SampleController
 		{
 			b.LogShown = !b.LogShown;
 		}
-		if (b.Phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro && input.Pressed(GameAction.Pause))
+		if (Choosing(b.Phase) && input.Pressed(GameAction.Pause))
 		{
 			OpenPause();
 			return;
@@ -242,6 +269,7 @@ public sealed partial class SampleController
 				if (_s.Mode != Mode.Battle)
 				{
 					b.Phase = BattlePhase.Ended;
+					b.ResultPage = 0;
 				}
 				else if (b.Auto)
 				{
@@ -254,20 +282,66 @@ public sealed partial class SampleController
 			}
 			break;
 		case BattlePhase.Ended:
-			if (_outro is null && (input.Confirm || input.Back))
+			if (_outro is null && input.Confirm && b.ResultPage + 1 < ResultPages())
+			{
+				b.ResultPage++;
+			}
+			else if (_outro is null && (input.Confirm || input.Back))
 			{
 				EndBattleScreen();
 			}
 			break;
+		case BattlePhase.Top:
+			Move(input, TopMenu.Length);
+			if (!input.Confirm)
+			{
+				break;
+			}
+			b.MenuIndex = _cursor;
+			switch (TopMenu[_cursor])
+			{
+			case "fight":
+				NextActor(0);
+				break;
+			case "macro" when _s.Macros().Count == 0:
+				Say(SampleText("ui.battle.no_macros"));
+				b.Log.Add(SampleText("ui.battle.no_macros"));
+				break;
+			case "macro":
+				b.MenuChoice = "macro";
+				b.FromTop = true;
+				_cursor = 0;
+				b.Phase = BattlePhase.Macro;
+				break;
+			default:
+				RunAway();
+				break;
+			}
+			break;
 		case BattlePhase.Command:
 			List<CommandRow> rows = CommandRows();
-			Move(input, rows.Count);
+			if (CommandRowAxis)
+			{
+				MoveAcross(input, rows.Count);
+			}
+			else
+			{
+				Move(input, rows.Count);
+			}
+			if (input.Back && LayoutSwitch("command_top") && FirstActor() == b.Actor)
+			{
+				b.Phase = BattlePhase.Top;
+				_cursor = 0;
+				break;
+			}
 			if (!input.Confirm)
 			{
 				break;
 			}
 			CommandRow row = rows[Math.Clamp(_cursor, 0, rows.Count - 1)];
 			b.MenuChoice = row.Command;
+			b.FromTop = false;
+			b.MenuIndex = Math.Clamp(_cursor, 0, rows.Count - 1);
 			_cursor = 0;
 			if (row.Option is { } skill)
 			{
@@ -368,7 +442,7 @@ public sealed partial class SampleController
 			Move(input, macros.Count);
 			if (input.Back || macros.Count == 0)
 			{
-				b.Phase = BattlePhase.Command;
+				b.Phase = b.FromTop ? BattlePhase.Top : BattlePhase.Command;
 			}
 			else if (input.Confirm)
 			{
@@ -389,6 +463,66 @@ public sealed partial class SampleController
 			}
 			break;
 		}
+	}
+
+	// The result window's pages: one, or as many as the battle layout's `result_page_lines` lines a page make.
+	private int ResultPages()
+	{
+		int per = Ui.Param(StageLayout() == BattleLayout.Front ? "battle_front" : "battle_side", "result_page_lines", UiData(), 0);
+		return per <= 0 ? 1 : Math.Max(1, (ResultLines(_s.BattleInfo()).Count + per - 1) / per);
+	}
+
+	// Left and Right walk the command rows laid out as one row.
+	private void MoveAcross(ActionInput input, int count)
+	{
+		if (count == 0)
+		{
+			return;
+		}
+		if (input.Pressed(GameAction.Left))
+		{
+			_cursor = (_cursor + count - 1) % count;
+		}
+		if (input.Pressed(GameAction.Right))
+		{
+			_cursor = (_cursor + 1) % count;
+		}
+		_cursor = Math.Clamp(_cursor, 0, count - 1);
+	}
+
+	// The first member who takes commands this round, as NextActor would pick it.
+	private int FirstActor()
+	{
+		IReadOnlyList<Combatant> all = _s.Combatants();
+		BattleInfo? info = _s.BattleInfo();
+		for (int i = 0; info is not null && i < info.PartyCount; i++)
+		{
+			if (all[i].Alive && (info.Vehicle.Length == 0 || all[i].Id == info.Vehicle))
+			{
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	// The top-level Run: the party tries to get away at once, every member who takes commands set to escape.
+	private void RunAway()
+	{
+		IReadOnlyList<Combatant> all = _s.Combatants();
+		BattleInfo? info = _s.BattleInfo();
+		int first = FirstActor();
+		for (int i = first; first >= 0 && info is not null && i < info.PartyCount; i++)
+		{
+			if (all[i].Alive && (info.Vehicle.Length == 0 || all[i].Id == info.Vehicle))
+			{
+				PsivResult result = _s.SetCommand(i, CommandKind.Escape, null, -1);
+				if (!result.Ok)
+				{
+					_battle.Log.Add(T("ui.battle.log.refused", result.Error!.Text));
+				}
+			}
+		}
+		Resolve();
 	}
 
 	private void ChooseOption(BattleOption option)
@@ -420,6 +554,7 @@ public sealed partial class SampleController
 		"battlelogshown" => _battle.LogShown ? "on" : "off",
 		"battlesync" => $"{_syncChecks} checked, " + (_syncProblems.Count == 0 ? "all match" : string.Join("; ", _syncProblems)),
 		"battleshake" => _probeShake.ToString(CultureInfo.InvariantCulture),
+		"screenlight" => _probeLight.ToString("0.00", CultureInfo.InvariantCulture),
 		"flash" => _probeFlash ? "on" : "off",
 		"backdrop" => _probeBackdrop,
 		"battleoverlay" => _probeOverlay,
@@ -442,6 +577,8 @@ public sealed partial class SampleController
 		"commands" => _probeCommands,
 		// What the last frame drew under the enemies: `labels N bars N`.
 		"enemymarks" => _probeEnemyMarks,
+		// The status icons the last frame drew under each enemy with a status, in order: `Gel Mite A sleep, Rust Hound none`.
+		"enemyicons" => _probeEnemyIcons,
 		// Each party figure drawn: its name, the middle x and the feet's y.
 		"partyplaces" => _probePlaces,
 		// The floating texts the last frame drew: `Gel Mite A 13 damage, Gel Mite B 24 Resisted resisted`.

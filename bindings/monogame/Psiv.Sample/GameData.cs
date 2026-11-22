@@ -70,6 +70,8 @@ public sealed partial class GameData
 	public Dictionary<string, string> PieceUses { get; } = [];
 	// Weapons by id: their category, and whether they take both hands.
 	public Dictionary<string, string> EquipmentCategories { get; } = [];
+	// Every equipment piece of any slot, by id: its category.
+	public Dictionary<string, string> AllEquipment { get; } = [];
 	public HashSet<string> TwoHanded { get; } = [];
 	// Combination recipes by id: the ability they make and the abilities that make it.
 	public Dictionary<string, (string Result, List<string> Abilities)> Recipes { get; } = [];
@@ -84,9 +86,55 @@ public sealed partial class GameData
 	[GeneratedRegex(@"^\s*(music play|ambient play|sound)\s+([A-Za-z0-9_]+)", RegexOptions.Multiline)]
 	private static partial Regex ScriptAudio();
 
+	// DATA/flashing.json, which only the sample reads (the game's loader refuses unknown keys in game.json): the flashing
+	// level of a new profile (`default`: reduced, standard or original; null: reduced) and whether the options offer
+	// `original` at all (`original`, default true). Problems: what is wrong with the file, for --check-assets.
+	public string? FlashDefault { get; private set; }
+	public bool FlashOriginalOffered { get; private set; } = true;
+	public List<string> FlashProblems { get; } = [];
+
+	private void ReadFlashing(string dataDir)
+	{
+		string path = Path.Combine(dataDir, "flashing.json");
+		if (!File.Exists(path))
+		{
+			return;
+		}
+		try
+		{
+			using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(path));
+			foreach (JsonProperty p in doc.RootElement.EnumerateObject())
+			{
+				switch (p.Name)
+				{
+				case "default" when p.Value.ValueKind == JsonValueKind.String && p.Value.GetString() is "reduced" or "standard" or "original":
+					FlashDefault = p.Value.GetString();
+					break;
+				case "default":
+					FlashProblems.Add("default: must be reduced, standard or original");
+					break;
+				case "original" when p.Value.ValueKind is JsonValueKind.True or JsonValueKind.False:
+					FlashOriginalOffered = p.Value.GetBoolean();
+					break;
+				case "original":
+					FlashProblems.Add("original: must be true or false");
+					break;
+				default:
+					FlashProblems.Add($"unknown field '{p.Name}'");
+					break;
+				}
+			}
+		}
+		catch (JsonException e)
+		{
+			FlashProblems.Add("not valid JSON: " + e.Message);
+		}
+	}
+
 	public static GameData Load(GameSession session, string dataDir)
 	{
 		var d = new GameData();
+		d.ReadFlashing(dataDir);
 		d.Actors.UnionWith(session.ActorIds());
 		d.Cameras.UnionWith(session.Cameras().Select(c => c.Id));
 		d.Languages.UnionWith(session.GameInfo().Languages);
@@ -206,6 +254,10 @@ public sealed partial class GameData
 			d.Actions[i.GetProperty("id").GetString()!] = Shape("item", i);
 		}
 		using JsonDocument equipment = JsonDocument.Parse(File.ReadAllText(Path.Combine(core, "equipment.json")));
+		foreach (JsonElement piece in Array(equipment.RootElement, "equipment"))
+		{
+			d.AllEquipment[piece.GetProperty("id").GetString()!] = piece.TryGetProperty("category", out JsonElement category) ? category.GetString()! : piece.TryGetProperty("slot", out JsonElement slot) ? slot.GetString()! : "";
+		}
 		foreach (JsonElement piece in Array(equipment.RootElement, "equipment").Where(x => x.TryGetProperty("use", out _)))
 		{
 			d.PieceUses[piece.GetProperty("id").GetString()!] = piece.GetProperty("use").GetString()!;

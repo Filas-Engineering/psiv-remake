@@ -75,6 +75,46 @@ public sealed partial class SampleController
 		return (p.Name, now - p.Start);
 	}
 
+	// A sequence's colors, the scene first (transparent): each phase's color in order.
+	private static List<Color>? SequenceColors(JsonObject def) => def["phases"] is JsonArray phases
+		? [Color.Transparent, .. phases.OfType<JsonObject>().Select(p => BattleAnimationEval.ParseColor(BattleAnimationRun.Str(p["color"]) ?? "#000000", _ => Color.Black))]
+		: null;
+
+	// A sequence transition: under `cover` the screen goes to each phase's color in turn, in `steps` steps `step_frames`
+	// apart, and holds it `hold`; under `hold` the last color; under `reveal` the last color steps back to the next scene
+	// at the last phase's rate.
+	private void DrawSequence(IDrawSurface s, JsonObject def, AnimRun run, string phase, long local)
+	{
+		var phases = (def["phases"] as JsonArray ?? []).OfType<JsonObject>().ToList();
+		List<Color> colors = SequenceColors(def)!;
+		long Each(JsonObject p) => Math.Max(1, BattleAnimationRun.Time(p["step_frames"] ?? JsonValue.Create(4), run));
+		int Steps(JsonObject p) => (int)(BattleAnimationRun.Num(p["steps"]) ?? 1);
+		Color shown = colors[^1];
+		if (phase == "cover")
+		{
+			long at = local;
+			for (int i = 0; i < phases.Count; i++)
+			{
+				long ramp = Steps(phases[i]) * Each(phases[i]), hold = BattleAnimationRun.Time(phases[i]["hold"], run);
+				if (at < ramp + hold)
+				{
+					float level = at >= ramp ? 1f : Math.Min(1f, (at / Each(phases[i]) + 1) / (float)Steps(phases[i]));
+					shown = Color.Lerp(colors[i], colors[i + 1], level);
+					_probeTransition += $" phase {i} {(at >= ramp ? "hold" : "step")}";
+					break;
+				}
+				at -= ramp + hold;
+			}
+		}
+		else if (phase == "reveal")
+		{
+			JsonObject last = phases[^1];
+			float level = Math.Min(1f, (local / Each(last) + 1) / (float)Steps(last));
+			shown = colors[^1] * (1f - level);
+		}
+		s.Fill(0, 0, s.Width, s.Height, shown);
+	}
+
 	// Draws the cover of a transition over the frame. `now` is script time; under `cover` the scene being left shows.
 	private void DrawTransition(IDrawSurface s, AnimRun run, long now)
 	{
@@ -96,8 +136,22 @@ public sealed partial class SampleController
 			{
 				kind = "fade";
 			}
+			if (kind == "sequence" && SequenceColors(def) is { } colors)
+			{
+				// A sequence whose steps raise the light by a flash's step counts each toward the flash limit; under reduced
+				// flash or past the limit it plays as a fade to its last color.
+				int flashes = colors.Zip(colors.Skip(1)).Count(p => Luma(p.Second) * p.Second.A / 255f - Luma(p.First) * p.First.A / 255f >= FlashStep);
+				if (reduced || flashes > 0 && !FlashAllowed(run, t.Index, flashes))
+				{
+					kind = "fade";
+					color = colors[^1];
+				}
+			}
 			switch (kind)
 			{
+			case "sequence":
+				DrawSequence(s, def, run, phase, local);
+				break;
 			case "fade":
 			case "split" when phase != "reveal":
 				if (def["steps"] is JsonValue sv && sv.TryGetValue(out int steps))

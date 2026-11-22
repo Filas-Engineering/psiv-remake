@@ -1,0 +1,15 @@
+# The photosensitivity notice (make_flash_data.py with the default `original`), with --play-defaults so this scripted
+# run starts a new profile as normal play does: before the title draws, the notice stands alone on black with its three
+# answers, the cursor on Reduced; Down and Confirm choose Standard, which applies at once, and the title follows.
+wait 1
+expect state flashing original notice
+expect statehas prompt This game contains flashing effects.
+expect state windows confirm/dim 0 0 1280x720, confirm/box 154 275 971x170
+shot build/shots/flash/notice.png
+press Down
+press Enter
+wait 1
+expect state flashing standard
+expect state prompt none
+expect screen Title
+expect statehas windows title/box

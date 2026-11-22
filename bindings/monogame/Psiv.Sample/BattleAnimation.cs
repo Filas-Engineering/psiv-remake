@@ -29,7 +29,7 @@ public sealed partial class BattleAnimation
 	public static readonly string[] NumberKinds = ["damage", "critical", "weak", "resisted", "immune", "miss", "heal", "tp", "revive", "status", "status_resisted", "status_ends", "stat_up",
 		"stat_down", "stat_normal", "no_effect", "felled", "felling_resisted"];
 	public static readonly string[] DefeatKinds = ["fade", "blink", "bands", "slide", "sink", "flash_fade", "frames"];
-	public static readonly string[] TransitionKinds = ["flash", "fade", "wipe", "iris", "tiles", "spiral", "split"];
+	public static readonly string[] TransitionKinds = ["flash", "fade", "wipe", "iris", "tiles", "spiral", "split", "sequence"];
 	public static readonly string[] Layers = ["under_figures", "over_figures", "effects", "over_labels", "top"];
 	public static readonly string[] SubjectNames = ["actor", "user", "targets", "hit_targets", "fallen_targets", "party", "enemies", "all", "party_others", "enemies_others", "allies", "changed", "previous_form", "from", "to", "self"];
 	public static readonly string[] Anchors = ["center", "feet", "head", "top", "left", "right", "auto", "place"];

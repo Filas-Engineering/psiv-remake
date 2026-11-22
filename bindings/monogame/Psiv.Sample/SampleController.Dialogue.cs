@@ -46,6 +46,10 @@ public sealed partial class SampleController
 	// The still picture the dialogue's `picture` tags show (a name of the assets' `pictures`), "" for none, until hidden or
 	// the scene ends.
 	private string _picture = "";
+	// Every still picture up, the top last, when the dialogue layout's `picture_stack` keeps them as a stack.
+	private readonly List<string> _pictureStack = [];
+
+	private bool PictureStack => Ui.Param("dialogue", "picture_stack", UiData(), 0) != 0;
 	// The `{portrait:ID:EXPRESSION}` ids already reported as lacking their expression, once a run.
 	private readonly HashSet<string> _portraitProblems = [];
 	// The surface the last frame drew on, which measures the box's text between frames, and the box it last fitted.
@@ -292,16 +296,18 @@ public sealed partial class SampleController
 			return;
 		}
 		UiTag? hook = Layout.Screen("dialogue").Tags.GetValueOrDefault(tag.Name) ?? UiLayoutSet.Defaults.Screen("dialogue").Tags.GetValueOrDefault(tag.Name);
-		string id = hook?.Values?.GetValueOrDefault(tag.Value) ?? hook?.Default ?? hook?.Id ?? tag.Value;
-		switch (hook?.Action)
+		UiTagCase? match = hook?.Cases.FirstOrDefault(c => c.Holds(tag.Value));
+		string id = match is not null ? match.IdFor(tag.Value) ?? tag.Value : hook?.Values?.GetValueOrDefault(tag.Value) ?? hook?.Default ?? hook?.Id ?? tag.Value;
+		string? slot = match is not null ? match.Slot : hook?.Slot;
+		switch (match?.Action ?? hook?.Action)
 		{
-		case "cue" when _data.Cues.Contains(id):
+		case "cue" when _data.Cues.Contains(id) || Assets.TagIds(Layout, "cue").Contains(id):
 			_audio.PlayCue(id);
 			break;
 		case "cue":
 			TagProblem(tag, $"no cue '{id}' the game or the sample plays");
 			break;
-		case "music" when _data.Music.Contains(id):
+		case "music" when _data.Music.Contains(id) || Assets.TagIds(Layout, "music").Contains(id):
 			_scriptMusic = id;
 			_audio.PlayMusic(id, CrossfadeMs);
 			break;
@@ -326,7 +332,7 @@ public sealed partial class SampleController
 			break;
 		case "panel_show" when _data.Cameras.Contains(id) || _data.Actors.Contains(id) || _data.Characters.Contains(id):
 			_panels.RemoveAll(p => p.Id == id);
-			_panels.Add(new Panel(id, id, KnownSlot(hook.Slot ?? DefaultSlot)));
+			_panels.Add(new Panel(id, id, KnownSlot(slot ?? DefaultSlot)));
 			break;
 		case "panel_show":
 			TagProblem(tag, $"no camera or person '{id}' for a panel to show");
@@ -341,19 +347,31 @@ public sealed partial class SampleController
 			_panels.Clear();
 			break;
 		case "picture" when _assets?.Manifest.Pictures.ContainsKey(id) == true:
+			if (!PictureStack)
+			{
+				_pictureStack.Clear();
+			}
+			_pictureStack.Remove(id);
+			_pictureStack.Add(id);
 			_picture = id;
 			break;
 		case "picture":
 			TagProblem(tag, $"no picture '{id}' in the assets' pictures");
 			break;
-		case "picture_hide" when _picture == id:
-			_picture = "";
+		case "picture_hide" when PictureStack ? _pictureStack.Contains(id) : _picture == id:
+			_pictureStack.Remove(id);
+			_picture = PictureStack && _pictureStack.Count > 0 ? _pictureStack[^1] : "";
+			if (!PictureStack)
+			{
+				_pictureStack.Clear();
+			}
 			break;
 		case "picture_hide":
 			TagProblem(tag, $"no picture '{id}' is up");
 			break;
 		case "picture_clear":
 			_picture = "";
+			_pictureStack.Clear();
 			break;
 		case "portrait_off":
 			_portraitOff = true;
@@ -493,6 +511,7 @@ public sealed partial class SampleController
 	private void DrawDialogue(IDrawSurface s, IDrawSurface t, Art art)
 	{
 		bool field = DrawField(s, art);
+		DrawDarkness(s, "dialogue");
 		int y = DialogueTop(s, field);
 		// Between lines (a script actor walking, a fade) the field shows without an empty box.
 		bool box = _s.LinePending || _s.Choice() is not null;
@@ -524,7 +543,9 @@ public sealed partial class SampleController
 		int picture = _picture.Length > 0 ? art.NamedPicture(_picture) ?? -1 : -1;
 		ctx.Set("picture", picture)
 			.Set("picture_w", picture >= 0 ? art.SizeOf(picture).W : 0)
-			.Set("picture_h", picture >= 0 ? art.SizeOf(picture).H : 0);
+			.Set("picture_h", picture >= 0 ? art.SizeOf(picture).H : 0)
+			.Set("pictures", _pictureStack.Select(name => art.NamedPicture(name) ?? -1).Where(image => image >= 0).Select(image => new UiContext()
+				.Set("picture", image).Set("picture_w", art.SizeOf(image).W).Set("picture_h", art.SizeOf(image).H)).ToList());
 		// The wrapped line's probe, measured while the dialogue's font draws it: the line count, then each line's width.
 		var widths = new List<int>();
 		int count = -1;
@@ -562,6 +583,10 @@ public sealed partial class SampleController
 		if (key == "picture")
 		{
 			return _picture.Length > 0 ? _picture : "-";
+		}
+		if (key == "pictures")
+		{
+			return _pictureStack.Count > 0 ? string.Join(" ", _pictureStack) : "-";
 		}
 		if (line is null)
 		{

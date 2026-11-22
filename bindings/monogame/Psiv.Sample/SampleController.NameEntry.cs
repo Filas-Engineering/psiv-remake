@@ -20,7 +20,11 @@ public sealed partial class SampleController
 	{
 		string member = _s.NameEntryMember;
 		Ui.Draw("name_entry", s, t, UiData()
-			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "name_entry")))
+			.Set("backdrop", (UiSlot)((_, _, _, _) =>
+			{
+				DrawBackdrop(t, art, "name_entry");
+				DrawDarkness(s, "name_entry");
+			}))
 			.Set("portrait", art.Portrait("", member))
 			.Set("member_name", _s.DisplayName(member))
 			.Set("entry", (UiSlot)((x, y, w, _) => _nameEntry.Draw(t, x, y, w, _clockMs, Px, PadLabels(), Timing("caret_ms"))))

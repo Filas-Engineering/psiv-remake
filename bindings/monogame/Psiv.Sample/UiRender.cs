@@ -90,6 +90,13 @@ public sealed class UiRenderer
 		return e is null ? fallback : (int)e.Eval(new Scope(this, ctx, null, null)).Int;
 	}
 
+	// A screen's param as text (a word such as `command_axis`'s): the file's, else the built-in layout's, else `fallback`.
+	public string ParamText(string screen, string name, UiContext ctx, string fallback)
+	{
+		UiExpr? e = Set.Screen(screen).Params.GetValueOrDefault(name) ?? UiLayoutSet.Defaults.Screen(screen).Params.GetValueOrDefault(name);
+		return e is null ? fallback : e.Eval(new Scope(this, ctx, null, null)).Text;
+	}
+
 	// A screen's param as a number with a fraction (an opacity, say): the file's, else the built-in layout's, else `fallback`.
 	public double ParamNumber(string screen, string name, UiContext ctx, double fallback)
 	{
@@ -115,8 +122,12 @@ public sealed class UiRenderer
 	public bool Blocks(int x, int y) => Drawn.Any(d => d.Rect.Contains(x, y) && Set.Screen(d.Screen).Windows.FirstOrDefault(w => w.Name == d.Window)?.BlocksClicks == true);
 
 	// `s` draws at the logical resolution with text at 100%, `t` with the profile's text size.
+	// The data each screen was last drawn with, for the `uifield` probe.
+	public Dictionary<string, UiContext> LastData { get; } = [];
+
 	public void Draw(string screen, IDrawSurface s, IDrawSurface t, UiContext ctx)
 	{
+		LastData[screen] = ctx;
 		UiScreenLayout layout = Set.Screen(screen);
 		bool fresh = !_lastDrawn.TryGetValue(screen, out int last) || last < _frame - 1;
 		_lastDrawn[screen] = _frame;

@@ -17,6 +17,7 @@ public static class Program
 		"              [--assets DIR] [--watch-assets] [--dev] [--battle-layout front|side] [--language CODE]\n" +
 		"  Psiv.Sample --window --script FILE ...   the window, with keys from the script instead of the keyboard\n" +
 		"              [--realtime]   the real-time field input and the window's own clock instead of 16 ms frames\n" +
+		"              [--play-defaults]   a scripted run starts a new profile as normal play does: flashing reduced, with the title's notice\n" +
 		"              [--pacing-log FILE]   each drawn frame's wall time and the leader's drawn position, for frame pacing\n" +
 		"  Psiv.Sample --script FILE --frames N [--data DIR] [--saves DIR] [--seed N] [--assets DIR] [--frame-digests FILE] [--language CODE] [--strict-text]\n" +
 		"              headless, no window, no sound\n" +
@@ -67,6 +68,7 @@ public static class Program
 		bool watchAssets = false;
 		bool dev = false;
 		bool realtime = false;
+		bool playDefaults = false;
 		string? pacingLog = null;
 		BattleLayout? battleLayout = null;
 		string? language = null;
@@ -92,6 +94,7 @@ public static class Program
 			case "--watch-assets": watchAssets = true; break;
 			case "--dev": dev = true; break;
 			case "--realtime": realtime = true; break;
+			case "--play-defaults": playDefaults = true; break;
 			case "--pacing-log": pacingLog = Next(); break;
 			case "--battle-layout" when BattlePresentation.ParseLayout(Next()) is { } layout: battleLayout = layout; break;
 			case "--language": language = Next(); break;
@@ -144,6 +147,9 @@ public static class Program
 			Directory.CreateDirectory(saves);
 		}
 
+		// A new profile in normal play (no script, or --play-defaults) starts with reduced flashing; scripted runs keep the
+		// profile's default, standard, so their transcripts do not depend on it.
+		bool newProfile = saves is not null && !File.Exists(Path.Combine(saves, "profile.cfg"));
 		GameSession session;
 		try
 		{
@@ -170,6 +176,10 @@ public static class Program
 				}
 			}
 			GameData gameData = GameData.Load(session, data);
+			if (newProfile && (script is null || playDefaults))
+			{
+				SampleController.NewProfile = true;
+			}
 			if (checkAssets)
 			{
 				return CheckAssets(assets!, gameData);
@@ -205,6 +215,10 @@ public static class Program
 		{
 			Console.WriteLine("assets: " + problem);
 		}
+		foreach (string problem in data.FlashProblems)
+		{
+			Console.WriteLine("data: flashing.json: " + problem);
+		}
 		AssetManifest m = assets.Manifest;
 		Console.WriteLine($"assets: {m.Tilesets.Count} tilesets, {m.Characters.Count} characters, {m.Portraits.Count} portraits, {m.Figures.Count} figures, " +
 			$"{m.FieldEnemies.Count} field enemies, {m.Vehicles.Count} vehicles, {m.Backdrops.Count} backdrops, {m.Effects.Count} effects, {m.Sprites.Count} sprites, {m.StatusIcons.Count} status icons, " +
@@ -216,8 +230,9 @@ public static class Program
 			(m.CommandIcons.Count > 0 ? $", {m.CommandIcons.Count} command icons" : "") + (m.Pictures.Count > 0 ? $", {m.Pictures.Count} pictures" : "") +
 			(m.Keepers.Count > 0 ? $", {m.Keepers.Count} keepers" : "") +
 			(assets.Layout.IsDefault ? m.UiLayoutEnabled == false ? ", layouts turned off" : "" : $", {assets.Layout.FromFiles.Count} layout files ({assets.Layout.Styles.Width}x{assets.Layout.Styles.Height})"));
-		Console.WriteLine(assets.Problems.Count == 0 ? "OK: no problems." : $"FAILED: {assets.Problems.Count} problems.");
-		return assets.Problems.Count == 0 ? 0 : 1;
+		int problems = assets.Problems.Count + data.FlashProblems.Count;
+		Console.WriteLine(problems == 0 ? "OK: no problems." : $"FAILED: {problems} problems.");
+		return problems == 0 ? 0 : 1;
 	}
 
 	// One generated track and three cues as WAV files, then the synthesizer's self-check over every sound the sample
@@ -630,6 +645,9 @@ public sealed class ScriptPlayer
 				{
 					Fail($"{source}: the dev command was {(accepted ? "accepted" : "refused")}");
 				}
+				break;
+			case "flashing" when w.Length == 2 && Enum.TryParse(w[1], true, out SampleController.FlashLevel level):
+				_controller.SetFlashing(level, confirmed: true);
 				break;
 			case "battlelayout" when w.Length == 2:
 				// The flag's override from here on; `data` goes back to the battle presentation table's layout.

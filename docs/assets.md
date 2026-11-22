@@ -484,7 +484,7 @@ Text without spaces (Japanese) wraps between characters where it reaches the edg
 * `ambient`: the ids scripts play with `ambient play`.
 * `cue`: the ids scripts play with `sound`, and the sample's own cues (`cursor`, `confirm`, `back`, `refuse`, `menu_open`, `menu_close`, `text`, `line`, `save`, `step`, `battle_start`, `hit`, `miss`, `critical`, `heal`, `status`, `enemy_down`, `victory`, `game_over`, `level_up`).
 * Music and ambient loops play from the start to `loop_end` (default: the end), then loop from `loop_start` (default 0); cues play once and take no loop points. `gain` (0 to 4, default 1) multiplies the profile's volume for that sound.
-* The id must be one the game or the sample plays as that kind; the export lists them all.
+* The id must be one the game or the sample plays as that kind; the export lists them all. A cue or music id that the dialogue layout's tags table names (an entry's or case's `id`, `ids`, `values` or `default`, [`ui-layout.md`](ui-layout.md), "Dialogue: cases and the picture stack") counts as played, so its entry passes the check and the tag plays it.
 
 ## The battle presentation table
 

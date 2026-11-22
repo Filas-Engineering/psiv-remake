@@ -214,6 +214,11 @@ public sealed partial class SampleController
 				// toasts and only reaches the log.
 				_log("notice: (" + n.Text + ")");
 			}
+			else if (n.Key == "game.arrive" && Ui.Param("field", "arrive_toast", UiData(), 1) == 0)
+			{
+				// The field layout's `arrive_toast` 0: the arrival is logged as ever but shows no notice.
+				_log("notice: " + n.Text);
+			}
 			else
 			{
 				Say(n.Text);
@@ -247,6 +252,7 @@ public sealed partial class SampleController
 		{
 			_panels.Clear();
 			_picture = "";
+			_pictureStack.Clear();
 			_camera = null;
 			_cameraMove = null;
 			_shake = null;
@@ -272,6 +278,7 @@ public sealed partial class SampleController
 		_pause = _optionsOverlay = _loadOverlay = _soundTestOverlay = false;
 		_soundTestTrack = "";
 		_clearRecord = null;
+		_titleStarted = false;
 		ResetMenuPages();
 		_nameEntry.Reset();
 	}
@@ -542,6 +549,13 @@ public sealed partial class SampleController
 		_overlayDrawn.Clear();
 		BeginUiFrame(s);
 		s.Fill(0, 0, s.Width, s.Height, Style.Background);
+		if (_flashNotice)
+		{
+			// The photosensitivity notice comes before the title and anything that moves.
+			s.Fill(0, 0, s.Width, s.Height, Color.Black);
+			DrawConfirm(s, t);
+			return;
+		}
 		switch (Screen)
 		{
 		case Screen.Title: DrawTitle(s, t, art); break;
@@ -568,7 +582,11 @@ public sealed partial class SampleController
 			break;
 		case Screen.TextLog:
 			Ui.Draw("text_log", s, t, UiData()
-				.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "text_log")))
+				.Set("backdrop", (UiSlot)((_, _, _, _) =>
+				{
+					DrawBackdrop(t, art, "text_log");
+					DrawDarkness(s, "text_log");
+				}))
 				.Set("log", (UiSlot)((x, y, w, h) => DrawTextLog(s, t, x, y, w, h))));
 			break;
 		}
@@ -583,9 +601,18 @@ public sealed partial class SampleController
 		DrawFx(s);
 		DrawConfirm(s, t);
 		DrawAnimations(s);
-		if (_dev)
+		// The styles' `dev_draw` 0 keeps every developer drawing off; `dev_scale` draws it at that percent of its sizes.
+		_probeDevDraw = "off";
+		if (_dev && Layout.Styles.Param("dev_draw") != 0)
 		{
-			DrawDev(s, art);
+			int devScale = Layout.Styles.Param("dev_scale");
+			_probeDevDraw = $"{devScale}%";
+			if (devScale != 100)
+			{
+				// At a fraction of their size the tools take the layout set's menu font, which a small set draws legibly.
+				UseTextRole(s, TextRole.Menu);
+			}
+			DrawDev(devScale == 100 ? s : new ZoomSurface(s, devScale / 100f, text: _bitmapFont is null), art);
 		}
 	}
 
@@ -622,12 +649,14 @@ public sealed partial class SampleController
 			"overlaps" when Screen != Screen.Battle => ToastOverlaps(),
 			"uiframes" => FramesProbe(),
 			"backdropdim" => _probeBackdropDim,
+			"darkness" => _probeDarkness,
 			"keeper" => _probeKeeper,
 			"titlesizes" => _probeTitleSizes,
 			_ when key.StartsWith("window.", StringComparison.Ordinal) => WindowProbe(key["window.".Length..]),
+			_ when key.StartsWith("uifield.", StringComparison.Ordinal) => FieldProbe(key["uifield.".Length..]),
 			"wrapped" => _probeWrapped,
 			// The characters of the line on screen that the dialogue's bitmap font draws in the fallback font.
-			"fontmissing" or "reveal" or "tags" or "pagetext" or "dialoguepage" or "lineportrait" or "shownportrait" or "dialogueoverlaps" or "picture" => DialogueState(key),
+			"fontmissing" or "reveal" or "tags" or "pagetext" or "dialoguepage" or "lineportrait" or "shownportrait" or "dialogueoverlaps" or "picture" or "pictures" => DialogueState(key),
 			// How a person's sheet draws the facing it was last drawn in: `west: east mirrored 3 4 5`, or `generated`.
 			_ when key.StartsWith("sheet.", StringComparison.Ordinal) => _art is not null && _field.DrawnActors.TryGetValue(key["sheet.".Length..], out DrawnPerson drawn)
 				? _art.SheetProbe(key["sheet.".Length..], drawn.Facing) : "-",
@@ -662,6 +691,7 @@ public sealed partial class SampleController
 			"text_size" => p.TextSizePercent.ToString(CultureInfo.InvariantCulture),
 			"battle_speed" => GameSession.NameOf(NameKind.BattleSpeed, (int)p.BattleSpeed),
 			"reduced_flash" => OnOff(p.ReducedFlash),
+			"flashing" => Flashing.ToString().ToLowerInvariant() + (_flashNotice ? " notice" : ""),
 			"ambient_talk" => OnOff(p.AmbientTalk),
 			"shipped_names" => OnOff(p.ShowShippedNames),
 			"language" => p.TextLanguage,

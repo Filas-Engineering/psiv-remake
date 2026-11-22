@@ -64,8 +64,8 @@ public sealed partial class BattleAnimation
 				}
 				if (r["weapon_classes"] is JsonObject classes)
 				{
-					_classes.UnionWith(classes.Where(c => c.Key.Split(':', 2) is ["equipment", var piece] ? ctx.Data.EquipmentCategories.ContainsKey(piece)
-						: c.Key.Split(':', 2) is ["category", var cat] && ctx.Data.EquipmentCategories.ContainsValue(cat))
+					_classes.UnionWith(classes.Where(c => c.Key.Split(':', 2) is ["equipment", var piece] ? ctx.Data.AllEquipment.ContainsKey(piece)
+						: c.Key.Split(':', 2) is ["category", var cat] && ctx.Data.AllEquipment.ContainsValue(cat))
 						.Select(c => c.Value is JsonValue v && v.TryGetValue(out string? s) ? s : "").Where(s => s.Length > 0));
 				}
 			}
@@ -185,10 +185,10 @@ public sealed partial class BattleAnimation
 					foreach ((string key, JsonNode? value) in o)
 					{
 						string[] parts = key.Split(':', 2);
-						bool known = parts is ["equipment", var piece] ? ctx.Data.EquipmentCategories.ContainsKey(piece) : parts is ["category", var cat] && ctx.Data.EquipmentCategories.ContainsValue(cat);
+						bool known = parts is ["equipment", var piece] ? ctx.Data.AllEquipment.ContainsKey(piece) : parts is ["category", var cat] && ctx.Data.AllEquipment.ContainsValue(cat);
 						if (!known)
 						{
-							Problem($"weapon_classes.{key}", "unknown key: equipment:ID or category:NAME, with an equipment piece or weapon category of the game data");
+							Problem($"weapon_classes.{key}", "unknown key: equipment:ID or category:NAME, with an equipment piece or category of the game data");
 						}
 						else if (value is not JsonValue v || !v.TryGetValue(out string? c) || !IsId(c))
 						{
@@ -411,6 +411,12 @@ public sealed partial class BattleAnimation
 			{
 				return null;
 			}
+			if (s.Split(':', 3) is [var kind and ("beside" or "adjacent"), var side, var of])
+			{
+				return side is not ("left" or "right") ? $"{kind}:SIDE:SUBJECT takes left or right"
+					: of.StartsWith("beside:", StringComparison.Ordinal) || of.StartsWith("adjacent:", StringComparison.Ordinal) ? $"{kind}: the subject beside which is not itself beside another"
+					: SubjectProblem(of);
+			}
 			string[] parts = s.Split(':');
 			if (parts.Length == 2 && int.TryParse(parts[1], CultureInfo.InvariantCulture, out int n))
 			{
@@ -422,7 +428,7 @@ public sealed partial class BattleAnimation
 					_ => $"unknown subject '{s}'",
 				};
 			}
-			return $"unknown subject '{s}': {string.Join(", ", SubjectNames)}, actor:N, target:N, place:N or slot:N";
+			return $"unknown subject '{s}': {string.Join(", ", SubjectNames)}, actor:N, target:N, place:N, slot:N, beside:SIDE:SUBJECT or adjacent:SIDE:SUBJECT";
 		}
 
 		private static Check Subject() => n => Text(n) is { } s ? SubjectProblem(s) : "must be a subject";
@@ -517,7 +523,7 @@ public sealed partial class BattleAnimation
 		{
 			["type"] = Any(), ["id"] = Name(), ["at"] = At(), ["length"] = Time(), ["if"] = ConditionProblem, ["layout"] = Enum("front", "side"),
 			["stagger"] = L(n => Text(n) == "sweep" ? null : TimeProblem(n, false)), ["order"] = Enum("event", "left_to_right", "right_to_left", "near_first", "far_first"),
-			["reduced"] = n => n is JsonObject ? null : Enum("keep", "drop", "damp")(n),
+			["reduced"] = n => n is JsonObject ? null : Enum("keep", "drop", "damp")(n), ["flash"] = Bool(),
 		};
 
 		private Dictionary<string, Check> EffectFields(bool requireSheet)
@@ -948,7 +954,19 @@ public sealed partial class BattleAnimation
 				["order"] = Enum("rows", "columns", "checker", "diagonal", "random", "spiral", "spiral_in"), ["turn"] = Enum("cw", "ccw"),
 				["steps"] = Int(2, 32), ["step_frames"] = Time(), ["cover_step_frames"] = Time(), ["reveal_step_frames"] = Time(), ["speed"] = Num(1, 4000), ["frames"] = Time(),
 				["axis"] = Enum("horizontal", "vertical"),
+				["phases"] = n => kind != "sequence" ? "is for a sequence transition"
+					: n is JsonArray a && a.Count is >= 1 and <= 8 && a.All(p => p is JsonObject o && o.ContainsKey("color") && o.All(f => f.Key switch
+					{
+						"color" => ColorProblem(f.Value) is null,
+						"steps" => Int(1, 32)(f.Value) is null,
+						"step_frames" or "hold" => TimeProblem(f.Value, false) is null,
+						_ => false,
+					})) ? null : "must be 1 to 8 phases, each {color, steps (1 to 32), step_frames, hold}",
 			}, null);
+			if (kind == "sequence" && t["phases"] is null)
+			{
+				return Fail(entry + ".phases", "a sequence transition needs its phases");
+			}
 			return true;
 		}
 
@@ -993,7 +1011,7 @@ public sealed partial class BattleAnimation
 				return Qualifiers(parts[1..], turnQualifiers);
 			case "turn" when value == "escape":
 				return Qualifiers(parts[1..], turnQualifiers);
-			case "item" when ctx.Data.EquipmentCategories.ContainsKey(value):
+			case "item" when ctx.Data.PieceUses.ContainsKey(value) || ctx.Data.EquipmentCategories.ContainsKey(value):
 				return Qualifiers(parts[1..], "character", "weapon", "count", "encounter");
 			case "ability" or "item":
 				return ctx.Data.Actions.ContainsKey(value) ? Qualifiers(parts[1..], "character", "weapon", "vehicle", "count", "encounter") : $"unknown ability or item '{value}': not in the game data";

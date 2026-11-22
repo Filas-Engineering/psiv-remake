@@ -188,10 +188,12 @@ expect state battle_speed 2x
 press Left 2
 expect state battle_speed 1x
 press Down
-press Enter
+press Left
 expect state reduced_flash on
-press Enter
+expect state flashing reduced
+press Right
 expect state reduced_flash off
+expect state flashing standard
 press Down
 press Enter
 expect state ambient_talk off

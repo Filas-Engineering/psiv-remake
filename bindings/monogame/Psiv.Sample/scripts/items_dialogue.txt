@@ -1,0 +1,78 @@
+# The layout items' dialogue and field fields (make_items_assets.py) on the data copy make_items_data.py writes, with
+# --dev: a line shown while the screen is faded out draws over the fade; a tag acting by value (a range playing two
+# tracks, a range ringing a cue only the tags play, one value stopping the music, one matching no case and logged);
+# still pictures as a stack (a hide uncovers the one under it, a clear takes all); the battle's top-level Macro with no
+# macros saying so; and a warp with neither the arrival notice nor the area banner. With --window the shot lines save
+# screenshots under build/shots/items/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 3
+press Enter
+wait 2
+press Down
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+
+# The line while faded out: the box draws over the black.
+audio mark
+dev event dialogue_items
+wait 2
+expect screen Dialogue
+expect state line Who put the lamps out? I can still see you.
+expect state darkness 1.00 under dialogue
+expect statehas windows dialogue/box
+expect state dialogueoverlaps none
+shot build/shots/items/faded_line.png
+press Enter
+wait 20
+expect state darkness none
+expect state pictures chart tower
+expect state picture tower
+expect state music tag_theme
+expect statehas windows dialogue/stack
+shot build/shots/items/picture_stack.png
+press Enter
+wait 2
+expect state pictures chart
+expect state picture chart
+expect audio cue tag_gong
+expect state music title
+shot build/shots/items/picture_uncovered.png
+press Enter
+wait 2
+expect state pictures -
+expect state picture -
+expect state music -
+pressuntil Enter Field 400
+
+# The battle's top-level Macro with no macros.
+dev battle training
+waitstate 300 battlephase Top
+press Down
+wait 2
+expect state description There are no macros yet.
+press Enter
+wait 2
+expect toast There are no macros yet.
+expect statehas battlelog There are no macros yet.
+expect state battlephase Top
+shot build/shots/items/no_macros.png
+dev win
+hold F 60
+waitstate 600 battlephase Ended
+pressuntil Enter Field 600
+
+# A warp: the arrival is logged, but neither a notice nor the banner shows.
+dev warp reed_path 2 4
+wait 10
+expect screen Field
+expect notoast You arrive
+expect statenot windows field/banner
+shot build/shots/items/no_banner.png

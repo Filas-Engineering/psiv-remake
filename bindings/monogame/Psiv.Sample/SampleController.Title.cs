@@ -13,49 +13,91 @@ public sealed partial class SampleController
 	// Whether the story was finished, read once each time the title comes back.
 	private bool? _clearRecord;
 
-	private List<(string Label, Func<PsivResult> Run)> TitleOptions()
+	// The title's start state is up: the layout asks for one and no key has been pressed since the title came up.
+	private bool _titleStarted;
+
+	private bool TitleStart => Layout.Screen("title").Start && !_titleStarted;
+
+	// The title's entries that can be chosen now, in the layout's order (`options`) or the built-in one.
+	private List<(string Id, string Label, Func<PsivResult> Run)> TitleOptions()
 	{
-		var options = new List<(string, Func<PsivResult>)>();
-		if (_s.WorldInfo().CanRetry)
-		{
-			options.Add((T("ui.title.retry"), _s.RetryBattle));
-		}
-		options.Add((T("ui.title.new_game"), _s.NewGame));
-		options.Add((T("ui.title.continue"), _s.ContinueGame));
-		options.Add((T("ui.title.load"), () =>
-		{
-			_loadOverlay = true;
-			_list.Reset();
-			return PsivResult.Success;
-		}));
+		var options = new List<(string, string, Func<PsivResult>)>();
 		_clearRecord ??= _s.ClearRecordExists();
-		if (_clearRecord == true)
+		foreach (string id in Layout.Screen("title").Options ?? [.. UiFields.TitleEntries])
 		{
-			options.Add((T("ui.title.sound_test"), () =>
+			switch (id)
 			{
-				_soundTestOverlay = true;
-				_list.Reset();
-				return PsivResult.Success;
-			}));
+			case "retry" when _s.WorldInfo().CanRetry:
+				options.Add((id, T("ui.title.retry"), _s.RetryBattle));
+				break;
+			case "new_game":
+				options.Add((id, T("ui.title.new_game"), _s.NewGame));
+				break;
+			case "continue":
+				options.Add((id, T("ui.title.continue"), _s.ContinueGame));
+				break;
+			case "load":
+				options.Add((id, T("ui.title.load"), () =>
+				{
+					_loadOverlay = true;
+					_list.Reset();
+					return PsivResult.Success;
+				}));
+				break;
+			case "sound_test" when _clearRecord == true:
+				options.Add((id, T("ui.title.sound_test"), () =>
+				{
+					_soundTestOverlay = true;
+					_list.Reset();
+					return PsivResult.Success;
+				}));
+				break;
+			case "options":
+				options.Add((id, T("ui.title.options"), () =>
+				{
+					OpenOptions();
+					return PsivResult.Success;
+				}));
+				break;
+			case "quit":
+				options.Add((id, T("ui.title.quit"), () =>
+				{
+					QuitRequested = true;
+					return PsivResult.Success;
+				}));
+				break;
+			}
 		}
-		options.Add((T("ui.title.options"), () =>
-		{
-			OpenOptions();
-			return PsivResult.Success;
-		}));
-		options.Add((T("ui.title.quit"), () =>
-		{
-			QuitRequested = true;
-			return PsivResult.Success;
-		}));
 		return options;
 	}
 
+	// Any key or button but the window's and the developer tools' own function keys.
+	private static bool AnyPress(InputState raw) => raw.PressedButtons.Any()
+		|| raw.PressedKeys.Any(k => k is not (>= Microsoft.Xna.Framework.Input.Keys.F1 and <= Microsoft.Xna.Framework.Input.Keys.F24 or Microsoft.Xna.Framework.Input.Keys.OemTilde));
+
+	// Set by the program for a new profile in normal play: the title says once that flashing is reduced.
+	public static bool NewProfile { get; set; }
+
 	private void UpdateTitle(ActionInput input)
 	{
+		if (NewProfile)
+		{
+			NewProfile = false;
+			ApplyNewProfileFlashing();
+			return;
+		}
+		if (TitleStart)
+		{
+			if (AnyPress(input.Raw))
+			{
+				_titleStarted = true;
+				_cursor = 0;
+			}
+			return;
+		}
 		var options = TitleOptions();
 		Move(input, options.Count);
-		if (input.Confirm)
+		if (input.Confirm && options.Count > 0)
 		{
 			Report(options[_cursor].Run());
 		}
@@ -117,7 +159,8 @@ public sealed partial class SampleController
 	private void DrawTitle(IDrawSurface s, IDrawSurface t, Art art)
 	{
 		var options = TitleOptions();
-		_probeSelected = options[Math.Clamp(_cursor, 0, options.Count - 1)].Label;
+		bool start = TitleStart;
+		_probeSelected = start || options.Count == 0 ? "-" : options[Math.Clamp(_cursor, 0, options.Count - 1)].Label;
 		int walk = 1 + _clockMs / 260 % 2;
 		// At a reference height the title art's logo, traveler and creature draw at a whole multiple of their pixels; else
 		// the logo at its size and the two figures in today's 64-pixel squares.
@@ -147,6 +190,9 @@ public sealed partial class SampleController
 			.Set("art_scale", multiple)
 			.Set("game_over", _s.WorldInfo().GameOver)
 			.Set("options", options.Select(o => o.Label).ToList())
+			.Set("option_ids", options.Select(o => o.Id).ToList())
+			.Set("start", start)
+			.Set("start_hint", SampleText("ui.title.press_start"))
 			.Set("cursor", _cursor)
 			.Set("version", LibraryVersion)
 			.Set("toasts", (UiSlot)((_, _, _, _) => DrawToasts(t, 16, t.Height - 40, right: true)))

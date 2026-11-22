@@ -1,0 +1,21 @@
+# The notice again on a new profile: Back keeps the authored flashing, and since the notice was seen, choosing Original
+# later from the options asks nothing more; Reduced from the options applies at once.
+wait 1
+expect state flashing original notice
+press Escape
+wait 1
+expect state flashing original
+expect screen Title
+press Down 3
+expect state selected Options
+press Enter
+expect screen Options
+press Down 4
+expect state selected Flashing: As authored
+press Left
+expect state flashing standard
+press Right
+expect state prompt none
+expect state flashing original
+press Right
+expect state flashing reduced

@@ -151,7 +151,7 @@ public sealed partial class SampleController
 			_audio.PlayCue(menuAfter ? "menu_open" : "menu_close");
 		}
 		else if (menuBefore || before == Screen.Title || (before == Screen.Dialogue && _s.Choice() is not null) ||
-			(before == Screen.Battle && _battle.Phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro))
+			(before == Screen.Battle && Choosing(_battle.Phase)))
 		{
 			if (_refused)
 			{

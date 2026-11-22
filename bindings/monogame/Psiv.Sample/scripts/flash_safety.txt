@@ -1,0 +1,124 @@
+# Flashes by their effect (make_flash_assets.py), with --dev: a basic attack's stage strobing white four times through
+# stepped color keys is past the flash limit and does not draw (the transcript names it); Spark's two-step whiteout draws
+# at full light, and under reduced flash is held to a fifth; a defend's slow tint is no flash and draws the same either
+# way. `screenlight` reads the most light the stage's fills gave the last frame. With --window the shot lines save
+# screenshots under build/shots/flash/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev encounters off
+
+dev battle training
+# The battle opens with the sequence transition: amber, held; black, held; amber again; then the reveal.
+waitstatehas 60 transition phase 0 hold
+shot build/shots/flash/sequence_amber.png
+waitstatehas 60 transition phase 1 hold
+shot build/shots/flash/sequence_black.png
+waitstatehas 60 transition phase 2
+waitstate 300 battlephase Command
+# The fighter attacks, the mystic casts Spark, the medic defends.
+press Enter
+press Enter
+press Down
+press Enter
+press Enter
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 step effect slash
+wait 1
+expect state screenlight 0.00
+shot build/shots/flash/strobe_dropped.png
+waitstatehas 900 step effect burst_shock
+wait 1
+expect state screenlight 1.00
+expect statehas figureposes Gel Mite B hurt
+expect statenot figureposes Gel Mite A hurt
+shot build/shots/flash/double_full.png
+waitstatehas 900 step effect shield
+wait 60
+expect state screenlight 0.58
+dev win
+hold F 60
+waitstate 600 battlephase Ended
+pressuntil Enter Field 600
+
+# Reduced flash: the whiteout is held to a fifth, the slow tint is untouched.
+cmd set reduced_flash on
+dev battle training
+waitstate 300 battlephase Command
+press Enter
+press Enter
+press Down
+press Enter
+press Enter
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 step effect burst_shock
+wait 1
+expect state screenlight 0.20
+shot build/shots/flash/double_reduced.png
+waitstatehas 900 step effect shield
+wait 60
+expect state screenlight 0.58
+dev win
+hold F 60
+waitstate 600 battlephase Ended
+pressuntil Enter Field 600
+
+# The three flashing levels through the `flashing` verb: original plays the strobe as authored (no limit, no
+# damping); standard drops it again; reduced also holds the whiteout to a fifth.
+flashing original
+expect state flashing original
+expect state reduced_flash off
+dev battle training
+waitstate 300 battlephase Command
+press Enter
+press Enter
+press Down
+press Enter
+press Enter
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 step effect slash
+wait 1
+expect state screenlight 1.00
+shot build/shots/flash/strobe_original.png
+waitstatehas 900 step effect burst_shock
+wait 1
+expect state screenlight 1.00
+dev win
+hold F 60
+waitstate 600 battlephase Ended
+pressuntil Enter Field 600
+flashing standard
+expect state flashing standard
+dev battle training
+waitstate 300 battlephase Command
+press Enter
+press Enter
+press Down
+press Enter
+press Enter
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 step effect slash
+wait 1
+expect state screenlight 0.00
+dev win
+hold F 60
+waitstate 600 battlephase Ended
+pressuntil Enter Field 600
+flashing reduced
+expect state flashing reduced
+expect state reduced_flash on

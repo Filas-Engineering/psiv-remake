@@ -458,6 +458,49 @@ dotnet-test: dotnet
 		--assets $(BUILD)/pictures_assets --script $(SAMPLE_SCRIPTS)/dialogue_pictures.txt --frames 1200 > $(BUILD)/sample_dialogue_pictures_headless.txt \
 		|| (cat $(BUILD)/sample_dialogue_pictures_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_dialogue_pictures_headless.txt
+	# The layout items (make_items_assets.py): battle fields, command axis and top-level step, result pages, the title's
+	# start state and entries, row models, tag cases, the picture stack, a line over a fade, no arrival notice or banner;
+	# the cue and track only the tags play pass the check, and without the tags table they are problems.
+	python3 -I $(SAMPLE_SCRIPTS)/make_items_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/items_assets
+	python3 -I $(SAMPLE_SCRIPTS)/make_items_data.py $(GAME)/data $(CORE)/data $(BUILD)/items_data
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/items_data/game/data --check-assets --assets $(BUILD)/items_assets
+	rm -rf $(BUILD)/items_untagged_assets
+	cp -R $(BUILD)/items_assets $(BUILD)/items_untagged_assets
+	rm $(BUILD)/items_untagged_assets/ui/dialogue.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/items_untagged_assets > $(BUILD)/check_assets_untagged.txt
+	grep -q "unknown cue 'tag_gong'" $(BUILD)/check_assets_untagged.txt
+	grep -q "unknown music 'tag_theme'" $(BUILD)/check_assets_untagged.txt
+	@for run in items_battle:$(BUILD)/front_data/game/data:8000 items_menus:$(GAME)/data:3000 items_dialogue:$(BUILD)/items_data/game/data:2500; do \
+		name=$${run%%:*}; rest=$${run#*:}; data=$${rest%%:*}; frames=$${rest##*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves $(BUILD)/$${name}_assets; \
+		cp -R $(BUILD)/items_assets $(BUILD)/$${name}_assets; \
+		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $$data --dev --saves $(BUILD)/sample_$${name}_saves --assets $(BUILD)/$${name}_assets \
+			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
+	$(call small_run,small_dev,1200)
+	# Flashes by their effect (make_flash_assets.py): a stepped stage strobe past the limit is dropped, a two-step whiteout
+	# is held to a fifth under reduced flash, a slow tint is untouched.
+	python3 -I $(SAMPLE_SCRIPTS)/make_flash_assets.py $(BUILD)/export $(BUILD)/flash_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/flash_assets
+	rm -rf $(BUILD)/sample_flash_safety_saves
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_flash_safety_saves --assets $(BUILD)/flash_assets --script $(SAMPLE_SCRIPTS)/flash_safety.txt --frames 7000 \
+		> $(BUILD)/sample_flash_safety_headless.txt || (cat $(BUILD)/sample_flash_safety_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_flash_safety_headless.txt
+	grep -q "animation: flash.strobe: flash dropped, more than 3 in 60 frames" $(BUILD)/sample_flash_safety_headless.txt
+	# The flashing level of a new profile in normal play (--play-defaults): reduced with the title's notice on the shipped
+	# data; with a data copy whose default is original, the photosensitivity notice first, Standard chosen, or kept.
+	python3 -I $(SAMPLE_SCRIPTS)/make_flash_data.py $(GAME)/data $(CORE)/data $(BUILD)/flash_bad_data bright
+	! $(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/flash_bad_data/game/data --check-assets --assets $(BUILD)/export > $(BUILD)/check_flash_data.txt
+	grep -q "data: flashing.json: default: must be reduced, standard or original" $(BUILD)/check_flash_data.txt
+	python3 -I $(SAMPLE_SCRIPTS)/make_flash_data.py $(GAME)/data $(CORE)/data $(BUILD)/flash_data original
+	@for run in flashing_new:$(GAME)/data flashing_notice:$(BUILD)/flash_data/game/data flashing_notice_keep:$(BUILD)/flash_data/game/data; do \
+		name=$${run%%:*}; data=$${run#*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves; \
+		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $$data --play-defaults --saves $(BUILD)/sample_$${name}_saves --script $(SAMPLE_SCRIPTS)/$$name.txt \
+			--frames 300 > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
 	@for run in $(SAMPLE_DEV_SCRIPTS); do \
 		rm -rf $(BUILD)/sample_$${run}_saves; \
 		$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_$${run}_saves --script $(SAMPLE_SCRIPTS)/$$run.txt --frames 1500 > $(BUILD)/sample_$${run}_headless.txt \

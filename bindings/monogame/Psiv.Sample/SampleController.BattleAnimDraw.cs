@@ -719,10 +719,10 @@ public sealed partial class SampleController
 	private readonly Dictionary<(AnimRun Run, int Track), bool> _flashVerdicts = [];
 
 	// The flash limit: a flash starting while the set's count already started inside its window is dropped, with one
-	// log line per script.
-	private bool FlashAllowed(AnimRun run, int track)
+	// log line per script. A track that flashes several times (`flashes`, from FlashesOf) counts each.
+	private bool FlashAllowed(AnimRun run, int track, int flashes = 1)
 	{
-		if (Anim.FlashLimit is not (int count, int frames))
+		if (Anim.FlashLimit is not (int count, int frames) || Flashing == FlashLevel.Original)
 		{
 			return true;
 		}
@@ -732,10 +732,10 @@ public sealed partial class SampleController
 		}
 		int window = frames * 1000 / 60;
 		_flashStarts.RemoveAll(ms => _clockMs - ms >= window);
-		bool ok = _flashStarts.Count < count;
+		bool ok = _flashStarts.Count + Math.Max(1, flashes) <= count;
 		if (ok)
 		{
-			_flashStarts.Add(_clockMs);
+			_flashStarts.AddRange(Enumerable.Repeat(_clockMs, Math.Max(1, flashes)));
 		}
 		else if (!_flashVerdicts.Any(v => v.Key.Run.ScriptId == run.ScriptId && !v.Value))
 		{
@@ -755,6 +755,104 @@ public sealed partial class SampleController
 		}
 		Color add = BattleAnimationRun.Str(to["add"]) is { } a ? BattleAnimationEval.ParseColor(a, _ => Color.White) : Color.Transparent;
 		return Math.Max(add.R, Math.Max(add.G, add.B)) > 64 || to["tint"] is not null && (BattleAnimationRun.Num(to["amount"]) ?? 1) > 0.25;
+	}
+
+	// Flashes by effect (docs/battle-animation.md, "Flashes by effect"): a screen-wide color track's light is how far it
+	// moves the whole area's brightness from untouched, 0 to 1: the luminance of its added light, plus how much its
+	// multiply and alpha darken, plus the largest luminance step of its palette pairs; a fill's is its color's luminance
+	// times its opacity. A flash is a rise of at least FlashStep within FlashFrames frames; it re-arms once the light falls
+	// FlashStep below the peak, so a stepped strobe counts every step up.
+	private const float FlashStep = 0.25f;
+	private const int FlashFrames = 6;
+	// Under reduced flash a track that flashes, without its own `reduced`, is held to this much light.
+	private const float FlashCap = 0.2f;
+
+	private static float Luma(Color c) => (0.2126f * c.R + 0.7152f * c.G + 0.0722f * c.B) / 255f;
+
+	// The light of a color track on the backdrop, the stage or the frame at `local` clock units into it.
+	private float LightOf(AnimTrack t, AnimRun run, long local)
+	{
+		string on = BattleAnimationRun.Str(t.Def["on"]) ?? "";
+		float tt = t.Length <= 0 ? 0f : Math.Clamp(BattleClock.Ratio(local, t.Length), 0f, 1f);
+		if (BattleAnimationEval.ColorAt(t.Def, tt, local, t.Length, run, n => AnimColor(n, run.In.Look)) is not { } ct)
+		{
+			return 0f;
+		}
+		if (on is "stage" or "frame")
+		{
+			// A fill: the add's light, or the tint at its amount (the transform's multiply reads the tint's strength).
+			return Math.Min(1f, Luma(ct.Add) + (1f - Luma(ct.Multiply)));
+		}
+		float palette = ct.Palette?.Select(p => Math.Abs(Luma(p.To) - Luma(p.From))).DefaultIfEmpty(0f).Max() ?? 0f;
+		return Math.Min(1f, Luma(ct.Add) + (1f - Luma(ct.Multiply) * ct.Alpha) + palette);
+	}
+
+	private readonly Dictionary<(AnimRun Run, int Track), (int Flashes, float Peak)> _flashMeasures = [];
+
+	// How many flashes a track makes over its life and its peak light; a `flash` track and `"flash": true` count once at
+	// least.
+	private (int Flashes, float Peak) FlashesOf(AnimTrack t, AnimRun run)
+	{
+		if (_flashMeasures.TryGetValue((run, t.Index), out var known))
+		{
+			return known;
+		}
+		int flashes = 0;
+		float peak = 0f, low = 0f;
+		bool armed = true;
+		// Before it starts the track gives no light, so a track that opens bright is a rise.
+		var recent = new Queue<float>([0f]);
+		long frames = Math.Min(3600, Math.Max(1, t.Length / BattleClock.Frame));
+		bool colorTrack = t.Type == "color" && BattleAnimationRun.Str(t.Def["on"]) is "backdrop" or "stage" or "frame";
+		for (long f = 0; colorTrack && f <= frames; f++)
+		{
+			float light = LightOf(t, run, f * BattleClock.Frame);
+			recent.Enqueue(light);
+			if (recent.Count > FlashFrames + 1)
+			{
+				recent.Dequeue();
+			}
+			low = recent.Min();
+			if (armed && light - low >= FlashStep)
+			{
+				flashes++;
+				armed = false;
+				peak = light;
+			}
+			peak = Math.Max(peak, light);
+			if (!armed && peak - light >= FlashStep)
+			{
+				armed = true;
+				peak = light;
+			}
+		}
+		float top = 0f;
+		for (long f = 0; colorTrack && f <= frames; f++)
+		{
+			top = Math.Max(top, LightOf(t, run, f * BattleClock.Frame));
+		}
+		if (t.Type == "flash" || BattleAnimationRun.Bool(t.Def["flash"]) == true)
+		{
+			flashes = Math.Max(1, flashes);
+		}
+		return _flashMeasures[(run, t.Index)] = (flashes, top);
+	}
+
+	// Whether a color track on the backdrop, the stage or the frame may draw, and at what strength (1 untouched): a flash
+	// past the limit does not draw; under reduced flash one that flashes, without its own `reduced`, is held to FlashCap.
+	private (bool Draw, float Strength) FlashGate(AnimTrack t, AnimRun run, bool reduced)
+	{
+		(int flashes, float peak) = FlashesOf(t, run);
+		if (flashes == 0 && !BrightFlash(t.Def))
+		{
+			return (true, 1f);
+		}
+		if (!FlashAllowed(run, t.Index, flashes))
+		{
+			return (false, 0f);
+		}
+		bool own = t.Def["reduced"] is not null;
+		return (true, reduced && !own && flashes > 0 && peak > FlashCap ? FlashCap / peak : 1f);
 	}
 
 	// The track's reduced flash policy: its own, the file's for its type, else the built-in one.
@@ -794,8 +892,22 @@ public sealed partial class SampleController
 					continue;
 				}
 				string mode = BattleAnimationRun.Str(t.Def["mode"]) ?? "set";
-				if (c.Reduced && mode == "flash" && Reduced(t, "drop") == "drop" || BrightFlash(t.Def) && !FlashAllowed(run, t.Index))
+				if (c.Reduced && mode == "flash" && Reduced(t, "drop") == "drop")
 				{
+					continue;
+				}
+				(bool draw, float strength) = FlashGate(t, run, c.Reduced);
+				if (!draw)
+				{
+					continue;
+				}
+				// Keys give the fill their added light at each moment.
+				if (mode == "keys")
+				{
+					if (BattleAnimationEval.ColorAt(t.Def, tt, now - t.Start, t.Length, run, n => AnimColor(n, run.In.Look)) is { } keyed && keyed.Add != Color.Transparent)
+					{
+						fills.Add((rect, new Color((byte)(keyed.Add.R * strength), (byte)(keyed.Add.G * strength), (byte)(keyed.Add.B * strength), (byte)0)));
+					}
 					continue;
 				}
 				// A fill is the `to` color at the track's strength: a tint at its amount, an add additively. The strength is the
@@ -807,7 +919,7 @@ public sealed partial class SampleController
 				{
 					probe["mode"] = "set";
 				}
-				float k = (BattleAnimationEval.ColorAt(probe, tt, now - t.Start, t.Length, run, _ => Color.White)?.Add.R ?? 0) / 255f;
+				float k = strength * (BattleAnimationEval.ColorAt(probe, tt, now - t.Start, t.Length, run, _ => Color.White)?.Add.R ?? 0) / 255f;
 				JsonObject? to = BattleAnimationRun.Pick(t.Def["to"], c.Front) as JsonObject ?? (t.Def["colors"] as JsonArray)?.FirstOrDefault() as JsonObject;
 				if (to?["tint"] is JsonNode tint)
 				{
@@ -821,6 +933,11 @@ public sealed partial class SampleController
 				}
 			}
 		}
+		// Fill colors are premultiplied, an additive one with alpha 0: either way the color's luminance is its light.
+		_probeLight = Math.Max(area == "stage" ? 0f : _probeLight, fills.Select(f => Luma(f.Item2)).DefaultIfEmpty(0f).Max());
 		return fills;
 	}
+
+	// `screenlight`: the most light the stage's and the frame's fills gave the last battle frame (FlashesOf's measure).
+	private float _probeLight;
 }

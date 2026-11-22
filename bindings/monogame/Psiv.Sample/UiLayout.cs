@@ -60,11 +60,35 @@ public sealed class UiScreenLayout
 	public Dictionary<string, UiTag> Tags { get; } = [];
 	// How a status shows on the party's slots (`statuses` in the file), by status id; one left out keeps the plain look.
 	public Dictionary<string, UiStatusLook> Statuses { get; } = [];
+	// The title's start state before its menu (`start` in the file), and the menu's entries in order (`options`; null: the
+	// built-in order).
+	public bool Start { get; set; }
+	public List<string>? Options { get; set; }
+	// The Equip page's places in order, each with its label's text key (`places`; null: the built-in six).
+	public List<(string Slot, string? Label)>? Places { get; set; }
+	// The status page's profile rows in order (`profile`; null: every one UiFields.ProfileKeys lists).
+	public List<string>? Profile { get; set; }
 }
 
 // One entry of a `tags` table: the action (UiFields.TagActions), the id it uses instead of the tag's value, and the slot
 // a shown panel takes. Values: the id for each tag value, and Default the id for a value it leaves out.
-public sealed record UiTag(string Action, string? Id, string? Slot, IReadOnlyDictionary<string, string>? Values = null, string? Default = null);
+public sealed record UiTag(string Action, string? Id, string? Slot, IReadOnlyDictionary<string, string>? Values = null, string? Default = null)
+{
+	// Per value, in order, before the entry's own action: the first case whose value or whole-number range holds the tag's
+	// value acts instead.
+	public IReadOnlyList<UiTagCase> Cases { get; init; } = [];
+}
+
+// One case of a tag: the exact value or the range From to To (whole numbers, both ends in), and what it does: an action
+// with its id, or Ids, the id for each value of the range in order from From.
+public sealed record UiTagCase(string? Value, int From, int To, string Action, string? Id, IReadOnlyList<string>? Ids, string? Slot)
+{
+	public bool Holds(string value) => Value is not null ? Value == value
+		: int.TryParse(value, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out int n) && n >= From && n <= To;
+
+	public string? IdFor(string value) => Ids is not null && int.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out int n) && n - From >= 0 && n - From < Ids.Count
+		? Ids[n - From] : Id;
+}
 
 // A status on a party slot: the name's color while it is the highest-priority status with one (null: none), its icon
 // shown or not, and its priority, which also orders the icons.
@@ -588,7 +612,13 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 			foreach (JsonProperty p in ps.EnumerateObject().Where(p => UiFields.StyleParams.ContainsKey(p.Name)))
 			{
 				// The field's cell divides every field position.
-				st.Params[p.Name] = p.Name == "field_cell" ? Int(ps, p.Name, "params", Art.Tile, 8, 256) : Int(ps, p.Name, "params", 0, 0, 4096);
+				st.Params[p.Name] = p.Name switch
+				{
+					"field_cell" => Int(ps, p.Name, "params", Art.Tile, 8, 256),
+					"dev_scale" => Int(ps, p.Name, "params", 100, 10, 100),
+					"dev_draw" => Int(ps, p.Name, "params", 1, 0, 1),
+					_ => Int(ps, p.Name, "params", 0, 0, 4096),
+				};
 			}
 		}
 		foreach (string needed in new[] { "panel", "none" }.Where(n => !st.Frames.ContainsKey(n)))
@@ -604,7 +634,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		{
 			return null;
 		}
-		Known(root, "-", ["version", "windows", "params", "tags", "statuses"]);
+		Known(root, "-", ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile"]);
 		Version(root);
 		var screen = new UiScreenLayout { Name = name, Source = source };
 		if (!root.TryGetProperty("windows", out JsonElement windows) || windows.ValueKind != JsonValueKind.Array)
@@ -630,6 +660,17 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 				if (!fields.Params.Contains(p.Name))
 				{
 					Problem($"params.{p.Name}", fields.Params.Count == 0 ? "the screen takes no params" : $"unknown param: {string.Join(", ", fields.Params)}");
+				}
+				else if (p.Name == "command_axis")
+				{
+					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("row" or "column"))
+					{
+						Problem($"params.{p.Name}", "must be \"column\" or \"row\": the keys that move the command cursor");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
+					}
 				}
 				else if (Expr(p.Value, $"params.{p.Name}", p.Name) is { } e)
 				{
@@ -659,6 +700,8 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 				Statuses(looks, screen);
 			}
 		}
+		TitleMenu(root, screen);
+		RowModels(root, screen);
 		int index = 0;
 		foreach (JsonElement w in windows.EnumerateArray())
 		{
@@ -667,11 +710,153 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 				screen.Windows.Add(window);
 			}
 		}
+		CommandAxis(screen);
 		foreach (UiWindow w in screen.Windows.Where(w => w.RelativeTo is not null && !_windowNames.Contains(w.RelativeTo)))
 		{
 			Problem($"windows.{w.Name}", $"field 'relative_to' names no window of this screen: '{w.RelativeTo}'");
 		}
 		return screen;
+	}
+
+	private void RowModels(JsonElement root, UiScreenLayout screen)
+	{
+		if (root.TryGetProperty("places", out JsonElement places))
+		{
+			if (fields!.Screen != "menu_equip")
+			{
+				Problem("places", "only the menu_equip screen takes 'places'");
+			}
+			else if (places.ValueKind != JsonValueKind.Array || places.GetArrayLength() == 0)
+			{
+				Problem("places", "must be a non-empty list of places");
+			}
+			else
+			{
+				screen.Places = [];
+				int i = 0;
+				foreach (JsonElement p in places.EnumerateArray())
+				{
+					string entry = $"places[{i++}]";
+					if (!Object(p, entry))
+					{
+						continue;
+					}
+					Known(p, entry, ["slot", "label"]);
+					string? slot = Str(p, "slot", entry, UiFields.EquipPlaces);
+					if (slot is null)
+					{
+						if (!p.TryGetProperty("slot", out _))
+						{
+							Problem(entry, "missing field 'slot'");
+						}
+					}
+					else if (screen.Places.Any(x => x.Slot == slot))
+					{
+						Problem(entry, $"'{slot}' is listed twice");
+					}
+					else
+					{
+						screen.Places.Add((slot, Str(p, "label", entry)));
+					}
+				}
+			}
+		}
+		if (root.TryGetProperty("profile", out JsonElement profile))
+		{
+			if (fields!.Screen != "menu_status")
+			{
+				Problem("profile", "only the menu_status screen takes 'profile'");
+			}
+			else if (profile.ValueKind != JsonValueKind.Array)
+			{
+				Problem("profile", "must be a list of profile rows");
+			}
+			else
+			{
+				screen.Profile = [];
+				int i = 0;
+				foreach (JsonElement k in profile.EnumerateArray())
+				{
+					string entry = $"profile[{i++}]";
+					string? key = k.ValueKind == JsonValueKind.String ? k.GetString() : null;
+					if (key is null || !UiFields.ProfileKeys.Contains(key))
+					{
+						Problem(entry, $"must be a profile row: {string.Join(", ", UiFields.ProfileKeys)}");
+					}
+					else if (!screen.Profile.Contains(key))
+					{
+						screen.Profile.Add(key);
+					}
+					else
+					{
+						Problem(entry, $"'{key}' is listed twice");
+					}
+				}
+			}
+		}
+	}
+
+	// A battle layout that lays the menu's rows out across (a repeater over `menu_items` in a row or grid, or rows one to a
+	// column) must say so with `command_axis: "row"`, or Left and Right would not move the cursor it shows.
+	private void CommandAxis(UiScreenLayout screen)
+	{
+		if (!fields!.Statuses || screen.Params.TryGetValue("command_axis", out UiExpr? axis) && axis.Names.Count == 0 && axis.Eval(null!).Text == "row")
+		{
+			return;
+		}
+		static bool Across(UiElement e) => e.E("items")?.Names.Contains("menu_items") == true && (e.Type == "repeater" && (e.S("layout") == "grid" || e.S("layout") is null or "row" && e.E("dy") is null)
+			|| e.Type == "rows" && e.E("per_column") is { Names.Count: 0 } per && per.Eval(null!).Int == 1);
+		IEnumerable<UiElement> All(IEnumerable<UiElement> list) => list.SelectMany(e => All(e.Children.Values.SelectMany(c => c)).Prepend(e));
+		foreach (UiWindow w in screen.Windows.Where(w => All(w.Elements).Any(Across)))
+		{
+			Problem($"windows.{w.Name}", "lays the menu's rows out across: set the param 'command_axis' to \"row\" so Left and Right move the cursor");
+		}
+	}
+
+	private void TitleMenu(JsonElement root, UiScreenLayout screen)
+	{
+		bool hasStart = root.TryGetProperty("start", out JsonElement start), hasOptions = root.TryGetProperty("options", out JsonElement options);
+		if ((hasStart || hasOptions) && !fields!.Title)
+		{
+			Problem(hasStart ? "start" : "options", "only the title screen takes 'start' and 'options'");
+			return;
+		}
+		if (hasStart)
+		{
+			if (start.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+			{
+				Problem("start", "must be true or false");
+			}
+			screen.Start = start.ValueKind == JsonValueKind.True;
+		}
+		if (!hasOptions)
+		{
+			return;
+		}
+		if (options.ValueKind != JsonValueKind.Array || options.GetArrayLength() == 0)
+		{
+			Problem("options", "must be a non-empty list of title entries");
+			return;
+		}
+		screen.Options = [];
+		int i = 0;
+		foreach (JsonElement o in options.EnumerateArray())
+		{
+			string entry = $"options[{i++}]";
+			string? id = o.ValueKind == JsonValueKind.String ? o.GetString() : null;
+			if (id is null || !UiFields.TitleEntries.Contains(id))
+			{
+				Problem(entry, $"must be a title entry: {string.Join(", ", UiFields.TitleEntries)}");
+			}
+			else if (screen.Options.Contains(id))
+			{
+				Problem(entry, $"'{id}' is listed twice");
+			}
+			else
+			{
+				screen.Options.Add(id);
+			}
+		}
 	}
 
 	private void Tags(JsonElement tags, UiScreenLayout screen)
@@ -693,12 +878,18 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 			{
 				continue;
 			}
-			Known(p.Value, entry, ["action", "id", "slot", "values", "default"]);
+			Known(p.Value, entry, ["action", "id", "slot", "values", "default", "cases"]);
+			List<UiTagCase> cases = p.Value.TryGetProperty("cases", out JsonElement cs) ? TagCases(cs, entry + ".cases") : [];
 			string? action = Str(p.Value, "action", entry, UiFields.TagActions);
 			if (action is null)
 			{
 				if (!p.Value.TryGetProperty("action", out _))
 				{
+					if (cases.Count > 0)
+					{
+						screen.Tags[p.Name] = new UiTag("log", null, null) { Cases = cases };
+						continue;
+					}
 					Problem(entry, "missing field 'action'");
 				}
 				continue;
@@ -732,8 +923,76 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 			{
 				Problem(entry, "field 'id' leaves the tag's value unread: give 'values' and 'default' without it");
 			}
-			screen.Tags[p.Name] = new UiTag(action, id, slot, values, fallback);
+			screen.Tags[p.Name] = new UiTag(action, id, slot, values, fallback) { Cases = cases };
 		}
+	}
+
+	private static readonly string[] NoIdActions = ["music_stop", "music_pause", "music_resume", "panel_clear", "picture_clear", "portrait_off", "log"];
+
+	private List<UiTagCase> TagCases(JsonElement list, string entry)
+	{
+		var cases = new List<UiTagCase>();
+		if (list.ValueKind != JsonValueKind.Array)
+		{
+			Problem(entry, "must be a list of cases");
+			return cases;
+		}
+		int i = 0;
+		foreach (JsonElement c in list.EnumerateArray())
+		{
+			string ce = $"{entry}[{i++}]";
+			if (!Object(c, ce))
+			{
+				continue;
+			}
+			Known(c, ce, ["value", "from", "to", "action", "id", "ids", "slot"]);
+			string? value = Str(c, "value", ce);
+			bool ranged = c.TryGetProperty("from", out _) || c.TryGetProperty("to", out _);
+			int from = Int(c, "from", ce, int.MinValue, -1000000, 1000000), to = Int(c, "to", ce, int.MaxValue, -1000000, 1000000);
+			if ((value is null) == !ranged)
+			{
+				Problem(ce, "needs 'value' or a range ('from', 'to'), not both");
+				continue;
+			}
+			if (from > to)
+			{
+				Problem(ce, $"'from' {from} is past 'to' {to}");
+				continue;
+			}
+			string? action = Str(c, "action", ce, UiFields.TagActions);
+			if (action is null)
+			{
+				if (!c.TryGetProperty("action", out _))
+				{
+					Problem(ce, "missing field 'action'");
+				}
+				continue;
+			}
+			string? slot = Str(c, "slot", ce);
+			if (slot is not null && action != "panel_show")
+			{
+				Problem(ce, "field 'slot' is for panel_show only");
+			}
+			string? id = Str(c, "id", ce);
+			List<string>? ids = null;
+			if (c.TryGetProperty("ids", out JsonElement idList))
+			{
+				if (idList.ValueKind != JsonValueKind.Array || !ranged || idList.EnumerateArray().Any(x => x.ValueKind != JsonValueKind.String || x.GetString()!.Length == 0))
+				{
+					Problem(ce, "field 'ids' must be a list of non-empty strings, on a range");
+				}
+				else
+				{
+					ids = [.. idList.EnumerateArray().Select(x => x.GetString()!)];
+				}
+			}
+			if ((id is not null || ids is not null) && NoIdActions.Contains(action))
+			{
+				Problem(ce, $"fields 'id' and 'ids' are for an action that takes an id, not {action}");
+			}
+			cases.Add(new UiTagCase(value, from, to, action, id, ids, slot));
+		}
+		return cases;
 	}
 
 	private void Statuses(JsonElement looks, UiScreenLayout screen)
@@ -895,7 +1154,8 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		Known(e, entry, Common.Split(' ').Concat(kinds.Keys).Where(k => forcedType is null || k != "type"));
 		var el = new UiElement { Type = type, Name = elName ?? "" };
 		// Inside a list's row or a repeater's templates the item's own fields and the row variables are names too.
-		HashSet<string> inner = [.. locals ?? [], .. UiFields.ItemVariables, .. fields?.ItemFields ?? []];
+		HashSet<string> inner = [.. locals ?? [], .. UiFields.ItemVariables, .. fields?.ItemFields ?? [],
+			.. fields?.Statuses == true ? statuses?.Where(id => id != "defeated").Select(id => UiFields.StatusFlag + id) ?? [] : []];
 		foreach (JsonProperty p in e.EnumerateObject().Where(p => p.Name != "type" && p.Name != "name"))
 		{
 			char kind = p.Name switch { "visible" or "x" or "y" or "w" or "h" or "alpha" => 'e', "scaled" => 'b', _ => kinds.GetValueOrDefault(p.Name) };

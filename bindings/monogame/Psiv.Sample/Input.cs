@@ -194,6 +194,10 @@ public sealed class Bindings
 	// The real-time field's two options, kept beside the bindings: run without holding Run, and the interaction prompt.
 	public bool AlwaysRun { get; set; }
 	public bool InteractPrompt { get; set; } = true;
+	// The player's flashing level beside the profile's reduced flash (`reduced`, `standard`, `original`; null: never
+	// chosen, so the profile's reduced flash decides), and whether the photosensitivity warning was accepted.
+	public string? Flashing { get; set; }
+	public bool OriginalConfirmed { get; set; }
 
 	private readonly Dictionary<GameAction, List<Keys>> _keys = [];
 	private readonly Dictionary<GameAction, List<Buttons>> _buttons = [];
@@ -304,6 +308,13 @@ public sealed class Bindings
 			}
 			foreach ((string name, JsonNode? entry) in root)
 			{
+				if (name == "flashing" && entry is JsonObject flashing)
+				{
+					string? level = flashing["level"]?.GetValue<string>();
+					bindings.Flashing = level is "reduced" or "standard" or "original" ? level : null;
+					bindings.OriginalConfirmed = flashing["original_confirmed"]?.GetValue<bool>() ?? false;
+					continue;
+				}
 				if (name == "field" && entry is JsonObject options)
 				{
 					bindings.AlwaysRun = options["always_run"]?.GetValue<bool>() ?? false;
@@ -384,6 +395,13 @@ public sealed class Bindings
 			json.WriteBoolean("always_run", AlwaysRun);
 			json.WriteBoolean("interact_prompt", InteractPrompt);
 			json.WriteEndObject();
+			if (Flashing is not null)
+			{
+				json.WriteStartObject("flashing");
+				json.WriteString("level", Flashing);
+				json.WriteBoolean("original_confirmed", OriginalConfirmed);
+				json.WriteEndObject();
+			}
 			json.WriteEndObject();
 		}
 		stream.WriteByte((byte)'\n');

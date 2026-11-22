@@ -225,7 +225,8 @@ public sealed class AssetManifest
 
 	// Reads DIR/assets.json against the session's data, scaled tilesets against the field's `cell` (the layouts'
 	// `field_cell`). A directory without a manifest is a problem too, since the caller named it.
-	public static AssetManifest Load(string directory, GameData data, int cell = Art.Tile)
+	// `played`: cue and music ids something outside the data plays (the dialogue layout's tags), checked as the data's.
+	public static AssetManifest Load(string directory, GameData data, int cell = Art.Tile, (IReadOnlySet<string> Cues, IReadOnlySet<string> Music)? played = null)
 	{
 		var m = new AssetManifest(Path.GetFullPath(directory));
 		string path = Path.Combine(directory, FileName);
@@ -237,7 +238,7 @@ public sealed class AssetManifest
 		try
 		{
 			using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(path), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip });
-			new Reader(m, data, cell).Root(doc.RootElement);
+			new Reader(m, data, cell, played).Root(doc.RootElement);
 		}
 		catch (JsonException e)
 		{
@@ -247,7 +248,7 @@ public sealed class AssetManifest
 	}
 
 	// Walks the JSON, reporting unknown fields, wrong types, unknown ids and files that do not fit their entries.
-	private sealed class Reader(AssetManifest m, GameData data, int cell)
+	private sealed class Reader(AssetManifest m, GameData data, int cell, (IReadOnlySet<string> Cues, IReadOnlySet<string> Music)? played)
 	{
 		// Figures that ask for their natural size, checked once battle_figures is read.
 		private readonly List<(string Entry, FigureEntry Figure)> _natural = [];
@@ -1739,7 +1740,8 @@ public sealed class AssetManifest
 				Problem(entry, $"unknown kind '{kindName}': music, ambient or cue");
 			}
 			HashSet<string>? ids = kind switch { SoundKind.Music => data.Music, SoundKind.Ambient => data.Ambient, SoundKind.Cue => data.Cues, _ => null };
-			if (id is not null && ids is not null && !ids.Contains(id))
+			IReadOnlySet<string>? tagged = kind switch { SoundKind.Music => played?.Music, SoundKind.Cue => played?.Cues, _ => null };
+			if (id is not null && ids is not null && !ids.Contains(id) && tagged?.Contains(id) != true)
 			{
 				Problem(entry, $"unknown {kindName} '{id}': not an id the game or the sample plays as {kindName}");
 			}

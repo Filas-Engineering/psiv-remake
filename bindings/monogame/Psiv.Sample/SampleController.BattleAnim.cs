@@ -455,6 +455,28 @@ public sealed partial class SampleController
 	private List<int> Subject(AnimRun run, string name)
 	{
 		IReadOnlyList<Combatant> all = StageCombatants();
+		// `beside:SIDE:SUBJECT` and `adjacent:SIDE:SUBJECT`: the figure of the same side standing next to the subject's first
+		// figure, by formation place (marching slot for the party), `left` the lower place; `beside` passes over empty
+		// places, `adjacent` takes only the place next to it.
+		if (name.Split(':', 3) is [var kind and ("beside" or "adjacent"), var side, var of])
+		{
+			if (Subject(run, of) is not [int at, ..] || at >= all.Count)
+			{
+				return [];
+			}
+			int Place(int i) => all[i].Side == Psiv.Session.Side.Party ? i : _show.All[i].Position;
+			int step = side == "left" ? -1 : 1;
+			var standing = Enumerable.Range(0, Math.Min(all.Count, _show.All.Count)).Where(i => i != at && all[i].Side == all[at].Side && _show.All[i].Alive && Place(i) >= 0)
+				.ToDictionary(Place, i => i);
+			for (int p = Place(at) + step, limit = kind == "adjacent" ? 1 : 8; Math.Abs(p - Place(at)) <= limit && p >= 0 && p <= 7; p += step)
+			{
+				if (standing.TryGetValue(p, out int found))
+				{
+					return [found];
+				}
+			}
+			return [];
+		}
 		AnimInputs a = run.In;
 		List<int> actors = [.. a.Actors];
 		string[] parts = name.Split(':');

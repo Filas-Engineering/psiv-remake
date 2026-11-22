@@ -146,6 +146,8 @@ The forward axis points toward the other side: in the side layout along x (membe
 | `self` | in a reaction script or figure state: the figure it plays on; in a projectile's `travel`, the instance's own figure |
 | `place:N` | the enemy standing at formation place N (0 to 7) |
 | `slot:N` | the party member in marching slot N (0 to 4) |
+| `beside:SIDE:SUBJECT` | the figure of the same side nearest the subject's first figure on that side (`left`: a lower formation place, `right`: a higher one; marching slots for the party), passing over empty places: `beside:right:target:0` |
+| `adjacent:SIDE:SUBJECT` | as `beside`, but only the place right next to it: nobody when that place is empty |
 
 A subject that names nobody in this turn (a `target:2` of a single-target action, an `actor:1` outside a combination) makes its tracks draw nothing. The check reports `actor:N` with N above 0 in a script that no `combo:` key or combination shape selects.
 
@@ -254,6 +256,7 @@ Fields every track takes:
 | `stagger` | 0 | on a subject of several figures, each later one starts this TIME after the one before; `"sweep"` is today's front-layout rule, `min(90 ms, effect_ms / (2 * targets))` |
 | `order` | `event` | the order a stagger walks: `event`, `left_to_right`, `right_to_left`, `near_first` (closest to the user first), `far_first` |
 | `reduced` | per type | what reduced flash does with it: `keep`, `drop`, `damp` (amplitudes and amounts times `reduced_flash.damp`, 0.25), or a replacement track object, which inherits `at` |
+| `flash` | false | true: the track counts as a screen-wide flash toward the flash limit whatever it draws; a marked sprite is damped under reduced flash unless it has its own `reduced` ([Flashes by effect](#flashes-by-effect)) |
 
 Tracks are stateless: what a track draws at script frame `t` depends only on `t`, the script's inputs (the turn's events, the look, the params) and the stage's geometry. That is what lets the battle jump to any frame (hurry, fast-forward, the previewer's seek) and still draw the same thing it would have drawn by playing there.
 
@@ -543,6 +546,27 @@ The built-in `transform_in` reproduces what is drawn today: today's code asks fo
 
 Figure animations in `assets.json`: today a figure entry accepts only the six named animations. With this design an entry may also name any animation `[a-z0-9_]+` that a `pose` track, a figure state or a weapon variant plays. An animation no script and no state plays is a problem (`no battle animation script or figure state plays 'attack_axe'`), as a character pose no script animation plays is today. Back figures take the same names.
 
+## The flashing level
+
+The player's flashing level (the options' Flashing row, [`ui-layout.md`](ui-layout.md), "Flashing") decides what the safeguards do: `reduced` (the profile's reduced flash: the `reduced` replacements and damping, and the flash limit), `standard` (the flash limit only, no replacements) and `original` (no limit and no replacements: scripts play as authored). The script verb `flashing reduced|standard|original` sets it in a test, answering the photosensitivity question.
+
+## Flashes by effect
+
+The flash limit and reduced flash judge a color track on the backdrop, the stage or the frame by what it does to the screen, not by its type or mode, so a whiteout written as stepped `set` or `keys` colors, an `add`, an `alpha` or a palette swap counts as a `flash` track does. Default on, for every set.
+
+* A track's light at a frame is how far it moves the whole area's brightness from untouched, 0 to 1, with luminance `0.2126 R + 0.7152 G + 0.0722 B` over 255: on the backdrop the luminance of its added light, plus `1 - luminance(multiply) x alpha` (darkening), plus the largest luminance difference between a palette pair's source and replacement; on the stage and the frame (fills) the luminance of its added light plus `1 - luminance(multiply)` (a tint at its amount).
+* The light is sampled every frame of the track's life (its first 3600 frames), starting from 0 before the track. A flash is a rise of at least 0.25 within 6 frames (0.1 s at 60 Hz); after one, the next counts only once the light has fallen 0.25 below the peak, so a strobe counts every step up and a slow tint (0.6 over 60 frames, 0.06 in any 6) counts none.
+* Each flash counts toward `settings.flash_limit`; a track whose flashes would take the count in the window past the limit does not draw at all (one transcript line per script, as before). A track marked `"flash": true` counts at least once.
+* Under reduced flash a track that flashes and has no `reduced` of its own draws at most 0.2 of light: its transform is eased toward untouched by `0.2 / peak` (a palette swap is left out). `flash` tracks and `mode: "flash"` colors keep their built-in `drop`.
+* Stage and frame fills follow `keys` (the added light of the key at each moment; before, a keys track on the stage drew nothing).
+
+```json
+{"type": "color", "on": "stage", "at": "effect", "mode": "keys", "ease": "step", "length": 24,
+	"keys": [[0, {"add": "#ffffff"}], [3, {}], [6, {"add": "#ffffff"}], [9, {}], [12, {"add": "#ffffff"}], [15, {}], [18, {"add": "#ffffff"}], [21, {}]]}
+```
+
+That strobe makes four flashes in 24 frames and never draws under the default limit; two of its steps would draw, and at a fifth of the light with reduced flash. The probe `screenlight` reads the most light the stage's fills gave the last frame (`1.00`, `0.20`). `scripts/make_flash_assets.py` and `scripts/flash_safety.txt` test it.
+
 ## Floating numbers
 
 `numbers` gives the floating text of each released result its motion and color. The text itself stays the text tables' (`ui.battle.float.` keys) and the role stays `battle_numbers`.
@@ -602,7 +626,7 @@ Rules:
 | 1 | `encounter:ENC/enemy:FORM/ACTION` | an enemy's action in one encounter; FORM is the enemy's current id (a next form is its own id), ACTION `attack`, `defend` or an ability id |
 | 2 | `enemy:FORM/ACTION` | that enemy's action anywhere |
 | 3 | `combo:RECIPE` | a combination by its recipe id (`combos.json`; the recipe whose result and participants' abilities match) |
-| 4 | `ability:ID/character:CHAR`, `ability:ID/weapon:CLASS`, `ability:ID/vehicle:VEHICLE`, `ability:ID` or `item:ID` | the ability or item (a combination's own ability; a basic attack's ability, `ability:strike`; anything cast through the Item command is `item:`, so a worn piece cast that way is `item:PIECE`, an equipment id the check accepts); `/vehicle:VEHICLE` when the vehicle in a vehicle battle acts |
+| 4 | `ability:ID/character:CHAR`, `ability:ID/weapon:CLASS`, `ability:ID/vehicle:VEHICLE`, `ability:ID` or `item:ID` | the ability or item (a combination's own ability; a basic attack's ability, `ability:strike`; anything cast through the Item command is `item:`, so a worn piece cast that way is `item:PIECE`: the check accepts any equipment piece with a `use`, of any slot (the Squall Fan, an accessory), and any weapon; `weapon_classes` accepts `equipment:ID` of any piece and `category:NAME` of any equipment category); `/vehicle:VEHICLE` when the vehicle in a vehicle battle acts |
 | 5 | `weapon:CLASS/HANDS/character:CHAR`, `weapon:CLASS/character:CHAR`, `weapon:CLASS/HANDS`, `weapon:CLASS` | a party member's basic attack, by its weapon animation class and hand count (`one`, `both`) |
 | 6 | `shape:KIND.EFFECT.ELEMENT` | the element level: kind, first effect and element, as the presentation table's fallbacks (`shape:technique.damage.shock`) |
 | 7 | `shape:KIND.EFFECT` | the effect-kind level |
@@ -648,6 +672,7 @@ The presentation table keeps resolving a look for every turn and change exactly 
 | `mosaic` | `block` (8 to 64 pixels), then `color` for the hold | the scene breaks into growing blocks, then the next scene sharpens from blocks |
 | `tiles` | `color`, `tile` (8 to 160 pixels), `order` (`rows`, `columns`, `checker`, `diagonal`, `random`, `spiral`, `spiral_in`), `grow` (TIME each tile takes to fill its cell) | cells of the cover appear in that order, and go in the reverse |
 | `spiral` | `color`, `tile`, `turn` (`cw`, `ccw`), `from` (`center`, `edge`) | `tiles` along a spiral from the center or the edge |
+| `sequence` | `phases`: 1 to 8 of `{"color", "steps" (1 to 32, default 1), "step_frames" (default 4 frames), "hold"}` | under `cover` the screen goes to each phase's color in turn from the one before (the scene first), in `steps` steps `step_frames` apart, then holds it `hold`; under `hold` the last color; under `reveal` the last color steps back to the next scene at the last phase's rate. Each step that raises the light by a flash's step (0.25, [Flashes by effect](#flashes-by-effect)) counts toward the flash limit; under reduced flash or past the limit the sequence plays as a fade to its last color |
 | `split` | `color`, `steps`, `step_frames`, `speed` (pixels a frame), `frames`, `axis` (`horizontal`, default, or `vertical`) | a (stepped) fade over the cover; in `reveal` the backdrop slides in from the left and the figures, their labels and bars from the right, `speed` pixels a frame for `frames`; with `vertical` the backdrop drops in from above and the figures and labels rise from below |
 
 `fade` and `split` take `steps` (2 to 32) and `step_frames` (TIME): the cover moves one level every `step_frames`, `steps` levels to the color and back; `cover_step_frames` and `reveal_step_frames` give each half its own rate (each falls back to `step_frames`). `mosaic` is not built.
@@ -655,6 +680,16 @@ The presentation table keeps resolving a look for every turn and change exactly 
 ```json
 "transitions": {"drop": {"kind": "split", "axis": "vertical", "steps": 4, "cover_step_frames": 2, "reveal_step_frames": 5, "speed": 12, "frames": 20}}
 ```
+
+```json
+"transitions": {"amber_dark": {"kind": "sequence", "phases": [
+	{"color": "#c0a040", "steps": 3, "step_frames": 2, "hold": 6},
+	{"color": "#000000", "steps": 2, "step_frames": 3, "hold": 8},
+	{"color": "#c0a040", "steps": 2, "step_frames": 2, "hold": 6}
+]}}
+```
+
+The probe `transition` adds the sequence's phase and whether it steps or holds (`sequence cover 20/44 phase 1 hold`).
 
 `ease` (default `linear`) shapes every kind's progress. A rotating swirl distortion needs a shader and is not a kind ([Implementation plan](#implementation-plan)).
 
@@ -676,7 +711,7 @@ Per-encounter, per-area, per-terrain, per-kind and boss overrides are the `/enco
 
 * Battle speed: scales the clock, so every phase, track, travel and number life is that much shorter. Idle states, status tints and `battle:backdrop` loops run on the controller's clock and keep their speed.
 * Reduced flash: each track type has a policy, which `reduced_flash` can change per type and a track's `reduced` per track. A track's `reduced` may be a replacement track object: with reduced flash on when the round's scripts are built, the replacement plays in its place, taking the original's `at` unless it has its own (`{"type": "flash", "at": "effect", "reduced": {"id": "calm", "type": "color", "on": "stage", "mode": "tint", "to": {"tint": "#4060a0", "amount": 0.2}, "in": 2, "hold": 4, "out": 2}}`). Built-in: `flash` tracks drop; `color` tracks in `flash` mode on the backdrop, the stage or the frame drop, on figures damp; `cycle` holds its first color; `shake` damps to a quarter (today's); `flash` transitions become fades; `blink` defeats become fades; the strip's hit flash stays the layout's (framed red only). `damp` is 0.25, changeable as `reduced_flash.damp`.
-* Flash limit, with or without reduced flash: at most three screen-wide flashes (`flash` tracks, `color` flashes on the backdrop, stage or frame whose peak `add` is above 64 or whose fill opacity is above 0.25, `flash` transitions, which then play as fades) may start in any 60 frames of the controller's clock (1000 ms). A later one is dropped, with one transcript line per script (`animation: more.blade: flash dropped, more than 3 in 60 frames`). `settings.flash_limit` changes it (`{"count": 2, "frames": 90}`) or turns it off (`false`). A flash counts on the first frame it draws, so a fast-forward that draws nothing counts nothing. The built-in set flashes at most once a turn, so no existing run drops one.
+* Flash limit, with or without reduced flash: at most three screen-wide flashes (`flash` tracks, `color` flashes on the backdrop, stage or frame whose peak `add` is above 64 or whose fill opacity is above 0.25, any backdrop, stage or frame color track that flashes by its effect, counting each of its flashes, tracks marked `"flash": true`, and `flash` transitions, which then play as fades) may start in any 60 frames of the controller's clock (1000 ms); a track whose flashes would pass the limit does not draw. A later one is dropped, with one transcript line per script (`animation: more.blade: flash dropped, more than 3 in 60 frames`). `settings.flash_limit` changes it (`{"count": 2, "frames": 90}`) or turns it off (`false`). A flash counts on the first frame it draws, so a fast-forward that draws nothing counts nothing. The built-in set flashes at most once a turn, so no existing run drops one.
 * Hurry (Confirm): finishes the current step. The script jumps to the start of the next phase (the step's end). Every event of the step not yet released is released at once, with its number, reaction and bar already over (their life ended with the step); the event cues of the units it released play once each by cue id. `sound` tracks whose frames were jumped over do not play. Moves, sprites and colors are drawn as they are at the new frame, which statelessness guarantees.
 * Fast-forward (held): plays the rest of the round at once, as today: every remaining step starts, each script jumps to its end, every event is released, no cue plays, nothing of the skipped steps is drawn.
 * Skipping in general: whatever the jump, every event of every step it passes is released, in order, so `BattleShow` reaches the same state as a played round.

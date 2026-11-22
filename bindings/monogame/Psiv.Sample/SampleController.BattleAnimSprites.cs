@@ -121,7 +121,14 @@ public sealed partial class SampleController
 				{
 					continue;
 				}
-				string policy = Reduced(t, "keep");
+				// A sprite marked `"flash": true` counts toward the flash limit and is damped under reduced flash unless it has
+				// its own `reduced`.
+				bool marked = BattleAnimationRun.Bool(t.Def["flash"]) == true;
+				if (marked && !FlashAllowed(run, t.Index))
+				{
+					continue;
+				}
+				string policy = Reduced(t, marked ? "damp" : "keep");
 				DrawSprite(s, art, c, run, t, now, marks, c.Reduced && policy == "damp" ? Anim.Damp : 1f);
 			}
 		}
@@ -542,12 +549,21 @@ public sealed partial class SampleController
 						continue;
 					}
 					string mode = BattleAnimationRun.Str(t.Def["mode"]) ?? "set";
-					if (c.Reduced && mode == "flash" && Reduced(t, "drop") == "drop" || BrightFlash(t.Def) && !FlashAllowed(run, t.Index))
+					if (c.Reduced && mode == "flash" && Reduced(t, "drop") == "drop")
+					{
+						continue;
+					}
+					(bool draw, float strength) = FlashGate(t, run, c.Reduced);
+					if (!draw)
 					{
 						continue;
 					}
 					if (BattleAnimationEval.ColorAt(t.Def, t.T(now), local, t.Length, run, n => AnimColor(n, run.In.Look)) is { } ct)
 					{
+						if (strength < 1f)
+						{
+							ct = BattleAnimationEval.Lerp(new ColorTransform(Color.White, Color.Transparent, 1f, null), ct, strength);
+						}
 						if (c.Reduced && mode == "cycle" && BattleAnimationEval.Ct((t.Def["colors"] as JsonArray)?.FirstOrDefault(), n => AnimColor(n, run.In.Look)) is var first)
 						{
 							ct = first;

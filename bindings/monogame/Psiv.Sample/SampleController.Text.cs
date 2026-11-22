@@ -90,6 +90,38 @@ public sealed partial class SampleController
 		["ui.prompt.travel"] = "travel",
 	};
 
+	// Words of the battle's top-level step, the title's start state and the Save page's system menu, which the game's text
+	// tables do not carry yet: a table's own text for the key when it has one, else this English, not counted as missing.
+	private static readonly Dictionary<string, string> SampleWords = new()
+	{
+		["ui.battle.top.fight"] = "Fight",
+		["ui.battle.top.macro"] = "Macro",
+		["ui.battle.top.run"] = "Run",
+		["ui.battle.title.top"] = "Party",
+		["ui.title.press_start"] = "Press any key",
+		["ui.battle.no_macros"] = "There are no macros yet.",
+		["ui.options.flashing"] = "Flashing",
+		["ui.options.flashing.reduced"] = "Reduced",
+		["ui.options.flashing.standard"] = "Standard",
+		["ui.options.flashing.original"] = "As authored",
+		["ui.options.flashing_help"] = "Reduced softens flashes and limits them; Standard limits them; As authored plays every flash.",
+		["ui.options.flashing_warning"] = "Flashing as authored can trigger seizures in people with photosensitive epilepsy. Play every flash?",
+		["ui.title.flashing_notice"] = "Flashing is reduced. Options > Flashing changes it.",
+		["ui.options.flashing_notice"] = "This game contains flashing effects. Options > Flashing changes them at any time.",
+		["ui.options.flashing_keep"] = "Continue as authored",
+		["ui.saves.system.save"] = "Save",
+		["ui.saves.system.quit"] = "Quit",
+		["ui.status.profile.name"] = "Name",
+		["ui.status.profile.level"] = "Level",
+		["ui.status.profile.experience"] = "Experience",
+		["ui.status.profile.experience_next"] = "Next level",
+		["ui.status.profile.kind"] = "Kind",
+		["ui.status.profile.hp"] = "HP",
+		["ui.status.profile.tp"] = "TP",
+	};
+
+	private string SampleText(string key) => _s.FormatText(key, []) is var text && text != key ? text : SampleWords[key];
+
 	private string FieldText(string key) => _s.FormatText(key, []) is var text && text != key ? text : FieldWords[key];
 
 	private string AreaKindText(AreaKind kind) => T(NameKind.AreaKind, (int)kind);

@@ -109,13 +109,19 @@ assets: battle_animation.json: scripts.spark.bolt.tracks[5].type: unknown track 
 assets: battle_animation.json: scripts.spark.bolt.tracks[6].by: must be pixels, "Npx" (never scaled), "Nm" (scaled by motion_percent), "Nf" (forward units), "Nh" or "Nw" (of the figure's height or width)
 assets: battle_animation.json: scripts.spark.bolt.tracks[7].reduced[0].type: unknown track type 'wobble': backdrop, call, color, flash, move, name_window, pose, react, release, shake, sound, sprite, state, transition
 assets: battle_animation.json: scripts.spark.bolt.tracks[8].amplitude: must be logical pixels from 0 to 32, a number or "Npx"
+assets: battle_animation.json: scripts.spark.bolt.tracks[9].on: beside:SIDE:SUBJECT takes left or right
+assets: battle_animation.json: scripts.spark.bolt.tracks[9].flash: must be true or false
+assets: battle_animation.json: scripts.spark.bolt.tracks[10].on: adjacent: the subject beside which is not itself beside another
 assets: battle_animation.json: scripts.loop.a.extends: 'loop.b' extends 'loop.a': a cycle
 assets: battle_animation.json: scripts.loop.b.extends: 'loop.a' extends 'loop.b': a cycle
 assets: battle_animation.json: scripts.Bad Id: an id is lower-case letters, digits, '_' and '.', 1 to 64 characters
 assets: battle_animation.json: effects.spark.orb.sheet: unknown effect sheet 'no_such_sheet': an effect in assets.json or a generated effect
 assets: battle_animation.json: effects.spark.orb.frames: must be a list of frame indexes, -1 drawing nothing
-assets: battle_animation.json: transitions.blocks.kind: unknown transition kind 'mosaic': flash, fade, wipe, iris, tiles, spiral, split
+assets: battle_animation.json: transitions.blocks.kind: unknown transition kind 'mosaic': flash, fade, wipe, iris, tiles, spiral, split, sequence
 assets: battle_animation.json: transitions.dots.tile: must be a whole number from 8 to 160
+assets: battle_animation.json: transitions.seq.phases: a sequence transition needs its phases
+assets: battle_animation.json: transitions.seq2.phases: must be 1 to 8 phases, each {color, steps (1 to 32), step_frames, hold}
+assets: battle_animation.json: transitions.fade2.phases: is for a sequence transition
 assets: battle_animation.json: numbers.critical.color: unknown color 'gold': a styles.json color name or #rrggbb
 assets: battle_animation.json: numbers.huge: unknown result kind 'huge': damage, critical, weak, resisted, immune, miss, heal, tp, revive, status, status_resisted, status_ends, stat_up, stat_down, stat_normal, no_effect, felled, felling_resisted
 assets: battle_animation.json: numbers.damage.rise: must be logical pixels from -4000 to 4000, a number or "Npx"
@@ -130,7 +136,7 @@ assets: battle_animation.json: select.item:no_such_piece: unknown ability or ite
 assets: battle_animation.json: figures.enemy.states.defeat.kind: must be one of fade, blink, bands, slide, sink, flash_fade, frames
 assets: battle_animation.json: figures.enemy.states.defeat:instant.outlast: must be frames from 0 to 36000, "Nms", "N%", or a $timing, $look, $param, $step, $phase or $rest reference
 assets: battle_animation.json: figures.monster: unknown scope 'monster': party, enemy, vehicle, or one of them with :ID
-assets: battle_animation.json: weapon_classes.category:axe: unknown key: equipment:ID or category:NAME, with an equipment piece or weapon category of the game data
+assets: battle_animation.json: weapon_classes.category:axe: unknown key: equipment:ID or category:NAME, with an equipment piece or category of the game data
 assets: battle_animation.json: placements.count:9: unknown key: count:1 to count:5 (5 is five or more enemies) or encounter:ID
 assets: animation/broken_extras.json: fragments.cast_glow: calls nest deeper than 8, or call themselves
 assets: ui/menu.json: -: missing file: the built-in layout stands in
@@ -141,8 +147,13 @@ assets: ui/styles.json: frames.ink: 'skin' is for a generated frame only
 assets: ui/styles.json: params: unknown field 'toast_size'
 assets: ui/styles.json: params: field 'toast_h' must be a whole number from 0 to 4096
 assets: ui/styles.json: params: field 'field_cell' must be a whole number from 8 to 256
+assets: ui/styles.json: params: field 'dev_scale' must be a whole number from 10 to 100
+assets: ui/styles.json: params: field 'dev_draw' must be a whole number from 0 to 1
 assets: ui/styles.json: -: the built-in styles stand in
-assets: ui/battle_front.json: params.party_slot_5_x: unknown param: backdrop_h, critical_marks, critical_marks_enemy, critical_marks_party, dev_badge_y, effect_scale, effect_scale_large, effectiveness_marks, effectiveness_marks_enemy, effectiveness_marks_party, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_x, ground_h, icon_gap, icon_size, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, miss_marks, miss_marks_enemy, miss_marks_party, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, stage_bottom, step_aside, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
+assets: ui/battle_front.json: params.party_slot_5_x: unknown param: backdrop_h, command_axis, command_top, critical_marks, critical_marks_enemy, critical_marks_party, dev_badge_y, effect_scale, effect_scale_large, effectiveness_marks, effectiveness_marks_enemy, effectiveness_marks_party, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_statuses, enemy_x, ground_h, icon_gap, icon_size, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, miss_marks, miss_marks_enemy, miss_marks_party, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, result_page_lines, stage_bottom, step_aside, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
+assets: ui/battle_front.json: params.command_axis: must be "column" or "row": the keys that move the command cursor
+assets: ui/battle_front.json: windows.icons.elements[0].template.elements[1]: field 'visible' reads 'status_nausea', which is not a field of the battle_front screen, a window or a variable
+assets: ui/battle_front.json: windows.icons: lays the menu's rows out across: set the param 'command_axis' to "row" so Left and Right move the cursor
 assets: ui/battle_front.json: -: the built-in layout of this screen stands in
 assets: ui/battle_side.json: params.motion_percent: field 'motion_percent' reads 'speed', which is not a field of the battle_side screen, a window or a variable
 assets: ui/battle_side.json: statuses.nausea: unknown status 'nausea': not a status of the game data the party's slots show
@@ -154,16 +165,22 @@ assets: ui/battle_side.json: -: the built-in layout of this screen stands in
 assets: ui/confirm.json: params.backdrop_dim: the screen takes no params
 assets: ui/confirm.json: -: the built-in layout of this screen stands in
 assets: ui/dialogue.json: params.box_h: field 'box_h': expected ')' at character 4 of '(70'
-assets: ui/dialogue.json: params.box_width: unknown param: box_h, box_margin, box_top
+assets: ui/dialogue.json: params.box_width: unknown param: box_h, box_margin, box_top, picture_stack
 assets: ui/dialogue.json: tags.bell.values.1: must be a non-empty string: the id the tag's value stands for
 assets: ui/dialogue.json: tags.bell.values.2: must be a non-empty string: the id the tag's value stands for
 assets: ui/dialogue.json: tags.bell: field 'id' leaves the tag's value unread: give 'values' and 'default' without it
 assets: ui/dialogue.json: tags.clear_all: fields 'values' and 'default' are for an action that takes an id, not picture_clear
+assets: ui/dialogue.json: tags.snd.cases[0]: needs 'value' or a range ('from', 'to'), not both
+assets: ui/dialogue.json: tags.snd.cases[1]: 'from' 5 is past 'to' 1
+assets: ui/dialogue.json: tags.snd.cases[2]: fields 'id' and 'ids' are for an action that takes an id, not music_stop
+assets: ui/dialogue.json: tags.snd.cases[3]: missing field 'action'
 assets: ui/dialogue.json: windows.picture.open: field 'step' is for grow, grow_x and grow_y only
 assets: ui/dialogue.json: windows.picture.close: field 'kind' must be one of none, fade, grow, grow_x, grow_y, slide
 assets: ui/dialogue.json: windows.picture.close: field 'step' must be a whole number from 0 to 1024
 assets: ui/dialogue.json: windows.picture.close: field 'step' is for grow, grow_x and grow_y only
 assets: ui/dialogue.json: -: the built-in layout of this screen stands in
+assets: ui/field.json: params.area_banners: unknown param: area_banner, arrive_toast
+assets: ui/field.json: -: the built-in layout of this screen stands in
 assets: ui/inn.json: statuses: the screen takes no statuses table
 assets: ui/inn.json: windows.box: unknown field 'colour'
 assets: ui/inn.json: windows.box.elements[3]: unknown element type 'sparkle': fill, outline, box, plate, text, bar, value_bar, image, pointer, rows, list, hints, tabs, scroll_bar, repeater, group, slot, role
@@ -175,10 +192,21 @@ assets: ui/inn.json: windows.box.elements[5]: missing field 'color'
 assets: ui/inn.json: windows.box.elements[6]: the inn screen has no slots
 assets: ui/inn.json: windows.box: field 'relative_to' names no window of this screen: 'missing'
 assets: ui/inn.json: -: the built-in layout of this screen stands in
+assets: ui/menu_equip.json: places[0]: field 'slot' must be one of weapon, left_hand, head, body, arms, accessory
+assets: ui/menu_equip.json: places[1]: field 'label' must be a non-empty string
+assets: ui/menu_equip.json: places[2]: 'head' is listed twice
+assets: ui/menu_equip.json: places[3]: missing field 'slot'
+assets: ui/menu_equip.json: -: the built-in layout of this screen stands in
+assets: ui/menu_status.json: places: only the menu_equip screen takes 'places'
+assets: ui/menu_status.json: profile[1]: must be a profile row: name, level, experience, experience_next, kind, hp, max_hp, tp, max_tp, strength, mental, agility, dexterity, defense, critical, evasion, magic_defense, attack_element
+assets: ui/menu_status.json: profile[2]: 'name' is listed twice
+assets: ui/menu_status.json: -: the built-in layout of this screen stands in
 assets: ui/nonsense.json: -: unknown screen 'nonsense': battle_front, battle_side, confirm, controls, dialogue, field, inn, load_game, menu, menu_codex, menu_combos, menu_equip, menu_items, menu_log, menu_macros, menu_options, menu_order, menu_quests, menu_status, name_entry, options, panels, pause, quest_log, save_prompt, save_slots, shop, sound_test, text_log, title, travel or styles
 assets: ui/panels.json: params.zoom: unknown param: bottom, gutter, margin, slide
 assets: ui/panels.json: -: the built-in layout of this screen stands in
+assets: ui/sound_test.json: start: only the title screen takes 'start' and 'options'
+assets: ui/sound_test.json: -: the built-in layout of this screen stands in
 assets: ui/title.json: -: not valid JSON: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 27.
 assets: ui/title.json: -: the built-in layout of this screen stands in
-assets: 0 tilesets, 14 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 4 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 23 layout files (1280x720)
-FAILED: 182 problems.
+assets: 0 tilesets, 14 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 4 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 19 layout files (1280x720)
+FAILED: 210 problems.

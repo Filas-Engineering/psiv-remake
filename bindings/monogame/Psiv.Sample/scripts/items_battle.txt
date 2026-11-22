@@ -1,0 +1,202 @@
+# The layout items' battle fields and models (make_items_assets.py), with --dev on the front data copy
+# (make_front_data.py): the title's start state and its chosen entries; the top-level step (fight, macro, run) before
+# the members' commands; the command rows as a row of pictures that Left and Right walk (`command_axis` row); the list's kind and index
+# sizing the command window; the acting member's slot; a name window only for a command chosen from a list; the
+# members' status flags and the fallen flag on the strip; the enemies' status icons following the statuses table in the
+# front layout and kept off it in the side layout; the top-level Run; and the result window paged two lines at a time.
+# The `uifield` probe reads each field as the screen was last drawn with it. With --window the shot lines save
+# screenshots under build/shots/items/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 3
+expect state uifield.title.start true
+expect state selected -
+expect state windows title/scene 0 0 1280x720, title/press 430 300 420x120, title/corner 0 0 1280x720, title/hint 0 690 1280x30
+shot build/shots/items/title_start.png
+press Space
+wait 2
+expect state uifield.title.start false
+expect state uifield.title.option_ids 5
+expect state uifield.title.option_ids.0.text -
+expect state selected Continue
+shot build/shots/items/title_menu.png
+press Down
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev encounters off
+cmd set difficulty hard
+cmd set reward x2
+
+# A full party of five against six enemies.
+dev event tidewater_board
+pressuntil Enter Field 900
+dev level scout 1
+dev level engineer 1
+dev level fighter 20
+dev level mystic 20
+dev level medic 20
+battlelayout front
+dev battle horde
+expect mode Battle
+
+# The top-level step comes first.
+waitstate 300 battlephase Top
+expect state uifield.battle_front.phase top
+expect state uifield.battle_front.list_kind top
+expect state uifield.battle_front.actor_slot -1
+expect state battlemenu [Fight] | Macro | Run
+expect statehas windows battle_front/command
+shot build/shots/items/top.png
+press Enter
+wait 2
+expect state battlephase Command
+expect state uifield.battle_front.list_kind command
+expect state uifield.battle_front.list_index -1
+expect state uifield.battle_front.actor_slot 0
+expect state uifield.battle_front.menu_items 8
+expect state uifield.battle_front.menu_items.1.command technique
+expect statehas windows battle_front/icons
+expect statenot windows battle_front/command
+# Left and Right walk the row; Up and Down do nothing there.
+press Right
+expect state battlemenu Attack | [Technique] | Skill | Item | Defend | Escape | Macro | Auto
+press Down
+expect state battlemenu Attack | [Technique] | Skill | Item | Defend | Escape | Macro | Auto
+press Left 2
+expect state battlemenu Attack | Technique | Skill | Item | Defend | Escape | Macro | [Auto]
+shot build/shots/items/icons.png
+# Back from the first member's commands goes up to the top-level step.
+press Escape
+expect state battlephase Top
+press Enter
+press Right 3
+press Enter
+expect state battlephase Option
+expect state uifield.battle_front.list_kind item
+expect state uifield.battle_front.list_index 3
+expect state window.command battle_front/command 216 416 360x160
+shot build/shots/items/item_list.png
+press Escape
+press Right
+press Enter
+expect state uifield.battle_front.list_kind technique
+expect state uifield.battle_front.list_index 1
+expect state window.command battle_front/command 216 462 360x114
+press Escape
+# The fighter attacks, the mystic casts Spark, the others defend.
+press Enter
+expect state uifield.battle_front.list_kind target
+press Enter
+expect state uifield.battle_front.actor_slot 1
+press Right
+press Enter
+press Enter
+press Enter
+press Right 4
+press Enter
+press Right 4
+press Enter
+press Right 4
+press Enter
+waitstatehas 600 step animate Test Mystic
+expect state uifield.battle_front.action_command technique
+expect state uifield.battle_front.action_chosen true
+expect state uifield.battle_front.actor_slot 1
+expect statehas windows battle_front/chosen
+shot build/shots/items/chosen.png
+waitstatehas 900 step animate Test Fighter attack
+expect state uifield.battle_front.action_command attack
+expect state uifield.battle_front.action_chosen false
+expect state uifield.battle_front.actor_slot 0
+expect statenot windows battle_front/chosen
+waitstatehas 900 step animate Rust Hound A
+expect state uifield.battle_front.actor_slot -1
+expect state uifield.battle_front.action_chosen false
+
+# Auto from the top-level step's Fight: sleep lands on enemies; their icons follow the table.
+waitstate 1200 battlephase Top
+press Enter
+press Left
+press Enter
+waitstatehas 1200 step +sleep
+wait 12
+expect statehas enemyicons sleep
+# The scout fell and the fighter is poisoned earlier in the round: the strip reads their flags.
+expect state uifield.battle_front.members.3.fallen true
+expect state uifield.battle_front.members.3.alive false
+expect state uifield.battle_front.members.0.status_poison true
+expect state uifield.battle_front.members.0.status_sleep false
+shot build/shots/items/enemy_sleep.png
+hold F 60
+waitstate 300 battlephase Top
+dev win
+waitstatehas 300 step sync
+hold F 60
+expect state battlephase Ended
+expect state uifield.battle_front.result_pages 2
+expect state uifield.battle_front.result_page 1
+expect state uifield.battle_front.result_lines 2
+expect state uifield.battle_front.result_more true
+expect statehas windows battle_front/pages
+shot build/shots/items/result_page1.png
+press Enter
+wait 2
+expect state battlephase Ended
+expect state uifield.battle_front.result_page 2
+expect state uifield.battle_front.result_more false
+expect state uifield.battle_front.result_lines 1
+shot build/shots/items/result_page2.png
+press Enter
+pressuntil Enter Field 600
+
+# The marsh: sleep on the members shows as their status flag.
+dev battle marsh
+waitstate 300 battlephase Top
+press Enter
+press Left
+press Enter
+waitstatehas 2400 step result Test Fighter +sleep
+wait 10
+expect state uifield.battle_front.members.0.status_sleep true
+expect state uifield.battle_front.members.1.status_sleep false
+expect state uifield.battle_front.members.0.fallen false
+shot build/shots/items/member_sleep.png
+dev win
+waitstate 900 battlephase Ended
+press Enter
+pressuntil Enter Field 600
+
+# The top-level Run sets every member to escape at once.
+dev battle training
+waitstate 300 battlephase Top
+press Down 2
+expect state battlemenu Fight | Macro | [Run]
+press Enter
+waitstatehas 600 step banner Escape
+waitstatehas 600 step result escaped
+expect statenot battlelog defends
+waitstate 1200 battlephase Ended
+press Enter
+pressuntil Enter Field 600
+
+# The side layout's enemies keep their icons off the table.
+battlelayout side
+dev battle horde
+waitstate 300 battlephase Command
+press Down 7
+press Enter
+waitstatehas 3000 step +sleep
+wait 12
+expect statehas enemyicons sleep
+shot build/shots/items/side_enemy_sleep.png
+dev win
+hold F 120
+waitstate 600 battlephase Ended
+expect statehas battlesync all match
+pressuntil Enter Field 600

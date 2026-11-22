@@ -35,9 +35,12 @@ public sealed class Assets
 		var layoutProblems = new List<AssetProblem>();
 		UiLayoutSet layout = manifest.UiLayoutEnabled == false ? UiLayoutSet.Defaults : UiLayoutSet.Load(manifest.Directory, manifest.UiLayoutEnabled == true, layoutProblems, data.Statuses);
 		// Scaled tilesets must fill the field's cell, so styles with a cell of their own read the manifest again against it.
-		if (layout.Styles.Param("field_cell") is var cell && cell != Art.Tile)
+		// So do cues and music only the dialogue's tags play.
+		(HashSet<string> Cues, HashSet<string> Music) tagged = (TagIds(layout, "cue"), TagIds(layout, "music"));
+		bool playedByTags = tagged.Cues.Except(data.Cues).Any() || tagged.Music.Except(data.Music).Any();
+		if (layout.Styles.Param("field_cell") is var cell && (cell != Art.Tile || playedByTags))
 		{
-			manifest = AssetManifest.Load(directory, data, cell);
+			manifest = AssetManifest.Load(directory, data, cell, playedByTags ? tagged : null);
 		}
 		var problems = new List<AssetProblem>(manifest.Problems);
 		BattlePresentation battle = BattlePresentation.Defaults();
@@ -76,6 +79,13 @@ public sealed class Assets
 		}
 		return new Assets(manifest, battle, animation, layout, problems);
 	}
+
+	// The ids the dialogue layout's tags name for an action: an entry's or a case's id, values and default.
+	public static HashSet<string> TagIds(UiLayoutSet layout, string action) => [.. layout.Screen("dialogue").Tags.Values
+		.SelectMany(t => t.Cases.Select(c => (c.Action, c.Id, c.Ids, (IReadOnlyDictionary<string, string>?)null, (string?)null)).Prepend((t.Action, t.Id, (IReadOnlyList<string>?)null, t.Values, t.Default)))
+		.Where(t => t.Item1 == action)
+		.SelectMany(t => new[] { t.Item2, t.Item5 }.Concat(t.Item3 ?? []).Concat(t.Item4?.Values ?? []))
+		.OfType<string>()];
 
 	// The files whose size or time differ from what `before` loaded, the manifest included; empty when nothing changed.
 	public IEnumerable<string> ChangedSince(Assets before) =>

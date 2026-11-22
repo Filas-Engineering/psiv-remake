@@ -107,6 +107,10 @@ Each is toggled by its key or `overlay NAME`. The field overlays draw over the m
 * `windows` (F1): every window the screen's layout drew this frame outlined, with its screen and name (`title/box`), on every screen including the battle and the menus ([`ui-layout.md`](ui-layout.md)). `overlay windows [on|off]` toggles it; `overlay all` and `overlay none` leave it as it is. `help overlays` lists it with its key; `help` keeps its six lines without it, because `scripts/dev_console.txt` prints them into its transcript and the console draws each line, so another line would change that transcript and its draw counts. `overlay.windows` reads how many windows it outlined.
 * `event` (F10): the running event and the source line of the instruction its interpreter is at, `event reed_path_lookout events/reed_path.ev:62` (`psiv_event_position_get`: the innermost event a `call` runs, and while it waits on a `together` or `race` block, the first live branch's line).
 
+## At small logical resolutions
+
+The tools are laid out for 1280x720. A layout set at another resolution can shrink them with the styles' `dev_scale` (10 to 100 percent, default 100): every tool (the badge, the paused and speed banners, the console, the picker, the overlays' plates, the frame ruler, the windows overlay's labels) is drawn in a frame of the logical size over that percent and scaled down to it; with a bitmap font for the menu role the text keeps the font's own size, so a 320x224 set at `"dev_scale": 60` draws the console in its own 10-pixel letters. `dev_draw` 0 draws none of them while every key and command still works. The probe `devdraw` reads `100%`, `60%` or `off`. `scripts/small_dev.txt` shows both on the small example set ([`ui-layout.md`](ui-layout.md), "The developer tools at small resolutions").
+
 ## Previewer
 
 F12 (or `preview`) opens a picker with two lists: every event of the data, and every battle presentation entry, the table's actions and then its fallbacks. Left and Right switch lists, Confirm plays, Back closes.

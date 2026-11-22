@@ -103,74 +103,119 @@ public sealed partial class SampleController
 		}
 	}
 
-	// The stats page in two columns of (label, value) rows; a row with no value is a heading.
+	// A stats page row: its label and value; a stat's total and its equipment bonus apart (signed, "" for none).
+	private sealed record StatRow(string Label, string Value, string Total = "", string Bonus = "");
+
 	private (List<(string Label, string Value)> Left, List<(string Label, string Value)> Right) StatusColumns(string memberId)
+	{
+		(List<StatRow> left, List<StatRow> right) = StatusRowsOf(memberId);
+		return ([.. left.Select(r => (r.Label, r.Value))], [.. right.Select(r => (r.Label, r.Value))]);
+	}
+
+	// The stats page in two columns; a row with no value is a heading. With the menu_status layout's `stat_bonus` at 0 a
+	// stat's value leaves out its equipment bonus.
+	private (List<StatRow> Left, List<StatRow> Right) StatusRowsOf(string memberId)
 	{
 		Member m = _s.Party().First(x => x.Id == memberId);
 		MemberDetail? d = _s.MemberDetail(memberId);
-		var left = new List<(string, string)>();
-		var right = new List<(string, string)>();
+		var left = new List<StatRow>();
+		var right = new List<StatRow>();
 		if (d is null)
 		{
 			return (left, right);
 		}
-		string Stat(int total, Func<StatBonus, int> bonus)
+		bool withBonus = Ui.Param("menu_status", "stat_bonus", UiData(), 1) != 0;
+		StatRow Stat(string label, int total, Func<StatBonus, int> bonus)
 		{
 			int sum = d.EquipmentBonus.Sum(bonus);
-			return total.ToString(CultureInfo.InvariantCulture) + (sum != 0 ? $" ({Signed(sum)})" : "");
+			string number = total.ToString(CultureInfo.InvariantCulture);
+			return new StatRow(label, number + (sum != 0 && withBonus ? $" ({Signed(sum)})" : ""), number, sum != 0 ? Signed(sum) : "");
 		}
-		left.Add((T("ui.status.stats"), ""));
-		left.Add((T("ui.stat.strength"), Stat(m.Strength, b => b.Strength)));
-		left.Add((T("ui.stat.mental"), Stat(m.Mental, b => b.Mental)));
-		left.Add((T("ui.stat.agility"), Stat(m.Agility, b => b.Agility)));
-		left.Add((T("ui.stat.dexterity"), Stat(m.Dexterity, b => b.Dexterity)));
-		left.Add((T("ui.stat.defense"), Stat(m.Defense, b => b.Defense)));
-		left.Add((T("ui.stat.critical"), Stat(d.Critical, b => b.Critical)));
-		left.Add((T("ui.stat.evasion"), Stat(d.Evasion, b => b.Evasion)));
+		left.Add(new StatRow(T("ui.status.stats"), ""));
+		left.Add(Stat(T("ui.stat.strength"), m.Strength, b => b.Strength));
+		left.Add(Stat(T("ui.stat.mental"), m.Mental, b => b.Mental));
+		left.Add(Stat(T("ui.stat.agility"), m.Agility, b => b.Agility));
+		left.Add(Stat(T("ui.stat.dexterity"), m.Dexterity, b => b.Dexterity));
+		left.Add(Stat(T("ui.stat.defense"), m.Defense, b => b.Defense));
+		left.Add(Stat(T("ui.stat.critical"), d.Critical, b => b.Critical));
+		left.Add(Stat(T("ui.stat.evasion"), d.Evasion, b => b.Evasion));
 		if (_s.GameInfo().MagicDefense)
 		{
-			left.Add((T("ui.stat.magic_defense"), Stat(d.MagicDefense, b => b.MagicDefense)));
+			left.Add(Stat(T("ui.stat.magic_defense"), d.MagicDefense, b => b.MagicDefense));
 		}
-		left.Add((T("ui.status.attack_element"), ElementText(d.AttackElement)));
-		left.Add((T("ui.status.affinities"), ""));
+		left.Add(new StatRow(T("ui.status.attack_element"), ElementText(d.AttackElement)));
+		left.Add(new StatRow(T("ui.status.affinities"), ""));
 		if (d.AffinityList is not { Count: > 0 })
 		{
-			left.Add((T("ui.status.none"), "-"));
+			left.Add(new StatRow(T("ui.status.none"), "-"));
 		}
 		int divisor = _s.GameInfo().AffinityDivisor;
 		foreach (Affinity a in d.AffinityList ?? [])
 		{
-			left.Add((a.Name, $"{a.Percent * 100 / Math.Max(1, divisor)}%"));
+			left.Add(new StatRow(a.Name, $"{a.Percent * 100 / Math.Max(1, divisor)}%"));
 		}
-		left.Add((T("ui.status.resistances"), ""));
+		left.Add(new StatRow(T("ui.status.resistances"), ""));
 		if (d.StatusResists.Count == 0)
 		{
-			left.Add((T("ui.status.none"), "-"));
+			left.Add(new StatRow(T("ui.status.none"), "-"));
 		}
 		foreach (StatusResist r in d.StatusResists)
 		{
-			left.Add((r.Name, $"{r.Percent}%"));
+			left.Add(new StatRow(r.Name, $"{r.Percent}%"));
 		}
-		right.Add((T("ui.status.equipment"), ""));
+		right.Add(new StatRow(T("ui.status.equipment"), ""));
 		foreach (int slot in EquipPositions.Select(p => (int)p))
 		{
 			string piece = m.EquipmentNames[slot].Length > 0 ? m.EquipmentNames[slot] : "-";
-			right.Add((T(NameKind.EquipSlot, slot), piece));
+			right.Add(new StatRow(T(NameKind.EquipSlot, slot), piece));
 			if (m.Equipment[slot].Length > 0 && slot < d.EquipmentBonus.Count)
 			{
-				right.Add(("", BonusText(d.EquipmentBonus[slot])));
+				right.Add(new StatRow("", BonusText(d.EquipmentBonus[slot])));
 			}
 		}
-		right.Add((T("ui.status.statuses"), ""));
+		right.Add(new StatRow(T("ui.status.statuses"), ""));
 		if (m.Statuses.Count == 0)
 		{
-			right.Add((T("ui.status.none"), "-"));
+			right.Add(new StatRow(T("ui.status.none"), "-"));
 		}
 		foreach (ActiveStatus st in m.Statuses)
 		{
-			right.Add((st.Name, st.Remaining > 0 ? T("ui.status.remaining", st.Remaining) : "-"));
+			right.Add(new StatRow(st.Name, st.Remaining > 0 ? T("ui.status.remaining", st.Remaining) : "-"));
 		}
 		return (left, right);
+	}
+
+	// The profile rows the menu_status layout's `profile` lists (every one by default), each `key`, `label` and `value`.
+	private List<UiContext> ProfileRows(Member m, MemberDetail d)
+	{
+		string Value(string key) => key switch
+		{
+			"name" => m.Name,
+			"level" => m.Level.ToString(CultureInfo.InvariantCulture),
+			"experience" => m.Experience.ToString(CultureInfo.InvariantCulture),
+			"experience_next" => d.ExperienceToNext.ToString(CultureInfo.InvariantCulture),
+			"kind" => GameSession.NameOf(NameKind.CreatureKind, (int)_s.CharacterKind(m.Id)),
+			"hp" => m.Hp.ToString(CultureInfo.InvariantCulture),
+			"max_hp" => m.MaxHp.ToString(CultureInfo.InvariantCulture),
+			"tp" => m.Tp.ToString(CultureInfo.InvariantCulture),
+			"max_tp" => m.MaxTp.ToString(CultureInfo.InvariantCulture),
+			"strength" => m.Strength.ToString(CultureInfo.InvariantCulture),
+			"mental" => m.Mental.ToString(CultureInfo.InvariantCulture),
+			"agility" => m.Agility.ToString(CultureInfo.InvariantCulture),
+			"dexterity" => m.Dexterity.ToString(CultureInfo.InvariantCulture),
+			"defense" => m.Defense.ToString(CultureInfo.InvariantCulture),
+			"critical" => d.Critical.ToString(CultureInfo.InvariantCulture),
+			"evasion" => d.Evasion.ToString(CultureInfo.InvariantCulture),
+			"magic_defense" => d.MagicDefense.ToString(CultureInfo.InvariantCulture),
+			_ => ElementText(d.AttackElement),
+		};
+		string Label(string key) => key switch
+		{
+			"attack_element" => T("ui.status.attack_element"),
+			"name" or "level" or "experience" or "experience_next" or "kind" or "hp" or "tp" => SampleText("ui.status.profile." + key),
+			_ => T("ui.stat." + key),
+		};
+		return [.. (Layout.Screen("menu_status").Profile ?? [.. UiFields.ProfileKeys]).Select(key => new UiContext().Set("key", key).Set("label", Label(key)).Set("value", Value(key)))];
 	}
 
 	private List<(string Label, string Value)> StatusRows(string memberId)
@@ -197,8 +242,12 @@ public sealed partial class SampleController
 		{
 			return;
 		}
+		int portrait = art.Portrait("", member.Id);
 		data.Set("view", _statusPage == 0 ? "stats" : "abilities")
-			.Set("portrait", art.Portrait("", member.Id))
+			.Set("portrait", portrait)
+			.Set("portrait_w", art.SizeOf(portrait).W)
+			.Set("portrait_h", art.SizeOf(portrait).H)
+			.Set("profile", ProfileRows(member, detail))
 			.Set("name", member.Name)
 			.Set("level", member.Level)
 			.Set("experience", member.Experience)
@@ -212,9 +261,9 @@ public sealed partial class SampleController
 			.Set("sub_list", _sub);
 		if (_statusPage == 0)
 		{
-			var (left, right) = StatusColumns(member.Id);
-			UiContext Cell(List<(string Label, string Value)> rows, int i) => i < rows.Count
-				? new UiContext(data).Set("shown", true).Set("label", rows[i].Label).Set("value", rows[i].Value)
+			var (left, right) = StatusRowsOf(member.Id);
+			UiContext Cell(List<StatRow> rows, int i) => i < rows.Count
+				? new UiContext(data).Set("shown", true).Set("label", rows[i].Label).Set("value", rows[i].Value).Set("total", rows[i].Total).Set("bonus", rows[i].Bonus)
 				: new UiContext(data).Set("shown", false);
 			Ui.Draw("menu_status", s, t, data.Set("stat_rows", Enumerable.Range(0, Math.Max(left.Count, right.Count))
 				.Select(i => new UiContext(data).Set("cells", new List<UiContext> { Cell(left, i), Cell(right, i) })).ToList()));

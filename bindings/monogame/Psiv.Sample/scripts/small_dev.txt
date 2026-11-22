@@ -1,0 +1,41 @@
+# The developer tools on the small example set (make_layout_assets.py --small, 320x224), with --dev: drawn at their
+# 1280x720 sizes as before, then at 60% with the styles' `dev_scale` (the badge, the windows overlay's labels and the
+# console laid out in a frame of 533x373 drawn at 0.6), then not at all with `dev_draw` 0, where the console's
+# commands still work. With --window the shot lines save screenshots under build/shots/small/ (run from bindings/,
+# --window-size 1280x896).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+wait 180
+expect state devdraw 100%
+dev overlay windows on
+wait 2
+shot build/shots/small/dev_full.png
+
+assets swap ui/styles.json alt/styles_dev60.json
+wait 6
+expect state devdraw 60%
+expect statehas windows field/hud
+shot build/shots/small/dev_60.png
+press OemTilde
+wait 2
+expect state console open
+shot build/shots/small/dev_60_console.png
+press OemTilde
+wait 2
+
+assets swap ui/styles.json alt/styles_dev_off.json
+wait 6
+expect state devdraw off
+expect state overlay.windows -
+dev money 7
+expect statehas consolelast money
+shot build/shots/small/dev_off.png

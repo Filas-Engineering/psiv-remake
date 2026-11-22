@@ -23,6 +23,8 @@ public sealed partial class SampleController
 		_equipSlot = null;
 		_equipChange = null;
 		_macroStage = MacroStage.List;
+		_saveMode = null;
+		_systemCursor = 0;
 	}
 
 	// Where the page is, for headless expectations.
@@ -43,10 +45,12 @@ public sealed partial class SampleController
 
 	private bool MenuAtTop() => MenuTabs[_tab] switch
 	{
-		"Status" or "Equip" => _pickMember is null,
+		"Status" => _pickMember is null,
+		"Equip" => _pickMember is null || (!EquipMembersFirst && _equipSlot is null),
 		"Items" => _pickAction is null,
 		"Order" => _orderFrom is null,
 		"Macros" => _macroStage == MacroStage.List,
+		"Save" => SaveAtTop,
 		_ => true,
 	};
 
@@ -60,6 +64,7 @@ public sealed partial class SampleController
 			if (step != 0)
 			{
 				_tab = (_tab + MenuTabs.Length + step) % MenuTabs.Length;
+				_pickMember = null;
 				_list.Reset();
 				_sub.Reset();
 				ResetMenuPages();
@@ -96,12 +101,7 @@ public sealed partial class SampleController
 			ScrollTextLog(input);
 			break;
 		case "Save":
-			List<string> slots = ManualSlots();
-			_list.Move(input, slots.Count);
-			if (input.Confirm)
-			{
-				SaveTo(slots[_list.Cursor]);
-			}
+			UpdateSavePage(input);
 			break;
 		case "Options":
 			if (input.Confirm)
@@ -208,6 +208,9 @@ public sealed partial class SampleController
 		case "Order":
 			Ui.Draw("menu_order", s, t, UiArea(x, y, w, h)
 				.Set("rows", LineupMembers().Select((m, i) => (_orderFrom == i ? "> " : "") + $"{i + 1}. {MemberRow(m)}" + string.Concat(m.Statuses.Select(st => $" [{st.Name}]"))).ToList())
+				.Set("lineup", LineupMembers().Select((m, i) => new UiContext().Set("text", MemberRow(m)).Set("name", m.Name).Set("level", m.Level).Set("hp", m.Hp)
+					.Set("max_hp", m.MaxHp).Set("tp", m.Tp).Set("max_tp", m.MaxTp).Set("number", i + 1).Set("picked", _orderFrom == i)
+					.Set("statuses", string.Join(" ", m.Statuses.Select(st => st.Name)))).ToList())
 				.Set("list", _list));
 			break;
 		case "Macros": DrawMacros(s, t, x, y, w, h); break;
@@ -215,7 +218,7 @@ public sealed partial class SampleController
 		case "Quests": DrawQuestLog(s, t, x, y, w, h); break;
 		case "Codex": DrawCodex(s, t, x, y, w, h); break;
 		case "Log": DrawTextLog(s, t, x, y, w, h); break;
-		case "Save": DrawSlots(t, _list, x, y, w, h, ManualSlots(), _s.Saves() ?? []); break;
+		case "Save": DrawSavePage(t, x, y, w, h); break;
 		case "Options":
 			Ui.Draw("menu_options", s, t, UiArea(x, y, w, h).Set("options", new List<string> { T("ui.menu.open_options") }));
 			_probeSelected = T("ui.menu.open_options");

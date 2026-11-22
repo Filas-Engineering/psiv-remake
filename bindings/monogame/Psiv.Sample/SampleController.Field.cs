@@ -521,7 +521,7 @@ public sealed partial class SampleController
 		int left = _field.BannerLeftMs;
 		int shown = FieldRenderer.BannerMs - left;
 		float alpha = Math.Clamp(Math.Min(shown / 300f, left / 500f), 0f, 1f);
-		visible &= left > 0;
+		visible &= left > 0 && Ui.Param("field", "area_banner", UiData(), 1) != 0;
 		return ctx.Set("banner_visible", visible)
 			.Set("banner_title", _field.BannerTitle)
 			.Set("banner_kind", visible ? AreaKindText(_field.BannerKind) : "")

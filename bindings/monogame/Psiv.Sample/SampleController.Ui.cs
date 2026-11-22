@@ -74,22 +74,51 @@ public sealed partial class SampleController
 		return covered.Count == 0 ? "none" : string.Join(", ", covered);
 	}
 
+	// `uifield.SCREEN.NAME` (or `.NAME.N.FIELD` for an item of a list field): a field as the screen was last drawn with it,
+	// `-` when it has none; a list reads as its length.
+	private string FieldProbe(string path)
+	{
+		string[] parts = path.Split('.');
+		if (parts.Length < 2 || !Ui.LastData.TryGetValue(parts[0], out UiContext? ctx))
+		{
+			return "-";
+		}
+		object? value = ctx.Get(parts[1]);
+		for (int i = 2; i + 1 < parts.Length; i += 2)
+		{
+			value = value is System.Collections.IList list && int.TryParse(parts[i], CultureInfo.InvariantCulture, out int n) && n >= 0 && n < list.Count && list[n] is UiContext item
+				? item.Get(parts[i + 1]) : null;
+		}
+		return value switch
+		{
+			null => "-",
+			bool b => b ? "true" : "false",
+			System.Collections.IList l => l.Count.ToString(CultureInfo.InvariantCulture),
+			IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
+			_ => value.ToString() ?? "-",
+		};
+	}
+
 	// `uiframes`: each frame style the layouts drew in the last frame as `NAME HOW COUNT`, by name.
 	private string FramesProbe() => Ui.FramesDrawn.Count == 0 ? "none"
 		: string.Join(", ", Ui.FramesDrawn.OrderBy(f => f.Key, StringComparer.Ordinal).Select(f => $"{f.Key} {f.Value.How} {f.Value.Count}"));
 
 	// The developer overlay `windows`: every window drawn this frame outlined, with its screen and name.
-	private void DrawWindowOverlay(IDrawSurface s)
+	// Its labels at `zoom` of their size: the windows stand in logical pixels, the labels follow the styles' `dev_scale`.
+	private void DrawWindowOverlay(IDrawSurface s, float zoom = 1f)
 	{
+		int Z(int v) => zoom == 1f ? v : Math.Max(1, (int)MathF.Round(v * zoom));
+		// A bitmap font draws at its own scale, so its text keeps its size.
+		int size = _bitmapFont is null ? Z(Style.Small) : Style.Small;
 		foreach (UiDrawn d in Ui.Drawn)
 		{
 			Style.Frame(s, d.Rect.X, d.Rect.Y, Math.Max(2, d.Rect.Width), Math.Max(2, d.Rect.Height), new Color(255, 96, 220), 1);
 			string label = $"{d.Screen}/{d.Window}";
-			int w = s.Measure(label, Style.Small) + 8;
+			int w = s.Measure(label, size) + Z(8);
 			int lx = Math.Clamp(d.Rect.X, 0, Math.Max(0, s.Width - w));
-			int ly = Math.Clamp(d.Rect.Y, 0, Math.Max(0, s.Height - 22));
-			s.Fill(lx, ly, w, 22, Color.Black * 0.7f);
-			s.Text(label, lx + 4, ly + 2, new Color(255, 160, 236), Style.Small);
+			int ly = Math.Clamp(d.Rect.Y, 0, Math.Max(0, s.Height - Z(22)));
+			s.Fill(lx, ly, w, Z(22), Color.Black * 0.7f);
+			s.Text(label, lx + Z(4), ly + Z(2), new Color(255, 160, 236), size);
 		}
 		_overlayDrawn["windows"] = Ui.Drawn.Count.ToString(CultureInfo.InvariantCulture);
 	}
@@ -103,6 +132,7 @@ public sealed partial class SampleController
 		Ui.Draw("confirm", s, t, UiData()
 			.Set("question", _confirm.Question)
 			.Set("on_yes", _confirm.OnYes)
-			.Set("options", new List<string> { T("ui.confirm.yes"), T("ui.confirm.no") }));
+			.Set("cursor", _confirm.Cursor)
+			.Set("options", _confirm.Choices?.ToList() ?? new List<string> { T("ui.confirm.yes"), T("ui.confirm.no") }));
 	}
 }

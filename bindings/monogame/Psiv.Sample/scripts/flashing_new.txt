@@ -1,0 +1,23 @@
+# A new profile in normal play (--play-defaults) on the shipped data: flashing starts reduced and the title says once
+# where to change it; choosing Original from the options asks the photosensitivity question first, and No keeps it.
+wait 2
+expect state flashing reduced
+expect toast Flashing is reduced. Options > Flashing changes it.
+expect screen Title
+press Down 3
+press Enter
+expect screen Options
+press Down 4
+expect state selected Flashing: Reduced
+press Left
+expect state flashing reduced
+expect statehas prompt can trigger seizures
+shot build/shots/flash/warning.png
+press Enter
+expect state prompt none
+expect state flashing reduced
+press Left
+press Left
+press Enter
+expect state flashing original
+press Escape

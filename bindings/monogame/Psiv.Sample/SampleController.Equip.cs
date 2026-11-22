@@ -30,6 +30,25 @@ public sealed partial class SampleController
 
 	private static int[] Values(StatBonus b) => [b.MaxHp, b.MaxTp, b.Strength, b.Mental, b.Agility, b.Dexterity, b.Defense, b.Critical, b.Evasion, b.MagicDefense];
 
+	// The places the page offers, in order: the menu_equip layout's `places`, else the built-in six.
+	private List<int> EquipPlaces() => Layout.Screen("menu_equip").Places?.Select(p => (int)Enum.Parse<EquipSlot>(p.Slot.Replace("_", ""), ignoreCase: true)).ToList()
+		?? [.. EquipPositions.Select(p => (int)p)];
+
+	private string PlaceLabel(int slot) => Layout.Screen("menu_equip").Places?.FirstOrDefault(p => (int)Enum.Parse<EquipSlot>(p.Slot.Replace("_", ""), ignoreCase: true) == slot).Label is { } key
+		? T(key) : T(NameKind.EquipSlot, slot);
+
+	// The page opens on the member list (`members_first`, 1 by default), or on the first member's places, where the tab
+	// keys still turn the tabs and the PartyTalk key (the Items page's sort key) goes to the next member.
+	private bool EquipMembersFirst => Ui.Param("menu_equip", "members_first", UiData(), 1) != 0;
+
+	private void EquipFirstMember(List<Member> lineup)
+	{
+		if (_pickMember is null && !EquipMembersFirst && lineup.Count > 0)
+		{
+			_pickMember = lineup[0].Id;
+		}
+	}
+
 	private static bool Fits(InventoryEntry piece, int position) => position is (int)EquipSlot.Weapon or (int)EquipSlot.LeftHand
 		? piece.Slot is EquipSlot.Weapon or EquipSlot.Shield
 		: (int)piece.Slot == position;
@@ -55,6 +74,7 @@ public sealed partial class SampleController
 	private void UpdateEquip(ActionInput input)
 	{
 		List<Member> lineup = LineupMembers();
+		EquipFirstMember(lineup);
 		if (_pickMember is null)
 		{
 			_list.Move(input, lineup.Count);
@@ -68,14 +88,21 @@ public sealed partial class SampleController
 		}
 		if (_equipSlot is not { } slot)
 		{
-			_sub.Move(input, EquipPositions.Length);
-			if (input.Back)
+			List<int> places = EquipPlaces();
+			_sub.Move(input, places.Count);
+			if (!EquipMembersFirst && input.Pressed(GameAction.PartyTalk) && lineup.Count > 0)
+			{
+				int at = Math.Max(0, lineup.FindIndex(m => m.Id == _pickMember));
+				_pickMember = lineup[(at + 1) % lineup.Count].Id;
+				_equipChange = null;
+			}
+			else if (input.Back)
 			{
 				_pickMember = null;
 			}
 			else if (input.Confirm)
 			{
-				_equipSlot = (int)EquipPositions[_sub.Cursor];
+				_equipSlot = places[_sub.Cursor];
 				_third.Reset();
 			}
 			return;
@@ -103,6 +130,7 @@ public sealed partial class SampleController
 	private void DrawEquip(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{
 		List<Member> lineup = LineupMembers();
+		EquipFirstMember(lineup);
 		UiContext data = UiArea(x, y, w, h);
 		if (_pickMember is null)
 		{
@@ -119,20 +147,27 @@ public sealed partial class SampleController
 			return;
 		}
 		string WornText(int slot) => member.Equipment[slot].Length > 0 ? $"{member.EquipmentNames[slot]}: {BonusText(detail.EquipmentBonus[slot])}" : T("ui.equip.nothing");
-		var slots = EquipPositions.Select(slot => (int)slot).ToList();
+		List<int> slots = EquipPlaces();
+		string Row(int slot) => $"{PlaceLabel(slot)}: " + (member.Equipment[slot].Length > 0 ? member.EquipmentNames[slot] : "-");
 		data.Set("member_name", member.Name)
-			.Set("slot_rows", slots.Select(slot => $"{T(NameKind.EquipSlot, slot)}: " + (member.Equipment[slot].Length > 0 ? member.EquipmentNames[slot] : "-")).ToList())
+			.Set("slot_rows", slots.Select(Row).ToList())
+			.Set("places", slots.Select(slot => new UiContext(data).Set("text", Row(slot)).Set("slot", Snake(((EquipSlot)slot).ToString())).Set("label", PlaceLabel(slot))
+				.Set("piece", member.EquipmentNames[slot]).Set("worn", member.Equipment[slot].Length > 0)).ToList())
+			.Set("member_index", lineup.FindIndex(m => m.Id == member.Id))
+			.Set("member_count", lineup.Count)
 			.Set("slot_list", _sub);
 		int[] totals = Totals(member.Id)!;
 		List<(string Label, int Before, int After)> compare = [];
 		if (_equipSlot is not { } chosen)
 		{
+			// With `stats_preview_only` the stats show only while a piece is browsed, not the last change made.
+			(string Title, List<(string Label, int Before, int After)> Rows)? shownChange = Ui.Param("menu_equip", "stats_preview_only", data, 0) != 0 ? null : _equipChange;
 			data.Set("view", "slots")
 				.Set("right", "worn")
 				.Set("worn_text", WornText(slots[Math.Clamp(_sub.Cursor, 0, slots.Count - 1)]))
-				.Set("has_change", _equipChange is not null)
-				.Set("change_text", _equipChange is { } last ? T("ui.equip.last_change", last.Title) : "");
-			if (_equipChange is { } change)
+				.Set("has_change", shownChange is not null)
+				.Set("change_text", shownChange is { } last ? T("ui.equip.last_change", last.Title) : "");
+			if (shownChange is { } change)
 			{
 				compare = change.Rows.Count > 0 ? change.Rows : [(T("ui.equip.no_change_made"), 0, 0)];
 			}
@@ -141,7 +176,7 @@ public sealed partial class SampleController
 		{
 			List<(string Label, string? Piece, bool Wearable)> choices = EquipChoices(member.Id, chosen);
 			data.Set("view", "pieces")
-				.Set("slot_name", T(NameKind.EquipSlot, chosen))
+				.Set("slot_name", PlaceLabel(chosen))
 				.Set("choices", choices.Select(c => new UiContext(data).Set("text", c.Label).Set("enabled", c.Wearable)).ToList())
 				.Set("choice_list", _third);
 			if (choices.Count > 0)

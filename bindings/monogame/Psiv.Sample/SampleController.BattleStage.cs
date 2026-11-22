@@ -330,7 +330,9 @@ public sealed partial class SampleController
 			int labelWidth = Param("label_max_width"), labelY = Param("label_y"), labelH = Param("label_h"), labelPad = Param("label_pad"), labelTextY = Param("label_text_y");
 			int barY = Param("enemy_bar_y"), barW = Param("enemy_bar_w"), barH = Param("enemy_bar_h"), iconsY = Param("enemy_icons_y");
 			bool showLabels = Ui.Param(screen, "enemy_labels", ui, 1) != 0, showBars = Ui.Param(screen, "enemy_bars", ui, 1) != 0;
+			Dictionary<string, UiStatusLook>? enemyLooks = Ui.Param(screen, "enemy_statuses", ui, 1) != 0 ? Layout.Screen(screen).Statuses : null;
 			int labelsDrawn = 0, barsDrawn = 0;
+			var enemyIcons = new List<string>();
 			foreach (int i in order.Where(i => all[i].Side == Side.Enemy && (shown[i].Alive || (shown[i].AliveStep is not null && shown[i].AliveStep == step))
 				&& !(step is { Kind: StepKind.Merge } && i == step.From)))
 			{
@@ -351,13 +353,19 @@ public sealed partial class SampleController
 					Style.Bar(s, x - barW / 2, foot + barY, barW, barH, Shown(shown[i], step).Hp, shown[i].MaxHp, Style.Bad);
 					barsDrawn++;
 				}
-				DrawIcons(s, art, icons, shown[i], step, x - barW / 2, foot + iconsY);
+				DrawIcons(s, art, icons, shown[i], step, x - barW / 2, foot + iconsY, enemyLooks);
+				if (shown[i].Statuses.Count > 0)
+				{
+					List<string> drawn = [.. Iconed(shown[i].Statuses, enemyLooks ?? [])];
+					enemyIcons.Add($"{shown[i].Label} {(drawn.Count > 0 ? string.Join(" ", drawn) : "none")}");
+				}
 				// Without its label the enemy's mark is its bar and icons.
 				int lx = showLabels ? Math.Min(x - lw / 2 - labelPad, x - barW / 2) : x - barW / 2;
 				int ly = showLabels ? labelY : showBars ? barY : iconsY;
 				labels[shown[i].Label] = new Rectangle(lx, foot + ly, Math.Max(x - lx, showLabels ? lw / 2 + labelPad : 0) * 2, iconsY + icons.Size - ly);
 			}
 			_probeEnemyMarks = $"labels {labelsDrawn} bars {barsDrawn}";
+			_probeEnemyIcons = enemyIcons.Count == 0 ? "none" : string.Join(", ", enemyIcons);
 
 			// The target cursor over the figure being chosen (a member seen from behind gets it over the command window), and
 			// over the retarget step's new target as it moves there.
@@ -468,14 +476,9 @@ public sealed partial class SampleController
 			string statusColor = sc.Statuses.Select(id => looks.GetValueOrDefault(id)).Where(l => l?.Color is not null).OrderByDescending(l => l!.Priority).FirstOrDefault()?.Color ?? "";
 			List<string> iconed = [.. Iconed(sc.Statuses, looks)];
 			partyStatus.Add($"{c.Name}: {(statusColor.Length > 0 ? statusColor : "-")} {(iconed.Count > 0 ? string.Join(" ", iconed) : "none")}");
-			string command = c.CommandKind switch
-			{
-				CommandKind.None => "",
-				CommandKind.Ability => _data.Actions.GetValueOrDefault(c.CommandId)?.Kind is { } kind && AssetManifest.CommandNames.Contains(kind) ? kind : "technique",
-				_ => c.CommandKind.ToString().ToLowerInvariant(),
-			};
+			string command = CommandName(c.CommandKind, c.CommandId);
 			commands.Add($"{c.Name} {(command.Length > 0 ? command : "-")}");
-			return new UiContext(ui)
+			UiContext member = new UiContext(ui)
 				.Set("name", c.Name)
 				.Set("alive", sc.Alive)
 				.Set("acting", commanding ? c.Index == b.Actor : turn?.Actors.Contains(c.Index) == true)
@@ -495,7 +498,14 @@ public sealed partial class SampleController
 				.Set("anchor", (UiSlot)((x, y, w, h) => anchors.TryAdd(c.Index, new Rectangle(x, y, w, h))))
 				.Set("command", command)
 				.Set("command_icon", command.Length > 0 ? art.CommandIcon(command) : -1)
-				.Set("level", levels.GetValueOrDefault(c.Id));
+				.Set("level", levels.GetValueOrDefault(c.Id))
+				.Set("fallen", !sc.Alive)
+				.Set("slot", c.Index);
+			foreach (string status in _data.Statuses)
+			{
+				member.Set(UiFields.StatusFlag + status, sc.Statuses.Contains(status));
+			}
+			return member;
 		}
 		List<Combatant> partySide = [.. all.Where(c => c.Side == Side.Party)];
 		List<UiContext> party = [.. partySide.Select(Member)];
@@ -552,11 +562,44 @@ public sealed partial class SampleController
 				BattlePhase.Ended => T("ui.battle.hint.continue", Hint(GameAction.Confirm)),
 				_ => T("ui.battle.hint.command", Hint(GameAction.Confirm), Hint(GameAction.Back), Hint(GameAction.TextLog), Hint(GameAction.Pause)),
 			})
-			.Set("outcome", OutcomeText(info?.Outcome ?? Outcome.Ongoing))
-			.Set("result_lines", b.Phase == BattlePhase.Ended ? ResultLines(info) : []);
+			.Set("outcome", OutcomeText(info?.Outcome ?? Outcome.Ongoing));
+		int page = 0, pages = 0;
+		ui.Set("result_lines", b.Phase == BattlePhase.Ended ? ResultPage(ResultLines(info), screen, out page, out pages) : [])
+			.Set("result_page", b.Phase == BattlePhase.Ended ? page + 1 : 0)
+			.Set("result_pages", b.Phase == BattlePhase.Ended ? pages : 0)
+			.Set("result_more", b.Phase == BattlePhase.Ended && page + 1 < pages);
+		// The list open and the command row it came from; the member choosing or acting; and whether the turn playing is a
+		// command a member chose from a list rather than a plain attack.
+		bool listed = b.Phase is BattlePhase.Option or BattlePhase.Macro or BattlePhase.Target;
+		ui.Set("list_kind", b.Phase switch
+			{
+				BattlePhase.Command => "command",
+				BattlePhase.Top => "top",
+				BattlePhase.Option => b.MenuChoice,
+				BattlePhase.Macro => "macro",
+				BattlePhase.Target => "target",
+				_ => "",
+			})
+			.Set("list_index", listed ? b.MenuIndex : -1);
+		int partyCount = info?.PartyCount ?? all.Count(c => c.Side == Side.Party);
+		BattleTurn? playing = step?.Turn;
+		int actorSlot = b.Phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro && !b.FromTop ? b.Actor
+			: playing is { Actors: [int first, ..] } && first < partyCount ? first : -1;
+		string actionCommand = playing is null ? "" : playing.Combo ? "combo" : CommandName(playing.Command, playing.Ability);
+		ui.Set("actor_slot", actorSlot)
+			.Set("action_command", actionCommand)
+			.Set("action_chosen", playing is { Actors: [int actor, ..] } && actor < partyCount && actionCommand is not ("" or "attack"));
 		// A row's own fields, then the screen's: a row template may read the cursor and the phase. An option's name, cost and
 		// uses left (-1 for none) stand apart from its row text.
+		List<string> rowCommands = b.Phase switch
+		{
+			BattlePhase.Command => [.. CommandRows().Select(r => r.Command)],
+			BattlePhase.Top => [.. TopMenu],
+			_ => [],
+		};
 		ui.Set("menu_items", menu is { } m ? m.Items.Select((item, i) => new UiContext(ui).Set("text", item).Set("usable", m.Usable is null || m.Usable[i])
+			.Set("command", i < rowCommands.Count ? rowCommands[i] : "")
+			.Set("icon", i < rowCommands.Count && b.Phase == BattlePhase.Command && _art is { } icons ? icons.CommandIcon(rowCommands[i]) : -1)
 			.Set("name", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Name : item)
 			.Set("cost", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Cost : 0)
 			.Set("uses", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Uses : -1)).ToList() : []);
@@ -605,6 +648,14 @@ public sealed partial class SampleController
 		return ui.Set("log_lines", lines);
 	}
 
+	// A command as the layouts' `command` fields name it: attack, technique, skill, combo, item, defend, escape, or "".
+	private string CommandName(CommandKind kind, string id) => kind switch
+	{
+		CommandKind.None => "",
+		CommandKind.Ability => _data.Actions.GetValueOrDefault(id)?.Kind is { } k && AssetManifest.CommandNames.Contains(k) ? k : "technique",
+		_ => kind.ToString().ToLowerInvariant(),
+	};
+
 	// A member's state under its name: fallen, defending and its statuses.
 	private string MemberState(Combatant c, ShownCombatant sc) =>
 		!sc.Alive ? T("ui.battle.fallen") : string.Join(" ", sc.Statuses.Select(_s.DisplayName).Prepend(c.Defending ? T("ui.battle.defending") : "").Where(x => x.Length > 0));
@@ -617,6 +668,7 @@ public sealed partial class SampleController
 	private string MenuTitle(IReadOnlyList<Combatant> all) => _battle.Phase switch
 	{
 		BattlePhase.Command => _battle.Actor < all.Count ? all[_battle.Actor].Name : "",
+		BattlePhase.Top => SampleText("ui.battle.title.top"),
 		BattlePhase.Option => T("ui.battle.command." + _battle.MenuChoice),
 		BattlePhase.Target => T("ui.battle.title.target"),
 		BattlePhase.Macro => T("ui.battle.title.macro"),
@@ -631,6 +683,7 @@ public sealed partial class SampleController
 		return b.Phase switch
 		{
 			BattlePhase.Command when CommandRows() is var rows => ([.. rows.Select(r => r.Text)], [.. rows.Select(r => r.Usable)]),
+			BattlePhase.Top => ([.. TopMenu.Select(t => SampleText("ui.battle.top." + t))], null),
 			BattlePhase.Option => (b.Options.Select(OptionText).ToList(), b.Options.Select(o => o.Usable).ToList()),
 			BattlePhase.Target => (b.Targets.Select(t => t < all.Count ? (all[t].Side == Side.Party ? all[t].Name : all[t].Label) : "?").ToList(), null),
 			BattlePhase.Macro => ([.. _s.Macros()], null),
@@ -653,6 +706,11 @@ public sealed partial class SampleController
 				return T("ui.battle.worn_note") + (piece is { Length: > 0 } ? " " + piece : "");
 			}
 			return _s.Description(option.Command == CommandKind.Item ? DescriptionKind.Item : DescriptionKind.Ability, option.Id);
+		}
+		// The top-level step's Macro says so when there are none to choose.
+		if (b.Phase == BattlePhase.Top && _cursor < TopMenu.Length && TopMenu[_cursor] == "macro" && _s.Macros().Count == 0)
+		{
+			return SampleText("ui.battle.no_macros");
 		}
 		if (b.Phase == BattlePhase.Target && target >= 0 && target < all.Count && all[target].Side == Side.Enemy)
 		{
@@ -773,6 +831,15 @@ public sealed partial class SampleController
 	private static string BannerOf(BattleStep step) => step.Kind == StepKind.Banner ? step.Text : step.Turn?.Name ?? "";
 
 	// The result screen's lines: experience, money, drops, and each level-up with what it taught; or the party's fall.
+	// The result lines of the page showing, when the layout's `result_page_lines` pages them; all of them otherwise.
+	private List<UiContext> ResultPage(List<UiContext> lines, string screen, out int page, out int pages)
+	{
+		int per = Ui.Param(screen, "result_page_lines", UiData(), 0);
+		pages = per <= 0 ? 1 : Math.Max(1, (lines.Count + per - 1) / per);
+		page = Math.Clamp(_battle.ResultPage, 0, pages - 1);
+		return per <= 0 ? lines : [.. lines.Skip(page * per).Take(per)];
+	}
+
 	private List<UiContext> ResultLines(BattleInfo? info)
 	{
 		BattleResult? result = _s.BattleResult();

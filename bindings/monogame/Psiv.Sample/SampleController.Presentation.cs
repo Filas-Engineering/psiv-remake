@@ -104,6 +104,12 @@ public sealed partial class SampleController
 			_animations.Add(new Animation(a, length));
 			return;
 		}
+		if (a.Type is ActionType.FadeIn or ActionType.FadeOut && a.Seconds <= 0)
+		{
+			EndAnimation(a);
+			_s.FinishAction(a.Handle);
+			return;
+		}
 		if (a.Type is ActionType.FadeIn or ActionType.FadeOut)
 		{
 			_animations.Add(new Animation(a, Math.Clamp((int)(a.Seconds * 1000), ShortestAnimationMs, LongestAnimationMs)));
@@ -215,19 +221,48 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void DrawAnimations(IDrawSurface s)
+	// How dark the scripts' fades leave the screen now, 0 to 1.
+	private float Darkness()
 	{
 		float darkness = _darkness;
 		foreach (Animation a in _animations)
 		{
+			darkness = a.Action.Type switch
+			{
+				ActionType.FadeIn => 1f - a.Progress,
+				ActionType.FadeOut => a.Progress,
+				_ => darkness,
+			};
+		}
+		return darkness;
+	}
+
+	// The fade's black, once a frame: over the scene and its panels, under the dialogue box, the name entry and the text
+	// log, which call this before they draw; else, from DrawAnimations, over everything.
+	private bool _darknessDrawn;
+	// The `darkness` probe: how dark the last frame's fade drew and what it lay under, `none` without one.
+	private string _probeDarkness = "none";
+
+	private void DrawDarkness(IDrawSurface s, string under = "nothing")
+	{
+		if (!_darknessDrawn)
+		{
+			float darkness = Darkness();
+			if (darkness > 0f)
+			{
+				s.Fill(0, 0, s.Width, s.Height, Color.Black * darkness);
+			}
+			_probeDarkness = darkness > 0f ? $"{darkness.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} under {under}" : "none";
+		}
+		_darknessDrawn = true;
+	}
+
+	private void DrawAnimations(IDrawSurface s)
+	{
+		foreach (Animation a in _animations)
+		{
 			switch (a.Action.Type)
 			{
-			case ActionType.FadeIn:
-				darkness = 1f - a.Progress;
-				break;
-			case ActionType.FadeOut:
-				darkness = a.Progress;
-				break;
 			case var _ when a.Labeled:
 				string label = LabelOf(a.Action);
 				int x = 20 + (int)((s.Width - s.Measure(label, Style.Small) - 64) * a.Progress);
@@ -235,9 +270,7 @@ public sealed partial class SampleController
 				break;
 			}
 		}
-		if (darkness > 0f)
-		{
-			s.Fill(0, 0, s.Width, s.Height, Color.Black * darkness);
-		}
+		DrawDarkness(s);
+		_darknessDrawn = false;
 	}
 }

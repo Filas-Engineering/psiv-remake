@@ -102,21 +102,54 @@ public sealed class ConfirmPrompt
 {
 	private Action? _yes;
 	private bool _onYes;
+	// A question with several answers instead of yes and no (Choose): each answer's words and what it does; Back takes
+	// `_back`.
+	private List<(string Text, Action Act)>? _choices;
+	private int _cursor, _back;
 
 	public string? Question { get; private set; }
 	public bool OnYes => _onYes;
+	public IReadOnlyList<string>? Choices => _choices?.Select(c => c.Text).ToList();
+	public int Cursor => _choices is null ? (_onYes ? 0 : 1) : _cursor;
 
 	public void Ask(string question, Action yes)
 	{
 		Question = question;
 		_yes = yes;
 		_onYes = false;
+		_choices = null;
+	}
+
+	public void Choose(string question, List<(string Text, Action Act)> choices, int start, int back)
+	{
+		Question = question;
+		_choices = choices;
+		_cursor = start;
+		_back = back;
 	}
 
 	public void Close() => Question = null;
 
 	public void Update(ActionInput input)
 	{
+		if (_choices is { } choices)
+		{
+			if (input.Pressed(GameAction.Up) || input.Pressed(GameAction.Left))
+			{
+				_cursor = (_cursor + choices.Count - 1) % choices.Count;
+			}
+			if (input.Pressed(GameAction.Down) || input.Pressed(GameAction.Right))
+			{
+				_cursor = (_cursor + 1) % choices.Count;
+			}
+			if (input.Back || input.Confirm)
+			{
+				Question = null;
+				_choices = null;
+				choices[input.Confirm ? _cursor : _back].Act();
+			}
+			return;
+		}
 		if (input.Pressed(GameAction.Up) || input.Pressed(GameAction.Down) || input.Pressed(GameAction.Left) || input.Pressed(GameAction.Right))
 		{
 			_onYes = !_onYes;

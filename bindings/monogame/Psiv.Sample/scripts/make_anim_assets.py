@@ -438,6 +438,8 @@ def broken(out):
 					{"type": "move", "on": "party_others", "kind": "offset", "by": ["4pz", 0]},
 					{"type": "flash", "reduced": {"type": "wobble"}},
 					{"type": "shake", "amplitude": "40px"},
+					{"type": "pose", "on": "beside:up:target:0", "pose": "hurt", "flash": "yes"},
+					{"type": "pose", "on": "adjacent:left:beside:right:user", "pose": "hurt"},
 				],
 				"event_cues_off": "sometimes",
 			},
@@ -448,7 +450,8 @@ def broken(out):
 		"effects": {"spark.orb": {"sheet": "no_such_sheet", "frames": [0, -2]}},
 		"figures": {"enemy": {"states": {"defeat": {"kind": "explode"}, "defeat:instant": {"outlast": "soon"}}}, "monster": {"states": {}}},
 		"numbers": {"critical": {"color": "gold"}, "huge": {}, "damage": {"rise": "3h", "pad": "200px"}},
-		"transitions": {"blocks": {"kind": "mosaic", "block": 4}, "dots": {"kind": "tiles", "tile": 2}},
+		"transitions": {"blocks": {"kind": "mosaic", "block": 4}, "dots": {"kind": "tiles", "tile": 2}, "seq": {"kind": "sequence"},
+			"seq2": {"kind": "sequence", "phases": [{"color": "#fff", "steps": 0}]}, "fade2": {"kind": "fade", "phases": []}},
 		"weapon_classes": {"category:axe": "chop"},
 		"placements": {"count:9": [[1, 2]]},
 	})

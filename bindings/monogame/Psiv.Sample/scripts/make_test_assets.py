@@ -228,6 +228,7 @@ def main():
 	more_broken(broken)
 	broken_layouts(broken)
 	looks_broken(broken)
+	items_broken(broken)
 	bitmap_fonts(export, fonts)
 	if len(sys.argv) > 5:
 		subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("make_layout_assets.py")), str(export), str(fonts), sys.argv[5]], check=True)
@@ -671,6 +672,33 @@ def more_broken(broken):
 	m["pictures"] = {"bell tower": "title/traveler.png", "chart": 5}
 	m["keepers"] = {"no_such_shop": "guide", "tidewater_inn": "nobody", "tidewater_stall": 3}
 	(broken / "assets.json").write_text(json.dumps(m, indent="\t") + "\n")
+
+
+def items_broken(broken):
+	"""One problem of each kind the layout items' fields can have, in BROKEN's ui/ (docs/ui-layout.md, "Layout items")."""
+	ui = broken / "ui"
+
+	def change(name, edit):
+		data = json.loads((ui / f"{name}.json").read_text())
+		edit(data)
+		(ui / f"{name}.json").write_text(json.dumps(data, indent="\t") + "\n")
+
+	def front(d):
+		d["params"]["command_axis"] = "diagonal"
+		d["windows"].append({"name": "icons", "elements": [{"type": "repeater", "items": "menu_items", "dx": 40, "template": [
+			{"type": "image", "image": "icon", "w": 32, "h": 32}, {"type": "text", "visible": "status_nausea", "value": "'?'"}]}]})
+	change("battle_front", front)
+	change("sound_test", lambda d: d.update({"start": True, "options": ["new_game"]}))
+	change("menu_equip", lambda d: d.update({"places": [{"slot": "tail"}, {"slot": "head", "label": ""}, {"slot": "head"}, {"label": "ui.stat.defense"}]}))
+	change("menu_status", lambda d: d.update({"profile": ["name", "shoe_size", "name"], "places": [{"slot": "head"}]}))
+	change("field", lambda d: d.update({"params": {"arrive_toast": 0, "area_banners": 0}}))
+	change("dialogue", lambda d: d["tags"].update({"snd": {"cases": [{"value": "1", "from": 2, "action": "cue"}, {"from": 5, "to": 1, "action": "music"},
+		{"from": 1, "to": 3, "action": "music_stop", "ids": ["title"]}, {"value": "4"}]}}))
+
+	def styles(d):
+		d["params"]["dev_scale"] = 5
+		d["params"]["dev_draw"] = 2
+	change("styles", styles)
 
 
 def broken_layouts(broken):
