@@ -185,7 +185,8 @@ public sealed class UiRenderer
 	// The data each screen was last drawn with, for the `uifield` probe.
 	public Dictionary<string, UiContext> LastData { get; } = [];
 
-	public void Draw(string screen, IDrawSurface s, IDrawSurface t, UiContext ctx)
+	// With `window`, that window of the screen alone.
+	public void Draw(string screen, IDrawSurface s, IDrawSurface t, UiContext ctx, string? window = null)
 	{
 		LastData[screen] = ctx;
 		UiScreenLayout layout = Set.Screen(screen);
@@ -193,7 +194,7 @@ public sealed class UiRenderer
 		_lastDrawn[screen] = _frame;
 		try
 		{
-			new Run(this, layout, s, t, ctx).Draw(fresh, _settle.Remove(screen));
+			new Run(this, layout, s, t, ctx).Draw(fresh, _settle.Remove(screen), window);
 		}
 		catch (Exception e) when (!_failed.Contains(screen) && !Set.IsDefault)
 		{
@@ -303,9 +304,9 @@ public sealed class UiRenderer
 			return _rects[w.Name] = new Rectangle(x, y, width, height);
 		}
 
-		public void Draw(bool fresh, bool settle)
+		public void Draw(bool fresh, bool settle, string? only)
 		{
-			foreach (UiWindow w in layout.Windows.OrderBy(w => w.Z))
+			foreach (UiWindow w in layout.Windows.Where(w => only is null || w.Name == only).OrderBy(w => w.Z))
 			{
 				bool visible = w.Visible is null || w.Visible.Eval(Root()).Truth;
 				string key = layout.Name + "/" + w.Name;

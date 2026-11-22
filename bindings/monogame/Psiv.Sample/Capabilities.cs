@@ -29,7 +29,7 @@ public static class Capabilities
 		"leader", "leaderpos", "line", "lineportrait", "loglines", "macrocheck", "macros", "marks", "menukind", "music", "narration", "narrationreveal", "numbers", "objects", "overlaps",
 		"overlays", "page", "pagetext", "panels", "paneltiles", "party", "partyplaces", "partystatus", "paused", "picture", "pictures", "platforms", "playtime", "preview", "prompt", "ranks",
 		"reduced_flash", "released", "reload", "reveal", "reward", "scenecamera", "screenlight", "selected", "shake", "shipped_names", "shown", "shownportrait", "speaker", "speed", "spritesteps", "step", "strip",
-		"tab", "tags", "text_size", "text_speed", "tilehooks", "timescale", "titleart", "titlesizes", "toastboxes", "top", "transition", "uiframes", "vehicles", "victory", "voice",
+		"tab", "tags", "talk", "text_size", "text_speed", "tilehooks", "timescale", "titleart", "titlesizes", "toastboxes", "top", "transition", "uiframes", "vehicles", "victory", "voice",
 		"volumes", "walk", "walkbuffer", "walkstep", "windows", "wrapped"];
 
 	// Probes that take a name after the dot: `uifield.SCREEN.FIELD`, `window.NAME`, `figure.NAME` and so on.

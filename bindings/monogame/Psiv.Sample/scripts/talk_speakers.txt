@@ -1,0 +1,134 @@
+# The party talk one speaker at a time (make_talk_data.py, make_talk_assets.py), from saves of the scripted playthrough
+# on that data copy, with --dev: the Talk tab, an `immediate` entry, opens on the first speaker; each speaker's portrait
+# (the medic's expression, which a tag of the line selects), name and line reveal at the text speed, Confirm shows a box
+# still revealing at once, then goes to the next page, the next speaker and back to the page after the last; Back leaves
+# at once; `talk_hide_menu` draws the speaker's window alone over the field; the Extras menu opens the page the menu
+# leaves out, whose row starts the talk with Confirm; with nobody to talk the refusal shows. The steps wait on the `talk`
+# probe, which the window's late frames cannot get ahead of. With --window the shot lines save screenshots under
+# build/shots/talk/ (run from bindings/).
+
+cmd set text normal
+expect screen Title
+wait 2
+cmd load manual_1
+wait 4
+expect screen Field
+dev encounters off
+dev warp tidewater stall_front
+# The arrival's notices gone first.
+wait 300
+
+# The Talk tab starts at once: the mystic's first page reveals, Confirm shows it whole, the arrow says more follows.
+press M
+expect screen Menu
+press Right
+wait 2
+expect state tab Party_talk
+expect state page speakers
+expect statehas talk 1/3 mystic page 1/2 person:mystic
+expect statenot talk 1/3 mystic page 1/2 person:mystic 20/20
+expect state uifield.menu_options.talk_speaker_name Test Mystic
+expect state uifield.menu_options.talk_text The tide is turning.
+expect state uifield.menu_options.talk_more false
+shot build/shots/talk/reveal.png
+press Enter
+wait 1
+expect state talk 1/3 mystic page 1/2 person:mystic 20/20
+expect state uifield.menu_options.talk_shown 20
+expect state uifield.menu_options.talk_more true
+shot build/shots/talk/page_one.png
+press Enter
+wait 1
+expect statehas talk 1/3 mystic page 2/2 person:mystic
+expect state uifield.menu_options.talk_text We should move before the bell rings again.
+waitstate 200 talk 1/3 mystic page 2/2 person:mystic 43/43
+
+# The medic's line selects the `worried` expression by its tag and waits partway; no tag reaches the screen.
+press Enter
+wait 1
+expect statehas talk 2/3 medic page 1/1 portrait:medic:worried
+expect state uifield.menu_options.talk_text Count the bandages twice. We are running low again.
+expect notext {
+waitstate 300 talk 2/3 medic page 1/1 portrait:medic:worried 51/51
+wait 1
+expect state uifield.menu_options.talk_more true
+shot build/shots/talk/medic_worried.png
+press Enter
+wait 1
+expect statehas talk 3/3 scout page 1/1 person:scout
+press Enter
+wait 1
+expect state talk 3/3 scout page 1/1 person:scout 119/119
+expect state uifield.menu_options.talk_more false
+shot build/shots/talk/last.png
+press Enter
+wait 1
+expect state page party_talk
+expect state talk -
+expect screen Menu
+
+# Back leaves at once; the tab opened again starts again.
+press Left
+press Right
+wait 2
+expect state page speakers
+press Escape
+wait 1
+expect state page party_talk
+expect state talk -
+expect screen Menu
+press Escape
+wait 2
+expect screen Field
+
+# talk_hide_menu: the speaker's window alone over the field, the menu back after Back.
+assets swap ui/menu_options.json alt/menu_options_hide.json
+wait 2
+press M
+press Right
+wait 2
+expect state page speakers
+expect statehas windows menu_options/talk_speaker
+expect statenot windows menu/box
+shot build/shots/talk/hide_menu.png
+press Escape
+wait 2
+expect statehas windows menu/box
+press Escape
+wait 2
+expect screen Field
+assets swap ui/menu_options.json alt/menu_options_speakers.json
+
+# From the Extras menu, with a menu that leaves the page out: its row, then Confirm.
+assets swap ui/menu.json alt/menu_plain.json
+wait 2
+press C
+expect screen Extras
+press Enter
+wait 2
+expect screen Menu
+expect state tab Party_talk
+expect state page party_talk
+press Enter
+wait 1
+expect statehas talk 1/3 mystic page 1/2 person:mystic
+shot build/shots/talk/from_extras.png
+press Escape
+press Escape
+wait 2
+expect screen Field
+
+# Away from Tidewater nobody talks: the refusal, the page kept.
+dev warp ember_steps west_gate
+wait 2
+press C
+press Enter
+wait 2
+press Enter
+wait 1
+expect toast Nobody has anything to say.
+expect state page party_talk
+expect state talk -
+press Escape
+wait 2
+expect screen Field

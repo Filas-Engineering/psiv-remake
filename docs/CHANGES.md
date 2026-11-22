@@ -112,6 +112,7 @@ One line per feature, newest first: name, kind, meaning. Each pass adds its line
 
 Newest first. The MonoGame sample (`bindings/monogame/Psiv.Sample`) only.
 
+* `party_talk` "speakers" and `talk_hide_menu` (menu_options params), window `talk_speaker`, fields `talk_speaker_name`, `talk_speaker_id`, `talk_portrait`, `talk_text`, `talk_shown`, `talk_page`, `talk_pages`, `talk_index`, `talk_count`, `talk_more`, `page_arrow`, probe `talk`, `make_talk_data.py`, `make_talk_assets.py`, `talk_speakers.txt`, `small_talk.txt` (scripts): the party talk page one speaker at a time, portrait and expression by the line's tags, pages and the window's rows revealed at the text speed, with the menu hidden or kept; an `immediate` entry acts once when Confirm comes in the frame it opens.
 * `make_host_data.py`, `make_host_assets.py`, `host_menus.txt`, `host_tags.txt`, `host_reach.txt` (scripts), `expect notext TEXT` (script expectation): the items below on generated data copies, and no `{` on any screen showing tagged text.
 * control tags outside the dialogue (behavior): notices, the party talk page, keeper lines, shop and Items results, descriptions, the quest log, the codex, credits, choices and the battle's event lines act on tags as the text log does.
 * `ui.action.extras` ... `ui.menu.tab.techniques`, `ui.battle.stat.attack`, `ui.battle.stat.magic_defense` (sample words): dropped, the text tables carry them.

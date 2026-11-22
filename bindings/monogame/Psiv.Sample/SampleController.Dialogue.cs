@@ -100,11 +100,13 @@ public sealed partial class SampleController
 		};
 	}
 
-	// The box's revealed characters and whether it is done. Each character takes 1000 / cps ms, and a punctuation
-	// character with a pause holds the next one back that much longer, as a wait does at its place; a wait after the last
-	// character holds the box from being done. Without pauses and waits that is the box's time times the speed.
-	private (int Count, bool Done) Revealed(DialogueBox box)
+	// The box's revealed characters and whether it is done, `ms` after it came up (the dialogue's own box by default).
+	// Each character takes 1000 / cps ms, and a punctuation character with a pause holds the next one back that much longer,
+	// as a wait does at its place; a wait after the last character holds the box from being done. Without pauses and waits
+	// that is the box's time times the speed.
+	private (int Count, bool Done) Revealed(DialogueBox box, int? ms = null)
 	{
+		int lineMs = ms ?? _lineMs;
 		int cps = CharsPerSecond(_s.Profile().TextSpeed);
 		if (cps == int.MaxValue)
 		{
@@ -115,7 +117,7 @@ public sealed partial class SampleController
 		Dictionary<string, int>? pauses = Layout.Styles.TimingTables.GetValueOrDefault("punctuation_pauses");
 		if (pauses is not { Count: > 0 } && waits.Count == 0)
 		{
-			int count = (int)Math.Min(box.End, (long)_lineMs * cps / 1000);
+			int count = (int)Math.Min(box.End, (long)lineMs * cps / 1000);
 			return (count, count == box.End);
 		}
 		long held = 0;
@@ -126,7 +128,7 @@ public sealed partial class SampleController
 			{
 				held += waits[w].Ms;
 			}
-			if ((long)(_lineMs - held) * cps / 1000 <= i)
+			if ((long)(lineMs - held) * cps / 1000 <= i)
 			{
 				return (i, false);
 			}
@@ -137,7 +139,7 @@ public sealed partial class SampleController
 			return (box.End, true);
 		}
 		held += waits.Skip(w).Sum(x => (long)x.Ms);
-		return (box.End, (long)(_lineMs - held) * cps / 1000 >= box.End);
+		return (box.End, (long)(lineMs - held) * cps / 1000 >= box.End);
 	}
 
 	private int? WaitMs(string value) => int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int n) ? n * Timing("wait_unit_ms") : null;
@@ -233,7 +235,12 @@ public sealed partial class SampleController
 		.Set("line_step", _art?.BitmapFontFor(_s.Profile().TextLanguage, TextRole.Dialogue)?.LineStep((int)MathF.Round(Style.Body * _scale)) ?? Px(Style.LineHeight));
 
 	// How much of `text` the box holds: the lines the layout's `line` element shows, measured as it draws them.
-	private (int End, int Next) Fit(Line line, string text)
+	private (int End, int Next) Fit(Line line, string text) =>
+		FitIn("dialogue", "box", "line", () => LineFields(UiData().Set("box_visible", true), line, text), text);
+
+	// How much of `text` a window's named wrapped text element holds with the fields `ctx` gives: the end of its last line
+	// shown, and where the next box starts (-1 when the text ends in this one).
+	private (int End, int Next) FitIn(string screen, string window, string element, Func<UiContext> ctx, string text)
 	{
 		if (_measure is not { } s || text.Length == 0)
 		{
@@ -241,7 +248,7 @@ public sealed partial class SampleController
 		}
 		IDrawSurface t = _scale == 1f ? s : new ScaledSurface(s, _scale);
 		BitmapFont? font = _bitmapFont;
-		var wrap = Ui.WrapOf("dialogue", "box", "line", s, t, LineFields(UiData().Set("box_visible", true), line, text));
+		var wrap = Ui.WrapOf(screen, window, element, s, t, ctx());
 		if (_bitmapFont != font)
 		{
 			s.UseBitmapFont(font);

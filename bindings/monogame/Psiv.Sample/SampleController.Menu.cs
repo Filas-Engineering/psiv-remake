@@ -79,7 +79,7 @@ public sealed partial class SampleController
 	// pages with the control tags acted on.
 	private List<(TalkLine Line, List<string> Pages)> _talkLines = [];
 
-	private bool PartyTalkOnPage => Ui.ParamText("menu_options", "party_talk", UiData(), "close") == "page";
+	private bool PartyTalkOnPage => PartyTalkMode == "page";
 
 	private readonly ScrollList _third = new();
 	// The Items page's order; the bag has none of its own, so this is the sample's own choice and is not saved.
@@ -121,6 +121,7 @@ public sealed partial class SampleController
 		_saveMode = null;
 		_systemCursor = 0;
 		_talkLines = [];
+		_talkSpeakers = null;
 		_itemActing = null;
 		_itemLooking = false;
 		_itemResult = "";
@@ -140,6 +141,7 @@ public sealed partial class SampleController
 			"macros" => _macroStage.ToString().ToLowerInvariant(),
 			"techniques" or "skills" or "abilities" => _pickMember is null ? "members" : _pickAction is not null ? "target" : "list",
 			"system" => _saveMode is null ? "system" : "slots",
+			"party_talk" when _talkSpeakers is not null => "speakers",
 			_ => MenuPage,
 		},
 		Screen.Options => _controlsPage ? "controls" : "options",
@@ -156,12 +158,13 @@ public sealed partial class SampleController
 		"macros" => _macroStage == MacroStage.List,
 		"save" => SaveAtTop,
 		"system" => _saveMode is null,
+		"party_talk" => _talkSpeakers is null,
 		_ => true,
 	};
 
 	private List<Member> LineupMembers() => _s.Party().Where(m => m.InLineup).ToList();
 
-	private void UpdateMenu(ActionInput input)
+	private void UpdateMenu(int dtMs, ActionInput input)
 	{
 		if (MenuAtTop())
 		{
@@ -216,8 +219,10 @@ public sealed partial class SampleController
 		case "macros": UpdateMacros(input); break;
 		case "techniques" or "skills" or "abilities": UpdateAbilitiesPage(input); break;
 		case "system": UpdateSystemPage(input); break;
-		// An `immediate` entry acts as Confirm on its one row would, once each time it opens.
-		case "party_talk" or "extras" when input.Confirm || ImmediateDue():
+		case "party_talk" when _talkSpeakers is not null: UpdateTalkSpeakers(dtMs, input); break;
+		// An `immediate` entry acts as Confirm on its one row would, once each time it opens; a Confirm in the frame it
+		// opens counts as that once.
+		case "party_talk" or "extras" when ImmediateDue() || input.Confirm:
 			ConfirmRowPage();
 			break;
 		case "combos":
@@ -417,6 +422,12 @@ public sealed partial class SampleController
 
 	private void DrawMenu(IDrawSurface s, IDrawSurface t, Art art)
 	{
+		if (_talkSpeakers is not null && TalkHidesMenu)
+		{
+			DrawField(s, art);
+			DrawTalkSpeakers(s, t, art, 0, 0, s.Width, s.Height, "talk_speaker");
+			return;
+		}
 		Ui.Draw("menu", s, t, UiData()
 			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "menu")))
 			.Set("tabs", MenuTabs.Select(tab => T(MenuLabel(tab))).ToList())
@@ -462,6 +473,9 @@ public sealed partial class SampleController
 		case "equip": DrawEquip(s, t, x, y, w, h); break;
 		case "techniques" or "skills" or "abilities": DrawAbilitiesPage(s, t, x, y, w, h); break;
 		case "system": DrawSystemPage(s, t, x, y, w, h); break;
+		case "party_talk" when PartyTalkMode == "speakers":
+			DrawTalkSpeakers(s, t, art, x, y, w, h, null);
+			break;
 		case "party_talk" when PartyTalkOnPage:
 			UiContext data = UiArea(x, y, w, h);
 			Ui.Draw("menu_options", s, t, data
@@ -544,6 +558,18 @@ public sealed partial class SampleController
 		if (MenuPage == "extras")
 		{
 			OpenExtras();
+			return;
+		}
+		if (PartyTalkMode == "speakers")
+		{
+			IReadOnlyList<TalkLine> lines = _s.PartyTalkLines();
+			if (lines.Count == 0)
+			{
+				Say(T("game.refuse.nobody_talks"));
+				_audio.PlayCue("refuse");
+				return;
+			}
+			StartTalkSpeakers(lines);
 			return;
 		}
 		if (PartyTalkOnPage)

@@ -1,0 +1,68 @@
+# The party talk one speaker at a time at 320x224 (make_talk_assets.py --small on the small example set, the
+# make_talk_data.py copy), from saves of the scripted playthrough, with --dev: the Talk tab opens on the first speaker in
+# a window shaped as the set's dialogue box, two rows a box, so the scout's long line takes two boxes; the medic's
+# expression; `talk_hide_menu` over the field. The steps wait on the `talk` probe. With --window the shot lines save
+# screenshots under build/shots/small/ (run from bindings/ with --window-size 1280x896).
+
+cmd set text normal
+expect screen Title
+wait 2
+cmd load manual_1
+wait 4
+expect screen Field
+dev encounters off
+dev warp tidewater stall_front
+# The arrival's notices gone first.
+wait 300
+press M
+press Right
+wait 2
+expect state tab Party_talk
+expect state page speakers
+waitstate 100 talk 1/3 mystic page 1/2 person:mystic 20/20
+shot build/shots/small/talk_mystic.png
+press Enter
+waitstate 300 talk 1/3 mystic page 2/2 person:mystic 43/43
+press Enter
+wait 1
+expect statehas talk 2/3 medic page 1/1 portrait:medic:worried
+expect notext {
+waitstate 300 talk 2/3 medic page 1/1 portrait:medic:worried 51/51
+shot build/shots/small/talk_medic.png
+press Enter
+waitstate 300 talk 3/3 scout page 1/2 person:scout 61/61
+wait 1
+expect state uifield.menu_options.talk_more true
+shot build/shots/small/talk_rows.png
+press Enter
+wait 1
+expect statehas talk 3/3 scout page 2/2 person:scout
+press Enter
+wait 1
+expect state talk 3/3 scout page 2/2 person:scout 57/57
+wait 1
+expect state uifield.menu_options.talk_more false
+press Enter
+wait 1
+expect state talk -
+expect state page party_talk
+press Escape
+wait 2
+expect screen Field
+
+assets swap ui/menu_options.json alt/menu_options_hide.json
+wait 2
+press M
+press Right
+wait 2
+expect state page speakers
+expect statenot windows menu/box
+press Enter
+wait 1
+shot build/shots/small/talk_hide.png
+press Escape
+wait 2
+expect statehas windows menu/box
+press Escape
+wait 2
+expect screen Field

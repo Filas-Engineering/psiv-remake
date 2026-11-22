@@ -722,7 +722,7 @@ def menus_broken(broken):
 	change("shop", lambda d: d.update({"entries": [{"page": "items"}]}))
 	change("menu_system", lambda d: d.update({"rows": ["save", "teleport", "save"], "params": {"system_action": "always"}}))
 	change("menu_abilities", lambda d: d.update({"params": {"unusable": "grey"}}))
-	change("menu_options", lambda d: d.update({"params": {"party_talk": "dialogue"}}))
+	change("menu_options", lambda d: d.update({"params": {"party_talk": "speakers", "talk_hide_menu": "yes"}}))
 	change("menu_status", lambda d: d.update({"params": {"tab_h": "tall"}}))
 	change("battle_side", lambda d: d.update({"command_rows": {"top": ["fight", "dance"], "member": [], "side": 1, "vehicle": ["attack", "fly"]}}))
 

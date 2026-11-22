@@ -406,7 +406,7 @@ public sealed partial class SampleController
 		case Screen.Dialogue: UpdateDialogue(dtMs, input); break;
 		case Screen.Battle when _stage is not null: UpdateStagePreview(dtMs, input); break;
 		case Screen.Battle: UpdateBattle(dtMs, input); break;
-		case Screen.Menu: UpdateMenu(input); break;
+		case Screen.Menu: UpdateMenu(dtMs, input); break;
 		case Screen.Shop: UpdateShop(input); break;
 		case Screen.Inn: UpdateInn(input); break;
 		case Screen.SavePrompt: UpdateSavePrompt(input); break;
@@ -752,6 +752,7 @@ public sealed partial class SampleController
 		{
 			"tab" => Screen == Screen.Menu ? char.ToUpperInvariant(MenuPage[0]) + MenuPage[1..] : "-",
 			"page" => Page(),
+			"talk" => TalkProbe(),
 			"selected" => _probeSelected,
 			"top" => _probeTop.ToString(CultureInfo.InvariantCulture),
 			"compare" => _probeCompare,

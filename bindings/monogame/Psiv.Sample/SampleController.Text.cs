@@ -53,10 +53,18 @@ public sealed partial class SampleController
 
 	// Text from the game's tables as a screen other than the dialogue box shows it: control tags acted on as the text log
 	// does (a `{var:...}` filled with its value, presentation tags dropped, a `{name}` token the glossary lacks kept as
-	// written), the pages joined by a space. ShownPages keeps each `{page}`'s text apart.
+	// written), the pages joined by a space. ShownPages keeps each `{page}`'s text apart, and ShownTagPages each page's tags
+	// with it, at their places in the trimmed text.
 	private string Shown(string text) => text.Contains('{') ? string.Join(" ", ShownPages(text)) : text;
 
-	private List<string> ShownPages(string text) => [.. Parse(text, null).Select(page => page.Text.Trim()).Where(page => page.Length > 0)];
+	private List<string> ShownPages(string text) => [.. ShownTagPages(text).Select(page => page.Text)];
+
+	private List<DialoguePage> ShownTagPages(string text) => [.. Parse(text, null).Select(page =>
+	{
+		string trimmed = page.Text.Trim();
+		int lead = page.Text.Length - page.Text.TrimStart().Length;
+		return new DialoguePage(trimmed, [.. page.Tags.Select(tag => tag with { At = Math.Clamp(tag.At - lead, 0, trimmed.Length) })]);
+	}).Where(page => page.Text.Length > 0)];
 
 	private string T(string key, params object[] parameters)
 	{

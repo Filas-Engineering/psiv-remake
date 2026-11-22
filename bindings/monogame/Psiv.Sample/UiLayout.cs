@@ -94,6 +94,8 @@ public sealed class UiScreenLayout
 	// Whether any element's expression reads the field, so the screen's code can tell what the layout shows.
 	public bool Reads(string field) => Windows.Any(w => Reads(w.Elements, field));
 
+	public bool WindowReads(string window, string field) => Windows.Any(w => w.Name == window && Reads(w.Elements, field));
+
 	private static bool Reads(IEnumerable<UiElement> elements, string field) =>
 		elements.Any(e => e.Exprs.Values.Concat(e.Lists.Values.SelectMany(l => l)).Any(x => x.Names.Contains(field)) || e.Children.Values.Any(c => Reads(c, field)));
 
@@ -689,7 +691,6 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["continue"] = ("newest", "choose", "whether Continue loads the newest save or opens the Load list"),
 		["item_order"] = ("items_then_equipment", "equipment_then_items", "whether the Item list puts the bag's items or the worn pieces first"),
 		["macro_flow"] = ("reset", "remember", "whether the menus open at their first row after a macro's round or on Macro and the macro played last"),
-		["party_talk"] = ("close", "page", "whether party talk closes the menu or shows its lines on the page"),
 		["unusable"] = ("dim", "hide", "whether abilities not usable in the field show dimmed or not at all"),
 	};
 
@@ -786,6 +787,17 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
 					}
 				}
+				else if (p.Name == "party_talk")
+				{
+					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("close" or "page" or "speakers"))
+					{
+						Problem($"params.{p.Name}", "must be \"close\", \"page\" or \"speakers\": whether party talk closes the menu, shows its lines on the page or steps through the speakers");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
+					}
+				}
 				else if (p.Name == "command_axis")
 				{
 					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("row" or "column"))
@@ -846,6 +858,11 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 			&& !screen.Reads("discard_text"))
 		{
 			Problem("params.discard", "no element draws the field 'discard_text', so Discard's count and confirm would not show");
+		}
+		if (fields.Screen == "menu_options" && screen.Params.TryGetValue("party_talk", out UiExpr? talk) && talk.Eval(null!).Text == "speakers"
+			&& !screen.WindowReads("talk_speaker", "talk_text"))
+		{
+			Problem("params.party_talk", "no element of a window 'talk_speaker' draws the field 'talk_text', so the speakers' lines would not show");
 		}
 		foreach (UiWindow w in screen.Windows.Where(w => w.RelativeTo is not null && !_windowNames.Contains(w.RelativeTo)))
 		{

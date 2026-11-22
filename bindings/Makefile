@@ -854,6 +854,32 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
 		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
 	done
+	# The party talk one speaker at a time (make_talk_data.py, make_talk_assets.py), from saves of the scripted playthrough
+	# on the talk data copy: three speakers, one in two pages and one whose tag selects a portrait expression, at
+	# 1280x720 (talk_speakers: `immediate`, the reveal and Confirm, Back, `talk_hide_menu`, the Extras menu, nobody to
+	# talk) and on the small set (small_talk: a long line in two boxes of the window's rows); a copy with a `party_talk`
+	# word that is none of the three reports it.
+	python3 -I $(SAMPLE_SCRIPTS)/make_talk_data.py $(GAME)/data $(CORE)/data $(BUILD)/talk_data
+	python3 -I $(SAMPLE_SCRIPTS)/make_talk_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/talk_assets
+	python3 -I $(SAMPLE_SCRIPTS)/make_talk_assets.py $(BUILD)/export $(BUILD)/small_assets $(BUILD)/small_talk_assets --small
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/talk_data/game/data --check-assets --assets $(BUILD)/talk_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/talk_data/game/data --check-assets --assets $(BUILD)/small_talk_assets
+	rm -rf $(BUILD)/talk_broken_assets
+	cp -R $(BUILD)/talk_assets $(BUILD)/talk_broken_assets
+	cp $(BUILD)/talk_broken_assets/alt/menu_options_broken.json $(BUILD)/talk_broken_assets/ui/menu_options.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/talk_broken_assets > $(BUILD)/check_assets_talk.txt
+	grep -qF 'params.party_talk: must be "close", "page" or "speakers"' $(BUILD)/check_assets_talk.txt
+	rm -rf $(BUILD)/sample_talk_saves
+	$(GAME_CLI) --data $(BUILD)/talk_data/game/data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/sample_talk_saves > /dev/null
+	@for run in talk_speakers:talk_assets:1800 small_talk:small_talk_assets:1500; do \
+		name=$${run%%:*}; rest=$${run#*:}; set=$${rest%%:*}; frames=$${rest#*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves $(BUILD)/$${name}_run_assets; \
+		cp -R $(BUILD)/sample_talk_saves $(BUILD)/sample_$${name}_saves; \
+		cp -R $(BUILD)/$$set $(BUILD)/$${name}_run_assets; \
+		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/talk_data/game/data --dev --saves $(BUILD)/sample_$${name}_saves --assets $(BUILD)/$${name}_run_assets \
+			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
 	# Screens over screens and screens at small sizes (make_screens_assets.py): the notices drawn once by the topmost
 	# screen with a toasts slot, a page the field menu leaves out opened from Extras, title entries by `when`, Controls
 	# without Extras; the name pad's sizes, the built-in pause at 320x224, the developer badge's place and the music cut.
