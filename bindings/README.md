@@ -62,7 +62,7 @@ To use another build of the library from .NET, set the MSBuild property `PsivNat
 
 ## Packaging
 
-`make package` (here or at the repo root) runs `../tools/package.sh`, which builds a self-contained, runnable copy of the sample per platform under `../dist/` (git-ignored): `dist/psiv-sample-VERSION-RID/` for `osx-arm64`, `osx-x64`, `linux-x64`, `linux-arm64` and `win-x64` (`../tools/package.sh RID ...` builds some of them). VERSION is the library version, `PSIV_BINDING_VERSION` in `c/psiv_session.cpp`, which `psiv_version()` reports, the sample's `--version` prints and its title screen shows in the top right corner. Each package holds:
+`make package` (here or at the repo root) runs `../tools/package.sh`, which builds a self-contained, runnable copy of the sample per platform under `../dist/` (git-ignored): `dist/psiv-sample-VERSION-RID/` for `osx-arm64`, `osx-x64`, `linux-x64`, `linux-arm64` and `win-x64` (`../tools/package.sh RID ...` builds some of them). VERSION is the library version, `kLibraryVersion` in `../game/include/game/capabilities.h`, which `psiv_version()` reports, the sample's `--version` prints and its title screen shows in the top right corner. Each package holds:
 
 * the sample from `dotnet publish -c Release -r RID --self-contained` (no .NET install needed), with the `psiv_session` library built for that platform beside it (through `PsivNativeDir`) and MonoGame's SDL2 and OpenAL where its package ships them (not for linux-arm64);
 * `game/data` and `core/data`, in that relation because `game.json` reaches core's data as `../../core/data`, and `game/assets` when the repo has one; the sample finds them beside the program;

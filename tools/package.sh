@@ -2,7 +2,7 @@
 # Packages the MonoGame sample as a self-contained, runnable build per platform under dist/ (git-ignored):
 # dist/psiv-sample-VERSION-RID/ holds the published sample with the psiv_session library for that platform beside it,
 # game/data and core/data (game.json reaches core's data as ../../core/data), game/assets when the repo has one, and a
-# README.txt; for macOS also dist/psiv-sample-VERSION-RID.app. VERSION is the library's PSIV_BINDING_VERSION.
+# README.txt; for macOS also dist/psiv-sample-VERSION-RID.app. VERSION is the library's kLibraryVersion.
 # Native libraries: macOS with the host's clang++ (-arch per target), Linux and Windows in the Docker images that
 # tools/linux-check.sh and tools/windows-check.sh build (the repo mounted read-only and copied inside; only the library
 # comes back). Every build goes under dist/.build, never into bindings/build or a project's bin/ and obj/.
@@ -21,12 +21,12 @@ WINDOW=${PSIV_PACKAGE_WINDOW:-1}
 TARGETS=${*:-osx-arm64 osx-x64 linux-x64 linux-arm64 win-x64}
 SAMPLE=$ROOT/bindings/monogame/Psiv.Sample
 SCRIPTS=$SAMPLE/scripts
-VERSION=$(sed -n 's/^#define PSIV_BINDING_VERSION "\(.*\)"$/\1/p' "$ROOT/bindings/c/psiv_session.cpp")
+VERSION=$(sed -n 's/^constexpr const char\* kLibraryVersion = "\(.*\)";$/\1/p' "$ROOT/game/include/game/capabilities.h")
 APP_NAME="Psiv Sample"
 SUMMARY=
 
 if [ -z "$VERSION" ]; then
-	echo "package: cannot read PSIV_BINDING_VERSION from bindings/c/psiv_session.cpp" >&2
+	echo "package: cannot read kLibraryVersion from game/include/game/capabilities.h" >&2
 	exit 1
 fi
 if [ ! -x "$DOTNET" ]; then
