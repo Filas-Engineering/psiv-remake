@@ -108,6 +108,25 @@ One line per feature, newest first: name, kind, meaning. Each pass adds its line
 
 Newest first. The MonoGame sample (`bindings/monogame/Psiv.Sample`) only.
 
+* `make_small_more_assets.py`, `small_more.txt`, `make_motion_more_assets.py`, `motion_more.txt` (scripts): the slots below at 320x224, and the motion and previewer additions.
+* the animation previewer's enemy dummies (behavior): they attack with the data's `basic_attack`, which the log names.
+* `encounter:ENC` keys (animation previewer): a key that names an encounter plays in it, on its enemies, with its placements.
+* `bob`, `pulse` (figure motion kinds) and move `scale`: a hop and a scale, as idle states, states and move tracks.
+* `at` (maps.areas[] layer key): `[x, y]` in picture pixels, placing a layer that does not repeat.
+* `palettes` on a `tilesets` entry without `image` (manifest): recolors the generated tiles of its kind or area.
+* `sprites` entries as `{"image", "palettes"}` (manifest): palette tracks on listed sprites; `fieldmotion` reads their steps.
+* `immediate` (menu entry and child key): a party talk or extras page acts as it opens; an entry's single child opens in place of its list.
+* `list_w`, `row_h`, `rows`, `pad`, `text_size` (menu_children params): the children list's sizes for small resolutions.
+* `talk_size`, `talk_name_size`, `talk_row_h`, `talk_pad`, `talk_rows` (menu_options params) and the text styles `talk`, `talk_name`: the party talk box sized by the layout instead of fixed code sizes.
+* `make_library_data.py`, `make_library_assets.py`, `field_status_cli.txt` and the runs `library_followers`, `exit_block`, `library_shop`, `library_autosave`, `field_status`, `library_macros` (scripts): the library state below on generated data copies, the 2x2 exit block in both field inputs and the field-status notices included.
+* `rest` (dev console command): `DevRest`, a free rest marking the game.
+* `ui.battle.stat.attack`, `ui.battle.stat.magic_defense` (sample words): the attack and magic defense stat-change words, from the tables when they have the keys.
+* `auto_trouble`, `auto_policy` (settings rows, controls.json `battle` keys, probes): the trouble mode and policy auto play goes under (`SetAutoPlayMacro(name, mode, policy)`), with the round's trouble in the log.
+* `macro_check`, `macro_failed`, `macro_flow`, `auto_choose` (battle params) and `macro_steps`, `macro_trouble`, `macro_trouble_text` (fields), probe `macrocheck`: each step marked by `CheckMacro` before Confirm, the failed step's result (`automatic`, `attack`, `lose_turn`), the menus back on Macro and the last macro (`remember`, or `reset` as before), and the Auto row asking the trouble mode and policy.
+* `options` (menu_macros param) and `on_trouble`, `recover_who`, `unnamed`, `policy`, `option_rows` (fields): a macro's options edited through `SetMacroOptions` and `SetMacroPolicy`.
+* `name`, `title` (inn fields), `name`, `bag`, `bag_used`, `bag_slots` (shop fields), `bag`, `bag_used`, `bag_slots` (menu_items fields): shop and inn display names (the shop's also the keeper's `{0}`) and the bag's slots; no autosave marks and no retry when game.json's `autosave` is false.
+* narration `auto` (behavior): a narration line goes on by itself only while `NextEventOutput` says a line comes next, so the window waits for a press before the event's end, a choice or anything else.
+* followers (behavior, sample follows the library): drawn from the session's `Followers()` trail (a load puts them back where the save kept them; past the trail's end they stand where the last one does); the field param `followers_arrive` only when game.json does not set the key.
 * `actions`, `acting`, `action_ids`, `action_list`, `looking`, `look_text`, `result_text`, `result_ok` (menu_items param and fields): an item's actions, use and look (its description), and the uses' outcomes on the page instead of the notices.
 * `macro_auto_first` (battle param): the macro list opens with the auto-battle macro first, marked `(auto)`.
 * `item_order` (battle param): `"items_then_equipment"` (as before) or `"equipment_then_items"`, the worn pieces first in the Item list.

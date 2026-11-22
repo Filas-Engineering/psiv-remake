@@ -181,7 +181,7 @@ public sealed partial class Art
 	// An area's tiles, how the renderer picks among them (one floor in DecorOneIn is a decoration, one wall top in
 	// WallTopAltOneIn and one wall face in WallFaceAltOneIn is a variant, water steps a frame every WaterFrameMs) and
 	// the objects standing on its cells.
-	public sealed class TileSet
+	public sealed record TileSet
 	{
 		public required int[] Floor { get; init; }
 		public required int[] Decor { get; init; }
@@ -272,11 +272,11 @@ public sealed partial class Art
 
 	public TileSet Tiles(Theme theme) => _tiles[theme];
 
-	public int Bubble { get; private set; }
-	public int Alert { get; private set; }
-	public int Shadow { get; private set; }
+	public int Bubble { get => Sprite("bubble", field); private set; }
+	public int Alert { get => Sprite("alert", field); private set; }
+	public int Shadow { get => Sprite("shadow", field); private set; }
 	// A downward pointer, for battle targets.
-	public int Pointer { get; private set; }
+	public int Pointer { get => Sprite("pointer", field); private set; }
 
 	public static (Color Edge, Color Bank) DefaultEdges(Theme theme) => theme switch
 	{

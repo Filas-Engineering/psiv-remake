@@ -203,7 +203,14 @@ public sealed class FieldRenderer
 	private int _lastClock = -1;
 	private readonly Glide _leader = new();
 	private readonly Glide[] _followers = [new(), new(), new(), new(), new()];
-	private readonly List<(int X, int Y)> _trail = [];
+	// Whether a follower past the end of FollowerLine stands on the leader (the fallback arrival) or on the line's last cell.
+	private bool _lineEndsOnLeader;
+	// The cells the fallback arrival (FollowersBehind) put the followers on, nearest first, kept behind the session's trail
+	// until that trail is long enough for the line.
+	private readonly List<(int X, int Y)> _arrival = [];
+	// The cells a script's walk of the leader left, newest first, ahead of the session's trail: the session's leader does
+	// not move during a scene.
+	private readonly List<(int X, int Y)> _scriptTrail = [];
 	// The cell a script's walk of the leader last stepped into, which the followers not in the scene trail behind.
 	private (int X, int Y)? _scriptedLeaderCell;
 	private readonly Dictionary<int, Glide> _enemies = [];
@@ -609,30 +616,59 @@ public sealed class FieldRenderer
 
 	public static string KindName(AreaKind kind) => kind switch { AreaKind.Town => "Town", AreaKind.Dungeon => "Dungeon", _ => "Field" };
 
-	// Where followers stand when the party arrives (an exit, a warp, travel, a load): false stacks them on the leader until
-	// it walks; true (the field layout's `followers_arrive` "behind") puts each a cell behind the one before, against the
-	// leader's facing, while those cells can be walked, the rest stacked. The session keeps no follower cells: the trail is
-	// the sample's.
+	// The session's followers (Session::followers): the lineup after the leader and the follower actor on the leader's
+	// trail, set each frame before Track.
+	public IReadOnlyList<Follower> SessionFollowers { get; set; } = [];
+
+	// The fallback for data whose game.json does not set `followers_arrive`: true (the field layout's `followers_arrive`
+	// "behind") puts each follower a cell behind the one before on arrival, against the leader's facing, while those cells
+	// can be walked, the rest stacked; the session's trail then grows in front of those cells.
 	public bool FollowersBehind { get; set; }
 
 	private void Arrive(FieldView view, IReadOnlyList<string> lineup)
 	{
 		FieldInfo f = view.Info;
-		_trail.Clear();
+		_arrival.Clear();
+		_scriptTrail.Clear();
 		(int dx, int dy) = f.Facing switch { Direction.North => (0, 1), Direction.South => (0, -1), Direction.East => (-1, 0), _ => (1, 0) };
 		(int x, int y) = (f.LeaderX, f.LeaderY);
 		int count = Math.Min(_followers.Length, Math.Max(0, lineup.Count - 1));
-		while (FollowersBehind && f.Aboard.Length == 0 && _trail.Count < count && view.Cell(x + dx, y + dy).HasFlag(CellFlags.Walkable))
+		while (FollowersBehind && f.Aboard.Length == 0 && _arrival.Count < count && view.Cell(x + dx, y + dy).HasFlag(CellFlags.Walkable))
 		{
 			(x, y) = (x + dx, y + dy);
-			_trail.Add((x, y));
+			_arrival.Add((x, y));
 		}
+		List<(int X, int Y)> line = FollowerLine(f);
 		for (int i = 0; i < _followers.Length; i++)
 		{
-			(int fx, int fy) = i < _trail.Count ? _trail[i] : (f.LeaderX, f.LeaderY);
+			(int fx, int fy) = i < line.Count ? line[i] : line.Count > 0 && !_lineEndsOnLeader ? line[^1] : (f.LeaderX, f.LeaderY);
 			_followers[i].Snap(fx, fy);
 			_followers[i].Facing = f.Facing;
 		}
+	}
+
+	// The cells the followers walk to, nearest first: the session's trail as far as it has cells of its own (a follower
+	// past its end stands where the last one does), then the fallback arrival's cells (a follower past those stands on the
+	// leader).
+	private List<(int X, int Y)> FollowerLine(FieldInfo f)
+	{
+		var line = new List<(int X, int Y)>();
+		foreach (Follower x in SessionFollowers)
+		{
+			(int X, int Y) cell = (x.X, x.Y);
+			if (cell == (line.Count > 0 ? line[^1] : (f.LeaderX, f.LeaderY)))
+			{
+				break;
+			}
+			line.Add(cell);
+		}
+		if (line.Count >= SessionFollowers.Count || f.Aboard.Length > 0 || f.RidingPlatform.Length > 0)
+		{
+			_arrival.Clear();
+		}
+		line.AddRange(_arrival);
+		_lineEndsOnLeader = _arrival.Count > 0;
+		return line;
 	}
 
 	// Follows the view's positions; `clockMs` is the controller's clock, so the glides advance with the
@@ -674,30 +710,22 @@ public sealed class FieldRenderer
 		{
 			// The platform carries the party: the leader's cell follows it without a step, and the followers ride along.
 			_leader.Snap(f.LeaderX, f.LeaderY);
-			_trail.Clear();
 		}
-		else if (_leader.Go(leaderX, leaderY, glideMs, glideGone))
-		{
-			_trail.Insert(0, (oldX, oldY));
-			if (_trail.Count > Followers)
-			{
-				_trail.RemoveAt(_trail.Count - 1);
-			}
-		}
-		else if (_leader.X != oldX || _leader.Y != oldY)
+		else if (!_leader.Go(leaderX, leaderY, glideMs, glideGone) && (_leader.X != oldX || _leader.Y != oldY))
 		{
 			// A warp or a load within the area: the leader is put down, and the followers arrive with it.
 			Arrive(view, lineup);
 		}
 		_leader.Facing = f.Facing;
-		// The members ride along aboard a vehicle, so they leave the trail and stand with the leader.
-		if (aboard)
-		{
-			_trail.Clear();
-		}
 		foreach (MemberPlace m in _members.Values)
 		{
 			m.Walk.Advance(dt);
+		}
+		List<(int X, int Y)> line = FollowerLine(f);
+		// The leader drawn a step ahead of the session (the real-time glide leads it) has left the session's cell already.
+		if ((_leader.X, _leader.Y) != (f.LeaderX, f.LeaderY) && Math.Abs(_leader.X - f.LeaderX) + Math.Abs(_leader.Y - f.LeaderY) == 1 && !aboard && _ride is null)
+		{
+			line.Insert(0, (f.LeaderX, f.LeaderY));
 		}
 		// A script walking the leader leads the line as the player does: each cell it steps into leaves the one before on
 		// the trail, and the followers glide behind at its pace. A scene that places other members too keeps the line
@@ -708,34 +736,35 @@ public sealed class FieldRenderer
 			head = scripted.Walk.Cell;
 			if ((_scriptedLeaderCell ?? scripted.Walk.Cells[0]) is var before && before != head && Math.Abs(before.X - head.X) + Math.Abs(before.Y - head.Y) == 1)
 			{
-				_trail.Insert(0, before);
-				if (_trail.Count > Followers)
+				_scriptTrail.Insert(0, before);
+				if (_scriptTrail.Count > Followers)
 				{
-					_trail.RemoveAt(_trail.Count - 1);
+					_scriptTrail.RemoveAt(_scriptTrail.Count - 1);
 				}
 				(glideMs, glideGone) = (scripted.Walk.CellMs, 0);
 			}
 			_scriptedLeaderCell = head;
+			line.InsertRange(0, _scriptTrail);
 		}
 		else
 		{
 			_scriptedLeaderCell = null;
+			_scriptTrail.Clear();
 		}
 		for (int i = 0; i < _followers.Length; i++)
 		{
 			Glide g = _followers[i];
 			g.Advance(dt);
-			(int tx, int ty) = i < _trail.Count ? _trail[i] : head;
-			if (i >= lineup.Count - 1 || i >= _trail.Count)
+			(int tx, int ty) = i < line.Count ? line[i] : line.Count > 0 && !_lineEndsOnLeader ? line[^1] : head;
+			if ((g.X, g.Y) == (tx, ty))
 			{
-				if (g.X != tx || g.Y != ty)
-				{
-					g.Snap(tx, ty);
-					g.Facing = _leader.Facing;
-				}
 				continue;
 			}
-			g.Go(tx, ty, glideMs, glideGone);
+			if (i >= lineup.Count - 1 || (tx, ty) == head || !g.Go(tx, ty, glideMs, glideGone))
+			{
+				g.Snap(tx, ty);
+				g.Facing = _leader.Facing;
+			}
 		}
 
 		// Members walking back after a scene go a cell per step to the cell their place in the line holds, around the
@@ -912,6 +941,11 @@ public sealed class FieldRenderer
 		var shown = new List<string>();
 		Func<int, int>? paint = Palette(s, motion?.Motion.Palettes ?? [], clockMs, "palettes", shown);
 		Func<int, int>? paintTiles = Palette(s, tiles.Palettes, clockMs, "tiles", shown);
+		art.MotionTime = w => MotionMs(w, clockMs);
+		if (art.SpriteSteps().ToList() is { Count: > 0 } spriteSteps)
+		{
+			shown.Add("sprites " + string.Join(" ", spriteSteps));
+		}
 		int Paint(int image) => paint?.Invoke(image) ?? image;
 		int behind = motion is null ? 0 : DrawLayers(s, motion, front: false, viewport, cameraX, cameraY, tile, clockMs);
 
@@ -1015,7 +1049,7 @@ public sealed class FieldRenderer
 		foreach (Platform p in Platforms)
 		{
 			(float px, float py) = PlatformAt(p);
-			s.Image(art.Platform, ox + (int)MathF.Round(px * tile), oy + (int)MathF.Round(py * tile), tile, tile, Color.White);
+			s.Image(art.Sprite("platform", art.Platform), ox + (int)MathF.Round(px * tile), oy + (int)MathF.Round(py * tile), tile, tile, Color.White);
 			platformsDrawn.Add(FormattableString.Invariant($"{p.Id} {px * CellPixels:0.#} {py * CellPixels:0.#}") + (p.Carrying ? " carrying" : ""));
 		}
 		if (record)
@@ -1254,7 +1288,7 @@ public sealed class FieldRenderer
 				// A port appears once its story opens it.
 				if (p.Active)
 				{
-					Put(p.X, p.Y, (sx, sy) => s.Image(art.Pier, sx, sy, tile, tile, Color.White));
+					Put(p.X, p.Y, (sx, sy) => s.Image(art.Sprite("pier", art.Pier), sx, sy, tile, tile, Color.White));
 				}
 				break;
 			case PointKind.Helm:
@@ -1527,7 +1561,7 @@ public sealed class FieldRenderer
 			}
 			drawn++;
 			double sec = ms / 1000.0, w = l.Width * k, h = l.Height * k;
-			double Origin(int view, int camera, float scroll, float speed) => view - camera * (double)scroll + speed * sec * k;
+			double Origin(int view, int camera, float scroll, float speed, float at) => view - camera * (double)scroll + (speed * sec + at) * k;
 			// A wave or a band can move a row or column out by up to a copy, so one more copy is drawn on each side.
 			int extra = loaded.Strips.Length > 0 ? 1 : 0;
 			IEnumerable<double> Copies(double start, double size, int from, int length, bool repeat)
@@ -1552,7 +1586,7 @@ public sealed class FieldRenderer
 					s.Image(image, left, top, right - left, bottom - top, Color.White);
 				}
 			}
-			double x0 = Origin(viewport.X, cameraX, l.ScrollX, l.SpeedX), y0 = Origin(viewport.Y, cameraY, l.ScrollY, l.SpeedY);
+			double x0 = Origin(viewport.X, cameraX, l.ScrollX, l.SpeedX, l.AtX), y0 = Origin(viewport.Y, cameraY, l.ScrollY, l.SpeedY, l.AtY);
 			if (loaded.Strips.Length == 0)
 			{
 				foreach (double y in Copies(y0, h, viewport.Y, viewport.Height, l.RepeatY))
@@ -1580,7 +1614,7 @@ public sealed class FieldRenderer
 			{
 				for (int r = 0; r < l.Height; r++)
 				{
-					double rowX = (l.Bands.FirstOrDefault(b => b.First <= r && r <= b.Last) is { } band ? Origin(viewport.X, cameraX, band.Scroll, band.Speed) : x0) + Wave(r) * k;
+					double rowX = (l.Bands.FirstOrDefault(b => b.First <= r && r <= b.Last) is { } band ? Origin(viewport.X, cameraX, band.Scroll, band.Speed, l.AtX) : x0) + Wave(r) * k;
 					foreach (double y in Copies(y0, h, viewport.Y, viewport.Height, l.RepeatY))
 					{
 						foreach (double x in Copies(rowX, w, viewport.X, viewport.Width, l.RepeatX))

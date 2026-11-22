@@ -74,6 +74,9 @@ public sealed class UiScreenLayout
 	public List<(string Page, string? Label)>? Entries { get; set; }
 	// A field menu entry's `children`, by the entry's page: the choices its tab lists in place of its own page.
 	public Dictionary<string, List<(string Page, string? Label)>> Children { get; } = [];
+	// The menu entries and children with `immediate`: a one-row page that acts as soon as it opens, or a tab whose one
+	// child opens in place of the list.
+	public HashSet<string> Immediate { get; } = [];
 	// The system page's rows in order (`rows`; null: UiFields.SystemDefault).
 	public List<string>? Rows { get; set; }
 	// A battle layout's command rows per step with `command_top` (`command_rows`: `top`, `member`; a step left out lists all).
@@ -332,8 +335,8 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["styles.cursors{}"] = ["type", "image", "size", "color", "blink_ms"],
 		["screen"] = ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows"],
 		["screen.places[]"] = ["slot", "label"],
-		["screen.entries[]"] = ["page", "label", "children"],
-		["screen.entries[].children[]"] = ["page", "label"],
+		["screen.entries[]"] = ["page", "label", "children", "immediate"],
+		["screen.entries[].children[]"] = ["page", "label", "immediate"],
 		["screen.command_rows"] = ["top", "member", "vehicle"],
 		["screen.options[]"] = ["id", "when"],
 		["screen.tags{}"] = ["action", "id", "slot", "values", "default", "cases"],
@@ -681,6 +684,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 	{
 		["continue"] = ("newest", "choose", "whether Continue loads the newest save or opens the Load list"),
 		["item_order"] = ("items_then_equipment", "equipment_then_items", "whether the Item list puts the bag's items or the worn pieces first"),
+		["macro_flow"] = ("reset", "remember", "whether the menus open at their first row after a macro's round or on Macro and the macro played last"),
 		["party_talk"] = ("close", "page", "whether party talk closes the menu or shows its lines on the page"),
 		["unusable"] = ("dim", "hide", "whether abilities not usable in the field show dimmed or not at all"),
 	};
@@ -738,6 +742,17 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("stacked" or "behind"))
 					{
 						Problem($"params.{p.Name}", "must be \"stacked\" or \"behind\": where followers stand when the party arrives");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
+					}
+				}
+				else if (p.Name == "macro_failed")
+				{
+					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("automatic" or "attack" or "lose_turn"))
+					{
+						Problem($"params.{p.Name}", "must be \"automatic\", \"attack\" or \"lose_turn\": what a macro step that cannot run does");
 					}
 					else
 					{
@@ -984,6 +999,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 						{
 							MenuChildren(children, $"{entry}.children", page, screen);
 						}
+						ImmediateEntry(e, entry, page, screen, screen.Children.ContainsKey(page));
 					}
 				}
 			}
@@ -1066,9 +1082,32 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 			else
 			{
 				list.Add((child, Str(c, "label", at)));
+				ImmediateEntry(c, at, child, screen, false);
 			}
 		}
 		screen.Children[page] = list;
+	}
+
+	// `immediate` (a boolean): a page with one row that acts on opening (`party_talk`, `extras`), or an entry with children
+	// whose single child opens at once.
+	private void ImmediateEntry(JsonElement e, string entry, string page, UiScreenLayout screen, bool parent)
+	{
+		if (!e.TryGetProperty("immediate", out JsonElement value))
+		{
+			return;
+		}
+		if (value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+		{
+			Problem(entry, "field 'immediate' must be true or false");
+		}
+		else if (fields!.Screen != "menu" || !parent && page is not ("party_talk" or "extras"))
+		{
+			Problem(entry, "'immediate' acts only on the field menu's party_talk and extras pages and on an entry with children");
+		}
+		else if (value.GetBoolean())
+		{
+			screen.Immediate.Add(page);
+		}
 	}
 
 	// A battle layout that lays the menu's rows out across (a repeater over `menu_items` in a row or grid, or rows one to a

@@ -64,6 +64,12 @@ public sealed partial class SampleController
 	// over it additively as its silhouette.
 	private void FigurePicture(IDrawSurface s, List<Action> pictures, int image, Rectangle body, Color color, FigureLook fl, int footLine, int index)
 	{
+		if (fl.Scale != 1f)
+		{
+			// About the middle of the bottom edge, so a pulsing figure keeps standing on its ground line.
+			int w = (int)MathF.Round(body.Width * fl.Scale), h = (int)MathF.Round(body.Height * fl.Scale);
+			body = new Rectangle(body.Center.X - w / 2, body.Bottom - h, w, h);
+		}
 		string kind = fl.Defeat is { } d ? BattleAnimationRun.Str(d["kind"]) ?? "fade" : "";
 		if (kind == "bands")
 		{

@@ -613,6 +613,7 @@ public sealed partial class SampleController
 				BattlePhase.Option => b.MenuChoice,
 				BattlePhase.Macro => "macro",
 				BattlePhase.Target => "target",
+				BattlePhase.AutoChoice => "auto",
 				_ => "",
 			})
 			.Set("list_index", listed ? b.MenuIndex : -1);
@@ -647,7 +648,11 @@ public sealed partial class SampleController
 		_probeEnemyGroups = groups.Count == 0 ? "none" : string.Join(", ", groups.Select(g => g.Get("text")));
 		ui.Set("enemy_groups", groups);
 		string? description = MenuDescription(all, target, out bool described);
-		ui.Set("description_shown", described).Set("description", description ?? "");
+		List<UiContext> checks = MacroChecks(ui, out bool trouble);
+		ui.Set("description_shown", described || checks.Count > 0).Set("description", description ?? "")
+			.Set("macro_steps", checks)
+			.Set("macro_trouble", trouble)
+			.Set("macro_trouble_text", trouble ? T("ui.battle.macro_trouble") : "");
 		if (described)
 		{
 			_probeDescription = string.IsNullOrEmpty(description) ? "-" : description;
@@ -710,6 +715,7 @@ public sealed partial class SampleController
 		BattlePhase.Option => T("ui.battle.command." + _battle.MenuChoice),
 		BattlePhase.Target => T("ui.battle.title.target"),
 		BattlePhase.Macro => T("ui.battle.title.macro"),
+		BattlePhase.AutoChoice => T(_autoChoiceStep == 0 ? "ui.battle.title.auto_trouble" : "ui.battle.title.auto_policy"),
 		BattlePhase.Ended => T("ui.battle.title.over"),
 		_ => T("ui.battle.title.battle"),
 	};
@@ -726,9 +732,46 @@ public sealed partial class SampleController
 			BattlePhase.Target => (b.Targets.Select(t => t < all.Count ? (all[t].Side == Side.Party ? all[t].Name : all[t].Label) : "?").ToList(),
 				b.Refused.Count == 0 ? null : [.. b.Targets.Select(t => !b.Refused.Contains(t))]),
 			BattlePhase.Macro => ([.. BattleMacros().Select(m => LayoutSwitch("macro_auto_first") && m == _s.Settings().AutoMacro ? T("ui.battle.auto_macro_row", m) : m)], null),
+			BattlePhase.AutoChoice => (_autoChoiceStep == 0 ? [.. AutoTroubles.Select(t => T(NameKind.MacroTrouble, (int)t))] : [.. AutoPolicies.Select(p => T(NameKind.MacroPolicy, (int)p))], null),
 			_ => null,
 		};
 	}
+
+	// With the battle layout's `macro_check`, the highlighted macro's steps as the session would play them this round
+	// (CheckMacro): each step's text, `ok`, and the issue or refusal of one that cannot run; `trouble` whether the round
+	// would be in trouble (TroubleReport). Empty in other phases and without the param.
+	private List<UiContext> MacroChecks(UiContext ui, out bool trouble)
+	{
+		trouble = false;
+		List<string> macros = _battle.Phase == BattlePhase.Macro && LayoutSwitch("macro_check") ? BattleMacros() : [];
+		if (macros.Count == 0)
+		{
+			_probeMacroCheck = "-";
+			return [];
+		}
+		string name = macros[Math.Clamp(_cursor, 0, macros.Count - 1)];
+		if (!_s.CheckMacro(name, out IReadOnlyList<MacroStepCheck> checks).Ok)
+		{
+			_probeMacroCheck = "-";
+			return [];
+		}
+		trouble = _s.TroubleReport(name, out MacroTroubleReport report).Ok && report.Holds;
+		IReadOnlyList<MacroStep> steps = _s.MacroList().FirstOrDefault(m => m.Name == name)?.Steps ?? [];
+		var rows = new List<UiContext>();
+		for (int i = 0; i < checks.Count; i++)
+		{
+			MacroStepCheck c = checks[i];
+			string step = i < steps.Count ? StepText(steps[i] with { Issue = MacroIssue.None }) : _s.DisplayName(c.Member);
+			string issue = c.Ok ? "" : c.RefusalText.Length > 0 ? c.RefusalText
+				: c.Status.Length > 0 ? $"{T(NameKind.MacroIssue, (int)c.Issue)} ({_s.DisplayName(c.Status)})" : T(NameKind.MacroIssue, (int)c.Issue);
+			rows.Add(new UiContext(ui).Set("text", c.Ok ? step : T("ui.battle.macro_step_issue", step, issue)).Set("ok", c.Ok).Set("issue", issue));
+		}
+		_probeMacroCheck = string.Join(" / ", rows.Select(r => (bool)r.Get("ok")! ? "ok" : (string)r.Get("issue")!)) + (trouble ? " / trouble" : "");
+		return rows;
+	}
+
+	// The macro check the last frame drew: each step `ok` or its issue, then `trouble` when the round would be in trouble.
+	private string _probeMacroCheck = "-";
 
 	// The highlighted option's or targeted enemy's description (null or "" when the data has none); `described` false when
 	// no description shows.

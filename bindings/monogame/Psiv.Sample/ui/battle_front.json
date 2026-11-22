@@ -88,9 +88,13 @@
 			{"type": "text", "visible": "len(menu_items) > 8", "key": "ui.battle.pages", "args": ["cursor / 8 + 1", "(len(menu_items) + 7) / 8"], "w": "cw - 14", "align": "right", "y": 4, "style": "small_dim"},
 			{"type": "slot", "slot": "target_pointer"}
 		]},
-		{"name": "description", "visible": "description_shown", "x": 16, "y": "log_shown ? log.bottom + 12 : 16", "w": "W - 32", "h": "t(22) * 2 + 16", "frame": "battle", "opacity": 0.9, "elements": [
-			{"type": "text", "visible": "description != ''", "value": "description", "x": 16, "y": 8, "wrap": true, "max_width": "cw - 32", "lines": 2, "line_height": "t(22)", "style": "small"},
-			{"type": "text", "visible": "description == ''", "key": "ui.common.no_description", "x": 16, "y": 8, "wrap": true, "max_width": "cw - 32", "lines": 2, "line_height": "t(22)", "style": "small_dim"}
+		{"name": "description", "visible": "description_shown", "x": 16, "y": "log_shown ? log.bottom + 12 : 16", "w": "W - 32", "h": "len(macro_steps) > 0 ? t(22) * (len(macro_steps) + (macro_trouble ? 1 : 0)) + 16 : t(22) * 2 + 16", "frame": "battle", "opacity": 0.9, "elements": [
+			{"type": "text", "visible": "description != '' && len(macro_steps) == 0", "value": "description", "x": 16, "y": 8, "wrap": true, "max_width": "cw - 32", "lines": 2, "line_height": "t(22)", "style": "small"},
+			{"type": "text", "visible": "description == '' && len(macro_steps) == 0", "key": "ui.common.no_description", "x": 16, "y": 8, "wrap": true, "max_width": "cw - 32", "lines": 2, "line_height": "t(22)", "style": "small_dim"},
+			{"type": "repeater", "items": "macro_steps", "x": 16, "y": 8, "dy": "t(22)", "template": [
+				{"type": "text", "value": "text", "max_width": "cw - 32", "style": "small", "color": "ok ? 'text' : 'dim'"}
+			]},
+			{"type": "text", "visible": "macro_trouble", "value": "macro_trouble_text", "x": 16, "y": "8 + t(22) * len(macro_steps)", "style": "small", "color": "bad"}
 		]},
 		{"name": "keys", "x": 0, "y": "H - 30", "w": "W", "h": 30, "elements": [
 			{"type": "fill", "w": "W", "h": 30, "color": "black", "alpha": 0.6},

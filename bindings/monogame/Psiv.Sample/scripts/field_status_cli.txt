@@ -1,0 +1,24 @@
+# A game_cli script (not the sample's) the Makefile plays on make_library_data.py's copy after the scripted playthrough,
+# for field_status.txt: from manual_1, a battle on Reed Path puts poison on the mystic and paralysis on the medic
+# (test_venom, test_numb), auto-battle wins it, Test Drain leaves the mystic 1 hit point, and manual_2 is saved in
+# exit_yard_a (field_poison).
+load manual_1
+dev give test_venom 1
+dev give test_numb 1
+dev give test_drain 1
+dev warp reed_path west_gate
+walk 10 2
+walk 1 4
+item fighter test_venom p1
+item scout test_numb p2
+defend mystic
+defend medic
+round
+auto
+menu
+item test_drain mystic
+close
+dev warp exit_yard_a west
+menu
+save manual_2
+close

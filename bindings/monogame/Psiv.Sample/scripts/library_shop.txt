@@ -1,0 +1,79 @@
+# Shop and inn names and the bag's slots (make_library_data.py --bag: Tidewater's stall and inn named, the stall's voice
+# welcoming with {0} its name, game.json `bag_slots` 4), with --dev on a new game: the shop's title and name fields and
+# the keeper's {0}; the bag line in the shop and on the Items page; a purchase that fills the bag, then one refused as
+# the bag is full; the reed path's cache staying shut with its notice; the inn's title. With --window the shot lines save
+# screenshots under build/shots/library/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev money 500
+dev give clear_gel 1
+dev give test_drain 1
+
+# The stall: its name as the title and as the keeper's {0}; three of four slots used.
+cmd walk stall_front
+press Up
+wait 3
+press Enter
+expect screen Shop
+wait 2
+expect state uifield.shop.title Gull's Rest Stall
+expect state uifield.shop.name Gull's Rest Stall
+expect state voice voice.library_stall.welcome
+expect state uifield.shop.voice_line Welcome to Gull's Rest Stall.
+expect state uifield.shop.bag Bag 3/4
+expect state uifield.shop.bag_slots 4
+# Spark Flask fills the bag; Second Wind no longer fits.
+press Down 3
+press Enter
+wait 2
+expect state uifield.shop.bag Bag 4/4
+shot build/shots/library/shop_bag_full.png
+press Up
+press Enter
+wait 2
+expect toast The bag is full (4 slots).
+expect state uifield.shop.bag Bag 4/4
+shot build/shots/library/shop_refused.png
+press Escape
+wait 2
+expect screen Field
+
+# The Items page shows the bag line.
+press M
+expect screen Menu
+press Right
+wait 2
+expect state tab Items
+expect state uifield.menu_items.bag Bag 4/4
+shot build/shots/library/items_bag.png
+press Escape
+wait 2
+
+# The inn's title is its name.
+cmd walk inn_front
+cmd face west
+wait 2
+press Enter
+wait 2
+expect screen Inn
+expect state uifield.inn.title The Mooring Inn
+expect state uifield.inn.name The Mooring Inn
+shot build/shots/library/inn_name.png
+press Down
+press Enter
+wait 2
+expect screen Field
+
+# The reed path's cache holds Second Wind, which no longer fits: the chest stays shut and says so.
+dev warp reed_path cache_front
+wait 5
+cmd face north
+wait 2
+press Enter
+wait 3
+expect toast The bag is full; the chest stays shut.
+shot build/shots/library/chest_shut.png

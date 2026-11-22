@@ -1,0 +1,36 @@
+# The two field-status notices (make_library_data.py's copy: exit_yard_a with `field_poison`, exit_yard_b with
+# `field_paralysis`; rules.json's field_poison_every 2 and field_paralysis surely by step 3), with --dev, from manual_2,
+# which field_status_cli.txt saved in exit_yard_a with the mystic poisoned at 1 hit point and the medic paralyzed: two
+# steps there and the mystic succumbs (`game.poison_fell`, a notice), the medic still paralyzed; through the exit block
+# into exit_yard_b, and within three steps the medic can move again (`game.paralysis_worn_off`). With --window the shot
+# lines save screenshots under build/shots/library/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 2
+cmd load manual_2
+wait 4
+expect screen Field
+expect state leader exit_yard_a 2 3
+dev encounters off
+fieldinput realtime
+press Right
+wait 20
+press Right
+wait 20
+expect toast Test Mystic succumbs to poison.
+expect notoast can move again
+shot build/shots/library/poison_fell.png
+cmd walk 5 3
+wait 2
+press Right
+wait 25
+expect state leader exit_yard_b 6 3
+press Down
+wait 20
+press Left
+wait 20
+press Left
+wait 20
+expect toast Test Medic can move again.
+shot build/shots/library/paralysis_worn_off.png

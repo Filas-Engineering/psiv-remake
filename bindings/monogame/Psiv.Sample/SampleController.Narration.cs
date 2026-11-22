@@ -161,11 +161,12 @@ public sealed partial class SampleController
 	private bool _narrationHeld;
 
 	// Whether a shown line goes on without a press: the dialogue's `narration_wait` "auto" or the line's
-	// `{narration:nowait}`, unless it leaves the window full.
+	// `{narration:nowait}`, unless it leaves the window full. Under "auto" the line waits for a press when the event shows
+	// no line next (NextEventOutput: its end, a choice or anything else), so the window does not close with the event.
 	private bool NarrationGoesOn(Line line, string text)
 	{
-		bool auto = Ui.ParamText("dialogue", "narration_wait", UiData(), "press") == "auto" ||
-			ControlTag().Matches(line.Text).Any(m => m.Groups[1].Value == "narration" && m.Groups[2].Value == "nowait");
+		bool nowait = ControlTag().Matches(line.Text).Any(m => m.Groups[1].Value == "narration" && m.Groups[2].Value == "nowait");
+		bool auto = nowait || Ui.ParamText("dialogue", "narration_wait", UiData(), "press") == "auto" && _s.NextEventOutput == NextOutput.Line;
 		int rows = _narration.Sum(entry => NarrationRows(entry).Count) + NarrationRows(text).Count;
 		return auto && rows < Math.Max(1, DialogueParam("narration_lines", 4));
 	}

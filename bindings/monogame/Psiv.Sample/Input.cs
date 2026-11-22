@@ -199,6 +199,10 @@ public sealed class Bindings
 	// from the battle menu gives each member whose step cannot run core's automatic choice (MacroFallback.Automatic).
 	public string AutoPlayMacro { get; set; } = "";
 	public bool MacroFallbackAutomatic { get; set; }
+	// The trouble mode and policy auto play goes under (SetAutoPlayMacro's), the settings rows `auto_trouble` and
+	// `auto_policy`; Default leaves both to the macro and rules.json.
+	public MacroTrouble AutoTrouble { get; set; }
+	public MacroPolicy AutoPolicy { get; set; }
 
 	private readonly Dictionary<GameAction, List<Keys>> _keys = [];
 	private readonly Dictionary<GameAction, List<Buttons>> _buttons = [];
@@ -322,6 +326,10 @@ public sealed class Bindings
 				{
 					bindings.AutoPlayMacro = battle["auto_play_macro"]?.GetValue<string>() ?? "";
 					bindings.MacroFallbackAutomatic = battle["macro_fallback"]?.GetValue<string>() == "automatic";
+					bindings.AutoTrouble = battle["auto_trouble"]?.GetValue<string>() is { } trouble
+						? (MacroTrouble)(GameSession.ParseName(NameKind.MacroTrouble, trouble) ?? throw new FormatException($"unknown auto_trouble {trouble}")) : MacroTrouble.Default;
+					bindings.AutoPolicy = battle["auto_policy"]?.GetValue<string>() is { } policy
+						? (MacroPolicy)(GameSession.ParseName(NameKind.MacroPolicy, policy) ?? throw new FormatException($"unknown auto_policy {policy}")) : MacroPolicy.Default;
 					continue;
 				}
 				if (!TryName(name, out GameAction action) || entry is not JsonObject fields)
@@ -397,11 +405,16 @@ public sealed class Bindings
 			json.WriteStartObject("field");
 			json.WriteBoolean("interact_prompt", InteractPrompt);
 			json.WriteEndObject();
-			if (AutoPlayMacro.Length > 0 || MacroFallbackAutomatic)
+			if (AutoPlayMacro.Length > 0 || MacroFallbackAutomatic || AutoTrouble != MacroTrouble.Default || AutoPolicy != MacroPolicy.Default)
 			{
 				json.WriteStartObject("battle");
 				json.WriteString("auto_play_macro", AutoPlayMacro);
 				json.WriteString("macro_fallback", MacroFallbackAutomatic ? "automatic" : "basic_attack");
+				if (AutoTrouble != MacroTrouble.Default || AutoPolicy != MacroPolicy.Default)
+				{
+					json.WriteString("auto_trouble", GameSession.NameOf(NameKind.MacroTrouble, (int)AutoTrouble));
+					json.WriteString("auto_policy", GameSession.NameOf(NameKind.MacroPolicy, (int)AutoPolicy));
+				}
 				json.WriteEndObject();
 			}
 			json.WriteEndObject();

@@ -81,27 +81,61 @@ public sealed partial class SampleController
 	private string ActionText(GameAction action) => T("ui.action." + Snake(action.ToString()));
 
 	// The sample's words for keys the game's text tables do not carry: the field options' help, the credits screen, the
-	// macro editor's auto play and fallback actions, the automatic step status, the title's empty erase list, the field
-	// menu's newer pages, the Items page's actions, the battle's auto macro mark, the Extras menu and the camera overlay's
-	// scene camera. T takes a table's own text for the key when it has one, else this English, without counting the key
-	// as missing.
+	// macro editor's auto play, fallback and option actions, the macro option values, the automatic and lost-turn step
+	// statuses, the title's empty erase list, the field menu's newer pages, the Items page's actions, the battle's auto
+	// macro mark, macro check, trouble and auto mode lines, the attack and magic defense stat words, the bag line, the auto
+	// mode settings, `dev rest`, the Extras menu and the camera overlay's scene camera. T takes a table's own text for the
+	// key when it has one, else this English, without counting the key as missing.
 	private static readonly Dictionary<string, string> SampleWords = new()
 	{
-		["ui.battle.auto_macro_row"] = "{0} (auto)",
-		["ui.battle.log.auto_play"] = "Auto-battle plays {0} every round.",
 		["ui.action.extras"] = "Extras",
 		["ui.action.system"] = "System",
+		["ui.battle.auto_macro_row"] = "{0} (auto)",
+		["ui.battle.log.auto_mode"] = "Auto-battle: {0} in trouble, {1} choices.",
+		["ui.battle.log.auto_play"] = "Auto-battle plays {0} every round.",
+		["ui.battle.log.trouble"] = "Trouble ({0}): {1}; automatic choice for {2}.",
+		["ui.battle.log.trouble_nobody"] = "nobody",
+		["ui.battle.macro_step_issue"] = "{0}: {1}",
+		["ui.battle.macro_trouble"] = "This round would be in trouble.",
+		["ui.battle.stat.attack"] = "attack",
+		["ui.battle.stat.magic_defense"] = "magic defense",
+		["ui.battle.title.auto_policy"] = "Choices",
+		["ui.battle.title.auto_trouble"] = "In trouble",
+		["ui.common.bag"] = "Bag {0}/{1}",
 		["ui.credits.hint"] = "{0} end the credits",
 		["ui.dev.camera_scene"] = "scene at {0}",
 		["ui.dev.camera_scene_back"] = "scene, back to the leader",
+		["ui.dev.rested"] = "rested: hit and technique points refilled",
 		["ui.extras.dev"] = "Developer console",
 		["ui.extras.photosensitivity"] = "Photosensitivity notice",
 		["ui.extras.title"] = "Extras",
 		["ui.items.action.look"] = "Look",
 		["ui.items.action.use"] = "Use",
+		["ui.macro_policy.default"] = "as the rules say",
+		["ui.macro_policy.expected"] = "expected",
+		["ui.macro_policy.power"] = "power",
+		["ui.macro_recover_who.all"] = "everyone",
+		["ui.macro_recover_who.default"] = "as the rules say",
+		["ui.macro_recover_who.troubled"] = "those in trouble",
+		["ui.macro_recover_who.uncovered"] = "those without a step",
 		["ui.macro_step_status.automatic"] = "automatic",
+		["ui.macro_step_status.lost_turn"] = "waiting (turn lost)",
+		["ui.macro_trouble.continue"] = "continue",
+		["ui.macro_trouble.default"] = "as the rules say",
+		["ui.macro_trouble.recover"] = "recover",
+		["ui.macro_trouble.stop"] = "stop",
+		["ui.macro_unnamed.attack"] = "attack",
+		["ui.macro_unnamed.auto"] = "automatic choice",
+		["ui.macro_unnamed.default"] = "as the rules say",
+		["ui.macro_unnamed.none"] = "nothing",
 		["ui.macros.fallback_automatic"] = "Stuck steps: automatic choice",
 		["ui.macros.fallback_basic"] = "Stuck steps: basic attack",
+		["ui.macros.option.on_trouble"] = "In trouble: {0}",
+		["ui.macros.option.policy"] = "Choices: {0}",
+		["ui.macros.option.recover_who"] = "Recover: {0}",
+		["ui.macros.option.unnamed"] = "Without a step: {0}",
+		["ui.macros.options"] = "Options",
+		["ui.macros.options_title"] = "The macro's options",
 		["ui.macros.stop_auto_play"] = "Stop auto-battle playing it every round",
 		["ui.macros.use_auto_play"] = "Auto-battle plays it every round",
 		["ui.menu.open_extras"] = "Open extras",
@@ -113,9 +147,13 @@ public sealed partial class SampleController
 		["ui.menu.tab.system"] = "System",
 		["ui.menu.tab.techniques"] = "Techniques",
 		["ui.options.always_run_help"] = "Walk at running pace without holding Run; holding Run then walks.",
+		["ui.options.auto_policy"] = "Auto-battle choices",
+		["ui.options.auto_policy_help"] = "How auto-battle's automatic choices pick: by power, by the damage expected, or as the macro and rules say.",
+		["ui.options.auto_trouble"] = "Auto-battle in trouble",
+		["ui.options.auto_trouble_help"] = "What auto-battle does in a round where a member has fallen or a step cannot run: go on, recover, or stop.",
 		["ui.options.interact_prompt_help"] = "Shows the key and a mark over what the leader can talk to, open or board.",
 		["ui.title.erase_none"] = "No saves to erase.",
-	};
+};
 
 	private string AreaKindText(AreaKind kind) => T(NameKind.AreaKind, (int)kind);
 

@@ -26,7 +26,7 @@ public sealed partial class SampleController
 		UiContext Row(string slot, int index)
 		{
 			SaveSummary? save = saves.FirstOrDefault(v => v.Slot == slot);
-			string name = slot + (save is { Autosave: true } ? " " + T("ui.saves.autosave") : "") + (_dev && save is { Dev: true } ? " " + T("ui.saves.dev") : "");
+			string name = slot + (save is { Autosave: true } && AutosaveOn ? " " + T("ui.saves.autosave") : "") + (_dev && save is { Dev: true } ? " " + T("ui.saves.dev") : "");
 			string head = save is null ? $"{name}   {T("ui.saves.empty")}"
 				: save.Damaged ? $"{name}   {T("ui.saves.damaged")}"
 				: $"{name}   {_s.DisplayName(save.Area)}   {Clock(save.PlayTimeMs)}   {_s.DisplayName(save.Difficulty)}";
@@ -148,6 +148,9 @@ public sealed partial class SampleController
 	}
 
 	// Every slot with a file, manual ones first, then the autosaves.
+	// game.json's `autosave` (R175): false writes no autosave, so the lists mark none and the title offers no retry.
+	private bool AutosaveOn => (_gameInfo ??= _s.GameInfo()).Autosave;
+
 	private List<SaveSummary> LoadableSaves() => [.. (_s.Saves() ?? []).OrderBy(v => v.Autosave)];
 
 	private void UpdateLoadGame(ActionInput input)

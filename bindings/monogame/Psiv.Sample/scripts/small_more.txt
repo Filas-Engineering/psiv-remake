@@ -1,0 +1,40 @@
+# The newer menu slots at 320x224 (make_small_more_assets.py on the small example set), with --dev: the Talk tab, an
+# `immediate` entry, starts the party talk as it opens and shows the lines in the talk box at the talk params' sizes; the
+# System tab's single child (the Save page) opens in place of a list; the Extras tab lists its children at the
+# menu_children params' sizes. With --window the shot lines save screenshots under build/shots/small/ (run from
+# bindings/ with --window-size 1280x896).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+press M
+expect screen Menu
+expect state tab Items
+press Right
+wait 3
+expect state tab Party_talk
+expect state uifield.menu_options.talking true
+shot build/shots/small/more_talk.png
+press Right
+wait 2
+expect state tab Save
+shot build/shots/small/more_only_child.png
+press Escape
+wait 2
+expect screen Field
+press M
+press Left
+wait 2
+expect state page children
+shot build/shots/small/more_children.png
+press Down
+press Enter
+wait 2
+expect state tab Quests

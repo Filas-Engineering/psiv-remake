@@ -108,8 +108,22 @@ public sealed partial class SampleController
 				by => _s.SetProfile(p with { TextSizePercent = Math.Clamp(p.TextSizePercent + 10 * by, 100, 150) })),
 			"battle_speed" => new(T("ui.options.battle_speed"), SpeedName(p.BattleSpeed), T("ui.options.battle_speed_help"),
 				by => _s.SetProfile(p with { BattleSpeed = Step(p.BattleSpeed, by) })),
+			// The sample's own, kept in controls.json beside the auto play macro.
+			"auto_trouble" => new(T("ui.options.auto_trouble"), T(NameKind.MacroTrouble, (int)_bindings.AutoTrouble), T("ui.options.auto_trouble_help"),
+				by => ChangeAutoMode(() => _bindings.AutoTrouble = Step(_bindings.AutoTrouble, by))),
+			"auto_policy" => new(T("ui.options.auto_policy"), T(NameKind.MacroPolicy, (int)_bindings.AutoPolicy), T("ui.options.auto_policy_help"),
+				by => ChangeAutoMode(() => _bindings.AutoPolicy = Step(_bindings.AutoPolicy, by))),
 			_ => FlashingRow(),
 		};
+	}
+
+	private PsivResult ChangeAutoMode(Action change)
+	{
+		change();
+		SaveControls();
+		// A battle's auto play takes the change from its next round.
+		_autoPlaying = "";
+		return PsivResult.Success;
 	}
 
 	// The flashing level (FlashLevel): `reduced` (the profile's reduced flash: replacements, damping and the flash limit),

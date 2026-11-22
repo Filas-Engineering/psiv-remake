@@ -765,6 +765,68 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_layout_choices_saves --assets $(BUILD)/choices_run \
 		--script $(SAMPLE_SCRIPTS)/layout_choices.txt --frames 1800 > $(BUILD)/sample_layout_choices_headless.txt || (cat $(BUILD)/sample_layout_choices_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_layout_choices_headless.txt
+	# The library state of the last rules passes (make_library_data.py, make_library_assets.py): followers drawn from the
+	# session's trail under game.json's followers_arrive, the exits' rule on a 2x2 block of exits with keys and clicks in
+	# both field inputs, shop and inn names with the bag's slots and its refusals, no autosaves, the two field-status
+	# notices from a save field_status_cli.txt writes with game_cli, and the macro options, step checks, flow, failed
+	# steps and auto modes; a copy with a bad `macro_failed`, `macro_flow` and `options` reports each.
+	python3 -I $(SAMPLE_SCRIPTS)/make_library_data.py $(GAME)/data $(CORE)/data $(BUILD)/library_data
+	python3 -I $(SAMPLE_SCRIPTS)/make_library_data.py $(GAME)/data $(CORE)/data $(BUILD)/library_bag_data --bag
+	python3 -I $(SAMPLE_SCRIPTS)/make_library_data.py $(GAME)/data $(CORE)/data $(BUILD)/library_noauto_data --no-autosave
+	python3 -I $(SAMPLE_SCRIPTS)/make_library_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/library_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/library_assets
+	rm -rf $(BUILD)/library_broken_assets
+	cp -R $(BUILD)/library_assets $(BUILD)/library_broken_assets
+	cp $(BUILD)/library_broken_assets/alt/battle_front_broken.json $(BUILD)/library_broken_assets/ui/battle_front.json
+	cp $(BUILD)/library_broken_assets/alt/menu_macros_broken.json $(BUILD)/library_broken_assets/ui/menu_macros.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/library_broken_assets > $(BUILD)/check_assets_library.txt
+	grep -qF "params.macro_failed: must be \"automatic\", \"attack\" or \"lose_turn\"" $(BUILD)/check_assets_library.txt
+	grep -qF "params.macro_flow: must be \"reset\" or \"remember\"" $(BUILD)/check_assets_library.txt
+	grep -qF "params.options: field 'options' reads 'yes'" $(BUILD)/check_assets_library.txt
+	rm -rf $(BUILD)/sample_library_saves
+	$(GAME_CLI) --data $(BUILD)/library_data/game/data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/sample_library_saves > /dev/null
+	$(GAME_CLI) --data $(BUILD)/library_data/game/data --seed 6 --script $(SAMPLE_SCRIPTS)/field_status_cli.txt --saves $(BUILD)/sample_library_saves \
+		> $(BUILD)/field_status_cli.txt
+	grep -qF "Saved to manual_2." $(BUILD)/field_status_cli.txt
+	@for run in library_followers:library_data:400:saves field_status:library_data:600:saves library_autosave:library_noauto_data:1000:saves \
+		exit_block:library_data:1500:- library_shop:library_bag_data:1500:-; do \
+		name=$${run%%:*}; rest=$${run#*:}; data=$${rest%%:*}; rest=$${rest#*:}; frames=$${rest%%:*}; saves=$${rest#*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves; \
+		if [ $$saves = saves ]; then cp -R $(BUILD)/sample_library_saves $(BUILD)/sample_$${name}_saves; fi; \
+		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/$$data/game/data --dev --saves $(BUILD)/sample_$${name}_saves \
+			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
+	rm -rf $(BUILD)/sample_library_macros_saves $(BUILD)/library_macros_run
+	cp -R $(BUILD)/library_assets $(BUILD)/library_macros_run
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_library_macros_saves --assets $(BUILD)/library_macros_run --script $(SAMPLE_SCRIPTS)/library_macros.txt --frames 2400 \
+		> $(BUILD)/sample_library_macros_headless.txt || (cat $(BUILD)/sample_library_macros_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_library_macros_headless.txt
+	# The newer menu slots at 320x224 (make_small_more_assets.py on the small set): the party talk's box by the talk params
+	# and text styles, `immediate` entries (the talk at once, a single child in place of its list) and the children list
+	# by the menu_children params; a copy with a bad `immediate` reports both problems.
+	python3 -I $(SAMPLE_SCRIPTS)/make_small_more_assets.py $(BUILD)/export $(BUILD)/small_assets $(BUILD)/small_more_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/small_more_assets
+	rm -rf $(BUILD)/small_more_broken_assets
+	cp -R $(BUILD)/small_more_assets $(BUILD)/small_more_broken_assets
+	cp $(BUILD)/small_more_broken_assets/alt/menu_broken.json $(BUILD)/small_more_broken_assets/ui/menu.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/small_more_broken_assets > $(BUILD)/check_assets_small_more.txt
+	grep -qF "entries[0]: 'immediate' acts only on the field menu's party_talk and extras pages and on an entry with children" $(BUILD)/check_assets_small_more.txt
+	grep -qF "entries[1]: field 'immediate' must be true or false" $(BUILD)/check_assets_small_more.txt
+	rm -rf $(BUILD)/sample_small_more_saves $(BUILD)/small_more_run
+	cp -R $(BUILD)/small_more_assets $(BUILD)/small_more_run
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_small_more_saves --assets $(BUILD)/small_more_run --script $(SAMPLE_SCRIPTS)/small_more.txt --frames 800 \
+		> $(BUILD)/sample_small_more_headless.txt || (cat $(BUILD)/sample_small_more_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_small_more_headless.txt
+	# More motion (make_motion_more_assets.py: a sprite's and the generated tilesets' palette tracks, a layer placed with
+	# `at`, idle bob and pulse, an encounter's key in the previewer) on the background data, on a copy.
+	python3 -I $(SAMPLE_SCRIPTS)/make_motion_more_assets.py $(BUILD)/motion_more_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --check-assets --assets $(BUILD)/motion_more_assets
+	rm -rf $(BUILD)/sample_motion_more_saves $(BUILD)/motion_more_run
+	cp -R $(BUILD)/motion_more_assets $(BUILD)/motion_more_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --dev --saves $(BUILD)/sample_motion_more_saves --assets $(BUILD)/motion_more_run \
+		--script $(SAMPLE_SCRIPTS)/motion_more.txt --frames 800 > $(BUILD)/sample_motion_more_headless.txt || (cat $(BUILD)/sample_motion_more_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_motion_more_headless.txt
 	# Screens over screens and screens at small sizes (make_screens_assets.py): the notices drawn once by the topmost
 	# screen with a toasts slot, a page the field menu leaves out opened from Extras, title entries by `when`, Controls
 	# without Extras; the name pad's sizes, the built-in pause at 320x224, the developer badge's place and the music cut.

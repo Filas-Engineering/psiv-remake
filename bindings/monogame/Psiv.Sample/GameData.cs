@@ -64,6 +64,8 @@ public sealed partial class GameData
 	public bool InteractNearby { get; private set; }
 	// game.json's `run_speed_percent` (R81), 0 when it gives none: the real-time walk then runs through the session.
 	public int RunSpeedPercent { get; private set; }
+	// Whether game.json sets `followers_arrive` (R166); without it the field layout's param of that name decides.
+	public bool FollowersArriveSet { get; private set; }
 	// Each wandering or patrolling actor's speed against the area's step time (game.json actors' `wander.speed_percent` or
 	// `patrol.speed_percent`, default 50).
 	public Dictionary<string, int> WanderPercent { get; } = [];
@@ -92,6 +94,8 @@ public sealed partial class GameData
 	// Combination recipes by id: the ability they make and the abilities that make it.
 	public Dictionary<string, (string Result, List<string> Abilities)> Recipes { get; } = [];
 	public Dictionary<string, List<string>> EnemyStatuses { get; } = [];
+	// Each enemy's basic attack (core's enemies.json `basic_attack`), an ability id.
+	public Dictionary<string, string> EnemyAttacks { get; } = [];
 	// Where each event a hook starts begins: the hook's area and cell, for the event previewer.
 	public Dictionary<string, (string Area, int X, int Y)> EventStarts { get; } = [];
 	// The shops' and rest points' ids, which the assets' keepers give a portrait.
@@ -137,6 +141,7 @@ public sealed partial class GameData
 		d.Flags.UnionWith(Array(root, "flags").Select(IdOf).OfType<string>());
 		d.InteractNearby = root.TryGetProperty("interact", out JsonElement interact) && Text(interact) == "nearby";
 		d.RunSpeedPercent = root.TryGetProperty("run_speed_percent", out JsonElement run) ? Whole(run) ?? 0 : 0;
+		d.FollowersArriveSet = root.TryGetProperty("followers_arrive", out _);
 		// An actor is a name or an object; `wander` is an object with an optional `speed_percent`, or any other value for the
 		// default pace.
 		d.Each(Array(root, "actors").Where(a => a.ValueKind == JsonValueKind.Object && (a.TryGetProperty("wander", out _) || a.TryGetProperty("patrol", out _))), "game.json actors", actor =>
@@ -194,6 +199,10 @@ public sealed partial class GameData
 				string id = e.GetProperty("id").GetString()!;
 				d.Enemies.Add(id);
 				d.EnemyStatuses[id] = [.. Array(e, "statuses").Select(IdOf).OfType<string>()];
+				if (e.TryGetProperty("basic_attack", out JsonElement attack) && Text(attack) is { } basic)
+				{
+					d.EnemyAttacks[id] = basic;
+				}
 			});
 			d.Each(Array(enemies.RootElement, "encounters"), "enemies.json encounters", encounter =>
 			{

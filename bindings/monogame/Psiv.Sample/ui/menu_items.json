@@ -4,6 +4,7 @@
 		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
 			{"type": "text", "key": "ui.items.sorted_by", "args": ["sort_name"], "y": "-t(26)", "style": "small_dim"},
 			{"type": "text", "key": "ui.items.totals", "args": ["item_count", "item_total"], "w": "(picking ? cw / 2 - 20 : cw) - 20", "align": "right", "y": "-t(26)", "style": "small_dim"},
+			{"type": "text", "visible": "bag != ''", "value": "bag", "w": "(picking ? cw / 2 - 20 : cw) - 20", "align": "center", "y": "-t(26)", "style": "small_dim"},
 			{"type": "text", "visible": "item_count == 0", "key": "ui.items.none", "x": 14, "color": "dim"},
 			{"type": "list", "items": "items", "state": "list", "w": "picking ? cw / 2 - 20 : cw", "h": "ch - t(56)", "active": "!picking"},
 			{"type": "group", "visible": "item_count > 0", "y": "ch - t(56)", "elements": [

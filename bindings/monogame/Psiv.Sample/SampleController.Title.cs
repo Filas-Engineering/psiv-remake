@@ -36,7 +36,7 @@ public sealed partial class SampleController
 			}
 			switch (id)
 			{
-			case "retry" when _s.WorldInfo().CanRetry:
+			case "retry" when _s.WorldInfo().CanRetry && AutosaveOn:
 				options.Add((id, T("ui.title.retry"), _s.RetryBattle));
 				break;
 			case "new_game":
@@ -118,7 +118,7 @@ public sealed partial class SampleController
 	private List<SaveSummary> ErasableSaves() => [.. (_s.Saves() ?? []).OrderBy(v => v.Autosave)];
 
 	private List<string> EraseRows(List<SaveSummary> saves) => saves.Count == 0 ? [T("ui.title.erase_none")]
-		: [.. saves.Select(v => v.Slot + (v.Autosave ? " " + T("ui.saves.autosave") : "") + "   " + (v.Damaged ? T("ui.saves.damaged") : $"{_s.DisplayName(v.Area)}   {Clock(v.PlayTimeMs)}"))];
+		: [.. saves.Select(v => v.Slot + (v.Autosave && AutosaveOn ? " " + T("ui.saves.autosave") : "") + "   " + (v.Damaged ? T("ui.saves.damaged") : $"{_s.DisplayName(v.Area)}   {Clock(v.PlayTimeMs)}"))];
 
 	// The erase list: Confirm asks with ui.title.erase_confirm, then EraseSave; the session's notice (game.save_erased) or
 	// its refusal shows as a notice, and the list is read again. Back, or nothing left to erase, returns to the options.

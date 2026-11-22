@@ -352,6 +352,7 @@ public sealed partial class SampleController
 		if (_s.Mode == Mode.Battle && !_battle.Active)
 		{
 			_autoPlaying = "";
+			_autoChosen = false;
 			StartBattle();
 		}
 		Screen screen = Screen;
@@ -846,6 +847,9 @@ public sealed partial class SampleController
 			"ambient" => _audio.Ambient.Length == 0 ? "-" : _audio.Ambient,
 			"text_speed" => GameSession.NameOf(NameKind.TextSpeed, (int)p.TextSpeed),
 			"auto_advance" => OnOff(p.AutoAdvance),
+			"macrocheck" => _probeMacroCheck,
+			"auto_trouble" => GameSession.NameOf(NameKind.MacroTrouble, (int)_bindings.AutoTrouble),
+			"auto_policy" => GameSession.NameOf(NameKind.MacroPolicy, (int)_bindings.AutoPolicy),
 			"text_size" => p.TextSizePercent.ToString(CultureInfo.InvariantCulture),
 			"battle_speed" => GameSession.NameOf(NameKind.BattleSpeed, (int)p.BattleSpeed),
 			"reduced_flash" => OnOff(p.ReducedFlash),

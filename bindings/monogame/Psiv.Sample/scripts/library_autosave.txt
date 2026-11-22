@@ -1,0 +1,30 @@
+# game.json `autosave` false (make_library_data.py --no-autosave), with --dev, in a save directory holding autosaves of
+# the scripted playthrough: the title's Load list and the erase list mark none of them as autosaves; after a lost
+# battle the title offers no retry, the battle having no autosave to retry from. With --window the shot lines save
+# screenshots under build/shots/library/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 2
+expect statenot uifield.title.option_ids retry
+press Down 2
+press Enter
+wait 3
+expect screen LoadGame
+press Down 3
+expect statehas selected auto_0
+shot build/shots/library/load_no_marks.png
+press Escape
+wait 3
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev battle training
+wait 60
+dev lose
+waitstate 600 battlephase Ended
+press Enter
+wait 2
+expect screen Title
+expect statenot uifield.title.option_ids retry
+shot build/shots/library/title_no_retry.png

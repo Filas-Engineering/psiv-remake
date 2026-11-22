@@ -36,6 +36,8 @@ public sealed partial class SampleController
 			.Set("top", DialogueTop(s, field))
 			.Set("bed", AreaTiles(art).Bed)
 			.Set("cost", inn?.Cost ?? 0)
+			.Set("name", inn?.Name ?? "")
+			.Set("title", inn is { Name.Length: > 0 } named ? named.Name : T("ui.inn.title"))
 			.Set("per_member", inn?.PerMember ?? false)
 			.Set("cost_each", inn is { PerMember: true } ? inn.Cost / Math.Max(1, LineupMembers().Count) : inn?.Cost ?? 0)
 			.Set("voice_line", inn is null ? "" : VoiceLine(inn.Voice, "inn", _keeperMoment, "", inn.Cost))

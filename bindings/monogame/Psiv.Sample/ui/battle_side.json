@@ -48,9 +48,13 @@
 			{"type": "rows", "visible": "menu_shown", "items": "menu_items", "selected": "cursor", "text": "fit(text, 230, size_small)", "enabled": "usable", "x": 24, "y": 30, "w": 264,
 				"size": "size_small", "row_height": 28, "first": "clamp(cursor - (ch - 44) / 28 + 1, 0, max(0, len(menu_items) - (ch - 44) / 28))", "most": "(ch - 44) / 28"}
 		]},
-		{"name": "description", "visible": "description_shown", "x": 16, "y": "log_shown ? log.bottom + 12 : 16", "w": "W - 32", "h": "t(22) * 2 + 16", "frame": "battle", "opacity": 0.9, "elements": [
-			{"type": "text", "visible": "description != ''", "value": "description", "x": 16, "y": 8, "wrap": true, "max_width": "cw - 32", "lines": 2, "line_height": "t(22)", "style": "small"},
-			{"type": "text", "visible": "description == ''", "key": "ui.common.no_description", "x": 16, "y": 8, "wrap": true, "max_width": "cw - 32", "lines": 2, "line_height": "t(22)", "style": "small_dim"}
+		{"name": "description", "visible": "description_shown", "x": 16, "y": "log_shown ? log.bottom + 12 : 16", "w": "W - 32", "h": "len(macro_steps) > 0 ? t(22) * (len(macro_steps) + (macro_trouble ? 1 : 0)) + 16 : t(22) * 2 + 16", "frame": "battle", "opacity": 0.9, "elements": [
+			{"type": "text", "visible": "description != '' && len(macro_steps) == 0", "value": "description", "x": 16, "y": 8, "wrap": true, "max_width": "cw - 32", "lines": 2, "line_height": "t(22)", "style": "small"},
+			{"type": "text", "visible": "description == '' && len(macro_steps) == 0", "key": "ui.common.no_description", "x": 16, "y": 8, "wrap": true, "max_width": "cw - 32", "lines": 2, "line_height": "t(22)", "style": "small_dim"},
+			{"type": "repeater", "items": "macro_steps", "x": 16, "y": 8, "dy": "t(22)", "template": [
+				{"type": "text", "value": "text", "max_width": "cw - 32", "style": "small", "color": "ok ? 'text' : 'dim'"}
+			]},
+			{"type": "text", "visible": "macro_trouble", "value": "macro_trouble_text", "x": 16, "y": "8 + t(22) * len(macro_steps)", "style": "small", "color": "bad"}
 		]},
 		{"name": "status", "x": "menu.x", "y": "menu.y", "w": "menu.w", "h": "menu.h", "elements": [
 			{"type": "text", "visible": "phase == 'playback' && auto", "key": "ui.battle.auto", "x": 24, "y": 34},

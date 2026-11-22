@@ -189,15 +189,19 @@ public sealed partial class SampleController
 			return false;
 		}
 		string kind = ScriptKind(id);
+		// A key of an encounter (`encounter:ENC/...`, or ending in `/encounter:ENC`) plays in that encounter, on dummies of an
+		// enemy it lists unless the key or `enemy` names one.
+		string encounter = key.Split('/').FirstOrDefault(p => p.StartsWith("encounter:", StringComparison.Ordinal))?[10..] ?? "";
+		string inner = key.StartsWith("encounter:", StringComparison.Ordinal) && key.Contains('/') ? key[(key.IndexOf('/') + 1)..] : key;
 		// An enemy's key has a dummy enemy act on the members; an item's has a member use it (a worn piece its use).
-		string[] head = key.Split('/')[0].Split(':', 2);
-		string? enemyAction = key.Split('/') is [var e, var action, ..] && e.StartsWith("enemy:", StringComparison.Ordinal) ? action : null;
+		string[] head = inner.Split('/')[0].Split(':', 2);
+		string? enemyAction = inner.Split('/') is [var e, var action, ..] && e.StartsWith("enemy:", StringComparison.Ordinal) ? action : null;
 		string actionId = head is ["item", var piece] && _data.PieceUses.TryGetValue(piece, out string? use) ? use
 			: head is ["ability" or "item", var a0] ? a0 : enemyAction is not null and not ("attack" or "defend") ? enemyAction : "";
 		string entry = PresentationTable.Actions.ContainsKey(actionId) ? actionId
 			: _data.Actions.TryGetValue(actionId, out ActionShape? shape) ? $"{shape.Kind}.{shape.Effect}"
 			: enemyAction == "defend" ? "defend"
-			: kind == "reaction" || key.StartsWith("weapon:", StringComparison.Ordinal) || enemyAction is not null ? "attack" : "technique.damage";
+			: kind == "reaction" || inner.StartsWith("weapon:", StringComparison.Ordinal) || enemyAction is not null ? "attack" : "technique.damage";
 		if (!PresentationTable.Actions.ContainsKey(entry) && !PresentationTable.Fallbacks.ContainsKey(entry))
 		{
 			entry = "technique.damage";
@@ -208,9 +212,10 @@ public sealed partial class SampleController
 		}
 		_forcedScript = id;
 		_forcedReaction = kind == "reaction" ? id : null;
-		string? dummy = _animPreviewEnemy.Length > 0 ? _animPreviewEnemy : enemyAction is not null ? head[1] : null;
-		bool ok = StartStagePreview(entry, key.StartsWith("change:", StringComparison.Ordinal) ? key[7..] : null, dummy, key.StartsWith("combo:", StringComparison.Ordinal),
-			_animPreviewCount, _animPreviewTargets, enemyAction is not null, head[0] == "item");
+		string? dummy = _animPreviewEnemy.Length > 0 ? _animPreviewEnemy : enemyAction is not null ? head[1]
+			: encounter.Length > 0 ? _data.EnemyEncounters.Where(p => p.Value == encounter).Select(p => p.Key).Order(StringComparer.Ordinal).FirstOrDefault() : null;
+		bool ok = StartStagePreview(entry, inner.StartsWith("change:", StringComparison.Ordinal) ? inner[7..] : null, dummy, inner.StartsWith("combo:", StringComparison.Ordinal),
+			_animPreviewCount, _animPreviewTargets, enemyAction is not null, head[0] == "item", encounter);
 		_forcedScript = null;
 		if (ok)
 		{

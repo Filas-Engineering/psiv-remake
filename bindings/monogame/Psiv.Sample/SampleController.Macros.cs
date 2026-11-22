@@ -6,7 +6,7 @@ namespace Psiv.Sample;
 // item, then target rule; the session refuses what does not fit, and marks steps that cannot run now.
 public sealed partial class SampleController
 {
-	private enum MacroStage { List, Actions, Steps, StepActions, Member, Command, Pick, Target, TargetMember, TargetEnemy, Name }
+	private enum MacroStage { List, Actions, Steps, StepActions, Member, Command, Pick, Target, TargetMember, TargetEnemy, Name, Options }
 
 	private static readonly CommandKind[] StepCommands = [CommandKind.Attack, CommandKind.Ability, CommandKind.Item, CommandKind.Defend, CommandKind.Escape];
 	private static readonly MacroTargetKind[] StepTargets = [MacroTargetKind.Default, MacroTargetKind.Self, MacroTargetKind.Member, MacroTargetKind.Enemy, MacroTargetKind.All];
@@ -70,9 +70,35 @@ public sealed partial class SampleController
 
 	// After delete: whether auto-battle plays this macro every round (stuck members taking the automatic choice), and how a
 	// macro used from the battle menu treats a member whose step cannot run; both the sample's, kept in controls.json.
+	// With the Macros page's `options` param, an Options action last, for the macro's options (SetMacroOptions, SetMacroPolicy).
 	private List<string> MacroActions(string name) =>
 		[.. new[] { "edit_steps", "rename", "move_up", "move_down", _s.Settings().AutoMacro == name ? "stop_auto" : "use_auto", "delete",
-			_bindings.AutoPlayMacro == name ? "stop_auto_play" : "use_auto_play", _bindings.MacroFallbackAutomatic ? "fallback_automatic" : "fallback_basic" }.Select(a => T("ui.macros." + a))];
+			_bindings.AutoPlayMacro == name ? "stop_auto_play" : "use_auto_play", _bindings.MacroFallbackAutomatic ? "fallback_automatic" : "fallback_basic" }
+			.Concat(MacroOptionsShown ? ["options"] : []).Select(a => T("ui.macros." + a))];
+
+	private bool MacroOptionsShown => Ui.Param("menu_macros", "options", UiData(), 0) != 0;
+
+	// The macro's options as rows: what repeating it does in trouble, who takes core's choice in a recover round, what a
+	// member without a step does, and the automatic choice's policy; Default leaves each to the next level.
+	private List<string> MacroOptionRows(Macro macro) =>
+	[
+		T("ui.macros.option.on_trouble", T(NameKind.MacroTrouble, (int)macro.OnTrouble)),
+		T("ui.macros.option.recover_who", T(NameKind.MacroRecoverWho, (int)macro.RecoverWho)),
+		T("ui.macros.option.unnamed", T(NameKind.MacroUnnamed, (int)macro.Unnamed)),
+		T("ui.macros.option.policy", T(NameKind.MacroPolicy, (int)macro.Policy)),
+	];
+
+	// Steps the option at `row` by `by` through the session, which keeps it in the save.
+	private void StepMacroOption(Macro macro, int row, int by)
+	{
+		Report(row switch
+		{
+			0 => _s.SetMacroOptions(macro.Name, Step(macro.OnTrouble, by), macro.RecoverWho, macro.Unnamed),
+			1 => _s.SetMacroOptions(macro.Name, macro.OnTrouble, Step(macro.RecoverWho, by), macro.Unnamed),
+			2 => _s.SetMacroOptions(macro.Name, macro.OnTrouble, macro.RecoverWho, Step(macro.Unnamed, by)),
+			_ => _s.SetMacroPolicy(macro.Name, Step(macro.Policy, by)),
+		});
+	}
 
 	private string[] StepActions => [.. new[] { "change", "move_up", "move_down", "remove" }.Select(a => T("ui.macros." + a))];
 
@@ -94,6 +120,7 @@ public sealed partial class SampleController
 		MacroStage.Pick => [.. DraftPicks().Select(p => p.Text)],
 		MacroStage.Target => [.. StepTargets.Select(t => T(NameKind.MacroTargetKind, (int)t))],
 		MacroStage.TargetEnemy => [.. Enumerable.Range(1, EnemyPositions).Select(i => T("ui.macros.enemy_position", i))],
+		MacroStage.Options when macro is not null => MacroOptionRows(macro),
 		_ => [],
 	};
 
@@ -141,11 +168,21 @@ public sealed partial class SampleController
 		List<string> rows = StageRows(macros, macro);
 		ScrollList list = StageList;
 		list.Move(input, rows.Count);
+		if (_macroStage == MacroStage.Options && macro is not null && !input.Back)
+		{
+			int by = input.Confirm || input.Pressed(GameAction.Right) ? 1 : input.Pressed(GameAction.Left) ? -1 : 0;
+			if (by != 0)
+			{
+				StepMacroOption(macro, list.Cursor, by);
+			}
+			return;
+		}
 		if (input.Back)
 		{
 			Stage(_macroStage switch
 			{
 				MacroStage.Actions or MacroStage.Steps => MacroStage.List,
+				MacroStage.Options => MacroStage.Actions,
 				MacroStage.StepActions or MacroStage.Member => MacroStage.Steps,
 				MacroStage.Command => MacroStage.Member,
 				MacroStage.Pick => MacroStage.Command,
@@ -247,6 +284,9 @@ public sealed partial class SampleController
 			_bindings.MacroFallbackAutomatic = !_bindings.MacroFallbackAutomatic;
 			SaveControls();
 			break;
+		case 8:
+			Stage(MacroStage.Options);
+			break;
 		case 5:
 			_confirm.Ask(T("ui.macros.delete_confirm", macro.Name), () =>
 			{
@@ -301,25 +341,51 @@ public sealed partial class SampleController
 
 	// The battle's auto play (Resolve): with an auto play macro chosen, every round is filled with it, each member whose
 	// step cannot run taking core's automatic choice (FillAutoRound after SetAutoPlayMacro); otherwise the save's auto macro
-	// through StartAuto and FillFromAuto, as before. False when auto play stops.
+	// through StartAuto and FillFromAuto, as before. A trouble mode or policy chosen at the Auto row (`auto_choose`) or in
+	// the settings rows `auto_trouble` and `auto_policy` goes with the macro, the save's auto macro then also filling the
+	// round through FillAutoRound. A round filled that way logs the trouble it met. False when auto play stops.
 	private bool FillAuto()
 	{
-		if (_bindings.AutoPlayMacro.Length > 0 && _s.Macros().Contains(_bindings.AutoPlayMacro))
+		bool modes = _bindings.AutoTrouble != MacroTrouble.Default || _bindings.AutoPolicy != MacroPolicy.Default;
+		string macro = _bindings.AutoPlayMacro.Length > 0 && _s.Macros().Contains(_bindings.AutoPlayMacro) ? _bindings.AutoPlayMacro : "";
+		if (!_autoChosen && macro.Length == 0 && !modes)
 		{
-			if (_autoPlaying != _bindings.AutoPlayMacro)
-			{
-				_autoPlaying = _bindings.AutoPlayMacro;
-				Report(_s.SetAutoPlayMacro(_autoPlaying));
-				_battle.Log.Add(T("ui.battle.log.auto_play", _autoPlaying));
-			}
-			_s.FillAutoRound();
-			return true;
+			return _s.FillFromAuto();
 		}
-		return _s.FillFromAuto();
+		if (!_autoChosen && _autoPlaying != (macro.Length > 0 ? macro : SaveAutoMacro))
+		{
+			_autoPlaying = macro.Length > 0 ? macro : SaveAutoMacro;
+			Report(modes ? _s.SetAutoPlayMacro(macro.Length > 0 ? macro : null, _bindings.AutoTrouble, _bindings.AutoPolicy) : _s.SetAutoPlayMacro(macro));
+			if (macro.Length > 0)
+			{
+				_battle.Log.Add(T("ui.battle.log.auto_play", macro));
+			}
+		}
+		_s.FillAutoRound();
+		if (_s.TroubleReport(null, out MacroTroubleReport trouble).Ok && trouble.Holds)
+		{
+			_battle.Log.Add(TroubleText(trouble));
+		}
+		return true;
 	}
 
-	// The auto play macro given to the session for the battle under way, "" before its first round.
+	// The round's trouble (AutoRound.Trouble) for the log: the members in trouble, then those core's choice took over.
+	private string TroubleText(MacroTroubleReport trouble)
+	{
+		IReadOnlyList<Combatant> all = _s.Combatants();
+		string Names(IReadOnlyList<int> who) => who.Count == 0 ? T("ui.battle.log.trouble_nobody")
+			: ListText(who.Where(i => i >= 0 && i < all.Count).Select(i => all[i].Name));
+		return T("ui.battle.log.trouble", T(NameKind.MacroTrouble, (int)trouble.Mode), Names([.. trouble.Fallen.Concat(trouble.TroubledMembers).Distinct()]),
+			Names(trouble.Recovered));
+	}
+
+	// The auto play macro given to the session for the battle under way, "" before its first round; SaveAutoMacro stands for
+	// the save's auto macro given with a trouble mode or policy.
 	private string _autoPlaying = "";
+	private const string SaveAutoMacro = "\u0001save";
+
+	// The Auto row gave the session a trouble mode and policy for the battle under way (`auto_choose`).
+	private bool _autoChosen;
 
 	// How a macro picked from the battle menu treats a member whose step cannot run.
 	private MacroFallback BattleMacroFallback => _bindings.MacroFallbackAutomatic ? MacroFallback.Automatic : MacroFallback.BasicAttack;
@@ -340,6 +406,11 @@ public sealed partial class SampleController
 			.Set("name_pad", (UiSlot)((nx, ny, nw, _) => _macroName.Draw(t, nx, ny, nw, _clockMs, Px, Pad("menu_macros", UiArea(x, y, w, h)), PadLabels(), Timing("caret_ms"))))
 			.Set("sub_list", _sub)
 			.Set("stage_list", _third);
+		data.Set("on_trouble", macro is null ? "" : GameSession.NameOf(NameKind.MacroTrouble, (int)macro.OnTrouble))
+			.Set("recover_who", macro is null ? "" : GameSession.NameOf(NameKind.MacroRecoverWho, (int)macro.RecoverWho))
+			.Set("unnamed", macro is null ? "" : GameSession.NameOf(NameKind.MacroUnnamed, (int)macro.Unnamed))
+			.Set("policy", macro is null ? "" : GameSession.NameOf(NameKind.MacroPolicy, (int)macro.Policy))
+			.Set("option_rows", macro is null ? new List<string>() : MacroOptionRows(macro));
 		if (macro is not null)
 		{
 			data.Set("title", macro.Name + (macro.Name == _s.Settings().AutoMacro ? "  " + T("ui.macros.used_for_auto") : ""))
@@ -357,6 +428,7 @@ public sealed partial class SampleController
 					MacroStage.Pick => T(_draftKind == CommandKind.Ability ? "ui.macros.which_ability" : "ui.macros.which_item"),
 					MacroStage.Target => T("ui.macros.aimed_at"),
 					MacroStage.TargetMember => T("ui.macros.which_member"),
+					MacroStage.Options => T("ui.macros.options_title"),
 					_ => T("ui.macros.which_enemy"),
 				}).Set("stage_rows", StageRows(macros, macro));
 			}

@@ -601,9 +601,10 @@ public sealed partial class BattleAnimation
 
 		private Dictionary<string, Check> MoveFields() => new()
 		{
-			["kind"] = Enum("forward", "home", "to", "arc", "hop", "offset", "enter", "exit", "sine", "shake"), ["distance"] = Dist(), ["height"] = Dist(), ["stop_short"] = Dist(),
+			["kind"] = Enum("forward", "home", "to", "arc", "hop", "offset", "enter", "exit", "sine", "shake", "bob", "pulse"), ["distance"] = Dist(), ["height"] = Dist(), ["stop_short"] = Dist(),
 			["to"] = Point(), ["reach"] = Num(0, 1), ["by"] = DistPair(), ["space"] = Enum("screen", "forward"), ["ease"] = Ease(), ["length"] = Time(), ["speed"] = Num(0.01, 100),
 			["axis"] = Enum("both", "x", "y", "forward"), ["amplitude"] = Dist(), ["period"] = Time(), ["phase"] = Time(), ["frequency"] = Num(0, 1000), ["decay"] = Enum("linear", "none", "out"),
+			["scale"] = Num(0, 1),
 		};
 
 		private Dictionary<string, Check> ColorTrackFields() => new()

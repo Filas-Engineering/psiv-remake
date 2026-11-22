@@ -49,6 +49,9 @@ public sealed record TilesetEntry(string? Kind, string? Area, Theme Theme, GridI
 	int[] WallFace, int WallFaceAltOneIn, int[] Water, int WaterFrameMs, Color Edge, Color Bank, Dictionary<string, int> Objects, Dictionary<int, FrameRun> Animated,
 	List<PaletteTrack>? Palettes = null);
 
+// A tilesets entry without a picture: palette tracks over the tiles its kind or area shows without it.
+public sealed record TilesetRecolor(string? Kind, string? Area, Theme Theme, List<PaletteTrack> Palettes);
+
 // A whole-area picture, Cell pixels a cell: Ground in place of the area's tiles, Above over everyone. A patch is drawn on
 // the cells of its flag's changes while the flag is set.
 public sealed record MapPatch(string Flag, string Path, (int X, int Y)[] Cells);
@@ -100,9 +103,9 @@ public sealed record LayerBand(int First, int Last, float Scroll, float Speed);
 public sealed record LayerWave(bool Columns, float Amplitude, float Wavelength, float Speed);
 
 // A picture behind the area (Front false) or in front of everything on it, moving Scroll times the camera and Speed
-// picture pixels a second, repeated along the axes it repeats on.
+// picture pixels a second, repeated along the axes it repeats on; At moves it that many picture pixels.
 public sealed record AreaLayer(string Image, int Width, int Height, bool Front, float ScrollX, float ScrollY, float SpeedX, float SpeedY, bool RepeatX, bool RepeatY,
-	List<LayerBand> Bands, LayerWave? Wave, MotionWhen When);
+	List<LayerBand> Bands, LayerWave? Wave, MotionWhen When, float AtX, float AtY);
 
 // An area's motion, from its maps entry: Cell picture pixels a cell, as the entry's pictures.
 public sealed record AreaMotion(int Cell, List<PaletteTrack> Palettes, List<AreaRun> Runs, List<AreaLayer> Layers);
@@ -225,7 +228,7 @@ public sealed class AssetManifest
 		["maps.areas[]"] = ["area", "image", "above", "cell", "changes", "palettes", "animated", "layers"],
 		["maps.areas[].animated[]"] = ["cells", "pixels", "image", "frames", "ms", "ticks", "layer", "clock", "flag", "unless_flag"],
 		["maps.areas[].animated[].layer"] = ["ground", "above"],
-		["maps.areas[].layers[]"] = ["image", "place", "scroll", "speed", "repeat", "bands", "wave", "clock", "flag", "unless_flag"],
+		["maps.areas[].layers[]"] = ["image", "place", "scroll", "speed", "at", "repeat", "bands", "wave", "clock", "flag", "unless_flag"],
 		["maps.areas[].layers[].bands[]"] = ["rows", "scroll", "speed"],
 		["maps.areas[].layers[].place"] = ["back", "front"],
 		["maps.areas[].layers[].repeat"] = ["both", "x", "y", "none"],
@@ -233,6 +236,7 @@ public sealed class AssetManifest
 		["maps.areas[].layers[].wave.axis"] = ["lines", "columns"],
 		["motion.clock"] = ["global", "entry"],
 		["palettes[]"] = ["colors", "steps", "ms", "ticks", "clock", "flag", "unless_flag"],
+		["sprites{}"] = ["image", "palettes"],
 		["objects[].state"] = ["image", "frame", "frames", "ms", "size", "anchor"],
 		["objects[]"] = ["area", "point", "at", "image", "frame", "frames", "ms", "size", "anchor", "open", "open_flag", "character", "facing"],
 		["field"] = ["wall_shadows", "water_foam", "conveyors", "tile_hooks", "conveyor_overlay", "tile_hook_overlay", "areas"],
@@ -278,6 +282,7 @@ public sealed class AssetManifest
 	public TitleArtEntry? TitleArt { get; private set; }
 	public List<EffectEntry> Effects { get; } = [];
 	public Dictionary<string, string> Sprites { get; } = [];
+	public Dictionary<string, List<PaletteTrack>> SpritePalettes { get; } = [];
 	public Dictionary<string, string> StatusIcons { get; } = [];
 	public Dictionary<string, string> CommandIcons { get; } = [];
 	// Still pictures by name, which the dialogue's `picture` tags show.
@@ -291,6 +296,7 @@ public sealed class AssetManifest
 	// False when the manifest turns the whole-area pictures off, which also stops the maps/ file convention.
 	public bool MapsEnabled { get; private set; } = true;
 	public List<MapEntry> Maps { get; } = [];
+	public List<TilesetRecolor> TilesetRecolors { get; } = [];
 	// Palette tracks, frame runs and layers by area, from the maps entries.
 	public Dictionary<string, AreaMotion> AreaMotions { get; } = [];
 	public List<ObjectEntry> Objects { get; } = [];
@@ -800,13 +806,7 @@ public sealed class AssetManifest
 					m.Effects.Add(new EffectEntry(id, image, run, palette, paletteFile));
 				}
 			}
-			Named(root, "sprites", (id, entry) =>
-			{
-				if (!SpriteNames.Contains(id))
-				{
-					Problem(entry, $"unknown sprite '{id}': {string.Join(", ", SpriteNames)}");
-				}
-			}, m.Sprites);
+			Sprites(root);
 			Named(root, "status_icons", (id, entry) => Known(id, data.Statuses, entry, "status"), m.StatusIcons);
 			Named(root, "command_icons", (id, entry) =>
 			{
@@ -966,6 +966,48 @@ public sealed class AssetManifest
 				else if (Header(p.Value.GetString()!, entry) is not null && m.Problems.Count == before)
 				{
 					into[p.Name] = p.Value.GetString()!;
+				}
+			}
+		}
+
+		// Sprites by name: a file, or an object of its `image` and `palettes`.
+		private void Sprites(JsonElement root)
+		{
+			if (!root.TryGetProperty("sprites", out JsonElement map) || !IsObject(map, "sprites"))
+			{
+				return;
+			}
+			foreach (JsonProperty p in map.EnumerateObject())
+			{
+				string entry = $"sprites.{p.Name}";
+				int before = m.Problems.Count;
+				if (!SpriteNames.Contains(p.Name))
+				{
+					Problem(entry, $"unknown sprite '{p.Name}': {string.Join(", ", SpriteNames)}");
+				}
+				string? file = null;
+				List<PaletteTrack> palettes = [];
+				if (p.Value.ValueKind == JsonValueKind.Object)
+				{
+					Fields(p.Value, entry, Schema["sprites{}"]);
+					file = Str(p.Value, "image", entry);
+					palettes = Palettes(p.Value, entry);
+				}
+				else if (p.Value.ValueKind == JsonValueKind.String)
+				{
+					file = p.Value.GetString()!;
+				}
+				else
+				{
+					Problem(entry, "must be an image file name, or {\"image\": FILE, \"palettes\": [...]}");
+				}
+				if (file is not null && Header(file, entry) is not null && m.Problems.Count == before)
+				{
+					m.Sprites[p.Name] = file;
+					if (palettes.Count > 0)
+					{
+						m.SpritePalettes[p.Name] = palettes;
+					}
 				}
 			}
 		}
@@ -1560,6 +1602,7 @@ public sealed class AssetManifest
 				string? repeat = OneOf(l, "repeat", layerEntry, "maps.areas[].layers[].repeat", "both");
 				float[] scroll = Floats(l, "scroll", layerEntry, 2, -16, 16) ?? [1, 1];
 				float[] speed = Floats(l, "speed", layerEntry, 2, -10000, 10000) ?? [0, 0];
+				float[] at = Floats(l, "at", layerEntry, 2, -65536, 65536) ?? [0, 0];
 				var bands = new List<LayerBand>();
 				foreach ((JsonElement b, string bandEntry) in List(l, "bands").Select(x => (x.Item, $"{layerEntry}.{x.Entry}")))
 				{
@@ -1595,7 +1638,7 @@ public sealed class AssetManifest
 				if (When(l, layerEntry) is { } when && header is { } size && place is not null && repeat is not null)
 				{
 					layers.Add(new AreaLayer(file!, size.Width, size.Height, place == "front", scroll[0], scroll[1], speed[0], speed[1], repeat is "both" or "x",
-						repeat is "both" or "y", bands, wave, when));
+						repeat is "both" or "y", bands, wave, when, at[0], at[1]));
 				}
 			}
 			if (m.Problems.Count == before && m.MapsEnabled)
@@ -1820,6 +1863,20 @@ public sealed class AssetManifest
 			int before = m.Problems.Count;
 			Fields(e, entry, Schema["tilesets[]"]);
 			(string? kind, string? area, _, _, _) = Scope(e, entry, backdrop: false);
+			Theme theme = kind switch { "town" => Theme.Town, "dungeon" => Theme.Dungeon, "field" => Theme.Field, _ => Art.ThemeOf(area is null ? AreaKind.Field : data.AreaKinds.GetValueOrDefault(area)) };
+			if (!e.TryGetProperty("image", out _) && e.TryGetProperty("palettes", out _))
+			{
+				foreach (string field in Schema["tilesets[]"].Where(f => f is not ("kind" or "area" or "palettes") && e.TryGetProperty(f, out _)))
+				{
+					Problem(entry, $"field '{field}' needs 'image': an entry without one recolors the tiles its {(kind is null ? "area" : "kind")} shows with 'palettes' only");
+				}
+				List<PaletteTrack> recolor = Palettes(e, entry);
+				if ((kind ?? area) is not null && m.Problems.Count == before)
+				{
+					m.TilesetRecolors.Add(new TilesetRecolor(kind, area, theme, recolor));
+				}
+				return;
+			}
 			GridImage? image = Grid(e, entry, Pixels.Size, scaled: true, footed: false);
 			// Tiles lie edge to edge, so a scaled tile must come out exactly a cell wide at its snapped factor: the cell's
 			// factor (the field's cell over 16) over the scale.
@@ -1877,7 +1934,6 @@ public sealed class AssetManifest
 				}
 			}
 			List<PaletteTrack> palettes = Palettes(e, entry);
-			Theme theme = kind switch { "town" => Theme.Town, "dungeon" => Theme.Dungeon, "field" => Theme.Field, _ => Art.ThemeOf(area is null ? AreaKind.Field : data.AreaKinds.GetValueOrDefault(area)) };
 			(Color edge, Color bank) = Art.DefaultEdges(theme);
 			if (image is not null && (kind ?? area) is not null && m.Problems.Count == before)
 			{

@@ -45,6 +45,7 @@ public sealed partial class SampleController
 		public float Lift;
 		public float AddX;
 		public float AddY;
+		public float Scale = 1f;
 		public string Pose = "idle";
 		public int PoseMs = -1;
 		public bool PoseLoop;
@@ -414,7 +415,7 @@ public sealed partial class SampleController
 			{
 				ApplyColor(fl, idleColor, 0f, local, 0, timing, null, c);
 			}
-			if (idle["motion"] is JsonObject idleMotion && BattleAnimationRun.Str(idleMotion["kind"]) is "shake" or "sine")
+			if (idle["motion"] is JsonObject idleMotion && BattleAnimationRun.Str(idleMotion["kind"]) is { } idleKind && Additives.Contains(idleKind))
 			{
 				Additive(fl, idleMotion, 0f, local, timing, c);
 			}
@@ -434,7 +435,7 @@ public sealed partial class SampleController
 				if (t.Type == "move")
 				{
 					string kind = BattleAnimationRun.Str(t.Def["kind"]) ?? "forward";
-					if (kind is "shake" or "sine")
+					if (Additives.Contains(kind))
 					{
 						if (t.Active(now))
 						{
@@ -448,7 +449,7 @@ public sealed partial class SampleController
 				{
 					string kind = BattleAnimationRun.Str(motion["kind"]) ?? "forward";
 					long length = motion["length"] is JsonNode ml ? BattleAnimationRun.Time(ml, run, t.Length) : StateLength(def, t, run);
-					if (kind is "shake" or "sine")
+					if (Additives.Contains(kind))
 					{
 						if (now < t.Start + length)
 						{
@@ -627,7 +628,7 @@ public sealed partial class SampleController
 			if (Anim.State(Scopes(i, c), "status:" + status) is { } def)
 			{
 				ApplyState(fl, def, "status:" + status, 0f, (long)_clockMs * _timeline.RateMilli, 0, StatusRun(i), null, c);
-				if (def["motion"] is JsonObject motion && BattleAnimationRun.Str(motion["kind"]) is "shake" or "sine")
+				if (def["motion"] is JsonObject motion && BattleAnimationRun.Str(motion["kind"]) is { } statusKind && Additives.Contains(statusKind))
 				{
 					Additive(fl, motion, 0f, (long)_clockMs * _timeline.RateMilli, StatusRun(i), c);
 				}
@@ -647,11 +648,26 @@ public sealed partial class SampleController
 	private static long StateLength(JsonObject def, AnimTrack t, AnimRun run) =>
 		def["length"] is JsonNode n && BattleAnimationRun.Str(n) is not "$phase" ? BattleAnimationRun.Time(n, run, t.PhaseLength, t.Length, out _) ?? t.Length : t.Length;
 
+	// The motion kinds added to a figure's offset (or, for `pulse`, its size) while they play, not chained.
+	private static readonly string[] Additives = ["bob", "pulse", "shake", "sine"];
+
 	private void Additive(FigureLook fl, JsonObject d, float t, long local, AnimRun run, StageCtx c)
 	{
 		string axis = BattleAnimationRun.Str(d["axis"]) ?? "x";
+		string kind = BattleAnimationRun.Str(d["kind"]) ?? "sine";
 		float value;
-		if (BattleAnimationRun.Str(d["kind"]) == "shake")
+		if (kind is "bob" or "pulse")
+		{
+			long period = Math.Max(1, BattleAnimationRun.Time(d["period"], run, 60 * BattleClock.Frame));
+			float cycle = BattleClock.Ratio((local + BattleAnimationRun.Time(d["phase"], run)) % period, period);
+			if (kind == "pulse")
+			{
+				fl.Scale *= 1f + (float)(BattleAnimationRun.Num(d["scale"]) ?? 0.1) * MathF.Sin(2f * MathF.PI * cycle);
+				return;
+			}
+			value = BattleAnimationEval.Dist(d["amplitude"] ?? JsonValue.Create(4), 24, default, c.Motion) * MathF.Abs(MathF.Sin(MathF.PI * cycle)) * (axis == "y" ? -1 : 1);
+		}
+		else if (kind == "shake")
 		{
 			float amp = BattleAnimationEval.Px(d["amplitude"]) ?? 0, freq = (float)(BattleAnimationRun.Num(d["frequency"]) ?? 40);
 			float motion = BattleAnimationRun.Str(d["amplitude"])?.EndsWith("px", StringComparison.Ordinal) == true ? 1f : c.Motion;

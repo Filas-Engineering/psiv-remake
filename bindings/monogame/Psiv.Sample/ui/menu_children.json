@@ -1,9 +1,11 @@
 {
 	"version": 1,
 	"windows": [
-		{"name": "list", "x": "max(area_x, min(tab_x - 16, area_x + area_w - t(300)))", "y": "area_y", "w": "t(300)", "h": "min(len(children), 8) * t(30) + t(8) + 48",
-			"frame": "panel", "elements": [
-			{"type": "list", "items": "children", "state": "list", "x": 24, "y": 24, "w": "cw - 48", "h": "min(len(children), 8) * t(30) + t(8)"}
+		{"name": "list", "x": "max(area_x, min(tab_x - 16, area_x + area_w - (list_w > 0 ? list_w : t(300))))", "y": "area_y", "w": "list_w > 0 ? list_w : t(300)",
+			"h": "min(len(children), rows_max) * (row_h > 0 ? row_h : t(30)) + t(8) + 2 * list_pad", "frame": "panel", "elements": [
+			{"type": "list", "items": "children", "state": "list", "x": "list_pad", "y": "list_pad", "w": "cw - 2 * list_pad",
+				"h": "min(len(children), rows_max) * (row_h > 0 ? row_h : t(30)) + t(8)", "row_height": "row_h > 0 ? row_h : t(30)",
+				"height": "row_h > 0 ? row_h - 2 : t(28)", "size": "text_size > 0 ? text_size : 20"}
 		]}
 	]
 }

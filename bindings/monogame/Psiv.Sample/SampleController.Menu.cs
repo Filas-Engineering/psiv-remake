@@ -1,3 +1,4 @@
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 
 using Psiv.Session;
@@ -20,7 +21,25 @@ public sealed partial class SampleController
 
 	private string MenuTab => MenuTabs[Math.Clamp(_tab, 0, MenuTabs.Length - 1)];
 
-	private string MenuPage => _menuChild ?? MenuTab;
+	private string MenuPage => _menuChild ?? OnlyChild ?? MenuTab;
+
+	// An `immediate` entry's single child, which opens in place of the children's list.
+	private string? OnlyChild => _menuOnly is null && Layout.Screen("menu") is var menu && menu.Immediate.Contains(MenuTab)
+		&& menu.Children.GetValueOrDefault(MenuTab) is [var only] ? only.Page : null;
+
+	// The page an `immediate` entry acted on last, with its tab, so it acts once each time it opens.
+	private string? _immediateActed;
+
+	private bool ImmediateDue()
+	{
+		string key = $"{_tab} {MenuPage}";
+		if (!Layout.Screen("menu").Immediate.Contains(MenuPage) || _immediateActed == key)
+		{
+			return false;
+		}
+		_immediateActed = key;
+		return true;
+	}
 
 	// The page a tab's `children` opened, until Back or another tab.
 	private string? _menuChild;
@@ -28,11 +47,12 @@ public sealed partial class SampleController
 
 	// The selected tab's children while they are listed, before one is chosen.
 	private List<(string Page, string? Label)>? MenuChildren =>
-		_menuOnly is null && _menuChild is null && Layout.Screen("menu").Children.GetValueOrDefault(MenuTab) is { } children ? children : null;
+		_menuOnly is null && _menuChild is null && OnlyChild is null && Layout.Screen("menu").Children.GetValueOrDefault(MenuTab) is { } children ? children : null;
 
 	private void ResetMenuChild()
 	{
 		_menuChild = null;
+		_immediateActed = null;
 		_childList.Reset();
 	}
 
@@ -169,20 +189,9 @@ public sealed partial class SampleController
 		case "macros": UpdateMacros(input); break;
 		case "techniques" or "skills" or "abilities": UpdateAbilitiesPage(input); break;
 		case "system": UpdateSystemPage(input); break;
-		case "party_talk" when input.Confirm && PartyTalkOnPage:
-			// The session talks only in the field, so the menu closes for the talk and opens again where it was.
-			Report(_s.CloseMenu());
-			_talkLines = [];
-			_talkToPage = true;
-			Report(_s.PartyTalk());
-			Report(_s.OpenMenu());
-			break;
-		case "party_talk" when input.Confirm:
-			Report(_s.CloseMenu());
-			Report(_s.PartyTalk());
-			break;
-		case "extras" when input.Confirm:
-			OpenExtras();
+		// An `immediate` entry acts as Confirm on its one row would, once each time it opens.
+		case "party_talk" or "extras" when input.Confirm || ImmediateDue():
+			ConfirmRowPage();
 			break;
 		case "combos":
 			ComboLog combos = _s.ComboLog();
@@ -364,7 +373,12 @@ public sealed partial class SampleController
 				.Set("children", children.Select(c => T(c.Label ?? "ui.menu.tab." + c.Page)).ToList())
 				.Set("list", _childList)
 				.Set("tab_x", tabX)
-				.Set("tab_w", tabW));
+				.Set("tab_w", tabW)
+				.Set("list_w", Ui.Param("menu_children", "list_w", UiData(), 0))
+				.Set("row_h", Ui.Param("menu_children", "row_h", UiData(), 0))
+				.Set("rows_max", Ui.Param("menu_children", "rows", UiData(), 8))
+				.Set("list_pad", Ui.Param("menu_children", "pad", UiData(), 24))
+				.Set("text_size", Ui.Param("menu_children", "text_size", UiData(), 0)));
 			return;
 		}
 		switch (MenuPage)
@@ -410,23 +424,64 @@ public sealed partial class SampleController
 	}
 
 	// The party talk's lines in the slot's rectangle: each speaker's name, then the line wrapped under it.
+	// The party talk's lines in the slot: speaker names in the styles' text style `talk_name` and lines in `talk` (size and
+	// color; accent and text without them), sized again by the menu_options params `talk_name_size` and `talk_size`, rows
+	// `talk_row_h` apart (else the line height for the size), inside `talk_pad` and at most `talk_rows` rows (0: as many
+	// as fit).
 	private void DrawTalkBox(IDrawSurface t, int x, int y, int w, int h)
 	{
-		int line = Px(Style.LineHeight);
-		int ty = y;
+		UiContext ctx = UiData();
+		(int? lineSize, Color lineColor) = TalkStyle("talk", Style.Text);
+		(int? nameSize, Color nameColor) = TalkStyle("talk_name", Style.Accent);
+		int size = Ui.Param("menu_options", "talk_size", ctx, lineSize ?? Style.Body);
+		int nameAt = Ui.Param("menu_options", "talk_name_size", ctx, nameSize ?? size);
+		int line = Ui.Param("menu_options", "talk_row_h", ctx, 0) is > 0 and int rowH ? Px(rowH)
+			: size == Style.Body && nameAt == Style.Body ? Px(Style.LineHeight) : Px(Math.Max(size, nameAt) * Style.LineHeight / Style.Body);
+		int pad = Ui.Param("menu_options", "talk_pad", ctx, 0);
+		int most = Ui.Param("menu_options", "talk_rows", ctx, 0);
+		(x, y, w, h) = (x + pad, y + pad, Math.Max(1, w - 2 * pad), h - 2 * pad);
+		int ty = y, rows = 0;
+		bool Fits() => ty + line <= y + h && (most <= 0 || rows < most);
 		foreach ((string speaker, string said, _) in _talkLines)
 		{
-			if (speaker.Length > 0 && ty + line <= y + h)
+			if (speaker.Length > 0 && Fits())
 			{
-				t.Text(speaker, x, ty, Style.Accent);
+				t.Text(speaker, x, ty, nameColor, nameAt);
 				ty += line;
+				rows++;
 			}
-			foreach (string row in Style.Wrap(t, said, w).TakeWhile(_ => ty + line <= y + h))
+			foreach (string row in Style.Wrap(t, said, w, size).TakeWhile(_ => Fits()))
 			{
-				t.Text(row, x, ty, Style.Text);
+				t.Text(row, x, ty, lineColor, size);
 				ty += line;
+				rows++;
 			}
 		}
+	}
+
+	private (int? Size, Color Color) TalkStyle(string name, Color fallback) =>
+		Layout.Styles.TextStyles.TryGetValue(name, out UiTextStyle? style)
+			? (style.Size?.Int(new StylesScope(Layout.Styles)), style.Color is { } c ? Ui.ColorOf(c) : fallback) : (null, fallback);
+
+	// Confirm on the one row of the party talk or the extras page.
+	private void ConfirmRowPage()
+	{
+		if (MenuPage == "extras")
+		{
+			OpenExtras();
+			return;
+		}
+		Report(_s.CloseMenu());
+		if (PartyTalkOnPage)
+		{
+			// The session talks only in the field, so the menu closes for the talk and opens again where it was.
+			_talkLines = [];
+			_talkToPage = true;
+			Report(_s.PartyTalk());
+			Report(_s.OpenMenu());
+			return;
+		}
+		Report(_s.PartyTalk());
 	}
 
 	// A party talk line as the page shows it: the speaker is the lineup member whose name starts the notice.
@@ -474,7 +529,7 @@ public sealed partial class SampleController
 			_probeDescription = description.Length == 0 ? "-" : description;
 		}
 		InventoryEntry? looked = _itemLooking ? items.FirstOrDefault(i => i.Id == _itemActing) : null;
-		Ui.Draw("menu_items", s, t, UiArea(x, y, w, h)
+		Ui.Draw("menu_items", s, t, SetBag(UiArea(x, y, w, h))
 			.Set("picking", _pickAction is not null)
 			.Set("sort_name", T(NameKind.ItemSort, (int)_itemSort))
 			.Set("item_count", items.Count)

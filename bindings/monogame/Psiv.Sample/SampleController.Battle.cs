@@ -16,10 +16,33 @@ public sealed partial class SampleController
 
 	private int SpeedPercent() => (int)MathF.Round(SpeedOf(_s.Profile().BattleSpeed) * 100);
 
-	private enum BattlePhase { Command, Option, Target, Macro, Playback, Ended, Top }
+	private enum BattlePhase { Command, Option, Target, Macro, Playback, Ended, Top, AutoChoice }
 
 	// The phases with a menu to choose from.
-	private static bool Choosing(BattlePhase phase) => phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro or BattlePhase.Top;
+	private static bool Choosing(BattlePhase phase) =>
+		phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro or BattlePhase.Top or BattlePhase.AutoChoice;
+
+	// The battle layout's `macro_flow` "remember": after a macro's round the command menu opens on Macro, and the macro list
+	// on the macro played last; "reset" (the default) opens both at their first row.
+	private bool MacroFlowRemember => Ui.ParamText(BattleScreen, "macro_flow", UiData(), "reset") == "remember";
+	private string _lastMacro = "";
+	private bool _macroRound;
+
+	// The battle layout's `macro_failed`: what a macro picked from the menu does with a step that cannot run (`automatic`,
+	// `attack` or `lose_turn`); without it the Macros page's choice (basic attack or automatic).
+	private MacroFallback MenuMacroFallback => Ui.ParamText(BattleScreen, "macro_failed", UiData(), "") switch
+	{
+		"automatic" => MacroFallback.Automatic,
+		"attack" => MacroFallback.Attack,
+		"lose_turn" => MacroFallback.LoseTurn,
+		_ => BattleMacroFallback,
+	};
+
+	// The Auto row's choice with the battle layout's `auto_choose`: the trouble mode, then the policy.
+	private int _autoChoiceStep;
+	private MacroTrouble _autoChoiceTrouble;
+	private static readonly MacroTrouble[] AutoTroubles = [MacroTrouble.Continue, MacroTrouble.Recover, MacroTrouble.Stop];
+	private static readonly MacroPolicy[] AutoPolicies = [MacroPolicy.Default, MacroPolicy.Power, MacroPolicy.Expected];
 
 	// The top-level step's rows, before the members' commands when the battle layout's `command_top` is on; its
 	// `command_rows.top` can leave some out.
@@ -188,7 +211,8 @@ public sealed partial class SampleController
 			if (from == 0 && _battle.Phase != BattlePhase.Top && LayoutSwitch("command_top"))
 			{
 				_battle.Phase = BattlePhase.Top;
-				_cursor = 0;
+				_cursor = _macroRound && MacroFlowRemember ? Math.Max(0, Array.IndexOf(TopMenu, "macro")) : 0;
+				_macroRound = false;
 				return;
 			}
 			for (int i = from; i < info.PartyCount; i++)
@@ -198,7 +222,8 @@ public sealed partial class SampleController
 				{
 					_battle.Actor = i;
 					_battle.Phase = BattlePhase.Command;
-					_cursor = 0;
+					_cursor = from == 0 && _macroRound && MacroFlowRemember ? Math.Max(0, CommandRows().FindIndex(r => r.Command == "macro")) : 0;
+					_macroRound = false;
 					return;
 				}
 			}
@@ -401,7 +426,7 @@ public sealed partial class SampleController
 			case "macro":
 				b.MenuChoice = "macro";
 				b.FromTop = true;
-				_cursor = 0;
+				_cursor = LastMacroRow();
 				b.Phase = BattlePhase.Macro;
 				break;
 			default:
@@ -476,7 +501,12 @@ public sealed partial class SampleController
 				SetAndAdvance(CommandKind.Escape, null, -1);
 				break;
 			case "macro":
+				_cursor = LastMacroRow();
 				b.Phase = BattlePhase.Macro;
+				break;
+			case "auto" when LayoutSwitch("auto_choose"):
+				_autoChoiceStep = 0;
+				b.Phase = BattlePhase.AutoChoice;
 				break;
 			case "auto":
 				if (_s.Settings().AutoMacro.Length == 0 && _s.Macros().Count > 0)
@@ -540,7 +570,9 @@ public sealed partial class SampleController
 			}
 			else if (input.Confirm)
 			{
-				PsivResult applied = _s.ApplyMacro(macros[_cursor], out IReadOnlyList<MacroStepResult> steps, BattleMacroFallback);
+				_lastMacro = macros[_cursor];
+				_macroRound = true;
+				PsivResult applied = _s.ApplyMacro(macros[_cursor], out IReadOnlyList<MacroStepResult> steps, MenuMacroFallback);
 				if (!applied.Ok)
 				{
 					b.Log.Add(T("ui.battle.log.refused", applied.Error!.Text));
@@ -556,8 +588,49 @@ public sealed partial class SampleController
 				}
 			}
 			break;
+		case BattlePhase.AutoChoice:
+			Move(input, _autoChoiceStep == 0 ? AutoTroubles.Length : AutoPolicies.Length);
+			if (input.Back)
+			{
+				b.Phase = _autoChoiceStep == 0 ? BattlePhase.Command : BattlePhase.AutoChoice;
+				_cursor = _autoChoiceStep == 0 ? b.MenuIndex : Array.IndexOf(AutoTroubles, _autoChoiceTrouble);
+				_autoChoiceStep = 0;
+			}
+			else if (input.Confirm && _autoChoiceStep == 0)
+			{
+				_autoChoiceTrouble = AutoTroubles[_cursor];
+				_autoChoiceStep = 1;
+				_cursor = 0;
+			}
+			else if (input.Confirm)
+			{
+				StartAutoPlay(_autoChoiceTrouble, AutoPolicies[_cursor]);
+			}
+			break;
 		}
 	}
+
+	// Auto play under the trouble mode and policy the player chose at the Auto row (`auto_choose`): every round filled by
+	// FillAutoRound with the auto play macro, else the save's auto macro, under them.
+	private void StartAutoPlay(MacroTrouble trouble, MacroPolicy policy)
+	{
+		string? macro = _bindings.AutoPlayMacro.Length > 0 && _s.Macros().Contains(_bindings.AutoPlayMacro) ? _bindings.AutoPlayMacro : null;
+		PsivResult set = _s.SetAutoPlayMacro(macro, trouble, policy);
+		if (!set.Ok)
+		{
+			_battle.Log.Add(T("ui.battle.log.refused", set.Error!.Text));
+			_battle.Phase = BattlePhase.Command;
+			return;
+		}
+		_autoChosen = true;
+		_battle.Log.Add(T("ui.battle.log.auto_mode", T(NameKind.MacroTrouble, (int)trouble), T(NameKind.MacroPolicy, (int)policy)));
+		_battle.Auto = true;
+		TakeNotices();
+		Resolve();
+	}
+
+	// The macro list's row for the macro played last under `macro_flow` "remember", else the first.
+	private int LastMacroRow() => MacroFlowRemember ? Math.Max(0, BattleMacros().IndexOf(_lastMacro)) : 0;
 
 	// The party's macros, or with the battle layout's `macro_auto_first` the one auto-battle plays (Settings.AutoMacro)
 	// first.

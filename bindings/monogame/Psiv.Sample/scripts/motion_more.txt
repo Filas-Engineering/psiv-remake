@@ -1,0 +1,62 @@
+# More motion from the asset manifest (scripts/make_motion_more_assets.py, on the background data copy): the shadow
+# sprite's palette track, the generated field tileset's grass stepping and Wren Loft's generated floor recolored, a layer
+# that does not repeat placed with `at`, Bog Wisps hopping and a Gel Mite pulsing as their idle states, and the previewer
+# playing an encounter's key with the Squall Kite's own attack named in the log. `fieldmotion` reads the steps,
+# `cellpixel.X.Y[.DX.DY]` the colors. With --window the shot lines save screenshots under build/shots/motion_more/.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev warp wren_yard yard_middle
+wait 2
+# The grass steps every 400 ms on the global clock, the shadow under the leader every 20 ticks.
+expect statehas fieldmotion tiles
+expect statehas fieldmotion sprites shadow:
+waitstatehas 40 fieldmotion tiles 0
+expect statehas cellpixel.4.4 50984a
+waitstatehas 40 fieldmotion tiles 1
+expect statehas cellpixel.4.4 98504a
+waitstatehas 30 fieldmotion sprites shadow:0
+expect statehas cellpixel.6.4.15.20 202020
+waitstatehas 30 fieldmotion sprites shadow:1
+expect statehas cellpixel.6.4.15.20 c02020
+shot build/shots/motion_more/yard.png
+# The marker stands on cell 3,2 only: the layer does not repeat.
+expect statehas fieldmotion back 0 front 1
+expect statehas cellpixel.3.2 ff00ff
+expect statenot cellpixel.4.2 ff00ff
+expect statenot cellpixel.3.3 ff00ff
+# Wren Loft's own entry recolors its floor; its walls keep their color.
+dev warp wren_loft loft_door
+wait 2
+expect statehas fieldmotion tiles 0
+expect statehas cellpixel.4.2 4e3a3c
+shot build/shots/motion_more/loft.png
+dev warp wren_yard yard_middle
+wait 2
+
+# The marsh: the wisps hop off their places and back, the mite grows and shrinks.
+dev battle marsh
+waitstate 300 battlephase Command
+waitstatehas 120 figure.Bog_Wisp_A offset 0,-6
+waitstatehas 120 figure.Bog_Wisp_A offset 0,0
+shot build/shots/motion_more/marsh.png
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+expect screen Field
+
+# The previewer: an encounter's key plays in that encounter (the file places its enemies), with the key's enemy acting,
+# and the log names its attack.
+dev preview anim encounter:kites/enemy:squall_kite/attack
+waitstatehas 300 preview anim encounter:kites/enemy:squall_kite/attack frame
+waitstatehas 60 anim mm.talon preview
+expect state enemyplaces Dummy A 300 400 176, Dummy B 600 400 176, Dummy C 900 400 176
+waitstatehas 300 battlelog Dummy A uses Talon on
+shot build/shots/motion_more/preview_talon.png
+dev preview stop
+dev resume

@@ -309,7 +309,7 @@ Moves a figure off its place. A figure's offset at frame `t` is defined by its m
 | `length` | default `$phase` |
 | `speed` | the move completes in 1/`speed` of its length and holds (the table's join rises at 1.6, the merge slides at 1.4) |
 | `axis` | `both` (default), `x` or `y`: a `to` move on one axis only |
-| `kind: sine`, `kind: shake` | not chained: added to the figure's offset while they play; `sine` swings `amplitude` (DIST) on `axis` (`x`, `y`, `forward`) every `period` from `phase`; `shake` is `sin(t * frequency) * amplitude * motion * (1 - t)` (`decay: none` drops the last factor) |
+| `kind: sine`, `kind: shake`, `kind: bob`, `kind: pulse` | not chained: added to the figure's offset (`pulse`: its size) while they play; `sine` swings `amplitude` (DIST) on `axis` (`x`, `y`, `forward`) every `period` from `phase`; `shake` is `sin(t * frequency) * amplitude * motion * (1 - t)` (`decay: none` drops the last factor); `bob` hops `amplitude` away from the place and back every `period` from `phase` (`amplitude * abs(sin(pi * cycle))`, up on `y`); `pulse` grows and shrinks the picture by `scale` (0 to 1, default 0.1) of its size every `period` from `phase`, about the middle of its bottom edge |
 
 A figure with no picture on the stage (a member in a vehicle battle) does not move. The shadow stays on the ground under a `hop` or `arc`.
 
@@ -530,7 +530,7 @@ A state has:
 | `pose` | a figure animation name (falls back to `idle` when the figure lacks it) |
 | `loop` | the pose loops |
 | `length` | TIME; default the pose's length |
-| `motion` | a `move` track's fields (without `on` and `at`), or `{"kind": "sine", "axis": "x"|"y"|"forward", "amplitude": DIST, "period": TIME, "phase": TIME}`, or `{"kind": "shake", "amplitude": px, "frequency": N, "decay": "linear"}` |
+| `motion` | a `move` track's fields (without `on` and `at`), or `{"kind": "sine", "axis": "x"|"y"|"forward", "amplitude": DIST, "period": TIME, "phase": TIME}`, `{"kind": "bob", ...}` with the same fields, `{"kind": "pulse", "scale": 0.25, "period": TIME, "phase": TIME}`, or `{"kind": "shake", "amplitude": px, "frequency": N, "decay": "linear"}` |
 | `color` | a CT, or a `color` track's fields (without `on` and `at`) |
 | `kind` | defeat states only: below |
 | `opacity` | `{from, to, speed, ease}`: the figure's opacity over the state (the join fades in from 0 at speed 1.6) |
@@ -555,7 +555,7 @@ The states the battle plays by itself:
 
 ### Idle states
 
-An `idle` state (and `idle:flying`, tried first for a flying enemy in the front layout) replaces the stage's own idle for the figures of its scope: its `pose` loops in place of the figure's `idle` run, its `motion` (`sine` or `shake`) and `color` (a CT, or a `color` track's fields; a `cycle` cycles) play on the controller's clock read in script units at `settings.rate`, each figure `stagger` (TIME, default `"137ms"`) after the figure before it, and `lift` (DIST) is the hover over its place, its shadow staying on the ground (0 when left out: a flier with an idle state no longer takes the built-in hover). Battle speed does not scale it; it reloads on the next frame; a figure that is down plays none.
+An `idle` state (and `idle:flying`, tried first for a flying enemy in the front layout) replaces the stage's own idle for the figures of its scope: its `pose` loops in place of the figure's `idle` run, its `motion` (`sine`, `bob`, `pulse` or `shake`) and `color` (a CT, or a `color` track's fields; a `cycle` cycles) play on the controller's clock read in script units at `settings.rate`, each figure `stagger` (TIME, default `"137ms"`) after the figure before it, and `lift` (DIST) is the hover over its place, its shadow staying on the ground (0 when left out: a flier with an idle state no longer takes the built-in hover). Battle speed does not scale it; it reloads on the next frame; a figure that is down plays none.
 
 ```json
 "figures": {
@@ -1286,7 +1286,7 @@ A test of the Spark example: `animlog mark`, a round, then `expect animloghas cu
 
 With `--dev`, the previewer's picker gains a third list, every select key and script, beside events and the table's entries ([`dev-tools.md`](dev-tools.md), "Previewer").
 
-* `preview anim KEY|SCRIPT [layout front|side] [enemy ID] [count N] [targets N]`: plays it on dummies, as table entries play today (two members, `count` dummies, default three, of the data's first enemy or of `enemy`; `targets` of them hit by a damaging action), from synthetic events shaped like the script's key (a transform for `change:transform.ENEMY`, a felling for `react:instant_defeat`, a combination of two members for `combo:`, the first dummy, of that enemy, acting on the members for `enemy:ID/ACTION`, the first member using the item, on a member when it heals, for `item:ID`). A battle script plays over a captured field frame.
+* `preview anim KEY|SCRIPT [layout front|side] [enemy ID] [count N] [targets N]`: plays it on dummies, as table entries play today (two members, `count` dummies, default three, of the data's first enemy or of `enemy`; `targets` of them hit by a damaging action), from synthetic events shaped like the script's key (a transform for `change:transform.ENEMY`, a felling for `react:instant_defeat`, a combination of two members for `combo:`, the first dummy, of that enemy, acting on the members for `enemy:ID/ACTION`, the first member using the item, on a member when it heals, for `item:ID`; a key of an encounter, `encounter:ENC/...` or one ending in `/encounter:ENC`, in that encounter, so its placements and layout apply, its dummies of the key's enemy, else of an enemy the encounter lists). An enemy dummy's basic attack is its data's attack ability, which the battle log names (`Dummy A uses Talon on Test Fighter.`). A battle script plays over a captured field frame.
 * `.` steps one frame forward (as now); `,` steps one frame back, which statelessness allows; `anim seek N` jumps to frame N; `anim step N` steps N frames, negative too; Page Down replays, End stops.
 * The `anim` overlay (`overlay anim [on|off]` toggles it; on by default while previewing a script, and kept as set through seeks) draws a frame ruler under the stage: the phases as labeled spans, marks, every track as a bar from its start to its end with its id, sound frames and release frames as ticks, and the current frame as a line; beside it the subjects' anchors as small crosses and each figure's offset.
 * `anim why KEY` in the console prints the lookup chain for a key and `anim expand KEY` the expanded script.

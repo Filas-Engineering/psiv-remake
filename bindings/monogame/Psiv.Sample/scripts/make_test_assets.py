@@ -232,6 +232,7 @@ def main():
 	menus_broken(broken)
 	dialogue_items_broken(broken)
 	motion_broken(broken)
+	motion_more_broken(broken)
 	choices_broken(broken)
 	bitmap_fonts(export, fonts)
 	if len(sys.argv) > 5:
@@ -775,14 +776,30 @@ def motion_broken(broken):
 	(broken / "assets.json").write_text(json.dumps(m, indent="\t") + "\n")
 
 
+def motion_more_broken(broken):
+	"""A tileset entry without a picture that names tiles, a sprite's bad palette track and a sprite that is neither a file
+	nor an object, and a layer's bad `at`, in BROKEN (docs/assets.md, "tilesets", "sprites and status_icons", "Motion")."""
+	m = json.loads((broken / "assets.json").read_text())
+	m["tilesets"].append({"kind": "dungeon", "floor": [0], "palettes": [{"colors": {"floor": "#3a3642"}, "steps": [{"floor": "#4e3a3c"}]}]})
+	m["sprites"]["bubble"] = {"image": m["sprites"]["bubble"], "palettes": [{"colors": {"white": "#fff"}, "steps": [{}]}]}
+	m["sprites"]["alert"] = 7
+	tidewater = next(a for a in m["maps"]["areas"] if a["area"] == "tidewater")
+	tidewater["layers"].append({"image": "backdrops/town.png", "repeat": "none", "at": [1]})
+	(broken / "assets.json").write_text(json.dumps(m, indent="\t") + "\n")
+
+
 def choices_broken(broken):
-	"""A bad value of each layout choice the broken copy's files can take: the battle's Item list order and macro list
-	switch, and the Items page's actions with nothing that draws them (docs/ui-layout.md; the title's `continue` is
-	checked on a copy in the layout_choices run, the broken copy's title file being unreadable)."""
+	"""A bad value of each layout choice the broken copy's files can take: the battle's Item list order, macro list
+	switch, failed macro step and macro flow, the Items page's actions with nothing that draws them, and the Macros
+	page's options switch (docs/ui-layout.md; the title's `continue` is checked on a copy in the layout_choices run, the
+	broken copy's title file being unreadable)."""
 	ui = broken / "ui"
 	front = json.loads((ui / "battle_front.json").read_text())
-	front["params"].update({"item_order": "worn_first", "macro_auto_first": "on"})
+	front["params"].update({"item_order": "worn_first", "macro_auto_first": "on", "macro_failed": "skip", "macro_flow": "keep"})
 	(ui / "battle_front.json").write_text(json.dumps(front, indent="\t") + "\n")
+	macros = json.loads((ui / "menu_macros.json").read_text())
+	macros["params"] = {"options": "yes"}
+	(ui / "menu_macros.json").write_text(json.dumps(macros, indent="\t") + "\n")
 	items = json.loads((ui / "menu_items.json").read_text())
 	items["params"] = {"actions": 1}
 	(ui / "menu_items.json").write_text(json.dumps(items, indent="\t") + "\n")

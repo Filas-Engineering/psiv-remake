@@ -167,11 +167,13 @@ public sealed partial class SampleController
 		KeeperOpened(shop?.Id, "welcome");
 		UiContext ctx = UiData()
 			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "shop")))
-			.Set("title", shop is { } open ? T(NameKind.ShopKind, (int)open.Kind) : T("ui.shop.title"))
+			.Set("title", shop is { Name.Length: > 0 } named ? named.Name : shop is { } open ? T(NameKind.ShopKind, (int)open.Kind) : T("ui.shop.title"))
+			.Set("name", shop?.Name ?? "")
 			.Set("open", shop is not null)
 			.Set("tab", _tab)
 			.Set("money_value", _s.WorldInfo().Money)
-			.Set("keeper", shop is null ? -1 : Keeper(art, shop.Id))
+			.Set("keeper", shop is null ? -1 : Keeper(art, shop.Id));
+		SetBag(ctx)
 			.Set("voice_line", "");
 		List<InventoryEntry> entries = shop is null ? [] : ShopRows(shop);
 		if (shop is not null)
@@ -262,15 +264,16 @@ public sealed partial class SampleController
 		return T($"ui.{kind}.{moment}", parameters);
 	}
 
-	// A shop keeper's line, with {0} the shop's kind word, {1} the item's name, {2} the quantity, {3} the total price and
+	// A shop keeper's line, with {0} the shop's name (its kind word when the data names none), {1} the item's name, {2} the quantity, {3} the total price and
 	// {4} the price of one: after a trade those of the trade, while confirming those of the row and count chosen, empty
 	// when there are none (the welcome).
 	private string ShopVoiceLine(ShopInfo shop, InventoryEntry? at, int count)
 	{
 		string side = _keeperMoment is "confirm" or "thanks" ? (_tab == 0 ? "buy" : "sell") : "";
-		object[] values = _keeperMoment == "thanks" && _voiceTrade is { } traded ? [T(NameKind.ShopKind, (int)shop.Kind), traded.Name, traded.Count, traded.Count * traded.Unit, traded.Unit]
-			: _keeperMoment == "confirm" && at is not null ? [T(NameKind.ShopKind, (int)shop.Kind), at.Name, count, ShopPrice(shop, at) * count, ShopPrice(shop, at)]
-			: [T(NameKind.ShopKind, (int)shop.Kind), "", "", "", ""];
+		string name = shop.Name.Length > 0 ? shop.Name : T(NameKind.ShopKind, (int)shop.Kind);
+		object[] values = _keeperMoment == "thanks" && _voiceTrade is { } traded ? [name, traded.Name, traded.Count, traded.Count * traded.Unit, traded.Unit]
+			: _keeperMoment == "confirm" && at is not null ? [name, at.Name, count, ShopPrice(shop, at) * count, ShopPrice(shop, at)]
+			: [name, "", "", "", ""];
 		return VoiceLine(shop.Voice, "shop", _keeperMoment, side, values);
 	}
 
@@ -279,6 +282,15 @@ public sealed partial class SampleController
 
 	private void RememberTrade(ShopInfo shop, InventoryEntry entry, int count, PsivResult traded) =>
 		_voiceTrade = traded.Ok ? (entry.Name, count, ShopPrice(shop, entry)) : _voiceTrade;
+
+	// The bag's slots (game.json `bag_slots`, R174) for the shop and the Items page: `bag_used` of `bag_slots`, and `bag` the
+	// line to show, "" when the bag has no limit.
+	private UiContext SetBag(UiContext ctx)
+	{
+		int slots = (_gameInfo ??= _s.GameInfo()).BagSlots;
+		int used = _s.WorldInfo().BagUsed;
+		return ctx.Set("bag_used", used).Set("bag_slots", slots).Set("bag", slots > 0 ? T("ui.common.bag", used, slots) : "");
+	}
 
 	// The text key of the keeper's line the last shop or inn frame showed.
 	private string _probeVoice = "-";

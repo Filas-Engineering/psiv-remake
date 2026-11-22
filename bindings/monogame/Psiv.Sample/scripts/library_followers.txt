@@ -1,0 +1,42 @@
+# Followers drawn from the session's trail (Followers()) on data whose game.json sets `followers_arrive` "behind"
+# (make_library_data.py), from saves of the scripted playthrough, with --dev and the built-in field layout (no
+# `followers_arrive` param): after a warp each follower stands behind the one before as the session places them, the
+# session leaving out exit cells and stopping at a wall; then they trail the leader cell by cell. With --window the shot
+# lines save screenshots under build/shots/library/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 2
+cmd load manual_1
+wait 4
+expect screen Field
+dev encounters off
+fieldinput realtime
+dev warp reed_path 10 4
+wait 5
+expect state leader reed_path 10 4
+expect actor fighter 10 4 north
+expect actor mystic 10 5
+expect actor medic 10 6
+shot build/shots/library/followers_warp.png
+# Walking on: the line follows the session's trail, the drawn leader a step ahead of it.
+press Right
+wait 20
+expect actor fighter 11 4
+expect actor mystic 10 4
+expect actor medic 10 5
+press Down
+wait 20
+expect actor fighter 11 5
+expect actor mystic 11 4
+expect actor medic 10 4
+shot build/shots/library/followers_trail.png
+# A warp facing south: the line behind goes north while those cells can be walked.
+dev warp reed_path west_gate
+wait 5
+expect state leader reed_path 1 4
+expect actor mystic 1 3
+shot build/shots/library/followers_edge.png
+# The developer console's `rest` (DevRest): a free rest, marking the game.
+dev rest
+expect state consolelast rested: hit and technique points refilled

@@ -605,7 +605,9 @@ public sealed partial class SampleController
 		{
 			lineup.Add(follower);
 		}
-		_field.FollowersBehind = Ui.ParamText("field", "followers_arrive", UiData(), "stacked") == "behind";
+		// game.json's `followers_arrive` places the session's followers; the field layout's param is the fallback without it.
+		_field.FollowersBehind = !_data.FollowersArriveSet && Ui.ParamText("field", "followers_arrive", UiData(), "stacked") == "behind";
+		_field.SessionFollowers = _s.Followers();
 		_field.Platforms = _s.Platforms();
 		_field.Track(view, _clockMs, lineup);
 		(float X, float Y)? focus = SceneFocus(lineup) ?? (_camera is null ? null : CameraFocus(view));

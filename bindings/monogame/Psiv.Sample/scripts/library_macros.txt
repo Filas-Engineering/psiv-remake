@@ -1,0 +1,96 @@
+# The macro options and checks the library added (make_library_assets.py), with --dev on the shipped data: the Macros
+# page's Options action stepping a macro's on_trouble, recover_who, unnamed and policy through SetMacroOptions and
+# SetMacroPolicy; in battle each step of the highlighted macro marked before Confirm (CheckMacro: the steps of members
+# not in the party greyed with their issue) and whether the round would be in trouble; a step that cannot run losing the
+# member's turn (`macro_failed` "lose_turn", logged as waiting); the command menu back on Macro and the macro list on
+# the macro played last after its round (`macro_flow` "remember"); the Auto row asking the trouble mode and the policy
+# (`auto_choose`); the Extras menu's auto_trouble and auto_policy rows in battle. With --window the shot lines save
+# screenshots under build/shots/library/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+
+# The Options action, last of the macro's actions: each option stepped with Right.
+press M
+press Right 5
+expect state tab Macros
+press Enter
+press Up
+press Enter
+expect state uifield.menu_macros.stage options
+expect state uifield.menu_macros.on_trouble default
+press Right
+expect state uifield.menu_macros.on_trouble continue
+press Down
+press Right
+press Right
+expect state uifield.menu_macros.recover_who uncovered
+press Down
+press Right 3
+expect state uifield.menu_macros.unnamed auto
+press Down
+press Enter
+press Enter
+expect state uifield.menu_macros.policy expected
+shot build/shots/library/macro_options.png
+press Escape
+expect state uifield.menu_macros.stage actions
+pressuntil Escape Field 6
+
+# In battle: the Macro row's list marks each step of the highlighted macro.
+dev battle training
+waitstate 300 battlephase Command
+expect state battlemenu [Attack] | Technique | Skill | Item | Defend | Escape | Macro | Auto
+press Down 6
+press Enter
+expect state battlephase Macro
+expect state macrocheck ok / not in party / ok / not in party / ok
+expect state uifield.battle_front.macro_trouble false
+press Down 2
+expect state macrocheck ok / ok / ok / not in party / not in party
+shot build/shots/library/macro_check.png
+press Enter
+waitstate 2400 battlephase Command
+# Back on the command menu at Macro, the list at the macro played last.
+expect state battlemenu Attack | Technique | Skill | Item | Defend | Escape | [Macro] | Auto
+expect statehas battlelog scout: skipped (not in party)
+press Enter
+expect state battlemenu opener | tempest | [regroup]
+shot build/shots/library/macro_remembered.png
+# The Extras menu in battle has the auto mode rows, kept in controls.json.
+press Escape
+press C
+wait 2
+expect state auto_trouble default
+press Right
+expect state auto_trouble continue
+press Down
+press Right
+expect state auto_policy power
+shot build/shots/library/extras_auto.png
+press Left
+expect state auto_policy default
+press C
+wait 2
+# Auto asks the trouble mode, then the policy, and logs the choice.
+expect state battlephase Command
+press Down 5
+press Enter
+expect state battlephase AutoChoice
+expect state battlemenu [continue] | recover | stop
+press Down
+press Enter
+expect state battlemenu [as the rules say] | power | expected
+shot build/shots/library/auto_choice.png
+press Down 2
+press Enter
+expect statehas battlelog Auto-battle: recover in trouble, expected choices.
+waitstate 2400 battlephase Ended

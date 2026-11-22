@@ -1,0 +1,76 @@
+# The exits' rule on a 2x2 block of exits (make_library_data.py: exit_yard_a and exit_yard_b, each block leading onto the
+# other's, where the party arrives standing on an exit), with --dev: the arrival on the block leaves nobody in a loop;
+# walking across the block's other cells takes no exit; stepping off onto floor and back on takes it. The same with keys
+# and with a click (the session's WalkTo, which crosses exit cells that would not fire and takes one only as its goal),
+# in the real-time and the classic field input. With --window the shot lines save screenshots under build/shots/library/
+# (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+
+# Real time, keys (a tap walks one cell): into the block from floor takes the exit, onto the other yard's block.
+fieldinput realtime
+dev warp exit_yard_a 5 3
+wait 5
+press Right
+wait 25
+expect state leader exit_yard_b 6 3
+shot build/shots/library/exit_arrived.png
+# Across the block: east, then south, staying in the yard.
+press Right
+wait 20
+expect state leader exit_yard_b 7 3
+press Down
+wait 20
+expect state leader exit_yard_b 7 4
+shot build/shots/library/exit_across.png
+# Off onto floor and back on: the exit takes the party.
+press Right
+wait 20
+expect state leader exit_yard_b 8 4
+press Left
+wait 25
+expect state leader exit_yard_a 6 3
+
+# Real time, a click: a goal across the block walks round it without leaving, then one on the block from floor leaves.
+dev warp exit_yard_a 2 3
+wait 5
+clickcell 8 4
+wait 200
+expect state leader exit_yard_a 8 4
+clickcell 7 4
+wait 40
+expect state leader exit_yard_b 6 3
+shot build/shots/library/exit_click.png
+
+# Classic input (a held key steps a cell per step time): the same crossing and the same exit.
+fieldinput classic
+dev warp exit_yard_a 5 3
+wait 5
+hold Right 12
+wait 20
+expect state leader exit_yard_b 6 3
+hold Right 12
+wait 20
+expect state leader exit_yard_b 7 3
+hold Down 20
+wait 20
+expect state leader exit_yard_b 7 4
+hold Right 20
+wait 20
+expect state leader exit_yard_b 8 4
+hold Left 20
+wait 25
+expect state leader exit_yard_a 6 3
+dev warp exit_yard_b 2 3
+wait 5
+clickcell 8 3
+wait 200
+expect state leader exit_yard_b 8 3
+clickcell 7 3
+wait 40
+expect state leader exit_yard_a 6 3
+shot build/shots/library/exit_classic.png

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Microsoft.Xna.Framework;
 
 using Psiv.Session;
@@ -61,6 +63,7 @@ public sealed partial class Art
 	private readonly Dictionary<string, int> _pictures = [];
 	private readonly Dictionary<string, AreaPicture> _areaPictures = [];
 	private readonly Dictionary<string, LoadedMotion> _areaMotions = [];
+	private readonly Dictionary<string, List<PaletteTrack>> _spritePalettes = [];
 	private readonly Dictionary<string, List<LoadedObject>> _objects = [];
 	private readonly Dictionary<string, int> _vehicleOverlays = [];
 	private FieldLook _fieldLook = new(true, true);
@@ -312,6 +315,17 @@ public sealed partial class Art
 				_fromFile["tileset:area:" + t.Area] = t.Image.Path;
 			}
 		}
+		foreach (TilesetRecolor r in m.TilesetRecolors.OrderBy(r => r.Kind is null))
+		{
+			if (r.Kind is not null)
+			{
+				_tiles[r.Theme] = _tiles[r.Theme] with { Palettes = r.Palettes };
+			}
+			else
+			{
+				_areaTiles[r.Area!] = (_areaTiles.GetValueOrDefault(r.Area!) ?? _tiles[r.Theme]) with { Palettes = r.Palettes };
+			}
+		}
 		foreach (CharacterEntry c in m.Characters)
 		{
 			_people[c.Id] = (c, Cut(c.Image));
@@ -387,6 +401,10 @@ public sealed partial class Art
 			default: Pointer = image; break;
 			}
 			_fromFile["sprite:" + id] = file;
+		}
+		foreach ((string id, List<PaletteTrack> tracks) in m.SpritePalettes)
+		{
+			_spritePalettes[id] = tracks;
 		}
 		foreach ((string id, string file) in m.StatusIcons)
 		{
@@ -669,6 +687,32 @@ public sealed partial class Art
 
 	// The overlay over a vehicle battle's stage: the vehicle's own, else the one for every vehicle.
 	public int? VehicleOverlay(string vehicle) => _vehicleOverlays.TryGetValue(vehicle, out int image) || _vehicleOverlays.TryGetValue("", out image) ? image : null;
+
+	// Where a sprite's palette track stands (null while its flags keep it off): the field sets it each frame it draws.
+	public Func<MotionWhen, long?> MotionTime { get; set; } = _ => 0;
+
+	// A sprite's picture through its palette tracks, the first track naming a color winning.
+	public int Sprite(string name, int image)
+	{
+		if (!_spritePalettes.TryGetValue(name, out List<PaletteTrack>? tracks))
+		{
+			return image;
+		}
+		var pairs = new List<(Color From, Color To)>();
+		foreach (PaletteTrack t in tracks)
+		{
+			if (MotionTime(t.When) is long ms)
+			{
+				pairs.AddRange(t.Steps[t.StepAt(ms)].Where(p => !pairs.Any(q => q.From == p.From)));
+			}
+		}
+		return pairs.Count == 0 ? image : _s.Derive(image, "area_palette:" + string.Join(",", pairs.Select(p => $"{p.From.PackedValue:x}>{p.To.PackedValue:x}")),
+			(px, _, _) => SampleController.Recolor(px, pairs));
+	}
+
+	// Each sprite with palette tracks and their steps now (`-` for one its flags keep off), for the `fieldmotion` probe.
+	public IEnumerable<string> SpriteSteps() => _spritePalettes.OrderBy(p => p.Key, StringComparer.Ordinal)
+		.Select(p => p.Key + ":" + string.Join(",", p.Value.Select(t => MotionTime(t.When) is long ms ? t.StepAt(ms).ToString(CultureInfo.InvariantCulture) : "-")));
 
 	public TileSet Tiles(AreaKind kind, string area) => _areaTiles.GetValueOrDefault(area) ?? _tiles[ThemeOf(kind)];
 }

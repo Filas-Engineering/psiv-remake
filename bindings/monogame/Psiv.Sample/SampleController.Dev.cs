@@ -38,7 +38,7 @@ public sealed partial class SampleController
 	private static readonly string[] Help =
 	[
 		"warp AREA MARKER | warp AREA X Y      flag NAME on|off      give ID [COUNT]      money AMOUNT",
-		"level MEMBER LEVEL      battle ENCOUNTER      win | lose      vehicle ID AREA MARKER",
+		"level MEMBER LEVEL      rest      battle ENCOUNTER      win | lose      vehicle ID AREA MARKER",
 		"encounters on|off      event ID      list KIND      reload      clear",
 		"overlay NAME [on|off] | overlay all|none   (collision hooks zones actors camera fps event)",
 		"speed 0.25|0.5|1|2|4|8      pause | resume | step [N]",
@@ -343,6 +343,8 @@ public sealed partial class SampleController
 			return Result(_s.DevMoney(amount), T("ui.dev.money", _s.WorldInfo().Money));
 		case "level" when w.Length == 3 && Number(w[2], out int level):
 			return Result(_s.DevSetLevel(w[1], level), T("ui.dev.level", w[1], level));
+		case "rest" when w.Length == 1:
+			return Result(_s.DevRest(), T("ui.dev.rested"));
 		case "battle" when w.Length == 2:
 			return Result(_s.DevBattle(w[1]), T("ui.dev.battle", w[1]));
 		case "win" or "lose" when w.Length == 1:
@@ -735,9 +737,10 @@ public sealed partial class SampleController
 
 	// A battle presentation entry played on dummy targets: synthetic typed events of one turn by the first lineup member,
 	// built into steps by BattleTimeline as a round's are; no session battle runs.
-	// `change` (`transform.ENEMY`) adds a change of form after the results; `dummy` names the dummies' enemy.
+	// `change` (`transform.ENEMY`) adds a change of form after the results; `dummy` names the dummies' enemy; `encounter` the
+	// battle's encounter, which the scripts' lookup and placements read.
 	private bool StartStagePreview(string entry, string? change = null, string? dummy = null, bool combo = false, int dummies = 3, int targetCount = 0, bool enemyActor = false,
-		bool item = false)
+		bool item = false, string encounter = "")
 	{
 		if (_s.Mode == Mode.Battle)
 		{
@@ -795,7 +798,9 @@ public sealed partial class SampleController
 			_ when command is CommandKind.Attack => [foes[0]],
 			_ => foes,
 		};
-		_stageEvents = StageEvents(command, ability, shape, targets, status, actor);
+		// An enemy's basic attack is its data's attack ability, as the battle reports it.
+		string attack = enemyActor && command == CommandKind.Attack ? _data.EnemyAttacks.GetValueOrDefault(enemy, "") : "";
+		_stageEvents = StageEvents(command, ability, shape, targets, status, actor, attack);
 		// A combination's turn: the first two members cast it together.
 		int head = _stageEvents.FindIndex(e => e.Type == BattleEventType.ActionStarted);
 		if (combo && head >= 0)
@@ -811,7 +816,7 @@ public sealed partial class SampleController
 				Ids = [into], Hp = 100, Amount = 3 });
 		}
 		_stage = stage;
-		_stageInfo = new BattleInfo(true, "", BattleSource.Event, 1, 2, stage.Count, Outcome.Ongoing, false, false, false, false, "", "");
+		_stageInfo = new BattleInfo(true, encounter, BattleSource.Event, 1, 2, stage.Count, Outcome.Ongoing, false, false, false, false, "", "");
 		_stageEntry = entry;
 		_battle.Active = true;
 		_battle.Labels = [.. stage.Select(c => c.Label)];
@@ -826,12 +831,12 @@ public sealed partial class SampleController
 		return true;
 	}
 
-	private static List<BattleEvent> StageEvents(CommandKind command, string ability, ActionShape shape, List<int> targets, string status, int actor)
+	private static List<BattleEvent> StageEvents(CommandKind command, string ability, ActionShape shape, List<int> targets, string status, int actor, string attack)
 	{
 		var none = new BattleEvent(BattleEventType.RoundStarted, 1, -1, -1, -1, "", "", "", "", [], "", 0, 0, 0, CommandKind.None, Element.None,
 			Effectiveness.Normal, Stat.Strength, CancelReason.None, StatusEnd.Cured, Outcome.Ongoing, ResourceKind.None, Opening.Normal, false, false, 0, 0,
 			new Dictionary<string, int>(), "", [], [], [], [], 0, false, false, false, []);
-		string id = command is CommandKind.Attack or CommandKind.Defend ? "" : ability;
+		string id = command == CommandKind.Attack ? attack : command == CommandKind.Defend ? "" : ability;
 		Element element = Enum.TryParse(shape.Element, true, out Element e) ? e : Element.None;
 		var events = new List<BattleEvent>
 		{

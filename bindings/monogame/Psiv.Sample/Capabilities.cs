@@ -21,12 +21,12 @@ public static class Capabilities
 
 	// The state probes (`expect state KEY VALUE`); SampleController.State answers `?` for any other key.
 	public static readonly string[] Probes = ["aboard", "abovecover", "always_run", "ambient", "ambient_talk", "anim", "animated", "animframe", "animkey", "animsprites", "animtracks", "area", "auto_advance",
-		"auto_macro", "backdrop", "backdropdim", "backdropfx", "banner", "battle_speed", "battlelayout", "battlelines", "battlelog", "battlelogshown", "battlemenu", "battleoverlay",
+		"auto_macro", "auto_policy", "auto_trouble", "backdrop", "backdropdim", "backdropfx", "banner", "battle_speed", "battlelayout", "battlelines", "battlelog", "battlelogshown", "battlemenu", "battleoverlay",
 		"battlejolt", "battlephase", "battleshake", "battlesync", "battleunusable", "bitmapfonts", "buffer", "camera", "cell", "clock", "commands", "compare", "console", "consolelast", "conveyors", "credits",
 		"darkness", "description", "destinations", "dev", "devdraw", "deverror", "devmark", "dialogue", "dialogueoverlaps", "dialoguepage", "difficulty", "effectsize",
 		"encounters", "enemygroups", "enemyplaces", "enemyicons", "enemymarks", "fieldinput", "fieldlook", "fieldmarks", "fieldmotion", "fieldpicture", "figureposes", "figures", "figuresizes", "flash",
 		"flashing", "flying", "follower", "fontmissing", "formation", "glide", "held", "hudmark", "interact_prompt", "interactprompt", "interacttarget", "itemsort", "keeper", "language",
-		"leader", "leaderpos", "line", "lineportrait", "loglines", "macros", "marks", "menukind", "music", "narration", "narrationreveal", "numbers", "objects", "overlaps",
+		"leader", "leaderpos", "line", "lineportrait", "loglines", "macrocheck", "macros", "marks", "menukind", "music", "narration", "narrationreveal", "numbers", "objects", "overlaps",
 		"overlays", "page", "pagetext", "panels", "paneltiles", "party", "partyplaces", "partystatus", "paused", "picture", "pictures", "platforms", "playtime", "preview", "prompt", "ranks",
 		"reduced_flash", "released", "reload", "reveal", "reward", "scenecamera", "screenlight", "selected", "shake", "shipped_names", "shown", "shownportrait", "speaker", "speed", "step", "strip",
 		"tab", "tags", "text_size", "text_speed", "tilehooks", "timescale", "titleart", "titlesizes", "toastboxes", "top", "transition", "uiframes", "vehicles", "victory", "voice",
