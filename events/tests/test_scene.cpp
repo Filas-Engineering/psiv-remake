@@ -222,3 +222,41 @@ TEST(the_command_table_is_what_the_parser_knows) {
 	CHECK(events::script_command("bogus_word") == nullptr);
 	CHECK(test::has_diagnostic(test::compile_errors("event a unskippable\n\tbogus_word\nend\n"), 2, "unknown command 'bogus_word'"));
 }
+
+TEST(register_and_unregister_town_reach_the_host) {
+	Program p = test::compile_ok("event a unskippable\n\tregister town saltgrass\n\tunregister town tidewater\nend\n");
+	CHECK(p.code[0].op == Op::register_town && p.code[0].name == "saltgrass" && p.code[0].number == 0);
+	CHECK(p.code[1].op == Op::register_town && p.code[1].name == "tidewater" && p.code[1].number == 1);
+	RecordingHost host;
+	Interpreter it(p, host);
+	CHECK(it.start("a"));
+	test::run(it, host);
+	CHECK(with_prefix(host.trace, "register town ") == std::vector<std::string>{"register town saltgrass"});
+	CHECK(with_prefix(host.trace, "unregister town ") == std::vector<std::string>{"unregister town tidewater"});
+	auto d = test::compile_errors("event a unskippable\n\tregister saltgrass\n\tunregister town\nend\nevent b background\n\tregister town saltgrass\nend\n");
+	CHECK(test::has_diagnostic(d, 2, "'town'"));
+	CHECK(test::has_diagnostic(d, 3, "expected a map name"));
+	CHECK(test::has_diagnostic(d, 6, "'register'"));
+	events::Registry r;
+	r.add(events::NameKind::map, "saltgrass");
+	events::CompileOptions options;
+	options.registry = &r;
+	auto unknown = events::compile({{"t.ev", "event a unskippable\n\tregister town saltgrass\n\tregister town nowhere\nend\n"}}, options).diagnostics;
+	CHECK(test::has_diagnostic(unknown, 3, "unknown map 'nowhere'"));
+	CHECK_EQ(unknown.size(), 1u);
+}
+
+TEST(a_choice_header_reaches_the_host_with_the_options) {
+	Program p = test::compile_ok("event a unskippable\n\tchoice \"Where to?\" header @trip.header into trip.pick\n\toption \"North\"\n\toption \"South\"\n\tend\n"
+		"\tchoice header \"Pick one\"\n\toption \"A\"\n\toption \"B\"\n\tend\nend\n");
+	CHECK(p.code[0].choice.header.is_id && p.code[0].choice.header.value == "trip.header" && p.code[0].choice.prompt.value == "Where to?");
+	RecordingHost host;
+	host.queue_choices({1, 0});
+	Interpreter it(p, host);
+	CHECK(it.start("a"));
+	test::run(it, host);
+	CHECK(with_prefix(host.trace, "choice ") ==
+		(std::vector<std::string>{"choice \"Where to?\" header @trip.header [\"North\" | \"South\"] -> 1", "choice header \"Pick one\" [\"A\" | \"B\"] -> 0"}));
+	auto d = test::compile_errors("event a unskippable\n\tchoice header\n\toption \"A\"\n\toption \"B\"\n\tend\nend\n");
+	CHECK(test::has_diagnostic(d, 2, "expected header text"));
+}

@@ -443,6 +443,9 @@ void Interpreter::execute(Thread& thread) {
 			host_.clear_pictures();
 		}
 		break;
+	case Op::register_town:
+		host_.register_town(ins.name, ins.number == 0);
+		break;
 	case Op::actor_look:
 		host_.set_actor_look(ins.name, ins.action.subject == "enemy" ? ins.action.target : std::string(),
 			ins.action.subject == "enemy" ? std::string() : ins.action.target);

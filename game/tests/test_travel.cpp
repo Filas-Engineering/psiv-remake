@@ -348,3 +348,31 @@ TEST(aDungeonsOwnWayOutWinsOverWhereThePartyWentIn) {
 	CHECK(s.travel(TravelKind::DungeonExit, "", "", "waymark_chalk").empty());
 	CHECK(s.world().area == "tidewater" && s.world().position == (Cell{4, 4}) && s.world().facing == Facing::West);
 }
+
+// A town's `return` lands outside it: listed by the town, it puts the party on the destination with its facing, and the
+// arrival counts as coming from the town.
+TEST(aReturnToATownCanLandOutsideIt) {
+	GameData d = test::data();
+	DungeonExitTarget way;
+	way.area = "reed_path";
+	way.at = {2, 4};
+	way.facing = Facing::West;
+	d.areas.at("tidewater").returnTo = way;
+	d.areas.at("reed_path").arriveNotices = {{{"tidewater"}, false, 0}, {{}, true, 0}};
+	Session s(d, SessionOptions());
+	CHECK(s.newGame().empty());
+	test::confirmLines(s);
+	test::placeParty(s, "saltgrass", "south_gate", Facing::North);
+	const std::vector<TravelDestination> towns = s.travelDestinations(TravelKind::Town);
+	const auto tidewater = std::find_if(towns.begin(), towns.end(), [](const TravelDestination& t) { return t.id == "tidewater"; });
+	CHECK(tidewater != towns.end() && tidewater->area == "reed_path" && tidewater->cell == (Cell{2, 4}) && tidewater->region == "coast");
+	s.world().items["homing_shell"] = 1;
+	CHECK(s.openMenu().empty());
+	CHECK(s.travel(TravelKind::Town, "tidewater", "", "homing_shell").empty());
+	CHECK(s.world().area == "reed_path" && s.world().position == (Cell{2, 4}) && s.world().facing == Facing::West);
+	CHECK(!s.arrivalAnnounced());
+	CHECK(s.world().trail.empty());
+	CHECK(s.devWarp("saltgrass", "south_gate").empty());
+	CHECK(s.devWarp("reed_path", "west_gate").empty());
+	CHECK(s.arrivalAnnounced());
+}

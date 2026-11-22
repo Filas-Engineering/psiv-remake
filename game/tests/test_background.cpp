@@ -1,10 +1,12 @@
 #include "test.h"
 
+#include "game/check.h"
 #include "game/save.h"
 #include "game/session.h"
 
 #include <algorithm>
 #include <cstdlib>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -499,4 +501,83 @@ TEST(runningChangesNeitherPlayTimeNorVisibleEnemies) {
 	const World runningWorld = run(true);
 	std::string diff;
 	CHECK(sameWorld(walking, runningWorld, &diff));
+}
+
+// game.json start_towns registers towns at a new game; `register town` and `unregister town` change the list by story,
+// and the list is saved; the data check refuses an area that could never be listed.
+TEST(townsJoinTheReturnListWithoutAVisit) {
+	GameData d = test::withScript("events/bell_cove.ev", "event cove_bell unskippable\n\tregister town ashfall_market\n\tunregister town saltgrass\nend\n");
+	d.config.startTowns = {"saltgrass"};
+	Session s(d, SessionOptions());
+	CHECK(s.newGame().empty());
+	test::confirmLines(s);
+	CHECK(s.world().visitedAreas.count("saltgrass") && !s.world().visitedAreas.count("ashfall_market"));
+	const auto towns = [&] {
+		std::vector<std::string> out;
+		for (const TravelDestination& t : s.travelDestinations(TravelKind::Town)) {
+			out.push_back(t.area);
+		}
+		return out;
+	};
+	CHECK(towns() == std::vector<std::string>{"saltgrass"});
+	test::placeParty(s, "bell_cove", "bell_front", Facing::East);
+	CHECK(s.interact().empty());
+	test::confirmLines(s);
+	CHECK(s.world().visitedAreas.count("ashfall_market") && !s.world().visitedAreas.count("saltgrass"));
+	std::string text;
+	CHECK(s.saveText(text).empty());
+	Session loaded(d, SessionOptions());
+	CHECK(loaded.loadSaveText(text).empty());
+	CHECK(loaded.world().visitedAreas == s.world().visitedAreas);
+
+	const std::string dir = test::freshDirectory("start_towns");
+	std::filesystem::copy("data", dir + "/data", std::filesystem::copy_options::recursive);
+	std::string config;
+	CHECK(readFile(dir + "/data/game.json", config));
+	config.insert(config.find("\"start\""), "\"start_towns\": [\"saltgrass\", \"brine_flats\", \"nowhere\"], ");
+	std::string error;
+	CHECK(writeFileAtomic(dir + "/data/game.json", config, error));
+	std::string script;
+	CHECK(readFile(dir + "/data/events/flats.ev", script));
+	script.replace(script.find("\tlock player"), 12, "\tregister town kiln_upper\n\tlock player");
+	CHECK(writeFileAtomic(dir + "/data/events/flats.ev", script, error));
+	const CheckReport r = checkData(DataDirectories{dir + "/data", "../core/data"});
+	std::vector<std::string> refused;
+	for (const rules::Problem& p : r.problems) {
+		if (p.message.key == "data.town_not_registrable") {
+			refused.push_back(p.message.params[0]);
+		}
+	}
+	CHECK(refused == (std::vector<std::string>{"brine_flats", "nowhere", "kiln_upper"}));
+}
+
+// An actor's require_flag and block_flag hide it, so it is neither drawn nor solid, whatever a script showed.
+TEST(anActorsFlagsHideIt) {
+	GameData d = test::backgroundData();
+	for (ActorDef& a : d.config.actorDefs) {
+		if (a.id == "yard_trader") {
+			a.requireFlag = "yard.trader_here";
+			a.blockFlag = "yard.trader_gone";
+		}
+	}
+	Session s(d, SessionOptions());
+	inYard(s);
+	const auto trader = [&] {
+		for (const ActorView& a : s.actorsHere()) {
+			if (a.id == "yard_trader") {
+				return a;
+			}
+		}
+		return ActorView();
+	};
+	CHECK(trader().id == "yard_trader" && !trader().visible && !trader().solid);
+	s.world().flags["yard.trader_here"] = true;
+	CHECK(trader().visible && trader().solid);
+	s.world().flags["yard.trader_gone"] = true;
+	CHECK(!trader().visible && !trader().solid);
+	s.world().flags.erase("yard.trader_gone");
+	s.world().actors["yard_trader"].area = "wren_yard";
+	s.world().actors["yard_trader"].cell = {9, 1};
+	s.world().flags.erase("yard.trader_here");
+	CHECK(!trader().visible);
 }

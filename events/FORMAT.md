@@ -92,6 +92,8 @@ no
 end
 ```
 
+A choice may carry a `header` after its prompt, text the game shows with the options (inside the list window, say), where the prompt is the question before them: `choice @harbor.first_stop_prompt header @harbor.first_stop_header into harbor.first_stop`. `ask` has none.
+
 `into` is optional and records the answer before its branch runs: a `choice` sets the variable to the option's number, 1 for the first; an `ask` sets the flag for yes and clears it for no.
 
 ## Flags and variables
@@ -315,12 +317,14 @@ end
 | `money take <amount>` | `money take 20` (the game keeps money at 0 or more) |
 | `equip <member> <piece>` | `equip guide brass_dagger` (puts the piece on from the bag, by the game's equipment rules) |
 | `unequip <member> <piece>` | `unequip guide brass_dagger` (takes the worn piece off, back to the bag) |
+| `register town <map>` | `register town saltgrass` (the town joins the places the party may return to, as if visited) |
+| `unregister town <map>` | `unregister town saltgrass` (the town leaves that list until the party enters it again) |
 | `lock player` | stops player input during the scene |
 | `unlock player` | gives control back |
 
 The `party` commands keep membership and order only: members keep their own levels, equipment and state. `party save` replaces an earlier snapshot of the same name, and a snapshot stays (in the save) after it is restored, so it can be restored again. `party restore` of a name nobody saved stops the event with a runtime error at that line, like any other runtime error, also while skipping. The game decides what a restore does with members who joined or left since the snapshot, and what a swap it cannot make does (`../game/README.md`, "Party snapshots and swaps"); in `../game` a member who joined since stays in the reserve, a member who left since comes back, and an impossible swap warns and changes nothing. `party swap` without `equipment` follows the game's rule for a member who leaves (`leave_equipment` in `../game`); `equipment keep` keeps the replaced member's pieces on it and `equipment bag` puts them in the bag. `party order` names each member once (`script.party_order_twice`); a name that is not in the lineup when it runs (a reserve member, or one who never joined) stops the event with a runtime error at that line, as `party restore` of an unknown snapshot does, also while skipping, and the lineup stays as it was. `silent` only drops the game's notice; the change itself is the same. With a registry the swap's and the order's members are listed `member` names; snapshot names are not listed.
 
-The `vehicle`, `learn`, `follower`, `money`, `equip` and `unequip` commands (and `remove`, under [Actors](#actors)) change the game at once, like `give`, and apply while skipping. With a registry, `learn` names a listed `member` and `ability`, `follower` a listed `actor`, `equip` and `unequip` a listed `member` and `item`, and `music area` a listed `audio` track. A piece that does not fit, or is not held or worn, is the game's to refuse (`../game` warns and carries on). With a registry the vehicle must be listed on a `vehicle` line and the marker must be on the map, as for `warp`; they do not change the map the party is on. Where a vehicle may stand, and what happens to a party riding one that a script moves or removes, is the game's business (`../game/README.md`).
+The `vehicle`, `learn`, `follower`, `money`, `equip`, `unequip`, `register town` and `unregister town` commands (and `remove`, under [Actors](#actors)) change the game at once, like `give`, and apply while skipping. With a registry, `learn` names a listed `member` and `ability`, `follower` a listed `actor`, `equip` and `unequip` a listed `member` and `item`, `music area` a listed `audio` track, and `register town` and `unregister town` a listed `map`. A piece that does not fit, or is not held or worn, is the game's to refuse (`../game` warns and carries on). With a registry the vehicle must be listed on a `vehicle` line and the marker must be on the map, as for `warp`; they do not change the map the party is on. Where a vehicle may stand, and what happens to a party riding one that a script moves or removes, is the game's business (`../game/README.md`).
 
 ## Menus and rests
 

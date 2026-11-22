@@ -353,6 +353,8 @@ void readActors(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 				reader.fail(entry, "data.bad_facing", {});
 			}
 			reader.boolean(entry, "solid", actor.solid, false);
+			reader.text(entry, "require_flag", actor.requireFlag, false);
+			reader.text(entry, "block_flag", actor.blockFlag, false);
 			if (const JsonValue* wander = reader.field(entry, "wander", JsonValue::Type::Object, false)) {
 				reader.only(*wander, gameKeys("game.json", "actors[].wander"));
 				ActorWander w;
@@ -569,6 +571,24 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 			for (const char* key : {"encounters", "vehicles"}) {
 				const JsonValue* e = reader.field(*m, key, JsonValue::Type::Object, false);
 				for (std::size_t i = 0; e && i < e->keys.size(); ++i) {
+					if (std::string(key) == "vehicles" && e->values[i].is(JsonValue::Type::Object)) {
+						const JsonValue& v = e->values[i];
+						reader.only(v, gameKeys("game.json", "presentation.music.vehicles entry"));
+						std::string battle;
+						std::string field;
+						reader.text(v, "battle", battle, false);
+						reader.text(v, "field", field, false);
+						if (battle.empty() && field.empty()) {
+							reader.fail(v, "data.music_not_text", {e->keys[i]});
+						}
+						if (!battle.empty()) {
+							c.presentation.music.vehicles[e->keys[i]] = battle;
+						}
+						if (!field.empty()) {
+							c.presentation.music.vehiclesField[e->keys[i]] = field;
+						}
+						continue;
+					}
 					if (!e->values[i].is(JsonValue::Type::String) || e->values[i].string.empty()) {
 						reader.fail(e->values[i], "data.music_not_text", {e->keys[i]});
 						continue;
@@ -785,6 +805,8 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	};
 	arrival("followers_arrive", c.followersArrive);
 	arrival("followers_arrive_other", c.followersArriveOther);
+	reader.boolean(json, "followers_on_exits", c.followersOnExits, false);
+	reader.texts(json, "start_towns", c.startTowns, false);
 	std::string talkAt;
 	reader.text(json, "talk_at", talkAt, false);
 	if (const int index = talkAt.empty() ? 0 : gameEnumIndex("talk_at", talkAt); index >= 0) {
@@ -1074,6 +1096,10 @@ void checkReferences(const GameData& data, Problems& problems) {
 		const Area* a = data.area(area);
 		return a && a->markers.count(marker);
 	};
+	auto registrableTown = [&](const std::string& id) {
+		const Area* a = data.area(id);
+		return a && a->kind == AreaKind::Town && (!a->arrival.empty() || a->returnTo) && !a->region.empty();
+	};
 	auto flagDeclared = [&](const std::string& where, const std::string& flag) {
 		const events::Declaration* d = data.registry.find(flag);
 		if (!flag.empty() && (!d || !d->is_flag)) {
@@ -1093,6 +1119,11 @@ void checkReferences(const GameData& data, Problems& problems) {
 	};
 	if (!markerExists(c.startArea, c.startMarker)) {
 		problems.add("game.json", "data.start_marker_missing", {c.startArea, c.startMarker});
+	}
+	for (const std::string& id : c.startTowns) {
+		if (!registrableTown(id)) {
+			problems.add("game.json", "data.town_not_registrable", {id});
+		}
 	}
 	for (const std::string& id : c.startLineup) {
 		if (!db.character(id)) {
@@ -1121,6 +1152,10 @@ void checkReferences(const GameData& data, Problems& problems) {
 		flagDeclared("game.json boss", b.flag);
 	}
 	flagDeclared("game.json clear_flag", c.clearFlag);
+	for (const ActorDef& a : c.actorDefs) {
+		flagDeclared("game.json actor '" + a.id + "'", a.requireFlag);
+		flagDeclared("game.json actor '" + a.id + "'", a.blockFlag);
+	}
 	for (const FieldVehicle& v : c.vehicles) {
 		if (!db.vehicle(v.id)) {
 			problems.add("game.json vehicles", "data.vehicle_unknown", {v.id});
@@ -1175,6 +1210,12 @@ void checkReferences(const GameData& data, Problems& problems) {
 		}
 	}
 	for (const auto& [vehicle, track] : shown.music.vehicles) {
+		if (!data.vehicle(vehicle)) {
+			problems.add("game.json music", "data.music_unknown_vehicle", {vehicle});
+		}
+		musicListed("game.json music vehicle '" + vehicle + "'", track);
+	}
+	for (const auto& [vehicle, track] : shown.music.vehiclesField) {
 		if (!data.vehicle(vehicle)) {
 			problems.add("game.json music", "data.music_unknown_vehicle", {vehicle});
 		}
@@ -1312,6 +1353,18 @@ void checkReferences(const GameData& data, Problems& problems) {
 			}
 			flagAt(e.line, e.requireFlag);
 			flagAt(e.line, e.blockFlag);
+		}
+		if (const std::optional<DungeonExitTarget>& way = area.returnTo) {
+			const Area* to = data.area(way->area);
+			if (!to) {
+				at(way->line, "data.return_unknown_area", {way->area});
+			} else if (to == &area) {
+				at(way->line, "data.return_into_own_area", {});
+			} else if (!way->marker.empty() && !to->markers.count(way->marker)) {
+				at(way->line, "data.return_missing_marker", {way->area, way->marker});
+			} else if (const Cell cell = way->marker.empty() ? way->at : to->markers.at(way->marker); !to->walkable(cell)) {
+				at(way->line, "data.return_not_walkable", {way->area, "(" + std::to_string(cell.x) + "," + std::to_string(cell.y) + ")"});
+			}
 		}
 		if (const std::optional<DungeonExitTarget>& way = area.dungeonExit) {
 			const Area* to = data.area(way->area);
@@ -1460,6 +1513,11 @@ void checkReferences(const GameData& data, Problems& problems) {
 	}
 	for (const std::string& key : sessionTextKeys()) {
 		textExists("the session", key);
+	}
+	for (const events::Instruction& in : data.program.code) {
+		if (in.op == events::Op::register_town && !registrableTown(in.name)) {
+			problems.add({data.program.files[in.file], in.source_line, "", {"data.town_not_registrable", {in.name}}});
+		}
 	}
 	for (const events::Instruction& in : data.program.code) {
 		if (in.op != events::Op::vehicle_give && in.op != events::Op::vehicle_place) {

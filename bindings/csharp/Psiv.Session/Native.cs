@@ -184,7 +184,7 @@ public struct PsivTravelDestination { public IntPtr Id, Area, AreaName, Region; 
 public struct PsivLine { public IntPtr SpeakerId, SpeakerName, TextId, Text, Portrait, Display; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivChoice { public IntPtr Prompt; public int YesNo, OptionCount; public IntPtr Options; }
+public struct PsivChoice { public IntPtr Prompt; public int YesNo, OptionCount; public IntPtr Options, Header, HeaderId; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivAction
@@ -469,7 +469,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 19;
+	public const uint AbiVersion = 20;
 	// PSIV_SLOT_COUNT: the places a member wears equipment, which the member structs index by psiv_equip_slot.
 	public const int SlotCount = 7;
 

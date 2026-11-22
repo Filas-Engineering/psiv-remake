@@ -1732,7 +1732,7 @@ psiv_status psiv_travel_destinations(psiv_session* session, int32_t kind, const 
 		psiv_travel_destination* list = arena.array<psiv_travel_destination>(places.size());
 		for (std::size_t i = 0; i < places.size(); ++i) {
 			const game::TravelDestination& d = places[i];
-			list[i] = {arena.str(d.id), arena.str(d.area), arena.str(session->session->displayName(d.area)), arena.str(d.region), d.cell.x, d.cell.y};
+			list[i] = {arena.str(d.id), arena.str(d.area), arena.str(session->session->displayName(kind == PSIV_TRAVEL_TOWN ? d.id : d.area)), arena.str(d.region), d.cell.x, d.cell.y};
 		}
 		*out = list;
 		*count = static_cast<int32_t>(places.size());
@@ -1911,6 +1911,8 @@ psiv_status psiv_choice_get(psiv_session* session, psiv_choice* out) {
 		out->yes_no = c->yesNo;
 		out->option_count = static_cast<int32_t>(c->options.size());
 		out->options = session->arena.strs(c->options);
+		out->header = session->arena.str(c->header);
+		out->header_id = session->arena.str(c->headerId);
 		return PSIV_OK;
 	});
 }

@@ -92,6 +92,8 @@ The shipped values below are the placeholder's or the library's defaults, not th
 | `cell_pixels` | 16 | pixels per cell for pixel paths and platforms |
 | `exit_fires` | `from_floor` | whether a step from another exit cell takes an exit |
 | `followers_arrive`, `followers_arrive_other` | `stacked`, `stacked` | where followers stand after walking in through an exit (an exit's `followers` wins) or off a gangway, and after any other area entry |
+| `followers_on_exits` | false | whether the arrival line may place followers on exit cells (only the leader's step takes an exit) |
+| `start_towns` | none | towns the party may return to from the new game on, as if visited |
 | `talk_at` | `point` | whether an actor's talk point answers on its own cell or on the cell the actor stands on (`actor`) |
 
 Per file: an area's `step_ms` (250), `encounter_mode` (`visible`) and its zones' `visible` values (the ENC-012/013 defaults) and `random` `min_steps`/`max_steps` (12/24), `step_distance`, `grace_steps`, `step_chance`; `presentation.flash_default` (`reduced`) and `flash_original`, `presentation.music.fade_ms` (the host's own); `party.json` characters' growth, `experience_table` and `level_stats` (the level cap is 99); `difficulties.json` presets; items.json `discardable` (true: the game's discard may throw any item away; mark story items false); the text speeds a host offers (the profile's, not data).
@@ -143,6 +145,10 @@ Difficulty overlays that scale enemies, abilities and rewards. Reference: [diffi
 ### text_en.json
 
 Core's English message templates for battle and field results. The loader requires a template for every key core can emit with your data. Reference: [text_en.json](../core/README.md#text_enjson).
+
+### Followers on exits, towns, choice headers, returns, vehicle music and actors by flag
+
+Optional, data without them as before: `game.json` `followers_on_exits` and `start_towns`; script `register town`, `unregister town` and a choice's `header`; a town's `return` (`{"area": ..., "marker": ...}` or `{"area": ..., "at": [x, y]}`, optional `facing`), where a return to it lands outside it (the overworld cell beside the town, say); `presentation.music.vehicles` entries as `{"battle": TRACK, "field": TRACK}` (a plain string is still the battle track), the field track while riding; `game.json` actors' `require_flag` and `block_flag`, which hide the actor ([game/README.md](../game/README.md#areas)).
 
 ### Followers by exit, talk points on moving actors and contact from the keys
 

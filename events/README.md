@@ -189,6 +189,13 @@ Every CLI command is a library call, so a build pipeline can run them without th
 
 ## Changes a host must make
 
+Newest: towns registered by story and choice headers ([FORMAT.md](FORMAT.md), "Game state" and "Choices").
+
+- `program.h`: `Op::register_town` (appended, name `register town`): `Instruction::name` the area, `number` 1 for `unregister town`. A `switch` over `Op` needs the new case.
+- `host.h`: `ChoiceRequest::header` (empty without one) and the virtual `Host::register_town(area, registered)`, whose default does nothing. `describe(ChoiceRequest)` adds ` header <text>` after the prompt; `collect_texts` gives the header the role `choice header`.
+- `RecordingHost` logs `register town <area>` and `unregister town <area>`.
+- Scripts that use none of the new syntax keep their fingerprint and code.
+
 Latest: story pictures, the scene camera and music fades ([FORMAT.md](FORMAT.md), "Story pictures", "Camera, panels and the screen" and "Audio").
 
 - `program.h`: `Op::picture` (appended, name `picture`): `Instruction::name` the picture (empty for a hide of the top one), `number` 0 show, 1 hide, 2 clear. A `switch` over `Op` needs the new case.

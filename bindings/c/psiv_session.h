@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 19
+#define PSIV_ABI_VERSION 20
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -770,6 +770,7 @@ typedef struct psiv_vehicle {
 typedef struct psiv_travel_destination {
 	/* A port id for PSIV_TRAVEL_PORT, an area id otherwise; what psiv_travel takes. */
 	const char* id;
+	/* The area the party lands in; area_name is its name, the town's (id's) for PSIV_TRAVEL_TOWN. */
 	const char* area;
 	const char* area_name;
 	const char* region;
@@ -935,6 +936,9 @@ typedef struct psiv_choice {
 	/* For yes/no requests the options are the string table's choice.yes and choice.no (yes = 0, no = 1). */
 	int32_t option_count;
 	const char* const* options;
+	/* The script's `header`, shown with the options, "" for none; header_id its string id, "" for quoted text. */
+	const char* header;
+	const char* header_id;
 } psiv_choice;
 
 PSIV_API int32_t psiv_line_pending(const psiv_session* session);

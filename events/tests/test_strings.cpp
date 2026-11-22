@@ -146,6 +146,12 @@ TEST(collect_texts_names_event_role_and_line) {
 	CHECK_EQ(uses[7].line, 14);
 }
 
+TEST(collect_texts_names_a_choice_header) {
+	events::Program p = test::compile_ok("event a unskippable\n\tchoice @a.where header @a.header\n\toption \"N\"\n\toption \"S\"\n\tend\nend\n");
+	std::vector<events::TextUse> uses = events::collect_texts(p);
+	CHECK(uses.size() == 4u && uses[1].role == "choice header" && uses[1].text.value == "a.header");
+}
+
 TEST(string_check_rejects_translations_that_drop_or_change_tokens_or_control_tags) {
 	events::Program p = test::compile_ok("event a unskippable\n\tsay guide @a.one\n\tsay guide @a.two\n\tsay guide @a.three\n\tsay guide @a.four\nend\n");
 	StringTable en = table_ok("en.strings", "language en\na.one = Take the {name:tide_lamp}.{page}And the {name:rope}.\n"

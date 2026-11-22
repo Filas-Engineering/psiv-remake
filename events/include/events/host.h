@@ -28,6 +28,8 @@ struct Line {
 struct ChoiceRequest {
 	// prompt.value is empty when the script gave no prompt.
 	Text prompt;
+	// `header`: text shown with the options, empty when the script gave none.
+	Text header;
 	std::vector<Text> options;
 	bool yes_no = false;
 };
@@ -258,6 +260,9 @@ public:
 	virtual void show_picture(const std::string& picture);
 	virtual void hide_picture(const std::string& picture);
 	virtual void clear_pictures();
+	// `register town` and `unregister town`: the area joins or leaves the towns the party may return to. The default
+	// does nothing.
+	virtual void register_town(const std::string& area, bool registered);
 };
 
 // What a standard animation leaves behind once it has played (FORMAT.md, "Actors").

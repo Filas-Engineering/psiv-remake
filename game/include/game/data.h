@@ -116,6 +116,8 @@ struct MusicNames {
 	std::map<std::string, std::string> encounters;
 	// By FieldVehicle id: random battles fought aboard, unless the encounter has its own track.
 	std::map<std::string, std::string> vehicles;
+	// By FieldVehicle id: the field while the party rides it, in place of the area's track (a script's `music area` wins).
+	std::map<std::string, std::string> vehiclesField;
 	// By area id, in order; the first whose flag is set (or that has none) gives the area's track, in place of the area's own.
 	std::map<std::string, std::vector<AreaTrack>> areas;
 	// `fade_ms`: how long a change of track fades, for area changes and script `music play` without its own `fade` or
@@ -242,6 +244,10 @@ struct ActorDef {
 	Facing facing = Facing::South;
 	// The cell it stands on blocks walking while it is shown there.
 	bool solid = true;
+	// Hidden, and so neither drawn nor solid, unless requireFlag is set and blockFlag is not, wherever it stands and
+	// whatever a script showed.
+	std::string requireFlag;
+	std::string blockFlag;
 	int line = 0;
 	// Walks about its home by itself; needs a home.
 	std::optional<ActorWander> wander = std::nullopt;
@@ -333,6 +339,8 @@ struct GameConfig {
 	std::string startMarker;
 	Facing startFacing = Facing::South;
 	std::vector<std::string> startLineup;
+	// game.json `start_towns`: towns the party may return to from a new game on, as if visited.
+	std::vector<std::string> startTowns;
 	int startLevel = 1;
 	int startMoney = 0;
 	rules::Inventory startItems;
@@ -387,6 +395,9 @@ struct GameConfig {
 	// game.json `followers_arrive_other`: every other area entry (a script's or developer's warp, travel, boarding a ship,
 	// the new game). A load restores the saved trail and a battle's end keeps it.
 	FollowersArrive followersArriveOther = FollowersArrive::Stacked;
+	// game.json `followers_on_exits`: the arrival line may place followers on exit cells, which fire only on the
+	// leader's own step; false ends it at the first exit cell.
+	bool followersOnExits = false;
 	// game.json `talk_at`: where an actor's talk point answers (R186).
 	TalkAt talkAt = TalkAt::Point;
 	// game.json `step_timing` `exact` (R108; default `ticks`): steps of the leader (on foot, running and aboard), belts and

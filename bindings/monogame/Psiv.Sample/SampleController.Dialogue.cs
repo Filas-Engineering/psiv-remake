@@ -608,6 +608,7 @@ public sealed partial class SampleController
 			.Set("has_choice", choice is not null)
 			.Set("prompt", choice is null ? "" : choice.Prompt.Length == 0 ? T("ui.dialogue.choose") : Shown(choice.Prompt))
 			.Set("options", choice?.Options.Select(Shown).ToList() ?? [])
+			.Set("choice_header", choice is null || choice.Header.Length == 0 ? "" : Shown(choice.Header))
 			.Set("cursor", _cursor);
 		List<string> names = StoryPictures();
 		List<int> images = StoryPictureImages(art, names);

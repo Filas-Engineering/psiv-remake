@@ -217,7 +217,7 @@ struct Helm {
 };
 
 // Where leaving a dungeon at once (FLD-051) takes the party from the dungeon area that names it, in place of the cell
-// the party stood on before going in.
+// the party stood on before going in; also a town's `return`.
 struct DungeonExitTarget {
 	std::string area;
 	// A marker of `area`; when empty, `at`.
@@ -332,6 +332,8 @@ struct Area {
 	std::vector<std::string> arrivalNotFrom;
 	// A dungeon's way out for the dungeon-exit item and technique; without one, the cell the party entered from.
 	std::optional<DungeonExitTarget> dungeonExit;
+	// `return`: where a return to this town lands, in another area (the field beside it), in place of `arrival`.
+	std::optional<DungeonExitTarget> returnTo;
 	std::vector<std::string> rows;
 	std::map<std::string, Cell> markers;
 	std::vector<Exit> exits;

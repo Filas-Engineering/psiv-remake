@@ -505,3 +505,18 @@ TEST(troubleModesForRepeatingMacros) {
 	CHECK(!views.empty() && views.back().onTrouble == rules::MacroTrouble::Stop && views.back().unnamed == rules::MacroUnnamed::Auto &&
 		views.back().recoverWho == rules::MacroRecoverWho::Default);
 }
+
+// A choice's header reaches the view as text and string id, and the terminal prints it after the prompt.
+TEST(aChoiceHeaderIsShownWithTheOptions) {
+	const GameData d = test::withScript("events/bell_cove.ev",
+		"event cove_bell unskippable\n\tchoice \"Ring it?\" header @cove.bell.frame\n\toption \"Ring\"\n\toption \"Leave\"\n\tend\n"
+		"\tchoice\n\toption \"A\"\n\toption \"B\"\n\tend\nend\n");
+	Session s(d, SessionOptions());
+	test::placeParty(s, "bell_cove", "bell_front", Facing::East);
+	CHECK(s.interact().empty());
+	std::optional<ChoiceView> c = s.choiceView();
+	CHECK(c && c->prompt == "Ring it?" && c->headerId == "cove.bell.frame" && !c->header.empty() && c->header != c->headerId);
+	CHECK(s.choose(0).empty());
+	c = s.choiceView();
+	CHECK(c && c->header.empty() && c->headerId.empty());
+}

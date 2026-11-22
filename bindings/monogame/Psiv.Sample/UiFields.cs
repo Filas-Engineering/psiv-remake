@@ -207,7 +207,7 @@ public static class UiFields
 		["dialogue"] = new("dialogue",
 			["banner_visible", "banner_title", "banner_kind", "banner_alpha", "banner_drop", "banner_ms", "banner_left_ms", "top", "box_visible", "has_line", "speaker",
 				"portrait", "line", "revealed", "all_shown", "line_step", "hint", "next_arrow_ms", "arrow", "has_choice", "prompt", "options", "cursor", "picture",
-				"picture_w", "picture_h", "pictures", "narration_visible", "narration_rows", "narration_all_shown", "shown_ms", "line_key", "picture_top", "picture_names", "page_arrow"],
+				"picture_w", "picture_h", "pictures", "narration_visible", "narration_rows", "narration_all_shown", "shown_ms", "line_key", "picture_top", "picture_names", "page_arrow", "choice_header"],
 			itemFields: ["picture", "picture_w", "picture_h", "text", "full", "shown"],
 			parameters: ["box_h", "box_margin", "box_top", "picture_stack", "narration_lines", "narration_cps", "narration_delay_ms", "narration_hold_ms", "narration_wait", "narration_width",
 				"narration_when"],

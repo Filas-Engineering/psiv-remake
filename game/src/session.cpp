@@ -1143,6 +1143,14 @@ public:
 
 	void set_area_music(const std::string& track) override { s_.world_.areaMusic = track; }
 
+	void register_town(const std::string& area, bool registered) override {
+		if (registered) {
+			s_.world_.visitedAreas.insert(area);
+		} else {
+			s_.world_.visitedAreas.erase(area);
+		}
+	}
+
 	void show_picture(const std::string& picture) override {
 		s_.world_.pictures.push_back(picture);
 		s_.output_.push_back({OutputKind::Action, {}, "picture show " + picture});
@@ -2409,6 +2417,9 @@ bool Session::actorView(const ActorDef& def, const Area& here, ActorView& view) 
 	} else {
 		return false;
 	}
+	if ((!def.requireFlag.empty() && !world_.flag(def.requireFlag)) || (!def.blockFlag.empty() && world_.flag(def.blockFlag))) {
+		view.visible = false;
+	}
 	view.solid = view.visible && solidActors_.count(def.id) > 0;
 	if (it != world_.actors.end() && (!it->second.lookEnemy.empty() || !it->second.look.empty())) {
 		view.spriteEnemy = it->second.lookEnemy;
@@ -2576,6 +2587,12 @@ std::string Session::areaMusic() const {
 	const Area* here = area();
 	if (!world_.areaMusic.empty() || !here) {
 		return world_.areaMusic;
+	}
+	if (const FieldVehicle* vehicle = riding()) {
+		const auto& byVehicle = data_.config.presentation.music.vehiclesField;
+		if (auto track = byVehicle.find(vehicle->id); track != byVehicle.end()) {
+			return track->second;
+		}
 	}
 	const auto& byArea = data_.config.presentation.music.areas;
 	if (auto tracks = byArea.find(here->id); tracks != byArea.end()) {
@@ -2931,6 +2948,7 @@ rules::Message Session::newGame() {
 		world_.lineup.push_back(id);
 	}
 	world_.money = c.startMoney;
+	world_.visitedAreas.insert(c.startTowns.begin(), c.startTowns.end());
 	for (const auto& [id, n] : c.startItems) {
 		giveThing(id, n);
 	}
@@ -3540,7 +3558,7 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 	}
 	stopBackground();
 	const Area* before = area();
-	const std::string cameIn = before ? before->id : "";
+	const std::string cameIn = !arrivingFrom_.empty() ? arrivingFrom_ : before ? before->id : "";
 	if (a->kind != AreaKind::Dungeon) {
 		world_.dungeonExitArea.clear();
 		world_.dungeonExitCell = {};
@@ -3552,6 +3570,10 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 		world_.brokenHere.clear();
 		world_.areaMusic.clear();
 		previousArea_ = world_.area;
+	}
+	if (!arrivingFrom_.empty()) {
+		previousArea_ = arrivingFrom_;
+		arrivingFrom_.clear();
 	}
 	world_.cameFrom = a->names.empty() ? "" : previousArea_;
 	scriptTrack_.reset();
@@ -3636,7 +3658,7 @@ void Session::placeFollowers() {
 	Cell c = world_.position;
 	for (std::size_t i = 0; i < kTrailCells; ++i) {
 		const Cell n = stepFrom(c, toward);
-		if (!a->walkable(n) || exitOn(*a, n)) {
+		if (!a->walkable(n) || (!data_.config.followersOnExits && exitOn(*a, n))) {
 			break;
 		}
 		c = n;
@@ -4469,7 +4491,13 @@ std::vector<TravelDestination> Session::travelDestinations(TravelKind kind) cons
 		break;
 	case TravelKind::Town:
 		for (const auto& [id, a] : data_.areas) {
-			if (a.kind == AreaKind::Town && !a.arrival.empty() && a.region == here->region && id != here->id && world_.visitedAreas.count(id)) {
+			if (a.kind != AreaKind::Town || a.region != here->region || id == here->id || !world_.visitedAreas.count(id)) {
+				continue;
+			}
+			if (const std::optional<DungeonExitTarget>& way = a.returnTo) {
+				const Area& to = *data_.area(way->area);
+				out.push_back({id, way->area, way->marker.empty() ? way->at : to.markers.at(way->marker), a.region});
+			} else if (!a.arrival.empty()) {
 				out.push_back({id, id, a.markers.at(a.arrival), a.region});
 			}
 		}
@@ -4526,8 +4554,10 @@ rules::Message Session::travel(TravelKind kind, const std::string& destination, 
 		return refusal("no_destination", {destination});
 	}
 	const TravelDestination to = *chosen;
-	const bool turn = kind == TravelKind::DungeonExit && area()->dungeonExit && area()->dungeonExit->facing;
-	const Facing arrival = turn ? *area()->dungeonExit->facing : world_.facing;
+	const Area* town = kind == TravelKind::Town ? data_.area(to.id) : nullptr;
+	const std::optional<DungeonExitTarget>& way = town ? town->returnTo : area()->dungeonExit;
+	const bool turn = (town || kind == TravelKind::DungeonExit) && way && way->facing;
+	const Facing arrival = turn ? *way->facing : world_.facing;
 	if (kind != TravelKind::Port) {
 		std::vector<rules::PartyMember> party = activeParty();
 		rules::FieldUse use;
@@ -4556,6 +4586,9 @@ rules::Message Session::travel(TravelKind kind, const std::string& destination, 
 	modes_.transition(Mode::Field);
 	menuKind_ = MenuKind::None;
 	portId_.clear();
+	if (town && town->returnTo) {
+		arrivingFrom_ = town->id;
+	}
 	enterAreaAt(to.area, to.cell);
 	if (turn) {
 		world_.facing = arrival;
@@ -4795,6 +4828,8 @@ std::optional<ChoiceView> Session::choiceView() const {
 	}
 	ChoiceView view;
 	view.prompt = request->prompt.value.empty() ? "" : scriptText(request->prompt);
+	view.header = request->header.value.empty() ? "" : scriptText(request->header);
+	view.headerId = request->header.is_id ? request->header.value : "";
 	view.yesNo = request->yes_no;
 	if (request->yes_no) {
 		view.options = {stringText(kChoiceYes), stringText(kChoiceNo)};

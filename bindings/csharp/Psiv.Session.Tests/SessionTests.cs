@@ -817,6 +817,7 @@ public class SessionTests
 		Choice ask = s.Choice()!;
 		Assert.True(ask.YesNo);
 		Assert.Equal(["Yes", "No"], ask.Options);
+		Assert.Equal(("", ""), (ask.Header, ask.HeaderId));
 		Assert.True(s.SetProfileValue("text_language", "ja").Ok);
 		Assert.Equal(["はい", "いいえ"], s.Choice()!.Options);
 		Assert.True(s.SetProfileValue("text_language", "en").Ok);

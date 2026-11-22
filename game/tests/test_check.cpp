@@ -256,7 +256,7 @@ TEST(vehicleAndAreaMusicAreCheckedAndLeftOutOfTheContentHash) {
 	const std::string dir = copyData("music", {});
 	const DataDirectories directories{dir, "../core/data"};
 	const std::string encounters = "\"encounters\": {\"marsh\": \"battle_marsh_ambush\", \"warden\": \"battle_brass_warden\"}";
-	replaceIn(dir + "/game.json", encounters, encounters + ", \"vehicles\": {\"reed_skimmer\": \"battle_brass_warden\"}, \"areas\": {\"cogway\": "
+	replaceIn(dir + "/game.json", encounters, encounters + ", \"vehicles\": {\"reed_skimmer\": \"battle_brass_warden\", \"dune_crawler\": {\"field\": \"title_harbor_dawn\"}}, \"areas\": {\"cogway\": "
 		"[{\"flag\": \"cogway.loud\", \"track\": \"dungeon_firing_floor\"}, \"title_harbor_dawn\"], \"tidewater\": \"defeat_low_tide\"}");
 	rules::Result<GameData> edited = loadGameData(directories);
 	CHECK(edited.ok());
@@ -264,6 +264,7 @@ TEST(vehicleAndAreaMusicAreCheckedAndLeftOutOfTheContentHash) {
 		const MusicNames& music = edited.value->config.presentation.music;
 		CHECK_EQ(edited.value->contentHash, test::data().contentHash);
 		CHECK_EQ(music.vehicles.at("reed_skimmer"), std::string("battle_brass_warden"));
+		CHECK(!music.vehicles.count("dune_crawler") && music.vehiclesField.at("dune_crawler") == "title_harbor_dawn");
 		const std::vector<AreaTrack>& cogway = music.areas.at("cogway");
 		CHECK(cogway.size() == 2 && cogway[0].flag == "cogway.loud" && cogway[0].track == "dungeon_firing_floor" && cogway[1].flag.empty());
 		CHECK(music.areas.at("tidewater").size() == 1 && music.areas.at("tidewater")[0].track == "defeat_low_tide");
@@ -581,4 +582,32 @@ TEST(theCheckWalksOutFromArrivalsOnExitCells) {
 	}
 	CHECK_EQ(unreached, 1);
 	CHECK_EQ(which, std::string("sealed"));
+}
+
+// A town's `return` must lead into another existing area, onto floor the party can walk to from that area's ways in;
+// only a town has one.
+TEST(aTownsReturnIsChecked) {
+	const auto withReturn = [](const std::string& name, const std::string& value) {
+		const std::string dir = copyData(name, {});
+		replaceIn(dir + "/areas/tidewater.json", "\"kind\": \"town\",", "\"kind\": \"town\", \"return\": " + value + ",");
+		return dir;
+	};
+	std::string dir = withReturn("return_ok", "{\"area\": \"reed_path\", \"at\": [2, 4], \"facing\": \"west\"}");
+	CHECK(checkData(DataDirectories{dir, "../core/data"}).ok());
+
+	dir = withReturn("return_islet", "{\"area\": \"brine_flats\", \"at\": [21, 1]}");
+	replaceIn(dir + "/game.json", "\"crosses\": [\"floor\", \"water\"]", "\"crosses\": [\"floor\"]");
+	const CheckReport islet = checkData(DataDirectories{dir, "../core/data"});
+	const rules::Problem* stranded = find(islet, "check.return_not_reached");
+	CHECK(stranded && stranded->message.params[0] == "tidewater" && stranded->message.params[1] == "brine_flats" && ends(stranded->file, "tidewater.json"));
+
+	dir = withReturn("return_wall", "{\"area\": \"reed_path\", \"at\": [0, 0]}");
+	CHECK(find(checkData(DataDirectories{dir, "../core/data"}), "data.return_not_walkable"));
+	dir = withReturn("return_own", "{\"area\": \"tidewater\", \"marker\": \"start\"}");
+	CHECK(find(checkData(DataDirectories{dir, "../core/data"}), "data.return_into_own_area"));
+	dir = withReturn("return_marker", "{\"area\": \"reed_path\", \"marker\": \"nowhere\"}");
+	CHECK(find(checkData(DataDirectories{dir, "../core/data"}), "data.return_missing_marker"));
+	dir = copyData("return_field", {});
+	replaceIn(dir + "/areas/reed_path.json", "\"kind\": \"field\",", "\"kind\": \"field\", \"return\": {\"area\": \"tidewater\", \"marker\": \"start\"},");
+	CHECK(find(checkData(DataDirectories{dir, "../core/data"}), "data.return_not_town"));
 }

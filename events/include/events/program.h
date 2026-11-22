@@ -83,6 +83,7 @@ enum class Op {
 	credits,
 	end_game,
 	picture,
+	register_town,
 };
 
 const char* op_name(Op op);
@@ -103,6 +104,7 @@ struct Instruction {
 	// actor, with action.subject `enemy` and action.target the enemy, action.target alone the look, or both empty for the
 	// game's own figure. party_add, party_remove: the member, with `number` 1 for `silent`. party_order: `names` alone. credits: the credits id.
 	// picture: the picture, with `number` 0 for show, 1 for hide (an empty name hides the top one) and 2 for clear.
+	// register_town: the area, with `number` 1 for `unregister town`.
 	std::string name;
 	// fork: 1 for a `race`, which ends when its first branch does.
 	std::int64_t number = 0;

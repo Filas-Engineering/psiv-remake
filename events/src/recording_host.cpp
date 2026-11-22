@@ -265,6 +265,10 @@ void RecordingHost::clear_pictures() {
 	trace.push_back("picture clear");
 }
 
+void RecordingHost::register_town(const std::string& area, bool registered) {
+	trace.push_back((registered ? "register town " : "unregister town ") + area);
+}
+
 void RecordingHost::save_party(const std::string& snapshot) {
 	trace.push_back("party save " + snapshot);
 	party_snapshots[snapshot] = party;

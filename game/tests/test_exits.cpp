@@ -316,6 +316,62 @@ TEST(theExitTakenPlacesTheFollowers) {
 	CHECK(right.world().position == (Cell{1, 2}) && right.followers()[0].cell == (Cell{2, 2}));
 }
 
+// Under followers_on_exits the line places followers on exit cells (a block, a pit, an `always` exit) and goes on beyond
+// them, and nothing fires; without it the line ends before the first. The trail crosses the block the leader walks over
+// either way, and a follower blocks nothing.
+TEST(followersOnExitsPlacesFollowersOnExitCells) {
+	const char* room = R"({"id": "follow_room", "kind": "field", "map": ["#######", "#.....#", "#.....#", "#.....#", "#.....#", "#######"],
+		"markers": {"top": [3, 1], "block": [2, 2], "corner": [1, 3]},
+		"exits": [{"at": [2, 2], "to": "tidewater", "marker": "east_gate"}, {"at": [3, 2], "to": "tidewater", "marker": "east_gate"},
+			{"at": [3, 3], "to": "tidewater", "marker": "start", "fall": true},
+			{"at": [4, 2], "to": "tidewater", "marker": "start", "fires": "always"},
+			{"at": [1, 4], "to": "follow_room", "marker": "top", "followers": "down"},
+			{"at": [4, 4], "to": "follow_room", "marker": "block", "followers": "behind"}]})";
+	GameData data = withAreas({room});
+	Session today(data, SessionOptions());
+	startIn(today, "follow_room", "corner");
+	today.world().lineup = {"fighter", "medic"};
+	CHECK(today.walk(Facing::South).empty());
+	CHECK(today.world().position == (Cell{3, 1}) && today.world().trail.empty());
+	data.config.followersOnExits = true;
+	Session s(data, SessionOptions());
+	startIn(s, "follow_room", "corner");
+	const std::vector<std::string> lineup = s.world().lineup;
+	s.world().lineup = {"fighter", "medic"};
+	const auto cells = [&] {
+		std::vector<Cell> out;
+		for (const FollowerView& f : s.followers()) {
+			out.push_back(f.cell);
+		}
+		return out;
+	};
+	CHECK(s.walk(Facing::South).empty());
+	CHECK(s.world().area == "follow_room" && s.world().position == (Cell{3, 1}));
+	CHECK(cells() == (std::vector<Cell>{{3, 2}}));
+	s.world().lineup = {"fighter", "medic", "scout"};
+	s.world().follower = "peddler";
+	CHECK(cells() == (std::vector<Cell>{{3, 2}, {3, 3}, {3, 4}}));
+	for (Facing f : {Facing::East, Facing::East, Facing::South, Facing::South, Facing::South, Facing::West}) {
+		CHECK(s.walk(f).empty());
+	}
+	CHECK(s.world().position == (Cell{2, 2}) && s.world().facing == Facing::West);
+	CHECK(cells() == (std::vector<Cell>{{3, 2}, {4, 2}, {5, 2}}));
+	CHECK(s.walk(Facing::East).empty());
+	CHECK(s.walk(Facing::North).empty());
+	CHECK(s.world().area == "follow_room" && s.world().position == (Cell{3, 1}));
+	CHECK(cells() == (std::vector<Cell>{{3, 2}, {2, 2}, {3, 2}}));
+	s.world().follower.clear();
+	s.world().lineup = lineup;
+	std::string text;
+	CHECK(s.saveText(text).empty());
+	CHECK(text.find("\ntrail 3 2 2 2 3 2 4 2 5 2\n") != std::string::npos);
+	Session loaded(data, SessionOptions());
+	CHECK(loaded.loadSaveText(text).empty());
+	CHECK(loaded.world().trail == s.world().trail);
+	CHECK(s.walk(Facing::South).empty());
+	CHECK(s.world().area == "tidewater" && s.world().position == s.data().area("tidewater")->markers.at("east_gate"));
+}
+
 // An area's arrive_notice by the area the party came from: the first entry listing it, else the entry without `from`.
 TEST(theArrivalNoticeDependsOnWhereThePartyCameFrom) {
 	std::string text = kBlock;

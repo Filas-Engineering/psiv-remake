@@ -164,6 +164,11 @@ std::vector<TextUse> collect_texts(const Program& program) {
 				use.text = ins.choice.prompt;
 				uses.push_back(use);
 			}
+			if (!ins.choice.header.value.empty()) {
+				use.role = "choice header";
+				use.text = ins.choice.header;
+				uses.push_back(use);
+			}
 			for (std::size_t i = 0; i < ins.choice.options.size(); ++i) {
 				use.role = "option";
 				use.text = ins.choice.options[i];

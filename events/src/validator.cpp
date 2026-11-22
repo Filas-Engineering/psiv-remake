@@ -270,6 +270,9 @@ private:
 		case Op::credits:
 			name(NameKind::credits, ins.name, s.line);
 			break;
+		case Op::register_town:
+			name(NameKind::map, ins.name, s.line);
+			break;
 		case Op::picture:
 			// A registry that lists no picture leaves picture names to the game.
 			if (registry_.names.count(NameKind::picture)) {

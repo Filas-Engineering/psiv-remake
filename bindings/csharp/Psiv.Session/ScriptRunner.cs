@@ -142,6 +142,10 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 			if (session.Choice() is { } choice)
 			{
 				var text = new StringBuilder(choice.Prompt.Length == 0 ? "Choose:" : choice.Prompt);
+				if (choice.Header.Length > 0)
+				{
+					text.Append(" | ").Append(choice.Header);
+				}
 				for (int i = 0; i < choice.Options.Count; i++)
 				{
 					text.Append(CultureInfo.InvariantCulture, $" [{i}] {choice.Options[i]}");

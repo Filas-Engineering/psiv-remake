@@ -347,6 +347,9 @@ static void settle(void) {
 			bclear(&text);
 			psiv_choice_get(S, &choice);
 			badd(&text, "%s", choice.prompt[0] ? choice.prompt : "Choose:");
+			if (choice.header[0]) {
+				badd(&text, " | %s", choice.header);
+			}
 			for (int32_t i = 0; i < choice.option_count; ++i) {
 				badd(&text, " [%d] %s", i, choice.options[i]);
 			}

@@ -111,6 +111,9 @@ struct LineView {
 struct ChoiceView {
 	// Empty when the script gave no prompt.
 	std::string prompt;
+	// The choice's `header`, shown with the options; headerId is its string id, empty for quoted text.
+	std::string header;
+	std::string headerId;
 	bool yesNo = false;
 	std::vector<std::string> options;
 };
@@ -486,6 +489,7 @@ bool parseTravelKind(const std::string& text, TravelKind& out);
 struct TravelDestination {
 	// A port id for Port, an area id for Town and DungeonExit.
 	std::string id;
+	// Where the party lands: for a town with `return`, not the town.
 	std::string area;
 	// Where the party lands.
 	Cell cell;
@@ -670,8 +674,8 @@ public:
 	WalkStatus walkStep(PathWalk& walk);
 	// The actors in the party's area, in game.json order, hidden ones included.
 	std::vector<ActorView> actorsHere() const;
-	// The track the area plays now: the one a script set (`music area`) until the party leaves, else the first of
-	// game.json's `music.areas` entries for the area whose flag is set, else the area's own. Flags are read on each call,
+	// The track the area plays now: the one a script set (`music area`) until the party leaves, else aboard a vehicle
+	// its `music.vehicles` `field` track, else the first of game.json's `music.areas` entries for the area whose flag is set, else the area's own. Flags are read on each call,
 	// so a listed flag set in the area changes it at once.
 	std::string areaMusic() const;
 	// The battle's track, live or ended: the encounter's from game.json, else for a random battle aboard the vehicle's;
@@ -1021,6 +1025,8 @@ private:
 	void placeFollowers();
 	// The area the party was in before, kept while it walks (World::cameFrom holds it for areas with `name` variants).
 	std::string previousArea_;
+	// Set by a return to a town that lands outside it: the next entry counts as coming from that town.
+	std::string arrivingFrom_;
 	// The track a script's `music play` started (empty after `music stop`) until the party enters an area; unset plays the
 	// area's track. Not saved: after a load the area's track plays.
 	std::optional<std::string> scriptTrack_;

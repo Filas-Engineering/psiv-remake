@@ -125,6 +125,8 @@ const char* op_name(Op op) {
 		return "end game";
 	case Op::picture:
 		return "picture";
+	case Op::register_town:
+		return "register town";
 	}
 	return "unknown";
 }

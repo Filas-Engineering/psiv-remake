@@ -39,6 +39,12 @@ struct Solid {
 	bool point = true;
 };
 
+// A town's `return` that lands on a cell of the area checked.
+struct Landing {
+	const Area* town = nullptr;
+	Cell cell;
+};
+
 // An object the party uses: the cells it is used at (a hook's further cells, and under `interact: "nearby"` the cell
 // its actor stands on behind a counter) and whether it is used across a counter (game/README.md, "Interaction").
 struct Use {
@@ -48,7 +54,7 @@ struct Use {
 	bool across = false;
 };
 
-void checkArea(const Area& area, const std::set<std::string>& entrances, const GameConfig& config, Found& found) {
+void checkArea(const Area& area, const std::set<std::string>& entrances, const std::vector<Landing>& landings, const GameConfig& config, Found& found) {
 	const std::string& file = area.file;
 	const std::vector<std::string>& actors = config.actors;
 	const std::vector<FieldVehicle>& vehicles = config.vehicles;
@@ -320,6 +326,11 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const G
 			found.add(file, area.markerLines.count(name) ? area.markerLines.at(name) : 0, "check.marker_not_reached", {name});
 		}
 	}
+	for (const Landing& l : landings) {
+		if (!reached.count(l.cell)) {
+			found.add(l.town->file, l.town->returnTo->line, "check.return_not_reached", {l.town->id, area.id, cellText(l.cell)});
+		}
+	}
 	for (const Hook& h : area.hooks) {
 		if (h.trigger == HookTrigger::Step && !h.tile && !reached.count(h.at) && !solidAt(h.at)) {
 			found.add(file, h.line, "check.hook_not_reached", {h.id});
@@ -387,6 +398,14 @@ std::vector<rules::Problem> crossCheck(const GameData& data, bool loaderChecked)
 			entrances[id].insert(area.arrival);
 		}
 	}
+	// A town's return must land where the party can walk from the destination area's other ways in.
+	std::map<std::string, std::vector<Landing>> landings;
+	for (const auto& [id, area] : data.areas) {
+		const Area* to = area.returnTo ? data.area(area.returnTo->area) : nullptr;
+		if (to && to != &area && (area.returnTo->marker.empty() || to->markers.count(area.returnTo->marker))) {
+			landings[to->id].push_back({&area, area.returnTo->marker.empty() ? area.returnTo->at : to->markers.at(area.returnTo->marker)});
+		}
+	}
 
 	// In game.json's order, so the first area listed keeps a chest id and a later one is reported.
 	std::vector<const Area*> ordered;
@@ -418,7 +437,8 @@ std::vector<rules::Problem> crossCheck(const GameData& data, bool loaderChecked)
 			}
 		}
 		auto in = entrances.find(id);
-		checkArea(area, in == entrances.end() ? std::set<std::string>() : in->second, c, found);
+		auto lands = landings.find(id);
+		checkArea(area, in == entrances.end() ? std::set<std::string>() : in->second, lands == landings.end() ? std::vector<Landing>() : lands->second, c, found);
 	}
 
 	// Areas reachable from the start through exits. A script warp can run anywhere, so its target counts as reached.

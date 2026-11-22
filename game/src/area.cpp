@@ -724,21 +724,19 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			area.chests.push_back(chest);
 		}
 	}
-	if (area.arrival.empty() && (!area.arrivalFrom.empty() || !area.arrivalNotFrom.empty())) {
-		reader.fail(json, "data.arrival_from_without_arrival", {});
-	}
-	if (!area.arrival.empty() && !area.markers.count(area.arrival)) {
-		reader.fail(json, "data.arrival_marker_missing", {area.arrival});
-	}
-	if (const JsonValue* way = reader.field(json, "dungeon_exit", JsonValue::Type::Object, false)) {
-		reader.only(*way, gameKeys("area", "dungeon_exit"));
-		DungeonExitTarget target;
-		target.line = way->line;
-		reader.text(*way, "area", target.area, true);
-		reader.text(*way, "marker", target.marker, false);
-		reader.cellField(*way, "at", target.at, false);
-		if (target.marker.empty() == !way->find("at")) {
-			reader.fail(*way, "data.dungeon_exit_needs_place", {});
+	const auto target = [&](const char* key, const auto& keys, const char* needsPlace, AreaKind owner, const char* wrongOwner) -> std::optional<DungeonExitTarget> {
+		const JsonValue* way = reader.field(json, key, JsonValue::Type::Object, false);
+		if (!way) {
+			return std::nullopt;
+		}
+		reader.only(*way, keys);
+		DungeonExitTarget t;
+		t.line = way->line;
+		reader.text(*way, "area", t.area, true);
+		reader.text(*way, "marker", t.marker, false);
+		reader.cellField(*way, "at", t.at, false);
+		if (t.marker.empty() == !way->find("at")) {
+			reader.fail(*way, needsPlace, {});
 		}
 		std::string facing;
 		reader.text(*way, "facing", facing, false);
@@ -746,13 +744,21 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		if (!facing.empty() && !parseFacing(facing, parsed)) {
 			reader.fail(*way, "data.bad_facing", {});
 		} else if (!facing.empty()) {
-			target.facing = parsed;
+			t.facing = parsed;
 		}
-		if (area.kind != AreaKind::Dungeon) {
-			reader.fail(*way, "data.dungeon_exit_not_dungeon", {});
+		if (area.kind != owner) {
+			reader.fail(*way, wrongOwner, {});
 		}
-		area.dungeonExit = target;
+		return t;
+	};
+	area.returnTo = target("return", gameKeys("area", "return"), "data.return_needs_place", AreaKind::Town, "data.return_not_town");
+	if (area.arrival.empty() && !area.returnTo && (!area.arrivalFrom.empty() || !area.arrivalNotFrom.empty())) {
+		reader.fail(json, "data.arrival_from_without_arrival", {});
 	}
+	if (!area.arrival.empty() && !area.markers.count(area.arrival)) {
+		reader.fail(json, "data.arrival_marker_missing", {area.arrival});
+	}
+	area.dungeonExit = target("dungeon_exit", gameKeys("area", "dungeon_exit"), "data.dungeon_exit_needs_place", AreaKind::Dungeon, "data.dungeon_exit_not_dungeon");
 	if (const JsonValue* ports = array(reader, json, "ports")) {
 		for (const JsonValue& p : ports->items) {
 			reader.only(p, gameKeys("area", "ports[]"));

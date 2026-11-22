@@ -114,6 +114,8 @@ public:
 	void show_picture(const std::string& picture) override;
 	void hide_picture(const std::string& picture) override;
 	void clear_pictures() override;
+	// Logged as `register town <area>` and `unregister town <area>`.
+	void register_town(const std::string& area, bool registered) override;
 
 protected:
 	// Hooks for hosts built on this one (TimingHost). The defaults use the

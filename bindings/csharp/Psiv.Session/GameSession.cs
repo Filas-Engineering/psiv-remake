@@ -527,7 +527,7 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			return null;
 		}
-		return new Choice(Native.Str(c.Prompt), c.YesNo != 0, Native.Strs(c.Options, c.OptionCount));
+		return new Choice(Native.Str(c.Prompt), c.YesNo != 0, Native.Strs(c.Options, c.OptionCount), Native.Str(c.Header), Native.Str(c.HeaderId));
 	}
 
 	public PsivResult Choose(int index) => Result(Native.Choose(_handle, index));

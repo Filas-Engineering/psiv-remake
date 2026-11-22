@@ -295,7 +295,7 @@ public sealed record FieldView(FieldInfo Info, IReadOnlyList<CellFlags> Grid, IR
 
 public sealed record Line(string SpeakerId, string SpeakerName, string TextId, string Text, string Portrait, string Display);
 
-public sealed record Choice(string Prompt, bool YesNo, IReadOnlyList<string> Options);
+public sealed record Choice(string Prompt, bool YesNo, IReadOnlyList<string> Options, string Header, string HeaderId);
 
 // Duration is how long the animation lasts by the data (game.json's presentation durations, else Seconds), 0 for none.
 public sealed record PresentationAction(ulong Handle, ActionPhase Phase, ActionType Type, string Subject, string Target, string Slot, bool HasPosition,

@@ -180,6 +180,24 @@ TEST(randomBattlesAboardPlayTheVehiclesTrackUnlessTheEncounterHasOne) {
 	CHECK_EQ(s.battleMusic(), std::string("battle_marsh_ambush"));
 }
 
+// A vehicle's `field` track plays on the field while the party rides it, over the area's; a script's `music area` wins.
+TEST(aVehiclesFieldTrackPlaysWhileThePartyRidesIt) {
+	GameData d = test::data();
+	d.config.presentation.music.vehiclesField["reed_skimmer"] = "battle_brass_warden";
+	Session s(d, SessionOptions());
+	cogway(s, {6, 4}, Facing::South);
+	const std::string own = s.areaMusic();
+	CHECK(own != "battle_brass_warden");
+	CHECK(s.devVehicle("reed_skimmer", "cogway", "entry").empty());
+	CHECK(s.board().empty());
+	CHECK_EQ(s.areaMusic(), std::string("battle_brass_warden"));
+	s.world().areaMusic = "title_harbor_dawn";
+	CHECK_EQ(s.areaMusic(), std::string("title_harbor_dawn"));
+	s.world().areaMusic.clear();
+	CHECK(s.leaveVehicle().empty());
+	CHECK_EQ(s.areaMusic(), own);
+}
+
 // R25: a conveyor carries the party a cell per step, taking no input; a step hook is a lift.
 TEST(beltsCarryThePartyAndALiftStepHookWarps) {
 	Session s(test::data(), SessionOptions());

@@ -230,6 +230,9 @@ std::string describe(const ChoiceRequest& request) {
 	if (!request.prompt.value.empty()) {
 		out += " " + describe(request.prompt);
 	}
+	if (!request.header.value.empty()) {
+		out += " header " + describe(request.header);
+	}
 	if (!request.yes_no) {
 		out += " [";
 		for (std::size_t i = 0; i < request.options.size(); ++i) {
@@ -398,5 +401,7 @@ void Host::show_picture(const std::string&) {}
 void Host::hide_picture(const std::string&) {}
 
 void Host::clear_pictures() {}
+
+void Host::register_town(const std::string&, bool) {}
 
 }

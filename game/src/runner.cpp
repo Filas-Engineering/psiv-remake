@@ -239,6 +239,9 @@ void Runner::settle() {
 		}
 		if (const std::optional<ChoiceView> c = session_.choiceView()) {
 			std::string text = c->prompt.empty() ? "Choose:" : c->prompt;
+			if (!c->header.empty()) {
+				text += " | " + c->header;
+			}
 			for (std::size_t i = 0; i < c->options.size(); ++i) {
 				text += " [" + std::to_string(i) + "] " + c->options[i];
 			}
@@ -730,7 +733,7 @@ bool Runner::execute(const std::string& rawLine) {
 			error("destinations port|town|dungeon_exit");
 		} else {
 			for (const TravelDestination& d : session_.travelDestinations(kind)) {
-				print("  " + d.id + ": " + session_.displayName(d.area) + " (" + std::to_string(d.cell.x) + "," + std::to_string(d.cell.y) + ")");
+				print("  " + d.id + ": " + session_.displayName(kind == TravelKind::Town ? d.id : d.area) + " (" + std::to_string(d.cell.x) + "," + std::to_string(d.cell.y) + ")");
 			}
 		}
 	} else if (cmd == "travel" && w.size() >= 3 && w.size() <= 5) {

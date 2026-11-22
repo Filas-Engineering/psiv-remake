@@ -41,7 +41,7 @@ struct TextUse {
 	// For an option, the line of the option itself.
 	int line = 0;
 	std::string event;
-	// "say <speaker>", "narrate", "choice prompt", "option" or "ask".
+	// "say <speaker>", "narrate", "choice prompt", "choice header", "option" or "ask".
 	std::string role;
 	Text text;
 };

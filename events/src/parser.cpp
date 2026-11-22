@@ -497,6 +497,9 @@ private:
 		if (a.next_is_text()) {
 			a.text(s.ins.choice.prompt, text_what);
 		}
+		if (a.keyword("header")) {
+			a.text(s.ins.choice.header, "header text (a quoted string or @string.id)");
+		}
 		into(a, s, "a variable name after 'into'");
 		a.finish();
 		++pos_;
@@ -1123,6 +1126,11 @@ private:
 			s = simple(Op::name_entry);
 			a.expect_keyword("entry");
 			a.name(s.ins.name, "a party member name");
+		} else if (cmd == "register" || cmd == "unregister") {
+			s = simple(Op::register_town);
+			s.ins.number = cmd == "unregister" ? 1 : 0;
+			a.expect_keyword("town");
+			a.name(s.ins.name, "a map name");
 		} else if (cmd == "credits") {
 			s = simple(Op::credits);
 			a.name(s.ins.name, "a credits name");

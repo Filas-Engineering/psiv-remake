@@ -385,6 +385,8 @@ Fields:
 * `has_choice` (bool): a choice is up instead of a line.
 * `prompt` (string): the choice's prompt, or the default one.
 * `options` (list of strings): the choice's options.
+* `choice_header` (string): the choice's `header` (`../events/FORMAT.md`, "Choices"), empty for none; the built-in
+  layout does not draw it, a layout that wants it inside the list window puts a `text` element there.
 * `cursor` (int): the option under the cursor.
 * `picture` (image): the still picture the `picture` tags show (below, "The `tags` table"), -1 for none. `picture_w`,
   `picture_h` (int): its size in pixels, 0 for none.
