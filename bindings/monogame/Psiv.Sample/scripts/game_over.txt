@@ -1,7 +1,7 @@
 # The game over screen's return to the title (scripts/make_scene_assets.py's SCENE copy): with the styles' timing
 # `game_over_return_ms` 1500 swapped in, a lost battle's result screen goes back to the title by itself 1.5 s after it
 # comes up, and Confirm still returns at once. With alt/battle_front_no_confirm.json (the layout this battle uses):
-# `game_over_confirm` 0, so Confirm does nothing and only the timing returns, and `party_figures` off on the result
+# `game_over_confirm` 0, so Confirm does nothing and only the timing returns (the hint says nothing of Confirm), and `party_figures` off on the result
 # step, so the party's figures go while the backdrop stays. Screenshots under build/shots/game_over/ with --window.
 
 cmd set text instant
@@ -14,6 +14,8 @@ wait 60
 dev lose
 waitstate 600 battlephase Ended
 expect statenot figures none
+expect state uifield.battle_front.result_confirm true
+expect statehas uifield.battle_front.hint continue
 shot build/shots/game_over/result.png
 press Enter
 wait 2
@@ -27,6 +29,8 @@ wait 60
 dev lose
 waitstate 600 battlephase Ended
 expect state figures none
+expect state uifield.battle_front.result_confirm false
+expect statenot uifield.battle_front.hint continue
 expect statehas windows battle_front/stage
 shot build/shots/game_over/no_party.png
 press Enter

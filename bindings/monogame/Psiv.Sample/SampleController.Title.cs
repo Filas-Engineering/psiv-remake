@@ -42,10 +42,21 @@ public sealed partial class SampleController
 			case "new_game":
 				options.Add((id, T("ui.title.new_game"), _s.NewGame));
 				break;
+			// The title layout's `continue` "choose" opens the Load list in place of loading the newest save; with no save
+			// the session's refusal still shows.
+			case "continue" when Ui.ParamText("title", "continue", UiData(), "newest") == "choose" && (_s.Saves()?.Count ?? 0) > 0:
+				options.Add((id, T("ui.title.continue"), () =>
+				{
+					_loadOverlay = true;
+					_list.Reset();
+					return PsivResult.Success;
+				}));
+				break;
 			case "continue":
 				options.Add((id, T("ui.title.continue"), _s.ContinueGame));
 				break;
-			case "load":
+			// The session says whether a load is accepted from here (refused away from the title by the spec's table).
+			case "load" when _s.CanLoad:
 				options.Add((id, T("ui.title.load"), () =>
 				{
 					_loadOverlay = true;
@@ -93,7 +104,7 @@ public sealed partial class SampleController
 	private UiContext TitleSaveFields(UiContext ctx)
 	{
 		int saves = _s.Saves()?.Count ?? 0;
-		return ctx.Set("has_save", saves > 0).Set("save_count", saves).Set("has_clear", _clearRecord == true);
+		return ctx.Set("has_save", saves > 0).Set("save_count", saves).Set("has_clear", _clearRecord == true).Set("can_load", _s.CanLoad);
 	}
 
 	// Any key or button but the window's and the developer tools' own function keys.

@@ -8,7 +8,8 @@ namespace Psiv.Sample;
 
 // What a battle animation file is checked against: the game data, the effects pictures can play (generated and the
 // manifest's, with their frame counts), the styles' color names and the asset directory for backdrop pictures.
-public sealed record AnimCheckContext(GameData Data, Dictionary<string, int> EffectFrames, HashSet<string> ColorNames, string? Directory, HashSet<string> BackdropKeys);
+public sealed record AnimCheckContext(GameData Data, Dictionary<string, int> EffectFrames, HashSet<string> ColorNames, string? Directory, HashSet<string> BackdropKeys,
+	HashSet<string>? FrameNames = null);
 
 // The battle animation scripts (docs/battle-animation.md): the built-in set embedded in the sample, with an asset
 // directory's battle_animation.json (and the files it includes) layered over it entry by entry. Entries stay JSON and
@@ -31,7 +32,7 @@ public sealed partial class BattleAnimation
 	public static readonly string[] NumberKinds = ["damage", "critical", "weak", "resisted", "immune", "miss", "heal", "tp", "revive", "status", "status_resisted", "status_ends", "stat_up",
 		"stat_down", "stat_normal", "no_effect", "felled", "felling_resisted"];
 	public static readonly string[] DefeatKinds = ["fade", "blink", "bands", "slide", "sink", "flash_fade", "frames"];
-	public static readonly string[] TransitionKinds = ["flash", "fade", "wipe", "iris", "tiles", "spiral", "split", "sequence"];
+	public static readonly string[] TransitionKinds = ["flash", "fade", "wipe", "iris", "tiles", "spiral", "split", "sequence", "mosaic"];
 	public static readonly string[] Layers = ["under_figures", "over_figures", "effects", "over_labels", "top"];
 	public static readonly string[] SubjectNames = ["actor", "user", "targets", "hit_targets", "fallen_targets", "party", "enemies", "all", "party_others", "enemies_others", "allies", "changed", "previous_form", "from", "to", "self"];
 	public static readonly string[] Anchors = ["center", "feet", "head", "top", "left", "right", "auto", "place"];
@@ -42,6 +43,8 @@ public sealed partial class BattleAnimation
 		"felling_resisted", "no_effect", "tp"];
 	public static readonly string[] EventCues = ["hit", "miss", "critical", "heal", "status", "enemy_down"];
 	public static readonly string[] Changes = ["join", "merge", "transform", "split", "split_piece", "leave", "self_destruct", "remove_beside"];
+	// The kinds of step `solo` draws only the member choosing or acting in.
+	public static readonly string[] SoloSteps = ["action", "command", "result"];
 
 	public int RateMilli { get; private set; } = BattleClock.DefaultRateMilli;
 	public bool LogRelease { get; private set; }
@@ -49,6 +52,10 @@ public sealed partial class BattleAnimation
 	public (int Count, int Frames)? FlashLimit { get; private set; } = (3, 60);
 	// Event cues a release plays that the whole set turns off: every one (`true`) or the listed ones.
 	public HashSet<string> EventCuesOff { get; } = new(StringComparer.Ordinal);
+	// The kinds of step that draw only the member choosing or acting (settings.solo).
+	public HashSet<string> Solo { get; } = new(StringComparer.Ordinal);
+	// Some select key takes a `/layout:` qualifier, so every lookup tries the stage's layout first.
+	public bool LayoutKeys { get; private set; }
 	public Dictionary<string, string> Select { get; } = new(StringComparer.Ordinal);
 	public Dictionary<string, JsonObject> Scripts { get; } = new(StringComparer.Ordinal);
 	public Dictionary<string, JsonObject> Fragments { get; } = new(StringComparer.Ordinal);
@@ -216,6 +223,11 @@ public sealed partial class BattleAnimation
 				EventCuesOff.Clear();
 				EventCuesOff.UnionWith(CuesOff(off));
 			}
+			if (settings["solo"] is JsonNode solo)
+			{
+				Solo.Clear();
+				Solo.UnionWith(SoloOf(solo));
+			}
 		}
 		void Section(string name, Dictionary<string, JsonObject> into, bool count = false)
 		{
@@ -247,6 +259,7 @@ public sealed partial class BattleAnimation
 				if (node is JsonValue v && v.TryGetValue(out string? id))
 				{
 					Select[key] = id;
+					LayoutKeys |= key.Contains("/layout:", StringComparison.Ordinal);
 					if (!builtin)
 					{
 						FileKeys++;
@@ -311,6 +324,10 @@ public sealed partial class BattleAnimation
 	public static IEnumerable<string> CuesOff(JsonNode? n) => BattleAnimationRun.Bool(n) == true ? EventCues
 		: n is JsonArray a ? a.Select(BattleAnimationRun.Str).OfType<string>() : [];
 
+	// A `solo` value: true for every kind of step, false for none, or the list of them.
+	public static IEnumerable<string> SoloOf(JsonNode? n) => BattleAnimationRun.Bool(n) is bool all ? all ? SoloSteps : []
+		: n is JsonArray a ? a.Select(BattleAnimationRun.Str).OfType<string>() : [];
+
 	// The whole set as one file, for the placeholder export: every key, script, fragment, effect, state, style and
 	// transition, so the export plays as the built-in set does.
 	public void Write(string path)
@@ -319,8 +336,21 @@ public sealed partial class BattleAnimation
 		File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true, IndentCharacter = '\t', IndentSize = 1 }) + "\n");
 	}
 
+	// Every figure animation a pose track, a react track or a figure state names.
+	public IEnumerable<string> PlayedPoses()
+	{
+		IEnumerable<JsonNode?> Values(JsonNode? n) => n is JsonObject o && o.Count == 2 && o.ContainsKey("front") && o.ContainsKey("side") ? [o["front"], o["side"]] : [n];
+		IEnumerable<JsonObject> tracks = Scripts.Values.Concat(Fragments.Values).SelectMany(s => (s["tracks"] as JsonArray ?? []).OfType<JsonObject>())
+			.SelectMany(t => t["reduced"] is JsonObject r ? new[] { t, r } : [t]);
+		return tracks.Where(t => BattleAnimationRun.Str(t["type"]) is "pose" or "react").SelectMany(t => Values(t["pose"]))
+			.Concat(States.Values.SelectMany(s => s.Values).SelectMany(s => Values(s["pose"]))).Select(BattleAnimationRun.Str).OfType<string>();
+	}
+
 	// The script a key names, or null.
 	public string? Find(string key) => Select.TryGetValue(key, out string? id) && Scripts.ContainsKey(id) ? id : null;
+
+	// The script a key names on the stage's layout: `KEY/layout:LAYOUT` first, when the set has such keys.
+	public string? Find(string key, bool front) => (LayoutKeys ? Find($"{key}/layout:{(front ? "front" : "side")}") : null) ?? Find(key);
 
 	// The figure state for a figure's scopes (most specific first), its variant before its base name.
 	public JsonObject? State(IEnumerable<string> scopes, string name)

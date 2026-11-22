@@ -19,6 +19,19 @@ public sealed partial class SampleController
 	private string? _menuOnlyNext;
 	private readonly ScrollList _extrasList = new();
 
+	// The System action: the field menu with the system page as its only tab, whatever its entries list.
+	private void OpenSystem()
+	{
+		_menuOnlyNext = "system";
+		_menuTabNext = 0;
+		PsivResult opened = _s.OpenMenu();
+		if (!opened.Ok)
+		{
+			_menuOnlyNext = null;
+		}
+		Report(opened);
+	}
+
 	private void OpenExtras()
 	{
 		_extrasOverlay = true;
@@ -111,6 +124,7 @@ public sealed partial class SampleController
 				_list.Reset();
 				_sub.Reset();
 				ResetMenuPages();
+				ResetMenuChild();
 			}
 			else
 			{

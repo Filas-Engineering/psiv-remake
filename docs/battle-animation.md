@@ -91,9 +91,9 @@ A start (AT) is a TIME counted from the script's start, or a phase or mark name 
 | Field | What |
 | --- | --- |
 | `version` | required, 1 |
-| `settings` | `rate` (frames a second, default 60), `log_timing` (`step` or `release`, default `step`), `flash_limit` and `event_cues_off` ([Timing control](#timing-control), [Releasing results](#releasing-results)) |
+| `settings` | `rate` (frames a second, default 60), `log_timing` (`step` or `release`, default `step`), `flash_limit` and `event_cues_off` ([Timing control](#timing-control), [Releasing results](#releasing-results)), `solo` ([The member alone](#the-member-alone)) |
 | `weapon_classes` | `equipment:ID` or `category:NAME` to a weapon animation class name |
-| `placements` | `count:N` (1 to 5) or `encounter:ID` to the enemies' places, `[[x, foot], ...]` in logical pixels per formation place (per-layout values allowed); the encounter's entry first; a layout's `enemy_slot_N_x` still wins |
+| `placements` | `count:N` (1 to 8) or `encounter:ID` to the enemies' places, `[[x, foot], ...]` in logical pixels per formation place, or `[x, foot, "front"|"back"]` for a place in a rank (per-layout values allowed); the encounter's entry first, then the exact count, then `count:5` for five or more; a layout's `enemy_slot_N_x` still wins ([Placements](#placements)) |
 | `include` | further files, above |
 | `select` | key to script id: which script plays for a turn, a step, a formation change, a reaction or a battle-level moment ([Selection and chaining](#selection-and-chaining)) |
 | `scripts` | id to script ([Scripts](#scripts)) |
@@ -179,9 +179,16 @@ Rendering is not paletted, so palette-style effects are color transforms applied
 | `add` | `#000000` | added to each channel where the picture is opaque, 0 to 255 (scaled by the pixel's alpha, so transparent pixels stay transparent) |
 | `alpha` | 1 | the picture's opacity, 0 to 1 |
 | `tint` and `amount` | none | the multiply moved `amount` (0 to 1) of the way from white toward `tint` (a multiply-only tint, which is what the table's glow and hurt colors draw) |
-| `palette` | none | `[["#rrggbb", "#rrggbb"], ...]` (up to 64): each opaque pixel of exactly a source color is drawn in its replacement; with `keys` and `"ease": "step"` a palette changes per key |
+| `palette` | none | `[[SOURCE, "#rrggbb"], ...]` (up to 64): each opaque pixel of exactly a source color is drawn in its replacement; with `keys` and `"ease": "step"` a palette changes per key. A source is a `"#rrggbb"` color, or an index (0 to 255) into the palette the picture's manifest entry declares ([`assets.md`](assets.md), "figures"): on figures and sprites only, and left out where the picture declares none or fewer colors |
 
 Brightening uses `add`; darkening uses `multiply`. A transform with an `add` term draws the picture, then its white silhouette tinted with the added color additively.
+
+```json
+{"type": "color", "on": "targets", "at": "effect", "mode": "set", "to": {"palette": [[0, "#40c0ff"], [2, "#2060a0"]]}, "length": 40},
+{"type": "sprite", "at": "effect", "effect": "burst_shock", "spawn": "targets", "color": {"palette": [[0, "#ff40ff"], [1, "#a020a0"]]}}
+```
+
+The first recolors each target's palette entries 0 and 2, whatever colors its picture has there; the second recolors the burst through the strip its effect entry names. Color-matched pairs (`["#73d15e", "#40c0ff"]`) work as before and mix with index pairs.
 
 ### Easing
 
@@ -345,13 +352,16 @@ A full-screen flash: shorthand for a `color` track on the stage.
 | `amplitude` | required | 0 to 32: a number (scaled by `motion_percent`), `"Npx"` (not scaled), or `"$look.shake"` |
 | `decay` | `linear` | `linear` (to 0 over `length`), `none`, `out` |
 | `axis` | `both` | `both`, `x`, `y` |
-| `pattern` | `clock` | `clock`: today's jolt, `sin(clock * 0.09)` and `cos(clock * 0.13)` of the controller's clock; `script`: the same curves of script time, so a seek redraws it exactly |
+| `pattern` | `clock` | `clock`: today's jolt, `sin(clock * 0.09)` and `cos(clock * 0.13)` of the controller's clock in milliseconds; `script`: the same curves of the script's time in milliseconds, so a seek redraws it exactly |
 | `length` | `$phase` | |
 | `reduced` | `damp` | |
-
 | `offsets` | none | per-frame `[dx, dy]` lists for `backdrop`, `figures` and `screen` (both), each frame taking the next entry, repeating |
 
-When several shakes play at once the stage shakes by the largest. `pattern` is read but every shake uses the controller's clock (`script` is not built).
+When several shakes play at once the stage shakes by the largest, with the largest's pattern. The probe `battlejolt` reads the jolt the last frame drew (`-2,1`).
+
+```json
+{"type": "shake", "at": "result", "amplitude": 6, "decay": "none", "pattern": "script", "length": 20}
+```
 
 ### `color`
 
@@ -381,9 +391,18 @@ On `stage` and `frame` a transform is a fill: `add` fills additively, `tint` and
 | Field | What |
 | --- | --- |
 | `effect` | `restore` (crossfade back to the battle's own backdrop over `length`), `scroll` (`speed` `[x, y]` in pixels a frame; the backdrop wraps), `wave` (rows shifted sideways by `amplitude` pixels along a sine of `wavelength` pixels, moving one wavelength every `period`; drawn in bands of `band` rows, 2 to 32, default 4), `offset` (to `by` over `length`, eased), `swap` (crossfade over `length` to `image`, a PNG in the asset directory, or `key`, a backdrop key: `kind:field`, `area:kiln_lower`, `encounter:warden`, `terrain:water`, `generated`), `darken` (shorthand: `color` on the backdrop, `multiply` `#606060`), `tint` (shorthand: `color` on the backdrop with `to`) |
-| `persist` | with `swap`: the swapped picture stays as the backdrop for the rest of the battle (until a `restore`) |
+| `persist` | with `swap`: the swapped picture stays as the backdrop for the rest of the battle (until a `restore`); without it the swapped picture stays after its crossfade to its script's end, or until a later `restore` in the script crossfades back |
 | `loop` | in a looping battle script, repeats with the script |
-| `length` | default to the script's end |
+| `length` | default to the script's end; of a `swap` or `restore`, its crossfade |
+
+Backdrop tracks apply in start order, so a restore crossfades back from the swap before it whatever order the script lists them in. An attack that darkens the stage as it swings and brings the battle's backdrop back as the attacker returns:
+
+```json
+{"id": "dark", "type": "backdrop", "at": "animate", "effect": "swap", "image": "backdrops/lo_swap.png", "length": 6},
+{"id": "light", "type": "backdrop", "at": "back", "effect": "restore", "length": 8}
+```
+
+The probe `backdropfx` reads `swap` from the swap's start, `swap, restore` while the restore crossfades, and `none` after.
 
 ### `sound`
 
@@ -459,8 +478,8 @@ A reaction on each released target from its release frame: `pose`, `state` and `
 | `scale` | `layout` | `layout`: today's factor, 3 screen pixels a file pixel, 4 on enemies in the front layout and on formation changes; a number: that factor; `"xN"`: the layout's factor times N. Either way divided by the sheet's own `scale` and snapped as figures are ([`assets.md`](assets.md)), so every file pixel covers the same whole number of screen pixels |
 | `blend` | `alpha` | `alpha` or `additive` |
 | `color` | none | a CT, or `{"from": CT, "to": CT, "ease": E}` over the instance's life, or `{"keys": [[TIME, CT], ...]}` |
-| `directions` | none | frame lists by travel direction, `left`, `right`, `up`, `down`: the dominant axis of the travel picks one (no rotation is drawn) |
-| `flip` | `auto` | `auto`: mirrored when traveling right and there are no `right` frames; `none`; `x` |
+| `directions` | none | frame lists by travel direction, `left`, `right`, `up`, `down`: the dominant axis of the whole travel (from its `from` to its `to`) picks one, in place of `frames` (no rotation is drawn) |
+| `flip` | `none` | `auto`: mirrored when traveling right and there are no `right` frames; `none`; `x` |
 | `travel` | none | below |
 | `impact` | none | an effect animation (or sheet id) spawned where and when the travel arrives |
 
@@ -473,9 +492,17 @@ A reaction on each released target from its release frame: `pose`, `state` and `
 | `path` | `line` | `line`, `arc` (rising `height`), `wave` (`waves` sine swings of `height` across the line) |
 | `height` | `"0.5h"` | DIST |
 | `ease` | `linear` | |
-| `trail` | none | `count` copies following `gap` frames apart, each `alpha` times the one before |
+| `trail` | none | `count` (default 3) copies of the instance's current frame where it was `gap` (TIME, default 2 frames, at least 1), 2 `gap`, ... ago, each `alpha` (default 0.5) times as opaque as the one before; drawn in flight only, under the instance |
 
 An instance with `travel` lives `frames` plus its `hold_last`; with `spawn: targets` there is one projectile per target, each launched by the track's `stagger`.
+
+```json
+"lo.glob": {"sheet": "burst_heat", "frames": [0, 1, 2], "durations": 3, "loops": -1, "blend": "additive", "flip": "auto",
+	"directions": {"left": [3, 4, 5], "up": [0, 1, 2]},
+	"travel": {"from": "user:center", "frames": 18, "path": "arc", "height": 30, "trail": {"count": 3, "gap": 2, "alpha": 0.5}}}
+```
+
+Thrown by an enemy at a member, in the front layout (the member down and to the left) it shows its `left` frames; in the side layout it flies right, has no `right` frames and is mirrored. The probe `animsprites` reads each sprite instance the last frame drew as `TRACK frame N`, with ` flip` and ` trail` (`glob frame 1 flip trail, glob frame 1 flip`).
 
 ## Figure states
 
@@ -513,7 +540,7 @@ The states the battle plays by itself:
 
 | State | When | Built-in (today's look) |
 | --- | --- | --- |
-| `idle` | always, looping on the controller's clock, each figure 137 ms apart | the figure's `idle` run; a flying enemy in the front layout hovers `size / 5` up, bobbing 5 pixels along `sin((clock + 211 * i) / 420 ms)` |
+| `idle` | always, looping on the controller's clock, each figure 137 ms apart; `idle:flying` first for a flying enemy in the front layout | none: the figure's `idle` run; a flying enemy in the front layout hovers `size / 5` up, bobbing 5 pixels along `sin((clock + 211 * i) / 420 ms)` ([Idle states](#idle-states)) |
 | `choosing` | a member choosing a command | front layout: 12 pixels forward; side: nothing |
 | `attack`, `cast`, `item`, `defend` | through `state` tracks (`$look.animation`) | `attack`: pose `attack` and a lunge of 10 pixels (front) or 16 (side) along `sine` over the phase; `cast` and `item`: their pose and a glow toward the effect's element color, amount `0.5 * sin(pi t)`; `defend`: its pose |
 | `hurt` | the `react:damage` reaction | pose `hurt`, a sideways shake `6 * sin(40 t) * (1 - t)` and a tint toward `#ff786e` at 0.7 for the first 40% |
@@ -525,6 +552,20 @@ The states the battle plays by itself:
 | `transform_in` | the new form of a transform or merge | the old figure fading out over `smooth`, the new one fading in |
 | `victory` | the `step:outcome.victory` script, when it plays it | pose `victory` (else `idle`) |
 | `status:ID` | while the figure shows that status | none |
+
+### Idle states
+
+An `idle` state (and `idle:flying`, tried first for a flying enemy in the front layout) replaces the stage's own idle for the figures of its scope: its `pose` loops in place of the figure's `idle` run, its `motion` (`sine` or `shake`) and `color` (a CT, or a `color` track's fields; a `cycle` cycles) play on the controller's clock read in script units at `settings.rate`, each figure `stagger` (TIME, default `"137ms"`) after the figure before it, and `lift` (DIST) is the hover over its place, its shadow staying on the ground (0 when left out: a flier with an idle state no longer takes the built-in hover). Battle speed does not scale it; it reloads on the next frame; a figure that is down plays none.
+
+```json
+"figures": {
+	"enemy:gel_mite": {"states": {"idle": {"stagger": 10, "motion": {"kind": "sine", "axis": "y", "amplitude": "4px", "period": 40},
+		"color": {"mode": "cycle", "colors": [{}, {"tint": "#80ff80", "amount": 0.4}], "period": 30, "smooth": true}}}},
+	"enemy": {"states": {"idle:flying": {"lift": "0.4h", "motion": {"kind": "sine", "axis": "y", "amplitude": "8px", "period": 60}}}}
+}
+```
+
+The mites sway 4 pixels and tint green in turn, 10 frames apart; every flier hovers 0.4 of its height up, bobbing 8 pixels a second (`flying` lists them; `figuresizes` gives the hover as the bottom's distance above the ground line).
 
 A defeat state may carry `outlast` (TIME): its kind then plays over that length from the fall's release, on through the steps after the result step (the back phase, later turns, the round's end), on the timeline's clock (which battle speed scales and a fast-forward jumps over). The enemy's label, bar and target are gone at the release as before, so `battlesync` and the target lists do not change; another enemy that joins at its formation place ends it.
 
@@ -544,7 +585,7 @@ Defeat kinds, each over the state's `length` (or `outlast`) from the fall's rele
 
 The built-in `transform_in` reproduces what is drawn today: today's code asks for the new form "lit white" with a multiply-only tint, which draws no light. An author gets the light with `"color": {"mode": "flash", "to": {"add": "#ffffff"}}`.
 
-Figure animations in `assets.json`: today a figure entry accepts only the six named animations. With this design an entry may also name any animation `[a-z0-9_]+` that a `pose` track, a figure state or a weapon variant plays. An animation no script and no state plays is a problem (`no battle animation script or figure state plays 'attack_axe'`), as a character pose no script animation plays is today. Back figures take the same names.
+Figure animations in `assets.json`: an entry may name any animation `[a-z0-9_]+` beside the six named ones, which a `pose` track, a `react` track's `pose`, a figure state (a weapon variant's too) or the presentation table plays. With an animation file, an animation none of them plays is a problem (`assets: assets.json: figures[5].animations.flourish: no battle animation script or figure state plays 'flourish'`), as a character pose no script animation plays is. Back figures take the same names.
 
 ## The flashing level
 
@@ -587,8 +628,51 @@ Kinds: `damage`, `critical`, `weak`, `resisted`, `immune`, `miss`, `heal`, `tp`,
 | `stack` | 6 | logical pixels between numbers stacked on one figure, over the text size (a number or `"Npx"`) |
 | `from` | `top` | where it starts: today 26 pixels above the figure's top, 36 below the top of a member seen from behind |
 | `motion: "window"`, `row`, `open`, `pad` | | a framed box at logical row `row` over the target's column, opening sideways over `open` (TIME, default 6 frames), the text once it is open, no rise, no fade; `pad` pixels round the text |
+| `row` | 40 | with `window`: a row, or `{"party": ROW, "enemy": ROW}`, the row for the target's side |
+| `pad` | 6 | with `window`: pixels round the text, or `[x, y]` |
+| `frame` | none | with `window`: a frame style of `styles.json` (`battle`, the battle windows' frame, which takes the UI skin's `battle_frame`); without it the box is the panel color with an edge |
+| `close` | none | with `window`: the box closes sideways over the last `close` (TIME; a `%` is of the life) of its `life` (default to the end of its step), its text gone as it starts, and is gone at the life's end |
 
 A kind without an entry draws exactly as the table did (its size from the layout's `number_size` params, rising `number_rise` over half its life and fading over the last 30%).
+
+```json
+"numbers": {
+	"damage": {"motion": "window", "row": {"party": 360, "enemy": 120}, "pad": [14, 4], "frame": "battle", "open": 4, "close": 8},
+	"heal": {"motion": "window", "row": {"party": 330, "enemy": 120}, "pad": 6, "frame": "battle", "close": "25%", "color": "good"}
+}
+```
+
+Damage on an enemy opens in a battle-framed box at row 120 (on a member at 360), 14 pixels wide of the text and 4 above and below, and closes over its last 8 frames; the `uiframes` probe counts the frame among the layouts' (`battle generated 5`).
+
+## The member alone
+
+`solo` draws only the member choosing or acting, the other members left out of the stage (their places still anchor effects and numbers, and their slots and panels stay), in both layouts. Its value is `true` (every kind of step), `false`, or a list of kinds:
+
+| Kind | Draws only |
+| --- | --- |
+| `command` | the member choosing a command |
+| `action` | in a member's turn, its acting members (every participant of a combination) during `forward`, `banner`, `animate`, `effect`, `back` and the retarget and change steps the turn holds for |
+| `result` | the same during `result` |
+
+`settings.solo` sets it for the battle; a turn script's `solo` (`action` and `result` only, inherited through `extends`; the nearest that has one decides) overrides it for its turn. An enemy's turn draws every member. The `figures` probe lists only the members drawn.
+
+```json
+"settings": {"solo": ["command"]},
+"scripts": {"lo.blade": {"solo": ["action"], "phases": {"forward": 8, "banner": 18, "animate": 12, "effect": 8, "result": 30, "back": 12}, "tracks": []}}
+```
+
+## Placements
+
+`placements` puts the enemies where the file says, by encounter, then by the exact enemy count (`count:1` to `count:8`), then `count:5` for five or more. A place's third value puts it in a rank: `"back"` takes the layout's `enemy_size` for the back rank (`enemy_back`), `"front"` the front's; the foot row also orders them back to front. Six enemies in two ranks, in each layout:
+
+```json
+"placements": {"count:6": {
+	"front": [[340, 430], [640, 430], [940, 430], [490, 330, "back"], [790, 330, "back"], [1090, 330, "back"]],
+	"side": [[180, 360], [360, 360], [540, 360], [270, 270, "back"], [450, 270, "back"], [630, 270, "back"]]
+}}
+```
+
+The probe `enemyplaces` reads each enemy standing, back to front, as `LABEL X FOOT SIZE`.
 
 ## Releasing results
 
@@ -641,7 +725,9 @@ Other keys, each with its own chain:
 * Reactions, per released event on its figure, every matching chain playing: `react:damage`, `react:critical`, `react:miss`, `react:heal`, `react:revive`, `react:status.ID` then `react:status`, `react:status_resisted`, `react:status_ends`, `react:stat`, `react:defeat`, `react:instant_defeat`, `react:felling_resisted`, `react:no_effect`, `react:tp`; each tried as `react:EVENT.ENEMY` first for an enemy figure.
 * Battle level: `battle:transition_in`, `battle:backdrop`, `battle:transition_out`, each tried with `/encounter:ID`, `/area:ID`, `/terrain:floor|water|soft`, `/kind:town|field|dungeon`, `/boss` (an encounter `game.json`'s `bosses` names), `/opening:enemy_first|party_first`, `/vehicle` in that order, then bare.
 
-Every key of the turn's lookup is tried with `/encounter:ID`, then `/count:N`, then bare. Keys are checked against the data: encounter, enemy, ability, item, recipe, status, character and area ids, weapon classes (categories and `weapon_classes` names); notice keys are checked for their form only.
+Every key of the turn's lookup is tried with `/encounter:ID`, then `/count:N`, then bare.
+
+Any key of any kind (turn, step, change, reaction, battle, status) may end in `/layout:front` or `/layout:side`: when the set has such a key, every lookup tries each key with the stage's layout before the key without it (and the `animkey` trace lists those tries), so one file plays a script its own way in one layout: `"ability:spark/layout:side": "lo.spark.side"`. Keys are checked against the data: encounter, enemy, ability, item, recipe, status, character and area ids, weapon classes (categories and `weapon_classes` names); notice keys are checked for their form only.
 
 * Statuses: `status:ID/idle`, a looping script (with `length`) played on every figure that shows the status, on the controller's clock (asleep, unable to act); `status:ID/tick`, a reaction played on every figure that shows the status as each round's banner step starts (the session reports no damage-over-time events, so the tick is per round).
 * `step:recover` (a fallen machine standing up after the battle) and `change:leave` (an enemy gone with no partner, then `change:merge`) are keys of their own.
@@ -675,7 +761,15 @@ The presentation table keeps resolving a look for every turn and change exactly 
 | `sequence` | `phases`: 1 to 8 of `{"color", "steps" (1 to 32, default 1), "step_frames" (default 4 frames), "hold"}` | under `cover` the screen goes to each phase's color in turn from the one before (the scene first), in `steps` steps `step_frames` apart, then holds it `hold`; under `hold` the last color; under `reveal` the last color steps back to the next scene at the last phase's rate. Each step that raises the light by a flash's step (0.25, [Flashes by effect](#flashes-by-effect)) counts toward the flash limit; under reduced flash or past the limit the sequence plays as a fade to its last color |
 | `split` | `color`, `steps`, `step_frames`, `speed` (pixels a frame), `frames`, `axis` (`horizontal`, default, or `vertical`) | a (stepped) fade over the cover; in `reveal` the backdrop slides in from the left and the figures, their labels and bars from the right, `speed` pixels a frame for `frames`; with `vertical` the backdrop drops in from above and the figures and labels rise from below |
 
-`fade` and `split` take `steps` (2 to 32) and `step_frames` (TIME): the cover moves one level every `step_frames`, `steps` levels to the color and back; `cover_step_frames` and `reveal_step_frames` give each half its own rate (each falls back to `step_frames`). `mosaic` is not built.
+`fade` and `split` take `steps` (2 to 32) and `step_frames` (TIME): the cover moves one level every `step_frames`, `steps` levels to the color and back; `cover_step_frames` and `reveal_step_frames` give each half its own rate (each falls back to `step_frames`).
+
+`mosaic` takes `block` (8 to 64, default 32) and `steps` (default 4): under `cover` every picture of the scene is drawn in blocks growing to `block` logical pixels in `steps` levels, under `hold` the `color` covers the frame, under `reveal` the next scene sharpens from `block` the same way. Nothing captures the frame, so each picture (a tile, a figure, a window's frame) breaks into blocks of its own and text stays sharp. The probe `transition` adds the block (`mosaic cover 13/16 block 32`).
+
+```json
+"transitions": {"lo.mosaic": {"kind": "mosaic", "block": 32, "steps": 4, "color": "#000000"}},
+"select": {"battle:transition_in/encounter:horde": "lo.mosaic"},
+"scripts": {"lo.mosaic": {"phases": {"cover": 16, "hold": 4, "reveal": 16}, "tracks": [{"type": "transition", "transition": "lo.mosaic"}]}}
+```
 
 ```json
 "transitions": {"drop": {"kind": "split", "axis": "vertical", "steps": 4, "cover_step_frames": 2, "reveal_step_frames": 5, "speed": 12, "frames": 20}}
@@ -1192,9 +1286,9 @@ A test of the Spark example: `animlog mark`, a round, then `expect animloghas cu
 
 With `--dev`, the previewer's picker gains a third list, every select key and script, beside events and the table's entries ([`dev-tools.md`](dev-tools.md), "Previewer").
 
-* `preview anim KEY|SCRIPT [layout front|side] [enemy ID]`: plays it on dummies, as table entries play today (two members, three dummies of the data's first enemy or of `enemy`), from synthetic events shaped like the script's key (a transform for `change:transform.ENEMY`, a felling for `react:instant_defeat`, a combination of two members for `combo:`). A battle script plays over a captured field frame.
+* `preview anim KEY|SCRIPT [layout front|side] [enemy ID] [count N] [targets N]`: plays it on dummies, as table entries play today (two members, `count` dummies, default three, of the data's first enemy or of `enemy`; `targets` of them hit by a damaging action), from synthetic events shaped like the script's key (a transform for `change:transform.ENEMY`, a felling for `react:instant_defeat`, a combination of two members for `combo:`, the first dummy, of that enemy, acting on the members for `enemy:ID/ACTION`, the first member using the item, on a member when it heals, for `item:ID`). A battle script plays over a captured field frame.
 * `.` steps one frame forward (as now); `,` steps one frame back, which statelessness allows; `anim seek N` jumps to frame N; `anim step N` steps N frames, negative too; Page Down replays, End stops.
-* The `anim` overlay (`overlay anim`, on by default while previewing a script) draws a frame ruler under the stage: the phases as labeled spans, marks, every track as a bar from its start to its end with its id, sound frames and release frames as ticks, and the current frame as a line; beside it the subjects' anchors as small crosses and each figure's offset.
+* The `anim` overlay (`overlay anim [on|off]` toggles it; on by default while previewing a script, and kept as set through seeks) draws a frame ruler under the stage: the phases as labeled spans, marks, every track as a bar from its start to its end with its id, sound frames and release frames as ticks, and the current frame as a line; beside it the subjects' anchors as small crosses and each figure's offset.
 * `anim why KEY` in the console prints the lookup chain for a key and `anim expand KEY` the expanded script.
 * Probes: `preview` reads `anim KEY frame N`; `preview.KEY` reads the previewed stage's probes (`preview.released`).
 
@@ -1219,13 +1313,15 @@ The dialogue's tags table ([`ui-layout.md`](ui-layout.md), "Control tags") has a
 
 The stage (`SampleController.BattleStage.cs`) draws every figure, sprite, shake and flash from the scripts; the formulas it had are the built-in set's data. The proof: every headless run's transcript and per-frame digest is byte-identical to the round before this one with no animation file, and the round trip plays the export's `battle_animation.json` with the same digests.
 
-Tests: `scripts/make_anim_assets.py` writes the example set (original placeholder animations: every track type and field on the placeholder abilities and figures, an fx red flash and dusk tint, and the 59.92 Hz variant with release log timing); `scripts/battle_anim.txt` asserts its frames from the animation log and probes on the front data copy (intro, blade, heal, hound, silence tick, staff, boss form, Frost Pane's releases on 53, 59 and 65, a hurry, a fast-forward, the side layout, the previewer with the combination and the two-hand variants, `anim expand`, the 59.92 Hz reload mid-battle with log lines on their release frames); `scripts/battle_anim_layouts.txt` plays it over the 640x480 and 320x224 layout sets; `scripts/dialogue_fx.txt` plays the fx and music tags. `make_anim_assets.py --more` writes the set of the later additions over a 50% `motion_percent` front layout, and `scripts/battle_anim_more.txt` asserts it on the front data copy: `"40px"` against scaled distances (`figure.LABEL` offsets 40 and 20), `party_others`, a hidden pose lifted (the `figures` probe), the backdrop's added light (`backdropfx`), the flash limit (the run's transcript holds the dropped line), a 6-pixel `"6px"` shake (`battleshake`), release cues off (`expect noaudio cue hit`), a defeat outlasting its step into the next turn, reduced flash dropping a sprite and replacing a flash (`animtracks`), the defend's and the vehicle's actor keys, `item:storm_rod`, and a vertical split into a vehicle battle.
+Tests: `scripts/make_anim_assets.py` writes the example set (original placeholder animations: every track type and field on the placeholder abilities and figures, an fx red flash and dusk tint, and the 59.92 Hz variant with release log timing); `scripts/battle_anim.txt` asserts its frames from the animation log and probes on the front data copy (intro, blade, heal, hound, silence tick, staff, boss form, Frost Pane's releases on 53, 59 and 65, a hurry, a fast-forward, the side layout, the previewer with the combination and the two-hand variants, `anim expand`, the 59.92 Hz reload mid-battle with log lines on their release frames); `scripts/battle_anim_layouts.txt` plays it over the 640x480 and 320x224 layout sets; `scripts/dialogue_fx.txt` plays the fx and music tags. `make_anim_assets.py --leftovers` writes the set of the last additions on the export (number windows, `solo`, palettes by index, idle states, a backdrop restored inside an attack, six enemies placed in two ranks, a projectile's trail and directions, a script shake, a mosaic, a layout key), and `scripts/battle_anim_leftovers.txt` asserts it on the front data copy in both layouts, with the previewer's enemy actors, item key, counts, ruler toggle and the windows after a seek, and the fliers' lift read again mid-battle; `scripts/battle_anim_side.txt` plays the example set in the side layout (intro, blade, heal window, hound, tick, staff, boss form, Frost Pane's releases, instant defeat, victory and tiles out) and the two-weapon variants and Twin Arc live through `equip` and `combo` in both layouts. `make_anim_assets.py --more` writes the set of the later additions over a 50% `motion_percent` front layout, and `scripts/battle_anim_more.txt` asserts it on the front data copy: `"40px"` against scaled distances (`figure.LABEL` offsets 40 and 20), `party_others`, a hidden pose lifted (the `figures` probe), the backdrop's added light (`backdropfx`), the flash limit (the run's transcript holds the dropped line), a 6-pixel `"6px"` shake (`battleshake`), release cues off (`expect noaudio cue hit`), a defeat outlasting its step into the next turn, reduced flash dropping a sprite and replacing a flash (`animtracks`), the defend's and the vehicle's actor keys, `item:storm_rod`, and a vertical split into a vehicle battle.
 
 ### Probes and verbs as built
 
 * `anim`: `SCRIPT KEY frame N/TOTAL PHASE` (`ex.spark ability:spark frame 34/102 animate`), `-` outside playback. `animkey`: the step's lookup, `KEY SCRIPT|-` joined by ` | `. `animframe`, `animtracks` (`ID TYPE FRAME/LENGTH`, reactions as `KEY:ID TYPE`), `released` (`RELEASED/TOTAL [forced N] LABEL RESULT @FRAME, ...`, counting main results and formation changes: `Tide Colossus Core becomes Tide Colossus Core @48`), `figure.LABEL` with `_` for the label's spaces (`pose hurt frame 5 offset 0,-24 color #ff786e alpha 1.00 defeat`), `transition` (`split reveal 4/20`), `backdropfx` (`tint, wave`).
+* `battlejolt` (the jolt the last frame drew, `X,Y`), `enemyplaces` (each enemy standing, back to front, `LABEL X FOOT SIZE`), `animsprites` (each sprite instance drawn, `TRACK frame N [flip] [trail]`); `figure.LABEL` ends in `palette N` while N palette entries recolor it.
+* The headless verbs `equip MEMBER PIECE [SLOT]` (a piece worn through the session's equip call, the field menu opened around it; `left_hand` for a second weapon) and `combo RECIPE` (while the members choose: each of the recipe's abilities set as the command of a member who knows it, on the first enemy standing or on the member for an ally's ability, the others defending, and the round resolved) play the weapon variants and a combination's script live.
 * `animlog mark`, `expect animlog ENTRY | ...`, `expect animloghas TEXT`: `start ID (KEY) @0`, `phase NAME @F`, `cue ID @F` (a reaction's cue at its own frame), `release LABEL RESULT @F`, `forced LABEL RESULT @F`, `tick STATUS LABEL @F`, `hurry @A>B`, `skip @A>B`, `seek @F`, `preview ID (KEY)`, `end @F`.
-* Console (`--dev`): `preview anim KEY|SCRIPT [layout front|side] [enemy ID]`, `anim seek N`, `anim step N` (negative too), `anim why KEY`, `anim expand KEY` (also logged as `anim: JSON`). In the previewer `.` steps a frame, `,` steps one back (the preview plays again quietly up to the frame), Page Down replays, End stops; the `anim` overlay draws the frame ruler (phases, the first seven tracks, release ticks, the frame). `preview` reads `anim KEY frame N`. A combination key previews on the first two members; a change key adds the change after the results; a reaction script plays on the dummies' damage.
+* Console (`--dev`): `preview anim KEY|SCRIPT [layout front|side] [enemy ID] [count N] [targets N]`, `anim seek N`, `anim step N` (negative too; after a seek the battle layout's windows show as playing there would have, none still opening or closing), `anim why KEY`, `anim expand KEY` (also logged as `anim: JSON`), `overlay anim [on|off]`. In the previewer `.` steps a frame, `,` steps one back (the preview plays again quietly up to the frame), Page Down replays, End stops; the `anim` overlay draws the frame ruler (phases, the first seven tracks, release ticks, the frame). `preview` reads `anim KEY frame N`. A combination key previews on the first two members; a change key adds the change after the results; a reaction script plays on the dummies' damage.
 
 ## Changes from the first draft
 
@@ -1240,6 +1336,8 @@ Renamed or changed meaning:
 * `layer: over_figures` draws over a vehicle battle's overlay (draft: under it).
 * Transitions draw the field live under `cover` (draft: a captured picture of the last field frame).
 * Reactions end with their step, whatever their `length`.
+* An effect animation's `flip` defaults to `none` (draft: `auto`), so a projectile flying right is drawn as before; `auto` mirrors it.
+* A `swap` without `persist` keeps its picture after its crossfade to its script's end (it went back at the crossfade's end).
 
 Added:
 
@@ -1252,14 +1350,15 @@ Added:
 * Later: the `"Npx"` and `"Nm"` distance units; subjects `party_others`, `enemies_others`, `allies`; `pose: "shown"` and a later pose lifting `hidden`; the whole color transform on the backdrop; `reduced` on sprites and replacement track objects; the flash limit with `settings.flash_limit`; `event_cues_off` in `settings` and scripts; a defeat state's `outlast`; `item:PIECE`; `/vehicle:ID` on ability and shape keys and `/character:ID` on the shape keys of a member's defend; `split`'s `axis`, and `cover_step_frames` and `reveal_step_frames` on `fade` and `split`.
 * The dialogue tags' `fx`, `music_pause` and `music_resume` actions.
 * Probes `animkey` as a trace, `figure.LABEL`, `transition`, `backdropfx`; log entries `tick`, `seek`, `preview`; console `anim seek`, `anim step`.
+* Last: number windows' `row` per side, `pad` as `[x, y]`, `frame` and `close`; `solo` in `settings` and turn scripts; palette sources by index into a figure's or effect's declared `palette`; `idle` and `idle:flying` states with `lift` and `stagger`; placements `count:6` to `count:8` and ranks; the `/layout:` qualifier on every key; the previewer's `count`, `targets`, enemy actors, item users, `overlay anim` and windows settled after a seek; probes `battlejolt`, `enemyplaces`, `animsprites`; headless verbs `equip` and `combo`.
 
-Removed (not built, below): `mosaic`, the capture calls, the per-item `hit_flash` and `hit_fade` fields.
+Removed (not built, below): the capture calls, the per-item `hit_flash` and `hit_fade` fields.
 
 ## Not built
 
-* `shake.pattern: "script"` (every shake reads the controller's clock), `travel.trail`, `directions` and `flip: "auto"` (only `flip: "x"`), the `mosaic` transition and capturing frames, a rotating swirl.
-* The `idle` figure state as data (the idle frames and a flyer's hover stay the stage's code; `status:ID` states and `status:ID/idle` scripts are built).
-* The problem for a figure animation no script or state plays, and checking notice keys against a list the session publishes.
+* Capturing frames (the mosaic breaks each picture on its own) and a rotating swirl.
+* An `idle` state's `move` kinds other than `sine` and `shake` (a hop that repeats, say).
+* Checking notice keys against a list the session publishes.
 * The previewer's anchor crosses and offsets on the ruler, and previewing a battle-level transition over the field.
 * Per-item `hit_flash` and `hit_fade` fields for the strip (the built-in layouts keep the step's; a member's `hit` is true once its damage is released).
 * Release frames before the `result` phase are moved to its start, as designed; nothing moves the step's log lines but `log_timing: release`.

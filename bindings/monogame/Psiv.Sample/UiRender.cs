@@ -65,6 +65,8 @@ public sealed class UiRenderer
 	// Transitions run this much faster (the battle's speed), in percent.
 	public int TimeScale { get; set; } = 100;
 	public List<UiDrawn> Drawn { get; } = [];
+	// The selected tab of the tabs element drawn last, on its surface: for a list the code opens under it.
+	public (int X, int Y, int W, int H) SelectedTab { get; private set; }
 	public List<UiDrawnElement> DrawnElements { get; } = [];
 	// Each frame style drawn this frame: how it drew (`generated`, `skin`, `nine_slice`, `fill`, `outline`) and how often.
 	public Dictionary<string, (string How, int Count)> FramesDrawn { get; } = [];
@@ -78,6 +80,54 @@ public sealed class UiRenderer
 		DrawnElements.Clear();
 		FramesDrawn.Clear();
 	}
+
+	// A frame style of styles.json drawn around a rectangle, as a window or a box takes it.
+	public void DrawFrame(string name, IDrawSurface surface, Rectangle rect, float opacity)
+	{
+		if (!Styles.Frames.TryGetValue(name, out UiFrameStyle? f))
+		{
+			return;
+		}
+		NineSliceImage? slice = f.Type == "nine_slice" ? SliceImage?.Invoke(f.Image!, f.Border, f.Scale) : null;
+		if (f.Type != "none")
+		{
+			string how = f.Type is "generated" or "nine_slice" && slice is null ? Style.Skin?.Frame is null ? "generated" : "skin" : f.Type;
+			FramesDrawn[name] = (how, FramesDrawn.GetValueOrDefault(name).Count + 1);
+		}
+		switch (f.Type)
+		{
+		case "generated" when f.Skin == "battle" && Style.Skin?.BattleFrame is { } battle:
+			Style.NineSlice(surface, battle, rect.X, rect.Y, rect.Width, rect.Height, Color.White * opacity);
+			break;
+		case "generated":
+			if (opacity == 1f)
+			{
+				Style.Box(surface, rect.X, rect.Y, rect.Width, rect.Height);
+			}
+			else
+			{
+				Style.Box(surface, rect.X, rect.Y, rect.Width, rect.Height, opacity);
+			}
+			break;
+		case "nine_slice" when slice is not null:
+			Style.NineSlice(surface, slice, rect.X, rect.Y, rect.Width, rect.Height, Color.White * opacity);
+			break;
+		case "nine_slice":
+			Style.Box(surface, rect.X, rect.Y, rect.Width, rect.Height, opacity);
+			break;
+		case "fill":
+			surface.Fill(rect.X, rect.Y, rect.Width, rect.Height, Run.Fade(ColorOf(f.Color ?? "panel"), opacity));
+			break;
+		case "outline":
+			Style.Frame(surface, rect.X, rect.Y, rect.Width, rect.Height, Run.Fade(ColorOf(f.Color ?? "panel_edge"), opacity), f.Thickness);
+			break;
+		}
+	}
+
+	// The next time the screen draws, every window shows as it would long after it opened or closed: no transition runs.
+	public void Settle(string screen) => _settle.Add(screen);
+
+	private readonly HashSet<string> _settle = [];
 
 	public Color ColorOf(string name) => Styles.Colors.TryGetValue(name, out Color c) ? c : name.StartsWith('#') ? UiReader.ParseHex(name) : Color.Magenta;
 
@@ -143,7 +193,7 @@ public sealed class UiRenderer
 		_lastDrawn[screen] = _frame;
 		try
 		{
-			new Run(this, layout, s, t, ctx).Draw(fresh);
+			new Run(this, layout, s, t, ctx).Draw(fresh, _settle.Remove(screen));
 		}
 		catch (Exception e) when (!_failed.Contains(screen) && !Set.IsDefault)
 		{
@@ -253,7 +303,7 @@ public sealed class UiRenderer
 			return _rects[w.Name] = new Rectangle(x, y, width, height);
 		}
 
-		public void Draw(bool fresh)
+		public void Draw(bool fresh, bool settle)
 		{
 			foreach (UiWindow w in layout.Windows.OrderBy(w => w.Z))
 			{
@@ -268,6 +318,10 @@ public sealed class UiRenderer
 					if (!had || state.Visible != visible)
 					{
 						state = (visible, had || visible ? r.ClockMs : int.MinValue / 2, visible ? rect : state.Rect);
+					}
+					if (settle)
+					{
+						state.ChangedMs = int.MinValue / 2;
 					}
 					else if (visible)
 					{
@@ -405,52 +459,10 @@ public sealed class UiRenderer
 		private void Frame(UiWindow w, Rectangle rect, float fade)
 		{
 			float opacity = (float)(w.Opacity?.Eval(Root()).Number ?? 1.0) * fade;
-			FrameStyle(w.Frame, t, rect, opacity);
+			r.DrawFrame(w.Frame, t, rect, opacity);
 		}
 
-		private void FrameStyle(string name, IDrawSurface surface, Rectangle rect, float opacity)
-		{
-			if (!r.Styles.Frames.TryGetValue(name, out UiFrameStyle? f))
-			{
-				return;
-			}
-			NineSliceImage? slice = f.Type == "nine_slice" ? r.SliceImage?.Invoke(f.Image!, f.Border, f.Scale) : null;
-			if (f.Type != "none")
-			{
-				string how = f.Type is "generated" or "nine_slice" && slice is null ? Style.Skin?.Frame is null ? "generated" : "skin" : f.Type;
-				r.FramesDrawn[name] = (how, r.FramesDrawn.GetValueOrDefault(name).Count + 1);
-			}
-			switch (f.Type)
-			{
-			case "generated" when f.Skin == "battle" && Style.Skin?.BattleFrame is { } battle:
-				Style.NineSlice(surface, battle, rect.X, rect.Y, rect.Width, rect.Height, Color.White * opacity);
-				break;
-			case "generated":
-				if (opacity == 1f)
-				{
-					Style.Box(surface, rect.X, rect.Y, rect.Width, rect.Height);
-				}
-				else
-				{
-					Style.Box(surface, rect.X, rect.Y, rect.Width, rect.Height, opacity);
-				}
-				break;
-			case "nine_slice" when slice is not null:
-				Style.NineSlice(surface, slice, rect.X, rect.Y, rect.Width, rect.Height, Color.White * opacity);
-				break;
-			case "nine_slice":
-				Style.Box(surface, rect.X, rect.Y, rect.Width, rect.Height, opacity);
-				break;
-			case "fill":
-				surface.Fill(rect.X, rect.Y, rect.Width, rect.Height, Fade(r.ColorOf(f.Color ?? "panel"), opacity));
-				break;
-			case "outline":
-				Style.Frame(surface, rect.X, rect.Y, rect.Width, rect.Height, Fade(r.ColorOf(f.Color ?? "panel_edge"), opacity), f.Thickness);
-				break;
-			}
-		}
-
-		private static Color Fade(Color c, float fade) => fade == 1f ? c : c * fade;
+		internal static Color Fade(Color c, float fade) => fade == 1f ? c : c * fade;
 
 		private Color ColorProp(UiElement e, string name, string fallback, Scope scope)
 		{
@@ -567,7 +579,7 @@ public sealed class UiRenderer
 				break;
 			case "box":
 				var box = new Rectangle(X(), Y(), Wd(), Ht());
-				FrameStyle(e.S("frame") ?? "panel", surface, box, (float)(e.E("opacity")?.Eval(scope).Number ?? 1.0) * fade);
+				r.DrawFrame(e.S("frame") ?? "panel", surface, box, (float)(e.E("opacity")?.Eval(scope).Number ?? 1.0) * fade);
 				Record(e, box);
 				break;
 			case "plate":
@@ -601,7 +613,10 @@ public sealed class UiRenderer
 				Widgets.Hints(surface, X(), Y(), Wd(), Str(e, scope) ?? "");
 				break;
 			case "tabs":
-				Widgets.Tabs(surface, X(), Y(), Wd(), [.. Items(e.E("items")!.Eval(scope).Raw).Select(i => i?.ToString() ?? "")], e.E("selected")?.Int(scope) ?? 0, r.Px);
+				int Tab(string name, int fallback) => layout.Params.GetValueOrDefault(name) is { } p ? p.Int(scope) : fallback;
+				(int tabX, int tabW) = Widgets.Tabs(surface, X(), Y(), Wd(), [.. Items(e.E("items")!.Eval(scope).Raw).Select(i => i?.ToString() ?? "")], e.E("selected")?.Int(scope) ?? 0,
+					r.Px, Tab("tab_h", 32), Tab("tab_pad", 28), Tab("tab_gap", 8), Tab("tab_text_y", 5));
+				r.SelectedTab = (tabX, Y(), tabW, r.Px(Tab("tab_h", 32)));
 				break;
 			case "scroll_bar":
 				Widgets.ScrollBar(surface, X(), Y(), Ht(), e.E("top")?.Int(scope) ?? 0, e.E("rows")?.Int(scope) ?? 1, Math.Max(1, e.E("count")?.Int(scope) ?? 1));

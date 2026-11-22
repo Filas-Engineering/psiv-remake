@@ -8,7 +8,10 @@ a plain line, one starting with `{narration}`, a speaker's line with `{narration
 `{narration:off}`, lines under the still pictures `chart` and `tower` with `picture_hide` taking the top one at a time,
 and a `tale.` key.
 
-Usage: make_narration_data.py GAME_DATA CORE_DATA OUT [--routing]
+With --nowait (scripts/narration_nowait.txt) an event `nowait` plays two narration lines tagged
+`{narration:nowait}`, then a plain one, then a speaker's line.
+
+Usage: make_narration_data.py GAME_DATA CORE_DATA OUT [--routing] [--nowait]
 
 OUT gets game/data and core/data side by side, where game.json's core_data looks.
 """
@@ -88,22 +91,46 @@ ROUTING_STRINGS = {"en": {
 }}
 
 
+NOWAIT_EVENT = """
+# Test-only (scripts/make_narration_data.py --nowait): lines that go on by themselves under the press mode.
+event nowait skippable
+	narrate @nowait.tide
+	narrate @nowait.gulls
+	narrate @nowait.still
+	say guide @nowait.guide
+end
+"""
+
+NOWAIT_STRINGS = {"en": {
+	"nowait.tide": "{narration:nowait}The tide turned at noon.",
+	"nowait.gulls": "{narration:nowait}The gulls went quiet.",
+	"nowait.still": "Then nothing moved at all.",
+	"nowait.guide": "Strange weather.",
+}, "ja": {
+	"nowait.tide": "{narration:nowait}正午に潮が変わった。",
+	"nowait.gulls": "{narration:nowait}カモメが静かになった。",
+	"nowait.still": "それから何も動かなかった。",
+	"nowait.guide": "妙な天気だ。",
+}}
+
+
 def main():
 	game, core, out = (Path(a) for a in sys.argv[1:4])
 	routing = "--routing" in sys.argv[4:]
+	nowait = "--nowait" in sys.argv[4:]
 	if out.exists():
 		shutil.rmtree(out)
 	shutil.copytree(game, out / "game" / "data")
 	shutil.copytree(core, out / "core" / "data")
 	data = out / "game" / "data"
-	(data / "events" / "narration.ev").write_text(EVENT.lstrip("\n") + (ROUTING_EVENT if routing else ""))
+	(data / "events" / "narration.ev").write_text(EVENT.lstrip("\n") + (ROUTING_EVENT if routing else "") + (NOWAIT_EVENT if nowait else ""))
 	game_file = data / "game.json"
 	game_json = json.loads(game_file.read_text())
 	game_json["events"].append("events/narration.ev")
 	game_file.write_text(json.dumps(game_json, indent="\t", ensure_ascii=False) + "\n")
 	for language in game_json["languages"]:
 		table = data / language["strings"]
-		strings = dict(STRINGS[language["code"]], **(ROUTING_STRINGS[language["code"]] if routing else {}))
+		strings = dict(STRINGS[language["code"]], **(ROUTING_STRINGS[language["code"]] if routing else {}), **(NOWAIT_STRINGS[language["code"]] if nowait else {}))
 		lines = "".join(f"{key} = {text}\n" for key, text in strings.items())
 		table.write_text(table.read_text().rstrip("\n") + "\n\n" + lines)
 

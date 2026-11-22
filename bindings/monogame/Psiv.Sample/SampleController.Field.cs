@@ -94,6 +94,8 @@ public sealed partial class SampleController
 	}
 
 	private WalkStep? _walk;
+	// The area the walk under way began in; a warp, travel or event that changes the area ends it.
+	private string _walkArea = "";
 	// The directions held, the latest pressed last, and the one pressed during the current step, which goes next.
 	private readonly List<Direction> _heldDirections = [];
 	private Direction _bufferedDirection = Direction.None;
@@ -164,6 +166,10 @@ public sealed partial class SampleController
 	// milliseconds faster, so the session walks a cell per its own step time while the drawn step is shorter.
 	private void RealtimeWalk(int dtMs, ActionInput input)
 	{
+		if (_walk is not null && _s.FieldInfo()?.AreaId != _walkArea)
+		{
+			EndWalk();
+		}
 		_heldDirections.RemoveAll(d => !input.Down(DirectionActions.First(x => x.Direction == d).Action));
 		foreach ((GameAction action, Direction direction) in DirectionActions.Where(x => input.Down(x.Action) && !_heldDirections.Contains(x.Direction)))
 		{
@@ -243,7 +249,15 @@ public sealed partial class SampleController
 				_s.Face(next);
 			}
 			(int x, int y) = StepFrom(f.LeaderX, f.LeaderY, next);
-			if (SessionRun ? (f.StepMask & (1 << (int)next)) == 0 : !Enterable(view, x, y))
+			// A docked platform is entered though its cell is not walkable, so where there are platforms the session's step
+			// mask says where a step goes; while one carries the party the mask is 0 and the held input waits for the dock.
+			bool masked = SessionRun || f.RidingPlatform.Length > 0 || _s.Platforms().Count > 0;
+			if (f.RidingPlatform.Length > 0 && (f.StepMask & (1 << (int)next)) == 0)
+			{
+				Carry(left);
+				return;
+			}
+			if (masked ? (f.StepMask & (1 << (int)next)) == 0 : !Enterable(view, x, y))
 			{
 				// Blocked, or a visible enemy there: the session turns the leader, or starts the battle.
 				Feed(next, left);
@@ -255,11 +269,13 @@ public sealed partial class SampleController
 				int length = Math.Max(1, _running ? f.RunStepMs : f.LeaderStepMs);
 				int gone = Math.Clamp(f.StepProgressMs, 0, length - 1);
 				_walk = new WalkStep(next, x, y, gone, length, Math.Max(1, f.StepMs) * 100 / length, led: true);
+				_walkArea = _s.FieldInfo()?.AreaId ?? "";
 				LandWith(_walk, f);
 				_field.LeaderStep = (x, y, _walk.LengthMs, gone);
 				continue;
 			}
 			_walk = new WalkStep(next, x, y, 0, Math.Max(1, f.LeaderStepMs * 100 / percent), percent, led: true);
+			_walkArea = _s.FieldInfo()?.AreaId ?? "";
 			LandWith(_walk, f);
 			_field.LeaderStep = (x, y, _walk.LengthMs, 0);
 		}
@@ -312,6 +328,7 @@ public sealed partial class SampleController
 			{
 				int gone = Math.Clamp(moved.ConveyorStepMs > 0 ? moved.ConveyorProgressMs : 0, 0, f.ConveyorStepMs - 1);
 				_walk = new WalkStep(Direction.None, moved.LeaderX, moved.LeaderY, gone, f.ConveyorStepMs, 100, led: false);
+				_walkArea = _s.FieldInfo()?.AreaId ?? "";
 				_field.LeaderStep = (moved.LeaderX, moved.LeaderY, f.ConveyorStepMs, gone);
 			}
 			return;
@@ -320,6 +337,7 @@ public sealed partial class SampleController
 			_data.BeltMsAt(f.AreaId, f.LeaderX, f.LeaderY, _s.Flag) is int beltMs)
 		{
 			_walk = new WalkStep(Direction.None, now.LeaderX, now.LeaderY, 0, beltMs, 100, led: false);
+			_walkArea = _s.FieldInfo()?.AreaId ?? "";
 			_field.LeaderStep = (now.LeaderX, now.LeaderY, beltMs, 0);
 		}
 	}
@@ -494,6 +512,10 @@ public sealed partial class SampleController
 		{
 			OpenExtras();
 		}
+		else if (input.Pressed(GameAction.System) && SystemActionOn)
+		{
+			OpenSystem();
+		}
 		else if (input.Pressed(GameAction.QuestLog))
 		{
 			_questOverlay = true;
@@ -540,6 +562,10 @@ public sealed partial class SampleController
 		{
 			OpenExtras();
 		}
+		else if (input.Pressed(GameAction.System) && SystemActionOn)
+		{
+			OpenSystem();
+		}
 		else if (input.Pressed(GameAction.QuestLog))
 		{
 			_questOverlay = true;
@@ -580,6 +606,7 @@ public sealed partial class SampleController
 			lineup.Add(follower);
 		}
 		_field.FollowersBehind = Ui.ParamText("field", "followers_arrive", UiData(), "stacked") == "behind";
+		_field.Platforms = _s.Platforms();
 		_field.Track(view, _clockMs, lineup);
 		(float X, float Y)? focus = SceneFocus(lineup) ?? (_camera is null ? null : CameraFocus(view));
 		_field.Draw(s, art, view, _clockMs, lineup, focus, ShakeOffset(), Layout.Styles.Param("field_cell"));

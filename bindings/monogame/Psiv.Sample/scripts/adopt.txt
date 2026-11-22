@@ -1,0 +1,141 @@
+# Library state the sample now follows (make_adopt_data.py, make_adopt_assets.py), from saves of the scripted playthrough
+# on that data copy, with --dev: the title's Load by CanLoad, Reed Path's name variant in the arrival banner, the status
+# page's member detail fields (attack, base stats, kind, total experience and the experience bar of ExperienceForLevel),
+# a skill's maximum uses beside its uses, the target picker greying out the ally the session refused (Mend cannot reach
+# the machine Cogwright), floating numbers as applied (the default: Mend on a full fighter floats +0) and, with
+# alt/battle_front_rolled.json swapped in, as rolled; then a script's walk of the leader (`lead_walk`) with the members
+# trailing it; a warp half way through a step. With --window the shot lines save screenshots under
+# build/shots/adopt/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 2
+expect state uifield.title.can_load true
+cmd load manual_1
+wait 4
+expect screen Field
+
+# The banner takes the area's name as the session gives it: the variant once the scout has joined.
+dev warp reed_path west_gate
+wait 2
+expect state banner Reed Path Lookout
+expect state area Reed Path Lookout
+shot build/shots/adopt/banner_variant.png
+
+# The status page binds the member detail fields.
+press M
+expect screen Menu
+expect state tab Status
+press Enter
+wait 1
+expect state page stats
+expect state uifield.menu_status.attack 22
+expect state uifield.menu_status.base_strength 18
+expect state uifield.menu_status.kind living
+expect state uifield.menu_status.total_experience 134
+expect state uifield.menu_status.experience_for_level 145
+shot build/shots/adopt/status_detail.png
+press Escape
+press Escape
+wait 2
+expect screen Field
+
+# The Cogwright joins; in battle the fighter's skill shows its uses of its maximum; the session refuses the medic's Mend
+# on it, and the picker stays open with it greyed out (Confirm on it again does nothing).
+dev warp ember_steps west_gate
+wait 2
+dev event steps_tinker
+pressuntil Enter Field 100
+dev battle training
+waitstate 300 battlephase Command
+press Down 2
+press Enter
+expect state battlemenu [Focus Shot x3/3]
+shot build/shots/adopt/skill_uses.png
+press Enter
+press Enter
+press Enter
+press Enter
+press Down
+press Enter
+expect statehas battlemenu [Mend (3 TP)]
+press Enter
+expect state battlemenu [Bryn] | Test Mystic | Test Medic | Test Scout | Test Cogwright
+expect state battleunusable -
+press Down 4
+press Enter
+wait 1
+expect state battlephase Target
+expect state battleunusable Test Cogwright
+expect statehas battlelog Mend would do nothing to Test Cogwright.
+shot build/shots/adopt/target_refused.png
+press Enter
+expect state battlephase Target
+press Up 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 numbers Bryn +0 heal
+dev win
+waitstate 900 battlephase Ended
+press Enter
+wait 2
+expect screen Field
+
+# The same round with the floating numbers as rolled: Mend's roll on the full fighter floats (+44) instead of +0.
+assets swap ui/battle_front.json alt/battle_front_rolled.json
+dev battle training
+waitstate 300 battlephase Command
+press Down 2
+press Enter
+press Enter
+press Enter
+press Enter
+press Enter
+press Down
+press Enter
+press Enter
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 900 numbers Bryn +44 heal
+shot build/shots/adopt/rolled_heal.png
+dev win
+waitstate 900 battlephase Ended
+press Enter
+wait 2
+expect screen Field
+
+# A script walking the leader leads the line: the members behind it trail along its cells at its pace.
+fieldinput realtime
+dev encounters off
+dev warp reed_path west_gate
+wait 2
+hold Right 50
+wait 20
+expect state actorpos.mystic 64 64
+dev event lead_walk
+wait 10
+expect actor mystic walking
+expect actor medic walking
+waitstate 60 actorpos.mystic 128 64
+shot build/shots/adopt/lead_walk.png
+waitstate 60 actorpos.mystic 144 64
+expect state actorpos.medic 128 64
+
+# A warp half way through a step: the new area shows the leader on its own cell from its first frame, the old step gone.
+wait 90
+expect mode Field
+dev warp reed_path west_gate
+wait 2
+hold Right 7
+expect statehas walkstep east
+dev warp brine_flats 20 4
+wait 1
+expect state area Brine Flats
+expect state actorpos.fighter 320 64
+expect state walkstep -

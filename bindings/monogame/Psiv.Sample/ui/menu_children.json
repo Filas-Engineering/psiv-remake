@@ -1,0 +1,9 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "list", "x": "max(area_x, min(tab_x - 16, area_x + area_w - t(300)))", "y": "area_y", "w": "t(300)", "h": "min(len(children), 8) * t(30) + t(8) + 48",
+			"frame": "panel", "elements": [
+			{"type": "list", "items": "children", "state": "list", "x": 24, "y": 24, "w": "cw - 48", "h": "min(len(children), 8) * t(30) + t(8)"}
+		]}
+	]
+}

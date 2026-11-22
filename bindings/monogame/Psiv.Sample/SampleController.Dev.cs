@@ -32,6 +32,8 @@ public sealed partial class SampleController
 
 	// The layout's windows outlined with their names (F1); `overlay all` and `overlay none` leave it as it is.
 	private const string WindowsOverlay = "windows";
+	// The previewer's frame ruler, on by default while a script is previewed.
+	private const string AnimOverlay = "anim";
 
 	private static readonly string[] Help =
 	[
@@ -369,7 +371,7 @@ public sealed partial class SampleController
 				ToggleOverlay(name, w[1] == "all");
 			}
 			return true;
-		case "overlay" when w.Length is 2 or 3 && (OverlayKeys.Any(o => o.Name == w[1]) || w[1] == WindowsOverlay):
+		case "overlay" when w.Length is 2 or 3 && (OverlayKeys.Any(o => o.Name == w[1]) || w[1] is WindowsOverlay or AnimOverlay):
 			bool overlayOn = !_overlays.Contains(w[1]);
 			if (w.Length == 3 && !OnOff(w[2], out overlayOn))
 			{
@@ -734,7 +736,8 @@ public sealed partial class SampleController
 	// A battle presentation entry played on dummy targets: synthetic typed events of one turn by the first lineup member,
 	// built into steps by BattleTimeline as a round's are; no session battle runs.
 	// `change` (`transform.ENEMY`) adds a change of form after the results; `dummy` names the dummies' enemy.
-	private bool StartStagePreview(string entry, string? change = null, string? dummy = null, bool combo = false)
+	private bool StartStagePreview(string entry, string? change = null, string? dummy = null, bool combo = false, int dummies = 3, int targetCount = 0, bool enemyActor = false,
+		bool item = false)
 	{
 		if (_s.Mode == Mode.Battle)
 		{
@@ -763,7 +766,7 @@ public sealed partial class SampleController
 			ability = entry;
 			_data.Actions[ability] = shape;
 		}
-		CommandKind command = shape.Kind switch { "item" => CommandKind.Item, "defend" => CommandKind.Defend, "attack" => CommandKind.Attack, _ => CommandKind.Ability };
+		CommandKind command = item ? CommandKind.Item : shape.Kind switch { "item" => CommandKind.Item, "defend" => CommandKind.Defend, "attack" => CommandKind.Attack, _ => CommandKind.Ability };
 		List<string> lineup = _s.Mode == Mode.Title ? [] : Lineup();
 		List<string> characters = [.. lineup.Concat(_data.Characters.Order(StringComparer.Ordinal)).Distinct()];
 		string enemy = dummy is not null && _data.Enemies.Contains(dummy) ? dummy : _data.Enemies.Order(StringComparer.Ordinal).FirstOrDefault() ?? "dummy";
@@ -776,18 +779,23 @@ public sealed partial class SampleController
 				shape.Effect == "cure" && status.Length > 0 ? [new ActiveStatus(status, _s.DisplayName(status), 0)] : []),
 			Make(1, characters[Math.Min(1, characters.Count - 1)], _s.DisplayName(characters[Math.Min(1, characters.Count - 1)]), Side.Party, shape.Effect == "revive" ? 0 : 100, []),
 		};
-		for (int i = 0; i < 3; i++)
+		for (int i = 0; i < dummies; i++)
 		{
 			stage.Add(Make(2 + i, enemy, T("ui.dev.dummy", (char)('A' + i)), Side.Enemy, 100, []));
 		}
+		// An enemy acting takes the first dummy and turns its action on the members.
+		int actor = enemyActor ? 2 : 0;
+		List<int> foes = enemyActor ? [0, 1] : [.. Enumerable.Range(2, dummies)];
 		List<int> targets = shape.Effect switch
 		{
-			"heal" or "cure" or "stat" => [0],
+			"heal" or "cure" or "stat" => [actor],
 			"revive" => [1],
-			_ when command is CommandKind.Attack or CommandKind.Defend => [2],
-			_ => [2, 3, 4],
+			_ when command is CommandKind.Defend => [actor],
+			_ when targetCount > 0 => [.. foes.Take(targetCount)],
+			_ when command is CommandKind.Attack => [foes[0]],
+			_ => foes,
 		};
-		_stageEvents = StageEvents(command, ability, shape, targets, status);
+		_stageEvents = StageEvents(command, ability, shape, targets, status, actor);
 		// A combination's turn: the first two members cast it together.
 		int head = _stageEvents.FindIndex(e => e.Type == BattleEventType.ActionStarted);
 		if (combo && head >= 0)
@@ -799,7 +807,7 @@ public sealed partial class SampleController
 			string[] ce = change.Split('.', 2);
 			string into = ce.Length > 1 && _data.Enemies.Contains(ce[1]) ? ce[1] : enemy;
 			BattleEvent last = _stageEvents[^1];
-			_stageEvents.Insert(_stageEvents.Count - 1, last with { Type = ce[0] == "join" ? BattleEventType.EnemyJoined : BattleEventType.EnemyTransformed, Actor = 0, Target = ce[0] == "join" ? 5 : 2,
+			_stageEvents.Insert(_stageEvents.Count - 1, last with { Type = ce[0] == "join" ? BattleEventType.EnemyJoined : BattleEventType.EnemyTransformed, Actor = 0, Target = ce[0] == "join" ? 2 + dummies : 2,
 				Ids = [into], Hp = 100, Amount = 3 });
 		}
 		_stage = stage;
@@ -818,7 +826,7 @@ public sealed partial class SampleController
 		return true;
 	}
 
-	private static List<BattleEvent> StageEvents(CommandKind command, string ability, ActionShape shape, List<int> targets, string status)
+	private static List<BattleEvent> StageEvents(CommandKind command, string ability, ActionShape shape, List<int> targets, string status, int actor)
 	{
 		var none = new BattleEvent(BattleEventType.RoundStarted, 1, -1, -1, -1, "", "", "", "", [], "", 0, 0, 0, CommandKind.None, Element.None,
 			Effectiveness.Normal, Stat.Strength, CancelReason.None, StatusEnd.Cured, Outcome.Ongoing, ResourceKind.None, Opening.Normal, false, false, 0, 0,
@@ -828,44 +836,44 @@ public sealed partial class SampleController
 		var events = new List<BattleEvent>
 		{
 			none,
-			none with { Type = BattleEventType.CommandsLocked, Commands = [new RecordedCommand(0, command, id, targets[0])] },
-			none with { Type = BattleEventType.OrderResolved, Order = [0] },
-			none with { Type = BattleEventType.ActionStarted, Actor = 0, Target = targets[0], Ability = id, Command = command },
+			none with { Type = BattleEventType.CommandsLocked, Commands = [new RecordedCommand(actor, command, id, targets[0])] },
+			none with { Type = BattleEventType.OrderResolved, Order = [actor] },
+			none with { Type = BattleEventType.ActionStarted, Actor = actor, Target = targets[0], Ability = id, Command = command },
 		};
 		if (command == CommandKind.Ability)
 		{
-			events.Add(none with { Type = BattleEventType.ResourceSpent, Actor = 0, Resource = ResourceKind.Tp, Amount = 5, Ability = id });
+			events.Add(none with { Type = BattleEventType.ResourceSpent, Actor = actor, Resource = ResourceKind.Tp, Amount = 5, Ability = id });
 		}
 		foreach (int t in targets)
 		{
 			switch (shape.Effect)
 			{
 			case "heal":
-				events.Add(none with { Type = BattleEventType.Healed, Actor = 0, Target = t, Amount = 30, Hp = 100, Ability = id });
+				events.Add(none with { Type = BattleEventType.Healed, Actor = actor, Target = t, Amount = 30, Hp = 100, Ability = id });
 				break;
 			case "revive":
-				events.Add(none with { Type = BattleEventType.Revived, Actor = 0, Target = t, Amount = 30, Hp = 30, Ability = id });
+				events.Add(none with { Type = BattleEventType.Revived, Actor = actor, Target = t, Amount = 30, Hp = 30, Ability = id });
 				break;
 			case "status" when status.Length > 0:
-				events.Add(none with { Type = BattleEventType.StatusApplied, Actor = 0, Target = t, Status = status, Duration = 3, Ability = id });
+				events.Add(none with { Type = BattleEventType.StatusApplied, Actor = actor, Target = t, Status = status, Duration = 3, Ability = id });
 				break;
 			case "cure" when status.Length > 0:
-				events.Add(none with { Type = BattleEventType.StatusRemoved, Actor = 0, Target = t, Status = status, StatusEnd = StatusEnd.Cured, Ability = id });
+				events.Add(none with { Type = BattleEventType.StatusRemoved, Actor = actor, Target = t, Status = status, StatusEnd = StatusEnd.Cured, Ability = id });
 				break;
 			case "stat":
-				events.Add(none with { Type = BattleEventType.StatModified, Actor = 0, Target = t, Stat = Stat.Agility, Amount = 4, Ability = id });
+				events.Add(none with { Type = BattleEventType.StatModified, Actor = actor, Target = t, Stat = Stat.Agility, Amount = 4, Ability = id });
 				break;
 			case "damage" when command != CommandKind.Defend:
 				if (command == CommandKind.Attack)
 				{
-					events.Add(none with { Type = BattleEventType.Hit, Actor = 0, Target = t });
+					events.Add(none with { Type = BattleEventType.Hit, Actor = actor, Target = t });
 				}
-				events.Add(none with { Type = BattleEventType.DamageDealt, Actor = 0, Target = t, Amount = 24, Hp = 76, Element = element, Ability = id, Command = command });
+				events.Add(none with { Type = BattleEventType.DamageDealt, Actor = actor, Target = t, Amount = 24, Hp = 76, Element = element, Ability = id, Command = command });
 				break;
 			case "damage":
 				break;
 			default:
-				events.Add(none with { Type = BattleEventType.ItemHadNoEffect, Actor = 0, Target = t, Ability = id });
+				events.Add(none with { Type = BattleEventType.ItemHadNoEffect, Actor = actor, Target = t, Ability = id });
 				break;
 			}
 		}
@@ -1067,13 +1075,18 @@ public sealed partial class SampleController
 		}
 		if (_overlays.Contains("camera"))
 		{
-			(float fx, float fy) = _camera is null ? _field.Leader(Lineup()) : CameraFocus(view);
+			// A script's scene camera (`camera to`, or on its way back after `camera reset`) frames the field when no panel
+			// camera does: the mark goes where it centers and names it.
+			SceneCamera scene = _s.SceneCamera();
+			bool held = _camera is null && (scene.Held || scene.Ms > 0) && _lastFocus is not null;
+			(float fx, float fy) = held ? _lastFocus!.Value : _camera is null ? _field.Leader(Lineup()) : CameraFocus(view);
 			int cx = (int)(fx * tile) - _field.CameraX + tile / 2, cy = (int)(fy * tile) - _field.CameraY + tile / 2;
 			s.Fill(cx - 16, cy - 1, 32, 3, Style.Accent);
 			s.Fill(cx - 1, cy - 16, 3, 32, Style.Accent);
 			Style.Frame(s, cx - 10, cy - 10, 20, 20, Style.Accent);
-			_overlayDrawn["camera"] = _camera ?? "leader";
-			Label(T("ui.dev.camera", _camera ?? T("ui.dev.camera_leader")), cx + 14, cy + 10, Style.Accent);
+			string sceneName = scene.Held ? T("ui.dev.camera_scene", $"{scene.X} {scene.Y}") : T("ui.dev.camera_scene_back");
+			_overlayDrawn["camera"] = _camera ?? (held ? "scene " + SceneCameraProbe() : "leader");
+			Label(T("ui.dev.camera", _camera ?? (held ? sceneName : T("ui.dev.camera_leader"))), cx + 14, cy + 10, Style.Accent);
 		}
 	}
 

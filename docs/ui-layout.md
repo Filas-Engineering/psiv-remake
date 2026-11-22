@@ -20,7 +20,7 @@ ASSETS/assets.json           "ui_layout": {"enabled": true}
 
 Every file has `"version": 1`.
 
-Screen keys: `title`, `sound_test`, `credits`, `load_game`, `options`, `controls`, `confirm`, `field`, `dialogue`, `name_entry`, `pause`, `travel`, `shop`, `inn`, `save_prompt`, `panels`, `menu`, `menu_status`, `menu_items`, `menu_equip`, `menu_order`, `menu_macros`, `menu_combos`, `menu_quests`, `menu_codex`, `menu_log`, `menu_options`, `menu_abilities`, `menu_system`, `extras`, `save_slots`, `quest_log`, `text_log`, `battle_front`, `battle_side`. The two battle files are the two stage layouts; the battle presentation table's `layout: front|side` (and its per-encounter and per-area overrides, `--battle-layout` and the `battlelayout` script verb) chooses which one draws.
+Screen keys: `title`, `sound_test`, `credits`, `load_game`, `options`, `controls`, `confirm`, `field`, `dialogue`, `name_entry`, `pause`, `travel`, `shop`, `inn`, `save_prompt`, `panels`, `menu`, `menu_status`, `menu_items`, `menu_equip`, `menu_order`, `menu_macros`, `menu_combos`, `menu_quests`, `menu_codex`, `menu_log`, `menu_options`, `menu_abilities`, `menu_system`, `menu_children`, `extras`, `save_slots`, `quest_log`, `text_log`, `battle_front`, `battle_side`. The two battle files are the two stage layouts; the battle presentation table's `layout: front|side` (and its per-encounter and per-area overrides, `--battle-layout` and the `battlelayout` script verb) chooses which one draws.
 
 ## Export, check and reload
 
@@ -233,6 +233,12 @@ Windows: `scene` (the title's field scene, slot `scene`: the title art's backgro
 Fields: `title` (string, the game's title), `subtitle` (string), `hero_frame`, `creature_frame` (images, animated by the clock; the title art's traveler and creature when given), `hero_w`, `hero_h`, `creature_w`, `creature_h` (int: the sizes to draw them at, 64 by 64 unless the title art gives a reference height, then their frames' size times `art_scale`), `logo` (image, the title art's logo, -1 without one), `logo_w`, `logo_h` (int, its size in pixels times `art_scale` when there is one, 0 without a logo), `art_scale` (int, the title art's natural multiple, 0 without a reference height), `game_over` (bool, the last game ended in defeat), `options` (list of strings), `cursor` (int), `version` (string, the library version), `hint` (string).
 
 Erase: the title offers Erase when its layout's `options` lists `erase` (below, "Title start state and entries"), or, in the built-in order, when its param `erase` is not 0 (the older switch, kept as an alias; the built-in file sets neither, so the built-in title's options are as before). Erase lists every slot with a file, damaged ones too (`Saves()`, manual slots first), asks `ui.title.erase_confirm` with the slot through the confirm screen, calls `EraseSave` and shows the session's `game.save_erased` notice or the refusal, then reads the list again; Back returns to the options. Fields: `erasing` (bool, the list is up), `erase_rows` (list of strings: the slot, `(autosave)`, then the area and play time or `(damaged)`; `No saves to erase.` when none), `erase_cursor` (int). The built-in file draws them in a window named `erase` over the box.
+
+Continue: the param `continue` (a plain string, not an expression): `"newest"` (default: Continue loads the newest save through `ContinueGame`) or `"choose"` (Continue opens the Load list, the `load_game` screen the Load entry opens, and Back returns to the title; with no save Continue still calls `ContinueGame`, so the session's refusal shows). Any other value is a problem.
+
+```json
+{"version": 1, "params": {"continue": "choose"}, "windows": [...]}
+```
 
 ## Credits (`ui/credits.json`)
 
@@ -594,6 +600,25 @@ Fields:
 
 Slots: `backdrop`, `page` (draws the selected tab's page layout into its rectangle), `toasts`.
 
+Params (also on `menu_status`, for its Stats/Abilities tabs): the `tabs` element's sizes, in logical pixels scaled with the text size like the rest: `tab_h` (32, a tab's height), `tab_pad` (28, the room beside a tab's text, half on each side), `tab_gap` (8, the gap after a tab), `tab_text_y` (5, the text's top in the tab).
+
+```json
+"params": {"tab_h": 36, "tab_pad": 36, "tab_gap": 12, "tab_text_y": 7}
+```
+
+### menu_children (`ui/menu_children.json`)
+
+The list a field menu entry's `children` open under its tab ("Menu entries", below), drawn into the page's rectangle while the tab is selected and no child is open. The built-in file is a framed list 300 pixels wide (at 100%) under the tab, kept inside the page.
+
+Window: `list`.
+
+Fields: area fields; `label` (string, the tab's name); `children` (list of strings, the children's names); `list` (scroll list); `tab_x`, `tab_w` (int: the selected tab's left edge and width as the `tabs` element drew it, on the same surface).
+
+```json
+{"name": "list", "x": "max(area_x, min(tab_x - 16, area_x + area_w - t(300)))", "y": "area_y", "w": "t(300)", "h": "min(len(children), 8) * t(30) + t(8) + 48",
+	"frame": "panel", "elements": [{"type": "list", "items": "children", "state": "list", "x": 24, "y": 24, "w": "cw - 48", "h": "min(len(children), 8) * t(30) + t(8)"}]}
+```
+
 ### menu_status (`ui/menu_status.json`)
 
 Windows, all on the area: `members` (the member list), `header` (portrait, name and level, experience, HP and TP bars, the Stats/Abilities tabs), `stats` (two columns of stat rows), `abilities` (the ability list, its description, the target list).
@@ -625,6 +650,23 @@ Fields:
 - `items` (list of strings), `list` (scroll list): the bag.
 - `description` (string): the highlighted item's description, empty when it has none.
 - `target_name` (string), `members` (list of strings), `member_list` (scroll list): the target choice.
+- `acting` (bool), `actions` (list of strings), `action_ids` (list of strings), `action_list` (scroll list): the highlighted item's actions while they are open (param `actions`): `use` and `look`, as the sample's words `Use` and `Look` (keys `ui.items.action.use`, `ui.items.action.look`). There is no `discard`: the session has no call that throws an item away.
+- `looking` (bool), `look_text` (string): the item's description (or `ui.common.no_description`) while `look` shows it, `''` otherwise.
+- `result_text` (string), `result_ok` (bool): the last use's outcome, the session's notice (the last one when it gives several) or its refusal, and whether the use went through. A file that reads `result_text` takes the uses' outcomes there instead of the notices, as the shop does.
+
+Param `actions` (an expression, default 0): not 0, Confirm on an item opens its actions instead of using it. `use` goes on as Confirm did before (the target choice for an item used on one ally, the travel choice for a travel item, else the use); `look` shows the description until Confirm or Back; Back closes the actions, as does the item running out. A file that turns `actions` on with a number but draws no element that reads `actions` is a problem (the list would not show). The page's `page` probe reads `actions` and `look` for the two steps.
+
+```json
+{"version": 1, "params": {"actions": 1}, "windows": [
+	{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+		{"type": "list", "items": "items", "state": "list", "w": "cw", "h": "ch - t(56)", "active": "!picking && !acting"},
+		{"type": "text", "visible": "result_text != ''", "value": "result_text", "y": "ch - t(86)", "style": "small", "color": "result_ok ? 'good' : 'bad'"}]},
+	{"name": "actions", "visible": "acting", "x": "area_x + area_w - 300", "y": "area_y + t(20)", "w": 260, "h": "t(110)", "z": 5, "frame": "panel", "elements": [
+		{"type": "list", "items": "actions", "state": "action_list", "w": "cw", "h": "ch", "active": "acting && !looking"}]},
+	{"name": "look", "visible": "looking", "x": "area_x + 40", "y": "area_y + t(150)", "w": "area_w - 80", "h": "t(110)", "z": 6, "frame": "panel", "elements": [
+		{"type": "text", "value": "look_text", "w": "cw", "wrap": true, "lines": 3}]}
+]}
+```
 
 ### menu_equip (`ui/menu_equip.json`)
 
@@ -667,6 +709,18 @@ The technique, skill and ability pages and the system page ("Menu entries", belo
 - menu_abilities. Windows `members`, `abilities` (the area). Fields: area fields, `view` (`members` or `list`), `kind` (`techniques`, `skills` or `abilities`), `members` (list of strings), `list` (scroll list), `name` (string, the member), `abilities` (list of items: `text`, `label` (the name with `  *` when usable here), `usable` (bool), `kind`, `cost`, `uses` (strings)), `sub_list`, `description`, `picking` (bool), `target_name`, `targets` (list of strings), `target_list`.
 - menu_system. Window `page` (the area). Fields: area fields, `rows` (list of items: `id`, `text` (label and value), `label`, `value` (strings), `changeable` (bool)), `list` (scroll list), `description` (a settings row's help). The slot list draws through `save_slots`.
 
+Params:
+- menu_abilities `unusable`: `"dim"` (default: the abilities not usable in the field are listed, their names dimmed by the built-in file's `usable` color) or `"hide"` (they are left out of the list, so the cursor, the description and the `abilities` items have only those usable here; a member with none shows `ui.status.no_abilities`).
+- menu_system `system_action` (0 or 1, default 0): 1 turns on the `System` action ("Menu entries", below), which opens this page over the field.
+
+```json
+{"version": 1, "params": {"unusable": "hide"}, "windows": [...]}
+```
+
+```json
+{"version": 1, "params": {"system_action": 1}, "rows": ["save", "text_speed", "quit"], "windows": [...]}
+```
+
 ### extras (`ui/extras.json`)
 
 The Extras menu ("Menu entries", below). Windows: `scene` (what it opened over, then the dimming), `box`, `toasts`, `hint`. Fields: `rows` (list of items, as menu_system's), `list` (scroll list), `view` (`list` or `notice`), `notice` (the photosensitivity notice), `description`, `hint` (strings), `in_battle`, `on_title` (bool). Slots: `scene`, `toasts`.
@@ -677,6 +731,17 @@ Window: `page` (the area).
 
 - menu_order: `rows` (list of strings), `list` (scroll list): the lineup.
 - menu_options: `options` (list of strings): the one "open options" row, always selected.
+
+The `party_talk` page draws through menu_options too. Its param `party_talk` is `"close"` (default: Confirm closes the menu and starts the party talk, its lines shown as notices, as before) or `"page"` (the menu stays open on the page and the lines show there; no notice). With `"page"` the page also gets `talking` (bool: lines to show), `talk` (list of items: `speaker` (the member's name), `line` (what they say), `text` (both, as the notice reads)) and the slot `talk_box`, which draws each speaker's name in the accent color and their line wrapped under it, as many rows as fit its rectangle. The lines stay until the tab changes, the menu closes or Confirm talks again; a refusal (`nobody_talks`) is a notice as before. The built-in file draws none of them, so a layout that turns the page on adds the box:
+
+```json
+{"version": 1, "params": {"party_talk": "page"}, "windows": [
+	{"name": "page", ...},
+	{"name": "talk", "visible": "talking", "x": "area_x + 20", "y": "area_y + t(96)", "w": "min(area_w - 40, t(640))", "h": "t(150)", "frame": "panel", "elements": [
+		{"type": "slot", "slot": "talk_box", "x": 24, "y": 20, "w": "cw - 48", "h": "ch - 40"}
+	]}
+]}
+```
 
 ### menu_macros (`ui/menu_macros.json`)
 
@@ -783,7 +848,7 @@ Windows: `page` (the area: column heads and one row per action, then reset), `ac
 
 Fields:
 - area fields.
-- `actions` (list of items): item fields `label`, `keys`, `buttons` (strings), `reset` (bool: the reset row, which has no bindings). With the real-time field input on, `Interact`, `Run` and `RunToggle` come after `FastForward`, before the reset row; with it off they are left out, so the page is as it was. `Extras` comes last, before the reset row, unless the param `list_extras` is 0.
+- `actions` (list of items): item fields `label`, `keys`, `buttons` (strings), `reset` (bool: the reset row, which has no bindings). With the real-time field input on, `Interact`, `Run` and `RunToggle` come after `FastForward`, before the reset row; with it off they are left out, so the page is as it was. `Extras` comes next, before the reset row, unless the param `list_extras` is 0, and `System` after it while the menu_system layout's `system_action` is 1.
 - `list` (scroll list), `active` (bool).
 - `picking` (bool), `action_name` (string), `choices` (list of strings), `choice` (int): the `action` box.
 - `capturing` (bool), `ask` (string): the `capture` box.
@@ -966,6 +1031,18 @@ Params `party_figures` and `enemy_figures` (expressions, default 1) on either ba
 ```json
 "params": {"party_figures": "result_step ? 0 : 1", "game_over_confirm": 0}
 ```
+
+Field `result_confirm` (bool): the result screen is up and Confirm or Back leave it (false after a game over under `game_over_confirm` 0, where the built-in side file's continue line and the `hint` field say nothing of Confirm).
+
+Param `damage_numbers` (`"applied"` default, or `"rolled"`): what a hit's or a heal's floating number shows, the change made to the target (`BattleEvent.Amount`) or what the roll gave before the target's hit points, a shield's cap or the maximum took any off (`BattleEvent.Rolled`; a heal on a full member floats its roll instead of +0). The log keeps the change made.
+
+```json
+"params": {"damage_numbers": "rolled"}
+```
+
+Item field `max_uses` (int): a skill option's uses after a rest (`BattleOption.MaxUses`, its character's `skill_uses` by level), -1 for anything else; the built-in rows show a skill's uses as `x2/3`.
+
+A one-ally ability or item the session refuses for the ally picked (`command.no_effect_on_target`: none of its effects can reach that ally) keeps the target list open with that ally's row not `usable` (greyed) and the refusal in the log; Confirm on a greyed row does nothing but the `refuse` cue.
 * `page_arrow` image: as the dialogue's, for a next-page mark under `result_more`: `{"type": "image", "visible": "result_more", "image": "page_arrow", "x": "cw - 28", "y": "ch - 24", "w": 16, "h": 16}`.
 
 Item fields of `party`, `members` and `vehicle`: `fallen` (bool, shown as down), `slot` (int, its index: the marching slot), and one `status_ID` bool per status of the game data (`status_poison`, `status_sleep`, ...; `defeated` excluded), true while the playback shows it. A name that is not `status_` and a status of the data is a problem. `menu_items` items gain `command` (the command row's id, `fight`/`macro`/`run` on the top-level step, `''` in lists) and `icon` (the command's picture from `command_icons` or generated, -1 off the command rows).
@@ -984,11 +1061,17 @@ Params (numbers but `command_axis`):
 | `command_axis` | `"column"` | `"row"`: Left and Right move the command cursor (wrapping) and Up and Down do nothing; Confirm picks the highlighted command either way. A plain string, not an expression |
 | `command_top` | 0 | 1: each round opens on a top-level step (phase `top`): `fight` (the members' commands, from which Back on the first member returns here), `macro` (the macro list for the party; with no macros the description strip and the log say so and the step stays), `run` (every member who takes commands is set to escape, one choice for the party) |
 | `result_page_lines` | 0 | above 0: the result window shows that many lines a page; Confirm turns the page, and on the last page ends the battle; Back ends it at once |
+| `item_order` | `"items_then_equipment"` | the Item command's list: the bag's items (the session's `BattleOptions` order), then the member's worn pieces that have a battle use (`(worn)`); `"equipment_then_items"` puts the worn pieces first. A plain string, not an expression |
+| `macro_auto_first` | 0 | 1: the macro list (a member's Macro and the top-level step's) opens with the macro auto-battle plays (`Settings().AutoMacro`, set on the Macros page) first, marked `{0} (auto)` (the sample's words, key `ui.battle.auto_macro_row`); the rest keep the party's order. Without an auto macro the list is as before |
 
 A battle file that lays the menu's rows out across, a `repeater` over `menu_items` in a row (no `dy`) or grid, or `rows` over it with `per_column` 1, without `"command_axis": "row"` is a problem (`windows.icons: lays the menu's rows out across: set the param 'command_axis' to "row" so Left and Right move the cursor`): the cursor would not follow the keys the layout shows.
 
 ```json
 "params": {"command_axis": "row", "command_top": 1, "result_page_lines": 2, "enemy_statuses": 1}
+```
+
+```json
+"params": {"item_order": "equipment_then_items", "macro_auto_first": 1}
 ```
 
 `command_rows` (a top-level object of either battle file, with `command_top` on): which commands each step shows, in order. `top` from `fight`, `macro`, `run`; `member` from `attack`, `technique`, `skill`, `item`, `defend`, `escape`, `macro`, `auto`; a step left out shows all. `vehicle` (with or without `command_top`) from `attack`, `skills` (one row per skill of the vehicle), `macro` (the party's macros through `ApplyMacro`, a step the vehicle cannot run taking the layout's macro fallback), `auto` (auto-battle through `StartAuto`) and `escape` lists a vehicle's rows in a vehicle battle; without it `attack`, `skills`, `escape` as before. An unknown or repeated command, an empty list, an unknown field, or `top` or `member` without `command_top` is a problem.
@@ -1008,6 +1091,7 @@ The words of the top-level step are the text tables' `ui.battle.top.fight`, `.ma
 Two top-level fields of `title.json` (only that file takes them):
 
 * `start` (true or false, default false): the title opens on a start state: the field `start` is true and the menu takes no input until any key or button (not a function key or the console key) is pressed, then `start` is false. It comes back each time the title does (not after its overlays). `start_hint` is the prompt's words (the text tables' `ui.title.press_start`).
+* `load` shows while the session accepts a load from here (`CanLoad`; the field `can_load`, true on the title), and the field menu's Save page offers none.
 * `options` (a list): the menu's entries in order, from `retry`, `new_game`, `continue`, `load`, `sound_test`, `erase`, `options`, `quit` (default: that order). An entry still shows only when it can be chosen: `retry` after a lost battle that allows one, `sound_test` after a finished story, `erase` always (the erase list, above, under Title). An unknown or repeated entry is a problem. The field `option_ids` lists the ids shown. An entry may be an object `{"id": ID, "when": CONDITION}`: it shows only while the condition holds too (an expression over the title's fields: `has_save` (bool, a save of any kind exists), `save_count` (int), `has_clear` (bool, a finished story's record exists); every title layout may read them).
 
 ```json
@@ -1029,12 +1113,20 @@ Three optional fields; the export writes none of them, and without them the menu
 * `entries` (`menu.json`): the field menu's tabs in order, each `{"page": ID, "label": TEXT_KEY}` (`label` optional, default `ui.menu.tab.ID`). Pages: `status`, `items`, `techniques`, `skills`, `abilities` (both kinds, as the Status page's abilities), `equip`, `order`, `macros`, `combos`, `quests`, `codex`, `log`, `options`, `save`, `system`, `party_talk`, `extras`. Default: `status`, `items`, `equip`, `save`, `order`, `macros`, `combos`, `quests`, `codex`, `log`, `options`, the menu as it was. The `tab` probe reads the page id with its first letter raised (`Techniques`, `Party_talk`); `page` reads `members`, `list` or `target` on the technique, skill and ability pages and `system` or `slots` on the system page.
   * `techniques`, `skills`, `abilities` (screen `menu_abilities`): a member, then their abilities of that kind with the TP cost and uses; Confirm on one usable in the field uses it (a target first when it takes one ally), as on the Status page.
   * `system` (screen `menu_system`): rows from its `rows`; `save` opens the slot list (the `save_slots` layout, Back returns), `quit` asks and quits to the title, a settings row steps its value with Confirm (Left and Right turn the tabs).
-  * `party_talk`: one row (the `menu_options` layout); Confirm closes the menu and starts the party talk.
+  * `party_talk`: one row (the `menu_options` layout); Confirm closes the menu and starts the party talk, or with that layout's `party_talk` "page" shows the lines on the page with the menu kept open ("menu_order, menu_options").
   * `extras`: one row; Confirm opens the Extras menu over the field menu.
+* `children` (an entry of `menu.json`'s `entries`): `[{"page": ID, "label": TEXT_KEY}]`, the same shape and pages as the entries (`label` default `ui.menu.tab.ID`). The tab still takes its name from its own entry, but in place of its page it lists the children under the tab (the `menu_children` layout); Up and Down choose, Confirm opens that page in the page's place (the `tab` probe then reads the child's page id) and Back at the page's top returns to the list, which keeps its cursor. Left and Right turn the tabs from the list and from a child page's top; Back on the list closes the menu. The entry's own page is not opened unless it is also one of its children; the `page` probe reads `children` on the list. A page only a child lists counts as one the entries leave out for the Extras menu and the System action (it opens alone).
 * `rows` (`menu_system.json`): the system page's rows in order from `save`, `quit`, `text_speed`, `battle_speed`, `flashing`, `auto_advance`, `text_size` (default `save`, `text_speed`, `battle_speed`, `auto_advance`).
 * `entries` (`extras.json`): the Extras menu's entries, the same shape, from the field menu's pages but `extras`, and `controls` (the Controls page; Back leaves it for the Extras menu), `photosensitivity` (the flashing notice, `ui.options.flashing_notice`, in the box), `dev` (the developer console; shown only with `--dev`), and the settings rows above (Left, Right or Confirm change them in place). Default: `options`, `controls`. A field menu page opens the field menu on that page; when the menu's entries leave the page out, the field menu opens with that page as its only tab, until it closes (the menu opened again shows its own entries). On the title the field menu's pages but `options` are left out; in a battle only `text_speed`, `battle_speed` and `flashing` show.
 
-An unknown or repeated page or row, a missing `page`, an unknown field, or `entries` or `rows` on another screen is a problem.
+An unknown or repeated page or row, a missing `page`, an unknown field, `children` that are not a non-empty list or on the Extras menu's entries, a child's unknown or repeated page or missing `page`, children under a child, or `entries` or `rows` on another screen is a problem.
+
+```json
+{"version": 1, "entries": [{"page": "items"}, {"page": "system", "children": [{"page": "save"}, {"page": "options"}, {"page": "quests", "label": "ui.quests.jobs"}]},
+	{"page": "abilities"}, {"page": "party_talk"}, {"page": "status"}], "windows": [...]}
+```
+
+The `System` action (S, no button: Start is `Menu`; [`../bindings/README.md`](../bindings/README.md), controls) is read only while the menu_system layout's param `system_action` is 1. It then opens the field menu from the field with the system page as its only tab, whatever the entries list (as the Extras menu opens a page they leave out), and it or Back closes it again. The Controls page and `controls list` show it after `Extras` only while it is on, and it rebinds like any action. Its label is `ui.action.system` (the sample's own English when the text table has none).
 
 ```json
 {"version": 1, "entries": [{"page": "items"}, {"page": "techniques"}, {"page": "skills"}, {"page": "system"}, {"page": "party_talk"},
@@ -1164,6 +1256,12 @@ Params of `field.json`: `arrive_toast` (default 1; 0: the arrival notice, `game.
 
 * Param `stat_bonus` (default 1): 0 leaves the equipment bonus out of each stat's `value`. The cells of `stat_rows` gain `total` (the stat's number) and `bonus` (the equipment's, signed, `''` for none) either way.
 * Fields `portrait_w`, `portrait_h`: the portrait's size in pixels, for a portrait drawn at a whole multiple.
+* Fields from the member detail (`MemberDetail`): `attack` (strength plus both hands' weapon attack, what a basic attack hits with), `base_hp`, `base_tp`, `base_strength`, `base_mental`, `base_agility`, `base_dexterity`, `base_defense` (the level's own numbers, before equipment, to set against the totals), `experience_for_level` (the experience the current level takes from start to end, 0 at the cap; with `experience_next` an experience bar), `total_experience` and `kind` (`living`, `spirit`, `machine`). The built-in file shows none of them.
+
+```json
+{"type": "bar", "x": "cw - t(300)", "y": "t(54)", "w": "t(300)", "h": 6, "value": "experience_for_level - experience_next", "max": "max(1, experience_for_level)", "color": "accent"},
+{"type": "text", "value": "'ATK ' + attack + '  STR ' + base_strength + ' base  ' + kind", "x": "cw - t(300)", "y": "t(32)", "style": "small_dim"}
+```
 * Top-level `profile`: the profile rows, in order, from `name`, `level`, `experience`, `experience_next`, `kind`, `hp`, `max_hp`, `tp`, `max_tp`, `strength`, `mental`, `agility`, `dexterity`, `defense`, `critical`, `evasion`, `magic_defense`, `attack_element`, `data` (default: all); the field `profile` lists them with `key`, `label` and `value`. These are every member detail the session gives (`Member`, `MemberDetail`, the creature kind); `data` stands for the character's own rows from `party.json` `profile` (`MemberDetail.Profile`, none in the shipped data), each keyed by the data's key with the session's text for both sides. The labels are the text tables' `ui.status.profile.*`, `ui.status.attack_element` and `ui.stat.*`.
 
 ```json
@@ -1200,6 +1298,8 @@ Two `styles.json` params: `dev_scale` (10 to 100, default 100) draws every devel
 ### The item runs
 
 `make_items_assets.py EXPORT TEST OUT` copies the test assets with `alt/assets_more.json` as the manifest, a cue `tag_gong` and a track `tag_theme` that only the tags play, and the item layouts; `make_items_data.py` writes a data copy with the event `dialogue_items` and no party macros. `items_battle.txt` (front data copy): the title's start state and entries, the top-level step, the command row walked with Left and Right, the item and technique lists' sizes, the actor's slot, the chosen-command window, the fallen and status flags, the enemies' icons by the table and (side) off it, Run for the party, the result in two pages. `items_menus.txt`: the profile rows, the Equip page on the first member, the system menu and numbered slots, the unnumbered lineup. `items_dialogue.txt` (item data copy): a line while faded out, the cases, the picture stack, the top-level Macro without macros, a warp without notice or banner. `small_dev.txt`: the small set with `dev_scale` and `dev_draw`. Screenshots under `build/shots/items/` with `--window`.
+
+`make_choices_assets.py EXPORT TEST OUT` copies the test assets with a title whose Continue opens the Load list, a front battle layout with `item_order` `"equipment_then_items"` and `macro_auto_first`, and an Items page with `actions` and a `result_text` line; `alt/` holds the built-in title and battle files for the run to swap in, and `alt/title_broken.json` and `alt/menu_items_broken.json`, which the Makefile checks on a copy. `layout_choices.txt` (front data copy, `--dev`): the worn Storm Rod before the Tonic and `tempest (auto)` first, then the built-in order after the swap; the Items page's look, a use and a refusal on the result line with no notice; Continue opening the Load list, then loading the newest save with the built-in title. Screenshots under `build/shots/choices/` with `--window`.
 
 ## Dialogue control tags (`ui/dialogue.json`, `SampleController.Dialogue.cs`)
 

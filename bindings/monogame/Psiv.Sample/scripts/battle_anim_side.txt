@@ -1,0 +1,252 @@
+# The example animation set (scripts/make_anim_assets.py) in the side layout, on the front data copy with --dev: the
+# stepped fade and split reveal into battle, the blade's hit on frame 42, the heal's window, the hound pulling a member
+# under it, a status's tick, the staff's teleport and the boss's next form, Frost Pane's releases six frames apart, the
+# instant defeat's mark and bands, the victory and the tiles out. Then the combination and the two-weapon variants
+# played live: `equip` puts a second blade in the fighter's left hand and then a two-handed blade in its hands, and
+# `combo` has the medic and the mystic cast Twin Arc, in the side layout and again in the front one. After each round
+# the playback matches the session (battlesync). With --window the shot lines save screenshots under build/shots/.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev level fighter 30
+dev level mystic 60
+dev level medic 20
+battlelayout side
+
+# Into battle: the fade steps over the field, then the backdrop and the figures slide in from opposite sides.
+animlog mark
+dev battle training
+waitstatehas 60 transition split reveal 4/
+shot build/shots/anim_side_intro.png
+waitstate 300 battlephase Command
+expect animloghas start ex.intro (battle:transition_in) @0
+
+# The fighter's blade, the mystic's Hush on the hound, the medic's Mend on the fighter; the hound bites.
+animlog mark
+press Enter
+press Enter
+press Down
+press Enter
+press Down 3
+press Enter
+press Down 2
+press Enter
+press Down
+press Enter
+press Enter
+press Enter
+waitstatehas 600 anim ex.blade.one weapon:blade/one
+waitstate 60 animframe 43
+expect statehas released 1/1 Gel Mite A -60 @42
+waitstatehas 600 anim ex.mend ability:mend
+waitstate 120 animframe 70
+shot build/shots/anim_side_mend_window.png
+waitstatehas 600 anim ex.hound enemy:rust_hound/attack
+waitstate 120 animframe 30
+expect statehas figure.Test_Fighter pose hurt
+shot build/shots/anim_side_hound_pull.png
+waitstate 900 battlephase Command
+expect animloghas start ex.blade.one (weapon:blade/one) @0 | phase forward @0 | phase banner @8 | phase animate @26 | cue ex_swing @30 | phase effect @36 | phase result @42
+expect statehas battlesync all match
+
+# The next round's banner ticks the hound's silence.
+animlog mark
+press Down 4
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 120 anim step.banner step:round
+waitstate 900 battlephase Command
+expect animloghas start step.banner (step:round) @0 | tick silence Rust Hound @0 | cue ex_tick @0
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+expect screen Field
+
+# The boss: the mystic's staff teleports beside it, then its next form recolors the old one, swaps the backdrop and
+# replaces it on frame 48.
+animlog mark
+dev battle colossus
+waitstate 300 battlephase Command
+press Enter 6
+waitstatehas 600 anim ex.rod weapon:rod
+waitstate 60 animframe 34
+expect statehas figure.Test_Mystic pose attack
+shot build/shots/anim_side_rod_teleport.png
+waitstate 900 battlephase Command
+press Enter 6
+waitstatehas 900 anim ex.core change:transform.tide_colossus_core
+waitstate 60 animframe 50
+expect statehas released 1/1 Tide Colossus Core becomes Tide Colossus Core @48
+waitstate 60 animframe 70
+expect statehas backdropfx swap
+shot build/shots/anim_side_core_swap.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+expect screen Field
+
+# Frost Pane on three enemies: the releases on frames 53, 59 and 65 in the side layout too; then the victory and the
+# tiles out.
+animlog mark
+dev battle training
+waitstate 300 battlephase Command
+press Down 4
+press Enter
+press Down
+press Enter
+press Down 2
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 anim ex.frost.three ability:frostbite/count:3
+waitstate 120 animframe 60
+expect statehas released 2/3 Gel Mite A -60 resisted @53, Gel Mite B -60 resisted @59
+shot build/shots/anim_side_frost.png
+waitstate 900 battlephase Ended
+expect animloghas phase result @53 | release Gel Mite A -60 resisted @53 | cue ex_crack @56 | release Gel Mite B -60 resisted @59 | release Rust Hound -90 @65
+expect animloghas start ex.victory (step:outcome.victory) @0 | end @72
+shot build/shots/anim_side_victory.png
+expect statehas battlesync all match
+press Enter
+waitstatehas 60 transition tiles cover
+wait 60
+expect screen Field
+
+# The instant defeat on the lone ooze, placed by the file at its side place: the ring, the mark, the bands.
+animlog mark
+dev battle lone_ooze
+waitstate 300 battlephase Command
+expect statehas enemyplaces Twin Ooze 300 420
+press Down 4
+press Enter
+press Down
+press Enter
+press Up
+press Enter
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 anim ex.unmake ability:unmake
+waitstatehas 120 step result Twin Ooze felled
+wait 20
+expect statehas figure.Twin_Ooze defeat:instant
+shot build/shots/anim_side_unmake.png
+waitstate 900 battlephase Ended
+expect statehas battlesync all match
+press Enter
+wait 60
+
+# Live variants: a second blade in the fighter's left hand plays weapon:blade/both, a two-handed blade (the class
+# table makes greatblade heavy) weapon:heavy/both, and Twin Arc cast by the medic and the mystic its combination script.
+dev give gill_knife
+equip fighter gill_knife left_hand
+animlog mark
+dev battle training
+waitstate 300 battlephase Command
+press Enter
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 anim ex.blade.both weapon:blade/both
+expect statehas animkey weapon:blade/both/count:3 - | weapon:blade/both ex.blade.both
+waitstate 60 animframe 40
+expect statehas animtracks cut2 sprite 1/20, plate name_window
+shot build/shots/anim_side_blade_both.png
+waitstate 900 battlephase Command
+expect animloghas start ex.blade.both (weapon:blade/both) @0
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+dev give kelp_cleaver
+equip fighter kelp_cleaver
+animlog mark
+dev battle training
+waitstate 300 battlephase Command
+press Enter
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 anim ex.heavy weapon:heavy/both
+waitstate 60 animframe 38
+shot build/shots/anim_side_heavy.png
+waitstate 900 battlephase Command
+expect animloghas start ex.heavy (weapon:heavy/both) @0
+expect statehas battlesync all match
+animlog mark
+combo twin_arc
+waitstatehas 600 anim ex.twin combo:twin_arc
+waitstate 120 animframe 74
+expect statehas anim ex.twin combo:twin_arc frame 74/132 effect
+shot build/shots/anim_side_twin.png
+waitstate 900 battlephase Command
+expect animloghas start ex.twin (combo:twin_arc) @0
+expect animloghas phase result @82
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+
+# The same live variants in the front layout.
+battlelayout data
+equip fighter copper_blade
+equip fighter gill_knife left_hand
+animlog mark
+dev battle training
+waitstate 300 battlephase Command
+press Enter
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 anim ex.blade.both weapon:blade/both
+waitstate 900 battlephase Command
+expect animloghas start ex.blade.both (weapon:blade/both) @0
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+animlog mark
+dev battle colossus
+waitstate 300 battlephase Command
+combo twin_arc
+waitstatehas 600 anim ex.twin combo:twin_arc
+waitstate 120 animframe 74
+shot build/shots/anim_front_twin_live.png
+waitstate 900 battlephase Command
+expect animloghas start ex.twin (combo:twin_arc) @0
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+expect screen Field

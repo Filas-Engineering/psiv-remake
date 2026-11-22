@@ -6,13 +6,20 @@ namespace Psiv.Sample;
 
 // Frames of one picture set: idle and named animations are runs over Images, by index.
 // Shadow: whether the battle draws the generated ground shadow under it.
-public sealed record Figure(int[] Images, FrameRun Idle, IReadOnlyDictionary<string, FrameRun> Animations, bool Shadow = true);
+// Palette: the manifest's colors of the picture in order, which a color transform's palette names by index.
+public sealed record Figure(int[] Images, FrameRun Idle, IReadOnlyDictionary<string, FrameRun> Animations, bool Shadow = true, IReadOnlyList<Color>? Palette = null);
 
 // A window frame cut in nine: corners drawn at their size times Scale, edges and middle stretched.
 public sealed record NineSliceImage(int[] Images, int Border, int Scale);
 
 // A whole-area picture loaded: the ground and above images, pixels a cell, and per change flag the patch's cells cut out.
 public sealed record AreaPicture(int Ground, int? Above, int Cell, int Width, int Height, IReadOnlyList<(string Flag, IReadOnlyDictionary<(int X, int Y), int> Cells)> Patches);
+
+// An area's motion loaded: each run's frames, and each layer's picture with, when its bands or a wave move its rows (or a
+// wave its columns) apart, every row (column) as an image of its own.
+public sealed record LoadedLayer(AreaLayer Layer, int Image, int[] Strips);
+
+public sealed record LoadedMotion(AreaMotion Motion, IReadOnlyList<int[]> Runs, IReadOnlyList<LoadedLayer> Layers);
 
 // An object loaded: its entry and the images each state's frame run indexes (none for a person's standing frame).
 public sealed record LoadedObject(ObjectEntry Entry, int[] Closed, int[] Open);
@@ -53,6 +60,7 @@ public sealed partial class Art
 	private readonly Dictionary<string, int> _commandIcons = [];
 	private readonly Dictionary<string, int> _pictures = [];
 	private readonly Dictionary<string, AreaPicture> _areaPictures = [];
+	private readonly Dictionary<string, LoadedMotion> _areaMotions = [];
 	private readonly Dictionary<string, List<LoadedObject>> _objects = [];
 	private readonly Dictionary<string, int> _vehicleOverlays = [];
 	private FieldLook _fieldLook = new(true, true);
@@ -76,7 +84,7 @@ public sealed partial class Art
 	// Whether the picture for a key (`tileset:town`, `tileset:area:tidewater`, `character:fighter`, `portrait:guide`,
 	// `figure:party:fighter`, `figure:back:fighter`, `figure:enemy:gel_mite`, `field_enemy:training`, `vehicle:reed_skimmer`, `backdrop:kind:town`, `effect:slash`,
 	// `sprite:shadow`, `status_icon:sleep`, `ui:frame`, `map:tidewater`, `map:tidewater:above`, `map:AREA@FLAG`, `object:AREA:POINT`,
-	// `object:AREA:X,Y`, `vehicle_overlay[:ID]` ...) came from a file.
+	// `object:AREA:X,Y`, `vehicle_overlay[:ID]`, `animated:AREA:N`, `layer:AREA:N` ...) came from a file.
 	public bool FromFile(string key) => _fromFile.ContainsKey(key);
 
 	// The file a key's picture came from and a hash of its pixels as loaded, or null for a generated picture.
@@ -282,6 +290,7 @@ public sealed partial class Art
 				WallFaceAltOneIn = t.WallFaceAltOneIn,
 				WaterFrameMs = t.WaterFrameMs,
 				Animated = t.Animated.ToDictionary(a => cells[a.Key], a => new Figure(cells, a.Value, new Dictionary<string, FrameRun>())),
+				Palettes = t.Palettes ?? [],
 				Door = Object("door", fallback.Door),
 				ChestClosed = Object("chest_closed", fallback.ChestClosed),
 				ChestOpen = Object("chest_open", fallback.ChestOpen),
@@ -319,7 +328,7 @@ public sealed partial class Art
 		}
 		foreach (FigureEntry f in m.Figures)
 		{
-			var figure = new Figure(Cut(f.Image, natural: f.Natural ?? true), f.Idle, f.Animations, f.Shadow ?? m.FigureShadows);
+			var figure = new Figure(Cut(f.Image, natural: f.Natural ?? true), f.Idle, f.Animations, f.Shadow ?? m.FigureShadows, f.Palette);
 			if (f.Back)
 			{
 				_backFigures[f.Id] = figure;
@@ -363,7 +372,7 @@ public sealed partial class Art
 					_effectScales[frame] = scale;
 				}
 			}
-			_effects[e.Id] = new Figure(frames, e.Run, new Dictionary<string, FrameRun>());
+			_effects[e.Id] = new Figure(frames, e.Run, new Dictionary<string, FrameRun>(), Palette: e.Palette);
 			_fromFile["effect:" + e.Id] = e.Image.Path;
 		}
 		foreach ((string id, string file) in m.Sprites)
@@ -374,7 +383,7 @@ public sealed partial class Art
 			case "shadow": Shadow = image; break;
 			case "bubble": Bubble = image; break;
 			case "alert": Alert = image; break;
-			case "pier": break;
+			case "pier" or "platform": break;
 			default: Pointer = image; break;
 			}
 			_fromFile["sprite:" + id] = file;
@@ -420,6 +429,30 @@ public sealed partial class Art
 			if (a.Above is not null)
 			{
 				_fromFile[$"map:{a.Area}:above"] = a.Above;
+			}
+		}
+		foreach ((string area, AreaMotion motion) in m.AreaMotions)
+		{
+			var layers = new List<LoadedLayer>();
+			foreach (AreaLayer l in motion.Layers)
+			{
+				(int w, int h, Color[] pixels) = File(l.Image);
+				int[] strips = [];
+				if (l.Wave is { Columns: true })
+				{
+					strips = [.. Enumerable.Range(0, w).Select(x => _s.CreateImage(1, h, [.. Enumerable.Range(0, h).Select(y => pixels[y * w + x])]))];
+				}
+				else if (l.Wave is not null || l.Bands.Count > 0)
+				{
+					strips = [.. Enumerable.Range(0, h).Select(y => _s.CreateImage(w, 1, pixels[(y * w)..((y + 1) * w)]))];
+				}
+				layers.Add(new LoadedLayer(l, Whole(l.Image), strips));
+				_fromFile[$"layer:{area}:{layers.Count - 1}"] = l.Image;
+			}
+			_areaMotions[area] = new LoadedMotion(motion, [.. motion.Runs.Select(r => Cut(r.Image))], layers);
+			for (int i = 0; i < motion.Runs.Count; i++)
+			{
+				_fromFile[$"animated:{area}:{i}"] = motion.Runs[i].Image.Path;
 			}
 		}
 		foreach (ObjectEntry o in m.Objects)
@@ -626,6 +659,8 @@ public sealed partial class Art
 	public int? NamedPicture(string name) => _pictures.TryGetValue(name, out int image) ? image : null;
 
 	public AreaPicture? AreaPictureOf(string area) => _areaPictures.GetValueOrDefault(area);
+
+	public LoadedMotion? AreaMotionOf(string area) => _areaMotions.GetValueOrDefault(area);
 
 	// The objects of an area with a picture of their own, at points and at cells.
 	public IReadOnlyList<LoadedObject> ObjectsIn(string area) => _objects.GetValueOrDefault(area) ?? [];

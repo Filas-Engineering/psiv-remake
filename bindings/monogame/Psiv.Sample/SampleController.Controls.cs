@@ -15,9 +15,12 @@ public sealed partial class SampleController
 	public IReadOnlyList<ControlBinding> Controls() => ControlActions().Select(_bindings.Describe).ToList();
 
 	// The actions the Controls page lists: the real-time field input's own only while it is on, Extras unless the controls
-	// layout's `list_extras` is 0.
+	// layout's `list_extras` is 0, System only while the system page's `system_action` is on.
 	private GameAction[] ControlActions() => [.. Enum.GetValues<GameAction>().Where(a => (_realtimeField || !Bindings.FieldActions.Contains(a))
-		&& (a != GameAction.Extras || Ui.Param("controls", "list_extras", UiData(), 1) != 0))];
+		&& (a != GameAction.Extras || Ui.Param("controls", "list_extras", UiData(), 1) != 0) && (a != GameAction.System || SystemActionOn))];
+
+	// The menu_system layout's `system_action`: the System action opens the system page over the field.
+	private bool SystemActionOn => Ui.Param("menu_system", "system_action", UiData(), 0) != 0;
 
 	public void BeginCapture(GameAction action) => Capturing = action;
 

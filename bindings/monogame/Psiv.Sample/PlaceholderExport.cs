@@ -199,7 +199,7 @@ public static class PlaceholderExport
 		{
 			["shadow"] = Single("sprites/shadow.png", art.Shadow), ["bubble"] = Single("sprites/bubble.png", art.Bubble),
 			["alert"] = Single("sprites/alert.png", art.Alert), ["pointer"] = Single("sprites/pointer.png", art.Pointer),
-			["pier"] = Single("sprites/pier.png", art.Pier),
+			["pier"] = Single("sprites/pier.png", art.Pier), ["platform"] = Single("sprites/platform.png", art.Platform),
 		};
 		manifest["status_icons"] = new JsonObject(data.Statuses.Where(s => s != "defeated").Order(StringComparer.Ordinal)
 			.Select(s => KeyValuePair.Create(s, (JsonNode?)Single($"status_icons/{s}.png", art.StatusIcon(s)))));

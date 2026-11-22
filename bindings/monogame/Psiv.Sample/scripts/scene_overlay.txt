@@ -1,0 +1,29 @@
+# The developer camera overlay (F8, `overlay camera`) over a script's scene camera on the hall data copy
+# (scripts/make_scene_data.py) with scripts/make_scene_assets.py's SCENE copy: on the leader before the plinth's event,
+# then on the cell the scene camera holds, named as the scene's, while the event eases it to the hall's far corner, and
+# on its way back after `camera reset`. Screenshots under build/shots/scene/ with --window.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev warp gallery_hall plinth_front
+dev overlay camera on
+wait 10
+expect state overlay.camera leader
+press Up
+press Enter
+wait 20
+press Enter
+waitstatehas 60 scenecamera 1000
+wait 1
+expect statehas overlay.camera scene held 29 17
+waitstate 120 overlay.camera scene held 29 17
+wait 20
+shot build/shots/scene/overlay_scene_camera.png
+press Enter
+waitstatehas 60 scenecamera leader
+wait 1
+expect statehas overlay.camera scene leader
+waitstate 120 overlay.camera leader

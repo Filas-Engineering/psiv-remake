@@ -63,7 +63,8 @@ def main():
 		text = json.loads(text_file.read_text())
 		text["text"]["area.belt_yard"] = "Belt Yard"
 		text_file.write_text(json.dumps(text, indent="\t", ensure_ascii=False) + "\n")
-	game_json["flags"] = sorted(game_json["flags"] + ["belt.reversed"])
+	# A flag is a name or an object with an `id` (and `reset`).
+	game_json["flags"] = sorted(game_json["flags"] + ["belt.reversed"], key=lambda f: f["id"] if isinstance(f, dict) else f)
 	game_json["presentation"]["animations"].append({"id": "belt_bow", "seconds": 0.5})
 	game_file.write_text(json.dumps(game_json, indent="\t", ensure_ascii=False) + "\n")
 

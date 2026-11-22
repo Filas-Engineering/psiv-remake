@@ -31,6 +31,9 @@ public sealed partial class SampleController
 
 	private bool LayoutSwitch(string name) => Ui.Param(BattleScreen, name, UiData(), 0) != 0;
 
+	// Whether Confirm or Back leaves the result screen: always but after a game over whose layout's `game_over_confirm` is 0.
+	private bool ResultConfirms => _s.BattleInfo()?.GameOver != true || Ui.Param(BattleScreen, "game_over_confirm", UiData(), 1) != 0;
+
 	private bool CommandRowAxis => Ui.ParamText(BattleScreen, "command_axis", UiData(), "column") == "row";
 
 	private sealed class BattleUi
@@ -50,6 +53,8 @@ public sealed partial class SampleController
 		public HashSet<string> Worn = [];
 		public BattleOption? Option;
 		public List<int> Targets = [];
+		// Allies among the targets the session refused for the option with `command.no_effect_on_target`, greyed out.
+		public HashSet<int> Refused = [];
 		public List<string> Labels = [];
 		public readonly List<string> Log = [];
 		public bool Auto;
@@ -103,7 +108,7 @@ public sealed partial class SampleController
 	}
 
 	private string OptionText(BattleOption o) => _battle.Worn.Contains(o.Id) ? T("ui.battle.worn_row", o.Name)
-		: o.Name + (o.Cost > 0 ? " " + T("ui.battle.cost", o.Cost) : "") + (o.Uses >= 0 ? " " + T("ui.common.count", o.Uses) : "");
+		: o.Name + (o.Cost > 0 ? " " + T("ui.battle.cost", o.Cost) : "") + (o.Uses >= 0 ? " " + T("ui.common.count", o.MaxUses >= 0 ? $"{o.Uses}/{o.MaxUses}" : o.Uses) : "");
 
 	// The actor's worn pieces that have a battle use, as Item options: nothing is paid and the piece stays on.
 	private IEnumerable<BattleOption> WornOptions(int actor)
@@ -217,9 +222,73 @@ public sealed partial class SampleController
 		_battle.Phase = BattlePhase.Playback;
 	}
 
+	// The script verb `equip MEMBER PIECE [SLOT]`: the piece worn as the equip screen would (at that place, `left_hand` for
+	// a second weapon), the field menu opened around it when the field is up; null when it is worn, else the refusal.
+	public string? ScriptEquip(string member, string piece, string? slot)
+	{
+		EquipSlot place = default;
+		if (slot is not null && !Enum.TryParse(slot.Replace("_", ""), true, out place))
+		{
+			return $"no equipment place '{slot}': {string.Join(", ", Enum.GetNames<EquipSlot>())}";
+		}
+		bool opened = _s.Mode == Mode.Field && _s.OpenMenu().Ok;
+		PsivResult result = slot is null ? _s.Equip(member, piece) : _s.EquipAt(member, piece, place);
+		if (opened)
+		{
+			_s.CloseMenu();
+		}
+		return result.Ok ? null : result.Error!.Text;
+	}
+
+	// The script verb `combo RECIPE` while the members choose: each of the recipe's abilities set as the command of a
+	// member who knows it (on the first enemy standing, or on the member for an ally's ability), the rest defending, and
+	// the round resolved; null when it starts, else why not.
+	public string? ScriptCombo(string recipe)
+	{
+		if (!_battle.Active || _battle.Phase is not (BattlePhase.Command or BattlePhase.Top))
+		{
+			return "the members are not choosing commands";
+		}
+		if (!_data.Recipes.TryGetValue(recipe, out var combo))
+		{
+			return $"unknown combination recipe '{recipe}'";
+		}
+		IReadOnlyList<Combatant> all = _s.Combatants();
+		int enemy = all.FirstOrDefault(c => c.Side == Side.Enemy && c.Alive)?.Index ?? -1;
+		var used = new HashSet<int>();
+		foreach (string ability in combo.Abilities)
+		{
+			Combatant? member = all.FirstOrDefault(c => c.Side == Side.Party && c.Alive && !used.Contains(c.Index) && _s.MemberAbilities(c.Id).Any(a => a.Id == ability));
+			if (member is null)
+			{
+				return $"no member who can act knows '{ability}'";
+			}
+			int target = _s.MemberAbilities(member.Id).First(a => a.Id == ability).Targeting switch { Targeting.OneEnemy => enemy, Targeting.OneAlly => member.Index, _ => -1 };
+			PsivResult set = _s.SetCommand(member.Index, CommandKind.Ability, ability, target);
+			if (!set.Ok)
+			{
+				return set.Error!.Text;
+			}
+			used.Add(member.Index);
+		}
+		foreach (Combatant c in all.Where(c => c.Side == Side.Party && c.Alive && !used.Contains(c.Index)))
+		{
+			_s.SetCommand(c.Index, CommandKind.Defend);
+		}
+		Resolve();
+		return null;
+	}
+
 	private void SetAndAdvance(CommandKind kind, string? id, int target)
 	{
 		PsivResult result = _s.SetCommand(_battle.Actor, kind, id, target);
+		if (result.Error is { Key: "command.no_effect_on_target" } && _battle.Phase == BattlePhase.Target)
+		{
+			// An ally none of the ability's or item's effects can reach (R142): the picker stays open with that ally greyed out.
+			_battle.Log.Add(T("ui.battle.log.refused", result.Error.Text));
+			_battle.Refused.Add(target);
+			return;
+		}
 		if (!result.Ok)
 		{
 			_battle.Log.Add(T("ui.battle.log.refused", result.Error!.Text));
@@ -239,6 +308,7 @@ public sealed partial class SampleController
 			Targeting.OneFallenAlly => all.Where(c => c.Side == Side.Party && !c.Alive).Select(c => c.Index).ToList(),
 			_ => [],
 		};
+		_battle.Refused.Clear();
 	}
 
 	private void UpdateBattle(int dtMs, ActionInput input)
@@ -297,7 +367,7 @@ public sealed partial class SampleController
 			// or Back unless the battle layout's `game_over_confirm` is 0.
 			bool gameOver = _s.BattleInfo()?.GameOver == true;
 			b.EndedMs += dtMs;
-			bool confirms = !gameOver || Ui.Param(BattleScreen, "game_over_confirm", UiData(), 1) != 0;
+			bool confirms = ResultConfirms;
 			if (_outro is null && gameOver && Timing("game_over_return_ms") is > 0 and int back && b.EndedMs >= back)
 			{
 				EndBattleScreen();
@@ -388,11 +458,10 @@ public sealed partial class SampleController
 				b.Worn.Clear();
 				if (b.MenuChoice == "item")
 				{
-					foreach (BattleOption worn in WornOptions(b.Actor))
-					{
-						b.Worn.Add(worn.Id);
-						b.Options.Add(worn);
-					}
+					List<BattleOption> worn = [.. WornOptions(b.Actor)];
+					b.Worn.UnionWith(worn.Select(o => o.Id));
+					bool wornFirst = Ui.ParamText(BattleScreen, "item_order", UiData(), "items_then_equipment") == "equipment_then_items";
+					b.Options.InsertRange(wornFirst ? 0 : b.Options.Count, worn);
 				}
 				b.Phase = b.Options.Count > 0 ? BattlePhase.Option : BattlePhase.Command;
 				if (b.Options.Count == 0)
@@ -445,6 +514,10 @@ public sealed partial class SampleController
 			{
 				b.Phase = BattlePhase.Command;
 			}
+			else if (input.Confirm && b.Refused.Contains(b.Targets[_cursor]))
+			{
+				_audio.PlayCue("refuse");
+			}
 			else if (input.Confirm)
 			{
 				int target = b.Targets[_cursor];
@@ -459,7 +532,7 @@ public sealed partial class SampleController
 			}
 			break;
 		case BattlePhase.Macro:
-			IReadOnlyList<string> macros = _s.Macros();
+			List<string> macros = BattleMacros();
 			Move(input, macros.Count);
 			if (input.Back || macros.Count == 0)
 			{
@@ -484,6 +557,15 @@ public sealed partial class SampleController
 			}
 			break;
 		}
+	}
+
+	// The party's macros, or with the battle layout's `macro_auto_first` the one auto-battle plays (Settings.AutoMacro)
+	// first.
+	private List<string> BattleMacros()
+	{
+		IReadOnlyList<string> macros = _s.Macros();
+		string auto = _s.Settings().AutoMacro;
+		return LayoutSwitch("macro_auto_first") && macros.Contains(auto) ? [auto, .. macros.Where(m => m != auto)] : [.. macros];
 	}
 
 	// The result window's pages: one, or as many as the battle layout's `result_page_lines` lines a page make.
@@ -575,6 +657,12 @@ public sealed partial class SampleController
 		"battlelogshown" => _battle.LogShown ? "on" : "off",
 		"battlesync" => $"{_syncChecks} checked, " + (_syncProblems.Count == 0 ? "all match" : string.Join("; ", _syncProblems)),
 		"battleshake" => _probeShake.ToString(CultureInfo.InvariantCulture),
+		// The screen's jolt the last battle frame drew, `X,Y`.
+		"battlejolt" => _probeJolt,
+		// Each enemy standing, front to back: its label, x, foot row and size.
+		"enemyplaces" => _probeEnemyPlaces,
+		// Each sprite instance the last frame drew: `TRACK frame N [flip] [trail]`.
+		"animsprites" => _probeSprites.Count == 0 ? "none" : string.Join(", ", _probeSprites),
 		"screenlight" => _probeLight.ToString("0.00", CultureInfo.InvariantCulture),
 		"flash" => _probeFlash ? "on" : "off",
 		"backdrop" => _probeBackdrop,
@@ -588,6 +676,9 @@ public sealed partial class SampleController
 		// The command menu's rows for the phase, the one under the cursor in brackets.
 		"battlemenu" => _battle.Active && MenuRows(StageCombatants()) is { } menu
 			? string.Join(" | ", menu.Items.Select((item, i) => i == _cursor ? $"[{item}]" : item)) : "-",
+		// The rows of that menu that cannot be chosen (greyed), `-` for none.
+		"battleunusable" => _battle.Active && MenuRows(StageCombatants()) is { Usable: { } usable } rows && usable.Contains(false)
+			? string.Join(" | ", rows.Items.Where((_, i) => !usable[i])) : "-",
 		// Each party combatant as its slot shows its statuses: the name's color from the layout's statuses table and the icons.
 		"partystatus" => _probePartyStatus,
 		// Each figure the last frame drew in a pose other than idle, by label: `Gel Mite A attack, Test Fighter flourish`.

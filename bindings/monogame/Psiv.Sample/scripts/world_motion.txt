@@ -1,0 +1,79 @@
+# World motion from the asset manifest (scripts/make_world_motion_assets.py, on a copy, on the background data copy): Wren
+# Yard's palette tracks (the pond on the global clock, the leaves of its above picture from entering the area, the grass
+# recolored while cogway.loud is set), a frame run on its ground from entering and one over its above picture that the
+# flag turns off, a sky behind the area in two bands with a wave over its lines and rain in front while the flag is set;
+# Wren Loft's tileset recolors its floor. `fieldmotion` reads each track's step, each run's frame and the layers drawn;
+# `cellpixel.X.Y[.DX.DY]` reads the colors. The manifest without motion is swapped in and out again (hot reload). With
+# --window the shot lines save screenshots under build/shots/motion/.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev warp wren_yard yard_middle
+wait 2
+expect asset animated:wren_yard:0 file
+expect asset layer:wren_yard:1 file
+# Entering starts the entry clocks: the leaves as drawn, the fountain's first frame; the flag keeps the grass and the rain off.
+expect statehas fieldmotion ,0,- runs 0,
+expect statehas fieldmotion back 1 front 0
+expect statehas cellpixel.11.1 285a28
+expect statehas cellpixel.7.1 c8a040
+expect statehas cellpixel.5.5 466e3c
+expect statenot pixel.10.10 0e101a
+shot build/shots/motion/yard.png
+# The pond steps every 500 ms on the global clock; a color is replaced once (the foam takes the old deep blue, which stays).
+waitstatehas 40 fieldmotion palettes 1,
+expect statehas cellpixel.3.2.3.0 3870d0
+expect statehas cellpixel.3.2 3060c0
+shot build/shots/motion/pond_step1.png
+waitstatehas 40 fieldmotion palettes 2,
+expect statehas cellpixel.3.2.3.0 4080e0
+expect statehas cellpixel.3.2 a0c8f0
+waitstatehas 40 fieldmotion palettes 0,
+expect statehas cellpixel.3.2.3.0 3060c0
+# The leaves step after 30 ticks from entering, the fountain plays 200, 200 and 400 ms, the lamp over the roofs 12 ticks a frame.
+waitstatehas 40 fieldmotion ,1,-
+expect statehas cellpixel.11.1 5a8a28
+waitstatehas 60 fieldmotion runs 2,
+expect statehas cellpixel.7.1 40c8a0
+waitstatehas 20 fieldmotion ,1 back
+expect statehas cellpixel.1.6 202020
+waitstatehas 20 fieldmotion ,0 back
+expect statehas cellpixel.1.6 e0e0e0
+# Leaving and coming back restarts the entry clocks; the pond's global clock runs on.
+dev warp wren_loft loft_door
+waitstate 30 fieldmotion tiles 0
+expect statehas cellpixel.4.3 7a6a50
+waitstatehas 30 fieldmotion tiles 1
+expect statehas cellpixel.4.3 8a5050
+shot build/shots/motion/loft.png
+dev warp wren_yard yard_middle
+wait 2
+expect statehas fieldmotion ,0,- runs 0,
+expect statehas cellpixel.11.1 285a28
+# The flag recolors the grass, turns the lamp off and the rain on.
+dev flag cogway.loud on
+wait 2
+expect statehas fieldmotion ,0 runs
+expect statehas fieldmotion ,- back 1 front 1
+expect statehas cellpixel.5.5 6e463c
+expect statehas cellpixel.1.6 6e463c
+wait 20
+shot build/shots/motion/loud.png
+# Hot reload: without the motion every picture shows as drawn and the sky is gone; with it again everything plays.
+assets swap assets.json alt/assets_still.json
+wait 2
+expect state fieldmotion -
+expect statehas cellpixel.5.5 466e3c
+expect statehas cellpixel.3.2.3.0 3060c0
+expect statehas pixel.10.10 0e101a
+assets swap assets.json alt/assets_moving.json
+wait 2
+expect statehas fieldmotion back 1 front 1
+expect statehas cellpixel.5.5 6e463c
+dev flag cogway.loud off
+wait 2
+expect statehas fieldmotion back 1 front 0
+expect statehas cellpixel.5.5 466e3c

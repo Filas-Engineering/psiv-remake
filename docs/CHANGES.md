@@ -76,6 +76,43 @@ One line per feature, newest first: name, kind, meaning. Each pass adds its line
 
 Newest first. The MonoGame sample (`bindings/monogame/Psiv.Sample`) only.
 
+* `actions`, `acting`, `action_ids`, `action_list`, `looking`, `look_text`, `result_text`, `result_ok` (menu_items param and fields): an item's actions, use and look (its description), and the uses' outcomes on the page instead of the notices.
+* `macro_auto_first` (battle param): the macro list opens with the auto-battle macro first, marked `(auto)`.
+* `item_order` (battle param): `"items_then_equipment"` (as before) or `"equipment_then_items"`, the worn pieces first in the Item list.
+* `continue` (title param): `"newest"` (as before) or `"choose"`, Continue opening the Load list.
+* Area changes (fix): a warp, travel or event that changes the area during a real-time step ends that step, and the new area's first frame shows the leader on its own cell (it showed the old step's target cell until the step ran out).
+* Scripted leader walks (behavior): a script's `move` of the leader (also `nowait`) leads the line; the members not in the scene trail along its cells at its pace, as in walking (they stood still).
+* `battle_anim_side.txt` (headless run), the `equip` and `combo` script verbs: the example animation set in the side layout, and the two-weapon variants and Twin Arc's script played live in both layouts.
+* `make_anim_assets.py --leftovers`, `battle_anim_leftovers.txt` (headless run): the last animation additions checked, reloaded and played in both layouts, with broken cases in `make_anim_assets.py --broken`.
+* Battle animation `travel.trail`, `directions` and `flip: auto` (default `none`), `shake.pattern: script`, the `mosaic` transition (`block`, `steps`), the `/layout:` qualifier on every key, and the problem for a figure animation nothing plays; probes `animsprites`, `battlejolt`.
+* The animation previewer: `count` and `targets` on `preview anim`, an enemy acting for `enemy:` keys, a member using the item for `item:` keys, `overlay anim [on|off]`, and the layout's windows settled after a seek.
+* A backdrop `swap` keeps its picture to its script's end and a later `restore` crossfades back in the same action; `placements` take `count:6` to `count:8` and a rank per place; probe `enemyplaces`.
+* `idle` and `idle:flying` figure states as data (`pose`, `motion`, `color`, `lift`, `stagger`) on the controller's clock in script units, replacing the built-in idle and hover.
+* `palette` on figure and effect entries of `assets.json` (a color list or a PNG strip), and palette sources by index in color transforms, on figures and sprites; `figure.LABEL` ends in `palette N`.
+* `solo` (settings and turn scripts: `command`, `action`, `result`): only the member choosing or acting drawn, in both layouts.
+* Number windows: `row` per side (`{"party", "enemy"}`), `pad` as `[x, y]`, `frame` (a styles.json frame, `battle`) and `close`.
+* Area layers (`maps.areas[].layers`): pictures behind the area or in front of everything on it, each with its scroll factor against the camera, an automatic drift, the axes it repeats on, row bands at their own rates and a sine over its lines or columns, in a documented order around the ground and above pictures; checked, reloaded, in the broken copy and `world_motion.txt`.
+* Frame runs on an area's picture (`maps.areas[].animated`): a sheet's frames on a rectangle in cells or picture pixels, on the ground or over the above picture, timed in ms or 60 Hz ticks on the global or the area-entry clock, with flag conditions; asset keys `animated:AREA:N`, the `fieldmotion` probe.
+* Palette tracks (`palettes` on `maps.areas[]` entries and on tilesets): named source colors replaced exactly in looping steps (one step a still recolor) on the area's pictures and frame runs or the tileset's tiles, by the battle animations' recolor, timed in ms or ticks on the global or entry clock, with `flag`/`unless_flag`; a maps entry with only motion keeps the area's tiles.
+* `make_shapes_data.py`, `shapes.txt` (headless run): every newer data shape the library accepts (object `flags` with `reset`, `presentation.pictures`, `music.fade_ms` and area music lists, `field_status`, area `name` lists, `counters`, exit `sound`/`block_flag`/`closed_tile`, wanderers' `stand_percent`/`axis`, `patrol`, `path`, `platforms`) read with no `data problem`; the sample's data reading never throws on an entry it cannot read, and `make_belt_data.py` sorts object flags by id.
+* `make_menus_more_assets.py`, `menus_more.txt` (headless run): the menu follow-ups played, the children's problems checked on a copy.
+* `tab_h`, `tab_pad`, `tab_gap`, `tab_text_y` (menu and menu_status params) and `unusable` (menu_abilities param): the tabs' sizes, and abilities not usable in the field dimmed or hidden.
+* `party_talk` (menu_options param), `talking`, `talk` (fields) and `talk_box` (slot): the party talk's lines on its page with the menu kept open.
+* `System` (game action) and `system_action` (menu_system param): S opens the system page alone over the field.
+* `children` (menu entry field) and `menu_children` (screen key): a tab that lists pages under it and opens the one chosen.
+* `make_adopt_assets.py`, `make_adopt_data.py`, `motion.txt`, `adopt.txt`, `scene_overlay.txt`, `narration_nowait.txt` (headless runs), `make_narration_data.py --nowait`: the library adoption items played.
+* `platforms`, `actorpos.ID`, `battleunusable` (state probes): the platforms and people as drawn in the data's pixels, and the greyed rows of the battle menu.
+* Camera overlay (behavior): names and marks a script's scene camera (`scene at X Y`, `scene, back to the leader`).
+* `result_confirm` (battle field): false after a game over under `game_over_confirm` 0, which also empties the continue hint.
+* Title `load` and field `can_load` (behavior and title field): Load shows by `CanLoad`.
+* Notices `game.poison_fell`, `game.paralysis_worn_off`, `game.machine_stood_up` (behavior): toasts with the cues `hit`, `status`, `heal`.
+* `step:notice.KEY` (animation key check): the notice must be one of `BattleKeys().Notices`.
+* `max_uses` (battle item field) and a skill's battle row as `x2/3` (behavior): `BattleOption.MaxUses`.
+* `attack`, `base_hp`, `base_tp`, `base_strength`, `base_mental`, `base_agility`, `base_dexterity`, `base_defense`, `experience_for_level`, `total_experience`, `kind` (`menu_status` fields): the member detail the session gives.
+* Refused ally (behavior): Mend or any one-ally action the session refuses with `command.no_effect_on_target` keeps the target list open with that ally greyed out.
+* `damage_numbers` (battle param: `applied`, `rolled`): floating numbers as the change made or as `BattleEvent.Rolled`.
+* Patrolling actors (behavior): slide between cells at their `patrol.speed_percent` like wanderers; path actors drawn at home plus their pixel offset (`GameInfo.CellPixels`).
+* `sprites.platform` (asset entry) and moving platforms (behavior): `Platforms()` drawn at their pixel places, the party drawn on the one carrying it with no glide, input gated on `StepMask` where there are platforms.
 * `make_scene_data.py`, `make_scene_assets.py`, `scene.txt`, `shop_voice.txt`, `vehicle_commands.txt`, `game_over.txt`, `arrive_behind.txt`, `above_cover.txt`, `glide.txt`, `narration_auto.txt` (headless runs): this pass's items played.
 * `narration_wait` (`press`, `auto`) and `narration_hold_ms` (dialogue params), `{narration:nowait}` (built-in tag value): narration lines that go on by themselves until the window is full; the window waits for a press before a speaker's line or a choice.
 * `party_figures`, `enemy_figures` (battle params, expressions, default 1): a side's figures left out of the `stage` slot, the backdrop staying.

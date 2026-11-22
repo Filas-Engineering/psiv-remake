@@ -6,12 +6,17 @@ namespace Psiv.Sample;
 // use) and its system page (the slot list, quitting, and settings rows changed with Confirm).
 public sealed partial class SampleController
 {
-	private List<AbilityInfo> PageAbilities(string member) => [.. _s.MemberAbilities(member).Where(a => MenuPage switch
+	// The menu_abilities layout's `unusable` "hide" leaves out what cannot be used in the field.
+	private List<AbilityInfo> PageAbilities(string member)
 	{
-		"techniques" => a.Kind == AbilityKind.Technique,
-		"skills" => a.Kind == AbilityKind.Skill,
-		_ => true,
-	})];
+		bool hide = Ui.ParamText("menu_abilities", "unusable", UiData(), "dim") == "hide";
+		return [.. _s.MemberAbilities(member).Where(a => (a.Field || !hide) && MenuPage switch
+		{
+			"techniques" => a.Kind == AbilityKind.Technique,
+			"skills" => a.Kind == AbilityKind.Skill,
+			_ => true,
+		})];
+	}
 
 	private void UpdateAbilitiesPage(ActionInput input)
 	{

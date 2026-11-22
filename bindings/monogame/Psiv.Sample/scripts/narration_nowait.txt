@@ -1,0 +1,23 @@
+# The line tag `{narration:nowait}` under the dialogue's `narration_wait` "press" (make_narration_data.py --nowait,
+# make_narration_assets.py's narration window): each of the two tagged lines goes on by itself once revealed and held,
+# so the next joins the window without a press; the plain third line waits for Confirm, then the guide's line shows in
+# the box. Screenshots under build/shots/narration/nowait_*.png with --window.
+
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev event nowait
+waitstatehas 120 narration The tide turned at noon.
+expect state narration The tide turned at noon.
+waitstatehas 200 narration The tide turned at noon. | The gulls went quiet.
+waitstate 300 narration The tide turned at noon. | The gulls went quiet. | Then nothing moved at all.
+waitstate 200 narrationreveal 26/26
+wait 90
+expect state narration The tide turned at noon. | The gulls went quiet. | Then nothing moved at all.
+expect state uifield.dialogue.box_visible false
+shot build/shots/narration/nowait_held.png
+press Enter
+wait 2
+expect state narration none
+expect state uifield.dialogue.box_visible true
+expect statehas line Strange weather.

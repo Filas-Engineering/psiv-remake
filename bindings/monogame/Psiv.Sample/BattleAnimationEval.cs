@@ -6,7 +6,8 @@ using Microsoft.Xna.Framework;
 namespace Psiv.Sample;
 
 // A color transform as drawn: the multiply as the picture's tint, an added color drawn as the picture's silhouette on
-// top, the opacity, and an exact-match recolor of opaque source pixels.
+// top, the opacity, and an exact-match recolor of opaque source pixels. A source given by index into the picture's
+// palette is a transparent color holding the index in R until the picture resolves it (SampleController.Resolve).
 public readonly record struct ColorTransform(Color Multiply, Color Add, float Alpha, IReadOnlyList<(Color From, Color To)>? Palette)
 {
 	public static readonly ColorTransform None = new(Color.White, Color.Transparent, 1f, null);
@@ -72,7 +73,8 @@ public static class BattleAnimationEval
 		}
 		float alpha = (float)(BattleAnimationRun.Num(o["alpha"]) ?? 1);
 		List<(Color, Color)>? palette = o["palette"] is JsonArray map
-			? [.. map.OfType<JsonArray>().Select(p => (UiLayoutColor(BattleAnimationRun.Str(p[0])!), UiLayoutColor(BattleAnimationRun.Str(p[1])!)))]
+			? [.. map.OfType<JsonArray>().Select(p => (BattleAnimationRun.Num(p[0]) is double index ? new Color((int)index, 0, 0, 0) : UiLayoutColor(BattleAnimationRun.Str(p[0])!),
+				UiLayoutColor(BattleAnimationRun.Str(p[1])!)))]
 			: null;
 		return new ColorTransform(mul, add, alpha, palette);
 	}

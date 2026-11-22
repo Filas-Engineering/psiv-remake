@@ -63,7 +63,18 @@ public sealed class Assets
 			}
 			var backdrops = new HashSet<string>(manifest.Backdrops.SelectMany(b => new[] { b.Kind is null ? null : "kind:" + b.Kind, b.Area is null ? null : "area:" + b.Area,
 				b.Encounter is null ? null : "encounter:" + b.Encounter, b.Terrain is null ? null : "terrain:" + b.Terrain, b.Id is null ? null : "id:" + b.Id }).OfType<string>()) { "generated" };
-			animation = BattleAnimation.Load(manifest.Directory, file, new AnimCheckContext(data, frames, [.. layout.Styles.Colors.Keys], manifest.Directory, backdrops), problems);
+			animation = BattleAnimation.Load(manifest.Directory, file, new AnimCheckContext(data, frames, [.. layout.Styles.Colors.Keys], manifest.Directory, backdrops,
+				[.. layout.Styles.Frames.Keys]), problems);
+			// A figure animation beyond the six the battle plays needs a script, a figure state or a table entry that plays it.
+			var played = new HashSet<string>(AssetManifest.FigureAnimations.Concat(animation.PlayedPoses())
+				.Concat(battle.Actions.Values.Concat(battle.Fallbacks.Values).Concat(battle.EnemyLooks.Values).Concat(battle.ChangeLooks.Values).Select(l => l.Pose).OfType<string>()));
+			foreach (FigureEntry f in manifest.Figures)
+			{
+				foreach (string name in f.Animations.Keys.Where(n => !played.Contains(n)).Order(StringComparer.Ordinal))
+				{
+					problems.Add(new AssetProblem(AssetManifest.FileName, $"{f.Entry}.animations.{name}", $"no battle animation script or figure state plays '{name}'"));
+				}
+			}
 		}
 		problems.AddRange(layoutProblems);
 		// The dialogue's fx tags name scripts of the animation set.

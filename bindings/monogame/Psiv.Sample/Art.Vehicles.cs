@@ -14,6 +14,7 @@ public sealed partial class Art
 	private readonly Dictionary<(string, Direction, int), int> _vehicles = [];
 	private readonly Dictionary<string, (VehicleEntry Entry, int[] Images)> _vehicleSheets = [];
 	private int _pier = -1;
+	private int _platform = -1;
 
 	private static readonly string[] VehicleSide =
 	[
@@ -95,6 +96,27 @@ public sealed partial class Art
 		"................",
 	];
 
+	// A raft of planks bound with rope, seen from above, filling its cell.
+	private static readonly string[] PlatformRows =
+	[
+		"oooooooooooooooo",
+		"ommmmmmmmmmmmmmo",
+		"orrmmmmmmmmmmrro",
+		"oddddddddddddddo",
+		"ommmmmmmmmmmmmmo",
+		"ommmmmmmmmmmmmmo",
+		"oddddddddddddddo",
+		"ommmmmmmmmmmmmmo",
+		"ommmmmmmmmmmmmmo",
+		"oddddddddddddddo",
+		"ommmmmmmmmmmmmmo",
+		"ommmmmmmmmmmmmmo",
+		"oddddddddddddddo",
+		"orrmmmmmmmmmmrro",
+		"ommmmmmmmmmmmmmo",
+		"oooooooooooooooo",
+	];
+
 	// A generated vehicle frame: the hull colored from the vehicle's id, frame 1 a pixel lower, with the spray between.
 	public static Pixels VehicleTemplate(string id, Direction facing, int frame)
 	{
@@ -170,6 +192,27 @@ public sealed partial class Art
 		}
 	}
 
+	// A moving platform (GameSession.Platforms), drawn a cell large at its pixel place.
+	public int Platform
+	{
+		get
+		{
+			if (_platform < 0)
+			{
+				Color Palette(char c) => c switch
+				{
+					'o' => Outline,
+					'm' => new Color(150, 112, 70),
+					'd' => new Color(104, 74, 44),
+					'r' => new Color(214, 196, 150),
+					_ => Color.Magenta,
+				};
+				_platform = Add(Pixels.FromTemplate(PlatformRows, Palette));
+			}
+			return _platform;
+		}
+	}
+
 	private readonly Dictionary<string, Figure> _vehicleFigures = [];
 
 	// A vehicle in battle, facing the enemies on the left: the manifest's party figure for its id, else its west frames
@@ -199,6 +242,10 @@ public sealed partial class Art
 		if (m.Sprites.TryGetValue("pier", out string? pier))
 		{
 			_pier = Whole(pier);
+		}
+		if (m.Sprites.TryGetValue("platform", out string? platform))
+		{
+			_platform = Whole(platform);
 		}
 	}
 }

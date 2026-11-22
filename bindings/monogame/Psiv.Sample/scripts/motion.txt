@@ -1,0 +1,74 @@
+# Actors that move by themselves and moving platforms in Wren Mill, on the data copy `make_actor_data ... motion` writes,
+# from saves of the scripted playthrough on that copy (four members), on a copy of make_adopt_assets.py's directory (its
+# platform picture, swapped for a red one), with --dev and the real-time field input. The water
+# wheel is drawn at its home plus its path's pixel offset, the mill hand's patrol slides between cells as wanderers do,
+# the raft and the skiff are drawn at their pixel places; the party boards the raft, rides it with held input waiting (no
+# glide, followers on it), steps off at the far bank; a save mid-ride loads back aboard. With --window the shot lines
+# save screenshots under build/shots/motion/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+cmd load manual_1
+wait 4
+expect screen Field
+fieldinput realtime
+dev warp wren_mill mill_door
+wait 2
+expect state area Wren Mill
+waitstate 10 platforms raft 96 32, skiff 96 64
+# The platform's picture comes from the asset directory (green planks) and reloads when the file changes (red).
+expect asset sprite:platform file
+expect statehas cellpixel.6.2 60a858
+assets swap sprites/platform.png alt/platform_red.png
+wait 1
+expect statehas cellpixel.6.2 c85048
+
+# The wheel follows its offsets ([0,0] [4,-2] [8,0] [4,2], two ticks each) from its home cell 11,4: drawn off the cell grid.
+waitstate 30 actorpos.mill_wheel 180 62
+waitstate 30 actorpos.mill_wheel 184 64
+waitstate 30 actorpos.mill_wheel 180 66
+# The mill hand walks its patrol a cell per 250 ms, gliding from cell to cell.
+waitstatehas 120 actorroute.mill_hand 4,
+expect actor mill_hand walking
+waitstatehas 60 actorpos.mill_hand .
+shot build/shots/motion/mill_patrol_wheel.png
+
+# The skiff shuttles by itself, drawn between cells.
+waitstatehas 120 platforms skiff 10
+expect statenot platforms carrying
+
+# The raft waits at its bank (triggered) until the party steps onto it from the bank; its cell is water, so only the
+# session's step mask lets the step go.
+cmd walk raft_bank
+cmd face east
+wait 2
+hold Right 10
+waitstatehas 30 platforms carrying
+# Held input waits while it moves: no step starts, the leader rides at the raft's place, the followers beside it.
+hold Right 8
+expect state walkstep -
+expect statehas platforms raft 1
+expect statehas platforms carrying
+shot build/shots/motion/raft_ride.png
+
+# A save mid-ride comes back aboard.
+cmd menu
+cmd save manual_2
+cmd close
+wait 2
+cmd title
+wait 2
+cmd load manual_2
+wait 4
+expect screen Field
+expect statehas platforms carrying
+fieldinput realtime
+
+# Docked at the far bank (9,2), the mask lets the leader step off onto 10,2 with a glide.
+waitstatehas 200 platforms raft 144 32 carrying
+hold Right 8
+expect statehas walkstep east 10 2
+wait 30
+expect statenot platforms carrying
+expect actor fighter 10 2 east
+shot build/shots/motion/raft_off.png

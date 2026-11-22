@@ -55,6 +55,8 @@ public sealed partial class GameData
 	public HashSet<string> Enemies { get; } = [];
 	public HashSet<string> Encounters { get; } = [];
 	public HashSet<string> Statuses { get; } = [];
+	// The notice keys battles can show with this data (GameSession.BattleKeys), for the animation set's `step:notice.KEY`.
+	public HashSet<string> BattleNotices { get; } = [];
 	public HashSet<string> Cameras { get; } = [];
 	public HashSet<string> Portraits { get; } = [];
 	public HashSet<string> Animations { get; } = [];
@@ -62,7 +64,8 @@ public sealed partial class GameData
 	public bool InteractNearby { get; private set; }
 	// game.json's `run_speed_percent` (R81), 0 when it gives none: the real-time walk then runs through the session.
 	public int RunSpeedPercent { get; private set; }
-	// Each wandering actor's speed against the area's step time (game.json actors' `wander.speed_percent`, default 50).
+	// Each wandering or patrolling actor's speed against the area's step time (game.json actors' `wander.speed_percent` or
+	// `patrol.speed_percent`, default 50).
 	public Dictionary<string, int> WanderPercent { get; } = [];
 	// Each talk point's `actor_at` cell by actor: where the actor stands apart from its hook's cell.
 	public Dictionary<string, (int X, int Y)> ActorAt { get; } = [];
@@ -104,6 +107,7 @@ public sealed partial class GameData
 		var d = new GameData();
 		d.Actors.UnionWith(session.ActorIds());
 		d.Cameras.UnionWith(session.Cameras().Select(c => c.Id));
+		d.BattleNotices.UnionWith(session.BattleKeys().Notices);
 		d.Languages.UnionWith(session.GameInfo().Languages);
 		d.Cues.UnionWith(Synth.SampleCues);
 		using JsonDocument game = JsonDocument.Parse(File.ReadAllText(Path.Combine(dataDir, "game.json")));
@@ -135,9 +139,9 @@ public sealed partial class GameData
 		d.RunSpeedPercent = root.TryGetProperty("run_speed_percent", out JsonElement run) ? Whole(run) ?? 0 : 0;
 		// An actor is a name or an object; `wander` is an object with an optional `speed_percent`, or any other value for the
 		// default pace.
-		d.Each(Array(root, "actors").Where(a => a.ValueKind == JsonValueKind.Object && a.TryGetProperty("wander", out _)), "game.json actors", actor =>
+		d.Each(Array(root, "actors").Where(a => a.ValueKind == JsonValueKind.Object && (a.TryGetProperty("wander", out _) || a.TryGetProperty("patrol", out _))), "game.json actors", actor =>
 		{
-			JsonElement wander = actor.GetProperty("wander");
+			JsonElement wander = actor.TryGetProperty("wander", out JsonElement w) ? w : actor.GetProperty("patrol");
 			if (wander.ValueKind is JsonValueKind.False or JsonValueKind.Null)
 			{
 				return;
@@ -320,7 +324,7 @@ public sealed partial class GameData
 			read();
 		}
 		catch (Exception e) when (e is InvalidOperationException or KeyNotFoundException or FormatException or IndexOutOfRangeException or ArgumentException
-			or JsonException or IOException or OverflowException)
+			or JsonException or IOException or OverflowException or NullReferenceException)
 		{
 			Problems.Add($"{where}: {e.Message}");
 		}

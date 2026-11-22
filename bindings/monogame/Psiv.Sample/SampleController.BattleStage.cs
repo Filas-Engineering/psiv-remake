@@ -14,6 +14,8 @@ namespace Psiv.Sample;
 public sealed partial class SampleController
 {
 	private int _probeShake;
+	private string _probeJolt = "0,0";
+	private string _probeEnemyPlaces = "none";
 	private bool _probeFlash;
 	private string _probeBackdrop = "-";
 	private string _probeOverlay = "-";
@@ -121,6 +123,7 @@ public sealed partial class SampleController
 		bool reduced = _s.Profile().ReducedFlash;
 		List<ShownCombatant> shown = _show.All;
 		_stageLayout = StageLayout();
+		_probeSprites.Clear();
 		bool front = _stageLayout == BattleLayout.Front;
 		string screen = front ? "battle_front" : "battle_side";
 		string vehicle = info?.Vehicle ?? "";
@@ -141,7 +144,7 @@ public sealed partial class SampleController
 			EffectScale = effectScale, EffectScaleLarge = effectScaleLarge, StageBottom = stageBottom, Width = s.Width, Height = s.Height,
 		};
 		// The screen shakes by the largest of the scripts' shakes (reduced flash damps them), in percent of the layout's motion.
-		float shake = Shake(ctx, out Point backdropShift, out Point figureShift);
+		float shake = Shake(ctx, out Point backdropShift, out Point figureShift, out int joltMs);
 		// A vertical split reveal brings the enemies' labels up with their figures.
 		int splitY = 0;
 		if (step is { Kind: StepKind.Transition, Run: { } split })
@@ -160,7 +163,8 @@ public sealed partial class SampleController
 			}
 		}
 		_probeShake = (int)MathF.Round(shake);
-		var jolt = new Point((int)MathF.Round(shake * MathF.Sin(_clockMs * 0.09f)), (int)MathF.Round(shake * MathF.Cos(_clockMs * 0.13f)));
+		var jolt = new Point((int)MathF.Round(shake * MathF.Sin(joltMs * 0.09f)), (int)MathF.Round(shake * MathF.Cos(joltMs * 0.13f)));
+		_probeJolt = $"{jolt.X},{jolt.Y}";
 
 		FieldInfo? field = _s.FieldInfo();
 		(int backdrop, _probeBackdrop) = art.Backdrop(field?.AreaKind ?? AreaKind.Field, field?.AreaId ?? "", info?.Encounter ?? "", _battleTerrain, _battleCell, _s.Flag);
@@ -188,7 +192,8 @@ public sealed partial class SampleController
 				f = enemyPlaces[shown[i].Position] = PlaceEnemy(screen, rules, ui, shown[i].Position, enemyCount);
 				if (Placement(info?.Encounter ?? "", enemyCount, shown[i].Position, front) is { } placed && Ui.Param(screen, $"enemy_slot_{shown[i].Position}_x", ui, -1) < 0)
 				{
-					f = enemyPlaces[shown[i].Position] = (placed.X, placed.Foot, f.Size);
+					int size = placed.Rank is null ? f.Size : Ui.Param(screen, "enemy_size", new UiContext(ui).Set("enemy_count", enemyCount).Set("enemy_back", placed.Rank == "back"), 0);
+					f = enemyPlaces[shown[i].Position] = (placed.X, placed.Foot, size);
 				}
 			}
 			return centers.TryGetValue(i, out int cx) ? (cx, f.Foot, f.Size) : f;
@@ -203,6 +208,7 @@ public sealed partial class SampleController
 		// The battle layout's `party_figures` and `enemy_figures` (expressions, default 1) leave a side's figures out of the
 		// stage slot, its backdrop staying; their places still anchor effects and numbers.
 		bool partyFigures = Ui.Param(screen, "party_figures", ui, 1) != 0, enemyFigures = Ui.Param(screen, "enemy_figures", ui, 1) != 0;
+		HashSet<int>? solo = SoloMembers(step, commanding, b.Actor, partyCount);
 		bool hideFigure = false;
 		var hidden = new List<Action>();
 		void Picture(int image, int x, int y, int w, int h, Color tint)
@@ -221,7 +227,7 @@ public sealed partial class SampleController
 			Combatant c = all[i];
 			ShownCombatant sc = shown[i];
 			bool enemy = c.Side == Side.Enemy;
-			hideFigure = !(enemy ? enemyFigures : partyFigures);
+			hideFigure = !(enemy ? enemyFigures : partyFigures) || !enemy && solo is not null && !solo.Contains(i);
 			string id = enemy ? sc.Id : c.Id;
 			// In a vehicle battle the members ride inside it: only the vehicle stands on the field, at the party's middle.
 			if (vehicle.Length > 0 && !enemy && c.Id != vehicle)
@@ -273,11 +279,11 @@ public sealed partial class SampleController
 			}
 			FrameRun run = figure.Animations.GetValueOrDefault(animation) ?? figure.Idle;
 			bool idle = run == figure.Idle;
-			int cell = fl.Frame >= 0 ? -1 : run.FrameAt(idle ? _clockMs + i * 137 : fl.PoseMs < 0 ? _timeline.ElapsedMs : fl.PoseMs, loop: idle || fl.PoseLoop);
+			int cell = fl.Frame >= 0 ? -1 : run.FrameAt(idle ? fl.IdleMs ?? _clockMs + i * 137 : fl.PoseMs < 0 ? _timeline.ElapsedMs : fl.PoseMs, loop: idle || fl.PoseLoop);
 			int image = fl.Frame >= 0 ? figure.Images[Math.Clamp(fl.Frame, 0, figure.Images.Length - 1)] : figure.Images[cell];
 			int left = x - size / 2 + (int)MathF.Round(dx) + jolt.X + figureShift.X, top = foot - size + (int)MathF.Round(dy) + jolt.Y + figureShift.Y;
 			// In the front layout a flying enemy hovers over its place, bobbing, while its shadow stays on the ground.
-			int hover = front && enemy && c.Flying ? size / 5 + (int)MathF.Round(5 * motion * MathF.Sin((_clockMs + i * 211) / 420f)) : 0;
+			int hover = fl.IdleLift is float idleLift ? (int)MathF.Round(idleLift) : front && enemy && c.Flying ? size / 5 + (int)MathF.Round(5 * motion * MathF.Sin((_clockMs + i * 211) / 420f)) : 0;
 			int lift = (int)MathF.Round(fl.Lift);
 			Rectangle body = art.Stand(image, left, top - hover - lift, size);
 			bodies[i] = body;
@@ -302,13 +308,16 @@ public sealed partial class SampleController
 				tint = Color.Lerp(Color.White * 4f, tint, fl.Crossfade);
 				alpha *= fl.Crossfade;
 			}
-			if (fl.Palette is { Count: > 0 } palette)
+			int recolored = 0;
+			if (fl.Palette is { Count: > 0 } && Resolve(fl.Palette, figure.Palette) is { Count: > 0 } palette)
 			{
-				image = s.Derive(image, "palette:" + string.Join(",", palette.Select(p => $"{p.From.PackedValue:x}>{p.To.PackedValue:x}")), (px, _, _) => Recolor(px, palette));
+				image = s.Derive(image, PaletteKey(palette), (px, _, _) => Recolor(px, palette));
+				recolored = palette.Count;
 			}
 			FigurePicture(s, hideFigure ? hidden : pictures, image, body, tint * alpha, fl, foot + (int)MathF.Round(dy) + jolt.Y + figureShift.Y, i);
 			_probeFigureLooks[c.Label] = $"pose {animation} frame {(fl.Frame >= 0 ? fl.Frame : cell)} offset {(int)MathF.Round(dx)},{(int)MathF.Round(dy)}" +
-				$" color #{tint.R:x2}{tint.G:x2}{tint.B:x2} alpha {alpha.ToString("0.00", CultureInfo.InvariantCulture)}" + (fl.Life.Length > 0 ? " " + fl.Life : "");
+				$" color #{tint.R:x2}{tint.G:x2}{tint.B:x2} alpha {alpha.ToString("0.00", CultureInfo.InvariantCulture)}" + (fl.Life.Length > 0 ? " " + fl.Life : "")
+					+ (recolored > 0 ? $" palette {recolored}" : "");
 		}
 		hideFigure = false;
 		_lastBodies = new Dictionary<int, Rectangle>(bodies);
@@ -317,6 +326,7 @@ public sealed partial class SampleController
 		_probeBodies = string.Join(", ", bodies.OrderBy(x => x.Key).Select(x => $"{all[x.Key].Label} {x.Value.Width}x{x.Value.Height} {x.Value.Bottom - Where(x.Key).Foot}"));
 		_probeFlying = hovering.Count == 0 ? "none" : string.Join(", ", hovering);
 		_probePlaces = string.Join(", ", bodies.Keys.Where(k => k < partyCount).Order().Select(k => $"{all[k].Name} {Where(k).X} {Where(k).Foot}").DefaultIfEmpty("none"));
+		_probeEnemyPlaces = string.Join(", ", order.Where(k => k >= partyCount && shown[k].Alive).Select(k => $"{shown[k].Label} {Where(k).X} {Where(k).Foot} {Where(k).Size}").DefaultIfEmpty("none"));
 		// A vehicle battle's overlay (a cockpit, a hull's rim) goes over the stage and its figures, under the effects and
 		// every window.
 		_probeOverlay = "-";
@@ -407,6 +417,9 @@ public sealed partial class SampleController
 				var sizes = new NumberSizes(Param("number_size"), Param("number_critical_size"), Param("number_tp_size"), Param("number_word_size"));
 				int numberY = Param("number_y"), numberMemberY = Param("number_member_y"), numberRise = Param("number_rise"), numberGap = Param("number_gap");
 				var stacked = new Dictionary<int, int>();
+				// The layout's `damage_numbers` "rolled" floats what the roll gave (BattleEvent.Rolled) before hit points, a shield's
+				// cap or the maximum took any off; "applied", the default, the change made.
+				bool rolledNumbers = Ui.ParamText(screen, "damage_numbers", ui, "applied") == "rolled";
 				_probeNumbers.Clear();
 				BattleEvent? previous = null;
 				foreach (BattleEvent e in step.Events)
@@ -420,6 +433,10 @@ public sealed partial class SampleController
 					float p = Since(step, unit is null ? 0 : unit.Forced ? step.Length : unit.At);
 					int t = e.Type == BattleEventType.ItemHadNoEffect ? e.Actor : e.Target;
 					(BattleEvent plain, BattleEvent? previousEvent) = Plain(e, previous, screen, ui);
+					if (rolledNumbers && plain.Type is BattleEventType.DamageDealt or BattleEventType.Healed && plain.Rolled > 0)
+					{
+						plain = plain with { Amount = plain.Rolled };
+					}
 					if (!anchors.TryGetValue(t, out Rectangle r) || e.Type == BattleEventType.Missed && !Marked(screen, ui, "miss", t)
 						|| Floating(plain, previousEvent, sizes) is not { } floating)
 					{
@@ -431,7 +448,7 @@ public sealed partial class SampleController
 					stacked[t] = n + 1;
 					_probeNumbers.Add($"{_show.All.ElementAtOrDefault(t)?.Label ?? "?"} {floating.Text} {NumberKind(plain, previousEvent)}");
 					DrawNumber(s, e, floating, p, r, Behind(t), n, numberY, numberMemberY, numberRise, numberGap, NumberKind(plain, previousEvent),
-						_timeline.Elapsed - (unit is null ? 0 : unit.At));
+						_timeline.Elapsed - (unit is null ? 0 : unit.At), t < partyCount, step.Length - (unit is null ? 0 : unit.Forced ? step.Length : unit.At));
 				}
 				UseTextRole(s, TextRole.Menu);
 			}
@@ -572,6 +589,7 @@ public sealed partial class SampleController
 			{
 				BattlePhase.Playback => T("ui.battle.hint.playback", Hint(GameAction.Confirm), Hint(GameAction.FastForward), Hint(GameAction.TextLog)) +
 					(b.Auto ? T("ui.battle.hint.playback_auto", Hint(GameAction.Back)) : ""),
+				BattlePhase.Ended when !ResultConfirms => "",
 				BattlePhase.Ended => T("ui.battle.hint.continue", Hint(GameAction.Confirm)),
 				_ => T("ui.battle.hint.command", Hint(GameAction.Confirm), Hint(GameAction.Back), Hint(GameAction.TextLog), Hint(GameAction.Pause)),
 			})
@@ -582,6 +600,7 @@ public sealed partial class SampleController
 			.Set("result_pages", b.Phase == BattlePhase.Ended ? pages : 0)
 			.Set("result_more", b.Phase == BattlePhase.Ended && page + 1 < pages)
 			.Set("result_step", b.Phase == BattlePhase.Ended)
+			.Set("result_confirm", b.Phase == BattlePhase.Ended && ResultConfirms)
 			.Set("transition_playing", TransitionPlaying)
 			.Set("page_arrow", PageArrow);
 		// The list open and the command row it came from; the member choosing or acting; and whether the turn playing is a
@@ -618,7 +637,8 @@ public sealed partial class SampleController
 			.Set("icon", i < rowCommands.Count && b.Phase == BattlePhase.Command && _art is { } icons ? icons.CommandIcon(rowCommands[i]) : -1)
 			.Set("name", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Name : item)
 			.Set("cost", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Cost : 0)
-			.Set("uses", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Uses : -1)).ToList() : []);
+			.Set("uses", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Uses : -1)
+			.Set("max_uses", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].MaxUses : -1)).ToList() : []);
 		// The enemies standing, by name in the order they first stand, each with how many share it and the first one's level.
 		List<UiContext> groups = [.. _show.All.Select((c, i) => (Shown: c, Index: i)).Where(x => x.Index < all.Count && all[x.Index].Side == Side.Enemy && x.Shown.Alive)
 			.GroupBy(x => _s.DisplayName(x.Shown.Id))
@@ -703,8 +723,9 @@ public sealed partial class SampleController
 			BattlePhase.Command when CommandRows() is var rows => ([.. rows.Select(r => r.Text)], [.. rows.Select(r => r.Usable)]),
 			BattlePhase.Top => ([.. TopMenu.Select(t => T("ui.battle.top." + t))], null),
 			BattlePhase.Option => (b.Options.Select(OptionText).ToList(), b.Options.Select(o => o.Usable).ToList()),
-			BattlePhase.Target => (b.Targets.Select(t => t < all.Count ? (all[t].Side == Side.Party ? all[t].Name : all[t].Label) : "?").ToList(), null),
-			BattlePhase.Macro => ([.. _s.Macros()], null),
+			BattlePhase.Target => (b.Targets.Select(t => t < all.Count ? (all[t].Side == Side.Party ? all[t].Name : all[t].Label) : "?").ToList(),
+				b.Refused.Count == 0 ? null : [.. b.Targets.Select(t => !b.Refused.Contains(t))]),
+			BattlePhase.Macro => ([.. BattleMacros().Select(m => LayoutSwitch("macro_auto_first") && m == _s.Settings().AutoMacro ? T("ui.battle.auto_macro_row", m) : m)], null),
 			_ => null,
 		};
 	}

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Microsoft.Xna.Framework;
 
 using Psiv.Session;
@@ -113,6 +115,9 @@ public sealed class FieldRenderer
 		// The cells of the walk under way, from where it began, for the route probe.
 		public IReadOnlyList<(int X, int Y)> Cells => _cells;
 		public bool Walking => _elapsedMs < (_cells.Count - 1) * _cellMs;
+		public int CellMs => _cellMs;
+		// The cell it is stepping into, or standing on.
+		public (int X, int Y) Cell => _cells[Math.Min(_elapsedMs / _cellMs + 1, _cells.Count - 1)];
 		public float PX { get; private set; }
 		public float PY { get; private set; }
 		public int Frame { get; private set; }
@@ -193,10 +198,14 @@ public sealed class FieldRenderer
 	private sealed record PoseRun(string Animation, ulong Handle, int StartMs, bool Loop);
 
 	private string _area = "";
+	// The clock when the party entered the area shown, where the `entry` clocks of its motion start.
+	private int _enteredMs;
 	private int _lastClock = -1;
 	private readonly Glide _leader = new();
 	private readonly Glide[] _followers = [new(), new(), new(), new(), new()];
 	private readonly List<(int X, int Y)> _trail = [];
+	// The cell a script's walk of the leader last stepped into, which the followers not in the scene trail behind.
+	private (int X, int Y)? _scriptedLeaderCell;
 	private readonly Dictionary<int, Glide> _enemies = [];
 	// Visible enemies a script moves (`enemy.<zone>.<n>`), walking along their route until they arrive.
 	private readonly Dictionary<int, ActorWalk> _enemyWalks = [];
@@ -230,6 +239,9 @@ public sealed class FieldRenderer
 	// and how many cells came from a change's picture or from tiles, and each object by key with its state and frame.
 	public string DrawnPicture { get; private set; } = "-";
 	public List<string> DrawnObjects { get; } = [];
+	// The area's motion as the last frame drew it: each palette track's step (the area's, then its tileset's), each frame
+	// run's frame (`-` while its flags keep it off) and how many layers showed behind and in front, or `-` without any.
+	public string DrawnMotion { get; private set; } = "-";
 
 	public int CameraX { get; private set; }
 	public int CameraY { get; private set; }
@@ -238,9 +250,27 @@ public sealed class FieldRenderer
 	// Where the leader was last drawn, in screen pixels (its top edge).
 	public int LeaderScreenY { get; private set; }
 
-	// Where the leader is drawn now, in cells: its scripted place during a scene, otherwise its glide.
+	// Where the leader is drawn now, in cells: its scripted place during a scene, the platform carrying it, otherwise its glide.
 	public (float X, float Y) Leader(IReadOnlyList<string> lineup) =>
-		lineup.Count > 0 && _members.TryGetValue(lineup[0], out MemberPlace? m) ? (m.Walk.PX, m.Walk.PY) : (_leader.PX, _leader.PY);
+		lineup.Count > 0 && _members.TryGetValue(lineup[0], out MemberPlace? m) ? (m.Walk.PX, m.Walk.PY) : RideAt() ?? (_leader.PX, _leader.PY);
+
+	// The moving platforms of the area (GameSession.Platforms), set before each Track, and the cell size their pixel places
+	// are given at (GameInfo.CellPixels).
+	public IReadOnlyList<Platform> Platforms { get; set; } = [];
+	public int CellPixels { get; set; } = 16;
+	// The platform carrying the party by the last Track, null on foot.
+	private Platform? _ride;
+
+	// Where each follower stands on a platform, in the field's own pixels from the leader.
+	private static readonly (int X, int Y)[] RideSpots = [(-14, -4), (14, -4), (-7, -10), (7, -10), (0, -14)];
+
+	private (float X, float Y) PlatformAt(Platform p) => (p.PixelX / (float)Math.Max(1, CellPixels), p.PixelY / (float)Math.Max(1, CellPixels));
+
+	// The platform's place while it carries the party and the leader's step onto it has ended.
+	private (float X, float Y)? RideAt() => _ride is { } ride && _leader.Progress >= 1f ? PlatformAt(ride) : null;
+
+	// The platforms the last frame drew: `ID PX PY` in the data's pixels (CellPixels a cell), with `carrying` for the one ridden.
+	public string DrawnPlatforms { get; private set; } = "-";
 
 	// The people drawn in the last frame, actors and party members, by id: where, whether between cells, facing, pose.
 	public Dictionary<string, DrawnPerson> DrawnActors { get; } = [];
@@ -269,7 +299,7 @@ public sealed class FieldRenderer
 	public Func<string, bool> CreatureLook { get; set; } = _ => false;
 	// The encounter whose field figure an enemy's figure is drawn with (an actor's `sprite_enemy`), null for the enemy's own.
 	public Func<string, string?> EnemyEncounter { get; set; } = _ => null;
-	// A wandering actor's speed in percent of the area's step time, null when it does not wander.
+	// A wandering or patrolling actor's speed in percent of the area's step time, null when it does neither.
 	public Func<string, int?> WanderPercent { get; set; } = _ => null;
 	// A talk point's `actor_at` cell, where its actor stands apart from the hook's cell; null for none.
 	public Func<string, (int X, int Y)?> ActorHome { get; set; } = _ => null;
@@ -614,9 +644,11 @@ public sealed class FieldRenderer
 		FieldInfo f = view.Info;
 		int step = Math.Max(1, f.LeaderStepMs);
 		bool aboard = f.Aboard.Length > 0;
-		if (f.AreaId != _area)
+		bool entered = f.AreaId != _area;
+		if (entered)
 		{
 			_area = f.AreaId;
+			_enteredMs = clockMs;
 			_leader.Snap(f.LeaderX, f.LeaderY);
 			Arrive(view, lineup);
 			_enemies.Clear();
@@ -635,8 +667,16 @@ public sealed class FieldRenderer
 
 		int oldX = _leader.X, oldY = _leader.Y;
 		_leader.Advance(dt);
-		(int leaderX, int leaderY, int glideMs, int glideGone) = LeaderStep ?? (f.LeaderX, f.LeaderY, step, 0);
-		if (_leader.Go(leaderX, leaderY, glideMs, glideGone))
+		_ride = f.RidingPlatform.Length > 0 ? Platforms.FirstOrDefault(p => p.Id == f.RidingPlatform) : null;
+		// A step led in the area left behind never carries over: the new area shows the leader on its own cell at once.
+		(int leaderX, int leaderY, int glideMs, int glideGone) = entered ? (f.LeaderX, f.LeaderY, step, 0) : LeaderStep ?? (f.LeaderX, f.LeaderY, step, 0);
+		if (_ride is not null && LeaderStep is null && _leader.Progress >= 1f)
+		{
+			// The platform carries the party: the leader's cell follows it without a step, and the followers ride along.
+			_leader.Snap(f.LeaderX, f.LeaderY);
+			_trail.Clear();
+		}
+		else if (_leader.Go(leaderX, leaderY, glideMs, glideGone))
 		{
 			_trail.Insert(0, (oldX, oldY));
 			if (_trail.Count > Followers)
@@ -655,11 +695,37 @@ public sealed class FieldRenderer
 		{
 			_trail.Clear();
 		}
+		foreach (MemberPlace m in _members.Values)
+		{
+			m.Walk.Advance(dt);
+		}
+		// A script walking the leader leads the line as the player does: each cell it steps into leaves the one before on
+		// the trail, and the followers glide behind at its pace. A scene that places other members too keeps the line
+		// where it was, for them to walk back to.
+		(int X, int Y) head = (_leader.X, _leader.Y);
+		if (lineup.Count > 0 && _members.TryGetValue(lineup[0], out MemberPlace? scripted) && lineup.Skip(1).All(id => !_members.ContainsKey(id)))
+		{
+			head = scripted.Walk.Cell;
+			if ((_scriptedLeaderCell ?? scripted.Walk.Cells[0]) is var before && before != head && Math.Abs(before.X - head.X) + Math.Abs(before.Y - head.Y) == 1)
+			{
+				_trail.Insert(0, before);
+				if (_trail.Count > Followers)
+				{
+					_trail.RemoveAt(_trail.Count - 1);
+				}
+				(glideMs, glideGone) = (scripted.Walk.CellMs, 0);
+			}
+			_scriptedLeaderCell = head;
+		}
+		else
+		{
+			_scriptedLeaderCell = null;
+		}
 		for (int i = 0; i < _followers.Length; i++)
 		{
 			Glide g = _followers[i];
 			g.Advance(dt);
-			(int tx, int ty) = i < _trail.Count ? _trail[i] : (_leader.X, _leader.Y);
+			(int tx, int ty) = i < _trail.Count ? _trail[i] : head;
 			if (i >= lineup.Count - 1 || i >= _trail.Count)
 			{
 				if (g.X != tx || g.Y != ty)
@@ -672,10 +738,6 @@ public sealed class FieldRenderer
 			g.Go(tx, ty, glideMs, glideGone);
 		}
 
-		foreach (MemberPlace m in _members.Values)
-		{
-			m.Walk.Advance(dt);
-		}
 		// Members walking back after a scene go a cell per step to the cell their place in the line holds, around the
 		// people drawn and the cells nobody can stand on, or along x and then y when there is no way round. If the
 		// leader sets off first, the trail takes each of them over from where it is drawn.
@@ -775,7 +837,7 @@ public sealed class FieldRenderer
 					{
 						w.WalkTo(a.X, a.Y, pace);
 					}
-					else if (a.Wanders && WanderPercent(a.Id) is int percent && Math.Abs(a.X - from.X) + Math.Abs(a.Y - from.Y) == 1)
+					else if ((a.Wanders || a.Patrols) && WanderPercent(a.Id) is int percent && Math.Abs(a.X - from.X) + Math.Abs(a.Y - from.Y) == 1)
 					{
 						w.WalkTo(a.X, a.Y, Math.Max(1, Math.Max(1, f.StepMs) * 100 / Math.Max(1, percent)));
 					}
@@ -846,11 +908,17 @@ public sealed class FieldRenderer
 		AreaPicture? picture = art.AreaPictureOf(f.AreaId);
 		AreaMap? map = MapOf(f.AreaId);
 		AreaMap? written = picture is null ? null : map;
+		LoadedMotion? motion = art.AreaMotionOf(f.AreaId);
+		var shown = new List<string>();
+		Func<int, int>? paint = Palette(s, motion?.Motion.Palettes ?? [], clockMs, "palettes", shown);
+		Func<int, int>? paintTiles = Palette(s, tiles.Palettes, clockMs, "tiles", shown);
+		int Paint(int image) => paint?.Invoke(image) ?? image;
+		int behind = motion is null ? 0 : DrawLayers(s, motion, front: false, viewport, cameraX, cameraY, tile, clockMs);
 
 		CellFlags Terrain(int x, int y) => view.Cell(x, y) & CellFlags.TerrainMask;
 		void Tiled(int x, int y)
 		{
-			DrawCell(s, tiles, Terrain, x, y, ox + x * tile, oy + y * tile, Noise.Hash(x, y, f.AreaId.Length), waterFrame, tile, clockMs, look);
+			DrawCell(s, tiles, Terrain, x, y, ox + x * tile, oy + y * tile, Noise.Hash(x, y, f.AreaId.Length), waterFrame, tile, clockMs, look, paintTiles);
 			if (view.Cell(x, y).HasFlag(CellFlags.Barrier))
 			{
 				DrawBarrier(s, ox + x * tile, oy + y * tile, Noise.Hash(x, y, 7), tile);
@@ -861,7 +929,7 @@ public sealed class FieldRenderer
 			// The picture shows the map as written. A cell whose flag's change has a picture of its own shows that, the
 			// latest set change winning as in the game; any other cell whose terrain is not as written (a change without
 			// a picture, a broken barrier) shows its tile.
-			s.Image(picture.Ground, ox, oy, f.Width * tile, f.Height * tile, Color.White);
+			s.Image(Paint(picture.Ground), ox, oy, f.Width * tile, f.Height * tile, Color.White);
 			var patched = new Dictionary<(int X, int Y), int>();
 			foreach ((string flag, IReadOnlyDictionary<(int X, int Y), int> cells) in picture.Patches.Where(p => Flag(p.Flag)))
 			{
@@ -880,7 +948,7 @@ public sealed class FieldRenderer
 				{
 					if (patched.TryGetValue((x, y), out int image))
 					{
-						s.Image(image, ox + x * tile, oy + y * tile, tile, tile, Color.White);
+						s.Image(Paint(image), ox + x * tile, oy + y * tile, tile, tile, Color.White);
 						fromPatches++;
 					}
 					else if ((view.Cell(x, y) & AreaMap.TerrainBits) != written.Written[y * f.Width + x])
@@ -911,6 +979,12 @@ public sealed class FieldRenderer
 			}
 		}
 
+		var runFrames = new List<string>();
+		if (motion is not null)
+		{
+			DrawRuns(s, motion, above: false, ox, oy, tile, clockMs, Paint, runFrames);
+		}
+
 		float pulse = 0.6f + 0.4f * MathF.Sin(clockMs / 260f);
 		foreach (FieldExit e in view.Exits)
 		{
@@ -935,6 +1009,18 @@ public sealed class FieldRenderer
 				s.Fill(sx + Px(4), sy + Px(4), tile - Px(8), tile - Px(8), new Color(120, 240, 160) * (0.18f * pulse));
 				s.Image(tiles.ExitArrow[dir], sx, sy, tile, tile, Color.White * pulse);
 			}
+		}
+		// Platforms lie on the ground layer at their pixel places; what stands on them is drawn over them.
+		var platformsDrawn = new List<string>();
+		foreach (Platform p in Platforms)
+		{
+			(float px, float py) = PlatformAt(p);
+			s.Image(art.Platform, ox + (int)MathF.Round(px * tile), oy + (int)MathF.Round(py * tile), tile, tile, Color.White);
+			platformsDrawn.Add(FormattableString.Invariant($"{p.Id} {px * CellPixels:0.#} {py * CellPixels:0.#}") + (p.Carrying ? " carrying" : ""));
+		}
+		if (record)
+		{
+			DrawnPlatforms = platformsDrawn.Count == 0 ? "-" : string.Join(", ", platformsDrawn);
 		}
 
 		// Everything standing on the map, drawn top row first so lower sprites overlap higher ones.
@@ -1246,7 +1332,9 @@ public sealed class FieldRenderer
 			Direction facing = !w.Walking && FacingOverrides.TryGetValue(a.Id, out Direction turned) ? turned
 				: !a.Scripted && art.StartFacing(a.Id) is { } start ? start : w.Facing;
 			string? creatureKey = a.SpriteEnemy.Length > 0 ? EnemyEncounter(a.SpriteEnemy) ?? a.SpriteEnemy : null;
-			Person(a.Id, w.PX, w.PY, facing, w.Frame, w.Walking, extra: talks
+			// A path actor is not cell-bound: it stands at its home plus the path's pixel offset.
+			(float ax, float ay) = a.OnPath ? (a.HomeX + a.PathX / (float)Math.Max(1, CellPixels), a.HomeY + a.PathY / (float)Math.Max(1, CellPixels)) : (w.PX, w.PY);
+			Person(a.Id, ax, ay, facing, w.Frame, w.Walking, extra: talks
 				? (sx, sy) => Overlay(art.Bubble, sx + tile / 2, sy - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8))
 				: null, figure: a.Look.Length > 0 ? a.Look : null, creatureKey: creatureKey, played: played);
 		}
@@ -1295,7 +1383,14 @@ public sealed class FieldRenderer
 				continue;
 			}
 			Glide g = _followers[i];
-			if (g.X == _leader.X && g.Y == _leader.Y)
+			if (RideAt() is { } riding)
+			{
+				// Riding, the followers stand on the platform around the leader, behind it.
+				(int dx, int dy) = RideSpots[i % RideSpots.Length];
+				Person(id, riding.X + dx / (float)Tile, riding.Y + dy / (float)Tile, _leader.Facing, 0, false, -0.01f);
+				continue;
+			}
+			if ((g.X, g.Y) == (_scriptedLeaderCell ?? (_leader.X, _leader.Y)))
 			{
 				continue;
 			}
@@ -1316,7 +1411,8 @@ public sealed class FieldRenderer
 		}
 		else
 		{
-			Person(leaderId, _leader.PX, _leader.PY, _leader.Facing, _leader.Frame, _leader.Progress < 1f, look: noLeader, raise: f.Aboard.Length > 0 ? 5 : 0);
+			(float lx, float ly) = RideAt() ?? (_leader.PX, _leader.PY);
+			Person(leaderId, lx, ly, _leader.Facing, _leader.Frame, _leader.Progress < 1f, look: noLeader, raise: f.Aboard.Length > 0 ? 5 : 0);
 		}
 		if (record)
 		{
@@ -1328,11 +1424,29 @@ public sealed class FieldRenderer
 		}
 		if (picture?.Above is int above)
 		{
+			above = Paint(above);
 			s.Image(above, ox, oy, f.Width * tile, f.Height * tile, Color.White);
 			if (record)
 			{
 				DrawnAbove = (above, new Rectangle(ox, oy, f.Width * tile, f.Height * tile));
 			}
+		}
+		if (motion is not null)
+		{
+			DrawRuns(s, motion, above: true, ox, oy, tile, clockMs, Paint, runFrames);
+			int front = DrawLayers(s, motion, front: true, viewport, cameraX, cameraY, tile, clockMs);
+			if (motion.Motion.Runs.Count > 0)
+			{
+				shown.Add("runs " + string.Join(",", runFrames));
+			}
+			if (motion.Motion.Layers.Count > 0)
+			{
+				shown.Add($"back {behind} front {front}");
+			}
+		}
+		if (record)
+		{
+			DrawnMotion = shown.Count == 0 ? "-" : string.Join(" ", shown);
 		}
 		foreach (Action draw in overlays)
 		{
@@ -1340,10 +1454,151 @@ public sealed class FieldRenderer
 		}
 	}
 
+	// Where a piece of the area's motion stands: off (null) while its flags keep it off, else its clock's milliseconds.
+	private long? MotionMs(MotionWhen w, int clockMs) =>
+		w.Flag is { } flag && !Flag(flag) || w.UnlessFlag is { } unless && Flag(unless) ? null : w.Entry ? Math.Max(0, clockMs - _enteredMs) : clockMs;
+
+	// The recolor of the palette tracks that show, the first track naming a color winning, or null when none changes one;
+	// each track's step goes into `shown` after `label`.
+	private Func<int, int>? Palette(IDrawSurface s, IReadOnlyList<PaletteTrack> tracks, int clockMs, string label, List<string> shown)
+	{
+		if (tracks.Count == 0)
+		{
+			return null;
+		}
+		var pairs = new List<(Color From, Color To)>();
+		var steps = new List<string>();
+		foreach (PaletteTrack t in tracks)
+		{
+			if (MotionMs(t.When, clockMs) is not long ms)
+			{
+				steps.Add("-");
+				continue;
+			}
+			int step = t.StepAt(ms);
+			steps.Add(step.ToString(CultureInfo.InvariantCulture));
+			pairs.AddRange(t.Steps[step].Where(p => !pairs.Any(q => q.From == p.From)));
+		}
+		shown.Add(label + " " + string.Join(",", steps));
+		if (pairs.Count == 0)
+		{
+			return null;
+		}
+		string key = "area_palette:" + string.Join(",", pairs.Select(p => $"{p.From.PackedValue:x}>{p.To.PackedValue:x}"));
+		return image => s.Derive(image, key, (px, _, _) => SampleController.Recolor(px, pairs));
+	}
+
+	// The frame runs on the ground or over the above picture, recolored as the area's pictures are.
+	private void DrawRuns(IDrawSurface s, LoadedMotion motion, bool above, int ox, int oy, int tile, int clockMs, Func<int, int> paint, List<string> frames)
+	{
+		int cell = motion.Motion.Cell;
+		for (int i = 0; i < motion.Motion.Runs.Count; i++)
+		{
+			AreaRun r = motion.Motion.Runs[i];
+			if (r.Above != above)
+			{
+				continue;
+			}
+			if (MotionMs(r.When, clockMs) is not long ms)
+			{
+				frames.Add("-");
+				continue;
+			}
+			int frame = r.FrameAt(ms);
+			frames.Add(frame.ToString(CultureInfo.InvariantCulture));
+			int x = ox + r.X * tile / cell, y = oy + r.Y * tile / cell;
+			s.Image(paint(motion.Runs[i][frame]), x, y, ox + (r.X + r.W) * tile / cell - x, oy + (r.Y + r.H) * tile / cell - y, Color.White);
+		}
+	}
+
+	// The layers behind the area or in front of everything on it, at the pictures' scale (`tile` screen pixels a cell of
+	// the entry's), each moving its scroll factor times the camera plus its speed, repeated across the viewport along the
+	// axes it repeats on; bands and a wave over lines move rows apart, a wave over columns columns. How many showed.
+	private int DrawLayers(IDrawSurface s, LoadedMotion motion, bool front, Rectangle viewport, int cameraX, int cameraY, int tile, int clockMs)
+	{
+		double k = tile / (double)motion.Motion.Cell;
+		int drawn = 0;
+		foreach (LoadedLayer loaded in motion.Layers.Where(l => l.Layer.Front == front))
+		{
+			AreaLayer l = loaded.Layer;
+			if (MotionMs(l.When, clockMs) is not long ms)
+			{
+				continue;
+			}
+			drawn++;
+			double sec = ms / 1000.0, w = l.Width * k, h = l.Height * k;
+			double Origin(int view, int camera, float scroll, float speed) => view - camera * (double)scroll + speed * sec * k;
+			// A wave or a band can move a row or column out by up to a copy, so one more copy is drawn on each side.
+			int extra = loaded.Strips.Length > 0 ? 1 : 0;
+			IEnumerable<double> Copies(double start, double size, int from, int length, bool repeat)
+			{
+				if (!repeat)
+				{
+					yield return start;
+					yield break;
+				}
+				double first = start - Math.Ceiling((start - from) / size) * size - extra * size;
+				for (double c = first; c < from + length + extra * size; c += size)
+				{
+					yield return c;
+				}
+			}
+			int Wave(int index) => l.Wave is { } wave ? (int)Math.Round(wave.Amplitude * Math.Sin(2 * Math.PI * (index - wave.Speed * sec) / wave.Wavelength)) : 0;
+			void Draw(int image, double x, double y, double dw, double dh)
+			{
+				int left = (int)Math.Round(x), top = (int)Math.Round(y), right = (int)Math.Round(x + dw), bottom = (int)Math.Round(y + dh);
+				if (right > viewport.Left && left < viewport.Right && bottom > viewport.Top && top < viewport.Bottom && right > left && bottom > top)
+				{
+					s.Image(image, left, top, right - left, bottom - top, Color.White);
+				}
+			}
+			double x0 = Origin(viewport.X, cameraX, l.ScrollX, l.SpeedX), y0 = Origin(viewport.Y, cameraY, l.ScrollY, l.SpeedY);
+			if (loaded.Strips.Length == 0)
+			{
+				foreach (double y in Copies(y0, h, viewport.Y, viewport.Height, l.RepeatY))
+				{
+					foreach (double x in Copies(x0, w, viewport.X, viewport.Width, l.RepeatX))
+					{
+						Draw(loaded.Image, x, y, w, h);
+					}
+				}
+			}
+			else if (l.Wave is { Columns: true })
+			{
+				for (int c = 0; c < l.Width; c++)
+				{
+					foreach (double x in Copies(x0, w, viewport.X, viewport.Width, l.RepeatX))
+					{
+						foreach (double y in Copies(y0 + Wave(c) * k, h, viewport.Y, viewport.Height, l.RepeatY))
+						{
+							Draw(loaded.Strips[c], x + c * k, y, k, h);
+						}
+					}
+				}
+			}
+			else
+			{
+				for (int r = 0; r < l.Height; r++)
+				{
+					double rowX = (l.Bands.FirstOrDefault(b => b.First <= r && r <= b.Last) is { } band ? Origin(viewport.X, cameraX, band.Scroll, band.Speed) : x0) + Wave(r) * k;
+					foreach (double y in Copies(y0, h, viewport.Y, viewport.Height, l.RepeatY))
+					{
+						foreach (double x in Copies(rowX, w, viewport.X, viewport.Width, l.RepeatX))
+						{
+							Draw(loaded.Strips[r], x, y + r * k, w, k);
+						}
+					}
+				}
+			}
+		}
+		return drawn;
+	}
+
 	// `look` turns off the walls' shadows and the water's foam; `clockMs` steps the tileset's animated tiles.
 	public static void DrawCell(IDrawSurface s, Art.TileSet t, Func<int, int, CellFlags> terrain, int x, int y, int sx, int sy, uint hash, int waterFrame, int tile = Tile,
-		int clockMs = 0, FieldLook? look = null)
+		int clockMs = 0, FieldLook? look = null, Func<int, int>? paint = null)
 	{
+		int Paint(int image) => paint?.Invoke(image) ?? image;
 		int Px(int pixels) => pixels * tile / Tile;
 		bool shadows = look?.WallShadows ?? true, foam = look?.WaterFoam ?? true;
 		CellFlags c = terrain(x, y);
@@ -1353,11 +1608,11 @@ public sealed class FieldRenderer
 			bool faceDown = terrain(x, y + 1) != CellFlags.Wall;
 			if (faceDown)
 			{
-				s.Image(t.Frame(Art.TileSet.Variant(t.WallFace, hash, t.WallFaceAltOneIn), clockMs), sx, sy, tile, tile, Color.White);
+				s.Image(Paint(t.Frame(Art.TileSet.Variant(t.WallFace, hash, t.WallFaceAltOneIn), clockMs)), sx, sy, tile, tile, Color.White);
 			}
 			else
 			{
-				s.Image(t.Frame(Art.TileSet.Variant(t.WallTop, hash, t.WallTopAltOneIn), clockMs), sx, sy, tile, tile, Color.White);
+				s.Image(Paint(t.Frame(Art.TileSet.Variant(t.WallTop, hash, t.WallTopAltOneIn), clockMs)), sx, sy, tile, tile, Color.White);
 				if (terrain(x, y - 1) != CellFlags.Wall)
 				{
 					s.Fill(sx, sy, tile, edge, t.Edge);
@@ -1375,7 +1630,7 @@ public sealed class FieldRenderer
 		}
 		if (c == CellFlags.Water)
 		{
-			s.Image(t.Water[(waterFrame + (int)(hash % 2)) % t.Water.Length], sx, sy, tile, tile, Color.White);
+			s.Image(Paint(t.Water[(waterFrame + (int)(hash % 2)) % t.Water.Length]), sx, sy, tile, tile, Color.White);
 			if (!foam)
 			{
 				return;
@@ -1413,7 +1668,7 @@ public sealed class FieldRenderer
 		}
 		// Floor: one of the variants, with an occasional decoration, from the cell's coordinates.
 		int image = hash % (uint)t.DecorOneIn == 0 ? t.Decor[(hash >> 8) % (uint)t.Decor.Length] : t.Floor[(hash >> 4) % (uint)t.Floor.Length];
-		s.Image(t.Frame(image, clockMs), sx, sy, tile, tile, Color.White);
+		s.Image(Paint(t.Frame(image, clockMs)), sx, sy, tile, tile, Color.White);
 		if (!shadows)
 		{
 			return;

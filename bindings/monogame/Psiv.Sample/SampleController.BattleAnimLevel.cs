@@ -166,6 +166,12 @@ public sealed partial class SampleController
 				break;
 			case "split":
 				break;
+			case "mosaic" when phase == "hold":
+				s.Fill(0, 0, s.Width, s.Height, color);
+				break;
+			case "mosaic":
+				_probeTransition += $" block {MosaicBlock()}";
+				break;
 			case "flash":
 			{
 				int count = (int)(BattleAnimationRun.Num(def["count"]) ?? 2);
@@ -261,6 +267,34 @@ public sealed partial class SampleController
 		}
 	}
 
+	// A mosaic transition's block size now, in logical pixels: under `cover` the scene breaks into blocks growing to
+	// `block` in `steps` levels, under `reveal` the next scene sharpens from them; 0 while none plays or it holds its color.
+	private int MosaicBlock()
+	{
+		AnimRun? run = Screen == Screen.Battle && _battle.Phase == BattlePhase.Playback && _timeline.Current is { Kind: StepKind.Transition, Run: { } intro } ? intro : _outro;
+		if (run is null)
+		{
+			return 0;
+		}
+		long now = run == _outro ? (long)_outroMs * run.RateMilli : _timeline.Elapsed;
+		foreach (AnimTrack t in run.Tracks.Where(t => t.Type == "transition"))
+		{
+			if (Anim.Transitions.GetValueOrDefault(BattleAnimationRun.Str(t.Def["transition"]) ?? "") is { } def && BattleAnimationRun.Str(def["kind"]) == "mosaic")
+			{
+				(string phase, long local) = TransitionPhase(run, now);
+				if (phase is not ("cover" or "reveal"))
+				{
+					return 0;
+				}
+				long len = Math.Max(1, run.Phases.First(p => p.Name == phase).Length);
+				float u = BattleAnimationEval.Ease(BattleAnimationRun.Str(def["ease"]) ?? "linear", BattleClock.Ratio(local, len));
+				int block = (int)(BattleAnimationRun.Num(def["block"]) ?? 32), steps = Math.Max(1, (int)(BattleAnimationRun.Num(def["steps"]) ?? 4));
+				return Math.Max(1, (int)MathF.Ceiling((phase == "cover" ? u : 1f - u) * steps)) * block / steps;
+			}
+		}
+		return 0;
+	}
+
 	// The split reveal: the backdrop slides in from one side and the figures from the other.
 	private (int Backdrop, int Figures, bool Vertical) SplitShift(AnimRun run, long now)
 	{
@@ -307,7 +341,7 @@ public sealed partial class SampleController
 	{
 		foreach (string status in sc.Statuses)
 		{
-			if (Anim.Find($"status:{status}/idle") is not { } id)
+			if (Anim.Find($"status:{status}/idle", StageLayout() == BattleLayout.Front) is not { } id)
 			{
 				continue;
 			}
@@ -331,7 +365,7 @@ public sealed partial class SampleController
 		{
 			foreach (string status in _show.All[i].Statuses)
 			{
-				if (Anim.Find($"status:{status}/tick") is not { } id)
+				if (Anim.Find($"status:{status}/tick", StageLayout() == BattleLayout.Front) is not { } id)
 				{
 					continue;
 				}

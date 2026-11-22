@@ -39,11 +39,13 @@ public sealed partial class SampleController
 		};
 	}
 
-	// The first key of `keys` with a script; `trace` gets each key tried with the script it found or `-`.
+	// The first key of `keys` with a script, each tried on the stage's layout first when the set has `/layout:` keys;
+	// `trace` gets each key tried with the script it found or `-`.
 	private (string Id, string Key) Choose(IEnumerable<string> keys, List<string> trace, string fallback)
 	{
 		BattleAnimation set = Anim;
-		foreach (string key in keys)
+		string layout = StageLayout() == BattleLayout.Front ? "/layout:front" : "/layout:side";
+		foreach (string key in set.LayoutKeys ? keys.SelectMany(k => new[] { k + layout, k }) : keys)
 		{
 			string? id = set.Find(key);
 			trace.Add($"{key} {id ?? "-"}");
@@ -338,6 +340,23 @@ public sealed partial class SampleController
 			}
 			s.Held = run;
 		}
+	}
+
+	// The members `solo` draws alone: the one choosing a command, or a member's turn's acting members in its steps of the
+	// kinds the turn script's `solo` (else the set's) names; null draws every member.
+	private HashSet<int>? SoloMembers(BattleStep? step, bool commanding, int actor, int partyCount)
+	{
+		if (commanding)
+		{
+			return Anim.Solo.Contains("command") && actor >= 0 ? [actor] : null;
+		}
+		AnimRun? run = step?.Run is { Kind: "turn" } own ? own : step?.Held;
+		if (run is null || step!.Turn is not { } turn || !(run.Solo ?? Anim.Solo).Contains(step.Kind == StepKind.Result ? "result" : "action"))
+		{
+			return null;
+		}
+		HashSet<int> members = [.. turn.Actors.Where(a => a < partyCount)];
+		return members.Count > 0 ? members : null;
 	}
 
 	private static int TargetOf(BattleEvent e) => e.Type is BattleEventType.ItemHadNoEffect or BattleEventType.ResourceSpent ? e.Actor : e.Target >= 0 ? e.Target : e.Actor;
@@ -799,7 +818,8 @@ public sealed partial class SampleController
 			string enemy = figure >= partyCount && figure < _show.All.Count ? _show.All[figure].Id : "";
 			foreach (string key in ReactionKeys(e, partyCount))
 			{
-				string? id = key == "react:damage" && _forcedReaction is not null ? _forcedReaction : (enemy.Length > 0 ? set.Find($"{key}.{enemy}") : null) ?? set.Find(key);
+				bool front = StageLayout() == BattleLayout.Front;
+				string? id = key == "react:damage" && _forcedReaction is not null ? _forcedReaction : (enemy.Length > 0 ? set.Find($"{key}.{enemy}", front) : null) ?? set.Find(key, front);
 				if (id is null)
 				{
 					continue;

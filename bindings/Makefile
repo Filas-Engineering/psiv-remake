@@ -453,6 +453,25 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 		--script $(SAMPLE_SCRIPTS)/battle_anim_more.txt --frames 3500 > $(BUILD)/sample_anim_more_headless.txt || (cat $(BUILD)/sample_anim_more_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_anim_more_headless.txt
 	grep -q "animation: more.blade: flash dropped, more than 3 in 60 frames" $(BUILD)/sample_anim_more_headless.txt
+	# The last animation additions (make_anim_assets.py --leftovers: number windows with a row per side, a padding pair, the
+	# battle frame and a close, the member choosing or acting alone, palettes by index, idle states as data, a backdrop
+	# restored inside an attack, six enemies in two ranks in both layouts, a projectile's trail, direction frames and
+	# `flip: auto`, a shake on script time, a mosaic, a layout key; the previewer's enemy actors, item keys, dummy and target
+	# counts, ruler toggle and windows after a seek), on a copy since the run swaps a layout in.
+	python3 -I $(SAMPLE_SCRIPTS)/make_anim_assets.py --leftovers $(BUILD)/export $(BUILD)/anim_leftovers_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --check-assets --assets $(BUILD)/anim_leftovers_assets
+	rm -rf $(BUILD)/sample_anim_leftovers_saves $(BUILD)/anim_leftovers_run
+	cp -R $(BUILD)/anim_leftovers_assets $(BUILD)/anim_leftovers_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_anim_leftovers_saves --assets $(BUILD)/anim_leftovers_run \
+		--script $(SAMPLE_SCRIPTS)/battle_anim_leftovers.txt --frames 6000 > $(BUILD)/sample_anim_leftovers_headless.txt || (cat $(BUILD)/sample_anim_leftovers_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_anim_leftovers_headless.txt
+	# The example set in the side layout, and the combination and the two-weapon variants played live through the `equip`
+	# and `combo` verbs in both layouts.
+	rm -rf $(BUILD)/sample_anim_side_saves $(BUILD)/anim_side_run
+	cp -R $(BUILD)/anim_assets $(BUILD)/anim_side_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_anim_side_saves --assets $(BUILD)/anim_side_run \
+		--script $(SAMPLE_SCRIPTS)/battle_anim_side.txt --frames 9500 > $(BUILD)/sample_anim_side_headless.txt || (cat $(BUILD)/sample_anim_side_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_anim_side_headless.txt
 	# The small set's notices on the menu, the shop and the Load screen take the styles' small text size.
 	rm -rf $(BUILD)/sample_small_toasts_saves $(BUILD)/small_toasts_assets
 	cp -R $(BUILD)/small_assets $(BUILD)/small_toasts_assets
@@ -470,6 +489,22 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(call narration_run,narration,)
 	$(call narration_run,narration_ja,--language ja --strict-text)
 	$(call narration_run,narration_auto,)
+	# Every newer data shape the library accepts (object flags, pictures, music fade and area lists, field status, name
+	# lists, counters, exit sounds and closing flags, wanderers, patrols, paths, platforms) read with no data problem.
+	python3 -I $(SAMPLE_SCRIPTS)/make_shapes_data.py $(MOTION_DATA)/../.. $(BUILD)/shapes_data
+	rm -rf $(BUILD)/sample_shapes_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/shapes_data/game/data --dev --saves $(BUILD)/sample_shapes_saves \
+		--script $(SAMPLE_SCRIPTS)/shapes.txt --frames 1200 > $(BUILD)/sample_shapes_headless.txt || (cat $(BUILD)/sample_shapes_headless.txt; exit 1)
+	! grep "data problem" $(BUILD)/sample_shapes_headless.txt
+	@tail -n 1 $(BUILD)/sample_shapes_headless.txt
+	# The line tag {narration:nowait} under the press mode, on a data copy with an event that uses it.
+	python3 -I $(SAMPLE_SCRIPTS)/make_narration_data.py $(GAME)/data $(CORE)/data $(BUILD)/nowait_data --nowait
+	rm -rf $(BUILD)/sample_narration_nowait_saves $(BUILD)/narration_nowait_run_assets
+	cp -R $(BUILD)/narration_assets $(BUILD)/narration_nowait_run_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/nowait_data/game/data --dev --saves $(BUILD)/sample_narration_nowait_saves \
+		--assets $(BUILD)/narration_nowait_run_assets --script $(SAMPLE_SCRIPTS)/narration_nowait.txt --frames 900 > $(BUILD)/sample_narration_nowait_headless.txt \
+		|| (cat $(BUILD)/sample_narration_nowait_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_narration_nowait_headless.txt
 	# The text and quest logs laid out by the built-in files at 320x224 and 192x144, after the tags scene.
 	rm -rf $(BUILD)/sample_small_logs_saves $(BUILD)/small_logs_assets
 	cp -R $(BUILD)/small_assets $(BUILD)/small_logs_assets
@@ -520,7 +555,8 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	python3 -I $(SAMPLE_SCRIPTS)/make_scene_assets.py monogame/Psiv.Sample/ui $(BUILD)/scene_assets $(BUILD)/above_assets
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/hall_data/game/data --check-assets --assets $(BUILD)/scene_assets
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --check-assets --assets $(BUILD)/above_assets
-	@for run in scene:$(BUILD)/hall_data/game/data:2400 shop_voice:$(BUILD)/hall_data/game/data:1200 vehicle_commands:$(GAME)/data:5000 game_over:$(GAME)/data:3000 arrive_behind:$(GAME)/data:1400; do \
+	@for run in scene:$(BUILD)/hall_data/game/data:2400 shop_voice:$(BUILD)/hall_data/game/data:1200 vehicle_commands:$(GAME)/data:5000 game_over:$(GAME)/data:3000 arrive_behind:$(GAME)/data:1400 \
+		scene_overlay:$(BUILD)/hall_data/game/data:600; do \
 		name=$${run%%:*}; rest=$${run#*:}; data=$${rest%%:*}; frames=$${rest#*:}; \
 		rm -rf $(BUILD)/sample_$${name}_saves $(BUILD)/$${name}_run_assets; \
 		cp -R $(BUILD)/scene_assets $(BUILD)/$${name}_run_assets; \
@@ -532,6 +568,15 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --dev --saves $(BUILD)/sample_above_cover_saves --assets $(BUILD)/above_assets \
 		--script $(SAMPLE_SCRIPTS)/above_cover.txt --frames 1400 > $(BUILD)/sample_above_cover_headless.txt || (cat $(BUILD)/sample_above_cover_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_above_cover_headless.txt
+	# World motion from the manifest on the background data (make_world_motion_assets.py, played on a copy since the hot reload
+	# swaps files in): Wren Yard's palette tracks, frame runs and layers, Wren Loft's tileset palette.
+	python3 -I $(SAMPLE_SCRIPTS)/make_world_motion_assets.py $(BUILD)/world_motion_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --check-assets --assets $(BUILD)/world_motion_assets
+	rm -rf $(BUILD)/sample_world_motion_saves $(BUILD)/world_motion_run
+	cp -R $(BUILD)/world_motion_assets $(BUILD)/world_motion_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --dev --saves $(BUILD)/sample_world_motion_saves --assets $(BUILD)/world_motion_run \
+		--script $(SAMPLE_SCRIPTS)/world_motion.txt --frames 700 > $(BUILD)/sample_world_motion_headless.txt || (cat $(BUILD)/sample_world_motion_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_world_motion_headless.txt
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_field_interact_saves --script $(SAMPLE_SCRIPTS)/field_interact.txt --frames 700 > $(BUILD)/sample_field_interact_headless.txt \
 		|| (cat $(BUILD)/sample_field_interact_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_field_interact_headless.txt
@@ -567,6 +612,22 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --dev --saves $(BUILD)/sample_rules_yard_saves \
 		--script $(SAMPLE_SCRIPTS)/rules_yard.txt --frames 2400 > $(BUILD)/sample_rules_yard_headless.txt || (cat $(BUILD)/sample_rules_yard_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_rules_yard_headless.txt
+	# The library state the sample adopts (make_adopt_assets.py, make_adopt_data.py), each run from saves of the scripted
+	# playthrough on its data copy: moving platforms, path and patrol actors in Wren Mill on the motion data; the title's
+	# Load, an area's name variant, the status page's detail fields, a skill's maximum uses, a refused ally greyed out and
+	# floating numbers applied or rolled on the adopt data.
+	python3 -I $(SAMPLE_SCRIPTS)/make_adopt_assets.py monogame/Psiv.Sample/ui $(BUILD)/adopt_assets
+	python3 -I $(SAMPLE_SCRIPTS)/make_adopt_data.py $(GAME)/data $(CORE)/data $(BUILD)/adopt_data
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/adopt_data/game/data --check-assets --assets $(BUILD)/adopt_assets
+	@for run in motion:$(MOTION_DATA):1200 adopt:$(BUILD)/adopt_data/game/data:4500; do \
+		name=$${run%%:*}; rest=$${run#*:}; data=$${rest%%:*}; frames=$${rest#*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves $(BUILD)/$${name}_run_assets; \
+		cp -R $(BUILD)/adopt_assets $(BUILD)/$${name}_run_assets; \
+		$(GAME_CLI) --data $$data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/sample_$${name}_saves > /dev/null || exit 1; \
+		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $$data --dev --saves $(BUILD)/sample_$${name}_saves --assets $(BUILD)/$${name}_run_assets \
+			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
 	rm -rf $(BUILD)/sample_assets_saves
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_assets_saves --assets $(BUILD)/test_assets --script $(SAMPLE_ASSETS_SCRIPT) --frames 2000 > $(BUILD)/sample_assets_headless.txt \
 		|| (cat $(BUILD)/sample_assets_headless.txt; exit 1)
@@ -661,6 +722,41 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 			> $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
 		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
 	done
+	# The menu follow-ups (make_menus_more_assets.py): a tab's children, the tabs' sizes, abilities not usable in the field
+	# hidden, the party talk on its page and the System action; each problem the children can have, on a copy.
+	python3 -I $(SAMPLE_SCRIPTS)/make_menus_more_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/menus_more_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/menus_more_assets
+	rm -rf $(BUILD)/menus_more_broken_assets
+	cp -R $(BUILD)/menus_more_assets $(BUILD)/menus_more_broken_assets
+	cp $(BUILD)/menus_more_broken_assets/alt/menu_broken.json $(BUILD)/menus_more_broken_assets/ui/menu.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/menus_more_broken_assets > $(BUILD)/check_assets_menus_more.txt
+	grep -qF "entries[0].children: must be a non-empty list of entries" $(BUILD)/check_assets_menus_more.txt
+	grep -qF "entries[1].children[1]: field 'page' must be one of" $(BUILD)/check_assets_menus_more.txt
+	grep -qF "entries[1].children[2]: 'save' is listed twice" $(BUILD)/check_assets_menus_more.txt
+	grep -qF "entries[1].children[3]: missing field 'page'" $(BUILD)/check_assets_menus_more.txt
+	grep -qF "entries[1].children[4]: unknown field 'children'" $(BUILD)/check_assets_menus_more.txt
+	rm -rf $(BUILD)/sample_menus_more_saves $(BUILD)/menus_more_run
+	cp -R $(BUILD)/menus_more_assets $(BUILD)/menus_more_run
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_menus_more_saves --assets $(BUILD)/menus_more_run --script $(SAMPLE_SCRIPTS)/menus_more.txt --frames 900 \
+		> $(BUILD)/sample_menus_more_headless.txt || (cat $(BUILD)/sample_menus_more_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_menus_more_headless.txt
+	# The layout choices (make_choices_assets.py): the battle's Item list order and the auto macro first, the Items page's
+	# actions with their outcomes on the page, and the title's Continue opening the Load list; a copy with a bad
+	# `continue` and `actions` reports both.
+	python3 -I $(SAMPLE_SCRIPTS)/make_choices_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/choices_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/choices_assets
+	rm -rf $(BUILD)/choices_broken_assets
+	cp -R $(BUILD)/choices_assets $(BUILD)/choices_broken_assets
+	cp $(BUILD)/choices_broken_assets/alt/title_broken.json $(BUILD)/choices_broken_assets/ui/title.json
+	cp $(BUILD)/choices_broken_assets/alt/menu_items_broken.json $(BUILD)/choices_broken_assets/ui/menu_items.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/choices_broken_assets > $(BUILD)/check_assets_choices.txt
+	grep -qF "params.continue: must be \"newest\" or \"choose\"" $(BUILD)/check_assets_choices.txt
+	grep -qF "params.actions: field 'actions' reads 'yes'" $(BUILD)/check_assets_choices.txt
+	rm -rf $(BUILD)/sample_layout_choices_saves $(BUILD)/choices_run
+	cp -R $(BUILD)/choices_assets $(BUILD)/choices_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_layout_choices_saves --assets $(BUILD)/choices_run \
+		--script $(SAMPLE_SCRIPTS)/layout_choices.txt --frames 1800 > $(BUILD)/sample_layout_choices_headless.txt || (cat $(BUILD)/sample_layout_choices_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_layout_choices_headless.txt
 	# Screens over screens and screens at small sizes (make_screens_assets.py): the notices drawn once by the topmost
 	# screen with a toasts slot, a page the field menu leaves out opened from Extras, title entries by `when`, Controls
 	# without Extras; the name pad's sizes, the built-in pause at 320x224, the developer badge's place and the music cut.

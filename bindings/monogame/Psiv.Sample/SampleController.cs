@@ -81,6 +81,7 @@ public sealed partial class SampleController
 		_field.CreatureLook = id => _data.Encounters.Contains(id) && _art?.FromFile("character:" + id) != true;
 		_field.EnemyEncounter = enemy => _data.EnemyEncounters.GetValueOrDefault(enemy);
 		_field.WanderPercent = id => _data.WanderPercent.TryGetValue(id, out int percent) ? percent : null;
+		_field.CellPixels = session.GameInfo().CellPixels;
 		_field.ActorHome = id => _data.ActorAt.TryGetValue(id, out (int X, int Y) home) ? home : null;
 		_assetDir = assetDir;
 		if (assetDir is not null)
@@ -225,6 +226,11 @@ public sealed partial class SampleController
 			{
 				AddBattleNotice(n);
 			}
+			else if (_talkToPage && n.Kind == NoticeKind.Line)
+			{
+				TakeTalkLine(n);
+				_log("notice: " + n.Text);
+			}
 			else if (n.Kind == NoticeKind.Action)
 			{
 				// Every script action plays on screen (on a sprite, as a fade or as a label), so it stays out of the
@@ -234,6 +240,11 @@ public sealed partial class SampleController
 			else if (Screen == Screen.Shop && ShopResultShown)
 			{
 				_shopResult = n.Text;
+				_log("notice: " + n.Text);
+			}
+			else if (Screen == Screen.Menu && MenuPage == "items" && ItemResultShown)
+			{
+				_itemResult = n.Text;
 				_log("notice: " + n.Text);
 			}
 			else if (n.Key == "game.arrive" && Ui.Param("field", "arrive_toast", UiData(), 1) == 0)
@@ -250,6 +261,7 @@ public sealed partial class SampleController
 				}
 			}
 		}
+		_talkToPage = false;
 		IReadOnlyList<PresentationAction> actions = _s.PollActions();
 		if (actions.Count > 0)
 		{
@@ -295,6 +307,7 @@ public sealed partial class SampleController
 		_menuTabNext = 0;
 		_menuOnly = _menuOnlyNext;
 		_menuOnlyNext = null;
+		ResetMenuChild();
 		_pickMember = null;
 		_pickAction = null;
 		_list.Reset();
@@ -604,6 +617,12 @@ public sealed partial class SampleController
 			DrawConfirm(s, t);
 			return;
 		}
+		// A mosaic transition draws the scene's pictures in blocks.
+		IDrawSurface unblocked = s;
+		if (MosaicBlock() is > 1 and int block)
+		{
+			s = new MosaicSurface(s, block);
+		}
 		switch (Screen)
 		{
 		case Screen.Title: DrawTitle(s, t, art); break;
@@ -640,6 +659,7 @@ public sealed partial class SampleController
 				.Set("log", (UiSlot)((x, y, w, h) => DrawTextLog(s, t, x, y, w, h))));
 			break;
 		}
+		s = unblocked;
 		if (Screen == Screen.Battle && _battle.Phase == BattlePhase.Playback && _timeline.Current is { Kind: StepKind.Transition, Run: { } coverIn })
 		{
 			DrawTransition(s, coverIn, _timeline.Elapsed);
@@ -764,6 +784,10 @@ public sealed partial class SampleController
 			// The cells of the walk the field draws an actor taking (`actorroute.ID`), `-` while it stands.
 			_ when key.StartsWith("actorroute.", StringComparison.Ordinal) => _field.RouteProbe(key["actorroute.".Length..]),
 			"tilehooks" => $"{_field.ActiveTileHooks}/{_field.DrawnTileHooks}",
+			"platforms" => _field.DrawnPlatforms,
+			// Where the last frame drew a person (`actorpos.ID`), in the data's pixels (GameInfo.CellPixels a cell), `-` when not drawn.
+			_ when key.StartsWith("actorpos.", StringComparison.Ordinal) => _field.DrawnActors.TryGetValue(key["actorpos.".Length..], out DrawnPerson placed)
+				? FormattableString.Invariant($"{placed.X * _field.CellPixels:0.#} {placed.Y * _field.CellPixels:0.#}") : "-",
 			// How the area shows its conveyor belts and tile step hooks: generated, from the field's overlay pictures, or off.
 			"fieldmarks" => _art is null || _s.FieldInfo() is not { } marked ? "-" : _art.FieldLookOf(marked.AreaId) is var ml
 				? $"belts {(!ml.Conveyors ? "off" : _art.FromFile("conveyor_overlay") ? "overlay" : "generated")} pads {(!ml.TileHooks ? "off" : _art.FromFile("tile_hook_overlay") ? "overlay" : "generated")}"
@@ -802,6 +826,7 @@ public sealed partial class SampleController
 			"aboard" => _s.FieldInfo() is { Aboard.Length: > 0 } aboard ? aboard.Aboard : "-",
 			"vehicles" => _field.DrawnVehicles.Count == 0 ? "none" : string.Join(", ", _field.DrawnVehicles.Select(v => $"{v.Key} {v.Value}")),
 			"fieldpicture" => _field.DrawnPicture,
+			"fieldmotion" => _field.DrawnMotion,
 			// The area tileset's animated tiles: each as TILE>FRAME, the sheet frame it shows now.
 			"animated" => _art is null || _s.FieldInfo() is null ? "-" : string.Join(", ", AreaTiles(_art).Animated.Select(a =>
 				$"{Array.IndexOf(a.Value.Images, a.Key)}>{a.Value.Idle.FrameAt(_clockMs, loop: true)}").DefaultIfEmpty("none")),

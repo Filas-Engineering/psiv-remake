@@ -11,23 +11,26 @@ namespace Psiv.Sample;
 public sealed partial class SampleController
 {
 	private readonly Dictionary<string, int> _animImages = [];
+	// Each sprite instance the last battle frame drew: its track, frame, whether mirrored and whether a trail's copy.
+	private readonly List<string> _probeSprites = [];
 
-	// An animation file's enemy place for formation place `position`, by encounter, then by enemy count.
-	private (int X, int Foot)? Placement(string encounter, int count, int position, bool front)
+	// An animation file's enemy place for formation place `position`, by encounter, then by the exact enemy count, then
+	// count:5 for five or more; with its rank when the place names one.
+	private (int X, int Foot, string? Rank)? Placement(string encounter, int count, int position, bool front)
 	{
-		foreach (string key in new[] { "encounter:" + encounter, "count:" + Math.Min(count, 5).ToString(CultureInfo.InvariantCulture) })
+		foreach (string key in new[] { "encounter:" + encounter, "count:" + count.ToString(CultureInfo.InvariantCulture), "count:" + Math.Min(count, 5).ToString(CultureInfo.InvariantCulture) })
 		{
 			if (Anim.Placements.TryGetValue(key, out JsonNode? node) && BattleAnimationRun.Pick(node, front) is JsonArray places && position < places.Count
 				&& places[position] is JsonArray xy)
 			{
-				return ((int)(BattleAnimationRun.Num(xy[0]) ?? 0), (int)(BattleAnimationRun.Num(xy[1]) ?? 0));
+				return ((int)(BattleAnimationRun.Num(xy[0]) ?? 0), (int)(BattleAnimationRun.Num(xy[1]) ?? 0), xy.Count > 2 ? BattleAnimationRun.Str(xy[2]) : null);
 			}
 		}
 		return null;
 	}
 
 	// Opaque pixels whose color is a palette entry's source take its replacement.
-	private static Color[] Recolor(Color[] pixels, IReadOnlyList<(Color From, Color To)> palette)
+	internal static Color[] Recolor(Color[] pixels, IReadOnlyList<(Color From, Color To)> palette)
 	{
 		var result = (Color[])pixels.Clone();
 		for (int k = 0; k < result.Length; k++)
@@ -48,6 +51,12 @@ public sealed partial class SampleController
 		}
 		return result;
 	}
+
+	// A palette's index sources take the picture's palette entry; without one, or past its end, they are left out.
+	internal static IReadOnlyList<(Color From, Color To)> Resolve(IReadOnlyList<(Color From, Color To)> palette, IReadOnlyList<Color>? declared) =>
+		[.. palette.Where(p => p.From.A != 0 || declared is not null && p.From.R < declared.Count).Select(p => p.From.A != 0 ? p : (declared![p.From.R], p.To))];
+
+	private static string PaletteKey(IReadOnlyList<(Color From, Color To)> palette) => "palette:" + string.Join(",", palette.Select(p => $"{p.From.PackedValue:x}>{p.To.PackedValue:x}"));
 
 	private static Color[] Silhouette(Color[] pixels, int w, int h) => [.. pixels.Select(p => new Color(p.A, p.A, p.A, p.A))];
 
@@ -196,7 +205,6 @@ public sealed partial class SampleController
 			: BattleAnimationRun.Time(BattleAnimationRun.Pick(t.Def["stagger"], front), run);
 		bool sheetTiming = F("frames") is null && F("durations") is null && anim is null;
 		int loops = (int)(BattleAnimationRun.Num(F("loops")) ?? 0);
-		JsonArray? offsets = F("offsets") as JsonArray;
 		for (int k = 0; k < spots.Count; k++)
 		{
 			long local = now - t.Start - k * stagger;
@@ -205,9 +213,23 @@ public sealed partial class SampleController
 				continue;
 			}
 			(int fig, Vector2 at) = spots[k];
+			// A projectile's direction (the dominant axis of its whole travel) picks its `directions` frames, and with `flip: auto`
+			// mirrors it traveling right when it has no right frames.
+			JsonObject? travel = F("travel") as JsonObject;
+			Vector2 from = Vector2.Zero, to = Vector2.Zero;
+			string direction = "";
+			if (travel is not null)
+			{
+				from = PointOf(run, travel["from"] ?? JsonValue.Create("user:auto"), c, fig) ?? at;
+				to = travel["to"] is JsonNode tn ? PointOf(run, tn, c, fig) ?? at : at;
+				Vector2 d = to - from;
+				direction = MathF.Abs(d.X) >= MathF.Abs(d.Y) ? d.X > 0 ? "right" : "left" : d.Y > 0 ? "down" : "up";
+			}
+			JsonObject? directions = F("directions") as JsonObject;
+			JsonArray? frameList = directions?[direction] as JsonArray ?? F("frames") as JsonArray;
 			int frame;
 			bool over;
-			if (sheetTiming)
+			if (sheetTiming && frameList is null)
 			{
 				int ms = (int)(local / rate);
 				frame = fx.Idle.FrameAt(ms, loop: loops != 0);
@@ -215,7 +237,7 @@ public sealed partial class SampleController
 			}
 			else
 			{
-				int[] frames = F("frames") is JsonArray fa ? [.. fa.Select(x => (int)(BattleAnimationRun.Num(x) ?? 0))] : fx.Idle.Frames;
+				int[] frames = frameList is not null ? [.. frameList.Select(x => (int)(BattleAnimationRun.Num(x) ?? 0))] : fx.Idle.Frames;
 				long[] durations = F("durations") switch
 				{
 					JsonArray da => [.. da.Select(x => BattleAnimationRun.Time(x, run))],
@@ -228,13 +250,31 @@ public sealed partial class SampleController
 				}
 				frame = BattleAnimationEval.Frame(frames, durations, loops, BattleAnimationRun.Bool(F("pingpong")) == true, BattleAnimationRun.Time(F("hold_last"), run), local, out over);
 			}
-			// A projectile travels from one point to another; its impact animation plays where it lands.
-			if (F("travel") is JsonObject travel)
+			// A projectile travels from one point to another, its trail of fading copies behind it; its impact animation plays
+			// where it lands.
+			var points = new List<(Vector2 At, float Alpha)>();
+			if (travel is not null)
 			{
 				long frames = BattleAnimationRun.Time(travel["frames"], run, BattleClock.Frame);
-				int self = fig;
-				Vector2 from = PointOf(run, travel["from"] ?? JsonValue.Create("user:auto"), c, self) ?? at;
-				Vector2 to = travel["to"] is JsonNode tn ? PointOf(run, tn, c, self) ?? at : at;
+				Rectangle size = fig >= 0 && c.Anchors.TryGetValue(fig, out Rectangle fr) ? fr : new Rectangle(0, 0, 64, 64);
+				float height = BattleAnimationEval.Dist(travel["height"] ?? JsonValue.Create("0.5h"), 24, size, c.Motion);
+				Vector2 Flight(long l)
+				{
+					float u = BattleAnimationEval.Ease(BattleAnimationRun.Str(travel["ease"]) ?? "linear", BattleClock.Ratio(l, frames));
+					Vector2 p = Vector2.Lerp(from, to, u);
+					switch (BattleAnimationRun.Str(travel["path"]))
+					{
+					case "arc":
+						p.Y -= height * MathF.Sin(MathF.PI * u);
+						break;
+					case "wave":
+						Vector2 dir = to - from;
+						var normal = dir == Vector2.Zero ? Vector2.UnitY : Vector2.Normalize(new Vector2(-dir.Y, dir.X));
+						p += normal * height * MathF.Sin(2f * MathF.PI * (float)(BattleAnimationRun.Num(travel["waves"]) ?? 1) * u);
+						break;
+					}
+					return p;
+				}
 				if (local >= frames)
 				{
 					if (local < frames + BattleAnimationRun.Time(F("hold_last"), run))
@@ -252,20 +292,16 @@ public sealed partial class SampleController
 				}
 				else
 				{
-					float u = BattleAnimationEval.Ease(BattleAnimationRun.Str(travel["ease"]) ?? "linear", BattleClock.Ratio(local, frames));
-					at = Vector2.Lerp(from, to, u);
-					Rectangle size = fig >= 0 && c.Anchors.TryGetValue(fig, out Rectangle fr) ? fr : new Rectangle(0, 0, 64, 64);
-					float height = BattleAnimationEval.Dist(travel["height"] ?? JsonValue.Create("0.5h"), 24, size, c.Motion);
-					switch (BattleAnimationRun.Str(travel["path"]))
+					at = Flight(local);
+					if (travel["trail"] is JsonObject trail)
 					{
-					case "arc":
-						at.Y -= height * MathF.Sin(MathF.PI * u);
-						break;
-					case "wave":
-						Vector2 dir = to - from;
-						var normal = dir == Vector2.Zero ? Vector2.UnitY : Vector2.Normalize(new Vector2(-dir.Y, dir.X));
-						at += normal * height * MathF.Sin(2f * MathF.PI * (float)(BattleAnimationRun.Num(travel["waves"]) ?? 1) * u);
-						break;
+						long gap = Math.Max(BattleClock.Frame, BattleAnimationRun.Time(trail["gap"] ?? JsonValue.Create(2), run));
+						float fade = (float)(BattleAnimationRun.Num(trail["alpha"]) ?? 0.5), copy = 1f;
+						for (int j = 1; j <= (int)(BattleAnimationRun.Num(trail["count"]) ?? 3) && local - j * gap >= 0; j++)
+						{
+							copy *= fade;
+							points.Add((Flight(local - j * gap), copy));
+						}
 					}
 				}
 			}
@@ -277,101 +313,121 @@ public sealed partial class SampleController
 			{
 				continue;
 			}
-			int image = fx.Images[frame];
-			int layoutFactor = c.Front && fig >= 0 && !c.Behind(fig) ? c.EffectScaleLarge : c.EffectScale;
-			JsonNode? scale = F("scale");
-			int factor = BattleAnimationRun.Str(scale) switch
+			points.Reverse();
+			points.Add((at, 1f));
+			foreach ((Vector2 point, float copyAlpha) in points)
 			{
-				"large" => c.EffectScaleLarge,
-				{ } times when times.StartsWith('x') => Math.Max(1, (int)Math.Round(layoutFactor * double.Parse(times[1..], CultureInfo.InvariantCulture))),
-				_ => BattleAnimationRun.Num(scale) is double n ? Math.Max(1, (int)Math.Round(n)) : layoutFactor,
-			};
-			(int ew, int eh) = art.DrawnEffectSize(image, factor);
-			float dx = 0, dy = 0;
-			Rectangle body = fig >= 0 && c.Anchors.TryGetValue(fig, out Rectangle br) ? br : default;
-			if (offsets is not null && offsets.Count > 0 && offsets[Math.Min(k, offsets.Count - 1)] is JsonArray ok)
-			{
-				dx += BattleAnimationEval.Dist(ok[0], 24, body, c.Motion);
-				dy += BattleAnimationEval.Dist(ok[1], 24, body, c.Motion);
+				DrawInstance(s, art, c, run, t, fx, F, frame, fig, point, k, local, anchor, copyAlpha * damp, direction, directions, marks is not null && copyAlpha == 1f ? marks : null,
+					copyAlpha < 1f);
 			}
-			if (F("offset") is JsonArray of)
-			{
-				dx += BattleAnimationEval.Dist(of[0], 24, body, c.Motion);
-				dy += BattleAnimationEval.Dist(of[1], 24, body, c.Motion);
-			}
-			if (F("jitter") is JsonArray jit)
-			{
-				dx += (BattleAnimationEval.Hash(run.ScriptId, t.Index, k) * 2 - 1) * BattleAnimationEval.Dist(jit[0], 24, body, c.Motion);
-				dy += (BattleAnimationEval.Hash(run.ScriptId, t.Index, k + 977) * 2 - 1) * BattleAnimationEval.Dist(jit[1], 24, body, c.Motion);
-			}
-			if (F("path") is JsonArray path)
-			{
-				(float px, float py) = PathAt(path, local, run, body, c);
-				dx += px;
-				dy += py;
-			}
-			float ox = 0.5f, oy = anchor == "feet" ? 1f : 0.5f;
-			if (F("origin") is JsonArray origin)
-			{
-				ox = (float)(BattleAnimationRun.Num(origin[0]) ?? 0.5);
-				oy = (float)(BattleAnimationRun.Num(origin[1]) ?? 0.5);
-			}
-			int x = (int)at.X + (int)MathF.Round(dx) - (ox == 0.5f ? ew / 2 : (int)(ew * ox));
-			int y = (int)at.Y + (int)MathF.Round(dy) - (oy == 0.5f ? eh / 2 : (int)(eh * oy));
-			Color tint = Color.White;
-			float alpha = 1f;
-			Color add = Color.Transparent;
-			if (F("color") is JsonObject color)
-			{
-				long life = t.HasLength ? t.Length : fx.Idle.Ms.Sum() * (long)rate;
-				float u = BattleClock.Ratio(local, Math.Max(1, life));
-				ColorTransform ct = color.ContainsKey("from")
-					? BattleAnimationEval.Lerp(BattleAnimationEval.Ct(color["from"], n => AnimColor(n, run.In.Look)), BattleAnimationEval.Ct(color["to"], n => AnimColor(n, run.In.Look)),
-						BattleAnimationEval.Ease(BattleAnimationRun.Str(color["ease"]), u))
-					: color.ContainsKey("keys") ? BattleAnimationEval.ColorAt(new JsonObject { ["mode"] = "keys", ["keys"] = color["keys"]!.DeepClone() }, u, local, life, run, n => AnimColor(n, run.In.Look)) ?? ColorTransform.None
-					: BattleAnimationEval.Ct(color, n => AnimColor(n, run.In.Look));
+		}
+	}
+
+	// One drawn instance of a sprite at its point: its factor, offsets, path, origin, color, fade and blend.
+	private void DrawInstance(IDrawSurface s, Art art, StageCtx c, AnimRun run, AnimTrack t, Figure fx, Func<string, JsonNode?> F, int frame, int fig, Vector2 at, int k, long local,
+			string anchor, float damp, string direction, JsonObject? directions, List<string>? marks, bool trail)
+		{
+		int rate = Math.Max(1, run.RateMilli);
+		JsonArray? offsets = F("offsets") as JsonArray;
+		int image = fx.Images[frame];
+		int layoutFactor = c.Front && fig >= 0 && !c.Behind(fig) ? c.EffectScaleLarge : c.EffectScale;
+		JsonNode? scale = F("scale");
+		int factor = BattleAnimationRun.Str(scale) switch
+		{
+			"large" => c.EffectScaleLarge,
+			{ } times when times.StartsWith('x') => Math.Max(1, (int)Math.Round(layoutFactor * double.Parse(times[1..], CultureInfo.InvariantCulture))),
+			_ => BattleAnimationRun.Num(scale) is double n ? Math.Max(1, (int)Math.Round(n)) : layoutFactor,
+		};
+		(int ew, int eh) = art.DrawnEffectSize(image, factor);
+		float dx = 0, dy = 0;
+		Rectangle body = fig >= 0 && c.Anchors.TryGetValue(fig, out Rectangle br) ? br : default;
+		if (offsets is not null && offsets.Count > 0 && offsets[Math.Min(k, offsets.Count - 1)] is JsonArray ok)
+		{
+			dx += BattleAnimationEval.Dist(ok[0], 24, body, c.Motion);
+			dy += BattleAnimationEval.Dist(ok[1], 24, body, c.Motion);
+		}
+		if (F("offset") is JsonArray of)
+		{
+			dx += BattleAnimationEval.Dist(of[0], 24, body, c.Motion);
+			dy += BattleAnimationEval.Dist(of[1], 24, body, c.Motion);
+		}
+		if (F("jitter") is JsonArray jit)
+		{
+			dx += (BattleAnimationEval.Hash(run.ScriptId, t.Index, k) * 2 - 1) * BattleAnimationEval.Dist(jit[0], 24, body, c.Motion);
+			dy += (BattleAnimationEval.Hash(run.ScriptId, t.Index, k + 977) * 2 - 1) * BattleAnimationEval.Dist(jit[1], 24, body, c.Motion);
+		}
+		if (F("path") is JsonArray path)
+		{
+			(float px, float py) = PathAt(path, local, run, body, c);
+			dx += px;
+			dy += py;
+		}
+		float ox = 0.5f, oy = anchor == "feet" ? 1f : 0.5f;
+		if (F("origin") is JsonArray origin)
+		{
+			ox = (float)(BattleAnimationRun.Num(origin[0]) ?? 0.5);
+			oy = (float)(BattleAnimationRun.Num(origin[1]) ?? 0.5);
+		}
+		int x = (int)at.X + (int)MathF.Round(dx) - (ox == 0.5f ? ew / 2 : (int)(ew * ox));
+		int y = (int)at.Y + (int)MathF.Round(dy) - (oy == 0.5f ? eh / 2 : (int)(eh * oy));
+		Color tint = Color.White;
+		float alpha = 1f;
+		Color add = Color.Transparent;
+		if (F("color") is JsonObject color)
+		{
+			long life = t.HasLength ? t.Length : fx.Idle.Ms.Sum() * (long)rate;
+			float u = BattleClock.Ratio(local, Math.Max(1, life));
+			ColorTransform ct = color.ContainsKey("from")
+				? BattleAnimationEval.Lerp(BattleAnimationEval.Ct(color["from"], n => AnimColor(n, run.In.Look)), BattleAnimationEval.Ct(color["to"], n => AnimColor(n, run.In.Look)),
+					BattleAnimationEval.Ease(BattleAnimationRun.Str(color["ease"]), u))
+				: color.ContainsKey("keys") ? BattleAnimationEval.ColorAt(new JsonObject { ["mode"] = "keys", ["keys"] = color["keys"]!.DeepClone() }, u, local, life, run, n => AnimColor(n, run.In.Look)) ?? ColorTransform.None
+				: BattleAnimationEval.Ct(color, n => AnimColor(n, run.In.Look));
 				tint = ct.Multiply;
 				alpha = ct.Alpha;
 				add = ct.Add;
+				if (ct.Palette is { } recolor && Resolve(recolor, fx.Palette) is { Count: > 0 } resolved)
+				{
+					image = s.Derive(image, PaletteKey(resolved), (px, _, _) => Recolor(px, resolved));
+				}
 			}
-			if (BattleAnimationRun.Str(F("fade_out")) is { } fade && fade.EndsWith('%'))
-			{
-				double share = double.Parse(fade[..^1], CultureInfo.InvariantCulture) / 100;
-				float u = BattleClock.Ratio(local, t.Length);
-				alpha *= u < (float)(1 - share) ? 1f : (1f - u) / (float)share;
-			}
-			if (damp != 1f)
-			{
-				alpha *= damp;
-			}
-			bool additive = BattleAnimationRun.Str(F("blend")) == "additive";
-			string flip = BattleAnimationRun.Str(F("flip")) ?? "auto";
-			bool flipX = flip == "x";
-			Color draw = alpha == 1f ? tint : tint * alpha;
-			if (additive)
-			{
-				draw = new Color(draw.R, draw.G, draw.B, (byte)0);
-			}
-			if (additive || flipX)
-			{
-				s.ImageEx(image, x, y, ew, eh, draw, flipX);
-			}
-			else
-			{
-				s.Image(image, x, y, ew, eh, draw);
-			}
-			if (add.R > 0 || add.G > 0 || add.B > 0)
-			{
-				s.ImageEx(s.Derive(image, "silhouette", Silhouette), x, y, ew, eh, new Color((byte)(add.R * alpha), (byte)(add.G * alpha), (byte)(add.B * alpha), (byte)0), flipX);
-			}
-			if (run.Kind == "turn")
-			{
-				_probeEffectSize = $"{ew}x{eh}";
-			}
-			if (marks is not null && fig >= 0 && fig < _show.All.Count)
-			{
-				marks.Add(_show.All[fig].Label);
-			}
+		if (BattleAnimationRun.Str(F("fade_out")) is { } fade && fade.EndsWith('%'))
+		{
+			double share = double.Parse(fade[..^1], CultureInfo.InvariantCulture) / 100;
+			float u = BattleClock.Ratio(local, t.Length);
+			alpha *= u < (float)(1 - share) ? 1f : (1f - u) / (float)share;
+		}
+		if (damp != 1f)
+		{
+			alpha *= damp;
+		}
+		bool additive = BattleAnimationRun.Str(F("blend")) == "additive";
+		string flip = BattleAnimationRun.Str(F("flip")) ?? "none";
+		bool flipX = flip == "x" || flip == "auto" && direction == "right" && directions?["right"] is null;
+		Color draw = alpha == 1f ? tint : tint * alpha;
+		if (additive)
+		{
+			draw = new Color(draw.R, draw.G, draw.B, (byte)0);
+		}
+		if (additive || flipX)
+		{
+			s.ImageEx(image, x, y, ew, eh, draw, flipX);
+		}
+		else
+		{
+			s.Image(image, x, y, ew, eh, draw);
+		}
+		if (add.R > 0 || add.G > 0 || add.B > 0)
+		{
+			s.ImageEx(s.Derive(image, "silhouette", Silhouette), x, y, ew, eh, new Color((byte)(add.R * alpha), (byte)(add.G * alpha), (byte)(add.B * alpha), (byte)0), flipX);
+		}
+		if (run.Kind == "turn")
+		{
+			_probeEffectSize = $"{ew}x{eh}";
+		}
+		_probeSprites.Add($"{t.Label} frame {frame}{(flipX ? " flip" : "")}{(trail ? " trail" : "")}");
+		if (marks is not null && fig >= 0 && fig < _show.All.Count)
+		{
+			marks.Add(_show.All[fig].Label);
 		}
 	}
 
@@ -430,9 +486,10 @@ public sealed partial class SampleController
 		return (keys[^1].X, keys[^1].Y);
 	}
 
-	// A floating number: the built-in rise over its life, or its kind's style from the animation file.
+	// A floating number: the built-in rise over its life, or its kind's style from the animation file. `rest` is the clock
+	// units from its release to its step's end.
 	private void DrawNumber(IDrawSurface s, BattleEvent e, FloatingText floating, float p, Rectangle r, bool behind, int n, int numberY, int numberMemberY, int numberRise, int numberGap,
-		string kind, long local)
+		string kind, long local, bool party, long rest)
 	{
 		if (!Anim.Numbers.TryGetValue(kind, out JsonObject? style))
 		{
@@ -456,17 +513,39 @@ public sealed partial class SampleController
 		int width = s.Measure(floating.Text, size);
 		if (motion == "window")
 		{
-			int pad = (int)(BattleAnimationEval.Px(style["pad"]) ?? 6);
-			int row = (int)(BattleAnimationEval.Px(style["row"]) ?? 40);
+			bool front = _stageLayout == BattleLayout.Front;
+			JsonNode? padNode = BattleAnimationRun.Pick(style["pad"], front);
+			int padX = (int)(BattleAnimationEval.Px(padNode is JsonArray xy ? xy[0] : padNode) ?? 6), padY = (int)(BattleAnimationEval.Px(padNode is JsonArray xy2 ? xy2[1] : padNode) ?? 6);
+			JsonNode? rowNode = BattleAnimationRun.Pick(style["row"], front);
+			int row = (int)(BattleAnimationEval.Px(rowNode is JsonObject sides ? sides[party ? "party" : "enemy"] : rowNode) ?? 40);
 			long open = Math.Max(1, BattleAnimationRun.Time(style["open"] ?? JsonValue.Create(6), timing));
-			int full = width + 2 * pad, h = size + 2 * pad;
-			int wNow = Math.Max(2, (int)(full * Math.Min(1f, BattleClock.Ratio(local - delay, open))));
+			int full = width + 2 * padX, h = size + 2 * padY;
+			float shown = Math.Min(1f, BattleClock.Ratio(local - delay, open));
+			// It closes sideways over the last `close` of its life, its text gone as it starts.
+			if (style["close"] is JsonNode closeNode)
+			{
+				long life = style["life"] is JsonNode lifeNode ? BattleAnimationRun.Time(lifeNode, timing, rest, rest, out _) ?? rest : rest;
+				long close = Math.Max(1, BattleAnimationRun.Time(closeNode, timing, life, life, out _) ?? 1);
+				if (local >= life)
+				{
+					return;
+				}
+				shown = Math.Min(shown, BattleClock.Ratio(life - local, close));
+			}
+			int wNow = Math.Max(2, (int)(full * shown));
 			int bx = r.Center.X - wNow / 2, by = row + n * (h + 4);
-			s.Fill(bx, by, wNow, h, Style.Panel);
-			Style.Frame(s, bx, by, wNow, h, Style.PanelEdge);
+			if (BattleAnimationRun.Str(style["frame"]) is { } frame)
+			{
+				Ui.DrawFrame(frame, s, new Rectangle(bx, by, wNow, h), 1f);
+			}
+			else
+			{
+				s.Fill(bx, by, wNow, h, Style.Panel);
+				Style.Frame(s, bx, by, wNow, h, Style.PanelEdge);
+			}
 			if (wNow >= full)
 			{
-				s.Text(floating.Text, r.Center.X - width / 2, by + pad, color, size);
+				s.Text(floating.Text, r.Center.X - width / 2, by + padY, color, size);
 			}
 			return;
 		}
@@ -538,9 +617,12 @@ public sealed partial class SampleController
 			{
 				continue;
 			}
-			foreach (AnimTrack t in run.Tracks.Where(t => t.Type is "backdrop" or "color" && now >= t.Start && Holds(run, t.Def)))
+			// In start order, so a restore after a swap crossfades back from it whatever the order the script lists them in.
+			foreach (AnimTrack t in run.Tracks.Where(t => t.Type is "backdrop" or "color" && now >= t.Start && Holds(run, t.Def)).OrderBy(t => t.Start))
 			{
-				bool active = t.Active(now) || BattleAnimationRun.Bool(t.Def["persist"]) == true;
+				bool persist = BattleAnimationRun.Bool(t.Def["persist"]) == true;
+				// A swap's picture stays after its crossfade until its script ends (for the battle with `persist`) or a restore.
+				bool active = t.Active(now) || persist || BattleAnimationRun.Str(t.Def["effect"]) == "swap";
 				long local = now - t.Start;
 				if (t.Type == "color")
 				{
@@ -615,7 +697,7 @@ public sealed partial class SampleController
 					int? next = BattleAnimationRun.Str(t.Def["image"]) is { } file ? AnimImage(s, file) : BattleAnimationRun.Str(t.Def["key"]) is { } key ? key == "generated" ? backdrop : art.BackdropByKey(key) : null;
 					if (next is int n)
 					{
-						if (!t.Active(now))
+						if (!t.Active(now) && persist)
 						{
 							_persistBackdrop = n;
 						}
@@ -657,7 +739,8 @@ public sealed partial class SampleController
 		{
 			tint *= tintAlpha;
 		}
-		string paletteKey = tintPalette is { Count: > 0 } ? "palette:" + string.Join(",", tintPalette.Select(p => $"{p.From.PackedValue:x}>{p.To.PackedValue:x}")) : "";
+		tintPalette = tintPalette is null ? null : Resolve(tintPalette, null);
+		string paletteKey = tintPalette is { Count: > 0 } ? PaletteKey(tintPalette) : "";
 		void Draw(int img, int x, int y, int dw, int dh, Color color)
 		{
 			s.Image(paletteKey.Length > 0 ? s.Derive(img, paletteKey, (px, _, _) => Recolor(px, tintPalette!)) : img, x, y, dw, dh, color);

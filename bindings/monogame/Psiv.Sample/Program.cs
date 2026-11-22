@@ -240,7 +240,8 @@ public static class Program
 			(m.BitmapFontsEnabled switch { true => $", {m.BitmapFonts.Count} bitmap fonts", false => ", bitmap fonts turned off", null => "" }) +
 			(m.BackdropMaps.Count > 0 ? $", {m.BackdropMaps.Count} backdrop maps" : "") + (m.TitleArt is null ? "" : ", title art") +
 			(m.CommandIcons.Count > 0 ? $", {m.CommandIcons.Count} command icons" : "") + (m.Pictures.Count > 0 ? $", {m.Pictures.Count} pictures" : "") +
-			(m.Keepers.Count > 0 ? $", {m.Keepers.Count} keepers" : "") +
+			(m.Keepers.Count > 0 ? $", {m.Keepers.Count} keepers" : "") + (m.AreaMotions.Count > 0 ? $", {m.AreaMotions.Count} areas with motion" : "") +
+			(m.Tilesets.Count(t => t.Palettes is { Count: > 0 }) is int recolored and > 0 ? $", {recolored} recolored tilesets" : "") +
 			(assets.Layout.IsDefault ? m.UiLayoutEnabled == false ? ", layouts turned off" : "" : $", {assets.Layout.FromFiles.Count} layout files ({assets.Layout.Styles.Width}x{assets.Layout.Styles.Height})"));
 		int problems = assets.Problems.Count;
 		Console.WriteLine(problems == 0 ? "OK: no problems." : $"FAILED: {problems} problems.");
@@ -666,6 +667,20 @@ public sealed class ScriptPlayer
 				break;
 			case "flashing" when w.Length == 2 && Enum.TryParse(w[1], true, out FlashLevel level) && level != FlashLevel.Unset:
 				_controller.SetFlashing(level, confirmed: true);
+				break;
+			case "equip" when w.Length is 3 or 4:
+				// A piece worn through the session's equip call, as the equip screen wears it.
+				if (_controller.ScriptEquip(w[1], w[2], w.Length == 4 ? w[3] : null) is { } refusedEquip)
+				{
+					Fail($"{source}: equip refused: {refusedEquip}");
+				}
+				break;
+			case "combo" when w.Length == 2:
+				// A combination's abilities chosen by the members who know them, and the round resolved.
+				if (_controller.ScriptCombo(w[1]) is { } refusedCombo)
+				{
+					Fail($"{source}: combo refused: {refusedCombo}");
+				}
 				break;
 			case "battlelayout" when w.Length == 2:
 				// The flag's override from here on; `data` goes back to the battle presentation table's layout.

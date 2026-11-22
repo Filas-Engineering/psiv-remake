@@ -1,4 +1,6 @@
 assets: assets.json: tilesets[0].animated[0]: tile 14 is not one of the tileset's floor, decor, wall_top or wall_face frames (water animates by itself)
+assets: assets.json: tilesets[0].palettes[0]: 'steps' must be a list of at least one step, each {"NAME": "#rrggbb"}
+assets: assets.json: tilesets[0].palettes[1]: 'colors' must name at least one source color: {"NAME": "#rrggbb"}
 assets: assets.json: tilesets[1]: a 16-pixel tile at scale 2 draws 32 screen pixels a cell, not the field's 48: a tile is 16 x scale pixels, with 3 / scale a whole number or one over a whole number (24 at 1.5, 48 at 3, 96 at 6)
 assets: tilesets/dungeon.png: tilesets[2]: 17x17 does not divide into 16x16 frames
 assets: assets.json: characters[0].animations.dance: unknown animation 'dance': not in game.json's presentation animations
@@ -19,6 +21,7 @@ assets: assets.json: figures[0].animations.Big Jump: a pose's name is lower-case
 assets: assets.json: figures[1]: field 'scale' must be a number above 0, at most 64
 assets: assets.json: figures[2]: field 'foot' must be a whole number from 1 to 16
 assets: assets.json: figures[4]: 'natural': true and 'scale' do not go together: the scale sets the size
+assets: assets.json: figures[6]: field 'palette' must be a list of 1 to 256 colors as #rrggbb, or a PNG strip of them
 assets: assets.json: figures[11]: view 'back' is for party members and vehicles only
 assets: assets.json: vehicles[3]: unknown vehicle 'hovercart': not in the game data
 assets: assets.json: vehicles[3]: 'facings' needs north, east, south and west, each at least one frame
@@ -40,7 +43,8 @@ assets: assets.json: backdrop_maps[4]: needs exactly one of 'image' (with 'color
 assets: assets.json: backdrop_maps[4]: an 'image' needs 'colors': each of its colors to the id of a backdrop
 assets: backdrop_maps/small.png: backdrop_maps[4]: 16x16 is not the area's 20x9 cells at one pixel a cell
 assets: assets.json: effects[1]: field 'scale' must be a number above 0, at most 64
-assets: assets.json: sprites.moon: unknown sprite 'moon': shadow, bubble, alert, pointer, pier
+assets: effects/missing_palette.png: effects[28]: missing file
+assets: assets.json: sprites.moon: unknown sprite 'moon': shadow, bubble, alert, pointer, pier, platform
 assets: command_icons/missing.png: command_icons.attack: missing file
 assets: assets.json: command_icons.dance: unknown command 'dance': attack, technique, skill, combo, item, defend, escape
 assets: assets.json: pictures.bell tower: a picture's name is letters, digits and '_'
@@ -64,6 +68,29 @@ assets: fonts/ja_bad.json: bitmap_fonts.fonts[5]: glyphs.Q: rect 0, 0, 999, 10 i
 assets: fonts/ja_bad.json: bitmap_fonts.fonts[5]: kerning.AZ: a pair is two characters of the font's glyphs
 assets: maps/ashfall_market.png: maps.areas[0]: 16x16 is not the area's 16x9 cells at 16 pixels a cell (256x144)
 assets: assets.json: maps.areas[1]: unknown change flag 'no.such_flag': not a flag of the area's changes (it has none)
+assets: assets.json: maps.areas[14].palettes[0]: color 'sea' must be a color as #rrggbb
+assets: assets.json: maps.areas[14].palettes[0]: colors 'sand' and 'dune' are the same color
+assets: assets.json: maps.areas[14].palettes[0].steps[0]: names no color 'reef' of 'colors'
+assets: assets.json: maps.areas[14].palettes[0]: takes 'ms' or 'ticks', not both
+assets: assets.json: maps.areas[14].palettes[1]: needs 'ms' or 'ticks' for more than one step or frame
+assets: assets.json: maps.areas[14].palettes[1]: field 'clock' must be one of global, entry, not 'sometimes'
+assets: assets.json: maps.areas[14].palettes[1]: unknown flag 'no.such_flag': not in the game data
+assets: assets.json: maps.areas[14].animated[0]: field 'cells' must be [x, y, width, height], width and height at least 1, inside the area's 14x9 cells
+assets: assets.json: maps.areas[14].animated[1]: needs exactly one of 'cells' and 'pixels': the rectangle [x, y, width, height] the frames are drawn on
+assets: tilesets/town.png: maps.areas[14].animated[2]: 'frames' names frame 999, but the image has 32 frames of 16x16
+assets: assets.json: maps.areas[14].animated[2]: field 'ms' must be a number from 1 to 60000 or a list of 2 of them, one for each step or frame
+assets: assets.json: maps.areas[14].animated[2]: field 'layer' must be one of ground, above, not 'middle'
+assets: motion/missing.png: maps.areas[14].animated[3]: missing file
+assets: assets.json: maps.areas[14].layers[0]: field 'place' must be one of back, front, not 'under'
+assets: assets.json: maps.areas[14].layers[0]: field 'repeat' must be one of both, x, y, none, not 'always'
+assets: assets.json: maps.areas[14].layers[0]: field 'scroll' must be [x, y], each from -16 to 16
+assets: assets.json: maps.areas[14].layers[0].bands[0]: field 'rows' must be [first, last], rows of the picture (0 to 104), first at most last
+assets: assets.json: maps.areas[14].layers[0].bands[2]: rows 4 to 12 overlap the band of rows 0 to 10
+assets: assets.json: maps.areas[14].layers[0].wave: field 'amplitude' must be a number from 0 to 1024
+assets: assets.json: maps.areas[14].layers[0]: a wave over columns does not go with 'bands', which move rows
+assets: assets.json: maps.areas[14].layers[1]: missing field 'image'
+assets: assets.json: maps.areas[14].layers[1]: unknown flag 'no.such_flag': not in the game data
+assets: assets.json: maps.areas[15]: unknown area 'atlantis': not in the game data
 assets: maps/atlantis.png: maps: names no area: maps/AREA.png, maps/AREA_above.png or maps/AREA@FLAG.png, with an area of the game data and a flag of its changes
 assets: assets.json: title_art: unknown field 'sparkle'
 assets: title/traveler.png: title_art.layers[0]: 'frames' names frame 9, but the image has 2 frames of 16x16
@@ -100,6 +127,7 @@ assets: battle_animation.json: settings.rate: must be a number from 1 to 240
 assets: battle_animation.json: settings.log_timing: must be one of step, release
 assets: battle_animation.json: settings.flash_limit: must be false or {count: 1 to 60, frames: 1 to 3600}
 assets: battle_animation.json: settings.event_cues_off: must be true, false or a list of event cues: hit, miss, critical, heal, status, enemy_down
+assets: battle_animation.json: settings.solo: must be true, false or a list of action, command, result
 assets: battle_animation.json: scripts.spark.bolt.event_cues_off: must be true, false or a list of event cues: hit, miss, critical, heal, status, enemy_down
 assets: battle_animation.json: scripts.spark.bolt.tracks[1].at: unknown phase or mark 'impakt': forward, banner, animate, effect, result, back, end
 assets: battle_animation.json: scripts.spark.bolt.tracks[1].effect: unknown effect 'sprak.orb': not an effect animation, an effect in assets.json, a generated effect or $look.effect
@@ -113,12 +141,19 @@ assets: battle_animation.json: scripts.spark.bolt.tracks[8].amplitude: must be l
 assets: battle_animation.json: scripts.spark.bolt.tracks[9].on: beside:SIDE:SUBJECT takes left or right
 assets: battle_animation.json: scripts.spark.bolt.tracks[9].flash: must be true or false
 assets: battle_animation.json: scripts.spark.bolt.tracks[10].on: adjacent: the subject beside which is not itself beside another
+assets: battle_animation.json: scripts.spark.bolt.tracks[11].pattern: must be one of clock, script
+assets: battle_animation.json: scripts.spark.bolt.tracks[12].to: palette: must be a list of up to 64 [source, "#rrggbb"] pairs: the source a "#rrggbb" color or an index 0 to 255 into the picture's palette
 assets: battle_animation.json: scripts.loop.a.extends: 'loop.b' extends 'loop.a': a cycle
 assets: battle_animation.json: scripts.loop.b.extends: 'loop.a' extends 'loop.b': a cycle
 assets: battle_animation.json: scripts.Bad Id: an id is lower-case letters, digits, '_' and '.', 1 to 64 characters
+assets: battle_animation.json: scripts.bad.solo.solo: must be true, false or a list of action, result
+assets: battle_animation.json: scripts.bad.solo.solo: only a turn script draws the member acting alone
 assets: battle_animation.json: effects.spark.orb.sheet: unknown effect sheet 'no_such_sheet': an effect in assets.json or a generated effect
 assets: battle_animation.json: effects.spark.orb.frames: must be a list of frame indexes, -1 drawing nothing
-assets: battle_animation.json: transitions.blocks.kind: unknown transition kind 'mosaic': flash, fade, wipe, iris, tiles, spiral, split, sequence
+assets: battle_animation.json: effects.bad.trail.flip: must be one of auto, none, x
+assets: battle_animation.json: effects.bad.trail.directions: must be frame lists by left, right, up and down
+assets: battle_animation.json: effects.bad.trail.travel: trail: must be {count, gap, alpha}
+assets: battle_animation.json: transitions.blocks.block: must be a whole number from 8 to 64
 assets: battle_animation.json: transitions.dots.tile: must be a whole number from 8 to 160
 assets: battle_animation.json: transitions.seq.phases: a sequence transition needs its phases
 assets: battle_animation.json: transitions.seq2.phases: must be 1 to 8 phases, each {color, steps (1 to 32), step_frames, hold}
@@ -127,19 +162,29 @@ assets: battle_animation.json: numbers.critical.color: unknown color 'gold': a s
 assets: battle_animation.json: numbers.huge: unknown result kind 'huge': damage, critical, weak, resisted, immune, miss, heal, tp, revive, status, status_resisted, status_ends, stat_up, stat_down, stat_normal, no_effect, felled, felling_resisted
 assets: battle_animation.json: numbers.damage.rise: must be logical pixels from -4000 to 4000, a number or "Npx"
 assets: battle_animation.json: numbers.damage.pad: must be logical pixels from 0 to 64, a number or "Npx"
+assets: battle_animation.json: numbers.heal.row: must be logical pixels, or {party, enemy}: a row for each side's targets
+assets: battle_animation.json: numbers.heal.pad: must be pixels, or [x, y]
+assets: battle_animation.json: numbers.heal.frame: unknown frame style 'glass': a frame of styles.json (battle, none, panel)
+assets: battle_animation.json: numbers.heal.close: must be frames from 0 to 36000, "Nms", "N%", or a $timing, $look, $param, $step, $phase or $rest reference
 assets: battle_animation.json: select.ability:sparkk: unknown ability or item 'sparkk': not in the game data
 assets: battle_animation.json: select.weapon:axe: unknown weapon class 'axe': blade, greatblade, rod, sling
 assets: battle_animation.json: select.combo:twin_arcs: unknown combination recipe 'twin_arcs': not in combos.json
 assets: battle_animation.json: select.ability:spark: unknown script 'spark.bolts'
 assets: battle_animation.json: select.step:notice.Game Lvl: unknown notice key 'Game Lvl'
+assets: battle_animation.json: select.step:notice.game.no_such_notice: notice key 'game.no_such_notice' is not one a battle shows with this data (GameSession.BattleKeys)
 assets: battle_animation.json: select.status:poison/wobble: status:ID/idle or status:ID/tick
 assets: battle_animation.json: select.item:no_such_piece: unknown ability or item 'no_such_piece': not in the game data
+assets: battle_animation.json: select.ability:spark/layout:top: layout:front or layout:side
 assets: battle_animation.json: figures.enemy.states.defeat.kind: must be one of fade, blink, bands, slide, sink, flash_fade, frames
 assets: battle_animation.json: figures.enemy.states.defeat:instant.outlast: must be frames from 0 to 36000, "Nms", "N%", or a $timing, $look, $param, $step, $phase or $rest reference
+assets: battle_animation.json: figures.enemy.states.idle.lift: must be pixels, "Npx" (never scaled), "Nm" (scaled by motion_percent), "Nf" (forward units), "Nh" or "Nw" (of the figure's height or width)
+assets: battle_animation.json: figures.enemy.states.idle.stagger: must be frames from 0 to 36000, "Nms", "N%", or a $timing, $look, $param, $step, $phase or $rest reference
 assets: battle_animation.json: figures.monster: unknown scope 'monster': party, enemy, vehicle, or one of them with :ID
 assets: battle_animation.json: weapon_classes.category:axe: unknown key: equipment:ID or category:NAME, with an equipment piece or category of the game data
-assets: battle_animation.json: placements.count:9: unknown key: count:1 to count:5 (5 is five or more enemies) or encounter:ID
+assets: battle_animation.json: placements.count:9: unknown key: count:1 to count:8 (count:5 also serves six or more enemies) or encounter:ID
+assets: battle_animation.json: placements.count:6: must be a list of up to 8 places, each [x, foot] in logical pixels, or [x, foot, "front" or "back"] for its rank
 assets: animation/broken_extras.json: fragments.cast_glow: calls nest deeper than 8, or call themselves
+assets: assets.json: figures[5].animations.flourish: no battle animation script or figure state plays 'flourish'
 assets: ui/menu.json: -: missing file: the built-in layout stands in
 assets: ui/styles.json: resolution: field 'width' must be a whole number from 160 to 7680
 assets: ui/styles.json: colors.mud: must be #rrggbb or #rrggbbaa
@@ -155,8 +200,11 @@ assets: ui/styles.json: params: field 'dev_draw' must be a whole number from 0 t
 assets: ui/styles.json: params: field 'dev_badge_x' must be a whole number from -1 to 4096
 assets: ui/styles.json: params: field 'dev_scale_bitmap' must be a whole number from 0 to 1
 assets: ui/styles.json: -: the built-in styles stand in
-assets: ui/battle_front.json: params.party_slot_5_x: unknown param: backdrop_h, command_axis, command_top, critical_marks, critical_marks_enemy, critical_marks_party, dev_badge_y, effect_scale, effect_scale_large, effectiveness_marks, effectiveness_marks_enemy, effectiveness_marks_party, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_figures, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_statuses, enemy_x, game_over_confirm, ground_h, icon_gap, icon_size, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, miss_marks, miss_marks_enemy, miss_marks_party, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_figures, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, result_page_lines, stage_bottom, step_aside, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
+assets: ui/battle_front.json: params.party_slot_5_x: unknown param: backdrop_h, command_axis, command_top, critical_marks, critical_marks_enemy, critical_marks_party, damage_numbers, dev_badge_y, effect_scale, effect_scale_large, effectiveness_marks, effectiveness_marks_enemy, effectiveness_marks_party, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_figures, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_statuses, enemy_x, game_over_confirm, ground_h, icon_gap, icon_size, item_order, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, macro_auto_first, miss_marks, miss_marks_enemy, miss_marks_party, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_figures, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, result_page_lines, stage_bottom, step_aside, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
 assets: ui/battle_front.json: params.command_axis: must be "column" or "row": the keys that move the command cursor
+assets: ui/battle_front.json: params.damage_numbers: must be "applied" or "rolled": whether floating numbers show the change made or what the roll gave
+assets: ui/battle_front.json: params.item_order: must be "items_then_equipment" or "equipment_then_items": whether the Item list puts the bag's items or the worn pieces first
+assets: ui/battle_front.json: params.macro_auto_first: field 'macro_auto_first' reads 'on', which is not a field of the battle_front screen, a window or a variable
 assets: ui/battle_front.json: windows.icons.elements[0].template.elements[1]: field 'visible' reads 'status_nausea', which is not a field of the battle_front screen, a window or a variable
 assets: ui/battle_front.json: windows.icons: lays the menu's rows out across: set the param 'command_axis' to "row" so Left and Right move the cursor
 assets: ui/battle_front.json: -: the built-in layout of this screen stands in
@@ -197,6 +245,7 @@ assets: ui/extras.json: entries[0]: field 'page' must be one of status, items, t
 assets: ui/extras.json: entries[2]: 'options' is listed twice
 assets: ui/extras.json: entries[3]: missing field 'page'
 assets: ui/extras.json: entries[4]: unknown field 'colour'
+assets: ui/extras.json: entries[5].children: only the menu screen's entries take 'children'
 assets: ui/extras.json: -: the built-in layout of this screen stands in
 assets: ui/field.json: params.area_banners: unknown param: area_banner, arrive_toast, followers_arrive
 assets: ui/field.json: params.followers_arrive: must be "stacked" or "behind": where followers stand when the party arrives
@@ -212,22 +261,30 @@ assets: ui/inn.json: windows.box.elements[5]: missing field 'color'
 assets: ui/inn.json: windows.box.elements[6]: the inn screen has no slots
 assets: ui/inn.json: windows.box: field 'relative_to' names no window of this screen: 'missing'
 assets: ui/inn.json: -: the built-in layout of this screen stands in
+assets: ui/menu_abilities.json: params.unusable: must be "dim" or "hide": whether abilities not usable in the field show dimmed or not at all
+assets: ui/menu_abilities.json: -: the built-in layout of this screen stands in
 assets: ui/menu_equip.json: places[0]: field 'slot' must be one of weapon, left_hand, head, body, arms, accessory
 assets: ui/menu_equip.json: places[1]: field 'label' must be a non-empty string
 assets: ui/menu_equip.json: places[2]: 'head' is listed twice
 assets: ui/menu_equip.json: places[3]: missing field 'slot'
 assets: ui/menu_equip.json: -: the built-in layout of this screen stands in
+assets: ui/menu_items.json: params.actions: no element draws the field 'actions', so the action list an item opens would not show
+assets: ui/menu_items.json: -: the built-in layout of this screen stands in
+assets: ui/menu_options.json: params.party_talk: must be "close" or "page": whether party talk closes the menu or shows its lines on the page
+assets: ui/menu_options.json: -: the built-in layout of this screen stands in
+assets: ui/menu_status.json: params.tab_h: field 'tab_h' reads 'tall', which is not a field of the menu_status screen, a window or a variable
 assets: ui/menu_status.json: places: only the menu_equip screen takes 'places'
 assets: ui/menu_status.json: profile[1]: must be a profile row: name, level, experience, experience_next, kind, hp, max_hp, tp, max_tp, strength, mental, agility, dexterity, defense, critical, evasion, magic_defense, attack_element, data
 assets: ui/menu_status.json: profile[2]: 'name' is listed twice
 assets: ui/menu_status.json: -: the built-in layout of this screen stands in
+assets: ui/menu_system.json: params.system_action: field 'system_action' reads 'always', which is not a field of the menu_system screen, a window or a variable
 assets: ui/menu_system.json: rows[1]: must be one of save, quit, text_speed, battle_speed, flashing, auto_advance, text_size
 assets: ui/menu_system.json: rows[2]: 'save' is listed twice
 assets: ui/menu_system.json: -: the built-in layout of this screen stands in
 assets: ui/name_entry.json: params.pad_cell_w: field 'pad_cell_w' reads 'cell_size', which is not a field of the name_entry screen, a window or a variable
 assets: ui/name_entry.json: params.pad_spacing: unknown param: backdrop_dim, pad_box_h, pad_cell_h, pad_cell_w, pad_entry_size, pad_gap, pad_label_size, pad_label_y, pad_text_x, pad_text_y
 assets: ui/name_entry.json: -: the built-in layout of this screen stands in
-assets: ui/nonsense.json: -: unknown screen 'nonsense': battle_front, battle_side, confirm, controls, credits, dialogue, extras, field, inn, load_game, menu, menu_abilities, menu_codex, menu_combos, menu_equip, menu_items, menu_log, menu_macros, menu_options, menu_order, menu_quests, menu_status, menu_system, name_entry, options, panels, pause, quest_log, save_prompt, save_slots, shop, sound_test, text_log, title, travel or styles
+assets: ui/nonsense.json: -: unknown screen 'nonsense': battle_front, battle_side, confirm, controls, credits, dialogue, extras, field, inn, load_game, menu, menu_abilities, menu_children, menu_codex, menu_combos, menu_equip, menu_items, menu_log, menu_macros, menu_options, menu_order, menu_quests, menu_status, menu_system, name_entry, options, panels, pause, quest_log, save_prompt, save_slots, shop, sound_test, text_log, title, travel or styles
 assets: ui/panels.json: params.zoom: unknown param: bottom, gutter, margin, slide
 assets: ui/panels.json: -: the built-in layout of this screen stands in
 assets: ui/shop.json: params.steps: field 'steps' reads 'flow', which is not a field of the shop screen, a window or a variable
@@ -237,5 +294,5 @@ assets: ui/sound_test.json: start: only the title screen takes 'start' and 'opti
 assets: ui/sound_test.json: -: the built-in layout of this screen stands in
 assets: ui/title.json: -: not valid JSON: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 27.
 assets: ui/title.json: -: the built-in layout of this screen stands in
-assets: 0 tilesets, 14 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 4 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 19 layout files (1280x720)
-FAILED: 239 problems.
+assets: 0 tilesets, 14 characters, 18 portraits, 41 figures, 18 field enemies, 3 vehicles, 4 backdrops, 27 effects, 6 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 17 layout files (1280x720)
+FAILED: 296 problems.

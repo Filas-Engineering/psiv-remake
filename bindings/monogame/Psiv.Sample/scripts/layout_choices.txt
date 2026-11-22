@@ -1,0 +1,121 @@
+# The layout choices (scripts/make_choices_assets.py, on the data copy scripts/make_front_data.py writes, with --dev):
+# in battle the mystic's worn Storm Rod before the bag's Tonic in the Item list and the auto-battle macro first and
+# marked in the macro list, then both in the built-in order once alt/battle_front_plain.json is swapped in; the Items
+# page's actions (use, look with the description in its window, the use's outcome on the page's result line and not as
+# a notice); and the title's Continue opening the Load list, then loading the newest save once alt/title_newest.json is
+# swapped in. With --window the shot lines save screenshots under build/shots/choices/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev give storm_rod 1
+press M
+cmd equip mystic storm_rod
+press Escape
+expect screen Field
+cmd set auto tempest
+expect state macros opener(5), tempest(5)*, regroup(5)
+
+# In battle: the worn piece first in the Item list, and the auto-battle macro first and marked.
+dev battle training
+waitstate 120 battlephase Command
+press Down 4
+press Enter
+press Down 3
+press Enter
+expect state battlemenu [Storm Rod (worn)] | Tonic x3
+shot build/shots/choices/battle_items.png
+press Escape
+press Escape
+press Down 6
+press Enter
+expect state battlemenu [tempest (auto)] | opener | regroup
+shot build/shots/choices/battle_macros.png
+press Escape
+# The built-in order: the bag's items, then the worn pieces; the macros as the party keeps them.
+assets swap ui/battle_front.json alt/battle_front_plain.json
+wait 2
+press Down 3
+press Enter
+expect state battlemenu [Tonic x3] | Storm Rod (worn)
+press Escape
+press Down 6
+press Enter
+expect state battlemenu [opener] | tempest | regroup
+press Escape
+# A round, so that the Tonic has someone to heal on the Items page.
+press Enter
+press Enter
+press Enter
+press Enter
+waitstate 900 battlephase Command
+dev win
+hold F 60
+press Enter
+expect screen Field
+
+# The Items page: Confirm opens the item's actions; look shows its description until Confirm; use goes on to the
+# target, and the session's notice or refusal shows on the result line, not as a notice.
+press M
+press Right
+expect state tab Items
+expect state page items
+press Enter
+expect state page actions
+expect state selected Use
+press Down
+expect state selected Look
+press Enter
+expect state page look
+expect statehas uifield.menu_items.look_text Restores 30 HP
+shot build/shots/choices/items_look.png
+press Enter
+expect state page actions
+press Up
+press Enter
+expect state page target
+press Enter
+expect state page items
+expect state uifield.menu_items.result_text Test Fighter recovers 2 HP.
+expect state uifield.menu_items.result_ok true
+expect notoast recovers
+shot build/shots/choices/items_result.png
+# Again: the refusal on the result line too. Back closes the actions.
+press Enter
+press Enter
+press Enter
+expect state uifield.menu_items.result_text Tonic would have no effect.
+expect state uifield.menu_items.result_ok false
+expect notoast no effect
+press Enter
+expect state page actions
+press Escape
+expect state page items
+press Escape
+expect screen Field
+
+# The title's Continue opens the Load list; with the built-in title it loads the newest save, the event's autosave.
+cmd title
+wait 2
+expect screen Title
+press Down
+expect state selected Continue
+press Enter
+expect screen LoadGame
+expect statehas selected auto_0
+shot build/shots/choices/title_continue.png
+press Escape
+expect screen Title
+assets swap ui/title.json alt/title_newest.json
+wait 2
+press Enter
+wait 2
+expect screen Field
+expect toast Loaded auto_1.

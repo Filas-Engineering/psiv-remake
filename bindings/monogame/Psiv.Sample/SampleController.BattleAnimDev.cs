@@ -22,6 +22,8 @@ public sealed partial class SampleController
 	private string? _animPreview;
 	private string _animPreviewLayout = "";
 	private string _animPreviewEnemy = "";
+	private int _animPreviewCount = 3;
+	private int _animPreviewTargets;
 
 	private string ScriptKind(string id)
 	{
@@ -79,15 +81,27 @@ public sealed partial class SampleController
 		case ["preview", "anim", var key, .. var rest]:
 			_animPreviewLayout = "";
 			_animPreviewEnemy = "";
+			_animPreviewCount = 3;
+			_animPreviewTargets = 0;
 			for (int k = 0; k + 1 < rest.Length; k += 2)
 			{
-				if (rest[k] == "layout")
+				switch (rest[k])
 				{
+				case "layout":
 					_animPreviewLayout = rest[k + 1];
-				}
-				else if (rest[k] == "enemy")
-				{
+					break;
+				case "enemy":
 					_animPreviewEnemy = rest[k + 1];
+					break;
+				case "count" when int.TryParse(rest[k + 1], CultureInfo.InvariantCulture, out int count) && count is >= 1 and <= 8:
+					_animPreviewCount = count;
+					break;
+				case "targets" when int.TryParse(rest[k + 1], CultureInfo.InvariantCulture, out int targets) && targets is >= 1 and <= 8:
+					_animPreviewTargets = targets;
+					break;
+				default:
+					DevLog(T("ui.dev.unreadable"), bad: true);
+					return false;
 				}
 			}
 			return StartAnimPreview(key);
@@ -175,9 +189,15 @@ public sealed partial class SampleController
 			return false;
 		}
 		string kind = ScriptKind(id);
-		string entry = key.Split(':', 2) is ["ability" or "item", var a] && PresentationTable.Actions.ContainsKey(a.Split('/')[0]) ? a.Split('/')[0]
-			: key.StartsWith("ability:", StringComparison.Ordinal) && _data.Actions.TryGetValue(key[8..].Split('/')[0], out ActionShape? shape) ? $"{shape.Kind}.{shape.Effect}"
-			: kind == "reaction" || key.StartsWith("weapon:", StringComparison.Ordinal) || key.StartsWith("enemy:", StringComparison.Ordinal) ? "attack" : "technique.damage";
+		// An enemy's key has a dummy enemy act on the members; an item's has a member use it (a worn piece its use).
+		string[] head = key.Split('/')[0].Split(':', 2);
+		string? enemyAction = key.Split('/') is [var e, var action, ..] && e.StartsWith("enemy:", StringComparison.Ordinal) ? action : null;
+		string actionId = head is ["item", var piece] && _data.PieceUses.TryGetValue(piece, out string? use) ? use
+			: head is ["ability" or "item", var a0] ? a0 : enemyAction is not null and not ("attack" or "defend") ? enemyAction : "";
+		string entry = PresentationTable.Actions.ContainsKey(actionId) ? actionId
+			: _data.Actions.TryGetValue(actionId, out ActionShape? shape) ? $"{shape.Kind}.{shape.Effect}"
+			: enemyAction == "defend" ? "defend"
+			: kind == "reaction" || key.StartsWith("weapon:", StringComparison.Ordinal) || enemyAction is not null ? "attack" : "technique.damage";
 		if (!PresentationTable.Actions.ContainsKey(entry) && !PresentationTable.Fallbacks.ContainsKey(entry))
 		{
 			entry = "technique.damage";
@@ -188,8 +208,9 @@ public sealed partial class SampleController
 		}
 		_forcedScript = id;
 		_forcedReaction = kind == "reaction" ? id : null;
-		bool ok = StartStagePreview(entry, key.StartsWith("change:", StringComparison.Ordinal) ? key[7..] : null, _animPreviewEnemy.Length > 0 ? _animPreviewEnemy : null,
-			key.StartsWith("combo:", StringComparison.Ordinal));
+		string? dummy = _animPreviewEnemy.Length > 0 ? _animPreviewEnemy : enemyAction is not null ? head[1] : null;
+		bool ok = StartStagePreview(entry, key.StartsWith("change:", StringComparison.Ordinal) ? key[7..] : null, dummy, key.StartsWith("combo:", StringComparison.Ordinal),
+			_animPreviewCount, _animPreviewTargets, enemyAction is not null, head[0] == "item");
 		_forcedScript = null;
 		if (ok)
 		{
@@ -212,7 +233,12 @@ public sealed partial class SampleController
 			return;
 		}
 		target = Math.Max(0, target);
+		bool overlay = _overlays.Contains("anim");
 		StartAnimPreview(key);
+		if (!overlay)
+		{
+			_overlays.Remove("anim");
+		}
 		string? id = Anim.Find(key) ?? key;
 		for (int guard = 0; guard < 64; guard++)
 		{
@@ -238,6 +264,8 @@ public sealed partial class SampleController
 			}
 		}
 		_paused = true;
+		// The windows show the seeked frame as playing there would have: none is still opening or closing.
+		Ui.Settle(StageLayout() == BattleLayout.Front ? "battle_front" : "battle_side");
 		AnimLog($"seek @{Frames(PreviewFrame())}");
 	}
 

@@ -231,6 +231,8 @@ def main():
 	items_broken(broken)
 	menus_broken(broken)
 	dialogue_items_broken(broken)
+	motion_broken(broken)
+	choices_broken(broken)
 	bitmap_fonts(export, fonts)
 	if len(sys.argv) > 5:
 		subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("make_layout_assets.py")), str(export), str(fonts), sys.argv[5]], check=True)
@@ -687,6 +689,7 @@ def items_broken(broken):
 
 	def front(d):
 		d["params"]["command_axis"] = "diagonal"
+		d["params"]["damage_numbers"] = "both"
 		d["windows"].append({"name": "icons", "elements": [{"type": "repeater", "items": "menu_items", "dx": 40, "template": [
 			{"type": "image", "image": "icon", "w": 32, "h": 32}, {"type": "text", "visible": "status_nausea", "value": "'?'"}]}]})
 	change("battle_front", front)
@@ -713,9 +716,12 @@ def menus_broken(broken):
 		(ui / f"{name}.json").write_text(json.dumps(data, indent="\t") + "\n")
 
 	change("extras", lambda d: d.update({"entries": [{"page": "extras"}, {"page": "options"}, {"page": "options"}, {"label": "ui.title.options"},
-		{"page": "dev", "colour": "red"}]}))
+		{"page": "dev", "colour": "red"}, {"page": "quests", "children": [{"page": "save"}]}]}))
 	change("shop", lambda d: d.update({"entries": [{"page": "items"}]}))
-	change("menu_system", lambda d: d.update({"rows": ["save", "teleport", "save"]}))
+	change("menu_system", lambda d: d.update({"rows": ["save", "teleport", "save"], "params": {"system_action": "always"}}))
+	change("menu_abilities", lambda d: d.update({"params": {"unusable": "grey"}}))
+	change("menu_options", lambda d: d.update({"params": {"party_talk": "dialogue"}}))
+	change("menu_status", lambda d: d.update({"params": {"tab_h": "tall"}}))
 	change("battle_side", lambda d: d.update({"command_rows": {"top": ["fight", "dance"], "member": [], "side": 1, "vehicle": ["attack", "fly"]}}))
 
 
@@ -742,6 +748,44 @@ def dialogue_items_broken(broken):
 	m = json.loads((broken / "assets.json").read_text())
 	m["ui"]["page_arrow"] = "ui/no_arrow.png"
 	(broken / "assets.json").write_text(json.dumps(m, indent="\t") + "\n")
+
+
+def motion_broken(broken):
+	"""One problem of each kind an area's palette tracks, frame runs and layers and a tileset's palette tracks can have, in
+	BROKEN (docs/assets.md, "Motion")."""
+	m = json.loads((broken / "assets.json").read_text())
+	tidewater = next(a for a in m["maps"]["areas"] if a["area"] == "tidewater")
+	tidewater["palettes"] = [
+		{"colors": {"sea": "#12345", "sand": "#d0b070", "dune": "#d0b070"}, "steps": [{"reef": "#000000"}], "ms": 100, "ticks": 6},
+		{"colors": {"sea": "#123456"}, "steps": [{}, {}], "clock": "sometimes", "flag": "no.such_flag"},
+	]
+	tidewater["animated"] = [
+		{"cells": [12, 8, 4, 4], "image": "tilesets/town.png", "frames": [0]},
+		{"cells": [0, 0, 1, 1], "pixels": [0, 0, 16, 16], "image": "tilesets/town.png", "frames": [0]},
+		{"cells": [0, 0, 1, 1], "image": "tilesets/town.png", "frames": [0, 999], "ms": [100], "layer": "middle"},
+		{"pixels": [0, 0, 16, 16], "image": "motion/missing.png", "frames": [0]},
+	]
+	tidewater["layers"] = [
+		{"image": "backdrops/town.png", "place": "under", "repeat": "always", "scroll": [1],
+			"bands": [{"rows": [5, 2]}, {"rows": [0, 10]}, {"rows": [4, 12]}], "wave": {"axis": "columns", "amplitude": -1}},
+		{"place": "front", "unless_flag": "no.such_flag"},
+	]
+	m["maps"]["areas"].append({"area": "atlantis", "layers": [{"image": "backdrops/town.png"}]})
+	m["tilesets"][0]["palettes"] = [{"colors": {"floor": "#7a6a50"}, "steps": []}, {"steps": [{"floor": "#000000"}]}]
+	(broken / "assets.json").write_text(json.dumps(m, indent="\t") + "\n")
+
+
+def choices_broken(broken):
+	"""A bad value of each layout choice the broken copy's files can take: the battle's Item list order and macro list
+	switch, and the Items page's actions with nothing that draws them (docs/ui-layout.md; the title's `continue` is
+	checked on a copy in the layout_choices run, the broken copy's title file being unreadable)."""
+	ui = broken / "ui"
+	front = json.loads((ui / "battle_front.json").read_text())
+	front["params"].update({"item_order": "worn_first", "macro_auto_first": "on"})
+	(ui / "battle_front.json").write_text(json.dumps(front, indent="\t") + "\n")
+	items = json.loads((ui / "menu_items.json").read_text())
+	items["params"] = {"actions": 1}
+	(ui / "menu_items.json").write_text(json.dumps(items, indent="\t") + "\n")
 
 
 def broken_layouts(broken):

@@ -99,6 +99,7 @@ How the renderer uses them, from a hash of each cell's coordinates so the pictur
 * `edge` and `bank` are `#rrggbb` or `#rrggbbaa`; left out, the generated kind's colors.
 * `scale` (optional): file pixels per unit, as for figures, with `tile` defaulting to 16 times it. A tile always fills exactly one cell, so the snapped factor (the field's cell over 16, over the scale; 3 over it at the default 48) times `tile` must be the field's cell (48 pixels unless the layouts' styles set `field_cell`): `{"kind": "town", "image": "tilesets/town_x3.png", "scale": 3, ...}` (48-pixel tiles at one screen pixel a file pixel), 24 at 1.5 or 96 at 6; a 32-pixel tile at scale 2 would draw 64 pixels a cell and is a problem. The check then guarantees every file pixel of the tileset covers the same whole number of screen pixels; without `scale` a tile of any size is stretched to its cell. In a panel whose camera zooms to another cell size the tiles fill the cell either way. At a 16-pixel cell a 48-pixel tile at scale 3, a 32-pixel one at 2 and a 16-pixel one at 1 fill it; `--check-assets` checks against the styles' cell (`a 48-pixel tile at scale 3 draws 24 screen pixels a cell, not the field's 20`).
 * `animated` (optional): frame runs that stand in for a tile wherever the renderer picks it, `[{"tile": 0, "frames": [0, 29, 30], "ms": 300}]` (`ms` a number for every frame or a list). `tile` is one of the tileset's `floor`, `decor`, `wall_top` or `wall_face` frames (water animates by itself); every cell showing it plays the run in step, from the controller's clock. A kind's tileset animates every area of that kind without one of its own; an area's tileset animates that area only.
+* `palettes` (optional): palette tracks over every tile picture the cells show (floors, decorations, walls, water, the animated tiles' frames), as an area's ([Motion](#motion)); the generated edge, bank, foam and shadow bands and the point objects keep their colors.
 
 ### characters
 
@@ -179,6 +180,15 @@ Figures take `scale`, `foot` and `shadow` ([How big pictures are drawn](#how-big
 {"id": "medic", "side": "party", "view": "back", "image": "figures/medic_back.png", "natural": false, "idle": {"frames": [0], "ms": [400]}}
 {"id": "fuse_beetle", "side": "enemy", "image": "figures/fuse_beetle.png", "frame": [48, 60], "foot": 48, "natural": true, "idle": {"frames": [0, 1], "ms": [400, 400]}}
 ```
+
+`palette` (optional) gives the picture's colors in order, so a battle animation's color transform can recolor them by index ([`battle-animation.md`](battle-animation.md), "Colors and color transforms"): a list of 1 to 256 `#rrggbb`, or a PNG strip in the asset directory whose top row holds them left to right (at most 256 pixels wide; reloaded with the rest). Without it, index entries of a palette do nothing on the figure. A list that is not colors, a missing strip or one wider than 256 pixels is a problem and leaves the entry out.
+
+```json
+{"id": "gel_mite", "side": "enemy", "image": "figures/enemy_gel_mite.png", "frame": [16, 16], "idle": {"frames": [0, 1], "ms": [400, 400]},
+	"palette": ["#73d15e", "#1a1420", "#47813a", "#c0eab6"]}
+```
+
+With a battle animation file, an animation of a figure entry beyond the six named ones that no script's `pose` or `react` track, no figure state and no presentation table entry plays is a problem (`assets: assets.json: figures[5].animations.flourish: no battle animation script or figure state plays 'flourish'`).
 
 ### battle_figures
 
@@ -268,7 +278,7 @@ A picture over the stage in a vehicle battle (a cockpit, a hull's rim): the vehi
 
 ### effects
 
-Frame runs drawn over each target of an action, at 3x (4x on enemies in the front layout; with `scale`, 3 or 4 over the scale, snapped as figures are), centered on its figure (on the head of a member seen from behind, and on its status slot in a vehicle battle, where members have no figure; in the front layout an effect on several targets starts on each a moment after the one to its left, sweeping along them): `{"id": "spark_bolt", "image": "effects/spark_bolt.png", "frame": [32, 32], "frames": [0, 1, 2, 3], "ms": 60}`, or from a sheet drawn twice as large, `{"id": "slash", "image": "effects/slash_x2.png", "frame": [64, 64], "scale": 2, "frames": [0, 1, 2, 3], "ms": 60}` (128 pixels on screen, in both layouts). The presentation table names effects by id; an id here replaces the generated effect of that id or adds a new one. The generated effects are `slash`, `burst` and `nova` with the suffixes `_heat`, `_chill`, `_shock`, `_gale` and `_holy` (or none), and `ring_status`, `ring_stat`, `ring_cure`, `motes_heal`, `motes_revive`, `motes_item`, `shield`, `motes_join`, `ring_merge`, `nova_transform` and `mark_defeat` (the last four for the presentation table's `changes`).
+Frame runs drawn over each target of an action, at 3x (4x on enemies in the front layout; with `scale`, 3 or 4 over the scale, snapped as figures are), centered on its figure (on the head of a member seen from behind, and on its status slot in a vehicle battle, where members have no figure; in the front layout an effect on several targets starts on each a moment after the one to its left, sweeping along them): `{"id": "spark_bolt", "image": "effects/spark_bolt.png", "frame": [32, 32], "frames": [0, 1, 2, 3], "ms": 60}`, or from a sheet drawn twice as large, `{"id": "slash", "image": "effects/slash_x2.png", "frame": [64, 64], "scale": 2, "frames": [0, 1, 2, 3], "ms": 60}` (128 pixels on screen, in both layouts). The presentation table names effects by id; an id here replaces the generated effect of that id or adds a new one. The generated effects are `slash`, `burst` and `nova` with the suffixes `_heat`, `_chill`, `_shock`, `_gale` and `_holy` (or none), and `ring_status`, `ring_stat`, `ring_cure`, `motes_heal`, `motes_revive`, `motes_item`, `shield`, `motes_join`, `ring_merge`, `nova_transform` and `mark_defeat` (the last four for the presentation table's `changes`). An effect takes `palette` as a figure does (above, [figures](#figures)): `{"id": "burst_shock", "image": "effects/burst_shock.png", "frame": [32, 32], "frames": [0, 1, 2, 3, 4, 5], "ms": 60, "palette": "effects/burst_shock_palette.png"}`.
 
 ### title_art
 
@@ -303,11 +313,11 @@ The title screen's own pictures:
 ### sprites and status_icons
 
 ```json
-"sprites": {"shadow": "sprites/shadow.png", "bubble": "sprites/bubble.png", "alert": "sprites/alert.png", "pointer": "sprites/pointer.png", "pier": "sprites/pier.png"},
+"sprites": {"shadow": "sprites/shadow.png", "bubble": "sprites/bubble.png", "alert": "sprites/alert.png", "pointer": "sprites/pointer.png", "pier": "sprites/pier.png", "platform": "sprites/platform.png"},
 "status_icons": {"sleep": "status_icons/sleep.png", "poison": "status_icons/poison.png"}
 ```
 
-The shadow under everyone, the speech bubble over talk points, the `!` over chasing enemies and startled people, the pointer over targets, finished dialogue lines and what the real-time field input's interaction prompt points at ([`ui-layout.md`](ui-layout.md), Field), the pier a port stands on (greyed while the port is closed); and an icon per status id (from core's `statuses.json`), drawn in the battle's panels and under the enemies, growing in when a status lands and blinking out when it ends.
+The shadow under everyone, the speech bubble over talk points, the `!` over chasing enemies and startled people, the pointer over targets, finished dialogue lines and what the real-time field input's interaction prompt points at ([`ui-layout.md`](ui-layout.md), Field), the pier a port stands on (greyed while the port is closed), a moving platform (`Platforms()`, drawn a cell large at its pixel place, `PixelX` and `PixelY` scaled from `GameInfo.CellPixels` to the field's cell, under whatever stands on it); and an icon per status id (from core's `statuses.json`), drawn in the battle's panels and under the enemies, growing in when a status lands and blinking out when it ends.
 
 ### command_icons
 
@@ -351,12 +361,67 @@ Whole-area pictures in place of tile drawing, by area id. Without the section ev
 ```
 
 * Alignment: every picture is aligned cell for cell to the area's grid, its top left pixel on cell (0, 0). `cell` (1 to 256, default 16; per entry over the section's) is the picture's pixels a cell, so its size must be exactly the area's width and height in cells times `cell` (the reed path, 20x9 cells, at 16: 320x144); any other size is a problem. The field draws a cell at 48 screen pixels (the styles' `field_cell`), so 16 draws at 3x and 48 at 1x, nearest-neighbor; at a 16-pixel cell 16 draws at 1x and 32 at half.
-* Layering, bottom to top: the ground picture; the cells drawn over it (below); exits' arrows and doorways, step runes, the runes on every cell of an active tile step hook (a hook with `tile`, whose cells the map marks with its character), and conveyor belts; then everyone sorted by row as before (objects and their pictures, chests, signs, shops, beds, piers, helms, vehicles, actors, visible enemies, the party); then the above picture; then speech bubbles, the `!` marks and pose marks; then the developer overlays and windows. The generated wall shadows, water foam, barrier frost and water frames are not drawn on a picture area (draw them into the picture). Belts and tile step hooks' runes are drawn on a picture area as on tiles, generated or from `field`'s overlay pictures; when the picture already shows them, turn them off for the area with `field`'s `conveyors` and `tile_hooks` ([field](#field)).
+* Layering, bottom to top (with the motion's layers and frame runs, see [Motion](#motion)): the ground picture; the cells drawn over it (below); exits' arrows and doorways, step runes, the runes on every cell of an active tile step hook (a hook with `tile`, whose cells the map marks with its character), and conveyor belts; then everyone sorted by row as before (objects and their pictures, chests, signs, shops, beds, piers, helms, vehicles, actors, visible enemies, the party); then the above picture; then speech bubbles, the `!` marks and pose marks; then the developer overlays and windows. The generated wall shadows, water foam, barrier frost and water frames are not drawn on a picture area (draw them into the picture). Belts and tile step hooks' runes are drawn on a picture area as on tiles, generated or from `field`'s overlay pictures; when the picture already shows them, turn them off for the area with `field`'s `conveyors` and `tile_hooks` ([field](#field)).
 * Map changes by flag: the picture shows the map as written. Each frame, for each change of the area in data order whose flag is set, a cell of that change shows the change's picture (`changes` above, or `maps/AREA@FLAG.png`) cut out at that cell, a later change winning a cell, as in the game. Any other cell whose terrain is not as written (a change without a picture, a barrier a vehicle broke) is drawn from the area's tileset, as without a picture. Only the changed cells are cut from a change's picture; the rest of it is never drawn.
 * `enabled: false` loads none of it and turns the file convention off (the export writes it so: a still picture cannot reproduce the water's frames, so the export's map pictures are a starting point, not a round trip). An explicit entry replaces the convention for its area. A picture in `maps/` that neither an entry nor the convention names is a problem (a misspelled area, most likely).
 * A change's picture or an above picture without a ground picture is a problem; the ground is required.
 * The above picture covers everything sorted by row wherever it is opaque, standing or mid-step: the party and its followers, a vehicle parked or ridden, script actors (one at its talk point's `actor_at` too), wanderers, visible enemies and the points' objects. Only the speech bubbles, the `!` marks and the pose marks go over it. The probe `abovecover` checks it pixel by pixel; `scripts/above_cover.txt` plays Wren Yard and Wren Hollow under a checkered above picture.
 * Asset keys: `map:AREA`, `map:AREA:above`, `map:AREA@FLAG`. The state probe `fieldpicture` reads `AREA [above] patched N tiled N` (cells drawn from change pictures and from tiles in the last frame) or `-`.
+
+### Motion
+
+An area's entry in `maps.areas` may move its pictures: palette tracks recolor them, frame runs play on rectangles of them, and layers scroll behind the area and in front of everything on it. All three are optional, and an entry with any of them may leave out `image`, `above` and `changes`: the area then keeps its tiles (and its `maps/AREA.png` is not used, as with any explicit entry). `maps.enabled: false` turns them off with the pictures.
+
+```json
+"maps": {"areas": [
+	{"area": "wren_yard", "image": "maps/wren_yard.png", "above": "maps/wren_yard_above.png",
+		"palettes": [
+			{"colors": {"deep": "#3060c0", "foam": "#a0c8f0"}, "steps": [{}, {"deep": "#3870d0", "foam": "#3060c0"}, {"deep": "#4080e0"}], "ms": 500},
+			{"colors": {"leaf": "#285a28"}, "steps": [{}, {"leaf": "#5a8a28"}], "ticks": 30, "clock": "entry"},
+			{"colors": {"grass": "#466e3c"}, "steps": [{"grass": "#6e463c"}], "flag": "cogway.loud"}
+		],
+		"animated": [
+			{"cells": [7, 1, 2, 2], "image": "motion/fountain.png", "frames": [0, 1, 2], "ms": [200, 200, 400], "clock": "entry"},
+			{"pixels": [16, 96, 16, 16], "image": "motion/lamp.png", "frames": [0, 1], "ticks": 12, "layer": "above", "unless_flag": "cogway.loud"}
+		],
+		"layers": [
+			{"image": "motion/sky.png", "scroll": [0.5, 0.5], "bands": [{"rows": [0, 15], "speed": 8}, {"rows": [16, 31], "scroll": 0.25, "speed": -16}],
+				"wave": {"axis": "lines", "amplitude": 2, "wavelength": 16, "speed": 8}},
+			{"image": "motion/rain.png", "place": "front", "speed": [0, 60], "wave": {"axis": "columns", "amplitude": 1, "wavelength": 32}, "flag": "cogway.loud"}
+		]}
+]}
+```
+
+Timing, the same for all three:
+
+* `ms` or `ticks` (60 Hz frames; not both): a number for every step or frame, or a list with one for each (`ms` 1 to 60000, `ticks` 1 to 3600). A single step or frame needs neither.
+* `clock`: `global` (default), the controller's clock, so the area shows the same phase whenever it is visited; `entry`, which starts at 0 each time the party enters the area. Both run from the frame time the session gets, never the wall clock, so headless runs repeat exactly.
+* `flag` and `unless_flag` (optional, flags of `game.json`): the piece shows only while `flag` is set and `unless_flag` is not. A palette track that is off leaves its colors alone; a frame run or layer that is off is not drawn.
+
+Palette tracks (`palettes`, a list; also on [tilesets](#tilesets)):
+
+* `colors` names the source colors (`#rrggbb`, each different); `steps` is a list of at least one step, each an object giving some of those names a replacement color. A step that leaves a name out keeps that color as drawn; `{}` shows the picture unchanged. One step is a still recolor. The steps loop.
+* Replacement is exact and done once: an opaque pixel whose color is a source takes that step's replacement, with no blending and no chaining (above, the foam takes the old deep blue in step 1, and that blue is not then replaced by the deep's step). Pixels that are not fully opaque keep their color. It is the battle animations' `palette` recolor.
+* An area's tracks recolor its ground picture, its change pictures, its above picture and its frame runs' frames; a tileset's recolor its tile pictures. When several tracks that show name the same color, the first in the list wins.
+
+Frame runs (`animated`, a list):
+
+* The rectangle is exactly one of `cells` (`[x, y, width, height]` in cells) or `pixels` (the same in the entry's picture pixels, `cell` a cell); it must lie inside the area.
+* `image` is a sheet cut into frames the rectangle's size in picture pixels (a 2x2-cell run at 16 pixels a cell takes 32x32 frames); `frames` lists the frames played, with their `ms` or `ticks`.
+* `layer`: `ground` (default) draws it over the ground picture (or the tiles) and the change pictures, under the exits, belts and everyone standing; `above` over the above picture.
+
+Layers (`layers`, a list), each a whole picture drawn at the entry's pictures' scale (the field's cell over `cell` screen pixels a picture pixel):
+
+* `place`: `back` (default) or `front`.
+* `scroll` (`[x, y]`, -16 to 16, default `[1, 1]`): how far the layer moves for each pixel the camera moves. 1 keeps it on the ground, 0.5 moves it half as far (parallax), 0 holds it on the screen. At 1 its top left pixel is on cell (0, 0).
+* `speed` (`[x, y]`, picture pixels a second, default `[0, 0]`): an automatic drift on the layer's clock.
+* `repeat`: `both` (default), `x`, `y` or `none`: the axes along which the picture repeats across the view.
+* `bands` (optional): row ranges of the picture (`rows`: `[first, last]`, picture rows, not overlapping) that scroll sideways at their own `scroll` and `speed` (numbers, default the layer's x values): a sky in strips drifting at different rates.
+* `wave` (optional): a sine over the picture's `lines` (each row moved sideways, `axis` default) or `columns` (each moved up and down): `amplitude` in picture pixels (0 to 1024, default 2), `wavelength` in picture pixels (1 to 4096, default 32), `speed` in picture pixels a second the wave travels (default 0). Each row or column moves a whole number of picture pixels. A wave over columns does not go with `bands`.
+
+Layer order, bottom to top: the `back` layers in list order; the ground picture or the tiles, with the change pictures; the `ground` frame runs; exits, runes and belts; everyone sorted by row; the above picture; the `above` frame runs; the `front` layers in list order; the speech bubbles and marks; the developer overlays and windows. A back layer shows where the ground is transparent and around an area smaller than the view.
+
+`--check-assets` reports each bad color, a color named twice, a step naming no source, missing or doubled timing, an unknown clock, flag or area, a rectangle outside the area, a sheet that does not divide into the rectangle's frames, a frame the sheet lacks, a bad `layer`, `place`, `repeat`, `scroll`, band or wave; a problem in any of an entry's motion leaves all of it out. Asset keys: `animated:AREA:N` and `layer:AREA:N` (N from 0, in list order). The state probe `fieldmotion` reads, for the area shown, `palettes S,S tiles S runs F,F back N front N` (each track's step, the tileset's tracks', each run's frame, `-` for one its flags keep off, and the layers drawn), each part only when there are any, or `-`; `scripts/world_motion.txt` plays the example above.
 
 ### objects
 

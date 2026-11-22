@@ -330,13 +330,16 @@ public static class Widgets
 		s.Fill(x, y + at, 4, thumb, Style.Accent);
 	}
 
-	// Tabs that do not all fit show a run around the selected one, with marks where more are hidden.
-	public static void Tabs(IDrawSurface s, int x, int y, int w, IReadOnlyList<string> tabs, int selected, Func<int, int> px)
+	// Tabs that do not all fit show a run around the selected one, with marks where more are hidden. `h`, `pad`, `gap` and
+	// `textY` are a tab's height, the room beside its text, the gap after it and the text's top, before `px`. Returns
+	// where the selected tab was drawn.
+	public static (int X, int W) Tabs(IDrawSurface s, int x, int y, int w, IReadOnlyList<string> tabs, int selected, Func<int, int> px, int h = 32, int pad = 28, int gap = 8,
+		int textY = 5)
 	{
-		int Width(int i) => s.Measure(tabs[i]) + px(28);
+		int Width(int i) => s.Measure(tabs[i]) + px(pad);
 		int first = 0;
 		int last = tabs.Count - 1;
-		int Span() => Enumerable.Range(first, last - first + 1).Sum(i => Width(i) + px(8)) + (first > 0 || last < tabs.Count - 1 ? px(48) : 0);
+		int Span() => Enumerable.Range(first, last - first + 1).Sum(i => Width(i) + px(gap)) + (first > 0 || last < tabs.Count - 1 ? px(48) : 0);
 		while (Span() > w && last > first)
 		{
 			if (last > selected)
@@ -351,24 +354,27 @@ public static class Widgets
 		int tx = x;
 		if (first > 0 || last < tabs.Count - 1)
 		{
-			s.Text("<", tx, y + px(5), first > 0 ? Style.Accent : Style.Dim);
+			s.Text("<", tx, y + px(textY), first > 0 ? Style.Accent : Style.Dim);
 			tx += px(24);
 		}
-		int h = px(32);
+		(int X, int W) shown = (x, 0);
+		int height = px(h);
 		for (int i = first; i <= last; i++)
 		{
 			if (i == selected)
 			{
-				s.Fill(tx, y, Width(i), h, Style.Row);
-				s.Fill(tx, y + h - 2, Width(i), 2, Style.Accent);
+				s.Fill(tx, y, Width(i), height, Style.Row);
+				s.Fill(tx, y + height - 2, Width(i), 2, Style.Accent);
+				shown = (tx, Width(i));
 			}
-			s.Text(tabs[i], tx + px(14), y + px(5), i == selected ? Style.Accent : Style.Dim);
-			tx += Width(i) + px(8);
+			s.Text(tabs[i], tx + px(pad / 2), y + px(textY), i == selected ? Style.Accent : Style.Dim);
+			tx += Width(i) + px(gap);
 		}
 		if (first > 0 || last < tabs.Count - 1)
 		{
-			s.Text(">", tx, y + px(5), last < tabs.Count - 1 ? Style.Accent : Style.Dim);
+			s.Text(">", tx, y + px(textY), last < tabs.Count - 1 ? Style.Accent : Style.Dim);
 		}
+		return shown;
 	}
 
 	// A label, the numbers at the right and a bar under them; returns the height used.

@@ -1,0 +1,210 @@
+# The last animation additions (scripts/make_anim_assets.py --leftovers) on the front data copy with --dev: a mosaic into
+# the six-enemy battle and its two ranks placed by the file in both layouts, the member choosing drawn alone, an attack
+# that draws only its actor while it swings and swaps the backdrop and restores it before it ends, a shake on script
+# time, number windows framed by the layout's battle frame with a row per side and closing, a figure and a burst
+# recolored by palette index, idle states as data (a flier's lift, a mite's sway and tint), a script chosen by layout,
+# and the previewer: an enemy's projectile with a trail and direction frames, mirrored in the side layout, an item's key
+# used by a member, choosable dummy and target counts, the frame ruler toggled, and the windows after a seek. After each
+# round the playback matches the session (battlesync). With --window the shot lines save screenshots under build/shots/.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev level fighter 30
+dev level mystic 60
+dev level medic 20
+
+# Into the horde through a mosaic: the field breaks into blocks growing to 32 pixels, then the stage sharpens from them;
+# the six enemies stand where the file puts them, three in front and three behind, smaller.
+animlog mark
+dev battle horde
+waitstatehas 60 transition mosaic cover 13/16 block 32
+shot build/shots/anim_lo_mosaic_cover.png
+waitstatehas 60 transition mosaic reveal 6/16 block 24
+shot build/shots/anim_lo_mosaic_reveal.png
+expect state enemyplaces Rust Hound B 490 330 112, Gel Mite C 790 330 112, Brass Warden 1090 330 112, Gel Mite A 340 430 136, Rust Hound A 640 430 136, Gel Mite B 940 430 136
+waitstate 300 battlephase Command
+expect animloghas start lo.mosaic (battle:transition_in/encounter:horde) @0
+shot build/shots/anim_lo_horde_front.png
+expect state figures fighter back
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+expect screen Field
+
+# The training battle: settings.solo draws only the member choosing; the mystic's Spark recolors Gel Mite A and the
+# burst through their palettes by index; the fighter's blade draws only the fighter while it acts, swaps the backdrop
+# as it swings and crossfades back as it returns, and its shake follows script time; the medic's Mend keeps the medic
+# alone through its result too. Damage and healing open in windows framed by the battle frame, at the enemy's row and
+# the party's row, and close before their step ends.
+animlog mark
+dev battle training
+waitstate 300 battlephase Command
+expect state figures fighter back
+press Enter
+press Enter
+expect state figures mystic back
+press Down
+press Enter
+press Enter
+press Enter
+expect state figures medic back
+press Down
+press Enter
+press Enter
+press Enter
+waitstatehas 600 anim lo.spark ability:spark
+waitstate 120 animframe 70
+expect statehas figure.Gel_Mite_A pose idle
+expect statehas figure.Gel_Mite_A palette 2
+expect statehas animsprites effect frame 4
+shot build/shots/anim_lo_spark_palette.png
+waitstatehas 600 anim lo.blade weapon:blade/one
+waitstatehas 120 animframe 3
+expect state figures fighter back
+waitstate 120 animframe 41
+expect state backdropfx swap
+expect state figures fighter back
+shot build/shots/anim_lo_blade_solo.png
+waitstate 120 animframe 52
+expect state figures fighter back, mystic back, medic back
+expect state battleshake 6
+expect statehas uiframes battle generated 5
+shot build/shots/anim_lo_damage_window.png
+waitstate 120 animframe 72
+shot build/shots/anim_lo_damage_closing.png
+waitstate 120 animframe 80
+expect state backdropfx swap, restore
+shot build/shots/anim_lo_blade_restore.png
+waitstatehas 600 anim lo.mend ability:mend
+waitstatehas 600 step result
+expect state figures medic back
+shot build/shots/anim_lo_heal_window.png
+waitstatehas 600 anim lo.mend ability:mend frame 1
+expect state backdropfx none
+waitstate 900 battlephase Command
+expect animloghas start lo.blade (weapon:blade/one) @0 | phase forward @0
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+expect screen Field
+
+# The marsh: the wisps hover 0.4 of their height over their places, bobbing 8 pixels, and the mite sways and tints
+# itself green, each from the file's idle states; a reload lowers the wisps.
+dev battle marsh
+waitstate 300 battlephase Command
+expect state flying Bog Wisp A, Bog Wisp B
+waitstatehas 120 figure.Gel_Mite offset 0,-4
+waitstatehas 120 figure.Gel_Mite ccffcc alpha
+waitstatehas 120 figuresizes Bog Wisp A 176x176 -78
+shot build/shots/anim_lo_idle.png
+# The file read again with the fliers' lift at 0.2 of their height: the next frame has them lower.
+assets swap battle_animation.json alt/battle_animation_lift.json
+waitstatehas 120 figuresizes Bog Wisp A 176x176 -43
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+expect screen Field
+
+# The side layout: the horde in the file's side places, the chooser alone, and the Spark key qualified by the layout.
+battlelayout side
+dev battle horde
+waitstate 300 battlephase Command
+expect state enemyplaces Rust Hound B 270 270 80, Gel Mite C 450 270 80, Brass Warden 630 270 80, Gel Mite A 180 360 80, Rust Hound A 360 360 80, Gel Mite B 540 360 80
+expect state figures fighter side
+shot build/shots/anim_lo_horde_side.png
+press Down 4
+press Enter
+press Down
+press Enter
+press Enter
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 anim lo.spark.side ability:spark/layout:side
+expect statehas animkey ability:spark/layout:side lo.spark.side
+waitstate 120 animframe 70
+expect statehas animsprites effect frame 4, ring frame 4
+shot build/shots/anim_lo_spark_side.png
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+expect screen Field
+battlelayout data
+
+# The previewer: the hound's key plays with a dummy hound throwing at a member, its glob trailing three copies and
+# showing its left frames; in the side layout it flies right and is mirrored. The frame ruler goes off and on.
+dev preview anim enemy:rust_hound/attack
+waitstatehas 300 preview anim enemy:rust_hound/attack frame
+dev anim seek 40
+wait 1
+expect state animsprites glob frame 4 trail, glob frame 4 trail, glob frame 4 trail, glob frame 4
+expect statehas overlay.anim lo.spit 40
+shot build/shots/anim_lo_preview_glob.png
+dev overlay anim off
+dev anim seek 46
+wait 1
+expect state overlay.anim -
+expect statehas released 1/1 Test Fighter
+dev overlay anim on
+dev preview stop
+dev preview anim enemy:rust_hound/attack layout side
+waitstatehas 300 preview anim enemy:rust_hound/attack frame
+dev anim seek 40
+wait 1
+expect state animsprites glob frame 1 flip trail, glob frame 1 flip trail, glob frame 1 flip trail, glob frame 1 flip
+shot build/shots/anim_lo_preview_glob_side.png
+dev preview stop
+battlelayout data
+# An item's key: a member uses it on a member; then five dummies, two of them targeted.
+dev preview anim item:tonic
+waitstatehas 300 preview anim item:tonic frame
+dev anim seek 90
+wait 1
+expect statehas anim lo.item preview frame 90/
+expect state released 1/1 Test Fighter +30 @74
+dev preview stop
+dev preview anim ability:spark count 5 targets 2
+waitstatehas 300 preview anim ability:spark frame
+dev anim seek 100
+wait 1
+expect statehas released 2/2 Dummy A -24 @
+expect statehas enemyplaces Dummy E
+shot build/shots/anim_lo_preview_counts.png
+dev preview stop
+# The shake on script time draws the same jolt at a frame whatever the controller's clock.
+dev preview anim weapon:blade/one
+waitstatehas 300 preview anim weapon:blade/one frame
+dev anim seek 50
+wait 1
+expect state battlejolt -2,1
+wait 10
+expect state battlejolt -2,1
+dev preview stop
+# With a name window that opens over 400 ms, a seek into the banner shows it whole, as playing there would.
+assets swap ui/battle_front.json alt/battle_front_open.json
+dev preview anim weapon:blade/one
+waitstatehas 300 preview anim weapon:blade/one frame
+dev anim seek 20
+wait 1
+expect statehas window.name_plate battle_front/name_plate
+shot build/shots/anim_lo_seek_window.png
+dev preview stop
+dev resume

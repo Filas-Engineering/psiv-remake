@@ -60,7 +60,7 @@
 			{"type": "text", "visible": "phase == 'playback'", "key": "ui.battle.hint.skip", "args": ["key_fast_forward"], "max_width": "cw - 48", "x": 24, "y": "ch - 58", "style": "small_dim"},
 			{"type": "text", "visible": "phase == 'playback'", "key": "ui.battle.hint.log", "args": ["key_text_log"], "max_width": "cw - 48", "x": 24, "y": "ch - 34", "style": "small_dim"},
 			{"type": "text", "visible": "phase == 'ended'", "value": "outcome", "x": 24, "y": 34, "style": "title"},
-			{"type": "text", "visible": "phase == 'ended'", "key": "ui.battle.hint.continue", "args": ["key_confirm"], "x": 24, "y": 84}
+			{"type": "text", "visible": "phase == 'ended' && result_confirm", "key": "ui.battle.hint.continue", "args": ["key_confirm"], "x": 24, "y": 84}
 		]},
 		{"name": "result", "visible": "phase == 'ended'", "x": "(W - w) / 2", "y": "max(24, (party.y - h) / 2)", "w": 640, "h": "84 + len(result_lines) * 30", "frame": "battle",
 			"title": "ui.battle.result.title", "elements": [

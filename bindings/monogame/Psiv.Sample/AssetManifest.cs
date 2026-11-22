@@ -46,13 +46,66 @@ public sealed record FrameRun(int[] Frames, int[] Ms)
 
 // Animated: frame runs that stand in for a tile frame wherever the renderer picks it.
 public sealed record TilesetEntry(string? Kind, string? Area, Theme Theme, GridImage Image, int[] Floor, int[] Decor, int DecorOneIn, int[] WallTop, int WallTopAltOneIn,
-	int[] WallFace, int WallFaceAltOneIn, int[] Water, int WaterFrameMs, Color Edge, Color Bank, Dictionary<string, int> Objects, Dictionary<int, FrameRun> Animated);
+	int[] WallFace, int WallFaceAltOneIn, int[] Water, int WaterFrameMs, Color Edge, Color Bank, Dictionary<string, int> Objects, Dictionary<int, FrameRun> Animated,
+	List<PaletteTrack>? Palettes = null);
 
 // A whole-area picture, Cell pixels a cell: Ground in place of the area's tiles, Above over everyone. A patch is drawn on
 // the cells of its flag's changes while the flag is set.
 public sealed record MapPatch(string Flag, string Path, (int X, int Y)[] Cells);
 
 public sealed record MapEntry(string Area, string Ground, string? Above, int Cell, List<MapPatch> Patches);
+
+// When a timed piece of an area's motion plays: its clock starts at the controller's zero (global) or when the area was
+// entered (Entry), and it shows while Flag is set (when given) and UnlessFlag is not.
+public sealed record MotionWhen(bool Entry, string? Flag, string? UnlessFlag);
+
+// Exact-color replacement in steps: each step's pairs, each step lasting its Units (60000ths of a second, so
+// milliseconds and 60 Hz ticks are both whole), looping. One step is a still recolor.
+public sealed record PaletteTrack(IReadOnlyList<(Color From, Color To)>[] Steps, int[] Units, MotionWhen When)
+{
+	public int StepAt(long ms) => IndexAt(Units, ms);
+
+	// The index of the duration a looping run of Units stands at after `ms` milliseconds.
+	public static int IndexAt(int[] units, long ms)
+	{
+		if (units.Length == 1)
+		{
+			return 0;
+		}
+		long t = ms * 60 % units.Sum();
+		for (int i = 0; i < units.Length; i++)
+		{
+			if (t < units[i])
+			{
+				return i;
+			}
+			t -= units[i];
+		}
+		return units.Length - 1;
+	}
+}
+
+// A sheet's frames played on a rectangle of the area's picture (X, Y, W, H in the entry's picture pixels), on the ground
+// or over the above picture; Units as a palette's.
+public sealed record AreaRun(GridImage Image, int X, int Y, int W, int H, int[] Frames, int[] Units, bool Above, MotionWhen When)
+{
+	public int FrameAt(long ms) => Frames[PaletteTrack.IndexAt(Units, ms)];
+}
+
+// Rows First to Last (picture pixels) of a layer scrolling at their own factor and speed across the screen.
+public sealed record LayerBand(int First, int Last, float Scroll, float Speed);
+
+// A sine over the layer's lines (each row moved sideways) or columns (each moved up and down), in picture pixels, the wave
+// travelling Speed pixels a second.
+public sealed record LayerWave(bool Columns, float Amplitude, float Wavelength, float Speed);
+
+// A picture behind the area (Front false) or in front of everything on it, moving Scroll times the camera and Speed
+// picture pixels a second, repeated along the axes it repeats on.
+public sealed record AreaLayer(string Image, int Width, int Height, bool Front, float ScrollX, float ScrollY, float SpeedX, float SpeedY, bool RepeatX, bool RepeatY,
+	List<LayerBand> Bands, LayerWave? Wave, MotionWhen When);
+
+// An area's motion, from its maps entry: Cell picture pixels a cell, as the entry's pictures.
+public sealed record AreaMotion(int Cell, List<PaletteTrack> Palettes, List<AreaRun> Runs, List<AreaLayer> Layers);
 
 // How an object looks in one state: a frame run of Image filling Width by Height cells, the anchor cell standing on the
 // object's cell.
@@ -90,8 +143,9 @@ public sealed record CharacterEntry(string Id, GridImage Image, Dictionary<Direc
 // Back: the party member or vehicle seen from behind, as the front battle layout draws it.
 // Shadow: whether the generated ground shadow is drawn under it (null: battle_figures.shadows).
 // Natural: whether it is drawn at its natural size (null: whenever battle_figures gives a reference height).
+// Palette: the picture's colors in order, which a color transform's palette names by index. Entry: where it is in assets.json.
 public sealed record FigureEntry(string Id, bool Enemy, GridImage Image, FrameRun Idle, Dictionary<string, FrameRun> Animations, bool Back, bool? Shadow = null,
-	bool? Natural = null);
+	bool? Natural = null, IReadOnlyList<Color>? Palette = null, string Entry = "", string? PaletteFile = null);
 
 public sealed record FieldEnemyEntry(string Encounter, GridImage Image, FrameRun Run);
 
@@ -120,7 +174,7 @@ public sealed record TitleLayer(GridImage Image, FrameRun Run, int X, int Y, int
 public sealed record TitleArtEntry(string? Background, string? Logo, List<TitleLayer> Layers, (GridImage Image, FrameRun Run)? Traveler, (GridImage Image, FrameRun Run)? Creature,
 	int? ReferenceHeight = null);
 
-public sealed record EffectEntry(string Id, GridImage Image, FrameRun Run);
+public sealed record EffectEntry(string Id, GridImage Image, FrameRun Run, IReadOnlyList<Color>? Palette = null, string? PaletteFile = null);
 
 public sealed record NineSlice(string? Camera, string Path, int Border, int Scale);
 
@@ -146,7 +200,7 @@ public sealed class AssetManifest
 
 	public static readonly string[] Facings = ["north", "east", "south", "west"];
 	public static readonly string[] ObjectNames = ["door", "chest_closed", "chest_open", "stall", "bed", "sign", "rune", "exit_north", "exit_east", "exit_south", "exit_west"];
-	public static readonly string[] SpriteNames = ["shadow", "bubble", "alert", "pointer", "pier"];
+	public static readonly string[] SpriteNames = ["shadow", "bubble", "alert", "pointer", "pier", "platform"];
 
 	// The fields each kind of entry takes, by its place in the file (`-` the top level, `[]` a list's entry, `{}` a map's
 	// value): the check refuses any other, and `--capabilities` reports these.
@@ -157,7 +211,7 @@ public sealed class AssetManifest
 		["field_enemies[]"] = ["encounter", "image", "frame", "scale", "foot", "frames", "ms"],
 		["vehicles[]"] = ["id", "image", "frame", "scale", "foot", "facings", "ms"],
 		["backdrops[]"] = ["id", "kind", "area", "encounter", "terrain", "flag", "image"],
-		["effects[]"] = ["id", "image", "frame", "scale", "frames", "ms"],
+		["effects[]"] = ["id", "image", "frame", "scale", "frames", "ms", "palette"],
 		["ui_layout"] = ["enabled"],
 		["battle_figures"] = ["reference_height", "shadows"],
 		["vehicle_overlays[]"] = ["vehicle", "image"],
@@ -168,7 +222,17 @@ public sealed class AssetManifest
 		["title_art.traveler"] = ["image", "frame", "frames", "ms"],
 		["title_art.layers[]"] = ["image", "frame", "frames", "ms", "at", "scale", "scroll"],
 		["maps"] = ["enabled", "cell", "areas"],
-		["maps.areas[]"] = ["area", "image", "above", "cell", "changes"],
+		["maps.areas[]"] = ["area", "image", "above", "cell", "changes", "palettes", "animated", "layers"],
+		["maps.areas[].animated[]"] = ["cells", "pixels", "image", "frames", "ms", "ticks", "layer", "clock", "flag", "unless_flag"],
+		["maps.areas[].animated[].layer"] = ["ground", "above"],
+		["maps.areas[].layers[]"] = ["image", "place", "scroll", "speed", "repeat", "bands", "wave", "clock", "flag", "unless_flag"],
+		["maps.areas[].layers[].bands[]"] = ["rows", "scroll", "speed"],
+		["maps.areas[].layers[].place"] = ["back", "front"],
+		["maps.areas[].layers[].repeat"] = ["both", "x", "y", "none"],
+		["maps.areas[].layers[].wave"] = ["axis", "amplitude", "wavelength", "speed"],
+		["maps.areas[].layers[].wave.axis"] = ["lines", "columns"],
+		["motion.clock"] = ["global", "entry"],
+		["palettes[]"] = ["colors", "steps", "ms", "ticks", "clock", "flag", "unless_flag"],
 		["objects[].state"] = ["image", "frame", "frames", "ms", "size", "anchor"],
 		["objects[]"] = ["area", "point", "at", "image", "frame", "frames", "ms", "size", "anchor", "open", "open_flag", "character", "facing"],
 		["field"] = ["wall_shadows", "water_foam", "conveyors", "tile_hooks", "conveyor_overlay", "tile_hook_overlay", "areas"],
@@ -177,12 +241,12 @@ public sealed class AssetManifest
 		["field.tile_hook_overlay"] = ["image", "frame", "frames", "ms"],
 		["bitmap_fonts"] = ["enabled", "fonts"],
 		["bitmap_fonts.fonts[]"] = ["language", "role", "image", "metrics", "scale"],
-		["tilesets[]"] = ["kind", "area", "image", "tile", "scale", "floor", "decor", "decor_one_in", "wall_top", "wall_top_alt_one_in", "wall_face", "wall_face_alt_one_in", "water", "water_frame_ms", "edge", "bank", "objects", "animated"],
+		["tilesets[]"] = ["kind", "area", "image", "tile", "scale", "floor", "decor", "decor_one_in", "wall_top", "wall_top_alt_one_in", "wall_face", "wall_face_alt_one_in", "water", "water_frame_ms", "edge", "bank", "objects", "animated", "palettes"],
 		["tilesets[].animated[]"] = ["tile", "frames", "ms"],
 		["characters[]"] = ["id", "image", "frame", "scale", "foot", "shadow", "walk", "poses", "animations", "facing"],
 		["characters[].facing"] = ["mirror", "fallback", "start"],
 		["characters[].poses{}"] = ["frames", "ms", "motion"],
-		["figures[]"] = ["id", "side", "view", "image", "frame", "scale", "foot", "shadow", "natural", "idle", "animations"],
+		["figures[]"] = ["id", "side", "view", "image", "frame", "scale", "foot", "shadow", "natural", "idle", "animations", "palette"],
 		["ui"] = ["enabled", "frame", "battle_frame", "panel_frames", "cursor", "bar_track", "bar_fill", "fonts", "page_arrow"],
 		["ui.fonts{}"] = ["file", "scale"],
 		["audio[]"] = ["kind", "id", "file", "loop_start", "loop_end", "gain"],
@@ -227,6 +291,8 @@ public sealed class AssetManifest
 	// False when the manifest turns the whole-area pictures off, which also stops the maps/ file convention.
 	public bool MapsEnabled { get; private set; } = true;
 	public List<MapEntry> Maps { get; } = [];
+	// Palette tracks, frame runs and layers by area, from the maps entries.
+	public Dictionary<string, AreaMotion> AreaMotions { get; } = [];
 	public List<ObjectEntry> Objects { get; } = [];
 	public FieldLook Field { get; private set; } = new(true, true);
 	public Dictionary<string, FieldLook> FieldAreas { get; } = [];
@@ -251,10 +317,11 @@ public sealed class AssetManifest
 
 	// Every file the manifest names, for change detection on reload.
 	public IEnumerable<string> Files() =>
-		Tilesets.Select(t => t.Image.Path).Concat(Characters.Select(c => c.Image.Path)).Concat(Portraits.Values).Concat(Figures.Select(f => f.Image.Path))
-			.Concat(FieldEnemies.Select(f => f.Image.Path)).Concat(Vehicles.Select(v => v.Image.Path)).Concat(Backdrops.Select(b => b.Path)).Concat(Effects.Select(e => e.Image.Path)).Concat(Sprites.Values)
+		Tilesets.Select(t => t.Image.Path).Concat(Characters.Select(c => c.Image.Path)).Concat(Portraits.Values).Concat(Figures.Select(f => f.Image.Path)).Concat(Figures.Select(f => f.PaletteFile).OfType<string>())
+			.Concat(FieldEnemies.Select(f => f.Image.Path)).Concat(Vehicles.Select(v => v.Image.Path)).Concat(Backdrops.Select(b => b.Path)).Concat(Effects.Select(e => e.Image.Path)).Concat(Effects.Select(e => e.PaletteFile).OfType<string>()).Concat(Sprites.Values)
 			.Concat(StatusIcons.Values).Concat(CommandIcons.Values).Concat(Pictures.Values).Concat(Audio.Select(a => a.Path))
 			.Concat(Maps.SelectMany(a => new[] { a.Ground, a.Above }.OfType<string>().Concat(a.Patches.Select(p => p.Path))))
+			.Concat(AreaMotions.Values.SelectMany(a => a.Runs.Select(r => r.Image.Path).Concat(a.Layers.Select(l => l.Image))))
 			.Concat(Objects.SelectMany(o => new[] { o.Closed?.Image.Path, o.Open?.Image.Path }).OfType<string>()).Concat(VehicleOverlays.Select(o => o.Path))
 			.Concat(new[] { ConveyorOverlay?.Image.Path, TileHookOverlay?.Image.Path }.OfType<string>())
 			.Concat(BitmapFonts.SelectMany(f => new[] { f.Image, f.MetricsFile }))
@@ -494,6 +561,49 @@ public sealed class AssetManifest
 		}
 
 		// An image used whole: it only has to be a readable PNG.
+		// `palette`: the picture's colors in order, as a list of "#rrggbb" or a PNG strip whose top row holds them left to right.
+		private (IReadOnlyList<Color>? Colors, string? File) Palette(JsonElement e, string entry)
+		{
+			if (!e.TryGetProperty("palette", out JsonElement p))
+			{
+				return (null, null);
+			}
+			if (p.ValueKind == JsonValueKind.String)
+			{
+				string file = p.GetString()!;
+				if (Header(file, entry) is not { } header)
+				{
+					return (null, null);
+				}
+				if (header.Width > 256)
+				{
+					Problem(entry, $"field 'palette' must be a strip of at most 256 colors, not {header.Width}", file);
+					return (null, null);
+				}
+				Color[] pixels = Png.Read(m.Full(file), out int width, out _);
+				return ([.. pixels.Take(width)], file);
+			}
+			var colors = new List<Color>();
+			if (p.ValueKind == JsonValueKind.Array && p.GetArrayLength() is >= 1 and <= 256)
+			{
+				foreach (JsonElement c in p.EnumerateArray())
+				{
+					string? text = c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+					if (text is not { Length: 7 } || text[0] != '#' || !uint.TryParse(text[1..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint v))
+					{
+						break;
+					}
+					colors.Add(new Color((int)(v >> 16) & 255, (int)(v >> 8) & 255, (int)v & 255));
+				}
+				if (colors.Count == p.GetArrayLength())
+				{
+					return (colors, null);
+				}
+			}
+			Problem(entry, "field 'palette' must be a list of 1 to 256 colors as #rrggbb, or a PNG strip of them");
+			return (null, null);
+		}
+
 		private string? Picture(JsonElement e, string name, string entry, bool required = true)
 		{
 			string? file = Str(e, name, entry, required);
@@ -684,9 +794,10 @@ public sealed class AssetManifest
 				Fields(e, entry, Schema["effects[]"]);
 				string? id = Str(e, "id", entry);
 				GridImage? image = Grid(e, entry, Art.EffectSize, scaled: true, footed: false);
+				(IReadOnlyList<Color>? palette, string? paletteFile) = Palette(e, entry);
 				if (Run(e, entry, image, 60, inline: true) is { } run && id is not null && image is not null && m.Problems.Count == before)
 				{
-					m.Effects.Add(new EffectEntry(id, image, run));
+					m.Effects.Add(new EffectEntry(id, image, run, palette, paletteFile));
 				}
 			}
 			Named(root, "sprites", (id, entry) =>
@@ -1196,7 +1307,16 @@ public sealed class AssetManifest
 					if (area is not null && data.Maps.ContainsKey(area))
 					{
 						explicitAreas.Add(area);
-						AddMap(area, full, Int(e, "cell", full, cell, 1, 256), ground, above, patches);
+						int areaCell = Int(e, "cell", full, cell, 1, 256);
+						bool moving = new[] { "palettes", "animated", "layers" }.Any(f => e.TryGetProperty(f, out _));
+						if (ground is not null || above is not null || patches.Count > 0 || !moving)
+						{
+							AddMap(area, full, areaCell, ground, above, patches);
+						}
+						if (moving)
+						{
+							Motion(e, full, area, areaCell);
+						}
 					}
 				}
 			}
@@ -1223,6 +1343,264 @@ public sealed class AssetManifest
 			{
 				Problem("maps", "names no area: maps/AREA.png, maps/AREA_above.png or maps/AREA@FLAG.png, with an area of the game data and a flag of its changes",
 					Path.GetRelativePath(m.Directory, stray).Replace('\\', '/'));
+			}
+		}
+
+		// "#rrggbb": a palette matches opaque pixels by their color alone.
+		private Color? Rgb(JsonElement v, string entry, string what)
+		{
+			string? text = v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+			if (text is not { Length: 7 } || text[0] != '#' || !uint.TryParse(text[1..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint c))
+			{
+				Problem(entry, $"{what} must be a color as #rrggbb");
+				return null;
+			}
+			return new Color((byte)(c >> 16), (byte)(c >> 8), (byte)c, (byte)255);
+		}
+
+		// Numbers from min to max, exactly `count` of them.
+		private float[]? Floats(JsonElement e, string name, string entry, int count, float min, float max)
+		{
+			if (!e.TryGetProperty(name, out JsonElement v))
+			{
+				return null;
+			}
+			if (v.ValueKind != JsonValueKind.Array || v.GetArrayLength() != count || v.EnumerateArray().Any(x => x.ValueKind != JsonValueKind.Number || x.GetSingle() < min || x.GetSingle() > max))
+			{
+				string F(float x) => x.ToString(CultureInfo.InvariantCulture);
+				Problem(entry, $"field '{name}' must be {(count == 2 ? "[x, y]" : $"{count} numbers")}, each from {F(min)} to {F(max)}");
+				return null;
+			}
+			return [.. v.EnumerateArray().Select(x => x.GetSingle())];
+		}
+
+		// One of a field's named values (`table` a Schema key), or the fallback when the field is left out.
+		private string? OneOf(JsonElement e, string name, string entry, string table, string fallback)
+		{
+			string? value = Str(e, name, entry, required: false);
+			if (value is null)
+			{
+				return e.TryGetProperty(name, out _) ? null : fallback;
+			}
+			if (!Schema[table].Contains(value))
+			{
+				Problem(entry, $"field '{name}' must be one of {string.Join(", ", Schema[table])}, not '{value}'");
+				return null;
+			}
+			return value;
+		}
+
+		// Durations in 60000ths of a second from `ms` or `ticks` (60 Hz frames): a number for each of `count`, or a list as
+		// long. Left out, every one lasts the same (unused: a single step or frame).
+		private int[]? Units(JsonElement e, string entry, int count)
+		{
+			bool ms = e.TryGetProperty("ms", out JsonElement msValue), ticks = e.TryGetProperty("ticks", out JsonElement tickValue);
+			if (ms && ticks)
+			{
+				Problem(entry, "takes 'ms' or 'ticks', not both");
+				return null;
+			}
+			if (!ms && !ticks)
+			{
+				if (count > 1)
+				{
+					Problem(entry, "needs 'ms' or 'ticks' for more than one step or frame");
+					return null;
+				}
+				return [.. Enumerable.Repeat(1, count)];
+			}
+			(string name, JsonElement v, int max, int unit) = ms ? ("ms", msValue, 60000, 60) : ("ticks", tickValue, 3600, 1000);
+			if (v.ValueKind == JsonValueKind.Number)
+			{
+				int n = Int(e, name, entry, 0, 1, max);
+				return n == 0 ? null : [.. Enumerable.Repeat(n * unit, count)];
+			}
+			int[] list = Ints(e, name, entry);
+			if (list.Length != count || list.Any(x => x is < 1 || x > max))
+			{
+				Problem(entry, $"field '{name}' must be a number from 1 to {max} or a list of {count} of them, one for each step or frame");
+				return null;
+			}
+			return [.. list.Select(x => x * unit)];
+		}
+
+		private MotionWhen? When(JsonElement e, string entry)
+		{
+			string? clock = OneOf(e, "clock", entry, "motion.clock", "global");
+			string? flag = Str(e, "flag", entry, required: false), unless = Str(e, "unless_flag", entry, required: false);
+			Known(flag, data.Flags, entry, "flag");
+			Known(unless, data.Flags, entry, "flag");
+			return clock is null ? null : new MotionWhen(clock == "entry", flag, unless);
+		}
+
+		// Palette tracks: named source colors and steps of replacements for them.
+		private List<PaletteTrack> Palettes(JsonElement e, string entry)
+		{
+			var tracks = new List<PaletteTrack>();
+			foreach ((JsonElement p, string trackEntry) in List(e, "palettes").Select(x => (x.Item, $"{entry}.{x.Entry}")))
+			{
+				int before = m.Problems.Count;
+				Fields(p, trackEntry, Schema["palettes[]"]);
+				var colors = new Dictionary<string, Color>();
+				if (!p.TryGetProperty("colors", out JsonElement named) || named.ValueKind != JsonValueKind.Object || !named.EnumerateObject().Any())
+				{
+					Problem(trackEntry, "'colors' must name at least one source color: {\"NAME\": \"#rrggbb\"}");
+				}
+				else
+				{
+					foreach (JsonProperty c in named.EnumerateObject())
+					{
+						if (Rgb(c.Value, trackEntry, $"color '{c.Name}'") is Color color)
+						{
+							if (colors.FirstOrDefault(o => o.Value == color) is { Key: { } same })
+							{
+								Problem(trackEntry, $"colors '{same}' and '{c.Name}' are the same color");
+							}
+							colors[c.Name] = color;
+						}
+					}
+				}
+				var steps = new List<IReadOnlyList<(Color, Color)>>();
+				if (!p.TryGetProperty("steps", out JsonElement list) || list.ValueKind != JsonValueKind.Array || list.GetArrayLength() == 0)
+				{
+					Problem(trackEntry, "'steps' must be a list of at least one step, each {\"NAME\": \"#rrggbb\"}");
+				}
+				else
+				{
+					int i = 0;
+					foreach (JsonElement step in list.EnumerateArray())
+					{
+						string stepEntry = $"{trackEntry}.steps[{i++}]";
+						var pairs = new List<(Color, Color)>();
+						if (IsObject(step, stepEntry))
+						{
+							foreach (JsonProperty c in step.EnumerateObject())
+							{
+								if (!colors.TryGetValue(c.Name, out Color from) && named.ValueKind == JsonValueKind.Object && !named.TryGetProperty(c.Name, out _))
+								{
+									Problem(stepEntry, $"names no color '{c.Name}' of 'colors'");
+								}
+								else if (Rgb(c.Value, stepEntry, $"color '{c.Name}'") is Color to)
+								{
+									pairs.Add((from, to));
+								}
+							}
+						}
+						steps.Add(pairs);
+					}
+				}
+				int[]? units = Units(p, trackEntry, Math.Max(1, steps.Count));
+				MotionWhen? when = When(p, trackEntry);
+				if (m.Problems.Count == before && units is not null && when is not null)
+				{
+					tracks.Add(new PaletteTrack([.. steps], units, when));
+				}
+			}
+			return tracks;
+		}
+
+		// An area's palette tracks, frame runs and layers; any problem in them drops all three.
+		private void Motion(JsonElement e, string entry, string area, int cell)
+		{
+			int before = m.Problems.Count;
+			AreaMap map = data.Maps[area];
+			int pw = map.Width * cell, ph = map.Height * cell;
+			List<PaletteTrack> palettes = Palettes(e, entry);
+			var runs = new List<AreaRun>();
+			foreach ((JsonElement r, string runEntry) in List(e, "animated").Select(x => (x.Item, $"{entry}.{x.Entry}")))
+			{
+				Fields(r, runEntry, Schema["maps.areas[].animated[]"]);
+				bool byCells = r.TryGetProperty("cells", out _), byPixels = r.TryGetProperty("pixels", out _);
+				int[] rect = byCells == byPixels ? [] : Ints(r, byCells ? "cells" : "pixels", runEntry);
+				if (byCells == byPixels)
+				{
+					Problem(runEntry, "needs exactly one of 'cells' and 'pixels': the rectangle [x, y, width, height] the frames are drawn on");
+					continue;
+				}
+				int k = byCells ? cell : 1;
+				if (rect.Length != 4 || rect[2] == 0 || rect[3] == 0 || (rect[0] + rect[2]) * k > pw || (rect[1] + rect[3]) * k > ph)
+				{
+					Problem(runEntry, $"field '{(byCells ? "cells" : "pixels")}' must be [x, y, width, height], width and height at least 1, inside the area's " +
+						(byCells ? $"{map.Width}x{map.Height} cells" : $"{pw}x{ph} picture pixels at {cell} a cell"));
+					continue;
+				}
+				(int x, int y, int w, int h) = (rect[0] * k, rect[1] * k, rect[2] * k, rect[3] * k);
+				string? file = Str(r, "image", runEntry);
+				GridImage? image = null;
+				if (file is not null && Header(file, runEntry) is { } header)
+				{
+					if (header.Width % w != 0 || header.Height % h != 0)
+					{
+						Problem(runEntry, $"{header.Width}x{header.Height} does not divide into frames the rectangle's size ({w}x{h} picture pixels)", file);
+					}
+					else
+					{
+						image = new GridImage(file, w, h) { Columns = header.Width / w, Rows = header.Height / h };
+					}
+				}
+				int[] frames = Cells(Ints(r, "frames", runEntry, required: true), image, runEntry, "'frames'");
+				if (r.TryGetProperty("frames", out _) && frames.Length == 0)
+				{
+					Problem(runEntry, "'frames' needs at least one frame");
+				}
+				int[]? units = Units(r, runEntry, Math.Max(1, frames.Length));
+				string? layer = OneOf(r, "layer", runEntry, "maps.areas[].animated[].layer", "ground");
+				if (When(r, runEntry) is { } when && image is not null && units is not null && layer is not null && frames.Length > 0)
+				{
+					runs.Add(new AreaRun(image, x, y, w, h, frames, units, layer == "above", when));
+				}
+			}
+			var layers = new List<AreaLayer>();
+			foreach ((JsonElement l, string layerEntry) in List(e, "layers").Select(x => (x.Item, $"{entry}.{x.Entry}")))
+			{
+				Fields(l, layerEntry, Schema["maps.areas[].layers[]"]);
+				string? file = Str(l, "image", layerEntry);
+				Png.Header? header = file is null ? null : Header(file, layerEntry);
+				string? place = OneOf(l, "place", layerEntry, "maps.areas[].layers[].place", "back");
+				string? repeat = OneOf(l, "repeat", layerEntry, "maps.areas[].layers[].repeat", "both");
+				float[] scroll = Floats(l, "scroll", layerEntry, 2, -16, 16) ?? [1, 1];
+				float[] speed = Floats(l, "speed", layerEntry, 2, -10000, 10000) ?? [0, 0];
+				var bands = new List<LayerBand>();
+				foreach ((JsonElement b, string bandEntry) in List(l, "bands").Select(x => (x.Item, $"{layerEntry}.{x.Entry}")))
+				{
+					Fields(b, bandEntry, Schema["maps.areas[].layers[].bands[]"]);
+					int[] rows = Ints(b, "rows", bandEntry, required: true);
+					if (header is { } hd && (rows.Length != 2 || rows[0] > rows[1] || rows[1] >= hd.Height))
+					{
+						Problem(bandEntry, $"field 'rows' must be [first, last], rows of the picture (0 to {hd.Height - 1}), first at most last");
+						continue;
+					}
+					if (rows.Length == 2 && bands.FirstOrDefault(o => o.First <= rows[1] && rows[0] <= o.Last) is { } other)
+					{
+						Problem(bandEntry, $"rows {rows[0]} to {rows[1]} overlap the band of rows {other.First} to {other.Last}");
+					}
+					if (rows.Length == 2)
+					{
+						bands.Add(new LayerBand(rows[0], rows[1], Float(b, "scroll", bandEntry, scroll[0], -16, 16), Float(b, "speed", bandEntry, speed[0], -10000, 10000)));
+					}
+				}
+				LayerWave? wave = null;
+				if (l.TryGetProperty("wave", out JsonElement wv) && IsObject(wv, layerEntry + ".wave"))
+				{
+					string waveEntry = layerEntry + ".wave";
+					Fields(wv, waveEntry, Schema["maps.areas[].layers[].wave"]);
+					string? axis = OneOf(wv, "axis", waveEntry, "maps.areas[].layers[].wave.axis", "lines");
+					wave = new LayerWave(axis == "columns", Float(wv, "amplitude", waveEntry, 2, 0, 1024), Float(wv, "wavelength", waveEntry, 32, 1, 4096),
+						Float(wv, "speed", waveEntry, 0, -10000, 10000));
+					if (wave.Columns && l.TryGetProperty("bands", out _))
+					{
+						Problem(layerEntry, "a wave over columns does not go with 'bands', which move rows");
+					}
+				}
+				if (When(l, layerEntry) is { } when && header is { } size && place is not null && repeat is not null)
+				{
+					layers.Add(new AreaLayer(file!, size.Width, size.Height, place == "front", scroll[0], scroll[1], speed[0], speed[1], repeat is "both" or "x",
+						repeat is "both" or "y", bands, wave, when));
+				}
+			}
+			if (m.Problems.Count == before && m.MapsEnabled)
+			{
+				m.AreaMotions[area] = new AreaMotion(cell, palettes, runs, layers);
 			}
 		}
 
@@ -1498,13 +1876,14 @@ public sealed class AssetManifest
 					animated[tile] = run;
 				}
 			}
+			List<PaletteTrack> palettes = Palettes(e, entry);
 			Theme theme = kind switch { "town" => Theme.Town, "dungeon" => Theme.Dungeon, "field" => Theme.Field, _ => Art.ThemeOf(area is null ? AreaKind.Field : data.AreaKinds.GetValueOrDefault(area)) };
 			(Color edge, Color bank) = Art.DefaultEdges(theme);
 			if (image is not null && (kind ?? area) is not null && m.Problems.Count == before)
 			{
 				m.Tilesets.Add(new TilesetEntry(kind, area, theme, image, floor, decor, Int(e, "decor_one_in", entry, 11, 1, 1000), wallTop, Int(e, "wall_top_alt_one_in", entry, 3, 1, 1000),
 					wallFace, Int(e, "wall_face_alt_one_in", entry, 5, 1, 1000), water, Int(e, "water_frame_ms", entry, 220, 1, 60000), ColorOf(e, "edge", entry, edge),
-					ColorOf(e, "bank", entry, bank), objects, animated));
+					ColorOf(e, "bank", entry, bank), objects, animated, palettes));
 			}
 		}
 
@@ -1682,10 +2061,11 @@ public sealed class AssetManifest
 			{
 				Problem(entry, "'natural': true and 'scale' do not go together: the scale sets the size");
 			}
+			(IReadOnlyList<Color>? palette, string? paletteFile) = Palette(e, entry);
 			if (id is not null && image is not null && idle is not null && side is "party" or "enemy" && m.Problems.Count == before)
 			{
 				var figure = new FigureEntry(id, side == "enemy", image, idle, animations, view == "back", e.TryGetProperty("shadow", out _) ? Bool(e, "shadow", entry, true) : null,
-					natural);
+					natural, palette, entry, paletteFile);
 				m.Figures.Add(figure);
 				if (natural == true)
 				{

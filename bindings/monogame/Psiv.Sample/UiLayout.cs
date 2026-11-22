@@ -72,6 +72,8 @@ public sealed class UiScreenLayout
 	public List<string>? Profile { get; set; }
 	// The field menu's or the Extras menu's entries in order, each with its label's text key (`entries`; null: the built-in ones).
 	public List<(string Page, string? Label)>? Entries { get; set; }
+	// A field menu entry's `children`, by the entry's page: the choices its tab lists in place of its own page.
+	public Dictionary<string, List<(string Page, string? Label)>> Children { get; } = [];
 	// The system page's rows in order (`rows`; null: UiFields.SystemDefault).
 	public List<string>? Rows { get; set; }
 	// A battle layout's command rows per step with `command_top` (`command_rows`: `top`, `member`; a step left out lists all).
@@ -330,7 +332,8 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["styles.cursors{}"] = ["type", "image", "size", "color", "blink_ms"],
 		["screen"] = ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows"],
 		["screen.places[]"] = ["slot", "label"],
-		["screen.entries[]"] = ["page", "label"],
+		["screen.entries[]"] = ["page", "label", "children"],
+		["screen.entries[].children[]"] = ["page", "label"],
 		["screen.command_rows"] = ["top", "member", "vehicle"],
 		["screen.options[]"] = ["id", "when"],
 		["screen.tags{}"] = ["action", "id", "slot", "values", "default", "cases"],
@@ -673,6 +676,15 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		return st;
 	}
 
+	// Screen params that take one of two words, the first being what the screen does without the param.
+	private static readonly Dictionary<string, (string A, string B, string What)> WordParams = new()
+	{
+		["continue"] = ("newest", "choose", "whether Continue loads the newest save or opens the Load list"),
+		["item_order"] = ("items_then_equipment", "equipment_then_items", "whether the Item list puts the bag's items or the worn pieces first"),
+		["party_talk"] = ("close", "page", "whether party talk closes the menu or shows its lines on the page"),
+		["unusable"] = ("dim", "hide", "whether abilities not usable in the field show dimmed or not at all"),
+	};
+
 	public UiScreenLayout? Screen(JsonElement root, string name, string source)
 	{
 		if (!Object(root, "-"))
@@ -732,6 +744,29 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
 					}
 				}
+				else if (p.Name == "damage_numbers")
+				{
+					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("applied" or "rolled"))
+					{
+						Problem($"params.{p.Name}", "must be \"applied\" or \"rolled\": whether floating numbers show the change made or what the roll gave");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
+					}
+				}
+				else if (WordParams.TryGetValue(p.Name, out (string A, string B, string What) words))
+				{
+					(string a, string b, string what) = words;
+					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() != a && p.Value.GetString() != b)
+					{
+						Problem($"params.{p.Name}", $"must be \"{a}\" or \"{b}\": {what}");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
+					}
+				}
 				else if (p.Name == "command_axis")
 				{
 					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("row" or "column"))
@@ -783,6 +818,11 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 			}
 		}
 		CommandAxis(screen);
+		if (fields.Screen == "menu_items" && screen.Params.TryGetValue("actions", out UiExpr? actions) && actions.Names.Count == 0 && actions.Eval(null!).Int != 0
+			&& !screen.Reads("actions"))
+		{
+			Problem("params.actions", "no element draws the field 'actions', so the action list an item opens would not show");
+		}
 		foreach (UiWindow w in screen.Windows.Where(w => w.RelativeTo is not null && !_windowNames.Contains(w.RelativeTo)))
 		{
 			Problem($"windows.{w.Name}", $"field 'relative_to' names no window of this screen: '{w.RelativeTo}'");
@@ -940,6 +980,10 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 					else
 					{
 						screen.Entries.Add((page, Str(e, "label", entry)));
+						if (e.TryGetProperty("children", out JsonElement children))
+						{
+							MenuChildren(children, $"{entry}.children", page, screen);
+						}
 					}
 				}
 			}
@@ -983,6 +1027,48 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 				}
 			}
 		}
+	}
+
+	private void MenuChildren(JsonElement children, string entry, string page, UiScreenLayout screen)
+	{
+		if (fields!.Screen != "menu")
+		{
+			Problem(entry, "only the menu screen's entries take 'children'");
+			return;
+		}
+		if (children.ValueKind != JsonValueKind.Array || children.GetArrayLength() == 0)
+		{
+			Problem(entry, "must be a non-empty list of entries");
+			return;
+		}
+		var list = new List<(string Page, string? Label)>();
+		int i = 0;
+		foreach (JsonElement c in children.EnumerateArray())
+		{
+			string at = $"{entry}[{i++}]";
+			if (!Object(c, at))
+			{
+				continue;
+			}
+			Known(c, at, Schema["screen.entries[].children[]"]);
+			string? child = Str(c, "page", at, UiFields.MenuPages);
+			if (child is null)
+			{
+				if (!c.TryGetProperty("page", out _))
+				{
+					Problem(at, "missing field 'page'");
+				}
+			}
+			else if (list.Any(x => x.Page == child))
+			{
+				Problem(at, $"'{child}' is listed twice");
+			}
+			else
+			{
+				list.Add((child, Str(c, "label", at)));
+			}
+		}
+		screen.Children[page] = list;
 	}
 
 	// A battle layout that lays the menu's rows out across (a repeater over `menu_items` in a row or grid, or rows one to a

@@ -82,16 +82,23 @@ public sealed partial class SampleController
 
 	// The sample's words for keys the game's text tables do not carry: the field options' help, the credits screen, the
 	// macro editor's auto play and fallback actions, the automatic step status, the title's empty erase list, the field
-	// menu's newer pages and the Extras menu. T takes a
-	// table's own text for the key when it has one, else this English, without counting the key as missing.
+	// menu's newer pages, the Items page's actions, the battle's auto macro mark, the Extras menu and the camera overlay's
+	// scene camera. T takes a table's own text for the key when it has one, else this English, without counting the key
+	// as missing.
 	private static readonly Dictionary<string, string> SampleWords = new()
 	{
+		["ui.battle.auto_macro_row"] = "{0} (auto)",
 		["ui.battle.log.auto_play"] = "Auto-battle plays {0} every round.",
 		["ui.action.extras"] = "Extras",
+		["ui.action.system"] = "System",
 		["ui.credits.hint"] = "{0} end the credits",
+		["ui.dev.camera_scene"] = "scene at {0}",
+		["ui.dev.camera_scene_back"] = "scene, back to the leader",
 		["ui.extras.dev"] = "Developer console",
 		["ui.extras.photosensitivity"] = "Photosensitivity notice",
 		["ui.extras.title"] = "Extras",
+		["ui.items.action.look"] = "Look",
+		["ui.items.action.use"] = "Use",
 		["ui.macro_step_status.automatic"] = "automatic",
 		["ui.macros.fallback_automatic"] = "Stuck steps: automatic choice",
 		["ui.macros.fallback_basic"] = "Stuck steps: basic attack",

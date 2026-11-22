@@ -50,6 +50,10 @@ public sealed partial class SampleController
 	{
 		"game.saved" => "save",
 		"game.level_up" => "level_up",
+		// Field statuses (rules.json field_poison_every, field_paralysis) and a machine member standing up after a battle.
+		"game.poison_fell" => "hit",
+		"game.paralysis_worn_off" => "status",
+		"game.machine_stood_up" => "heal",
 		_ => null,
 	};
 

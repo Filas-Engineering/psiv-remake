@@ -62,8 +62,11 @@ public sealed partial class SampleController
 		public JsonObject? Defeat;
 		public float DefeatT;
 		public long DefeatLocal;
-		public string Life = "";
-	}
+			public string Life = "";
+			// Set by an `idle` figure state: the hover over its place and the clock its idle frames read.
+			public float? IdleLift;
+			public int? IdleMs;
+		}
 
 	private Color AnimColor(string name, ActionLook? look)
 	{
@@ -394,6 +397,31 @@ public sealed partial class SampleController
 	{
 		var fl = new FigureLook();
 		BattleStep? step = c.Step;
+		// The `idle` state (`idle:flying` first for a flier in the front layout) as data on the controller's clock, in script
+		// units, each figure `stagger` after the one before; without one the stage's own idle frames and hover play.
+		if (sc.Alive && StateDef(i, c, c.Front && c.All[i].Flying ? "idle:flying" : "idle") is { } idle)
+		{
+			AnimRun timing = StatusRun(i);
+			long local = (long)_clockMs * timing.RateMilli + i * (idle["stagger"] is JsonNode stagger ? BattleAnimationRun.Time(stagger, timing) : 137L * timing.RateMilli);
+			fl.IdleMs = (int)(local / Math.Max(1, timing.RateMilli));
+			if (BattleAnimationRun.Str(idle["pose"]) is { } idlePose)
+			{
+				fl.Pose = idlePose;
+				fl.PoseMs = fl.IdleMs.Value;
+				fl.PoseLoop = true;
+			}
+			if (idle["color"] is JsonObject idleColor)
+			{
+				ApplyColor(fl, idleColor, 0f, local, 0, timing, null, c);
+			}
+			if (idle["motion"] is JsonObject idleMotion && BattleAnimationRun.Str(idleMotion["kind"]) is "shake" or "sine")
+			{
+				Additive(fl, idleMotion, 0f, local, timing, c);
+			}
+			(int X, int Foot, int Size) place = c.Where(i);
+			fl.IdleLift = idle["lift"] is JsonNode lift ? BattleAnimationEval.Dist(BattleAnimationRun.Pick(lift, c.Front), ForwardUnit(i, c),
+				new Rectangle(place.X - place.Size / 2, place.Foot - place.Size, place.Size, place.Size), c.Motion) : 0f;
+		}
 		if (choosing && StateDef(i, c, "choosing")?["motion"] is JsonObject chooseMotion)
 		{
 			fl.Fwd = BattleAnimationEval.Dist(BattleAnimationRun.Pick(chooseMotion["distance"], c.Front) ?? JsonValue.Create("1f"), ForwardUnit(i, c), default, c.Motion);
@@ -651,11 +679,13 @@ public sealed partial class SampleController
 	}
 
 	// The screen's shake: the largest of the shakes playing, damped with reduced flash, in percent of the layout's motion
-	// unless given in "Npx".
-	private float Shake(StageCtx c, out Point backdrop, out Point figures)
+	// unless given in "Npx". `clockMs` is the time its jolt curves read: the controller's clock, or with `pattern: script`
+	// the script's time, so a seek redraws it.
+	private float Shake(StageCtx c, out Point backdrop, out Point figures, out int clockMs)
 	{
 		float shake = 0f;
 		backdrop = figures = Point.Zero;
+		clockMs = _clockMs;
 		foreach ((AnimRun run, long now, bool only) in Runs(c.Step, c.Elapsed))
 		{
 			if (only)
@@ -705,8 +735,13 @@ public sealed partial class SampleController
 				{
 					v *= Anim.Damp;
 				}
-				shake = Math.Max(shake, logical ? v : v * c.Motion);
-			}
+					float scaled = logical ? v : v * c.Motion;
+					if (scaled > shake)
+					{
+						clockMs = BattleAnimationRun.Str(t.Def["pattern"]) == "script" ? (int)(now / Math.Max(1, run.RateMilli)) : _clockMs;
+					}
+					shake = Math.Max(shake, scaled);
+				}
 		}
 		return shake;
 	}

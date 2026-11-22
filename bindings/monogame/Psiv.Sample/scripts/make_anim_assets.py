@@ -20,6 +20,13 @@ with added light and opacity, a sprite dropped and a flash replaced under reduce
 turned off, a defeat that outlasts its step, a worn piece's `item:` key, a member's defend and a vehicle's attack by
 their actor qualifiers, and a vertical split into vehicle battles stepping at its own rate each way; and in alt/ the battle layouts with the
 slots out of marching order, without the step-aside, and without effectiveness, critical and miss marks.
+
+make_anim_assets.py --leftovers EXPORT OUT writes OUT: a copy of EXPORT with the last additions: number windows with a row
+per side, a padding pair, the battle frame and a closing animation, the member choosing or acting drawn alone, palettes
+declared on a figure (a list) and an effect (a strip file) recolored by index, idle states as data (a flier's lift), a
+backdrop swapped and restored inside one attack, six enemies placed in two ranks in both layouts, a projectile with a
+trail, direction frames and `flip: auto`, a shake on script time, a mosaic transition into battle, a key qualified by
+layout; and in alt/ a front battle layout whose action name window opens with a transition.
 """
 
 import json
@@ -311,6 +318,9 @@ def main():
 	if sys.argv[1] == "--more":
 		more(Path(sys.argv[2]), Path(sys.argv[3]))
 		return
+	if sys.argv[1] == "--leftovers":
+		leftovers(Path(sys.argv[2]), Path(sys.argv[3]))
+		return
 	export, out = Path(sys.argv[1]), Path(sys.argv[2])
 	base = Path(sys.argv[3]) if len(sys.argv) > 3 else export
 	shutil.rmtree(out, ignore_errors=True)
@@ -414,16 +424,112 @@ def more(export, out):
 	write(out / "assets.json", manifest)
 
 
+def leftovers(export, out):
+	"""The last additions' example set, on a copy of the export."""
+	shutil.rmtree(out, ignore_errors=True)
+	shutil.copytree(export, out)
+	manifest = json.loads((out / "assets.json").read_text())
+	manifest["battle_animation"] = "battle_animation.json"
+	for figure in manifest["figures"]:
+		if figure["id"] == "gel_mite":
+			figure["palette"] = colors_of(export / figure["image"], 4)
+	shock = colors_of(export / "effects/burst_shock.png", 2)
+	write_png(out / "effects/burst_shock_palette.png", len(shock), 1, [bytes(b for c in shock for b in (int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16), 255))])
+	for effect in manifest["effects"]:
+		if effect["id"] == "burst_shock":
+			effect["palette"] = "effects/burst_shock_palette.png"
+	write(out / "assets.json", manifest)
+	backdrop(out / "backdrops/lo_swap.png")
+	front = json.loads((out / "ui/battle_front.json").read_text())
+	for window in front["windows"]:
+		if window["name"] == "name_plate":
+			window["open"] = {"kind": "grow_y", "ms": 400}
+	write(out / "alt/battle_front_open.json", front)
+	leftover = {
+		"version": 1,
+		"settings": {"rate": 60, "log_timing": "step", "solo": ["command"]},
+		"select": {
+			"weapon:blade/one": "lo.blade", "ability:spark": "lo.spark", "ability:spark/layout:side": "lo.spark.side", "ability:mend": "lo.mend",
+			"enemy:gel_mite/attack": "lo.spit", "enemy:rust_hound/attack": "lo.spit", "battle:transition_in/encounter:horde": "lo.mosaic", "item:tonic": "lo.item",
+		},
+		"placements": {"count:6": {
+			"front": [[340, 430], [640, 430], [940, 430], [490, 330, "back"], [790, 330, "back"], [1090, 330, "back"]],
+			"side": [[180, 360], [360, 360], [540, 360], [270, 270, "back"], [450, 270, "back"], [630, 270, "back"]],
+		}},
+		"transitions": {"lo.mosaic": {"kind": "mosaic", "block": 32, "steps": 4, "color": "#000000"}},
+		"effects": {
+			"lo.glob": {"sheet": "burst_heat", "frames": [0, 1, 2], "durations": 3, "loops": -1, "blend": "additive", "flip": "auto",
+				"directions": {"left": [3, 4, 5], "up": [0, 1, 2]},
+				"travel": {"from": "user:center", "frames": 18, "path": "arc", "height": 30, "trail": {"count": 3, "gap": 2, "alpha": 0.5}}},
+		},
+		"figures": {
+			"enemy:gel_mite": {"states": {"idle": {"stagger": 10, "motion": {"kind": "sine", "axis": "y", "amplitude": "4px", "period": 40},
+				"color": {"mode": "cycle", "colors": [{}, {"tint": "#80ff80", "amount": 0.4}], "period": 30, "smooth": True}}}},
+			"enemy": {"states": {"idle:flying": {"lift": "0.4h", "motion": {"kind": "sine", "axis": "y", "amplitude": "8px", "period": 60}}}},
+		},
+		"numbers": {
+			"damage": {"motion": "window", "row": {"party": 360, "enemy": 120}, "pad": [14, 4], "frame": "battle", "open": 4, "close": 8},
+			"critical": {"motion": "window", "row": {"party": 360, "enemy": 120}, "pad": [14, 4], "frame": "battle", "open": 4, "close": 8, "color": "accent"},
+			"heal": {"motion": "window", "row": {"party": 330, "enemy": 120}, "pad": 6, "frame": "battle", "open": 6, "close": "25%", "color": "good"},
+		},
+		"scripts": {
+			# Only the attacker stands on the stage while it swings; the backdrop swaps as it swings and comes back as it
+			# returns; the shake follows script time, so a seek draws it again exactly.
+			"lo.blade": {
+				"solo": ["action"],
+				"phases": {"forward": 8, "banner": 18, "animate": 12, "effect": 8, "result": 30, "back": 12},
+				"tracks": [
+					{"id": "in", "type": "move", "on": "actor", "at": "forward", "kind": "forward"},
+					{"id": "swing", "type": "state", "on": "actor", "at": "animate", "state": "attack"},
+					{"id": "dark", "type": "backdrop", "at": "animate", "effect": "swap", "image": "backdrops/lo_swap.png", "length": 6},
+					{"id": "light", "type": "backdrop", "at": "back", "effect": "restore", "length": 8},
+					{"id": "cut", "type": "sprite", "at": "effect", "effect": "slash", "spawn": "target:0", "length": 16},
+					{"id": "jolt", "type": "shake", "at": "result", "amplitude": 6, "decay": "none", "pattern": "script", "length": 20},
+					{"id": "out", "type": "move", "on": "actor", "at": "back", "kind": "home"},
+				],
+			},
+			# The target and the burst recolored through their declared palettes, by index.
+			"lo.spark": {
+				"extends": "turn.default",
+				"tracks": [
+					{"id": "effect", "type": "sprite", "at": "effect", "effect": "burst_shock", "spawn": "targets", "length": "$phase",
+						"color": {"palette": [[0, "#ff40ff"], [1, "#a020a0"]]}},
+					{"id": "tone", "type": "color", "on": "targets", "at": "effect", "mode": "set", "to": {"palette": [[0, "#40c0ff"], [2, "#2060a0"]]}, "length": 40},
+				],
+			},
+			"lo.spark.side": {"extends": "lo.spark", "tracks": [{"id": "ring", "type": "sprite", "at": "effect", "effect": "ring_stat", "spawn": "targets", "length": 20}]},
+			"lo.mend": {"extends": "turn.default", "solo": ["action", "result"]},
+			"lo.item": {"extends": "turn.default", "phases": {"result": 40}},
+			# A glob thrown at the member: three fading copies behind it, its left frames in the front layout (where the
+			# member stands down and to the left) and mirrored flying right in the side layout, which has no right frames.
+			"lo.spit": {
+				"phases": {"forward": 6, "banner": 14, "animate": 8, "effect": 18, "result": 24, "back": 8},
+				"tracks": [
+					{"id": "in", "type": "move", "on": "actor", "at": "forward", "kind": "forward"},
+					{"id": "glob", "type": "sprite", "at": "effect", "effect": "lo.glob", "spawn": "target:0", "length": 18},
+					{"id": "out", "type": "move", "on": "actor", "at": "back", "kind": "home"},
+				],
+			},
+			"lo.mosaic": {"phases": {"cover": 16, "hold": 4, "reveal": 16}, "tracks": [{"id": "blocks", "type": "transition", "transition": "lo.mosaic"}]},
+		},
+	}
+	write(out / "battle_animation.json", leftover)
+	# The same set with the fliers hovering lower, read in by a reload mid-battle.
+	leftover["figures"]["enemy"]["states"]["idle:flying"]["lift"] = "0.2h"
+	write(out / "alt/battle_animation_lift.json", leftover)
+
+
 def broken(out):
 	"""Broken animation files beside the broken copy's other broken files: one of each kind of problem."""
 	write(out / "battle_animation.json", {
 		"version": 2,
 		"include": ["animation/missing.json", "animation/broken_extras.json"],
 		"scirpts": {},
-		"settings": {"rate": 500, "log_timing": "sometimes", "flash_limit": {"count": 0}, "event_cues_off": ["boom"]},
+		"settings": {"rate": 500, "log_timing": "sometimes", "flash_limit": {"count": 0}, "event_cues_off": ["boom"], "solo": ["dance"]},
 		"select": {
 			"ability:sparkk": "turn.default", "weapon:axe": "turn.default", "combo:twin_arcs": "turn.default", "ability:spark": "spark.bolts",
-			"step:notice.Game Lvl": "step.banner", "status:poison/wobble": "turn.default", "item:no_such_piece": "turn.default",
+			"step:notice.Game Lvl": "step.banner", "step:notice.game.no_such_notice": "step.banner", "status:poison/wobble": "turn.default", "item:no_such_piece": "turn.default",
+			"ability:spark/layout:top": "turn.default",
 		},
 		"scripts": {
 			"spark.bolt": {
@@ -440,24 +546,34 @@ def broken(out):
 					{"type": "shake", "amplitude": "40px"},
 					{"type": "pose", "on": "beside:up:target:0", "pose": "hurt", "flash": "yes"},
 					{"type": "pose", "on": "adjacent:left:beside:right:user", "pose": "hurt"},
+					{"type": "shake", "amplitude": 2, "pattern": "random"},
+					{"type": "color", "on": "targets", "to": {"palette": [[300, "#ffffff"]]}},
 				],
 				"event_cues_off": "sometimes",
 			},
 			"loop.a": {"extends": "loop.b", "tracks": []},
 			"loop.b": {"extends": "loop.a", "tracks": []},
 			"Bad Id": {"tracks": []},
+			"bad.solo": {"phases": {"step": 10}, "solo": ["command"], "tracks": []},
 		},
-		"effects": {"spark.orb": {"sheet": "no_such_sheet", "frames": [0, -2]}},
-		"figures": {"enemy": {"states": {"defeat": {"kind": "explode"}, "defeat:instant": {"outlast": "soon"}}}, "monster": {"states": {}}},
-		"numbers": {"critical": {"color": "gold"}, "huge": {}, "damage": {"rise": "3h", "pad": "200px"}},
+		"effects": {"spark.orb": {"sheet": "no_such_sheet", "frames": [0, -2]},
+			"bad.trail": {"sheet": "slash", "flip": "sideways", "directions": {"diagonal": [0]}, "travel": {"frames": 4, "trail": {"count": 3, "fade": 1}}}},
+		"figures": {"enemy": {"states": {"defeat": {"kind": "explode"}, "defeat:instant": {"outlast": "soon"}, "idle": {"lift": "high", "stagger": -1}}}, "monster": {"states": {}}},
+		"numbers": {"critical": {"color": "gold"}, "huge": {}, "damage": {"rise": "3h", "pad": "200px"},
+			"heal": {"motion": "window", "row": {"party": 10, "boss": 5}, "pad": [1, 2, 3], "frame": "glass", "close": "soon"}},
 		"transitions": {"blocks": {"kind": "mosaic", "block": 4}, "dots": {"kind": "tiles", "tile": 2}, "seq": {"kind": "sequence"},
 			"seq2": {"kind": "sequence", "phases": [{"color": "#fff", "steps": 0}]}, "fade2": {"kind": "fade", "phases": []}},
 		"weapon_classes": {"category:axe": "chop"},
-		"placements": {"count:9": [[1, 2]]},
+		"placements": {"count:9": [[1, 2]], "count:6": [[1, 2, "middle"]]},
 	})
 	write(out / "animation/broken_extras.json", {"fragments": {"cast_glow": {"tracks": [{"type": "call", "fragment": "cast_glow"}]}}, "version": 1})
 	manifest = json.loads((out / "assets.json").read_text())
 	manifest["battle_animation"] = "battle_animation.json"
+	# A palette that is not a color list, a strip file that is missing, and a figure animation nothing plays.
+	figures = {f["id"]: f for f in manifest["figures"] if f.get("side") == "party" and f.get("view") != "back"}
+	figures["medic"]["palette"] = ["#12345", "red"]
+	figures["lancer"]["animations"]["flourish"] = {"frames": [0], "ms": [200]}
+	next(e for e in manifest["effects"] if e["id"] == "mark_defeat")["palette"] = "effects/missing_palette.png"
 	write(out / "assets.json", manifest)
 
 

@@ -59,5 +59,5 @@ public sealed partial class SampleController
 		}
 	}
 
-	private int FxShake() => _fx is null || _s is null ? 0 : (int)MathF.Round(Shake(new StageCtx { Step = new BattleStep { Run = _fx, Length = _fx.Total }, Elapsed = FxNow(), Reduced = _s.Profile().ReducedFlash, All = [] }, out _, out _));
+	private int FxShake() => _fx is null || _s is null ? 0 : (int)MathF.Round(Shake(new StageCtx { Step = new BattleStep { Run = _fx, Length = _fx.Total }, Elapsed = FxNow(), Reduced = _s.Profile().ReducedFlash, All = [] }, out _, out _, out _));
 }

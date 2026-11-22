@@ -1,0 +1,25 @@
+# Every newer data shape the library accepts, on scripts/make_shapes_data.py's copy of the motion data: object flags
+# with `reset`, story pictures, a music fade and area music by flag, a field-status area with a name list, a counter
+# cell and an exit with a sound, a closing flag and `closed_tile`, beside wanderers, a patrol, a pixel path and
+# platforms. The sample reads all of it with no data problem (the Makefile checks the transcript) and plays on.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+fieldinput realtime
+dev warp wren_mill mill_door
+wait 10
+expect state area Wren Mill
+expect statehas platforms raft
+hold Right 30
+wait 10
+dev flag mill.visited on
+wait 2
+expect state area Wren Loft
+expect state music field_bell_shore
+press M
+expect screen Menu
+press Escape
+wait 2
+expect screen Field

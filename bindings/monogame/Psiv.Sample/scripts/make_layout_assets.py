@@ -435,6 +435,14 @@ def screens():
 		]},
 	]}
 
+	L["menu_children"] = {"windows": [
+		{"name": "list", "x": "max(area_x, min(tab_x - 8, area_x + area_w - t(160)))", "y": "area_y", "w": "t(160)", "h": "min(len(children), 6) * t(18) + 24",
+			"frame": "panel", "elements": [
+			{"type": "list", "items": "children", "state": "list", "x": 12, "y": 12, "w": "cw - 24", "h": "min(len(children), 6) * t(18)", "row_height": "t(18)",
+				"height": "t(16)"},
+		]},
+	]}
+
 	L["menu_system"] = {"windows": [
 		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
 			{"type": "list", "items": "rows", "state": "list", "w": "cw * 2 / 3", "h": "t(18) * 7", "row_height": "t(18)", "row": [

@@ -81,6 +81,8 @@ public sealed class AnimRun
 	public List<string> Problems = [];
 	// The release event cues this script turns off (its own `event_cues_off` or a parent's); null leaves it to the set.
 	public HashSet<string>? CuesOff;
+	// The kinds of turn step that draw only the members acting (its own `solo` or a parent's); null leaves it to the set.
+	public HashSet<string>? Solo;
 
 	public (string Name, long Start, long Length) PhaseAt(long t)
 	{
@@ -156,6 +158,15 @@ public static class BattleAnimationRun
 			if (s["event_cues_off"] is JsonNode off)
 			{
 				run.CuesOff = [.. BattleAnimation.CuesOff(off)];
+				break;
+			}
+		}
+		string? from = scriptId;
+		for (int depth = 0; depth < 9 && from is not null && set.Scripts.TryGetValue(from, out JsonObject? s); depth++, from = Str(s["extends"]))
+		{
+			if (s["solo"] is JsonNode solo)
+			{
+				run.Solo = [.. BattleAnimation.SoloOf(solo)];
 				break;
 			}
 		}

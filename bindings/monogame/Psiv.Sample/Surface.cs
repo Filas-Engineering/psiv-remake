@@ -811,3 +811,61 @@ public static class Fonts
 		return system;
 	}
 }
+
+// Another surface whose pictures are drawn broken into blocks of `block` logical pixels, each picture on its own: nothing
+// captures the frame, so a block never spans two pictures. The mosaic transition draws the scene through it.
+public sealed class MosaicSurface(IDrawSurface inner, int block) : IDrawSurface
+{
+	public int Width => inner.Width;
+	public int Height => inner.Height;
+	public void Fill(int x, int y, int w, int h, Color color) => inner.Fill(x, y, w, h, color);
+	public void Text(string text, int x, int y, Color color, int size = Style.Body) => inner.Text(text, x, y, color, size);
+	public int Measure(string text, int size = Style.Body) => inner.Measure(text, size);
+	public int CreateImage(int width, int height, Color[] pixels) => inner.CreateImage(width, height, pixels);
+	public void Image(int image, int x, int y, int w, int h, Color tint) => inner.Image(Blocks(image, w, h), x, y, w, h, tint);
+	public void Clip(int x, int y, int w, int h) => inner.Clip(x, y, w, h);
+	public void Unclip() => inner.Unclip();
+	public Color[] ReadImage(string path, out int width, out int height) => inner.ReadImage(path, out width, out height);
+	public void ClearImages() => inner.ClearImages();
+	public void UseFont(string? file, float scale) => inner.UseFont(file, scale);
+	public void UseBitmapFont(BitmapFont? font) => inner.UseBitmapFont(font);
+	public void ImageEx(int image, int x, int y, int w, int h, Color tint, bool flipX) => inner.ImageEx(Blocks(image, w, h), x, y, w, h, tint, flipX);
+	public int Derive(int image, string key, Func<Color[], int, int, Color[]> make) => inner.Derive(image, key, make);
+
+	private int Blocks(int image, int w, int h) => w <= 0 || h <= 0 ? image
+		: inner.Derive(image, $"mosaic:{block}:{w}x{h}", (pixels, iw, ih) => Pixelate(pixels, iw, ih, Math.Max(1, block * iw / w), Math.Max(1, block * ih / h)));
+
+	// Each bw x bh block of the picture's pixels takes their average (premultiplied, so transparency averages too).
+	private static Color[] Pixelate(Color[] pixels, int width, int height, int bw, int bh)
+	{
+		var result = new Color[pixels.Length];
+		for (int by = 0; by < height; by += bh)
+		{
+			for (int bx = 0; bx < width; bx += bw)
+			{
+				int r = 0, g = 0, b = 0, a = 0, n = 0;
+				for (int y = by; y < Math.Min(height, by + bh); y++)
+				{
+					for (int x = bx; x < Math.Min(width, bx + bw); x++)
+					{
+						Color p = pixels[y * width + x];
+						r += p.R;
+						g += p.G;
+						b += p.B;
+						a += p.A;
+						n++;
+					}
+				}
+				var average = new Color(r / n, g / n, b / n, a / n);
+				for (int y = by; y < Math.Min(height, by + bh); y++)
+				{
+					for (int x = bx; x < Math.Min(width, bx + bw); x++)
+					{
+						result[y * width + x] = average;
+					}
+				}
+			}
+		}
+		return result;
+	}
+}

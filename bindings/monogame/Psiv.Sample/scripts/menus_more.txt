@@ -1,0 +1,146 @@
+# The menu follow-ups (make_menus_more_assets.py), with --dev: a tab's children (the list under the tab, a child page
+# opened and Back to the list), larger tabs, abilities not usable in the field hidden and then dimmed again after a
+# reload, the party talk shown on its page, and the System action opening the system page alone over the field, listed
+# on the Controls page and rebound. With --window the shot lines save screenshots under build/shots/menus_more/ (run
+# from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 2
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+
+# The System tab lists its children under it; the system page itself is not one of them.
+press M
+expect screen Menu
+expect state tab Items
+expect state uifield.menu.page_ids 5
+press Right
+wait 2
+expect state tab System
+expect state page children
+expect state uifield.menu_children.children 3
+expect state uifield.menu_children.label System
+expect state uifield.menu_children.tab_x 151
+expect state selected Save
+shot build/shots/menus_more/children.png
+press Down 2
+wait 2
+expect state selected Jobs
+press Up 2
+press Enter
+wait 2
+expect state tab Save
+expect state page save
+shot build/shots/menus_more/child_save.png
+press Escape
+wait 2
+expect screen Menu
+expect state page children
+expect state selected Save
+press Down 2
+press Enter
+wait 2
+expect state tab Quests
+press Escape
+wait 2
+expect state page children
+
+# Abilities not usable in the field are hidden: all of the fighter's, one of the medic's.
+press Right
+expect state tab Abilities
+wait 2
+press Enter
+wait 2
+expect state page list
+expect state uifield.menu_abilities.abilities 0
+shot build/shots/menus_more/abilities_hidden_none.png
+press Escape
+press Down 2
+press Enter
+wait 2
+expect state uifield.menu_abilities.abilities 4
+expect state selected Mend
+shot build/shots/menus_more/abilities_hidden.png
+assets swap ui/menu_abilities.json alt/menu_abilities_dim.json
+wait 2
+expect state uifield.menu_abilities.abilities 5
+expect state uifield.menu_abilities.abilities.4.usable false
+press Escape
+
+# The party talk on its page: the menu stays and the line shows in the box.
+press Right
+expect state tab Party_talk
+wait 2
+expect state uifield.menu_options.talking false
+press Enter
+wait 2
+expect screen Menu
+expect state tab Party_talk
+expect state uifield.menu_options.talking true
+expect state uifield.menu_options.talk 1
+expect state uifield.menu_options.talk.0.speaker Test Mystic
+expect state uifield.menu_options.talk.0.line A bell that rings by itself. I would like to meet whoever pulls the rope.
+expect notoast A bell that rings
+shot build/shots/menus_more/party_talk.png
+press Right
+press Left
+wait 2
+expect state uifield.menu_options.talking false
+press Escape
+wait 2
+expect screen Field
+
+# The System action opens the system page alone over the field, and closes it again.
+press S
+wait 2
+expect screen Menu
+expect state tab System
+expect state page system
+expect state uifield.menu.page_ids 1
+expect state uifield.menu_system.rows 3
+shot build/shots/menus_more/system_action.png
+press S
+wait 2
+expect screen Field
+press S
+wait 2
+press Escape
+wait 2
+expect screen Field
+
+# Listed on the Controls page, and rebindable.
+press C
+wait 2
+press Down
+press Enter
+wait 2
+expect state page controls
+expect binding System S | -
+expect state uifield.controls.actions.16.label System
+press Up 2
+wait 2
+shot build/shots/menus_more/controls_system.png
+press Escape
+wait 2
+press Escape
+wait 2
+expect screen Field
+controls capture System
+press D
+wait 2
+expect binding System D | -
+press S
+wait 2
+expect screen Field
+press D
+wait 2
+expect state tab System
+press Escape
+wait 2
+expect screen Field

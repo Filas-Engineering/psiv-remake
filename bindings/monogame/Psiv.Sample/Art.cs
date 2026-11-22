@@ -208,6 +208,9 @@ public sealed partial class Art
 		// By the picture they stand in for: frame runs over Images, looping in step on every cell.
 		public IReadOnlyDictionary<int, Figure> Animated { get; init; } = new Dictionary<int, Figure>();
 
+		// Recolors of every tile picture the cells show.
+		public IReadOnlyList<PaletteTrack> Palettes { get; init; } = [];
+
 		public int WaterFrame(int clockMs) => clockMs / WaterFrameMs % Water.Length;
 
 		public int Frame(int image, int clockMs) => Animated.TryGetValue(image, out Figure? run) ? run.Images[run.Idle.FrameAt(clockMs, loop: true)] : image;

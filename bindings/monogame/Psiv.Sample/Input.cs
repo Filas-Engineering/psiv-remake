@@ -7,7 +7,7 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-public enum GameAction { Up, Down, Left, Right, Confirm, Back, Menu, QuestLog, PartyTalk, TextLog, Skip, PagePrev, PageNext, Pause, FastForward, Interact, Run, RunToggle, Extras }
+public enum GameAction { Up, Down, Left, Right, Confirm, Back, Menu, QuestLog, PartyTalk, TextLog, Skip, PagePrev, PageNext, Pause, FastForward, Interact, Run, RunToggle, Extras, System }
 
 // Keys and gamepad buttons down this frame and the ones that went down since the last frame.
 public sealed class InputState
@@ -231,6 +231,8 @@ public sealed class Bindings
 		GameAction.RunToggle => ([Keys.CapsLock], [Buttons.LeftStick]),
 		// F2 is a developer overlay with --dev and Select is Skip and Pause, so a free letter and no button.
 		GameAction.Extras => ([Keys.C], []),
+		// Start is Menu, so a free letter and no button.
+		GameAction.System => ([Keys.S], []),
 		_ => ([], []),
 	};
 
