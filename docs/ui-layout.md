@@ -20,7 +20,7 @@ ASSETS/assets.json           "ui_layout": {"enabled": true}
 
 Every file has `"version": 1`.
 
-Screen keys: `title`, `sound_test`, `load_game`, `options`, `controls`, `confirm`, `field`, `dialogue`, `name_entry`, `pause`, `travel`, `shop`, `inn`, `save_prompt`, `panels`, `menu`, `menu_status`, `menu_items`, `menu_equip`, `menu_order`, `menu_macros`, `menu_combos`, `menu_quests`, `menu_codex`, `menu_log`, `menu_options`, `save_slots`, `quest_log`, `text_log`, `battle_front`, `battle_side`. The two battle files are the two stage layouts; the battle presentation table's `layout: front|side` (and its per-encounter and per-area overrides, `--battle-layout` and the `battlelayout` script verb) chooses which one draws.
+Screen keys: `title`, `sound_test`, `credits`, `load_game`, `options`, `controls`, `confirm`, `field`, `dialogue`, `name_entry`, `pause`, `travel`, `shop`, `inn`, `save_prompt`, `panels`, `menu`, `menu_status`, `menu_items`, `menu_equip`, `menu_order`, `menu_macros`, `menu_combos`, `menu_quests`, `menu_codex`, `menu_log`, `menu_options`, `save_slots`, `quest_log`, `text_log`, `battle_front`, `battle_side`. The two battle files are the two stage layouts; the battle presentation table's `layout: front|side` (and its per-encounter and per-area overrides, `--battle-layout` and the `battlelayout` script verb) chooses which one draws.
 
 ## Export, check and reload
 
@@ -228,6 +228,12 @@ Windows: `scene` (the title's field scene, slot `scene`: the title art's backgro
 
 Fields: `title` (string, the game's title), `subtitle` (string), `hero_frame`, `creature_frame` (images, animated by the clock; the title art's traveler and creature when given), `hero_w`, `hero_h`, `creature_w`, `creature_h` (int: the sizes to draw them at, 64 by 64 unless the title art gives a reference height, then their frames' size times `art_scale`), `logo` (image, the title art's logo, -1 without one), `logo_w`, `logo_h` (int, its size in pixels times `art_scale` when there is one, 0 without a logo), `art_scale` (int, the title art's natural multiple, 0 without a reference height), `game_over` (bool, the last game ended in defeat), `options` (list of strings), `cursor` (int), `version` (string, the library version), `hint` (string).
 
+Erase: the title offers Erase when its layout's `options` lists `erase` (below, "Title start state and entries"), or, in the built-in order, when its param `erase` is not 0 (the older switch, kept as an alias; the built-in file sets neither, so the built-in title's options are as before). Erase lists every slot with a file, damaged ones too (`Saves()`, manual slots first), asks `ui.title.erase_confirm` with the slot through the confirm screen, calls `EraseSave` and shows the session's `game.save_erased` notice or the refusal, then reads the list again; Back returns to the options. Fields: `erasing` (bool, the list is up), `erase_rows` (list of strings: the slot, `(autosave)`, then the area and play time or `(damaged)`; `No saves to erase.` when none), `erase_cursor` (int). The built-in file draws them in a window named `erase` over the box.
+
+## Credits (`ui/credits.json`)
+
+The credits a script's `credits` plays (`MenuKind.Credits`). Windows: `backdrop` (the dark fill), `roll` (the lines; the code scrolls them so the newest stays inside this window's height), `hint`. Fields: `lines` (items: `text`, the entry's rendered text; `heading` (bool); `y`, its top in pixels from the roll's top, each entry after its `gap` of empty lines), `scroll` (int, pixels the roll has moved up), `shown`, `total` (int: entries come up and in all), `hint` (string). Confirm or Back ends them (`CloseMenu()`), and so does the session's end once every entry has had its time; the credits' `music` plays meanwhile. State probe `credits`: `SHOWN/TOTAL scroll N`.
+
 The `scene` slot's rectangle is where the scene goes: the title art's background is stretched over it, each layer's `at` counts from its top left and its scrolling repeats across it, the generated field scene fills it, and what reaches outside it is clipped (the built-in files give the whole screen). The same holds for the `scene` slots of the sound test, the Load screen and the options from the title.
 
 The built-in box draws the logo at its size, centered on the title's line, and the title's text only without a logo:
@@ -255,7 +261,9 @@ Fields: `tracks` (list of strings, every audio id's name), `list` (the list's sc
 
 The map draws first, in code. Window: `box` (the bed, the cost and money line, Rest and Leave).
 
-Fields: `top` (int, the box's top as the dialogue box would sit), `bed` (image, the area tileset's bed), `cost`, `money` (int), `options` (list of strings), `cursor` (int), `keeper` (image: the portrait the assets' `keepers` give the rest point, -1 without one; [`assets.md`](assets.md), "keepers"; the built-in file does not draw it).
+Fields: `top` (int, the box's top as the dialogue box would sit), `bed` (image, the area tileset's bed), `cost`, `money` (int), `options` (list of strings), `cursor` (int), `keeper` (image: the portrait the assets' `keepers` give the rest point, -1 without one; [`assets.md`](assets.md), "keepers"; the built-in file does not draw it), `per_member` (bool: the area data's `per_member`, so `cost` is the whole lineup's) and `cost_each` (int: the price per member, `cost` otherwise), `voice_line` (string: the keeper's line, below). The built-in file draws none of the last three.
+
+The keeper's line (`voice_line`, inn and shop): the point's voice (`InnInfo.Voice`, `ShopInfo.Voice`, the area data's `voice`) followed by `.welcome` when a shop opens, `.confirm` (with the cost) when an inn opens, `.thanks` after a purchase, sale or rest (the inn closes, so its thanks shows as a notice), `.cannot_afford` after a refusal for money; the tables' text for that key, else `ui.shop.*` or `ui.inn.*` with the same ending. The sample never asks a shop's `.confirm`. The state probe `voice` reads the key the last frame used.
 
 The state probe `keeper` reads the keeper's portrait id the last shop or inn frame gave its layout, `-` for none.
 
@@ -304,8 +312,11 @@ Fields:
   classic field input, so no existing run draws the window.
 * `prompt_key` (string): Confirm's first binding on the device last used (`Enter`, `A`), empty without a prompt.
 * `prompt_text` (string): what Confirm would do: `talk` (`ui.hint.talk`), `open`, `board`, `shop`, `rest` or `travel`
-  (`ui.prompt.*` keys, English built-ins while the text tables lack them), empty without a prompt.
+  (`ui.prompt.*` keys, English built-ins while the text tables lack them), empty without a prompt. Under game.json's
+  `interact: "nearby"` it comes from the session's `InteractTarget()` (`read` for a hook with no actor, `talk` for an actor)
+  and the marker goes over the target's cell, beyond a counter when it is used across.
 * `prompt_x`, `prompt_y` (int): the screen pixel at the center of the target cell, as the last frame drew the map.
+* `prompt_ready` (bool): false when the session's target would refuse (`InteractTarget.Ready`, under `interact: "nearby"`); the built-in plate is drawn at half opacity then. Always true with the sample's own search.
 
 The built-in prompt:
 
@@ -443,7 +454,8 @@ Fields: `title` (string); `open` (bool) a shop is open; `tab` (int) 0 buy, 1 sel
 (string, formatted); `stall` (image); `rows` (items); `list` (scroll list); `description` (string) and
 `description_missing` (bool) as on the travel screen; `compare` (string) the equipment comparison and wearers, empty
 when not equipment; `hint` (string); `money_value` (int, the money as a number); `keeper` (image, the shop's keeper as on
-the inn, -1 without one or without a shop; not drawn by the built-in file).
+the inn, -1 without one or without a shop; not drawn by the built-in file); `voice_line` (string, the keeper's line as on
+the inn; not drawn by the built-in file).
 
 ```json
 {"type": "group", "visible": "keeper >= 0", "x": 480, "elements": [{"type": "image", "image": "keeper", "w": 64, "h": 64}]}
@@ -668,7 +680,7 @@ Fields:
 - `title_mode` (bool): opened from the title.
 - `title` (string): the panel's title.
 - `on_controls` (bool): the Controls page is up.
-- `rows` (list of items): item fields `text` (the probe, `LABEL: VALUE`), `label`, `value` (string, empty for none), `changeable` (bool: shown as `<  VALUE  >` when selected), `enabled` (bool). With the real-time field input on, `Always run` and `Interaction prompt` come before `Controls`.
+- `rows` (list of items): item fields `text` (the probe, `LABEL: VALUE`), `label`, `value` (string, empty for none), `changeable` (bool: shown as `<  VALUE  >` when selected), `enabled` (bool). With the real-time field input on, `Always run` (the profile's `always_run`, for the session's run and the sample's own) and `Interaction prompt` (kept in `controls.json`) come before `Controls`.
 - `list` (scroll list).
 - `description` (string): the selected setting's help, two lines at most.
 - `hint` (string).
@@ -735,7 +747,7 @@ Windows the code places by (`Ui.WindowRect`): front `command` (its width for the
 * `target_pulse` number: a targeted highlight's pulsing alpha. `hit_flash` bool: a hit slot flashes now (not with reduced flash). `hit_fade` number: the hit flash's fade.
 * `command_center` int: where the command window's middle goes after the members made room, -1 when they did not. `actor_left`, `actor_right`, `actor_center` int: the acting figure's box.
 * `enemy_count` int, `enemy_back` bool: only while the `enemy_size` param is read (the formation's size, the enemy stands in the back rank).
-* `enemy_groups` items: the enemies standing as the playback shows them, one item per name in the order the names first stand, with item fields `name`, `number` (how many share it) and `text` (`Gel Mite x2`, or the name alone). The built-in files do not draw it; with the stage's labels hidden (`enemy_labels`, below) a window can name the enemies instead.
+* `enemy_groups` items: the enemies standing as the playback shows them, one item per name in the order the names first stand, with item fields `name`, `number` (how many share it), `level` (the first one's: its `enemies.json` `stats.level`, 1 when the data gives none; `Combatant.Level`) and `text` (`Gel Mite x2`, or the name alone). The built-in files do not draw it; with the stage's labels hidden (`enemy_labels`, below) a window can name the enemies instead.
 
 ```json
 {"name": "enemies", "visible": "len(enemy_groups) > 0", "x": 8, "y": 176, "w": 140, "h": "len(enemy_groups) * 13 + 26", "frame": "panel", "elements": [
@@ -830,16 +842,11 @@ The built-in values, which both files share but for the front-only ones (`side` 
 
 ## Fields the session cannot give yet
 
-Fields a layout might want that the C# `GameSession` does not expose, so no screen offers them: the actor who keeps a
-shop or rest point (`FieldPoint` and `ShopInfo` name none; the assets' `keepers` map points to portraits instead), and
-an enemy's level (`Combatant` has none; enemies have no portraits in the data either). Also: deleting a save (the title's `erase` entry needs a call such as `psiv_save_delete(session, slot)` /
-`GameSession.DeleteSave(slot)`), loading a save away from the title (a load entry on the Save page's system menu), and
-member profile fields beyond `Member`, `MemberDetail` and the creature kind (age, home, a biography: a member
-key/value list such as `psiv_member_profile(session, member)` returning text keys and values); the flashing level and
-the notice seen as profile fields (`psiv_profile`'s `flashing` and `flash_notice_seen`, kept in `controls.json` until
-then); the data's default flashing level in `game.json` (`presentation.flash_default`); and the game's switches for the
-arrival notice and banner per area, on script warps and for the starting area (a field such as `psiv_field_info`'s
-`arrival_notice`, `area_banner`, or a notice flag the sample can read with the arrival).
+Loading a save away from the title (a Load entry on the Save page's system menu): the session refuses it
+(`game.refuse.load_title`), as the spec lists the load screen only from the title (game-flow.md, the transition table:
+Title to Menu "Settings, load screen", Field to Menu "save screen"; FLOW-013 allows no other transition). A player quits
+to the title and loads there. The arrival switches, the keeper's voice, an enemy's level, erasing a save, member profile
+rows and the flashing level, listed here before, are given now (above and in the sections they belong to).
 
 ## Layout items: optional fields, params and row models
 
@@ -880,14 +887,14 @@ A battle file that lays the menu's rows out across, a `repeater` over `menu_item
 "params": {"command_axis": "row", "command_top": 1, "result_page_lines": 2, "enemy_statuses": 1}
 ```
 
-The words of the top-level step (`ui.battle.top.fight`, `.macro`, `.run`, `ui.battle.title.top`, `ui.battle.no_macros`) come from the text tables when they have them, else built-in English, not counted as missing. Probe: `enemyicons` reads the icons the last frame drew under each enemy with a status (`Gel Mite B sleep`, `none`).
+The words of the top-level step are the text tables' `ui.battle.top.fight`, `.macro`, `.run`, `ui.battle.title.top` and `ui.battle.no_macros`. Probe: `enemyicons` reads the icons the last frame drew under each enemy with a status (`Gel Mite B sleep`, `none`).
 
 ### Title start state and entries
 
 Two top-level fields of `title.json` (only that file takes them):
 
-* `start` (true or false, default false): the title opens on a start state: the field `start` is true and the menu takes no input until any key or button (not a function key or the console key) is pressed, then `start` is false. It comes back each time the title does (not after its overlays). `start_hint` is the prompt's words (`ui.title.press_start`, built-in "Press any key").
-* `options` (a list): the menu's entries in order, from `retry`, `new_game`, `continue`, `load`, `sound_test`, `erase`, `options`, `quit` (default: that order). An entry still shows only when it can be chosen: `retry` after a lost battle that allows one, `sound_test` after a finished story, `erase` never, since the session has no call that deletes a save (below, "Fields the session cannot give yet"). An unknown or repeated entry is a problem. The field `option_ids` lists the ids shown.
+* `start` (true or false, default false): the title opens on a start state: the field `start` is true and the menu takes no input until any key or button (not a function key or the console key) is pressed, then `start` is false. It comes back each time the title does (not after its overlays). `start_hint` is the prompt's words (the text tables' `ui.title.press_start`).
+* `options` (a list): the menu's entries in order, from `retry`, `new_game`, `continue`, `load`, `sound_test`, `erase`, `options`, `quit` (default: that order). An entry still shows only when it can be chosen: `retry` after a lost battle that allows one, `sound_test` after a finished story, `erase` always (the erase list, above, under Title). An unknown or repeated entry is a problem. The field `option_ids` lists the ids shown.
 
 ```json
 {"version": 1, "start": true, "options": ["continue", "new_game", "load", "erase", "options", "quit"], "windows": [
@@ -923,7 +930,7 @@ A script's `fade out` and `fade in` paint black over the screen. The order, back
 
 ### Field: arrival notice and banner
 
-Params of `field.json`: `arrive_toast` (default 1; 0: the arrival notice, `game.arrive`, is logged but shows no notice) and `area_banner` (default 1; 0: the area banner shows on neither the field nor the dialogue). Both are expressions of the common names.
+Params of `field.json`: `arrive_toast` (default 1; 0: the arrival notice, `game.arrive`, is logged but shows no notice) and `area_banner` (default 1; 0: the area banner shows on neither the field nor the dialogue). Both are expressions of the common names. Each only takes away: the session decides first whether an entry announces itself (`game.json` `arrive_notice` and the area's own, `FieldInfo.AnnounceArrival`; it emits no `game.arrive` otherwise), so a notice or banner shows only when both the data and the layout allow it.
 
 ```json
 {"version": 1, "params": {"arrive_toast": 0, "area_banner": 0}, "windows": []}
@@ -967,7 +974,7 @@ Params of `field.json`: `arrive_toast` (default 1; 0: the arrival notice, `game.
 
 * Param `stat_bonus` (default 1): 0 leaves the equipment bonus out of each stat's `value`. The cells of `stat_rows` gain `total` (the stat's number) and `bonus` (the equipment's, signed, `''` for none) either way.
 * Fields `portrait_w`, `portrait_h`: the portrait's size in pixels, for a portrait drawn at a whole multiple.
-* Top-level `profile`: the profile rows, in order, from `name`, `level`, `experience`, `experience_next`, `kind`, `hp`, `max_hp`, `tp`, `max_tp`, `strength`, `mental`, `agility`, `dexterity`, `defense`, `critical`, `evasion`, `magic_defense`, `attack_element` (default: all); the field `profile` lists them with `key`, `label` and `value`. These are every member detail the session gives (`Member`, `MemberDetail`, the creature kind); keys the text tables lack (`ui.status.profile.*`) are built-in English.
+* Top-level `profile`: the profile rows, in order, from `name`, `level`, `experience`, `experience_next`, `kind`, `hp`, `max_hp`, `tp`, `max_tp`, `strength`, `mental`, `agility`, `dexterity`, `defense`, `critical`, `evasion`, `magic_defense`, `attack_element`, `data` (default: all); the field `profile` lists them with `key`, `label` and `value`. These are every member detail the session gives (`Member`, `MemberDetail`, the creature kind); `data` stands for the character's own rows from `party.json` `profile` (`MemberDetail.Profile`, none in the shipped data), each keyed by the data's key with the session's text for both sides. The labels are the text tables' `ui.status.profile.*`, `ui.status.attack_element` and `ui.stat.*`.
 
 ```json
 {"version": 1, "params": {"stat_bonus": 0}, "profile": ["name", "level", "kind", "experience_next", "attack_element"], "windows": [
@@ -980,15 +987,15 @@ Params of `field.json`: `arrive_toast` (default 1; 0: the arrival notice, `game.
 
 ### Flashing
 
-The options' Flashing row replaces the Reduced flash row: `Reduced` (the profile's reduced flash on: the animation scripts' `reduced` replacements and damping, and the flash limit), `Standard` (the flash limit, no replacements: the old setting off) and `As authored` (no limit, no replacements). An old profile maps reduced flash on to Reduced and off to Standard. The level beside the profile's switch, and whether the photosensitivity warning was answered, live in `controls.json` (`"flashing": {"level": "original", "original_confirmed": true}`), written only once a level is chosen; the session's profile has no field for them (below, "Fields the session cannot give yet").
+The options' Flashing row replaces the Reduced flash row: `Reduced` (the profile's reduced flash on: the animation scripts' `reduced` replacements and damping, and the flash limit), `Standard` (the flash limit, no replacements: the old setting off) and `As authored` (no limit, no replacements). The level and whether the photosensitivity notice was seen are the profile's `flashing` and `flash_notice_seen` (`Profile.Flashing`, `Profile.FlashNoticeSeen`, written only once set); a level sets the profile's reduced flash to match. A profile that never chose (`FlashLevel.Unset`, an older profile) maps reduced flash on to Reduced and off to Standard. `controls.json` keeps no flashing entry.
 
 * Choosing As authored asks the photosensitivity question (`ui.options.flashing_warning`) until it has been answered yes once, or the notice below has been seen.
-* The options layout's param `flashing_original` (default 1) at 0, or the data's `flashing.json` `"original": false`, leaves As authored out of the row.
-* A new profile in normal play (no script; or a scripted run with `--play-defaults`) starts at the data's default: `flashing.json` in the game data directory, `{"default": "reduced" | "standard" | "original", "original": true}`, which only the sample reads (the game's loader refuses unknown keys in `game.json`; `presentation.flash_default` there is the key to move it to once that loader takes it). Without the file the default is Reduced, and the title says once where the option is (`ui.title.flashing_notice`). With `original` (and the choice not hidden) the photosensitivity notice comes first, on black before the title or anything that moves: the game has flashing effects, the setting is under Options > Flashing, and three answers, Reduced (the cursor's start: one Confirm), Standard, Continue as authored (also Back). It is drawn through the `confirm` layout, so a layout restyles it but cannot leave it out, and the data cannot skip it; seeing it counts as the warning's answer. `--check-assets` reports a bad `flashing.json` as `data: flashing.json: ...`.
+* The options layout's param `flashing_original` (default 1) at 0, or `game.json`'s `presentation.flash_original` false (`GameInfo.FlashOriginal`), leaves As authored out of the row.
+* A new profile in normal play (no script; or a scripted run with `--play-defaults`) starts at the data's default: `game.json` `presentation.flash_default` (`reduced`, `standard` or `original`; `GameInfo.FlashDefault`), and Reduced when the data hides original. Without the key the default is Reduced, and the title says once where the option is (`ui.title.flashing_notice`). With `original` (and the choice not hidden) the photosensitivity notice comes first, on black before the title or anything that moves: the game has flashing effects, the setting is under Options > Flashing, and three answers, Reduced (the cursor's start: one Confirm), Standard, Continue as authored (also Back). It is drawn through the `confirm` layout, so a layout restyles it but cannot leave it out, and the data cannot skip it; seeing it counts as the warning's answer. The game's loader refuses any other value (`data.bad_flash_default`).
 * Scripted runs (headless or in the window) start at the profile's default, Standard, so every transcript and digest stays as before; that is the difference from normal play. The probe `flashing` reads `reduced`, `standard` or `original` (`original notice` while the notice is up).
 * The confirm layout gains the field `cursor` (the answer under the cursor; Yes 0 and No 1 for a question) and `options` holds the notice's three answers; the built-in file sizes its box by `len(options)` and highlights `cursor`, which draws a yes/no question as before.
 
-Words the text tables do not carry yet, built-in English until they do: `ui.options.flashing`, `ui.options.flashing.reduced`, `ui.options.flashing.standard`, `ui.options.flashing.original`, `ui.options.flashing_help`, `ui.options.flashing_warning`, `ui.options.flashing_notice`, `ui.options.flashing_keep`, `ui.title.flashing_notice` (and, from the items above, `ui.battle.top.fight`, `ui.battle.top.macro`, `ui.battle.top.run`, `ui.battle.title.top`, `ui.battle.no_macros`, `ui.title.press_start`, `ui.saves.system.save`, `ui.saves.system.quit`, `ui.status.profile.name`, `.level`, `.experience`, `.experience_next`, `.kind`, `.hp`, `.tp`).
+The words are the text tables' `ui.options.flashing`, `ui.options.flashing.reduced`, `.standard`, `.original`, `ui.options.flashing_help`, `ui.options.flashing_warning`, `ui.options.flashing_notice`, `ui.options.flashing_keep` and `ui.title.flashing_notice`.
 
 `scripts/flash_safety.txt` asserts the three levels on a strobing script; `make_flash_data.py` writes a data copy whose default is original, on which `flashing_notice.txt` (Standard chosen) and `flashing_notice_keep.txt` (Back keeps it, Original later asks nothing) run with `--play-defaults`, and `flashing_new.txt` the shipped data's Reduced default with its notice and the warning.
 

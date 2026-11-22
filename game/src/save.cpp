@@ -216,6 +216,15 @@ std::string worldChunk(const World& w) {
 	if (!w.areaMusic.empty()) {
 		o.key("area_music").text(w.areaMusic).end();
 	}
+	if (w.stepCarryUs != 0) {
+		o.key("step_carry").num(w.stepCarryUs).end();
+	}
+	if (w.conveyorCarryUs != 0) {
+		o.key("conveyor_carry").num(w.conveyorCarryUs).end();
+	}
+	if (w.tickCarryMs != 0) {
+		o.key("tick_carry").num(w.tickCarryMs).end();
+	}
 	return o.str();
 }
 
@@ -557,6 +566,12 @@ bool readWorld(const std::string& payload, World& w, std::string& error) {
 			w.onceHooks.insert(in.text(l[1]));
 		} else if (k == "area_music" && in.need(l, 1)) {
 			w.areaMusic = in.text(l[1]);
+		} else if (k == "step_carry" && in.need(l, 1)) {
+			w.stepCarryUs = in.num(l[1]);
+		} else if (k == "conveyor_carry" && in.need(l, 1)) {
+			w.conveyorCarryUs = in.num(l[1]);
+		} else if (k == "tick_carry" && in.need(l, 1)) {
+			w.tickCarryMs = in.integer(l[1]);
 		} else {
 			in.fail("unknown line '" + k + "'");
 		}

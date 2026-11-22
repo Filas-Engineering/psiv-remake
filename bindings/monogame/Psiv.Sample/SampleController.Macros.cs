@@ -21,6 +21,40 @@ public sealed partial class SampleController
 	private string _draftMember = "";
 	private CommandKind _draftKind;
 	private string? _draftId;
+	// The item step names an equipment piece (SetMacroPieceStep).
+	private bool _draftPiece;
+
+	// Who a step may name: the party's members, then its vehicles in the area, whose steps run only in battles aboard.
+	private List<(string Id, string Name, bool Vehicle)> StepActors() =>
+		[.. _s.Party().Select(m => (m.Id, m.Name, false)), .. _s.FieldVehicles().Select(v => (v.Id, v.Name, true))];
+
+	private bool DraftVehicle => _data.VehicleSkills.ContainsKey(_draftMember) && !_s.Party().Any(m => m.Id == _draftMember);
+
+	// A vehicle attacks, uses one of its skills or escapes.
+	private CommandKind[] DraftCommands => DraftVehicle ? [CommandKind.Attack, CommandKind.Ability, CommandKind.Escape] : StepCommands;
+
+	// What a step may pick: an ability of the member (a vehicle's skills), or an item of the bag, then the equipment pieces
+	// with a battle use in the bag and on the member.
+	private List<(string Id, string Text, bool Piece)> DraftPicks()
+	{
+		if (_draftKind == CommandKind.Ability && DraftVehicle)
+		{
+			return [.. _data.VehicleSkills[_draftMember].Select(id => (id, _s.DisplayName(id), false))];
+		}
+		if (_draftKind == CommandKind.Ability)
+		{
+			return [.. _s.MemberAbilities(_draftMember).Select(a => (a.Id, a.Name + (a.Cost > 0 ? "  " + T("ui.common.tp_cost", a.Cost) : "") + (a.MaxUses >= 0 ? $"  {a.Uses}/{a.MaxUses}" : ""), false))];
+		}
+		IReadOnlyList<InventoryEntry> bag = _s.Inventory();
+		var picks = bag.Where(i => !i.IsEquipment).Select(i => (i.Id, T("ui.common.item_count", i.Name, i.Count), false)).ToList();
+		picks.AddRange(bag.Where(i => i.IsEquipment && _data.PieceUses.ContainsKey(i.Id)).Select(i => (i.Id, T("ui.common.item_count", i.Name, i.Count), true)));
+		if (_s.Party().FirstOrDefault(m => m.Id == _draftMember) is { } member)
+		{
+			picks.AddRange(member.Equipment.Select((id, i) => (id, i)).Where(x => _data.PieceUses.ContainsKey(x.id) && !picks.Any(p => p.Item1 == x.id))
+				.Select(x => (x.id, member.EquipmentNames[x.i], true)));
+		}
+		return picks;
+	}
 
 	private string StepText(MacroStep step)
 	{
@@ -34,8 +68,11 @@ public sealed partial class SampleController
 		return T("ui.macros.step", step.MemberName, command, target) + (step.Issue != MacroIssue.None ? $"  [{T(NameKind.MacroIssue, (int)step.Issue)}]" : "");
 	}
 
+	// After delete: whether auto-battle plays this macro every round (stuck members taking the automatic choice), and how a
+	// macro used from the battle menu treats a member whose step cannot run; both the sample's, kept in controls.json.
 	private List<string> MacroActions(string name) =>
-		[.. new[] { "edit_steps", "rename", "move_up", "move_down", _s.Settings().AutoMacro == name ? "stop_auto" : "use_auto", "delete" }.Select(a => T("ui.macros." + a))];
+		[.. new[] { "edit_steps", "rename", "move_up", "move_down", _s.Settings().AutoMacro == name ? "stop_auto" : "use_auto", "delete",
+			_bindings.AutoPlayMacro == name ? "stop_auto_play" : "use_auto_play", _bindings.MacroFallbackAutomatic ? "fallback_automatic" : "fallback_basic" }.Select(a => T("ui.macros." + a))];
 
 	private string[] StepActions => [.. new[] { "change", "move_up", "move_down", "remove" }.Select(a => T("ui.macros." + a))];
 
@@ -51,11 +88,10 @@ public sealed partial class SampleController
 		MacroStage.Actions when macro is not null => MacroActions(macro.Name),
 		MacroStage.Steps when macro is not null => [.. macro.Steps.Select(StepText), T("ui.macros.add_step")],
 		MacroStage.StepActions => [.. StepActions],
-		MacroStage.Member or MacroStage.TargetMember => [.. _s.Party().Select(m => m.Name)],
-		MacroStage.Command => [.. StepCommands.Select(k => T(NameKind.CommandKind, (int)k))],
-		MacroStage.Pick => _draftKind == CommandKind.Ability
-			? [.. _s.MemberAbilities(_draftMember).Select(a => a.Name + (a.Cost > 0 ? "  " + T("ui.common.tp_cost", a.Cost) : "") + (a.MaxUses >= 0 ? $"  {a.Uses}/{a.MaxUses}" : ""))]
-			: [.. _s.Inventory().Where(i => !i.IsEquipment).Select(i => T("ui.common.item_count", i.Name, i.Count))],
+		MacroStage.Member => [.. StepActors().Select(a => a.Name)],
+		MacroStage.TargetMember => [.. _s.Party().Select(m => m.Name)],
+		MacroStage.Command => [.. DraftCommands.Select(k => T(NameKind.CommandKind, (int)k))],
+		MacroStage.Pick => [.. DraftPicks().Select(p => p.Text)],
 		MacroStage.Target => [.. StepTargets.Select(t => T(NameKind.MacroTargetKind, (int)t))],
 		MacroStage.TargetEnemy => [.. Enumerable.Range(1, EnemyPositions).Select(i => T("ui.macros.enemy_position", i))],
 		_ => [],
@@ -148,16 +184,17 @@ public sealed partial class SampleController
 			RunStepAction(macro, at);
 			break;
 		case MacroStage.Member:
-			_draftMember = _s.Party()[at].Id;
+			_draftMember = StepActors()[at].Id;
 			Stage(MacroStage.Command);
 			break;
 		case MacroStage.Command:
-			_draftKind = StepCommands[at];
+			_draftKind = DraftCommands[at];
 			_draftId = null;
+			_draftPiece = false;
 			Stage(_draftKind is CommandKind.Ability or CommandKind.Item ? MacroStage.Pick : MacroStage.Target);
 			break;
 		case MacroStage.Pick:
-			_draftId = _draftKind == CommandKind.Ability ? _s.MemberAbilities(_draftMember)[at].Id : _s.Inventory().Where(i => !i.IsEquipment).ToList()[at].Id;
+			(_draftId, _, _draftPiece) = DraftPicks()[at];
 			Stage(MacroStage.Target);
 			break;
 		case MacroStage.Target when macro is not null:
@@ -202,6 +239,14 @@ public sealed partial class SampleController
 		case 4:
 			Report(_s.SetAutoMacro(_s.Settings().AutoMacro == macro.Name ? null : macro.Name));
 			break;
+		case 6:
+			_bindings.AutoPlayMacro = _bindings.AutoPlayMacro == macro.Name ? "" : macro.Name;
+			SaveControls();
+			break;
+		case 7:
+			_bindings.MacroFallbackAutomatic = !_bindings.MacroFallbackAutomatic;
+			SaveControls();
+			break;
 		case 5:
 			_confirm.Ask(T("ui.macros.delete_confirm", macro.Name), () =>
 			{
@@ -243,7 +288,9 @@ public sealed partial class SampleController
 
 	private void WriteStep(Macro macro, MacroTargetKind target, string? targetMember = null, int targetEnemy = -1)
 	{
-		PsivResult result = _s.SetMacroStep(macro.Name, _stepIndex, _draftMember, _draftKind, _draftId, target, targetMember, targetEnemy);
+		PsivResult result = _draftPiece && _draftId is not null
+			? _s.SetMacroPieceStep(macro.Name, _stepIndex, _draftMember, _draftId, target, targetMember, targetEnemy)
+			: _s.SetMacroStep(macro.Name, _stepIndex, _draftMember, _draftKind, _draftId, target, targetMember, targetEnemy);
 		Report(result);
 		if (result.Ok)
 		{
@@ -251,6 +298,31 @@ public sealed partial class SampleController
 			_sub.Cursor = _stepIndex;
 		}
 	}
+
+	// The battle's auto play (Resolve): with an auto play macro chosen, every round is filled with it, each member whose
+	// step cannot run taking core's automatic choice (FillAutoRound after SetAutoPlayMacro); otherwise the save's auto macro
+	// through StartAuto and FillFromAuto, as before. False when auto play stops.
+	private bool FillAuto()
+	{
+		if (_bindings.AutoPlayMacro.Length > 0 && _s.Macros().Contains(_bindings.AutoPlayMacro))
+		{
+			if (_autoPlaying != _bindings.AutoPlayMacro)
+			{
+				_autoPlaying = _bindings.AutoPlayMacro;
+				Report(_s.SetAutoPlayMacro(_autoPlaying));
+				_battle.Log.Add(T("ui.battle.log.auto_play", _autoPlaying));
+			}
+			_s.FillAutoRound();
+			return true;
+		}
+		return _s.FillFromAuto();
+	}
+
+	// The auto play macro given to the session for the battle under way, "" before its first round.
+	private string _autoPlaying = "";
+
+	// How a macro picked from the battle menu treats a member whose step cannot run.
+	private MacroFallback BattleMacroFallback => _bindings.MacroFallbackAutomatic ? MacroFallback.Automatic : MacroFallback.BasicAttack;
 
 	private void DrawMacros(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{

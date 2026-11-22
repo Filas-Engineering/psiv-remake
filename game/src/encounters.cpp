@@ -254,6 +254,12 @@ bool stepRolls(World& world, const Area& area, const Zone& zone, Cell cell, bool
 		return false;
 	}
 	const int chance = aboard && r.vehicleStepChance > 0 ? r.vehicleStepChance : r.stepChance;
+	if (chance > 0 && r.maxSteps == 0) {
+		world.randomCounter += r.stepDistance;
+		if (world.randomCounter < r.minSteps * r.stepDistance) {
+			return false;
+		}
+	}
 	if (chance > 0) {
 		return world.encounterStream.range(1, chance) == 1;
 	}
@@ -268,6 +274,8 @@ void afterRoll(World& world, const Zone& zone, bool aboard) {
 	const int chance = aboard && zone.random.vehicleStepChance > 0 ? zone.random.vehicleStepChance : zone.random.stepChance;
 	if (chance == 0) {
 		resetRandomCounter(world, zone);
+	} else if (zone.random.maxSteps == 0) {
+		world.randomCounter = 0;
 	}
 }
 

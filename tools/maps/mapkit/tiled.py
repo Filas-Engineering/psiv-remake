@@ -8,14 +8,14 @@ from pathlib import Path
 
 from . import areajson
 
-KINDS = {"floor": ".", "wall": "#", "water": "~", "soft": ":", "barrier": "%"}
+KINDS = {"floor": ".", "wall": "#", "water": "~", "soft": ":", "barrier": "%", "counter": "="}
 KIND_OF_CHARACTER = {c: k for k, c in KINDS.items()}
-TILE_IDS = {"floor": 0, "wall": 1, "water": 2, "soft": 3, "barrier": 4}
+TILE_IDS = {"floor": 0, "wall": 1, "water": 2, "soft": 3, "barrier": 4, "counter": 5}
 FLIP_BITS = 0xF0000000
-MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "int", "music": "string", "region": "string", "arrival": "string",
-	"dungeon_exit": "json object"}
+MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "number", "music": "string", "region": "string", "arrival": "string",
+	"dungeon_exit": "json object", "arrive_notice": "bool", "counters": "json list"}
 # Map properties in the area format's order, as the importer copies them and the exporter writes them.
-AREA_PROPERTIES = ("kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit")
+AREA_PROPERTIES = ("kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "arrive_notice", "counters")
 REQUIRED_MAP_PROPERTIES = ["id"]
 
 # Per object class: property name to type. "json" is a string property holding JSON text of the given shape.
@@ -24,15 +24,15 @@ OBJECT_PROPERTIES = {
 	"exit": {"to": "string", "marker": "string", "fall": "bool", "require_flag": "string", "block_flag": "string", "closed_tile": "string"},
 	"hook": {"trigger": "string", "event": "string", "require_flag": "string", "block_flag": "string", "once": "bool", "tile": "string", "solid": "string",
 		"actor_at": "json list", "across": "bool", "cells": "json list", "actor": "string"},
-	"shop": {"kind": "string", "stock": "json list", "sell_percent": "int", "require_flag": "string", "block_flag": "string", "script_only": "bool", "keeper": "string"},
-	"rest": {"cost": "int", "script_only": "bool", "keeper": "string"},
+	"shop": {"kind": "string", "stock": "json list", "sell_percent": "int", "require_flag": "string", "block_flag": "string", "script_only": "bool", "keeper": "string", "voice": "string"},
+	"rest": {"cost": "int", "script_only": "bool", "keeper": "string", "per_member": "bool", "voice": "string"},
 	"chest": {"flag": "string", "items": "json object", "equipment": "json object", "money": "int"},
 	"port": {"marker": "string", "flag": "string", "ship": "string", "block_flag": "string"},
 	"zone": {"table": "json list", "visible": "json object", "random": "json object"},
 	"helm": {},
 	"gangway": {},
 	"change": {"flag": "string", "tile": "string", "cells": "json list"},
-	"conveyor": {"cells": "json list", "direction": "string", "step_ms": "int", "require_flag": "string", "block_flag": "string"},
+	"conveyor": {"cells": "json list", "direction": "string", "step_ms": "number", "require_flag": "string", "block_flag": "string"},
 }
 REQUIRED_PROPERTIES = {"exit": ["to", "marker"], "hook": ["event"], "shop": ["stock"], "chest": ["flag"], "port": ["marker"], "zone": ["table"],
 	"change": ["flag", "tile", "cells"], "conveyor": ["cells", "direction"]}
@@ -108,6 +108,11 @@ def _typed(props, schema, where, problems):
 		if want == "int":
 			if kind != "int" or not isinstance(value, int) or isinstance(value, bool):
 				problems.append(f"{where}: property '{name}' must be an int property")
+				continue
+		elif want == "number":
+			# A whole number of milliseconds, or one with a fraction (step_ms).
+			if kind not in ("int", "float") or not isinstance(value, (int, float)) or isinstance(value, bool):
+				problems.append(f"{where}: property '{name}' must be an int or float property")
 				continue
 		elif want == "bool":
 			if kind != "bool" or not isinstance(value, bool):
@@ -433,6 +438,8 @@ def _prop(name, value):
 		return {"name": name, "type": "bool", "value": value}
 	if isinstance(value, int):
 		return {"name": name, "type": "int", "value": value}
+	if isinstance(value, float):
+		return {"name": name, "type": "float", "value": value}
 	if isinstance(value, (list, dict)):
 		return {"name": name, "type": "string", "value": json.dumps(value, ensure_ascii=False, separators=(", ", ": "))}
 	return {"name": name, "type": "string", "value": value}

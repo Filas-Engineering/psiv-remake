@@ -99,6 +99,11 @@ public sealed partial class SampleController
 			}
 			return game.TitleMusic.Length > 0 ? game.TitleMusic : "title";
 		}
+		// The credits' own track, while they play, over the scene's.
+		if (_s.Mode == Mode.Menu && _s.MenuKind == MenuKind.Credits && _s.Credits() is { Music.Length: > 0 } credits)
+		{
+			return credits.Music;
+		}
 		if (_scriptMusic is not null)
 		{
 			return _scriptMusic;

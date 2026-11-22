@@ -115,12 +115,12 @@ public sealed partial class SampleController
 		bool system = SystemMenuOn && _saveMode is null;
 		UiContext page = UiArea(x, y, w, h)
 			.Set("system", system)
-			.Set("system_rows", SystemMenu.Select(row => SampleText("ui.saves.system." + row)).ToList())
+			.Set("system_rows", SystemMenu.Select(row => T("ui.saves.system." + row)).ToList())
 			.Set("system_cursor", _systemCursor)
 			.Set("mode", SystemMenuOn ? _saveMode ?? "" : "save");
 		if (system)
 		{
-			_probeSelected = SampleText("ui.saves.system." + SystemMenu[_systemCursor]);
+			_probeSelected = T("ui.saves.system." + SystemMenu[_systemCursor]);
 		}
 		DrawSlots(t, _list, x, y, w, h, ManualSlots(), _s.Saves() ?? [], active: !system, page);
 	}

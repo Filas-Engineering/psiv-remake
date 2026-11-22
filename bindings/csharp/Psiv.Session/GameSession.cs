@@ -172,14 +172,15 @@ public sealed unsafe class GameSession : IDisposable
 		Must(Native.GameInfoGet(_handle, out PsivGameInfo i));
 		return new GameInfo(Native.Str(i.Title), Native.Str(i.GameBuild), i.RulesVersion, i.TickMs, i.RoundMs, i.ManualSlots, i.AutosaveSlots, i.ItemCap,
 			i.MoneyCap, Native.Strs(i.Languages, i.LanguageCount), Native.Str(i.TitleMusic), Native.Str(i.VictoryMusic), Native.Str(i.DefeatMusic),
-			i.MagicDefense != 0, i.AffinityDivisor);
+			i.MagicDefense != 0, i.AffinityDivisor, (FlashLevel)i.FlashDefault, i.FlashOriginal != 0);
 	}
 
 	public Profile Profile()
 	{
 		Must(Native.ProfileGet(_handle, out PsivProfile p));
 		return new Profile((TextSpeed)p.TextSpeed, p.AutoAdvance != 0, p.ShowShippedNames != 0, Native.Str(p.TextLanguage), p.TextSizePercent,
-			(BattleSpeed)p.BattleSpeed, p.AmbientTalk != 0, p.ReducedFlash != 0, p.MusicVolume, p.AmbientVolume, p.EffectsVolume, p.AlwaysRun != 0);
+			(BattleSpeed)p.BattleSpeed, p.AmbientTalk != 0, p.ReducedFlash != 0, p.MusicVolume, p.AmbientVolume, p.EffectsVolume, p.AlwaysRun != 0,
+			(FlashLevel)p.Flashing, p.FlashNoticeSeen != 0);
 	}
 
 	public PsivResult SetProfile(Profile profile)
@@ -201,6 +202,8 @@ public sealed unsafe class GameSession : IDisposable
 				AmbientVolume = profile.AmbientVolume,
 				EffectsVolume = profile.EffectsVolume,
 				AlwaysRun = profile.AlwaysRun ? 1 : 0,
+				Flashing = (int)profile.Flashing,
+				FlashNoticeSeen = profile.FlashNoticeSeen ? 1 : 0,
 			};
 			return Result(Native.ProfileSet(_handle, in p));
 		}
@@ -402,7 +405,8 @@ public sealed unsafe class GameSession : IDisposable
 		}
 		return new FieldInfo(Native.Str(f.AreaId), Native.Str(f.AreaName), (AreaKind)f.AreaKind, (EncounterMode)f.EncounterMode, f.Width, f.Height, f.StepMs,
 			f.LeaderX, f.LeaderY, (Direction)f.Facing, f.PlayerControl != 0, f.GraceMs, Native.Str(f.Music), Native.Str(f.Region), Native.Str(f.Aboard), f.LeaderStepMs,
-			Native.Str(f.ShipPort), f.RunStepMs, f.StepProgressMs, f.ConveyorStepMs, f.ConveyorProgressMs, f.StepMask);
+			Native.Str(f.ShipPort), f.RunStepMs, f.StepProgressMs, f.ConveyorStepMs, f.ConveyorProgressMs, f.StepMask,
+			f.AnnounceArrival != 0, f.LeaderStepUs, f.RunStepUs, f.StepProgressUs, f.ConveyorStepUs, f.ConveyorProgressUs);
 	}
 
 	public IReadOnlyList<string> FieldRows()
@@ -611,7 +615,7 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			list.Add(new Combatant(c.Index, Native.Str(c.Id), Native.Str(c.Name), Native.Str(c.Label), (Side)c.Side, Native.Str(c.Group), c.Hp, c.MaxHp, c.Tp,
 				c.MaxTp, c.Alive != 0, c.Defending != 0, Statuses(c.Statuses, c.StatusCount), (CommandKind)c.CommandKind, Native.Str(c.CommandId), c.CommandTarget,
-				c.Flying != 0, c.Position));
+				c.Flying != 0, c.Position, c.Level));
 		}
 		return list;
 	}
@@ -822,7 +826,13 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			resists.Add(new StatusResist(Native.Str(r.Id), Native.Str(r.Name), r.Percent));
 		}
-		return new MemberDetail(Native.Str(d.Id), d.ExperienceToNext, d.Critical, d.Evasion, (Element)d.AttackElement, bonuses, affinities, resists, d.MagicDefense, affinityList);
+		var profile = new List<ProfileRow>(d.ProfileCount);
+		foreach (PsivProfileRow r in Native.Span<PsivProfileRow>(d.Profile, d.ProfileCount))
+		{
+			profile.Add(new ProfileRow(Native.Str(r.Key), Native.Str(r.KeyText), r.KeyNumber != 0, Native.Str(r.Value), Native.Str(r.ValueText), r.ValueNumber != 0));
+		}
+		return new MemberDetail(Native.Str(d.Id), d.ExperienceToNext, d.Critical, d.Evasion, (Element)d.AttackElement, bonuses, affinities, resists, d.MagicDefense, affinityList,
+			profile);
 	}
 
 	private static StatBonus ToBonus(in PsivStatBonus b) => new(b.MaxHp, b.MaxTp, b.Strength, b.Mental, b.Agility, b.Dexterity, b.Defense, b.Critical, b.Evasion, b.MagicDefense);
@@ -897,10 +907,10 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			stock.Add(ToEntry(e));
 		}
-		return new ShopInfo(Native.Str(s.Id), s.SellPercent, stock, (ShopKind)s.Kind);
+		return new ShopInfo(Native.Str(s.Id), s.SellPercent, stock, (ShopKind)s.Kind, Native.Str(s.Voice));
 	}
 
-	public InnInfo? Inn() => Read(Native.InnGet(_handle, out PsivInnInfo i)) ? new InnInfo(Native.Str(i.Id), i.Cost) : null;
+	public InnInfo? Inn() => Read(Native.InnGet(_handle, out PsivInnInfo i)) ? new InnInfo(Native.Str(i.Id), i.Cost, Native.Str(i.Voice), i.PerMember != 0) : null;
 
 	public PsivResult OpenMenu() => Result(Native.OpenMenu(_handle));
 	public PsivResult CloseMenu() => Result(Native.CloseMenu(_handle));

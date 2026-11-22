@@ -265,7 +265,8 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const G
 		const bool used = std::any_of(use.cells.begin(), use.cells.end(), [&](Cell c) {
 			for (Cell d : {Cell{0, -1}, Cell{1, 0}, Cell{0, 1}, Cell{-1, 0}}) {
 				const Cell near{c.x - d.x, c.y - d.y};
-				if (standable(near) || (use.across && counter(near) && standable({near.x - d.x, near.y - d.y}))) {
+				// A marked counter (R109) passes any point behind it to the floor two cells away.
+				if (standable(near) || (((use.across && counter(near)) || (area.counters.count(near) && !solids.count(near))) && standable({near.x - d.x, near.y - d.y}))) {
 					return true;
 				}
 			}

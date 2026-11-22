@@ -124,6 +124,9 @@ typedef enum psiv_travel_kind { PSIV_TRAVEL_PORT, PSIV_TRAVEL_TOWN, PSIV_TRAVEL_
 typedef enum psiv_job_state { PSIV_JOB_AVAILABLE, PSIV_JOB_ACCEPTED, PSIV_JOB_COMPLETED, PSIV_JOB_MISSED } psiv_job_state;
 typedef enum psiv_text_speed { PSIV_TEXT_SLOW, PSIV_TEXT_NORMAL, PSIV_TEXT_FAST, PSIV_TEXT_INSTANT } psiv_text_speed;
 typedef enum psiv_battle_speed { PSIV_BATTLE_X1, PSIV_BATTLE_X1_5, PSIV_BATTLE_X2, PSIV_BATTLE_X3 } psiv_battle_speed;
+/* How much a host lets screen flashes through: reduced softens and limits them, standard limits them, original plays them
+ * as authored. PSIV_FLASH_UNSET: the profile never chose, so its reduced_flash says reduced or standard. */
+typedef enum psiv_flash_level { PSIV_FLASH_UNSET, PSIV_FLASH_REDUCED, PSIV_FLASH_STANDARD, PSIV_FLASH_ORIGINAL } psiv_flash_level;
 typedef enum psiv_reward_multiplier { PSIV_REWARD_X1, PSIV_REWARD_X1_5, PSIV_REWARD_X2 } psiv_reward_multiplier;
 typedef enum psiv_battle_source { PSIV_BATTLE_VISIBLE, PSIV_BATTLE_RANDOM, PSIV_BATTLE_EVENT } psiv_battle_source;
 typedef enum psiv_side { PSIV_SIDE_PARTY, PSIV_SIDE_ENEMY } psiv_side;
@@ -277,6 +280,11 @@ typedef struct psiv_game_info {
 	 * A battle event's effectiveness compares with rules.json effectiveness_baseline or element_baselines instead when
 	 * the data sets them. */
 	int32_t affinity_divisor;
+	/* game.json presentation.flash_default: the psiv_flash_level a new profile starts at (never PSIV_FLASH_UNSET;
+	 * reduced when the data names none), and flash_original: 0 when a host must not offer original at all (it then
+	 * starts a profile whose default is original at reduced). */
+	int32_t flash_default;
+	int32_t flash_original;
 } psiv_game_info;
 
 PSIV_API psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out);
@@ -298,6 +306,10 @@ typedef struct psiv_profile {
 	int32_t effects_volume;
 	/* The leader runs unless the run input is held, which then walks (psiv_update_input; game.json run_speed_percent). */
 	int32_t always_run;
+	/* The psiv_flash_level the player chose; setting one other than PSIV_FLASH_UNSET sets reduced_flash to match. */
+	int32_t flashing;
+	/* 1 once the photosensitivity notice was seen; its answer stands for the warning original asks once. */
+	int32_t flash_notice_seen;
 } psiv_profile;
 
 PSIV_API psiv_status psiv_profile_get(psiv_session* session, psiv_profile* out);
@@ -578,6 +590,17 @@ typedef struct psiv_field_info {
 	int32_t conveyor_progress_ms;
 	/* The directions psiv_can_step allows now: 1 north, 2 east, 4 south, 8 west. */
 	int32_t step_mask;
+	/* Whether the last area entry announced itself (the game.arrive notice, and a host's banner): game.json's arrive_notice
+	 * (always, walked through an exit, or never) and the area's own arrive_notice. */
+	int32_t announce_arrival;
+	/* leader_step_ms, run_step_ms, step_progress_ms, conveyor_step_ms and conveyor_progress_ms in microseconds: exact under
+	 * game.json's step_timing exact, where step_ms may have a fraction and the progress carries the time past the last
+	 * step; the milliseconds times 1000 otherwise. */
+	int64_t leader_step_us;
+	int64_t run_step_us;
+	int64_t step_progress_us;
+	int64_t conveyor_step_us;
+	int64_t conveyor_progress_us;
 } psiv_field_info;
 
 typedef struct psiv_enemy {
@@ -621,7 +644,7 @@ typedef struct psiv_point {
 	/* Talk and step points: their flag conditions hold now. Chests: not opened yet. Shops: open now. Ports: open now
 	 * (a port that its story has not opened yet is not there to see). Rests, helms and gangway cells: 1. */
 	int32_t active;
-	/* Rests: the price. */
+	/* Rests: the price now (per_member rests: times the lineup's size). */
 	int32_t cost;
 	/* Shops: a psiv_shop_kind. */
 	int32_t shop_kind;
@@ -903,6 +926,9 @@ typedef struct psiv_combatant {
 	int32_t flying;
 	/* Enemies: the formation position, from 0, free places counted; -1 for the party side. */
 	int32_t position;
+	/* The level in the combatant's stats: an enemy's enemies.json `stats.level` (1 when the data gives none), a member's
+	 * level, a vehicle's stats level. */
+	int32_t level;
 } psiv_combatant;
 
 typedef struct psiv_battle_info {
@@ -1194,6 +1220,17 @@ typedef struct psiv_status_resist {
 	int32_t percent;
 } psiv_status_resist;
 
+/* One of a character's profile rows (party.json `profile`). key and value are as the data gives them, a text key or a
+ * whole number; key_text and value_text are what to show, the text in the profile's language or the number. */
+typedef struct psiv_profile_row {
+	const char* key;
+	const char* key_text;
+	int32_t key_number;
+	const char* value;
+	const char* value_text;
+	int32_t value_number;
+} psiv_profile_row;
+
 /* What a status screen shows beyond psiv_member. */
 typedef struct psiv_member_detail {
 	const char* id;
@@ -1214,6 +1251,9 @@ typedef struct psiv_member_detail {
 	const psiv_status_resist* status_resists;
 	/* With equipment; see psiv_game_info's magic_defense. */
 	int32_t magic_defense;
+	/* The character's profile rows in the data's order; none when it has no `profile`. */
+	int32_t profile_count;
+	const psiv_profile_row* profile;
 } psiv_member_detail;
 
 /* PSIV_NOT_FOUND for a character not in the roster. */
@@ -1340,11 +1380,19 @@ typedef struct psiv_shop_info {
 	const psiv_inventory_entry* stock;
 	/* A psiv_shop_kind. */
 	int32_t kind;
+	/* The keeper's text key prefix (the area data's `voice`): a host shows VOICE.welcome, .confirm, .thanks and
+	 * .cannot_afford where the tables have them, else its own default lines; "" for the defaults. */
+	const char* voice;
 } psiv_shop_info;
 
 typedef struct psiv_inn_info {
 	const char* id;
+	/* What resting costs now: the area data's cost, times the lineup's size when per_member is set. */
 	int32_t cost;
+	/* As psiv_shop_info's voice. */
+	const char* voice;
+	/* 1 when the price is per member of the lineup. */
+	int32_t per_member;
 } psiv_inn_info;
 
 /* PSIV_NOT_FOUND unless a shop is open. */

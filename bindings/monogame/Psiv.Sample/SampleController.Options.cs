@@ -97,38 +97,37 @@ public sealed partial class SampleController
 		];
 	}
 
-	// The flashing level: `reduced` (the profile's reduced flash: replacements, damping and the flash limit), `standard`
-	// (the flash limit only) and `original` (scripts as authored, no limit), which asks the photosensitivity question the
-	// first time and which the options layout's `flashing_original` 0 leaves out.
-	public enum FlashLevel { Reduced, Standard, Original }
+	// The flashing level (FlashLevel): `reduced` (the profile's reduced flash: replacements, damping and the flash limit),
+	// `standard` (the flash limit only) and `original` (scripts as authored, no limit), which asks the photosensitivity
+	// question unless the notice was seen, and which game.json's `presentation.flash_original` false or the options
+	// layout's `flashing_original` 0 leaves out. A profile that never chose follows its reduced flash.
+	public FlashLevel Flashing => _s.Profile() is var p && p.Flashing != FlashLevel.Unset ? p.Flashing : p.ReducedFlash ? FlashLevel.Reduced : FlashLevel.Standard;
 
-	public FlashLevel Flashing => _s.Profile().ReducedFlash ? FlashLevel.Reduced : _bindings.Flashing == "original" ? FlashLevel.Original : FlashLevel.Standard;
+	private bool OriginalOffered => _s.GameInfo().FlashOriginal && Ui.Param("options", "flashing_original", UiData(), 1) != 0;
 
-	private bool OriginalOffered => _data.FlashOriginalOffered && Ui.Param("options", "flashing_original", UiData(), 1) != 0;
-
-	// A new profile's level in normal play: the data's `flashing.json` default, reduced without one (or when it names
-	// original and the data hides it). Original shows the photosensitivity notice before anything else; reduced says on
-	// the title that the option exists.
+	// A new profile's level in normal play: game.json's `presentation.flash_default`, reduced when it names original and
+	// the data hides original. Original shows the photosensitivity notice before anything else; reduced says on the title
+	// that the option exists.
 	private void ApplyNewProfileFlashing()
 	{
-		string level = _data.FlashDefault is "original" && !_data.FlashOriginalOffered ? "reduced" : _data.FlashDefault ?? "reduced";
-		if (level == "original")
+		GameInfo info = _s.GameInfo();
+		FlashLevel level = info.FlashDefault == FlashLevel.Original && !info.FlashOriginal ? FlashLevel.Reduced : info.FlashDefault;
+		if (level == FlashLevel.Original)
 		{
-			SetFlashing(FlashLevel.Original, confirmed: true);
-			_bindings.OriginalConfirmed = false;
+			Report(_s.SetProfile(_s.Profile() with { Flashing = FlashLevel.Original, ReducedFlash = false, FlashNoticeSeen = false }));
 			_flashNotice = true;
-			_confirm.Choose(SampleText("ui.options.flashing_notice"),
+			_confirm.Choose(T("ui.options.flashing_notice"),
 			[
-				(SampleText("ui.options.flashing.reduced"), () => NoticeAnswer(FlashLevel.Reduced)),
-				(SampleText("ui.options.flashing.standard"), () => NoticeAnswer(FlashLevel.Standard)),
-				(SampleText("ui.options.flashing_keep"), () => NoticeAnswer(FlashLevel.Original)),
+				(T("ui.options.flashing.reduced"), () => NoticeAnswer(FlashLevel.Reduced)),
+				(T("ui.options.flashing.standard"), () => NoticeAnswer(FlashLevel.Standard)),
+				(T("ui.options.flashing_keep"), () => NoticeAnswer(FlashLevel.Original)),
 			], start: 0, back: 2);
 			return;
 		}
-		Report(SetFlashing(level == "reduced" ? FlashLevel.Reduced : FlashLevel.Standard));
-		if (level == "reduced")
+		Report(SetFlashing(level));
+		if (level == FlashLevel.Reduced)
 		{
-			Say(SampleText("ui.title.flashing_notice"));
+			Say(T("ui.title.flashing_notice"));
 		}
 	}
 
@@ -136,7 +135,7 @@ public sealed partial class SampleController
 	private void NoticeAnswer(FlashLevel level)
 	{
 		_flashNotice = false;
-		_bindings.OriginalConfirmed = true;
+		Report(_s.SetProfile(_s.Profile() with { FlashNoticeSeen = true }));
 		Report(SetFlashing(level, confirmed: true));
 		_log($"flashing: {level.ToString().ToLowerInvariant()} from the notice");
 	}
@@ -144,29 +143,23 @@ public sealed partial class SampleController
 	// The photosensitivity notice is up: nothing but it draws or takes input.
 	private bool _flashNotice;
 
-	// Sets the level; `confirmed` stands for the warning's answer (a script's `flashing` verb).
+	// Sets the level in the profile; `confirmed` stands for the warning's answer (the notice, a script's `flashing` verb).
 	public PsivResult SetFlashing(FlashLevel level, bool confirmed = false)
 	{
-		if (level == FlashLevel.Original && !_bindings.OriginalConfirmed && !confirmed)
+		Profile p = _s.Profile();
+		if (level == FlashLevel.Original && !p.FlashNoticeSeen && !confirmed)
 		{
-			_confirm.Ask(SampleText("ui.options.flashing_warning"), () =>
-			{
-				_bindings.OriginalConfirmed = true;
-				Report(SetFlashing(FlashLevel.Original, confirmed: true));
-			});
+			_confirm.Ask(T("ui.options.flashing_warning"), () => Report(SetFlashing(FlashLevel.Original, confirmed: true)));
 			return PsivResult.Success;
 		}
-		_bindings.OriginalConfirmed |= confirmed && level == FlashLevel.Original;
-		_bindings.Flashing = level.ToString().ToLowerInvariant();
-		SaveControls();
-		return _s.SetProfile(_s.Profile() with { ReducedFlash = level == FlashLevel.Reduced });
+		return _s.SetProfile(p with { Flashing = level, ReducedFlash = level == FlashLevel.Reduced, FlashNoticeSeen = p.FlashNoticeSeen || confirmed && level == FlashLevel.Original });
 	}
 
 	private OptionRow FlashingRow()
 	{
 		FlashLevel[] levels = OriginalOffered ? [FlashLevel.Reduced, FlashLevel.Standard, FlashLevel.Original] : [FlashLevel.Reduced, FlashLevel.Standard];
 		int at = Math.Max(0, Array.IndexOf(levels, Flashing));
-		return new(SampleText("ui.options.flashing"), SampleText("ui.options.flashing." + Flashing.ToString().ToLowerInvariant()), SampleText("ui.options.flashing_help"),
+		return new(T("ui.options.flashing"), T("ui.options.flashing." + Flashing.ToString().ToLowerInvariant()), T("ui.options.flashing_help"),
 			by => SetFlashing(levels[(at + by + levels.Length) % levels.Length]));
 	}
 
@@ -177,13 +170,13 @@ public sealed partial class SampleController
 		{
 			yield break;
 		}
-		yield return new(FieldText("ui.options.always_run"), OnOffText(_bindings.AlwaysRun), FieldText("ui.options.always_run_help"),
-			_ => { _bindings.AlwaysRun = !_bindings.AlwaysRun; return SaveFieldOptions(); });
-		yield return new(FieldText("ui.options.interact_prompt"), OnOffText(_bindings.InteractPrompt), FieldText("ui.options.interact_prompt_help"),
+		yield return new(T("ui.options.always_run"), OnOffText(AlwaysRunOn), T("ui.options.always_run_help"),
+			_ => { ToggleAlwaysRun(); return PsivResult.Success; });
+		yield return new(T("ui.options.interact_prompt"), OnOffText(_bindings.InteractPrompt), T("ui.options.interact_prompt_help"),
 			_ => { _bindings.InteractPrompt = !_bindings.InteractPrompt; return SaveFieldOptions(); });
 	}
 
-	// The two options live in controls.json beside the bindings, saved at once like the profile's settings.
+	// The interaction prompt lives in controls.json beside the bindings (the profile has no field for it), saved at once.
 	private PsivResult SaveFieldOptions()
 	{
 		SaveControls();

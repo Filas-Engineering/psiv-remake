@@ -1,5 +1,5 @@
 # The layout items' battle fields and models (make_items_assets.py), with --dev on the front data copy
-# (make_front_data.py): the title's start state and its chosen entries; the top-level step (fight, macro, run) before
+# (make_front_data.py): the title's start state and its chosen entries with the erase list; the top-level step (fight, macro, run) before
 # the members' commands; the command rows as a row of pictures that Left and Right walk (`command_axis` row); the list's kind and index
 # sizing the command window; the acting member's slot; a name window only for a command chosen from a list; the
 # members' status flags and the fallen flag on the strip; the enemies' status icons following the statuses table in the
@@ -17,11 +17,21 @@ shot build/shots/items/title_start.png
 press Space
 wait 2
 expect state uifield.title.start false
-expect state uifield.title.option_ids 5
+expect state uifield.title.option_ids 6
 expect state uifield.title.option_ids.0.text -
 expect state selected Continue
 shot build/shots/items/title_menu.png
-press Down
+# The layout's erase entry opens the erase list, empty on these fresh saves.
+press Down 3
+expect state selected Erase
+press Enter
+wait 2
+expect state selected No saves to erase.
+press Escape
+wait 2
+expect state selected Erase
+press Up 2
+expect state selected New game
 press Enter
 pressuntil Enter Field 800
 cmd walk guide_front

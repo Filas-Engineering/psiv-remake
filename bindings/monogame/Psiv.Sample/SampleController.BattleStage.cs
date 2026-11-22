@@ -603,9 +603,11 @@ public sealed partial class SampleController
 			.Set("name", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Name : item)
 			.Set("cost", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Cost : 0)
 			.Set("uses", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Uses : -1)).ToList() : []);
-		// The enemies standing, by name in the order they first stand, each with how many share it.
-		List<UiContext> groups = [.. _show.All.Where((c, i) => i < all.Count && all[i].Side == Side.Enemy && c.Alive).GroupBy(c => _s.DisplayName(c.Id))
-			.Select(g => new UiContext().Set("name", g.Key).Set("number", g.Count()).Set("text", g.Count() > 1 ? T("ui.common.item_count", g.Key, g.Count()) : g.Key))];
+		// The enemies standing, by name in the order they first stand, each with how many share it and the first one's level.
+		List<UiContext> groups = [.. _show.All.Select((c, i) => (Shown: c, Index: i)).Where(x => x.Index < all.Count && all[x.Index].Side == Side.Enemy && x.Shown.Alive)
+			.GroupBy(x => _s.DisplayName(x.Shown.Id))
+			.Select(g => new UiContext().Set("name", g.Key).Set("number", g.Count()).Set("level", all[g.First().Index].Level)
+				.Set("text", g.Count() > 1 ? T("ui.common.item_count", g.Key, g.Count()) : g.Key))];
 		_probeEnemyGroups = groups.Count == 0 ? "none" : string.Join(", ", groups.Select(g => g.Get("text")));
 		ui.Set("enemy_groups", groups);
 		string? description = MenuDescription(all, target, out bool described);
@@ -668,7 +670,7 @@ public sealed partial class SampleController
 	private string MenuTitle(IReadOnlyList<Combatant> all) => _battle.Phase switch
 	{
 		BattlePhase.Command => _battle.Actor < all.Count ? all[_battle.Actor].Name : "",
-		BattlePhase.Top => SampleText("ui.battle.title.top"),
+		BattlePhase.Top => T("ui.battle.title.top"),
 		BattlePhase.Option => T("ui.battle.command." + _battle.MenuChoice),
 		BattlePhase.Target => T("ui.battle.title.target"),
 		BattlePhase.Macro => T("ui.battle.title.macro"),
@@ -683,7 +685,7 @@ public sealed partial class SampleController
 		return b.Phase switch
 		{
 			BattlePhase.Command when CommandRows() is var rows => ([.. rows.Select(r => r.Text)], [.. rows.Select(r => r.Usable)]),
-			BattlePhase.Top => ([.. TopMenu.Select(t => SampleText("ui.battle.top." + t))], null),
+			BattlePhase.Top => ([.. TopMenu.Select(t => T("ui.battle.top." + t))], null),
 			BattlePhase.Option => (b.Options.Select(OptionText).ToList(), b.Options.Select(o => o.Usable).ToList()),
 			BattlePhase.Target => (b.Targets.Select(t => t < all.Count ? (all[t].Side == Side.Party ? all[t].Name : all[t].Label) : "?").ToList(), null),
 			BattlePhase.Macro => ([.. _s.Macros()], null),
@@ -710,7 +712,7 @@ public sealed partial class SampleController
 		// The top-level step's Macro says so when there are none to choose.
 		if (b.Phase == BattlePhase.Top && _cursor < TopMenu.Length && TopMenu[_cursor] == "macro" && _s.Macros().Count == 0)
 		{
-			return SampleText("ui.battle.no_macros");
+			return T("ui.battle.no_macros");
 		}
 		if (b.Phase == BattlePhase.Target && target >= 0 && target < all.Count && all[target].Side == Side.Enemy)
 		{

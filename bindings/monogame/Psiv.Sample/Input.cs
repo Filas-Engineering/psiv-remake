@@ -191,13 +191,14 @@ public sealed class Bindings
 	// Read only by the real-time field input, so the Controls page and `controls list` show them only while it is on.
 	public static readonly GameAction[] FieldActions = [GameAction.Interact, GameAction.Run, GameAction.RunToggle];
 
-	// The real-time field's two options, kept beside the bindings: run without holding Run, and the interaction prompt.
-	public bool AlwaysRun { get; set; }
+	// The real-time field's interaction prompt, kept beside the bindings; Always run is the profile's.
 	public bool InteractPrompt { get; set; } = true;
-	// The player's flashing level beside the profile's reduced flash (`reduced`, `standard`, `original`; null: never
-	// chosen, so the profile's reduced flash decides), and whether the photosensitivity warning was accepted.
-	public string? Flashing { get; set; }
-	public bool OriginalConfirmed { get; set; }
+
+	// The battle's macro options, kept beside them and written only when set: the macro auto-battle plays every round
+	// (GameSession.SetAutoPlayMacro; "" for the save's auto macro through StartAuto, as before), and whether a macro used
+	// from the battle menu gives each member whose step cannot run core's automatic choice (MacroFallback.Automatic).
+	public string AutoPlayMacro { get; set; } = "";
+	public bool MacroFallbackAutomatic { get; set; }
 
 	private readonly Dictionary<GameAction, List<Keys>> _keys = [];
 	private readonly Dictionary<GameAction, List<Buttons>> _buttons = [];
@@ -308,17 +309,15 @@ public sealed class Bindings
 			}
 			foreach ((string name, JsonNode? entry) in root)
 			{
-				if (name == "flashing" && entry is JsonObject flashing)
-				{
-					string? level = flashing["level"]?.GetValue<string>();
-					bindings.Flashing = level is "reduced" or "standard" or "original" ? level : null;
-					bindings.OriginalConfirmed = flashing["original_confirmed"]?.GetValue<bool>() ?? false;
-					continue;
-				}
 				if (name == "field" && entry is JsonObject options)
 				{
-					bindings.AlwaysRun = options["always_run"]?.GetValue<bool>() ?? false;
 					bindings.InteractPrompt = options["interact_prompt"]?.GetValue<bool>() ?? true;
+					continue;
+				}
+				if (name == "battle" && entry is JsonObject battle)
+				{
+					bindings.AutoPlayMacro = battle["auto_play_macro"]?.GetValue<string>() ?? "";
+					bindings.MacroFallbackAutomatic = battle["macro_fallback"]?.GetValue<string>() == "automatic";
 					continue;
 				}
 				if (!TryName(name, out GameAction action) || entry is not JsonObject fields)
@@ -392,14 +391,13 @@ public sealed class Bindings
 				json.WriteEndObject();
 			}
 			json.WriteStartObject("field");
-			json.WriteBoolean("always_run", AlwaysRun);
 			json.WriteBoolean("interact_prompt", InteractPrompt);
 			json.WriteEndObject();
-			if (Flashing is not null)
+			if (AutoPlayMacro.Length > 0 || MacroFallbackAutomatic)
 			{
-				json.WriteStartObject("flashing");
-				json.WriteString("level", Flashing);
-				json.WriteBoolean("original_confirmed", OriginalConfirmed);
+				json.WriteStartObject("battle");
+				json.WriteString("auto_play_macro", AutoPlayMacro);
+				json.WriteString("macro_fallback", MacroFallbackAutomatic ? "automatic" : "basic_attack");
 				json.WriteEndObject();
 			}
 			json.WriteEndObject();

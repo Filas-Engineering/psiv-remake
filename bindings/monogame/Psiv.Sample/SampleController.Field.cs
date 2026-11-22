@@ -100,6 +100,12 @@ public sealed partial class SampleController
 	private bool _interactQueued;
 	// The session's milliseconds owed to a running step, past the whole ones it was given.
 	private int _runCarry;
+	// With game.json's run_speed_percent the session runs the leader itself: the run input goes to it with every update
+	// (`Update(dt, held, running)`), the step times, the step mask and the belt's progress come from it, and the profile
+	// keeps Always run, so running changes neither play time nor visible enemies. Without it the sample keeps its own run
+	// (the layout's run_speed_percent timing), which gives the session its milliseconds faster.
+	private bool SessionRun => _data.RunSpeedPercent > 0;
+	private bool _running;
 	// The target the interaction prompt points at, by the last update; null when none.
 	private InteractTarget? _promptTarget;
 
@@ -169,10 +175,10 @@ public sealed partial class SampleController
 		}
 		if (input.Pressed(GameAction.RunToggle))
 		{
-			_bindings.AlwaysRun = !_bindings.AlwaysRun;
-			SaveControls();
+			ToggleAlwaysRun();
 		}
-		int percent = _bindings.AlwaysRun != input.Down(GameAction.Run) ? Math.Max(100, Timing("run_speed_percent")) : 100;
+		_running = input.Down(GameAction.Run);
+		int percent = SessionRun ? 100 : AlwaysRunOn != input.Down(GameAction.Run) ? Math.Max(100, Timing("run_speed_percent")) : 100;
 		int left = dtMs;
 		while (_s.FieldInfo() is { } f)
 		{
@@ -189,7 +195,7 @@ public sealed partial class SampleController
 				// Drawn at its end with the session not there yet, it waits; a step the session has not taken in twice its
 				// length (something the guess missed stood in the way) is dropped and the leader glides back.
 				int part = Math.Min(left, (walk.ElapsedMs >= walk.LengthMs ? 2 : 1) * walk.LengthMs - walk.ElapsedMs);
-				if (!Feed(walk.Arrived ? Direction.None : walk.Direction, walk.Arrived ? part : RunMs(part, walk.Percent)))
+				if (!Feed(walk.Arrived ? Direction.None : walk.Direction, walk.Arrived || SessionRun ? part : RunMs(part, walk.Percent)))
 				{
 					return;
 				}
@@ -222,8 +228,8 @@ public sealed partial class SampleController
 			Direction next = _bufferedDirection != Direction.None ? _bufferedDirection : _heldDirections.Count > 0 ? _heldDirections[^1] : Direction.None;
 			_bufferedDirection = Direction.None;
 			// A running belt takes no input.
-			if (next == Direction.None || !f.PlayerControl || _data.BeltMs.GetValueOrDefault(f.AreaId)?.ContainsKey((f.LeaderX, f.LeaderY)) == true ||
-				_s.Field() is not { } view)
+			bool onBelt = SessionRun ? f.ConveyorStepMs > 0 : _data.BeltMs.GetValueOrDefault(f.AreaId)?.ContainsKey((f.LeaderX, f.LeaderY)) == true;
+			if (next == Direction.None || !f.PlayerControl || onBelt || _s.Field() is not { } view)
 			{
 				Carry(left);
 				return;
@@ -233,11 +239,20 @@ public sealed partial class SampleController
 				_s.Face(next);
 			}
 			(int x, int y) = StepFrom(f.LeaderX, f.LeaderY, next);
-			if (!Enterable(view, x, y))
+			if (SessionRun ? (f.StepMask & (1 << (int)next)) == 0 : !Enterable(view, x, y))
 			{
 				// Blocked, or a visible enemy there: the session turns the leader, or starts the battle.
 				Feed(next, left);
 				return;
+			}
+			if (SessionRun)
+			{
+				// The session's own step time, with the run input held or not, from the input it has already spent on it.
+				int length = Math.Max(1, _running ? f.RunStepMs : f.LeaderStepMs);
+				int gone = Math.Clamp(f.StepProgressMs, 0, length - 1);
+				_walk = new WalkStep(next, x, y, gone, length, Math.Max(1, f.StepMs) * 100 / length, led: true);
+				_field.LeaderStep = (x, y, length, gone);
+				continue;
 			}
 			_walk = new WalkStep(next, x, y, 0, Math.Max(1, f.LeaderStepMs * 100 / percent), percent, led: true);
 			_field.LeaderStep = (x, y, _walk.LengthMs, 0);
@@ -249,7 +264,11 @@ public sealed partial class SampleController
 	private bool Feed(Direction held, int ms)
 	{
 		string area = _s.FieldInfo()?.AreaId ?? "";
-		if (ms > 0)
+		if (ms > 0 && SessionRun)
+		{
+			_s.Update(ms, held, _running);
+		}
+		else if (ms > 0)
 		{
 			_s.Update(ms, held);
 		}
@@ -266,6 +285,18 @@ public sealed partial class SampleController
 	private void Carry(int ms)
 	{
 		FieldInfo f = _s.FieldInfo()!;
+		if (SessionRun)
+		{
+			// The belt's own time per cell, from the progress the session has made toward its next step since this one.
+			if (Feed(Direction.None, ms) && _s.FieldInfo() is { } moved && Math.Abs(moved.LeaderX - f.LeaderX) + Math.Abs(moved.LeaderY - f.LeaderY) == 1 &&
+				f.ConveyorStepMs > 0)
+			{
+				int gone = Math.Clamp(moved.ConveyorStepMs > 0 ? moved.ConveyorProgressMs : 0, 0, f.ConveyorStepMs - 1);
+				_walk = new WalkStep(Direction.None, moved.LeaderX, moved.LeaderY, gone, f.ConveyorStepMs, 100, led: false);
+				_field.LeaderStep = (moved.LeaderX, moved.LeaderY, f.ConveyorStepMs, gone);
+			}
+			return;
+		}
 		if (Feed(Direction.None, ms) && _s.FieldInfo() is { } now && Math.Abs(now.LeaderX - f.LeaderX) + Math.Abs(now.LeaderY - f.LeaderY) == 1 &&
 			_data.BeltMs.GetValueOrDefault(f.AreaId)?.TryGetValue((f.LeaderX, f.LeaderY), out int beltMs) == true)
 		{
@@ -284,11 +315,17 @@ public sealed partial class SampleController
 	// What Confirm or Interact acts on: the cell the leader faces when something there answers, else a neighboring
 	// cell that does, the sides before the back (clockwise first), which the leader turns to face. Aboard there is
 	// nothing to interact with; Confirm steps off.
-	private sealed record InteractTarget(int X, int Y, Direction Facing, string Verb);
+	// Under game.json's `interact: "nearby"` it is the session's own target (Session::interactTarget): Ready false when
+	// interact would refuse, Across when used over a counter, Keeper the actor keeping a shop or rest point.
+	private sealed record InteractTarget(int X, int Y, Direction Facing, string Verb, bool Ready = true, bool Across = false, string Keeper = "");
 
 	private InteractTarget? FindInteractTarget(FieldView view)
 	{
 		FieldInfo f = view.Info;
+		if (_data.InteractNearby)
+		{
+			return _s.InteractTarget() is { } t ? new InteractTarget(t.X, t.Y, t.Facing, PromptWord(t.Kind), t.Ready, t.Across, t.Keeper) : null;
+		}
 		if (!f.PlayerControl || f.Aboard.Length > 0)
 		{
 			return null;
@@ -311,28 +348,75 @@ public sealed partial class SampleController
 	{
 		if (view.Info.AreaKind == AreaKind.Field && view.Vehicles.Any(v => !v.Aboard && v.X == x && v.Y == y))
 		{
-			return FieldText("ui.prompt.board");
+			return T("ui.prompt.board");
 		}
 		return view.Points.FirstOrDefault(p => p.X == x && p.Y == y && p.Kind is not (PointKind.Step or PointKind.Gangway or PointKind.Conveyor)) switch
 		{
 			{ Kind: PointKind.Talk, Active: true } => T("ui.hint.talk"),
-			{ Kind: PointKind.Chest, Active: true } => FieldText("ui.prompt.open"),
-			{ Kind: PointKind.Shop, Active: true } => FieldText("ui.prompt.shop"),
-			{ Kind: PointKind.Rest } => FieldText("ui.prompt.rest"),
-			{ Kind: PointKind.Port, Active: true } => FieldText("ui.prompt.travel"),
-			{ Kind: PointKind.Helm } when view.Info.ShipPort.Length > 0 => FieldText("ui.prompt.travel"),
+			{ Kind: PointKind.Chest, Active: true } => T("ui.prompt.open"),
+			{ Kind: PointKind.Shop, Active: true } => T("ui.prompt.shop"),
+			{ Kind: PointKind.Rest } => T("ui.prompt.rest"),
+			{ Kind: PointKind.Port, Active: true } => T("ui.prompt.travel"),
+			{ Kind: PointKind.Helm } when view.Info.ShipPort.Length > 0 => T("ui.prompt.travel"),
 			_ => null,
 		};
 	}
 
+	// The prompt's word for what the session's target is: a sign or other hook with no actor is read.
+	private string PromptWord(InteractKind kind) => T(kind switch
+	{
+		InteractKind.Vehicle => "ui.prompt.board",
+		InteractKind.Port or InteractKind.Helm => "ui.prompt.travel",
+		InteractKind.Talk => "ui.prompt.read",
+		InteractKind.Actor => "ui.prompt.talk",
+		InteractKind.Chest => "ui.prompt.open",
+		InteractKind.Shop => "ui.prompt.shop",
+		_ => "ui.prompt.rest",
+	});
+
+	// Under the `nearby` rule the session turns the leader to its target itself.
 	private void Interact(FieldView view)
 	{
-		if (FindInteractTarget(view) is { } target && target.Facing != view.Info.Facing)
+		InteractTarget? target = FindInteractTarget(view);
+		if (!_data.InteractNearby && target is not null && target.Facing != view.Info.Facing)
 		{
 			_s.Face(target.Facing);
 		}
+		TurnKeeper(view, _data.InteractNearby ? target?.Keeper : _s.InteractTarget()?.Keeper);
 		Report(_s.Interact());
 	}
+
+	// A shop's or rest point's keeper turns toward the leader while the prompt points at its counter and while its menu is
+	// open; anyone else faces as the session says.
+	private void TurnKeeper(FieldView view, string? keeper)
+	{
+		_field.FacingOverrides.Clear();
+		if (keeper is { Length: > 0 } && view.Actors.FirstOrDefault(a => a.Id == keeper) is { } k)
+		{
+			int dx = view.Info.LeaderX - k.X, dy = view.Info.LeaderY - k.Y;
+			if (dx != 0 || dy != 0)
+			{
+				_field.FacingOverrides[keeper] = Math.Abs(dx) > Math.Abs(dy) ? (dx > 0 ? Direction.East : Direction.West) : (dy > 0 ? Direction.South : Direction.North);
+			}
+		}
+	}
+
+	// The profile's Always run, for the session's run (game.json's run_speed_percent) and the sample's own alike.
+	private void ToggleAlwaysRun()
+	{
+		Profile p = _s.Profile();
+		Report(_s.SetProfile(p with { AlwaysRun = !p.AlwaysRun }));
+	}
+
+	private bool AlwaysRunOn => _s.Profile().AlwaysRun;
+
+	// How the field draws an actor now: its figure (`enemy ID`, `look NAME` or `own`), the library's animation with its
+	// milliseconds left and in all, and `hidden` or `removed`.
+	private string ActorLookProbe(string id) => _s.Field()?.Actors.FirstOrDefault(a => a.Id == id) is { } a
+		? (a.SpriteEnemy.Length > 0 ? "enemy " + a.SpriteEnemy : a.Look.Length > 0 ? "look " + a.Look : "own") +
+			(a.Animation.Length > 0 && a.AnimationTotalMs > 0 ? $" {a.Animation} {a.AnimationMs}/{a.AnimationTotalMs}" : "") +
+			(a.Removal != ActorRemoval.None ? " removed" : a.Visible ? "" : " hidden")
+		: "-";
 
 	// The real-time field input's probes: the mode, the leader as drawn in field pixels, the step being drawn (direction,
 	// cell, time gone of its length, the session's pace), the direction buffered for after it, the directions held (the
@@ -348,9 +432,11 @@ public sealed partial class SampleController
 			"walkstep" => _walk is { } w ? $"{(w.Led ? Name(w.Direction) : "carried")} {w.X} {w.Y} {Math.Min(w.ElapsedMs, w.LengthMs)}/{w.LengthMs} {w.Percent}%" : "-",
 			"walkbuffer" => _bufferedDirection == Direction.None ? "-" : Name(_bufferedDirection),
 			"held" => _heldDirections.Count == 0 ? "-" : string.Join(" ", _heldDirections.Select(Name)),
-			"interactprompt" => _promptTarget is { } p ? $"{p.Verb} at {p.X} {p.Y}" : "none",
-			"interacttarget" => _s.Field() is { } view && FindInteractTarget(view) is { } t ? $"{t.Verb} at {t.X} {t.Y} facing {Name(t.Facing)}" : "none",
-			"always_run" => _bindings.AlwaysRun ? "on" : "off",
+			"interactprompt" => _promptTarget is { } p ? $"{p.Verb} at {p.X} {p.Y}" + (p.Ready ? "" : " refused") : "none",
+			"interacttarget" => _s.Field() is { } view && FindInteractTarget(view) is { } t
+				? $"{t.Verb} at {t.X} {t.Y} facing {Name(t.Facing)}" + (t.Across ? " across" : "") + (t.Keeper.Length > 0 ? $" kept by {t.Keeper}" : "") + (t.Ready ? "" : " refused")
+				: "none",
+			"always_run" => AlwaysRunOn ? "on" : "off",
 			_ => _bindings.InteractPrompt ? "on" : "off",
 		};
 	}
@@ -445,6 +531,11 @@ public sealed partial class SampleController
 		if (_walk is null && _bindings.InteractPrompt && _s.Mode == Mode.Field && _s.Field() is { } view)
 		{
 			_promptTarget = FindInteractTarget(view);
+			TurnKeeper(view, _data.InteractNearby ? _promptTarget?.Keeper : _s.InteractTarget()?.Keeper);
+		}
+		else if (_s.Mode == Mode.Field)
+		{
+			_field.FacingOverrides.Clear();
 		}
 	}
 
@@ -492,6 +583,7 @@ public sealed partial class SampleController
 			s.Image(art.Pointer, px - cell / 2, py - cell - cell / 6 + bob, cell, cell, Color.White);
 		}
 		ctx.Set("prompt_visible", _promptTarget is not null)
+			.Set("prompt_ready", _promptTarget?.Ready ?? true)
 			.Set("prompt_key", _promptTarget is null ? "" : Hint(GameAction.Confirm))
 			.Set("prompt_text", _promptTarget?.Verb ?? "")
 			.Set("prompt_x", px)

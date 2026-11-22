@@ -1753,11 +1753,14 @@ void Session::wanderActors(int ms) {
 			place.wanderPauseMs = std::max(0, place.wanderPauseMs - ms);
 			continue;
 		}
+		// Progress in milliseconds times percent: a step is the area's step time times 100 (to the hundredth of a millisecond
+		// under `exact`, which carries the rest).
 		place.wanderProgress += ms * rules.speedPercent;
-		if (place.wanderProgress < here->stepMs * 100) {
+		const int wanderStep = data_.config.exactSteps ? static_cast<int>(std::max<std::int64_t>(1, here->stepUs / 10)) : here->stepMs * 100;
+		if (place.wanderProgress < wanderStep) {
 			continue;
 		}
-		place.wanderProgress = 0;
+		place.wanderProgress = data_.config.exactSteps ? std::min(place.wanderProgress - wanderStep, wanderStep - 1) : 0;
 		static const Facing kTurns[] = {Facing::North, Facing::East, Facing::South, Facing::West};
 		const Facing f = kTurns[world_.encounterStream.range(0, 3)];
 		const Cell from = place.cell;
@@ -2142,6 +2145,9 @@ rules::Message Session::setProfile(const Profile& profile) {
 		return refusal("unknown_language", {profile.textLanguage});
 	}
 	profile_ = profile;
+	if (profile_.flashing != FlashLevel::Unset) {
+		profile_.reducedFlash = profile_.flashing == FlashLevel::Reduced;
+	}
 	if (!store_) {
 		return {};
 	}
@@ -2386,10 +2392,19 @@ rules::Message Session::loadText(const std::string& text, const std::string& slo
 	clearPending_ = false;
 	loadHooksPending_ = false;
 	loadHooksFired_.clear();
-	stepProgressMs_ = 0;
+	stepProgressUs_ = 0;
+	conveyorUs_ = 0;
 	tickRemainderMs_ = 0;
+	if (data_.config.exactSteps) {
+		stepProgressUs_ = world_.stepCarryUs;
+		conveyorUs_ = world_.conveyorCarryUs;
+		tickRemainderMs_ = world_.tickCarryMs;
+	}
+	world_.stepCarryUs = world_.conveyorCarryUs = 0;
+	world_.tickCarryMs = 0;
 	modes_.transition(Mode::Field);
 	const Area* a = area();
+	arrivalAnnounced_ = a->arriveNotice && data_.config.arriveNotice == ArriveNotice::Always;
 	if (pacingOn()) {
 		pacing_.enterArea(a->id, a->kind == AreaKind::Dungeon);
 	}
@@ -2504,16 +2519,17 @@ void Session::tickField(const FieldInput& input) {
 		}
 	}
 	if (!belt) {
-		conveyorMs_ = 0;
+		conveyorUs_ = 0;
 	}
 	if (belt && world_.playerControl) {
 		// A belt carries the party one cell per step and takes no input while it does.
-		stepProgressMs_ = 0;
-		conveyorMs_ += tick;
+		stepProgressUs_ = 0;
+		conveyorUs_ += tick * 1000LL;
 		const Cell target = stepFrom(world_.position, belt->direction);
 		const bool blockedByEnemy = std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; });
-		if (conveyorMs_ >= belt->stepMs) {
-			conveyorMs_ = 0;
+		const std::int64_t beltUs = data_.config.exactSteps ? belt->stepUs : belt->stepMs * 1000LL;
+		if (conveyorUs_ >= beltUs) {
+			conveyorUs_ = data_.config.exactSteps ? std::min(conveyorUs_ - beltUs, beltUs - 1) : 0;
 			if (canEnter(a, target) && !blockedByEnemy) {
 				arrive(target);
 				if (mode() != Mode::Field) {
@@ -2535,28 +2551,29 @@ void Session::tickField(const FieldInput& input) {
 			}
 		}
 		if (const Hook* touch = vehicle ? nullptr : touchHookAt(target)) {
-			stepProgressMs_ = 0;
+			stepProgressUs_ = 0;
 			startEvent(touch->event);
 			if (mode() != Mode::Field) {
 				return;
 			}
 		}
 		const bool blockedByEnemy = std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; });
-		const int stepMs = leaderStepMs(input.running);
+		// Under `exact` the time past the step carries into the next (a step shorter than a tick still takes one).
+		const std::int64_t stepUs = data_.config.exactSteps ? leaderStepUs(input.running) : leaderStepMs(input.running) * 1000LL;
 		if (canEnter(a, target) && !blockedByEnemy) {
-			stepProgressMs_ += tick;
-			if (stepProgressMs_ >= stepMs) {
-				stepProgressMs_ = 0;
+			stepProgressUs_ += tick * 1000LL;
+			if (stepProgressUs_ >= stepUs) {
+				stepProgressUs_ = data_.config.exactSteps ? std::min(stepProgressUs_ - stepUs, stepUs - 1) : 0;
 				arrive(target);
 				if (mode() != Mode::Field) {
 					return;
 				}
 			}
 		} else {
-			stepProgressMs_ = 0;
+			stepProgressUs_ = 0;
 		}
 	} else {
-		stepProgressMs_ = 0;
+		stepProgressUs_ = 0;
 	}
 	// After the leader's step, in this order: wandering actors, visible enemies, background events.
 	wanderActors(tick);
@@ -2618,6 +2635,7 @@ void Session::arrive(Cell cell) {
 	if (const Port* boarded = a.gangwayAt(cell) ? data_.port(world_.shipPort, &shore) : nullptr) {
 		const std::string marker = boarded->marker;
 		emit(OutputKind::Notice, "game.left_ship");
+		arrivalWalked_ = true;
 		enterArea(shore->id, marker, from);
 		settleField();
 		return;
@@ -2637,6 +2655,7 @@ void Session::arrive(Cell cell) {
 				emit(OutputKind::Notice, "game.vehicle_parked", {id});
 			}
 		}
+		arrivalWalked_ = true;
 		enterArea(e.toArea, e.toMarker, from);
 		settleField();
 		return;
@@ -2711,7 +2730,7 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 		world_.vehicles[world_.aboard].cell = cell;
 	}
 	world_.visitedAreas.insert(a->id);
-	stepProgressMs_ = 0;
+	stepProgressUs_ = 0;
 	if (encounterMode() == EncounterMode::Visible) {
 		spawnVisibleEnemies(world_, *a);
 	} else {
@@ -2729,7 +2748,12 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 			autosaveReason_ = kAreaEntry;
 		}
 	}
-	emit(OutputKind::Notice, "game.arrive", {a->id});
+	const ArriveNotice rule = data_.config.arriveNotice;
+	arrivalAnnounced_ = a->arriveNotice && (rule == ArriveNotice::Always || (rule == ArriveNotice::Walked && arrivalWalked_));
+	arrivalWalked_ = false;
+	if (arrivalAnnounced_) {
+		emit(OutputKind::Notice, "game.arrive", {a->id});
+	}
 }
 
 void Session::settleField() {
@@ -2762,7 +2786,7 @@ void Session::settleField() {
 	}
 	if (ambientPending_) {
 		ambientPending_ = false;
-		const TalkSet* set = profile_.ambientTalk ? talkSet() : nullptr;
+		const TalkSet* set = profile_.ambientTalk && data_.config.partyTalkAmbient ? talkSet() : nullptr;
 		if (set && world_.playerControl && !world_.ambientHeard.count(set->id + "@" + world_.area) && speak(*set, OutputKind::Ambient)) {
 			world_.ambientHeard.insert(set->id + "@" + world_.area);
 		}
@@ -2780,10 +2804,27 @@ void Session::settleField() {
 	}
 }
 
+std::int64_t Session::leaderStepUs(bool running) const {
+	const Area* a = area();
+	if (!a) {
+		return 0;
+	}
+	if (const FieldVehicle* vehicle = riding()) {
+		return std::max<std::int64_t>(1, a->stepUs * 100 / vehicle->speedPercent);
+	}
+	if (data_.config.runSpeedPercent > 0 && running != profile_.alwaysRun) {
+		return std::max<std::int64_t>(1, a->stepUs * 100 / data_.config.runSpeedPercent);
+	}
+	return a->stepUs;
+}
+
 int Session::leaderStepMs(bool running) const {
 	const Area* a = area();
 	if (!a) {
 		return 0;
+	}
+	if (data_.config.exactSteps) {
+		return static_cast<int>(std::max<std::int64_t>(1, (leaderStepUs(running) + 500) / 1000));
 	}
 	if (const FieldVehicle* vehicle = riding()) {
 		return std::max(1, a->stepMs * 100 / vehicle->speedPercent);
@@ -2995,6 +3036,48 @@ std::optional<InteractTarget> Session::pointAt(const Area& a, Cell cell, bool& a
 	return std::nullopt;
 }
 
+std::optional<InteractTarget> Session::beyondCounter(const Area& a, Cell cell) const {
+	bool acrossable = false;
+	std::optional<InteractTarget> t = pointAt(a, cell, acrossable);
+	if (!t) {
+		const auto keeps = [&](const std::string& keeper) {
+			if (keeper.empty()) {
+				return false;
+			}
+			for (const ActorView& actor : actorsHere()) {
+				if (actor.id == keeper && actor.visible && actor.cell == cell) {
+					return true;
+				}
+			}
+			return false;
+		};
+		for (const Shop& shop : a.shops) {
+			if (shop.at && keeps(shop.keeper)) {
+				t = InteractTarget{};
+				t->kind = InteractKind::Shop;
+				t->id = shop.id;
+				t->cell = *shop.at;
+				t->ready = shopOpen(shop);
+				t->keeper = shop.keeper;
+				break;
+			}
+		}
+		for (const RestPoint& rest : a.rests) {
+			if (!t && rest.at && keeps(rest.keeper)) {
+				t = InteractTarget{};
+				t->kind = InteractKind::Rest;
+				t->id = rest.id;
+				t->cell = *rest.at;
+				t->keeper = rest.keeper;
+			}
+		}
+	}
+	if (t) {
+		t->across = true;
+	}
+	return t;
+}
+
 std::optional<InteractTarget> Session::interactTarget() const {
 	if (mode() != Mode::Field || !world_.playerControl || !world_.aboard.empty()) {
 		return std::nullopt;
@@ -3005,6 +3088,10 @@ std::optional<InteractTarget> Session::interactTarget() const {
 		bool acrossable = false;
 		const Cell next = stepFrom(world_.position, direction);
 		std::optional<InteractTarget> t = pointAt(a, next, acrossable);
+		// A marked counter (R109): whatever stands behind it, used as if faced.
+		if (!t && a.counters.count(next) && !standing.count(next)) {
+			t = beyondCounter(a, stepFrom(next, direction));
+		}
 		// A counter: a cell straight ahead that is not floor and holds nothing, with a point beyond it.
 		if (!t && a.inside(next) && a.rows[next.y][next.x] != '.' && !a.exitAt(next) && !standing.count(next)) {
 			t = pointAt(a, stepFrom(next, direction), acrossable);
@@ -3044,6 +3131,12 @@ std::optional<InteractTarget> Session::interactAt(Cell cell) const {
 		bool acrossable = false;
 		const Cell next = stepFrom(world_.position, direction);
 		std::optional<InteractTarget> t = next == cell ? pointAt(a, next, acrossable) : std::nullopt;
+		if (!t && a.counters.count(next) && !standing.count(next) && !pointAt(a, next, acrossable)) {
+			t = beyondCounter(a, stepFrom(next, direction));
+			if (t && t->cell != cell && !(t->keeper.size() && stepFrom(next, direction) == cell)) {
+				t.reset();
+			}
+		}
 		if (!t && stepFrom(next, direction) == cell && !pointAt(a, next, acrossable) && a.inside(next) && a.rows[next.y][next.x] != '.' && !a.exitAt(next) &&
 			!standing.count(next)) {
 			t = pointAt(a, cell, acrossable);
@@ -3067,14 +3160,19 @@ FieldMotion Session::fieldMotion() const {
 	if (mode() != Mode::Field || !a) {
 		return m;
 	}
-	m.stepProgressMs = stepProgressMs_;
+	m.stepProgressUs = stepProgressUs_;
+	m.stepProgressMs = static_cast<int>(stepProgressUs_ / 1000);
 	m.stepMs = leaderStepMs(false);
 	m.runStepMs = leaderStepMs(true);
+	m.stepUs = data_.config.exactSteps ? leaderStepUs(false) : m.stepMs * 1000LL;
+	m.runStepUs = data_.config.exactSteps ? leaderStepUs(true) : m.runStepMs * 1000LL;
 	for (const Conveyor& c : a->conveyors) {
 		const bool holds = (c.requireFlag.empty() || world_.flag(c.requireFlag)) && (c.blockFlag.empty() || !world_.flag(c.blockFlag));
 		if (holds && std::find(c.cells.begin(), c.cells.end(), world_.position) != c.cells.end()) {
 			m.conveyorStepMs = c.stepMs;
-			m.conveyorProgressMs = conveyorMs_;
+			m.conveyorProgressMs = static_cast<int>(conveyorUs_ / 1000);
+			m.conveyorStepUs = data_.config.exactSteps ? c.stepUs : c.stepMs * 1000LL;
+			m.conveyorProgressUs = conveyorUs_;
 		}
 	}
 	int bit = 1;
@@ -3161,7 +3259,7 @@ rules::Message Session::interact() {
 		modes_.transition(Mode::Menu);
 		menuKind_ = MenuKind::Inn;
 		innId_ = rest.id;
-		emit(OutputKind::Notice, "game.inn_offer", {std::to_string(rest.cost)});
+		emit(OutputKind::Notice, "game.inn_offer", {std::to_string(restCost(rest))});
 		return {};
 	}
 	}
@@ -3226,7 +3324,7 @@ rules::Message Session::board() {
 	place.facing = world_.facing;
 	place.homeArea = place.area;
 	place.home = place.cell;
-	stepProgressMs_ = 0;
+	stepProgressUs_ = 0;
 	emit(OutputKind::Notice, "game.boarded", {id});
 	return {};
 }
@@ -3256,7 +3354,7 @@ rules::Message Session::leaveVehicle() {
 			world_.aboard.clear();
 			world_.position = c;
 			world_.facing = f;
-			stepProgressMs_ = 0;
+			stepProgressUs_ = 0;
 			emit(OutputKind::Notice, "game.left_vehicle", {id});
 			return {};
 		}
@@ -3283,7 +3381,7 @@ rules::Message Session::callVehicle(const FieldVehicle& vehicle) {
 	place.homeArea = place.area;
 	place.home = place.cell;
 	world_.aboard = vehicle.id;
-	stepProgressMs_ = 0;
+	stepProgressUs_ = 0;
 	modes_.transition(Mode::Field);
 	menuKind_ = MenuKind::None;
 	emit(OutputKind::Notice, "game.vehicle_called", {vehicle.id});
@@ -4079,6 +4177,11 @@ void Session::enterGameOver() {
 SaveFile Session::makeSave(bool autosave) const {
 	SaveFile save;
 	save.world = world_;
+	if (data_.config.exactSteps && mode() == Mode::Field) {
+		save.world.stepCarryUs = stepProgressUs_;
+		save.world.conveyorCarryUs = conveyorUs_;
+		save.world.tickCarryMs = tickRemainderMs_;
+	}
 	save.autosave = autosave;
 	save.contentHash = data_.contentHash;
 	save.writeTime = options_.clock ? options_.clock() : 0;
@@ -4270,8 +4373,12 @@ rules::Message Session::sell(const std::string& id, int count) {
 }
 
 // Rest for the whole roster, active or not (FLD-034). A null point is a free rest.
+int Session::restCost(const RestPoint& point) const {
+	return point.perMember ? point.cost * static_cast<int>(world_.lineup.size()) : point.cost;
+}
+
 rules::Message Session::payRest(const RestPoint* point) {
-	const int cost = point ? point->cost : 0;
+	const int cost = point ? restCost(*point) : 0;
 	if (world_.money < cost) {
 		return refusal("no_money");
 	}
@@ -4820,6 +4927,7 @@ std::optional<MemberDetail> Session::memberDetail(const std::string& member) con
 	detail.stats = combatant.stats;
 	detail.attackElement = combatant.attackElement;
 	detail.statusResist = combatant.statusResist;
+	detail.profile = data_.db.character(member)->profile;
 	for (const auto& [slot, id] : m->equipment) {
 		if (const rules::EquipmentDef* piece = data_.db.equipmentPiece(id)) {
 			detail.equipmentBonus[slot] = piece->bonus;

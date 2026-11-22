@@ -185,7 +185,8 @@ public sealed partial class SampleController
 		return (left, right);
 	}
 
-	// The profile rows the menu_status layout's `profile` lists (every one by default), each `key`, `label` and `value`.
+	// The profile rows the menu_status layout's `profile` lists (every one by default), each `key`, `label` and `value`;
+	// `data` stands for the character's party.json rows, keyed by the data's own key.
 	private List<UiContext> ProfileRows(Member m, MemberDetail d)
 	{
 		string Value(string key) => key switch
@@ -212,10 +213,12 @@ public sealed partial class SampleController
 		string Label(string key) => key switch
 		{
 			"attack_element" => T("ui.status.attack_element"),
-			"name" or "level" or "experience" or "experience_next" or "kind" or "hp" or "tp" => SampleText("ui.status.profile." + key),
+			"name" or "level" or "experience" or "experience_next" or "kind" or "hp" or "tp" => T("ui.status.profile." + key),
 			_ => T("ui.stat." + key),
 		};
-		return [.. (Layout.Screen("menu_status").Profile ?? [.. UiFields.ProfileKeys]).Select(key => new UiContext().Set("key", key).Set("label", Label(key)).Set("value", Value(key)))];
+		return [.. (Layout.Screen("menu_status").Profile ?? [.. UiFields.ProfileKeys]).SelectMany(key => key == "data"
+			? (d.Profile ?? []).Select(r => new UiContext().Set("key", r.Key).Set("label", r.KeyText).Set("value", r.ValueText))
+			: [new UiContext().Set("key", key).Set("label", Label(key)).Set("value", Value(key))])];
 	}
 
 	private List<(string Label, string Value)> StatusRows(string memberId)

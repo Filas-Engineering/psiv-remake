@@ -447,6 +447,30 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA)
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/field_data/game/data --saves $(BUILD)/sample_field_actors_saves \
 		--script $(SAMPLE_SCRIPTS)/field_actors.txt --frames 900 > $(BUILD)/sample_field_actors_headless.txt || (cat $(BUILD)/sample_field_actors_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_field_actors_headless.txt
+	# The library's newer field state (scripts/make_rules_data.py's copy of the interaction data and of the test assets):
+	# actors drawn from its state, the nearby prompt, running, closed exits, arrival notices, exact step times, music by
+	# flag and by vehicle, the macro editor's vehicle and piece steps and battle options, the title's Erase; the keepers' copy
+	# (profile rows, per-member rest, keeper voices, an enemy's level); then background events, wanderers, a visible enemy
+	# as an actor and the credits on the background data copy.
+	rm -rf $(BUILD)/sample_rules_cellar_saves $(BUILD)/sample_rules_macros_saves $(BUILD)/sample_rules_title_saves $(BUILD)/sample_rules_yard_saves \
+		$(BUILD)/sample_rules_keepers_saves
+	python3 -I $(SAMPLE_SCRIPTS)/make_rules_data.py $(BUILD)/interact_data $(BUILD)/rules_data --assets $(BUILD)/test_assets $(BUILD)/rules_assets \
+		--keepers $(BUILD)/keepers_data $(BUILD)/keepers_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/rules_data/game/data --dev --assets $(BUILD)/rules_assets --saves $(BUILD)/sample_rules_cellar_saves \
+		--script $(SAMPLE_SCRIPTS)/rules_cellar.txt --frames 1600 > $(BUILD)/sample_rules_cellar_headless.txt || (cat $(BUILD)/sample_rules_cellar_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_rules_cellar_headless.txt
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/rules_data/game/data --dev --saves $(BUILD)/sample_rules_macros_saves \
+		--script $(SAMPLE_SCRIPTS)/rules_macros.txt --frames 3000 > $(BUILD)/sample_rules_macros_headless.txt || (cat $(BUILD)/sample_rules_macros_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_rules_macros_headless.txt
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/rules_data/game/data --assets $(BUILD)/rules_assets --saves $(BUILD)/sample_rules_title_saves \
+		--script $(SAMPLE_SCRIPTS)/rules_title.txt --frames 900 > $(BUILD)/sample_rules_title_headless.txt || (cat $(BUILD)/sample_rules_title_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_rules_title_headless.txt
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/keepers_data/game/data --dev --assets $(BUILD)/keepers_assets --saves $(BUILD)/sample_rules_keepers_saves \
+		--script $(SAMPLE_SCRIPTS)/rules_keepers.txt --frames 2000 > $(BUILD)/sample_rules_keepers_headless.txt || (cat $(BUILD)/sample_rules_keepers_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_rules_keepers_headless.txt
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --dev --saves $(BUILD)/sample_rules_yard_saves \
+		--script $(SAMPLE_SCRIPTS)/rules_yard.txt --frames 2400 > $(BUILD)/sample_rules_yard_headless.txt || (cat $(BUILD)/sample_rules_yard_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_rules_yard_headless.txt
 	rm -rf $(BUILD)/sample_assets_saves
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_assets_saves --assets $(BUILD)/test_assets --script $(SAMPLE_ASSETS_SCRIPT) --frames 2000 > $(BUILD)/sample_assets_headless.txt \
 		|| (cat $(BUILD)/sample_assets_headless.txt; exit 1)
@@ -541,8 +565,8 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA)
 	# The flashing level of a new profile in normal play (--play-defaults): reduced with the title's notice on the shipped
 	# data; with a data copy whose default is original, the photosensitivity notice first, Standard chosen, or kept.
 	python3 -I $(SAMPLE_SCRIPTS)/make_flash_data.py $(GAME)/data $(CORE)/data $(BUILD)/flash_bad_data bright
-	! $(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/flash_bad_data/game/data --check-assets --assets $(BUILD)/export > $(BUILD)/check_flash_data.txt
-	grep -q "data: flashing.json: default: must be reduced, standard or original" $(BUILD)/check_flash_data.txt
+	! $(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/flash_bad_data/game/data --check-assets --assets $(BUILD)/export > $(BUILD)/check_flash_data.txt 2>&1
+	grep -q "flash_default 'bright' must be reduced, standard or original" $(BUILD)/check_flash_data.txt
 	python3 -I $(SAMPLE_SCRIPTS)/make_flash_data.py $(GAME)/data $(CORE)/data $(BUILD)/flash_data original
 	@for run in flashing_new:$(GAME)/data flashing_notice:$(BUILD)/flash_data/game/data flashing_notice_keep:$(BUILD)/flash_data/game/data; do \
 		name=$${run%%:*}; data=$${run#*:}; \

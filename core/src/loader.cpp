@@ -1068,6 +1068,40 @@ void parseGrowthTables(Reader& reader, const JsonValue& entry, CharacterDef& cha
 	}
 }
 
+// A text key or a whole number for each side of each row; the game checks the keys against its text tables.
+void parseProfile(Reader& reader, const JsonValue& entry, std::vector<ProfileRow>& out) {
+	const JsonValue* list = entry.find("profile");
+	if (!list) {
+		return;
+	}
+	if (list->type != JsonValue::Type::Array) {
+		reader.fail(*list, "load.profile_not_list", {});
+		return;
+	}
+	const auto side = [&](const JsonValue& row, const char* key, ProfileText& text) {
+		const JsonValue* v = row.find(key);
+		if (v && v->type == JsonValue::Type::String && !v->string.empty()) {
+			text.text = v->string;
+		} else if (v && v->type == JsonValue::Type::Number && v->number == std::floor(v->number) && std::abs(v->number) <= 999999999) {
+			text.text = std::to_string(static_cast<long long>(v->number));
+			text.number = true;
+		} else {
+			reader.fail(v ? *v : row, "load.profile_side", {key});
+		}
+	};
+	for (const JsonValue& row : list->items) {
+		if (row.type != JsonValue::Type::Object) {
+			reader.fail(row, "load.profile_not_list", {});
+			continue;
+		}
+		reader.rejectUnknownKeys(row, {"key", "value"});
+		ProfileRow r;
+		side(row, "key", r.key);
+		side(row, "value", r.value);
+		out.push_back(r);
+	}
+}
+
 void parseCharacters(Reader& reader, const JsonValue& root, Database& db) {
 	for (const JsonValue* entry : reader.objects(root, "characters", true)) {
 		CharacterDef character;
@@ -1076,7 +1110,7 @@ void parseCharacters(Reader& reader, const JsonValue& root, Database& db) {
 		}
 		reader.setContext("character '" + character.id + "'");
 		reader.rejectUnknownKeys(*entry, {"id", "name", "base", "growth", "basic_attack", "abilities", "learns", "affinities", "status_resist", "equip", "equipment", "kind",
-			"vulnerable", "teachable", "experience_table", "level_stats"});
+			"vulnerable", "teachable", "experience_table", "level_stats", "profile"});
 		reader.string(*entry, "name", character.name);
 		readAbilityList(reader, db, *entry, character.teachable, false, "teachable");
 		reader.boolean(*entry, "vulnerable", character.vulnerable);
@@ -1088,6 +1122,7 @@ void parseCharacters(Reader& reader, const JsonValue& root, Database& db) {
 		parseAffinities(reader, db, *entry, character.affinities);
 		parseStatusResist(reader, db, *entry, character.statusResist);
 		parseCharacterEquipment(reader, db, *entry, character);
+		parseProfile(reader, *entry, character.profile);
 		insertUnique(db.characters, character.id, character, reader, *entry);
 		reader.setContext("");
 	}

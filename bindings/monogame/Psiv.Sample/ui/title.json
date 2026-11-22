@@ -11,6 +11,9 @@
 			{"type": "text", "visible": "game_over", "key": "ui.title.fallen", "x": "-box.x", "w": "W", "align": "center", "y": "t(96)", "color": "bad"},
 			{"type": "rows", "items": "options", "selected": "cursor", "x": 80, "y": "t(132)", "w": "cw - 140", "row_height": "t(32)", "height": "t(28)"}
 		]},
+		{"name": "erase", "visible": "erasing", "anchor": "center", "z": 10, "w": 640, "h": "t(70) + len(erase_rows) * t(32)", "frame": "panel", "title": "ui.title.erase", "elements": [
+			{"type": "rows", "items": "erase_rows", "selected": "erase_cursor", "x": 40, "y": "t(36)", "w": "cw - 80", "row_height": "t(32)", "height": "t(28)"}
+		]},
 		{"name": "corner", "elements": [
 			{"type": "text", "value": "version", "w": "W - 12", "align": "right", "y": 8, "style": "small_dim"},
 			{"type": "slot", "slot": "toasts"}

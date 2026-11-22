@@ -485,3 +485,20 @@ TEST(loaderChecksTravelEffects) {
 		expectError(files, "ability 'outpath' has a travel effect, which only party members use");
 	}
 }
+
+TEST(loaderReadsCharacterProfileRows) {
+	auto files = fixtures::dataTexts();
+	replaceOnce(files["party.json"], "\"id\": \"fighter\",", "\"id\": \"fighter\", \"profile\": [{\"key\": \"profile.age\", \"value\": 19}, {\"key\": 3, \"value\": \"profile.home\"}],");
+	const Result<Database> loaded = loadDatabaseFromTexts(files);
+	CHECK(loaded.ok());
+	if (loaded.ok()) {
+		const std::vector<ProfileRow>& rows = loaded.value->characters.at("fighter").profile;
+		CHECK_EQ(rows.size(), std::size_t(2));
+		CHECK(rows[0].key.text == "profile.age" && !rows[0].key.number && rows[0].value.text == "19" && rows[0].value.number);
+		CHECK(rows[1].key.text == "3" && rows[1].key.number && rows[1].value.text == "profile.home" && !rows[1].value.number);
+	}
+	replaceOnce(files["party.json"], "\"value\": 19", "\"value\": 1.5");
+	expectError(files, "character 'fighter': profile row's value must be a text key or a whole number");
+	replaceOnce(files["party.json"], "\"value\": 1.5", "\"value\": 19, \"note\": 1");
+	expectError(files, "unknown field 'note'");
+}

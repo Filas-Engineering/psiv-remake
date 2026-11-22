@@ -36,17 +36,19 @@ Every problem in a map is printed as `MAP.tmj: text`, all of them in one run, an
 | `id` | string, required | `id` |
 | `kind` | string | `kind` (`town`, `field`, `dungeon`, `vessel`) |
 | `encounter_mode` | string | `encounter_mode` (`visible`, `random`) |
-| `step_ms` | int | `step_ms` |
+| `step_ms` | int or float | `step_ms` (a float keeps a fraction of a millisecond) |
 | `music` | string | `music` (an audio id from `game.json`) |
 | `region` | string | `region` (the world or region the area belongs to) |
 | `arrival` | string | `arrival` (a town's marker where a return to it lands) |
 | `dungeon_exit` | string holding a JSON object | `dungeon_exit` (a dungeon's way out: `{"area": "saltgrass", "marker": "east_gate", "facing": "west"}`, or `at` `[x, y]` in place of `marker`) |
+| `arrive_notice` | bool | `arrive_notice` (false: entering the area announces nothing) |
+| `counters` | string holding a JSON list | `counters` (cells marked as counters besides the `=` tiles: `[[4, 2], [5, 2]]`) |
 
 A property left out is left out of the area, so the game's default applies. Any other map property is refused.
 
 ### Layer `terrain`
 
-A tile layer the size of the map. Each tile's tileset entry carries a custom string property `kind`: `floor`, `wall`, `water`, `soft` (soft ground) or `barrier`, the game's five cell kinds, written `.`, `#`, `~`, `:` and `%` in the area's `map` rows. Any tileset works as long as its tiles have a `kind`; `cells.tsj` has one tile per kind, in that order (tile ids 0 to 4), so a new kind is appended and older maps keep their tiles. Flip and rotation bits are ignored. An empty cell, a tile without `kind` or an unknown kind is refused, with the first cell it happens at.
+A tile layer the size of the map. Each tile's tileset entry carries a custom string property `kind`: `floor`, `wall`, `water`, `soft` (soft ground), `barrier` or `counter`, the game's six cell kinds, written `.`, `#`, `~`, `:`, `%` and `=` in the area's `map` rows. Any tileset works as long as its tiles have a `kind`; `cells.tsj` has one tile per kind, in that order (tile ids 0 to 5), so a new kind is appended and older maps keep their tiles. Flip and rotation bits are ignored. An empty cell, a tile without `kind` or an unknown kind is refused, with the first cell it happens at.
 
 ### Layer `objects`
 
@@ -57,8 +59,8 @@ An object layer. Each object's class (Tiled's Class field, `type` in older versi
 | `marker` | the marker name, unique | none | `markers[name]: [x, y]` |
 | `exit` | ignored | `to` (string), `marker` (string), optional `fall` (bool), `require_flag`, `block_flag`, `closed_tile` (strings) | `exits[]: {at, to, marker, fall, require_flag, block_flag, closed_tile}` |
 | `hook` | the hook id | `event` (string), optional `trigger`, `require_flag`, `block_flag` (strings), `actor_at` (JSON list `[x, y]`, the cell its actor stands on), `across` (bool), `cells` (JSON list of `[x, y]`, further cells it covers), `actor` (string, a `touch` hook's actor; such a hook has no cell, like `load` and `flag`) | `hooks[]` |
-| `shop` | the shop id | `stock` (JSON list), optional `kind`, `require_flag`, `block_flag` (strings), `sell_percent` (int), `script_only` (bool), `keeper` (string, the actor who keeps it) | `shops[]` |
-| `rest` | the rest point id | optional `cost` (int), `script_only` (bool), `keeper` (string) | `rests[]` |
+| `shop` | the shop id | `stock` (JSON list), optional `kind`, `require_flag`, `block_flag` (strings), `sell_percent` (int), `script_only` (bool), `keeper` (string, the actor who keeps it), `voice` (string, the keeper's text key prefix) | `shops[]` |
+| `rest` | the rest point id | optional `cost` (int), `script_only` (bool), `keeper` (string), `per_member` (bool), `voice` (string) | `rests[]` |
 | `chest` | the chest id | `flag` (string), optional `items` and `equipment` (JSON objects), `money` (int) | `chests[]` |
 | `port` | the port id | `marker` (string), optional `flag`, `ship` (strings) | `ports[]` |
 | `zone` | the zone id | `table` (JSON list), optional `visible`, `random` (JSON objects) | `zones[]` |

@@ -164,6 +164,13 @@ struct World {
 	std::set<std::string> onceHooks;
 	// The track a script set for the area the party is in, until it leaves; empty plays the area's own.
 	std::string areaMusic;
+	// Under game.json's `step_timing` `exact` (R108), the time carried toward the leader's next step and the belt's next
+	// carry in microseconds, and the update time not yet a whole tick in milliseconds; the session keeps them while it
+	// runs and puts them here for a save (world chunk lines `step_carry`, `conveyor_carry`, `tick_carry`, written only
+	// when not 0), so a load goes on with the same remainder.
+	std::int64_t stepCarryUs = 0;
+	std::int64_t conveyorCarryUs = 0;
+	int tickCarryMs = 0;
 	// Where the party stood outside the dungeon it is in, which leaving the dungeon at once returns to (FLD-051); the
 	// area is empty when the party is not in a dungeon or came in by a script's warp from another dungeon.
 	std::string dungeonExitArea;

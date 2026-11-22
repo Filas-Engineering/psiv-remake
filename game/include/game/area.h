@@ -5,6 +5,7 @@
 #include "rules/result.h"
 #include "rules/types.h"
 
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <set>
@@ -25,9 +26,9 @@ const char* toString(AreaKind kind);
 const char* toString(ShopKind kind);
 bool parseShopKind(const std::string& text, ShopKind& out);
 
-// Map rows: '.' floor, '#' wall, '~' water, ':' soft ground, '%' a barrier wall a vehicle can break (F3). Only floor is
-// walked on foot.
-inline constexpr const char* kMapTiles = ".#~:%";
+// Map rows: '.' floor, '#' wall, '~' water, ':' soft ground, '%' a barrier wall a vehicle can break (F3), '=' a counter
+// (R109: never walked, used across). Only floor is walked on foot.
+inline constexpr const char* kMapTiles = ".#~:%=";
 const char* toString(EncounterMode mode);
 bool parseEncounterMode(const std::string& text, EncounterMode& out);
 
@@ -82,6 +83,9 @@ struct Conveyor {
 	std::vector<Cell> cells;
 	Facing direction = Facing::South;
 	int stepMs = 250;
+	// The same in microseconds: `step_ms` may have a fraction (stepMs is it rounded), which game.json's `step_timing`
+	// `exact` keeps.
+	std::int64_t stepUs = 250000;
 	std::string requireFlag;
 	std::string blockFlag;
 	int line = 0;
@@ -106,6 +110,9 @@ struct Shop {
 	int line = 0;
 	// The actor of game.json who keeps it, for a host to turn toward or animate; empty for none.
 	std::string keeper = {};
+	// A text key prefix for the keeper's lines (R113): a host shows PREFIX.welcome, .confirm, .thanks and
+	// .cannot_afford where the tables have them, else its own default lines. Empty for the defaults.
+	std::string voice = {};
 };
 
 struct RestPoint {
@@ -114,6 +121,9 @@ struct RestPoint {
 	int cost = 0;
 	int line = 0;
 	std::string keeper = {};
+	// The price is cost times the lineup's size (R113; Session::restCost).
+	bool perMember = false;
+	std::string voice = {};
 };
 
 struct Chest {
@@ -192,7 +202,8 @@ struct VisibleRules {
 };
 
 struct RandomRules {
-	// Steps between battles, drawn uniformly (ENC-040; the original's distribution is ENC-005).
+	// Steps between battles, drawn uniformly (ENC-040; the original's distribution is ENC-005). maxSteps 0 (R115) draws no
+	// count: once minSteps steps are taken, each step rolls stepChance, with no step at which a battle must come.
 	int minSteps = 12;
 	int maxSteps = 24;
 	// Distance units one cell adds to the counter (ENC-041).
@@ -226,8 +237,11 @@ struct Area {
 	std::string id;
 	AreaKind kind = AreaKind::Field;
 	EncounterMode mode = EncounterMode::Visible;
-	// Time to walk one cell.
+	// Time to walk one cell; `step_ms` may have a fraction, kept in microseconds in stepUs (stepMs is it rounded).
 	int stepMs = 250;
+	std::int64_t stepUs = 250000;
+	// False when the area's own `arrive_notice` is false: entering it shows no arrival notice (GameConfig::arriveNotice).
+	bool arriveNotice = true;
 	// The track for the area outside events and battles, an audio id from game.json; empty when the data names none.
 	std::string music;
 	// The world or region the area belongs to (FLD-050); a return to a town reaches only towns of the same region.
@@ -248,6 +262,9 @@ struct Area {
 	std::vector<Helm> helms;
 	// In a vessel: cells that take the party back ashore, to the port it boarded from.
 	std::vector<Cell> gangway;
+	// Counter cells (R109): the map's '=' cells and those the area's `counters` lists. Interaction tries the cell behind a
+	// faced counter that holds nothing, and runs what stands there as if faced.
+	std::set<Cell> counters;
 	std::vector<CellChange> changes;
 	std::vector<Conveyor> conveyors;
 	// Cells of interact hooks that are solid only while active and are not now; the session's view of the area sets them.

@@ -1,0 +1,94 @@
+# The keepers' data copy scripts/make_rules_data.py writes (the party starting as the fighter and the mystic, the
+# fighter's party.json profile rows, Tidewater's inn priced per member with a voice and its stall with a voice) and its
+# asset copy (inn and shop layouts that draw the keeper's line and the inn's price per member), with --dev. With --window
+# the shot lines save screenshots under build/shots/rules/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 1
+expect state selected New game
+press Enter
+pressuntil Enter Field 400
+dev encounters off
+
+# The status page lists the fighter's own profile rows after the session's, by the data's keys.
+press M
+expect screen Menu
+press Enter
+wait 2
+press Enter
+wait 2
+expect state page stats
+expect state uifield.menu_status.profile 20
+expect state uifield.menu_status.profile.18.key profile.age
+expect state uifield.menu_status.profile.18.label Age
+expect state uifield.menu_status.profile.18.value 19
+expect state uifield.menu_status.profile.19.label Home
+expect state uifield.menu_status.profile.19.value Tidewater
+press Escape
+press Escape
+wait 2
+expect screen Field
+
+# The stall's keeper speaks with its own voice: its welcome, then its thanks after a purchase.
+cmd walk stall_front
+cmd face north
+wait 2
+press Enter
+wait 2
+expect screen Shop
+expect state voice voice.dockhand.welcome
+expect state uifield.shop.voice_line Fresh off the boats!
+shot build/shots/rules/shop_voice.png
+press Enter
+wait 2
+expect state voice voice.dockhand.thanks
+expect state uifield.shop.voice_line Come again!
+press Escape
+wait 2
+expect screen Field
+
+# The inn prices a bed per member: the session's cost is the whole lineup's, the keeper asks with it, and a purse short
+# of the total is refused with the default line the inn's voice does not have.
+dev money -100000
+dev money 15
+cmd walk inn_front
+cmd face west
+wait 2
+press Enter
+wait 2
+expect screen Inn
+expect state uifield.inn.cost 20
+expect state uifield.inn.cost_each 10
+expect state uifield.inn.per_member true
+expect state uifield.inn.voice_line A bed each, 20 in all?
+shot build/shots/rules/inn_per_member.png
+press Enter
+wait 2
+expect state voice ui.inn.cannot_afford
+expect state uifield.inn.voice_line You cannot pay for a rest.
+expect state uifield.inn.money 15
+press Escape
+wait 2
+dev money 10
+press Enter
+wait 2
+expect screen Inn
+press Enter
+wait 2
+expect screen Field
+expect toast Rest well.
+press Enter
+wait 2
+expect state uifield.inn.money 5
+expect state uifield.inn.voice_line A bed each, 20 in all?
+press Escape
+wait 2
+
+# An enemy's level from its enemies.json stats reaches the battle layout's enemy_groups.
+dev battle training
+pressuntil Enter Battle 200
+wait 30
+expect state uifield.battle_front.enemy_groups.1.name Rust Hound
+expect state uifield.battle_front.enemy_groups.1.level 2
+dev win

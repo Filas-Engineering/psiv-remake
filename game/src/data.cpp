@@ -423,7 +423,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 		"vars", "clear_flag", "start", "join_levels", "prices", "item_cap", "money_cap", "tick_ms", "grace_ms", "round_ms",
 		"autosave_slots", "manual_slots", "bosses", "vehicles", "machine_step_heal", "outside_experience_until", "leave_equipment", "random_encounters_everywhere",
 		"nameless_actors", "grace_after_battle", "interact", "interact_across", "run_speed_percent", "vehicle_opening", "background_limit",
-		"credits"});
+		"credits", "arrive_notice", "step_timing", "party_talk_ambient"});
 	reader.text(json, "title", c.title, true);
 	reader.text(json, "core_data", c.coreData, true);
 	reader.texts(json, "areas", c.areaFiles, true);
@@ -451,7 +451,13 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	readActors(reader, json, c);
 	reader.texts(json, "nameless_actors", c.namelessActors, false);
 	if (const JsonValue* p = reader.field(json, "presentation", JsonValue::Type::Object, false)) {
-		reader.only(*p, {"audio", "cameras", "layouts", "animations", "portraits", "music", "durations"});
+		reader.only(*p, {"audio", "cameras", "layouts", "animations", "portraits", "music", "durations", "flash_default", "flash_original"});
+		std::string flash;
+		reader.text(*p, "flash_default", flash, false);
+		if (!flash.empty() && !parseFlashLevel(flash, c.presentation.flashDefault)) {
+			reader.fail(*p, "data.bad_flash_default", {flash});
+		}
+		reader.boolean(*p, "flash_original", c.presentation.flashOriginal, false);
 		reader.texts(*p, "audio", c.presentation.audio, false);
 		readCameras(reader, *p, c.presentation.cameras);
 		reader.texts(*p, "layouts", c.presentation.layouts, false);
@@ -622,6 +628,23 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 		return !text.empty();
 	};
 	opening(json, "vehicle_opening", c.vehicleOpening);
+	std::string arrive;
+	reader.text(json, "arrive_notice", arrive, false);
+	if (arrive == "walked") {
+		c.arriveNotice = ArriveNotice::Walked;
+	} else if (arrive == "never") {
+		c.arriveNotice = ArriveNotice::Never;
+	} else if (!arrive.empty() && arrive != "always") {
+		reader.fail(json, "data.bad_arrive_notice", {arrive});
+	}
+	reader.boolean(json, "party_talk_ambient", c.partyTalkAmbient, false);
+	std::string timing;
+	reader.text(json, "step_timing", timing, false);
+	if (timing == "exact") {
+		c.exactSteps = true;
+	} else if (!timing.empty() && timing != "ticks") {
+		reader.fail(json, "data.bad_step_timing", {timing});
+	}
 	if (const JsonValue* bosses = reader.field(json, "bosses", JsonValue::Type::Array, false)) {
 		for (const JsonValue& b : bosses->items) {
 			reader.only(b, {"encounter", "flag"});
@@ -974,6 +997,15 @@ void checkReferences(const GameData& data, Problems& problems) {
 		}
 		musicListed("game.json music encounter '" + encounter + "'", track);
 	}
+	for (const auto& [id, character] : db.characters) {
+		for (const rules::ProfileRow& row : character.profile) {
+			for (const rules::ProfileText* side : {&row.key, &row.value}) {
+				if (!side->number) {
+					textExists("party.json character '" + id + "' profile", side->text);
+				}
+			}
+		}
+	}
 	for (const Credits& credits : c.credits) {
 		musicListed("game.json credits '" + credits.id + "'", credits.music);
 		for (const CreditsEntry& entry : credits.entries) {
@@ -1097,11 +1129,19 @@ void checkReferences(const GameData& data, Problems& problems) {
 				at(line, "data.keeper_not_actor", {point, keeper});
 			}
 		};
+		const auto voiceUsed = [&](int line, const std::string& point, const std::string& voice) {
+			const auto has = [&](const char* line) { return data.languages.front().text.count(voice + line) > 0; };
+			if (!voice.empty() && !has(".welcome") && !has(".confirm") && !has(".thanks") && !has(".cannot_afford")) {
+				at(line, "data.voice_unused", {point, voice});
+			}
+		};
 		for (const RestPoint& r : area.rests) {
 			keeperKnown(r.line, r.id, r.keeper);
+			voiceUsed(r.line, r.id, r.voice);
 		}
 		for (const Shop& s : area.shops) {
 			keeperKnown(s.line, s.id, s.keeper);
+			voiceUsed(s.line, s.id, s.voice);
 			for (const StockEntry& entry : s.stock) {
 				if (!knownThing(db, entry.id) || data.price(entry.id) < 0) {
 					at(s.line, "data.shop_stock_unknown", {s.id, entry.id});

@@ -12,6 +12,9 @@ public sealed partial class SampleController
 	private string _probeTitleSizes = "-";
 	// Whether the story was finished, read once each time the title comes back.
 	private bool? _clearRecord;
+	// The title's erase list is up, and its cursor.
+	private bool _erasing;
+	private int _eraseCursor;
 
 	// The title's start state is up: the layout asks for one and no key has been pressed since the title came up.
 	private bool _titleStarted;
@@ -52,6 +55,16 @@ public sealed partial class SampleController
 					return PsivResult.Success;
 				}));
 				break;
+			// The built-in order lists erase only for a layout that sets the older `erase` param, so the built-in title
+			// keeps its entries; a layout's own `options` shows it wherever it puts it.
+			case "erase" when Layout.Screen("title").Options is not null || Ui.Param("title", "erase", UiData(), 0) != 0:
+				options.Add((id, T("ui.title.erase"), () =>
+				{
+					_erasing = true;
+					_eraseCursor = 0;
+					return PsivResult.Success;
+				}));
+				break;
 			case "options":
 				options.Add((id, T("ui.title.options"), () =>
 				{
@@ -78,8 +91,54 @@ public sealed partial class SampleController
 	// Set by the program for a new profile in normal play: the title says once that flashing is reduced.
 	public static bool NewProfile { get; set; }
 
+	// Every slot with a file, damaged ones too since they can be erased: manual ones first, then the autosaves.
+	private List<SaveSummary> ErasableSaves() => [.. (_s.Saves() ?? []).OrderBy(v => v.Autosave)];
+
+	private List<string> EraseRows(List<SaveSummary> saves) => saves.Count == 0 ? [T("ui.title.erase_none")]
+		: [.. saves.Select(v => v.Slot + (v.Autosave ? " " + T("ui.saves.autosave") : "") + "   " + (v.Damaged ? T("ui.saves.damaged") : $"{_s.DisplayName(v.Area)}   {Clock(v.PlayTimeMs)}"))];
+
+	// The erase list: Confirm asks with ui.title.erase_confirm, then EraseSave; the session's notice (game.save_erased) or
+	// its refusal shows as a notice, and the list is read again. Back, or nothing left to erase, returns to the options.
+	private void UpdateErase(ActionInput input)
+	{
+		List<SaveSummary> saves = ErasableSaves();
+		if (input.Back)
+		{
+			_erasing = false;
+			return;
+		}
+		if (saves.Count == 0)
+		{
+			_erasing = !input.Confirm;
+			return;
+		}
+		if (input.Pressed(GameAction.Up))
+		{
+			_eraseCursor = (_eraseCursor + saves.Count - 1) % saves.Count;
+		}
+		if (input.Pressed(GameAction.Down))
+		{
+			_eraseCursor = (_eraseCursor + 1) % saves.Count;
+		}
+		_eraseCursor = Math.Clamp(_eraseCursor, 0, saves.Count - 1);
+		if (input.Confirm)
+		{
+			string slot = saves[_eraseCursor].Slot;
+			_confirm.Ask(T("ui.title.erase_confirm", slot), () =>
+			{
+				Report(_s.EraseSave(slot));
+				_eraseCursor = Math.Clamp(_eraseCursor, 0, Math.Max(0, ErasableSaves().Count - 1));
+			});
+		}
+	}
+
 	private void UpdateTitle(ActionInput input)
 	{
+		if (_erasing)
+		{
+			UpdateErase(input);
+			return;
+		}
 		if (NewProfile)
 		{
 			NewProfile = false;
@@ -161,6 +220,11 @@ public sealed partial class SampleController
 		var options = TitleOptions();
 		bool start = TitleStart;
 		_probeSelected = start || options.Count == 0 ? "-" : options[Math.Clamp(_cursor, 0, options.Count - 1)].Label;
+		List<string> eraseRows = _erasing ? EraseRows(ErasableSaves()) : [];
+		if (_erasing)
+		{
+			_probeSelected = eraseRows[Math.Clamp(_eraseCursor, 0, eraseRows.Count - 1)];
+		}
 		int walk = 1 + _clockMs / 260 % 2;
 		// At a reference height the title art's logo, traveler and creature draw at a whole multiple of their pixels; else
 		// the logo at its size and the two figures in today's 64-pixel squares.
@@ -192,8 +256,11 @@ public sealed partial class SampleController
 			.Set("options", options.Select(o => o.Label).ToList())
 			.Set("option_ids", options.Select(o => o.Id).ToList())
 			.Set("start", start)
-			.Set("start_hint", SampleText("ui.title.press_start"))
+			.Set("start_hint", T("ui.title.press_start"))
 			.Set("cursor", _cursor)
+			.Set("erasing", _erasing)
+			.Set("erase_rows", eraseRows)
+			.Set("erase_cursor", _eraseCursor)
 			.Set("version", LibraryVersion)
 			.Set("toasts", (UiSlot)((_, _, _, _) => DrawToasts(t, 16, t.Height - 40, right: true)))
 			.Set("hint", T("ui.title.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm))));

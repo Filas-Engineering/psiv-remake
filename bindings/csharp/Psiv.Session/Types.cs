@@ -21,6 +21,8 @@ public enum TravelKind { Port, Town, DungeonExit }
 public enum JobState { Available, Accepted, Completed, Missed }
 public enum TextSpeed { Slow, Normal, Fast, Instant }
 public enum BattleSpeed { X1, X1_5, X2, X3 }
+// Unset: the profile never chose a level, so ReducedFlash says Reduced or Standard.
+public enum FlashLevel { Unset, Reduced, Standard, Original }
 public enum RewardMultiplier { X1, X1_5, X2 }
 public enum BattleSource { Visible, Random, Event }
 public enum Side { Party, Enemy }
@@ -139,7 +141,8 @@ public sealed record SessionOptions
 
 // TitleMusic, VictoryMusic and DefeatMusic are game.json's tracks, "" when the data names none.
 public sealed record GameInfo(string Title, string GameBuild, int RulesVersion, int TickMs, int RoundMs, int ManualSlots, int AutosaveSlots, int ItemCap, int MoneyCap,
-	IReadOnlyList<string> Languages, string TitleMusic, string VictoryMusic, string DefeatMusic, bool MagicDefense = false, int AffinityDivisor = 100);
+	IReadOnlyList<string> Languages, string TitleMusic, string VictoryMusic, string DefeatMusic, bool MagicDefense = false, int AffinityDivisor = 100,
+	FlashLevel FlashDefault = FlashLevel.Reduced, bool FlashOriginal = true);
 
 // An element the data knows. Element values past Holy are the ones rules.json declares, numbered by Index.
 public sealed record ElementInfo(Element Index, string Id, string Name);
@@ -148,7 +151,8 @@ public sealed record ElementInfo(Element Index, string Id, string Name);
 public sealed record Affinity(Element Element, string Id, string Name, int Percent);
 
 public sealed record Profile(TextSpeed TextSpeed, bool AutoAdvance, bool ShowShippedNames, string TextLanguage, int TextSizePercent, BattleSpeed BattleSpeed,
-	bool AmbientTalk, bool ReducedFlash, int MusicVolume, int AmbientVolume, int EffectsVolume, bool AlwaysRun = false);
+	bool AmbientTalk, bool ReducedFlash, int MusicVolume, int AmbientVolume, int EffectsVolume, bool AlwaysRun = false, FlashLevel Flashing = FlashLevel.Unset,
+	bool FlashNoticeSeen = false);
 
 public sealed record Settings(string Difficulty, RewardMultiplier RewardMultiplier, string AutoMacro);
 
@@ -181,10 +185,13 @@ public sealed record Zone(string Id, int FromX, int FromY, int ToX, int ToY, IRe
 // the leader's time per cell now, StepMs on foot, and RunStepMs the same while the run input is held (Update's running).
 // ShipPort, in a vessel, is the port the party walked aboard from. StepProgressMs: held input spent toward the next cell.
 // ConveyorStepMs and ConveyorProgressMs: the belt under the party, 0 off one. StepMask: where CanStep allows a step, 1 north,
-// 2 east, 4 south, 8 west.
+// 2 east, 4 south, 8 west. AnnounceArrival: the last area entry announced itself (game.json's arrive_notice and the area's
+// own), for a host's banner. The ...Us values: the step times and progress in microseconds, exact under game.json's
+// step_timing exact (fractional step_ms, the time past each step carried into the next).
 public sealed record FieldInfo(string AreaId, string AreaName, AreaKind AreaKind, EncounterMode EncounterMode, int Width, int Height, int StepMs,
 	int LeaderX, int LeaderY, Direction Facing, bool PlayerControl, int GraceMs, string Music, string Region, string Aboard, int LeaderStepMs, string ShipPort = "", int RunStepMs = 0,
-	int StepProgressMs = 0, int ConveyorStepMs = 0, int ConveyorProgressMs = 0, int StepMask = 0);
+	int StepProgressMs = 0, int ConveyorStepMs = 0, int ConveyorProgressMs = 0, int StepMask = 0, bool AnnounceArrival = true, long LeaderStepUs = 0,
+	long RunStepUs = 0, long StepProgressUs = 0, long ConveyorStepUs = 0, long ConveyorProgressUs = 0);
 
 // Actor: the reserved name scripts address it by ("enemy.<zone>.<n>"); an action with that subject moves or turns this enemy.
 public sealed record FieldEnemy(int Id, string Encounter, string Zone, int X, int Y, Direction Facing, EnemyState State, string Actor = "");
@@ -264,7 +271,8 @@ public sealed record Notice(NoticeKind Kind, string Key, IReadOnlyList<string> P
 public sealed record ActiveStatus(string Id, string Name, int Remaining);
 
 public sealed record Combatant(int Index, string Id, string Name, string Label, Side Side, string Group, int Hp, int MaxHp, int Tp, int MaxTp, bool Alive,
-	bool Defending, IReadOnlyList<ActiveStatus> Statuses, CommandKind CommandKind, string CommandId, int CommandTarget, bool Flying = false, int Position = -1);
+	bool Defending, IReadOnlyList<ActiveStatus> Statuses, CommandKind CommandKind, string CommandId, int CommandTarget, bool Flying = false, int Position = -1,
+	int Level = 0);
 
 // Music is the encounter's track from game.json, else for a random battle aboard the vehicle's, "" when the data names none. Vehicle is a vehicle battle's vehicle, the
 // combatant after the members riding it, "" otherwise.
@@ -300,10 +308,15 @@ public sealed record StatBonus(int MaxHp, int MaxTp, int Strength, int Mental, i
 
 public sealed record StatusResist(string Id, string Name, int Percent);
 
+// A character's profile row: Key and Value as the data gives them (a text key or a whole number), KeyText and ValueText
+// what to show.
+public sealed record ProfileRow(string Key, string KeyText, bool KeyNumber, string Value, string ValueText, bool ValueNumber);
+
 // What a status screen shows beyond Member. EquipmentBonus is indexed by EquipSlot; Affinities and AffinityList hold each
 // element the member takes at other than the normal rate, the list in the data's element order with names.
 public sealed record MemberDetail(string Id, int ExperienceToNext, int Critical, int Evasion, Element AttackElement, IReadOnlyList<StatBonus> EquipmentBonus,
-	IReadOnlyDictionary<Element, int> Affinities, IReadOnlyList<StatusResist> StatusResists, int MagicDefense = 0, IReadOnlyList<Affinity>? AffinityList = null);
+	IReadOnlyDictionary<Element, int> Affinities, IReadOnlyList<StatusResist> StatusResists, int MagicDefense = 0, IReadOnlyList<Affinity>? AffinityList = null,
+	IReadOnlyList<ProfileRow>? Profile = null);
 
 // A member's battle numbers, built by the code that sets up a battle combatant.
 public sealed record CombatView(StatBonus Stats, string BasicAttack, string BasicAttackName, Element AttackElement, IReadOnlyList<string> Abilities,
@@ -338,9 +351,11 @@ public sealed record InventoryEntry(string Id, string Name, int Count, bool IsEq
 	public EquipSlot Slot => (EquipSlot)TargetingOrSlot;
 }
 
-public sealed record ShopInfo(string Id, int SellPercent, IReadOnlyList<InventoryEntry> Stock, ShopKind Kind = ShopKind.General);
+// Voice: the keeper's text key prefix (VOICE.welcome, .confirm, .thanks, .cannot_afford), "" for a host's default lines.
+public sealed record ShopInfo(string Id, int SellPercent, IReadOnlyList<InventoryEntry> Stock, ShopKind Kind = ShopKind.General, string Voice = "");
 
-public sealed record InnInfo(string Id, int Cost);
+// Cost: what resting costs now, per member of the lineup when PerMember.
+public sealed record InnInfo(string Id, int Cost, string Voice = "", bool PerMember = false);
 
 public sealed record Job(string Id, string Title, JobState State);
 

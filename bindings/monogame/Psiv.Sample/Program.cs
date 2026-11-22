@@ -147,7 +147,7 @@ public static class Program
 			Directory.CreateDirectory(saves);
 		}
 
-		// A new profile in normal play (no script, or --play-defaults) starts with reduced flashing; scripted runs keep the
+		// A new profile in normal play (no script, or --play-defaults) starts at the data's flashing default; scripted runs keep the
 		// profile's default, standard, so their transcripts do not depend on it.
 		bool newProfile = saves is not null && !File.Exists(Path.Combine(saves, "profile.cfg"));
 		GameSession session;
@@ -215,10 +215,6 @@ public static class Program
 		{
 			Console.WriteLine("assets: " + problem);
 		}
-		foreach (string problem in data.FlashProblems)
-		{
-			Console.WriteLine("data: flashing.json: " + problem);
-		}
 		AssetManifest m = assets.Manifest;
 		Console.WriteLine($"assets: {m.Tilesets.Count} tilesets, {m.Characters.Count} characters, {m.Portraits.Count} portraits, {m.Figures.Count} figures, " +
 			$"{m.FieldEnemies.Count} field enemies, {m.Vehicles.Count} vehicles, {m.Backdrops.Count} backdrops, {m.Effects.Count} effects, {m.Sprites.Count} sprites, {m.StatusIcons.Count} status icons, " +
@@ -230,7 +226,7 @@ public static class Program
 			(m.CommandIcons.Count > 0 ? $", {m.CommandIcons.Count} command icons" : "") + (m.Pictures.Count > 0 ? $", {m.Pictures.Count} pictures" : "") +
 			(m.Keepers.Count > 0 ? $", {m.Keepers.Count} keepers" : "") +
 			(assets.Layout.IsDefault ? m.UiLayoutEnabled == false ? ", layouts turned off" : "" : $", {assets.Layout.FromFiles.Count} layout files ({assets.Layout.Styles.Width}x{assets.Layout.Styles.Height})"));
-		int problems = assets.Problems.Count + data.FlashProblems.Count;
+		int problems = assets.Problems.Count;
 		Console.WriteLine(problems == 0 ? "OK: no problems." : $"FAILED: {problems} problems.");
 		return problems == 0 ? 0 : 1;
 	}
@@ -646,7 +642,7 @@ public sealed class ScriptPlayer
 					Fail($"{source}: the dev command was {(accepted ? "accepted" : "refused")}");
 				}
 				break;
-			case "flashing" when w.Length == 2 && Enum.TryParse(w[1], true, out SampleController.FlashLevel level):
+			case "flashing" when w.Length == 2 && Enum.TryParse(w[1], true, out FlashLevel level) && level != FlashLevel.Unset:
 				_controller.SetFlashing(level, confirmed: true);
 				break;
 			case "battlelayout" when w.Length == 2:

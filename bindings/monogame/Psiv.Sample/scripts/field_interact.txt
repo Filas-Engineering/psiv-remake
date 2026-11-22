@@ -87,7 +87,7 @@ expect state selected Controls
 press Enter
 expect state page controls
 press Up 2
-expect state selected RunToggle
+expect state selected Toggle run
 press Up
 expect state selected Run
 shot build/shots/field/interact_controls.png

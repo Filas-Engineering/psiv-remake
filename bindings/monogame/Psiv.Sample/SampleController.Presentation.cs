@@ -66,8 +66,23 @@ public sealed partial class SampleController
 			return;
 		}
 		bool actor = view?.Actors.Any(x => x.Id == a.Subject) ?? false;
-		// An actor outside the party's area has nothing here to show, so its action is done at once.
-		if (!actor && _actorIds.Contains(a.Subject))
+		// A visible enemy a script addresses by its reserved name (`enemy.<zone>.<n>`): its figure walks or waits.
+		if (!actor && view?.Enemies.FirstOrDefault(e => e.Actor.Length > 0 && e.Actor == a.Subject) is { } enemy)
+		{
+			int enemyMs = a.Instant ? 0 : EnemyAction(a, enemy);
+			if (!a.Instant && enemyMs == 0)
+			{
+				_s.FinishAction(a.Handle);
+			}
+			else if (!a.Instant)
+			{
+				_animations.Add(new Animation(a, enemyMs));
+			}
+			return;
+		}
+		// An actor outside the party's area, or an enemy no longer in the field, has nothing here to show, so its action is
+		// done at once.
+		if (!actor && (_actorIds.Contains(a.Subject) || IsEnemyActor(a.Subject)))
 		{
 			if (!a.Instant)
 			{
@@ -78,14 +93,15 @@ public sealed partial class SampleController
 		// Any other subject is a party member, in the lineup or not. One outside it that a turn or pose finds without a
 		// cell steps up next to the leader first.
 		bool member = !actor && a.Subject.Length > 0;
-		if (member && view is not null && a.Type is ActionType.Face or ActionType.Animate)
+		if (member && view is not null && a.Type is ActionType.Face or ActionType.Animate or ActionType.Place)
 		{
 			_field.Arrive(a.Subject, lineup, view);
 		}
 		int? spriteMs = view is null ? null : a.Type switch
 		{
-			ActionType.Move or ActionType.Face or ActionType.ShowActor or ActionType.HideActor when actor => ActorAction(a, view),
-			ActionType.Move or ActionType.Face when member => MemberAction(a, view, lineup),
+			ActionType.Move or ActionType.Place or ActionType.Face or ActionType.ShowActor or ActionType.HideActor when actor => ActorAction(a, view),
+			ActionType.Move or ActionType.Place or ActionType.Face when member => MemberAction(a, view, lineup),
+			ActionType.Animate when actor && LibraryAnimationMs(a, view) is int timed => timed,
 			ActionType.Animate when member || actor => PoseAction(a),
 			_ => null,
 		};
@@ -131,14 +147,34 @@ public sealed partial class SampleController
 		{
 			return null;
 		}
+		// A place puts the actor down at once.
+		if (a.Type == ActionType.Place)
+		{
+			return 0;
+		}
+		// A show or hide with an animation the library times lasts as long as it plays.
+		if (a.Type is ActionType.ShowActor or ActionType.HideActor && LibraryAnimationMs(a, view) is int transition)
+		{
+			return transition;
+		}
 		if (a.Type != ActionType.Move || a.Instant)
 		{
 			return ShortestAnimationMs;
 		}
-		// The sprite walks there a cell per step time; the event waits until it arrives.
+		// The sprite walks there a cell per step time, along the move's route when the record gives one; the event waits
+		// until it arrives.
 		int cellMs = CellMs(a);
-		_field.Pace(actor.Id, cellMs);
-		int cells = Math.Abs(actor.X - from.X) + Math.Abs(actor.Y - from.Y);
+		int cells;
+		if (a.Route is { Count: > 1 } route && route[^1] == new RouteCell(actor.X, actor.Y))
+		{
+			_field.Route(actor.Id, route.Select(c => (c.X, c.Y)), cellMs);
+			cells = route.Count - 1;
+		}
+		else
+		{
+			_field.Pace(actor.Id, cellMs);
+			cells = Math.Abs(actor.X - from.X) + Math.Abs(actor.Y - from.Y);
+		}
 		return cells > 0 ? cells * cellMs : ShortestAnimationMs;
 	}
 
@@ -148,8 +184,10 @@ public sealed partial class SampleController
 	// up at once. Null when the target is not in the area.
 	private int? MemberAction(PresentationAction a, FieldView view, List<string> lineup)
 	{
-		(int X, int Y)? target = a.Type == ActionType.Move && a.HasPosition
+		bool move = a.Type is ActionType.Move or ActionType.Place;
+		(int X, int Y)? target = move && a.HasPosition
 			? ((int)Math.Round(a.X, MidpointRounding.AwayFromZero), (int)Math.Round(a.Z, MidpointRounding.AwayFromZero))
+			: a.Type == ActionType.Face && DirectionNamed(a.Target) is { } way && _field.MemberCell(a.Subject, lineup) is { } at ? StepFrom(at.X, at.Y, way)
 			: view.Markers.FirstOrDefault(m => m.Name == a.Target) is { } marker ? (marker.X, marker.Y)
 			: a.Type == ActionType.Face && view.Actors.FirstOrDefault(x => x.Id == a.Target) is { } actor ? _field.ActorCell(actor.Id) ?? (actor.X, actor.Y)
 			: a.Type == ActionType.Face ? _field.MemberCell(a.Target, lineup)
@@ -163,9 +201,55 @@ public sealed partial class SampleController
 			_field.FaceMember(a.Subject, lineup, cell.X, cell.Y);
 			return ShortestAnimationMs;
 		}
-		int cellMs = a.Instant ? 0 : CellMs(a);
+		// A place puts the member down at once, turned the way it names.
+		int cellMs = a.Instant || a.Type == ActionType.Place ? 0 : CellMs(a);
 		int cells = _field.MoveMember(a.Subject, lineup, cell.X, cell.Y, cellMs);
+		if (a.Type == ActionType.Place)
+		{
+			if (DirectionNamed(a.Facing) is { } placed)
+			{
+				(int px, int py) = StepFrom(cell.X, cell.Y, placed);
+				_field.FaceMember(a.Subject, lineup, px, py);
+			}
+			return 0;
+		}
 		return cells > 0 ? cells * cellMs : ShortestAnimationMs;
+	}
+
+	private static Direction? DirectionNamed(string name) => name switch
+	{
+		"north" => Direction.North,
+		"east" => Direction.East,
+		"south" => Direction.South,
+		"west" => Direction.West,
+		_ => null,
+	};
+
+	private static bool IsEnemyActor(string subject) => subject.StartsWith("enemy.", StringComparison.Ordinal);
+
+	// How long an actor's `anim`, or its `show` or `hide` with an animation, plays when the library times it: the
+	// milliseconds left of the animation FieldActor reports (a standard animation's own length, or the data's seconds).
+	// Null when the library plays none by that name, which leaves it to the sample's own poses.
+	private static int? LibraryAnimationMs(PresentationAction a, FieldView view) =>
+		view.Actors.FirstOrDefault(x => x.Id == a.Subject) is { } actor && a.Target.Length > 0 && actor.Animation == a.Target && actor.AnimationTotalMs > 0
+			? Math.Max(0, actor.AnimationMs) : null;
+
+	// A visible enemy's move walks its figure along the record's route a cell per step time; a turn, an `anim` and the
+	// rest are presentation the sample shows only by waiting their length.
+	private int EnemyAction(PresentationAction a, FieldEnemy enemy)
+	{
+		if (a.Type == ActionType.Move && a.Route is { Count: > 1 } route)
+		{
+			int cellMs = CellMs(a);
+			_field.WalkEnemy(enemy.Id, route.Select(c => (c.X, c.Y)), cellMs);
+			return (route.Count - 1) * cellMs;
+		}
+		return a.Type switch
+		{
+			ActionType.Place or ActionType.Move => 0,
+			ActionType.Animate => Math.Clamp((int)(Math.Max(a.Duration, a.Seconds) * 1000), ShortestAnimationMs, LongestAnimationMs),
+			_ => ShortestAnimationMs,
+		};
 	}
 
 	// An `anim` plays a pose on the person. A looping one repeats until another pose replaces it or the scene ends,

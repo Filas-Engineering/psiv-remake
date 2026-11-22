@@ -110,6 +110,8 @@ public sealed class FieldRenderer
 
 		public Direction Facing { get; set; } = Direction.South;
 		public (int X, int Y) Target => _cells[^1];
+		// The cells of the walk under way, from where it began, for the route probe.
+		public IReadOnlyList<(int X, int Y)> Cells => _cells;
 		public bool Walking => _elapsedMs < (_cells.Count - 1) * _cellMs;
 		public float PX { get; private set; }
 		public float PY { get; private set; }
@@ -196,9 +198,14 @@ public sealed class FieldRenderer
 	private readonly Glide[] _followers = [new(), new(), new(), new(), new()];
 	private readonly List<(int X, int Y)> _trail = [];
 	private readonly Dictionary<int, Glide> _enemies = [];
+	// Visible enemies a script moves (`enemy.<zone>.<n>`), walking along their route until they arrive.
+	private readonly Dictionary<int, ActorWalk> _enemyWalks = [];
+	private readonly Dictionary<int, (List<(int X, int Y)> Cells, int CellMs)> _enemyRoutes = [];
 	private readonly Dictionary<string, ActorWalk> _actors = [];
 	// Milliseconds per cell for each actor's next walk, from its move's speed.
 	private readonly Dictionary<string, int> _paces = [];
+	// The cells of each actor's next walk, from its move's record (PresentedAction::route), starting where it stood.
+	private readonly Dictionary<string, List<(int X, int Y)>> _routes = [];
 	// Party members a script moved or turned during the current scene, drawn there instead of in the walking line,
 	// and members outside the lineup a script moved, turned or posed, drawn until the scene ends.
 	private readonly Dictionary<string, MemberPlace> _members = [];
@@ -254,12 +261,36 @@ public sealed class FieldRenderer
 
 	// Actors whose id names an encounter, drawn as its field enemy rather than as a person.
 	public Func<string, bool> CreatureLook { get; set; } = _ => false;
+	// The encounter whose field figure an enemy's figure is drawn with (an actor's `sprite_enemy`), null for the enemy's own.
+	public Func<string, string?> EnemyEncounter { get; set; } = _ => null;
+	// A wandering actor's speed in percent of the area's step time, null when it does not wander.
+	public Func<string, int?> WanderPercent { get; set; } = _ => null;
+	// A talk point's `actor_at` cell, where its actor stands apart from the hook's cell; null for none.
+	public Func<string, (int X, int Y)?> ActorHome { get; set; } = _ => null;
+	// Actors drawn facing another way than the session reports while standing: a shop's or rest point's keeper turned
+	// toward the leader.
+	public Dictionary<string, Direction> FacingOverrides { get; } = [];
+	// The visible enemies a script addresses by name, as the last frame drew them: "X Y", or "walking".
+	public Dictionary<string, string> DrawnEnemies { get; } = [];
+
+	// The cells of the walk an actor is drawing (`X,Y X,Y ...` from where it began), `-` when it stands.
+	public string RouteProbe(string id) => _actors.TryGetValue(id, out ActorWalk? w) && w.Walking ? string.Join(" ", w.Cells.Select(c => $"{c.X},{c.Y}")) : "-";
 
 	// The cell an actor is drawn at or walking to, if it is on screen in this area.
 	public (int X, int Y)? ActorCell(string id) => _actors.TryGetValue(id, out ActorWalk? w) ? w.Target : null;
 
 	// The time per cell of the actor's next walk; without one the actor is put at its new cell at once.
 	public void Pace(string id, int cellMs) => _paces[id] = cellMs;
+
+	// The actor's next walk goes along these cells (the move's record), a cell per `cellMs`.
+	public void Route(string id, IEnumerable<(int X, int Y)> cells, int cellMs)
+	{
+		_routes[id] = [.. cells];
+		_paces[id] = cellMs;
+	}
+
+	// A visible enemy a script moves walks along its route, from the cell it is drawn on.
+	public void WalkEnemy(int id, IEnumerable<(int X, int Y)> cells, int cellMs) => _enemyRoutes[id] = ([.. cells], cellMs);
 
 	// Where a party member is drawn or walking to: its scripted cell during a scene, the cell it is walking back to
 	// after one, otherwise its place in the walking line (the leader's cell, or the trail behind it). A member
@@ -496,8 +527,13 @@ public sealed class FieldRenderer
 
 	// The scene is over and every pose stops. The leader is drawn at its cell again at once, since the player has it
 	// back; other lineup members the scene moved walk back to their places in the line; anyone else leaves.
-	public void EndScene(IReadOnlyList<string> lineup)
+	// While background events run (`backgroundRunning`) the actors' poses play on: those events animate them beside the field.
+	public void EndScene(IReadOnlyList<string> lineup, bool backgroundRunning = false)
 	{
+		foreach (string id in _poseRuns.Keys.Where(id => !backgroundRunning || IndexOf(lineup, id) >= 0 || _members.ContainsKey(id)).ToList())
+		{
+			_poseRuns.Remove(id);
+		}
 		foreach ((string id, MemberPlace m) in _members)
 		{
 			if (IndexOf(lineup, id) > 0)
@@ -510,7 +546,6 @@ public sealed class FieldRenderer
 			}
 		}
 		_members.Clear();
-		_poseRuns.Clear();
 	}
 
 	// A new area or the title: nothing a scene did is drawn any more.
@@ -530,6 +565,11 @@ public sealed class FieldRenderer
 		int elapsed = Math.Max(0, clockMs - run.StartMs);
 		return run.Loop || elapsed < art.PoseLengthMs(id, run.Animation) || Art.Vanishes(Art.PoseFor(run.Animation)) ? (run.Animation, elapsed, run.Loop) : null;
 	}
+
+	// The animation the library is playing on an actor (FieldActor.Animation) and how far through it is, 0 to 1; null when
+	// none plays or it has no length, which leaves the actor to the sample's own poses.
+	private static (string Animation, float T)? Played(FieldActor a) =>
+		a.Animation.Length > 0 && a.AnimationTotalMs > 0 && a.AnimationMs > 0 ? (a.Animation, 1f - a.AnimationMs / (float)a.AnimationTotalMs) : null;
 
 	public static string KindName(AreaKind kind) => kind switch { AreaKind.Town => "Town", AreaKind.Dungeon => "Dungeon", _ => "Field" };
 
@@ -553,9 +593,13 @@ public sealed class FieldRenderer
 				g.Facing = f.Facing;
 			}
 			_enemies.Clear();
+			_enemyWalks.Clear();
+			_enemyRoutes.Clear();
 			_actors.Clear();
+			_routes.Clear();
 			ClearScene();
-			_bannerLeftMs = BannerMs;
+			// The banner follows the session's arrival announcement (game.json's arrive_notice and the area's own).
+			_bannerLeftMs = f.AnnounceArrival ? BannerMs : 0;
 			_bannerTitle = f.AreaName;
 			_bannerKind = f.AreaKind;
 			dt = 0;
@@ -654,11 +698,29 @@ public sealed class FieldRenderer
 				_enemies[e.Id] = g;
 			}
 			g.Advance(dt);
+			if (_enemyRoutes.Remove(e.Id, out var route) && (g.X, g.Y) != (e.X, e.Y))
+			{
+				var walk = new ActorWalk(g.X, g.Y);
+				walk.WalkAlong(route.Cells.SkipWhile(c => c == (g.X, g.Y)), route.CellMs);
+				_enemyWalks[e.Id] = walk;
+				g.Snap(e.X, e.Y);
+			}
+			if (_enemyWalks.TryGetValue(e.Id, out ActorWalk? walking))
+			{
+				walking.Advance(dt);
+				if (!walking.Walking || walking.Target != (e.X, e.Y))
+				{
+					_enemyWalks.Remove(e.Id);
+					g.Snap(e.X, e.Y);
+				}
+				continue;
+			}
 			g.Go(e.X, e.Y, step);
 		}
 		foreach (int gone in _enemies.Keys.Where(k => !seen.Contains(k)).ToList())
 		{
 			_enemies.Remove(gone);
+			_enemyWalks.Remove(gone);
 		}
 
 		var present = new HashSet<string>();
@@ -674,10 +736,20 @@ public sealed class FieldRenderer
 				w.Advance(dt);
 				if (w.Target != (a.X, a.Y))
 				{
-					// Only a move the controller paced walks; anything else (a load, a rebuild) puts the actor there.
-					if (_paces.Remove(a.Id, out int pace))
+					// Only a move the controller paced walks, along its record's route when it has one; a wanderer's step
+					// glides over its own time per cell; anything else (a load, a rebuild, a place) puts the actor there.
+					(int X, int Y) from = w.Target;
+					if (_routes.Remove(a.Id, out List<(int X, int Y)>? route) && route.Count > 0 && route[^1] == (a.X, a.Y) && _paces.Remove(a.Id, out int routePace))
+					{
+						w.WalkAlong(route.SkipWhile(c => c == from), routePace);
+					}
+					else if (_paces.Remove(a.Id, out int pace))
 					{
 						w.WalkTo(a.X, a.Y, pace);
+					}
+					else if (a.Wanders && WanderPercent(a.Id) is int percent && Math.Abs(a.X - from.X) + Math.Abs(a.Y - from.Y) == 1)
+					{
+						w.WalkTo(a.X, a.Y, Math.Max(1, Math.Max(1, f.StepMs) * 100 / Math.Max(1, percent)));
 					}
 					else
 					{
@@ -812,6 +884,16 @@ public sealed class FieldRenderer
 		foreach (FieldExit e in view.Exits)
 		{
 			int sx = ox + e.X * tile, sy = oy + e.Y * tile;
+			// A closed exit is drawn as its row's tile (a wall unless the data names another), with a door over a tile that is
+			// not a wall: it still blocks.
+			if (!e.Open)
+			{
+				if (e.ClosedTile != '#')
+				{
+					s.Image(tiles.Door, sx, sy, tile, tile, Color.White);
+				}
+				continue;
+			}
 			int dir = e.X == 0 ? 3 : e.X == f.Width - 1 ? 1 : e.Y == 0 ? 0 : e.Y == f.Height - 1 ? 2 : -1;
 			if (dir < 0)
 			{
@@ -843,29 +925,49 @@ public sealed class FieldRenderer
 		// A person, actor or party member, in its pose if it is playing one: the shadow stays on the ground while a
 		// pose lifts the body. `extra` draws on top, given the body's screen position. `look` stands in for a person
 		// with no id.
+		// `figure` is the person whose pictures it wears (a script's `look`), `creatureKey` the encounter whose field figure it
+		// wears (an enemy's figure), and `played` the library's animation with how far through it is.
 		void Person(string id, float px, float py, Direction facing, int frame, bool walking, float sortBias = 0f, Action<int, int>? extra = null, ActorLook? look = null,
-			int raise = 0)
+			int raise = 0, string? figure = null, string? creatureKey = null, (string Animation, float T)? played = null)
 		{
-			bool creature = look is null && CreatureLook(id);
-			int image = creature ? art.FieldEnemy(id, clockMs, 0) : look is null ? art.PersonFrame(id, facing, frame) : art.ActorFrame(look, facing, frame);
+			string who = figure ?? id;
+			bool creature = look is null && (creatureKey is not null || (figure is null && CreatureLook(id)));
+			int image = creature ? art.FieldEnemy(creatureKey ?? id, clockMs, 0) : look is null ? art.PersonFrame(who, facing, frame) : art.ActorFrame(look, facing, frame);
 			int lift = 0;
 			bool alert = false;
 			MotionMark[] marks = [];
 			Pose pose = Pose.None;
 			(float alpha, int dx, float scatter) = (1f, 0, 0f);
-			if (look is null && PoseAt(id, clockMs, art) is { } run)
+			if (look is null && played is { } lib)
+			{
+				// The library times it: its pose plays stretched over the library's length.
+				pose = Art.PoseFor(lib.Animation);
+				if (Art.Vanishes(pose) && lib.T >= 1f)
+				{
+					return;
+				}
+				int length = art.PoseLengthMs(who, lib.Animation);
+				(int posed, lift, alert, marks) = art.PoseFrame(who, facing, lib.Animation, (int)(lib.T * length), false);
+				image = creature ? image : posed;
+				(alpha, dx, scatter) = Art.SpriteLook(pose, lib.T);
+				if (record && art.SheetPose(who, lib.Animation) is { } sheetPose)
+				{
+					DrawnSheetPoses[id] = sheetPose;
+				}
+			}
+			else if (look is null && PoseAt(id, clockMs, art) is { } run)
 			{
 				pose = Art.PoseFor(run.Animation);
-				int length = art.PoseLengthMs(id, run.Animation);
+				int length = art.PoseLengthMs(who, run.Animation);
 				if (Art.Vanishes(pose) && !run.Loop && run.ElapsedMs >= length)
 				{
 					return;
 				}
-				(int posed, lift, alert, marks) = art.PoseFrame(id, facing, run.Animation, run.ElapsedMs, run.Loop);
+				(int posed, lift, alert, marks) = art.PoseFrame(who, facing, run.Animation, run.ElapsedMs, run.Loop);
 				// A creature keeps its own picture; the pose lifts it.
 				image = creature ? image : posed;
 				(alpha, dx, scatter) = Art.SpriteLook(pose, (run.Loop ? run.ElapsedMs % length : run.ElapsedMs) / (float)Math.Max(1, length));
-				if (record && art.SheetPose(id, run.Animation) is { } sheetPose)
+				if (record && art.SheetPose(who, run.Animation) is { } sheetPose)
 				{
 					DrawnSheetPoses[id] = sheetPose;
 				}
@@ -877,7 +979,7 @@ public sealed class FieldRenderer
 			lift = Px(lift + raise);
 			Put(px, py, (sx, sy) =>
 			{
-				if (look is not null || creature || art.PersonShadow(id))
+				if (look is not null || creature || art.PersonShadow(who))
 				{
 					s.Image(art.Shadow, sx, sy + Px(3), tile, tile, Color.White * alpha);
 				}
@@ -1046,7 +1148,7 @@ public sealed class FieldRenderer
 						}
 					});
 				}
-				else if (p.Active && actor.Visible && _actors.TryGetValue(actor.Id, out ActorWalk? w) && !w.Walking && w.Target == (p.X, p.Y))
+				else if (p.Active && actor.Visible && _actors.TryGetValue(actor.Id, out ActorWalk? w) && !w.Walking && (w.Target == (p.X, p.Y) || w.Target == ActorHome(actor.Id)))
 				{
 					// The actor is drawn below, with the bubble while it stands on its talk point.
 					talkers.Add(actor.Id);
@@ -1078,17 +1180,27 @@ public sealed class FieldRenderer
 		}
 		foreach (FieldActor a in view.Actors)
 		{
-			if (!a.Visible || !_actors.TryGetValue(a.Id, out ActorWalk? w))
+			// A removed actor is gone; a hidden one shows only while the animation hiding it plays.
+			(string Animation, float T)? played = Played(a);
+			if (a.Removal != ActorRemoval.None || !_actors.TryGetValue(a.Id, out ActorWalk? w) ||
+				(!a.Visible && !(played is { } hiding && Art.Vanishes(Art.PoseFor(hiding.Animation)))))
 			{
 				continue;
 			}
 			// A pose has the person's attention, so the bubble waits until it ends.
-			bool talks = talkers.Contains(a.Id) && BubbleFree(a.X, a.Y) && PoseAt(a.Id, clockMs, art) is null;
+			bool talks = talkers.Contains(a.Id) && BubbleFree(a.X, a.Y) && PoseAt(a.Id, clockMs, art) is null && played is null;
 			int bob = (int)(2 * MathF.Sin(clockMs / 300f + a.X));
 			// The game stands an actor no script has turned facing south; its sheet may say otherwise.
-			Person(a.Id, w.PX, w.PY, !a.Scripted && art.StartFacing(a.Id) is { } start ? start : w.Facing, w.Frame, w.Walking, extra: talks
+			Direction facing = !w.Walking && FacingOverrides.TryGetValue(a.Id, out Direction turned) ? turned
+				: !a.Scripted && art.StartFacing(a.Id) is { } start ? start : w.Facing;
+			string? creatureKey = a.SpriteEnemy.Length > 0 ? EnemyEncounter(a.SpriteEnemy) ?? a.SpriteEnemy : null;
+			Person(a.Id, w.PX, w.PY, facing, w.Frame, w.Walking, extra: talks
 				? (sx, sy) => overlays.Add(() => s.Image(art.Bubble, sx + tile / 2, sy - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8), Color.White))
-				: null);
+				: null, figure: a.Look.Length > 0 ? a.Look : null, creatureKey: creatureKey, played: played);
+		}
+		if (record)
+		{
+			DrawnEnemies.Clear();
 		}
 		foreach (FieldEnemy e in view.Enemies)
 		{
@@ -1098,7 +1210,13 @@ public sealed class FieldRenderer
 			}
 			int creature = art.FieldEnemy(e.Encounter, clockMs, e.Id);
 			bool chasing = e.State == EnemyState.Chasing;
-			Put(g.PX, g.PY, (sx, sy) =>
+			ActorWalk? scripted = _enemyWalks.GetValueOrDefault(e.Id);
+			(float ex, float ey) = scripted is null ? (g.PX, g.PY) : (scripted.PX, scripted.PY);
+			if (record && e.Actor.Length > 0)
+			{
+				DrawnEnemies[e.Actor] = scripted is { Walking: true } || g.Progress < 1f ? "walking" : $"{e.X} {e.Y}";
+			}
+			Put(ex, ey, (sx, sy) =>
 			{
 				s.Image(art.Shadow, sx, sy + Px(2), tile, tile, Color.White);
 				Rectangle body = art.Stand(creature, sx, sy, tile);

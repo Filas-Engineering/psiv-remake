@@ -78,16 +78,16 @@ public static class UiFields
 		"portrait_off", "log"];
 
 	// What a title layout's `options` may list, in the built-in order. A listed entry still shows only when it can be
-	// chosen: retry after a lost battle that allows one, the sound test after a finished story, erase never yet (the
-	// session has no call that deletes a save).
+	// chosen: retry after a lost battle that allows one, the sound test after a finished story.
 	public static readonly string[] TitleEntries = ["retry", "new_game", "continue", "load", "sound_test", "erase", "options", "quit"];
 
 	// The places an Equip page's `places` may list, in the built-in order.
 	public static readonly string[] EquipPlaces = ["weapon", "left_hand", "head", "body", "arms", "accessory"];
 
-	// What a status page's profile rows may show: the member's and its detail's fields the session gives.
+	// What a status page's profile rows may show: the member's and its detail's fields the session gives, and `data`, the
+	// character's own profile rows from party.json in their order.
 	public static readonly string[] ProfileKeys = ["name", "level", "experience", "experience_next", "kind", "hp", "max_hp", "tp", "max_tp", "strength", "mental",
-		"agility", "dexterity", "defense", "critical", "evasion", "magic_defense", "attack_element"];
+		"agility", "dexterity", "defense", "critical", "evasion", "magic_defense", "attack_element", "data"];
 
 	// The tags a line's host acts on itself (events/FORMAT.md "Control tags") and the name tokens the session resolves,
 	// which a `tags` table cannot map.
@@ -135,13 +135,17 @@ public static class UiFields
 		["battle_side"] = new("battle_side", BattleData, BattleItems, BattleSlots, ["log"], BattleParams, statuses: true),
 		["title"] = new("title",
 			["title", "subtitle", "game_over", "options", "cursor", "version", "hint", "hero_frame", "creature_frame", "logo", "logo_w", "logo_h", "hero_w", "hero_h",
-				"creature_w", "creature_h", "art_scale", "start", "start_hint", "option_ids"],
-			slots: ["scene", "toasts"], title: true),
+				"creature_w", "creature_h", "art_scale", "start", "start_hint", "option_ids", "erasing", "erase_rows", "erase_cursor"],
+			slots: ["scene", "toasts"], title: true,
+			parameters: ["erase"]),
+		["credits"] = new("credits",
+			["lines", "scroll", "shown", "total", "hint"],
+			itemFields: ["text", "heading", "y"]),
 		["sound_test"] = new("sound_test",
 			["tracks", "list", "playing", "hint"],
 			slots: ["scene"]),
 		["inn"] = new("inn",
-			["cost", "money", "cursor", "bed", "top", "options", "keeper"]),
+			["cost", "money", "cursor", "bed", "top", "options", "keeper", "per_member", "cost_each", "voice_line"]),
 		["save_prompt"] = new("save_prompt",
 			["leave", "leave_selected"],
 			slots: ["backdrop", "slot_list"],
@@ -150,7 +154,7 @@ public static class UiFields
 			["question", "on_yes", "options", "cursor"]),
 		["field"] = new("field",
 			["hud", "area", "status", "banner_visible", "banner_title", "banner_kind", "banner_alpha", "banner_drop", "banner_ms", "banner_left_ms", "toasts", "hint",
-				"prompt_visible", "prompt_key", "prompt_text", "prompt_x", "prompt_y"],
+				"prompt_visible", "prompt_key", "prompt_text", "prompt_x", "prompt_y", "prompt_ready"],
 			itemFields: ["text", "alpha", "box_alpha", "width"],
 			parameters: ["area_banner", "arrive_toast"]),
 		["dialogue"] = new("dialogue",
@@ -168,7 +172,7 @@ public static class UiFields
 			slots: ["backdrop", "toasts"],
 			parameters: [BackdropDim]),
 		["shop"] = new("shop",
-			["title", "open", "tab", "tabs", "money", "stall", "rows", "list", "description", "description_missing", "compare", "hint", "money_value", "keeper"],
+			["title", "open", "tab", "tabs", "money", "stall", "rows", "list", "description", "description_missing", "compare", "hint", "money_value", "keeper", "voice_line"],
 			itemFields: ["text", "price", "have"],
 			slots: ["backdrop", "toasts"],
 			parameters: [BackdropDim]),

@@ -9,7 +9,7 @@ optional fields docs/ui-layout.md describes:
   command chosen from a list, the command rows as a row of pictures walked with Left and Right (`command_axis` row), the top-level step, and
   the result window paged two lines at a time;
 * battle_side: the enemies' status icons kept off the table (`enemy_statuses` 0);
-* title: a start state before the menu, and the menu's entries chosen and ordered (erase listed, so hidden);
+* title: a start state before the menu, and the menu's entries chosen and ordered (erase listed, so shown);
 * dialogue: a tag whose values act by range and by value, and the still pictures kept as a stack;
 * field: no arrival notice and no area banner (`arrive_toast`, `area_banner` 0);
 * save_slots, menu_equip, menu_order, menu_status: the Save page's system menu and numbered slots, the Equip page

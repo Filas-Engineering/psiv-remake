@@ -6,7 +6,7 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-public enum Screen { Title, Field, Dialogue, Battle, Menu, Shop, Inn, SavePrompt, NameEntry, QuestLog, TextLog, Options, Pause, LoadGame, Travel, SoundTest }
+public enum Screen { Title, Field, Dialogue, Battle, Menu, Shop, Inn, SavePrompt, NameEntry, QuestLog, TextLog, Options, Pause, LoadGame, Travel, SoundTest, Credits }
 
 // The sample's screens: reads the session after each update and draws it through the surface with the
 // sample's own generated pictures (Art), rectangles and text. Holds no game state of its own beyond cursors,
@@ -78,6 +78,9 @@ public sealed partial class SampleController
 		_field.MapOf = area => _data.Maps.GetValueOrDefault(area);
 		// An actor named after an encounter is that encounter's field enemy, unless the asset directory gives it a sheet.
 		_field.CreatureLook = id => _data.Encounters.Contains(id) && _art?.FromFile("character:" + id) != true;
+		_field.EnemyEncounter = enemy => _data.EnemyEncounters.GetValueOrDefault(enemy);
+		_field.WanderPercent = id => _data.WanderPercent.TryGetValue(id, out int percent) ? percent : null;
+		_field.ActorHome = id => _data.ActorAt.TryGetValue(id, out (int X, int Y) home) ? home : null;
 		_assetDir = assetDir;
 		if (assetDir is not null)
 		{
@@ -169,6 +172,7 @@ public sealed partial class SampleController
 					MenuKind.SavePrompt => Screen.SavePrompt,
 					MenuKind.NameEntry => Screen.NameEntry,
 					MenuKind.Port => Screen.Travel,
+					MenuKind.Credits => Screen.Credits,
 					MenuKind.Field when _travelPick is not null => Screen.Travel,
 					_ => Screen.Menu,
 				},
@@ -242,7 +246,7 @@ public sealed partial class SampleController
 		// camera go, and the area's music comes back.
 		if (_s.Mode == Mode.Field)
 		{
-			_field.EndScene(Lineup());
+			_field.EndScene(Lineup(), _s.BackgroundEvents().Count > 0);
 		}
 		else if (_s.Mode == Mode.Title)
 		{
@@ -275,7 +279,7 @@ public sealed partial class SampleController
 		_list.Reset();
 		_sub.Reset();
 		_confirm.Close();
-		_pause = _optionsOverlay = _loadOverlay = _soundTestOverlay = false;
+		_pause = _optionsOverlay = _loadOverlay = _soundTestOverlay = _erasing = false;
 		_soundTestTrack = "";
 		_clearRecord = null;
 		_titleStarted = false;
@@ -313,6 +317,7 @@ public sealed partial class SampleController
 		}
 		if (_s.Mode == Mode.Battle && !_battle.Active)
 		{
+			_autoPlaying = "";
 			StartBattle();
 		}
 		Screen screen = Screen;
@@ -377,6 +382,7 @@ public sealed partial class SampleController
 		case Screen.LoadGame: UpdateLoadGame(input); break;
 		case Screen.SoundTest: UpdateSoundTest(input); break;
 		case Screen.Travel: UpdateTravel(input); break;
+		case Screen.Credits: UpdateCredits(dtMs, input); break;
 		case Screen.QuestLog:
 		case Screen.TextLog:
 			if (input.Back || input.Confirm || input.Pressed(GameAction.QuestLog) || input.Pressed(GameAction.TextLog))
@@ -575,6 +581,7 @@ public sealed partial class SampleController
 		case Screen.LoadGame: DrawLoadGame(s, t, art); break;
 		case Screen.SoundTest: DrawSoundTest(s, t, art); break;
 		case Screen.Travel: DrawTravel(s, t, art); break;
+		case Screen.Credits: DrawCredits(s, t); break;
 		case Screen.QuestLog:
 			Ui.Draw("quest_log", s, t, UiData()
 				.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "quest_log")))
@@ -639,6 +646,22 @@ public sealed partial class SampleController
 			"line" => _s.Line()?.Text ?? "-",
 			"speaker" => _s.Line() is { } spoken ? (spoken.SpeakerName.Length > 0 ? spoken.SpeakerName : "none") : "-",
 			"conveyors" => $"{_field.RunningConveyors}/{_field.DrawnConveyors}",
+			// The area banner's title while it shows (it follows the session's arrival announcement), `-` otherwise.
+			"banner" => _field.BannerLeftMs > 0 ? _field.BannerTitle : "-",
+			"playtime" => _s.WorldInfo().PlayTimeMs.ToString(CultureInfo.InvariantCulture),
+			"menukind" => GameSession.NameOf(NameKind.MenuKind, (int)_s.MenuKind),
+			// The credits as the last frame drew them: lines shown of the entries, and the scroll in pixels.
+			"credits" => _probeCredits,
+			// A visible enemy a script addresses by its reserved name, as the last frame drew it: `X Y`, `walking` or `-`.
+			_ when key.StartsWith("enemy.", StringComparison.Ordinal) => _field.DrawnEnemies.GetValueOrDefault(key) ?? "-",
+			// What InteractAt says of a cell (`interactat.X.Y`): the target's word, cell and facing, or `none`.
+			_ when key.StartsWith("interactat.", StringComparison.Ordinal) && key.Split('.') is [_, string ix, string iy] &&
+				int.TryParse(ix, CultureInfo.InvariantCulture, out int atX) && int.TryParse(iy, CultureInfo.InvariantCulture, out int atY) =>
+				_s.InteractAt(atX, atY) is { } at ? $"{PromptWord(at.Kind)} at {at.X} {at.Y} facing {at.Facing.ToString().ToLowerInvariant()}" + (at.Across ? " across" : "") : "none",
+			// How the field draws an actor now (`actorlook.ID`): its figure and the library's animation with its milliseconds.
+			_ when key.StartsWith("actorlook.", StringComparison.Ordinal) => ActorLookProbe(key["actorlook.".Length..]),
+			// The cells of the walk the field draws an actor taking (`actorroute.ID`), `-` while it stands.
+			_ when key.StartsWith("actorroute.", StringComparison.Ordinal) => _field.RouteProbe(key["actorroute.".Length..]),
 			"tilehooks" => $"{_field.ActiveTileHooks}/{_field.DrawnTileHooks}",
 			// How the area shows its conveyor belts and tile step hooks: generated, from the field's overlay pictures, or off.
 			"fieldmarks" => _art is null || _s.FieldInfo() is not { } marked ? "-" : _art.FieldLookOf(marked.AreaId) is var ml
@@ -651,6 +674,7 @@ public sealed partial class SampleController
 			"backdropdim" => _probeBackdropDim,
 			"darkness" => _probeDarkness,
 			"keeper" => _probeKeeper,
+			"voice" => _probeVoice,
 			"titlesizes" => _probeTitleSizes,
 			_ when key.StartsWith("window.", StringComparison.Ordinal) => WindowProbe(key["window.".Length..]),
 			_ when key.StartsWith("uifield.", StringComparison.Ordinal) => FieldProbe(key["uifield.".Length..]),

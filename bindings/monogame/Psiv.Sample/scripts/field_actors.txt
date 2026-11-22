@@ -2,6 +2,8 @@
 # named after the marsh encounter stands on its talk point in Tidewater Landing drawn as that encounter's field enemy;
 # talking to it plays `field_creature`, which hops it, trembles it, moves it at twice the walking pace, fades it out,
 # fades it in and blinks it out, then fades it in and dissolves it, each vanishing followed by the hide that removes it.
+# The hop, fades, blink and dissolve are the library's standard animations: the session times them (0.3, 0.5, 0.6 and 0.8
+# seconds) and hides the creature as a vanishing one starts, and the sample draws them from that state.
 # With --window the shot lines save screenshots under build/shots/field/ (run from bindings/).
 
 cmd set text instant
@@ -26,14 +28,14 @@ expect pose marsh tremble
 shot build/shots/field/actor_tremble.png
 wait 40
 expect actor marsh walking
-wait 60
+wait 45
 expect pose marsh fadeout
 shot build/shots/field/actor_fade_out.png
 wait 40
 expect actor marsh hidden
 
 # Hidden, it walks back to its talk point unseen; shown again it fades in, then blinks out.
-wait 75
+wait 85
 expect pose marsh fadein
 expect actor marsh 10 6
 shot build/shots/field/actor_fade_in.png
@@ -42,7 +44,7 @@ expect pose marsh blinkout
 shot build/shots/field/actor_blink_out.png
 wait 45
 expect pose marsh fadein
-wait 30
+wait 35
 expect pose marsh dissolve
 shot build/shots/field/actor_dissolve.png
 wait 50

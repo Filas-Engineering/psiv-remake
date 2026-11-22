@@ -47,7 +47,7 @@ const char* onOff(bool value) {
 }
 
 const char* const kKeys[] = {"text_speed", "auto_advance", "show_shipped_names", "text_language", "text_size", "battle_speed",
-	"ambient_talk", "reduced_flash", "music_volume", "ambient_volume", "effects_volume", "always_run"};
+	"ambient_talk", "reduced_flash", "music_volume", "ambient_volume", "effects_volume", "always_run", "flashing", "flash_notice_seen"};
 
 bool knownKey(const std::string& key) {
 	for (const char* k : kKeys) {
@@ -78,6 +78,26 @@ const char* toString(BattleSpeed speed) {
 	case BattleSpeed::X3: return "3x";
 	}
 	return "1x";
+}
+
+const char* toString(FlashLevel level) {
+	switch (level) {
+	case FlashLevel::Unset: return "";
+	case FlashLevel::Reduced: return "reduced";
+	case FlashLevel::Standard: return "standard";
+	case FlashLevel::Original: return "original";
+	}
+	return "";
+}
+
+bool parseFlashLevel(const std::string& text, FlashLevel& out) {
+	for (FlashLevel l : {FlashLevel::Reduced, FlashLevel::Standard, FlashLevel::Original}) {
+		if (text == toString(l)) {
+			out = l;
+			return true;
+		}
+	}
+	return false;
 }
 
 bool parseTextSpeed(const std::string& text, TextSpeed& out) {
@@ -129,6 +149,10 @@ std::string setProfileValue(Profile& p, const std::string& key, const std::strin
 		ok = parsePercent(value, 0, 100, p.effectsVolume);
 	} else if (key == "always_run") {
 		ok = parseSwitch(value, p.alwaysRun);
+	} else if (key == "flashing") {
+		ok = parseFlashLevel(value, p.flashing);
+	} else if (key == "flash_notice_seen") {
+		ok = parseSwitch(value, p.flashNoticeSeen);
 	} else {
 		return "unknown setting '" + key + "'";
 	}
@@ -151,6 +175,12 @@ std::string serializeProfile(const Profile& p) {
 	line("effects_volume", std::to_string(p.effectsVolume));
 	if (p.alwaysRun) {
 		line("always_run", onOff(p.alwaysRun));
+	}
+	if (p.flashing != FlashLevel::Unset) {
+		line("flashing", toString(p.flashing));
+	}
+	if (p.flashNoticeSeen) {
+		line("flash_notice_seen", onOff(p.flashNoticeSeen));
 	}
 	for (const auto& [key, value] : p.unknown) {
 		out += key + " " + value + "\n";

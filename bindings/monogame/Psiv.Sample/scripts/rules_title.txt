@@ -1,0 +1,42 @@
+# The title's Erase, on the data copy and asset copy scripts/make_rules_data.py writes (its title layout lists Erase with the
+# `erase` param): the slots from Saves(), damaged ones included, ui.title.erase_confirm with the slot, No keeping it and
+# Yes erasing it through EraseSave with the session's game.save_erased notice, the list read again, and Back to the
+# options. With --window the shot lines save screenshots under build/shots/rules/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+waitstate 10 selected New game
+press Enter
+pressuntil Enter Field 400
+cmd menu
+cmd save manual_0
+cmd title
+wait 2
+expect screen Title
+savefile damage manual_0
+press Down 3
+expect state selected Erase
+press Enter
+expect state selected manual_0 (damaged)
+press Down
+expect statehas selected auto_0 (autosave) Tidewater Landing
+shot build/shots/rules/title_erase.png
+press Enter
+expect state prompt Erase auto_0? It cannot be brought back.
+shot build/shots/rules/title_erase_confirm.png
+press Enter
+expect state prompt none
+expect statehas selected auto_0
+press Enter
+press Up
+press Enter
+expect toast Erased auto_0.
+press Up
+expect state selected manual_0 (damaged)
+press Enter
+press Up
+press Enter
+expect toast Erased manual_0.
+expect state selected No saves to erase.
+press Escape
+expect state selected Erase

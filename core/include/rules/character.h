@@ -15,6 +15,17 @@ struct LearnedAbility {
 	std::string ability;
 };
 
+// One side of a profile row: a text key of the game's tables, or a whole number shown as written.
+struct ProfileText {
+	std::string text;
+	bool number = false;
+};
+
+struct ProfileRow {
+	ProfileText key;
+	ProfileText value;
+};
+
 struct CharacterDef {
 	std::string id;
 	std::string name;
@@ -37,6 +48,8 @@ struct CharacterDef {
 	bool vulnerable = false;
 	// Techniques and skills events can teach it, which combination recipes count as abilities it can use.
 	std::vector<std::string> teachable = {};
+	// Presentation only: rows a status screen lists in this order (age, home, ...).
+	std::vector<ProfileRow> profile = {};
 };
 
 // The persistent state of a party member between battles. The host owns it.

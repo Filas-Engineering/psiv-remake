@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game/area.h"
+#include "game/profile.h"
 #include "game/world.h"
 
 #include "events/glossary.h"
@@ -135,6 +136,10 @@ struct PresentationNames {
 	// events::action_seconds.
 	std::map<events::ActionType, double> durations;
 	std::map<std::pair<events::ActionType, std::string>, double> subjectDurations;
+	// The flashing level a new profile starts at (`flash_default`, R110; never Unset) and whether a host offers Original
+	// at all (`flash_original`); a host that cannot offer the default falls back to Reduced.
+	FlashLevel flashDefault = FlashLevel::Reduced;
+	bool flashOriginal = true;
 
 	const CameraDef* camera(const std::string& id) const;
 	// The length of one play of `name`: the data's seconds, else a standard animation's own, else 0.
@@ -213,6 +218,11 @@ struct LanguageFiles {
 // How a battle fought aboard a vehicle opens: rolled from the vehicle's agility like a random battle on foot, or always
 // normally, with no roll drawn.
 enum class VehicleOpening { Roll, Normal };
+
+// When entering an area shows the `game.arrive` notice (R107): always, only when the party walks in through an exit or a
+// gangway (not a script's warp, travel, boarding a ship or the new game's start), or never. An area's own
+// `arrive_notice: false` turns it off there.
+enum class ArriveNotice { Always, Walked, Never };
 
 // How a vehicle moves in the field (FLD-061). Its battle stats, attack and skills are core's vehicle of the same id,
 // which fights its vehicle battles (BAT-140).
@@ -309,9 +319,18 @@ struct GameConfig {
 	// The leader's speed on foot while running against walking: 200 crosses a cell in half the step time. 0: no running.
 	int runSpeedPercent = 0;
 	VehicleOpening vehicleOpening = VehicleOpening::Roll;
+	// game.json `arrive_notice` (R107).
+	ArriveNotice arriveNotice = ArriveNotice::Always;
+	// game.json `step_timing` `exact` (R108; default `ticks`): steps of the leader (on foot, running and aboard), belts and
+	// wandering actors carry the time past each step into the next, to the microsecond, so a step time that is not a whole
+	// number of ticks (or has a fraction) is kept on average over any distance; the carry is saved. With `ticks` a step ends
+	// at the first tick at or past its time and the rest is dropped, as before.
+	bool exactSteps = false;
 	// Background events that may run at once (events/FORMAT.md, "Background events"); a spawn past it is dropped with a
 	// warning.
 	int backgroundLimit = 4;
+	// False: entering an area never starts ambient party talk, whatever the profile's ambient_talk says (R114).
+	bool partyTalkAmbient = true;
 	std::vector<Credits> credits = {};
 	const Credits* creditsById(const std::string& id) const;
 };

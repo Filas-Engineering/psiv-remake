@@ -5,18 +5,19 @@
 	"name": "cells",
 	"tilewidth": 16,
 	"tileheight": 16,
-	"tilecount": 5,
-	"columns": 5,
+	"tilecount": 6,
+	"columns": 6,
 	"margin": 0,
 	"spacing": 0,
 	"image": "cells.png",
-	"imagewidth": 80,
+	"imagewidth": 96,
 	"imageheight": 16,
 	"tiles": [
 		{"id":0,"properties":[{"name":"kind","type":"string","value":"floor"}]},
 		{"id":1,"properties":[{"name":"kind","type":"string","value":"wall"}]},
 		{"id":2,"properties":[{"name":"kind","type":"string","value":"water"}]},
 		{"id":3,"properties":[{"name":"kind","type":"string","value":"soft"}]},
-		{"id":4,"properties":[{"name":"kind","type":"string","value":"barrier"}]}
+		{"id":4,"properties":[{"name":"kind","type":"string","value":"barrier"}]},
+		{"id":5,"properties":[{"name":"kind","type":"string","value":"counter"}]}
 	]
 }

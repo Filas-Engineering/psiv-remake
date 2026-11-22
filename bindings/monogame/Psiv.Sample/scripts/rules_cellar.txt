@@ -1,0 +1,143 @@
+# The data copy scripts/make_rules_data.py writes (Wren Cellar with game.json's interact nearby, run_speed_percent 200,
+# arrive_notice walked, step_timing exact at 133.5 ms a cell, a counter drawn as '=', music by the door's flag and for the
+# skimmer's battles) and its asset copy (an object over both cells of the long table, a title that lists Erase), with
+# --dev and the real-time field input. With --window the shot lines save screenshots under build/shots/rules/ (run from
+# bindings/).
+
+cmd set text instant
+expect screen Title
+wait 1
+expect state selected New game
+press Enter
+pressuntil Enter Field 400
+fieldinput realtime
+# arrive_notice walked: the new game's start announces nothing.
+expect state banner -
+expect notoast You arrive
+dev warp wren_cellar cellar_door
+dev encounters off
+wait 2
+expect state area Wren Cellar
+expect state banner -
+expect state music field_marsh_reeds
+shot build/shots/rules/cellar.png
+
+# The closed exit below the door is drawn as its normal tile with the door over it, and blocks.
+expect state fieldpicture -
+cmd walk 6 8
+cmd face south
+wait 2
+hold Down 20
+expect actor fighter 6 8 south
+
+# The prompt follows the session's target: the clerk across the counter drawn as '='.
+cmd walk 2 3
+cmd face north
+wait 2
+expect state interacttarget read at 2 1 facing north across
+expect state interactprompt read at 2 1
+shot build/shots/rules/prompt_across.png
+expect state interactat.2.1 read at 2 1 facing north across
+
+# The long table answers from below either of its cells, under the object drawn over both.
+cmd walk 9 3
+cmd face north
+wait 2
+expect state interacttarget read at 9 2 facing north
+expect statehas objects 2x1
+shot build/shots/rules/table_object.png
+
+# The cook stands on its actor_at cell behind its counter, and answers there from beside it.
+expect actor cellar_cook 10 5
+cmd walk 9 5
+cmd face west
+wait 2
+expect state interacttarget talk at 10 5 facing east
+expect state interactprompt talk at 10 5
+
+# Running through the session: the drawn step is the session's run step time, and play time moves with the frames only.
+cmd walk 2 6
+cmd face east
+wait 2
+trace walkstep,playtime,leaderpos
+hold LeftShift+Right 3
+expect statehas walkstep 200%
+hold LeftShift+Right 17
+trace off
+wait 10
+
+# The notice opens the door; the area's music follows its flag once the event is over.
+cmd walk 5 3
+cmd face north
+wait 2
+expect state interacttarget read at 5 2 facing north
+press Enter
+pressuntil Enter Field 40
+wait 4
+expect state music title_harbor_dawn
+
+# Walking out through the exit announces the hollow (banner and notice).
+cmd walk 6 8
+cmd face south
+wait 2
+hold Down 20
+wait 2
+expect state area Wren Hollow
+expect state banner Wren Hollow
+expect toast You arrive at Wren Hollow.
+shot build/shots/rules/arrival_banner.png
+
+# Wren Hollow's actors from the library's state: the tallykeeper on its actor_at cell behind the counter, the sentinel in
+# an enemy's figure; the scene places the drifter, fades it in, walks it along its routes, hops it, dissolves it and
+# removes it, and the keeper's own `tally_nod` lasts the 0.7 seconds game.json gives it as an object.
+expect actor tallykeeper 4 1
+expect state actorlook.hollow_sentinel enemy aegis_sentinel
+expect actor hollow_sentinel 7 4 west
+cmd walk 4 3
+cmd face north
+wait 2
+expect state interacttarget talk at 4 2 facing north
+press Enter
+expect screen Dialogue
+press Enter
+waitstatehas 40 actorlook.hollow_drifter fade_in
+expect pose hollow_drifter fadein
+expect actor tallykeeper 4 1 south
+shot build/shots/rules/drifter_fade_in.png
+waitstate 60 actorlook.hollow_drifter own
+expect actor hollow_drifter 1 4 east
+press Enter
+# The pathfinding move walks the record's route round the leader and the sentinel, not along x then y.
+waitstate 20 actorroute.hollow_drifter 1,4 1,3 2,3 3,3 4,3 5,3 6,3 7,3 8,3 8,4
+wait 30
+expect actor hollow_drifter walking
+shot build/shots/rules/drifter_route.png
+waitstatehas 200 actorlook.hollow_drifter hop
+expect pose hollow_drifter jump
+waitstate 60 actorroute.hollow_drifter 8,4 7,4 6,4 5,4 4,4 3,4 2,4 2,3 1,3 1,4
+waitstatehas 120 actorlook.hollow_drifter dissolve
+wait 20
+# Hidden by the library at once, it is drawn dissolving for the animation's 0.8 seconds.
+expect pose hollow_drifter dissolve
+shot build/shots/rules/drifter_dissolve.png
+waitstate 60 actorlook.hollow_drifter own hidden
+expect actor hollow_drifter hidden
+press Enter
+waitstatehas 10 actorlook.tallykeeper tally_nod
+expect statehas actorlook.tallykeeper /700
+expect state actorlook.hollow_drifter own removed
+waitstatehas 60 actorlook.tallykeeper shake
+pressuntil Enter Field 200
+expect actor hollow_drifter hidden
+
+# The second talk fades the keeper out and removes it for good, then reloads the area.
+cmd face north
+wait 2
+press Enter
+press Enter
+waitstatehas 120 actorlook.tallykeeper fade_out
+expect pose tallykeeper fadeout
+pressuntil Enter Field 200
+wait 2
+expect actor tallykeeper hidden
+expect state actorlook.tallykeeper own removed

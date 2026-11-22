@@ -262,6 +262,7 @@ Items use the same effects and targets (of the enemy-only effects, `transform`),
   * `kind` (optional): `living` (default), `spirit` or `machine` (P6). See effect `kinds` and `machine_recover_hp`.
   * `vulnerable` (optional bool): enemy instant-defeat effects can fell the member (see `instant_defeat_kinds`).
   * `teachable` (optional): techniques and skills events can teach the character (`learn`, `../events`). Combination recipes and data macros count an ability a character can know by any route: from the start, by level, through equipment it can wear, `teachable`, or an item with a `teach` effect (which any character can use).
+  * `profile` (optional): presentation rows a status screen lists in order, `[{"key": "profile.age", "value": 19}, ...]`, each side a text key of the game's tables or a whole number (`load.profile_side` otherwise; `CharacterDef::profile`). Battles never read it; the game checks the keys.
   * `base` and `growth` may give `magic_defense`, as may equipment `stats`.
 * `vehicles` (optional): see [Vehicle battles](#vehicle-battles).
 * `lineup`: 1 to 5 character ids.
@@ -328,6 +329,7 @@ When a macro step cannot run as written (BAT-053):
 * Override target rules (optional `target`, BAT-090/091): `default`, `random`, `lowest_hp`, `highest_hp` (current hit points, ties to the lower index), `has_status` and `lacks_status` (with `target_status`; a random match), and `last_attacker` (the foe that last damaged this enemy). They need a single-target ability, and `last_attacker` one aimed at foes. An override whose rule finds no target does not fire that turn.
 * `flying` (optional bool): presentation only, for a renderer to show the enemy off the ground.
 * `kind` (optional): `living` (default), `spirit` or `machine` (B6). `vulnerable` (bool): instant defeat can work on it. `statuses`: statuses it starts every battle with (a boss shield). `summons`, `merges_into` (enemy ids, needed by an ability with a summon or merge effect) and `next_form` (the enemy it becomes at full hit points when it falls, in place of being defeated, B16; a chain of forms must end). These may name any enemy of the file.
+* `stats.level` (optional, 1 to 99, default 1): no formula reads it; front ends show it as the enemy's level (the combatant's stats carry it, C `psiv_combatant.level`).
 * `merges_with`, `transforms_into`, `splits_into` (enemy ids): the partner a merge takes in (default: its own id), and what a transform or a split makes of it; a transform or split effect needs its field.
 * `attack_element` (optional, an element): its basic attack's physical damage takes the target's affinity for it, like a weapon's element, so Defend does not quarter it. Default none.
 * `keeps_ambush` (optional bool, needs `next_form` or `transforms_into`): its next form (at `next_form_at` or on falling) and its transform keep the `ambushed` mark it has when it changes, so an `ambushed` override can still fire for the new form. Default false: the new form starts unmarked, as before. A merge result and split parts always start unmarked.

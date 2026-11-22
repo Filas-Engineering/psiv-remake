@@ -505,7 +505,7 @@ uint32_t psiv_sizeof(const char* struct_name) {
 		PSIV_SIZE(psiv_macro_step), PSIV_SIZE(psiv_macro), PSIV_SIZE(psiv_stat_bonus), PSIV_SIZE(psiv_affinity), PSIV_SIZE(psiv_status_resist),
 		PSIV_SIZE(psiv_member_detail), PSIV_SIZE(psiv_combo_entry), PSIV_SIZE(psiv_combat_view), PSIV_SIZE(psiv_equip_preview), PSIV_SIZE(psiv_difficulty), PSIV_SIZE(psiv_camera),
 		PSIV_SIZE(psiv_vehicle), PSIV_SIZE(psiv_travel_destination), PSIV_SIZE(psiv_event_position), PSIV_SIZE(psiv_zone), PSIV_SIZE(psiv_element_info),
-		PSIV_SIZE(psiv_route_cell), PSIV_SIZE(psiv_interact_target), PSIV_SIZE(psiv_field_input),
+		PSIV_SIZE(psiv_route_cell), PSIV_SIZE(psiv_interact_target), PSIV_SIZE(psiv_field_input), PSIV_SIZE(psiv_profile_row),
 	};
 #undef PSIV_SIZE
 	if (!struct_name) {
@@ -777,6 +777,8 @@ psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out) {
 		out->defeat_music = session->arena.str(c.presentation.music.defeat);
 		out->magic_defense = session->data->db.battleRules.magicDefense;
 		out->affinity_divisor = session->data->db.battleRules.affinityDivisor;
+		out->flash_default = static_cast<int32_t>(c.presentation.flashDefault);
+		out->flash_original = c.presentation.flashOriginal;
 		return PSIV_OK;
 	});
 }
@@ -802,6 +804,8 @@ psiv_status psiv_profile_get(psiv_session* session, psiv_profile* out) {
 		out->ambient_volume = p.ambientVolume;
 		out->effects_volume = p.effectsVolume;
 		out->always_run = p.alwaysRun;
+		out->flashing = static_cast<int32_t>(p.flashing);
+		out->flash_notice_seen = p.flashNoticeSeen;
 		return PSIV_OK;
 	});
 }
@@ -819,6 +823,9 @@ psiv_status psiv_profile_set(psiv_session* session, const psiv_profile* profile)
 		if (in.battle_speed < 0 || in.battle_speed > PSIV_BATTLE_X3) {
 			return outOfRange(session, "profile->battle_speed", in.battle_speed);
 		}
+		if (in.flashing < PSIV_FLASH_UNSET || in.flashing > PSIV_FLASH_ORIGINAL) {
+			return outOfRange(session, "profile->flashing", in.flashing);
+		}
 		game::Profile p = session->session->profile();
 		p.textSpeed = static_cast<game::TextSpeed>(in.text_speed);
 		p.autoAdvance = in.auto_advance != 0;
@@ -832,6 +839,8 @@ psiv_status psiv_profile_set(psiv_session* session, const psiv_profile* profile)
 		p.ambientVolume = in.ambient_volume;
 		p.effectsVolume = in.effects_volume;
 		p.alwaysRun = in.always_run != 0;
+		p.flashing = static_cast<game::FlashLevel>(in.flashing);
+		p.flashNoticeSeen = in.flash_notice_seen != 0;
 		return refused(session, session->session->setProfile(p));
 	});
 }
@@ -1408,6 +1417,12 @@ psiv_status psiv_field_info_get(psiv_session* session, psiv_field_info* out) {
 		out->conveyor_step_ms = motion.conveyorStepMs;
 		out->conveyor_progress_ms = motion.conveyorProgressMs;
 		out->step_mask = motion.stepMask;
+		out->announce_arrival = session->session->arrivalAnnounced();
+		out->leader_step_us = motion.stepUs;
+		out->run_step_us = motion.runStepUs;
+		out->step_progress_us = motion.stepProgressUs;
+		out->conveyor_step_us = motion.conveyorStepUs;
+		out->conveyor_progress_us = motion.conveyorProgressUs;
 		return PSIV_OK;
 	});
 }
@@ -1561,7 +1576,7 @@ psiv_status psiv_field_points(psiv_session* session, const psiv_point** out, int
 		}
 		for (const game::RestPoint& r : a->rests) {
 			if (r.at) {
-				points.push_back({PSIV_POINT_REST, arena.str(r.id), r.at->x, r.at->y, "", 1, r.cost, 0, 0, arena.str(r.keeper)});
+				points.push_back({PSIV_POINT_REST, arena.str(r.id), r.at->x, r.at->y, "", 1, session->session->restCost(r), 0, 0, arena.str(r.keeper)});
 			}
 		}
 		for (const game::Port& p : a->ports) {
@@ -1907,6 +1922,7 @@ psiv_status psiv_battle_combatants(psiv_session* session, const psiv_combatant**
 			const rules::EnemyDef* enemy = b->isParty(static_cast<int>(i)) ? nullptr : b->database().enemy(c.defId);
 			o.flying = enemy && enemy->flying;
 			o.position = c.side == rules::Side::Enemy ? c.position : -1;
+			o.level = c.stats.level;
 		}
 		*out = items;
 		*count = static_cast<int32_t>(names.size());
@@ -2360,6 +2376,14 @@ psiv_status psiv_member_detail_get(psiv_session* session, const char* member, ps
 		}
 		out->status_resist_count = n;
 		out->status_resists = resists;
+		psiv_profile_row* rows = a.array<psiv_profile_row>(detail->profile.size());
+		n = 0;
+		for (const rules::ProfileRow& row : detail->profile) {
+			const auto shown = [&](const rules::ProfileText& t) { return a.str(t.number ? t.text : session->session->render({t.text, {}})); };
+			rows[n++] = {a.str(row.key.text), shown(row.key), row.key.number, a.str(row.value.text), shown(row.value), row.value.number};
+		}
+		out->profile_count = n;
+		out->profile = rows;
 		return PSIV_OK;
 	});
 }
@@ -2543,6 +2567,7 @@ psiv_status psiv_shop_get(psiv_session* session, psiv_shop_info* out) {
 		out->stock_count = static_cast<int32_t>(sold.size());
 		out->stock = stock;
 		out->kind = static_cast<int32_t>(shop->kind);
+		out->voice = session->arena.str(shop->voice);
 		return PSIV_OK;
 	});
 }
@@ -2556,8 +2581,11 @@ psiv_status psiv_inn_get(psiv_session* session, psiv_inn_info* out) {
 		if (!inn) {
 			return notFound(session, "inn");
 		}
+		*out = psiv_inn_info();
 		out->id = session->arena.str(inn->id);
-		out->cost = inn->cost;
+		out->cost = session->session->restCost(*inn);
+		out->voice = session->arena.str(inn->voice);
+		out->per_member = inn->perMember;
 		return PSIV_OK;
 	});
 }

@@ -32,6 +32,7 @@ public struct PsivGameInfo
 	public IntPtr Languages, TitleMusic, VictoryMusic, DefeatMusic;
 	public int MagicDefense;
 	public int AffinityDivisor;
+	public int FlashDefault, FlashOriginal;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -41,6 +42,7 @@ public struct PsivProfile
 	public IntPtr TextLanguage;
 	public int TextSizePercent, BattleSpeed, AmbientTalk, ReducedFlash, MusicVolume, AmbientVolume, EffectsVolume;
 	public int AlwaysRun;
+	public int Flashing, FlashNoticeSeen;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -81,6 +83,8 @@ public struct PsivFieldInfo
 	public IntPtr ShipPort;
 	public int RunStepMs;
 	public int StepProgressMs, ConveyorStepMs, ConveyorProgressMs, StepMask;
+	public int AnnounceArrival;
+	public long LeaderStepUs, RunStepUs, StepProgressUs, ConveyorStepUs, ConveyorProgressUs;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -188,7 +192,7 @@ public struct PsivCombatant
 	public IntPtr Statuses;
 	public int CommandKind;
 	public IntPtr CommandId;
-	public int CommandTarget, Flying, Position;
+	public int CommandTarget, Flying, Position, Level;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -278,6 +282,9 @@ public struct PsivElementInfo { public int Index; public IntPtr Id, Name; }
 public struct PsivStatusResist { public IntPtr Id, Name; public int Percent; }
 
 [StructLayout(LayoutKind.Sequential)]
+public struct PsivProfileRow { public IntPtr Key, KeyText; public int KeyNumber; public IntPtr Value, ValueText; public int ValueNumber; }
+
+[StructLayout(LayoutKind.Sequential)]
 public struct PsivMemberDetail
 {
 	public IntPtr Id;
@@ -288,6 +295,8 @@ public struct PsivMemberDetail
 	public int StatusResistCount;
 	public IntPtr StatusResists;
 	public int MagicDefense;
+	public int ProfileCount;
+	public IntPtr Profile;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -339,10 +348,10 @@ public struct PsivComboEntry
 public struct PsivInventoryEntry { public IntPtr Id, Name; public int Count, Equipment, Field, TargetingOrSlot, Price, Travel; public IntPtr CallsVehicle; public int Hands; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivShopInfo { public IntPtr Id; public int SellPercent, StockCount; public IntPtr Stock; public int Kind; }
+public struct PsivShopInfo { public IntPtr Id; public int SellPercent, StockCount; public IntPtr Stock; public int Kind; public IntPtr Voice; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivInnInfo { public IntPtr Id; public int Cost; }
+public struct PsivInnInfo { public IntPtr Id; public int Cost; public IntPtr Voice; public int PerMember; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivJob { public IntPtr Id, Title; public int State; }

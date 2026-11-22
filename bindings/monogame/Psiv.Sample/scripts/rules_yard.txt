@@ -1,0 +1,79 @@
+# Background events, wandering actors, script looks, a visible enemy addressed as an actor, credits and the end of the game,
+# on the data copy `make_actor_data ... background` writes (Wren Yard and Wren Den), with --dev and the real-time field
+# input. With --window the shot lines save screenshots under build/shots/rules/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+fieldinput realtime
+dev warp wren_yard yard_gate
+wait 2
+expect state area Wren Yard
+
+# The lamplighter's round runs in the background: the leader keeps walking while it walks between the lamps.
+waitstatehas 60 actorroute.yard_lamplighter ,
+expect actor yard_lamplighter walking
+expect screen Field
+hold Left 20
+wait 20
+expect actor fighter 4 6 west
+shot build/shots/rules/yard_background.png
+
+# The goat wanders about its pen, gliding a cell at a time.
+waitstatehas 300 actorroute.yard_goat ,
+expect actor yard_goat walking
+shot build/shots/rules/yard_goat.png
+
+# The bell's scene: the trader takes an enemy's figure, and the patch's visible enemy is turned, walked along its route and
+# taken off the field by its reserved name.
+# Round the goat's pen, which its wandering may block.
+cmd walk 6 6
+cmd walk 6 1
+cmd walk bell_front
+cmd face north
+wait 2
+expect actor fighter 3 1 north
+expect state enemy.yard_patch.1 11 5
+press Enter
+expect screen Dialogue
+press Enter
+waitstate 60 actorlook.yard_trader enemy aegis_sentinel
+waitstate 60 enemy.yard_patch.1 walking
+shot build/shots/rules/yard_enemy_walk.png
+waitstate 60 enemy.yard_patch.1 12 6
+pressuntil Enter Field 40
+wait 2
+expect state enemy.yard_patch.1 -
+# Away from the goat's pen, so its touch does not start a scene that pauses the background.
+cmd walk 8 1
+
+# The crow's flight, spawned by the scene, plays on beside the field and ends with a dissolve.
+waitstatehas 300 actorlook.yard_crow dissolve
+wait 10
+expect pose yard_crow dissolve
+shot build/shots/rules/yard_crow_dissolve.png
+waitstate 60 actorlook.yard_crow look crow removed
+expect actor yard_crow hidden
+
+# The den's plaque plays the credits: their music, their entries coming up after their gaps, then the end of the game.
+dev warp wren_den plaque_front
+wait 2
+cmd face east
+wait 2
+press Enter
+expect screen Dialogue
+press Enter
+wait 2
+expect screen Credits
+expect state music title_harbor_dawn
+expect state credits 1/4 scroll 0
+shot build/shots/rules/credits_first.png
+waitstate 400 credits 4/4 scroll 0
+shot build/shots/rules/credits_all.png
+press Enter
+expect screen Dialogue
+press Enter
+wait 2
+expect screen Title
+expect state music title_harbor_dawn

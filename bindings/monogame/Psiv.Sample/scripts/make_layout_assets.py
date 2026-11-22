@@ -550,6 +550,22 @@ def screens():
 		]},
 	]}
 
+	# The credits roll in a narrow column with the set's hint bar.
+	L["credits"] = {"windows": [
+		{"name": "backdrop", "elements": [{"type": "fill", "w": "W", "h": "H", "color": "black", "alpha": 0.95}]},
+		{"name": "roll", "x": 24, "y": TOP, "w": "W - 48", "h": f"H - 8 - {TOP} - {HINT_H}", "elements": [
+			{"type": "repeater", "items": "lines", "layout": "column", "dy": 0, "template": [
+				text("text", visible="heading && y >= scroll && y - scroll < ch", w="cw", align="center", y="y - scroll", style="title"),
+				text("text", visible="!heading && y >= scroll && y - scroll < ch", w="cw", align="center", y="y - scroll", style="body"),
+			]},
+		]},
+		{"name": "hint", "x": 0, "y": f"H - {HINT_H}", "h": HINT_H, "elements": [
+			{"type": "fill", "w": "W", "h": HINT_H, "color": "black", "alpha": 0.7},
+			{"type": "fill", "w": 3, "h": HINT_H, "color": "accent"},
+			{"type": "hints", "value": "hint", "x": 12, "y": "t(3)", "w": "W - 24"},
+		]},
+	]}
+
 	L["options"] = {"windows": [
 		{"name": "scene", "visible": "title_mode", "elements": [
 			{"type": "slot", "slot": "scene"},

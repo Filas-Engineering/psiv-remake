@@ -1,0 +1,115 @@
+# The macro editor's newer steps and the battle's macro options, on the data copy scripts/make_rules_data.py writes, with
+# --dev: the skimmer offered as a step's actor once it is in the area (its attack, skills or escape), a step naming an
+# equipment piece with a battle use, a macro made auto-battle's every-round macro and the automatic fallback for stuck
+# steps, then a battle where Auto plays it (the fighter's piece step, which cannot run from the bag, takes core's
+# automatic choice) and one where the Macro entry applies it with the fallback; and a battle aboard the skimmer playing
+# the vehicle's track from game.json's music.vehicles.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 400
+dev warp wren_cellar skiff_front
+dev vehicle reed_skimmer wren_cellar skiff_post
+dev give storm_rod
+dev encounters off
+wait 2
+
+# A new macro of two steps: the skimmer's attack and the fighter's Storm Rod.
+press M
+press Right 5
+expect state tab Macros
+press Down 3
+expect state selected + New macro
+press Enter
+press S
+press K
+press Enter
+expect state selected Sk
+press Enter
+press Enter
+expect state page steps
+press Enter
+expect state page member
+press Down
+expect state selected Reed Skimmer
+shot build/shots/rules/macro_vehicle.png
+press Enter
+expect state page command
+press Down 2
+expect state selected escape
+press Up 2
+press Enter
+expect state page target
+press Enter
+expect state page steps
+expect statehas macro.Sk Reed Skimmer:
+press Down
+press Enter
+expect state selected Test Fighter
+press Enter
+press Down 2
+expect state selected item
+press Enter
+expect state page pick
+press Down
+expect statehas selected Storm Rod
+shot build/shots/rules/macro_piece.png
+press Enter
+press Enter
+expect statehas macro.Sk Test Fighter: Storm Rod
+press Escape
+expect state page list
+
+# The two battle options after Delete: auto-battle plays this macro every round, stuck steps take the automatic choice.
+press Enter
+press Down 6
+expect state selected Auto-battle plays it every round
+press Enter
+expect state selected Stop auto-battle playing it every round
+press Down
+expect state selected Stuck steps: basic attack
+press Enter
+expect state selected Stuck steps: automatic choice
+shot build/shots/rules/macro_options.png
+pressuntil Escape Field 10
+expect screen Field
+
+# Auto plays the macro: the fighter's piece step cannot run from the bag, so core's automatic choice stands in.
+dev battle training
+wait 60
+expect screen Battle
+press Down 7
+press Enter
+wait 30
+expect statehas battlelog Auto-battle plays Sk every round.
+dev win
+pressuntil Enter Field 600
+
+# The Macro entry with the automatic fallback logs the stuck step as automatic.
+dev battle training
+wait 60
+expect screen Battle
+press Down 6
+press Enter
+press Down 3
+press Enter
+hold F 1
+expect statehas battlelog fighter: automatic (no item)
+dev win
+pressuntil Enter Field 600
+
+# Aboard the skimmer the pool's battles play the vehicle's track.
+cmd face east
+press Enter
+expect state aboard reed_skimmer
+dev encounters on
+hold Left 10
+# The grace after the last battle runs out first.
+wait 200
+hold Right 30
+expect mode Battle
+wait 10
+expect state music battle_brass_warden
+dev win
+pressuntil Enter Field 600

@@ -6,6 +6,7 @@
 #include "json_read.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace game {
 
@@ -218,6 +219,14 @@ const RestPoint* Area::rest(const std::string& id) const {
 
 namespace {
 
+// A `step_ms`: whole milliseconds, or with a fraction (R108), kept to the microsecond in `us` and rounded in `ms`.
+void stepTime(JsonReader& reader, const JsonValue& object, int& ms, std::int64_t& us, int min, int max) {
+	double value = ms;
+	reader.number(object, "step_ms", value, false, min, max);
+	us = std::llround(value * 1000.0);
+	ms = static_cast<int>(std::llround(value));
+}
+
 const JsonValue* array(JsonReader& reader, const JsonValue& object, const char* key) {
 	return reader.field(object, key, JsonValue::Type::Array, false);
 }
@@ -275,9 +284,11 @@ void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 			reader.fail(*v, "data.grace_after_battle_needs_grace", {});
 		}
 		reader.integer(*v, "min_steps", r.minSteps, false, 1, 1000);
-		reader.integer(*v, "max_steps", r.maxSteps, false, 1, 1000);
+		reader.integer(*v, "max_steps", r.maxSteps, false, 0, 1000);
 		reader.integer(*v, "step_distance", r.stepDistance, false, 1, 100);
-		if (r.maxSteps < r.minSteps) {
+		if (r.maxSteps == 0 && r.stepChance == 0) {
+			reader.fail(*v, "data.max_steps_zero_needs_chance", {});
+		} else if (r.maxSteps != 0 && r.maxSteps < r.minSteps) {
 			reader.fail(*v, "data.max_steps_below_min_steps", {});
 		}
 	}
@@ -303,7 +314,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		return rules::Result<Area>::failure(reader.problems(), reader.errors());
 	}
 	reader.only(json, {"id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "map", "markers", "exits", "hooks",
-		"shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"});
+		"shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes", "conveyors", "arrive_notice", "counters"});
 	reader.text(json, "id", area.id, true);
 	reader.text(json, "music", area.music, false);
 	reader.text(json, "region", area.region, false);
@@ -324,7 +335,8 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	if (!parseEncounterMode(mode, area.mode)) {
 		reader.fail(json, "data.bad_encounter_mode", {});
 	}
-	reader.integer(json, "step_ms", area.stepMs, false, 50, 5000);
+	stepTime(reader, json, area.stepMs, area.stepUs, 50, 5000);
+	reader.boolean(json, "arrive_notice", area.arriveNotice, false);
 	reader.texts(json, "map", area.rows, true);
 	for (const std::string& row : area.rows) {
 		if (row.size() != area.rows[0].size()) {
@@ -334,6 +346,27 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		if (row.find_first_not_of(kMapTiles) != std::string::npos) {
 			reader.fail(json, "data.bad_map_character", {});
 			break;
+		}
+	}
+	for (std::size_t y = 0; y < area.rows.size(); ++y) {
+		for (std::size_t x = 0; x < area.rows[y].size(); ++x) {
+			if (area.rows[y][x] == '=') {
+				area.counters.insert({static_cast<int>(x), static_cast<int>(y)});
+			}
+		}
+	}
+	if (const JsonValue* counters = reader.field(json, "counters", JsonValue::Type::Array, false)) {
+		for (const JsonValue& at : counters->items) {
+			Cell c;
+			if (!reader.cell(at, c)) {
+				continue;
+			}
+			// A counter is never walked on: a floor cell cannot be one.
+			if (!area.inside(c) || area.rows[c.y][c.x] == '.') {
+				reader.fail(at, "data.counter_not_solid", {std::to_string(c.x), std::to_string(c.y)});
+				continue;
+			}
+			area.counters.insert(c);
 		}
 	}
 	auto checkCell = [&](const JsonValue& at, Cell c, const std::string& what) {
@@ -482,7 +515,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* shops = array(reader, json, "shops")) {
 		for (const JsonValue& s : shops->items) {
-			reader.only(s, {"id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper"});
+			reader.only(s, {"id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper", "voice"});
 			Shop shop;
 			shop.line = s.line;
 			reader.text(s, "id", shop.id, true);
@@ -517,12 +550,13 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			reader.text(s, "require_flag", shop.requireFlag, false);
 			reader.text(s, "block_flag", shop.blockFlag, false);
 			reader.text(s, "keeper", shop.keeper, false);
+			reader.text(s, "voice", shop.voice, false);
 			area.shops.push_back(shop);
 		}
 	}
 	if (const JsonValue* rests = array(reader, json, "rests")) {
 		for (const JsonValue& r : rests->items) {
-			reader.only(r, {"id", "at", "cost", "keeper"});
+			reader.only(r, {"id", "at", "cost", "keeper", "per_member", "voice"});
 			RestPoint rest;
 			rest.line = r.line;
 			reader.text(r, "id", rest.id, true);
@@ -533,6 +567,8 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			}
 			reader.integer(r, "cost", rest.cost, false, 0, 1000000);
 			reader.text(r, "keeper", rest.keeper, false);
+			reader.boolean(r, "per_member", rest.perMember, false);
+			reader.text(r, "voice", rest.voice, false);
 			area.rests.push_back(rest);
 		}
 	}
@@ -672,7 +708,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			if (!direction.empty() && !parseFacing(direction, conveyor.direction)) {
 				reader.fail(c, "data.bad_direction", {direction});
 			}
-			reader.integer(c, "step_ms", conveyor.stepMs, false, 16, 10000);
+			stepTime(reader, c, conveyor.stepMs, conveyor.stepUs, 16, 10000);
 			reader.text(c, "require_flag", conveyor.requireFlag, false);
 			reader.text(c, "block_flag", conveyor.blockFlag, false);
 			if (const JsonValue* cells = reader.field(c, "cells", JsonValue::Type::Array, true)) {

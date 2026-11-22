@@ -15,8 +15,8 @@ def encode(width, height, pixel):
 	return b"\x89PNG\r\n\x1a\n" + _chunk(b"IHDR", header) + _chunk(b"IDAT", zlib.compress(raw, 9)) + _chunk(b"IEND", b"")
 
 
-# Floor, wall, water, soft ground and barrier, in tile id order.
-COLORS = [(214, 196, 150), (84, 78, 92), (70, 120, 180), (150, 112, 70), (150, 60, 50)]
+# Floor, wall, water, soft ground, barrier and counter, in tile id order.
+COLORS = [(214, 196, 150), (84, 78, 92), (70, 120, 180), (150, 112, 70), (150, 60, 50), (170, 120, 60)]
 
 
 def cell_tiles(tile_size=16):

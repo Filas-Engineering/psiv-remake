@@ -1,0 +1,18 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "backdrop", "elements": [
+			{"type": "fill", "w": "W", "h": "H", "color": "black", "alpha": 0.92}
+		]},
+		{"name": "roll", "x": 0, "y": 60, "w": "W", "h": "H - 120", "elements": [
+			{"type": "repeater", "items": "lines", "layout": "column", "dy": 0, "template": [
+				{"type": "text", "value": "text", "visible": "heading && y >= scroll && y - scroll < ch", "w": "cw", "align": "center", "y": "y - scroll", "style": "title"},
+				{"type": "text", "value": "text", "visible": "!heading && y >= scroll && y - scroll < ch", "w": "cw", "align": "center", "y": "y - scroll", "style": "body"}
+			]}
+		]},
+		{"name": "hint", "x": 0, "y": "H - t(30)", "h": "t(30)", "elements": [
+			{"type": "fill", "w": "W", "h": "t(30)", "color": "black", "alpha": 0.6},
+			{"type": "text", "value": "hint", "max_width": "W - 32", "w": "W", "align": "center", "y": "t(5)", "style": "small_dim"}
+		]}
+	]
+}

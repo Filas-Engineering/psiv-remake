@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Copies the placeholder data with a `flashing.json` the sample reads (docs/ui-layout.md, "Flashing"): a new profile's
-flashing level, and optionally the `original` choice hidden, for scripts/flashing_notice.txt.
+"""Copies the placeholder data with game.json's `presentation.flash_default` (docs/ui-layout.md, "Flashing"): a new
+profile's flashing level, and optionally `presentation.flash_original` false hiding the `original` choice, for
+scripts/flashing_notice.txt.
 
 Usage: make_flash_data.py GAME_DATA CORE_DATA OUT LEVEL [--hide-original]
 """
@@ -18,10 +19,12 @@ def main():
 		shutil.rmtree(out)
 	shutil.copytree(game, out / "game" / "data")
 	shutil.copytree(core, out / "core" / "data")
-	flashing = {"default": level}
+	game_file = out / "game" / "data" / "game.json"
+	config = json.loads(game_file.read_text())
+	config["presentation"]["flash_default"] = level
 	if "--hide-original" in sys.argv[5:]:
-		flashing["original"] = False
-	(out / "game" / "data" / "flashing.json").write_text(json.dumps(flashing, indent="\t") + "\n")
+		config["presentation"]["flash_original"] = False
+	game_file.write_text(json.dumps(config, indent="\t", ensure_ascii=False) + "\n")
 
 
 if __name__ == "__main__":

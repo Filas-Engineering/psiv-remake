@@ -24,7 +24,8 @@ public sealed record AreaMap(int Width, int Height, CellFlags[] Written, List<(s
 
 	public static CellFlags Terrain(char tile) => tile switch
 	{
-		'#' => CellFlags.Wall,
+		// A counter (R109) is never walked: it draws as a wall.
+		'#' or '=' => CellFlags.Wall,
 		'~' => CellFlags.Water,
 		':' => CellFlags.Soft,
 		'%' => CellFlags.Wall | CellFlags.Barrier,
@@ -57,6 +58,18 @@ public sealed partial class GameData
 	public HashSet<string> Cameras { get; } = [];
 	public HashSet<string> Portraits { get; } = [];
 	public HashSet<string> Animations { get; } = [];
+	// game.json's `interact` (R77): true under "nearby", when the prompt and interaction follow the session's target query.
+	public bool InteractNearby { get; private set; }
+	// game.json's `run_speed_percent` (R81), 0 when it gives none: the real-time walk then runs through the session.
+	public int RunSpeedPercent { get; private set; }
+	// Each wandering actor's speed against the area's step time (game.json actors' `wander.speed_percent`, default 50).
+	public Dictionary<string, int> WanderPercent { get; } = [];
+	// Each talk point's `actor_at` cell by actor: where the actor stands apart from its hook's cell.
+	public Dictionary<string, (int X, int Y)> ActorAt { get; } = [];
+	// The first encounter listing each enemy, whose field figure an actor in that enemy's figure wears.
+	public Dictionary<string, string> EnemyEncounters { get; } = [];
+	// Each vehicle's skills (core's party.json `abilities`), which its macro steps may name.
+	public Dictionary<string, List<string>> VehicleSkills { get; } = [];
 	public HashSet<string> Languages { get; } = [];
 	// Every audio id the game can ask for by kind: the data's tracks, loops and sounds, the tracks the sample derives
 	// where the data names none, and the sample's own cues.
@@ -86,55 +99,9 @@ public sealed partial class GameData
 	[GeneratedRegex(@"^\s*(music play|ambient play|sound)\s+([A-Za-z0-9_]+)", RegexOptions.Multiline)]
 	private static partial Regex ScriptAudio();
 
-	// DATA/flashing.json, which only the sample reads (the game's loader refuses unknown keys in game.json): the flashing
-	// level of a new profile (`default`: reduced, standard or original; null: reduced) and whether the options offer
-	// `original` at all (`original`, default true). Problems: what is wrong with the file, for --check-assets.
-	public string? FlashDefault { get; private set; }
-	public bool FlashOriginalOffered { get; private set; } = true;
-	public List<string> FlashProblems { get; } = [];
-
-	private void ReadFlashing(string dataDir)
-	{
-		string path = Path.Combine(dataDir, "flashing.json");
-		if (!File.Exists(path))
-		{
-			return;
-		}
-		try
-		{
-			using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(path));
-			foreach (JsonProperty p in doc.RootElement.EnumerateObject())
-			{
-				switch (p.Name)
-				{
-				case "default" when p.Value.ValueKind == JsonValueKind.String && p.Value.GetString() is "reduced" or "standard" or "original":
-					FlashDefault = p.Value.GetString();
-					break;
-				case "default":
-					FlashProblems.Add("default: must be reduced, standard or original");
-					break;
-				case "original" when p.Value.ValueKind is JsonValueKind.True or JsonValueKind.False:
-					FlashOriginalOffered = p.Value.GetBoolean();
-					break;
-				case "original":
-					FlashProblems.Add("original: must be true or false");
-					break;
-				default:
-					FlashProblems.Add($"unknown field '{p.Name}'");
-					break;
-				}
-			}
-		}
-		catch (JsonException e)
-		{
-			FlashProblems.Add("not valid JSON: " + e.Message);
-		}
-	}
-
 	public static GameData Load(GameSession session, string dataDir)
 	{
 		var d = new GameData();
-		d.ReadFlashing(dataDir);
 		d.Actors.UnionWith(session.ActorIds());
 		d.Cameras.UnionWith(session.Cameras().Select(c => c.Id));
 		d.Languages.UnionWith(session.GameInfo().Languages);
@@ -150,6 +117,10 @@ public sealed partial class GameData
 			d.AreaKinds[id] = kind;
 			foreach (JsonElement hook in Array(doc.RootElement, "hooks"))
 			{
+				if (hook.TryGetProperty("actor_at", out JsonElement actorAt) && actorAt.ValueKind == JsonValueKind.Array)
+				{
+					d.ActorAt[hook.GetProperty("id").GetString()!] = (actorAt[0].GetInt32(), actorAt[1].GetInt32());
+				}
 				if (hook.TryGetProperty("event", out JsonElement ev) && hook.TryGetProperty("at", out JsonElement at) && at.ValueKind == JsonValueKind.Array)
 				{
 					d.EventStarts.TryAdd(ev.GetString()!, (id, at[0].GetInt32(), at[1].GetInt32()));
@@ -200,6 +171,13 @@ public sealed partial class GameData
 			d.TextTables[language.GetProperty("code").GetString()!] = lines;
 		}
 		d.Flags.UnionWith(Array(root, "flags").Select(f => f.GetString()!));
+		d.InteractNearby = root.TryGetProperty("interact", out JsonElement interact) && interact.GetString() == "nearby";
+		d.RunSpeedPercent = root.TryGetProperty("run_speed_percent", out JsonElement run) && run.ValueKind == JsonValueKind.Number ? run.GetInt32() : 0;
+		foreach (JsonElement actor in Array(root, "actors").Where(a => a.ValueKind == JsonValueKind.Object && a.TryGetProperty("wander", out _)))
+		{
+			JsonElement wander = actor.GetProperty("wander");
+			d.WanderPercent[actor.GetProperty("id").GetString()!] = wander.TryGetProperty("speed_percent", out JsonElement speed) ? speed.GetInt32() : 50;
+		}
 		d.Music.UnionWith(["title", "battle_town", "battle_field", "battle_dungeon", "battle_scripted"]);
 		d.FieldVehicles.UnionWith(Array(root, "vehicles").Select(v => v.GetProperty("id").GetString()!));
 		foreach (JsonElement v in Array(root, "vehicles"))
@@ -222,13 +200,18 @@ public sealed partial class GameData
 				string audio = id.GetString()!;
 				(scripted.GetValueOrDefault(audio) switch { "ambient play" => d.Ambient, "sound" => d.Cues, _ => d.Music }).Add(audio);
 			}
-			d.Animations.UnionWith(Array(presentation, "animations").Select(a => a.GetString()!));
+			// An entry is a name, or an object with its `id` and `seconds`.
+			d.Animations.UnionWith(Array(presentation, "animations").Select(a => a.ValueKind == JsonValueKind.Object ? a.GetProperty("id").GetString()! : a.GetString()!));
 			d.Portraits.UnionWith(Array(presentation, "portraits").Select(a => a.GetString()!));
 		}
 		string core = Path.GetFullPath(Path.Combine(dataDir, root.GetProperty("core_data").GetString()!));
 		using JsonDocument party = JsonDocument.Parse(File.ReadAllText(Path.Combine(core, "party.json")));
 		d.Characters.UnionWith(Array(party.RootElement, "characters").Select(c => c.GetProperty("id").GetString()!));
 		d.Vehicles.UnionWith(Array(party.RootElement, "vehicles").Select(c => c.GetProperty("id").GetString()!));
+		foreach (JsonElement v in Array(party.RootElement, "vehicles"))
+		{
+			d.VehicleSkills[v.GetProperty("id").GetString()!] = [.. Array(v, "abilities").Select(a => a.GetString()!)];
+		}
 		using JsonDocument enemies = JsonDocument.Parse(File.ReadAllText(Path.Combine(core, "enemies.json")));
 		foreach (JsonElement e in Array(enemies.RootElement, "enemies"))
 		{
@@ -236,7 +219,15 @@ public sealed partial class GameData
 			d.Enemies.Add(id);
 			d.EnemyStatuses[id] = [.. Array(e, "statuses").Select(x => x.GetString()!)];
 		}
-		d.Encounters.UnionWith(Array(enemies.RootElement, "encounters").Select(c => c.GetProperty("id").GetString()!));
+		foreach (JsonElement encounter in Array(enemies.RootElement, "encounters"))
+		{
+			string id = encounter.GetProperty("id").GetString()!;
+			d.Encounters.Add(id);
+			foreach (JsonElement e in Array(encounter, "enemies").Where(e => e.ValueKind is JsonValueKind.String or JsonValueKind.Object))
+			{
+				d.EnemyEncounters.TryAdd(e.ValueKind == JsonValueKind.String ? e.GetString()! : e.GetProperty("enemy").GetString()!, id);
+			}
+		}
 		using JsonDocument statuses = JsonDocument.Parse(File.ReadAllText(Path.Combine(core, "statuses.json")));
 		d.Statuses.UnionWith(Array(statuses.RootElement, "statuses").Select(c => c.GetProperty("id").GetString()!));
 		using JsonDocument abilities = JsonDocument.Parse(File.ReadAllText(Path.Combine(core, "abilities.json")));

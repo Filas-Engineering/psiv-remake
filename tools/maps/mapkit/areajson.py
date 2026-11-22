@@ -2,14 +2,14 @@
 
 import json
 
-TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "map", "markers", "exits", "hooks", "shops", "rests",
-	"chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"]
+TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "arrive_notice", "map", "markers", "exits", "hooks", "shops", "rests",
+	"chests", "ports", "zones", "helms", "gangway", "changes", "conveyors", "counters"]
 LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"]
 ENTRY_FIELDS = {
 	"exits": ["at", "to", "marker", "fall", "require_flag", "block_flag", "closed_tile"],
 	"hooks": ["id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid", "actor_at", "across", "cells", "actor"],
-	"shops": ["id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper"],
-	"rests": ["id", "at", "cost", "keeper"],
+	"shops": ["id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper", "voice"],
+	"rests": ["id", "at", "cost", "keeper", "per_member", "voice"],
 	"chests": ["id", "at", "flag", "items", "equipment", "money"],
 	"ports": ["id", "at", "marker", "flag", "ship", "block_flag"],
 	"zones": ["id", "from", "to", "table", "visible", "random"],
@@ -22,7 +22,7 @@ STOCK_FIELDS = ["id", "require_flag", "block_flag"]
 TABLE_FIELDS = ["encounter", "weight"]
 VISIBLE_FIELDS = ["spawns", "cap", "detection_radius", "leash_radius", "chase_speed_percent", "chase_ms", "wander_speed_percent", "wander_percent"]
 RANDOM_FIELDS = ["min_steps", "max_steps", "step_distance", "grace_steps", "step_chance", "vehicle_step_chance", "safe_near_exits", "grace_after_battle"]
-CELL_CHARACTERS = {".": "floor", "#": "wall", "~": "water", ":": "soft", "%": "barrier"}
+CELL_CHARACTERS = {".": "floor", "#": "wall", "~": "water", ":": "soft", "%": "barrier", "=": "counter"}
 
 
 class AreaError(Exception):

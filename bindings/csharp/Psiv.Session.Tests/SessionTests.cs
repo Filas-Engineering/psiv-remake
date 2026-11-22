@@ -195,6 +195,7 @@ public class NativeLayoutTests
 		Same<PsivAffinity>("psiv_affinity");
 		Same<PsivStatusResist>("psiv_status_resist");
 		Same<PsivMemberDetail>("psiv_member_detail");
+		Same<PsivProfileRow>("psiv_profile_row");
 		Same<PsivComboEntry>("psiv_combo_entry");
 		Same<PsivCombatView>("psiv_combat_view");
 		Same<PsivEquipPreview>("psiv_equip_preview");
@@ -525,6 +526,20 @@ public class SessionTests
 		Assert.True(s.Profile().AlwaysRun);
 		info = s.FieldInfo()!;
 		Assert.Equal((125, 250), (info.LeaderStepMs, info.RunStepMs));
+	}
+
+	[Fact]
+	public void FlashingLevelComesFromTheDataAndStaysInTheProfile()
+	{
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = Paths.FreshDirectory("flashing"), Seed = 285 });
+		GameInfo info = s.GameInfo();
+		Assert.Equal((FlashLevel.Reduced, true), (info.FlashDefault, info.FlashOriginal));
+		Assert.Equal(FlashLevel.Unset, s.Profile().Flashing);
+		Assert.True(s.SetProfile(s.Profile() with { Flashing = FlashLevel.Reduced, FlashNoticeSeen = true }).Ok);
+		Profile p = s.Profile();
+		Assert.Equal((FlashLevel.Reduced, true, true), (p.Flashing, p.FlashNoticeSeen, p.ReducedFlash));
+		Assert.True(s.NewGame().Ok);
+		Assert.Empty(s.MemberDetail("fighter")!.Profile!);
 	}
 
 	[Fact]

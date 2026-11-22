@@ -261,6 +261,11 @@ static void testStringOwnership(void) {
 	CHECK_OK(psiv_new_game(s));
 	settle(s);
 	CHECK_OK(psiv_field_info_get(s, &field));
+	/* The default arrive_notice announces every entry; ticks timing reports the milliseconds as microseconds. */
+	CHECK(field.announce_arrival == 1);
+	CHECK(field.leader_step_us == (int64_t)field.leader_step_ms * 1000);
+	CHECK(field.run_step_us == (int64_t)field.run_step_ms * 1000);
+	CHECK(field.step_progress_us == (int64_t)field.step_progress_ms * 1000);
 	snprintf(areaCopy, sizeof areaCopy, "%s", field.area_id);
 	snprintf(nameCopy, sizeof nameCopy, "%s", field.area_name);
 	const char* area = field.area_id;
@@ -803,6 +808,7 @@ static void testAdventurePaths(void) {
 	int32_t count;
 	CHECK_OK(psiv_battle_combatants(s, &combatants, &count));
 	CHECK(count == 4 && strcmp(combatants[0].name, "Test Fighter") == 0 && strcmp(combatants[1].label, "Gel Mite A") == 0);
+	CHECK(strcmp(combatants[3].id, "rust_hound") == 0 && combatants[3].level == 2 && combatants[0].level == 3);
 	psiv_auto_battle played;
 	CHECK_OK(psiv_battle_play(s, 0, &played));
 	CHECK(played.ended && played.round_count >= 1 && strcmp(played.refusal_key, "") == 0);
@@ -1781,6 +1787,46 @@ static int32_t ambientCount(psiv_session* s, const char* keyPrefix) {
 	return ambient;
 }
 
+/* The flashing level from the data and in the profile, a rest point's price and voice, and member profile rows (none in
+ * the shipped data). */
+static void testHostData(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/host_data", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	psiv_game_info game;
+	CHECK_OK(psiv_game_info_get(s, &game));
+	CHECK(game.flash_default == PSIV_FLASH_REDUCED && game.flash_original == 1);
+	psiv_profile profile;
+	CHECK_OK(psiv_profile_get(s, &profile));
+	CHECK(profile.flashing == PSIV_FLASH_UNSET && !profile.flash_notice_seen);
+	profile.flashing = PSIV_FLASH_REDUCED;
+	profile.flash_notice_seen = 1;
+	profile.reduced_flash = 0;
+	CHECK_OK(psiv_profile_set(s, &profile));
+	CHECK_OK(psiv_profile_get(s, &profile));
+	CHECK(profile.flashing == PSIV_FLASH_REDUCED && profile.flash_notice_seen && profile.reduced_flash);
+	profile.flashing = 9;
+	CHECK(psiv_profile_set(s, &profile) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_profile_set_value(s, "flashing", "standard"));
+	CHECK_OK(psiv_profile_get(s, &profile));
+	CHECK(profile.flashing == PSIV_FLASH_STANDARD && !profile.reduced_flash);
+
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	psiv_member_detail detail;
+	CHECK_OK(psiv_member_detail_get(s, "fighter", &detail));
+	CHECK(detail.profile_count == 0);
+	CHECK(walkToMarker(s, "inn_front") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_WEST));
+	CHECK_OK(psiv_interact(s));
+	psiv_inn_info inn;
+	CHECK_OK(psiv_inn_get(s, &inn));
+	CHECK(strcmp(inn.id, "tidewater_inn") == 0 && inn.cost == 10 && strcmp(inn.voice, "") == 0 && !inn.per_member);
+	psiv_session_destroy(s);
+}
+
 static void testAmbientTalk(void) {
 	psiv_session* s = afterGuide("ambient");
 	ambientCount(s, "");
@@ -2385,6 +2431,7 @@ int main(int argc, char** argv) {
 	testDifficulties();
 	testCamerasAndMusic();
 	testAmbientTalk();
+	testHostData();
 	testVehiclesAndTravel();
 	testDevTools();
 	testFollowersKindsAndUses();

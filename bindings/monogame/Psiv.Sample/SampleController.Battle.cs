@@ -198,7 +198,7 @@ public sealed partial class SampleController
 
 	private void Resolve()
 	{
-		if (_battle.Auto && !_s.FillFromAuto())
+		if (_battle.Auto && !FillAuto())
 		{
 			_battle.Auto = false;
 			TakeNotices();
@@ -304,8 +304,8 @@ public sealed partial class SampleController
 				NextActor(0);
 				break;
 			case "macro" when _s.Macros().Count == 0:
-				Say(SampleText("ui.battle.no_macros"));
-				b.Log.Add(SampleText("ui.battle.no_macros"));
+				Say(T("ui.battle.no_macros"));
+				b.Log.Add(T("ui.battle.no_macros"));
 				break;
 			case "macro":
 				b.MenuChoice = "macro";
@@ -446,7 +446,7 @@ public sealed partial class SampleController
 			}
 			else if (input.Confirm)
 			{
-				PsivResult applied = _s.ApplyMacro(macros[_cursor], out IReadOnlyList<MacroStepResult> steps);
+				PsivResult applied = _s.ApplyMacro(macros[_cursor], out IReadOnlyList<MacroStepResult> steps, BattleMacroFallback);
 				if (!applied.Ok)
 				{
 					b.Log.Add(T("ui.battle.log.refused", applied.Error!.Text));

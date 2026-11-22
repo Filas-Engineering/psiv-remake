@@ -262,6 +262,8 @@ struct MemberDetail {
 	std::vector<std::pair<rules::Element, int>> affinities;
 	// The character's status resistances plus its pieces', capped at 100, as a battle combatant gets them.
 	rules::StatusResists statusResist;
+	// The character's `profile` rows from party.json, in order (R111).
+	std::vector<rules::ProfileRow> profile;
 };
 
 // Orders for listing the bag. The bag itself has no order (items and pieces are kept by id), so a sort is a read and
@@ -381,6 +383,13 @@ struct FieldMotion {
 	// The belt carrying the party: its time per cell and the milliseconds spent toward the next; both 0 off a belt.
 	int conveyorStepMs = 0;
 	int conveyorProgressMs = 0;
+	// The same five in microseconds, exact under game.json's `step_timing` `exact` (R108), where step times may have a
+	// fraction and the progress carries the time past the last step.
+	std::int64_t stepProgressUs = 0;
+	std::int64_t stepUs = 0;
+	std::int64_t runStepUs = 0;
+	std::int64_t conveyorStepUs = 0;
+	std::int64_t conveyorProgressUs = 0;
 	// The directions a step would move the leader now (canStep): 1 north, 2 east, 4 south, 8 west.
 	int stepMask = 0;
 };
@@ -499,6 +508,11 @@ public:
 	// The leader's time per cell now: the area's step time, a vehicle's speed aboard, and on foot with `running` (the run
 	// input as FieldInput::running holds it) the run speed.
 	int leaderStepMs(bool running = false) const;
+	// The same in microseconds: the area's step_ms with its fraction over the vehicle's or the run's speed.
+	std::int64_t leaderStepUs(bool running = false) const;
+	// Whether the last area entry announced itself (game.arrive and a host's banner, R107): game.json's arrive_notice and
+	// the area's own.
+	bool arrivalAnnounced() const { return arrivalAnnounced_; }
 	// Turns the leader in place.
 	rules::Message face(Facing direction);
 	// A walk to `goal` along the shortest path over walkable cells, avoiding exits other than the goal. Visible
@@ -619,6 +633,8 @@ public:
 	bool shopOpen(const Shop& shop) const;
 	std::vector<std::string> stock(const Shop& shop) const;
 	const RestPoint* inn() const;
+	// What resting at the point costs now: its cost, times the lineup's size when it is per_member (R113).
+	int restCost(const RestPoint& point) const;
 	rules::Message buy(const std::string& id, int count);
 	rules::Message sell(const std::string& id, int count);
 	rules::Message rest();
@@ -794,6 +810,8 @@ private:
 	// What answers on `cell` of `area` for interact, its facing and cell left to the caller; `acrossable` is set when it
 	// may be used across a counter.
 	std::optional<InteractTarget> pointAt(const Area& area, Cell cell, bool& acrossable) const;
+	// What a marked counter's far side holds (R109): a point there, or a shop's or rest point's keeper standing there.
+	std::optional<InteractTarget> beyondCounter(const Area& area, Cell cell) const;
 	void pumpEvent(double seconds);
 	void endEvent();
 	void dropEvent();
@@ -856,8 +874,13 @@ private:
 	std::int64_t clockCounter_ = 0;
 
 	int tickRemainderMs_ = 0;
-	int stepProgressMs_ = 0;
-	int conveyorMs_ = 0;
+	// Held input spent toward the leader's next cell and time on a belt toward its next carry, in microseconds (whole
+	// milliseconds under `step_timing` `ticks`).
+	std::int64_t stepProgressUs_ = 0;
+	std::int64_t conveyorUs_ = 0;
+	// The area entry under way came from walking through an exit or a gangway, and whether the last one announced itself.
+	bool arrivalWalked_ = false;
+	bool arrivalAnnounced_ = true;
 	std::optional<Facing> latchedDirection_;
 	// Not saved: hooks fire once per area entry and autosave points are judged per session (FLOW-050).
 	bool loadHooksPending_ = false;

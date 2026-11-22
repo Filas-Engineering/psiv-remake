@@ -118,6 +118,8 @@ const TextTable& problemText() {
 		{"load.only_weapons_have_element", "only weapons have an element"},
 		{"load.only_weapons_have_hands", "only weapons have hands"},
 		{"load.piece_needs_item_step", "only an item step names a piece"},
+		{"load.profile_not_list", "profile must be a list of objects with key and value"},
+		{"load.profile_side", "profile row's {0} must be a text key or a whole number"},
 		{"load.removes_names_missing_status", "removes names missing status '{0}'"},
 		{"load.result_have_kind_combo", "result '{0}' must have kind combo"},
 		{"load.revive_needs_fallen_target", "revive effects need target one_fallen_ally or all_allies"},

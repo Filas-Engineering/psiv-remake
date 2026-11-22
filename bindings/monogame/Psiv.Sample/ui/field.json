@@ -18,7 +18,7 @@
 		]},
 		{"name": "prompt", "visible": "prompt_visible", "x": "(W - w) / 2", "y": "H - t(30) - 46", "w": "measure_unscaled(prompt_key + '  ' + prompt_text, size_small) + 24",
 			"h": 28, "elements": [
-			{"type": "plate", "value": "prompt_key + '  ' + prompt_text", "color": "accent", "scaled": false}
+			{"type": "plate", "value": "prompt_key + '  ' + prompt_text", "color": "accent", "alpha": "prompt_ready ? 1 : 0.5", "scaled": false}
 		]},
 		{"name": "hint", "x": 0, "y": "H - t(30)", "h": "t(30)", "elements": [
 			{"type": "fill", "w": "W", "h": "t(30)", "color": "black", "alpha": 0.6, "scaled": false},
