@@ -5,7 +5,7 @@ namespace Psiv.Session;
 public enum PsivStatus { Ok, Refused, InvalidArgument, NotFound, DataError, InternalError }
 public enum Mode { Title, Field, Event, Battle, Menu, Shop }
 // Port: a port's destinations (TravelDestinations(TravelKind.Port)).
-public enum MenuKind { None, Field, Inn, SavePrompt, NameEntry, Port }
+public enum MenuKind { None, Field, Inn, SavePrompt, NameEntry, Port, Credits }
 public enum Direction { None = -1, North, East, South, West }
 // Ambient: a party talk line that came up by itself on arrival; it does not stop play.
 public enum NoticeKind { Line, Choice, Action, Notice, Warning, Autosave, Ambient }
@@ -13,6 +13,9 @@ public enum AreaKind { Town, Field, Dungeon, Vessel }
 public enum EncounterMode { Visible, Random }
 public enum EnemyState { Idle, Chasing, Returning }
 public enum PointKind { Talk, Step, Chest, Shop, Rest, Port, Helm, Gangway, Conveyor }
+// What Interact acts on. Talk is an interact hook that is no actor's (a sign); Actor an actor's talk point, or the actor
+// where it stands under game.json's `interact: "nearby"`.
+public enum InteractKind { Vehicle, Port, Helm, Talk, Actor, Chest, Shop, Rest }
 // From a port to another open port, back to a visited town of the region, out of a dungeon.
 public enum TravelKind { Port, Town, DungeonExit }
 public enum JobState { Available, Accepted, Completed, Missed }
@@ -62,10 +65,16 @@ public enum MacroIssue
 public enum ActionType
 {
 	Move, Face, Animate, ShowActor, HideActor, PanelShow, PanelHide, PanelClear, CameraCut, CameraMove, FadeIn, FadeOut,
-	Shake, MusicPlay, MusicStop, MusicFade, AmbientPlay, AmbientStop, Sound, Warp,
+	Shake, MusicPlay, MusicStop, MusicFade, AmbientPlay, AmbientStop, Sound, Warp, Place,
 }
 
 public enum ActionPhase { Begin, Cancel }
+// How a hidden actor left: a plain hide, or the standard animation that hid it.
+public enum ActorVanish { None, Faded, Dissolved, BlinkedOut }
+// A script's remove: gone until the party next enters an area, or for good.
+public enum ActorRemoval { None, UntilReload, ForGood }
+// What an animation leaves behind once it has played.
+public enum AnimationEnd { None, Shown, Hidden }
 public enum Presentation { Instant, Wait }
 public enum WalkStatus { Walking, Arrived, LeftArea, Stopped, NoPath, TooLong }
 public enum DescriptionKind { Item, Equipment, Ability, Status, Enemy, Difficulty }
@@ -83,7 +92,8 @@ public enum NameKind
 	Mode, MenuKind, Direction, NoticeKind, AreaKind, EncounterMode, EnemyState, PointKind, JobState, TextSpeed, BattleSpeed,
 	RewardMultiplier, BattleSource, Side, CommandKind, AbilityKind, Targeting, EquipSlot, Outcome, EventType, CancelReason,
 	Effectiveness, StatusEnd, ResourceKind, Element, Stat, Opening, AutoStop, MacroStepStatus, MacroIssue, ActionType, MacroTargetKind,
-	DescriptionKind, ItemSort, CameraTarget, TravelKind, DevList, CreatureKind, ShopKind,
+	DescriptionKind, ItemSort, CameraTarget, TravelKind, DevList, CreatureKind, ShopKind, ActorVanish, ActorRemoval, AnimationEnd,
+	InteractKind,
 }
 
 // The id lists of DevIds: what the developer commands take. Markers are "area:marker".
@@ -138,7 +148,7 @@ public sealed record ElementInfo(Element Index, string Id, string Name);
 public sealed record Affinity(Element Element, string Id, string Name, int Percent);
 
 public sealed record Profile(TextSpeed TextSpeed, bool AutoAdvance, bool ShowShippedNames, string TextLanguage, int TextSizePercent, BattleSpeed BattleSpeed,
-	bool AmbientTalk, bool ReducedFlash, int MusicVolume, int AmbientVolume, int EffectsVolume);
+	bool AmbientTalk, bool ReducedFlash, int MusicVolume, int AmbientVolume, int EffectsVolume, bool AlwaysRun = false);
 
 public sealed record Settings(string Difficulty, RewardMultiplier RewardMultiplier, string AutoMacro);
 
@@ -157,29 +167,71 @@ public sealed record WorldInfo(Mode Mode, MenuKind MenuKind, int Money, long Pla
 
 // The running event and the source line its interpreter is at.
 public sealed record EventPosition(string Event, string File, int Line);
+public enum CreditsEntryKind { Heading, Line }
+public sealed record CreditsEntry(CreditsEntryKind Kind, string Key, string Text, int Gap, int PauseMs);
+// The credits playing (MenuKind.Credits): Shown entries have come up after ElapsedMs of play time; CloseMenu() says they
+// finished.
+public sealed record CreditsInfo(string Id, string Music, int Shown, long ElapsedMs, long TotalMs, ValueList<CreditsEntry> Entries);
 
 // An encounter zone of the party's area: the rectangle it covers (corners included), its table and its visible spawns.
 public sealed record Zone(string Id, int FromX, int FromY, int ToX, int ToY, IReadOnlyList<(string Encounter, int Weight)> Table,
 	IReadOnlyList<(int X, int Y)> Spawns);
 
-// Music is the area's track, "" when the data names none. Aboard is the vehicle the party rides, "" on foot; LeaderStepMs
-// the leader's time per cell now, StepMs on foot. ShipPort, in a vessel, is the port the party walked aboard from.
+// Music is the area's track (a script's, else game.json's music.areas by flag, else the area's own), "" when the data names none. Aboard is the vehicle the party rides, "" on foot; LeaderStepMs
+// the leader's time per cell now, StepMs on foot, and RunStepMs the same while the run input is held (Update's running).
+// ShipPort, in a vessel, is the port the party walked aboard from. StepProgressMs: held input spent toward the next cell.
+// ConveyorStepMs and ConveyorProgressMs: the belt under the party, 0 off one. StepMask: where CanStep allows a step, 1 north,
+// 2 east, 4 south, 8 west.
 public sealed record FieldInfo(string AreaId, string AreaName, AreaKind AreaKind, EncounterMode EncounterMode, int Width, int Height, int StepMs,
-	int LeaderX, int LeaderY, Direction Facing, bool PlayerControl, int GraceMs, string Music, string Region, string Aboard, int LeaderStepMs, string ShipPort = "");
+	int LeaderX, int LeaderY, Direction Facing, bool PlayerControl, int GraceMs, string Music, string Region, string Aboard, int LeaderStepMs, string ShipPort = "", int RunStepMs = 0,
+	int StepProgressMs = 0, int ConveyorStepMs = 0, int ConveyorProgressMs = 0, int StepMask = 0);
 
-public sealed record FieldEnemy(int Id, string Encounter, string Zone, int X, int Y, Direction Facing, EnemyState State);
+// Actor: the reserved name scripts address it by ("enemy.<zone>.<n>"); an action with that subject moves or turns this enemy.
+public sealed record FieldEnemy(int Id, string Encounter, string Zone, int X, int Y, Direction Facing, EnemyState State, string Actor = "");
 
 public sealed record Marker(string Name, int X, int Y);
 
-public sealed record FieldExit(int X, int Y, string ToArea, string ToMarker);
+// Open: its flags let the party through. ClosedTile: the map character it is drawn as while closed ('#' unless the data
+// names another, a door drawn as floor); FieldRows and the grid show it then.
+public sealed record FieldExit(int X, int Y, string ToArea, string ToMarker, bool Open = true, char ClosedTile = '#');
+
+// What Interact would act on now: the cell acted on, where the leader faces to use it (Interact turns it there), Ready
+// false when Interact would refuse, Across when used across a counter, Keeper a shop's or rest point's keeper ("" for none).
+public sealed record InteractTarget(InteractKind Kind, string Id, int X, int Y, Direction Facing, bool Ready, bool Across, string Keeper = "");
 
 // Active for a shop or a port: open now.
-// Direction: for a conveyor cell, where it carries the party.
-public sealed record FieldPoint(PointKind Kind, string Id, int X, int Y, string Event, bool Active, int Cost, ShopKind ShopKind = ShopKind.General, Direction Direction = Direction.North);
+// Direction: for a conveyor cell, where it carries the party. Keeper: a shop's or rest point's keeper, "" for none.
+public sealed record FieldPoint(PointKind Kind, string Id, int X, int Y, string Event, bool Active, int Cost, ShopKind ShopKind = ShopKind.General, Direction Direction = Direction.North,
+	string Keeper = "");
 
 // One of the game's actors in the party's area. Scripted: a script has moved, turned, shown or hidden it; an
 // untouched actor stands at the talk point named after it.
-public sealed record FieldActor(string Id, string Name, int X, int Y, Direction Facing, bool Visible, bool Scripted);
+// Solid: it blocks walking on its cell now. Animation: the one-shot animation playing, with its milliseconds left and in
+// all; Visible already holds its end state. SpriteEnemy or Look: its figure (a script's `look`, else game.json's), "" for the
+// host's own. Wanders: it walks about by itself now (game.json `wander`).
+public sealed record FieldActor(string Id, string Name, int X, int Y, Direction Facing, bool Visible, bool Scripted, bool Solid = false,
+	ActorVanish Vanish = ActorVanish.None, string Animation = "", int AnimationMs = 0, int AnimationTotalMs = 0, ActorRemoval Removal = ActorRemoval.None,
+	string SpriteEnemy = "", string Look = "", bool Wanders = false);
+
+public sealed record RouteCell(int X, int Y);
+
+// A list that equals another with the same items in the same order, so records holding one compare by value.
+public sealed class ValueList<T>(IEnumerable<T> items) : IReadOnlyList<T>, IEquatable<ValueList<T>>
+{
+	private readonly T[] _items = items.ToArray();
+
+	public T this[int index] => _items[index];
+	public int Count => _items.Length;
+	public IEnumerator<T> GetEnumerator() => ((IEnumerable<T>)_items).GetEnumerator();
+	System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => _items.GetEnumerator();
+	public bool Equals(ValueList<T>? other) => other is not null && _items.SequenceEqual(other._items);
+	public override bool Equals(object? obj) => Equals(obj as ValueList<T>);
+	public override int GetHashCode() => _items.Aggregate(_items.Length, (hash, item) => HashCode.Combine(hash, item));
+	public override string ToString() => "[" + string.Join(", ", _items) + "]";
+}
+
+// An animation scripts may name, with how long one play lasts and what it leaves behind.
+public sealed record AnimationInfo(string Id, double Seconds, bool Standard, AnimationEnd End);
 
 // One of the party's vehicles in its area; Aboard: the party rides it, so it stands on the leader's cell.
 public sealed record FieldVehicle(string Id, string Name, int X, int Y, Direction Facing, bool Aboard);
@@ -200,7 +252,8 @@ public sealed record Choice(string Prompt, bool YesNo, IReadOnlyList<string> Opt
 
 // Duration is how long the animation lasts by the data (game.json's presentation durations, else Seconds), 0 for none.
 public sealed record PresentationAction(ulong Handle, ActionPhase Phase, ActionType Type, string Subject, string Target, string Slot, bool HasPosition,
-	double X, double Y, double Z, double Seconds, double Speed, double Strength, bool Loop, bool Instant, string Description, double Duration);
+	double X, double Y, double Z, double Seconds, double Speed, double Strength, bool Loop, bool Instant, string Description, double Duration,
+	IReadOnlyList<string>? Waypoints = null, bool Pathfind = false, string Facing = "", IReadOnlyList<RouteCell>? Route = null);
 
 // A camera scripts may name and what game.json says it looks at: Area and Marker for a Marker target, Follow for a Follow
 // target; Zoom is 1 when the data gives none.
@@ -213,7 +266,7 @@ public sealed record ActiveStatus(string Id, string Name, int Remaining);
 public sealed record Combatant(int Index, string Id, string Name, string Label, Side Side, string Group, int Hp, int MaxHp, int Tp, int MaxTp, bool Alive,
 	bool Defending, IReadOnlyList<ActiveStatus> Statuses, CommandKind CommandKind, string CommandId, int CommandTarget, bool Flying = false, int Position = -1);
 
-// Music is the encounter's track from game.json, "" when the data names none. Vehicle is a vehicle battle's vehicle, the
+// Music is the encounter's track from game.json, else for a random battle aboard the vehicle's, "" when the data names none. Vehicle is a vehicle battle's vehicle, the
 // combatant after the members riding it, "" otherwise.
 public sealed record BattleInfo(bool Live, string Encounter, BattleSource Source, int Round, int PartyCount, int CombatantCount, Outcome Outcome,
 	bool EscapeAllowed, bool AutoActive, bool PartyActsNextRound, bool GameOver, string Music, string Vehicle, int FormationSize = 0);

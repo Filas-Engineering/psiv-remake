@@ -66,6 +66,12 @@ int elementScore(int roll, int actorMental, int targetMental, int affinity, int 
 	return (roll + actorMental - targetMental) * (affinity * 4 / divisor);
 }
 
+// One division, so the factor rounds down once: at affinity == divisor it is statusScore's, at resistance 0
+// elementScore's.
+int effectScore(int roll, int actorStat, int targetStat, int affinity, int divisor, int resistance) {
+	return (roll + actorStat - targetStat) * (affinity * (100 - resistance) * 4 / (divisor * 100));
+}
+
 int experienceToNextLevel(int level) {
 	return 15 * level * level + 10;
 }

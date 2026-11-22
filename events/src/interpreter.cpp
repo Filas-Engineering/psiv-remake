@@ -12,7 +12,7 @@ const std::size_t max_call_depth = 32;
 const double time_epsilon = 1e-9;
 
 bool waits_on_player(Op op) {
-	return op == Op::choice || op == Op::battle || op == Op::shop || op == Op::save_prompt || op == Op::name_entry;
+	return op == Op::choice || op == Op::battle || op == Op::shop || op == Op::save_prompt || op == Op::name_entry || op == Op::credits;
 }
 
 const char* service_method(Op op) {
@@ -23,6 +23,8 @@ const char* service_method(Op op) {
 		return "rest_party";
 	case Op::save_prompt:
 		return "open_save_prompt";
+	case Op::credits:
+		return "play_credits";
 	default:
 		return "open_name_entry";
 	}
@@ -231,7 +233,8 @@ void Interpreter::execute(Thread& thread) {
 	case Op::shop:
 	case Op::rest:
 	case Op::save_prompt:
-	case Op::name_entry: {
+	case Op::name_entry:
+	case Op::credits: {
 		if (ins.op != Op::rest) {
 			stop_skipping();
 		}
@@ -242,6 +245,8 @@ void Interpreter::execute(Thread& thread) {
 			handle = host_.rest_party({ins.name, skipping});
 		} else if (ins.op == Op::save_prompt) {
 			handle = host_.open_save_prompt();
+		} else if (ins.op == Op::credits) {
+			handle = host_.play_credits(ins.name);
 		} else {
 			handle = host_.open_name_entry(ins.name);
 		}
@@ -376,14 +381,60 @@ void Interpreter::execute(Thread& thread) {
 	case Op::area_music:
 		host_.set_area_music(ins.name);
 		break;
+	case Op::remove_actor:
+		host_.remove_actor(ins.name, ins.number == 1);
+		break;
 	case Op::take:
 		host_.take_item(ins.name, static_cast<int>(ins.number));
 		break;
 	case Op::party_add:
-		host_.add_party_member(ins.name);
+		if (ins.number == 1) {
+			host_.add_party_member_silently(ins.name);
+		} else {
+			host_.add_party_member(ins.name);
+		}
 		break;
 	case Op::party_remove:
-		host_.remove_party_member(ins.name);
+		if (ins.number == 1) {
+			host_.remove_party_member_silently(ins.name);
+		} else {
+			host_.remove_party_member(ins.name);
+		}
+		break;
+	case Op::party_order:
+		if (!host_.order_party(ins.names)) {
+			std::string named;
+			for (const std::string& member : ins.names) {
+				named += " " + member;
+			}
+			fail(thread.pc, "'party order" + named + "' names a member who is not in the lineup");
+			return;
+		}
+		break;
+	case Op::party_save:
+		host_.save_party(ins.name);
+		break;
+	case Op::party_restore:
+		if (!host_.restore_party(ins.name)) {
+			fail(thread.pc, "there is no party snapshot '" + ins.name + "'; 'party save " + ins.name + "' makes one");
+			return;
+		}
+		break;
+	case Op::party_swap:
+		host_.swap_party_member(ins.swap);
+		break;
+	case Op::spawn:
+		host_.spawn_event(ins.name);
+		break;
+	case Op::end_game:
+		host_.end_game();
+		cancel_all();
+		skip_depth_ = -1;
+		status_ = Status::finished;
+		return;
+	case Op::actor_look:
+		host_.set_actor_look(ins.name, ins.action.subject == "enemy" ? ins.action.target : std::string(),
+			ins.action.subject == "enemy" ? std::string() : ins.action.target);
 		break;
 	case Op::lock_player:
 		host_.set_player_control(false);
@@ -575,24 +626,48 @@ ActorState& Interpreter::actor(const std::string& name) {
 void Interpreter::record(const Action& action) {
 	PresentationState& p = presentation_;
 	switch (action.type) {
-	case ActionType::move: {
+	case ActionType::move:
+	case ActionType::place_actor: {
 		ActorState& a = actor(action.subject);
 		a.has_position = action.has_position;
 		a.marker = action.has_position ? std::string() : action.target;
 		a.position = action.position;
-		a.facing.clear();
+		a.via = action.waypoints;
+		a.pathfind = action.pathfind;
+		a.placed = action.type == ActionType::place_actor;
+		a.facing = action.facing;
 		break;
 	}
 	case ActionType::face:
 		actor(action.subject).facing = action.target;
 		break;
-	case ActionType::animate:
-		actor(action.subject).pose = action.loop ? action.target : std::string();
+	case ActionType::animate: {
+		ActorState& a = actor(action.subject);
+		const StandardAnimation* standard = standard_animation(action.target);
+		if (standard && standard->end != AnimationEnd::none) {
+			// The pose of a hidden actor names the animation that hid it, which the rebuild plays at once.
+			a.visible = standard->end == AnimationEnd::shown ? 1 : 0;
+			a.pose = standard->end == AnimationEnd::hidden ? action.target : std::string();
+		} else {
+			a.pose = action.loop ? action.target : std::string();
+		}
 		break;
+	}
 	case ActionType::show_actor:
-	case ActionType::hide_actor:
-		actor(action.subject).visible = action.type == ActionType::show_actor ? 1 : 0;
+	case ActionType::hide_actor: {
+		ActorState& a = actor(action.subject);
+		a.visible = action.type == ActionType::show_actor ? 1 : 0;
+		const StandardAnimation* standard = standard_animation(a.pose);
+		if (standard && standard->end == AnimationEnd::hidden) {
+			a.pose.clear();
+		}
+		// Hidden with a standard animation that hides: rebuilt as that animation, as an `anim` of it is.
+		const StandardAnimation* transition = standard_animation(action.target);
+		if (action.type == ActionType::hide_actor && transition && transition->end == AnimationEnd::hidden) {
+			a.pose = action.target;
+		}
 		break;
+	}
 	case ActionType::panel_show: {
 		auto it = std::find_if(p.panels.begin(), p.panels.end(), [&](const PanelState& s) { return s.panel == action.subject; });
 		if (it == p.panels.end()) {
@@ -639,6 +714,7 @@ void Interpreter::record(const Action& action) {
 void Interpreter::mark_dirty(const Action& action) {
 	switch (action.type) {
 	case ActionType::move:
+	case ActionType::place_actor:
 	case ActionType::face:
 	case ActionType::animate:
 	case ActionType::show_actor:
@@ -702,19 +778,26 @@ void Interpreter::rebuild(bool everything) {
 		if (!wanted("actor:" + a.actor)) {
 			continue;
 		}
-		if (a.visible >= 0) {
+		const StandardAnimation* vanished = a.visible == 0 ? standard_animation(a.pose) : nullptr;
+		if (a.visible >= 0 && !vanished) {
 			issue_instant(make(a.visible ? ActionType::show_actor : ActionType::hide_actor, a.actor));
 		}
 		if (a.has_position || !a.marker.empty()) {
-			Action move = make(ActionType::move, a.actor, a.marker);
+			Action move = make(a.placed ? ActionType::place_actor : ActionType::move, a.actor, a.marker);
 			move.has_position = a.has_position;
 			move.position = a.position;
+			move.waypoints = a.via;
+			move.pathfind = a.pathfind;
 			issue_instant(move);
 		}
 		if (!a.facing.empty()) {
 			issue_instant(make(ActionType::face, a.actor, a.facing));
 		}
-		if (!a.pose.empty()) {
+		if (vanished) {
+			Action gone = make(ActionType::animate, a.actor, a.pose);
+			gone.seconds = vanished->seconds;
+			issue_instant(gone);
+		} else if (!a.pose.empty()) {
 			Action pose = make(ActionType::animate, a.actor, a.pose);
 			pose.loop = true;
 			issue_instant(pose);
@@ -752,6 +835,15 @@ void Interpreter::cancel_all() {
 		}
 	}
 	background_.clear();
+}
+
+void Interpreter::cancel() {
+	if (status_ != Status::running) {
+		return;
+	}
+	cancel_all();
+	skip_depth_ = -1;
+	status_ = Status::idle;
 }
 
 void Interpreter::finish() {

@@ -40,6 +40,7 @@ Every problem in a map is printed as `MAP.tmj: text`, all of them in one run, an
 | `music` | string | `music` (an audio id from `game.json`) |
 | `region` | string | `region` (the world or region the area belongs to) |
 | `arrival` | string | `arrival` (a town's marker where a return to it lands) |
+| `dungeon_exit` | string holding a JSON object | `dungeon_exit` (a dungeon's way out: `{"area": "saltgrass", "marker": "east_gate", "facing": "west"}`, or `at` `[x, y]` in place of `marker`) |
 
 A property left out is left out of the area, so the game's default applies. Any other map property is refused.
 
@@ -54,10 +55,10 @@ An object layer. Each object's class (Tiled's Class field, `type` in older versi
 | Class | Name | Properties | Area entry |
 | --- | --- | --- | --- |
 | `marker` | the marker name, unique | none | `markers[name]: [x, y]` |
-| `exit` | ignored | `to` (string), `marker` (string), optional `fall` (bool) | `exits[]: {at, to, marker, fall}` |
-| `hook` | the hook id | `event` (string), optional `trigger`, `require_flag`, `block_flag` (strings) | `hooks[]` |
-| `shop` | the shop id | `stock` (JSON list), optional `kind`, `require_flag`, `block_flag` (strings), `sell_percent` (int), `script_only` (bool) | `shops[]` |
-| `rest` | the rest point id | optional `cost` (int), `script_only` (bool) | `rests[]` |
+| `exit` | ignored | `to` (string), `marker` (string), optional `fall` (bool), `require_flag`, `block_flag`, `closed_tile` (strings) | `exits[]: {at, to, marker, fall, require_flag, block_flag, closed_tile}` |
+| `hook` | the hook id | `event` (string), optional `trigger`, `require_flag`, `block_flag` (strings), `actor_at` (JSON list `[x, y]`, the cell its actor stands on), `across` (bool), `cells` (JSON list of `[x, y]`, further cells it covers), `actor` (string, a `touch` hook's actor; such a hook has no cell, like `load` and `flag`) | `hooks[]` |
+| `shop` | the shop id | `stock` (JSON list), optional `kind`, `require_flag`, `block_flag` (strings), `sell_percent` (int), `script_only` (bool), `keeper` (string, the actor who keeps it) | `shops[]` |
+| `rest` | the rest point id | optional `cost` (int), `script_only` (bool), `keeper` (string) | `rests[]` |
 | `chest` | the chest id | `flag` (string), optional `items` and `equipment` (JSON objects), `money` (int) | `chests[]` |
 | `port` | the port id | `marker` (string), optional `flag`, `ship` (strings) | `ports[]` |
 | `zone` | the zone id | `table` (JSON list), optional `visible`, `random` (JSON objects) | `zones[]` |
@@ -66,7 +67,7 @@ An object layer. Each object's class (Tiled's Class field, `type` in older versi
 | `change` | ignored | `flag` (string), `tile` (string, one map character), `cells` (JSON list of cells) | `changes[]: {flag, tile, cells}` |
 
 * "JSON" properties are string properties holding JSON text in the area format, for example a shop's stock `["tonic", {"id": "spark_flask", "require_flag": "fells.bridge_mended"}]`, a chest's items `{"tonic": 2}` or a zone's table `[{"encounter": "training", "weight": 2}]`. Spawn points inside `visible` are cells, `[[4, 2], [8, 6]]`.
-* A hook whose `trigger` is `load` or `flag` has no cell: its position is ignored, and `area_to_tiled.py` puts it in a column just left of the map.
+* A hook whose `trigger` is `load`, `flag` or `touch` has no cell: its position is ignored, and `area_to_tiled.py` puts it in a column just left of the map.
 * `script_only: true` on a shop or rest point leaves out `at` (one reached only from a script), and the position is ignored the same way.
 * A change's cells are in its `cells` property, `[[7, 4], [8, 4]]`, since they need not touch; its position is ignored the same way.
 * A zone is a rectangle; its `from` and `to` are the first and last cell it covers. Edges that do not fall on the grid widen it to whole cells.

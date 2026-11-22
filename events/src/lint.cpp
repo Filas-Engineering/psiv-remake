@@ -118,6 +118,7 @@ private:
 			note(var_writes_, ins.name, ins);
 			break;
 		case Op::call:
+		case Op::spawn:
 			calls_.insert(ins.name);
 			break;
 		case Op::choice:

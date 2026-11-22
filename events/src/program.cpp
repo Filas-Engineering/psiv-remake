@@ -105,6 +105,24 @@ const char* op_name(Op op) {
 		return "unequip";
 	case Op::area_music:
 		return "music area";
+	case Op::remove_actor:
+		return "remove";
+	case Op::party_save:
+		return "party save";
+	case Op::party_restore:
+		return "party restore";
+	case Op::party_swap:
+		return "party swap";
+	case Op::spawn:
+		return "spawn";
+	case Op::actor_look:
+		return "look";
+	case Op::party_order:
+		return "party order";
+	case Op::credits:
+		return "credits";
+	case Op::end_game:
+		return "end game";
 	}
 	return "unknown";
 }

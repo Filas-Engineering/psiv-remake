@@ -68,9 +68,30 @@ struct EncyclopediaView {
 inline constexpr int kMaxMacros = 8;
 
 // What the Menu mode is showing. Shop has its own mode. Port: the destinations of the port the party is at.
-enum class MenuKind { None, Field, Inn, SavePrompt, NameEntry, Port };
+enum class MenuKind { None, Field, Inn, SavePrompt, NameEntry, Port, Credits };
 
 const char* toString(MenuKind kind);
+
+// One entry of the credits playing, its text in the profile's language.
+struct CreditsEntryView {
+	CreditsEntryKind kind = CreditsEntryKind::Line;
+	std::string key;
+	std::string text;
+	int gap = 0;
+	int pauseMs = 0;
+};
+
+// The credits a script's `credits <id>` plays (MenuKind::Credits): the entries and how far play time has come through
+// them. Entry i is shown once elapsedMs reaches the pauses of the entries before it, so the first is shown at once.
+struct CreditsView {
+	std::string id;
+	std::string music;
+	std::vector<CreditsEntryView> entries;
+	int shown = 0;
+	// Play time since the credits began, at most totalMs, the sum of every entry's pause.
+	std::int64_t elapsedMs = 0;
+	std::int64_t totalMs = 0;
+};
 
 // The pending event line, ready to show.
 struct LineView {
@@ -123,6 +144,9 @@ struct PresentedAction {
 	// How long the action's animation lasts by the data: game.json's presentation durations for its type and subject,
 	// else its type, else the action's own seconds (events::action_seconds); 0 for none.
 	double seconds = 0;
+	// A move or place of one of the game's actors: the cells it passes, from where it stood to where it ends; one cell
+	// when it had no cell in the area or was placed. Empty for any other action.
+	std::vector<Cell> route = {};
 };
 
 struct SessionOptions {
@@ -146,6 +170,9 @@ struct SessionOptions {
 struct FieldInput {
 	bool held = false;
 	Facing direction = Facing::South;
+	// The host's run input. The leader runs on foot while it is held, or while it is not with the profile's always_run,
+	// when game.json gives a run_speed_percent; otherwise it changes nothing.
+	bool running = false;
 };
 
 enum class BattleSource { Visible, Random, Event };
@@ -296,6 +323,21 @@ struct ActorView {
 	bool visible = true;
 	// A script has moved, turned, shown or hidden it.
 	bool scripted = false;
+	// It blocks walking on its cell now: a solid actor (game.json `solid`, or a talk point with `actor_at`) shown there.
+	bool solid = false;
+	ActorVanish vanish = ActorVanish::None;
+	// The one-shot animation playing, with its milliseconds left and in all; empty when none plays.
+	std::string animation = {};
+	int animationMs = 0;
+	int animationTotalMs = 0;
+	// A removed actor is not shown, does not block and its talk point does not answer.
+	ActorRemoval removed = ActorRemoval::None;
+	// Its figure: a script's `look`, else game.json's: an enemy's field sprite, or a look the host names; both empty for the
+	// host's own.
+	std::string spriteEnemy = {};
+	std::string look = {};
+	// It walks about by itself now (game.json `wander`): shown, not removed, in its home area and in no running event.
+	bool wanders = false;
 };
 
 // One of the party's vehicles in the party's area, from Session::vehiclesHere() (FLD-060).
@@ -305,6 +347,42 @@ struct VehicleView {
 	Facing facing = Facing::South;
 	// The party rides it, so it stands on the leader's cell.
 	bool aboard = false;
+};
+
+// What interact acts on (FLD-030). Talk is an interact hook that is no actor's (a sign); Actor an actor's talk point, or
+// the actor where it stands under game.json's `interact: "nearby"`.
+enum class InteractKind { Vehicle, Port, Helm, Talk, Actor, Chest, Shop, Rest };
+
+const char* toString(InteractKind kind);
+
+// What interact would act on now, from Session::interactTarget(), for a host to draw a prompt over.
+struct InteractTarget {
+	InteractKind kind = InteractKind::Talk;
+	// The vehicle, port, helm, hook, chest, shop or rest point id; for Actor the actor's, which is its talk point's.
+	std::string id;
+	// The cell acted on: the one faced, another neighbor, the one beyond a counter, or where the actor stands.
+	Cell cell;
+	// Where the leader faces to use it; interact turns the leader there first.
+	Facing facing = Facing::South;
+	// False when interact would refuse: a hook whose flags do not hold or whose actor is removed, a closed shop or port.
+	bool ready = true;
+	// Used across a counter.
+	bool across = false;
+	// A shop's or rest point's `keeper`, the actor who keeps it; empty for none and for every other kind.
+	std::string keeper = {};
+};
+
+// How the leader and the belt under it move now, for a host that slides the leader between cells (Session::fieldMotion).
+struct FieldMotion {
+	// Milliseconds of held input spent toward the next cell, and the time a cell takes walking and with the run input.
+	int stepProgressMs = 0;
+	int stepMs = 0;
+	int runStepMs = 0;
+	// The belt carrying the party: its time per cell and the milliseconds spent toward the next; both 0 off a belt.
+	int conveyorStepMs = 0;
+	int conveyorProgressMs = 0;
+	// The directions a step would move the leader now (canStep): 1 north, 2 east, 4 south, 8 west.
+	int stepMask = 0;
 };
 
 // Ways to travel at once (FLD-051): from a port to another open port, back to a town visited before in the region the
@@ -398,6 +476,10 @@ public:
 	rules::Message newGame();
 	rules::Message continueGame();
 	rules::Message load(const std::string& slot);
+	// Deletes a manual or autosave slot's file, damaged ones included, in any mode; the game being played is not touched.
+	// Refused as load() refuses a slot it cannot read: no saving, an unknown slot name or an empty slot. Erasing the
+	// autosave a retry would load ends that retry.
+	rules::Message eraseSave(const std::string& slot);
 	// After a game over, reloads the autosave taken before the lost event battle (FLOW-042).
 	rules::Message retryBattle();
 	bool gameOver() const { return gameOver_; }
@@ -409,6 +491,14 @@ public:
 	void update(int ms, const FieldInput& input = FieldInput());
 	// Holds `direction` until the leader enters the next cell or something stops the field.
 	rules::Message walk(Facing direction);
+	// The same with the run input as FieldInput::running holds it.
+	rules::Message walk(Facing direction, bool running);
+	// Whether a step in `direction` would move the leader now: the field under player control, no belt carrying the party,
+	// and a cell it can enter with no visible enemy on it (bumping one starts its battle instead).
+	bool canStep(Facing direction) const;
+	// The leader's time per cell now: the area's step time, a vehicle's speed aboard, and on foot with `running` (the run
+	// input as FieldInput::running holds it) the run speed.
+	int leaderStepMs(bool running = false) const;
 	// Turns the leader in place.
 	rules::Message face(Facing direction);
 	// A walk to `goal` along the shortest path over walkable cells, avoiding exits other than the goal. Visible
@@ -421,11 +511,30 @@ public:
 	WalkStatus walkStep(PathWalk& walk);
 	// The actors in the party's area, in game.json order, hidden ones included.
 	std::vector<ActorView> actorsHere() const;
-	// The track the area plays now: the one a script set (`music area`), else the area's own.
+	// The track the area plays now: the one a script set (`music area`) until the party leaves, else the first of
+	// game.json's `music.areas` entries for the area whose flag is set, else the area's own. Flags are read on each call,
+	// so a listed flag set in the area changes it at once.
 	std::string areaMusic() const;
+	// The battle's track, live or ended: the encounter's from game.json, else for a random battle aboard the vehicle's;
+	// empty when the data names none.
+	std::string battleMusic() const;
 	// Interacts with whatever stands in the cell the leader faces (FLD-030): a vehicle is boarded, a port opens its
-	// destinations. Refused while the party rides a vehicle.
+	// destinations. Refused while the party rides a vehicle. game.json's interact rules can pick another cell
+	// (interactTarget).
 	rules::Message interact();
+	// What interact would act on now; empty when nothing answers, outside the field, without control or aboard.
+	std::optional<InteractTarget> interactTarget() const;
+	// What stands on `cell` and whether the leader can use it from where it stands: the target interact would act on once
+	// the leader faced that way (a neighbor, the cell beyond a counter, or an actor standing there), with the facing to
+	// turn to; empty when nothing there answers from here, and when interactTarget would be.
+	std::optional<InteractTarget> interactAt(Cell cell) const;
+	// The leader's step progress and times, the belt's, and where a step can go (all 0 outside the field).
+	FieldMotion fieldMotion() const;
+	// The background events running now, in start order, each with the script line it is at (events/FORMAT.md,
+	// "Background events"). They run only in field ticks, after the leader's step and the wanderers' and visible enemies'.
+	std::vector<EventPosition> backgroundEvents() const;
+	// The reserved actor name (`enemy.<zone>.<n>`) a script addresses the visible enemy with this id by; empty for none.
+	std::string enemyActor(int enemyId) const;
 	// The party's vehicles in its area, in id order, the one it rides included.
 	std::vector<VehicleView> vehiclesHere() const;
 	// The field rules of the vehicle the party rides, or null on foot.
@@ -439,7 +548,8 @@ public:
 	const Port* port() const;
 	// Where a travel of `kind` can go now: the other open ports while a port's menu is up, the towns of the region the
 	// party has visited that have an arrival marker (the area it is in left out), or the one way out of the dungeon it is
-	// in. Empty when there is none.
+	// in: the dungeon area's `dungeon_exit` when it has one, else where the party stood before going in. Empty when there
+	// is none.
 	std::vector<TravelDestination> travelDestinations(TravelKind kind) const;
 	// Travels to `destination`. Port: from a port's menu. Town and DungeonExit: from the field menu with `thing`, an item,
 	// or a technique that `user` (a lineup member) knows, whose travel effect matches; it is spent as core's field use
@@ -483,8 +593,14 @@ public:
 	void fillFromPolicy();
 	// Fills the round the way auto play does: on the first round, starts auto-battle with the save's auto macro
 	// when one is set; then fillFromAuto, or fillFromPolicy once auto-battle is off. Returns why auto-battle did
-	// not start, if it did not.
+	// not start, if it did not. With an auto play macro it applies that macro with MacroFallback::Automatic instead.
 	rules::Message fillAutoRound();
+	// A macro auto play (fillAutoRound, playBattle) fills every round with, in place of the save's auto macro and
+	// core's policy: each member whose step cannot be paid for or has no target takes core's automatic choice, and
+	// the rest of the macro stands. Empty, the default, plays as before. Kept for the session, not saved; refuses a
+	// name no macro has. A macro deleted or renamed later is refused at the next round, which plays as before.
+	rules::Message setAutoPlayMacro(const std::string& name);
+	const std::string& autoPlayMacro() const { return autoPlayMacro_; }
 	// Plays the battle to its end with fillAutoRound and resolveRound, at most `maxRounds` rounds.
 	AutoBattle playBattle(int maxRounds = 60);
 	// Resolves one round. The battle ends inside this call when an outcome is reached; endedBattle() then has it.
@@ -516,6 +632,10 @@ public:
 	rules::Message unequip(const std::string& member, rules::EquipSlot slot);
 	// From the field menu, or from a save prompt an event opened.
 	rules::Message saveManual(const std::string& slot);
+	// The credits playing, while menuKind() is Credits. update() moves them on; closeMenu() is how the front end says they
+	// finished (at any point: the session never ends them itself), and the event that started them goes on. Saving is
+	// refused while they play, as anywhere outside the field menu and a save prompt.
+	std::optional<CreditsView> credits() const;
 	// Name entry: the member being named, and the name to confirm, which closes the entry.
 	const std::string& nameEntryMember() const { return nameMember_; }
 	rules::Message enterName(const std::string& name);
@@ -611,7 +731,15 @@ public:
 private:
 	class GameHost;
 	class ActionQueue;
+	class BackgroundHost;
 	friend class GameHost;
+	friend class BackgroundHost;
+
+	struct BackgroundRun {
+		std::string event;
+		std::unique_ptr<BackgroundHost> host;
+		std::unique_ptr<events::Interpreter> interpreter;
+	};
 
 	enum class HandleKind { Line, Choice, Battle, Action, Menu };
 	struct HandleState {
@@ -649,14 +777,46 @@ private:
 	// Lines of `set` whose speakers are in the active party, as output of `kind`; false when none is.
 	bool speak(const TalkSet& set, OutputKind kind);
 	bool startEvent(const std::string& event);
+	bool backgroundEvent(const std::string& event) const;
+	// Starts a background event beside the field; ignored while one of that name runs, refused past background_limit.
+	void spawnBackground(const std::string& event);
+	void stepBackground(int ms);
+	// Cancels every background event: on entering an area, a load, a new game and the title.
+	void stopBackground();
+	bool restoreBackground(const std::string& event, const std::string& text);
+	void setActorLook(const std::string& actor, const std::string& enemy, const std::string& look);
+	// The touch hook of the actor standing on `cell` of the party's area whose flags hold, or null.
+	const Hook* touchHookAt(Cell cell) const;
+	const Hook* touchHook(const std::string& actor) const;
+	// Steps every wandering actor of the party's area by one tick, after the leader's step.
+	void wanderActors(int ms);
+	VisibleEnemy* visibleEnemyByActor(const std::string& actor);
+	// What answers on `cell` of `area` for interact, its facing and cell left to the caller; `acrossable` is set when it
+	// may be used across a counter.
+	std::optional<InteractTarget> pointAt(const Area& area, Cell cell, bool& acrossable) const;
 	void pumpEvent(double seconds);
 	void endEvent();
 	void dropEvent();
 	void openChest(const Chest& chest);
 	void boardShip(const Port& port);
 	rules::Message callVehicle(const FieldVehicle& vehicle);
-	void applyActorAction(const events::Action& action);
+	// Where an actor no script touched stands in `area`: its talk point (or the hook's `actor_at`), or its game.json home.
+	struct ActorHome {
+		Cell cell;
+		Facing facing = Facing::South;
+		bool visible = true;
+	};
+	std::optional<ActorHome> actorHome(const Area* area, const std::string& actor) const;
+	// `animationMs` is how long an `anim` plays by the data, 0 for an instant one.
+	void applyActorAction(const events::Action& action, int animationMs);
+	ActorPlace& touchActor(const std::string& actor);
 	std::optional<Cell> actorCell(const std::string& actor) const;
+	// The cells from `from` through each stop in turn: along x then y, or with `pathfind` around what stands in the way.
+	std::vector<Cell> actorRoute(const Area& area, const std::string& actor, Cell from, const std::vector<Cell>& stops, bool pathfind) const;
+	// Cells solid actors stand on in the party's area, `except` left out.
+	std::set<Cell> actorCells(const std::string& except = "") const;
+	void removeActor(const std::string& actor, bool untilReload);
+	void advanceActors(int ms);
 	void giveThing(const std::string& id, int count);
 	void reportFieldUse(const std::vector<rules::Event>& events, const std::vector<rules::PartyMember>& party);
 	rules::Message payRest(const RestPoint* point);
@@ -707,19 +867,29 @@ private:
 	// The autosave point waiting for control to return to the field, if any.
 	std::string autosaveReason_;
 	bool clearPending_ = false;
+	// A script's `end game` ran; the event's end writes the clear-data record and goes back to the title.
+	bool endGamePending_ = false;
 	MenuKind menuKind_ = MenuKind::None;
 	std::string shopId_;
 	std::string innId_;
 	std::string portId_;
 	std::string nameMember_;
-	// The open shop, save prompt or name entry an event is waiting on.
+	std::string creditsId_;
+	std::int64_t creditsElapsedMs_ = 0;
+	// The open shop, save prompt, name entry or credits an event is waiting on.
 	events::Handle menuHandle_ = 0;
 	int autosaveCount_ = 0;
 	bool encountersOn_ = true;
 	// Per area: the flags and broken cells its rows were built for, and the copy area() hands out.
 	mutable std::map<std::string, std::pair<std::string, Area>> areaViews_;
+	// Actors whose cell blocks walking while they are shown: game.json homes with `solid`, and talk points with `actor_at`.
+	std::set<std::string> solidActors_;
+	// The route of the actor action being started, for its presented record.
+	std::vector<Cell> actionRoute_;
 
 	std::unique_ptr<events::Interpreter> interpreter_;
+	std::vector<BackgroundRun> background_;
+	bool backgroundChangedFlag_ = false;
 	std::map<events::Handle, HandleState> handles_;
 	events::Handle nextHandle_ = 1;
 	events::Handle lineHandle_ = 0;
@@ -727,6 +897,7 @@ private:
 	bool eventChangedFlag_ = false;
 	// The slot a mid-event save was loaded from, until its battle is set up again.
 	std::string resumedSlot_;
+	std::string autoPlayMacro_;
 
 	std::optional<rules::Battle> battle_;
 	std::optional<EndedBattle> ended_;

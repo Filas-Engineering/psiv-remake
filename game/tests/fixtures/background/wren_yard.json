@@ -1,0 +1,46 @@
+{
+	"id": "wren_yard",
+	"kind": "field",
+	"encounter_mode": "visible",
+	"step_ms": 250,
+	"region": "coast",
+	"map": [
+		"#............#",
+		"#............#",
+		"#............#",
+		"#............#",
+		"#............#",
+		"#............#",
+		"#............#",
+		"##############"
+	],
+	"markers": {
+		"yard_gate": [6, 6],
+		"bell_front": [3, 1],
+		"lamp_west": [1, 3],
+		"lamp_east": [12, 3],
+		"yard_middle": [6, 4],
+		"crow_perch": [12, 1],
+		"stall_front": [9, 3],
+		"patch_corner": [12, 6],
+		"pen_side": [5, 5]
+	},
+	"hooks": [
+		{"id": "yard_lamps", "trigger": "load", "event": "yard_lamps"},
+		{"id": "yard_bell", "at": [3, 0], "event": "yard_bell"},
+		{"id": "yard_goat_touch", "trigger": "touch", "event": "yard_goat_bleat", "actor": "yard_goat"},
+		{"id": "yard_lit", "trigger": "flag", "event": "yard_lit", "require_flag": "yard.lamps_lit", "block_flag": "yard.lit_seen"}
+	],
+	"shops": [
+		{"id": "yard_stall", "at": [9, 2], "stock": ["tonic"], "keeper": "yard_trader"}
+	],
+	"zones": [
+		{
+			"id": "yard_patch",
+			"from": [10, 5],
+			"to": [12, 6],
+			"table": [{"encounter": "training", "weight": 1}],
+			"visible": {"spawns": [[11, 5]], "cap": 1, "detection_radius": 0, "wander_percent": 0}
+		}
+	]
+}

@@ -1,0 +1,46 @@
+# Wren Loft, for the party commands: the ledger gathers the party, saves it twice (the default snapshot and a named
+# one) and splits it with swaps, three of which the game refuses; the bell restores the named snapshot after another
+# member joined; the slate asks for a snapshot nobody saved, which stops the scene with a runtime error.
+
+event loft_ledger unskippable
+	lock player
+	narrate @loft.ledger.gather
+	party add mystic
+	party add scout
+	party add medic
+	party save
+	party save before_road
+	narrate @loft.ledger.split
+	party remove scout
+	party swap 2 scout equipment bag
+	party swap medic engineer
+	party add engineer
+	party swap medic engineer
+	party swap 5 lancer
+	unlock player
+end
+
+event loft_bell unskippable
+	party add harpooner
+	party restore before_road
+	narrate @loft.bell.regroup
+	warp wren_loft loft_door
+end
+
+event loft_slate unskippable
+	narrate @loft.slate.blank
+	party restore old_crew
+	narrate @loft.slate.blank
+end
+
+# The roster board sets the lineup's order and changes it with no notices (`party order`, `silent`), then names a
+# reserve member in an order, another runtime error.
+event loft_roster unskippable
+	party order medic scout
+	party add lancer silent
+	party swap mystic engineer silent
+	party remove lancer silent
+	narrate @loft.roster.lined
+	party order harpooner fighter
+	narrate @loft.roster.lined
+end

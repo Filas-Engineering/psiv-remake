@@ -1,0 +1,108 @@
+The Bell at Tidewater (seed 6)
+title> new
+You arrive at Tidewater Landing.
+  (fade in 1)
+The ferry bumps against the pilings of Tidewater Landing.
+  (move dockhand to dock_front)
+  (move dockhand to greet_spot)
+  (face dockhand fighter)
+Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  (move dockhand to dock_front)
+  (move dockhand to 10 0 2)
+  (face dockhand dock_front)
+New job: The dockhand's lost crate.
+New encyclopedia entry: Tidewater Landing.
+[Autosaved to auto_0 (event end).]
+field> dev warp wren_hollow hollow_door
+Developer tools changed this game. It and its saves are marked.
+You arrive at Wren Hollow.
+[Autosaved to auto_1 (area entry).]
+field> look
+  ##########
+  #........#
+  ####N#####
+  #........#
+  #........#
+  #...@....#
+  ##########
+field> actors
+  hollow_sentinel at 7 4 facing west shown solid enemy aegis_sentinel
+  tallykeeper at 4 1 facing south shown solid
+field> walk 6 4
+field> refused e
+! The way is blocked.
+field> walk counter_front
+field> face north
+field> talk
+Tallykeeper: Welcome to the Hollow. Mind the sentinel by the wall; it only stands guard.
+  (face tallykeeper west)
+  (face tallykeeper south)
+  (place hollow_drifter west_post facing east)
+  (anim hollow_drifter fade_in)
+Tallykeeper: Here comes the drifter, round the long way as always.
+  (move hollow_drifter to east_post pathfind)
+  (anim hollow_drifter hop)
+  (face hollow_drifter tallykeeper)
+  (move hollow_drifter via shelf_front to west_post speed 2)
+  (anim hollow_drifter dissolve)
+Tallykeeper: And gone again. It will be back once you step out and in.
+  (anim tallykeeper tally_nod)
+  (anim tallykeeper shake)
+[Autosaved to auto_2 (event end).]
+field> actors
+  hollow_drifter at 1 4 facing south hidden dissolved removed until_reload
+  hollow_sentinel at 7 4 facing west shown solid enemy aegis_sentinel
+  tallykeeper at 4 1 facing south shown solid anim shake 400/400ms
+field> wait 200
+field> actors
+  hollow_drifter at 1 4 facing south hidden dissolved removed until_reload
+  hollow_sentinel at 7 4 facing west shown solid enemy aegis_sentinel
+  tallykeeper at 4 1 facing south shown solid anim shake 200/400ms
+field> wait 200
+field> actors
+  hollow_drifter at 1 4 facing south hidden dissolved removed until_reload
+  hollow_sentinel at 7 4 facing west shown solid enemy aegis_sentinel
+  tallykeeper at 4 1 facing south shown solid
+field> dev warp wren_hollow hollow_door
+You arrive at Wren Hollow.
+field> actors
+  hollow_drifter at 1 4 facing south hidden dissolved
+  hollow_sentinel at 7 4 facing west shown solid enemy aegis_sentinel
+  tallykeeper at 4 1 facing south shown solid
+field> walk counter_front
+field> face north
+field> talk
+Tallykeeper: Back already? Then I am done with this counter for good.
+  (anim hollow_drifter fade_in)
+  (place hollow_drifter 6 0 5 facing north)
+  (move hollow_drifter to shelf_front)
+  (face tallykeeper east)
+  (anim hollow_drifter blink_out)
+  (anim tallykeeper fade_out)
+You arrive at Wren Hollow.
+  (warp wren_hollow hollow_door)
+field> actors
+  hollow_drifter at 2 3 facing north hidden blinked_out anim blink_out 600/600ms
+  hollow_sentinel at 7 4 facing west shown solid enemy aegis_sentinel
+  tallykeeper at 4 1 facing east hidden faded removed for_good
+field> menu
+menu> save manual_1
+Saved to manual_1.
+menu> close
+field> wait 300
+field> actors
+  hollow_drifter at 2 3 facing north hidden blinked_out anim blink_out 300/600ms
+  hollow_sentinel at 7 4 facing west shown solid enemy aegis_sentinel
+  tallykeeper at 4 1 facing east hidden faded removed for_good
+field> title
+title> load manual_1
+Loaded manual_1.
+field> actors
+  hollow_drifter at 2 3 facing north hidden blinked_out anim blink_out 600/600ms
+  hollow_sentinel at 7 4 facing west shown solid enemy aegis_sentinel
+  tallykeeper at 4 1 facing east hidden faded removed for_good
+field> walk counter_front
+field> face north
+field> refused talk
+! There is no answer.
+End of script.

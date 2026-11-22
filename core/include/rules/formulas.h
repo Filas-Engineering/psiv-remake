@@ -51,6 +51,9 @@ int statusScore(int roll, int actorMental, int targetMental, int resistance);
 // A roll whose factor is the target's affinity for an element on the original's scale of 4 for normal
 // (original-battle-rules.md, section 6): affinity * 4 / divisor.
 int elementScore(int roll, int actorMental, int targetMental, int affinity, int divisor);
+// Both factors at once, for an effect with an element whose target also resists the status by a percent:
+// affinity * (100 - resistance) * 4 / (divisor * 100).
+int effectScore(int roll, int actorStat, int targetStat, int affinity, int divisor, int resistance);
 int experienceToNextLevel(int level);
 
 }

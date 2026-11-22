@@ -169,6 +169,46 @@ class VesselAndChangesTest(TempCase):
 		self.assertNotIn("at", back["hooks"][0])
 		self.assertIn('\t"conveyors": [\n\t\t{"cells": [[1, 1], [2, 1]], "direction": "east", "step_ms": 200, "block_flag": "b.flag"}\n\t]', areajson.dumps(back))
 
+	def test_a_dungeons_way_out_survives_a_round_trip_in_canonical_order(self):
+		area = copy.deepcopy(VESSEL_AREA)
+		area["kind"] = "dungeon"
+		area["dungeon_exit"] = {"facing": "north", "marker": "gate", "area": "saltgrass"}
+		back = self.convert(tiled.area_to_tmj(copy.deepcopy(area), "cells.tsj"))
+		self.assertEqual(areajson.dumps(area), areajson.dumps(back))
+		self.assertEqual(["area", "marker", "facing"], list(back["dungeon_exit"]))
+		self.assertIn('\t"dungeon_exit": {"area": "saltgrass", "marker": "gate", "facing": "north"},\n\t"map": [', areajson.dumps(back))
+		area["dungeon_exit"] = {"area": "saltgrass", "at": [1, 1], "door": "x"}
+		with self.assertRaises(areajson.AreaError) as caught:
+			areajson.normalize(area)
+		self.assertIn("dungeon_exit: unknown field 'door'", caught.exception.problems)
+
+	def test_a_hooks_actor_cell_survives_a_round_trip(self):
+		area = copy.deepcopy(VESSEL_AREA)
+		area["hooks"] = [{"id": "keeper", "at": [1, 0], "event": "e", "actor_at": [2, 1]}]
+		back = self.convert(tiled.area_to_tmj(copy.deepcopy(area), "cells.tsj"))
+		self.assertEqual(areajson.dumps(area), areajson.dumps(back))
+		self.assertEqual([2, 1], back["hooks"][0]["actor_at"])
+
+	def test_a_closed_exits_tile_and_a_hooks_counter_and_cells_survive_a_round_trip(self):
+		area = copy.deepcopy(VESSEL_AREA)
+		area["exits"] = [{"at": [1, 1], "to": "elsewhere", "marker": "door", "require_flag": "door.open", "closed_tile": "normal"}]
+		area["hooks"] = [{"id": "table", "at": [1, 0], "event": "e", "across": True, "cells": [[2, 0], [3, 0]]}]
+		back = self.convert(tiled.area_to_tmj(copy.deepcopy(area), "cells.tsj"))
+		self.assertEqual(areajson.dumps(area), areajson.dumps(back))
+		self.assertIn('{"id": "table", "at": [1, 0], "event": "e", "across": true, "cells": [[2, 0], [3, 0]]}', areajson.dumps(back))
+		self.assertEqual("normal", back["exits"][0]["closed_tile"])
+
+	def test_a_touch_hook_and_a_keeper_survive_a_round_trip(self):
+		area = copy.deepcopy(VESSEL_AREA)
+		area["hooks"] = [{"id": "goat", "trigger": "touch", "event": "e", "actor": "goat"}]
+		area["shops"] = [{"id": "stall", "at": [1, 0], "stock": ["tonic"], "keeper": "trader"}]
+		area["rests"] = [{"id": "cot", "cost": 5, "keeper": "warden"}]
+		back = self.convert(tiled.area_to_tmj(copy.deepcopy(area), "cells.tsj"))
+		self.assertEqual(areajson.dumps(area), areajson.dumps(back))
+		self.assertNotIn("at", back["hooks"][0])
+		self.assertEqual("goat", back["hooks"][0]["actor"])
+		self.assertEqual(["trader", "warden"], [back["shops"][0]["keeper"], back["rests"][0]["keeper"]])
+
 	def test_refuses_a_change_tile_that_is_not_a_map_character_and_a_change_without_cells(self):
 		tmj = tiled.area_to_tmj(copy.deepcopy(VESSEL_AREA), "cells.tsj")
 		changes = [o for o in objects(tmj) if o["type"] == "change"]

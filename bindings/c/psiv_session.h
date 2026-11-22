@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 13
+#define PSIV_ABI_VERSION 14
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -110,7 +110,7 @@ PSIV_API psiv_status psiv_data_problems(const psiv_problem** out, int32_t* count
 
 typedef enum psiv_mode { PSIV_MODE_TITLE, PSIV_MODE_FIELD, PSIV_MODE_EVENT, PSIV_MODE_BATTLE, PSIV_MODE_MENU, PSIV_MODE_SHOP } psiv_mode;
 /* PORT: a port's destinations (psiv_travel_destinations with PSIV_TRAVEL_PORT). */
-typedef enum psiv_menu_kind { PSIV_MENU_NONE, PSIV_MENU_FIELD, PSIV_MENU_INN, PSIV_MENU_SAVE_PROMPT, PSIV_MENU_NAME_ENTRY, PSIV_MENU_PORT } psiv_menu_kind;
+typedef enum psiv_menu_kind { PSIV_MENU_NONE, PSIV_MENU_FIELD, PSIV_MENU_INN, PSIV_MENU_SAVE_PROMPT, PSIV_MENU_NAME_ENTRY, PSIV_MENU_PORT, PSIV_MENU_CREDITS } psiv_menu_kind;
 /* PSIV_DIRECTION_NONE means no direction held. */
 typedef enum psiv_direction { PSIV_DIRECTION_NONE = -1, PSIV_DIRECTION_NORTH = 0, PSIV_DIRECTION_EAST, PSIV_DIRECTION_SOUTH, PSIV_DIRECTION_WEST } psiv_direction;
 /* PSIV_NOTICE_AMBIENT: a party talk line that came up by itself as the party arrived; show it without stopping play. */
@@ -170,8 +170,15 @@ typedef enum psiv_action_type {
 	PSIV_ACTION_MOVE, PSIV_ACTION_FACE, PSIV_ACTION_ANIMATE, PSIV_ACTION_SHOW_ACTOR, PSIV_ACTION_HIDE_ACTOR, PSIV_ACTION_PANEL_SHOW,
 	PSIV_ACTION_PANEL_HIDE, PSIV_ACTION_PANEL_CLEAR, PSIV_ACTION_CAMERA_CUT, PSIV_ACTION_CAMERA_MOVE, PSIV_ACTION_FADE_IN, PSIV_ACTION_FADE_OUT,
 	PSIV_ACTION_SHAKE, PSIV_ACTION_MUSIC_PLAY, PSIV_ACTION_MUSIC_STOP, PSIV_ACTION_MUSIC_FADE, PSIV_ACTION_AMBIENT_PLAY, PSIV_ACTION_AMBIENT_STOP,
-	PSIV_ACTION_SOUND, PSIV_ACTION_WARP
+	PSIV_ACTION_SOUND, PSIV_ACTION_WARP, PSIV_ACTION_PLACE
 } psiv_action_type;
+/* How a hidden actor left: a plain hide, or the standard animation that hid it (fade_out, dissolve, blink_out). */
+typedef enum psiv_actor_vanish { PSIV_VANISH_NONE, PSIV_VANISH_FADED, PSIV_VANISH_DISSOLVED, PSIV_VANISH_BLINKED_OUT } psiv_actor_vanish;
+/* A script's remove: gone until the party next enters an area, or for good. */
+typedef enum psiv_actor_removal { PSIV_REMOVAL_NONE, PSIV_REMOVAL_UNTIL_RELOAD, PSIV_REMOVAL_FOR_GOOD } psiv_actor_removal;
+/* What an animation leaves behind once it has played: nothing, the actor shown (fade_in) or hidden (fade_out, dissolve,
+ * blink_out). */
+typedef enum psiv_animation_end { PSIV_ANIMATION_END_NONE, PSIV_ANIMATION_END_SHOWN, PSIV_ANIMATION_END_HIDDEN } psiv_animation_end;
 /* A queued presentation record: an action starting, or an action the interpreter abandoned (a skip). */
 typedef enum psiv_action_phase { PSIV_ACTION_BEGIN, PSIV_ACTION_CANCEL } psiv_action_phase;
 /* INSTANT: every action is done when it starts (what the terminal and tests do). WAIT: an action is done
@@ -193,6 +200,9 @@ typedef enum psiv_item_sort { PSIV_SORT_ID, PSIV_SORT_KIND, PSIV_SORT_NAME, PSIV
 /* A cell's terrain (masked by PSIV_CELL_TERRAIN_MASK) and flags. Soft ground is crossed by a vehicle only; a barrier is a
  * wall (PSIV_CELL_WALL | PSIV_CELL_BARRIER) that a vehicle can break through. */
 typedef enum psiv_cell { PSIV_CELL_FLOOR = 0, PSIV_CELL_WALL = 1, PSIV_CELL_WATER = 2, PSIV_CELL_TERRAIN_MASK = 3, PSIV_CELL_WALKABLE = 16, PSIV_CELL_SOFT = 3, PSIV_CELL_BARRIER = 8 } psiv_cell;
+/* What psiv_interact acts on (psiv_interact_target_get). TALK is an interact hook that is no actor's (a sign); ACTOR an actor's
+ * talk point, or the actor where it stands under game.json's `interact: "nearby"`. */
+typedef enum psiv_interact_kind { PSIV_INTERACT_VEHICLE, PSIV_INTERACT_PORT, PSIV_INTERACT_HELM, PSIV_INTERACT_TALK, PSIV_INTERACT_ACTOR, PSIV_INTERACT_CHEST, PSIV_INTERACT_SHOP, PSIV_INTERACT_REST } psiv_interact_kind;
 /* The id lists of psiv_dev_ids: what the developer commands take. Markers are "area:marker". */
 typedef enum psiv_dev_list {
 	PSIV_DEV_AREAS, PSIV_DEV_MARKERS, PSIV_DEV_FLAGS, PSIV_DEV_ITEMS, PSIV_DEV_EQUIPMENT, PSIV_DEV_ABILITIES, PSIV_DEV_ENEMIES, PSIV_DEV_ENCOUNTERS,
@@ -206,7 +216,8 @@ typedef enum psiv_name_kind {
 	PSIV_NAME_OUTCOME, PSIV_NAME_EVENT_TYPE, PSIV_NAME_CANCEL_REASON, PSIV_NAME_EFFECTIVENESS, PSIV_NAME_STATUS_END, PSIV_NAME_RESOURCE_KIND,
 	PSIV_NAME_ELEMENT, PSIV_NAME_STAT, PSIV_NAME_OPENING, PSIV_NAME_AUTO_STOP, PSIV_NAME_MACRO_STEP_STATUS, PSIV_NAME_MACRO_ISSUE,
 	PSIV_NAME_ACTION_TYPE, PSIV_NAME_MACRO_TARGET_KIND, PSIV_NAME_DESCRIPTION_KIND, PSIV_NAME_ITEM_SORT, PSIV_NAME_CAMERA_TARGET,
-	PSIV_NAME_TRAVEL_KIND, PSIV_NAME_DEV_LIST, PSIV_NAME_CREATURE_KIND, PSIV_NAME_SHOP_KIND
+	PSIV_NAME_TRAVEL_KIND, PSIV_NAME_DEV_LIST, PSIV_NAME_CREATURE_KIND, PSIV_NAME_SHOP_KIND, PSIV_NAME_ACTOR_VANISH, PSIV_NAME_ACTOR_REMOVAL,
+	PSIV_NAME_ANIMATION_END, PSIV_NAME_INTERACT_KIND
 } psiv_name_kind;
 
 /* The stable name of an enum value as the C++ libraries spell it, lowercase with underscores ("field",
@@ -262,7 +273,9 @@ typedef struct psiv_game_info {
 	const char* defeat_music;
 	/* 1 when rules.json sets magic_defense: elemental damage subtracts magic defense, which a front end then shows. */
 	int32_t magic_defense;
-	/* rules.json affinity_divisor: the affinity of normal damage, so above it is a weakness and below it a resistance. */
+	/* rules.json affinity_divisor: the affinity of normal damage, so above it is a weakness and below it a resistance.
+	 * A battle event's effectiveness compares with rules.json effectiveness_baseline or element_baselines instead when
+	 * the data sets them. */
 	int32_t affinity_divisor;
 } psiv_game_info;
 
@@ -283,6 +296,8 @@ typedef struct psiv_profile {
 	int32_t music_volume;
 	int32_t ambient_volume;
 	int32_t effects_volume;
+	/* The leader runs unless the run input is held, which then walks (psiv_update_input; game.json run_speed_percent). */
+	int32_t always_run;
 } psiv_profile;
 
 PSIV_API psiv_status psiv_profile_get(psiv_session* session, psiv_profile* out);
@@ -401,6 +416,11 @@ PSIV_API psiv_status psiv_retry_battle(psiv_session* session);
 PSIV_API psiv_status psiv_quit_to_title(psiv_session* session); /* MUTATES */
 /* MUTATES. From the field menu ("manual_0" .. ) or from a save prompt an event opened. */
 PSIV_API psiv_status psiv_save_manual(psiv_session* session, const char* slot);
+/* MUTATES. Deletes a manual or autosave slot's file, a damaged one too, in any mode, without touching the game being
+ * played, and adds the notice "game.save_erased". Refused as psiv_load refuses a slot it cannot read
+ * ("game.refuse.slot_unreadable": saving disabled, an unknown slot name, an empty slot), or "game.refuse.erase_failed"
+ * when the file stays. Erasing the autosave a retry would load ends that retry. */
+PSIV_API psiv_status psiv_erase_save(psiv_session* session, const char* slot);
 
 typedef struct psiv_save_summary {
 	const char* slot;
@@ -450,6 +470,22 @@ PSIV_API int32_t psiv_flag(const psiv_session* session, const char* name);
  * psiv_direction; NONE when nothing is held). In an event it steps the interpreter. Battle and title ignore
  * it. */
 PSIV_API psiv_status psiv_update(psiv_session* session, int32_t dt_ms, int32_t direction);
+
+/* The field input of one frame, for psiv_update_input. */
+typedef struct psiv_field_input {
+	/* A psiv_direction; NONE when nothing is held. */
+	int32_t direction;
+	/* 1 while the run input is held: the leader runs on foot, or walks with the profile's always_run, when game.json gives
+	 * run_speed_percent; otherwise it changes nothing. */
+	int32_t running;
+} psiv_field_input;
+
+/* MUTATES. psiv_update with the whole field input: a NULL input holds nothing and does not run. */
+PSIV_API psiv_status psiv_update_input(psiv_session* session, int32_t dt_ms, const psiv_field_input* input);
+/* 1 when a step in `direction` (a psiv_direction) would move the leader now: the field under player control, no belt
+ * carrying the party, and a cell it can enter with no visible enemy on it (bumping one starts its battle instead). 0
+ * otherwise, also for a NULL session or a direction out of range. */
+PSIV_API int32_t psiv_can_step(const psiv_session* session, int32_t direction);
 /* MUTATES. Holds `direction` until the leader enters the next cell or something stops the field. */
 PSIV_API psiv_status psiv_walk(psiv_session* session, int32_t direction);
 /* MUTATES. Turns the leader without moving. Refused outside the field or without player control. */
@@ -465,8 +501,36 @@ PSIV_API psiv_status psiv_walk_to(psiv_session* session, int32_t x, int32_t y);
  * without one. */
 PSIV_API psiv_status psiv_walk_step(psiv_session* session, int32_t* status);
 /* MUTATES. Interacts with whatever stands in the cell the leader faces: a vehicle of the party is boarded, an open
- * port shows its destinations (PSIV_MENU_PORT). Refused while the party rides a vehicle. */
+ * port shows its destinations (PSIV_MENU_PORT). Refused while the party rides a vehicle. Under game.json's interaction
+ * rules it acts on what psiv_interact_target_get names, turning the leader to it first. */
 PSIV_API psiv_status psiv_interact(psiv_session* session);
+
+/* What psiv_interact would act on now, for a host to draw a prompt over. */
+typedef struct psiv_interact_target {
+	/* A psiv_interact_kind. */
+	int32_t kind;
+	/* The vehicle, port, helm, hook, chest, shop or rest point id; for an actor the actor's, which is its talk point's. */
+	const char* id;
+	/* The cell acted on: the one faced, another neighbor, the one beyond a counter, or where the actor stands. */
+	int32_t x;
+	int32_t y;
+	/* The psiv_direction the leader faces to use it; psiv_interact turns the leader there first. */
+	int32_t facing;
+	/* 0 when psiv_interact would refuse: a hook whose flags do not hold or whose actor is removed, a closed shop or port. */
+	int32_t ready;
+	/* 1 when it is used across a counter. */
+	int32_t across;
+	/* A shop's or rest point's keeper (the area data's `keeper`), the actor a host turns toward or animates; "" for none and
+	 * for every other kind. */
+	const char* keeper;
+} psiv_interact_target;
+
+/* PSIV_NOT_FOUND when nothing answers, outside the field, without player control or aboard a vehicle. */
+PSIV_API psiv_status psiv_interact_target_get(psiv_session* session, psiv_interact_target* out);
+/* What stands on cell (x, y) and whether the leader can use it from where it stands: what psiv_interact would act on once
+ * the leader faced that way (a neighbor, the cell beyond a counter, or an actor standing there), with the facing to turn
+ * to. PSIV_NOT_FOUND when nothing there answers from here, outside the field, without player control or aboard. */
+PSIV_API psiv_status psiv_interact_at(psiv_session* session, int32_t x, int32_t y, psiv_interact_target* out);
 /* MUTATES. Boards the party's vehicle in the cell the leader faces (psiv_interact does the same). */
 PSIV_API psiv_status psiv_board(psiv_session* session);
 /* MUTATES. Steps off the ridden vehicle onto the faced cell, or else the first of the other neighbors (north, east,
@@ -491,7 +555,9 @@ typedef struct psiv_field_info {
 	int32_t facing;
 	int32_t player_control;
 	int32_t grace_ms;
-	/* The area's track outside events and battles, an audio id; "" when the data names none. */
+	/* The area's track outside events and battles, an audio id; "" when the data names none: a script's `music area`
+	 * until the party leaves, else the first game.json `music.areas` entry for the area whose flag is set, else the
+	 * area's own. A listed flag set while in the area changes it, so read it again after flags may change. */
 	const char* music;
 	/* The world or region the area belongs to; "" when the data names none. */
 	const char* region;
@@ -501,6 +567,17 @@ typedef struct psiv_field_info {
 	int32_t leader_step_ms;
 	/* In a vessel: the port the party walked aboard from, where its gangway leads; "" otherwise. */
 	const char* ship_port;
+	/* The leader's time per cell while the run input is held (psiv_update_input); leader_step_ms is the time without it.
+	 * Both include the profile's always_run, and are equal when game.json gives no run_speed_percent or aboard. */
+	int32_t run_step_ms;
+	/* Milliseconds of held input spent toward the next cell, out of leader_step_ms (or run_step_ms while running), for a host
+	 * that slides the leader between cells. */
+	int32_t step_progress_ms;
+	/* The belt carrying the party: its time per cell and the milliseconds spent toward the next; both 0 off a belt. */
+	int32_t conveyor_step_ms;
+	int32_t conveyor_progress_ms;
+	/* The directions psiv_can_step allows now: 1 north, 2 east, 4 south, 8 west. */
+	int32_t step_mask;
 } psiv_field_info;
 
 typedef struct psiv_enemy {
@@ -511,6 +588,9 @@ typedef struct psiv_enemy {
 	int32_t y;
 	int32_t facing;
 	int32_t state;
+	/* The reserved actor name scripts address it by, "enemy.<zone>.<n>" (the n-th of its zone's visible enemies still in the
+	 * field): an action whose subject is this name moves, places or turns this enemy, not a character. */
+	const char* actor;
 } psiv_enemy;
 
 typedef struct psiv_marker {
@@ -524,6 +604,11 @@ typedef struct psiv_exit {
 	int32_t y;
 	const char* to_area;
 	const char* to_marker;
+	/* 1 while its flags let the party through. A closed exit blocks walking. */
+	int32_t open;
+	/* The map character a closed exit is drawn as, which psiv_field_rows and psiv_field_grid show while it is closed: '#'
+	 * unless the data's closed_tile names another (a door drawn as floor). */
+	int32_t closed_tile;
 } psiv_exit;
 
 typedef struct psiv_point {
@@ -542,6 +627,8 @@ typedef struct psiv_point {
 	int32_t shop_kind;
 	/* Conveyor cells (one point each; active while their flags hold): the psiv_direction they carry the party toward. */
 	int32_t direction;
+	/* Shops and rests: the actor who keeps it (the area data's `keeper`), "" for none; "" for every other kind. */
+	const char* keeper;
 } psiv_point;
 
 /* One of the party's vehicles in its area. */
@@ -581,19 +668,56 @@ typedef struct psiv_actor {
 	int32_t visible;
 	/* 1 once a script has moved, turned, shown or hidden it; 0 while it stands untouched at its talk point. */
 	int32_t scripted;
+	/* 1 while it blocks walking on its cell: a solid actor (game.json `solid`, or a talk point with `actor_at`) shown there. */
+	int32_t solid;
+	/* A psiv_actor_vanish: how it was last hidden, for a host that draws a dissolved actor apart from a hidden one. */
+	int32_t vanish;
+	/* The one-shot animation playing, "" for none, with its milliseconds left and in all: draw a fade or dissolve at
+	 * animation_ms / animation_total_ms of the way from its end state (visible already holds the end state). */
+	const char* animation;
+	int32_t animation_ms;
+	int32_t animation_total_ms;
+	/* A psiv_actor_removal. A removed actor is not visible, does not block and its talk point does not answer. */
+	int32_t removal;
+	/* game.json's figure for it: an enemy id whose field sprite draws it, or a look the host names; both "" for the
+	 * host's own figure. It never fights. */
+	const char* sprite_enemy;
+	const char* look;
+	/* 1 while it walks about by itself (game.json `wander`): shown, not removed, in its home area and in no running event. A
+	 * script's `look` replaces sprite_enemy and look; `look <actor> default` brings back game.json's. */
+	int32_t wanders;
 } psiv_actor;
+
+/* A cell of a route. */
+typedef struct psiv_route_cell {
+	int32_t x;
+	int32_t y;
+} psiv_route_cell;
+
+/* An animation scripts may name: game.json's presentation animations, then the standard ones it does not list. */
+typedef struct psiv_animation {
+	const char* id;
+	/* How long one play lasts: the data's seconds, else a standard animation's own, else 0. */
+	double seconds;
+	/* 1 for fade_in, fade_out, dissolve, blink_out, hop and shake. */
+	int32_t standard;
+	/* A psiv_animation_end. */
+	int32_t end;
+} psiv_animation;
 
 /* PSIV_NOT_FOUND outside an area (at the title before a game). */
 PSIV_API psiv_status psiv_field_info_get(psiv_session* session, psiv_field_info* out);
-/* width * height bytes, row-major from the top left, each a psiv_cell terrain plus PSIV_CELL_WALKABLE. */
+/* width * height bytes, row-major from the top left, each a psiv_cell terrain plus PSIV_CELL_WALKABLE. A closed exit has
+ * the terrain of its closed_tile and is not walkable. */
 PSIV_API psiv_status psiv_field_grid(psiv_session* session, const uint8_t** out, int32_t* count);
-/* The area's map rows as written in its data ('.', '#', '~'). */
+/* The area's map rows as written in its data ('.', '#', '~'), with the cell changes whose flags are set, broken barriers,
+ * and each closed exit drawn as its closed_tile. */
 PSIV_API psiv_status psiv_field_rows(psiv_session* session, const char* const** out, int32_t* count);
 PSIV_API psiv_status psiv_field_enemies(psiv_session* session, const psiv_enemy** out, int32_t* count);
 PSIV_API psiv_status psiv_field_markers(psiv_session* session, const psiv_marker** out, int32_t* count);
 PSIV_API psiv_status psiv_field_exits(psiv_session* session, const psiv_exit** out, int32_t* count);
 /* Talk hooks, step hooks, chests, shops, rest points and ports that stand on a cell. A port's `active` says it is
- * open. */
+ * open. A talk hook covering further cells (an object between them) has one point per cell, with the same id. */
 PSIV_API psiv_status psiv_field_points(psiv_session* session, const psiv_point** out, int32_t* count);
 /* The party's vehicles in its area, in id order, the ridden one included. Saves keep where each stands and which one
  * the party rides. */
@@ -618,6 +742,9 @@ PSIV_API psiv_status psiv_field_actors(psiv_session* session, const psiv_actor**
  * psiv_field_actors is an actor outside the party's area, which a front end does not draw; any other subject is a
  * character. Works at the title too. */
 PSIV_API psiv_status psiv_actor_ids(psiv_session* session, const char* const** out, int32_t* count);
+/* Every animation scripts may name with its length and what it leaves behind, so a host without its own timing (or a
+ * headless one) plays an `anim` for as long as the game counts it. Works at the title too. */
+PSIV_API psiv_status psiv_animations(psiv_session* session, const psiv_animation** out, int32_t* count);
 
 /* ------------------------------------------------------------------------------------------------------ */
 /* Events                                                                                                 */
@@ -682,6 +809,16 @@ typedef struct psiv_action {
 	/* How long the animation lasts by the data: game.json's presentation durations for the type and subject, else the
 	 * type, else `seconds`; 0 for none. A host can use it for actions whose length the script does not give. */
 	double duration;
+	/* A move's `via` markers, in order, and its `pathfind`. */
+	int32_t waypoint_count;
+	const char* const* waypoints;
+	int32_t pathfind;
+	/* A place's facing (north, east, south or west), "" to keep the actor's. */
+	const char* facing;
+	/* A move or place of one of the game's actors: the cells it passes, from where it stood to where it ends (one cell
+	 * when it had no cell in the area, and for a place). Empty for anything else. Walk the actor along it. */
+	int32_t route_count;
+	const psiv_route_cell* route;
 } psiv_action;
 
 typedef void (*psiv_action_callback)(void* user, const psiv_action* action);
@@ -782,7 +919,8 @@ typedef struct psiv_battle_info {
 	int32_t auto_active;
 	int32_t party_acts_next_round;
 	int32_t game_over;
-	/* The encounter's track from game.json, an audio id; "" when the data names none. */
+	/* The encounter's track from game.json, else, for a random battle aboard, the vehicle's (`music.vehicles`); an audio
+	 * id, "" when the data names none. */
 	const char* music;
 	/* A vehicle battle's vehicle, the combatant after the members riding it; "" otherwise. */
 	const char* vehicle;
@@ -871,6 +1009,12 @@ PSIV_API psiv_status psiv_battle_fill_from_policy(psiv_session* session);
  * auto macro when one is set, then fills from auto-battle, or from core's policy once auto-battle is off.
  * PSIV_REFUSED when auto-battle could not start; the round is filled from the policy anyway. */
 PSIV_API psiv_status psiv_battle_fill_auto_round(psiv_session* session);
+/* MUTATES. A macro psiv_battle_fill_auto_round and psiv_battle_play fill every round with, in place of the save's
+ * auto macro and core's policy, as psiv_battle_apply_macro_fallback with PSIV_MACRO_FALLBACK_AUTOMATIC: each member
+ * whose step cannot be paid for or has no target takes core's automatic choice, the rest of the macro stands. NULL or
+ * "" plays as before (the default). Kept for the session, not saved. "game.refuse.no_macro" for a name no macro has;
+ * a macro deleted or renamed later makes the next round PSIV_REFUSED with that refusal, filled as before. */
+PSIV_API psiv_status psiv_battle_set_auto_play_macro(psiv_session* session, const char* macro);
 
 
 typedef struct psiv_recorded_command {
@@ -1227,6 +1371,37 @@ PSIV_API psiv_status psiv_unequip(psiv_session* session, const char* member, int
 PSIV_API const char* psiv_name_entry_member(psiv_session* session);
 PSIV_API psiv_status psiv_enter_name(psiv_session* session, const char* name); /* MUTATES */
 
+/* The credits a script's `credits` command plays (game.json `credits`), while the menu kind is PSIV_MENU_CREDITS. The
+ * session moves them on with psiv_update's play time and never ends them itself: psiv_close_menu says they finished (at
+ * any point), and the event goes on. Saving is refused while they play. */
+typedef enum psiv_credits_entry_kind { PSIV_CREDITS_HEADING, PSIV_CREDITS_LINE } psiv_credits_entry_kind;
+typedef struct psiv_credits_entry {
+	int32_t kind; /* psiv_credits_entry_kind */
+	/* The text key, and its text in the profile's language. */
+	const char* key;
+	const char* text;
+	/* Empty lines to leave before the entry. */
+	int32_t gap;
+	/* How long the entry holds before the next one. */
+	int32_t pause_ms;
+} psiv_credits_entry;
+typedef struct psiv_credits_info {
+	const char* id;
+	/* An audio id, "" to keep the track playing. */
+	const char* music;
+	int32_t entry_count;
+	/* Entries whose time has come: entry i once elapsed_ms reaches the pauses of the entries before it (the first at
+	 * once). */
+	int32_t shown;
+	/* Play time since the credits began, at most total_ms, the sum of every entry's pause. */
+	int64_t elapsed_ms;
+	int64_t total_ms;
+} psiv_credits_info;
+/* PSIV_NOT_FOUND while no credits play. */
+PSIV_API psiv_status psiv_credits_info_get(psiv_session* session, psiv_credits_info* out);
+/* The entries in order. PSIV_NOT_FOUND while no credits play. */
+PSIV_API psiv_status psiv_credits_entries(psiv_session* session, const psiv_credits_entry** out, int32_t* count);
+
 /* ------------------------------------------------------------------------------------------------------ */
 /* Journal, text log and text                                                                             */
 
@@ -1351,6 +1526,11 @@ typedef struct psiv_event_position {
 
 /* PSIV_NOT_FOUND while no event runs. */
 PSIV_API psiv_status psiv_event_position_get(psiv_session* session, psiv_event_position* out);
+/* The background events running now (events/FORMAT.md, "Background events"), in start order, each with the line it is at;
+ * `event` is the spawned event, not one it called. They step only in field ticks, after the leader's step, the wandering
+ * actors and the visible enemies, so they pause during events, menus, shops and battles; entering an area stops them; a
+ * save keeps them. An empty list when none runs. */
+PSIV_API psiv_status psiv_background_events(psiv_session* session, const psiv_event_position** out, int32_t* count);
 
 /* An encounter zone of the party's area. */
 typedef struct psiv_zone {

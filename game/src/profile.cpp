@@ -47,7 +47,7 @@ const char* onOff(bool value) {
 }
 
 const char* const kKeys[] = {"text_speed", "auto_advance", "show_shipped_names", "text_language", "text_size", "battle_speed",
-	"ambient_talk", "reduced_flash", "music_volume", "ambient_volume", "effects_volume"};
+	"ambient_talk", "reduced_flash", "music_volume", "ambient_volume", "effects_volume", "always_run"};
 
 bool knownKey(const std::string& key) {
 	for (const char* k : kKeys) {
@@ -127,6 +127,8 @@ std::string setProfileValue(Profile& p, const std::string& key, const std::strin
 		ok = parsePercent(value, 0, 100, p.ambientVolume);
 	} else if (key == "effects_volume") {
 		ok = parsePercent(value, 0, 100, p.effectsVolume);
+	} else if (key == "always_run") {
+		ok = parseSwitch(value, p.alwaysRun);
 	} else {
 		return "unknown setting '" + key + "'";
 	}
@@ -147,6 +149,9 @@ std::string serializeProfile(const Profile& p) {
 	line("music_volume", std::to_string(p.musicVolume));
 	line("ambient_volume", std::to_string(p.ambientVolume));
 	line("effects_volume", std::to_string(p.effectsVolume));
+	if (p.alwaysRun) {
+		line("always_run", onOff(p.alwaysRun));
+	}
 	for (const auto& [key, value] : p.unknown) {
 		out += key + " " + value + "\n";
 	}

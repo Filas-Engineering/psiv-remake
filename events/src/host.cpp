@@ -1,5 +1,6 @@
 #include "events/host.h"
 
+#include <algorithm>
 #include <cstdio>
 
 namespace events {
@@ -56,12 +57,39 @@ const char* action_type_name(ActionType type) {
 		return "sound";
 	case ActionType::warp:
 		return "warp";
+	case ActionType::place_actor:
+		return "place";
 	}
 	return "unknown";
 }
 
+const std::vector<StandardAnimation>& standard_animations() {
+	static const std::vector<StandardAnimation> list = {
+		{"fade_in", 0.5, AnimationEnd::shown},
+		{"fade_out", 0.5, AnimationEnd::hidden},
+		{"dissolve", 0.8, AnimationEnd::hidden},
+		{"blink_out", 0.6, AnimationEnd::hidden},
+		{"hop", 0.3, AnimationEnd::none},
+		{"shake", 0.4, AnimationEnd::none},
+	};
+	return list;
+}
+
+const StandardAnimation* standard_animation(const std::string& name) {
+	for (const StandardAnimation& a : standard_animations()) {
+		if (name == a.name) {
+			return &a;
+		}
+	}
+	return nullptr;
+}
+
+bool is_direction(const std::string& word) {
+	return word == "north" || word == "east" || word == "south" || word == "west";
+}
+
 bool parse_action_type(const std::string& name, ActionType& type) {
-	for (int i = 0; i <= static_cast<int>(ActionType::warp); ++i) {
+	for (int i = 0; i <= static_cast<int>(ActionType::place_actor); ++i) {
 		std::string candidate = action_type_name(static_cast<ActionType>(i));
 		for (char& c : candidate) {
 			if (c == ' ') {
@@ -94,7 +122,15 @@ std::string describe(const Action& action) {
 	std::string out = action_type_name(action.type);
 	switch (action.type) {
 	case ActionType::move:
-		out += " " + action.subject + " to ";
+	case ActionType::place_actor:
+		out += " " + action.subject;
+		if (!action.waypoints.empty()) {
+			out += " via";
+			for (const std::string& w : action.waypoints) {
+				out += " " + w;
+			}
+		}
+		out += action.type == ActionType::move ? " to " : " ";
 		if (action.has_position) {
 			out += num(action.position.x) + " " + num(action.position.y) + " " + num(action.position.z);
 		} else {
@@ -102,6 +138,12 @@ std::string describe(const Action& action) {
 		}
 		if (action.speed > 0) {
 			out += " speed " + num(action.speed);
+		}
+		if (action.pathfind) {
+			out += " pathfind";
+		}
+		if (!action.facing.empty()) {
+			out += " facing " + action.facing;
 		}
 		break;
 	case ActionType::face:
@@ -119,6 +161,11 @@ std::string describe(const Action& action) {
 		break;
 	case ActionType::show_actor:
 	case ActionType::hide_actor:
+		out += " " + action.subject;
+		if (!action.target.empty()) {
+			out += " with " + action.target;
+		}
+		break;
 	case ActionType::panel_hide:
 	case ActionType::camera_cut:
 	case ActionType::music_play:
@@ -191,6 +238,17 @@ std::string describe(const BattleRequest& request) {
 
 std::string describe(const RestRequest& request) {
 	return request.point.empty() ? "rest" : "rest " + request.point;
+}
+
+std::string describe(const PartySwap& swap) {
+	std::string out = "party swap " + (swap.slot > 0 ? std::to_string(swap.slot) : swap.replaced) + " " + swap.member;
+	if (swap.equipment != SwapEquipment::rule) {
+		out += swap.equipment == SwapEquipment::keep ? " equipment keep" : " equipment bag";
+	}
+	if (swap.silent) {
+		out += " silent";
+	}
+	return out;
 }
 
 const char* battle_result_name(BattleResult result) {
@@ -276,5 +334,37 @@ void Host::equip_piece(const std::string&, const std::string&) {}
 void Host::unequip_piece(const std::string&, const std::string&) {}
 
 void Host::set_area_music(const std::string&) {}
+
+void Host::remove_actor(const std::string&, bool) {}
+
+void Host::save_party(const std::string&) {}
+
+void Host::spawn_event(const std::string&) {}
+
+void Host::set_actor_look(const std::string&, const std::string&, const std::string&) {}
+
+bool Host::restore_party(const std::string&) {
+	return false;
+}
+
+void Host::swap_party_member(const PartySwap&) {}
+
+void Host::add_party_member_silently(const std::string& member) {
+	add_party_member(member);
+}
+
+void Host::remove_party_member_silently(const std::string& member) {
+	remove_party_member(member);
+}
+
+bool Host::order_party(const std::vector<std::string>& members) {
+	return std::all_of(members.begin(), members.end(), [this](const std::string& member) { return in_party(member); });
+}
+
+Handle Host::play_credits(const std::string&) {
+	return 0;
+}
+
+void Host::end_game() {}
 
 }

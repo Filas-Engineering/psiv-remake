@@ -1,0 +1,577 @@
+The Bell at Tidewater (seed 6)
+title> new
+You arrive at Tidewater Landing.
+  (fade in 1)
+The ferry bumps against the pilings of Tidewater Landing.
+  (move dockhand to dock_front)
+  (move dockhand to greet_spot)
+  (face dockhand fighter)
+Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  (move dockhand to dock_front)
+  (move dockhand to 10 0 2)
+  (face dockhand dock_front)
+New job: The dockhand's lost crate.
+New encyclopedia entry: Tidewater Landing.
+[Autosaved to auto_0 (event end).]
+field> dev warp wren_cellar cellar_door
+Developer tools changed this game. It and its saves are marked.
+You arrive at Wren Cellar.
+[Autosaved to auto_1 (area entry).]
+field> rows
+  ##############
+  ##.#......#~~#
+  ####.#....#~~#
+  #..........~~#
+  #.........#~~#
+  #..........~~#
+  #..........~~#
+  #..........~~#
+  #..........~~#
+  ######.#######
+field> steps
+  steps: north yes, east yes, south no, west yes
+field> refused s
+! The way is blocked.
+field> prompt
+  prompt: nothing
+field> walk clerk_front
+field> face north
+field> prompt
+  prompt: talk cellar_clerk at 2 1 facing north across
+field> talk
+The clerk leans over the counter: "Jars to the left, sacks to the right."
+You arrive at Wren Cellar.
+  (warp wren_cellar cellar_door)
+field> walk notice_side
+field> face east
+field> prompt
+  prompt: talk cellar_notice at 5 2 facing north
+field> talk
+The notice says the back door is open for deliveries today.
+[Autosaved to auto_2 (event end).]
+field> prompt
+  prompt: talk cellar_notice at 5 2 facing north
+field> rows
+  ##############
+  ##.#......#~~#
+  ####.#....#~~#
+  #..........~~#
+  #.........#~~#
+  #..........~~#
+  #..........~~#
+  #..........~~#
+  #..........~~#
+  ######.#######
+field> walk table_north
+field> face south
+field> prompt
+  prompt: talk cellar_table at 9 2 facing south
+field> talk
+Crumbs from someone's lunch cover the long table.
+field> walk table_south
+field> face north
+field> prompt
+  prompt: talk cellar_table at 8 2 facing north
+field> talk
+Crumbs from someone's lunch cover the long table.
+field> walk cook_front
+field> face south
+field> prompt
+  prompt: actor cellar_cook at 10 4 facing south
+field> walk cook_side
+field> face east
+field> prompt
+  prompt: actor cellar_cook at 10 5 facing east
+field> talk
+The cook stirs the pot and waves you away from the stove.
+field> face north
+field> prompt
+  prompt: actor cellar_cook at 10 5 facing east
+field> time
+  play time 7750 ms; a step takes 250 ms, 125 ms with the run input
+field> walk 9 3
+field> time
+  play time 8250 ms; a step takes 250 ms, 125 ms with the run input
+field> set always_run on
+field> time
+  play time 8250 ms; a step takes 125 ms, 250 ms with the run input
+field> s 2
+field> time
+  play time 8550 ms; a step takes 125 ms, 250 ms with the run input
+field> set always_run off
+field> dev vehicle reed_skimmer wren_cellar skiff_post
+The Reed Skimmer is yours to ride.
+field> walk skiff_front
+field> face east
+field> prompt
+  prompt: vehicle reed_skimmer at 9 7 facing east
+field> board
+You board the Reed Skimmer.
+field> wait 3000
+field> autobattle on
+field> e 2
+Battle!
+Enemies: Bog Wisp A, Bog Wisp B, Gel Mite.
+-- round 1 --
+Bog Wisp A uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+  Reed Skimmer cannot be paralyzed.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 6 damage.
+Reed Skimmer uses Hull Vent on Gel Mite.
+  Gel Mite takes 58 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer evades.
+-- round 2 --
+Bog Wisp A uses Patch Up on Gel Mite.
+  Gel Mite recovers 31.
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer uses Hull Vent on Gel Mite.
+  Gel Mite takes 33 damage.
+  Gel Mite falls.
+Gel Mite cannot act (Defeated).
+-- round 3 --
+Bog Wisp A uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+  Reed Skimmer cannot be paralyzed.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+Reed Skimmer uses Hull Vent.
+  Bog Wisp A takes 25 damage.
+  Bog Wisp B takes 24 damage.
+-- round 4 --
+Bog Wisp A uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer cannot be paralyzed.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 42 damage.
+-- round 5 --
+Bog Wisp A uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 30.
+Bog Wisp B uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 33.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 39 damage.
+-- round 6 --
+Bog Wisp A uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 32.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 47 damage.
+-- round 7 --
+Bog Wisp B uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 33.
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 41 damage.
+-- round 8 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Bog Wisp B uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 32.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 35 damage.
+-- round 9 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 7 damage.
+Bog Wisp B uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 31.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 32 damage.
+  Bog Wisp A falls.
+-- round 10 --
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B evades.
+-- round 11 --
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 37 damage.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 4 damage.
+-- round 12 --
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 3 damage.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 9 damage.
+  Bog Wisp B falls.
+Outcome: victory
+Victory. 15 experience, 22 money.
+The enemies dropped 1 Wake Chime.
+field> status
+Mode field, Wren Cellar (11,7) facing east, play time 0:01:00.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 15
+  Money 72. Items: tonic x1, wake_chime x1.
+  Aboard the Reed Skimmer.
+field> autobattle off
+field> disembark
+You step off the Reed Skimmer.
+field> walk cellar_door
+field> steps
+  steps: north yes, east yes, south yes, west yes
+field> s
+You arrive at Wren Hollow.
+[Autosaved to auto_0 (area entry).]
+field> dev warp wren_cellar cellar_door
+You arrive at Wren Cellar.
+[Autosaved to auto_1 (area entry).]
+field> dev vehicle reed_skimmer wren_cellar skiff_post
+field> walk skiff_front
+field> face east
+field> board
+You board the Reed Skimmer.
+field> menu
+menu> macro create hull
+menu> macro step hull 0 fighter attack
+menu> refused macro step hull 1 reed_skimmer item tonic
+! A item step cannot be set that way.
+menu> refused macro step hull 1 reed_skimmer defend
+! A defend step cannot be set that way.
+menu> refused macro step hull 1 reed_skimmer ability rime_drill
+! Reed Skimmer does not know Rime Drill.
+menu> refused macro step hull 1 reed_skimmer ability hull_patch fighter
+! That target does not fit this command (member).
+menu> macro step hull 1 reed_skimmer ability hull_vent e0
+menu> macro step hull 1 reed_skimmer attack e1
+menu> macros
+  opener
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0 (not_in_party)
+    2 fighter attack e0
+    3 engineer ability drowse e1 (not_in_party)
+    4 medic ability mend fighter (not_in_party)
+  tempest
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0 (not_in_party)
+    2 engineer ability flare_burst all (not_in_party)
+    3 fighter attack e0
+    4 medic defend (not_in_party)
+  regroup
+    0 medic ability mend fighter (not_in_party)
+    1 fighter ability rally all
+    2 mystic ability frostbite (not_in_party)
+    3 scout attack e0 (not_in_party)
+    4 engineer item tonic mystic (not_in_party)
+  hull
+    0 fighter attack
+    1 reed_skimmer attack e1
+menu> close
+field> wait 3000
+field> e 2
+Battle!
+Enemies: Bog Wisp A, Bog Wisp B, Gel Mite.
+battle> attack reed_skimmer e0
+battle> refused attack fighter e0
+! Test Fighter is aboard and cannot act.
+battle> round
+-- round 1 --
+Bog Wisp B uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 6 damage.
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 13 damage.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 40 damage.
+battle> use reed_skimmer hull_vent e1
+battle> round
+-- round 2 --
+Bog Wisp B uses Patch Up on Bog Wisp A.
+  Bog Wisp A recovers 34.
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Reed Skimmer uses Hull Vent.
+  Bog Wisp A takes 27 damage.
+  Bog Wisp B takes 25 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 7 damage.
+battle> fight hull
+-- round 3 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 5 damage.
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer turns from Bog Wisp B to Bog Wisp A.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 37 damage.
+  Bog Wisp A falls.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 9 damage.
+-- round 4 --
+Bog Wisp B uses Drone Hum on Reed Skimmer.
+  Reed Skimmer falls asleep!
+Reed Skimmer cannot act (Sleep).
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 7 damage.
+  Reed Skimmer wakes up.
+-- round 5 --
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer cannot be paralyzed.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 9 damage.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 45 damage.
+  Bog Wisp B falls.
+-- round 6 --
+Reed Skimmer uses Ram on Gel Mite.
+  Gel Mite takes 46 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 11 damage.
+-- round 7 --
+Reed Skimmer uses Ram on Gel Mite.
+  Gel Mite takes 14 damage.
+  Gel Mite falls.
+Outcome: victory
+Victory. 15 experience, 22 money.
+field> set auto hull
+field> autobattle on
+field> w 2
+field> e 2
+field> w 2
+field> e 2
+field> w 2
+field> e 2
+field> w 2
+field> e 2
+field> w 2
+field> e 2
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+Auto-battle on with hull.
+-- round 1 --
+Rust Hound uses Venom Spit on Reed Skimmer.
+  Reed Skimmer takes 14 damage.
+  Reed Skimmer resists the poison.
+Reed Skimmer turns from Gel Mite B to Rust Hound.
+Reed Skimmer uses Ram on Rust Hound.
+  Rust Hound evades.
+Gel Mite A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 7 damage.
+Gel Mite B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 6 damage.
+-- round 2 --
+Rust Hound uses Venom Spit on Reed Skimmer.
+  Reed Skimmer takes 14 damage.
+  Reed Skimmer is poisoned!
+Reed Skimmer turns from Gel Mite B to Rust Hound.
+Reed Skimmer uses Ram on Rust Hound.
+  Rust Hound takes 37 damage.
+Gel Mite B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 8 damage.
+Gel Mite A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 8 damage.
+-- round 3 --
+Rust Hound uses Venom Spit on Reed Skimmer.
+  Reed Skimmer takes 12 damage.
+  Reed Skimmer is poisoned!
+Reed Skimmer turns from Gel Mite B to Rust Hound.
+Reed Skimmer uses Ram on Rust Hound.
+  Rust Hound takes 40 damage.
+Gel Mite A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 9 damage.
+Gel Mite B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 6 damage.
+-- round 4 --
+Rust Hound uses Venom Spit on Reed Skimmer.
+  Reed Skimmer takes 14 damage.
+  Reed Skimmer is poisoned!
+Reed Skimmer turns from Gel Mite B to Rust Hound.
+Reed Skimmer uses Ram on Rust Hound.
+  Rust Hound evades.
+Gel Mite A uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 13 damage.
+Gel Mite B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 4 damage.
+-- round 5 --
+Rust Hound uses Bite on Reed Skimmer.
+  Reed Skimmer takes 14 damage.
+Gel Mite A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 6 damage.
+Reed Skimmer turns from Gel Mite B to Rust Hound.
+Reed Skimmer uses Ram on Rust Hound.
+  Rust Hound takes 13 damage.
+  Rust Hound falls.
+Gel Mite B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 10 damage.
+-- round 6 --
+Reed Skimmer turns from Gel Mite B to Gel Mite A.
+Reed Skimmer uses Ram on Gel Mite A.
+  Gel Mite A takes 42 damage.
+Gel Mite A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 7 damage.
+Gel Mite B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 6 damage.
+-- round 7 --
+Reed Skimmer turns from Gel Mite B to Gel Mite A.
+Reed Skimmer uses Ram on Gel Mite A.
+  Gel Mite A takes 18 damage.
+  Gel Mite A falls.
+Gel Mite A cannot act (Defeated).
+Gel Mite B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 7 damage.
+-- round 8 --
+Reed Skimmer uses Ram on Gel Mite B.
+  Gel Mite B takes 42 damage.
+Gel Mite B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 4 damage.
+-- round 9 --
+Gel Mite B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 9 damage.
+Reed Skimmer uses Ram on Gel Mite B.
+  Critical hit!
+  Gel Mite B takes 18 damage.
+  Gel Mite B falls.
+Outcome: victory
+Victory. 11 experience, 15 money.
+field> autobattle on hull
+field> w 2
+field> e 2
+field> w 2
+field> e 2
+field> w 2
+field> e 2
+field> w 2
+field> e 2
+field> w 2
+field> e 2
+Battle!
+Enemies: Bog Wisp A, Bog Wisp B, Gel Mite.
+-- round 1 --
+Bog Wisp A uses Drone Hum on Reed Skimmer.
+  Reed Skimmer stays awake.
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 40 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 9 damage.
+-- round 2 --
+Bog Wisp A uses Patch Up on Bog Wisp B.
+  Bog Wisp B recovers 32.
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+  Reed Skimmer cannot be paralyzed.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 9 damage.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 47 damage.
+-- round 3 --
+Bog Wisp A uses Patch Up on Bog Wisp B.
+  Bog Wisp B recovers 31.
+Bog Wisp B uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 7 damage.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 36 damage.
+-- round 4 --
+Bog Wisp A uses Patch Up on Bog Wisp B.
+  Bog Wisp B recovers 31.
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 4 damage.
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B evades.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 7 damage.
+-- round 5 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Bog Wisp B uses Numbing Sting on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+  Reed Skimmer cannot be paralyzed.
+Reed Skimmer uses Ram on Bog Wisp B.
+  Bog Wisp B takes 41 damage.
+  Bog Wisp B falls.
+Gel Mite uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 10 damage.
+-- round 6 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 3 damage.
+Reed Skimmer turns from Bog Wisp A to Gel Mite.
+Reed Skimmer uses Ram on Gel Mite.
+  Gel Mite takes 40 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Critical hit!
+  Reed Skimmer takes 11 damage.
+-- round 7 --
+Bog Wisp A uses Patch Up on Gel Mite.
+  Gel Mite recovers 30.
+Reed Skimmer turns from Bog Wisp A to Gel Mite.
+Reed Skimmer uses Ram on Gel Mite.
+  Gel Mite takes 42 damage.
+Gel Mite uses Bite on Reed Skimmer.
+  Reed Skimmer takes 10 damage.
+-- round 8 --
+Bog Wisp A uses Patch Up on Gel Mite.
+  Gel Mite recovers 31.
+Reed Skimmer turns from Bog Wisp A to Gel Mite.
+Reed Skimmer uses Ram on Gel Mite.
+  Critical hit!
+  Gel Mite takes 39 damage.
+  Gel Mite falls.
+Gel Mite cannot act (Defeated).
+-- round 9 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 4 damage.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A evades.
+-- round 10 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 2 damage.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 43 damage.
+-- round 11 --
+Bog Wisp A uses Bite on Reed Skimmer.
+  Reed Skimmer takes 1 damage.
+Reed Skimmer uses Ram on Bog Wisp A.
+  Bog Wisp A takes 27 damage.
+  Bog Wisp A falls.
+Outcome: victory
+Victory. 15 experience, 22 money.
+field> autobattle off
+field> w 2
+field> e 2
+field> w 2
+field> e 2
+field> w 2
+field> e 2
+field> w 2
+field> e 2
+field> w 2
+field> e 2
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+battle> escape reed_skimmer
+battle> round
+-- round 1 --
+Rust Hound uses Bite on Reed Skimmer.
+  Reed Skimmer takes 18 damage.
+  The party escapes!
+Outcome: escaped
+The party got away.
+field> status
+Mode field, Wren Cellar (11,7) facing east, play time 0:03:07.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 56
+  Money 131. Items: tonic x1, wake_chime x1.
+  Aboard the Reed Skimmer.
+field> quit
+End of script.

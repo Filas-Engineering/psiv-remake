@@ -19,6 +19,7 @@ public:
 		info.file = ev.file;
 		info.line = ev.line;
 		info.skippable = ev.skippable;
+		info.background = ev.background;
 		info.entry = here();
 		block(ev.body);
 		emit_ret(ev.file, ev.line);

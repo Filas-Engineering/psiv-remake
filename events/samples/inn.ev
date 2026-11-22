@@ -1,9 +1,12 @@
 # The innkeeper offers a room for the night. Exercises a rest at an inn,
-# the save prompt and ambient sound in a skippable scene.
+# the save prompt, ambient sound and the actor commands (place, a route,
+# a direction, standard animations, remove) in a skippable scene.
 
 event inn_counter skippable
 	lock player
 	ambient play hearth_crackle
+	place innkeeper stall_counter facing south
+	anim innkeeper fade_in
 	face innkeeper traveler
 	say innkeeper @inn.greeting as warm
 	ask @inn.stay_question into inn.stayed
@@ -15,6 +18,10 @@ event inn_counter skippable
 		save prompt
 	no
 		say innkeeper @inn.another_time
+		face innkeeper west
+		move innkeeper via stall_counter to door_inside speed 1.5 pathfind
+		anim innkeeper fade_out
+		remove innkeeper until reload
 	end
 	ambient stop
 	unlock player

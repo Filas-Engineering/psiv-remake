@@ -35,7 +35,8 @@ inline const Element Element::Holy{"holy"};
 // The elements every data set has, in the order the C API numbers them from 1.
 inline constexpr const char* kBuiltInElements[] = {"heat", "chill", "shock", "gale", "holy"};
 
-enum class Stat { Strength, Mental, Agility, Dexterity, Defense, MagicDefense };
+// Attack is derived: strength plus the weapons' attack bonuses. Rolls and attacking stats can name it; nothing changes it.
+enum class Stat { Strength, Mental, Agility, Dexterity, Defense, MagicDefense, Attack };
 
 enum class Side { Party, Enemy };
 

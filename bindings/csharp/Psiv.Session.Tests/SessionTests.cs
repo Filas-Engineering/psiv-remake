@@ -32,6 +32,39 @@ internal static class Paths
 
 	public static string Game => Path.GetDirectoryName(GameData)!;
 
+	// The placeholder data with Wren Hollow added (game/tests/actor_data.h): PSIV_ACTOR_DATA_DIR, else where game's
+	// `make test` writes it.
+	public static string ActorData
+	{
+		get
+		{
+			string? fromEnvironment = Environment.GetEnvironmentVariable("PSIV_ACTOR_DATA_DIR");
+			return Path.GetFullPath(!string.IsNullOrEmpty(fromEnvironment) ? fromEnvironment : Path.Combine(Game, "build", "actor_data", "game", "data"));
+		}
+	}
+
+	// The same with Wren Cellar and the interaction rules turned on (actor_data::makeInteract): PSIV_INTERACT_DATA_DIR, else
+	// where game's `make test` writes it.
+	public static string InteractData
+	{
+		get
+		{
+			string? fromEnvironment = Environment.GetEnvironmentVariable("PSIV_INTERACT_DATA_DIR");
+			return Path.GetFullPath(!string.IsNullOrEmpty(fromEnvironment) ? fromEnvironment : Path.Combine(Game, "build", "interact_data", "game", "data"));
+		}
+	}
+
+	// The actor data with Wren Yard (actor_data::makeBackground): PSIV_BACKGROUND_DATA_DIR, else where game's `make test` writes
+	// it.
+	public static string BackgroundData
+	{
+		get
+		{
+			string? fromEnvironment = Environment.GetEnvironmentVariable("PSIV_BACKGROUND_DATA_DIR");
+			return Path.GetFullPath(!string.IsNullOrEmpty(fromEnvironment) ? fromEnvironment : Path.Combine(Game, "build", "background_data", "game", "data"));
+		}
+	}
+
 	public static string FreshDirectory(string name)
 	{
 		string path = Path.Combine(Path.GetTempPath(), "psiv-tests-" + Environment.ProcessId, name);
@@ -172,6 +205,10 @@ public class NativeLayoutTests
 		Same<PsivEventPosition>("psiv_event_position");
 		Same<PsivZone>("psiv_zone");
 		Same<PsivElementInfo>("psiv_element_info");
+		Same<PsivAnimation>("psiv_animation");
+		Same<PsivRouteCell>("psiv_route_cell");
+		Same<PsivInteractTarget>("psiv_interact_target");
+		Same<PsivFieldInput>("psiv_field_input");
 		Assert.Equal(0u, Native.SizeOf("no_such_struct"));
 	}
 
@@ -186,6 +223,10 @@ public class NativeLayoutTests
 		Assert.Null(GameSession.ParseName(NameKind.Outcome, "won"));
 		Assert.Equal("one_fallen_ally", GameSession.NameOf(NameKind.Targeting, (int)Targeting.OneFallenAlly));
 		Assert.Equal("warp", GameSession.NameOf(NameKind.ActionType, (int)ActionType.Warp));
+		Assert.Equal("place", GameSession.NameOf(NameKind.ActionType, (int)ActionType.Place));
+		Assert.Equal("dissolved", GameSession.NameOf(NameKind.ActorVanish, (int)ActorVanish.Dissolved));
+		Assert.Equal("for_good", GameSession.NameOf(NameKind.ActorRemoval, (int)ActorRemoval.ForGood));
+		Assert.Equal("shown", GameSession.NameOf(NameKind.AnimationEnd, (int)AnimationEnd.Shown));
 		Assert.Equal("member", GameSession.NameOf(NameKind.MacroTargetKind, (int)MacroTargetKind.Member));
 		Assert.Equal("", GameSession.NameOf(NameKind.Outcome, 99));
 	}
@@ -286,6 +327,11 @@ public class SessionTests
 			Assert.Equal((3, 4), (field.LeaderX, field.LeaderY));
 			Assert.True(s.Flag("tidewater.arrived"));
 			Assert.False(s.Load("manual_9").Ok);
+			Assert.True(s.QuitToTitle().Ok);
+			Assert.True(s.EraseSave("manual_1").Ok);
+			Assert.DoesNotContain(s.Saves()!, x => x.Slot == "manual_1");
+			Assert.Equal("game.refuse.slot_unreadable", s.EraseSave("manual_1").Error!.Key);
+			Assert.False(s.EraseSave("manual_9").Ok);
 		}
 	}
 
@@ -434,6 +480,151 @@ public class SessionTests
 		Assert.True(s.SetProfile(s.Profile() with { TextLanguage = "en" }).Ok);
 		Assert.Equal(log.Objective, s.QuestLog().Objective);
 		Assert.Equal("game.refuse.unknown_language", s.SetProfileValue("text_language", "xx").Error!.Key);
+	}
+
+	[Fact]
+	public void InteractionRulesInWrenCellar()
+	{
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.InteractData, Seed = 285 });
+		Assert.Equal("actor", GameSession.NameOf(NameKind.InteractKind, (int)InteractKind.Actor));
+		Assert.Null(s.InteractTarget());
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.True(s.DevWarp("wren_cellar", "cellar_door").Ok);
+		Settle(s);
+		FieldView view = s.Field()!;
+		FieldExit door = view.Exits.Single();
+		Assert.Equal((false, '.'), (door.Open, door.ClosedTile));
+		Assert.Equal('.', s.FieldRows()[9][6]);
+		Assert.Equal(CellFlags.Floor, view.Cell(6, 9));
+		Assert.False(s.CanStep(Direction.South));
+		Assert.True(s.CanStep(Direction.North));
+
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "notice_side"));
+		Assert.True(s.Face(Direction.East).Ok);
+		Assert.Equal(new InteractTarget(InteractKind.Talk, "cellar_notice", 5, 2, Direction.North, true, false), s.InteractTarget());
+		Assert.True(s.Interact().Ok);
+		Settle(s);
+		Assert.Equal(Direction.North, s.FieldInfo()!.Facing);
+		Assert.True(s.Field()!.Exits.Single().Open);
+
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "clerk_front"));
+		Assert.True(s.Face(Direction.North).Ok);
+		Assert.Equal(new InteractTarget(InteractKind.Talk, "cellar_clerk", 2, 1, Direction.North, true, true), s.InteractTarget());
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "cook_side"));
+		Assert.True(s.Face(Direction.East).Ok);
+		Assert.Equal(new InteractTarget(InteractKind.Actor, "cellar_cook", 10, 5, Direction.East, true, false), s.InteractTarget());
+
+		FieldInfo info = s.FieldInfo()!;
+		Assert.Equal((250, 125), (info.LeaderStepMs, info.RunStepMs));
+		s.Update(150, Direction.West, running: true);
+		Assert.Equal(8, s.FieldInfo()!.LeaderX);
+		s.Update(150, Direction.West, running: false);
+		Assert.Equal(8, s.FieldInfo()!.LeaderX);
+		Assert.True(s.SetProfile(s.Profile() with { AlwaysRun = true }).Ok);
+		Assert.True(s.Profile().AlwaysRun);
+		info = s.FieldInfo()!;
+		Assert.Equal((125, 250), (info.LeaderStepMs, info.RunStepMs));
+	}
+
+	[Fact]
+	public void BackgroundEventsAndWanderersInWrenYard()
+	{
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.BackgroundData, Seed = 285 });
+		Assert.Empty(s.BackgroundEvents());
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.True(s.DevWarp("wren_yard", "yard_gate").Ok);
+		Settle(s);
+		EventPosition lamps = s.BackgroundEvents().Single();
+		Assert.Equal(("yard_lamps", "events/yard.ev"), (lamps.Event, lamps.File));
+		Assert.Equal(Mode.Field, s.Mode);
+		FieldView view = s.Field()!;
+		Assert.Equal("enemy.yard_patch.1", view.Enemies.Single().Actor);
+		FieldActor goat = view.Actors.Single(a => a.Id == "yard_goat");
+		Assert.True(goat.Wanders);
+		Assert.Equal("goat", goat.Look);
+		Assert.False(view.Actors.Single(a => a.Id == "yard_trader").Wanders);
+		Assert.Equal("yard_trader", view.Points.Single(p => p.Kind == PointKind.Shop).Keeper);
+
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "stall_front"));
+		Assert.Equal(new InteractTarget(InteractKind.Shop, "yard_stall", 9, 2, Direction.North, true, false, "yard_trader"), s.InteractAt(9, 2));
+		Assert.Null(s.InteractAt(3, 0));
+		FieldInfo info = s.FieldInfo()!;
+		int mask = 0;
+		foreach (Direction d in new[] { Direction.North, Direction.East, Direction.South, Direction.West })
+		{
+			mask |= s.CanStep(d) ? 1 << (int)d : 0;
+		}
+		Assert.Equal((mask, 0, 0, 0), (info.StepMask, info.StepProgressMs, info.ConveyorStepMs, info.ConveyorProgressMs));
+		s.Update(100, Direction.South);
+		Assert.Equal(100, s.FieldInfo()!.StepProgressMs);
+	}
+
+	[Fact]
+	public void TheDensWayOutAndItsCreditsThenTheTitle()
+	{
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.BackgroundData, Seed = 285 });
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.True(s.DevWarp("wren_den", "plaque_front").Ok);
+		Settle(s);
+		Assert.Null(s.Credits());
+		Assert.True(s.Face(Direction.East).Ok);
+		Assert.True(s.Interact().Ok);
+		Settle(s);
+		Assert.Equal(MenuKind.Credits, s.MenuKind);
+		CreditsInfo credits = s.Credits()!;
+		Assert.Equal(("wren_end", "title_harbor_dawn", 1, 0L, 8000L), (credits.Id, credits.Music, credits.Shown, credits.ElapsedMs, credits.TotalMs));
+		Assert.Equal(new CreditsEntry(CreditsEntryKind.Heading, "credits.wren_end.title", "Wren Hollow", 0, 2500), credits.Entries[0]);
+		Assert.Equal(4, credits.Entries.Count);
+		s.Update(2500);
+		Assert.Equal(2, s.Credits()!.Shown);
+		Assert.Equal("game.refuse.save_where", s.SaveManual("manual_0").Error!.Key);
+		Assert.True(s.CloseMenu().Ok);
+		Assert.Null(s.Credits());
+		Settle(s);
+		Assert.Equal(Mode.Title, s.Mode);
+	}
+
+	[Fact]
+	public void ScriptedActorsInWrenHollow()
+	{
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.ActorData, Seed = 285 });
+		AnimationInfo dissolve = s.Animations().Single(a => a.Id == "dissolve");
+		Assert.Equal(new AnimationInfo("dissolve", 0.8, true, AnimationEnd.Hidden), dissolve);
+		Assert.Contains(s.Animations(), a => a == new AnimationInfo("tally_nod", 0, false, AnimationEnd.None));
+		Assert.Contains(s.Animations(), a => a == new AnimationInfo("hop", 0.3, true, AnimationEnd.None));
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.True(s.DevWarp("wren_hollow", "hollow_door").Ok);
+		Settle(s);
+		FieldView view = s.Field()!;
+		FieldActor sentinel = view.Actors.Single(a => a.Id == "hollow_sentinel");
+		Assert.Equal((7, 4, Direction.West, true, true, "aegis_sentinel"), (sentinel.X, sentinel.Y, sentinel.Facing, sentinel.Visible, sentinel.Solid, sentinel.SpriteEnemy));
+		FieldActor keeper = view.Actors.Single(a => a.Id == "tallykeeper");
+		Assert.Equal((4, 1, true), (keeper.X, keeper.Y, keeper.Solid));
+		s.PollActions();
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "counter_front"));
+		Assert.True(s.Face(Direction.North).Ok);
+		Assert.True(s.Interact().Ok);
+		Assert.True(s.ConfirmLine().Ok);
+		Assert.True(s.ConfirmLine().Ok);
+		IReadOnlyList<PresentationAction> actions = s.PollActions();
+		PresentationAction place = actions.Single(a => a.Type == ActionType.Place);
+		Assert.Equal("east", place.Facing);
+		Assert.Equal([new RouteCell(1, 4)], place.Route!);
+		PresentationAction around = actions.Single(a => a.Type == ActionType.Move && a.Pathfind);
+		Assert.Equal(new RouteCell(8, 4), around.Route!.Last());
+		PresentationAction via = actions.Single(a => a.Type == ActionType.Move && !a.Pathfind);
+		Assert.Equal(["shelf_front"], via.Waypoints!);
+		FieldActor drifter = s.Field()!.Actors.Single(a => a.Id == "hollow_drifter");
+		Assert.Equal((false, ActorVanish.Dissolved, "dissolve", 800, 800), (drifter.Visible, drifter.Vanish, drifter.Animation, drifter.AnimationMs, drifter.AnimationTotalMs));
+		Assert.True(s.ConfirmLine().Ok);
+		Settle(s);
+		view = s.Field()!;
+		Assert.Equal(ActorRemoval.UntilReload, view.Actors.Single(a => a.Id == "hollow_drifter").Removal);
+		Assert.Equal(("shake", 400), (view.Actors.Single(a => a.Id == "tallykeeper").Animation, view.Actors.Single(a => a.Id == "tallykeeper").AnimationMs));
 	}
 
 	private static WalkStatus WalkToMarker(GameSession s, string name)
@@ -617,10 +808,13 @@ public class SessionTests
 		Assert.Equal(["medic", "mystic"], twin.Participants);
 		Assert.Equal(["Glint", "Spark"], twin.AbilityNames);
 
+		Assert.Equal("game.refuse.no_macro", s.SetAutoPlayMacro("whirlwind").Error!.Key);
 		if (s.Mode == Mode.Battle)
 		{
-			s.PlayBattle();
+			Assert.True(s.SetAutoPlayMacro("arc").Ok);
+			Assert.True(s.PlayBattle().Ended);
 		}
+		Assert.True(s.SetAutoPlayMacro(null).Ok);
 		Settle(s);
 		Assert.Equal(Mode.Field, s.Mode);
 		Assert.True(s.OpenMenu().Ok);

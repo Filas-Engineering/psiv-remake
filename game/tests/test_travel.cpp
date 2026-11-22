@@ -304,3 +304,47 @@ TEST(leavingADungeonReturnsToWhereThePartyWentIn) {
 	CHECK_EQ(s.world().member("mystic")->tp, tp - 8);
 	CHECK_EQ(s.world().area, std::string("tidewater"));
 }
+
+// R101: a dungeon area's `dungeon_exit` names the way out, with a facing, over where the party stood before going in;
+// a dungeon area without one keeps that rule, and one reached by a warp from nowhere outside has none.
+TEST(aDungeonsOwnWayOutWinsOverWhereThePartyWentIn) {
+	GameData d = test::data();
+	DungeonExitTarget way;
+	way.area = "tidewater";
+	way.marker = "inn_front";
+	way.facing = Facing::North;
+	d.areas.at("kiln_upper").dungeonExit = way;
+	Session s(d, SessionOptions());
+	test::placeParty(s, "saltgrass", "east_gate", Facing::East);
+	s.world().items["waymark_chalk"] = 2;
+	CHECK(s.walk(Facing::East).empty());
+	test::fightToTheEnd(s);
+	test::confirmLines(s);
+	CHECK_EQ(s.world().area, std::string("kiln_upper"));
+	CHECK(s.world().dungeonExitArea == "saltgrass");
+	if (s.mode() == Mode::Event) {
+		s.skip();
+		test::confirmLines(s);
+	}
+	CHECK(s.openMenu().empty());
+	const std::vector<TravelDestination> out = s.travelDestinations(TravelKind::DungeonExit);
+	CHECK(out.size() == 1 && out[0].area == "tidewater" && out[0].cell == (Cell{3, 6}));
+	CHECK(s.travel(TravelKind::DungeonExit, "", "", "waymark_chalk").empty());
+	CHECK_EQ(s.world().area, std::string("tidewater"));
+	CHECK(s.world().position == (Cell{3, 6}));
+	CHECK(s.world().facing == Facing::North);
+	CHECK(s.world().dungeonExitArea.empty());
+
+	// Placed in the lower kiln with no way in recorded and no way out named, the chalk finds nowhere to go.
+	test::placeParty(s, "kiln_lower", "up_stair", Facing::West);
+	CHECK(s.travelDestinations(TravelKind::DungeonExit).empty());
+	CHECK(s.openMenu().empty());
+	CHECK_EQ(s.travel(TravelKind::DungeonExit, "", "", "waymark_chalk").key, std::string("game.refuse.no_way_out"));
+	// Named by a cell without a facing, the way out keeps the facing the party had.
+	way.marker.clear();
+	way.at = {4, 4};
+	way.facing.reset();
+	d.areas.at("kiln_lower").dungeonExit = way;
+	CHECK(s.travel(TravelKind::DungeonExit, "", "", "waymark_chalk").empty());
+	CHECK(s.world().area == "tidewater" && s.world().position == (Cell{4, 4}) && s.world().facing == Facing::West);
+}

@@ -3,6 +3,7 @@
 #include "rules/stats.h"
 #include "rules/types.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -31,7 +32,9 @@ struct EquipmentDef {
 	// Affinities the wearer takes outright per element; they win over every piece's scaling, and the lowest wins.
 	Affinities setAffinities = {};
 	// The piece's own power, cast as the attacking stat of `use` in place of the wearer's stats or the flat item rule.
-	int usePower = 0;
+	std::optional<int> usePower;
+	// Weapons: added to the wearer's attack stat only (`stats.attack`), where `bonus.strength` raises strength itself.
+	int attackBonus = 0;
 };
 
 }

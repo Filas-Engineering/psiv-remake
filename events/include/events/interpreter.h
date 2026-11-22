@@ -44,6 +44,9 @@ public:
 	// then true.
 	bool restore(const SaveState& state, std::string& error);
 	bool restarted() const { return restarted_; }
+	// Stops a running event where it stands: the host cancels every action still in flight, nothing more runs, and the
+	// status becomes idle. A game uses it to end a background event (FORMAT.md, "Background events").
+	void cancel();
 	const PresentationState& presentation() const { return presentation_; }
 
 	Status status() const { return status_; }

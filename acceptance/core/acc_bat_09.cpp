@@ -32,11 +32,12 @@ std::map<std::string, double> expectedShares(const Database& db, const EnemyDef&
 			holds = hpPercent <= 25;
 			break;
 		// A lone enemy at position 0 is the last one standing, its whole group, with no other kind beside it and a free
-		// place next to it.
+		// place next to it, on its first turn.
 		case AiConditionKind::LastStanding:
 		case AiConditionKind::AllyAbsent:
 		case AiConditionKind::FreeSlotBeside:
 		case AiConditionKind::GroupIntact:
+		case AiConditionKind::FirstTurn:
 			holds = true;
 			break;
 		case AiConditionKind::HitByAttack:

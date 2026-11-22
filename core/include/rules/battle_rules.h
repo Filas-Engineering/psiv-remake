@@ -52,11 +52,22 @@ struct BattleRules {
 	std::map<int, std::vector<int>> targetWeights = {};
 	// Stats whose raised value wraps past 255 to 0 and up, as a byte would.
 	std::vector<Stat> statWraparound = {};
+	// A macro's one-ally picks pass by every member the effect would not change (Battle::wouldChange), as automatic
+	// choices do, and a step with the default target falls back when nobody qualifies.
+	bool macroAllyWouldChange = false;
+	// Automatic choices weigh each attack by its expected effect on the foes (rules.json auto_policy expected) in place of
+	// taking the largest damage power.
+	bool autoExpected = false;
+	// What weak, resisted and immune labels compare an elemental hit's affinity with, in place of the divisor; damage
+	// still divides by the divisor. elementBaselines wins for its elements.
+	std::optional<int> effectivenessBaseline;
+	std::map<Element, int> elementBaselines = {};
 	// Combatants take this affinity for an element their data leaves out; set from affinityDivisor, so normal damage.
 	int neutralAffinity() const { return affinityDivisor; }
 	int elementlessHitAffinity() const { return elementlessAffinity.value_or(affinityDivisor); }
 	int defendedAffinity() const;
 	bool defends(const Element& element) const;
+	int normalAffinity(const Element& element) const;
 };
 
 }

@@ -1,6 +1,7 @@
 #include "test.h"
 
 #include "game/session.h"
+#include "rules/auto_policy.h"
 #include "rules/progression.h"
 #include "rules/text.h"
 
@@ -286,4 +287,43 @@ TEST(camerasAndMusicComeFromTheData) {
 	CHECK_EQ(p.music.encounters.at("warden"), std::string("battle_brass_warden"));
 	CHECK_EQ(test::data().area("reed_path")->music, std::string("field_marsh_reeds"));
 	CHECK_EQ(std::string(toString(CameraTarget::Leader)), std::string("leader"));
+}
+
+// R75: an auto play macro fills every round of fillAutoRound with MacroFallback::Automatic: the member whose step
+// cannot be paid for takes core's automatic choice, the others keep their steps; empty plays as before.
+TEST(anAutoPlayMacroFillsEachRoundAndFallsBackPerMember) {
+	Session s(test::data(), SessionOptions());
+	CHECK_EQ(s.setAutoPlayMacro("whirlwind").key, std::string("game.refuse.no_macro"));
+	CHECK(s.autoPlayMacro().empty());
+	rules::Macro pair;
+	pair.name = "pair";
+	pair.steps.push_back({});
+	pair.steps.back().member = "fighter";
+	pair.steps.back().kind = rules::CommandKind::Item;
+	pair.steps.back().id = "gear_salve";
+	startHoldBattle(s);
+	s.world().macros.push_back(pair);
+	CHECK(s.setAutoPlayMacro("pair").empty());
+	// The hold's battle opens with the enemies first.
+	while (s.battle() && !s.battle()->sideActsNextRound(rules::Side::Party)) {
+		s.resolveRound();
+	}
+	CHECK(s.fillAutoRound().empty());
+	const rules::Command expected = rules::autoCommand(*s.battle(), 0);
+	CHECK(s.battle()->command(0).kind == expected.kind && s.battle()->command(0).id == expected.id);
+	CHECK(s.battle()->command(0).kind != rules::CommandKind::Item);
+	const AutoBattle played = s.playBattle();
+	CHECK(played.ended && played.refusal.empty());
+
+	// The macro deleted since: the round is refused and filled as before.
+	Session gone(test::data(), SessionOptions());
+	startHoldBattle(gone);
+	gone.world().macros.push_back(pair);
+	CHECK(gone.setAutoPlayMacro("pair").empty());
+	gone.world().macros.clear();
+	while (gone.battle() && !gone.battle()->sideActsNextRound(rules::Side::Party)) {
+		gone.resolveRound();
+	}
+	CHECK_EQ(gone.fillAutoRound().key, std::string("game.refuse.no_macro"));
+	CHECK(gone.battle()->command(0).kind != rules::CommandKind::None);
 }

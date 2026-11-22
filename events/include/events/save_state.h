@@ -35,13 +35,18 @@ struct ActorState {
 	std::string actor;
 	// -1 when the event never showed or hid the actor, 0 hidden, 1 shown.
 	int visible = -1;
-	// The last move's target: a marker, or a position when has_position.
+	// The last move's or place's target: a marker, or a position when has_position.
 	std::string marker;
 	bool has_position = false;
 	Vec3 position;
-	// The last `face` target since the last move.
+	// The last move's `via` markers and `pathfind`, and whether a `place` put the actor there instead.
+	std::vector<std::string> via;
+	bool pathfind = false;
+	bool placed = false;
+	// The last `face` target, or place facing, since the last move or place.
 	std::string facing;
-	// The last looping animation; a one-shot animation ends it.
+	// The last looping animation; a one-shot animation ends it. For an actor a standard animation hid (fade_out,
+	// dissolve, blink_out), that animation, until a show or hide.
 	std::string pose;
 
 	bool operator==(const ActorState& other) const;

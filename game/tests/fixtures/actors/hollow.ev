@@ -1,0 +1,39 @@
+# Wren Hollow, for the actor commands: the tallykeeper stands behind its counter (its talk point's actor_at), the
+# sentinel wears a field enemy's figure and stands solid without fighting, and the drifter is placed, routed,
+# animated and removed by the scene. The second talk shows the drifter again after the area reloaded, removes the
+# tallykeeper for good and reloads the area.
+
+event hollow_keeper unskippable
+	lock player
+	if hollow.met
+		say tallykeeper @hollow.keeper.again
+		anim hollow_drifter fade_in
+		place hollow_drifter 6 0 5 facing north
+		move hollow_drifter to shelf_front nowait
+		face tallykeeper east
+		sync
+		anim hollow_drifter blink_out
+		anim tallykeeper fade_out
+		remove tallykeeper
+		unlock player
+		warp wren_hollow hollow_door
+		return
+	end
+	say tallykeeper @hollow.keeper.hello
+	face tallykeeper west
+	face tallykeeper south
+	place hollow_drifter west_post facing east
+	anim hollow_drifter fade_in
+	say tallykeeper @hollow.keeper.drifter
+	move hollow_drifter to east_post pathfind
+	anim hollow_drifter hop
+	face hollow_drifter tallykeeper
+	move hollow_drifter via shelf_front to west_post speed 2
+	anim hollow_drifter dissolve
+	say tallykeeper @hollow.keeper.gone
+	remove hollow_drifter until reload
+	anim tallykeeper tally_nod
+	anim tallykeeper shake
+	set hollow.met
+	unlock player
+end

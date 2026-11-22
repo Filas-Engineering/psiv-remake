@@ -29,6 +29,7 @@ enum class NameKind {
 	enemy,
 	vehicle,
 	ability,
+	credits,
 };
 
 // The game's content, so the compiler can reject names it does not know

@@ -225,7 +225,7 @@ void Runner::settle() {
 			if (!options_.autoBattle || (options_.autoBattleEncountersOnly && session_.battleSource() == BattleSource::Event)) {
 				return;
 			}
-			finishBattleAuto();
+			finishBattleAuto(options_.autoBattleMacro);
 			continue;
 		}
 		battleNames_.clear();
@@ -250,8 +250,10 @@ void Runner::settle() {
 	error("the game did not settle");
 }
 
-void Runner::finishBattleAuto() {
+void Runner::finishBattleAuto(const std::string& macro) {
+	report(session_.setAutoPlayMacro(macro));
 	const AutoBattle played = session_.playBattle();
+	session_.setAutoPlayMacro("");
 	report(played.refusal);
 	for (const AutoRound& round : played.rounds) {
 		printOutput(round.output);
@@ -400,6 +402,8 @@ void Runner::dev(const std::vector<std::string>& w) {
 		report(session_.devMoney(n));
 	} else if (w[1] == "level" && w.size() == 4 && toInt(w[3], n)) {
 		report(session_.devSetLevel(w[2], n));
+	} else if (w[1] == "vehicle" && w.size() == 5) {
+		report(session_.devVehicle(w[2], w[3], w[4]));
 	} else {
 		error("unknown dev command");
 	}
@@ -462,6 +466,15 @@ bool Runner::execute(const std::string& rawLine) {
 		if (toInt(text, out)) {
 			return true;
 		}
+		// In a battle aboard, the vehicle acts for the party under its own id.
+		if (const rules::Battle* b = session_.battle()) {
+			for (int i = 0; i < b->partyCount(); ++i) {
+				if (b->combatant(i).defId == text && !b->combatant(i).aboard) {
+					out = i;
+					return true;
+				}
+			}
+		}
 		const std::vector<std::string>& lineup = session_.world().lineup;
 		auto it = std::find(lineup.begin(), lineup.end(), text);
 		if (it == lineup.end()) {
@@ -491,6 +504,8 @@ bool Runner::execute(const std::string& rawLine) {
 		report(session_.continueGame());
 	} else if (cmd == "load" && w.size() == 2) {
 		report(session_.load(w[1]));
+	} else if (cmd == "erase" && w.size() == 2) {
+		report(session_.eraseSave(w[1]));
 	} else if (cmd == "retry") {
 		report(session_.retryBattle());
 	} else if (cmd == "title") {
@@ -588,9 +603,14 @@ bool Runner::execute(const std::string& rawLine) {
 		listMacros();
 	} else if (cmd == "macro" && w.size() >= 3) {
 		macro(w);
-	} else if (cmd == "autobattle" && w.size() == 2 && (w[1] == "on" || w[1] == "off" || w[1] == "random")) {
+	} else if (cmd == "autobattle" && (w.size() == 2 || (w.size() == 3 && w[1] != "off")) && (w[1] == "on" || w[1] == "off" || w[1] == "random")) {
 		options_.autoBattle = w[1] != "off";
 		options_.autoBattleEncountersOnly = w[1] == "random";
+		options_.autoBattleMacro = w.size() == 3 ? w[2] : "";
+		if (!options_.autoBattleMacro.empty() && std::none_of(session_.world().macros.begin(), session_.world().macros.end(), [&](const rules::Macro& m) { return m.name == options_.autoBattleMacro; })) {
+			error("no macro named '" + options_.autoBattleMacro + "'");
+			options_.autoBattleMacro.clear();
+		}
 	} else if (mode == Mode::Battle && cmd == "macro" && w.size() == 2) {
 		std::vector<rules::MacroStepResult> results;
 		report(session_.applyMacro(w[1], &results));
@@ -710,6 +730,19 @@ bool Runner::execute(const std::string& rawLine) {
 		}
 	} else if (cmd == "status") {
 		status();
+	} else if (cmd == "party" && w.size() == 1) {
+		const World& world = session_.world();
+		std::string lineup;
+		for (const std::string& id : world.lineup) {
+			lineup += (lineup.empty() ? "" : ", ") + session_.displayName(id);
+		}
+		std::string reserve;
+		for (const rules::PartyMember& m : world.roster) {
+			if (std::find(world.lineup.begin(), world.lineup.end(), m.characterId) == world.lineup.end()) {
+				reserve += (reserve.empty() ? "" : ", ") + session_.displayName(m.characterId);
+			}
+		}
+		print("  Lineup: " + lineup + ". Reserve: " + (reserve.empty() ? "nobody" : reserve) + ".");
 	} else if (cmd == "look") {
 		const Area* a = session_.area();
 		if (!a) {
@@ -736,6 +769,86 @@ bool Runner::execute(const std::string& rawLine) {
 				print("  " + r);
 			}
 		}
+	} else if (cmd == "actors" && w.size() == 1) {
+		if (!session_.area()) {
+			error("there is no area");
+		} else {
+			const std::vector<ActorView> actors = session_.actorsHere();
+			if (actors.empty()) {
+				print("  (no actors)");
+			}
+			for (const ActorView& a : actors) {
+				std::string text = "  " + a.id + " at " + std::to_string(a.cell.x) + " " + std::to_string(a.cell.y) + " facing " + toString(a.facing) +
+					(a.visible ? " shown" : " hidden");
+				if (a.solid) {
+					text += " solid";
+				}
+				if (a.vanish != ActorVanish::None) {
+					text += std::string(" ") + toString(a.vanish);
+				}
+				if (a.removed != ActorRemoval::None) {
+					text += std::string(" removed ") + toString(a.removed);
+				}
+				if (!a.animation.empty()) {
+					text += " anim " + a.animation + " " + std::to_string(a.animationMs) + "/" + std::to_string(a.animationTotalMs) + "ms";
+				}
+				if (!a.spriteEnemy.empty()) {
+					text += " enemy " + a.spriteEnemy;
+				}
+				if (!a.look.empty()) {
+					text += " look " + a.look;
+				}
+				if (a.wanders) {
+					text += " wanders";
+				}
+				print(text);
+			}
+		}
+	} else if (cmd == "credits" && w.size() == 1) {
+		const std::optional<CreditsView> credits = session_.credits();
+		if (!credits) {
+			error("no credits are playing");
+			return true;
+		}
+		print("Credits " + credits->id + (credits->music.empty() ? "" : ", music " + credits->music) + ", " + std::to_string(credits->shown) + " of " +
+			std::to_string(credits->entries.size()) + " shown, " + std::to_string(credits->elapsedMs) + " of " + std::to_string(credits->totalMs) + " ms.");
+		for (std::size_t i = 0; i < credits->entries.size(); ++i) {
+			const CreditsEntryView& e = credits->entries[i];
+			print(std::string("  ") + (static_cast<int>(i) < credits->shown ? "+ " : "- ") + (e.kind == CreditsEntryKind::Heading ? "heading " : "line ") + e.text + " (" +
+				std::to_string(e.pauseMs) + " ms" + (e.gap > 0 ? ", gap " + std::to_string(e.gap) : "") + ")");
+		}
+	} else if (cmd == "background" && w.size() == 1) {
+		const std::vector<EventPosition> running = session_.backgroundEvents();
+		if (running.empty()) {
+			print("  background: none");
+		}
+		for (const EventPosition& at : running) {
+			print("  background: " + at.event + " at " + at.file + ":" + std::to_string(at.line));
+		}
+	} else if (cmd == "rows" && w.size() == 1) {
+		if (const Area* a = session_.area()) {
+			for (const std::string& r : a->rows) {
+				print("  " + r);
+			}
+		} else {
+			error("there is no area");
+		}
+	} else if (cmd == "prompt" && w.size() == 1) {
+		if (const std::optional<InteractTarget> t = session_.interactTarget()) {
+			print(std::string("  prompt: ") + toString(t->kind) + " " + t->id + " at " + std::to_string(t->cell.x) + " " + std::to_string(t->cell.y) + " facing " +
+				toString(t->facing) + (t->across ? " across" : "") + (t->keeper.empty() ? "" : " kept by " + t->keeper) + (t->ready ? "" : " (refused)"));
+		} else {
+			print("  prompt: nothing");
+		}
+	} else if (cmd == "steps" && w.size() == 1) {
+		std::string text;
+		for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
+			text += std::string(text.empty() ? "" : ", ") + toString(f) + (session_.canStep(f) ? " yes" : " no");
+		}
+		print("  steps: " + text);
+	} else if (cmd == "time" && w.size() == 1) {
+		print("  play time " + std::to_string(session_.world().playTimeMs) + " ms; a step takes " + std::to_string(session_.leaderStepMs()) + " ms, " +
+			std::to_string(session_.leaderStepMs(true)) + " ms with the run input");
 	} else if (cmd == "pacing") {
 		out_ << session_.pacing().table();
 	} else {

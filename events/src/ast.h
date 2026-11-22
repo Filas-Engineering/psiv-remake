@@ -36,6 +36,7 @@ struct EventDecl {
 	int file = 0;
 	int line = 0;
 	bool skippable = false;
+	bool background = false;
 	std::vector<Stmt> body;
 };
 

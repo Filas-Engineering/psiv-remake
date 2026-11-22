@@ -155,13 +155,13 @@ TEST(damagedAndNewerSavesAreRefused) {
 	CHECK(r.error.find("damaged") != std::string::npos);
 
 	std::string newer = text;
-	newer.replace(0, std::string("PSR-SAVE 10").size(), "PSR-SAVE 11");
+	newer.replace(0, std::string("PSR-SAVE 11").size(), "PSR-SAVE 12");
 	r = parseSave(resign(newer));
 	CHECK(!r.ok());
 	CHECK(r.error.find("newer build") != std::string::npos);
 
 	std::string newerChunk = text;
-	newerChunk.replace(newerChunk.find("chunk party 4"), 13, "chunk party 5");
+	newerChunk.replace(newerChunk.find("chunk party 5"), 13, "chunk party 6");
 	r = parseSave(resign(newerChunk));
 	CHECK(!r.ok());
 	CHECK(r.error.find("newer build") != std::string::npos);
@@ -225,6 +225,48 @@ TEST(continuePicksTheNewestSaveAndSkipsDamagedOnes) {
 	CHECK(s.mode() == Mode::Field);
 }
 
+// R98: erasing refuses what load cannot read, deletes damaged saves and autosaves in any mode, and leaves the game alone.
+TEST(erasingASaveDeletesItsFileWhereLoadCouldNotReadIt) {
+	Session off(test::data(), SessionOptions());
+	CHECK_EQ(off.eraseSave("manual_0").key, std::string("game.refuse.slot_unreadable"));
+
+	const std::string dir = test::freshDirectory("erase");
+	SessionOptions options;
+	options.saveDirectory = dir;
+	Session s(test::data(), options);
+	s.newGame();
+	test::confirmLines(s);
+	s.openMenu();
+	CHECK(s.saveManual("manual_0").empty());
+	CHECK(s.saveManual("manual_1").empty());
+	s.closeMenu();
+	CHECK(std::filesystem::exists(s.store()->path("auto_0")));
+	const rules::Message unknown = s.eraseSave("manual_99");
+	CHECK_EQ(unknown.key, std::string("game.refuse.slot_unreadable"));
+	CHECK(unknown.params == std::vector<std::string>{"manual_99"});
+	CHECK_EQ(s.eraseSave("manual_2").key, std::string("game.refuse.slot_unreadable"));
+	CHECK_EQ(s.eraseSave("../profile").key, std::string("game.refuse.slot_unreadable"));
+
+	std::string text;
+	s.store()->read("manual_1", text);
+	text[text.size() / 2] ^= 1;
+	std::string error;
+	CHECK(writeFileAtomic(s.store()->path("manual_1"), text, error));
+	CHECK(s.store()->list()[1].damaged);
+	const Cell at = s.world().position;
+	CHECK(s.eraseSave("manual_1").empty());
+	CHECK(test::outputHas(s.drainOutput(), "Erased manual_1."));
+	CHECK(s.eraseSave("auto_0").empty());
+	CHECK(s.mode() == Mode::Field && s.world().position == at);
+	CHECK(!std::filesystem::exists(s.store()->path("manual_1")) && !std::filesystem::exists(s.store()->path("auto_0")));
+	CHECK_EQ(s.eraseSave("manual_1").key, std::string("game.refuse.slot_unreadable"));
+
+	s.quitToTitle();
+	CHECK(s.eraseSave("manual_0").empty());
+	CHECK(s.store()->list().empty());
+	CHECK_EQ(s.continueGame().key, std::string("game.refuse.no_save"));
+}
+
 TEST(manualSavesAreFieldMenuOnly) {
 	const std::string dir = test::freshDirectory("manual");
 	SessionOptions options;
@@ -272,10 +314,10 @@ TEST(schemaOneSavesMigrateToTheCurrentSchema) {
 	CHECK_EQ(w.encounterStream.state(), 7u);
 
 	const std::string again = serializeSave(*save.value);
-	CHECK(again.compare(0, 12, "PSR-SAVE 10\n") == 0);
+	CHECK(again.compare(0, 12, "PSR-SAVE 11\n") == 0);
 	CHECK(again.find("chunk battle 3 ") != std::string::npos);
 	CHECK(again.find("chunk quests 1 ") != std::string::npos);
-	CHECK(again.find("chunk actors 1 ") != std::string::npos);
+	CHECK(again.find("chunk actors 2 ") != std::string::npos);
 	CHECK(again.find("chunk talk 1 ") != std::string::npos);
 	CHECK(again.find("chunk travel 3 ") != std::string::npos);
 	CHECK(again.find("chunk dev 1 0\n") != std::string::npos);
@@ -383,6 +425,8 @@ TEST(damagedSavesAreRefusedBeforeAnythingIndexesWithThem) {
 		{"unknown ship port", [](World& w) { w.shipPort = "atlantis"; }},
 		{"unknown job", [](World& w) { w.jobs["imaginary"] = JobState::Accepted; }},
 		{"negative grace", [](World& w) { w.graceMs = -1; }},
+		{"unknown member in a party snapshot", [](World& w) { w.partySnapshots["odd"] = {{"fighter", "stranger"}, {}}; }},
+		{"member twice in a party snapshot", [](World& w) { w.partySnapshots["odd"] = {{"fighter"}, {"fighter"}}; }},
 	};
 	{
 		Session s(test::data(), SessionOptions());

@@ -13,10 +13,10 @@ namespace {
 namespace fs = std::filesystem;
 
 // A copy of data/ under build/ with the fixture areas of tests/fixtures/check added to game.json's list.
-std::string copyData(const std::string& name, const std::vector<std::string>& fixtures) {
+std::string copyData(const std::string& name, const std::vector<std::string>& fixtures, const std::string& source = "data") {
 	const std::string root = test::freshDirectory("check_" + name);
 	const std::string dir = root + "/data";
-	fs::copy("data", dir, fs::copy_options::recursive);
+	fs::copy(source, dir, fs::copy_options::recursive);
 	std::string config;
 	readFile(dir + "/game.json", config);
 	std::string added;
@@ -250,6 +250,45 @@ TEST(camerasMusicAndDurationsAreCheckedAndLeftOutOfTheContentHash) {
 	CHECK_EQ(count(r, "/areas/reed_path.json", 0, "data.music_not_audio"), 1);
 }
 
+// R99, R100: vehicle and area music load outside the content hash and are checked against the vehicles, areas, flags and
+// audio ids.
+TEST(vehicleAndAreaMusicAreCheckedAndLeftOutOfTheContentHash) {
+	const std::string dir = copyData("music", {});
+	const DataDirectories directories{dir, "../core/data"};
+	const std::string encounters = "\"encounters\": {\"marsh\": \"battle_marsh_ambush\", \"warden\": \"battle_brass_warden\"}";
+	replaceIn(dir + "/game.json", encounters, encounters + ", \"vehicles\": {\"reed_skimmer\": \"battle_brass_warden\"}, \"areas\": {\"cogway\": "
+		"[{\"flag\": \"cogway.loud\", \"track\": \"dungeon_firing_floor\"}, \"title_harbor_dawn\"], \"tidewater\": \"defeat_low_tide\"}");
+	rules::Result<GameData> edited = loadGameData(directories);
+	CHECK(edited.ok());
+	if (edited.ok()) {
+		const MusicNames& music = edited.value->config.presentation.music;
+		CHECK_EQ(edited.value->contentHash, test::data().contentHash);
+		CHECK_EQ(music.vehicles.at("reed_skimmer"), std::string("battle_brass_warden"));
+		const std::vector<AreaTrack>& cogway = music.areas.at("cogway");
+		CHECK(cogway.size() == 2 && cogway[0].flag == "cogway.loud" && cogway[0].track == "dungeon_firing_floor" && cogway[1].flag.empty());
+		CHECK(music.areas.at("tidewater").size() == 1 && music.areas.at("tidewater")[0].track == "defeat_low_tide");
+	}
+
+	replaceIn(dir + "/game.json", "\"reed_skimmer\": \"battle_brass_warden\"", "\"raft\": \"battle_brass_warden\", \"reed_skimmer\": \"no_song\"");
+	replaceIn(dir + "/game.json", "[{\"flag\": \"cogway.loud\", \"track\": \"dungeon_firing_floor\"}, \"title_harbor_dawn\"]",
+		"[\"title_harbor_dawn\", {\"flag\": \"cogway.hushed\", \"track\": \"dungeon_firing_floor\"}]");
+	replaceIn(dir + "/game.json", "\"tidewater\": \"defeat_low_tide\"", "\"atlantis\": \"defeat_low_tide\"");
+	const CheckReport r = checkData(directories);
+	CHECK(find(r, "data.music_unknown_vehicle") && find(r, "data.music_unknown_vehicle")->message.params[0] == "raft");
+	CHECK(find(r, "data.music_unknown_area") && find(r, "data.music_unknown_area")->message.params[0] == "atlantis");
+	const rules::Problem* flag = find(r, "data.flag_not_declared");
+	CHECK(flag && flag->message.params[0] == "cogway.hushed");
+	CHECK(find(r, "data.music_after_default"));
+	const rules::Problem* track = find(r, "data.music_not_audio");
+	CHECK(track && track->message.params[0] == "no_song");
+
+	replaceIn(dir + "/game.json", "\"atlantis\": \"defeat_low_tide\"", "\"tidewater\": [7, {\"track\": \"defeat_low_tide\"}]");
+	const CheckReport bad = checkData(directories);
+	CHECK(find(bad, "data.music_not_text"));
+	const rules::Problem* missing = find(bad, "data.missing_field");
+	CHECK(missing && missing->message.params[0] == "flag");
+}
+
 TEST(anInteractHookMayStandOnAWallTheFloorBesideItReaches) {
 	const char* text = R"({"id": "cliff", "map": ["#####", "#...#", "#####"], "markers": {"start": [1, 1]},
 		"hooks": [{"id": "sign", "at": [2, 0], "event": "e"}, {"id": "ladder", "at": [0, 0], "event": "e"}]})";
@@ -311,4 +350,186 @@ TEST(vehiclesPortsAndArrivalsAreChecked) {
 	replaceIn(dir + "/areas/ember_steps.json", "\"region\": \"isles\",", "\"region\": \"isles\",\n\t\"arrival\": \"west_gate\",");
 	r = checkData(DataDirectories{dir, "../core/data"});
 	CHECK(find(r, "data.arrival_not_town"));
+}
+
+TEST(anActorCellApartFromItsTalkPointIsSolidButNotAPoint) {
+	const std::string dir = copyData("nook", {"nook.json"}, test::actorDataDirectory());
+	replaceIn(dir + "/game.json", "\"area\": \"tidewater\",\n\t\t\"marker\": \"start\"", "\"area\": \"nook\",\n\t\t\"marker\": \"start\"");
+	replaceIn(dir + "/text/en.json", "\t\t\"area.reed_path\"", "\t\t\"area.nook\": \"Nook\",\n\t\t\"area.reed_path\"");
+	replaceIn(dir + "/text/ja.json", "\t\t\"area.reed_path\"", "\t\t\"area.nook\": \"すみ\",\n\t\t\"area.reed_path\"");
+	// The keeper stands in the only gap, so the far side is cut off; its own cell needs no floor beside it, and the hook's
+	// cell, the point the party talks to, is used from the row above.
+	const CheckReport r = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(find(r, "check.marker_not_reached") && find(r, "check.marker_not_reached")->message.params[0] == "far");
+	CHECK(!find(r, "check.object_not_reached"));
+	CHECK_EQ(r.problems.size(), 1u);
+
+	// At runtime the cell blocks the party while the keeper is shown there.
+	rules::Result<GameData> loaded = loadGameData(DataDirectories{dir, "../core/data"});
+	CHECK(loaded.ok());
+	if (loaded.ok()) {
+		Session s(*loaded.value, SessionOptions());
+		CHECK(s.newGame().empty());
+		test::confirmLines(s);
+		s.world().position = {3, 1};
+		CHECK_EQ(s.walk(Facing::South).key, std::string("game.refuse.blocked"));
+		s.world().actors["tallykeeper"] = ActorPlace{"nook", {3, 2}, Facing::South, false};
+		CHECK(s.walk(Facing::South).empty());
+		CHECK(s.world().position == (Cell{3, 2}));
+	}
+
+	// Moved off the gap, the far side is reached; on a marker, the actor cell is reported like any solid thing.
+	replaceIn(dir + "/areas/nook.json", "\"actor_at\": [3, 2]", "\"actor_at\": [1, 3]");
+	const CheckReport moved = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(find(moved, "check.marker_on_object") && find(moved, "check.marker_on_object")->message.params[1] == "actor 'tallykeeper'");
+	CHECK(!find(moved, "check.marker_not_reached"));
+}
+
+TEST(actorHomesFiguresAndActorCellsAreChecked) {
+	const std::string shapes = copyData("actor_shapes", {}, test::actorDataDirectory());
+	replaceIn(shapes + "/game.json", "\"kilnwright\",", "{\"id\": \"kilnwright\", \"sprite\": {\"enemy\": \"gel_mite\", \"look\": \"rag\"}}, {\"id\": \"half\", \"at\": [1, 1]}, 7,");
+	const CheckReport bad = checkData(DataDirectories{shapes, "../core/data"});
+	CHECK(find(bad, "data.bad_actor_sprite"));
+	CHECK(find(bad, "data.actor_home_needs_area"));
+	CHECK(find(bad, "data.actor_shape"));
+
+	const std::string dir = copyData("actor_defs", {}, test::actorDataDirectory());
+	replaceIn(dir + "/game.json", "\"sprite\": {\"enemy\": \"aegis_sentinel\"}", "\"sprite\": {\"enemy\": \"no_such_enemy\"}");
+	replaceIn(dir + "/game.json", "\"kilnwright\",", "{\"id\": \"kilnwright\", \"area\": \"nowhere\", \"at\": \"gate\"},");
+	replaceIn(dir + "/game.json", "}, \"tallykeeper\", ", "}, {\"id\": \"tallykeeper\", \"area\": \"wren_hollow\", \"at\": \"west_post\"}, ");
+	const CheckReport r = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(find(r, "data.actor_sprite_unknown_enemy"));
+	CHECK(find(r, "data.actor_home_unknown_area"));
+	CHECK(find(r, "data.actor_home_twice"));
+
+	const char* stepWithActor = R"({"id": "a", "map": ["...", "..."], "markers": {"start": [0, 0]}, "hooks": [{"id": "x", "at": [1, 1], "trigger": "step", "event": "e", "actor_at": [0, 1]}]})";
+	rules::Result<Area> step = parseArea("a.json", stepWithActor);
+	CHECK(!step.ok() && step.problems[0].message.key == "data.actor_at_interact_hooks_only");
+	const char* onItself = R"({"id": "a", "map": ["...", "..."], "markers": {"start": [0, 0]}, "hooks": [{"id": "x", "at": [1, 1], "event": "e", "actor_at": [1, 1]}]})";
+	rules::Result<Area> same = parseArea("a.json", onItself);
+	CHECK(!same.ok() && same.problems[0].message.key == "data.actor_at_on_hook");
+	const char* offMap = R"({"id": "a", "map": ["...", "..."], "markers": {"start": [0, 0]}, "hooks": [{"id": "x", "at": [1, 1], "event": "e", "actor_at": [9, 1]}]})";
+	rules::Result<Area> off = parseArea("a.json", offMap);
+	CHECK(!off.ok() && off.problems[0].message.key == "data.not_on_map");
+
+	const std::string hooks = copyData("actor_at_hook", {});
+	replaceIn(hooks + "/areas/reed_path.json", "\"event\": \"reed_path_lookout\"", "\"event\": \"reed_path_lookout\", \"actor_at\": [1, 2]");
+	const CheckReport notActor = checkData(DataDirectories{hooks, "../core/data"});
+	CHECK(find(notActor, "data.actor_at_not_actor"));
+}
+
+TEST(wanderTouchHooksKeepersAndTheBackgroundLimitAreChecked) {
+	const CheckReport good = checkData(DataDirectories{test::backgroundDataDirectory(), "../core/data"});
+	CHECK(good.problems.empty());
+
+	const std::string dir = copyData("wander", {}, test::backgroundDataDirectory());
+	replaceIn(dir + "/game.json", "\"wander\": {\"radius\": 2, \"speed_percent\": 100, \"pause_ms\": [250, 750]}",
+		"\"wander\": {\"radius\": 2, \"from\": [1, 1], \"to\": [2, 2], \"pause_ms\": [750, 250], \"terrain\": \"#\"}");
+	replaceIn(dir + "/game.json", "\"background_limit\": 2", "\"background_limit\": 40");
+	replaceIn(dir + "/game.json", "\"kilnwright\",", "{\"id\": \"kilnwright\", \"wander\": {\"radius\": 1}},");
+	const CheckReport bad = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(find(bad, "data.wander_radius_or_region"));
+	CHECK(find(bad, "data.bad_wander_pause"));
+	CHECK(find(bad, "data.bad_wander_terrain"));
+	CHECK(find(bad, "data.wander_needs_home"));
+	CHECK(find(bad, "data.field_out_of_range"));
+
+	const std::string refs = copyData("wander_refs", {}, test::backgroundDataDirectory());
+	replaceIn(refs + "/game.json", "\"wander\": {\"radius\": 2,", "\"wander\": {\"from\": [6, 1], \"to\": [8, 2],");
+	replaceIn(refs + "/areas/wren_yard.json", "\"actor\": \"yard_goat\"", "\"actor\": \"yard_ghost\"");
+	replaceIn(refs + "/areas/wren_yard.json", "\"keeper\": \"yard_trader\"", "\"keeper\": \"stall_cat\"");
+	const CheckReport r = checkData(DataDirectories{refs, "../core/data"});
+	CHECK(find(r, "data.wander_home_outside") && find(r, "data.wander_home_outside")->message.params[0] == "yard_goat");
+	CHECK(find(r, "data.touch_unknown_actor") && find(r, "data.touch_unknown_actor")->message.params[1] == "yard_ghost");
+	CHECK(find(r, "data.keeper_not_actor") && find(r, "data.keeper_not_actor")->message.params[1] == "stall_cat");
+
+	const char* touchNoActor = R"({"id": "a", "map": ["...", "..."], "markers": {"start": [0, 0]}, "hooks": [{"id": "x", "trigger": "touch", "event": "e"}]})";
+	rules::Result<Area> missing = parseArea("a.json", touchNoActor);
+	CHECK(!missing.ok() && missing.problems[0].message.key == "data.missing_field");
+	const char* actorOnStep = R"({"id": "a", "map": ["...", "..."], "markers": {"start": [0, 0]}, "hooks": [{"id": "x", "at": [1, 1], "trigger": "step", "event": "e", "actor": "goat"}]})";
+	rules::Result<Area> step = parseArea("a.json", actorOnStep);
+	CHECK(!step.ok() && step.problems[0].message.key == "data.actor_touch_hooks_only");
+}
+
+TEST(animationsMayGiveTheirLength) {
+	const std::string dir = copyData("animation_lengths", {});
+	replaceIn(dir + "/game.json", "\"animations\": [\"bow\",", "\"animations\": [{\"id\": \"bow\", \"seconds\": 0.75}, {\"id\": \"dissolve\", \"seconds\": 1.5},");
+	rules::Result<GameData> loaded = loadGameData(DataDirectories{dir, "../core/data"});
+	CHECK(loaded.ok());
+	if (loaded.ok()) {
+		const PresentationNames& names = loaded.value->config.presentation;
+		CHECK_EQ(names.animationLength("bow"), 0.75);
+		CHECK_EQ(names.animationLength("dissolve"), 1.5);
+		CHECK_EQ(names.animationLength("hop"), 0.3);
+		CHECK_EQ(names.animationLength("nod"), 0.0);
+		CHECK(std::find(names.animations.begin(), names.animations.end(), "bow") != names.animations.end());
+	}
+	replaceIn(dir + "/game.json", "{\"id\": \"bow\", \"seconds\": 0.75}", "{\"id\": \"bow\"}, 3");
+	const CheckReport bad = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(find(bad, "data.animation_shape"));
+	CHECK(find(bad, "data.missing_field"));
+}
+
+// R101: a dungeon's `dungeon_exit` loads, and its area, place, facing and kinds are checked.
+TEST(aDungeonsWayOutIsLoadedAndChecked) {
+	const std::string dir = copyData("dungeon_exit", {});
+	const DataDirectories directories{dir, "../core/data"};
+	const std::string region = "\"region\": \"coast\",";
+	replaceIn(dir + "/areas/kiln_upper.json", region, region + "\n\t\"dungeon_exit\": {\"area\": \"tidewater\", \"marker\": \"inn_front\", \"facing\": \"north\"},");
+	rules::Result<GameData> loaded = loadGameData(directories);
+	CHECK(loaded.ok());
+	if (loaded.ok()) {
+		const std::optional<DungeonExitTarget>& way = loaded.value->area("kiln_upper")->dungeonExit;
+		CHECK(way && way->area == "tidewater" && way->marker == "inn_front" && way->facing == Facing::North);
+	}
+	const std::vector<std::pair<std::string, std::string>> cases = {
+		{"{\"area\": \"atlantis\", \"at\": [1, 1]}", "data.dungeon_exit_unknown_area"},
+		{"{\"area\": \"kiln_lower\", \"marker\": \"up_stair\"}", "data.dungeon_exit_into_dungeon"},
+		{"{\"area\": \"tidewater\", \"marker\": \"pier\"}", "data.dungeon_exit_missing_marker"},
+		{"{\"area\": \"tidewater\", \"at\": [0, 0]}", "data.dungeon_exit_not_walkable"},
+		{"{\"area\": \"tidewater\", \"at\": [40, 1]}", "data.dungeon_exit_not_walkable"},
+		{"{\"area\": \"tidewater\"}", "data.dungeon_exit_needs_place"},
+		{"{\"area\": \"tidewater\", \"at\": [1, 1], \"marker\": \"start\"}", "data.dungeon_exit_needs_place"},
+		{"{\"area\": \"tidewater\", \"at\": [1, 1], \"facing\": \"up\"}", "data.bad_facing"},
+	};
+	std::string current = "{\"area\": \"tidewater\", \"marker\": \"inn_front\", \"facing\": \"north\"}";
+	for (const auto& [target, key] : cases) {
+		replaceIn(dir + "/areas/kiln_upper.json", current, target);
+		current = target;
+		CHECK_EQ(find(checkData(directories), key) ? key : "nothing for " + target, key);
+	}
+	// Only a dungeon names a way out.
+	replaceIn(dir + "/areas/kiln_upper.json", current, "{\"area\": \"tidewater\", \"at\": [1, 1]}");
+	replaceIn(dir + "/areas/tidewater.json", "\"region\": \"coast\",", "\"region\": \"coast\",\n\t\"dungeon_exit\": {\"area\": \"saltgrass\", \"marker\": \"east_gate\"},");
+	CHECK(find(checkData(directories), "data.dungeon_exit_not_dungeon"));
+}
+
+// R102: game.json's credits load outside the content hash; their entries, text keys and music are checked, and their ids
+// are the names a script's `credits` may use.
+TEST(creditsAreLoadedCheckedAndNamedForScripts) {
+	const std::string dir = copyData("credits", {});
+	const DataDirectories directories{dir, "../core/data"};
+	replaceIn(dir + "/game.json", "\"title\":", "\"credits\": {\"finale\": {\"music\": \"title_harbor_dawn\", \"entries\": [{\"heading\": \"area.tidewater\", \"gap\": 1, \"pause_ms\": 900}, "
+		"{\"line\": \"area.saltgrass\"}]}},\n\t\"title\":");
+	rules::Result<GameData> loaded = loadGameData(directories);
+	CHECK(loaded.ok());
+	if (loaded.ok()) {
+		CHECK_EQ(loaded.value->contentHash, test::data().contentHash);
+		const Credits* credits = loaded.value->config.creditsById("finale");
+		CHECK(credits && credits->music == "title_harbor_dawn" && credits->entries.size() == 2);
+		CHECK(credits && credits->entries[0].kind == CreditsEntryKind::Heading && credits->entries[0].gap == 1 && credits->entries[0].pauseMs == 900);
+		CHECK(credits && credits->entries[1].kind == CreditsEntryKind::Line && credits->entries[1].pauseMs == 2000);
+		CHECK(loaded.value->registry.has(events::NameKind::credits, "finale"));
+	}
+	replaceIn(dir + "/game.json", "\"title_harbor_dawn\", \"entries\"", "\"no_song\", \"entries\"");
+	replaceIn(dir + "/game.json", "{\"line\": \"area.saltgrass\"}", "{\"line\": \"credits.nobody\"}");
+	const CheckReport r = checkData(directories);
+	CHECK(find(r, "data.music_not_audio") && find(r, "data.music_not_audio")->message.params[0] == "no_song");
+	CHECK(find(r, "data.text_not_in_table") && find(r, "data.text_not_in_table")->message.params[0] == "credits.nobody");
+	replaceIn(dir + "/game.json", "{\"line\": \"credits.nobody\"}", "{\"line\": \"area.saltgrass\", \"heading\": \"area.tidewater\"}");
+	CHECK(find(checkData(directories), "data.credits_entry_kind"));
+	replaceIn(dir + "/game.json", "\"entries\": [", "\"entries\": [], \"unused\": [");
+	const CheckReport empty = checkData(directories);
+	CHECK(find(empty, "data.credits_empty"));
+	CHECK(find(empty, "data.unknown_field"));
 }

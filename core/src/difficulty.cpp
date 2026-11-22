@@ -43,10 +43,10 @@ Database applyDifficulty(const Database& db, const DifficultyDef& difficulty) {
 		const Stats& p = overlay.statsPercent;
 		enemy.stats.maxHp = scaled(enemy.stats.maxHp, p.maxHp, 1);
 		enemy.stats.maxTp = scaled(enemy.stats.maxTp, p.maxTp, 0);
-		enemy.stats.strength = scaled(enemy.stats.strength, p.strength, 1);
-		enemy.stats.mental = scaled(enemy.stats.mental, p.mental, 1);
-		enemy.stats.agility = scaled(enemy.stats.agility, p.agility, 1);
-		enemy.stats.dexterity = scaled(enemy.stats.dexterity, p.dexterity, 1);
+		enemy.stats.strength = scaled(enemy.stats.strength, p.strength, std::min(1, enemy.stats.strength));
+		enemy.stats.mental = scaled(enemy.stats.mental, p.mental, std::min(1, enemy.stats.mental));
+		enemy.stats.agility = scaled(enemy.stats.agility, p.agility, std::min(1, enemy.stats.agility));
+		enemy.stats.dexterity = scaled(enemy.stats.dexterity, p.dexterity, std::min(1, enemy.stats.dexterity));
 		enemy.stats.defense = scaled(enemy.stats.defense, p.defense, 0);
 		for (const std::string& id : overlay.addAbilities) {
 			if (std::find(enemy.abilities.begin(), enemy.abilities.end(), id) == enemy.abilities.end()) {

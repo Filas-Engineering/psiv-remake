@@ -78,6 +78,7 @@ Stats memberStats(const Database& db, const PartyMember& member) {
 		return Stats();
 	}
 	Stats s = statsAtLevel(*character, member.level);
+	const Stats level = s;
 	for (const auto& [slot, id] : member.equipment) {
 		const EquipmentDef* piece = db.equipmentPiece(id);
 		if (!piece) {
@@ -97,10 +98,11 @@ Stats memberStats(const Database& db, const PartyMember& member) {
 	}
 	s.maxHp = std::max(1, s.maxHp);
 	s.maxTp = std::max(0, s.maxTp);
-	s.strength = std::max(1, s.strength);
-	s.mental = std::max(1, s.mental);
-	s.agility = std::max(1, s.agility);
-	s.dexterity = std::max(1, s.dexterity);
+	// Pieces never take a stat below 1, nor below 0 when the level gives it 0.
+	s.strength = std::max(std::min(1, level.strength), s.strength);
+	s.mental = std::max(std::min(1, level.mental), s.mental);
+	s.agility = std::max(std::min(1, level.agility), s.agility);
+	s.dexterity = std::max(std::min(1, level.dexterity), s.dexterity);
 	s.defense = std::max(0, s.defense);
 	s.critical = std::clamp(s.critical, 0, 100);
 	s.evasion = std::clamp(s.evasion, 0, 100);

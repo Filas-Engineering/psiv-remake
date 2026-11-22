@@ -1,0 +1,22 @@
+# Wren Cellar, for the interaction rules of the data copy that turns them on (interact nearby, running, battles aboard
+# opening normally): the clerk is used across the counter in front of it, the notice from beside it, the table from
+# either side of its two cells and the cook where it stands behind its counter. The notice opens the door, an exit drawn
+# as floor while it is closed.
+
+event cellar_clerk unskippable
+	narrate @cellar.clerk.hello
+	warp wren_cellar cellar_door
+end
+
+event cellar_notice unskippable
+	narrate @cellar.notice.read
+	set cellar.door_open
+end
+
+event cellar_table unskippable
+	narrate @cellar.table.crumbs
+end
+
+event cellar_cook unskippable
+	narrate @cellar.cook.stir
+end

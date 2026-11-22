@@ -15,6 +15,11 @@
 #endif
 
 static const char* dataDir = "../game/data";
+/* The placeholder data with Wren Hollow added (game/tests/actor_data.h); empty skips testScriptedActors. */
+static const char* actorDataDir = "";
+/* The same with Wren Cellar and the interaction rules turned on (actor_data::makeInteract); empty skips testInteraction. */
+static const char* interactDataDir = "";
+static const char* backgroundDataDir = "";
 static const char* scratch = "build/scratch";
 static int failures;
 static int checks;
@@ -104,6 +109,11 @@ static void testVersion(void) {
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_OUTCOME, PSIV_OUTCOME_VICTORY), "victory") == 0);
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_CANCEL_REASON, PSIV_CANCEL_NOT_ENOUGH_TP), "not_enough_tp") == 0);
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_ACTION_TYPE, PSIV_ACTION_WARP), "warp") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_ACTION_TYPE, PSIV_ACTION_PLACE), "place") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_ACTOR_VANISH, PSIV_VANISH_BLINKED_OUT), "blinked_out") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_ACTOR_REMOVAL, PSIV_REMOVAL_UNTIL_RELOAD), "until_reload") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_ANIMATION_END, PSIV_ANIMATION_END_HIDDEN), "hidden") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_ACTOR_VANISH, 4), "") == 0);
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_EVENT_TYPE, 999), "") == 0);
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_EVENT_TYPE, PSIV_EVENT_BATTLE_ENDED), "battle_ended") == 0);
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_REWARD_MULTIPLIER, PSIV_REWARD_X1_5), "x1_5") == 0);
@@ -117,6 +127,8 @@ static void testVersion(void) {
 	CHECK(psiv_parse_name(PSIV_NAME_OUTCOME, "won", &value) == PSIV_NOT_FOUND);
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_MACRO_TARGET_KIND, PSIV_MACRO_TARGET_ENEMY), "enemy") == 0);
 	CHECK(psiv_parse_name(PSIV_NAME_MACRO_TARGET_KIND, "all", &value) == PSIV_OK && value == PSIV_MACRO_TARGET_ALL);
+	CHECK(psiv_parse_name(PSIV_NAME_ACTOR_REMOVAL, "for_good", &value) == PSIV_OK && value == PSIV_REMOVAL_FOR_GOOD);
+	CHECK(psiv_sizeof("psiv_route_cell") == sizeof(psiv_route_cell) && psiv_sizeof("psiv_animation") == sizeof(psiv_animation));
 	CHECK(strcmp(psiv_name_of(999, 0), "") == 0);
 }
 
@@ -380,6 +392,19 @@ static void testSaveAndLoad(void) {
 		}
 	}
 	CHECK(psiv_load(s, list[0].slot) == PSIV_REFUSED);
+
+	/* Erasing takes the damaged file away; an erased, unknown or NULL slot is refused as psiv_load refuses it. */
+	CHECK_OK(psiv_erase_save(s, "manual_3"));
+	CHECK_OK(psiv_saves(s, &list, &count));
+	for (int32_t i = 0; i < count; ++i) {
+		CHECK(strcmp(list[i].slot, "manual_3") != 0);
+	}
+	CHECK(psiv_erase_save(s, "manual_3") == PSIV_REFUSED);
+	psiv_error e;
+	psiv_last_error(s, &e);
+	CHECK(strcmp(e.key, "game.refuse.slot_unreadable") == 0 && e.param_count == 1 && strcmp(e.params[0], "manual_3") == 0);
+	CHECK(psiv_erase_save(s, "manual_99") == PSIV_REFUSED);
+	CHECK(psiv_erase_save(s, NULL) == PSIV_INVALID_ARGUMENT);
 	psiv_session_destroy(s);
 }
 
@@ -961,9 +986,353 @@ static void testActors(void) {
 	psiv_session_destroy(s);
 }
 
+static int32_t errorIs(psiv_session* s, const char* key);
+
+/* Wren Hollow: the keeper behind its counter, the sentinel in an enemy's figure, the drifter's routes, animations with
+ * their milliseconds, removals, and the animation table. */
+static void testScriptedActors(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/scripted_actors", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	const char* shipped = dataDir;
+	dataDir = actorDataDir;
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	dataDir = shipped;
+	const psiv_animation* animations;
+	int32_t count;
+	CHECK(psiv_animations(s, NULL, &count) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_animations(s, &animations, &count));
+	int found = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		const psiv_animation* a = &animations[i];
+		if (strcmp(a->id, "dissolve") == 0) {
+			found += a->seconds == 0.8 && a->standard && a->end == PSIV_ANIMATION_END_HIDDEN;
+		} else if (strcmp(a->id, "tally_nod") == 0) {
+			found += a->seconds == 0 && !a->standard && a->end == PSIV_ANIMATION_END_NONE;
+		} else if (strcmp(a->id, "fade_in") == 0) {
+			found += a->seconds == 0.5 && a->standard && a->end == PSIV_ANIMATION_END_SHOWN;
+		} else if (strcmp(a->id, "bow") == 0) {
+			found += a->seconds == 0 && !a->standard;
+		}
+	}
+	CHECK(found == 4);
+	CHECK(count == 13);
+
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK_OK(psiv_dev_warp(s, "wren_hollow", "hollow_door"));
+	settle(s);
+	const psiv_actor* actors;
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	CHECK(count == 2);
+	const psiv_actor* sentinel = findActor(actors, count, "hollow_sentinel");
+	const psiv_actor* keeper = findActor(actors, count, "tallykeeper");
+	CHECK(sentinel && sentinel->x == 7 && sentinel->y == 4 && sentinel->facing == PSIV_DIRECTION_WEST && sentinel->solid && sentinel->visible);
+	CHECK(sentinel && strcmp(sentinel->sprite_enemy, "aegis_sentinel") == 0 && strcmp(sentinel->look, "") == 0);
+	CHECK(keeper && keeper->x == 4 && keeper->y == 1 && keeper->solid && !keeper->scripted && strcmp(keeper->animation, "") == 0);
+	CHECK(keeper && keeper->vanish == PSIV_VANISH_NONE && keeper->removal == PSIV_REMOVAL_NONE && strcmp(keeper->sprite_enemy, "") == 0);
+
+	/* The sentinel blocks the way and starts no battle. */
+	CHECK(psiv_walk_to(s, 6, 4) == PSIV_OK);
+	int32_t status = PSIV_WALK_WALKING;
+	while (psiv_walk_step(s, &status) == PSIV_OK && status == PSIV_WALK_WALKING) {
+	}
+	CHECK(status == PSIV_WALK_ARRIVED);
+	CHECK(psiv_walk(s, PSIV_DIRECTION_EAST) == PSIV_REFUSED && errorIs(s, "game.refuse.blocked"));
+	CHECK(psiv_mode_get(s) == PSIV_MODE_FIELD);
+
+	const psiv_action* records;
+	CHECK_OK(psiv_actions_poll(s, &records, &count));
+	CHECK(walkToMarker(s, "counter_front") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	CHECK(psiv_line_pending(s));
+	CHECK_OK(psiv_line_confirm(s));
+	CHECK(psiv_line_pending(s));
+	CHECK_OK(psiv_line_confirm(s));
+	CHECK(psiv_line_pending(s));
+	CHECK_OK(psiv_actions_poll(s, &records, &count));
+	int routes = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		const psiv_action* a = &records[i];
+		if (a->type == PSIV_ACTION_PLACE) {
+			routes += strcmp(a->facing, "east") == 0 && a->route_count == 1 && a->route[0].x == 1 && a->route[0].y == 4;
+		} else if (a->type == PSIV_ACTION_MOVE && a->pathfind) {
+			routes += a->route_count == 10 && a->route[0].x == 1 && a->route[9].x == 8 && a->route[9].y == 4 && a->waypoint_count == 0;
+		} else if (a->type == PSIV_ACTION_MOVE) {
+			routes += a->waypoint_count == 1 && strcmp(a->waypoints[0], "shelf_front") == 0 && a->route_count == 10 && a->speed == 2;
+		} else if (a->type == PSIV_ACTION_ANIMATE && strcmp(a->target, "dissolve") == 0) {
+			routes += a->duration == 0.8 && a->route_count == 0;
+		}
+	}
+	CHECK(routes == 4);
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	const psiv_actor* drifter = findActor(actors, count, "hollow_drifter");
+	CHECK(drifter && !drifter->visible && drifter->vanish == PSIV_VANISH_DISSOLVED && strcmp(drifter->animation, "dissolve") == 0 &&
+		drifter->animation_ms == 800 && drifter->animation_total_ms == 800);
+	CHECK_OK(psiv_line_confirm(s));
+	settle(s);
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	drifter = findActor(actors, count, "hollow_drifter");
+	keeper = findActor(actors, count, "tallykeeper");
+	CHECK(drifter && drifter->removal == PSIV_REMOVAL_UNTIL_RELOAD && !drifter->visible);
+	CHECK(keeper && strcmp(keeper->animation, "shake") == 0 && keeper->animation_ms == 400 && keeper->animation_total_ms == 400);
+	CHECK_OK(psiv_update(s, 200, PSIV_DIRECTION_NONE));
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	keeper = findActor(actors, count, "tallykeeper");
+	CHECK(keeper && keeper->animation_ms == 200);
+
+	/* The next area load ends the drifter's removal. */
+	CHECK_OK(psiv_dev_warp(s, "wren_hollow", "hollow_door"));
+	settle(s);
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	drifter = findActor(actors, count, "hollow_drifter");
+	CHECK(drifter && drifter->removal == PSIV_REMOVAL_NONE && drifter->x == 1 && drifter->y == 4);
+	psiv_session_destroy(s);
+}
+
+/* Wren Cellar under `interact: "nearby"`, `run_speed_percent` 200 and `vehicle_opening` normal: the prompt query, the
+ * leader turning to what answers, the table's two cells, the step query, the run input and the door drawn as floor
+ * while it is closed. */
+static void testInteraction(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/interaction", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	const char* shipped = dataDir;
+	dataDir = interactDataDir;
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	dataDir = shipped;
+	CHECK(psiv_sizeof("psiv_interact_target") == sizeof(psiv_interact_target) && psiv_sizeof("psiv_field_input") == sizeof(psiv_field_input));
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_INTERACT_KIND, PSIV_INTERACT_ACTOR), "actor") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_INTERACT_KIND, PSIV_INTERACT_REST + 1), "") == 0);
+	psiv_interact_target t;
+	CHECK(psiv_interact_target_get(s, NULL) == PSIV_INVALID_ARGUMENT);
+	CHECK(psiv_interact_target_get(s, &t) == PSIV_NOT_FOUND);
+	CHECK(psiv_can_step(s, PSIV_DIRECTION_NORTH) == 0 && psiv_can_step(NULL, PSIV_DIRECTION_NORTH) == 0);
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK_OK(psiv_dev_warp(s, "wren_cellar", "cellar_door"));
+	settle(s);
+
+	/* The door: an exit drawn as floor while it is closed, which blocks the way. */
+	const psiv_exit* exits;
+	int32_t count;
+	CHECK_OK(psiv_field_exits(s, &exits, &count));
+	CHECK(count == 1 && !exits[0].open && exits[0].closed_tile == '.');
+	const char* const* rows;
+	CHECK_OK(psiv_field_rows(s, &rows, &count));
+	CHECK(count == 10 && rows[9][6] == '.');
+	const uint8_t* grid;
+	CHECK_OK(psiv_field_grid(s, &grid, &count));
+	CHECK(grid[9 * 14 + 6] == PSIV_CELL_FLOOR && grid[8 * 14 + 6] == (PSIV_CELL_FLOOR | PSIV_CELL_WALKABLE));
+	CHECK(!psiv_can_step(s, PSIV_DIRECTION_SOUTH) && psiv_can_step(s, PSIV_DIRECTION_NORTH) && !psiv_can_step(s, 4));
+	CHECK(psiv_walk(s, PSIV_DIRECTION_SOUTH) == PSIV_REFUSED && errorIs(s, "game.refuse.blocked"));
+
+	/* The notice beside the leader: the prompt names it, and interact turns the leader to it. */
+	CHECK(walkToMarker(s, "notice_side") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_EAST));
+	CHECK_OK(psiv_interact_target_get(s, &t));
+	CHECK(t.kind == PSIV_INTERACT_TALK && strcmp(t.id, "cellar_notice") == 0 && t.x == 5 && t.y == 2 && t.facing == PSIV_DIRECTION_NORTH && t.ready && !t.across);
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	psiv_field_info field;
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(field.facing == PSIV_DIRECTION_NORTH);
+	CHECK_OK(psiv_field_exits(s, &exits, &count));
+	CHECK(exits[0].open);
+	CHECK_OK(psiv_field_grid(s, &grid, &count));
+	CHECK(grid[9 * 14 + 6] == (PSIV_CELL_FLOOR | PSIV_CELL_WALKABLE));
+
+	/* The clerk across its counter, the table's further cell, the cook where it stands. */
+	CHECK(walkToMarker(s, "clerk_front") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact_target_get(s, &t));
+	CHECK(t.kind == PSIV_INTERACT_TALK && strcmp(t.id, "cellar_clerk") == 0 && t.x == 2 && t.y == 1 && t.across);
+	CHECK(walkToMarker(s, "table_north") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_SOUTH));
+	CHECK_OK(psiv_interact_target_get(s, &t));
+	CHECK(strcmp(t.id, "cellar_table") == 0 && t.x == 9 && t.y == 2);
+	const psiv_point* points;
+	CHECK_OK(psiv_field_points(s, &points, &count));
+	int tableCells = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		tableCells += strcmp(points[i].id, "cellar_table") == 0 && points[i].kind == PSIV_POINT_TALK && points[i].y == 2 && (points[i].x == 8 || points[i].x == 9);
+	}
+	CHECK(tableCells == 2);
+	CHECK(walkToMarker(s, "cook_side") == PSIV_WALK_ARRIVED);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_EAST));
+	CHECK_OK(psiv_interact_target_get(s, &t));
+	CHECK(t.kind == PSIV_INTERACT_ACTOR && strcmp(t.id, "cellar_cook") == 0 && t.x == 10 && t.y == 5);
+
+	/* Running: the run input halves the step; always_run turns it around. */
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(field.leader_step_ms == 250 && field.run_step_ms == 125);
+	psiv_field_input input = {PSIV_DIRECTION_WEST, 1};
+	CHECK_OK(psiv_update_input(s, 150, &input));
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(field.leader_x == 8 && field.leader_y == 5);
+	input.running = 0;
+	CHECK_OK(psiv_update_input(s, 150, &input));
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(field.leader_x == 8);
+	CHECK_OK(psiv_update_input(s, 100, &input));
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(field.leader_x == 7);
+	input.direction = 7;
+	CHECK(psiv_update_input(s, 50, &input) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_update_input(s, 50, NULL));
+	psiv_profile profile;
+	CHECK_OK(psiv_profile_get(s, &profile));
+	CHECK(!profile.always_run);
+	profile.always_run = 1;
+	CHECK_OK(psiv_profile_set(s, &profile));
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(field.leader_step_ms == 125 && field.run_step_ms == 250);
+	CHECK_OK(psiv_profile_set_value(s, "always_run", "off"));
+	CHECK_OK(psiv_profile_get(s, &profile));
+	CHECK(!profile.always_run);
+	psiv_session_destroy(s);
+}
+
+/* Wren Yard: the lamplighter's background event beside the field, the wandering goat and its touch hook, the stall's keeper,
+ * what a cell holds from where the leader stands, the step and belt fields, and the patch's visible enemy by its reserved
+ * actor name. */
+static void testBackground(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/background", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	const char* shipped = dataDir;
+	dataDir = backgroundDataDir;
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	dataDir = shipped;
+	const psiv_event_position* running;
+	int32_t count = -1;
+	CHECK(psiv_background_events(s, NULL, &count) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_background_events(s, &running, &count));
+	CHECK(count == 0);
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK_OK(psiv_dev_warp(s, "wren_yard", "yard_gate"));
+	settle(s);
+	CHECK_OK(psiv_background_events(s, &running, &count));
+	CHECK(count == 1 && strcmp(running[0].event, "yard_lamps") == 0 && strcmp(running[0].file, "events/yard.ev") == 0 && running[0].line > 0);
+	CHECK(psiv_mode_get(s) == PSIV_MODE_FIELD);
+
+	/* The visible enemy's reserved name, and the goat wandering in its figure. */
+	const psiv_enemy* enemies;
+	CHECK_OK(psiv_field_enemies(s, &enemies, &count));
+	CHECK(count == 1 && strcmp(enemies[0].actor, "enemy.yard_patch.1") == 0);
+	const psiv_actor* actors;
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	int goats = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		goats += strcmp(actors[i].id, "yard_goat") == 0 && actors[i].wanders && strcmp(actors[i].look, "goat") == 0;
+		CHECK(strcmp(actors[i].id, "yard_trader") != 0 || !actors[i].wanders);
+	}
+	CHECK(goats == 1);
+
+	/* The stall and its keeper, from the cell in front of it, and what a cell holds from here. */
+	CHECK(walkToMarker(s, "stall_front") == PSIV_WALK_ARRIVED);
+	psiv_interact_target t;
+	CHECK(psiv_interact_at(s, 9, 2, NULL) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_interact_at(s, 9, 2, &t));
+	CHECK(t.kind == PSIV_INTERACT_SHOP && strcmp(t.id, "yard_stall") == 0 && t.facing == PSIV_DIRECTION_NORTH && strcmp(t.keeper, "yard_trader") == 0);
+	CHECK(psiv_interact_at(s, 3, 0, &t) == PSIV_NOT_FOUND);
+	const psiv_point* points;
+	CHECK_OK(psiv_field_points(s, &points, &count));
+	int kept = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		kept += points[i].kind == PSIV_POINT_SHOP && strcmp(points[i].keeper, "yard_trader") == 0;
+		CHECK(points[i].kind == PSIV_POINT_SHOP || points[i].keeper[0] == 0);
+	}
+	CHECK(kept == 1);
+
+	/* Step progress and the directions open. */
+	psiv_field_info field;
+	CHECK_OK(psiv_field_info_get(s, &field));
+	int32_t mask = 0;
+	for (int32_t d = PSIV_DIRECTION_NORTH; d <= PSIV_DIRECTION_WEST; ++d) {
+		mask |= psiv_can_step(s, d) ? 1 << d : 0;
+	}
+	CHECK(field.step_mask == mask && field.step_progress_ms == 0 && field.conveyor_step_ms == 0 && field.conveyor_progress_ms == 0);
+	CHECK_OK(psiv_update(s, 100, PSIV_DIRECTION_SOUTH));
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(field.step_progress_ms == 100);
+
+	/* A save keeps the background event; a load resumes it at the same line. */
+	CHECK_OK(psiv_background_events(s, &running, &count));
+	const int32_t line = count == 1 ? running[0].line : -1;
+	const char* text = NULL;
+	CHECK_OK(psiv_save_text(s, &text));
+	CHECK(text && strstr(text, "chunk background 1 ") != NULL);
+	char* copy = malloc(strlen(text) + 1);
+	strcpy(copy, text);
+	psiv_quit_to_title(s);
+	CHECK_OK(psiv_background_events(s, &running, &count));
+	CHECK(count == 0);
+	CHECK_OK(psiv_load_text(s, copy));
+	free(copy);
+	CHECK_OK(psiv_background_events(s, &running, &count));
+	CHECK(count == 1 && running[0].line == line);
+	psiv_session_destroy(s);
+}
+
 static int32_t errorIs(psiv_session* s, const char* key) {
 	psiv_error e;
 	return psiv_last_error(s, &e) == PSIV_OK && strcmp(e.key, key) == 0;
+}
+
+/* Wren Den: its area's own way out, then the credits its plaque plays, moved on by play time and finished by closing
+ * them, and the event's end game back to the title with the clear-data record written. */
+static void testDenAndCredits(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/den", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	const char* shipped = dataDir;
+	dataDir = backgroundDataDir;
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	dataDir = shipped;
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK_OK(psiv_dev_warp(s, "wren_den", "plaque_front"));
+	settle(s);
+	const psiv_travel_destination* places;
+	int32_t count = 0;
+	CHECK_OK(psiv_travel_destinations(s, PSIV_TRAVEL_DUNGEON_EXIT, &places, &count));
+	CHECK(count == 1 && strcmp(places[0].id, "tidewater") == 0 && places[0].x == 3 && places[0].y == 6);
+
+	psiv_credits_info info;
+	const psiv_credits_entry* entries;
+	CHECK(psiv_credits_info_get(s, &info) == PSIV_NOT_FOUND);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_EAST));
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	CHECK(psiv_menu_kind_get(s) == PSIV_MENU_CREDITS);
+	CHECK(psiv_credits_info_get(s, NULL) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_credits_info_get(s, &info));
+	CHECK(strcmp(info.id, "wren_end") == 0 && strcmp(info.music, "title_harbor_dawn") == 0 && info.entry_count == 4 && info.shown == 1);
+	CHECK(info.elapsed_ms == 0 && info.total_ms == 8000);
+	CHECK_OK(psiv_credits_entries(s, &entries, &count));
+	CHECK(count == 4 && entries[0].kind == PSIV_CREDITS_HEADING && strcmp(entries[0].text, "Wren Hollow") == 0 && entries[0].pause_ms == 2500);
+	CHECK(entries[1].kind == PSIV_CREDITS_LINE && strcmp(entries[1].key, "credits.wren_end.cast") == 0 && entries[1].gap == 1);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_MENU_KIND, PSIV_MENU_CREDITS), "credits") == 0);
+	CHECK_OK(psiv_update(s, 4500, PSIV_DIRECTION_NONE));
+	CHECK_OK(psiv_credits_info_get(s, &info));
+	CHECK(info.shown == 3 && info.elapsed_ms == 4500);
+	CHECK(psiv_save_manual(s, "manual_0") == PSIV_REFUSED && errorIs(s, "game.refuse.save_where"));
+	CHECK_OK(psiv_close_menu(s));
+	CHECK(psiv_credits_entries(s, &entries, &count) == PSIV_NOT_FOUND);
+	settle(s);
+	CHECK(psiv_mode_get(s) == PSIV_MODE_TITLE);
+	int32_t cleared = -1;
+	CHECK_OK(psiv_clear_record_exists(s, &cleared));
+	/* The developer warp marked the game, so nothing was recorded. */
+	CHECK(cleared == 0);
+	psiv_session_destroy(s);
 }
 
 static const psiv_macro* findMacro(const psiv_macro* macros, int32_t count, const char* name) {
@@ -1065,6 +1434,20 @@ static void testMenus(void) {
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_MACRO_STEP_STATUS, PSIV_MACRO_AUTOMATIC), "automatic") == 0);
 	CHECK_OK(psiv_macro_delete(s, "fan"));
 
+	/* A vehicle's step, for battles aboard it: its skills, attack or escape, marked while the party has no such vehicle. */
+	CHECK_OK(psiv_macro_create(s, "hull"));
+	CHECK_OK(psiv_macro_set_step(s, "hull", 0, "reed_skimmer", PSIV_COMMAND_ABILITY, "hull_vent", PSIV_MACRO_TARGET_ENEMY, NULL, 0));
+	CHECK(psiv_macro_set_step(s, "hull", 1, "reed_skimmer", PSIV_COMMAND_ATTACK, NULL, PSIV_MACRO_TARGET_DEFAULT, NULL, -1) == PSIV_REFUSED &&
+		errorIs(s, "game.refuse.macro_member_twice"));
+	CHECK(psiv_macro_set_step(s, "hull", 0, "reed_skimmer", PSIV_COMMAND_DEFEND, NULL, PSIV_MACRO_TARGET_DEFAULT, NULL, -1) == PSIV_REFUSED &&
+		errorIs(s, "game.refuse.macro_bad_command"));
+	CHECK(psiv_macro_set_step(s, "hull", 0, "reed_skimmer", PSIV_COMMAND_ABILITY, "spark", PSIV_MACRO_TARGET_DEFAULT, NULL, -1) == PSIV_REFUSED &&
+		errorIs(s, "game.refuse.macro_unknown_ability"));
+	CHECK_OK(psiv_macro_list(s, &macros, &count));
+	const psiv_macro* hull = findMacro(macros, count, "hull");
+	CHECK(hull && hull->step_count == 1 && strcmp(hull->steps[0].member_name, "Reed Skimmer") == 0 && hull->steps[0].issue == PSIV_ISSUE_NOT_IN_PARTY);
+	CHECK_OK(psiv_macro_delete(s, "hull"));
+
 	CHECK_OK(psiv_macro_create(s, "spare"));
 	CHECK_OK(psiv_settings_set_auto_macro(s, "spare"));
 	CHECK_OK(psiv_macro_rename(s, "spare", "extra"));
@@ -1141,13 +1524,17 @@ static void testMenus(void) {
 		CHECK(combos[0].ability_count == 2 && strcmp(combos[0].abilities[0], "glint") == 0 && strcmp(combos[0].ability_names[1], "Spark") == 0);
 	}
 
-	/* A macro made from the found combination, after the fight. */
+	/* A macro made from the found combination, after the fight; auto play finishes it with "arc" every round. */
 	settle(s);
+	CHECK(psiv_battle_set_auto_play_macro(s, "whirlwind") == PSIV_REFUSED && errorIs(s, "game.refuse.no_macro"));
 	if (psiv_mode_get(s) == PSIV_MODE_BATTLE) {
 		psiv_auto_battle played;
+		CHECK_OK(psiv_battle_set_auto_play_macro(s, "arc"));
 		CHECK_OK(psiv_battle_play(s, 60, &played));
+		CHECK(played.ended && played.refusal_key[0] == '\0');
 		settle(s);
 	}
+	CHECK_OK(psiv_battle_set_auto_play_macro(s, NULL));
 	CHECK(psiv_macro_from_combo(s, "twin_arc", "Twin") == PSIV_REFUSED && errorIs(s, "game.refuse.macro_menu_only"));
 	if (psiv_mode_get(s) == PSIV_MODE_FIELD) {
 		CHECK_OK(psiv_open_menu(s));
@@ -1960,6 +2347,12 @@ int main(int argc, char** argv) {
 	for (int i = 1; i + 1 < argc; i += 2) {
 		if (strcmp(argv[i], "--data") == 0) {
 			dataDir = argv[i + 1];
+		} else if (strcmp(argv[i], "--actor-data") == 0) {
+			actorDataDir = argv[i + 1];
+		} else if (strcmp(argv[i], "--interact-data") == 0) {
+			interactDataDir = argv[i + 1];
+		} else if (strcmp(argv[i], "--background-data") == 0) {
+			backgroundDataDir = argv[i + 1];
 		} else if (strcmp(argv[i], "--scratch") == 0) {
 			scratch = argv[i + 1];
 		}
@@ -1975,6 +2368,16 @@ int main(int argc, char** argv) {
 	testFieldAndMenus();
 	testAdventurePaths();
 	testActors();
+	if (actorDataDir[0]) {
+		testScriptedActors();
+	}
+	if (interactDataDir[0]) {
+		testInteraction();
+	}
+	if (backgroundDataDir[0]) {
+		testBackground();
+		testDenAndCredits();
+	}
 	testMenus();
 	testEquipPreview();
 	testDescriptions();

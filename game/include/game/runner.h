@@ -13,6 +13,9 @@ struct RunnerOptions {
 	// With autoBattle, only battles the field starts (random and visible encounters, developer battles); a battle an
 	// event starts waits for the script's commands. The `autobattle` command sets both.
 	bool autoBattleEncountersOnly = false;
+	// With autoBattle, the macro those battles play every round (Session::setAutoPlayMacro); empty plays them as
+	// Session::playBattle does by default. `autobattle on|random MACRO` sets it.
+	std::string autoBattleMacro;
 	// Print each command before running it, so a scripted run reads as a transcript.
 	bool echo = true;
 };
@@ -41,7 +44,7 @@ private:
 	void printOutput(const std::vector<Output>& outputs);
 	void flushOutput();
 	void printEvents(const std::vector<rules::Event>& events);
-	void finishBattleAuto();
+	void finishBattleAuto(const std::string& macro = "");
 	void fight(const std::string& macro);
 	void listMacros();
 	void macro(const std::vector<std::string>& w);

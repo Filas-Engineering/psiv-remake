@@ -1,0 +1,57 @@
+# Party snapshots and swaps in Wren Loft, reached by a developer warp, and auto-battle with a named macro. The ledger
+# gathers four members, saves them (`party save` and `party save before_road`) and splits them: a member leaves, a swap
+# by slot hands back the replaced member's pieces (`equipment bag`), and three swaps are refused (a member who has not
+# joined, one already in the lineup, an empty slot). A save and load keep the snapshots; the bell restores the named one
+# after another member joined, who stays in the reserve. The slate restores a snapshot nobody saved, a runtime error.
+# Then `autobattle random pair` plays the loft's random battles with the macro: once the only tonic is used, the
+# scout's tonic step takes the automatic choice while the other steps stand. `party` lists the lineup and the reserve.
+# Last, the roster board orders the lineup and changes it with no notices (`party order`, `silent`), then stops at an
+# order that names a reserve member. At the title, `erase` deletes the save and is refused for the empty slot and a
+# slot that does not exist. Run with --seed 6.
+new
+dev warp wren_loft loft_door
+party
+walk ledger_front
+face north
+talk
+party
+status
+menu
+save manual_1
+close
+title
+load manual_1
+party
+walk bell_front
+face north
+talk
+party
+status
+walk slate_front
+face north
+talk
+menu
+macro create pair
+macro step pair 0 medic ability mend
+macro step pair 1 scout item tonic self
+macro step pair 2 mystic ability spark e0
+macros
+close
+refused autobattle random nosuch
+autobattle random pair
+walk 2 3
+walk 7 3
+walk 2 3
+status
+autobattle off
+walk roster_front
+face north
+talk
+party
+title
+saves
+erase manual_1
+refused erase manual_1
+refused erase manual_9
+saves
+quit

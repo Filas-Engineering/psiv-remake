@@ -1,8 +1,13 @@
 #include "fixtures.h"
 #include "rules/auto_policy.h"
+#include "rules/loader.h"
 #include "test.h"
 
 #include <algorithm>
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
 
 using namespace rules;
 using namespace fixtures;
@@ -391,4 +396,89 @@ TEST(automaticFallbackGivesStuckStepsCoresChoice) {
 	othersDefend(automatic);
 	const std::vector<Event> events = automatic.resolveRound();
 	CHECK(ofType(events, EventType::ActionCancelled).empty());
+}
+
+// R76: with rules.json's macro_ally_pick would_change a default one-ally step passes by members it would not change and,
+// with nobody left, falls back by the mode in effect; by default a heal still goes to a member at full health and a
+// raise to the fallen first member in line.
+TEST(macroAllyPicksCanPassByMembersTheEffectWouldNotChange) {
+	Database db = data();
+	AbilityDef steel;
+	steel.id = "steel_up";
+	steel.name = "Steel Up";
+	steel.kind = AbilityKind::Technique;
+	steel.cost = 1;
+	steel.targeting = Targeting::OneAlly;
+	Effect raise;
+	raise.kind = EffectKind::ModifyStat;
+	raise.stat = Stat::Defense;
+	raise.raises = true;
+	steel.effects = {raise};
+	db.abilities[steel.id] = steel;
+	db.characters["scout"].abilities.push_back(steel.id);
+	Macro heal;
+	heal.name = "heal";
+	heal.steps.push_back(step("medic", CommandKind::Ability, "mend"));
+	Macro steady;
+	steady.name = "steady";
+	steady.steps.push_back(step("scout", CommandKind::Ability, "steel_up"));
+	auto sturdyParty = [](Battle& battle) {
+		for (int i = 0; i < kFirstEnemy; ++i) {
+			battle.combatant(i).stats.maxHp = battle.combatant(i).hp = 5000;
+		}
+	};
+	auto aimed = [](const std::vector<Event>& events, EventType type) {
+		for (const Event& e : events) {
+			if (e.type == type) {
+				return e.target;
+			}
+		}
+		return -1;
+	};
+
+	for (const bool byChange : {false, true}) {
+		db.battleRules.macroAllyWouldChange = byChange;
+		Battle full = makeBattle(db, {"gel_mite", "rust_hound"}, 1);
+		sturdyParty(full);
+		std::vector<MacroStepResult> results = full.applyMacro(heal);
+		CHECK_EQ(results[0].status == MacroStepStatus::FellBack, byChange);
+		CHECK_EQ(results[0].issue == MacroIssue::NoTarget, byChange);
+		CHECK_EQ(full.command(kMedic).kind == CommandKind::Attack, byChange);
+		Battle automatic = makeBattle(db, {"gel_mite", "rust_hound"}, 1);
+		sturdyParty(automatic);
+		results = automatic.applyMacro(heal, MacroFallback::Automatic);
+		CHECK_EQ(results[0].status == MacroStepStatus::Automatic, byChange);
+		if (byChange) {
+			const Command expected = autoCommand(automatic, kMedic);
+			CHECK(automatic.command(kMedic).kind == expected.kind && automatic.command(kMedic).id == expected.id && automatic.command(kMedic).target == expected.target);
+		}
+
+		Battle hurt = makeBattle(db, {"gel_mite", "rust_hound"}, 1);
+		sturdyParty(hurt);
+		hurt.combatant(kMystic).hp -= 10;
+		results = hurt.applyMacro(heal);
+		CHECK(results[0].status == MacroStepStatus::Applied && hurt.command(kMedic).kind == CommandKind::Ability);
+		othersDefend(hurt);
+		CHECK_EQ(aimed(hurt.resolveRound(), EventType::Healed), kMystic);
+
+		Battle fallen = makeBattle(db, {"gel_mite", "rust_hound"}, 1);
+		sturdyParty(fallen);
+		fallen.combatant(kFighter).hp = 0;
+		results = fallen.applyMacro(steady);
+		CHECK(results[0].status == MacroStepStatus::Applied);
+		othersDefend(fallen);
+		const std::vector<Event> events = fallen.resolveRound();
+		const std::optional<Event> started = firstBy(events, EventType::ActionStarted, kScout);
+		CHECK(started && started->ability == "steel_up");
+		CHECK_EQ(aimed(events, EventType::StatModified), byChange ? kMystic : -1);
+	}
+
+	std::map<std::string, std::string> texts = dataTexts();
+	texts["rules.json"].replace(texts["rules.json"].find('{'), 1, "{\"macro_ally_pick\": \"would_change\",");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok() && loaded.value->battleRules.macroAllyWouldChange);
+	texts = dataTexts();
+	texts["rules.json"].replace(texts["rules.json"].find('{'), 1, "{\"macro_ally_pick\": \"nearest\",");
+	const Result<Database> bad = loadDatabaseFromTexts(texts);
+	CHECK(!bad.ok() && bad.error.find("macro_ally_pick is 'nearest'; it takes original, would_change") != std::string::npos);
 }

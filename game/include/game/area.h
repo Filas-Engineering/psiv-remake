@@ -18,7 +18,8 @@ enum class AreaKind { Town, Field, Dungeon, Vessel };
 // What a shop sells, for its label (F7): `shop.kind.<kind>` in the text tables.
 enum class ShopKind { General, Weapon, Armor, Tool, Gift };
 enum class EncounterMode { Visible, Random };
-enum class HookTrigger { Interact, Step, Load, Flag };
+// Touch: the leader walks into an actor (`actor`), the actor wanders into the leader, or the leader interacts with it.
+enum class HookTrigger { Interact, Step, Load, Flag, Touch };
 
 const char* toString(AreaKind kind);
 const char* toString(ShopKind kind);
@@ -41,6 +42,9 @@ struct Exit {
 	// While these flags do not hold the exit is closed and the cell is a wall.
 	std::string requireFlag = {};
 	std::string blockFlag = {};
+	// The map character the cell is drawn as while the exit is closed (a door): '#' by default, 0 for the tile the map
+	// has there. It blocks walking whatever it is.
+	char closedTile = '#';
 };
 
 // A field hook (FLD-023): runs one event script when it fires and its flag conditions hold. A Flag hook fires
@@ -60,6 +64,17 @@ struct Hook {
 	// Interact hooks: the cell is solid only while the hook's flags hold (and, for an actor's talk point, while the actor
 	// is shown), so a hook switched off stops blocking the way.
 	bool solidWhileActive = false;
+	// Interact hooks: the cell the hook's actor stands on, is drawn on and is scripted from, apart from the cell the party
+	// uses it from (a keeper behind a counter). That cell blocks walking while the actor is shown there.
+	std::optional<Cell> actorAt = std::nullopt;
+	// Interact hooks: used from the cell beyond a counter, a cell straight ahead that is not floor and holds nothing.
+	bool across = false;
+	// Interact hooks: further cells the object covers besides `at` (a long table); each is solid and answers as the hook.
+	std::vector<Cell> cells = {};
+	// Touch hooks: the actor of game.json whose touch fires it, wherever it stands.
+	std::string actor = {};
+
+	bool covers(Cell cell) const;
 };
 
 // Cells that carry the party one cell in `direction` every `stepMs` while it stands on them and the flags hold.
@@ -89,6 +104,8 @@ struct Shop {
 	std::string requireFlag = {};
 	std::string blockFlag = {};
 	int line = 0;
+	// The actor of game.json who keeps it, for a host to turn toward or animate; empty for none.
+	std::string keeper = {};
 };
 
 struct RestPoint {
@@ -96,6 +113,7 @@ struct RestPoint {
 	std::optional<Cell> at;
 	int cost = 0;
 	int line = 0;
+	std::string keeper = {};
 };
 
 struct Chest {
@@ -131,6 +149,18 @@ struct Port {
 struct Helm {
 	std::string id;
 	Cell at;
+	int line = 0;
+};
+
+// Where leaving a dungeon at once (FLD-051) takes the party from the dungeon area that names it, in place of the cell
+// the party stood on before going in.
+struct DungeonExitTarget {
+	std::string area;
+	// A marker of `area`; when empty, `at`.
+	std::string marker;
+	Cell at;
+	// Left out, the party keeps the facing it had.
+	std::optional<Facing> facing;
 	int line = 0;
 };
 
@@ -204,6 +234,8 @@ struct Area {
 	std::string region;
 	// A town's marker where a return to it lands (FLD-051); a town without one is no destination.
 	std::string arrival;
+	// A dungeon's way out for the dungeon-exit item and technique; without one, the cell the party entered from.
+	std::optional<DungeonExitTarget> dungeonExit;
 	std::vector<std::string> rows;
 	std::map<std::string, Cell> markers;
 	std::vector<Exit> exits;
@@ -220,6 +252,8 @@ struct Area {
 	std::vector<Conveyor> conveyors;
 	// Cells of interact hooks that are solid only while active and are not now; the session's view of the area sets them.
 	std::set<Cell> passable = {};
+	// Closed exits drawn as something other than a wall; the session's view of the area sets them.
+	std::set<Cell> closed = {};
 	// The file game.json names for the area, and the line of each marker, for problem reports.
 	std::string file;
 	std::map<std::string, int> markerLines;
@@ -232,6 +266,7 @@ struct Area {
 	const Zone* zoneAt(Cell cell) const;
 	const Zone* zone(const std::string& id) const;
 	const Exit* exitAt(Cell cell) const;
+	// An interact hook covers `at` and its `cells`.
 	const Hook* hookAt(Cell cell, HookTrigger trigger) const;
 	// A step hook on the cell, or one on its map character.
 	const Hook* stepHookAt(Cell cell) const;

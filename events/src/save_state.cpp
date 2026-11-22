@@ -8,7 +8,10 @@ namespace events {
 namespace {
 
 const char* const header = "events-save";
-const int version = 3;
+// Version 4 adds each actor's route (`via`, `pathfind`) and `placed`; a state that uses none of them is written as
+// version 3, so older builds still read it.
+const int version = 4;
+const int oldest_version = 3;
 const char* const checksum_mark = " sum ";
 // Stands in for an empty word, which the space-separated form cannot hold.
 const char* const empty_word = "-";
@@ -118,7 +121,16 @@ bool read_bool(std::istringstream& in, bool& out) {
 	return true;
 }
 
-void write_presentation(std::ostringstream& out, const PresentationState& p) {
+bool uses_routes(const PresentationState& p) {
+	for (const ActorState& a : p.actors) {
+		if (!a.via.empty() || a.pathfind || a.placed) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void write_presentation(std::ostringstream& out, const PresentationState& p, int file_version) {
 	out << ' ' << p.music_set << ' ' << word(p.music) << ' ' << p.ambient_set << ' ' << word(p.ambient);
 	out << ' ' << p.fade_set << ' ' << p.faded_out << ' ' << word(p.camera);
 	out << ' ' << p.panels.size();
@@ -129,10 +141,17 @@ void write_presentation(std::ostringstream& out, const PresentationState& p) {
 	for (const ActorState& a : p.actors) {
 		out << ' ' << word(a.actor) << ' ' << a.visible << ' ' << word(a.marker) << ' ' << a.has_position << ' ' << real(a.position.x) << ' '
 			<< real(a.position.y) << ' ' << real(a.position.z) << ' ' << word(a.facing) << ' ' << word(a.pose);
+		if (file_version >= 4) {
+			out << ' ' << a.via.size();
+			for (const std::string& w : a.via) {
+				out << ' ' << word(w);
+			}
+			out << ' ' << a.pathfind << ' ' << a.placed;
+		}
 	}
 }
 
-bool read_presentation(std::istringstream& in, PresentationState& p) {
+bool read_presentation(std::istringstream& in, PresentationState& p, int file_version) {
 	if (!read_bool(in, p.music_set) || !read_word(in, p.music) || !read_bool(in, p.ambient_set) || !read_word(in, p.ambient) ||
 		!read_bool(in, p.fade_set) || !read_bool(in, p.faded_out) || !read_word(in, p.camera)) {
 		return false;
@@ -156,6 +175,21 @@ bool read_presentation(std::istringstream& in, PresentationState& p) {
 			!(in >> a.position.x >> a.position.y >> a.position.z) || !read_word(in, a.facing) || !read_word(in, a.pose)) {
 			return false;
 		}
+		if (file_version >= 4) {
+			std::size_t via = 0;
+			if (!read_count(in, via)) {
+				return false;
+			}
+			a.via.resize(via);
+			for (std::string& w : a.via) {
+				if (!read_word(in, w)) {
+					return false;
+				}
+			}
+			if (!read_bool(in, a.pathfind) || !read_bool(in, a.placed)) {
+				return false;
+			}
+		}
 	}
 	return true;
 }
@@ -164,8 +198,8 @@ bool read_presentation(std::istringstream& in, PresentationState& p) {
 
 bool ActorState::operator==(const ActorState& other) const {
 	return actor == other.actor && visible == other.visible && marker == other.marker && has_position == other.has_position &&
-		position.x == other.position.x && position.y == other.position.y && position.z == other.position.z && facing == other.facing &&
-		pose == other.pose;
+		position.x == other.position.x && position.y == other.position.y && position.z == other.position.z && via == other.via &&
+		pathfind == other.pathfind && placed == other.placed && facing == other.facing && pose == other.pose;
 }
 
 bool PanelState::operator==(const PanelState& other) const {
@@ -179,7 +213,8 @@ bool PresentationState::operator==(const PresentationState& other) const {
 
 std::string save_state_to_text(const SaveState& state) {
 	std::ostringstream out;
-	out << header << ' ' << version << ' ' << state.fingerprint << ' ' << static_cast<int>(state.status) << ' ' << state.skip_depth;
+	const int file_version = uses_routes(state.presentation) ? version : oldest_version;
+	out << header << ' ' << file_version << ' ' << state.fingerprint << ' ' << static_cast<int>(state.status) << ' ' << state.skip_depth;
 	out << ' ' << word(state.event) << ' ' << word(to_hex(state.start_world));
 	out << ' ' << state.frames.size();
 	for (const SavedFrame& f : state.frames) {
@@ -194,7 +229,7 @@ std::string save_state_to_text(const SaveState& state) {
 	for (const SavedBackground& b : state.background) {
 		out << ' ' << b.pc << ' ' << b.depth;
 	}
-	write_presentation(out, state.presentation);
+	write_presentation(out, state.presentation, file_version);
 	out << ' ' << state.locals.size();
 	for (const auto& local : state.locals) {
 		out << ' ' << word(local.first) << ' ' << local.second;
@@ -217,7 +252,7 @@ bool save_state_from_text(const std::string& text, SaveState& state) {
 	int file_version = 0;
 	int status = 0;
 	SaveState s;
-	if (!(in >> w >> file_version) || w != header || file_version != version) {
+	if (!(in >> w >> file_version) || w != header || file_version < oldest_version || file_version > version) {
 		return false;
 	}
 	if (!(in >> s.fingerprint >> status >> s.skip_depth) || status < 0 || status > static_cast<int>(Status::error) || s.skip_depth < -1) {
@@ -256,7 +291,7 @@ bool save_state_from_text(const std::string& text, SaveState& state) {
 			return false;
 		}
 	}
-	if (!read_presentation(in, s.presentation) || !read_count(in, count)) {
+	if (!read_presentation(in, s.presentation, file_version) || !read_count(in, count)) {
 		return false;
 	}
 	for (std::size_t i = 0; i < count; ++i) {

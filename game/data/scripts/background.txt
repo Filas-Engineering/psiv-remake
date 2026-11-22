@@ -1,0 +1,78 @@
+# Background events and wandering actors in Wren Yard, reached by a developer warp, on the data copy
+# `make_actor_data ... background` writes (game.json `background_limit` 2). The area's load hook starts the lamplighter's
+# round in the background: its commands show as `(yard_lamps: ...)` while the leader walks and waits, and `background`
+# lists what runs. The goat wanders about its pen and bleats when the leader walks into it or it into the leader (a touch
+# hook). The bell's scene pauses the background while it plays, spawns the crow's flight, has a third spawn refused by the
+# limit, draws the trader as an enemy figure (`look`) until the lamps' scene puts its own back, and turns, moves and removes the patch's visible enemy by
+# its reserved name `enemy.yard_patch.1`. A save made while both run resumes them after a load. Once the lamplighter has
+# gone round three times its flag's hook announces the lamps and warps the party back to the gate, which stops the crow's
+# flight and starts the load hook again. Run with --seed 6.
+new
+dev warp wren_yard yard_gate
+background
+actors
+look
+wait 1000
+background
+actors
+walk 4 5
+actors
+n
+actors
+w
+face north
+prompt
+talk
+actors
+n
+walk bell_front
+face north
+prompt
+talk
+background
+look
+actors
+menu
+save manual_0
+close
+wait 2500
+actors
+background
+title
+load manual_0
+background
+actors
+wait 2500
+actors
+background
+walk stall_front
+face north
+prompt
+wait 6000
+background
+actors
+# Wren Den, a dungeon whose area names its way out (`dungeon_exit`): the chalk leaves for Tidewater's inn, facing north,
+# not the yard cell the developer warp came from. The den's plaque plays the credits: `credits` lists their entries and
+# how far play time has come, saving and the field menu are refused while they play, `close` says they finished, and the
+# event's `end game` goes back to the title without a clear-data record, since the developer warps marked this game.
+dev warp wren_den den_mouth
+dev give waymark_chalk 1
+menu
+destinations dungeon_exit
+travel dungeon_exit waymark_chalk
+status
+dev warp wren_den den_mouth
+walk plaque_front
+face east
+prompt
+talk
+credits
+wait 3000
+credits
+refused save manual_1
+refused menu
+wait 4000
+credits
+close
+status
+quit

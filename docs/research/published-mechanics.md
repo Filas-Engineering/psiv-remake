@@ -43,6 +43,8 @@ Confidence:
 | [ENC-036](../spec/encounters.md) | Nothing published. | | None | Nothing published; needs measurement. |
 | [ENC-041](../spec/encounters.md) | Nothing published. Fan notes say two vehicles move two tiles per step. | https://pixelguides.org/phantasy-star-iv/vehicles/ | None | Nothing published; needs measurement. |
 
+**Reported by the data-import work, not verified here (ENC-005).** The team importing the original's data reports measured per-step encounter chances of about 1 in 37 on foot, and about 1 in 29 to 1 in 33 aboard each of the three vehicle kinds (about 1 in 32.6 pooled). If that holds, vehicles roll about as often as walking rather than at a separate, lower rate. The same work reports 10 steps of grace after a battle: the first 9 steps never roll. No source or measurement in this repo confirms these numbers, and no default changed because of them: zone `step_chance`, `vehicle_step_chance` and `grace_steps` stay data (`game/README.md`).
+
 ## Save and progression
 
 | Spec ID | What published sources say | Source URL(s) | Confidence | Still unknown |

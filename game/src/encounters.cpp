@@ -273,7 +273,8 @@ void afterRoll(World& world, const Zone& zone, bool aboard) {
 
 }
 
-std::optional<EncounterStart> vehicleStep(World& world, const Area& area, Cell cell, const std::vector<TableEntry>& table, const rules::Database& db, int agility) {
+std::optional<EncounterStart> vehicleStep(World& world, const Area& area, Cell cell, const std::vector<TableEntry>& table, const rules::Database& db, int agility,
+	bool rollOpening) {
 	const Zone* zone = area.zoneAt(cell);
 	if (world.graceMs > 0 || area.kind == AreaKind::Town || !zone || table.empty()) {
 		return std::nullopt;
@@ -285,7 +286,9 @@ std::optional<EncounterStart> vehicleStep(World& world, const Area& area, Cell c
 	vehicleZone.table = table;
 	EncounterStart start;
 	start.encounter = drawEncounter(world.encounterStream, vehicleZone);
-	start.opening = rules::openingFromRoll(world.encounterStream.range(0, rules::formulas::kChanceRollMax), agility, db.encounter(start.encounter)->awareness);
+	if (rollOpening) {
+		start.opening = rules::openingFromRoll(world.encounterStream.range(0, rules::formulas::kChanceRollMax), agility, db.encounter(start.encounter)->awareness);
+	}
 	afterRoll(world, *zone, true);
 	return start;
 }

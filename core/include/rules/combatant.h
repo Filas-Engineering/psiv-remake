@@ -28,6 +28,8 @@ struct Combatant {
 	std::string basicAttack;
 	// Element the basic attack's physical damage takes, from the weapon.
 	Element attackElement = Element::None;
+	// The attack bonuses of the weapons in both hands (equipment `stats.attack`), which strength does not include.
+	int attackBonus = 0;
 	std::vector<std::string> abilities;
 	std::map<std::string, int> skillUses;
 	Affinities affinities;

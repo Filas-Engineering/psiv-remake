@@ -40,6 +40,7 @@ public struct PsivProfile
 	public int TextSpeed, AutoAdvance, ShowShippedNames;
 	public IntPtr TextLanguage;
 	public int TextSizePercent, BattleSpeed, AmbientTalk, ReducedFlash, MusicVolume, AmbientVolume, EffectsVolume;
+	public int AlwaysRun;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -78,28 +79,56 @@ public struct PsivFieldInfo
 	public IntPtr Music, Region, Aboard;
 	public int LeaderStepMs;
 	public IntPtr ShipPort;
+	public int RunStepMs;
+	public int StepProgressMs, ConveyorStepMs, ConveyorProgressMs, StepMask;
 }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivEnemy { public int Id; public IntPtr Encounter, Zone; public int X, Y, Facing, State; }
+public struct PsivEnemy { public int Id; public IntPtr Encounter, Zone; public int X, Y, Facing, State; public IntPtr Actor; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivMarker { public IntPtr Name; public int X, Y; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivExit { public int X, Y; public IntPtr ToArea, ToMarker; }
+public struct PsivExit { public int X, Y; public IntPtr ToArea, ToMarker; public int Open, ClosedTile; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivActor { public IntPtr Id, Name; public int X, Y, Facing, Visible, Scripted; }
+public struct PsivInteractTarget { public int Kind; public IntPtr Id; public int X, Y, Facing, Ready, Across; public IntPtr Keeper; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivPoint { public int Kind; public IntPtr Id; public int X, Y; public IntPtr Event; public int Active, Cost, ShopKind, Direction; }
+public struct PsivFieldInput { public int Direction, Running; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivActor
+{
+	public IntPtr Id, Name;
+	public int X, Y, Facing, Visible, Scripted, Solid, Vanish;
+	public IntPtr Animation;
+	public int AnimationMs, AnimationTotalMs, Removal;
+	public IntPtr SpriteEnemy, Look;
+	public int Wanders;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivRouteCell { public int X, Y; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivAnimation { public IntPtr Id; public double Seconds; public int Standard, End; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivPoint { public int Kind; public IntPtr Id; public int X, Y; public IntPtr Event; public int Active, Cost, ShopKind, Direction; public IntPtr Keeper; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivVehicle { public IntPtr Id, Name; public int X, Y, Facing, Aboard; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivEventPosition { public IntPtr Event, File; public int Line; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivCreditsEntry { public int Kind; public IntPtr Key, Text; public int Gap, PauseMs; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivCreditsInfo { public IntPtr Id, Music; public int EntryCount, Shown; public long ElapsedMs, TotalMs; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivZone
@@ -131,6 +160,12 @@ public struct PsivAction
 	public int Loop, Instant;
 	public IntPtr Description;
 	public double Duration;
+	public int WaypointCount;
+	public IntPtr Waypoints;
+	public int Pathfind;
+	public IntPtr Facing;
+	public int RouteCount;
+	public IntPtr Route;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -367,7 +402,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 13;
+	public const uint AbiVersion = 14;
 	// PSIV_SLOT_COUNT: the places a member wears equipment, which the member structs index by psiv_equip_slot.
 	public const int SlotCount = 7;
 
@@ -407,6 +442,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_new_game")] public static partial int NewGame(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_continue_game")] public static partial int ContinueGame(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_load", StringMarshalling = StringMarshalling.Utf8)] public static partial int Load(SessionHandle s, string slot);
+	[LibraryImport(Library, EntryPoint = "psiv_erase_save", StringMarshalling = StringMarshalling.Utf8)] public static partial int EraseSave(SessionHandle s, string slot);
 	[LibraryImport(Library, EntryPoint = "psiv_retry_battle")] public static partial int RetryBattle(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_quit_to_title")] public static partial int QuitToTitle(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_save_manual", StringMarshalling = StringMarshalling.Utf8)] public static partial int SaveManual(SessionHandle s, string slot);
@@ -417,11 +453,15 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_flag", StringMarshalling = StringMarshalling.Utf8)] public static partial int Flag(SessionHandle s, string name);
 
 	[LibraryImport(Library, EntryPoint = "psiv_update")] public static partial int Update(SessionHandle s, int dtMs, int direction);
+	[LibraryImport(Library, EntryPoint = "psiv_update_input")] public static partial int UpdateInput(SessionHandle s, int dtMs, in PsivFieldInput input);
+	[LibraryImport(Library, EntryPoint = "psiv_can_step")] public static partial int CanStep(SessionHandle s, int direction);
 	[LibraryImport(Library, EntryPoint = "psiv_walk")] public static partial int Walk(SessionHandle s, int direction);
 	[LibraryImport(Library, EntryPoint = "psiv_face")] public static partial int Face(SessionHandle s, int direction);
 	[LibraryImport(Library, EntryPoint = "psiv_walk_to")] public static partial int WalkTo(SessionHandle s, int x, int y);
 	[LibraryImport(Library, EntryPoint = "psiv_walk_step")] public static partial int WalkStep(SessionHandle s, out int status);
 	[LibraryImport(Library, EntryPoint = "psiv_interact")] public static partial int Interact(SessionHandle s);
+	[LibraryImport(Library, EntryPoint = "psiv_interact_target_get")] public static partial int InteractTargetGet(SessionHandle s, out PsivInteractTarget target);
+	[LibraryImport(Library, EntryPoint = "psiv_interact_at")] public static partial int InteractAt(SessionHandle s, int x, int y, out PsivInteractTarget target);
 	[LibraryImport(Library, EntryPoint = "psiv_party_talk")] public static partial int PartyTalk(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_board")] public static partial int Board(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_leave_vehicle")] public static partial int LeaveVehicle(SessionHandle s);
@@ -438,6 +478,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_field_points")] public static partial int FieldPoints(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_field_actors")] public static partial int FieldActors(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_actor_ids")] public static partial int ActorIds(SessionHandle s, out IntPtr ids, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_animations")] public static partial int Animations(SessionHandle s, out IntPtr list, out int count);
 
 	[LibraryImport(Library, EntryPoint = "psiv_line_pending")] public static partial int LinePending(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_line_get")] public static partial int LineGet(SessionHandle s, out PsivLine line);
@@ -465,6 +506,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_battle_fill_from_auto")] public static partial int BattleFillFromAuto(SessionHandle s, out int filled);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_fill_from_policy")] public static partial int BattleFillFromPolicy(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_fill_auto_round")] public static partial int BattleFillAutoRound(SessionHandle s);
+	[LibraryImport(Library, EntryPoint = "psiv_battle_set_auto_play_macro", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleSetAutoPlayMacro(SessionHandle s, string macro);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_play")] public static partial int BattlePlay(SessionHandle s, int maxRounds, out PsivAutoBattle played);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_result_get")] public static partial int BattleResultGet(SessionHandle s, out PsivBattleResult result);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_dismiss")] public static partial int BattleDismiss(SessionHandle s);
@@ -524,6 +566,9 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_dev_run_event", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevRunEvent(SessionHandle s, string ev);
 	[LibraryImport(Library, EntryPoint = "psiv_dev_mark")] public static partial int DevMark(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_event_position_get")] public static partial int EventPositionGet(SessionHandle s, out PsivEventPosition position);
+	[LibraryImport(Library, EntryPoint = "psiv_background_events")] public static partial int BackgroundEvents(SessionHandle s, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_credits_info_get")] public static partial int CreditsInfoGet(SessionHandle s, out PsivCreditsInfo info);
+	[LibraryImport(Library, EntryPoint = "psiv_credits_entries")] public static partial int CreditsEntries(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_field_zones")] public static partial int FieldZones(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_save_text")] public static partial int SaveText(SessionHandle s, out IntPtr text);
 	[LibraryImport(Library, EntryPoint = "psiv_load_text", StringMarshalling = StringMarshalling.Utf8)] public static partial int LoadText(SessionHandle s, string text);

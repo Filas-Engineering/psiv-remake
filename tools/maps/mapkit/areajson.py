@@ -2,14 +2,14 @@
 
 import json
 
-TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "map", "markers", "exits", "hooks", "shops", "rests", "chests", "ports",
-	"zones", "helms", "gangway", "changes", "conveyors"]
+TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "map", "markers", "exits", "hooks", "shops", "rests",
+	"chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"]
 LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"]
 ENTRY_FIELDS = {
-	"exits": ["at", "to", "marker", "fall", "require_flag", "block_flag"],
-	"hooks": ["id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid"],
-	"shops": ["id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag"],
-	"rests": ["id", "at", "cost"],
+	"exits": ["at", "to", "marker", "fall", "require_flag", "block_flag", "closed_tile"],
+	"hooks": ["id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid", "actor_at", "across", "cells", "actor"],
+	"shops": ["id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper"],
+	"rests": ["id", "at", "cost", "keeper"],
 	"chests": ["id", "at", "flag", "items", "equipment", "money"],
 	"ports": ["id", "at", "marker", "flag", "ship", "block_flag"],
 	"zones": ["id", "from", "to", "table", "visible", "random"],
@@ -17,6 +17,7 @@ ENTRY_FIELDS = {
 	"changes": ["flag", "tile", "cells"],
 	"conveyors": ["cells", "direction", "step_ms", "require_flag", "block_flag"],
 }
+DUNGEON_EXIT_FIELDS = ["area", "at", "marker", "facing"]
 STOCK_FIELDS = ["id", "require_flag", "block_flag"]
 TABLE_FIELDS = ["encounter", "weight"]
 VISIBLE_FIELDS = ["spawns", "cap", "detection_radius", "leash_radius", "chase_speed_percent", "chase_ms", "wander_speed_percent", "wander_percent"]
@@ -49,6 +50,8 @@ def normalize(area):
 	out = _ordered(area, TOP_FIELDS, "the area", problems)
 	if isinstance(out.get("markers"), dict):
 		out["markers"] = dict(out["markers"])
+	if "dungeon_exit" in out:
+		out["dungeon_exit"] = _ordered(out["dungeon_exit"], DUNGEON_EXIT_FIELDS, "dungeon_exit", problems)
 	for field in LIST_FIELDS:
 		if field not in out:
 			continue

@@ -1,0 +1,23 @@
+{
+	"id": "wren_den",
+	"kind": "dungeon",
+	"encounter_mode": "visible",
+	"step_ms": 250,
+	"region": "coast",
+	"dungeon_exit": {"area": "tidewater", "marker": "inn_front", "facing": "north"},
+	"map": [
+		"#######",
+		"#.....#",
+		"#.....#",
+		"#######"
+	],
+	"markers": {
+		"den_mouth": [1, 2],
+		"plaque_front": [4, 2],
+		"echo_front": [2, 1]
+	},
+	"hooks": [
+		{"id": "den_plaque", "at": [5, 2], "event": "den_plaque"},
+		{"id": "den_echo", "at": [2, 0], "event": "den_echo"}
+	]
+}

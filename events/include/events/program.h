@@ -71,6 +71,15 @@ enum class Op {
 	equip,
 	unequip,
 	area_music,
+	remove_actor,
+	party_save,
+	party_restore,
+	party_swap,
+	spawn,
+	actor_look,
+	party_order,
+	credits,
+	end_game,
 };
 
 const char* op_name(Op op);
@@ -86,6 +95,10 @@ struct Instruction {
 	// the ability in action.subject. follower: the actor, empty for none.
 	// money: the change in `number`. equip, unequip: the member, with the
 	// piece in action.subject. area_music: the track, empty for the area's own.
+	// remove_actor: the actor, with `number` 1 for `until reload`. party_save, party_restore: the snapshot
+	// (`default` when the script names none). party_swap uses `swap` alone. spawn: the background event. actor_look: the
+	// actor, with action.subject `enemy` and action.target the enemy, action.target alone the look, or both empty for the
+	// game's own figure. party_add, party_remove: the member, with `number` 1 for `silent`. party_order: `names` alone. credits: the credits id.
 	std::string name;
 	// fork: 1 for a `race`, which ends when its first branch does.
 	std::int64_t number = 0;
@@ -95,6 +108,9 @@ struct Instruction {
 	Condition condition;
 	Action action;
 	BattleRequest battle;
+	PartySwap swap;
+	// party_order: the lineup members in their new order.
+	std::vector<std::string> names;
 	bool wait = true;
 	// jump/jump_unless: destination pc. fork: join pc. call: callee event index.
 	int target = -1;
@@ -109,6 +125,9 @@ struct EventInfo {
 	int file = 0;
 	int line = 0;
 	bool skippable = false;
+	// Marked `background`: it runs beside the field without taking control, and only the commands FORMAT.md lists
+	// under "Background events" compile in it.
+	bool background = false;
 	int entry = -1;
 };
 

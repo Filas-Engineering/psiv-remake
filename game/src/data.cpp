@@ -10,6 +10,7 @@
 #include "json_read.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <set>
 
 namespace game {
@@ -140,6 +141,40 @@ bool namesKnownThing(const rules::Database& db, const std::string& key) {
 	return (kind == "ability" && db.ability(id)) || (kind == "character" && db.character(id)) || (kind == "difficulty" && db.difficulty(id)) ||
 		(kind == "enemy" && db.enemy(id)) || (kind == "equipment" && db.equipmentPiece(id)) || (kind == "item" && db.item(id)) ||
 		(kind == "status" && db.status(id)) || (kind == "vehicle" && db.vehicle(id)) || (kind == "element" && db.hasElement(id));
+}
+
+double PresentationNames::animationLength(const std::string& name) const {
+	auto listed = animationSeconds.find(name);
+	if (listed != animationSeconds.end()) {
+		return listed->second;
+	}
+	const events::StandardAnimation* standard = events::standard_animation(name);
+	return standard ? standard->seconds : 0;
+}
+
+bool ActorWander::covers(Cell home, Cell cell) const {
+	if (from && to) {
+		return cell.x >= from->x && cell.x <= to->x && cell.y >= from->y && cell.y <= to->y;
+	}
+	return std::abs(cell.x - home.x) + std::abs(cell.y - home.y) <= radius;
+}
+
+const Credits* GameConfig::creditsById(const std::string& id) const {
+	for (const Credits& c : credits) {
+		if (c.id == id) {
+			return &c;
+		}
+	}
+	return nullptr;
+}
+
+const ActorDef* GameConfig::actorDef(const std::string& id) const {
+	for (const ActorDef& a : actorDefs) {
+		if (a.id == id) {
+			return &a;
+		}
+	}
+	return nullptr;
 }
 
 bool GameConfig::nameless(const std::string& actor) const {
@@ -276,11 +311,119 @@ void readCameras(JsonReader& reader, const JsonValue& presentation, std::vector<
 	}
 }
 
+// An actor is an id, or an object with the id and its figure and home.
+void readActors(JsonReader& reader, const JsonValue& json, GameConfig& c) {
+	const JsonValue* list = reader.field(json, "actors", JsonValue::Type::Array, false);
+	if (!list) {
+		return;
+	}
+	for (const JsonValue& entry : list->items) {
+		ActorDef actor;
+		actor.line = entry.line;
+		if (entry.is(JsonValue::Type::String) && !entry.string.empty()) {
+			actor.id = entry.string;
+		} else if (entry.is(JsonValue::Type::Object)) {
+			reader.only(entry, {"id", "sprite", "area", "at", "facing", "solid", "wander"});
+			reader.text(entry, "id", actor.id, true);
+			if (const JsonValue* sprite = reader.field(entry, "sprite", JsonValue::Type::Object, false)) {
+				reader.only(*sprite, {"enemy", "look"});
+				reader.text(*sprite, "enemy", actor.spriteEnemy, false);
+				reader.text(*sprite, "look", actor.look, false);
+				if (actor.spriteEnemy.empty() == actor.look.empty()) {
+					reader.fail(*sprite, "data.bad_actor_sprite", {actor.id});
+				}
+			}
+			reader.text(entry, "area", actor.area, false);
+			if (const JsonValue* at = entry.find("at")) {
+				Cell cell;
+				if (at->is(JsonValue::Type::String) && !at->string.empty()) {
+					actor.marker = at->string;
+				} else if (reader.cell(*at, cell)) {
+					actor.at = cell;
+				}
+			}
+			if (actor.area.empty() != (actor.marker.empty() && !actor.at)) {
+				reader.fail(entry, "data.actor_home_needs_area", {actor.id});
+			}
+			std::string facing = "south";
+			reader.text(entry, "facing", facing, false);
+			if (!parseFacing(facing, actor.facing)) {
+				reader.fail(entry, "data.bad_facing", {});
+			}
+			reader.boolean(entry, "solid", actor.solid, false);
+			if (const JsonValue* wander = reader.field(entry, "wander", JsonValue::Type::Object, false)) {
+				reader.only(*wander, {"radius", "from", "to", "speed_percent", "pause_ms", "terrain"});
+				ActorWander w;
+				reader.integer(*wander, "radius", w.radius, false, 1, 99);
+				if (wander->find("from") || wander->find("to")) {
+					Cell from;
+					Cell to;
+					reader.cellField(*wander, "from", from, true);
+					reader.cellField(*wander, "to", to, true);
+					w.from = Cell{std::min(from.x, to.x), std::min(from.y, to.y)};
+					w.to = Cell{std::max(from.x, to.x), std::max(from.y, to.y)};
+				}
+				if ((w.radius > 0) == w.from.has_value()) {
+					reader.fail(*wander, "data.wander_radius_or_region", {actor.id});
+				}
+				reader.integer(*wander, "speed_percent", w.speedPercent, false, 1, 1000);
+				if (const JsonValue* pause = reader.field(*wander, "pause_ms", JsonValue::Type::Array, false)) {
+					if (pause->items.size() != 2 || !pause->items[0].is(JsonValue::Type::Number) || !pause->items[1].is(JsonValue::Type::Number) ||
+						pause->items[0].number < 0 || pause->items[1].number < pause->items[0].number || pause->items[1].number > 600000) {
+						reader.fail(*pause, "data.bad_wander_pause", {actor.id});
+					} else {
+						w.pauseMinMs = static_cast<int>(pause->items[0].number);
+						w.pauseMaxMs = static_cast<int>(pause->items[1].number);
+					}
+				}
+				reader.text(*wander, "terrain", w.terrain, false);
+				if (w.terrain.empty() || w.terrain.find_first_not_of(kMapTiles) != std::string::npos || w.terrain.find('#') != std::string::npos) {
+					reader.fail(*wander, "data.bad_wander_terrain", {actor.id, w.terrain});
+				}
+				if (actor.area.empty()) {
+					reader.fail(*wander, "data.wander_needs_home", {actor.id});
+				}
+				actor.wander = w;
+			}
+		} else {
+			reader.fail(entry, "data.actor_shape", {});
+			continue;
+		}
+		c.actors.push_back(actor.id);
+		c.actorDefs.push_back(actor);
+	}
+}
+
+// An animation is a name, or an object with the name and the seconds one play lasts.
+void readAnimations(JsonReader& reader, const JsonValue& presentation, PresentationNames& out) {
+	const JsonValue* list = reader.field(presentation, "animations", JsonValue::Type::Array, false);
+	if (!list) {
+		return;
+	}
+	for (const JsonValue& entry : list->items) {
+		std::string id;
+		if (entry.is(JsonValue::Type::String) && !entry.string.empty()) {
+			id = entry.string;
+		} else if (entry.is(JsonValue::Type::Object)) {
+			reader.only(entry, {"id", "seconds"});
+			reader.text(entry, "id", id, true);
+			double seconds = 0;
+			reader.number(entry, "seconds", seconds, true, 0, 60);
+			out.animationSeconds[id] = seconds;
+		} else {
+			reader.fail(entry, "data.animation_shape", {});
+			continue;
+		}
+		out.animations.push_back(id);
+	}
+}
+
 void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.only(json, {"title", "core_data", "areas", "events", "glossary", "languages", "journal", "actors", "presentation", "flags",
 		"vars", "clear_flag", "start", "join_levels", "prices", "item_cap", "money_cap", "tick_ms", "grace_ms", "round_ms",
 		"autosave_slots", "manual_slots", "bosses", "vehicles", "machine_step_heal", "outside_experience_until", "leave_equipment", "random_encounters_everywhere",
-		"nameless_actors", "grace_after_battle"});
+		"nameless_actors", "grace_after_battle", "interact", "interact_across", "run_speed_percent", "vehicle_opening", "background_limit",
+		"credits"});
 	reader.text(json, "title", c.title, true);
 	reader.text(json, "core_data", c.coreData, true);
 	reader.texts(json, "areas", c.areaFiles, true);
@@ -305,27 +448,57 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 		}
 	}
 	reader.text(json, "journal", c.journalFile, true);
-	reader.texts(json, "actors", c.actors, false);
+	readActors(reader, json, c);
 	reader.texts(json, "nameless_actors", c.namelessActors, false);
 	if (const JsonValue* p = reader.field(json, "presentation", JsonValue::Type::Object, false)) {
 		reader.only(*p, {"audio", "cameras", "layouts", "animations", "portraits", "music", "durations"});
 		reader.texts(*p, "audio", c.presentation.audio, false);
 		readCameras(reader, *p, c.presentation.cameras);
 		reader.texts(*p, "layouts", c.presentation.layouts, false);
-		reader.texts(*p, "animations", c.presentation.animations, false);
+		readAnimations(reader, *p, c.presentation);
 		reader.texts(*p, "portraits", c.presentation.portraits, false);
 		if (const JsonValue* m = reader.field(*p, "music", JsonValue::Type::Object, false)) {
-			reader.only(*m, {"title", "victory", "defeat", "encounters"});
+			reader.only(*m, {"title", "victory", "defeat", "encounters", "vehicles", "areas"});
 			reader.text(*m, "title", c.presentation.music.title, false);
 			reader.text(*m, "victory", c.presentation.music.victory, false);
 			reader.text(*m, "defeat", c.presentation.music.defeat, false);
-			if (const JsonValue* e = reader.field(*m, "encounters", JsonValue::Type::Object, false)) {
-				for (std::size_t i = 0; i < e->keys.size(); ++i) {
+			for (const char* key : {"encounters", "vehicles"}) {
+				const JsonValue* e = reader.field(*m, key, JsonValue::Type::Object, false);
+				for (std::size_t i = 0; e && i < e->keys.size(); ++i) {
 					if (!e->values[i].is(JsonValue::Type::String) || e->values[i].string.empty()) {
 						reader.fail(e->values[i], "data.music_not_text", {e->keys[i]});
 						continue;
 					}
-					c.presentation.music.encounters[e->keys[i]] = e->values[i].string;
+					(std::string(key) == "encounters" ? c.presentation.music.encounters : c.presentation.music.vehicles)[e->keys[i]] = e->values[i].string;
+				}
+			}
+			if (const JsonValue* a = reader.field(*m, "areas", JsonValue::Type::Object, false)) {
+				for (std::size_t i = 0; i < a->keys.size(); ++i) {
+					const JsonValue& value = a->values[i];
+					std::vector<const JsonValue*> entries;
+					if (value.is(JsonValue::Type::Array)) {
+						for (const JsonValue& item : value.items) {
+							entries.push_back(&item);
+						}
+					} else {
+						entries.push_back(&value);
+					}
+					std::vector<AreaTrack>& tracks = c.presentation.music.areas[a->keys[i]];
+					for (const JsonValue* entry : entries) {
+						AreaTrack t;
+						if (entry->is(JsonValue::Type::Object)) {
+							reader.only(*entry, {"flag", "track"});
+							reader.text(*entry, "flag", t.flag, true);
+							reader.text(*entry, "track", t.track, true);
+						} else if (entry->is(JsonValue::Type::String) && !entry->string.empty()) {
+							t.track = entry->string;
+						} else {
+							reader.fail(*entry, "data.music_not_text", {a->keys[i]});
+						}
+						if (!t.track.empty()) {
+							tracks.push_back(t);
+						}
+					}
 				}
 			}
 		}
@@ -389,6 +562,66 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	}
 	reader.boolean(json, "random_encounters_everywhere", c.randomEncountersEverywhere, false);
 	reader.boolean(json, "grace_after_battle", c.graceAfterBattle, false);
+	std::string reach = "faced";
+	reader.text(json, "interact", reach, false);
+	if (reach == "nearby") {
+		c.interactReach = InteractReach::Nearby;
+	} else if (reach != "faced") {
+		reader.fail(json, "data.bad_interact", {reach});
+	}
+	reader.boolean(json, "interact_across", c.interactAcross, false);
+	reader.integer(json, "run_speed_percent", c.runSpeedPercent, false, 101, 1000);
+	reader.integer(json, "background_limit", c.backgroundLimit, false, 1, 32);
+	if (const JsonValue* all = reader.field(json, "credits", JsonValue::Type::Object, false)) {
+		for (std::size_t i = 0; i < all->keys.size(); ++i) {
+			const JsonValue& o = all->values[i];
+			Credits credits;
+			credits.id = all->keys[i];
+			credits.line = o.line;
+			if (!o.is(JsonValue::Type::Object)) {
+				reader.fail(o, "data.field_wrong_type", {credits.id, "object"});
+				continue;
+			}
+			reader.only(o, {"music", "entries"});
+			reader.text(o, "music", credits.music, false);
+			if (const JsonValue* entries = reader.field(o, "entries", JsonValue::Type::Array, true)) {
+				for (const JsonValue& e : entries->items) {
+					CreditsEntry entry;
+					reader.only(e, {"heading", "line", "gap", "pause_ms"});
+					std::string heading;
+					reader.text(e, "heading", heading, false);
+					reader.text(e, "line", entry.key, false);
+					if (heading.empty() == entry.key.empty()) {
+						reader.fail(e, "data.credits_entry_kind", {credits.id});
+					} else if (!heading.empty()) {
+						entry.kind = CreditsEntryKind::Heading;
+						entry.key = heading;
+					}
+					reader.integer(e, "gap", entry.gap, false, 0, 20);
+					reader.integer(e, "pause_ms", entry.pauseMs, false, 0, 60000);
+					credits.entries.push_back(entry);
+				}
+				if (entries->items.empty()) {
+					reader.fail(*entries, "data.credits_empty", {credits.id});
+				}
+			}
+			c.credits.push_back(credits);
+		}
+	}
+	const auto opening = [&](const JsonValue& object, const char* key, VehicleOpening& out) {
+		std::string text;
+		reader.text(object, key, text, false);
+		if (text == "normal") {
+			out = VehicleOpening::Normal;
+		} else if (text == "roll") {
+			out = VehicleOpening::Roll;
+		} else if (!text.empty()) {
+			reader.fail(object, "data.bad_vehicle_opening", {text});
+			return false;
+		}
+		return !text.empty();
+	};
+	opening(json, "vehicle_opening", c.vehicleOpening);
 	if (const JsonValue* bosses = reader.field(json, "bosses", JsonValue::Type::Array, false)) {
 		for (const JsonValue& b : bosses->items) {
 			reader.only(b, {"encounter", "flag"});
@@ -400,7 +633,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	}
 	if (const JsonValue* vehicles = reader.field(json, "vehicles", JsonValue::Type::Array, false)) {
 		for (const JsonValue& v : vehicles->items) {
-			reader.only(v, {"id", "crosses", "breaks", "breaks_for_good", "speed_percent", "encounters", "call_item"});
+			reader.only(v, {"id", "crosses", "breaks", "breaks_for_good", "speed_percent", "encounters", "call_item", "opening"});
 			FieldVehicle vehicle;
 			reader.text(v, "id", vehicle.id, true);
 			const auto terrains = [&](const char* key, std::string& out, bool required) {
@@ -429,6 +662,10 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 				reader.fail(v, "data.vehicle_needs_terrain", {vehicle.id});
 			}
 			reader.integer(v, "speed_percent", vehicle.speedPercent, false, 10, 1000);
+			VehicleOpening own = VehicleOpening::Roll;
+			if (opening(v, "opening", own)) {
+				vehicle.opening = own;
+			}
 			if (const JsonValue* table = reader.field(v, "encounters", JsonValue::Type::Array, true)) {
 				for (const JsonValue& t : table->items) {
 					if (!t.is(JsonValue::Type::Object)) {
@@ -557,6 +794,7 @@ events::Registry buildRegistry(const GameData& data, Problems& problems) {
 	for (const std::string& n : c.presentation.layouts) r.add(events::NameKind::layout, n);
 	for (const std::string& n : c.presentation.animations) r.add(events::NameKind::animation, n);
 	for (const std::string& n : c.presentation.portraits) r.add(events::NameKind::portrait, n);
+	for (const Credits& n : c.credits) r.add(events::NameKind::credits, n.id);
 	std::set<std::string> flags;
 	auto declareFlag = [&](const std::string& name, const std::string& where) {
 		if (!flags.insert(name).second) {
@@ -590,6 +828,11 @@ events::Registry buildRegistry(const GameData& data, Problems& problems) {
 		}
 		for (const Hook& h : a.hooks) {
 			r.add_event_map(areaId, h.event);
+		}
+		for (const Zone& z : a.zones) {
+			for (int n = 1; n <= z.visible.cap; ++n) {
+				r.add(events::NameKind::actor, visibleEnemyActor(z.id, n));
+			}
 		}
 		for (const Shop& s : a.shops) {
 			if (!shops.insert(s.id).second) {
@@ -731,12 +974,61 @@ void checkReferences(const GameData& data, Problems& problems) {
 		}
 		musicListed("game.json music encounter '" + encounter + "'", track);
 	}
+	for (const Credits& credits : c.credits) {
+		musicListed("game.json credits '" + credits.id + "'", credits.music);
+		for (const CreditsEntry& entry : credits.entries) {
+			textExists("game.json credits '" + credits.id + "'", entry.key);
+		}
+	}
+	for (const auto& [vehicle, track] : shown.music.vehicles) {
+		if (!data.vehicle(vehicle)) {
+			problems.add("game.json music", "data.music_unknown_vehicle", {vehicle});
+		}
+		musicListed("game.json music vehicle '" + vehicle + "'", track);
+	}
+	for (const auto& [area, tracks] : shown.music.areas) {
+		const std::string where = "game.json music area '" + area + "'";
+		if (!data.area(area)) {
+			problems.add("game.json music", "data.music_unknown_area", {area});
+		}
+		for (std::size_t i = 0; i < tracks.size(); ++i) {
+			flagDeclared(where, tracks[i].flag);
+			musicListed(where, tracks[i].track);
+			if (i > 0 && tracks[i - 1].flag.empty()) {
+				problems.add(where, "data.music_after_default", {tracks[i].track});
+			}
+		}
+	}
 	for (const std::string& actor : c.actors) {
 		if (db.character(actor)) {
 			problems.add("game.json", "data.actor_is_character", {actor});
 		}
 		if (!c.nameless(actor)) {
 			stringExists("game.json actor", "speaker." + actor);
+		}
+	}
+	for (const ActorDef& actor : c.actorDefs) {
+		const std::string where = "game.json actor '" + actor.id + "'";
+		if (!actor.spriteEnemy.empty() && !db.enemy(actor.spriteEnemy)) {
+			problems.add(where, "data.actor_sprite_unknown_enemy", {actor.id, actor.spriteEnemy});
+		}
+		if (actor.area.empty()) {
+			continue;
+		}
+		const Area* home = data.area(actor.area);
+		if (!home) {
+			problems.add(where, "data.actor_home_unknown_area", {actor.id, actor.area});
+		} else if (!actor.marker.empty() && !home->markers.count(actor.marker)) {
+			problems.add(where, "data.actor_home_marker_missing", {actor.id, actor.area, actor.marker});
+		} else if (actor.at && !home->inside(*actor.at)) {
+			problems.add(where, "data.not_on_map", {"actor '" + actor.id + "'"});
+		} else if (std::any_of(home->hooks.begin(), home->hooks.end(), [&](const Hook& h) { return h.trigger == HookTrigger::Interact && h.id == actor.id; })) {
+			problems.add(where, "data.actor_home_twice", {actor.id, actor.area});
+		} else if (actor.wander) {
+			const Cell cell = actor.at ? *actor.at : home->markers.at(actor.marker);
+			if (!actor.wander->covers(cell, cell)) {
+				problems.add(where, "data.wander_home_outside", {actor.id});
+			}
 		}
 	}
 	for (const std::string& actor : c.namelessActors) {
@@ -771,6 +1063,18 @@ void checkReferences(const GameData& data, Problems& problems) {
 			flagAt(e.line, e.requireFlag);
 			flagAt(e.line, e.blockFlag);
 		}
+		if (const std::optional<DungeonExitTarget>& way = area.dungeonExit) {
+			const Area* to = data.area(way->area);
+			if (!to) {
+				at(way->line, "data.dungeon_exit_unknown_area", {way->area});
+			} else if (to->kind == AreaKind::Dungeon) {
+				at(way->line, "data.dungeon_exit_into_dungeon", {way->area});
+			} else if (!way->marker.empty() && !to->markers.count(way->marker)) {
+				at(way->line, "data.dungeon_exit_missing_marker", {way->area, way->marker});
+			} else if (way->marker.empty() && !to->walkable(way->at)) {
+				at(way->line, "data.dungeon_exit_not_walkable", {way->area, "(" + std::to_string(way->at.x) + "," + std::to_string(way->at.y) + ")"});
+			}
+		}
 		for (const Conveyor& conveyor : area.conveyors) {
 			flagAt(conveyor.line, conveyor.requireFlag);
 			flagAt(conveyor.line, conveyor.blockFlag);
@@ -781,8 +1085,23 @@ void checkReferences(const GameData& data, Problems& problems) {
 			}
 			flagAt(h.line, h.requireFlag);
 			flagAt(h.line, h.blockFlag);
+			if (h.actorAt && std::find(c.actors.begin(), c.actors.end(), h.id) == c.actors.end()) {
+				at(h.line, "data.actor_at_not_actor", {h.id});
+			}
+			if (h.trigger == HookTrigger::Touch && std::find(c.actors.begin(), c.actors.end(), h.actor) == c.actors.end()) {
+				at(h.line, "data.touch_unknown_actor", {h.id, h.actor});
+			}
+		}
+		const auto keeperKnown = [&](int line, const std::string& point, const std::string& keeper) {
+			if (!keeper.empty() && std::find(c.actors.begin(), c.actors.end(), keeper) == c.actors.end()) {
+				at(line, "data.keeper_not_actor", {point, keeper});
+			}
+		};
+		for (const RestPoint& r : area.rests) {
+			keeperKnown(r.line, r.id, r.keeper);
 		}
 		for (const Shop& s : area.shops) {
+			keeperKnown(s.line, s.id, s.keeper);
 			for (const StockEntry& entry : s.stock) {
 				if (!knownThing(db, entry.id) || data.price(entry.id) < 0) {
 					at(s.line, "data.shop_stock_unknown", {s.id, entry.id});
@@ -909,7 +1228,7 @@ void loadInto(const DataDirectories& directories, GameData& data, Problems& prob
 		problems.add(reader.problems());
 		return;
 	}
-	std::uint64_t hash = hashJson(1469598103934665603ULL, *json.value, {"presentation"});
+	std::uint64_t hash = hashJson(1469598103934665603ULL, *json.value, {"credits", "presentation"});
 
 	const std::string coreDirectory = directories.core.empty() ? join(directory, data.config.coreData) : directories.core;
 	rules::Result<rules::Database> db = rules::loadDatabaseFromDirectory(coreDirectory);
@@ -1122,6 +1441,21 @@ std::vector<rules::Problem> loadGameDataPartly(const DataDirectories& directorie
 	return problems.list();
 }
 
+std::string visibleEnemyActor(const std::string& zone, int n) {
+	return "enemy." + zone + "." + std::to_string(n);
+}
+
+bool parseVisibleEnemyActor(const std::string& actor, std::string& zone, int& n) {
+	const std::size_t dot = actor.rfind('.');
+	if (actor.rfind("enemy.", 0) != 0 || dot == std::string::npos || dot <= 6 || dot + 1 >= actor.size() || dot + 4 < actor.size() ||
+		actor.find_first_not_of("0123456789", dot + 1) != std::string::npos) {
+		return false;
+	}
+	zone = actor.substr(6, dot - 6);
+	n = std::stoi(actor.substr(dot + 1));
+	return n >= 1;
+}
+
 std::string registryText(const events::Registry& registry) {
 	std::string out = "# Built from the game data by game_cli --registry.\n";
 	const std::pair<events::NameKind, const char*> kinds[] = {
@@ -1130,6 +1464,7 @@ std::string registryText(const events::Registry& registry) {
 		{events::NameKind::portrait, "portrait"}, {events::NameKind::item, "item"}, {events::NameKind::member, "member"},
 		{events::NameKind::encounter, "encounter"}, {events::NameKind::map, "map"}, {events::NameKind::shop, "shop"},
 		{events::NameKind::rest_point, "rest"}, {events::NameKind::enemy, "enemy"}, {events::NameKind::vehicle, "vehicle"}, {events::NameKind::ability, "ability"},
+		{events::NameKind::credits, "credits"},
 	};
 	for (const auto& [kind, word] : kinds) {
 		auto it = registry.names.find(kind);

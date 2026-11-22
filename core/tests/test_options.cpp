@@ -1,4 +1,5 @@
 #include "fixtures.h"
+#include "rules/difficulty.h"
 #include "rules/field.h"
 #include "rules/formulas.h"
 #include "rules/loader.h"
@@ -8,6 +9,7 @@
 
 #include <algorithm>
 #include <set>
+#include <tuple>
 
 using namespace rules;
 using namespace fixtures;
@@ -368,6 +370,61 @@ TEST(effectivenessComparesWithTheDivisor) {
 		plainHits.push_back(hit ? hit->amount : -1);
 	}
 	CHECK(plainHits.size() == 2 && plainHits[0] == plainHits[1]);
+}
+
+// R106: rules.json effectiveness_baseline, a declared element's normal and element_baselines move only what weak,
+// resisted and immune compare with; damage still divides by the divisor.
+TEST(effectivenessBaselineRelabelsWithoutChangingDamage) {
+	std::map<std::string, std::string> plainTexts = dataTexts();
+	replaceOnce(plainTexts["rules.json"], "\"elements\": [\"tide\"]", "\"affinity_divisor\": 200, \"elements\": [\"tide\"]");
+	std::map<std::string, std::string> baselineTexts = plainTexts;
+	replaceOnce(baselineTexts["rules.json"], "\"affinity_divisor\": 200,", "\"affinity_divisor\": 200, \"effectiveness_baseline\": 100,");
+	std::map<std::string, std::string> overrideTexts = baselineTexts;
+	replaceOnce(overrideTexts["rules.json"], "\"elements\": [\"tide\"]", "\"elements\": [{\"id\": \"tide\", \"normal\": 150}], \"element_baselines\": {\"shock\": 300}");
+	const Result<Database> plain = loadDatabaseFromTexts(plainTexts);
+	const Result<Database> baseline = loadDatabaseFromTexts(baselineTexts);
+	const Result<Database> overrides = loadDatabaseFromTexts(overrideTexts);
+	CHECK(plain.ok() && baseline.ok() && overrides.ok());
+	if (!plain.ok() || !baseline.ok() || !overrides.ok()) {
+		return;
+	}
+	CHECK((overrides.value->battleRules.elements == std::vector<std::string>{"tide"}));
+	auto spark = [](Database db, const Element& element, int affinity) {
+		db.abilities["spark"].effects.front().element = element;
+		db.enemies["gel_mite"].affinities[element] = affinity;
+		Battle battle = makeBattle(db, {"gel_mite"}, 4);
+		sturdyParty(battle);
+		sturdy(battle, kFirstEnemy);
+		battle.setCommand(kMystic, Command::ability("spark", kFirstEnemy));
+		othersDefend(battle);
+		const std::optional<Event> hit = firstBy(battle.resolveRound(), EventType::DamageDealt, kMystic);
+		return hit ? std::make_pair(hit->effectiveness, hit->amount) : std::make_pair(Effectiveness::Normal, -1);
+	};
+	for (const auto& [affinity, label, plainLabel] : std::vector<std::tuple<int, Effectiveness, Effectiveness>>{{100, Effectiveness::Normal, Effectiveness::Resisted},
+			{200, Effectiveness::Weak, Effectiveness::Normal}, {50, Effectiveness::Resisted, Effectiveness::Resisted}, {0, Effectiveness::Immune, Effectiveness::Immune}}) {
+		const auto before = spark(*plain.value, Element::Shock, affinity);
+		const auto after = spark(*baseline.value, Element::Shock, affinity);
+		CHECK(before.first == plainLabel && after.first == label);
+		CHECK(after.second >= 0 && after.second == before.second);
+	}
+	CHECK(spark(*overrides.value, Element::Shock, 200).first == Effectiveness::Resisted);
+	CHECK(spark(*overrides.value, Element::Shock, 300).first == Effectiveness::Normal);
+	CHECK(spark(*overrides.value, Element("tide"), 100).first == Effectiveness::Resisted);
+	CHECK(spark(*overrides.value, Element("tide"), 150).first == Effectiveness::Normal);
+	CHECK(spark(*overrides.value, Element("tide"), 200).first == Effectiveness::Weak);
+	CHECK(spark(*overrides.value, Element::Heat, 100).first == Effectiveness::Normal);
+	CHECK_EQ(spark(*overrides.value, Element::Shock, 200).second, spark(*plain.value, Element::Shock, 200).second);
+
+	for (const auto& [from, to] : std::vector<std::pair<std::string, std::string>>{{"\"effectiveness_baseline\": 100", "\"effectiveness_baseline\": 0"},
+			{"\"effectiveness_baseline\": 100", "\"effectiveness_baseline\": 801"}, {"\"normal\": 150", "\"normal\": 0"}, {"\"normal\": 150", "\"normal\": \"high\""},
+			{"\"normal\": 150", "\"normal\": 150, \"weak\": 300"}, {"{\"id\": \"tide\", \"normal\": 150}", "\"tide\", {\"normal\": 150}"},
+			{"{\"id\": \"tide\", \"normal\": 150}", "\"tide\", {\"id\": \"heat\", \"normal\": 150}"}, {"{\"id\": \"tide\", \"normal\": 150}", "\"tide\", 7"},
+			{"{\"shock\": 300}", "{\"tide\": 300}"}, {"{\"shock\": 300}", "{\"none\": 300}"}, {"{\"shock\": 300}", "{\"lava\": 300}"},
+			{"{\"shock\": 300}", "{\"shock\": 801}"}, {"{\"shock\": 300}", "[\"shock\"]"}}) {
+		std::map<std::string, std::string> bad = overrideTexts;
+		replaceOnce(bad["rules.json"], from, to);
+		CHECK(!loadDatabaseFromTexts(bad).ok());
+	}
 }
 
 // R14: attack_stat names the user's stat an ability attacks with.
@@ -942,7 +999,7 @@ TEST(aPieceCanCastItsUseWithItsOwnPower) {
 	replaceOnce(texts["equipment.json"], "\"use\": \"gust\", \"use_from_bag\": true", "\"use\": \"gust\", \"use_from_bag\": true, \"use_power\": 60");
 	const Result<Database> loaded = loadDatabaseFromTexts(texts);
 	CHECK(loaded.ok() && loaded.value->equipment.at("squall_fan").usePower == 60);
-	CHECK_EQ(data().equipment.at("squall_fan").usePower, 0);
+	CHECK(!data().equipment.at("squall_fan").usePower);
 	replaceOnce(texts["equipment.json"], "\"use\": \"gust\", \"use_from_bag\": true, \"use_power\": 60", "\"use_power\": 60");
 	const Result<Database> refused = loadDatabaseFromTexts(texts);
 	CHECK(!refused.ok() && refused.error.find("use_power needs a use") != std::string::npos);
@@ -1346,4 +1403,745 @@ TEST(statRaisesCanWrapPast255) {
 	CHECK(capless > 255);
 	db.battleRules.statWraparound = {Stat::Strength};
 	CHECK_EQ(raised(), capless % 256);
+}
+
+namespace {
+
+int silencedOf(const Database& db, int mysticMental, int miteMental, std::uint64_t seeds) {
+	int count = 0;
+	for (std::uint64_t seed = 1; seed <= seeds; ++seed) {
+		Battle battle = makeBattle(db, {"gel_mite"}, seed);
+		sturdyParty(battle);
+		sturdy(battle, kFirstEnemy);
+		battle.combatant(kMystic).stats.mental = mysticMental;
+		battle.combatant(kMystic).stats.defense = 300;
+		battle.combatant(kFirstEnemy).stats.mental = miteMental;
+		battle.combatant(kFirstEnemy).stats.agility = 1;
+		battle.setCommand(kMystic, Command::ability("hush", kFirstEnemy));
+		othersDefend(battle);
+		count += ofType(battle.resolveRound(), EventType::StatusApplied).size() == 1 ? 1 : 0;
+	}
+	return count;
+}
+
+}
+
+// R62: user_stat, target_stat and user_power choose the two sides of an effect roll; user_stat wins over attack_stat and
+// an item rolls with user_power in place of 0. Keys that repeat the defaults play and draw exactly as before.
+TEST(effectRollsCanNameTheirStatsOrAFlatUserPower) {
+	Database db = data();
+	Effect& hush = db.abilities["hush"].effects.front();
+	// (roll + 50 - 200) * 4 is never above 73.
+	CHECK_EQ(silencedOf(db, 50, 200, 8), 0);
+	// (roll + 300 - 200) * 4, from the Mystic's defense, always is.
+	hush.userStat = Stat::Defense;
+	CHECK_EQ(silencedOf(db, 50, 200, 8), 8);
+	hush.userStat.reset();
+	// (roll + 50 - 1) * 4, against the mite's agility.
+	hush.targetStat = Stat::Agility;
+	CHECK_EQ(silencedOf(db, 50, 200, 8), 8);
+	hush.targetStat.reset();
+	hush.userPower = 250;
+	CHECK_EQ(silencedOf(db, 50, 200, 8), 8);
+	hush.userPower.reset();
+	db.abilities["hush"].attackStat = Stat::Defense;
+	CHECK_EQ(silencedOf(db, 50, 200, 8), 8);
+	hush.userStat = Stat::Mental;
+	CHECK_EQ(silencedOf(db, 50, 200, 8), 0);
+
+	Database itemDb = data();
+	itemDb.items["spark_flask"].effects = {Effect()};
+	Effect& potion = itemDb.items["spark_flask"].effects.front();
+	potion.kind = EffectKind::ApplyStatus;
+	potion.status = "silence";
+	auto itemSilences = [&itemDb](std::uint64_t seed) {
+		Battle battle = makeBattle(itemDb, {"gel_mite"}, seed, Inventory{{"spark_flask", 1}});
+		sturdyParty(battle);
+		battle.combatant(kFirstEnemy).stats.mental = 70;
+		battle.setCommand(kFighter, Command::item("spark_flask", kFirstEnemy));
+		othersDefend(battle);
+		return ofType(battle.resolveRound(), EventType::StatusApplied).size() == 1;
+	};
+	CHECK(!itemSilences(1) && !itemSilences(2));
+	potion.userPower = 100;
+	CHECK(itemSilences(1) && itemSilences(2));
+
+	Database same = data();
+	for (const char* id : {"hush", "weaken"}) {
+		Effect& effect = same.abilities[id].effects.front();
+		effect.userStat = Stat::Mental;
+		effect.targetStat = Stat::Mental;
+		effect.element = Element("tide");
+	}
+	int landed = 0;
+	int resisted = 0;
+	for (std::uint64_t seed = 1; seed <= 30; ++seed) {
+		auto play = [seed](const Database& rules) {
+			Battle battle = makeBattle(rules, {"brass_warden"}, seed);
+			sturdyParty(battle);
+			sturdy(battle, kFirstEnemy);
+			std::vector<Event> events;
+			for (int round = 0; round < 3; ++round) {
+				battle.combatant(kMystic).tp = 99;
+				battle.combatant(kScout).tp = 99;
+				battle.setCommand(kMystic, Command::ability("hush", kFirstEnemy));
+				battle.setCommand(kScout, Command::ability("weaken", kFirstEnemy));
+				battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+				othersDefend(battle);
+				const std::vector<Event> round_events = battle.resolveRound();
+				events.insert(events.end(), round_events.begin(), round_events.end());
+			}
+			return events;
+		};
+		const std::vector<Event> before = play(data());
+		CHECK_EQ(serializeEvents(play(same)), serializeEvents(before));
+		landed += static_cast<int>(ofType(before, EventType::StatusApplied).size() + ofType(before, EventType::StatModified).size());
+		resisted += static_cast<int>(ofType(before, EventType::StatusResisted).size());
+	}
+	CHECK(landed > 0 && resisted > 0);
+}
+
+// R63: an element on apply_status, a lowering modify_stat or instant_defeat scales the roll's factor by the target's
+// affinity, together with the status resistance in one rounding: affinity * (100 - resistance) * 4 / (divisor * 100).
+// An affinity of 0 is immunity, with no roll.
+TEST(anEffectsElementScalesItsRollAndAffinityZeroIsImmunity) {
+	for (int roll : {0, 17, 63}) {
+		for (int resistance : {0, 25, 50, 76, 99}) {
+			CHECK_EQ(formulas::effectScore(roll, 20, 9, 100, 100, resistance), formulas::statusScore(roll, 20, 9, resistance));
+			CHECK_EQ(formulas::effectScore(roll, 20, 9, 400, 400, resistance), formulas::statusScore(roll, 20, 9, resistance));
+		}
+		for (int affinity : {0, 1, 50, 150, 300}) {
+			CHECK_EQ(formulas::effectScore(roll, 20, 9, affinity, 100, 0), formulas::elementScore(roll, 20, 9, affinity, 100));
+		}
+	}
+	CHECK_EQ(formulas::effectScore(10, 20, 10, 150, 100, 50), 60);
+
+	// The warden resists silence by 50: factor 2 without an element, 4 for an element it takes at 200.
+	Database db = data();
+	db.abilities["hush"].effects.front().threshold = 254;
+	db.enemies["brass_warden"].affinities[Element::Chill] = 200;
+	db.enemies["brass_warden"].affinities[Element::Holy] = 0;
+	auto hushes = [&db](std::uint64_t seed) {
+		Battle battle = makeBattle(db, {"brass_warden"}, seed);
+		sturdyParty(battle);
+		battle.combatant(kMystic).stats.mental = battle.combatant(kFirstEnemy).effective(Stat::Mental) + 64;
+		battle.setCommand(kMystic, Command::ability("hush", kFirstEnemy));
+		othersDefend(battle);
+		return battle.resolveRound();
+	};
+	Effect& hush = db.abilities["hush"].effects.front();
+	for (std::uint64_t seed = 1; seed <= 6; ++seed) {
+		hush.element = Element::None;
+		CHECK(ofType(hushes(seed), EventType::StatusApplied).empty());
+		hush.element = Element::Chill;
+		CHECK_EQ(ofType(hushes(seed), EventType::StatusApplied).size(), 1u);
+		hush.element = Element::Holy;
+		const std::vector<Event> resisted = ofType(hushes(seed), EventType::StatusResisted);
+		CHECK(resisted.size() == 1 && resisted[0].effectiveness == Effectiveness::Immune && resisted[0].message == "status.silence.immune");
+	}
+
+	Database lower = data();
+	lower.enemies["brass_warden"].affinities[Element::Holy] = 0;
+	lower.abilities["weaken"].effects.front().element = Element::Holy;
+	Battle battle = makeBattle(lower, {"brass_warden"}, 3);
+	sturdyParty(battle);
+	battle.combatant(kScout).stats.mental = 400;
+	battle.setCommand(kScout, Command::ability("weaken", kFirstEnemy));
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	const std::vector<Event> resisted = ofType(events, EventType::StatusResisted);
+	CHECK(ofType(events, EventType::StatModified).empty());
+	CHECK(resisted.size() == 1 && resisted[0].effectiveness == Effectiveness::Immune && resisted[0].message == "battle.stat_resisted");
+}
+
+// R64: always_lands takes no roll and draws no random number; immunity that needs no roll still holds.
+TEST(alwaysLandsSkipsTheRollAndItsDraw) {
+	Database db = data();
+	db.characters["mystic"].abilities.push_back("unmake");
+	db.enemies["brass_warden"].affinities[Element::Holy] = 0;
+	Effect& hush = db.abilities["hush"].effects.front();
+	auto roundTwo = [&db](std::uint64_t seed, int mysticMental, bool* silenced) {
+		Battle battle = makeBattle(db, {"brass_warden"}, seed);
+		sturdyParty(battle);
+		sturdy(battle, kFirstEnemy);
+		battle.combatant(kMystic).stats.mental = mysticMental;
+		battle.combatant(kFirstEnemy).stats.mental = 200;
+		battle.setCommand(kMystic, Command::ability("hush", kFirstEnemy));
+		othersDefend(battle);
+		*silenced = !ofType(battle.resolveRound(), EventType::StatusApplied).empty();
+		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+		othersDefend(battle);
+		std::string kept;
+		for (const Event& e : battle.resolveRound()) {
+			if (e.type == EventType::OrderResolved || e.type == EventType::Missed || e.type == EventType::DamageDealt) {
+				kept += serializeEvent(e) + "\n";
+			}
+		}
+		return kept;
+	};
+	int differed = 0;
+	for (std::uint64_t seed = 1; seed <= 10; ++seed) {
+		bool silenced = false;
+		const std::string rolled = roundTwo(seed, 1, &silenced);
+		CHECK(!silenced);
+		hush.alwaysLands = true;
+		const std::string landed = roundTwo(seed, 1, &silenced);
+		CHECK(silenced);
+		// An element the warden is immune to stops it with no roll either, so the stream after it is the same.
+		hush.element = Element::Holy;
+		CHECK_EQ(roundTwo(seed, 1, &silenced), landed);
+		CHECK(!silenced);
+		hush.element = Element::None;
+		hush.alwaysLands = false;
+		differed += rolled != landed ? 1 : 0;
+	}
+	CHECK(differed > 0);
+
+	db.abilities["unmake"].effects.front().alwaysLands = true;
+	for (std::uint64_t seed = 1; seed <= 6; ++seed) {
+		Battle battle = makeBattle(db, {"twin_ooze", "brass_warden"}, seed);
+		sturdyParty(battle);
+		battle.combatant(kMystic).stats.mental = 1;
+		battle.combatant(kMystic).tp = 99;
+		battle.setCommand(kMystic, Command::ability("unmake", kFirstEnemy));
+		othersDefend(battle);
+		battle.resolveRound();
+		CHECK(!battle.combatant(kFirstEnemy).alive());
+		battle.combatant(kMystic).tp = 99;
+		battle.setCommand(kMystic, Command::ability("unmake", kFirstEnemy + 1));
+		othersDefend(battle);
+		const std::vector<Event> events = battle.resolveRound();
+		CHECK(battle.combatant(kFirstEnemy + 1).alive());
+		CHECK(std::any_of(events.begin(), events.end(), [](const Event& e) { return e.message == "battle.instant_defeat_immune"; }));
+	}
+}
+
+// R62 to R64: the roll keys load only where a roll can use them.
+TEST(rollKeysLoadOnlyWhereARollUsesThem) {
+	const std::map<std::string, std::string> texts = dataTexts();
+	const std::string hush = "{\"type\": \"apply_status\", \"status\": \"silence\", \"threshold\": 73}";
+	auto loads = [&texts](const char* file, const std::string& from, const std::string& to) {
+		std::map<std::string, std::string> changed = texts;
+		replaceOnce(changed[file], from, to);
+		return loadDatabaseFromTexts(changed);
+	};
+	const Result<Database> fine = loads("abilities.json", hush,
+		"{\"type\": \"apply_status\", \"status\": \"silence\", \"threshold\": 73, \"user_stat\": \"attack\", \"target_stat\": \"agility\", \"element\": \"tide\"}");
+	CHECK(fine.ok());
+	if (fine.ok()) {
+		const Effect& effect = fine.value->ability("hush")->effects.front();
+		CHECK(effect.userStat == Stat::Attack && effect.targetStat == Stat::Agility && effect.element == Element("tide") && !effect.alwaysLands);
+	}
+	const std::vector<std::pair<std::string, std::string>> refused = {
+		{"\"threshold\": 73, \"always_lands\": true", "always_lands has no roll, so it has no threshold"},
+		{"\"threshold\": 73, \"user_stat\": \"mental\", \"user_power\": 9", "give user_power or user_stat, not both"},
+		{"\"threshold\": 73, \"target_stat\": \"luck\"", "unknown stat 'luck'"},
+		{"\"threshold\": 73, \"element\": \"magma\"", "unknown element 'magma'"},
+	};
+	for (const auto& [keys, message] : refused) {
+		const Result<Database> bad = loads("abilities.json", "\"silence\", \"threshold\": 73", "\"silence\", " + keys);
+		CHECK(!bad.ok() && bad.error.find(message) != std::string::npos);
+	}
+	const Result<Database> raise = loads("abilities.json", "{\"type\": \"modify_stat\", \"stat\": \"strength\", \"direction\": \"up\"}",
+		"{\"type\": \"modify_stat\", \"stat\": \"strength\", \"direction\": \"up\", \"element\": \"holy\"}");
+	CHECK(!raise.ok() && raise.error.find("only a stat change with direction down rolls, so this one has no element") != std::string::npos);
+	const Result<Database> combo = loads("abilities.json", "{\"type\": \"apply_status\", \"status\": \"sleep\", \"threshold\": 47},",
+		"{\"type\": \"apply_status\", \"status\": \"sleep\", \"threshold\": 47, \"user_stat\": \"mental\"},");
+	CHECK(!combo.ok() && combo.error.find("user_stat names the user's stat") != std::string::npos);
+	const Result<Database> item = loads("items.json", "{\"type\": \"elemental_damage\", \"power\": 25, \"element\": \"shock\"}",
+		"{\"type\": \"apply_status\", \"status\": \"silence\", \"user_stat\": \"mental\"}");
+	CHECK(!item.ok() && item.error.find("user_stat names the user's stat") != std::string::npos);
+	const Result<Database> itemPower = loads("items.json", "{\"type\": \"elemental_damage\", \"power\": 25, \"element\": \"shock\"}",
+		"{\"type\": \"apply_status\", \"status\": \"silence\", \"user_power\": 40, \"always_lands\": false}");
+	CHECK(itemPower.ok());
+}
+
+namespace {
+
+// The Fighter's damage with a blade in each hand whose attack bonuses are given, at extra base strength.
+int bladeDamage(Database db, int rightBonus, int leftBonus, int extraStrength, const Command& command, std::uint64_t seed) {
+	db.equipment["copper_blade"].attackBonus = rightBonus;
+	db.equipment["gill_knife"].attackBonus = leftBonus;
+	db.characters["fighter"].base.strength += extraStrength;
+	BattleSetup setup = makeSetup(db, {"gel_mite"}, seed);
+	setup.party[kFighter].equipment[EquipSlot::LeftHand] = "gill_knife";
+	Battle battle = makeBattle(db, setup);
+	sturdy(battle, kFirstEnemy);
+	battle.setCommand(kFighter, command);
+	othersDefend(battle);
+	const std::optional<Event> hit = firstBy(battle.resolveRound(), EventType::DamageDealt, kFighter);
+	return hit ? hit->amount : -1;
+}
+
+}
+
+// R65: the attack stat is strength plus the attack bonuses of the weapons in both hands. Basic attacks hit with it;
+// `attack_stat: "attack"` names it and `"strength"` the plain stat. Enemies and vehicles have no bonus.
+TEST(theAttackStatAddsBothHandsWeaponAttackBonuses) {
+	Database db = data();
+	const Command attack = Command::attack(kFirstEnemy);
+	const Command focus = Command::ability("focus_shot", kFirstEnemy);
+	int bonused = 0;
+	int plain = 0;
+	for (std::uint64_t seed = 1; seed <= 8; ++seed) {
+		const int withBonuses = bladeDamage(db, 20, 7, 0, attack, seed);
+		CHECK_EQ(withBonuses, bladeDamage(db, 0, 0, 27, attack, seed));
+		bonused += withBonuses;
+		plain += bladeDamage(db, 0, 0, 0, attack, seed);
+		CHECK_EQ(bladeDamage(db, 20, 7, 0, focus, seed), bladeDamage(db, 0, 0, 0, focus, seed));
+	}
+	CHECK(bonused > plain);
+	Database named = data();
+	named.abilities["strike"].attackStat = Stat::Strength;
+	named.abilities["focus_shot"].attackStat = Stat::Attack;
+	for (std::uint64_t seed = 1; seed <= 8; ++seed) {
+		CHECK_EQ(bladeDamage(named, 20, 7, 0, attack, seed), bladeDamage(named, 0, 0, 0, attack, seed));
+		CHECK_EQ(bladeDamage(named, 20, 7, 0, focus, seed), bladeDamage(named, 0, 0, 27, focus, seed));
+	}
+
+	named.equipment["copper_blade"].attackBonus = 20;
+	named.equipment["gill_knife"].attackBonus = 7;
+	named.abilities["rally"].attackStat = Stat::Attack;
+	BattleSetup setup = makeSetup(named, {"gel_mite"}, 2);
+	setup.party[kFighter].equipment[EquipSlot::LeftHand] = "gill_knife";
+	Battle battle = makeBattle(named, setup);
+	const Combatant& fighter = battle.combatant(kFighter);
+	const int strength = fighter.effective(Stat::Strength);
+	CHECK_EQ(strength, makeBattle(data(), setup).combatant(kFighter).effective(Stat::Strength));
+	CHECK_EQ(fighter.effective(Stat::Attack), strength + 27);
+	CHECK_EQ(battle.combatant(kFirstEnemy).effective(Stat::Attack), battle.combatant(kFirstEnemy).effective(Stat::Strength));
+	sturdyParty(battle);
+	battle.setCommand(kFighter, Command::ability("rally", -1));
+	othersDefend(battle);
+	const std::optional<Event> raised = firstBy(battle.resolveRound(), EventType::StatModified, kFighter);
+	CHECK(raised && raised->target == kFighter && raised->amount == strength + 27);
+	CHECK_EQ(battle.combatant(kFighter).effective(Stat::Attack), 2 * strength + 27 + 27);
+
+	const std::map<std::string, std::string> texts = dataTexts();
+	auto loads = [&texts](const std::string& from, const std::string& to) {
+		std::map<std::string, std::string> changed = texts;
+		replaceOnce(changed["equipment.json"], from, to);
+		return loadDatabaseFromTexts(changed);
+	};
+	const Result<Database> weapon = loads("\"stats\": {\"strength\": 4, \"critical\": 4}", "\"stats\": {\"strength\": 4, \"critical\": 4, \"attack\": 9}");
+	CHECK(weapon.ok() && weapon.value->equipmentPiece("copper_blade")->attackBonus == 9 && weapon.value->equipmentPiece("copper_blade")->bonus.strength == 4);
+	const Result<Database> shield = loads("\"stats\": {\"defense\": 4}", "\"stats\": {\"defense\": 4, \"attack\": 2}");
+	CHECK(!shield.ok() && shield.error.find("only weapons have an attack bonus") != std::string::npos);
+	std::map<std::string, std::string> lowered = texts;
+	replaceOnce(lowered["abilities.json"], "\"stat\": \"strength\", \"direction\": \"up\"", "\"stat\": \"attack\", \"direction\": \"up\"");
+	const Result<Database> changed = loadDatabaseFromTexts(lowered);
+	CHECK(!changed.ok() && changed.error.find("attack is strength plus the weapons' attack bonuses, which stat cannot change") != std::string::npos);
+	std::map<std::string, std::string> wrapped = texts;
+	replaceOnce(wrapped["rules.json"], "{", "{\"stat_wraparound\": [\"attack\"],");
+	CHECK(!loadDatabaseFromTexts(wrapped).ok());
+	std::map<std::string, std::string> enemy = texts;
+	replaceOnce(enemy["enemies.json"], "\"strength\": 11,", "\"strength\": 11, \"attack\": 4,");
+	CHECK(!loadDatabaseFromTexts(enemy).ok());
+}
+
+namespace {
+
+// How often the Fighter's basic attack, with a silence that rolls (roll + U - T) * 4 > 254, lands it over eight seeds:
+// strength and mental 50 on both sides, so it never lands at U 50 and always at U 350, the Fighter's attack with a
+// blade bonus of 300.
+int strikeSilences(const Database& db) {
+	int count = 0;
+	for (std::uint64_t seed = 1; seed <= 8; ++seed) {
+		Battle battle = makeBattle(db, {"gel_mite"}, seed);
+		sturdyParty(battle);
+		sturdy(battle, kFirstEnemy);
+		for (int index : {kFighter, kFirstEnemy}) {
+			battle.combatant(index).stats.strength = 50;
+			battle.combatant(index).stats.mental = 50;
+		}
+		battle.combatant(kFighter).stats.dexterity = 400;
+		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+		othersDefend(battle);
+		count += ofType(battle.resolveRound(), EventType::StatusApplied).size() == 1 ? 1 : 0;
+	}
+	return count;
+}
+
+}
+
+// An effect roll reads the plain stat it names: `user_stat: "strength"` leaves out the weapons' attack bonus, which only
+// `user_stat: "attack"` adds, and an ability whose attack_stat is `attack` rolls with plain strength, so a basic attack's
+// secondary roll never takes the bonus unless the data says `user_stat: "attack"`.
+TEST(anEffectRollReadsThePlainStatAndTheAttackStatOnlyWhenNamed) {
+	Database db = data();
+	db.equipment["copper_blade"].attackBonus = 300;
+	Effect silence;
+	silence.kind = EffectKind::ApplyStatus;
+	silence.status = "silence";
+	silence.threshold = 254;
+	silence.targetStat = Stat::Strength;
+	db.abilities["strike"].effects.push_back(silence);
+	Effect& roll = db.abilities["strike"].effects.back();
+	CHECK_EQ(strikeSilences(db), 0);
+	roll.userStat = Stat::Strength;
+	CHECK_EQ(strikeSilences(db), 0);
+	roll.userStat = Stat::Attack;
+	CHECK_EQ(strikeSilences(db), 8);
+	roll.userStat.reset();
+	db.abilities["strike"].attackStat = Stat::Attack;
+	CHECK_EQ(strikeSilences(db), 0);
+	roll.userStat = Stat::Attack;
+	CHECK_EQ(strikeSilences(db), 8);
+	db.abilities["strike"].attackStat = Stat::Strength;
+	roll.userStat.reset();
+	CHECK_EQ(strikeSilences(db), 0);
+}
+
+namespace {
+
+// The Fighter's first event of the type in one round with the command: blades with attack bonuses of 20 in the right
+// hand and 7 in the left, no damage variance, an enemy without defense, and dexterity 5 over its dodge with a critical
+// of -6, so every roll hits and none is critical.
+int bonusedBladeAmount(Database db, const Command& command, EventType type) {
+	db.equipment["copper_blade"].attackBonus = 20;
+	db.equipment["gill_knife"].attackBonus = 7;
+	db.characters["fighter"].abilities.push_back("overclock");
+	db.battleRules.damageVariance = DamageVariance{};
+	BattleSetup setup = makeSetup(db, {"gel_mite"}, 3);
+	setup.party[kFighter].equipment[EquipSlot::LeftHand] = "gill_knife";
+	Battle battle = makeBattle(db, setup);
+	sturdyParty(battle);
+	sturdy(battle, kFirstEnemy);
+	Combatant& enemy = battle.combatant(kFirstEnemy);
+	enemy.stats.defense = 0;
+	enemy.stats.agility = 0;
+	enemy.stats.evasion = 0;
+	battle.combatant(kFighter).stats.dexterity = 5;
+	battle.combatant(kFighter).stats.critical = -6;
+	battle.setCommand(kFighter, command);
+	partyDefends(battle);
+	const std::optional<Event> event = firstBy(battle.resolveRound(), type, kFighter);
+	return event ? event->amount : -1;
+}
+
+}
+
+// A weapon's attack bonus reaches only what names the attack stat: the Fighter's strength is 21 and its attack 48 with
+// bonuses of 20 and 7. An undefended hit deals 2 * (stat + power): the basic attack (Strike, power 0) 96 with the attack
+// stat, 42 when Strike names `attack_stat: "strength"`; Focus Shot (power 11) 64 with plain strength, also when it names `attack_stat: "strength"`, and 118 when it names
+// `"attack"`. A skill's stat change moves by plain strength, 21, and by 48 when the skill names `"attack"`.
+TEST(strengthAndTheAttackStatGiveTheirOwnNumbersWithABonusedWeapon) {
+	Database db = data();
+	const Command attack = Command::attack(kFirstEnemy);
+	const Command focus = Command::ability("focus_shot", kFirstEnemy);
+	const Command overclock = Command::ability("overclock", -1);
+	CHECK_EQ(bonusedBladeAmount(db, attack, EventType::DamageDealt), 96);
+	CHECK_EQ(bonusedBladeAmount(db, focus, EventType::DamageDealt), 64);
+	CHECK_EQ(bonusedBladeAmount(db, overclock, EventType::StatModified), 21);
+	db.abilities["focus_shot"].attackStat = Stat::Strength;
+	db.abilities["overclock"].attackStat = Stat::Strength;
+	CHECK_EQ(bonusedBladeAmount(db, focus, EventType::DamageDealt), 64);
+	CHECK_EQ(bonusedBladeAmount(db, overclock, EventType::StatModified), 21);
+	db.abilities["focus_shot"].attackStat = Stat::Attack;
+	db.abilities["overclock"].attackStat = Stat::Attack;
+	CHECK_EQ(bonusedBladeAmount(db, focus, EventType::DamageDealt), 118);
+	CHECK_EQ(bonusedBladeAmount(db, overclock, EventType::StatModified), 48);
+	db.abilities["strike"].attackStat = Stat::Strength;
+	CHECK_EQ(bonusedBladeAmount(db, attack, EventType::DamageDealt), 42);
+	for (const auto& entry : data().equipment) {
+		CHECK_EQ(entry.second.attackBonus, 0);
+	}
+}
+
+namespace {
+
+std::string actionOf(const std::vector<Event>& events, int actor) {
+	const std::optional<Event> started = firstBy(events, EventType::ActionStarted, actor);
+	return started ? started->ability : std::string();
+}
+
+void ramsOnItsFirstTurn(Database& db, const std::string& enemy) {
+	AiOverride first;
+	first.when = AiConditionKind::FirstTurn;
+	first.ability = "ram";
+	db.enemies[enemy].overrides = {first};
+}
+
+}
+
+// The first_turn override holds at a combatant's first turn of the battle and at its first turn after it joins or
+// takes a new form: a next form, a transform, a summon and a replacement each act on it once.
+TEST(theFirstTurnOverrideHoldsAfterJoiningOrTakingANewForm) {
+	Database db = data();
+	for (const char* id : {"gel_mite", "shellback", "shellback_bare", "moss_moth"}) {
+		ramsOnItsFirstTurn(db, id);
+	}
+
+	Battle shell = makeBattle(db, encounterSetup(db, "shellback", 2));
+	sturdyParty(shell);
+	shell.combatant(kFighter).stats.dexterity = 400;
+	shell.combatant(kFighter).stats.agility = 999;
+	std::vector<std::string> shellActions;
+	for (int round = 1; round <= 4; ++round) {
+		if (round == 2) {
+			shell.combatant(kFirstEnemy).hp = 1;
+			shell.setCommand(kFighter, Command::attack(kFirstEnemy));
+		}
+		partyDefends(shell);
+		shellActions.push_back(actionOf(shell.resolveRound(), kFirstEnemy));
+	}
+	CHECK_EQ(shell.combatant(kFirstEnemy).defId, std::string("shellback_bare"));
+	CHECK(shellActions == std::vector<std::string>({"ram", "ram", "bite", "bite"}));
+
+	Battle pupa = makeBattle(db, encounterSetup(db, "pupa", 3));
+	sturdyParty(pupa);
+	sturdy(pupa, kFirstEnemy);
+	std::vector<std::string> pupaActions;
+	for (int round = 1; round <= 5; ++round) {
+		partyDefends(pupa);
+		pupaActions.push_back(actionOf(pupa.resolveRound(), kFirstEnemy));
+	}
+	CHECK(std::vector<std::string>(pupaActions.begin(), pupaActions.begin() + 4) == std::vector<std::string>({"bite", "bite", "molt", "ram"}));
+	CHECK(pupaActions[4] != "ram");
+
+	Battle lantern = makeBattle(db, {"hive_lantern"}, 4);
+	sturdyParty(lantern);
+	sturdy(lantern, kFirstEnemy);
+	partyDefends(lantern);
+	CHECK_EQ(ofType(lantern.resolveRound(), EventType::EnemyJoined).size(), std::size_t(1));
+	const int summoned = kFirstEnemy + 1;
+	partyDefends(lantern);
+	CHECK_EQ(actionOf(lantern.resolveRound(), summoned), std::string("ram"));
+	partyDefends(lantern);
+	CHECK_EQ(actionOf(lantern.resolveRound(), summoned), std::string("bite"));
+
+	Battle endless = makeBattle(db, encounterSetup(db, "endless", 5));
+	sturdyParty(endless);
+	endless.combatant(kFighter).stats.dexterity = 400;
+	endless.combatant(kFighter).stats.agility = 999;
+	partyDefends(endless);
+	const std::vector<Event> opening = endless.resolveRound();
+	CHECK(actionOf(opening, kFirstEnemy) == "ram" && actionOf(opening, kFirstEnemy + 1) == "ram");
+	endless.combatant(kFirstEnemy).hp = 1;
+	endless.setCommand(kFighter, Command::attack(kFirstEnemy));
+	partyDefends(endless);
+	const std::vector<Event> fall = endless.resolveRound();
+	CHECK_EQ(ofType(fall, EventType::EnemyJoined).size(), std::size_t(1));
+	CHECK_EQ(actionOf(fall, kFirstEnemy + 1), std::string("bite"));
+	partyDefends(endless);
+	const std::vector<Event> after = endless.resolveRound();
+	CHECK(actionOf(after, kFirstEnemy + 2) == "ram" && actionOf(after, kFirstEnemy + 1) == "bite");
+
+	for (AiConditionKind compound : {AiConditionKind::All, AiConditionKind::Any}) {
+		Database both = data();
+		AiOverride halfOnFirst;
+		halfOnFirst.when = compound;
+		halfOnFirst.parts = {leaf(AiConditionKind::FirstTurn), leaf(AiConditionKind::SelfHpHalf)};
+		halfOnFirst.ability = "ram";
+		both.enemies["shellback"].overrides = {halfOnFirst};
+		const bool all = compound == AiConditionKind::All;
+		for (bool half : {false, true}) {
+			Battle battle = makeBattle(both, encounterSetup(both, "shellback", 2));
+			sturdyParty(battle);
+			if (half) {
+				battle.combatant(kFirstEnemy).hp = battle.combatant(kFirstEnemy).stats.maxHp / 2;
+			}
+			partyDefends(battle);
+			CHECK_EQ(actionOf(battle.resolveRound(), kFirstEnemy), std::string(half || !all ? "ram" : "bite"));
+			partyDefends(battle);
+			CHECK_EQ(actionOf(battle.resolveRound(), kFirstEnemy), std::string(half && !all ? "ram" : "bite"));
+		}
+	}
+
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["enemies.json"], "{\"when\": \"after_turns\", \"turns\": 2, \"ability\": \"molt\"}", "{\"when\": \"first_turn\", \"ability\": \"molt\"}");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok() && loaded.value->enemies.at("moss_pupa").overrides.at(0).when == AiConditionKind::FirstTurn);
+	replaceOnce(texts["enemies.json"], "{\"when\": \"first_turn\", \"ability\": \"molt\"}", "{\"when\": \"first_turn\", \"turns\": 2, \"ability\": \"molt\"}");
+	const Result<Database> bad = loadDatabaseFromTexts(texts);
+	CHECK(!bad.ok() && bad.error.find("only an after_turns condition has turns") != std::string::npos);
+}
+
+// keeps_ambush: an enemy's next form or transform keeps the ambushed mark it had; by default the new form starts
+// without it.
+TEST(keepsAmbushCarriesTheMarkToTheNextFormOrTransform) {
+	for (bool keeps : {false, true}) {
+		Database db = data();
+		db.enemies["shellback"].keepsAmbush = keeps;
+		AiOverride ambush;
+		ambush.when = AiConditionKind::Ambushed;
+		ambush.ability = "ram";
+		db.enemies["shellback_bare"].overrides = {ambush};
+		BattleSetup setup = encounterSetup(db, "shellback", 2);
+		setup.opening = Opening::PartyFirst;
+		Battle battle = makeBattle(db, setup);
+		sturdyParty(battle);
+		CHECK(battle.combatant(kFirstEnemy).ambushed);
+		battle.combatant(kFirstEnemy).hp = 1;
+		battle.combatant(kFighter).stats.dexterity = 400;
+		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+		partyDefends(battle);
+		battle.resolveRound();
+		CHECK_EQ(battle.combatant(kFirstEnemy).defId, std::string("shellback_bare"));
+		CHECK(battle.combatant(kFirstEnemy).ambushed == keeps);
+		partyDefends(battle);
+		CHECK_EQ(actionOf(battle.resolveRound(), kFirstEnemy), std::string(keeps ? "ram" : "bite"));
+		CHECK(!battle.combatant(kFirstEnemy).ambushed);
+
+		Database held = data();
+		held.battleRules.ambushOpening = Opening::EnemyFirst;
+		held.enemies["moss_pupa"].keepsAmbush = keeps;
+		BattleSetup pupa = encounterSetup(held, "pupa", 3);
+		pupa.opening = Opening::EnemyFirst;
+		Battle molting = makeBattle(held, pupa);
+		sturdyParty(molting);
+		sturdy(molting, kFirstEnemy);
+		CHECK(molting.combatant(kFirstEnemy).ambushed);
+		for (int round = 1; round <= 3; ++round) {
+			partyDefends(molting);
+			molting.resolveRound();
+		}
+		CHECK_EQ(molting.combatant(kFirstEnemy).defId, std::string("moss_moth"));
+		CHECK(molting.combatant(kFirstEnemy).ambushed == keeps);
+	}
+
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["enemies.json"], "\"next_form\": \"shellback_bare\",", "\"next_form\": \"shellback_bare\", \"keeps_ambush\": true,");
+	const Result<Database> kept = loadDatabaseFromTexts(texts);
+	CHECK(kept.ok() && kept.value->enemies.at("shellback").keepsAmbush && !kept.value->enemies.at("shellback_bare").keepsAmbush);
+	replaceOnce(texts["enemies.json"], "\"id\": \"gel_mite\",", "\"id\": \"gel_mite\", \"keeps_ambush\": true,");
+	const Result<Database> bad = loadDatabaseFromTexts(texts);
+	CHECK(!bad.ok() && bad.error.find("keeps_ambush needs a next_form or transforms_into") != std::string::npos);
+}
+
+// Powers and stats of 0: every formula stays defined and none goes negative where it must not; hit points alone keep a
+// floor of 1 in the data, a basic hit's damage keeps its floor of 1 and a revive gives at least 1 hit point.
+TEST(powersAndStatsOfZeroWorkInEveryFormula) {
+	CHECK_EQ(formulas::initiativeSpread(0), 0);
+	CHECK_EQ(formulas::initiative(0, 0), 0);
+	CHECK_EQ(formulas::chanceScore(0, 0, 0), 0);
+	CHECK_EQ(formulas::criticalBonus(0), 0);
+	CHECK_EQ(formulas::criticalBonusLowByte(0), 0);
+	for (int spread : {formulas::kSpreadMin, formulas::kSpreadMean, formulas::kSpreadMax}) {
+		CHECK_EQ(formulas::damage(0, 0, 0, 100, spread), 1);
+		CHECK_EQ(formulas::damage(0, 0, 0, 0, spread), 0);
+		CHECK_EQ(formulas::damage(0, 0, 0, 100, spread, 100, true, false), 1);
+		CHECK_EQ(formulas::healAmount(0, 0, spread), 0);
+		CHECK_EQ(formulas::healAmount(0, 10, spread), (10 * spread / 64 + 10) / 2);
+	}
+	CHECK_EQ(formulas::variedDamage(0, 0, 0, 100, 1, 1, 100), 1);
+	CHECK_EQ(formulas::reviveHp(1, 1), 1);
+	for (int roll : {0, 31, 63}) {
+		CHECK_EQ(formulas::effectScore(roll, 0, 0, 100, 100, 0), roll * 4);
+		CHECK_EQ(formulas::effectScore(roll, 0, 0, 0, 100, 0), 0);
+		CHECK_EQ(formulas::statusScore(roll, 0, 0, 100), 0);
+		CHECK_EQ(formulas::elementScore(roll, 0, 0, 200, 100), roll * 8);
+	}
+	CHECK_EQ(formulas::experienceToNextLevel(1), 25);
+
+	// The loader takes them.
+	const std::map<std::string, std::string> texts = dataTexts();
+	std::map<std::string, std::string> zero = texts;
+	replaceOnce(zero["enemies.json"], "\"strength\": 11, \"mental\": 3, \"agility\": 5, \"dexterity\": 8", "\"strength\": 0, \"mental\": 0, \"agility\": 0, \"dexterity\": 0");
+	replaceOnce(zero["abilities.json"], "{\"type\": \"heal\", \"kinds\": [\"living\"], \"power\": 28}", "{\"type\": \"heal\", \"kinds\": [\"living\"], \"power\": 0}");
+	replaceOnce(zero["items.json"], "{\"type\": \"elemental_damage\", \"power\": 25, \"element\": \"shock\"}", "{\"type\": \"elemental_damage\", \"power\": 0, \"element\": \"shock\"}");
+	replaceOnce(zero["equipment.json"], "\"use\": \"gust\", \"use_from_bag\": true", "\"use\": \"gust\", \"use_from_bag\": true, \"use_power\": 0");
+	const Result<Database> loaded = loadDatabaseFromTexts(zero);
+	CHECK(loaded.ok());
+	if (!loaded.ok()) {
+		return;
+	}
+	const Database& db = *loaded.value;
+	CHECK(db.enemy("gel_mite")->stats.strength == 0 && db.enemy("gel_mite")->stats.agility == 0);
+	CHECK(db.ability("mend")->effects.front().power == 0 && db.item("spark_flask")->effects.front().power == 0);
+	CHECK(db.equipment.at("squall_fan").usePower == 0);
+	std::map<std::string, std::string> noHp = texts;
+	replaceOnce(noHp["enemies.json"], "\"hp\": 60,", "\"hp\": 0,");
+	CHECK(!loadDatabaseFromTexts(noHp).ok());
+
+	// A difficulty keeps a stat of 0 at 0 and one of 1 at 1, as before.
+	DifficultyDef halved;
+	EnemyOverlay overlay;
+	overlay.enemy = "gel_mite";
+	overlay.statsPercent = Stats::filled(50);
+	halved.enemies.push_back(overlay);
+	Database ones = db;
+	ones.enemies["gel_mite"].stats.mental = 1;
+	const Database scaled = applyDifficulty(ones, halved);
+	CHECK(scaled.enemy("gel_mite")->stats.strength == 0 && scaled.enemy("gel_mite")->stats.mental == 1);
+
+	// A member's piece takes a stat of 0 nowhere below 0, and one of 1 nowhere below 1, as before.
+	Database members = data();
+	members.characters["fighter"].base.agility = 0;
+	members.characters["fighter"].growth.agility = 0;
+	PartyMember fighter = makePartyMember(members, *members.character("fighter"), 1);
+	fighter.equipment[EquipSlot::Body] = "rivet_plate";
+	CHECK_EQ(memberStats(members, fighter).agility, 0);
+	members.characters["fighter"].base.agility = 1;
+	CHECK_EQ(memberStats(members, fighter).agility, 1);
+
+	// In battle: 0 agility still acts, last; 0 strength hits for the floor of 1; a heal of power 0 with 0 mental
+	// recovers 0; lowering a stat of 0 leaves it at 0; a mite with every stat 0 still bites.
+	Database fight = db;
+	fight.abilities["weaken"].effects.front().alwaysLands = true;
+	fight.abilities["weaken"].effects.front().threshold = 0;
+	fight.abilities["weaken"].effects.front().stat = Stat::Agility;
+	for (std::uint64_t seed = 1; seed <= 6; ++seed) {
+		Battle battle = makeBattle(fight, {"gel_mite"}, seed);
+		sturdyParty(battle);
+		sturdy(battle, kFirstEnemy);
+		battle.combatant(kFighter).stats.strength = 0;
+		battle.combatant(kFighter).stats.agility = 0;
+		battle.combatant(kFighter).stats.dexterity = 400;
+		battle.combatant(kMedic).stats.mental = 0;
+		battle.combatant(kMedic).tp = 99;
+		battle.combatant(kScout).tp = 99;
+		battle.combatant(kMystic).hp = 10;
+		battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+		battle.setCommand(kMedic, Command::ability("mend", kMystic));
+		battle.setCommand(kScout, Command::ability("weaken", kFirstEnemy));
+		battle.setCommand(kMystic, Command::defend());
+		battle.setCommand(kEngineer, Command::defend());
+		const std::vector<Event> events = battle.resolveRound();
+		const std::vector<int>& order = battle.lastTurnOrder();
+		CHECK(std::find(order.begin(), order.end(), kFighter) != order.end());
+		const std::optional<Event> hit = firstBy(events, EventType::DamageDealt, kFighter);
+		CHECK(hit && hit->amount == 1);
+		const std::optional<Event> healed = firstBy(events, EventType::Healed, kMedic);
+		CHECK(healed && healed->amount == 0);
+		CHECK_EQ(battle.combatant(kFirstEnemy).effective(Stat::Agility), 0);
+		CHECK(firstBy(events, EventType::ActionStarted, kFirstEnemy).has_value());
+	}
+}
+
+// A macro may hold a step for a vehicle beside the members' steps: in a battle aboard it the vehicle takes it and the
+// members aboard pass theirs by; in a party battle the vehicle's step is passed by. Data macros take such steps.
+TEST(aMacroStepForAVehicleActsOnlyInBattlesAboard) {
+	Macro macro;
+	macro.name = "hull";
+	macro.steps.push_back({"fighter", CommandKind::Attack, "", {MacroTargetKind::Enemy, "", 0}});
+	macro.steps.push_back({"reed_skimmer", CommandKind::Ability, "hull_vent", {MacroTargetKind::Enemy, "", 0}});
+	BattleSetup aboard = makeSetup(data(), {"gel_mite"}, 4);
+	aboard.flags.vehicleBattle = true;
+	aboard.vehicle = "reed_skimmer";
+	Battle vehicleBattle = makeBattle(data(), aboard);
+	const int vehicle = static_cast<int>(aboard.party.size());
+	const std::vector<MacroStepResult> afloat = vehicleBattle.applyMacro(macro, MacroFallback::Automatic);
+	CHECK(afloat.size() == 2 && afloat[0].status == MacroStepStatus::Skipped && afloat[0].issue == MacroIssue::NotInParty);
+	CHECK(afloat[1].actor == vehicle && afloat[1].status == MacroStepStatus::Applied);
+	CHECK(vehicleBattle.command(vehicle).id == "hull_vent" && vehicleBattle.command(vehicle).target == vehicle + 1);
+	Battle partyBattle = makeBattle(data(), {"gel_mite"}, 4);
+	const std::vector<MacroStepResult> ashore = partyBattle.applyMacro(macro, MacroFallback::Automatic);
+	CHECK(ashore[0].actor == kFighter && ashore[1].status == MacroStepStatus::Skipped && ashore[1].issue == MacroIssue::NotInParty);
+
+	const std::map<std::string, std::string> texts = dataTexts();
+	const std::string step = "{\"member\": \"medic\", \"command\": \"defend\"}";
+	auto loads = [&texts, &step](const std::string& to) {
+		std::map<std::string, std::string> changed = texts;
+		replaceOnce(changed["party.json"], step, step + ", " + to);
+		return loadDatabaseFromTexts(changed);
+	};
+	const Result<Database> fine = loads("{\"member\": \"reed_skimmer\", \"command\": \"ability\", \"id\": \"hull_vent\", \"target\": {\"enemy\": 0}}");
+	CHECK(fine.ok() && fine.value->macro("tempest")->steps.back().member == "reed_skimmer");
+	const Result<Database> item = loads("{\"member\": \"reed_skimmer\", \"command\": \"item\", \"id\": \"tonic\"}");
+	CHECK(!item.ok() && item.error.find("vehicle 'reed_skimmer' cannot item") != std::string::npos);
+	const Result<Database> unknown = loads("{\"member\": \"reed_skimmer\", \"command\": \"ability\", \"id\": \"rime_drill\"}");
+	CHECK(!unknown.ok());
+	const Result<Database> member = loads("{\"member\": \"reed_skimmer\", \"command\": \"ability\", \"id\": \"hull_patch\", \"target\": {\"member\": \"fighter\"}}");
+	CHECK(!member.ok());
 }

@@ -1,0 +1,26 @@
+{
+	"id": "wren_hollow",
+	"kind": "town",
+	"encounter_mode": "visible",
+	"step_ms": 250,
+	"region": "coast",
+	"map": [
+		"##########",
+		"#........#",
+		"##########",
+		"#........#",
+		"#........#",
+		"#........#",
+		"##########"
+	],
+	"markers": {
+		"hollow_door": [4, 5],
+		"counter_front": [4, 3],
+		"west_post": [1, 4],
+		"east_post": [8, 4],
+		"shelf_front": [2, 3]
+	},
+	"hooks": [
+		{"id": "tallykeeper", "at": [4, 2], "event": "hollow_keeper", "actor_at": [4, 1]}
+	]
+}

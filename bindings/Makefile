@@ -54,6 +54,17 @@ TEST_OBJS = $(BUILD)/c/tests/test_api.o
 SCRIPT = $(GAME)/data/scripts/playthrough.txt
 TRAVEL_SCRIPT = $(GAME)/data/scripts/travel.txt
 MACROS_SCRIPT = $(GAME)/data/scripts/macros.txt
+ACTORS_SCRIPT = $(GAME)/data/scripts/actors.txt
+PARTY_SCRIPT = $(GAME)/data/scripts/party.txt
+INTERACT_SCRIPT = $(GAME)/data/scripts/interact.txt
+BACKGROUND_SCRIPT = $(GAME)/data/scripts/background.txt
+MAKE_ACTOR_DATA = $(GAME)/build/make_actor_data$(EXE)
+# The placeholder data with Wren Hollow added, for the actor script and the tests that play it.
+ACTOR_DATA = $(BUILD)/actor_data/game/data
+# The same with Wren Cellar and the interaction rules turned on, for the interaction script and its tests.
+INTERACT_DATA = $(BUILD)/interact_data/game/data
+# The actor data with Wren Yard (background events and wandering actors), for the background script and its tests.
+BACKGROUND_DATA = $(BUILD)/background_data/game/data
 SAMPLE = monogame/Psiv.Sample/Psiv.Sample.csproj
 SAMPLE_SCRIPT = monogame/Psiv.Sample/scripts/smoke.txt
 SAMPLE_LARGE_SCRIPT = monogame/Psiv.Sample/scripts/large_areas.txt
@@ -130,9 +141,20 @@ endif
 deps:
 	$(MAKE) -C $(CORE) build/librules.a
 	$(MAKE) -C $(EVENTS) build/libevents.a
-	$(MAKE) -C $(GAME) build/libgame.a build/game_cli$(EXE)
+	$(MAKE) -C $(GAME) build/libgame.a build/game_cli$(EXE) build/make_actor_data$(EXE)
 
-$(DEP_LIBS) $(GAME_CLI): deps
+$(DEP_LIBS) $(GAME_CLI) $(MAKE_ACTOR_DATA): deps
+
+$(ACTOR_DATA): $(MAKE_ACTOR_DATA)
+	./$(MAKE_ACTOR_DATA) $(GAME)/data $(CORE)/data $(GAME)/tests/fixtures/actors $(BUILD)/actor_data
+
+$(INTERACT_DATA): $(MAKE_ACTOR_DATA)
+	./$(MAKE_ACTOR_DATA) $(GAME)/data $(CORE)/data $(GAME)/tests/fixtures/actors $(BUILD)/interact_data interact
+
+$(BACKGROUND_DATA): $(MAKE_ACTOR_DATA)
+	./$(MAKE_ACTOR_DATA) $(GAME)/data $(CORE)/data $(GAME)/tests/fixtures/actors $(BUILD)/background_data background
+
+.PHONY: $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA)
 
 $(LIB): $(LIB_OBJS) $(DEP_LIBS)
 	$(CXX) $(SHARED_FLAGS) $(LIB_OBJS) $(DEP_LIBS) -o $@
@@ -158,8 +180,8 @@ else
 test: dotnet-missing
 endif
 
-native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI)
-	./$(TESTS) --data $(GAME)/data --scratch $(BUILD)/scratch
+native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI) $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA)
+	./$(TESTS) --data $(GAME)/data --actor-data $(ACTOR_DATA) --interact-data $(INTERACT_DATA) --background-data $(BACKGROUND_DATA) --scratch $(BUILD)/scratch
 	rm -rf $(BUILD)/saves_cpp $(BUILD)/saves_c
 	$(GAME_CLI) --data $(GAME)/data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/saves_cpp > $(BUILD)/playthrough_cpp.txt
 	./$(PLAYTHROUGH) --data $(GAME)/data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/saves_c > $(BUILD)/playthrough_c.txt
@@ -181,13 +203,41 @@ native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI)
 	cmp $(BUILD)/macros_c.txt $(GAME)/tests/expected/macros.txt
 	diff -r $(BUILD)/macros_saves_c $(BUILD)/macros_saves_cpp
 	@echo "C macro script matches the C++ session: transcript and every save file"
+	rm -rf $(BUILD)/actors_saves_cpp $(BUILD)/actors_saves_c
+	$(GAME_CLI) --data $(ACTOR_DATA) --seed 6 --script $(ACTORS_SCRIPT) --saves $(BUILD)/actors_saves_cpp > $(BUILD)/actors_cpp.txt
+	./$(PLAYTHROUGH) --data $(ACTOR_DATA) --seed 6 --script $(ACTORS_SCRIPT) --saves $(BUILD)/actors_saves_c > $(BUILD)/actors_c.txt
+	cmp $(BUILD)/actors_c.txt $(BUILD)/actors_cpp.txt
+	cmp $(BUILD)/actors_c.txt $(GAME)/tests/expected/actors.txt
+	diff -r $(BUILD)/actors_saves_c $(BUILD)/actors_saves_cpp
+	@echo "C actor script matches the C++ session: transcript and every save file"
+	rm -rf $(BUILD)/party_saves_cpp $(BUILD)/party_saves_c
+	$(GAME_CLI) --data $(ACTOR_DATA) --seed 6 --script $(PARTY_SCRIPT) --saves $(BUILD)/party_saves_cpp > $(BUILD)/party_cpp.txt
+	./$(PLAYTHROUGH) --data $(ACTOR_DATA) --seed 6 --script $(PARTY_SCRIPT) --saves $(BUILD)/party_saves_c > $(BUILD)/party_c.txt
+	cmp $(BUILD)/party_c.txt $(BUILD)/party_cpp.txt
+	cmp $(BUILD)/party_c.txt $(GAME)/tests/expected/party.txt
+	diff -r $(BUILD)/party_saves_c $(BUILD)/party_saves_cpp
+	@echo "C party script matches the C++ session: transcript and every save file"
+	rm -rf $(BUILD)/interact_saves_cpp $(BUILD)/interact_saves_c
+	$(GAME_CLI) --data $(INTERACT_DATA) --seed 6 --script $(INTERACT_SCRIPT) --saves $(BUILD)/interact_saves_cpp > $(BUILD)/interact_cpp.txt
+	./$(PLAYTHROUGH) --data $(INTERACT_DATA) --seed 6 --script $(INTERACT_SCRIPT) --saves $(BUILD)/interact_saves_c > $(BUILD)/interact_c.txt
+	cmp $(BUILD)/interact_c.txt $(BUILD)/interact_cpp.txt
+	cmp $(BUILD)/interact_c.txt $(GAME)/tests/expected/interact.txt
+	diff -r $(BUILD)/interact_saves_c $(BUILD)/interact_saves_cpp
+	@echo "C interaction script matches the C++ session: transcript and every save file"
+	rm -rf $(BUILD)/background_saves_cpp $(BUILD)/background_saves_c
+	$(GAME_CLI) --data $(BACKGROUND_DATA) --seed 6 --script $(BACKGROUND_SCRIPT) --saves $(BUILD)/background_saves_cpp > $(BUILD)/background_cpp.txt
+	./$(PLAYTHROUGH) --data $(BACKGROUND_DATA) --seed 6 --script $(BACKGROUND_SCRIPT) --saves $(BUILD)/background_saves_c > $(BUILD)/background_c.txt
+	cmp $(BUILD)/background_c.txt $(BUILD)/background_cpp.txt
+	cmp $(BUILD)/background_c.txt $(GAME)/tests/expected/background.txt
+	diff -r $(BUILD)/background_saves_c $(BUILD)/background_saves_cpp
+	@echo "C background script matches the C++ session: transcript and every save file"
 
 dotnet: $(LIB)
 	$(DOTNET) build csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj -nologo -v q -warnaserror
 	$(DOTNET) build $(SAMPLE) -nologo -v q -warnaserror
 
-dotnet-test: dotnet
-	PSIV_DATA_DIR=$(CURDIR)/$(GAME)/data $(DOTNET) test csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj --no-build -nologo
+dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA)
+	PSIV_DATA_DIR=$(CURDIR)/$(GAME)/data PSIV_ACTOR_DATA_DIR=$(CURDIR)/$(ACTOR_DATA) PSIV_INTERACT_DATA_DIR=$(CURDIR)/$(INTERACT_DATA) PSIV_BACKGROUND_DATA_DIR=$(CURDIR)/$(BACKGROUND_DATA) $(DOTNET) test csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj --no-build -nologo
 	rm -rf $(BUILD)/sample_saves
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_saves --script $(SAMPLE_SCRIPT) --frames 2000 --frame-digests $(BUILD)/digests_smoke.txt > $(BUILD)/sample_headless.txt \
 		|| (cat $(BUILD)/sample_headless.txt; exit 1)

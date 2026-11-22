@@ -44,6 +44,19 @@ std::vector<rules::Event> autoRound(game::Session& session);
 void fightToTheEnd(game::Session& session);
 // The adventure with one script file replaced; compiled without the registry, so tests can use any names.
 game::GameData withScript(const std::string& file, const std::string& text);
+// The adventure with Wren Hollow added (tests/actor_data.h), in build/test_saves/actor_data/game/data, loaded once.
+const std::string& actorDataDirectory();
+const game::GameData& actorData();
+// The same with one script file replaced, as withScript does.
+game::GameData actorDataWithScript(const std::string& file, const std::string& text);
+// The adventure with Wren Hollow, Wren Loft and Wren Cellar and game.json's interaction rules turned on
+// (actor_data::makeInteract), in build/test_saves/interact_data/game/data, loaded once.
+const game::GameData& interactData();
+// The actor data with Wren Yard added (actor_data::makeBackground), in build/test_saves/background_data/game/data, loaded
+// once; and with one script file replaced, as withScript does.
+const std::string& backgroundDataDirectory();
+const game::GameData& backgroundData();
+game::GameData backgroundDataWithScript(const std::string& file, const std::string& text);
 
 }
 

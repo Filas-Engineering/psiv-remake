@@ -127,16 +127,28 @@ void Screen::apply(const std::string& line) {
 		}
 	} else if (kind == "show" || kind == "hide") {
 		actor(second)[0] = kind == "show" ? "shown" : "hidden";
-	} else if (kind == "move" && w.size() > 3) {
-		std::string where = w[3];
-		for (std::size_t i = 4; i < w.size() && w[i] != "speed"; ++i) {
-			where += " " + w[i];
+	} else if ((kind == "move" || kind == "place") && w.size() > 2) {
+		// The target follows `to` (or the actor, for a place), up to the options.
+		std::size_t from = 2;
+		while (kind == "move" && from < w.size() && w[from - 1] != "to") {
+			++from;
+		}
+		std::string where;
+		std::size_t i = from;
+		for (; i < w.size() && w[i] != "speed" && w[i] != "pathfind" && w[i] != "facing"; ++i) {
+			where += (where.empty() ? "" : " ") + w[i];
 		}
 		actor(second)[1] = where;
-		actor(second)[2].clear();
+		actor(second)[2] = kind == "place" && i + 1 < w.size() && w[i] == "facing" ? w[i + 1] : "";
 	} else if (kind == "face" && w.size() > 2) {
 		actor(second)[2] = w[2];
 	} else if (kind == "anim" && w.size() > 2) {
+		// The standard animations that show or hide leave the actor so.
+		if (w[2] == "fade_in") {
+			actor(second)[0] = "shown";
+		} else if (w[2] == "fade_out" || w[2] == "dissolve" || w[2] == "blink_out") {
+			actor(second)[0] = "hidden";
+		}
 		actor(second)[3] = w.size() > 3 && w[3] == "loop" ? w[2] : "";
 	} else if (kind == "warp") {
 		actors.clear();

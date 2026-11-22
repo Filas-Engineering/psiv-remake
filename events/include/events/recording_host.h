@@ -23,6 +23,12 @@ public:
 	std::vector<std::string> party;
 	// Vehicles the party has, each with "map marker" where a script last put it. Nobody rides one here.
 	std::map<std::string, std::string> vehicles;
+	// Actors a script removed, each true when only until the next area load.
+	std::map<std::string, bool> removed;
+	// Background events `spawn` asked for, in order.
+	std::vector<std::string> spawned;
+	// Party snapshots by name: `party` as it was when saved.
+	std::map<std::string, std::vector<std::string>> party_snapshots;
 	bool player_control = true;
 	// Misuse such as polling a released handle; tests expect it to stay empty.
 	std::vector<std::string> errors;
@@ -88,6 +94,22 @@ public:
 	void equip_piece(const std::string& member, const std::string& piece) override;
 	void unequip_piece(const std::string& member, const std::string& piece) override;
 	void set_area_music(const std::string& track) override;
+	void remove_actor(const std::string& actor, bool until_reload) override;
+	void save_party(const std::string& snapshot) override;
+	bool restore_party(const std::string& snapshot) override;
+	// The replaced member leaves `party`; `member` takes its place unless it is already in the party.
+	void swap_party_member(const PartySwap& swap) override;
+	void add_party_member_silently(const std::string& member) override;
+	void remove_party_member_silently(const std::string& member) override;
+	bool order_party(const std::vector<std::string>& members) override;
+	// Logged as `spawn <event>` and kept in `spawned`, in order; nothing runs.
+	void spawn_event(const std::string& event) override;
+	// Logged as `look <actor> enemy <enemy>`, `look <actor> <look>` or `look <actor> default`.
+	void set_actor_look(const std::string& actor, const std::string& enemy, const std::string& look) override;
+	// Logged as `credits <id>` and done at once, like a menu.
+	Handle play_credits(const std::string& credits) override;
+	// Logged as `end game`.
+	void end_game() override;
 
 protected:
 	// Hooks for hosts built on this one (TimingHost). The defaults use the

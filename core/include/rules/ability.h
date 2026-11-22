@@ -14,7 +14,7 @@ struct Effect {
 	int power = 0;
 	Element element = Element::None;
 	std::string status;
-	// ApplyStatus and a lowering ModifyStat: the target resists when the status score is at or below this.
+	// ApplyStatus, a lowering ModifyStat and InstantDefeat: the target resists when the roll's score is at or below this.
 	int threshold = 0;
 	Stat stat = Stat::Strength;
 	// ModifyStat: raises the stat rather than lowering it.
@@ -35,8 +35,18 @@ struct Effect {
 	std::optional<int> statValue = {};
 	// PhysicalDamage: the hit takes the user's attack element (a member's weapon, an enemy's attack_element).
 	bool weaponElement = false;
+	// The roll of ApplyStatus, a lowering ModifyStat and InstantDefeat: the user's side is userPower, else the user's
+	// userStat, else the attacking stat; the target's side is its targetStat, else mental. `element` scales the factor.
+	std::optional<Stat> userStat = {};
+	std::optional<Stat> targetStat = {};
+	std::optional<int> userPower = {};
+	// No roll and no random draw; the immunities that need no roll still hold.
+	bool alwaysLands = false;
 	bool reaches(CreatureKind kind) const;
 };
+
+// The data's hint to automatic choices (autoCommand): Prefer and Avoid rank or weigh the ability, Never keeps it out.
+enum class AutoHint { None, Prefer, Avoid, Never };
 
 struct AbilityDef {
 	std::string id;
@@ -55,6 +65,7 @@ struct AbilityDef {
 	std::optional<Stat> attackStat = {};
 	// In place of the rules' variance or the original's spread for this ability's damage.
 	std::optional<DamageVariance> variance = {};
+	AutoHint autoHint = AutoHint::None;
 
 	bool revives() const;
 	bool hasEffect(EffectKind kind) const;

@@ -130,8 +130,9 @@ Combatant memberCombatant(const Database& db, const PartyMember& member) {
 	for (const auto& [element, affinity] : set) {
 		c.affinities[element] = affinity;
 	}
-	// The right hand's weapon gives the attack and its element, the left hand's what the right lacks. A weapon that
-	// reaches more than one enemy in either hand makes the attack reach them (original-battle-rules.md, section 2).
+	// Both hands' weapons add their attack bonuses. The right hand's weapon gives the attack and its element, the left
+	// hand's what the right lacks. A weapon that reaches more than one enemy in either hand makes the attack reach them
+	// (original-battle-rules.md, section 2).
 	const auto reachesMany = [&db](const std::string& ability) {
 		const AbilityDef* def = db.ability(ability);
 		return def && (def->targeting == Targeting::AllEnemies || def->targeting == Targeting::EnemyGroup);
@@ -143,6 +144,7 @@ Combatant memberCombatant(const Database& db, const PartyMember& member) {
 		if (!piece || piece->slot != EquipSlot::Weapon) {
 			continue;
 		}
+		c.attackBonus += piece->attackBonus;
 		if (!piece->attack.empty() && (!attackFromWeapon || (reachesMany(piece->attack) && !reachesMany(c.basicAttack)))) {
 			c.basicAttack = piece->attack;
 			attackFromWeapon = true;
@@ -703,8 +705,9 @@ int Battle::addEnemy(const EnemyDef& def, const std::string& group, int position
 	return index;
 }
 
-// The combatant takes the new form at full hit points with that form's statuses; its place, side and group stay.
-void Battle::transform(int target, const EnemyDef& def, std::vector<Event>& out) {
+// The combatant takes the new form at full hit points with that form's statuses; its place, side and group stay, and
+// its ambushed mark only when asked.
+void Battle::transform(int target, const EnemyDef& def, std::vector<Event>& out, bool keepAmbush) {
 	const std::vector<ActiveStatus> statuses = combatants_[target].statuses;
 	for (const ActiveStatus& active : statuses) {
 		emitStatusRemoved(-1, target, active.id, StatusEnd::Defeated, out);
@@ -713,6 +716,7 @@ void Battle::transform(int target, const EnemyDef& def, std::vector<Event>& out)
 	combatants_[target] = fromEnemy(*db_, def, before.group);
 	combatants_[target].position = before.position;
 	combatants_[target].lastAttacker = before.lastAttacker;
+	combatants_[target].ambushed = keepAmbush && before.ambushed;
 	syncPins(target);
 	Event& e = emit(out, EventType::EnemyTransformed);
 	e.target = target;

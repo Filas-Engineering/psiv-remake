@@ -179,7 +179,7 @@ public sealed unsafe class GameSession : IDisposable
 	{
 		Must(Native.ProfileGet(_handle, out PsivProfile p));
 		return new Profile((TextSpeed)p.TextSpeed, p.AutoAdvance != 0, p.ShowShippedNames != 0, Native.Str(p.TextLanguage), p.TextSizePercent,
-			(BattleSpeed)p.BattleSpeed, p.AmbientTalk != 0, p.ReducedFlash != 0, p.MusicVolume, p.AmbientVolume, p.EffectsVolume);
+			(BattleSpeed)p.BattleSpeed, p.AmbientTalk != 0, p.ReducedFlash != 0, p.MusicVolume, p.AmbientVolume, p.EffectsVolume, p.AlwaysRun != 0);
 	}
 
 	public PsivResult SetProfile(Profile profile)
@@ -200,6 +200,7 @@ public sealed unsafe class GameSession : IDisposable
 				MusicVolume = profile.MusicVolume,
 				AmbientVolume = profile.AmbientVolume,
 				EffectsVolume = profile.EffectsVolume,
+				AlwaysRun = profile.AlwaysRun ? 1 : 0,
 			};
 			return Result(Native.ProfileSet(_handle, in p));
 		}
@@ -287,6 +288,8 @@ public sealed unsafe class GameSession : IDisposable
 	public PsivResult RetryBattle() => Result(Native.RetryBattle(_handle));
 	public PsivResult QuitToTitle() => Result(Native.QuitToTitle(_handle));
 	public PsivResult SaveManual(string slot) => Result(Native.SaveManual(_handle, slot));
+	// Deletes a slot's file (manual or autosave, damaged included) in any mode; refused like Load for a slot it cannot read.
+	public PsivResult EraseSave(string slot) => Result(Native.EraseSave(_handle, slot));
 
 	// Null when saving is disabled.
 	public IReadOnlyList<SaveSummary>? Saves()
@@ -321,6 +324,11 @@ public sealed unsafe class GameSession : IDisposable
 	// Frame loop and field
 
 	public void Update(int dtMs, Direction held = Direction.None) => Must(Native.Update(_handle, dtMs, (int)held));
+	// With the run input: the leader runs on foot while it is held (walks with the profile's AlwaysRun) when game.json
+	// gives run_speed_percent.
+	public void Update(int dtMs, Direction held, bool running) => Must(Native.UpdateInput(_handle, dtMs, new PsivFieldInput { Direction = (int)held, Running = running ? 1 : 0 }));
+	// Whether a step that way would move the leader now (player control, no belt, a cell it can enter, no enemy on it).
+	public bool CanStep(Direction direction) => Native.CanStep(_handle, (int)direction) != 0;
 	public PsivResult Walk(Direction direction) => Result(Native.Walk(_handle, (int)direction));
 	public PsivResult Face(Direction direction) => Result(Native.Face(_handle, (int)direction));
 
@@ -334,6 +342,23 @@ public sealed unsafe class GameSession : IDisposable
 		return (WalkStatus)status;
 	}
 	public PsivResult Interact() => Result(Native.Interact(_handle));
+
+	// What Interact would act on now, for a prompt; null when nothing answers, outside the field, without control or aboard.
+	public InteractTarget? InteractTarget()
+	{
+		if (!Read(Native.InteractTargetGet(_handle, out PsivInteractTarget t)))
+		{
+			return null;
+		}
+		return Target(t);
+	}
+
+	// What stands on (x, y) and whether the leader can use it from where it stands, with the facing to turn to; null when
+	// nothing there answers from here.
+	public InteractTarget? InteractAt(int x, int y) => Read(Native.InteractAt(_handle, x, y, out PsivInteractTarget t)) ? Target(t) : null;
+
+	static InteractTarget Target(PsivInteractTarget t) =>
+		new((InteractKind)t.Kind, Native.Str(t.Id), t.X, t.Y, (Direction)t.Facing, t.Ready != 0, t.Across != 0, Native.Str(t.Keeper));
 	public PsivResult PartyTalk() => Result(Native.PartyTalk(_handle));
 	// Boards the party's vehicle in the faced cell (Interact does the same); LeaveVehicle steps off onto dry ground.
 	public PsivResult Board() => Result(Native.Board(_handle));
@@ -377,7 +402,7 @@ public sealed unsafe class GameSession : IDisposable
 		}
 		return new FieldInfo(Native.Str(f.AreaId), Native.Str(f.AreaName), (AreaKind)f.AreaKind, (EncounterMode)f.EncounterMode, f.Width, f.Height, f.StepMs,
 			f.LeaderX, f.LeaderY, (Direction)f.Facing, f.PlayerControl != 0, f.GraceMs, Native.Str(f.Music), Native.Str(f.Region), Native.Str(f.Aboard), f.LeaderStepMs,
-			Native.Str(f.ShipPort));
+			Native.Str(f.ShipPort), f.RunStepMs, f.StepProgressMs, f.ConveyorStepMs, f.ConveyorProgressMs, f.StepMask);
 	}
 
 	public IReadOnlyList<string> FieldRows()
@@ -401,7 +426,7 @@ public sealed unsafe class GameSession : IDisposable
 		var enemies = new List<FieldEnemy>(ec);
 		foreach (PsivEnemy e in Native.Span<PsivEnemy>(ep, ec))
 		{
-			enemies.Add(new FieldEnemy(e.Id, Native.Str(e.Encounter), Native.Str(e.Zone), e.X, e.Y, (Direction)e.Facing, (EnemyState)e.State));
+			enemies.Add(new FieldEnemy(e.Id, Native.Str(e.Encounter), Native.Str(e.Zone), e.X, e.Y, (Direction)e.Facing, (EnemyState)e.State, Native.Str(e.Actor)));
 		}
 		Must(Native.FieldMarkers(_handle, out IntPtr mp, out int mc));
 		var markers = new List<Marker>(mc);
@@ -413,19 +438,22 @@ public sealed unsafe class GameSession : IDisposable
 		var exits = new List<FieldExit>(xc);
 		foreach (PsivExit x in Native.Span<PsivExit>(xp, xc))
 		{
-			exits.Add(new FieldExit(x.X, x.Y, Native.Str(x.ToArea), Native.Str(x.ToMarker)));
+			exits.Add(new FieldExit(x.X, x.Y, Native.Str(x.ToArea), Native.Str(x.ToMarker), x.Open != 0, (char)x.ClosedTile));
 		}
 		Must(Native.FieldPoints(_handle, out IntPtr pp, out int pc));
 		var points = new List<FieldPoint>(pc);
 		foreach (PsivPoint p in Native.Span<PsivPoint>(pp, pc))
 		{
-			points.Add(new FieldPoint((PointKind)p.Kind, Native.Str(p.Id), p.X, p.Y, Native.Str(p.Event), p.Active != 0, p.Cost, (ShopKind)p.ShopKind, (Direction)p.Direction));
+			points.Add(new FieldPoint((PointKind)p.Kind, Native.Str(p.Id), p.X, p.Y, Native.Str(p.Event), p.Active != 0, p.Cost, (ShopKind)p.ShopKind, (Direction)p.Direction,
+				Native.Str(p.Keeper)));
 		}
 		Must(Native.FieldActors(_handle, out IntPtr ap, out int ac));
 		var actors = new List<FieldActor>(ac);
 		foreach (PsivActor a in Native.Span<PsivActor>(ap, ac))
 		{
-			actors.Add(new FieldActor(Native.Str(a.Id), Native.Str(a.Name), a.X, a.Y, (Direction)a.Facing, a.Visible != 0, a.Scripted != 0));
+			actors.Add(new FieldActor(Native.Str(a.Id), Native.Str(a.Name), a.X, a.Y, (Direction)a.Facing, a.Visible != 0, a.Scripted != 0, a.Solid != 0,
+				(ActorVanish)a.Vanish, Native.Str(a.Animation), a.AnimationMs, a.AnimationTotalMs, (ActorRemoval)a.Removal, Native.Str(a.SpriteEnemy), Native.Str(a.Look),
+				a.Wanders != 0));
 		}
 		return new FieldView(info, grid, enemies, markers, exits, points, actors, FieldVehicles());
 	}
@@ -436,6 +464,18 @@ public sealed unsafe class GameSession : IDisposable
 	{
 		Must(Native.ActorIds(_handle, out IntPtr p, out int count));
 		return Native.Strs(p, count);
+	}
+
+	// Every animation scripts may name with its length and what it leaves behind: game.json's, then the standard ones.
+	public IReadOnlyList<AnimationInfo> Animations()
+	{
+		Must(Native.Animations(_handle, out IntPtr p, out int count));
+		var list = new List<AnimationInfo>(count);
+		foreach (PsivAnimation a in Native.Span<PsivAnimation>(p, count))
+		{
+			list.Add(new AnimationInfo(Native.Str(a.Id), a.Seconds, a.Standard != 0, (AnimationEnd)a.End));
+		}
+		return list;
 	}
 
 	// Events
@@ -472,9 +512,17 @@ public sealed unsafe class GameSession : IDisposable
 
 	// Presentation actions
 
-	private static PresentationAction ToAction(in PsivAction a) =>
-		new(a.Handle, (ActionPhase)a.Phase, (ActionType)a.Type, Native.Str(a.Subject), Native.Str(a.Target), Native.Str(a.Slot), a.HasPosition != 0, a.X, a.Y, a.Z,
-			a.Seconds, a.Speed, a.Strength, a.Loop != 0, a.Instant != 0, Native.Str(a.Description), a.Duration);
+	private static PresentationAction ToAction(in PsivAction a)
+	{
+		var route = new List<RouteCell>(a.RouteCount);
+		foreach (PsivRouteCell c in Native.Span<PsivRouteCell>(a.Route, a.RouteCount))
+		{
+			route.Add(new RouteCell(c.X, c.Y));
+		}
+		return new(a.Handle, (ActionPhase)a.Phase, (ActionType)a.Type, Native.Str(a.Subject), Native.Str(a.Target), Native.Str(a.Slot), a.HasPosition != 0, a.X, a.Y, a.Z,
+			a.Seconds, a.Speed, a.Strength, a.Loop != 0, a.Instant != 0, Native.Str(a.Description), a.Duration, new ValueList<string>(Native.Strs(a.Waypoints, a.WaypointCount)),
+			a.Pathfind != 0, Native.Str(a.Facing), new ValueList<RouteCell>(route));
+	}
 
 	public IReadOnlyList<Camera> Cameras()
 	{
@@ -609,6 +657,10 @@ public sealed unsafe class GameSession : IDisposable
 
 	// The round the way auto play fills it; a refusal says auto-battle could not start, and the policy filled the round.
 	public PsivResult FillAutoRound() => Result(Native.BattleFillAutoRound(_handle));
+
+	// The macro FillAutoRound and PlayBattle fill every round with, each member whose step cannot run taking core's
+	// automatic choice; null or "" plays as before. Not saved.
+	public PsivResult SetAutoPlayMacro(string? macro) => Result(Native.BattleSetAutoPlayMacro(_handle, macro ?? ""));
 
 	private static IReadOnlyList<Notice> Notices(IntPtr p, int count)
 	{
@@ -1008,6 +1060,33 @@ public sealed unsafe class GameSession : IDisposable
 	// Null while no event runs.
 	public EventPosition? EventPosition() =>
 		Read(Native.EventPositionGet(_handle, out PsivEventPosition at)) ? new EventPosition(Native.Str(at.Event), Native.Str(at.File), at.Line) : null;
+
+	// The background events running now, in start order, each with the line it is at (events/FORMAT.md, "Background events").
+	public IReadOnlyList<EventPosition> BackgroundEvents()
+	{
+		Must(Native.BackgroundEvents(_handle, out IntPtr p, out int count));
+		var list = new List<EventPosition>(count);
+		foreach (PsivEventPosition at in Native.Span<PsivEventPosition>(p, count))
+		{
+			list.Add(new EventPosition(Native.Str(at.Event), Native.Str(at.File), at.Line));
+		}
+		return list;
+	}
+
+	// Null while no credits play.
+	public CreditsInfo? Credits()
+	{
+		if (!Read(Native.CreditsInfoGet(_handle, out PsivCreditsInfo info)) || !Read(Native.CreditsEntries(_handle, out IntPtr p, out int count)))
+		{
+			return null;
+		}
+		var entries = new List<CreditsEntry>(count);
+		foreach (PsivCreditsEntry e in Native.Span<PsivCreditsEntry>(p, count))
+		{
+			entries.Add(new CreditsEntry((CreditsEntryKind)e.Kind, Native.Str(e.Key), Native.Str(e.Text), e.Gap, e.PauseMs));
+		}
+		return new CreditsInfo(Native.Str(info.Id), Native.Str(info.Music), info.Shown, info.ElapsedMs, info.TotalMs, new ValueList<CreditsEntry>(entries));
+	}
 
 	public IReadOnlyList<Zone> FieldZones()
 	{

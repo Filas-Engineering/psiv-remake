@@ -1,0 +1,127 @@
+# The interaction rules and movement queries in Wren Cellar, reached by a developer warp, on the data copy
+# `make_actor_data ... interact` writes (game.json `interact` nearby, `run_speed_percent` 200, `vehicle_opening`
+# normal). `prompt` names what interact would act on: the clerk across its counter (its hook's `across`), the notice
+# beside the leader, who turns to it, the table from either side of its two cells (`cells`), and the cook where it stands
+# behind its counter as well as at the counter. `steps` says where the leader can step; `rows` shows the door, an exit
+# drawn as floor while it is closed (`closed_tile` normal), which the notice opens. `time` shows the step time walking
+# and running, and `set always_run on` runs. A battle aboard the skimmer opens normally, with no roll. Then battles
+# aboard take commands for the vehicle: a macro holds a step for the skimmer (refused as an item, a defend, a skill it
+# lacks or a member target) beside a member's step it passes by, `attack`, `use` and `escape` name the skimmer, `fight`
+# plays the macro, and the save's auto macro and `autobattle on hull` play it in later battles. Run with --seed 6.
+new
+dev warp wren_cellar cellar_door
+rows
+steps
+refused s
+prompt
+walk clerk_front
+face north
+prompt
+talk
+walk notice_side
+face east
+prompt
+talk
+prompt
+rows
+walk table_north
+face south
+prompt
+talk
+walk table_south
+face north
+prompt
+talk
+walk cook_front
+face south
+prompt
+walk cook_side
+face east
+prompt
+talk
+face north
+prompt
+time
+walk 9 3
+time
+set always_run on
+time
+s 2
+time
+set always_run off
+dev vehicle reed_skimmer wren_cellar skiff_post
+walk skiff_front
+face east
+prompt
+board
+wait 3000
+autobattle on
+e 2
+status
+autobattle off
+disembark
+walk cellar_door
+steps
+s
+dev warp wren_cellar cellar_door
+dev vehicle reed_skimmer wren_cellar skiff_post
+walk skiff_front
+face east
+board
+menu
+macro create hull
+macro step hull 0 fighter attack
+refused macro step hull 1 reed_skimmer item tonic
+refused macro step hull 1 reed_skimmer defend
+refused macro step hull 1 reed_skimmer ability rime_drill
+refused macro step hull 1 reed_skimmer ability hull_patch fighter
+macro step hull 1 reed_skimmer ability hull_vent e0
+macro step hull 1 reed_skimmer attack e1
+macros
+close
+wait 3000
+e 2
+attack reed_skimmer e0
+refused attack fighter e0
+round
+use reed_skimmer hull_vent e1
+round
+fight hull
+set auto hull
+autobattle on
+w 2
+e 2
+w 2
+e 2
+w 2
+e 2
+w 2
+e 2
+w 2
+e 2
+autobattle on hull
+w 2
+e 2
+w 2
+e 2
+w 2
+e 2
+w 2
+e 2
+w 2
+e 2
+autobattle off
+w 2
+e 2
+w 2
+e 2
+w 2
+e 2
+w 2
+e 2
+w 2
+e 2
+escape reed_skimmer
+round
+status
+quit

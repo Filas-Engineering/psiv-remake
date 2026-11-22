@@ -105,7 +105,7 @@ TEST(comboLogRoundTripsThroughText) {
 }
 
 TEST(everyPublicEnumHasAParser) {
-	CHECK_EQ(checkNames(parseStat), 6);
+	CHECK_EQ(checkNames(parseStat), 7);
 	CHECK_EQ(checkNames(parseSide), 2);
 	CHECK_EQ(checkNames(parseTargeting), 8);
 	CHECK_EQ(checkNames(parseAbilityKind), 4);
@@ -118,7 +118,7 @@ TEST(everyPublicEnumHasAParser) {
 	CHECK_EQ(checkNames(parseStatusAction), 3);
 	CHECK_EQ(checkNames(parseForcedTarget), 3);
 	CHECK_EQ(checkNames(parseStatusStacking), 3);
-	CHECK_EQ(checkNames(parseAiConditionKind), 17);
+	CHECK_EQ(checkNames(parseAiConditionKind), 18);
 	CHECK_EQ(checkNames(parseAiTargetRule), 7);
 	CHECK_EQ(checkNames(parseCommandKind), 6);
 	CHECK_EQ(checkNames(parseMacroTargetKind), 5);

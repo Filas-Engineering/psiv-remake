@@ -53,6 +53,7 @@ enum class ActionType {
 	ambient_stop,
 	sound,
 	warp,
+	place_actor,
 };
 
 // EVT-023: every action except warp only changes what is on screen or heard.
@@ -78,6 +79,13 @@ struct Action {
 	double speed = 0;
 	double strength = 0;
 	bool loop = false;
+	// move: markers walked through, in order, before the target. pathfind: the host finds its own way to the target
+	// around what stands in the way.
+	std::vector<std::string> waypoints;
+	bool pathfind = false;
+	// place_actor: north, east, south or west, or empty to keep the actor's facing.
+	std::string facing;
+	// show_actor, hide_actor: `target` may name a transition (`show <actor> with <animation>`), played for `seconds`.
 	// Reach the end state at once, with no transition, and report done
 	// immediately. Set when the interpreter rebuilds the screen after a skip
 	// or a restore, and on warps run while skipping. When the end state is
@@ -111,6 +119,22 @@ struct BattleRequest {
 	std::string end_enemy;
 	// Empty, or the vehicle the party fights aboard.
 	std::string vehicle;
+};
+
+// What `party swap` does with the pieces the replaced member wears: the game's own rule for a member who leaves, or
+// the script's `equipment keep` or `equipment bag`.
+enum class SwapEquipment : int { rule = 0, keep = 1, bag = 2 };
+
+// `party swap <slot|member> <member>`: the member in a lineup slot (1 is the leader) or the named lineup member goes to
+// the reserve and `member` takes that slot.
+struct PartySwap {
+	// 1 or more, or 0 when `replaced` names the member.
+	int slot = 0;
+	std::string replaced;
+	std::string member;
+	SwapEquipment equipment = SwapEquipment::rule;
+	// `silent`: no notice that the members changed places.
+	bool silent = false;
 };
 
 struct RestRequest {
@@ -191,7 +215,53 @@ public:
 	virtual void unequip_piece(const std::string& member, const std::string& piece);
 	// The track the area the party is in plays from now on, saved with the game; empty goes back to the area's own.
 	virtual void set_area_music(const std::string& track);
+	// The actor is gone for good, or until the party next enters an area, saved with the game.
+	virtual void remove_actor(const std::string& actor, bool until_reload);
+	// `party save` and `party restore`: a named snapshot of who is in the lineup and the reserve, in order, saved with
+	// the game; saving again under a name replaces it. restore_party returns false when no snapshot has that name,
+	// which stops the script with a runtime error. The defaults keep nothing, so every restore fails.
+	virtual void save_party(const std::string& snapshot);
+	virtual bool restore_party(const std::string& snapshot);
+	// `party swap`. A swap the game cannot make is the game's to refuse; the default does nothing.
+	virtual void swap_party_member(const PartySwap& swap);
+	// `party add <member> silent` and `party remove <member> silent`: as add_party_member and remove_party_member,
+	// without the notice that the member joined or left. The defaults call those.
+	virtual void add_party_member_silently(const std::string& member);
+	virtual void remove_party_member_silently(const std::string& member);
+	// `party order`: the named lineup members lead the lineup in that order and the others follow in their own order,
+	// with no notice. Returns false, which stops the script with a runtime error, when a name is not in the lineup;
+	// the default changes nothing and accepts only names in_party knows.
+	virtual bool order_party(const std::vector<std::string>& members);
+	// `spawn`: start the background event beside the field, without taking control (FORMAT.md, "Background events"). The
+	// game decides when it runs and what stops it; the default does nothing.
+	virtual void spawn_event(const std::string& event);
+	// `look`: draw the actor with that enemy's field figure, or with a look the game names, or with its own figure when
+	// both are empty; game state, saved with the game. The default does nothing.
+	virtual void set_actor_look(const std::string& actor, const std::string& enemy, const std::string& look);
+	// `credits`: play the credits the game data names, done when the host says they finished. The default returns 0,
+	// which stops the script with a runtime error, like the other blocking calls.
+	virtual Handle play_credits(const std::string& credits);
+	// `end game`: the story is over. The event ends after this call; the game decides what comes next (records the
+	// cleared game and goes back to the title, say). The default does nothing.
+	virtual void end_game();
 };
+
+// What a standard animation leaves behind once it has played (FORMAT.md, "Actors").
+enum class AnimationEnd { none, shown, hidden };
+
+// An animation name every host knows, with its length when the data gives none.
+struct StandardAnimation {
+	const char* name;
+	double seconds;
+	AnimationEnd end;
+};
+
+// fade_in, fade_out, dissolve, blink_out, hop and shake, in that order.
+const std::vector<StandardAnimation>& standard_animations();
+// Null for a name that is not a standard animation.
+const StandardAnimation* standard_animation(const std::string& name);
+// north, east, south or west: a `face` target that names a direction, and a `place` facing.
+bool is_direction(const std::string& word);
 
 const char* action_type_name(ActionType type);
 // The action named as timing configurations and game data write it: the type name with `_` for spaces ("move",
@@ -208,6 +278,7 @@ std::string describe(const Line& line);
 std::string describe(const ChoiceRequest& request);
 std::string describe(const BattleRequest& request);
 std::string describe(const RestRequest& request);
+std::string describe(const PartySwap& swap);
 const char* battle_result_name(BattleResult result);
 const char* battle_opening_name(BattleOpening opening);
 

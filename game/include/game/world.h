@@ -61,6 +61,18 @@ struct VisibleEnemy {
 	int moveProgress = 0;
 };
 
+// How a hidden actor left: a plain `hide` (None), or the standard animation that hid it.
+enum class ActorVanish { None, Faded, Dissolved, BlinkedOut };
+
+const char* toString(ActorVanish vanish);
+bool parseActorVanish(const std::string& text, ActorVanish& out);
+
+// A script's `remove`: gone until the party next enters an area, or for good.
+enum class ActorRemoval { None, UntilReload, ForGood };
+
+const char* toString(ActorRemoval removal);
+bool parseActorRemoval(const std::string& text, ActorRemoval& out);
+
 // Where an event script left one of the game's actors (game.json `actors`). Scripts place actors in the area the
 // party is in; an actor keeps its place when the party leaves.
 struct ActorPlace {
@@ -69,6 +81,18 @@ struct ActorPlace {
 	Cell cell;
 	Facing facing = Facing::South;
 	bool visible = true;
+	ActorVanish vanish = ActorVanish::None;
+	// The one-shot animation playing and its milliseconds left and in all; empty once it has played.
+	std::string animation = {};
+	int animationMs = 0;
+	int animationTotalMs = 0;
+	ActorRemoval removed = ActorRemoval::None;
+	// A script's `look`: an enemy's field figure or a host's look in place of game.json's; both empty for game.json's.
+	std::string lookEnemy = {};
+	std::string look = {};
+	// Its wander (game.json `wander`): hundredths of a cell travelled toward the next step, and the pause left after one.
+	int wanderProgress = 0;
+	int wanderPauseMs = 0;
 };
 
 // A vehicle the party has (FLD-060). While the party rides it, `area` and `cell` follow the party.
@@ -82,6 +106,14 @@ struct VehiclePlace {
 	Cell home;
 	// Its skill uses left from earlier battles (B19); a skill left out is full. Rest fills them all.
 	std::map<std::string, int> skillUses = {};
+};
+
+// Who was in the lineup and in the reserve, each in order, when a script's `party save` took it.
+struct PartySnapshot {
+	std::vector<std::string> lineup;
+	std::vector<std::string> reserve;
+	bool operator==(const PartySnapshot& other) const { return lineup == other.lineup && reserve == other.reserve; }
+	bool operator!=(const PartySnapshot& other) const { return !(*this == other); }
 };
 
 // A save chunk this build does not know, kept and written back unchanged (SAV-020).
@@ -100,6 +132,8 @@ struct World {
 	std::vector<std::string> lineup;
 	// Names given at name entry, by character id.
 	std::map<std::string, std::string> memberNames;
+	// Party snapshots scripts saved, by name.
+	std::map<std::string, PartySnapshot> partySnapshots;
 	rules::Inventory items;
 	rules::EquipmentBag equipmentBag;
 	int money = 0;

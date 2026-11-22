@@ -32,17 +32,17 @@ event harbor_arrival skippable
 end
 ```
 
-Every event is marked `skippable` or `unskippable`.
+Every event is marked `skippable`, `unskippable` or `background` (see [Background events](#background-events)).
 
 ### Skipping
 
 When the player skips a skippable event, the rest of the scene plays at once:
 
-- Every command that changes the game applies, in order, exactly as when the scene is watched: flags, variables, items, party, player control, warps and rests.
+- Every command that changes the game applies, in order, exactly as when the scene is watched: flags, variables, items, party (snapshots and swaps included), player control, warps and rests.
 - Lines are not shown. The game's text log still gets them, marked as skipped.
 - Waits take no time.
-- Moves, camera, panels, fades, music and ambient sound complete at once: the game puts everything at its end state without playing it. Shakes and one-shot sounds are dropped, because they leave nothing behind.
-- The skip stops at the next `choice`, `ask`, `battle`, `shop`, `save prompt` or `name entry`. The player answers or fights as usual and can skip again afterwards.
+- Moves, places, animations, camera, panels, fades, music and ambient sound complete at once: the game puts everything at its end state without playing it (an actor a standard animation hides is hidden). Shakes and one-shot sounds are dropped, because they leave nothing behind.
+- The skip stops at the next `choice`, `ask`, `battle`, `shop`, `save prompt`, `name entry` or `credits`. The player answers or fights as usual and can skip again afterwards.
 
 So the game after a skip is the same as after watching the same choices and battles, whenever the player skips. Write the scene once; there is nothing to add for skipping.
 
@@ -147,12 +147,42 @@ Labels belong to their event. A loop that never waits is stopped with a runtime 
 
 | Command | Example |
 | --- | --- |
-| `move <actor> to <marker> [speed <n>] [nowait]` | `move traveler to pier_end speed 1.5` |
-| `move <actor> to <x> <y> <z> [speed <n>] [nowait]` | `move vendor to 4 0 -2.5 nowait` |
-| `face <actor> <actor or marker> [nowait]` | `face guide traveler` |
-| `anim <actor> <animation> [loop] [nowait]` | `anim keeper bow loop` |
-| `show <actor> [nowait]` | `show traveler` |
-| `hide <actor> [nowait]` | `hide vendor` |
+| `move <actor> [via <marker>...] to <marker> [speed <n>] [pathfind] [nowait]` | `move traveler to pier_end speed 1.5` |
+| `move <actor> [via <marker>...] to <x> <y> <z> [speed <n>] [pathfind] [nowait]` | `move vendor via stall_counter to 4 0 -2.5 nowait` |
+| `place <actor> <marker> [facing <direction>] [nowait]` | `place keeper stall_counter facing south` |
+| `place <actor> <x> <y> <z> [facing <direction>] [nowait]` | `place vendor 4 0 -2.5` |
+| `face <actor> <actor, marker or direction> [nowait]` | `face guide traveler`, `face guide west` |
+| `anim <actor> <animation> [loop] [nowait]` | `anim keeper bow loop`, `anim vendor dissolve` |
+| `show <actor> [with <animation>] [nowait]` | `show traveler`, `show traveler with fade_in` |
+| `hide <actor> [with <animation>] [nowait]` | `hide vendor`, `hide vendor with dissolve` |
+| `remove <actor> [until reload]` | `remove vendor`, `remove keeper until reload` |
+| `look <actor> enemy <enemy>` | `look keeper enemy reef_crab` |
+| `look <actor> <look>` | `look keeper lantern_bearer` |
+| `look <actor> default` | `look keeper default` |
+
+- `move` walks to each `via` marker in turn, then to the target. `pathfind` asks the game to find its own way around what stands in the way; without it each leg is straight, as the game defines it.
+- `place` puts the actor there at once, with no walk, facing `facing` if given (`north`, `east`, `south` or `west`), otherwise as it faced.
+- A direction (`north`, `east`, `south`, `west`) after `face` always means the direction, so an actor or marker with such a name cannot be faced by name.
+- `remove` takes the actor out of the game: gone for good, or `until reload`, until the party next enters an area. It changes the game at once, like `give`, applies while skipping and is not allowed inside `together` or `race`. It is also the way to despawn an actor; there is no other command for it.
+- `move ... via` is the multi-point path: the actor walks to each `via` marker in turn, then to the target.
+- `show ... with` and `hide ... with` play the animation as the transition: the action lasts as long as an `anim` of it would, and a standard animation must leave the actor the same way (`show ... with fade_in`; `hide ... with fade_out`, `dissolve` or `blink_out`; `hop` and `shake` fit either). A hide with one of the hiding standard animations is rebuilt after a skip or a restore as that animation, as an `anim` of it is. With a registry, a name that is not standard must be on an `animation` line.
+- `look` changes how the game draws the actor: with an enemy's field figure (with a registry, a listed `enemy`), with a look the game names (not listed), or with its own figure again (`default`). It is game state, like `give`: it applies at once, applies while skipping, is saved with the game, and is not allowed inside `together` or `race`. A look cannot be named `enemy` or `default`.
+- A game may reserve actor names for things that are not actors; `../game` addresses a visible field enemy as `enemy.<zone>.<n>` (`../game/README.md`, "Actors").
+
+### Standard animations
+
+Every game knows these animation names; a registry need not list them, and the game's data may give them other lengths. Any other name goes to the game as written and must be in the registry.
+
+| Animation | Seconds | Leaves the actor |
+| --- | --- | --- |
+| `fade_in` | 0.5 | shown |
+| `fade_out` | 0.5 | hidden |
+| `dissolve` | 0.8 | hidden |
+| `blink_out` | 0.6 | hidden |
+| `hop` | 0.3 | as it was |
+| `shake` | 0.4 | as it was |
+
+An `anim` of one waits for that long by default (the `seconds` of its action, see [Timing a scene](#timing-a-scene)). One that shows or hides counts as a `show` or `hide` for what a save rebuilds, and a skip puts it at its end state: the actor shown or hidden, nothing playing.
 
 ## Camera, panels and the screen
 
@@ -177,7 +207,7 @@ Live panels are comic-style frames, each showing what a named camera sees in the
 | `music stop [nowait]` | `music stop` |
 | `music fade <seconds> [nowait]` | `music fade 1.0` (fades out, then stops) |
 | `music area <track>` | `music area harbor_storm` (the area the party is in plays this track from now on, saved with the game, until the party leaves or a script changes it) |
-| `music area default` | goes back to the area's own track |
+| `music area default` | goes back to the area's track (the game's: `game.json` `music.areas` by flag, else the area's own) |
 | `ambient play <sound> [nowait]` | `ambient play harbor_gulls` (a background loop such as wind or surf) |
 | `ambient stop [nowait]` | `ambient stop` |
 | `sound <cue> [nowait]` | `sound bell_chime` |
@@ -213,7 +243,28 @@ race
 end
 ```
 
-Inside `together` and `race` you can use only actor, camera, panel, screen and audio commands, `wait` and `sequence`. You cannot use `nowait` there, because every branch already runs in parallel. A `sequence` cannot contain another `sequence`.
+Inside `together` and `race` you can use only actor, camera, panel, screen and audio commands (not `remove` or `look`), `wait` and `sequence`. You cannot use `nowait` there, because every branch already runs in parallel. A `sequence` cannot contain another `sequence`.
+
+## Background events
+
+An event marked `background` runs beside the field without taking control: the player keeps walking while its actors move, animate and disappear. It cannot be skipped, since nobody watches it as a scene.
+
+```
+event hen_round background
+	while not yard.hen_home
+		move hen via coop to gate pathfind
+		anim hen peck
+		wait 2
+	end
+	hide hen with dissolve
+end
+```
+
+- `spawn <event>` starts a background event and goes straight on to the next line. It works in any event, applies while skipping and is not allowed inside `together` or `race`. The event it names must be marked `background`.
+- A game may also start one itself, as it starts any event; `../game` runs a hook's event in the background when that event is marked `background`.
+- Only these commands compile in a background event: `move`, `place`, `face`, `anim`, `show`, `hide`, `remove`, `look`, `wait`, `sync`, `sound`, `set`, `clear`, `var`, `if`, `while`, `label`, `goto`, `call`, `return`, `spawn`, `together`, `race` and `sequence` (with the parallel rules above). Dialogue, choices, battles, menus, rests, credits, `end game`, warps, party, items, money, vehicles, camera, panels, fades, shakes, music and ambient sound are errors at their line. `call` may name only another background event.
+- `nowait`, `sync` and timing work as in any event: a move waits until the game reports it done unless it is `nowait`.
+- Each background event runs in its own interpreter over the same program (`Interpreter`), and is saved with the same save state. When it runs, what pauses it, what stops it and how many may run at once are the game's rules; `../game/README.md` ("Background events") gives them for that library.
 
 ## Flow
 
@@ -221,6 +272,10 @@ Inside `together` and `race` you can use only actor, camera, panel, screen and a
 | --- | --- |
 | `call <event>` | `call market_counter_offer` |
 | `return` | ends the current event early and goes back to its caller |
+| `spawn <event>` | `spawn hen_round` (starts a background event and carries on; see [Background events](#background-events)) |
+| `end game` | the story is over: the event ends here, its callers and parallel branches with it, and the game decides what comes next (`../game` writes the clear-data record and goes back to the title) |
+
+`end game` is a command, not the end of a block: a line whose first two words are `end game` never closes an `if`, a loop or the event. It applies while skipping, like any command that changes the game.
 
 ## Game state
 
@@ -228,8 +283,12 @@ Inside `together` and `race` you can use only actor, camera, panel, screen and a
 | --- | --- |
 | `give <item> [count]` | `give lantern_oil 2` |
 | `take <item> [count]` | `take coin_pouch` |
-| `party add <member>` | `party add guide` |
-| `party remove <member>` | `party remove guide` |
+| `party add <member> [silent]` | `party add guide` (`silent`: no notice that the member joined) |
+| `party remove <member> [silent]` | `party remove guide` (`silent`: no notice that the member left) |
+| `party order <member> <member> ...` | `party order warden guide` (the named lineup members lead the lineup in that order; the others follow in their own order; no notice) |
+| `party save [<name>]` | `party save before_split` (a snapshot of who is in the lineup and the reserve, each in order; without a name, `default`) |
+| `party restore [<name>]` | `party restore before_split` (puts that lineup and reserve back; without a name, `default`) |
+| `party swap <slot\|member> <member> [equipment keep\|bag] [silent]` | `party swap 2 drifter` or `party swap guide drifter equipment bag silent` (the member in lineup slot 2, 1 being the leader, or the named lineup member goes to the reserve and `drifter` takes that slot; `silent`: no notice) |
 | `warp <map> <marker>` | `warp lighthouse_base door_inside` |
 | `vehicle give <vehicle> <map> <marker>` | `vehicle give skiff harbor pier_end` (the party now has it, standing there) |
 | `vehicle place <vehicle> <map> <marker>` | `vehicle place skiff harbor pier_end` (moves a vehicle the party has) |
@@ -243,7 +302,9 @@ Inside `together` and `race` you can use only actor, camera, panel, screen and a
 | `lock player` | stops player input during the scene |
 | `unlock player` | gives control back |
 
-The `vehicle`, `learn`, `follower`, `money`, `equip` and `unequip` commands change the game at once, like `give`, and apply while skipping. With a registry, `learn` names a listed `member` and `ability`, `follower` a listed `actor`, `equip` and `unequip` a listed `member` and `item`, and `music area` a listed `audio` track. A piece that does not fit, or is not held or worn, is the game's to refuse (`../game` warns and carries on). With a registry the vehicle must be listed on a `vehicle` line and the marker must be on the map, as for `warp`; they do not change the map the party is on. Where a vehicle may stand, and what happens to a party riding one that a script moves or removes, is the game's business (`../game/README.md`).
+The `party` commands keep membership and order only: members keep their own levels, equipment and state. `party save` replaces an earlier snapshot of the same name, and a snapshot stays (in the save) after it is restored, so it can be restored again. `party restore` of a name nobody saved stops the event with a runtime error at that line, like any other runtime error, also while skipping. The game decides what a restore does with members who joined or left since the snapshot, and what a swap it cannot make does (`../game/README.md`, "Party snapshots and swaps"); in `../game` a member who joined since stays in the reserve, a member who left since comes back, and an impossible swap warns and changes nothing. `party swap` without `equipment` follows the game's rule for a member who leaves (`leave_equipment` in `../game`); `equipment keep` keeps the replaced member's pieces on it and `equipment bag` puts them in the bag. `party order` names each member once (`script.party_order_twice`); a name that is not in the lineup when it runs (a reserve member, or one who never joined) stops the event with a runtime error at that line, as `party restore` of an unknown snapshot does, also while skipping, and the lineup stays as it was. `silent` only drops the game's notice; the change itself is the same. With a registry the swap's and the order's members are listed `member` names; snapshot names are not listed.
+
+The `vehicle`, `learn`, `follower`, `money`, `equip` and `unequip` commands (and `remove`, under [Actors](#actors)) change the game at once, like `give`, and apply while skipping. With a registry, `learn` names a listed `member` and `ability`, `follower` a listed `actor`, `equip` and `unequip` a listed `member` and `item`, and `music area` a listed `audio` track. A piece that does not fit, or is not held or worn, is the game's to refuse (`../game` warns and carries on). With a registry the vehicle must be listed on a `vehicle` line and the marker must be on the map, as for `warp`; they do not change the map the party is on. Where a vehicle may stand, and what happens to a party riding one that a script moves or removes, is the game's business (`../game/README.md`).
 
 ## Menus and rests
 
@@ -255,8 +316,9 @@ Each of these waits until the game is done with it.
 | `rest [<rest point>]` | `rest harbor_inn` (an inn's rules, such as its price, apply); `rest` alone heals the party for free |
 | `save prompt` | lets the player save; the save is an ordinary one, so loading it does not come back into this event |
 | `name entry <member>` | `name entry traveler` (until the player confirms a name) |
+| `credits <credits>` | `credits wren_end` (plays the credits the game's data names, until the game says they finished; `../game` lists them in `game.json` `credits`) |
 
-A skip stops at `shop`, `save prompt` and `name entry`, because the player decides something there. A `rest` happens while skipping, without its usual presentation.
+A skip stops at `shop`, `save prompt`, `name entry` and `credits`, because the player decides something there or watches it. A `rest` happens while skipping, without its usual presentation.
 
 ## Battles
 
@@ -402,7 +464,7 @@ duration move 1.5      # every move
 duration move traveler 2.5   # moves of one actor
 ```
 
-`duration` takes an action name, an optional subject (actor, camera, panel or track) and seconds. The action names are `move`, `face`, `anim`, `show`, `hide`, `panel_show`, `panel_hide`, `panel_clear`, `camera_cut`, `camera_move`, `fade_in`, `fade_out`, `shake`, `music_play`, `music_stop`, `music_fade`, `ambient_play`, `ambient_stop`, `sound` and `warp`. Menus and rests take no time. An action with no `duration` lasts the seconds written in the script (fades, camera moves, shakes, music fades), or no time at all. The game's data carries the same table (`presentation.durations` in `game.json`, see `../game/README.md`), and the game reports each action's seconds by this rule (`events::action_seconds`), so an engine and this tool time a scene alike.
+`duration` takes an action name, an optional subject (actor, camera, panel or track) and seconds. The action names are `move`, `face`, `anim`, `show`, `hide`, `panel_show`, `panel_hide`, `panel_clear`, `camera_cut`, `camera_move`, `fade_in`, `fade_out`, `shake`, `music_play`, `music_stop`, `music_fade`, `ambient_play`, `ambient_stop`, `sound`, `warp` and `place`. Menus and rests take no time. An action with no `duration` lasts the seconds written in the script (fades, camera moves, shakes, music fades) or a standard animation's own (see [Actors](#actors)), or no time at all. The game's data carries the same table (`presentation.durations` in `game.json`, see `../game/README.md`), and the game reports each action's seconds by this rule (`events::action_seconds`), so an engine and this tool time a scene alike.
 
 ## Lint
 
@@ -444,7 +506,7 @@ var harbor.first_stop
 var market.offer local default 30
 ```
 
-- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `face` and `anim` subject), `marker` (`move`, `face` and `warp` targets), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation`, `portrait` (the `as` of `say`), `item` (also the `item` test), `member` (`party`, `name entry` and the `party` test), `encounter`, `enemy` (`until defeat`), `vehicle` (`battle ... aboard`, the `vehicle` commands and the `vehicle` and `aboard` tests), `ability` (`learn`), `map`, `shop` and `rest`. Panel IDs are not listed; each scene names its own.
+- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `place`, `face`, `anim`, `remove` and `look` subject), `marker` (`move`, `place`, `face` and `warp` targets and `via` markers), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation` (`anim` and the `with` of `show` and `hide`; the standard animations need no line), `portrait` (the `as` of `say`), `item` (also the `item` test), `member` (`party add`, `party remove`, both members of `party swap`, every member of `party order`, `name entry` and the `party` test), `encounter`, `enemy` (`until defeat` and `look ... enemy`), `vehicle` (`battle ... aboard`, the `vehicle` commands and the `vehicle` and `aboard` tests), `ability` (`learn`), `map`, `shop`, `rest` and `credits` (the `credits` command). Panel IDs are not listed; each scene names its own.
 - `map_markers <map> <marker>...` lists the markers on one map; they count as listed markers. A marker on several maps is listed for each. `warp <map> <marker>` to a marker that is not on that map is an error. The checker also follows the map the party is on through each event, from its last `warp` (and from the start, see `event_map`), so a `move` to a marker on another map is an error too. Where the map cannot be known (after a branch that warps on one side only, a `call`, a `label`, or in a loop that warps), nothing more is checked until the next `warp`.
 - `event_map <map> <event>...` says the game starts those events on that map, for example from a hook in that area. An event listed for one map starts the move check on it; one listed for several, or none, starts with the map unknown.
 - `enemy <name>...` lists the enemies a `battle ... until defeat` may name.
@@ -470,7 +532,7 @@ The checker reports every problem it finds as `file:line: error: message`. Each 
 - blocks without an `end`, and an `end`, `else`, `option`, `yes`, `no`, `win`, `lose` or `flee` in the wrong place
 - unknown or duplicate labels, unknown or duplicate events
 - branches that can never run
-- commands that are not allowed inside `together` or `race`
+- commands that are not allowed inside `together` or `race`, or in a background event, a background event calling one that is not, and a `spawn` of an event that is not a background one
 - a choice with fewer than two options, and duplicate `yes`, `no`, `win`, `lose` or `flee` sections
 - a battle without a `win` section
 - with a registry: names it does not list, and flags and variables that are undeclared or used as the other type

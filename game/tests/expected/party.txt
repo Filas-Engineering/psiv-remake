@@ -1,0 +1,235 @@
+The Bell at Tidewater (seed 6)
+title> new
+You arrive at Tidewater Landing.
+  (fade in 1)
+The ferry bumps against the pilings of Tidewater Landing.
+  (move dockhand to dock_front)
+  (move dockhand to greet_spot)
+  (face dockhand fighter)
+Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  (move dockhand to dock_front)
+  (move dockhand to 10 0 2)
+  (face dockhand dock_front)
+New job: The dockhand's lost crate.
+New encyclopedia entry: Tidewater Landing.
+[Autosaved to auto_0 (event end).]
+field> dev warp wren_loft loft_door
+Developer tools changed this game. It and its saves are marked.
+You arrive at Wren Loft.
+[Autosaved to auto_1 (area entry).]
+field> party
+  Lineup: Test Fighter. Reserve: nobody.
+field> walk ledger_front
+field> face north
+field> talk
+The loft's ledger lists everyone who signed in today.
+Test Mystic joins the party.
+Test Scout joins the party.
+Test Medic joins the party.
+Some of you take the long road now; the rest wait here.
+Test Scout leaves the party.
+Test Scout takes Test Mystic's place in the party.
+Test Mystic hands back what they wore.
+! cannot party swap medic engineer: 'engineer' has not joined the party
+Test Engineer joins the party.
+! cannot party swap medic engineer: 'engineer' is already in the lineup
+! cannot party swap 5 lancer: lineup slot 5 is empty
+field> party
+  Lineup: Test Fighter, Test Scout, Test Medic, Test Engineer. Reserve: Test Mystic.
+field> status
+Mode field, Wren Loft (2,1) facing north, play time 0:00:01.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 0
+  Test Scout Lv4 HP 60/60 TP 18/18 EXP 0
+  Test Medic Lv3 HP 52/52 TP 32/32 EXP 0
+  Test Engineer Lv3 HP 89/89 TP 10/10 EXP 0
+  Money 50. Items: tonic x1, calm_charm x1, ember_rod x1.
+field> menu
+menu> save manual_1
+Saved to manual_1.
+menu> close
+field> title
+title> load manual_1
+Loaded manual_1.
+field> party
+  Lineup: Test Fighter, Test Scout, Test Medic, Test Engineer. Reserve: Test Mystic.
+field> walk bell_front
+field> face north
+field> talk
+Test Harpooner joins the party.
+The party regroups as it was.
+The bell rings, and the party gathers at the ledger as before.
+You arrive at Wren Loft.
+  (warp wren_loft loft_door)
+field> party
+  Lineup: Test Fighter, Test Mystic, Test Scout, Test Medic. Reserve: Test Engineer, Test Harpooner.
+field> status
+Mode field, Wren Loft (8,1) facing north, play time 0:00:02.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 0
+  Test Mystic Lv3 HP 46/46 TP 30/30 EXP 0
+  Test Scout Lv4 HP 60/60 TP 18/18 EXP 0
+  Test Medic Lv3 HP 52/52 TP 32/32 EXP 0
+  Money 50. Items: tonic x1, calm_charm x1, ember_rod x1.
+field> walk slate_front
+field> face north
+field> talk
+The slate is wiped clean.
+! event error: events/loft.ev:32: there is no party snapshot 'old_crew'; 'party save old_crew' makes one
+field> menu
+menu> macro create pair
+menu> macro step pair 0 medic ability mend
+menu> macro step pair 1 scout item tonic self
+menu> macro step pair 2 mystic ability spark e0
+menu> macros
+  opener
+    0 mystic ability spark e0
+    1 scout ability gust e0
+    2 fighter attack e0
+    3 engineer ability drowse e1 (not_in_party)
+    4 medic ability mend fighter
+  tempest
+    0 mystic ability spark e0
+    1 scout ability gust e0
+    2 engineer ability flare_burst all (not_in_party)
+    3 fighter attack e0
+    4 medic defend
+  regroup
+    0 medic ability mend fighter
+    1 fighter ability rally all
+    2 mystic ability frostbite
+    3 scout attack e0
+    4 engineer item tonic mystic (not_in_party)
+  pair
+    0 medic ability mend
+    1 scout item tonic self
+    2 mystic ability spark e0
+menu> close
+field> refused autobattle random nosuch
+! no macro named 'nosuch'
+field> autobattle random pair
+field> walk 2 3
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+-- round 1 --
+Rust Hound uses Venom Spit on Test Scout.
+  Test Scout takes 19 damage.
+  Test Scout resists the poison.
+Gel Mite B uses Bite on Test Mystic.
+  Test Mystic takes 17 damage.
+Test Fighter uses Strike on Gel Mite A.
+  Gel Mite A takes 44 damage.
+Test Medic turns from Test Medic to Test Scout.
+Test Medic uses Mend on Test Scout.
+  Test Scout recovers 19.
+Test Scout turns from Test Scout to Test Mystic.
+Test Scout uses Tonic on Test Mystic.
+  Test Mystic recovers 17.
+Test Mystic uses Spark on Gel Mite A.
+  Gel Mite A takes 16 damage.
+  Gel Mite A falls.
+Gel Mite A cannot act (Defeated).
+-- round 2 --
+Test Medic uses Mend on Test Medic.
+  Test Medic recovers 0.
+Test Scout uses Gust on Gel Mite B.
+  Gel Mite B takes 47 damage.
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter takes 11 damage.
+  Test Fighter resists the poison.
+Test Fighter uses Strike on Gel Mite B.
+  Gel Mite B takes 13 damage.
+  Gel Mite B falls.
+Test Mystic turns from Gel Mite B to Rust Hound.
+Test Mystic uses Spark on Rust Hound.
+  Rust Hound takes 84 damage.
+Gel Mite B cannot act (Defeated).
+-- round 3 --
+Test Medic turns from Test Medic to Test Fighter.
+Test Medic uses Mend on Test Fighter.
+  Test Fighter recovers 11.
+Combo: Storm Spark.
+  A new combination joins the combo log.
+  Rust Hound takes 6 damage.
+  Rust Hound falls.
+Outcome: victory
+Victory. 22 experience, 15 money.
+The enemies dropped 1 Tonic.
+field> walk 7 3
+field> walk 2 3
+Battle!
+Enemies: Gel Mite A, Gel Mite B, Rust Hound.
+-- round 1 --
+Test Medic uses Mend on Test Medic.
+  Test Medic recovers 0.
+Test Scout turns from Test Scout to Test Medic.
+Test Scout uses Tonic on Test Medic.
+  Test Medic recovers 0.
+  Tonic has no effect and is kept.
+Test Fighter uses Strike on Gel Mite A.
+  Gel Mite A takes 44 damage.
+Rust Hound uses Venom Spit on Test Scout.
+  Test Scout takes 17 damage.
+  Test Scout resists the poison.
+Gel Mite B uses Bite on Test Scout.
+  Test Scout evades.
+Test Mystic uses Spark on Gel Mite A.
+  Gel Mite A takes 16 damage.
+  Gel Mite A falls.
+Gel Mite A cannot act (Defeated).
+-- round 2 --
+Rust Hound uses Venom Spit on Test Fighter.
+  Test Fighter takes 14 damage.
+  Test Fighter is poisoned!
+Test Fighter uses Strike on Rust Hound.
+  Rust Hound takes 41 damage.
+Gel Mite B uses Bite on Test Fighter.
+  Test Fighter takes 7 damage.
+Test Medic turns from Test Medic to Test Fighter.
+Test Medic uses Mend on Test Fighter.
+  Test Fighter recovers 21.
+Test Scout uses Tonic on Test Scout.
+  Test Scout recovers 17.
+Test Mystic turns from Gel Mite B to Rust Hound.
+Test Mystic uses Spark on Rust Hound.
+  Rust Hound takes 49 damage.
+  Rust Hound falls.
+-- round 3 --
+Test Fighter uses Strike on Gel Mite B.
+  Gel Mite B takes 37 damage.
+Test Medic uses Mend on Test Medic.
+  Test Medic recovers 0.
+Combo: Storm Spark.
+  Gel Mite B takes 23 damage.
+  Gel Mite B falls.
+Outcome: victory
+Victory. 22 experience, 15 money.
+field> status
+Mode field, Wren Loft (2,3) facing west, play time 0:00:30.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 10 [Poison]
+  Test Mystic Lv3 HP 46/46 TP 12/30 EXP 10
+  Test Scout Lv4 HP 60/60 TP 9/18 EXP 10
+  Test Medic Lv3 HP 52/52 TP 14/32 EXP 10
+  Money 80. Items: calm_charm x1, ember_rod x1.
+field> autobattle off
+field> walk roster_front
+field> face north
+field> talk
+The roster board lists the party in a new order.
+! event error: events/loft.ev:44: 'party order harpooner fighter' names a member who is not in the lineup
+field> party
+  Lineup: Test Medic, Test Scout, Test Fighter, Test Engineer. Reserve: Test Mystic, Test Harpooner, Test Lancer.
+field> title
+title> saves
+  manual_1 wren_loft 0:00:01 [fighter:3 scout:4 medic:3 engineer:3] original
+  auto_0 tidewater 0:00:00 [fighter:3] original (auto)
+  auto_1 wren_loft 0:00:00 [fighter:3] original (auto)
+title> erase manual_1
+Erased manual_1.
+title> refused erase manual_1
+! Save slot manual_1 cannot be read.
+title> refused erase manual_9
+! Save slot manual_9 cannot be read.
+title> saves
+  auto_0 tidewater 0:00:00 [fighter:3] original (auto)
+  auto_1 wren_loft 0:00:00 [fighter:3] original (auto)
+title> quit
+End of script.

@@ -30,20 +30,39 @@ private:
 	std::vector<rules::Problem>& out_;
 };
 
-// What stands on a solid cell: interact hooks, shops, rest points, chests with a cell, ports and helms.
+// What stands on a solid cell. A point is used from a floor cell beside it (interact hooks, shops, rest points, chests
+// with a cell, ports and helms), so the party must reach one; a cell that is only solid (where an actor stands apart
+// from its talk point, or a solid actor's home) blocks the way and is never used.
 struct Solid {
 	std::string what;
 	int line = 0;
+	bool point = true;
 };
 
-void checkArea(const Area& area, const std::set<std::string>& entrances, const std::vector<FieldVehicle>& vehicles, const std::vector<std::string>& actors, Found& found) {
+// An object the party uses: the cells it is used at (a hook's further cells, and under `interact: "nearby"` the cell
+// its actor stands on behind a counter) and whether it is used across a counter (game/README.md, "Interaction").
+struct Use {
+	std::string what;
+	int line = 0;
+	std::vector<Cell> cells;
+	bool across = false;
+};
+
+void checkArea(const Area& area, const std::set<std::string>& entrances, const GameConfig& config, Found& found) {
 	const std::string& file = area.file;
+	const std::vector<std::string>& actors = config.actors;
+	const std::vector<FieldVehicle>& vehicles = config.vehicles;
 	std::map<Cell, Solid> solids;
-	auto addSolid = [&](Cell c, const std::string& what, int line) {
-		auto [it, added] = solids.emplace(c, Solid{what, line});
+	auto addSolid = [&](Cell c, const std::string& what, int line, bool point = true) {
+		auto [it, added] = solids.emplace(c, Solid{what, line, point});
 		if (!added) {
 			found.add(file, line, "check.cell_shared", {what, it->second.what, cellText(c)});
 		}
+	};
+	std::vector<Use> uses;
+	auto addPoint = [&](Cell c, const std::string& what, int line) {
+		addSolid(c, what, line);
+		uses.push_back({what, line, {c}, config.interactAcross});
 	};
 	std::set<std::string> hookIds;
 	for (const Hook& h : area.hooks) {
@@ -51,12 +70,32 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 			found.add(file, h.line, "check.hook_id_taken", {h.id});
 		}
 		if (h.trigger == HookTrigger::Interact) {
-			addSolid(h.at, "hook '" + h.id + "'", h.line);
+			const std::string what = "hook '" + h.id + "'";
+			addPoint(h.at, what, h.line);
+			for (Cell c : h.cells) {
+				addSolid(c, what, h.line);
+				uses.back().cells.push_back(c);
+			}
+			if (h.actorAt && config.interactReach == InteractReach::Nearby) {
+				uses.back().cells.push_back(*h.actorAt);
+			}
+			uses.back().across = uses.back().across || h.across;
+		}
+	}
+	for (const Hook& h : area.hooks) {
+		if (h.trigger == HookTrigger::Interact && h.actorAt) {
+			addSolid(*h.actorAt, "actor '" + h.id + "'", h.line, false);
+		}
+	}
+	for (const ActorDef& actor : config.actorDefs) {
+		const auto marker = area.markers.find(actor.marker);
+		if (actor.area == area.id && actor.solid && (actor.at || marker != area.markers.end())) {
+			addSolid(actor.at ? *actor.at : marker->second, "actor '" + actor.id + "'", 0, false);
 		}
 	}
 	for (const Shop& s : area.shops) {
 		if (s.at) {
-			addSolid(*s.at, "shop '" + s.id + "'", s.line);
+			addPoint(*s.at, "shop '" + s.id + "'", s.line);
 		}
 		if (s.stock.empty()) {
 			found.add(file, s.line, "check.shop_empty", {s.id});
@@ -64,17 +103,17 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 	}
 	for (const RestPoint& r : area.rests) {
 		if (r.at) {
-			addSolid(*r.at, "rest point '" + r.id + "'", r.line);
+			addPoint(*r.at, "rest point '" + r.id + "'", r.line);
 		}
 	}
 	for (const Chest& c : area.chests) {
-		addSolid(c.at, "chest '" + c.id + "'", c.line);
+		addPoint(c.at, "chest '" + c.id + "'", c.line);
 	}
 	for (const Port& p : area.ports) {
-		addSolid(p.at, "port '" + p.id + "'", p.line);
+		addPoint(p.at, "port '" + p.id + "'", p.line);
 	}
 	for (const Helm& h : area.helms) {
-		addSolid(h.at, "helm '" + h.id + "'", h.line);
+		addPoint(h.at, "helm '" + h.id + "'", h.line);
 	}
 	auto solidAt = [&](Cell c) -> const Solid* {
 		auto it = solids.find(c);
@@ -156,6 +195,10 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 	const std::set<Cell> reached = [&] {
 		auto solidHere = [&](Cell c) { return solids.count(c) && !switchable.count(c); };
 		auto crossable = [&](Cell c) {
+			const auto solid = solids.find(c);
+			if (solid != solids.end() && !solid->second.point) {
+				return false;
+			}
 			if (view.walkable(c)) {
 				return true;
 			}
@@ -216,10 +259,20 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 	auto standable = [&](Cell at) {
 		return reached.count(at) && !exitCells.count(at) && std::find(area.gangway.begin(), area.gangway.end(), at) == area.gangway.end();
 	};
-	for (const auto& [cell, solid] : solids) {
-		const Cell c = cell;
-		if (!standable({c.x, c.y - 1}) && !standable({c.x + 1, c.y}) && !standable({c.x, c.y + 1}) && !standable({c.x - 1, c.y})) {
-			found.add(file, solid.line, "check.object_not_reached", {solid.what});
+	// A counter is a cell that is not floor and holds nothing, which the session lets a point be used across.
+	auto counter = [&](Cell c) { return area.inside(c) && area.rows[c.y][c.x] != '.' && !solids.count(c) && !exitCells.count(c); };
+	for (const Use& use : uses) {
+		const bool used = std::any_of(use.cells.begin(), use.cells.end(), [&](Cell c) {
+			for (Cell d : {Cell{0, -1}, Cell{1, 0}, Cell{0, 1}, Cell{-1, 0}}) {
+				const Cell near{c.x - d.x, c.y - d.y};
+				if (standable(near) || (use.across && counter(near) && standable({near.x - d.x, near.y - d.y}))) {
+					return true;
+				}
+			}
+			return false;
+		});
+		if (!used) {
+			found.add(file, use.line, "check.object_not_reached", {use.what});
 		}
 	}
 }
@@ -294,7 +347,7 @@ std::vector<rules::Problem> crossCheck(const GameData& data, bool loaderChecked)
 			}
 		}
 		auto in = entrances.find(id);
-		checkArea(area, in == entrances.end() ? std::set<std::string>() : in->second, c.vehicles, c.actors, found);
+		checkArea(area, in == entrances.end() ? std::set<std::string>() : in->second, c, found);
 	}
 
 	// Areas reachable from the start through exits. A script warp can run anywhere, so its target counts as reached.

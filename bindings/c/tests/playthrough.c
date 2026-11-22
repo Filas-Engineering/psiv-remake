@@ -20,6 +20,8 @@ static int errors;
 static int autoBattle;
 /* With autoBattle, only battles the field starts; an event's battle waits for the script (`autobattle random`). */
 static int autoEncountersOnly;
+/* With autoBattle, the macro those battles play every round (`autobattle on|random MACRO`), "" for none. */
+static char autoMacro[NAME_SIZE];
 static int echo = 1;
 static char battleNames[MAX_COMBATANTS][NAME_SIZE];
 static int battleNameCount;
@@ -243,9 +245,12 @@ static void resolveAndPrint(void) {
 	}
 }
 
-static void finishBattleAuto(void) {
+static void finishBattleAuto(const char* macro) {
 	psiv_auto_battle played;
-	if (psiv_battle_play(S, 60, &played) != PSIV_OK) {
+	report(psiv_battle_set_auto_play_macro(S, macro));
+	const psiv_status status = psiv_battle_play(S, 60, &played);
+	if (status != PSIV_OK) {
+		psiv_battle_set_auto_play_macro(S, "");
 		return;
 	}
 	if (played.refusal_key[0]) {
@@ -255,6 +260,8 @@ static void finishBattleAuto(void) {
 		printNotices(played.rounds[i].notices, played.rounds[i].notice_count);
 		printEvents(played.rounds[i].events, played.rounds[i].event_count);
 	}
+	/* Clearing the macro frees what psiv_battle_play returned, so it waits until the rounds are printed. */
+	psiv_battle_set_auto_play_macro(S, "");
 	if (!played.ended) {
 		error("the battle did not end in 60 rounds");
 	}
@@ -285,7 +292,7 @@ static void settle(void) {
 			if (!autoBattle || (autoEncountersOnly && psiv_battle_info_get(S, &info) == PSIV_OK && info.source == PSIV_BATTLE_EVENT)) {
 				return;
 			}
-			finishBattleAuto();
+			finishBattleAuto(autoMacro);
 			continue;
 		}
 		battleNameCount = 0;
@@ -329,6 +336,36 @@ static void fight(const char* macro) {
 	if (psiv_mode_get(S) == PSIV_MODE_BATTLE) {
 		error("the battle did not end in 60 rounds");
 	}
+}
+
+static int hasMacro(const char* name) {
+	const psiv_macro* macros;
+	int32_t count;
+	if (psiv_macro_list(S, &macros, &count) != PSIV_OK) {
+		return 0;
+	}
+	for (int32_t i = 0; i < count; ++i) {
+		if (strcmp(macros[i].name, name) == 0) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/* `party`: the lineup in order, then the reserve in roster order. */
+static void partyLists(void) {
+	const psiv_member* party;
+	int32_t count;
+	Buffer lineup;
+	Buffer reserve;
+	bclear(&lineup);
+	bclear(&reserve);
+	psiv_party(S, &party, &count);
+	for (int32_t i = 0; i < count; ++i) {
+		Buffer* list = party[i].in_lineup ? &lineup : &reserve;
+		badd(list, "%s%s", list->length ? ", " : "", party[i].name);
+	}
+	print("  Lineup: %s. Reserve: %s.", lineup.text, reserve.length ? reserve.text : "nobody");
 }
 
 static void listMacros(void) {
@@ -433,6 +470,8 @@ static void dev(char words[][LINE_SIZE], int wordCount) {
 		report(psiv_dev_money(S, n));
 	} else if (strcmp(words[1], "level") == 0 && wordCount == 4 && toInt(words[3], &n)) {
 		report(psiv_dev_set_level(S, words[2], n));
+	} else if (strcmp(words[1], "vehicle") == 0 && wordCount == 5) {
+		report(psiv_dev_vehicle(S, words[2], words[3], words[4]));
 	} else {
 		error("unknown dev command");
 	}
@@ -556,6 +595,121 @@ static void look(void) {
 	free(map);
 }
 
+static void rows(void) {
+	const char* const* list;
+	int32_t count = 0;
+	if (psiv_field_rows(S, &list, &count) != PSIV_OK) {
+		error("there is no area");
+		return;
+	}
+	for (int32_t i = 0; i < count; ++i) {
+		print("  %s", list[i]);
+	}
+}
+
+static void prompt(void) {
+	psiv_interact_target t;
+	if (psiv_interact_target_get(S, &t) != PSIV_OK) {
+		print("  prompt: nothing");
+		return;
+	}
+	print("  prompt: %s %s at %d %d facing %s%s%s%s%s", psiv_name_of(PSIV_NAME_INTERACT_KIND, t.kind), t.id, t.x, t.y, psiv_name_of(PSIV_NAME_DIRECTION, t.facing),
+		t.across ? " across" : "", t.keeper[0] ? " kept by " : "", t.keeper, t.ready ? "" : " (refused)");
+}
+
+static void background(void) {
+	const psiv_event_position* list;
+	int32_t count = 0;
+	psiv_background_events(S, &list, &count);
+	if (count == 0) {
+		print("  background: none");
+	}
+	for (int32_t i = 0; i < count; ++i) {
+		print("  background: %s at %s:%d", list[i].event, list[i].file, list[i].line);
+	}
+}
+
+/* `credits`: the credits playing, how far play time has come and each entry, + once shown. */
+static void credits(void) {
+	psiv_credits_info info;
+	const psiv_credits_entry* entries;
+	int32_t count = 0;
+	if (psiv_credits_info_get(S, &info) != PSIV_OK || psiv_credits_entries(S, &entries, &count) != PSIV_OK) {
+		error("no credits are playing");
+		return;
+	}
+	print("Credits %s%s%s, %d of %d shown, %d of %d ms.", info.id, info.music[0] ? ", music " : "", info.music, info.shown, info.entry_count, (int)info.elapsed_ms,
+		(int)info.total_ms);
+	for (int32_t i = 0; i < count; ++i) {
+		char gap[32] = "";
+		if (entries[i].gap > 0) {
+			snprintf(gap, sizeof gap, ", gap %d", entries[i].gap);
+		}
+		print("  %s %s %s (%d ms%s)", i < info.shown ? "+" : "-", entries[i].kind == PSIV_CREDITS_HEADING ? "heading" : "line", entries[i].text, entries[i].pause_ms, gap);
+	}
+}
+
+static void steps(void) {
+	char text[LINE_SIZE] = "";
+	for (int32_t d = PSIV_DIRECTION_NORTH; d <= PSIV_DIRECTION_WEST; ++d) {
+		char part[64];
+		snprintf(part, sizeof part, "%s%s %s", d == PSIV_DIRECTION_NORTH ? "" : ", ", psiv_name_of(PSIV_NAME_DIRECTION, d), psiv_can_step(S, d) ? "yes" : "no");
+		strncat(text, part, sizeof text - strlen(text) - 1);
+	}
+	print("  steps: %s", text);
+}
+
+static void stepTime(void) {
+	psiv_world_info world;
+	psiv_field_info field;
+	psiv_world_info_get(S, &world);
+	if (psiv_field_info_get(S, &field) != PSIV_OK) {
+		field.leader_step_ms = 0;
+		field.run_step_ms = 0;
+	}
+	print("  play time %lld ms; a step takes %d ms, %d ms with the run input", (long long)world.play_time_ms, field.leader_step_ms, field.run_step_ms);
+}
+
+static void actors(void) {
+	const psiv_actor* list;
+	int32_t count = 0;
+	if (psiv_field_actors(S, &list, &count) != PSIV_OK) {
+		error("there is no area");
+		return;
+	}
+	if (count == 0) {
+		print("  (no actors)");
+	}
+	for (int32_t i = 0; i < count; ++i) {
+		const psiv_actor* a = &list[i];
+		char text[LINE_SIZE];
+		int n = snprintf(text, sizeof text, "  %s at %d %d facing %s %s", a->id, a->x, a->y, psiv_name_of(PSIV_NAME_DIRECTION, a->facing),
+			a->visible ? "shown" : "hidden");
+		if (a->solid) {
+			n += snprintf(text + n, sizeof text - (size_t)n, " solid");
+		}
+		if (a->vanish != PSIV_VANISH_NONE) {
+			n += snprintf(text + n, sizeof text - (size_t)n, " %s", psiv_name_of(PSIV_NAME_ACTOR_VANISH, a->vanish));
+		}
+		if (a->removal != PSIV_REMOVAL_NONE) {
+			n += snprintf(text + n, sizeof text - (size_t)n, " removed %s", psiv_name_of(PSIV_NAME_ACTOR_REMOVAL, a->removal));
+		}
+		if (a->animation[0]) {
+			n += snprintf(text + n, sizeof text - (size_t)n, " anim %s %d/%dms", a->animation, a->animation_ms, a->animation_total_ms);
+		}
+		if (a->sprite_enemy[0]) {
+			n += snprintf(text + n, sizeof text - (size_t)n, " enemy %s", a->sprite_enemy);
+		}
+		if (a->look[0]) {
+			n += snprintf(text + n, sizeof text - (size_t)n, " look %s", a->look);
+		}
+		if (a->wanders) {
+			snprintf(text + n, sizeof text - (size_t)n, " wanders");
+		}
+		print("%s", text);
+	}
+}
+
 static void walkTo(int goalX, int goalY) {
 	int32_t status = PSIV_WALK_WALKING;
 	if (psiv_walk_to(S, goalX, goalY) != PSIV_OK) {
@@ -584,6 +738,16 @@ static int actorIndex(const char* text, int* out) {
 		if (party[i].in_lineup && strcmp(party[i].id, text) == 0) {
 			*out = i;
 			return 1;
+		}
+	}
+	/* In a battle aboard, the vehicle acts for the party under its own id. */
+	const psiv_combatant* combatants;
+	if (psiv_battle_combatants(S, &combatants, &count) == PSIV_OK) {
+		for (int32_t i = 0; i < count; ++i) {
+			if (combatants[i].side == PSIV_SIDE_PARTY && strcmp(combatants[i].id, text) == 0) {
+				*out = combatants[i].index;
+				return 1;
+			}
 		}
 	}
 	return 0;
@@ -674,6 +838,8 @@ static int execute(const char* rawLine) {
 		report(psiv_continue_game(S));
 	} else if (strcmp(cmd, "load") == 0 && wordCount == 2) {
 		report(psiv_load(S, words[1]));
+	} else if (strcmp(cmd, "erase") == 0 && wordCount == 2) {
+		report(psiv_erase_save(S, words[1]));
 	} else if (strcmp(cmd, "retry") == 0) {
 		report(psiv_retry_battle(S));
 	} else if (strcmp(cmd, "title") == 0) {
@@ -786,10 +952,17 @@ static int execute(const char* rawLine) {
 		listMacros();
 	} else if (strcmp(cmd, "macro") == 0 && wordCount >= 3) {
 		macro(words, wordCount);
-	} else if (strcmp(cmd, "autobattle") == 0 && wordCount == 2 &&
+	} else if (strcmp(cmd, "autobattle") == 0 && (wordCount == 2 || (wordCount == 3 && strcmp(words[1], "off") != 0)) &&
 		(strcmp(words[1], "on") == 0 || strcmp(words[1], "off") == 0 || strcmp(words[1], "random") == 0)) {
 		autoBattle = strcmp(words[1], "off") != 0;
 		autoEncountersOnly = strcmp(words[1], "random") == 0;
+		snprintf(autoMacro, sizeof autoMacro, "%.*s", NAME_SIZE - 1, wordCount == 3 ? words[2] : "");
+		if (autoMacro[0] && !hasMacro(autoMacro)) {
+			char message[LINE_SIZE];
+			snprintf(message, sizeof message, "no macro named '%s'", autoMacro);
+			error(message);
+			autoMacro[0] = '\0';
+		}
 	} else if (strcmp(cmd, "dev") == 0 && wordCount >= 2) {
 		dev(words, wordCount);
 	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "macro") == 0 && wordCount == 2) {
@@ -797,7 +970,7 @@ static int execute(const char* rawLine) {
 	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "round") == 0) {
 		resolveAndPrint();
 	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "auto") == 0) {
-		finishBattleAuto();
+		finishBattleAuto("");
 	} else if (mode == PSIV_MODE_BATTLE && strcmp(cmd, "cancel") == 0) {
 		psiv_battle_cancel_auto(S);
 	} else if (strcmp(cmd, "menu") == 0) {
@@ -910,10 +1083,26 @@ static int execute(const char* rawLine) {
 				error(e.text);
 			}
 		}
+	} else if (strcmp(cmd, "party") == 0 && wordCount == 1) {
+		partyLists();
 	} else if (strcmp(cmd, "status") == 0) {
 		status();
 	} else if (strcmp(cmd, "look") == 0) {
 		look();
+	} else if (strcmp(cmd, "actors") == 0 && wordCount == 1) {
+		actors();
+	} else if (strcmp(cmd, "credits") == 0 && wordCount == 1) {
+		credits();
+	} else if (strcmp(cmd, "background") == 0 && wordCount == 1) {
+		background();
+	} else if (strcmp(cmd, "rows") == 0 && wordCount == 1) {
+		rows();
+	} else if (strcmp(cmd, "prompt") == 0 && wordCount == 1) {
+		prompt();
+	} else if (strcmp(cmd, "steps") == 0 && wordCount == 1) {
+		steps();
+	} else if (strcmp(cmd, "time") == 0 && wordCount == 1) {
+		stepTime();
 	} else if (strcmp(cmd, "pacing") == 0) {
 		const char* table = "";
 		psiv_pacing_table(S, &table);

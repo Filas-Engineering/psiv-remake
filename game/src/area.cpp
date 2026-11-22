@@ -74,7 +74,7 @@ bool Area::inside(Cell cell) const {
 }
 
 bool Area::walkable(Cell cell) const {
-	if (!inside(cell) || rows[cell.y][cell.x] != '.') {
+	if (!inside(cell) || rows[cell.y][cell.x] != '.' || closed.count(cell)) {
 		return false;
 	}
 	return (!hookAt(cell, HookTrigger::Interact) || passable.count(cell)) && !shopAt(cell) && !restAt(cell) && !chestAt(cell) && !portAt(cell) && !helmAt(cell);
@@ -107,9 +107,13 @@ const Exit* Area::exitAt(Cell cell) const {
 	return nullptr;
 }
 
+bool Hook::covers(Cell cell) const {
+	return at == cell || std::find(cells.begin(), cells.end(), cell) != cells.end();
+}
+
 const Hook* Area::hookAt(Cell cell, HookTrigger trigger) const {
 	for (const Hook& h : hooks) {
-		if (h.trigger == trigger && h.at == cell && !h.tile) {
+		if (h.trigger == trigger && h.covers(cell) && !h.tile) {
 			return &h;
 		}
 	}
@@ -298,8 +302,8 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		reader.fail(json, "data.area_object", {});
 		return rules::Result<Area>::failure(reader.problems(), reader.errors());
 	}
-	reader.only(json, {"id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "map", "markers", "exits", "hooks", "shops", "rests",
-		"chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"});
+	reader.only(json, {"id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "map", "markers", "exits", "hooks",
+		"shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"});
 	reader.text(json, "id", area.id, true);
 	reader.text(json, "music", area.music, false);
 	reader.text(json, "region", area.region, false);
@@ -350,11 +354,23 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* exits = array(reader, json, "exits")) {
 		for (const JsonValue& e : exits->items) {
-			reader.only(e, {"at", "to", "marker", "fall", "require_flag", "block_flag"});
+			reader.only(e, {"at", "to", "marker", "fall", "require_flag", "block_flag", "closed_tile"});
 			Exit exit;
 			exit.line = e.line;
 			reader.text(e, "require_flag", exit.requireFlag, false);
 			reader.text(e, "block_flag", exit.blockFlag, false);
+			std::string closedTile;
+			reader.text(e, "closed_tile", closedTile, false);
+			if (closedTile == "normal") {
+				exit.closedTile = 0;
+			} else if (closedTile.size() == 1 && std::string(kMapTiles).find(closedTile[0]) != std::string::npos) {
+				exit.closedTile = closedTile[0];
+			} else if (!closedTile.empty() && closedTile != "wall") {
+				reader.fail(e, "data.bad_closed_tile", {closedTile});
+			}
+			if (!closedTile.empty() && exit.requireFlag.empty() && exit.blockFlag.empty()) {
+				reader.fail(e, "data.closed_tile_never_closed", {});
+			}
 			reader.cellField(e, "at", exit.at, true);
 			reader.text(e, "to", exit.toArea, true);
 			reader.text(e, "marker", exit.toMarker, true);
@@ -365,7 +381,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* hooks = array(reader, json, "hooks")) {
 		for (const JsonValue& h : hooks->items) {
-			reader.only(h, {"id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid"});
+			reader.only(h, {"id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid", "actor_at", "across", "cells", "actor"});
 			Hook hook;
 			hook.line = h.line;
 			reader.boolean(h, "once", hook.once, false);
@@ -397,8 +413,14 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 				if (hook.blockFlag.empty() && !hook.once) {
 					reader.fail(h, "data.flag_hook_needs_block_flag", {hook.id});
 				}
+			} else if (trigger == "touch") {
+				hook.trigger = HookTrigger::Touch;
+				reader.text(h, "actor", hook.actor, true);
 			} else if (trigger != "interact") {
 				reader.fail(h, "data.bad_trigger", {});
+			}
+			if (hook.trigger != HookTrigger::Touch && h.is(JsonValue::Type::Object) && h.find("actor")) {
+				reader.fail(h, "data.actor_touch_hooks_only", {hook.id});
 			}
 			if (hook.once && hook.trigger != HookTrigger::Flag) {
 				reader.fail(h, "data.once_flag_hooks_only", {hook.id});
@@ -409,12 +431,43 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			if (hook.solidWhileActive && hook.trigger != HookTrigger::Interact) {
 				reader.fail(h, "data.solid_interact_hooks_only", {hook.id});
 			}
+			reader.boolean(h, "across", hook.across, false);
+			if ((hook.across || (h.is(JsonValue::Type::Object) && h.find("cells"))) && hook.trigger != HookTrigger::Interact) {
+				reader.fail(h, "data.across_cells_interact_hooks_only", {hook.id});
+			}
+			if (h.is(JsonValue::Type::Object) && h.find("actor_at")) {
+				Cell cell;
+				reader.cellField(h, "actor_at", cell, true);
+				hook.actorAt = cell;
+				if (hook.trigger != HookTrigger::Interact) {
+					reader.fail(h, "data.actor_at_interact_hooks_only", {hook.id});
+				} else if (!area.inside(cell)) {
+					reader.fail(h, "data.not_on_map", {"actor cell of hook '" + hook.id + "'"});
+				}
+			}
 			if (hook.trigger == HookTrigger::Interact) {
 				// A sign on a wall or a ladder up a cliff is used from the floor beside it (FLD-030), so an interact hook
 				// may stand on any cell; the data check makes sure the party can reach one beside it.
 				reader.cellField(h, "at", hook.at, true);
 				if (!area.inside(hook.at)) {
 					reader.fail(h, "data.not_on_map", {"hook '" + hook.id + "'"});
+				}
+				if (hook.actorAt && *hook.actorAt == hook.at) {
+					reader.fail(h, "data.actor_at_on_hook", {hook.id});
+				}
+				if (const JsonValue* cells = reader.field(h, "cells", JsonValue::Type::Array, false)) {
+					for (const JsonValue& at : cells->items) {
+						Cell cell;
+						if (!reader.cell(at, cell)) {
+							continue;
+						}
+						if (!area.inside(cell)) {
+							reader.fail(at, "data.not_on_map", {"cell of hook '" + hook.id + "'"});
+						} else if (hook.covers(cell) || (hook.actorAt && *hook.actorAt == cell)) {
+							reader.fail(at, "data.hook_cell_twice", {hook.id});
+						}
+						hook.cells.push_back(cell);
+					}
 				}
 			} else if (hook.trigger == HookTrigger::Step && hook.tile) {
 				if (h.is(JsonValue::Type::Object) && h.find("at")) {
@@ -429,7 +482,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* shops = array(reader, json, "shops")) {
 		for (const JsonValue& s : shops->items) {
-			reader.only(s, {"id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag"});
+			reader.only(s, {"id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper"});
 			Shop shop;
 			shop.line = s.line;
 			reader.text(s, "id", shop.id, true);
@@ -463,12 +516,13 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			reader.integer(s, "sell_percent", shop.sellPercent, false, 0, 100);
 			reader.text(s, "require_flag", shop.requireFlag, false);
 			reader.text(s, "block_flag", shop.blockFlag, false);
+			reader.text(s, "keeper", shop.keeper, false);
 			area.shops.push_back(shop);
 		}
 	}
 	if (const JsonValue* rests = array(reader, json, "rests")) {
 		for (const JsonValue& r : rests->items) {
-			reader.only(r, {"id", "at", "cost"});
+			reader.only(r, {"id", "at", "cost", "keeper"});
 			RestPoint rest;
 			rest.line = r.line;
 			reader.text(r, "id", rest.id, true);
@@ -478,6 +532,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 				checkCell(r, *rest.at, "rest point '" + rest.id + "'");
 			}
 			reader.integer(r, "cost", rest.cost, false, 0, 1000000);
+			reader.text(r, "keeper", rest.keeper, false);
 			area.rests.push_back(rest);
 		}
 	}
@@ -498,6 +553,29 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (!area.arrival.empty() && !area.markers.count(area.arrival)) {
 		reader.fail(json, "data.arrival_marker_missing", {area.arrival});
+	}
+	if (const JsonValue* way = reader.field(json, "dungeon_exit", JsonValue::Type::Object, false)) {
+		reader.only(*way, {"area", "at", "marker", "facing"});
+		DungeonExitTarget target;
+		target.line = way->line;
+		reader.text(*way, "area", target.area, true);
+		reader.text(*way, "marker", target.marker, false);
+		reader.cellField(*way, "at", target.at, false);
+		if (target.marker.empty() == !way->find("at")) {
+			reader.fail(*way, "data.dungeon_exit_needs_place", {});
+		}
+		std::string facing;
+		reader.text(*way, "facing", facing, false);
+		Facing parsed = Facing::South;
+		if (!facing.empty() && !parseFacing(facing, parsed)) {
+			reader.fail(*way, "data.bad_facing", {});
+		} else if (!facing.empty()) {
+			target.facing = parsed;
+		}
+		if (area.kind != AreaKind::Dungeon) {
+			reader.fail(*way, "data.dungeon_exit_not_dungeon", {});
+		}
+		area.dungeonExit = target;
 	}
 	if (const JsonValue* ports = array(reader, json, "ports")) {
 		for (const JsonValue& p : ports->items) {

@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace game {
@@ -13,7 +14,7 @@ namespace game {
 // Schema 2 added the party's statuses and names, core's macro and combo log forms, and the quests and unlocks
 // chunks; schema 3 the actors chunk; schema 4 the talk chunk; schema 5 the travel chunk; schema 6 the dev chunk. Older
 // schemas are migrated in order when they load (SAV-021).
-constexpr int kSaveSchemaVersion = 10;
+constexpr int kSaveSchemaVersion = 11;
 constexpr const char* kSaveMagic = "PSR-SAVE";
 constexpr const char* kClearMagic = "PSR-CLEAR";
 constexpr int kClearVersion = 1;
@@ -23,6 +24,9 @@ struct SaveFile {
 	World world;
 	// events::save_state_to_text of the interpreter, only in the autosave before an event battle (EVT-050).
 	std::string midEvent;
+	// Each running background event, in start order: its name and events::save_state_to_text of its interpreter (the
+	// `background` chunk, written only when one runs).
+	std::vector<std::pair<std::string, std::string>> background = {};
 	std::int64_t writeTime = 0;
 	std::uint64_t sequence = 0;
 	bool autosave = false;
@@ -79,6 +83,8 @@ public:
 
 	bool write(const std::string& slot, const std::string& text, std::string& error) const;
 	bool read(const std::string& slot, std::string& text) const;
+	// Removes the slot's file. False, with the reason, when the file could not be removed.
+	bool erase(const std::string& slot, std::string& error) const;
 
 	// Every slot that has a file, manual slots first.
 	std::vector<SaveSummary> list() const;

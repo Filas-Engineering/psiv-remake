@@ -22,7 +22,7 @@ bool parseName(const char* const (&names)[N], const std::string& text, E& out) {
 }
 
 // Order matches the enum declarations.
-const char* const kStats[] = {"strength", "mental", "agility", "dexterity", "defense", "magic_defense"};
+const char* const kStats[] = {"strength", "mental", "agility", "dexterity", "defense", "magic_defense", "attack"};
 const char* const kSides[] = {"party", "enemy"};
 const char* const kTargetings[] = {"one_enemy", "enemy_group", "all_enemies", "one_ally", "all_allies", "self", "one_fallen_ally", "random_enemy"};
 const char* const kAbilityKinds[] = {"attack", "technique", "skill", "combo"};
@@ -38,7 +38,7 @@ const char* const kForcedTargets[] = {"random_any", "random_ally", "random_foe"}
 const char* const kStatusStackings[] = {"refresh", "extend", "keep"};
 const char* const kAiConditions[] = {
 	"self_hp_half", "self_hp_quarter_once", "any_ally_hp_half", "last_standing", "hit_by_attack", "hit_by_ability", "hit_by_technique",
-	"techniques_blocked", "hit_by_group", "ambushed", "ally_present", "ally_absent", "free_slot_beside", "group_intact", "after_turns", "all", "any"};
+	"techniques_blocked", "hit_by_group", "ambushed", "ally_present", "ally_absent", "free_slot_beside", "group_intact", "after_turns", "all", "any", "first_turn"};
 const char* const kAiTargetRules[] = {"default", "random", "lowest_hp", "highest_hp", "has_status", "lacks_status", "last_attacker"};
 const char* const kCommandKinds[] = {"none", "attack", "ability", "item", "defend", "escape"};
 const char* const kMacroTargets[] = {"default", "self", "member", "enemy", "all"};

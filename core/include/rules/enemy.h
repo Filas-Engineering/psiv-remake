@@ -40,6 +40,9 @@ enum class AiConditionKind {
 	// Every one, or at least one, of the condition's parts holds.
 	All,
 	Any,
+	// Its first turn since it joined the battle or took its current form: the battle's start, a summon, a replacement, a
+	// split, a merge, a transform or a next form. A turn lost to a status or a surprise round is not one.
+	FirstTurn,
 };
 
 // How AllyPresent compares the number of other living enemies of its kind with its count.
@@ -118,6 +121,8 @@ struct EnemyDef {
 	std::string transformsInto = {};
 	// What each of the enemies its Split effect makes of it is.
 	std::string splitsInto = {};
+	// Its transform and next form keep the ambushed mark it has when it changes.
+	bool keepsAmbush = false;
 };
 
 // One position in an enemy group's formation. Group targeting hits every living enemy with the same group. An empty

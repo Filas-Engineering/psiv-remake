@@ -1,5 +1,7 @@
 #include "test.h"
 
+#include "actor_data.h"
+
 #include "events/compiler.h"
 #include "game/save.h"
 
@@ -53,7 +55,7 @@ void placeParty(game::Session& session, const std::string& area, const std::stri
 	}
 	game::World& w = session.world();
 	w.area = area;
-	w.position = data().area(area)->markers.at(marker);
+	w.position = session.data().area(area)->markers.at(marker);
 	w.facing = facing;
 	w.enemies.clear();
 	session.drainOutput();
@@ -81,13 +83,15 @@ void fightToTheEnd(game::Session& session) {
 	}
 }
 
-game::GameData withScript(const std::string& file, const std::string& text) {
-	game::GameData d = data();
+namespace {
+
+game::GameData replaceScript(const game::GameData& base, const std::string& directory, const std::string& file, const std::string& text) {
+	game::GameData d = base;
 	std::vector<events::Source> sources;
 	bool replaced = false;
 	for (const std::string& f : d.config.eventFiles) {
 		std::string source;
-		game::readFile("data/" + f, source);
+		game::readFile(directory + "/" + f, source);
 		if (f == file) {
 			source = text;
 			replaced = true;
@@ -103,6 +107,81 @@ game::GameData withScript(const std::string& file, const std::string& text) {
 	}
 	d.program = compiled.program;
 	return d;
+}
+
+}
+
+game::GameData withScript(const std::string& file, const std::string& text) {
+	return replaceScript(data(), "data", file, text);
+}
+
+const std::string& actorDataDirectory() {
+	static const std::string directory = [] {
+		const std::string root = freshDirectory("actor_data");
+		const std::string problem = actor_data::make("data", "../core/data", "tests/fixtures/actors", root);
+		if (!problem.empty()) {
+			std::cout << "cannot make the actor data: " << problem << "\n";
+			std::exit(1);
+		}
+		return root + "/game/data";
+	}();
+	return directory;
+}
+
+const game::GameData& actorData() {
+	static const rules::Result<game::GameData> loaded = game::loadGameData(actorDataDirectory());
+	if (!loaded.ok()) {
+		std::cout << "cannot load the actor data: " << loaded.error << "\n";
+		std::exit(1);
+	}
+	return *loaded.value;
+}
+
+game::GameData actorDataWithScript(const std::string& file, const std::string& text) {
+	return replaceScript(actorData(), actorDataDirectory(), file, text);
+}
+
+const game::GameData& interactData() {
+	static const rules::Result<game::GameData> loaded = [] {
+		const std::string root = freshDirectory("interact_data");
+		const std::string problem = actor_data::makeInteract("data", "../core/data", "tests/fixtures/actors", root);
+		if (!problem.empty()) {
+			std::cout << "cannot make the interaction data: " << problem << "\n";
+			std::exit(1);
+		}
+		return game::loadGameData(root + "/game/data");
+	}();
+	if (!loaded.ok()) {
+		std::cout << "cannot load the interaction data: " << loaded.error << "\n";
+		std::exit(1);
+	}
+	return *loaded.value;
+}
+
+const std::string& backgroundDataDirectory() {
+	static const std::string directory = [] {
+		const std::string root = freshDirectory("background_data");
+		const std::string problem = actor_data::makeBackground("data", "../core/data", "tests/fixtures/actors", root);
+		if (!problem.empty()) {
+			std::cout << "cannot make the background data: " << problem << "\n";
+			std::exit(1);
+		}
+		return root + "/game/data";
+	}();
+	return directory;
+}
+
+const game::GameData& backgroundData() {
+	static const rules::Result<game::GameData> loaded = game::loadGameData(backgroundDataDirectory());
+	if (!loaded.ok()) {
+		std::cout << "cannot load the background data: " << loaded.error << "\n";
+		std::exit(1);
+	}
+	return *loaded.value;
+}
+
+game::GameData backgroundDataWithScript(const std::string& file, const std::string& text) {
+	return replaceScript(backgroundData(), backgroundDataDirectory(), file, text);
 }
 
 }

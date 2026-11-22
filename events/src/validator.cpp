@@ -11,6 +11,7 @@ struct Walk {
 	std::map<std::string, int> labels;
 	std::vector<const Stmt*> gotos;
 	std::vector<const Stmt*> calls;
+	std::vector<const Stmt*> spawns;
 	std::vector<std::pair<std::string, int>> duplicate_labels;
 };
 
@@ -27,6 +28,8 @@ void walk(const std::vector<Stmt>& body, Walk& w) {
 			w.gotos.push_back(&s);
 		} else if (s.kind == StmtKind::simple && s.ins.op == Op::call) {
 			w.calls.push_back(&s);
+		} else if (s.kind == StmtKind::simple && s.ins.op == Op::spawn) {
+			w.spawns.push_back(&s);
 		}
 		for (const Branch& b : s.branches) {
 			walk(b.body, w);
@@ -140,7 +143,12 @@ private:
 	void action(const Action& a, int line, std::string& map) {
 		switch (a.type) {
 		case ActionType::move:
+		case ActionType::place_actor:
 			name(NameKind::actor, a.subject, line);
+			for (const std::string& waypoint : a.waypoints) {
+				name(NameKind::marker, waypoint, line);
+				on_map(waypoint, map, line, ", where the party is at this point");
+			}
 			if (!a.has_position) {
 				name(NameKind::marker, a.target, line);
 				on_map(a.target, map, line, ", where the party is at this point");
@@ -148,17 +156,22 @@ private:
 			break;
 		case ActionType::face:
 			name(NameKind::actor, a.subject, line);
-			if (!registry_.has(NameKind::actor, a.target) && !registry_.has(NameKind::marker, a.target)) {
+			if (!is_direction(a.target) && !registry_.has(NameKind::actor, a.target) && !registry_.has(NameKind::marker, a.target)) {
 				error(line, "script.unknown_actor_or_marker", {a.target, where()});
 			}
 			break;
 		case ActionType::animate:
 			name(NameKind::actor, a.subject, line);
-			name(NameKind::animation, a.target, line);
+			if (!standard_animation(a.target)) {
+				name(NameKind::animation, a.target, line);
+			}
 			break;
 		case ActionType::show_actor:
 		case ActionType::hide_actor:
 			name(NameKind::actor, a.subject, line);
+			if (!a.target.empty() && !standard_animation(a.target)) {
+				name(NameKind::animation, a.target, line);
+			}
 			break;
 		case ActionType::panel_show:
 			name(NameKind::camera, a.target, line);
@@ -227,8 +240,22 @@ private:
 		case Op::name_entry:
 			name(NameKind::member, ins.name, s.line);
 			break;
+		case Op::party_order:
+			for (const std::string& member : ins.names) {
+				name(NameKind::member, member, s.line);
+			}
+			break;
+		case Op::party_swap:
+			if (!ins.swap.replaced.empty()) {
+				name(NameKind::member, ins.swap.replaced, s.line);
+			}
+			name(NameKind::member, ins.swap.member, s.line);
+			break;
 		case Op::shop:
 			name(NameKind::shop, ins.name, s.line);
+			break;
+		case Op::credits:
+			name(NameKind::credits, ins.name, s.line);
 			break;
 		case Op::vehicle_give:
 		case Op::vehicle_place:
@@ -243,6 +270,15 @@ private:
 		case Op::learn:
 			name(NameKind::member, ins.name, s.line);
 			name(NameKind::ability, ins.action.subject, s.line);
+			break;
+		case Op::remove_actor:
+			name(NameKind::actor, ins.name, s.line);
+			break;
+		case Op::actor_look:
+			name(NameKind::actor, ins.name, s.line);
+			if (ins.action.subject == "enemy") {
+				name(NameKind::enemy, ins.action.target, s.line);
+			}
 			break;
 		case Op::follower:
 			if (!ins.name.empty()) {
@@ -315,8 +351,19 @@ void validate(const std::vector<EventDecl>& events, const std::vector<std::strin
 			}
 		}
 		for (const Stmt* c : w.calls) {
-			if (!by_name.count(c->ins.name)) {
+			const auto callee = by_name.find(c->ins.name);
+			if (callee == by_name.end()) {
 				diagnostics.push_back(diagnostic(Severity::error, file, c->line, "script.call_unknown_event", {c->ins.name}));
+			} else if (ev.background && !callee->second->background) {
+				diagnostics.push_back(diagnostic(Severity::error, file, c->line, "script.background_calls_foreground", {c->ins.name}));
+			}
+		}
+		for (const Stmt* sp : w.spawns) {
+			const auto spawned = by_name.find(sp->ins.name);
+			if (spawned == by_name.end()) {
+				diagnostics.push_back(diagnostic(Severity::error, file, sp->line, "script.spawn_unknown_event", {sp->ins.name}));
+			} else if (!spawned->second->background) {
+				diagnostics.push_back(diagnostic(Severity::error, file, sp->line, "script.spawn_needs_background", {sp->ins.name}));
 			}
 		}
 		if (registry) {

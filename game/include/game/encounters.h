@@ -45,8 +45,9 @@ std::optional<EncounterStart> randomStep(World& world, const Area& area, Cell ce
 
 // The leader finished a step aboard a vehicle onto `cell` (ENC-007): in either encounter mode the random counter of the
 // zone runs, and a battle draws its group from the vehicle's own table. The opening rolls the vehicle's agility, since
-// it alone fights.
-std::optional<EncounterStart> vehicleStep(World& world, const Area& area, Cell cell, const std::vector<TableEntry>& table, const rules::Database& db, int agility);
+// it alone fights; without `rollOpening` it is normal and nothing is drawn for it.
+std::optional<EncounterStart> vehicleStep(World& world, const Area& area, Cell cell, const std::vector<TableEntry>& table, const rules::Database& db, int agility,
+	bool rollOpening = true);
 
 // Draws a new random threshold for the zone and clears the counter.
 void resetRandomCounter(World& world, const Zone& zone);

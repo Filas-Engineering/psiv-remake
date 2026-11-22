@@ -127,6 +127,59 @@ TEST(areaMusicFromAScriptIsSavedUntilTheAreaChanges) {
 	CHECK_EQ(s.areaMusic(), std::string("dungeon_kiln_halls"));
 }
 
+// R100: game.json's music.areas gives the area's track by the first listed flag that is set, read again as flags change in
+// the area; a script's `music area` still wins until the party leaves, and `music area default` hands back to the list.
+TEST(areaMusicFollowsTheFirstListedFlagAndAScriptStillOverridesIt) {
+	GameData d = test::data();
+	d.config.presentation.music.areas["cogway"] = {{"cogway.loud", "field_marsh_reeds"}, {"cogway.swept", "battle_marsh_ambush"}};
+	d.config.presentation.music.areas["fell_moor"] = {{"", "title_harbor_dawn"}};
+	Session s(d, SessionOptions());
+	cogway(s, {10, 1}, Facing::North);
+	CHECK_EQ(s.areaMusic(), std::string("dungeon_kiln_halls"));
+	s.world().flags["cogway.swept"] = true;
+	CHECK_EQ(s.areaMusic(), std::string("battle_marsh_ambush"));
+	CHECK(s.interact().empty());
+	test::confirmLines(s);
+	CHECK(s.world().flag("cogway.loud"));
+	CHECK_EQ(s.areaMusic(), std::string("dungeon_firing_floor"));
+	CHECK(s.interact().empty());
+	test::confirmLines(s);
+	CHECK(!s.world().flag("cogway.loud") && s.world().areaMusic.empty());
+	CHECK_EQ(s.areaMusic(), std::string("battle_marsh_ambush"));
+	CHECK(s.interact().empty());
+	test::confirmLines(s);
+	CHECK(s.devWarp("fell_moor", "town_gate").empty());
+	test::confirmLines(s);
+	CHECK_EQ(s.areaMusic(), std::string("title_harbor_dawn"));
+	CHECK(s.devWarpCell("cogway", {10, 1}).empty());
+	test::confirmLines(s);
+	CHECK_EQ(s.areaMusic(), std::string("field_marsh_reeds"));
+}
+
+// R99: a random battle aboard plays the vehicle's track from game.json's music.vehicles, an encounter's own track first.
+TEST(randomBattlesAboardPlayTheVehiclesTrackUnlessTheEncounterHasOne) {
+	GameData d = test::data();
+	d.config.presentation.music.vehicles["reed_skimmer"] = "dungeon_firing_floor";
+	Session s(d, SessionOptions());
+	cogway(s, {6, 4}, Facing::South);
+	CHECK(s.battleMusic().empty());
+	CHECK(s.devBattle("training").empty());
+	CHECK(s.battleMusic().empty());
+	CHECK(s.devEndBattle(true).empty());
+	test::confirmLines(s);
+	CHECK(s.devVehicle("reed_skimmer", "cogway", "entry").empty());
+	CHECK(s.board().empty());
+	CHECK(s.devBattle("training").empty());
+	CHECK(s.battleSource() == BattleSource::Random && s.battle()->setup().flags.vehicleBattle);
+	CHECK_EQ(s.battleMusic(), std::string("dungeon_firing_floor"));
+	CHECK(s.devEndBattle(true).empty());
+	CHECK(!s.battle() && s.endedBattle());
+	CHECK_EQ(s.battleMusic(), std::string("dungeon_firing_floor"));
+	test::confirmLines(s);
+	CHECK(s.devBattle("marsh").empty());
+	CHECK_EQ(s.battleMusic(), std::string("battle_marsh_ambush"));
+}
+
 // R25: a conveyor carries the party a cell per step, taking no input; a step hook is a lift.
 TEST(beltsCarryThePartyAndALiftStepHookWarps) {
 	Session s(test::data(), SessionOptions());

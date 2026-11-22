@@ -18,6 +18,7 @@ namespace {
 
 constexpr int kHeaderVersion = 1;
 constexpr int kMidEventVersion = 1;
+constexpr int kBackgroundVersion = 1;
 
 std::uint64_t checksum(const std::string& text) {
 	std::uint64_t hash = 1469598103934665603ULL;
@@ -158,6 +159,16 @@ std::string partyChunk(const World& w) {
 	for (const auto& [id, name] : w.memberNames) {
 		o.key("named").text(id).text(name).end();
 	}
+	for (const auto& [name, snapshot] : w.partySnapshots) {
+		o.key("snapshot").text(name).num(static_cast<long long>(snapshot.lineup.size()));
+		for (const std::string& id : snapshot.lineup) {
+			o.text(id);
+		}
+		for (const std::string& id : snapshot.reserve) {
+			o.text(id);
+		}
+		o.end();
+	}
 	return o.str();
 }
 
@@ -212,6 +223,21 @@ std::string actorsChunk(const World& w) {
 	Writer o;
 	for (const auto& [id, place] : w.actors) {
 		o.key("actor").text(id).text(place.area).num(place.cell.x).num(place.cell.y).text(toString(place.facing)).num(place.visible ? 1 : 0).end();
+		if (place.vanish != ActorVanish::None) {
+			o.key("vanish").text(id).text(toString(place.vanish)).end();
+		}
+		if (!place.animation.empty()) {
+			o.key("anim").text(id).text(place.animation).num(place.animationMs).num(place.animationTotalMs).end();
+		}
+		if (place.removed != ActorRemoval::None) {
+			o.key("removed").text(id).text(toString(place.removed)).end();
+		}
+		if (!place.lookEnemy.empty() || !place.look.empty()) {
+			o.key("look").text(id).text(place.lookEnemy).text(place.look).end();
+		}
+		if (place.wanderProgress != 0 || place.wanderPauseMs != 0) {
+			o.key("wander").text(id).num(place.wanderProgress).num(place.wanderPauseMs).end();
+		}
 	}
 	return o.str();
 }
@@ -401,6 +427,7 @@ bool readParty(const std::string& payload, World& w, std::string& error) {
 	w.roster.clear();
 	w.lineup.clear();
 	w.memberNames.clear();
+	w.partySnapshots.clear();
 	for (const auto& l : in.lines()) {
 		const std::string& k = l[0];
 		if (k == "lineup") {
@@ -442,6 +469,16 @@ bool readParty(const std::string& payload, World& w, std::string& error) {
 			}
 		} else if (k == "named" && in.need(l, 2)) {
 			w.memberNames[in.text(l[1])] = in.text(l[2]);
+		} else if (k == "snapshot") {
+			const long long lineup = l.size() >= 3 ? in.num(l[2]) : -1;
+			if (lineup < 0 || lineup > static_cast<long long>(l.size()) - 3) {
+				in.fail("bad 'snapshot' line");
+			} else {
+				PartySnapshot& snapshot = w.partySnapshots[in.text(l[1])];
+				for (std::size_t i = 3; i < l.size(); ++i) {
+					(static_cast<long long>(i) - 3 < lineup ? snapshot.lineup : snapshot.reserve).push_back(in.text(l[i]));
+				}
+			}
 		} else if (k != "lineup") {
 			in.fail("unknown line '" + k + "'");
 		}
@@ -722,6 +759,26 @@ bool readActors(const std::string& payload, World& w, std::string& error) {
 			}
 			place.visible = in.num(l[6]) != 0;
 			w.actors[in.text(l[1])] = place;
+		} else if ((l[0] == "vanish" || l[0] == "anim" || l[0] == "removed" || l[0] == "look" || l[0] == "wander") &&
+			in.need(l, l[0] == "anim" ? 4 : l[0] == "look" || l[0] == "wander" ? 3 : 2)) {
+			auto actor = w.actors.find(in.text(l[1]));
+			if (actor == w.actors.end()) {
+				in.fail("'" + l[0] + "' for an actor with no 'actor' line");
+			} else if (l[0] == "vanish" && !parseActorVanish(in.text(l[2]), actor->second.vanish)) {
+				in.fail("bad actor vanish");
+			} else if (l[0] == "removed" && !parseActorRemoval(in.text(l[2]), actor->second.removed)) {
+				in.fail("bad actor removal");
+			} else if (l[0] == "anim") {
+				actor->second.animation = in.text(l[2]);
+				actor->second.animationMs = in.integer(l[3]);
+				actor->second.animationTotalMs = in.integer(l[4]);
+			} else if (l[0] == "look") {
+				actor->second.lookEnemy = in.text(l[2]);
+				actor->second.look = in.text(l[3]);
+			} else if (l[0] == "wander") {
+				actor->second.wanderProgress = in.integer(l[2]);
+				actor->second.wanderPauseMs = in.integer(l[3]);
+			}
 		} else {
 			in.fail("unknown line '" + l[0] + "'");
 		}
@@ -745,7 +802,7 @@ struct KnownChunk {
 // In the order they are written.
 const KnownChunk kWorldChunks[] = {
 	{"location", 1, locationChunk, readLocation, 1},
-	{"party", 4, partyChunk, readParty, 2},
+	{"party", 5, partyChunk, readParty, 2},
 	{"inventory", 1, inventoryChunk, readInventory, 1},
 	{"world", 3, worldChunk, readWorld, 1},
 	{"battle", 3, battleChunk, readBattle, 2},
@@ -753,7 +810,7 @@ const KnownChunk kWorldChunks[] = {
 	{"difficulty", 1, difficultyChunk, readDifficulty, 1},
 	{"quests", 1, questsChunk, readQuests, 1},
 	{"unlocks", 1, unlocksChunk, readUnlocks, 1},
-	{"actors", 1, actorsChunk, readActors, 1},
+	{"actors", 2, actorsChunk, readActors, 1},
 	{"talk", 1, talkChunk, readTalk, 1},
 	{"travel", 3, travelChunk, readTravel, 1},
 	{"dev", 1, devChunk, readDev, 1},
@@ -819,7 +876,7 @@ bool applyChunks(const std::vector<Chunk>& chunks, World& w, const std::vector<s
 	w.unknownChunks.clear();
 	std::set<std::string> seen;
 	for (const Chunk& c : chunks) {
-		if (c.type == "header" || c.type == "midevent") {
+		if (c.type == "header" || c.type == "midevent" || c.type == "background") {
 			continue;
 		}
 		const KnownChunk* known = knownChunk(c.type);
@@ -963,6 +1020,13 @@ bool migrate9to10(std::vector<Chunk>&, std::string&) {
 	return true;
 }
 
+// Schema 10 to 11: an actor's vanish, animation and removal (actors chunk 2) and party snapshots (party chunk 5); a schema
+// 10 save's actors chunk 1 has none, so every actor it names is shown or hidden plainly, with nothing playing and nothing
+// removed, and its party chunk 4 holds no snapshot.
+bool migrate10to11(std::vector<Chunk>&, std::string&) {
+	return true;
+}
+
 struct Migration {
 	int from;
 	bool (*apply)(std::vector<Chunk>& chunks, std::string& error);
@@ -979,6 +1043,7 @@ const Migration kMigrations[] = {
 	{7, migrate7to8},
 	{8, migrate8to9},
 	{9, migrate9to10},
+	{10, migrate10to11},
 };
 
 std::string headerChunk(const SaveFile& save) {
@@ -1087,6 +1152,13 @@ std::string serializeSave(const SaveFile& save) {
 		o.key("state").text(save.midEvent).end();
 		writeChunk(out, "midevent", kMidEventVersion, o.str());
 	}
+	if (!save.background.empty()) {
+		Writer o;
+		for (const auto& [event, state] : save.background) {
+			o.key("event").text(event).text(state).end();
+		}
+		writeChunk(out, "background", kBackgroundVersion, o.str());
+	}
 	out += "end " + hex(checksum(out)) + "\n";
 	return out;
 }
@@ -1114,6 +1186,21 @@ rules::Result<SaveFile> parseSave(const std::string& text) {
 					save.autosave = in.num(l[1]) != 0;
 				} else if (l[0] == "content" && in.need(l, 1)) {
 					save.contentHash = std::strtoull(l[1].c_str(), nullptr, 16);
+				}
+			}
+			if (!in.error.empty()) {
+				return R::failure(in.error);
+			}
+		} else if (c.type == "background") {
+			if (c.version > kBackgroundVersion) {
+				return R::failure("chunk 'background' is from a newer build (version " + std::to_string(c.version) + ")");
+			}
+			Lines in("background", c.payload);
+			for (const auto& l : in.lines()) {
+				if (l[0] == "event" && in.need(l, 2)) {
+					save.background.emplace_back(in.text(l[1]), in.text(l[2]));
+				} else {
+					in.fail("unknown line '" + l[0] + "'");
 				}
 			}
 			if (!in.error.empty()) {
@@ -1282,6 +1369,19 @@ bool SaveStore::write(const std::string& slot, const std::string& text, std::str
 
 bool SaveStore::read(const std::string& slot, std::string& text) const {
 	return validSlot(slot) && readFile(path(slot), text);
+}
+
+bool SaveStore::erase(const std::string& slot, std::string& error) const {
+	if (!validSlot(slot)) {
+		error = "no save slot '" + slot + "'";
+		return false;
+	}
+	std::error_code failed;
+	if (!std::filesystem::remove(std::filesystem::u8path(path(slot)), failed)) {
+		error = failed ? failed.message() : "no file";
+		return false;
+	}
+	return true;
 }
 
 std::vector<SaveSummary> SaveStore::list() const {

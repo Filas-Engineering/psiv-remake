@@ -184,7 +184,7 @@ TEST(skip_markers_are_required_and_on_skip_blocks_are_ignored_with_a_warning) {
 	set seen
 end
 )");
-	CHECK(test::has_diagnostic(d, 1, "event 'a' must be marked 'skippable' or 'unskippable'"));
+	CHECK(test::has_diagnostic(d, 1, "event 'a' must be marked 'skippable', 'unskippable' or 'background'"));
 	CHECK_EQ(d.size(), 1u);
 
 	// Older scripts still compile; the block's contents never run.

@@ -12,18 +12,20 @@ KINDS = {"floor": ".", "wall": "#", "water": "~", "soft": ":", "barrier": "%"}
 KIND_OF_CHARACTER = {c: k for k, c in KINDS.items()}
 TILE_IDS = {"floor": 0, "wall": 1, "water": 2, "soft": 3, "barrier": 4}
 FLIP_BITS = 0xF0000000
-MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "int", "music": "string", "region": "string", "arrival": "string"}
+MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "int", "music": "string", "region": "string", "arrival": "string",
+	"dungeon_exit": "json object"}
 # Map properties in the area format's order, as the importer copies them and the exporter writes them.
-AREA_PROPERTIES = ("kind", "encounter_mode", "step_ms", "music", "region", "arrival")
+AREA_PROPERTIES = ("kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit")
 REQUIRED_MAP_PROPERTIES = ["id"]
 
 # Per object class: property name to type. "json" is a string property holding JSON text of the given shape.
 OBJECT_PROPERTIES = {
 	"marker": {},
-	"exit": {"to": "string", "marker": "string", "fall": "bool", "require_flag": "string", "block_flag": "string"},
-	"hook": {"trigger": "string", "event": "string", "require_flag": "string", "block_flag": "string", "once": "bool", "tile": "string", "solid": "string"},
-	"shop": {"kind": "string", "stock": "json list", "sell_percent": "int", "require_flag": "string", "block_flag": "string", "script_only": "bool"},
-	"rest": {"cost": "int", "script_only": "bool"},
+	"exit": {"to": "string", "marker": "string", "fall": "bool", "require_flag": "string", "block_flag": "string", "closed_tile": "string"},
+	"hook": {"trigger": "string", "event": "string", "require_flag": "string", "block_flag": "string", "once": "bool", "tile": "string", "solid": "string",
+		"actor_at": "json list", "across": "bool", "cells": "json list", "actor": "string"},
+	"shop": {"kind": "string", "stock": "json list", "sell_percent": "int", "require_flag": "string", "block_flag": "string", "script_only": "bool", "keeper": "string"},
+	"rest": {"cost": "int", "script_only": "bool", "keeper": "string"},
 	"chest": {"flag": "string", "items": "json object", "equipment": "json object", "money": "int"},
 	"port": {"marker": "string", "flag": "string", "ship": "string", "block_flag": "string"},
 	"zone": {"table": "json list", "visible": "json object", "random": "json object"},
@@ -36,7 +38,7 @@ REQUIRED_PROPERTIES = {"exit": ["to", "marker"], "hook": ["event"], "shop": ["st
 	"change": ["flag", "tile", "cells"], "conveyor": ["cells", "direction"]}
 NAMED_CLASSES = {"marker", "hook", "shop", "rest", "chest", "port", "zone", "helm"}
 # Hooks with these triggers have no cell; their object's position is ignored.
-CELL_FREE_TRIGGERS = {"load", "flag"}
+CELL_FREE_TRIGGERS = {"load", "flag", "touch"}
 CLASS_OF_LIST = {"exits": "exit", "hooks": "hook", "shops": "shop", "rests": "rest", "chests": "chest", "ports": "port", "zones": "zone", "helms": "helm",
 	"gangway": "gangway", "changes": "change", "conveyors": "conveyor"}
 TILED_VERSION = "1.10.2"

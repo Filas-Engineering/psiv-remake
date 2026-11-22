@@ -1,5 +1,7 @@
 #include "parser.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <initializer_list>
 
@@ -11,6 +13,8 @@ struct Context {
 	// "together" or "race" inside a parallel block, else null.
 	const char* parallel = nullptr;
 	bool in_sequence = false;
+	// Inside an event marked `background`.
+	bool background = false;
 };
 
 bool one_of(const std::string& word, std::initializer_list<const char*> words) {
@@ -204,6 +208,12 @@ private:
 		return t.kind == TokenKind::word ? t.text : std::string();
 	}
 
+	// `end game` is a command, not the end of a block.
+	bool ends_game() const {
+		const std::vector<Token>& t = lines_[pos_].tokens;
+		return head() == "end" && t.size() > 1 && t[1].kind == TokenKind::word && t[1].text == "game";
+	}
+
 	void error(int number, const char* key, std::vector<std::string> params) {
 		diagnostics_.push_back(diagnostic(Severity::error, file_, number, key, std::move(params)));
 	}
@@ -229,7 +239,7 @@ private:
 			if (h == "event") {
 				return "";
 			}
-			if (one_of(h, stops)) {
+			if (one_of(h, stops) && !ends_game()) {
 				return h;
 			}
 			parse_statement(ctx, out);
@@ -265,6 +275,9 @@ private:
 				marked = true;
 			} else if (a.keyword("unskippable")) {
 				marked = true;
+			} else if (a.keyword("background")) {
+				ev.background = true;
+				marked = true;
 			}
 			if (!marked && !a.failed()) {
 				error(ev.line, "script.event_marked_skippable_unskippable", {ev.name});
@@ -274,6 +287,7 @@ private:
 		}
 		++pos_;
 		Context ctx;
+		ctx.background = ev.background;
 		std::string stop = parse_block(ctx, {"on", "end"}, ev.body);
 		if (stop == "on") {
 			// Older scripts describe a skip's effect here; a skip now plays the
@@ -637,7 +651,7 @@ private:
 	}
 
 	// Trailing options shared by host actions.
-	void action_options(const Context& ctx, Args& a, Stmt& s, bool speed, bool strength, bool loop) {
+	void action_options(const Context& ctx, Args& a, Stmt& s, bool speed, bool strength, bool loop, bool pathfind = false) {
 		while (!a.failed() && !a.done()) {
 			if (a.keyword("nowait")) {
 				if (ctx.parallel) {
@@ -648,6 +662,8 @@ private:
 				a.number(s.ins.action.speed, "a speed");
 			} else if (strength && a.keyword("strength")) {
 				a.number(s.ins.action.strength, "a strength");
+			} else if (pathfind && a.keyword("pathfind")) {
+				s.ins.action.pathfind = true;
 			} else if (loop && a.keyword("loop")) {
 				s.ins.action.loop = true;
 				s.ins.wait = false;
@@ -699,10 +715,10 @@ private:
 		}
 
 		static const std::initializer_list<const char*> known = {
-			"ambient", "anim", "ask", "battle", "call", "camera", "choice", "clear", "equip", "face", "fade", "follower", "give", "goto",
-			"hide", "if", "label", "learn", "lock", "money", "move", "music", "name", "narrate", "panel", "party", "race", "rest",
-			"return", "save", "say", "sequence", "set", "shake", "shop", "show", "sound", "sync", "take", "together", "unequip",
-			"unlock", "var", "vehicle", "wait", "warp", "while",
+			"ambient", "anim", "ask", "battle", "call", "camera", "choice", "clear", "credits", "end", "equip", "face", "fade", "follower", "give", "goto",
+			"hide", "if", "label", "learn", "lock", "look", "money", "move", "music", "name", "narrate", "panel", "party", "place", "race",
+			"remove", "rest", "return", "save", "say", "sequence", "set", "shake", "shop", "show", "sound", "spawn", "sync", "take", "together",
+			"unequip", "unlock", "var", "vehicle", "wait", "warp", "while",
 		};
 		if (!one_of(cmd, known)) {
 			error(l.number, "script.unknown_command", {cmd});
@@ -710,8 +726,14 @@ private:
 			return;
 		}
 
+		if (ctx.background && !one_of(cmd, {"anim", "call", "clear", "face", "goto", "hide", "if", "label", "look", "move", "place", "race", "remove", "return",
+						  "sequence", "set", "show", "sound", "spawn", "sync", "together", "var", "wait", "while"})) {
+			error(l.number, "script.background_not_allowed", {cmd});
+			skip_command(ctx);
+			return;
+		}
 		const bool areaMusic = cmd == "music" && l.tokens.size() > 1 && l.tokens[1].text == "area";
-		if (ctx.parallel && (areaMusic || !one_of(cmd, {"ambient", "anim", "camera", "face", "fade", "hide", "move", "music", "panel", "sequence", "shake", "show", "sound", "wait"}))) {
+		if (ctx.parallel && (areaMusic || !one_of(cmd, {"ambient", "anim", "camera", "face", "fade", "hide", "move", "music", "panel", "place", "sequence", "shake", "show", "sound", "wait"}))) {
 			error(l.number, "script.allowed_inside_only_actor_camera", {cmd, ctx.parallel});
 			skip_command(ctx);
 			return;
@@ -811,12 +833,56 @@ private:
 			}
 		} else if (cmd == "party") {
 			s = simple(Op::party_add);
-			if (a.keyword("remove")) {
-				s.ins.op = Op::party_remove;
+			const bool save = a.keyword("save");
+			if (save || a.keyword("restore")) {
+				s.ins.op = save ? Op::party_save : Op::party_restore;
+				s.ins.name = "default";
+				if (!a.done()) {
+					a.name(s.ins.name, "a party snapshot name");
+				}
+			} else if (a.keyword("swap")) {
+				s.ins.op = Op::party_swap;
+				PartySwap& swap = s.ins.swap;
+				if (a.next_is_number()) {
+					std::int64_t slot = 0;
+					if (a.integer(slot, "a lineup slot") && slot < 1) {
+						a.error("script.party_slot_at_least_1", {});
+					}
+					swap.slot = static_cast<int>(std::min<std::int64_t>(slot, 99));
+				} else {
+					a.name(swap.replaced, "a lineup slot or a party member name");
+				}
+				a.name(swap.member, "a party member name");
+				if (a.keyword("equipment")) {
+					if (a.keyword("keep")) {
+						swap.equipment = SwapEquipment::keep;
+					} else if (a.keyword("bag")) {
+						swap.equipment = SwapEquipment::bag;
+					} else {
+						a.expected("'keep' or 'bag'");
+					}
+				}
+				swap.silent = a.keyword("silent");
+			} else if (a.keyword("order")) {
+				s.ins.op = Op::party_order;
+				do {
+					std::string member;
+					if (a.name(member, "a party member name")) {
+						if (std::find(s.ins.names.begin(), s.ins.names.end(), member) != s.ins.names.end()) {
+							a.error("script.party_order_twice", {member});
+						}
+						s.ins.names.push_back(member);
+					}
+				} while (!a.failed() && !a.done());
 			} else {
-				a.expect_keyword("add");
+				if (a.keyword("remove")) {
+					s.ins.op = Op::party_remove;
+				} else {
+					a.expect_keyword("add");
+				}
+				a.name(s.ins.name, "a party member name");
+				s.ins.number = a.keyword("silent") ? 1 : 0;
 			}
-			a.name(s.ins.name, "a party member name");
 		} else if (cmd == "lock" || cmd == "unlock") {
 			s = simple(cmd == "lock" ? Op::lock_player : Op::unlock_player);
 			a.expect_keyword("player");
@@ -836,10 +902,19 @@ private:
 			s = simple(Op::jump);
 			s.kind = cmd == "label" ? StmtKind::label : StmtKind::go_to;
 			a.name(s.ins.name, "a label name");
-		} else if (cmd == "move") {
-			s = action(ActionType::move);
+		} else if (cmd == "move" || cmd == "place") {
+			s = action(cmd == "move" ? ActionType::move : ActionType::place_actor);
 			a.name(s.ins.action.subject, "an actor name");
-			a.expect_keyword("to");
+			if (cmd == "move" && a.keyword("via")) {
+				do {
+					std::string marker;
+					if (a.name(marker, "a marker name")) {
+						s.ins.action.waypoints.push_back(marker);
+					}
+				} while (!a.failed() && !a.keyword("to"));
+			} else if (cmd == "move") {
+				a.expect_keyword("to");
+			}
 			if (a.next_is_number()) {
 				s.ins.action.has_position = true;
 				a.number(s.ins.action.position.x, "an x coordinate");
@@ -848,7 +923,19 @@ private:
 			} else {
 				a.name(s.ins.action.target, "a marker name or x y z coordinates");
 			}
-			action_options(ctx, a, s, true, false, false);
+			if (cmd == "place" && a.keyword("facing")) {
+				if (a.name(s.ins.action.facing, "north, east, south or west") && !is_direction(s.ins.action.facing)) {
+					a.error("script.expected_found", {"north, east, south or west", "name '" + s.ins.action.facing + "'"});
+				}
+			}
+			action_options(ctx, a, s, cmd == "move", false, false, cmd == "move");
+		} else if (cmd == "remove") {
+			s = simple(Op::remove_actor);
+			a.name(s.ins.name, "an actor name");
+			if (a.keyword("until")) {
+				a.expect_keyword("reload");
+				s.ins.number = 1;
+			}
 		} else if (cmd == "face") {
 			s = action(ActionType::face);
 			a.name(s.ins.action.subject, "an actor name");
@@ -858,11 +945,35 @@ private:
 			s = action(ActionType::animate);
 			a.name(s.ins.action.subject, "an actor name");
 			a.name(s.ins.action.target, "an animation name");
+			if (const StandardAnimation* standard = standard_animation(s.ins.action.target)) {
+				s.ins.action.seconds = standard->seconds;
+			}
 			action_options(ctx, a, s, false, false, true);
 		} else if (cmd == "show" || cmd == "hide") {
 			s = action(cmd == "show" ? ActionType::show_actor : ActionType::hide_actor);
 			a.name(s.ins.action.subject, "an actor name");
+			if (a.keyword("with") && a.name(s.ins.action.target, "an animation name after 'with'")) {
+				if (const StandardAnimation* standard = standard_animation(s.ins.action.target)) {
+					s.ins.action.seconds = standard->seconds;
+					const AnimationEnd wrong = cmd == "show" ? AnimationEnd::hidden : AnimationEnd::shown;
+					if (standard->end == wrong) {
+						a.error("script.transition_wrong_way", {s.ins.action.target, cmd});
+					}
+				}
+			}
 			action_options(ctx, a, s, false, false, false);
+		} else if (cmd == "spawn") {
+			s = simple(Op::spawn);
+			a.name(s.ins.name, "a background event name");
+		} else if (cmd == "look") {
+			s = simple(Op::actor_look);
+			a.name(s.ins.name, "an actor name");
+			if (a.keyword("enemy")) {
+				s.ins.action.subject = "enemy";
+				a.name(s.ins.action.target, "an enemy name");
+			} else if (!a.keyword("default")) {
+				a.name(s.ins.action.target, "a look name, 'enemy <enemy>' or 'default'");
+			}
 		} else if (cmd == "panel") {
 			s = action(ActionType::panel_show);
 			if (a.keyword("show")) {
@@ -952,6 +1063,12 @@ private:
 			s = simple(Op::name_entry);
 			a.expect_keyword("entry");
 			a.name(s.ins.name, "a party member name");
+		} else if (cmd == "credits") {
+			s = simple(Op::credits);
+			a.name(s.ins.name, "a credits name");
+		} else if (cmd == "end") {
+			s = simple(Op::end_game);
+			a.expect_keyword("game");
 		} else if (cmd == "sound") {
 			s = action(ActionType::sound);
 			a.name(s.ins.action.subject, "a sound cue name");

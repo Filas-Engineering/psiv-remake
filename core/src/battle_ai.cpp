@@ -79,6 +79,8 @@ bool Battle::overrideHolds(const AiCondition& entry, int actor) const {
 		return !freeSlotsBeside(actor).empty();
 	case AiConditionKind::AfterTurns:
 		return self.turnsTaken >= entry.turns;
+	case AiConditionKind::FirstTurn:
+		return self.turnsTaken == 0;
 	case AiConditionKind::GroupIntact:
 		for (int i = partyCount_; i < startingCount_; ++i) {
 			if (combatants_[i].group == self.group && !combatants_[i].alive()) {
@@ -283,6 +285,7 @@ void Battle::chooseEnemyAction(int actor, std::vector<Event>& out) {
 			case AiConditionKind::LastStanding:
 			case AiConditionKind::TechniquesBlocked:
 			case AiConditionKind::AfterTurns:
+			case AiConditionKind::FirstTurn:
 			case AiConditionKind::AllyPresent:
 			case AiConditionKind::AllyAbsent:
 			case AiConditionKind::FreeSlotBeside:

@@ -64,7 +64,8 @@ bool Battle::wouldChange(int target, const std::vector<Effect>& effects) const {
 			break;
 		case EffectKind::ApplyStatus: {
 			const StatusDef* def = db_->status(effect.status);
-			if (def && t.resistance(effect.status) < 100 && !(def->stacking == StatusStacking::Keep && t.hasStatus(effect.status))) {
+			const bool elementImmune = effect.element != Element::None && t.affinity(effect.element) <= 0;
+			if (def && t.resistance(effect.status) < 100 && !elementImmune && !(def->stacking == StatusStacking::Keep && t.hasStatus(effect.status))) {
 				return true;
 			}
 			break;
@@ -160,12 +161,15 @@ int Battle::retargetFoe(int user, const std::vector<Effect>& effects) {
 
 // A one-ally action in a macro round (BAT-053): a revive takes the first fallen member, a cure the first member
 // with a status it cures (or the actor), a heal the member missing the most hit points (ties to the later member).
-// Each passes by members whose kind the effect does not reach. Anything else keeps the command's target.
+// Each passes by members whose kind the effect does not reach. Anything else keeps the command's target. With
+// rules.json's macro_ally_pick would_change, every pick also passes by members the effect would not change, and keeps
+// the command's target when nobody is left.
 int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const {
 	const int requested = commands_[actor].target;
 	if (effects.empty()) {
 		return requested;
 	}
+	const bool byChange = db_->battleRules.macroAllyWouldChange;
 	const std::vector<int> party = allies(actor);
 	switch (effects.front().kind) {
 	case EffectKind::Revive:
@@ -173,6 +177,9 @@ int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const
 			if (!combatants_[ally].alive() && wouldChange(ally, effects)) {
 				return ally;
 			}
+		}
+		if (byChange) {
+			return requested;
 		}
 		break;
 	case EffectKind::CureStatus:
@@ -183,13 +190,13 @@ int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const
 				}
 			}
 		}
-		return actor;
+		return byChange ? requested : actor;
 	case EffectKind::Heal:
 		break;
 	// The original's pick for a one-ally raise never moves off the first member in line, whatever that member's state.
 	case EffectKind::ModifyStat:
 		for (int ally : party) {
-			if (effects.front().reaches(combatants_[ally].kind)) {
+			if (byChange ? wouldChange(ally, effects) : effects.front().reaches(combatants_[ally].kind)) {
 				return ally;
 			}
 		}
@@ -213,7 +220,8 @@ int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const
 	int best = -1;
 	for (int ally : party) {
 		const Combatant& c = combatants_[ally];
-		if (c.alive() && effects.front().reaches(c.kind) && (best < 0 || c.stats.maxHp - c.hp >= combatants_[best].stats.maxHp - combatants_[best].hp)) {
+		if (c.alive() && effects.front().reaches(c.kind) && (!byChange || wouldChange(ally, effects)) &&
+			(best < 0 || c.stats.maxHp - c.hp >= combatants_[best].stats.maxHp - combatants_[best].hp)) {
 			best = ally;
 		}
 	}

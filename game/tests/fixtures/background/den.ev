@@ -1,0 +1,15 @@
+# Wren Den, a dungeon whose way out its area names (`dungeon_exit`). Its plaque plays the credits and ends the game; the
+# echo throws the party back to the den's mouth.
+
+event den_plaque unskippable
+	narrate @den.plaque.read
+	credits wren_end
+	narrate @den.plaque.after
+	end game
+	narrate @den.plaque.never
+end
+
+event den_echo unskippable
+	narrate @den.echo
+	warp wren_den den_mouth
+end

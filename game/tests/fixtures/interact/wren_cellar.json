@@ -1,0 +1,48 @@
+{
+	"id": "wren_cellar",
+	"kind": "field",
+	"encounter_mode": "visible",
+	"step_ms": 250,
+	"region": "coast",
+	"map": [
+		"##############",
+		"##.#......#~~#",
+		"####.#....#~~#",
+		"#..........~~#",
+		"#.........#~~#",
+		"#..........~~#",
+		"#..........~~#",
+		"#..........~~#",
+		"#..........~~#",
+		"######.#######"
+	],
+	"markers": {
+		"cellar_door": [6, 8],
+		"clerk_front": [2, 3],
+		"notice_side": [5, 3],
+		"table_north": [9, 1],
+		"table_south": [8, 3],
+		"cook_front": [10, 3],
+		"cook_side": [9, 5],
+		"skiff_front": [8, 7],
+		"skiff_post": [9, 7]
+	},
+	"exits": [
+		{"at": [6, 9], "to": "wren_hollow", "marker": "hollow_door", "require_flag": "cellar.door_open", "closed_tile": "normal"}
+	],
+	"hooks": [
+		{"id": "cellar_clerk", "at": [2, 1], "event": "cellar_clerk", "across": true},
+		{"id": "cellar_notice", "at": [5, 2], "event": "cellar_notice"},
+		{"id": "cellar_table", "at": [8, 2], "event": "cellar_table", "cells": [[9, 2]]},
+		{"id": "cellar_cook", "at": [10, 4], "event": "cellar_cook", "actor_at": [10, 5]}
+	],
+	"zones": [
+		{
+			"id": "cellar_pool",
+			"from": [11, 1],
+			"to": [12, 8],
+			"table": [{"encounter": "training", "weight": 1}],
+			"random": {"vehicle_step_chance": 1}
+		}
+	]
+}

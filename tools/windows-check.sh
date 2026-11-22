@@ -3,9 +3,12 @@
 # * the three C++ libraries' unit tests;
 # * the C API as a DLL (bindings/c), checked to export exactly the header's PSIV_API functions, with the C tests
 #   linked against it;
-# * the C playthrough and game_cli.exe on the scripted playthrough and the macro script, compared the way
-#   bindings/Makefile does: the two transcripts byte for byte, the golden transcript (line ends aside: standard output
-#   writes CR LF on Windows), and every save file the two runs wrote.
+# * the C playthrough and game_cli.exe on the scripted playthrough, the macro script, the actor script, the party
+#   script, the interaction script and the background script, compared the way bindings/Makefile does: the two
+#   transcripts byte for byte, the golden transcript (line ends aside: standard output writes CR LF on Windows), and every
+#   save file the two runs wrote; the actor, party, interaction and background scripts play the data make_actor_data.exe
+#   writes (the placeholder data with Wren Hollow and Wren Loft added, for the interaction script Wren Cellar and the
+#   interaction rules, and for the background script Wren Yard).
 # It does not cover MSVC, the acceptance suites, the C# wrapper or the MonoGame sample.
 # The repo is mounted read-only and copied inside the container.
 set -eu
@@ -39,6 +42,10 @@ docker run --rm --platform linux/amd64 -v "$ROOT":/src:ro "$IMAGE" sh -euc '
 	$cxx $flags -Iinclude -I../core/include -I../events/include src/*.cpp $libs tests/*.cpp -o game_tests.exe
 	wine game_tests.exe
 	$cxx $flags -Iinclude -I../core/include -I../events/include cli/*.cpp src/*.cpp $libs -o game_cli.exe
+	$cxx $flags -Iinclude -I../core/include -I../events/include tools/make_actor_data.cpp src/*.cpp $libs -o make_actor_data.exe
+	wine make_actor_data.exe data ../core/data tests/fixtures/actors build/actor_data
+	wine make_actor_data.exe data ../core/data tests/fixtures/actors build/interact_data interact
+	wine make_actor_data.exe data ../core/data tests/fixtures/actors build/background_data background
 	echo "== windows: core, events and game unit tests passed"
 
 	cd /work/bindings
@@ -54,7 +61,8 @@ docker run --rm --platform linux/amd64 -v "$ROOT":/src:ro "$IMAGE" sh -euc '
 	cflags="-std=c11 -Wall -Wextra -Werror -pedantic -O1 -Ic"
 	$cc $cflags c/tests/test_api.c build/libpsiv_session.dll.a -o build/c_tests.exe
 	$cc $cflags c/tests/playthrough.c build/libpsiv_session.dll.a -o build/c_playthrough.exe
-	wine build/c_tests.exe --data ../game/data --scratch build/scratch
+	wine build/c_tests.exe --data ../game/data --actor-data ../game/build/actor_data/game/data --interact-data ../game/build/interact_data/game/data \
+		--background-data ../game/build/background_data/game/data --scratch build/scratch
 	script=../game/data/scripts/playthrough.txt
 	wine ../game/game_cli.exe --data ../game/data --seed 6 --auto-battle --script $script --saves build/saves_cpp > build/playthrough_cpp.txt
 	wine build/c_playthrough.exe --data ../game/data --seed 6 --auto-battle --script $script --saves build/saves_c > build/playthrough_c.txt
@@ -68,5 +76,29 @@ docker run --rm --platform linux/amd64 -v "$ROOT":/src:ro "$IMAGE" sh -euc '
 	cmp build/macros_c.txt build/macros_cpp.txt
 	tr -d "\r" < build/macros_c.txt | cmp - ../game/tests/expected/macros.txt
 	diff -r build/macros_saves_c build/macros_saves_cpp
-	echo "== windows: C API tests passed; the C playthrough and macro script match game_cli.exe and their golden transcripts, saves included"
+	script=../game/data/scripts/actors.txt
+	wine ../game/game_cli.exe --data ../game/build/actor_data/game/data --seed 6 --script $script --saves build/actors_saves_cpp > build/actors_cpp.txt
+	wine build/c_playthrough.exe --data ../game/build/actor_data/game/data --seed 6 --script $script --saves build/actors_saves_c > build/actors_c.txt
+	cmp build/actors_c.txt build/actors_cpp.txt
+	tr -d "\r" < build/actors_c.txt | cmp - ../game/tests/expected/actors.txt
+	diff -r build/actors_saves_c build/actors_saves_cpp
+	script=../game/data/scripts/party.txt
+	wine ../game/game_cli.exe --data ../game/build/actor_data/game/data --seed 6 --script $script --saves build/party_saves_cpp > build/party_cpp.txt
+	wine build/c_playthrough.exe --data ../game/build/actor_data/game/data --seed 6 --script $script --saves build/party_saves_c > build/party_c.txt
+	cmp build/party_c.txt build/party_cpp.txt
+	tr -d "\r" < build/party_c.txt | cmp - ../game/tests/expected/party.txt
+	diff -r build/party_saves_c build/party_saves_cpp
+	script=../game/data/scripts/interact.txt
+	wine ../game/game_cli.exe --data ../game/build/interact_data/game/data --seed 6 --script $script --saves build/interact_saves_cpp > build/interact_cpp.txt
+	wine build/c_playthrough.exe --data ../game/build/interact_data/game/data --seed 6 --script $script --saves build/interact_saves_c > build/interact_c.txt
+	cmp build/interact_c.txt build/interact_cpp.txt
+	tr -d "\r" < build/interact_c.txt | cmp - ../game/tests/expected/interact.txt
+	diff -r build/interact_saves_c build/interact_saves_cpp
+	script=../game/data/scripts/background.txt
+	wine ../game/game_cli.exe --data ../game/build/background_data/game/data --seed 6 --script $script --saves build/background_saves_cpp > build/background_cpp.txt
+	wine build/c_playthrough.exe --data ../game/build/background_data/game/data --seed 6 --script $script --saves build/background_saves_c > build/background_c.txt
+	cmp build/background_c.txt build/background_cpp.txt
+	tr -d "\r" < build/background_c.txt | cmp - ../game/tests/expected/background.txt
+	diff -r build/background_saves_c build/background_saves_cpp
+	echo "== windows: C API tests passed; the C playthrough, macro script, actor script, party script, interaction script and background script match game_cli.exe and their golden transcripts, saves included"
 '

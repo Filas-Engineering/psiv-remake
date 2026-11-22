@@ -1,0 +1,30 @@
+{
+	"id": "wren_loft",
+	"kind": "dungeon",
+	"encounter_mode": "random",
+	"step_ms": 250,
+	"region": "coast",
+	"map": [
+		"##########",
+		"#........#",
+		"#........#",
+		"#........#",
+		"##########"
+	],
+	"markers": {
+		"loft_door": [8, 1],
+		"ledger_front": [2, 1],
+		"roster_front": [3, 1],
+		"bell_front": [4, 1],
+		"slate_front": [6, 1]
+	},
+	"hooks": [
+		{"id": "loft_ledger", "at": [2, 0], "event": "loft_ledger"},
+		{"id": "loft_roster", "at": [3, 0], "event": "loft_roster"},
+		{"id": "loft_bell", "at": [4, 0], "event": "loft_bell"},
+		{"id": "loft_slate", "at": [6, 0], "event": "loft_slate"}
+	],
+	"zones": [
+		{"id": "loft_floor", "from": [1, 3], "to": [8, 3], "table": [{"encounter": "training", "weight": 1}], "random": {"min_steps": 2, "max_steps": 3}}
+	]
+}

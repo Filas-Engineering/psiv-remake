@@ -30,6 +30,9 @@ struct Profile {
 	int musicVolume = 80;
 	int ambientVolume = 80;
 	int effectsVolume = 80;
+	// The leader runs unless the host's run input is held, which then walks (game.json `run_speed_percent`). Written to
+	// the file only when on, so older builds keep reading it as an unknown line.
+	bool alwaysRun = false;
 	// Lines this build does not know, kept and written back unchanged so a newer build's settings survive.
 	std::vector<std::pair<std::string, std::string>> unknown;
 };

@@ -1,0 +1,240 @@
+The Bell at Tidewater (seed 6)
+title> new
+You arrive at Tidewater Landing.
+  (fade in 1)
+The ferry bumps against the pilings of Tidewater Landing.
+  (move dockhand to dock_front)
+  (move dockhand to greet_spot)
+  (face dockhand fighter)
+Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  (move dockhand to dock_front)
+  (move dockhand to 10 0 2)
+  (face dockhand dock_front)
+New job: The dockhand's lost crate.
+New encyclopedia entry: Tidewater Landing.
+[Autosaved to auto_0 (event end).]
+field> dev warp wren_yard yard_gate
+Developer tools changed this game. It and its saves are marked.
+You arrive at Wren Yard.
+  (spawn yard_lamps)
+[Autosaved to auto_1 (area entry).]
+field> background
+  background: yard_lamps at events/yard.ev:10
+field> actors
+  yard_trader at 9 1 facing south shown solid
+  yard_goat at 3 4 facing south shown solid look goat wanders
+  yard_lamplighter at 1 2 facing east shown solid
+  yard_crow at 10 1 facing south shown look crow
+field> look
+  #..N.........#
+  #............#
+  #........$...#
+  #............#
+  #............#
+  #..........E.#
+  #.....@......#
+  ##############
+field> wait 1000
+  (yard_lamps: move yard_lamplighter to lamp_east)
+  (yard_lamps: anim yard_lamplighter hop)
+field> background
+  background: yard_lamps at events/yard.ev:13
+field> actors
+  yard_trader at 9 1 facing south shown solid
+  yard_goat at 4 4 facing east shown solid look goat wanders
+  yard_lamplighter at 12 3 facing south shown solid
+  yard_crow at 10 1 facing south shown look crow
+field> walk 4 5
+  (yard_lamps: move yard_lamplighter via yard_middle to lamp_west pathfind)
+  (yard_lamps: face yard_lamplighter south)
+  (yard_lamps: sound lookout_creak)
+field> actors
+  yard_trader at 9 1 facing south shown solid
+  yard_goat at 4 3 facing north shown solid look goat wanders
+  yard_lamplighter at 1 3 facing south shown solid
+  yard_crow at 10 1 facing south shown look crow
+field> n
+field> actors
+  yard_trader at 9 1 facing south shown solid
+  yard_goat at 3 3 facing west shown solid look goat wanders
+  yard_lamplighter at 1 3 facing south shown solid
+  yard_crow at 10 1 facing south shown look crow
+field> w
+  (yard_lamps: move yard_lamplighter to lamp_east)
+  (yard_lamps: anim yard_lamplighter hop)
+field> face north
+field> prompt
+  prompt: actor yard_goat at 3 3 facing north
+field> talk
+The goat bleats and butts the leader's knee.
+  (hide yard_goat with dissolve)
+  (show yard_goat with fade_in)
+field> actors
+  yard_trader at 9 1 facing south shown solid
+  yard_goat at 3 3 facing west shown solid anim fade_in 500/500ms look goat wanders
+  yard_lamplighter at 12 3 facing east shown solid anim hop 100/300ms
+  yard_crow at 10 1 facing south shown look crow
+field> n
+The goat bleats and butts the leader's knee.
+  (hide yard_goat with dissolve)
+  (show yard_goat with fade_in)
+field> walk bell_front
+  (yard_lamps: move yard_lamplighter via yard_middle to lamp_west pathfind)
+  (yard_lamps: face yard_lamplighter south)
+  (yard_lamps: sound lookout_creak)
+field> face north
+field> prompt
+  prompt: talk yard_bell at 3 0 facing north
+field> talk
+Yard Trader: The bell! That wakes the crow on the roof, and the dust devils too, if there is room for them.
+  (spawn yard_crow_flight)
+! background event 'yard_dust' not started: 2 already run (background_limit)
+  (face enemy.yard_patch.1 north)
+  (move enemy.yard_patch.1 to patch_corner)
+Yard Trader: And off with you, little pest. Out of my yard.
+field> background
+  background: yard_lamps at events/yard.ev:17
+  background: yard_crow_flight at events/yard.ev:27
+field> look
+  #..N.........#
+  #..@.........#
+  #........$...#
+  #............#
+  #............#
+  #............#
+  #............#
+  ##############
+field> actors
+  yard_trader at 9 1 facing south shown solid enemy aegis_sentinel
+  yard_goat at 3 2 facing north shown solid look goat wanders
+  yard_lamplighter at 1 3 facing south shown solid
+  yard_crow at 10 1 facing south shown look crow
+field> menu
+menu> save manual_0
+Saved to manual_0.
+menu> close
+field> wait 2500
+  (yard_crow_flight: anim yard_crow hop)
+  (yard_lamps: move yard_lamplighter to lamp_east)
+  (yard_lamps: anim yard_lamplighter hop)
+  (yard_crow_flight: move yard_crow to crow_perch)
+  (yard_lamps: move yard_lamplighter via yard_middle to lamp_west pathfind)
+  (yard_lamps: face yard_lamplighter south)
+  (yard_lamps: sound lookout_creak)
+  (yard_crow_flight: hide yard_crow with dissolve)
+  (yard_crow_flight: end)
+field> actors
+  yard_trader at 9 1 facing south shown solid enemy aegis_sentinel
+  yard_goat at 3 2 facing north shown solid look goat wanders
+  yard_lamplighter at 1 3 facing south shown solid
+  yard_crow at 12 1 facing east hidden dissolved removed until_reload look crow
+field> background
+  background: yard_lamps at events/yard.ev:17
+field> title
+title> load manual_0
+Loaded manual_0.
+field> background
+  background: yard_lamps at events/yard.ev:17
+  background: yard_crow_flight at events/yard.ev:27
+field> actors
+  yard_trader at 9 1 facing south shown solid enemy aegis_sentinel
+  yard_goat at 3 2 facing north shown solid look goat wanders
+  yard_lamplighter at 1 3 facing south shown solid
+  yard_crow at 10 1 facing south shown look crow
+field> wait 2500
+  (yard_lamps: move yard_lamplighter via yard_middle to lamp_west pathfind (instant))
+  (yard_lamps: face yard_lamplighter south (instant))
+  (yard_crow_flight: anim yard_crow hop)
+  (yard_lamps: move yard_lamplighter to lamp_east)
+  (yard_lamps: anim yard_lamplighter hop)
+  (yard_crow_flight: move yard_crow to crow_perch)
+  (yard_lamps: move yard_lamplighter via yard_middle to lamp_west pathfind)
+  (yard_lamps: face yard_lamplighter south)
+  (yard_lamps: sound lookout_creak)
+  (yard_crow_flight: hide yard_crow with dissolve)
+  (yard_crow_flight: end)
+field> actors
+  yard_trader at 9 1 facing south shown solid enemy aegis_sentinel
+  yard_goat at 3 2 facing north shown solid look goat wanders
+  yard_lamplighter at 1 3 facing south shown solid
+  yard_crow at 12 1 facing east hidden dissolved removed until_reload look crow
+field> background
+  background: yard_lamps at events/yard.ev:17
+field> walk stall_front
+  (yard_lamps: hide yard_lamplighter with fade_out)
+  (yard_lamps: end)
+The yard lamps glow, one by one.
+You arrive at Wren Yard.
+  (warp wren_yard yard_gate)
+  (spawn yard_lamps)
+[Autosaved to auto_2 (event end).]
+  (yard_lamps: hide yard_lamplighter with fade_out)
+  (yard_lamps: end)
+field> face north
+field> prompt
+  prompt: shop yard_stall at 9 2 facing north kept by yard_trader
+field> wait 6000
+field> background
+  background: none
+field> actors
+  yard_trader at 9 1 facing south shown solid
+  yard_goat at 2 3 facing west shown solid look goat wanders
+  yard_lamplighter at 1 3 facing south hidden faded
+  yard_crow at 12 1 facing east hidden dissolved look crow
+field> dev warp wren_den den_mouth
+You arrive at Wren Den.
+[Autosaved to auto_0 (area entry).]
+field> dev give waymark_chalk 1
+field> menu
+menu> destinations dungeon_exit
+  tidewater: Tidewater Landing (3,6)
+menu> travel dungeon_exit waymark_chalk
+Used Waymark Chalk.
+You arrive at Tidewater Landing.
+[Autosaved to auto_1 (area entry).]
+field> status
+Mode field, Tidewater Landing (3,6) facing north, play time 0:00:13.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 0
+  Money 50. Items: tonic x1.
+field> dev warp wren_den den_mouth
+You arrive at Wren Den.
+[Autosaved to auto_2 (area entry).]
+field> walk plaque_front
+field> face east
+field> prompt
+  prompt: talk den_plaque at 5 2 facing east
+field> talk
+The plaque names everyone who ever slept in the hollow.
+menu> credits
+Credits wren_end, music title_harbor_dawn, 1 of 4 shown, 0 of 8000 ms.
+  + heading Wren Hollow (2500 ms)
+  - line The yard trader, the goat and the crow (2000 ms, gap 1)
+  - heading With thanks (1500 ms, gap 2)
+  - line And to you, for walking every room (2000 ms)
+menu> wait 3000
+menu> credits
+Credits wren_end, music title_harbor_dawn, 2 of 4 shown, 3000 of 8000 ms.
+  + heading Wren Hollow (2500 ms)
+  + line The yard trader, the goat and the crow (2000 ms, gap 1)
+  - heading With thanks (1500 ms, gap 2)
+  - line And to you, for walking every room (2000 ms)
+menu> refused save manual_1
+! Saving is only allowed from the field menu or a save prompt.
+menu> refused menu
+! The menu opens from the field.
+menu> wait 4000
+menu> credits
+Credits wren_end, music title_harbor_dawn, 4 of 4 shown, 7000 of 8000 ms.
+  + heading Wren Hollow (2500 ms)
+  + line The yard trader, the goat and the crow (2000 ms, gap 1)
+  + heading With thanks (1500 ms, gap 2)
+  + line And to you, for walking every room (2000 ms)
+menu> close
+The den is quiet again.
+Developer tools marked this game, so no clear-data record was written.
+title> status
+Mode title, Wren Den (4,2) facing east, play time 0:00:21.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 0
+  Money 50. Items: tonic x1.
+title> quit
+End of script.

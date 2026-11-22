@@ -9,14 +9,14 @@ namespace rules {
 
 namespace {
 
-Effectiveness effectivenessOf(int affinity, int divisor) {
+Effectiveness effectivenessOf(int affinity, int normal) {
 	if (affinity <= 0) {
 		return Effectiveness::Immune;
 	}
-	if (affinity > divisor) {
+	if (affinity > normal) {
 		return Effectiveness::Weak;
 	}
-	return affinity < divisor ? Effectiveness::Resisted : Effectiveness::Normal;
+	return affinity < normal ? Effectiveness::Resisted : Effectiveness::Normal;
 }
 
 }
@@ -159,6 +159,9 @@ void Battle::useAbility(int actor, const AbilityDef& ability, int target, Comman
 	e.target = targets.size() == 1 ? targets.front() : -1;
 	payCost(actor, ability, out);
 	Attacker attacker = attackerOf(actor);
+	if (kind == CommandKind::Attack) {
+		attacker.strength = combatants_[actor].effective(Stat::Attack);
+	}
 	attacker.rollsToHit = ability.kind == AbilityKind::Attack;
 	attacker.singleTarget = ability.targeting == Targeting::OneEnemy || ability.targeting == Targeting::RandomEnemy;
 	attacker.technique = ability.kind == AbilityKind::Technique;
@@ -166,6 +169,9 @@ void Battle::useAbility(int actor, const AbilityDef& ability, int target, Comman
 	attacker.changeAmount = attacker.technique ? attacker.mental : attacker.strength;
 	if (ability.attackStat) {
 		attacker.strength = attacker.mental = attacker.changeAmount = combatants_[actor].effective(*ability.attackStat);
+		if (*ability.attackStat == Stat::Attack) {
+			attacker.rollUser = combatants_[actor].effective(Stat::Strength);
+		}
 	}
 	if (kind == CommandKind::Attack) {
 		attacker.element = combatants_[actor].attackElement;
@@ -257,10 +263,14 @@ void Battle::useWornPiece(int actor, const Command& command, const EquipmentDef&
 	attacker.changeAmount = attacker.technique ? attacker.mental : attacker.strength;
 	if (ability->attackStat) {
 		attacker.strength = attacker.mental = attacker.changeAmount = combatants_[actor].effective(*ability->attackStat);
+		if (*ability->attackStat == Stat::Attack) {
+			attacker.rollUser = combatants_[actor].effective(Stat::Strength);
+		}
 	}
 	attacker.variance = ability->variance;
-	if (piece.usePower > 0) {
-		attacker.strength = attacker.mental = attacker.changeAmount = piece.usePower;
+	if (piece.usePower) {
+		attacker.strength = attacker.mental = attacker.changeAmount = *piece.usePower;
+		attacker.rollUser.reset();
 	} else if (fromBag) {
 		Attacker flat;
 		flat.groupTarget = attacker.groupTarget;
@@ -347,6 +357,13 @@ int Battle::rollDamage(int attack, int defense, int bonus, int affinity, const A
 	return formulas::variedDamage(attack, defense, bonus, affinity, scale + offset, scale, rules.affinityDivisor);
 }
 
+int Battle::rollEffect(int user, const Attacker& attacker, const Effect& effect, const Combatant& target, int affinity, int resistance) {
+	const int roll = rng_.range(0, formulas::kChanceRollMax);
+	const int userSide = effect.userPower ? *effect.userPower : effect.userStat && user >= 0 ? combatants_[user].effective(*effect.userStat) : attacker.rollUser.value_or(attacker.mental);
+	const int targetSide = target.effective(effect.targetStat.value_or(Stat::Mental));
+	return formulas::effectScore(roll, userSide, targetSide, affinity, db_->battleRules.affinityDivisor, resistance);
+}
+
 void Battle::attemptEscape(int actor, std::vector<Event>& out) {
 	int partyAgility = 0;
 	bool enemyCanAct = false;
@@ -422,7 +439,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				const Element element = effect.weaponElement ? weapon : effect.element != Element::None ? effect.element : attacker.element;
 				const int affinity = element != Element::None ? elementAffinity(t, element) : (t.defending && rules.defends(Element::None) ? rules.defendedAffinity() : rules.elementlessHitAffinity());
 				const int damage = rollDamage(attack, t.effective(Stat::Defense), bonus, affinity, attacker);
-				const Effectiveness effectiveness = element != Element::None ? effectivenessOf(affinity, rules.affinityDivisor) : Effectiveness::Normal;
+				const Effectiveness effectiveness = element != Element::None ? effectivenessOf(affinity, rules.normalAffinity(element)) : Effectiveness::Normal;
 				changed = dealDamage(user, target, damage, element, effectiveness, out) > 0 || changed;
 				noteHit(user, target, attacker, flatPower);
 				break;
@@ -434,7 +451,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				const BattleRules& rules = db_->battleRules;
 				const int guard = t.effective(rules.magicDefense ? Stat::MagicDefense : Stat::Mental);
 				const int damage = rollDamage(attack, guard, bonus, affinity, attacker);
-				changed = dealDamage(user, target, damage, effect.element, effectivenessOf(affinity, rules.affinityDivisor), out) > 0 || changed;
+				changed = dealDamage(user, target, damage, effect.element, effectivenessOf(affinity, rules.normalAffinity(effect.element)), out) > 0 || changed;
 				noteHit(user, target, attacker, flatPower);
 				break;
 			}
@@ -471,13 +488,15 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 					break;
 				}
 				const int resistance = t.resistance(effect.status);
-				if (resistance >= 100 || formulas::statusScore(rng_.range(0, formulas::kChanceRollMax), attacker.mental, t.effective(Stat::Mental), resistance) <= effect.threshold) {
+				const int affinity = effect.element == Element::None ? db_->battleRules.affinityDivisor : t.affinity(effect.element);
+				const bool immune = resistance >= 100 || affinity <= 0;
+				if (immune || (!effect.alwaysLands && rollEffect(user, attacker, effect, t, affinity, resistance) <= effect.threshold)) {
 					Event& e = emit(out, EventType::StatusResisted);
 					e.actor = user;
 					e.target = target;
 					e.status = effect.status;
-					e.effectiveness = resistance >= 100 ? Effectiveness::Immune : Effectiveness::Normal;
-					e.message = statusMessageKey(effect.status, resistance >= 100 ? "immune" : "resisted");
+					e.effectiveness = immune ? Effectiveness::Immune : Effectiveness::Normal;
+					e.message = statusMessageKey(effect.status, immune ? "immune" : "resisted");
 					break;
 				}
 				const int duration = t.side == Side::Enemy && def->enemyDuration > 0 ? def->enemyDuration : def->duration;
@@ -519,17 +538,21 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 			case EffectKind::ModifyStat: {
 				// Lowering a foe's stat is a secondary effect and rolls like a status; raising always lands.
 				const bool rolls = !effect.raises && user >= 0 && combatants_[user].side != t.side;
-				if (rolls && formulas::statusScore(rng_.range(0, formulas::kChanceRollMax), attacker.mental, t.effective(Stat::Mental), 0) <= effect.threshold) {
+				const int affinity = effect.element == Element::None ? db_->battleRules.affinityDivisor : t.affinity(effect.element);
+				const bool immune = rolls && affinity <= 0;
+				if (immune || (rolls && !effect.alwaysLands && rollEffect(user, attacker, effect, t, affinity, 0) <= effect.threshold)) {
 					Event& e = emit(out, EventType::StatusResisted);
 					e.actor = user;
 					e.target = target;
 					e.stat = effect.stat;
+					e.effectiveness = immune ? Effectiveness::Immune : Effectiveness::Normal;
 					e.message = "battle.stat_resisted";
 					break;
 				}
 				const int amount = flatPower || effect.power > 0 ? effect.power : attacker.changeAmount;
 				const int base = t.base(effect.stat);
-				const int floor = effect.stat == Stat::Agility || effect.stat == Stat::Dexterity ? 1 : 0;
+				// A lowering never raises a stat that is already below the floor (0 in the data).
+				const int floor = std::min(base, effect.stat == Stat::Agility || effect.stat == Stat::Dexterity ? 1 : 0);
 				const BattleRules& rules = db_->battleRules;
 				const bool wraps = effect.raises && std::count(rules.statWraparound.begin(), rules.statWraparound.end(), effect.stat) > 0;
 				const int value = wraps ? (base + amount) % 256 : effect.raises ? base + amount : std::max(floor, base - amount);
@@ -548,12 +571,9 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 			case EffectKind::InstantDefeat: {
 				// With an element the roll's factor is the target's affinity for it, as the original's death effect reads it
 				// (original-battle-rules.md, section 6); an affinity of 0 is immunity.
-				const int elementAffinity = effect.element == Element::None ? 1 : t.affinity(effect.element);
-				const bool immune = !t.vulnerable || elementAffinity <= 0;
-				const int roll = immune ? 0 : rng_.range(0, formulas::kChanceRollMax);
-				const int score = effect.element == Element::None ? formulas::statusScore(roll, attacker.mental, t.effective(Stat::Mental), 0)
-					: formulas::elementScore(roll, attacker.mental, t.effective(Stat::Mental), elementAffinity, db_->battleRules.affinityDivisor);
-				if (immune || score <= effect.threshold) {
+				const int affinity = effect.element == Element::None ? db_->battleRules.affinityDivisor : t.affinity(effect.element);
+				const bool immune = !t.vulnerable || affinity <= 0;
+				if (immune || (!effect.alwaysLands && rollEffect(user, attacker, effect, t, affinity, 0) <= effect.threshold)) {
 					Event& e = emit(out, EventType::Message);
 					e.actor = user;
 					e.target = target;
@@ -629,7 +649,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 			case EffectKind::Transform: {
 				const EnemyDef* self = isParty(target) ? nullptr : db_->enemy(t.defId);
 				if (const EnemyDef* next = self ? db_->enemy(self->transformsInto) : nullptr) {
-					transform(target, *next, out);
+					transform(target, *next, out, self->keepsAmbush);
 					changed = true;
 				}
 				break;
@@ -687,7 +707,7 @@ int Battle::dealDamage(int user, int target, int amount, Element element, Effect
 	if (!t.alive()) {
 		defeat(target, out);
 	} else if (enemyDef && enemyDef->nextFormAt > 0 && dealt > 0 && t.hp * 100 <= t.stats.maxHp * enemyDef->nextFormAt && db_->enemy(enemyDef->nextForm)) {
-		transform(target, *db_->enemy(enemyDef->nextForm), out);
+		transform(target, *db_->enemy(enemyDef->nextForm), out, enemyDef->keepsAmbush);
 	} else if (dealt > 0) {
 		const std::vector<ActiveStatus> statuses = t.statuses;
 		for (const ActiveStatus& active : statuses) {
@@ -720,7 +740,7 @@ void Battle::defeat(int target, std::vector<Event>& out) {
 	const EnemyDef* enemyDef = isParty(target) ? nullptr : db_->enemy(combatants_[target].defId);
 	if (enemyDef && !enemyDef->nextForm.empty()) {
 		if (const EnemyDef* next = db_->enemy(enemyDef->nextForm)) {
-			transform(target, *next, out);
+			transform(target, *next, out, enemyDef->keepsAmbush);
 			return;
 		}
 	}

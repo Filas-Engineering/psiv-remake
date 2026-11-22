@@ -148,6 +148,9 @@ private:
 		int comboBonus = 0;
 		// The ability's own variance, which wins over the rules'.
 		std::optional<DamageVariance> variance = {};
+		// An effect roll's user side when it is not `mental`: `attack_stat: "attack"` rolls with plain strength, as only
+		// `user_stat: "attack"` rolls with the weapons' attack bonus.
+		std::optional<int> rollUser = {};
 	};
 
 	Battle() : rng_(0) {}
@@ -164,7 +167,7 @@ private:
 	Rewards computeRewards() const;
 	void recoverMachines(std::vector<Event>& out);
 	int addEnemy(const EnemyDef& def, const std::string& group, int position, int actor, std::vector<Event>& out);
-	void transform(int target, const EnemyDef& def, std::vector<Event>& out);
+	void transform(int target, const EnemyDef& def, std::vector<Event>& out, bool keepAmbush = false);
 	std::vector<int> freeSlotsBeside(int actor) const;
 	const EquipmentDef* wornPiece(int actor, const std::string& id) const;
 	const EquipmentDef* bagPiece(int actor, const std::string& id) const;
@@ -200,6 +203,8 @@ private:
 	int rollSpread();
 	// The damage formula with the original's spread, or the variance the ability or the rules give.
 	int rollDamage(int attack, int defense, int bonus, int affinity, const Attacker& attacker);
+	// Draws one roll for an effect that rolls to land and returns its score.
+	int rollEffect(int user, const Attacker& attacker, const Effect& effect, const Combatant& target, int affinity, int resistance);
 	void removeBeside(int actor, bool pays, std::vector<Event>& out);
 	void payCost(int actor, const AbilityDef& ability, std::vector<Event>& out);
 	// Returns whether any effect changed the battle state.

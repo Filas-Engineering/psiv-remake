@@ -1,0 +1,36 @@
+# Scripted actors in Wren Hollow, reached by a developer warp: the tallykeeper behind its counter (a talk point with
+# actor_at), the sentinel drawn with a field enemy's figure, standing solid and never fighting, and the drifter the
+# scene places, routes (pathfind around the sentinel, then via a marker), animates (fade_in, hop, dissolve, blink_out)
+# and removes until the area reloads; the tallykeeper's nod, shake and fade_out, and its removal for good. `actors` shows each actor's cell, facing, visibility, solidity, how it vanished, its removal and
+# the animation playing with its milliseconds left; `wait` runs them down, and a save keeps them. Run with --seed 6.
+new
+dev warp wren_hollow hollow_door
+look
+actors
+walk 6 4
+refused e
+walk counter_front
+face north
+talk
+actors
+wait 200
+actors
+wait 200
+actors
+dev warp wren_hollow hollow_door
+actors
+walk counter_front
+face north
+talk
+actors
+menu
+save manual_1
+close
+wait 300
+actors
+title
+load manual_1
+actors
+walk counter_front
+face north
+refused talk

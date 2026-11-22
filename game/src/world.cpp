@@ -78,6 +78,45 @@ bool parseEnemyState(const std::string& text, EnemyState& out) {
 	return false;
 }
 
+const char* toString(ActorVanish vanish) {
+	switch (vanish) {
+	case ActorVanish::None: return "none";
+	case ActorVanish::Faded: return "faded";
+	case ActorVanish::Dissolved: return "dissolved";
+	case ActorVanish::BlinkedOut: return "blinked_out";
+	}
+	return "none";
+}
+
+bool parseActorVanish(const std::string& text, ActorVanish& out) {
+	for (ActorVanish v : {ActorVanish::None, ActorVanish::Faded, ActorVanish::Dissolved, ActorVanish::BlinkedOut}) {
+		if (text == toString(v)) {
+			out = v;
+			return true;
+		}
+	}
+	return false;
+}
+
+const char* toString(ActorRemoval removal) {
+	switch (removal) {
+	case ActorRemoval::None: return "none";
+	case ActorRemoval::UntilReload: return "until_reload";
+	case ActorRemoval::ForGood: return "for_good";
+	}
+	return "none";
+}
+
+bool parseActorRemoval(const std::string& text, ActorRemoval& out) {
+	for (ActorRemoval r : {ActorRemoval::None, ActorRemoval::UntilReload, ActorRemoval::ForGood}) {
+		if (text == toString(r)) {
+			out = r;
+			return true;
+		}
+	}
+	return false;
+}
+
 rules::PartyMember* World::member(const std::string& characterId) {
 	for (rules::PartyMember& m : roster) {
 		if (m.characterId == characterId) {
@@ -163,6 +202,7 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 	if (!sameList(a.roster, b.roster, sameMember)) return differs("roster");
 	if (a.lineup != b.lineup) return differs("lineup");
 	if (a.memberNames != b.memberNames) return differs("memberNames");
+	if (a.partySnapshots != b.partySnapshots) return differs("partySnapshots");
 	if (a.items != b.items) return differs("items");
 	if (a.equipmentBag != b.equipmentBag) return differs("equipmentBag");
 	if (a.money != b.money) return differs("money");
@@ -179,7 +219,11 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 	auto sameActors = [](const std::map<std::string, ActorPlace>& x, const std::map<std::string, ActorPlace>& y) {
 		return std::equal(x.begin(), x.end(), y.begin(), y.end(), [](const auto& p, const auto& q) {
 			return p.first == q.first && p.second.area == q.second.area && p.second.cell == q.second.cell &&
-				p.second.facing == q.second.facing && p.second.visible == q.second.visible;
+				p.second.facing == q.second.facing && p.second.visible == q.second.visible && p.second.vanish == q.second.vanish &&
+				p.second.animation == q.second.animation && p.second.animationMs == q.second.animationMs &&
+				p.second.animationTotalMs == q.second.animationTotalMs && p.second.removed == q.second.removed &&
+				p.second.lookEnemy == q.second.lookEnemy && p.second.look == q.second.look && p.second.wanderProgress == q.second.wanderProgress &&
+				p.second.wanderPauseMs == q.second.wanderPauseMs;
 		});
 	};
 	if (!sameActors(a.actors, b.actors)) return differs("actors");

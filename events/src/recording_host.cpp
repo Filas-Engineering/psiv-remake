@@ -53,7 +53,8 @@ bool RecordingHost::same_world(const RecordingHost& other) const {
 	std::vector<std::string> b = other.party;
 	std::sort(a.begin(), a.end());
 	std::sort(b.begin(), b.end());
-	return flags == other.flags && vars == other.vars && items == other.items && a == b && vehicles == other.vehicles && player_control == other.player_control;
+	return flags == other.flags && vars == other.vars && items == other.items && a == b && vehicles == other.vehicles && removed == other.removed &&
+		party_snapshots == other.party_snapshots && player_control == other.player_control;
 }
 
 Handle RecordingHost::open(double seconds, int result, const std::string& description) {
@@ -229,6 +230,85 @@ void RecordingHost::set_area_music(const std::string& track) {
 	trace.push_back("music area " + (track.empty() ? std::string("default") : track));
 }
 
+void RecordingHost::remove_actor(const std::string& actor, bool until_reload) {
+	trace.push_back("remove " + actor + (until_reload ? " until reload" : ""));
+	removed[actor] = until_reload;
+}
+
+void RecordingHost::spawn_event(const std::string& event) {
+	trace.push_back("spawn " + event);
+	spawned.push_back(event);
+}
+
+void RecordingHost::set_actor_look(const std::string& actor, const std::string& enemy, const std::string& look) {
+	trace.push_back("look " + actor + (!enemy.empty() ? " enemy " + enemy : !look.empty() ? " " + look : std::string(" default")));
+}
+
+Handle RecordingHost::play_credits(const std::string& credits) {
+	trace.push_back("credits " + credits);
+	return open(0, 0, "credits " + credits);
+}
+
+void RecordingHost::end_game() {
+	trace.push_back("end game");
+}
+
+void RecordingHost::save_party(const std::string& snapshot) {
+	trace.push_back("party save " + snapshot);
+	party_snapshots[snapshot] = party;
+}
+
+bool RecordingHost::restore_party(const std::string& snapshot) {
+	const auto saved = party_snapshots.find(snapshot);
+	trace.push_back("party restore " + snapshot + " -> " + (saved == party_snapshots.end() ? "false" : "true"));
+	if (saved == party_snapshots.end()) {
+		return false;
+	}
+	party = saved->second;
+	return true;
+}
+
+void RecordingHost::swap_party_member(const PartySwap& swap) {
+	trace.push_back(describe(swap));
+	const std::size_t slot = swap.slot > 0 ? static_cast<std::size_t>(swap.slot - 1) : static_cast<std::size_t>(std::find(party.begin(), party.end(), swap.replaced) - party.begin());
+	if (slot < party.size() && std::find(party.begin(), party.end(), swap.member) == party.end()) {
+		party[slot] = swap.member;
+	}
+}
+
+void RecordingHost::add_party_member_silently(const std::string& member) {
+	trace.push_back("party add " + member + " silent");
+	if (std::find(party.begin(), party.end(), member) == party.end()) {
+		party.push_back(member);
+	}
+}
+
+void RecordingHost::remove_party_member_silently(const std::string& member) {
+	trace.push_back("party remove " + member + " silent");
+	party.erase(std::remove(party.begin(), party.end(), member), party.end());
+}
+
+bool RecordingHost::order_party(const std::vector<std::string>& members) {
+	std::string line = "party order";
+	bool known = true;
+	for (const std::string& member : members) {
+		line += " " + member;
+		known = known && std::find(party.begin(), party.end(), member) != party.end();
+	}
+	trace.push_back(line + " -> " + (known ? "true" : "false"));
+	if (!known) {
+		return false;
+	}
+	std::vector<std::string> ordered = members;
+	for (const std::string& member : party) {
+		if (std::find(members.begin(), members.end(), member) == members.end()) {
+			ordered.push_back(member);
+		}
+	}
+	party = std::move(ordered);
+	return true;
+}
+
 bool RecordingHost::has_vehicle(const std::string& vehicle) {
 	const bool held = vehicles.count(vehicle) > 0;
 	trace.push_back("has_vehicle " + vehicle + " -> " + (held ? "true" : "false"));
@@ -321,6 +401,16 @@ std::string RecordingHost::snapshot_world() {
 	for (const auto& v : vehicles) {
 		out << "vehicle " << v.first << ' ' << v.second << '\n';
 	}
+	for (const auto& r : removed) {
+		out << "removed " << r.first << ' ' << (r.second ? 1 : 0) << '\n';
+	}
+	for (const auto& [name, members] : party_snapshots) {
+		out << "snapshot " << name;
+		for (const std::string& member : members) {
+			out << ' ' << member;
+		}
+		out << '\n';
+	}
 	out << "control " << (player_control ? 1 : 0) << '\n';
 	return out.str();
 }
@@ -331,6 +421,8 @@ bool RecordingHost::restore_world(const std::string& snapshot) {
 	std::map<std::string, int> new_items;
 	std::vector<std::string> new_party;
 	std::map<std::string, std::string> new_vehicles;
+	std::map<std::string, bool> new_removed;
+	std::map<std::string, std::vector<std::string>> new_snapshots;
 	bool control = true;
 	std::istringstream in(snapshot);
 	std::string record;
@@ -369,6 +461,20 @@ bool RecordingHost::restore_world(const std::string& snapshot) {
 				return false;
 			}
 			new_vehicles[name] = map + " " + marker;
+		} else if (kind == "removed") {
+			int value = 0;
+			if (!(fields >> name >> value)) {
+				return false;
+			}
+			new_removed[name] = value != 0;
+		} else if (kind == "snapshot") {
+			if (!(fields >> name)) {
+				return false;
+			}
+			std::vector<std::string>& members = new_snapshots[name];
+			for (std::string member; fields >> member;) {
+				members.push_back(member);
+			}
 		} else if (kind == "control") {
 			int value = 0;
 			if (!(fields >> value)) {
@@ -385,6 +491,8 @@ bool RecordingHost::restore_world(const std::string& snapshot) {
 	items = new_items;
 	party = new_party;
 	vehicles = new_vehicles;
+	removed = new_removed;
+	party_snapshots = new_snapshots;
 	player_control = control;
 	return true;
 }

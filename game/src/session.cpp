@@ -48,6 +48,16 @@ std::string invalidWorld(const GameData& data, const World& w) {
 	if (w.lineup.empty() || w.lineup.size() > static_cast<std::size_t>(rules::kMaxPartySize)) {
 		return "the lineup needs 1 to " + std::to_string(rules::kMaxPartySize) + " members";
 	}
+	for (const auto& [name, snapshot] : w.partySnapshots) {
+		std::set<std::string> listed;
+		for (const std::vector<std::string>* part : {&snapshot.lineup, &snapshot.reserve}) {
+			for (const std::string& id : *part) {
+				if (!db.character(id) || !listed.insert(id).second) {
+					return named("unknown or repeated member in party snapshot", name);
+				}
+			}
+		}
+	}
 	std::set<std::string> seen;
 	for (const rules::PartyMember& m : w.roster) {
 		if (!db.character(m.characterId) || !seen.insert(m.characterId).second) {
@@ -157,7 +167,10 @@ std::string invalidWorld(const GameData& data, const World& w) {
 		}
 	}
 	for (const auto& [id, place] : w.actors) {
-		if (std::find(data.config.actors.begin(), data.config.actors.end(), id) == data.config.actors.end() || (!place.area.empty() && !cellIn(place.area, place.cell))) {
+		if (std::find(data.config.actors.begin(), data.config.actors.end(), id) == data.config.actors.end() || (!place.area.empty() && !cellIn(place.area, place.cell)) ||
+			place.animationMs < 0 || place.animationTotalMs < place.animationMs || place.animation.empty() != (place.animationTotalMs == 0) ||
+			(!place.lookEnemy.empty() && !db.enemy(place.lookEnemy)) || (!place.lookEnemy.empty() && !place.look.empty()) || place.wanderProgress < 0 ||
+			place.wanderPauseMs < 0) {
 			return named("unknown actor or cell outside its area for", id);
 		}
 	}
@@ -249,6 +262,23 @@ std::vector<rules::Macro>::iterator findMacro(std::vector<rules::Macro>& macros,
 // The macro editor's mark for a step (UI-005): the first reason the battle would skip or cancel it, judged on the
 // member as it stands outside battle.
 rules::MacroIssue stepIssue(const rules::Database& db, const World& world, const rules::MacroStep& step) {
+	// A vehicle's step runs in battles aboard it: judged on the vehicle the party has and the skill uses it keeps.
+	if (const rules::VehicleDef* vehicle = db.vehicle(step.member)) {
+		const auto held = world.vehicles.find(step.member);
+		if (held == world.vehicles.end()) {
+			return rules::MacroIssue::NotInParty;
+		}
+		if (step.kind == rules::CommandKind::Ability) {
+			if (std::find(vehicle->abilities.begin(), vehicle->abilities.end(), step.id) == vehicle->abilities.end()) {
+				return rules::MacroIssue::UnknownAbility;
+			}
+			const auto uses = held->second.skillUses.find(step.id);
+			if (uses != held->second.skillUses.end() && uses->second <= 0) {
+				return rules::MacroIssue::NoUsesLeft;
+			}
+		}
+		return rules::MacroIssue::None;
+	}
 	const rules::PartyMember* m = world.member(step.member);
 	if (!m || std::find(world.lineup.begin(), world.lineup.end(), step.member) == world.lineup.end()) {
 		return rules::MacroIssue::NotInParty;
@@ -318,7 +348,7 @@ rules::ScriptedEnd scriptedEnd(const events::BattleRequest& request, const rules
 }
 
 // The talk point named after an actor: where the actor stands in that area until a script moves it.
-const Hook* actorHome(const Area* area, const std::string& actor) {
+const Hook* talkPoint(const Area* area, const std::string& actor) {
 	if (!area) {
 		return nullptr;
 	}
@@ -375,8 +405,23 @@ const char* toString(MenuKind kind) {
 	case MenuKind::SavePrompt: return "save_prompt";
 	case MenuKind::NameEntry: return "name_entry";
 	case MenuKind::Port: return "port";
+	case MenuKind::Credits: return "credits";
 	}
 	return "none";
+}
+
+const char* toString(InteractKind kind) {
+	switch (kind) {
+	case InteractKind::Vehicle: return "vehicle";
+	case InteractKind::Port: return "port";
+	case InteractKind::Helm: return "helm";
+	case InteractKind::Talk: return "talk";
+	case InteractKind::Actor: return "actor";
+	case InteractKind::Chest: return "chest";
+	case InteractKind::Shop: return "shop";
+	case InteractKind::Rest: return "rest";
+	}
+	return "talk";
 }
 
 const char* toString(TravelKind kind) {
@@ -419,11 +464,11 @@ const char* toString(BattleSource source) {
 
 class Session::ActionQueue : public Presenter {
 public:
-	ActionQueue(const PresentationNames& names, Presentation presentation, std::function<void(const PresentedAction&)> onAction)
-		: names_(names), queued_(presentation == Presentation::Queued), onAction_(std::move(onAction)) {}
+	ActionQueue(const PresentationNames& names, const std::vector<Cell>& route, Presentation presentation, std::function<void(const PresentedAction&)> onAction)
+		: names_(names), route_(route), queued_(presentation == Presentation::Queued), onAction_(std::move(onAction)) {}
 
 	bool begin(std::uint64_t handle, const events::Action& action) override {
-		push({handle, ActionPhase::Begin, action, events::describe(action), events::action_seconds(action, names_.durations, names_.subjectDurations)});
+		push({handle, ActionPhase::Begin, action, events::describe(action), events::action_seconds(action, names_.durations, names_.subjectDurations), route_});
 		if (!queued_ || action.instant) {
 			return true;
 		}
@@ -458,6 +503,7 @@ private:
 	}
 
 	const PresentationNames& names_;
+	const std::vector<Cell>& route_;
 	bool queued_;
 	std::function<void(const PresentedAction&)> onAction_;
 	std::deque<PresentedAction> records_;
@@ -541,6 +587,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.dev_unknown_vehicle",
 		"game.refuse.dev_vehicle_outdoors",
 		"game.refuse.equip_menu_only",
+		"game.refuse.erase_failed",
 		"game.refuse.in_dungeon",
 		"game.refuse.in_the_way",
 		"game.refuse.interact_field_only",
@@ -622,6 +669,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.rest_no_money",
 		"game.rested",
 		"game.revived",
+		"game.save_erased",
 		"game.saved",
 		"game.scripted_end",
 		"game.shop_open",
@@ -645,16 +693,25 @@ public:
 	explicit GameHost(Session& session) : s_(session) {}
 
 	events::Handle start_action(const events::Action& action) override {
+		// game.json may give an animation its own length, which stands in for the script's.
+		events::Action shown = action;
+		const PresentationNames& names = s_.data_.config.presentation;
+		const bool timed = action.type == events::ActionType::animate || ((action.type == events::ActionType::show_actor || action.type == events::ActionType::hide_actor) && !action.target.empty());
+		if (timed && names.animationSeconds.count(action.target)) {
+			shown.seconds = names.animationSeconds.at(action.target);
+		}
 		if (action.type == events::ActionType::warp) {
+			s_.actionRoute_.clear();
 			s_.leaveVehicleBehind();
 			s_.enterArea(action.subject, action.target);
 		} else {
-			s_.applyActorAction(action);
+			const double seconds = events::action_seconds(shown, names.durations, names.subjectDurations);
+			s_.applyActorAction(shown, action.instant ? 0 : static_cast<int>(std::lround(seconds * 1000)));
 		}
 		HandleState state;
 		state.kind = HandleKind::Action;
 		const events::Handle handle = s_.newHandle(state);
-		const bool finished = s_.presenter()->begin(handle, action);
+		const bool finished = s_.presenter()->begin(handle, shown);
 		// An instant action has its end state on screen once begin returns, whatever the presenter says.
 		s_.handles_[handle].done = finished || action.instant;
 		s_.output_.push_back({OutputKind::Action, {}, events::describe(action) + (action.instant ? " (instant)" : "")});
@@ -746,6 +803,19 @@ public:
 		return handle;
 	}
 
+	events::Handle play_credits(const std::string& credits) override {
+		if (!s_.data_.config.creditsById(credits)) {
+			return 0;
+		}
+		const events::Handle handle = menuHandle();
+		s_.creditsId_ = credits;
+		s_.creditsElapsedMs_ = 0;
+		s_.openScriptMenu(Mode::Menu, MenuKind::Credits, handle);
+		return handle;
+	}
+
+	void end_game() override { s_.endGamePending_ = true; }
+
 	bool is_done(events::Handle handle) override {
 		auto it = s_.handles_.find(handle);
 		if (it == s_.handles_.end()) {
@@ -807,7 +877,12 @@ public:
 		}
 	}
 
-	void add_party_member(const std::string& member) override {
+	void add_party_member(const std::string& member) override { join(member, true); }
+	void add_party_member_silently(const std::string& member) override { join(member, false); }
+	void remove_party_member(const std::string& member) override { leave(member, true); }
+	void remove_party_member_silently(const std::string& member) override { leave(member, false); }
+
+	void join(const std::string& member, bool notice) {
 		World& w = s_.world_;
 		if (!w.member(member)) {
 			auto level = s_.data_.config.joinLevels.find(member);
@@ -816,11 +891,13 @@ public:
 		}
 		if (std::find(w.lineup.begin(), w.lineup.end(), member) == w.lineup.end() && w.lineup.size() < static_cast<std::size_t>(rules::kMaxPartySize)) {
 			w.lineup.push_back(member);
-			s_.emit(OutputKind::Notice, "game.joins", {member});
+			if (notice) {
+				s_.emit(OutputKind::Notice, "game.joins", {member});
+			}
 		}
 	}
 
-	void remove_party_member(const std::string& member) override {
+	void leave(const std::string& member, bool notice) {
 		World& w = s_.world_;
 		auto it = std::find(w.lineup.begin(), w.lineup.end(), member);
 		if (it == w.lineup.end()) {
@@ -831,14 +908,107 @@ public:
 			return;
 		}
 		w.lineup.erase(it);
-		s_.emit(OutputKind::Notice, "game.leaves", {member});
-		rules::PartyMember* leaving = w.member(member);
-		if (leaving && s_.data_.config.leaveEquipment == LeaveEquipment::Bag && !leaving->equipment.empty()) {
-			while (!leaving->equipment.empty()) {
-				rules::unequip(*leaving, s_.data_.db, w.equipmentBag, leaving->equipment.begin()->first);
-			}
-			s_.emit(OutputKind::Notice, "game.equipment_returned", {member});
+		if (notice) {
+			s_.emit(OutputKind::Notice, "game.leaves", {member});
 		}
+		if (s_.data_.config.leaveEquipment == LeaveEquipment::Bag) {
+			handBack(member);
+		}
+	}
+
+	void save_party(const std::string& snapshot) override {
+		World& w = s_.world_;
+		PartySnapshot taken;
+		taken.lineup = w.lineup;
+		for (const rules::PartyMember& m : w.roster) {
+			if (std::find(w.lineup.begin(), w.lineup.end(), m.characterId) == w.lineup.end()) {
+				taken.reserve.push_back(m.characterId);
+			}
+		}
+		w.partySnapshots[snapshot] = std::move(taken);
+	}
+
+	// The roster never loses a member, so everyone the snapshot names is still there: a member who left since goes back
+	// to its place, and one who joined since goes to the end of the reserve.
+	bool restore_party(const std::string& snapshot) override {
+		World& w = s_.world_;
+		const auto found = w.partySnapshots.find(snapshot);
+		if (found == w.partySnapshots.end()) {
+			return false;
+		}
+		std::vector<std::string> order;
+		for (const std::vector<std::string>* part : {&found->second.lineup, &found->second.reserve}) {
+			for (const std::string& id : *part) {
+				if (w.member(id) && std::find(order.begin(), order.end(), id) == order.end()) {
+					order.push_back(id);
+				}
+			}
+		}
+		std::vector<std::string> lineup;
+		for (const std::string& id : found->second.lineup) {
+			if (w.member(id) && lineup.size() < static_cast<std::size_t>(rules::kMaxPartySize)) {
+				lineup.push_back(id);
+			}
+		}
+		if (lineup.empty()) {
+			s_.warn("party snapshot '" + snapshot + "' names no member who has joined; the party stays as it is");
+			return true;
+		}
+		std::vector<rules::PartyMember> roster;
+		for (const std::string& id : order) {
+			roster.push_back(*w.member(id));
+		}
+		for (const rules::PartyMember& m : w.roster) {
+			if (std::find(order.begin(), order.end(), m.characterId) == order.end()) {
+				roster.push_back(m);
+			}
+		}
+		w.roster = std::move(roster);
+		w.lineup = std::move(lineup);
+		s_.emit(OutputKind::Notice, "game.party_restored");
+		return true;
+	}
+
+	void swap_party_member(const events::PartySwap& swap) override {
+		World& w = s_.world_;
+		const std::size_t slot = swap.slot > 0 ? static_cast<std::size_t>(swap.slot - 1) : static_cast<std::size_t>(std::find(w.lineup.begin(), w.lineup.end(), swap.replaced) - w.lineup.begin());
+		std::string refused;
+		if (slot >= w.lineup.size()) {
+			refused = swap.slot > 0 ? "lineup slot " + std::to_string(swap.slot) + " is empty" : "'" + swap.replaced + "' is not in the lineup";
+		} else if (!w.member(swap.member)) {
+			refused = "'" + swap.member + "' has not joined the party";
+		} else if (std::find(w.lineup.begin(), w.lineup.end(), swap.member) != w.lineup.end()) {
+			refused = "'" + swap.member + "' is already in the lineup";
+		}
+		if (!refused.empty()) {
+			s_.warn("cannot " + events::describe(swap) + ": " + refused);
+			return;
+		}
+		const std::string replaced = w.lineup[slot];
+		w.lineup[slot] = swap.member;
+		if (!swap.silent) {
+			s_.emit(OutputKind::Notice, "game.party_swapped", {replaced, swap.member});
+		}
+		if (swap.equipment == events::SwapEquipment::bag || (swap.equipment == events::SwapEquipment::rule && s_.data_.config.leaveEquipment == LeaveEquipment::Bag)) {
+			handBack(replaced);
+		}
+	}
+
+	bool order_party(const std::vector<std::string>& members) override {
+		World& w = s_.world_;
+		for (const std::string& member : members) {
+			if (std::find(w.lineup.begin(), w.lineup.end(), member) == w.lineup.end()) {
+				return false;
+			}
+		}
+		std::vector<std::string> lineup = members;
+		for (const std::string& member : w.lineup) {
+			if (std::find(members.begin(), members.end(), member) == members.end()) {
+				lineup.push_back(member);
+			}
+		}
+		w.lineup = std::move(lineup);
+		return true;
 	}
 
 	void set_player_control(bool enabled) override { s_.world_.playerControl = enabled; }
@@ -901,6 +1071,12 @@ public:
 	}
 
 	void set_area_music(const std::string& track) override { s_.world_.areaMusic = track; }
+
+	void remove_actor(const std::string& actor, bool untilReload) override { s_.removeActor(actor, untilReload); }
+
+	void spawn_event(const std::string& event) override { s_.spawnBackground(event); }
+
+	void set_actor_look(const std::string& actor, const std::string& enemy, const std::string& look) override { s_.setActorLook(actor, enemy, look); }
 
 	void set_follower(const std::string& actor) override {
 		if (s_.world_.follower == actor) {
@@ -975,6 +1151,18 @@ public:
 	}
 
 private:
+	// A member leaving the lineup puts every piece it wears back in the bag.
+	void handBack(const std::string& member) {
+		rules::PartyMember* leaving = s_.world_.member(member);
+		if (!leaving || leaving->equipment.empty()) {
+			return;
+		}
+		while (!leaving->equipment.empty()) {
+			rules::unequip(*leaving, s_.data_.db, s_.world_.equipmentBag, leaving->equipment.begin()->first);
+		}
+		s_.emit(OutputKind::Notice, "game.equipment_returned", {member});
+	}
+
 	bool put(const std::string& vehicle, const std::string& map, const std::string& marker) {
 		const Area* a = s_.data_.area(map);
 		if (!s_.data_.vehicle(vehicle) || !a || !a->markers.count(marker)) {
@@ -1014,9 +1202,130 @@ private:
 	Session& s_;
 };
 
+// The host of one background event. The compiler lets only actor commands, waits, sounds, flags, variables, calls and spawns
+// into a background event, so the calls that would take control are never made; were one made, it warns and is done at once.
+class Session::BackgroundHost : public events::Host {
+public:
+	BackgroundHost(Session& session, std::string event) : s_(session), event_(std::move(event)) {}
+
+	events::Handle start_action(const events::Action& action) override {
+		events::Action shown = action;
+		const PresentationNames& names = s_.data_.config.presentation;
+		const bool timed = action.type == events::ActionType::animate || ((action.type == events::ActionType::show_actor || action.type == events::ActionType::hide_actor) && !action.target.empty());
+		if (timed && names.animationSeconds.count(action.target)) {
+			shown.seconds = names.animationSeconds.at(action.target);
+		}
+		const double seconds = events::action_seconds(shown, names.durations, names.subjectDurations);
+		s_.applyActorAction(shown, action.instant ? 0 : static_cast<int>(std::lround(seconds * 1000)));
+		const events::Handle handle = s_.nextHandle_++;
+		live_[handle] = s_.presenter()->begin(handle, shown) || action.instant;
+		s_.output_.push_back({OutputKind::Action, {}, event_ + ": " + events::describe(action) + (action.instant ? " (instant)" : "")});
+		return handle;
+	}
+
+	events::Handle show_line(const events::Line&) override { return refuse("say"); }
+	events::Handle present_choice(const events::ChoiceRequest&) override { return refuse("choice"); }
+	events::Handle start_battle(const events::BattleRequest&) override { return refuse("battle"); }
+
+	bool is_done(events::Handle handle) override {
+		auto it = live_.find(handle);
+		if (it == live_.end()) {
+			return true;
+		}
+		if (!it->second) {
+			it->second = s_.presenter()->finished(handle);
+		}
+		return it->second;
+	}
+
+	int result(events::Handle) override { return 0; }
+
+	void cancel(events::Handle handle) override {
+		auto it = live_.find(handle);
+		if (it != live_.end() && !it->second) {
+			s_.presenter()->cancel(handle);
+		}
+		live_.erase(handle);
+	}
+
+	void release(events::Handle handle) override { live_.erase(handle); }
+
+	bool get_flag(const std::string& name) override { return s_.world_.flag(name); }
+
+	void set_flag(const std::string& name, bool value) override {
+		const bool before = s_.world_.flag(name);
+		if (before != value) {
+			s_.backgroundChangedFlag_ = true;
+		}
+		s_.world_.flags[name] = value;
+		if (value && !before && name == s_.data_.config.clearFlag) {
+			s_.clearPending_ = true;
+		}
+		s_.refreshJournal(true);
+	}
+
+	std::int64_t get_var(const std::string& name) override {
+		auto it = s_.world_.vars.find(name);
+		return it == s_.world_.vars.end() ? 0 : it->second;
+	}
+
+	void set_var(const std::string& name, std::int64_t value) override { s_.world_.vars[name] = value; }
+	void give_item(const std::string&, int) override { refuse("give"); }
+	void take_item(const std::string&, int) override { refuse("take"); }
+	void add_party_member(const std::string&) override { refuse("party add"); }
+	void remove_party_member(const std::string&) override { refuse("party remove"); }
+	void set_player_control(bool) override { refuse("lock"); }
+	// A background event changes nothing a restart would have to undo, so a save made with other scripts starts it again
+	// from its first command over the loaded world.
+	std::string snapshot_world() override { return ""; }
+	bool restore_world(const std::string&) override { return true; }
+	bool has_vehicle(const std::string& vehicle) override { return s_.world_.vehicles.count(vehicle) > 0; }
+	bool aboard_vehicle(const std::string& vehicle) override { return s_.world_.aboard == vehicle; }
+
+	bool in_party(const std::string& member) override {
+		return std::find(s_.world_.lineup.begin(), s_.world_.lineup.end(), member) != s_.world_.lineup.end();
+	}
+
+	int item_count(const std::string& item) override {
+		const std::map<std::string, int>& bag = s_.data_.db.item(item) ? s_.world_.items : s_.world_.equipmentBag;
+		const auto held = bag.find(item);
+		return held == bag.end() ? 0 : held->second;
+	}
+
+	std::int64_t money() override { return s_.world_.money; }
+	void remove_actor(const std::string& actor, bool untilReload) override { s_.removeActor(actor, untilReload); }
+	void spawn_event(const std::string& event) override { s_.spawnBackground(event); }
+	void set_actor_look(const std::string& actor, const std::string& enemy, const std::string& look) override { s_.setActorLook(actor, enemy, look); }
+
+private:
+	events::Handle refuse(const char* command) {
+		s_.warn("background event '" + event_ + "' cannot " + command);
+		const events::Handle handle = s_.nextHandle_++;
+		live_[handle] = true;
+		return handle;
+	}
+
+	Session& s_;
+	std::string event_;
+	// Each action in flight and whether it is done.
+	std::map<events::Handle, bool> live_;
+};
+
 Session::Session(const GameData& data, SessionOptions options) : data_(data), options_(std::move(options)) {
 	if (!options_.presenter) {
-		actions_ = std::make_unique<ActionQueue>(data_.config.presentation, options_.presentation, options_.onAction);
+		actions_ = std::make_unique<ActionQueue>(data_.config.presentation, actionRoute_, options_.presentation, options_.onAction);
+	}
+	for (const ActorDef& actor : data_.config.actorDefs) {
+		if (!actor.area.empty() && actor.solid) {
+			solidActors_.insert(actor.id);
+		}
+	}
+	for (const auto& [id, a] : data_.areas) {
+		for (const Hook& h : a.hooks) {
+			if (h.actorAt) {
+				solidActors_.insert(h.id);
+			}
+		}
 	}
 	if (!options_.saveDirectory.empty()) {
 		store_.emplace(options_.saveDirectory, data_.config.manualSlots, data_.config.autosaveSlots);
@@ -1049,61 +1358,226 @@ void Session::finishAction(std::uint64_t handle) {
 	}
 }
 
+std::optional<Session::ActorHome> Session::actorHome(const Area* area, const std::string& actor) const {
+	if (!area) {
+		return std::nullopt;
+	}
+	if (const Hook* hook = talkPoint(area, actor)) {
+		return ActorHome{hook->actorAt.value_or(hook->at), Facing::South, !hook->solidWhileActive || hookHolds(*hook, world_)};
+	}
+	const ActorDef* def = data_.config.actorDef(actor);
+	if (!def || def->area != area->id) {
+		return std::nullopt;
+	}
+	if (def->at) {
+		return ActorHome{*def->at, def->facing, true};
+	}
+	const auto marker = area->markers.find(def->marker);
+	return marker == area->markers.end() ? std::nullopt : std::optional<ActorHome>(ActorHome{marker->second, def->facing, true});
+}
+
 std::optional<Cell> Session::actorCell(const std::string& actor) const {
 	auto it = world_.actors.find(actor);
 	if (it != world_.actors.end()) {
 		return it->second.area == world_.area && !world_.area.empty() ? std::optional<Cell>(it->second.cell) : std::nullopt;
 	}
-	const Hook* home = actorHome(area(), actor);
-	return home ? std::optional<Cell>(home->at) : std::nullopt;
+	const std::optional<ActorHome> home = actorHome(area(), actor);
+	return home ? std::optional<Cell>(home->cell) : std::nullopt;
 }
 
-// The end state of a move, face, show or hide of one of the game's actors. Party members and anything else a script
-// names are left to the front end. A move walks along x, then along y, so the actor ends facing its last leg.
-void Session::applyActorAction(const events::Action& action) {
+ActorPlace& Session::touchActor(const std::string& actor) {
+	auto it = world_.actors.find(actor);
+	if (it == world_.actors.end()) {
+		ActorPlace place;
+		if (const std::optional<ActorHome> home = actorHome(area(), actor)) {
+			place.area = world_.area;
+			place.cell = home->cell;
+			place.facing = home->facing;
+		}
+		it = world_.actors.emplace(actor, place).first;
+	}
+	return it->second;
+}
+
+std::set<Cell> Session::actorCells(const std::string& except) const {
+	std::set<Cell> cells;
+	if (solidActors_.empty()) {
+		return cells;
+	}
+	for (const ActorView& a : actorsHere()) {
+		if (a.solid && a.id != except) {
+			cells.insert(a.cell);
+		}
+	}
+	return cells;
+}
+
+std::vector<Cell> Session::actorRoute(const Area& area, const std::string& actor, Cell from, const std::vector<Cell>& stops, bool pathfind) const {
+	std::vector<Cell> route{from};
+	const std::set<Cell> blocked = pathfind ? actorCells(actor) : std::set<Cell>();
+	for (const Cell stop : stops) {
+		const Cell start = route.back();
+		std::vector<Cell> leg;
+		if (pathfind && start != stop) {
+			// Breadth first over floor nothing stands on, never through an exit; the stop itself may be anything.
+			std::map<Cell, Cell> came;
+			std::deque<Cell> queue{start};
+			came[start] = start;
+			while (!queue.empty() && !came.count(stop)) {
+				const Cell c = queue.front();
+				queue.pop_front();
+				for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
+					const Cell n = stepFrom(c, f);
+					const bool open = n == stop || (area.walkable(n) && !area.exitAt(n) && !blocked.count(n));
+					if (!came.count(n) && area.inside(n) && open) {
+						came[n] = c;
+						queue.push_back(n);
+					}
+				}
+			}
+			for (Cell c = stop; came.count(stop) && c != start; c = came[c]) {
+				leg.insert(leg.begin(), c);
+			}
+		}
+		if (leg.empty()) {
+			Cell at = start;
+			while (at.x != stop.x) {
+				at.x += stop.x > at.x ? 1 : -1;
+				leg.push_back(at);
+			}
+			while (at.y != stop.y) {
+				at.y += stop.y > at.y ? 1 : -1;
+				leg.push_back(at);
+			}
+		}
+		route.insert(route.end(), leg.begin(), leg.end());
+	}
+	return route;
+}
+
+// The end state of a move, place, face, show, hide or timed `anim` of one of the game's actors. Party members and
+// anything else a script names are left to the front end, and so are looping poses and animations of no length that
+// do not show or hide. A move walks its route, so the actor ends facing its last step.
+void Session::applyActorAction(const events::Action& action, int animationMs) {
 	using events::ActionType;
-	if (action.type != ActionType::move && action.type != ActionType::face && action.type != ActionType::show_actor &&
-		action.type != ActionType::hide_actor) {
+	actionRoute_.clear();
+	if (action.type != ActionType::move && action.type != ActionType::place_actor && action.type != ActionType::face &&
+		action.type != ActionType::show_actor && action.type != ActionType::hide_actor && action.type != ActionType::animate) {
+		return;
+	}
+	const Area* here = area();
+	auto cellOf = [&](const std::string& marker) -> std::optional<Cell> {
+		const auto found = here ? here->markers.find(marker) : std::map<std::string, Cell>::const_iterator();
+		return here && found != here->markers.end() ? std::optional<Cell>(found->second) : std::nullopt;
+	};
+	auto goalOf = [&]() {
+		return action.has_position ? std::optional<Cell>(Cell{static_cast<int>(std::lround(action.position.x)), static_cast<int>(std::lround(action.position.z))})
+								   : cellOf(action.target);
+	};
+	auto stopsTo = [&](Cell goal) {
+		std::vector<Cell> stops;
+		for (const std::string& waypoint : action.waypoints) {
+			if (const std::optional<Cell> stop = cellOf(waypoint)) {
+				stops.push_back(*stop);
+			}
+		}
+		stops.push_back(goal);
+		return stops;
+	};
+	auto lastLeg = [](const std::vector<Cell>& route, Facing& facing) {
+		const std::size_t n = route.size();
+		if (n >= 2) {
+			const Cell last = route[n - 1];
+			const Cell before = route[n - 2];
+			facing = last.y != before.y ? (last.y > before.y ? Facing::South : Facing::North) : (last.x > before.x ? Facing::East : Facing::West);
+		}
+	};
+	std::string zone;
+	int slot = 0;
+	if (parseVisibleEnemyActor(action.subject, zone, slot)) {
+		// A visible enemy addressed by its reserved name: a move or place puts it there to wander from, a face turns it.
+		VisibleEnemy* enemy = visibleEnemyByActor(action.subject);
+		if (!enemy || !here) {
+			return;
+		}
+		if (action.type == ActionType::move || action.type == ActionType::place_actor) {
+			const std::optional<Cell> goal = goalOf();
+			if (!goal) {
+				return;
+			}
+			actionRoute_ = action.type == ActionType::place_actor ? std::vector<Cell>{*goal} : actorRoute(*here, "", enemy->position, stopsTo(*goal), action.pathfind);
+			lastLeg(actionRoute_, enemy->facing);
+			if (!action.facing.empty()) {
+				parseFacing(action.facing, enemy->facing);
+			}
+			enemy->position = *goal;
+			enemy->spawn = *goal;
+			enemy->state = EnemyState::Idle;
+			enemy->stateMs = 0;
+			enemy->moveProgress = 0;
+		} else if (action.type == ActionType::face) {
+			std::optional<Cell> target;
+			if (events::is_direction(action.target)) {
+				parseFacing(action.target, enemy->facing);
+			} else if (here->markers.count(action.target)) {
+				target = here->markers.at(action.target);
+			} else if (data_.db.character(action.target)) {
+				target = world_.position;
+			} else {
+				target = actorCell(action.target);
+			}
+			if (std::optional<Facing> facing = target ? facingToward(enemy->position, *target) : std::nullopt) {
+				enemy->facing = *facing;
+			}
+		}
 		return;
 	}
 	const std::vector<std::string>& actors = data_.config.actors;
 	if (std::find(actors.begin(), actors.end(), action.subject) == actors.end()) {
 		return;
 	}
-	const Area* here = area();
-	auto it = world_.actors.find(action.subject);
-	if (it == world_.actors.end()) {
-		ActorPlace place;
-		if (const Hook* home = actorHome(here, action.subject)) {
-			place.area = world_.area;
-			place.cell = home->at;
-		}
-		it = world_.actors.emplace(action.subject, place).first;
+	const events::StandardAnimation* standard = action.type == ActionType::animate ||
+			((action.type == ActionType::show_actor || action.type == ActionType::hide_actor) && !action.target.empty())
+		? events::standard_animation(action.target)
+		: nullptr;
+	auto vanishOf = [](const std::string& name) {
+		return name == "fade_out" ? ActorVanish::Faded : name == "dissolve" ? ActorVanish::Dissolved : ActorVanish::BlinkedOut;
+	};
+	if (action.type == ActionType::animate && (action.loop || ((!standard || standard->end == events::AnimationEnd::none) && animationMs <= 0))) {
+		return;
 	}
-	ActorPlace& place = it->second;
+	const auto existing = world_.actors.find(action.subject);
+	if (existing != world_.actors.end() && existing->second.removed != ActorRemoval::None) {
+		return;
+	}
+	ActorPlace& place = touchActor(action.subject);
 	switch (action.type) {
-	case ActionType::move: {
-		Cell goal;
-		if (action.has_position) {
-			goal = {static_cast<int>(std::lround(action.position.x)), static_cast<int>(std::lround(action.position.z))};
-		} else {
-			auto marker = here ? here->markers.find(action.target) : std::map<std::string, Cell>::const_iterator();
-			if (!here || marker == here->markers.end()) {
-				return;
-			}
-			goal = marker->second;
+	case ActionType::move:
+	case ActionType::place_actor: {
+		const std::optional<Cell> goal = goalOf();
+		if (!goal) {
+			return;
 		}
-		if (place.area == world_.area && goal != place.cell) {
-			place.facing = goal.y != place.cell.y ? (goal.y > place.cell.y ? Facing::South : Facing::North)
-				: (goal.x > place.cell.x ? Facing::East : Facing::West);
+		if (action.type == ActionType::place_actor || place.area != world_.area) {
+			actionRoute_ = {*goal};
+		} else {
+			actionRoute_ = actorRoute(*here, action.subject, place.cell, stopsTo(*goal), action.pathfind);
+			lastLeg(actionRoute_, place.facing);
+		}
+		if (action.type == ActionType::place_actor && !action.facing.empty()) {
+			parseFacing(action.facing, place.facing);
 		}
 		place.area = world_.area;
-		place.cell = goal;
+		place.cell = *goal;
 		break;
 	}
 	case ActionType::face: {
 		if (place.area.empty() || place.area != world_.area) {
 			return;
+		}
+		if (events::is_direction(action.target)) {
+			parseFacing(action.target, place.facing);
+			break;
 		}
 		std::optional<Cell> target;
 		if (here && here->markers.count(action.target)) {
@@ -1119,10 +1593,279 @@ void Session::applyActorAction(const events::Action& action) {
 		}
 		break;
 	}
-	case ActionType::show_actor: place.visible = true; break;
-	case ActionType::hide_actor: place.visible = false; break;
-	default: break;
+	case ActionType::show_actor:
+	case ActionType::hide_actor: {
+		// `with <animation>` plays it as the transition; a standard one that hides records how the actor vanished.
+		const bool transition = !action.target.empty() && animationMs > 0;
+		place.visible = action.type == ActionType::show_actor;
+		place.vanish = !place.visible && standard && standard->end == events::AnimationEnd::hidden ? vanishOf(action.target) : ActorVanish::None;
+		place.animation = transition ? action.target : std::string();
+		place.animationMs = transition ? animationMs : 0;
+		place.animationTotalMs = place.animationMs;
+		break;
 	}
+	case ActionType::animate:
+		if (standard && standard->end == events::AnimationEnd::shown) {
+			place.visible = true;
+			place.vanish = ActorVanish::None;
+		} else if (standard && standard->end == events::AnimationEnd::hidden) {
+			place.visible = false;
+			place.vanish = vanishOf(action.target);
+		}
+		place.animation = animationMs > 0 ? action.target : std::string();
+		place.animationMs = std::max(0, animationMs);
+		place.animationTotalMs = place.animationMs;
+		break;
+	default:
+		break;
+	}
+}
+
+void Session::removeActor(const std::string& actor, bool untilReload) {
+	std::string zone;
+	int slot = 0;
+	if (parseVisibleEnemyActor(actor, zone, slot)) {
+		// Gone from the field without a battle, until the area's visible enemies next spawn.
+		if (const VisibleEnemy* enemy = visibleEnemyByActor(actor)) {
+			const int id = enemy->id;
+			world_.enemies.erase(std::remove_if(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.id == id; }), world_.enemies.end());
+		}
+		return;
+	}
+	const std::vector<std::string>& actors = data_.config.actors;
+	if (std::find(actors.begin(), actors.end(), actor) == actors.end()) {
+		warn("cannot remove '" + actor + "': not an actor of game.json");
+		return;
+	}
+	ActorPlace& place = touchActor(actor);
+	if (place.removed != ActorRemoval::ForGood) {
+		place.removed = untilReload ? ActorRemoval::UntilReload : ActorRemoval::ForGood;
+	}
+	place.animation.clear();
+	place.animationMs = 0;
+	place.animationTotalMs = 0;
+}
+
+void Session::advanceActors(int ms) {
+	for (auto& [id, place] : world_.actors) {
+		if (place.animationMs > 0) {
+			place.animationMs -= ms;
+			if (place.animationMs <= 0) {
+				place.animation.clear();
+				place.animationMs = 0;
+				place.animationTotalMs = 0;
+			}
+		}
+	}
+}
+
+void Session::setActorLook(const std::string& actor, const std::string& enemy, const std::string& look) {
+	const std::vector<std::string>& actors = data_.config.actors;
+	if (std::find(actors.begin(), actors.end(), actor) == actors.end()) {
+		warn("cannot change the look of '" + actor + "': not an actor of game.json");
+		return;
+	}
+	if (!enemy.empty() && !data_.db.enemy(enemy)) {
+		warn("cannot draw '" + actor + "' as '" + enemy + "': not an enemy");
+		return;
+	}
+	ActorPlace& place = touchActor(actor);
+	place.lookEnemy = enemy;
+	place.look = look;
+}
+
+VisibleEnemy* Session::visibleEnemyByActor(const std::string& actor) {
+	std::string zone;
+	int slot = 0;
+	if (!parseVisibleEnemyActor(actor, zone, slot)) {
+		return nullptr;
+	}
+	for (VisibleEnemy& e : world_.enemies) {
+		if (e.zone == zone && --slot == 0) {
+			return &e;
+		}
+	}
+	return nullptr;
+}
+
+std::string Session::enemyActor(int enemyId) const {
+	std::map<std::string, int> seen;
+	for (const VisibleEnemy& e : world_.enemies) {
+		const int n = ++seen[e.zone];
+		if (e.id == enemyId) {
+			return visibleEnemyActor(e.zone, n);
+		}
+	}
+	return "";
+}
+
+const Hook* Session::touchHook(const std::string& actor) const {
+	const Area* here = area();
+	if (!here) {
+		return nullptr;
+	}
+	for (const Hook& hook : here->hooks) {
+		if (hook.trigger == HookTrigger::Touch && hook.actor == actor && hookHolds(hook, world_)) {
+			return &hook;
+		}
+	}
+	return nullptr;
+}
+
+const Hook* Session::touchHookAt(Cell cell) const {
+	const Area* here = area();
+	if (!here || std::none_of(here->hooks.begin(), here->hooks.end(), [](const Hook& h) { return h.trigger == HookTrigger::Touch; })) {
+		return nullptr;
+	}
+	for (const ActorView& actor : actorsHere()) {
+		if (actor.visible && actor.cell == cell) {
+			if (const Hook* hook = touchHook(actor.id)) {
+				return hook;
+			}
+		}
+	}
+	return nullptr;
+}
+
+void Session::wanderActors(int ms) {
+	const Area* here = area();
+	if (!here) {
+		return;
+	}
+	for (const ActorDef& def : data_.config.actorDefs) {
+		if (!def.wander || def.area != world_.area) {
+			continue;
+		}
+		const ActorView* view = nullptr;
+		const std::vector<ActorView> standing = actorsHere();
+		for (const ActorView& v : standing) {
+			if (v.id == def.id) {
+				view = &v;
+			}
+		}
+		if (!view || !view->wanders) {
+			continue;
+		}
+		const ActorWander& rules = *def.wander;
+		const Cell home = def.at ? *def.at : here->markers.at(def.marker);
+		ActorPlace& place = touchActor(def.id);
+		if (place.wanderPauseMs > 0) {
+			place.wanderPauseMs = std::max(0, place.wanderPauseMs - ms);
+			continue;
+		}
+		place.wanderProgress += ms * rules.speedPercent;
+		if (place.wanderProgress < here->stepMs * 100) {
+			continue;
+		}
+		place.wanderProgress = 0;
+		static const Facing kTurns[] = {Facing::North, Facing::East, Facing::South, Facing::West};
+		const Facing f = kTurns[world_.encounterStream.range(0, 3)];
+		const Cell from = place.cell;
+		const Cell next = stepFrom(from, f);
+		place.facing = f;
+		place.wanderPauseMs = rules.pauseMaxMs > rules.pauseMinMs ? world_.encounterStream.range(rules.pauseMinMs, rules.pauseMaxMs) : rules.pauseMinMs;
+		if (next == world_.position) {
+			if (const Hook* hook = touchHook(def.id); hook && world_.playerControl) {
+				startEvent(hook->event);
+				if (mode() != Mode::Field) {
+					return;
+				}
+			}
+			continue;
+		}
+		const auto distance = [&](Cell c) { return std::abs(c.x - home.x) + std::abs(c.y - home.y); };
+		const bool objectThere = here->hookAt(next, HookTrigger::Interact) || here->shopAt(next) || here->restAt(next) || here->chestAt(next) || here->portAt(next) ||
+			here->helmAt(next) || here->exitAt(next) || here->gangwayAt(next);
+		const bool standingThere = std::any_of(standing.begin(), standing.end(), [&](const ActorView& a) { return a.visible && a.cell == next; }) ||
+			std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == next; }) || !vehicleAt(next).empty();
+		if (here->inside(next) && rules.terrain.find(here->rows[next.y][next.x]) != std::string::npos && !here->closed.count(next) && !objectThere && !standingThere &&
+			(rules.covers(home, next) || distance(next) < distance(from))) {
+			place.cell = next;
+		}
+	}
+}
+
+bool Session::backgroundEvent(const std::string& event) const {
+	const int index = data_.program.find_event(event);
+	return index >= 0 && data_.program.events[index].background;
+}
+
+void Session::spawnBackground(const std::string& event) {
+	if (std::any_of(background_.begin(), background_.end(), [&](const BackgroundRun& run) { return run.event == event; })) {
+		return;
+	}
+	if (static_cast<int>(background_.size()) >= data_.config.backgroundLimit) {
+		warn("background event '" + event + "' not started: " + std::to_string(background_.size()) + " already run (background_limit)");
+		return;
+	}
+	BackgroundRun run;
+	run.event = event;
+	run.host = std::make_unique<BackgroundHost>(*this, event);
+	run.interpreter = std::make_unique<events::Interpreter>(data_.program, *run.host);
+	if (!run.interpreter->start(event)) {
+		warn("background event '" + event + "' cannot start: " + run.interpreter->error());
+		return;
+	}
+	output_.push_back({OutputKind::Action, {}, "spawn " + event});
+	background_.push_back(std::move(run));
+}
+
+void Session::stepBackground(int ms) {
+	backgroundChangedFlag_ = false;
+	// Those a step spawns wait for the next tick.
+	const std::size_t count = background_.size();
+	std::vector<std::string> ended;
+	for (std::size_t i = 0; i < count && i < background_.size(); ++i) {
+		events::Interpreter& interpreter = *background_[i].interpreter;
+		const events::Status status = interpreter.step(ms / 1000.0);
+		if (status == events::Status::error) {
+			warn("background event error: " + interpreter.error());
+			ended.push_back(background_[i].event);
+		} else if (status != events::Status::running) {
+			output_.push_back({OutputKind::Action, {}, background_[i].event + ": end"});
+			ended.push_back(background_[i].event);
+		}
+	}
+	background_.erase(std::remove_if(background_.begin(), background_.end(),
+						  [&](const BackgroundRun& run) { return std::find(ended.begin(), ended.end(), run.event) != ended.end(); }),
+		background_.end());
+	if (backgroundChangedFlag_) {
+		settleField();
+	}
+}
+
+void Session::stopBackground() {
+	for (BackgroundRun& run : background_) {
+		run.interpreter->cancel();
+		output_.push_back({OutputKind::Action, {}, run.event + ": stopped"});
+	}
+	background_.clear();
+}
+
+bool Session::restoreBackground(const std::string& event, const std::string& text) {
+	events::SaveState state;
+	std::string error;
+	BackgroundRun run;
+	run.event = event;
+	run.host = std::make_unique<BackgroundHost>(*this, event);
+	run.interpreter = std::make_unique<events::Interpreter>(data_.program, *run.host);
+	if (!backgroundEvent(event) || !events::save_state_from_text(text, state) || !run.interpreter->restore(state, error)) {
+		warn("background event '" + event + "' cannot resume" + (error.empty() ? std::string() : ": " + error));
+		return false;
+	}
+	if (run.interpreter->status() == events::Status::running) {
+		background_.push_back(std::move(run));
+	}
+	return true;
+}
+
+std::vector<EventPosition> Session::backgroundEvents() const {
+	std::vector<EventPosition> out;
+	for (const BackgroundRun& run : background_) {
+		const events::Interpreter::Position at = run.interpreter->position();
+		out.push_back({run.event, at.file, at.line});
+	}
+	return out;
 }
 
 std::vector<ActorView> Session::actorsHere() const {
@@ -1131,15 +1874,44 @@ std::vector<ActorView> Session::actorsHere() const {
 	if (!here) {
 		return out;
 	}
-	for (const std::string& id : data_.config.actors) {
-		auto it = world_.actors.find(id);
+	for (const ActorDef& def : data_.config.actorDefs) {
+		ActorView view;
+		view.id = def.id;
+		view.spriteEnemy = def.spriteEnemy;
+		view.look = def.look;
+		auto it = world_.actors.find(def.id);
 		if (it != world_.actors.end()) {
-			if (it->second.area == world_.area) {
-				out.push_back({id, it->second.cell, it->second.facing, it->second.visible, true});
+			const ActorPlace& p = it->second;
+			if (p.area != world_.area) {
+				continue;
 			}
-		} else if (const Hook* home = actorHome(here, id)) {
-			out.push_back({id, home->at, Facing::South, !home->solidWhileActive || hookHolds(*home, world_), false});
+			view.cell = p.cell;
+			view.facing = p.facing;
+			view.visible = p.visible && p.removed == ActorRemoval::None;
+			view.scripted = true;
+			view.vanish = p.vanish;
+			view.animation = p.animation;
+			view.animationMs = p.animationMs;
+			view.animationTotalMs = p.animationTotalMs;
+			view.removed = p.removed;
+		} else if (const std::optional<ActorHome> home = actorHome(here, def.id)) {
+			view.cell = home->cell;
+			view.facing = home->facing;
+			view.visible = home->visible;
+		} else {
+			continue;
 		}
+		view.solid = view.visible && solidActors_.count(def.id) > 0;
+		if (it != world_.actors.end() && (!it->second.lookEnemy.empty() || !it->second.look.empty())) {
+			view.spriteEnemy = it->second.lookEnemy;
+			view.look = it->second.look;
+		}
+		view.wanders = def.wander && view.visible && def.area == world_.area &&
+			std::none_of(background_.begin(), background_.end(), [&](const BackgroundRun& run) {
+				const std::vector<events::ActorState>& touched = run.interpreter->presentation().actors;
+				return std::any_of(touched.begin(), touched.end(), [&](const events::ActorState& a) { return a.actor == def.id; });
+			});
+		out.push_back(view);
 	}
 	return out;
 }
@@ -1155,7 +1927,36 @@ std::string Session::elementName(const rules::Element& element) const {
 
 std::string Session::areaMusic() const {
 	const Area* here = area();
-	return world_.areaMusic.empty() && here ? here->music : world_.areaMusic;
+	if (!world_.areaMusic.empty() || !here) {
+		return world_.areaMusic;
+	}
+	const auto& byArea = data_.config.presentation.music.areas;
+	if (auto tracks = byArea.find(here->id); tracks != byArea.end()) {
+		for (const AreaTrack& t : tracks->second) {
+			if (t.flag.empty() || world_.flag(t.flag)) {
+				return t.track;
+			}
+		}
+	}
+	return here->music;
+}
+
+std::string Session::battleMusic() const {
+	const rules::Battle* b = battle_ ? &*battle_ : ended_ ? &ended_->battle : nullptr;
+	if (!b) {
+		return {};
+	}
+	const MusicNames& music = data_.config.presentation.music;
+	if (auto track = music.encounters.find(battle_ ? battleEncounter_ : ended_->encounter); track != music.encounters.end()) {
+		return track->second;
+	}
+	const BattleSource source = battle_ ? battleSource_ : ended_->source;
+	if (source == BattleSource::Random && b->setup().flags.vehicleBattle) {
+		if (auto track = music.vehicles.find(b->setup().vehicle); track != music.vehicles.end()) {
+			return track->second;
+		}
+	}
+	return {};
 }
 
 // The copy keeps its hooks, shops and the rest in place, so pointers into it stay valid while only its rows and passable
@@ -1175,7 +1976,7 @@ const Area* Session::areaAt(const std::string& id) const {
 	// A hook that is solid only while active stands while its flags hold and, for an actor's talk point, the actor shows.
 	auto hookStands = [&](const Hook& h) {
 		const auto actor = world_.actors.find(h.id);
-		return hookHolds(h, world_) && (actor == world_.actors.end() || actor->second.visible);
+		return hookHolds(h, world_) && (actor == world_.actors.end() || (actor->second.visible && actor->second.removed == ActorRemoval::None));
 	};
 	std::set<Cell> open = broken == world_.brokenCells.end() ? std::set<Cell>() : broken->second;
 	if (here) {
@@ -1214,9 +2015,16 @@ const Area* Session::areaAt(const std::string& id) const {
 				rows[c.y][c.x] = '.';
 			}
 		}
+		std::set<Cell>& closed = view->second.second.closed;
+		closed.clear();
 		for (const Exit& e : base->exits) {
 			if (!exitOpen(e, world_)) {
-				rows[e.at.y][e.at.x] = '#';
+				if (e.closedTile != '#') {
+					closed.insert(e.at);
+				}
+				if (e.closedTile) {
+					rows[e.at.y][e.at.x] = e.closedTile;
+				}
 			}
 		}
 		std::set<Cell>& passable = view->second.second.passable;
@@ -1510,6 +2318,25 @@ rules::Message Session::load(const std::string& slot) {
 	return loadText(text, slot);
 }
 
+rules::Message Session::eraseSave(const std::string& slot) {
+	std::string text;
+	if (!store_ || !store_->read(slot, text)) {
+		return refusal("slot_unreadable", {slot});
+	}
+	std::string error;
+	if (!store_->erase(slot, error)) {
+		return refusal("erase_failed", {slot, error});
+	}
+	if (retrySlot_ == slot) {
+		retrySlot_.clear();
+	}
+	if (pendingRetrySlot_ == slot) {
+		pendingRetrySlot_.clear();
+	}
+	emit(OutputKind::Notice, "game.save_erased", {slot});
+	return {};
+}
+
 rules::Message Session::retryBattle() {
 	if (!canRetry()) {
 		return refusal("no_retry");
@@ -1542,6 +2369,7 @@ rules::Message Session::loadText(const std::string& text, const std::string& slo
 	battle_.reset();
 	ended_.reset();
 	latchedDirection_.reset();
+	background_.clear();
 	world_ = std::move(save.value->world);
 	// Data that changed since the save may have lowered a maximum.
 	for (rules::PartyMember& m : world_.roster) {
@@ -1570,6 +2398,9 @@ rules::Message Session::loadText(const std::string& text, const std::string& slo
 	} else {
 		emit(OutputKind::Notice, "game.loaded", {slot});
 	}
+	for (const auto& [event, state] : save.value->background) {
+		restoreBackground(event, state);
+	}
 	if (save.value->midEvent.empty()) {
 		return {};
 	}
@@ -1596,6 +2427,10 @@ rules::Message Session::loadText(const std::string& text, const std::string& slo
 }
 
 void Session::quitToTitle() {
+	for (BackgroundRun& run : background_) {
+		run.interpreter->cancel();
+	}
+	background_.clear();
 	dropEvent();
 	battle_.reset();
 	ended_.reset();
@@ -1616,7 +2451,8 @@ void Session::update(int ms, const FieldInput& input) {
 			tickRemainderMs_ -= data_.config.tickMs;
 			FieldInput tickInput = input;
 			if (!tickInput.held && latchedDirection_) {
-				tickInput = {true, *latchedDirection_};
+				tickInput.held = true;
+				tickInput.direction = *latchedDirection_;
 			}
 			latchedDirection_.reset();
 			tickField(tickInput);
@@ -1627,11 +2463,15 @@ void Session::update(int ms, const FieldInput& input) {
 		if (pacingOn()) {
 			pacing_.eventTime(ms);
 		}
+		advanceActors(ms);
 		pumpEvent(ms / 1000.0);
 		break;
 	case Mode::Menu:
 	case Mode::Shop:
 		addTime(ms);
+		if (menuKind_ == MenuKind::Credits) {
+			creditsElapsedMs_ += ms;
+		}
 		break;
 	case Mode::Battle:
 	case Mode::Title:
@@ -1652,6 +2492,7 @@ void Session::tickField(const FieldInput& input) {
 	if (pacingOn()) {
 		pacing_.fieldTime(tick);
 	}
+	advanceActors(tick);
 	world_.graceMs = std::max(0, world_.graceMs - tick);
 	const Area& a = *area();
 	const FieldVehicle* vehicle = riding();
@@ -1693,8 +2534,15 @@ void Session::tickField(const FieldInput& input) {
 				return;
 			}
 		}
+		if (const Hook* touch = vehicle ? nullptr : touchHookAt(target)) {
+			stepProgressMs_ = 0;
+			startEvent(touch->event);
+			if (mode() != Mode::Field) {
+				return;
+			}
+		}
 		const bool blockedByEnemy = std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; });
-		const int stepMs = vehicle ? std::max(1, a.stepMs * 100 / vehicle->speedPercent) : a.stepMs;
+		const int stepMs = leaderStepMs(input.running);
 		if (canEnter(a, target) && !blockedByEnemy) {
 			stepProgressMs_ += tick;
 			if (stepProgressMs_ >= stepMs) {
@@ -1710,10 +2558,19 @@ void Session::tickField(const FieldInput& input) {
 	} else {
 		stepProgressMs_ = 0;
 	}
+	// After the leader's step, in this order: wandering actors, visible enemies, background events.
+	wanderActors(tick);
+	if (mode() != Mode::Field) {
+		return;
+	}
 	if (encounterMode() == EncounterMode::Visible && world_.area == a.id && encountersOn_) {
 		if (std::optional<EncounterStart> contact = tickVisibleEnemies(world_, a, tick, a.stepMs, !world_.aboard.empty())) {
 			startFieldBattle(*contact);
+			return;
 		}
+	}
+	if (!background_.empty()) {
+		stepBackground(tick);
 	}
 }
 
@@ -1787,7 +2644,9 @@ void Session::arrive(Cell cell) {
 	if (const Hook* hook = a.stepHookAt(cell)) {
 		if (hookHolds(*hook, world_)) {
 			startEvent(hook->event);
-			return;
+			if (mode() != Mode::Field || !backgroundEvent(hook->event)) {
+				return;
+			}
 		}
 	}
 	if (!encountersOn_) {
@@ -1795,7 +2654,8 @@ void Session::arrive(Cell cell) {
 	}
 	if (const FieldVehicle* vehicle = riding()) {
 		const rules::VehicleDef* fighter = data_.db.vehicle(vehicle->id);
-		if (std::optional<EncounterStart> start = vehicleStep(world_, a, cell, vehicle->encounters, data_.db, fighter ? fighter->stats.agility : 0)) {
+		const bool roll = vehicle->opening.value_or(data_.config.vehicleOpening) == VehicleOpening::Roll;
+		if (std::optional<EncounterStart> start = vehicleStep(world_, a, cell, vehicle->encounters, data_.db, fighter ? fighter->stats.agility : 0, roll)) {
 			startFieldBattle(*start, vehicle->id);
 		}
 		return;
@@ -1822,6 +2682,7 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 		warn("unknown area '" + areaId + "'");
 		return;
 	}
+	stopBackground();
 	const Area* before = area();
 	if (a->kind != AreaKind::Dungeon) {
 		world_.dungeonExitArea.clear();
@@ -1837,6 +2698,11 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 	world_.areaSteps = 0;
 	if (a->kind != AreaKind::Vessel) {
 		world_.shipPort.clear();
+	}
+	for (auto& [id, place] : world_.actors) {
+		if (place.removed == ActorRemoval::UntilReload) {
+			place.removed = ActorRemoval::None;
+		}
 	}
 	world_.area = a->id;
 	world_.position = cell;
@@ -1875,7 +2741,9 @@ void Session::settleField() {
 			if (hook.trigger == HookTrigger::Load && !loadHooksFired_.count(hook.id) && hookHolds(hook, world_)) {
 				loadHooksFired_.insert(hook.id);
 				startEvent(hook.event);
-				return;
+				if (mode() != Mode::Field || !backgroundEvent(hook.event)) {
+					return;
+				}
 			}
 		}
 		loadHooksPending_ = false;
@@ -1887,7 +2755,9 @@ void Session::settleField() {
 				world_.onceHooks.insert(onceKey);
 			}
 			startEvent(hook.event);
-			return;
+			if (mode() != Mode::Field || !backgroundEvent(hook.event)) {
+				return;
+			}
 		}
 	}
 	if (ambientPending_) {
@@ -1910,7 +2780,39 @@ void Session::settleField() {
 	}
 }
 
+int Session::leaderStepMs(bool running) const {
+	const Area* a = area();
+	if (!a) {
+		return 0;
+	}
+	if (const FieldVehicle* vehicle = riding()) {
+		return std::max(1, a->stepMs * 100 / vehicle->speedPercent);
+	}
+	if (data_.config.runSpeedPercent > 0 && running != profile_.alwaysRun) {
+		return std::max(1, a->stepMs * 100 / data_.config.runSpeedPercent);
+	}
+	return a->stepMs;
+}
+
+bool Session::canStep(Facing direction) const {
+	if (mode() != Mode::Field || !world_.playerControl) {
+		return false;
+	}
+	const Area& a = *area();
+	const bool belt = std::any_of(a.conveyors.begin(), a.conveyors.end(), [&](const Conveyor& c) {
+		return (c.requireFlag.empty() || world_.flag(c.requireFlag)) && (c.blockFlag.empty() || !world_.flag(c.blockFlag)) &&
+			std::find(c.cells.begin(), c.cells.end(), world_.position) != c.cells.end();
+	});
+	const Cell target = stepFrom(world_.position, direction);
+	return !belt && canEnter(a, target) &&
+		std::none_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; });
+}
+
 rules::Message Session::walk(Facing direction) {
+	return walk(direction, false);
+}
+
+rules::Message Session::walk(Facing direction, bool running) {
 	if (mode() != Mode::Field) {
 		return refusal("walk_field_only");
 	}
@@ -1921,6 +2823,11 @@ rules::Message Session::walk(Facing direction) {
 	const Cell start = world_.position;
 	const Cell target = stepFrom(start, direction);
 	const bool enemyThere = std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; });
+	if (world_.aboard.empty() && touchHookAt(target)) {
+		// Walking into an actor with a touch hook starts it, once.
+		update(data_.config.tickMs, {true, direction, running});
+		return {};
+	}
 	if (!canEnter(a, target) && !enemyThere) {
 		face(direction);
 		return refusal("blocked");
@@ -1931,7 +2838,7 @@ rules::Message Session::walk(Facing direction) {
 	}
 	const std::string startArea = world_.area;
 	for (int guard = 0; guard < 1000; ++guard) {
-		update(data_.config.tickMs, {true, direction});
+		update(data_.config.tickMs, {true, direction, running});
 		if (mode() != Mode::Field || world_.position != start || world_.area != startArea) {
 			return {};
 		}
@@ -2015,6 +2922,171 @@ WalkStatus Session::walkStep(PathWalk& walk) {
 	return WalkStatus::Walking;
 }
 
+std::optional<InteractTarget> Session::pointAt(const Area& a, Cell cell, bool& acrossable) const {
+	const bool anyAcross = data_.config.interactAcross;
+	acrossable = anyAcross;
+	InteractTarget t;
+	t.cell = cell;
+	if (const std::string vehicle = vehicleAt(cell); !vehicle.empty()) {
+		t.kind = InteractKind::Vehicle;
+		t.id = vehicle;
+		return t;
+	}
+	if (const Port* port = a.portAt(cell)) {
+		t.kind = InteractKind::Port;
+		t.id = port->id;
+		t.ready = portOpen(*port, world_);
+		return t;
+	}
+	if (const Helm* helm = a.helmAt(cell); helm && data_.port(world_.shipPort)) {
+		t.kind = InteractKind::Helm;
+		t.id = helm->id;
+		return t;
+	}
+	const auto isActor = [&](const std::string& id) { return std::find(data_.config.actors.begin(), data_.config.actors.end(), id) != data_.config.actors.end(); };
+	const auto answers = [&](const Hook& hook) {
+		const auto actor = world_.actors.find(hook.id);
+		return hookHolds(hook, world_) && (actor == world_.actors.end() || actor->second.removed == ActorRemoval::None);
+	};
+	if (const Hook* hook = a.hookAt(cell, HookTrigger::Interact)) {
+		t.kind = isActor(hook->id) ? InteractKind::Actor : InteractKind::Talk;
+		t.id = hook->id;
+		t.ready = answers(*hook);
+		acrossable = anyAcross || hook->across;
+		return t;
+	}
+	if (const Chest* chest = a.chestAt(cell)) {
+		t.kind = InteractKind::Chest;
+		t.id = chest->id;
+		return t;
+	}
+	if (const Shop* shop = a.shopAt(cell)) {
+		t.kind = InteractKind::Shop;
+		t.id = shop->id;
+		t.ready = shopOpen(*shop);
+		t.keeper = shop->keeper;
+		return t;
+	}
+	if (const RestPoint* rest = a.restAt(cell)) {
+		t.kind = InteractKind::Rest;
+		t.id = rest->id;
+		t.keeper = rest->keeper;
+		return t;
+	}
+	// An actor with a touch hook (a wanderer) answers where it stands.
+	if (const Hook* touch = touchHookAt(cell)) {
+		t.kind = InteractKind::Actor;
+		t.id = touch->actor;
+		return t;
+	}
+	// An actor away from its talk point (moved by a script, or behind its counter) answers where it stands.
+	if (data_.config.interactReach == InteractReach::Nearby) {
+		for (const ActorView& actor : actorsHere()) {
+			const Hook* hook = actor.visible && actor.cell == cell ? talkPoint(&a, actor.id) : nullptr;
+			if (hook) {
+				t.kind = InteractKind::Actor;
+				t.id = actor.id;
+				t.ready = answers(*hook);
+				acrossable = anyAcross || hook->across;
+				return t;
+			}
+		}
+	}
+	return std::nullopt;
+}
+
+std::optional<InteractTarget> Session::interactTarget() const {
+	if (mode() != Mode::Field || !world_.playerControl || !world_.aboard.empty()) {
+		return std::nullopt;
+	}
+	const Area& a = *area();
+	const std::set<Cell> standing = actorCells();
+	const auto toward = [&](Facing direction) -> std::optional<InteractTarget> {
+		bool acrossable = false;
+		const Cell next = stepFrom(world_.position, direction);
+		std::optional<InteractTarget> t = pointAt(a, next, acrossable);
+		// A counter: a cell straight ahead that is not floor and holds nothing, with a point beyond it.
+		if (!t && a.inside(next) && a.rows[next.y][next.x] != '.' && !a.exitAt(next) && !standing.count(next)) {
+			t = pointAt(a, stepFrom(next, direction), acrossable);
+			if (t && !acrossable) {
+				t.reset();
+			} else if (t) {
+				t->across = true;
+			}
+		}
+		if (t) {
+			t->facing = direction;
+		}
+		return t;
+	};
+	if (std::optional<InteractTarget> faced = toward(world_.facing)) {
+		return faced;
+	}
+	if (data_.config.interactReach == InteractReach::Nearby) {
+		const int f = static_cast<int>(world_.facing);
+		for (int turn : {1, 3, 2}) {
+			std::optional<InteractTarget> t = toward(static_cast<Facing>((f + turn) % 4));
+			if (t && t->ready) {
+				return t;
+			}
+		}
+	}
+	return std::nullopt;
+}
+
+std::optional<InteractTarget> Session::interactAt(Cell cell) const {
+	if (mode() != Mode::Field || !world_.playerControl || !world_.aboard.empty()) {
+		return std::nullopt;
+	}
+	const Area& a = *area();
+	const std::set<Cell> standing = actorCells();
+	for (Facing direction : {Facing::North, Facing::East, Facing::South, Facing::West}) {
+		bool acrossable = false;
+		const Cell next = stepFrom(world_.position, direction);
+		std::optional<InteractTarget> t = next == cell ? pointAt(a, next, acrossable) : std::nullopt;
+		if (!t && stepFrom(next, direction) == cell && !pointAt(a, next, acrossable) && a.inside(next) && a.rows[next.y][next.x] != '.' && !a.exitAt(next) &&
+			!standing.count(next)) {
+			t = pointAt(a, cell, acrossable);
+			if (t && !acrossable) {
+				t.reset();
+			} else if (t) {
+				t->across = true;
+			}
+		}
+		if (t) {
+			t->facing = direction;
+			return t;
+		}
+	}
+	return std::nullopt;
+}
+
+FieldMotion Session::fieldMotion() const {
+	FieldMotion m;
+	const Area* a = area();
+	if (mode() != Mode::Field || !a) {
+		return m;
+	}
+	m.stepProgressMs = stepProgressMs_;
+	m.stepMs = leaderStepMs(false);
+	m.runStepMs = leaderStepMs(true);
+	for (const Conveyor& c : a->conveyors) {
+		const bool holds = (c.requireFlag.empty() || world_.flag(c.requireFlag)) && (c.blockFlag.empty() || !world_.flag(c.blockFlag));
+		if (holds && std::find(c.cells.begin(), c.cells.end(), world_.position) != c.cells.end()) {
+			m.conveyorStepMs = c.stepMs;
+			m.conveyorProgressMs = conveyorMs_;
+		}
+	}
+	int bit = 1;
+	for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
+		if (canStep(f)) {
+			m.stepMask |= bit;
+		}
+		bit <<= 1;
+	}
+	return m;
+}
+
 rules::Message Session::interact() {
 	if (mode() != Mode::Field) {
 		return refusal("interact_field_only");
@@ -2025,59 +3097,73 @@ rules::Message Session::interact() {
 	if (!world_.aboard.empty()) {
 		return refusal("aboard", {world_.aboard});
 	}
-	const Area& a = *area();
-	const Cell target = stepFrom(world_.position, world_.facing);
-	if (!vehicleAt(target).empty()) {
-		return board();
+	const std::optional<InteractTarget> target = interactTarget();
+	if (!target) {
+		return refusal("nothing_there");
 	}
-	if (const Port* port = a.portAt(target)) {
-		if (!portOpen(*port, world_)) {
+	world_.facing = target->facing;
+	const Area& a = *area();
+	switch (target->kind) {
+	case InteractKind::Vehicle:
+		return board();
+	case InteractKind::Port: {
+		const Port& port = *a.portAt(target->cell);
+		if (!target->ready) {
 			return refusal("port_closed");
 		}
-		if (!port->ship.empty()) {
-			boardShip(*port);
+		if (!port.ship.empty()) {
+			boardShip(port);
 			return {};
 		}
 		modes_.transition(Mode::Menu);
 		menuKind_ = MenuKind::Port;
-		portId_ = port->id;
+		portId_ = port.id;
 		emit(OutputKind::Notice, "game.port_open");
 		return {};
 	}
-	if (a.helmAt(target) && data_.port(world_.shipPort)) {
+	case InteractKind::Helm:
 		modes_.transition(Mode::Menu);
 		menuKind_ = MenuKind::Port;
 		portId_ = world_.shipPort;
 		emit(OutputKind::Notice, "game.helm_open");
 		return {};
-	}
-	if (const Hook* hook = a.hookAt(target, HookTrigger::Interact)) {
-		if (!hookHolds(*hook, world_)) {
+	case InteractKind::Talk:
+	case InteractKind::Actor: {
+		const Hook* hook = a.hookAt(target->cell, HookTrigger::Interact);
+		if (!hook) {
+			hook = talkPoint(&a, target->id);
+		}
+		if (!hook) {
+			hook = touchHook(target->id);
+		}
+		if (!target->ready || !hook) {
 			return refusal("no_answer");
 		}
 		startEvent(hook->event);
 		return {};
 	}
-	if (const Chest* chest = a.chestAt(target)) {
-		openChest(*chest);
+	case InteractKind::Chest:
+		openChest(*a.chestAt(target->cell));
 		settleField();
 		return {};
-	}
-	if (const Shop* shop = a.shopAt(target)) {
-		if (!shopOpen(*shop)) {
-			return refusal("shop_closed", {shop->id});
+	case InteractKind::Shop: {
+		const Shop& shop = *a.shopAt(target->cell);
+		if (!target->ready) {
+			return refusal("shop_closed", {shop.id});
 		}
 		modes_.transition(Mode::Shop);
-		shopId_ = shop->id;
+		shopId_ = shop.id;
 		emit(OutputKind::Notice, "game.shop_open");
 		return {};
 	}
-	if (const RestPoint* rest = a.restAt(target)) {
+	case InteractKind::Rest: {
+		const RestPoint& rest = *a.restAt(target->cell);
 		modes_.transition(Mode::Menu);
 		menuKind_ = MenuKind::Inn;
-		innId_ = rest->id;
-		emit(OutputKind::Notice, "game.inn_offer", {std::to_string(rest->cost)});
+		innId_ = rest.id;
+		emit(OutputKind::Notice, "game.inn_offer", {std::to_string(rest.cost)});
 		return {};
+	}
 	}
 	return refusal("nothing_there");
 }
@@ -2098,14 +3184,14 @@ std::string Session::vehicleAt(Cell cell) const {
 }
 
 bool Session::canEnter(const Area& area, Cell cell) const {
-	if (!vehicleAt(cell).empty()) {
+	if (!vehicleAt(cell).empty() || actorCells().count(cell)) {
 		return false;
 	}
 	const FieldVehicle* vehicle = riding();
 	if (!vehicle) {
 		return area.walkable(cell);
 	}
-	return area.inside(cell) && vehicle->canCross(area.rows[cell.y][cell.x]) && !area.hookAt(cell, HookTrigger::Interact) && !area.shopAt(cell) &&
+	return area.inside(cell) && vehicle->canCross(area.rows[cell.y][cell.x]) && !area.closed.count(cell) && !area.hookAt(cell, HookTrigger::Interact) && !area.shopAt(cell) &&
 		!area.restAt(cell) && !area.chestAt(cell) && !area.portAt(cell);
 }
 
@@ -2301,7 +3387,11 @@ std::vector<TravelDestination> Session::travelDestinations(TravelKind kind) cons
 		}
 		break;
 	case TravelKind::DungeonExit:
-		if (here->kind == AreaKind::Dungeon && data_.area(world_.dungeonExitArea)) {
+		if (here->kind == AreaKind::Dungeon && here->dungeonExit) {
+			const DungeonExitTarget& way = *here->dungeonExit;
+			const Area& to = *data_.area(way.area);
+			out.push_back({way.area, way.area, way.marker.empty() ? way.at : to.markers.at(way.marker), to.region});
+		} else if (here->kind == AreaKind::Dungeon && data_.area(world_.dungeonExitArea)) {
 			out.push_back({world_.dungeonExitArea, world_.dungeonExitArea, world_.dungeonExitCell, data_.area(world_.dungeonExitArea)->region});
 		}
 		break;
@@ -2348,6 +3438,8 @@ rules::Message Session::travel(TravelKind kind, const std::string& destination, 
 		return refusal("no_destination", {destination});
 	}
 	const TravelDestination to = *chosen;
+	const bool turn = kind == TravelKind::DungeonExit && area()->dungeonExit && area()->dungeonExit->facing;
+	const Facing arrival = turn ? *area()->dungeonExit->facing : world_.facing;
 	if (kind != TravelKind::Port) {
 		std::vector<rules::PartyMember> party = activeParty();
 		rules::FieldUse use;
@@ -2377,6 +3469,9 @@ rules::Message Session::travel(TravelKind kind, const std::string& destination, 
 	menuKind_ = MenuKind::None;
 	portId_.clear();
 	enterAreaAt(to.area, to.cell);
+	if (turn) {
+		world_.facing = arrival;
+	}
 	settleField();
 	return {};
 }
@@ -2448,6 +3543,10 @@ void Session::giveThing(const std::string& id, int count) {
 // Events
 
 bool Session::startEvent(const std::string& event) {
+	if (backgroundEvent(event)) {
+		spawnBackground(event);
+		return true;
+	}
 	if (!modes_.transition(Mode::Event)) {
 		return false;
 	}
@@ -2478,6 +3577,17 @@ void Session::pumpEvent(double seconds) {
 
 void Session::endEvent() {
 	dropEvent();
+	if (endGamePending_) {
+		endGamePending_ = false;
+		clearPending_ = false;
+		if (world_.devMarked) {
+			emit(OutputKind::Notice, "game.clear_not_recorded");
+		} else {
+			writeClearRecord();
+		}
+		quitToTitle();
+		return;
+	}
 	if (eventChangedFlag_ && autosaveReason_ != kVehicle) {
 		autosaveReason_ = kEventEnd;
 	}
@@ -2747,13 +3857,28 @@ void Session::fillFromPolicy() {
 	}
 }
 
+rules::Message Session::setAutoPlayMacro(const std::string& name) {
+	if (!name.empty() && std::none_of(world_.macros.begin(), world_.macros.end(), [&](const rules::Macro& m) { return m.name == name; })) {
+		return refusal("no_macro", {name});
+	}
+	autoPlayMacro_ = name;
+	return {};
+}
+
 rules::Message Session::fillAutoRound() {
 	if (!battle_) {
 		return refusal("no_battle");
 	}
 	rules::Message refused;
+	if (!autoPlayMacro_.empty()) {
+		refused = applyMacro(autoPlayMacro_, nullptr, rules::MacroFallback::Automatic);
+		if (refused.empty()) {
+			return {};
+		}
+	}
 	if (!world_.autoMacro.empty() && battle_->round() == 0 && !battle_->autoActive()) {
-		refused = startAuto();
+		const rules::Message notStarted = startAuto();
+		refused = refused.empty() ? notStarted : refused;
 	}
 	if (!fillFromAuto()) {
 		fillFromPolicy();
@@ -2958,6 +4083,9 @@ SaveFile Session::makeSave(bool autosave) const {
 	save.contentHash = data_.contentHash;
 	save.writeTime = options_.clock ? options_.clock() : 0;
 	save.sequence = store_ ? store_->nextSequence() : 0;
+	for (const BackgroundRun& run : background_) {
+		save.background.emplace_back(run.event, events::save_state_to_text(run.interpreter->save()));
+	}
 	return save;
 }
 
@@ -3058,6 +4186,7 @@ rules::Message Session::closeMenu() {
 	shopId_.clear();
 	portId_.clear();
 	nameMember_.clear();
+	creditsId_.clear();
 	settleField();
 	if (mode() == Mode::Event) {
 		pumpEvent(0);
@@ -3296,6 +4425,23 @@ rules::Message Session::unequip(const std::string& member, rules::EquipSlot slot
 	return {};
 }
 
+std::optional<CreditsView> Session::credits() const {
+	const Credits* data = menuKind() == MenuKind::Credits ? data_.config.creditsById(creditsId_) : nullptr;
+	if (!data) {
+		return std::nullopt;
+	}
+	CreditsView view;
+	view.id = data->id;
+	view.music = data->music;
+	for (const CreditsEntry& entry : data->entries) {
+		view.shown += creditsElapsedMs_ >= view.totalMs ? 1 : 0;
+		view.totalMs += entry.pauseMs;
+		view.entries.push_back({entry.kind, entry.key, text(entry.key), entry.gap, entry.pauseMs});
+	}
+	view.elapsedMs = std::min(creditsElapsedMs_, view.totalMs);
+	return view;
+}
+
 rules::Message Session::enterName(const std::string& name) {
 	if (menuKind() != MenuKind::NameEntry) {
 		return refusal("no_name_entry");
@@ -3464,12 +4610,16 @@ rules::Message Session::setMacroStep(const std::string& name, int index, const r
 	if (index < 0 || index > count) {
 		return refusal("macro_no_step", {std::to_string(index)});
 	}
-	if (index == count && count >= rules::kMaxPartySize) {
+	const rules::Database& db = data_.db;
+	// Steps of vehicles, which act only in battles aboard them, do not count against the party's steps.
+	const rules::VehicleDef* vehicle = db.vehicle(step.member);
+	const int memberSteps = static_cast<int>(std::count_if(steps.begin(), steps.end(), [&](const rules::MacroStep& s) { return !db.vehicle(s.member); }));
+	const bool replacesMember = index < count && !db.vehicle(steps[static_cast<std::size_t>(index)].member);
+	if (!vehicle && memberSteps - (replacesMember ? 1 : 0) >= rules::kMaxPartySize) {
 		return refusal("macro_steps_full", {std::to_string(rules::kMaxPartySize)});
 	}
-	const rules::Database& db = data_.db;
 	const rules::PartyMember* member = world_.member(step.member);
-	if (!member) {
+	if (!member && !vehicle) {
 		return refusal("macro_unknown_member", {step.member});
 	}
 	for (int i = 0; i < count; ++i) {
@@ -3478,9 +4628,15 @@ rules::Message Session::setMacroStep(const std::string& name, int index, const r
 		}
 	}
 	rules::Targeting targeting = rules::Targeting::OneEnemy;
+	if (vehicle && (step.piece || step.kind == rules::CommandKind::Item || step.kind == rules::CommandKind::Defend)) {
+		return refusal("macro_bad_command", {rules::toString(step.kind)});
+	}
+	if (vehicle && step.target.kind == rules::MacroTargetKind::Member) {
+		return refusal("macro_target", {rules::toString(step.target.kind)});
+	}
 	switch (step.kind) {
 	case rules::CommandKind::Ability: {
-		const std::vector<std::string> known = rules::knownAbilities(db, *member);
+		const std::vector<std::string> known = vehicle ? vehicle->abilities : rules::knownAbilities(db, *member);
 		const rules::AbilityDef* ability = db.ability(step.id);
 		if (!ability || std::find(known.begin(), known.end(), step.id) == known.end()) {
 			return refusal("macro_unknown_ability", {step.member, step.id});

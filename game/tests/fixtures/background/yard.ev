@@ -1,0 +1,65 @@
+# Wren Yard, for background events, wandering actors and the newer actor commands. The area's load hook starts the
+# lamplighter's round in the background, so the player keeps walking while it walks between the lamps (its second leg
+# through a waypoint), and once it has gone round three times it sets the flag whose hook announces the lamps. The goat wanders
+# about its pen and bleats when the leader walks into it (a touch hook). The bell starts the crow in the background,
+# tries one background event past the limit, draws the trader as an enemy figure until the lamps are lit, and turns, moves and sends
+# off the patch's visible enemy by its reserved name. The lamps' scene warps the party back to the gate, which stops the
+# background events still running and starts the area's load hook again.
+
+event yard_lamps background
+	while not yard.lamps_lit
+		move yard_lamplighter to lamp_east
+		anim yard_lamplighter hop
+		wait 1
+		move yard_lamplighter via yard_middle to lamp_west pathfind
+		face yard_lamplighter south
+		sound lookout_creak
+		wait 1
+		var yard.rounds += 1
+		if yard.rounds >= 3
+			set yard.lamps_lit
+		end
+	end
+	hide yard_lamplighter with fade_out
+end
+
+event yard_crow_flight background
+	anim yard_crow hop
+	wait 0.5
+	move yard_crow to crow_perch
+	wait 1.5
+	call yard_crow_gone
+end
+
+event yard_crow_gone background
+	hide yard_crow with dissolve
+	remove yard_crow until reload
+end
+
+event yard_dust background
+	wait 1
+end
+
+event yard_bell unskippable
+	say yard_trader @yard.trader.bell
+	spawn yard_crow_flight
+	spawn yard_dust
+	look yard_trader enemy aegis_sentinel
+	face enemy.yard_patch.1 north
+	move enemy.yard_patch.1 to patch_corner
+	say yard_trader @yard.trader.patch
+	remove enemy.yard_patch.1
+end
+
+event yard_goat_bleat unskippable
+	narrate @yard.goat.bleat
+	hide yard_goat with dissolve
+	show yard_goat with fade_in
+end
+
+event yard_lit unskippable
+	narrate @yard.lamps.lit
+	set yard.lit_seen
+	look yard_trader default
+	warp wren_yard yard_gate
+end

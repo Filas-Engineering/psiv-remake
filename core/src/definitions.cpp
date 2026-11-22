@@ -99,11 +99,15 @@ int Combatant::base(Stat stat) const {
 	case Stat::Dexterity: return stats.dexterity;
 	case Stat::Defense: return stats.defense;
 	case Stat::MagicDefense: return stats.magicDefense;
+	case Stat::Attack: return stats.strength + attackBonus;
 	}
 	return 0;
 }
 
 int Combatant::effective(Stat stat) const {
+	if (stat == Stat::Attack) {
+		return std::max(0, effective(Stat::Strength) + attackBonus);
+	}
 	if (std::find(pinned.begin(), pinned.end(), stat) != pinned.end()) {
 		return 1;
 	}
@@ -134,6 +138,11 @@ bool BattleRules::defends(const Element& element) const {
 		return std::find(defendElements->begin(), defendElements->end(), element) != defendElements->end();
 	}
 	return element == Element::None || defendElemental;
+}
+
+int BattleRules::normalAffinity(const Element& element) const {
+	const auto it = elementBaselines.find(element);
+	return it != elementBaselines.end() ? it->second : effectivenessBaseline.value_or(affinityDivisor);
 }
 
 int Combatant::affinity(Element element) const {
