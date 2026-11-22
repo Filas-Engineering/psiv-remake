@@ -1299,12 +1299,18 @@ Params of `field.json`: `arrive_toast` (default 1; 0: the arrival notice, `game.
 {"version": 1, "params": {"arrive_toast": 0, "area_banner": 0}, "windows": []}
 ```
 
-Followers stand where the session puts them (`Followers()`, each lineup member after the leader and the follower actor on a cell of the leader's trail, R166): the sample draws each gliding to its cell, the leader drawn a step ahead of the session's cell while the real-time glide leads it, and a script's walk of the leader during a scene adding its cells in front of the session's trail (the session's leader does not move in a scene). A load puts them back on the trail the save kept. Where they stand after an area entry is game.json's `followers_arrive` (`stacked`, the default, or `behind`).
+Followers stand where the session puts them (`Followers()`, each lineup member after the leader and the follower actor on a cell of the leader's trail, R166): the sample draws each gliding to its cell, the leader drawn a step ahead of the session's cell while the real-time glide leads it, and a script's walk of the leader during a scene adding its cells in front of the session's trail (the session's leader does not move in a scene). A load puts them back on the trail the save kept. Where they stand after an area entry is the exit's own `followers`, else game.json's `followers_arrive` (`stacked`, the default, `behind`, `up`, `down`, `left` or `right`); entries that take no exit (a script warp, travel, boarding, a new game) use `followers_arrive_other`.
 
 `followers_arrive` (param of `field.json`): the fallback for data whose game.json does not set the key. `"stacked"` (default: after an exit, a warp, travel or a load the followers stand on the leader, not drawn, until it walks) or `"behind"` (each follower stands a cell behind the one before it, against the leader's facing, drawn at once, while those cells can be walked; the rest stay stacked; aboard a vehicle they ride inside as before; the session's trail then grows in front of those cells). With game.json's key set the param is ignored. Any other value is a problem. `scripts/arrive_behind.txt` checks an exit, a warp and a load with the param; `scripts/library_followers.txt` the session's own placing on data that sets the key.
 
 ```json
 {"version": 1, "params": {"followers_arrive": "behind"}, "windows": []}
+```
+
+`click_actor` (param of `field.json`): what a click on an actor does. `"walk"` (default: the leader walks up to a cell beside the actor, choosing its way again each step, and faces it) or `"interact"` (the same, then interacts as Confirm would). A click on any other cell walks there as before. Any other value is a problem.
+
+```json
+{"version": 1, "params": {"click_actor": "interact"}, "windows": []}
 ```
 
 ### Row models
