@@ -996,8 +996,11 @@ private:
 	bool restoreBackground(const std::string& event, const std::string& text);
 	void setActorLook(const std::string& actor, const std::string& enemy, const std::string& look);
 	// The touch hook of the actor standing on `cell` of the party's area whose flags hold, or null.
-	const Hook* touchHookAt(Cell cell) const;
-	const Hook* touchHook(const std::string& actor) const;
+	// `deliberate`: a step of the player's own or interact, which `touch_from: keys` hooks also answer.
+	const Hook* touchHookAt(Cell cell, bool deliberate = true) const;
+	const Hook* touchHook(const std::string& actor, bool deliberate = true) const;
+	// Turns an actor of the party's area toward the leader (a hook's `turns`).
+	void turnTowardLeader(const std::string& actor);
 	// actorsHere() kept up to date through a field tick: the view of the actor last touched is rebuilt, and all of them
 	// after an event, which may change anything. `slot` is each view's place in `views` by the actor's place in game.json.
 	struct TickViews {
@@ -1066,6 +1069,8 @@ private:
 		std::map<std::string, std::size_t> talkPoints;
 		std::vector<std::size_t> homeActors;
 		std::vector<std::size_t> touchActors;
+		// Talk points that answer on their actor's cell (`talk_at: actor`), by hook index.
+		std::vector<std::size_t> actorTalk;
 		bool gatedExits = false;
 		bool gatedHooks = false;
 		std::vector<std::size_t> whileActiveHooks;
@@ -1137,6 +1142,12 @@ private:
 	bool arrivalAnnounced_ = true;
 	std::string exitSound_;
 	std::string pendingExitSound_;
+	// The followers' placement the walk into the area under way asked for (an exit's, or game.json's for an exit or a
+	// gangway), and the placement of the last entry; unset at an entry is game.json's `followers_arrive_other`.
+	std::optional<FollowersArrive> walkedFollowers_;
+	FollowersArrive arrivalFollowers_ = FollowersArrive::Stacked;
+	// A path walk's step is under way, which touch hooks with `touch_from: keys` do not answer.
+	bool pathStep_ = false;
 	std::optional<Facing> latchedDirection_;
 	// Not saved: hooks fire once per area entry and autosave points are judged per session (FLOW-050).
 	bool loadHooksPending_ = false;

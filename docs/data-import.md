@@ -91,7 +91,8 @@ The shipped values below are the placeholder's or the library's defaults, not th
 | `party_talk_ambient` | true | ambient party talk on arrival |
 | `cell_pixels` | 16 | pixels per cell for pixel paths and platforms |
 | `exit_fires` | `from_floor` | whether a step from another exit cell takes an exit |
-| `followers_arrive` | `stacked` | where followers stand after an area entry |
+| `followers_arrive`, `followers_arrive_other` | `stacked`, `stacked` | where followers stand after walking in through an exit (an exit's `followers` wins) or off a gangway, and after any other area entry |
+| `talk_at` | `point` | whether an actor's talk point answers on its own cell or on the cell the actor stands on (`actor`) |
 
 Per file: an area's `step_ms` (250), `encounter_mode` (`visible`) and its zones' `visible` values (the ENC-012/013 defaults) and `random` `min_steps`/`max_steps` (12/24), `step_distance`, `grace_steps`, `step_chance`; `presentation.flash_default` (`reduced`) and `flash_original`, `presentation.music.fade_ms` (the host's own); `party.json` characters' growth, `experience_table` and `level_stats` (the level cap is 99); `difficulties.json` presets; items.json `discardable` (true: the game's discard may throw any item away; mark story items false); the text speeds a host offers (the profile's, not data).
 
@@ -142,6 +143,10 @@ Difficulty overlays that scale enemies, abilities and rewards. Reference: [diffi
 ### text_en.json
 
 Core's English message templates for battle and field results. The loader requires a template for every key core can emit with your data. Reference: [text_en.json](../core/README.md#text_enjson).
+
+### Followers by exit, talk points on moving actors and contact from the keys
+
+Optional, data without them as before: an exit's `followers` (`stacked`, `behind`, `up`, `down`, `left`, `right`), where the followers stand when the party arrives through that exit (read from the exit taken), else `game.json` `followers_arrive`, which takes the same words; `game.json` `followers_arrive_other` (default `stacked`) for every other area entry (a warp, travel, boarding a ship, the new game). Data that set `followers_arrive: "behind"` for warps too sets `followers_arrive_other: "behind"` as well. `game.json` or an interact hook's `talk_at: "actor"` makes an actor's talk point answer where the actor stands, which lets a wanderer, a patrol or a path actor have its talk point in its home area (refused otherwise); a hook's `turns` turns the actor toward the leader; a touch hook's `touch_from: "keys"` keeps path walks and the actor's own walk from firing it (enemies on the map keep `any`). A town's interior offers the return to a town when its `region` is the towns' (game/README.md, `region`). `tools/maps` carries the exit and hook fields.
 
 ### Exits, arrivals by origin and the newest options
 

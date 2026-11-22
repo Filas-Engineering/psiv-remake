@@ -203,7 +203,7 @@ public static class UiFields
 			["hud", "area", "status", "banner_visible", "banner_title", "banner_kind", "banner_alpha", "banner_drop", "banner_ms", "banner_left_ms", "toasts", "hint",
 				"prompt_visible", "prompt_key", "prompt_text", "prompt_x", "prompt_y", "prompt_ready"],
 			itemFields: ["text", "alpha", "box_alpha", "width"],
-			parameters: ["area_banner", "arrive_toast", "followers_arrive"]),
+			parameters: ["area_banner", "arrive_toast", "click_actor", "followers_arrive"]),
 		["dialogue"] = new("dialogue",
 			["banner_visible", "banner_title", "banner_kind", "banner_alpha", "banner_drop", "banner_ms", "banner_left_ms", "top", "box_visible", "has_line", "speaker",
 				"portrait", "line", "revealed", "all_shown", "line_step", "hint", "next_arrow_ms", "arrow", "has_choice", "prompt", "options", "cursor", "picture",

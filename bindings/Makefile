@@ -769,8 +769,10 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	# session's trail under game.json's followers_arrive, the exits' rule on a 2x2 block of exits with keys and clicks in
 	# both field inputs, shop and inn names with the bag's slots and its refusals, no autosaves, the two field-status
 	# notices from a save field_status_cli.txt writes with game_cli, and the macro options, step checks, flow, failed
-	# steps and auto modes; a copy with a bad `macro_failed`, `macro_flow` and `options` reports each.
+	# steps and auto modes; a copy with a bad `macro_failed`, `macro_flow` and `options` reports each; followers placed by
+	# the exit taken and a wanderer whose talk point answers where she stands (moving_talk.txt on the --moving copy).
 	python3 -I $(SAMPLE_SCRIPTS)/make_library_data.py $(GAME)/data $(CORE)/data $(BUILD)/library_data
+	python3 -I $(SAMPLE_SCRIPTS)/make_library_data.py $(GAME)/data $(CORE)/data $(BUILD)/library_moving_data --moving
 	python3 -I $(SAMPLE_SCRIPTS)/make_library_data.py $(GAME)/data $(CORE)/data $(BUILD)/library_bag_data --bag
 	python3 -I $(SAMPLE_SCRIPTS)/make_library_data.py $(GAME)/data $(CORE)/data $(BUILD)/library_noauto_data --no-autosave
 	python3 -I $(SAMPLE_SCRIPTS)/make_library_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/library_assets
@@ -789,7 +791,7 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 		> $(BUILD)/field_status_cli.txt
 	grep -qF "Saved to manual_2." $(BUILD)/field_status_cli.txt
 	@for run in library_followers:library_data:400:saves field_status:library_data:600:saves library_autosave:library_noauto_data:1000:saves \
-		exit_block:library_data:1500:- library_shop:library_bag_data:1500:-; do \
+		exit_block:library_data:1500:- library_shop:library_bag_data:1500:- moving_talk:library_moving_data:600:saves; do \
 		name=$${run%%:*}; rest=$${run#*:}; data=$${rest%%:*}; rest=$${rest#*:}; frames=$${rest%%:*}; saves=$${rest#*:}; \
 		rm -rf $(BUILD)/sample_$${name}_saves; \
 		if [ $$saves = saves ]; then cp -R $(BUILD)/sample_library_saves $(BUILD)/sample_$${name}_saves; fi; \

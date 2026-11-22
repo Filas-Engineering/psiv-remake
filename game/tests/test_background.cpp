@@ -181,6 +181,181 @@ TEST(walkingIntoAWandererOrTalkingToItFiresItsTouchHook) {
 	CHECK_EQ(off.walk(Facing::North).key, std::string("game.refuse.blocked"));
 }
 
+namespace {
+
+// The yard with the goat's touch hook turned into its talk point at its home, (3, 4).
+GameData goatWithTalkPoint() {
+	GameData d = test::backgroundData();
+	for (Hook& h : d.areas.at("wren_yard").hooks) {
+		if (h.trigger == HookTrigger::Touch) {
+			h.trigger = HookTrigger::Interact;
+			h.id = "yard_goat";
+			h.actor.clear();
+			h.at = {3, 4};
+		}
+	}
+	return d;
+}
+
+ActorDef& goatDef(GameData& d) {
+	return *std::find_if(d.config.actorDefs.begin(), d.config.actorDefs.end(), [](const ActorDef& a) { return a.id == "yard_goat"; });
+}
+
+// Ticks until the goat stands off its home, then puts the leader on a free floor cell beside it, facing it.
+Cell besideTheWanderingGoat(Session& s) {
+	Cell goat = cellOf(s, "yard_goat");
+	for (int tick = 0; tick < 400 && goat == Cell{3, 4}; ++tick) {
+		s.update(s.data().config.tickMs);
+		goat = cellOf(s, "yard_goat");
+	}
+	CHECK(goat != (Cell{3, 4}));
+	for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
+		const Cell from = stepFrom(goat, f);
+		if (from != Cell{3, 4} && s.area()->walkable(from) && from != cellOf(s, "yard_lamplighter") && from != cellOf(s, "yard_trader")) {
+			s.world().position = from;
+			s.world().facing = static_cast<Facing>((static_cast<int>(f) + 2) % 4);
+			break;
+		}
+	}
+	return goat;
+}
+
+}
+
+// A wandering actor's talk point: by default it answers on its own cell, which the actor leaves for good; under
+// `talk_at: actor` the actor answers where it stands, stands still while its event runs, turns toward the leader with
+// `turns`, and the talk point's cell is floor.
+TEST(aMovingActorsTalkPointAnswersWhereTheActorStandsUnderTalkAtActor) {
+	GameData d = goatWithTalkPoint();
+	Session point(d, SessionOptions());
+	inYard(point);
+	const Cell wandered = besideTheWanderingGoat(point);
+	std::optional<InteractTarget> t = point.interactTarget();
+	CHECK(!t || t->cell != wandered);
+	point.world().position = {3, 5};
+	point.world().facing = Facing::North;
+	t = point.interactTarget();
+	CHECK(t && t->kind == InteractKind::Actor && t->id == "yard_goat" && t->cell == (Cell{3, 4}) && t->ready);
+	CHECK(!point.canStep(Facing::North));
+
+	d.config.talkAt = TalkAt::Actor;
+	for (Hook& h : d.areas.at("wren_yard").hooks) {
+		h.turns = h.id == "yard_goat";
+	}
+	Session s(d, SessionOptions());
+	inYard(s);
+	const Cell goat = besideTheWanderingGoat(s);
+	t = s.interactTarget();
+	CHECK(t && t->kind == InteractKind::Actor && t->id == "yard_goat" && t->cell == goat && t->ready);
+	CHECK(s.interactAt(goat) && s.interactAt(goat)->id == "yard_goat");
+	const Cell leader = s.world().position;
+	CHECK(s.interact().empty());
+	CHECK(s.mode() == Mode::Event);
+	const std::vector<ActorView> actors = s.actorsHere();
+	CHECK(actor(actors, "yard_goat")->facing == static_cast<Facing>((static_cast<int>(s.world().facing) + 2) % 4));
+	s.update(5000);
+	CHECK(cellOf(s, "yard_goat") == goat && s.world().position == leader);
+	test::confirmLines(s);
+	CHECK(s.mode() == Mode::Field);
+	// The talk point's own cell answers nothing while the goat is elsewhere, and the party may walk onto it.
+	s.world().position = {3, 5};
+	s.world().facing = Facing::North;
+	t = s.interactTarget();
+	CHECK(!t || t->cell != (Cell{3, 4}));
+	CHECK(s.canStep(Facing::North));
+}
+
+// game_cli's walk, the C and C# walks and click-to-walk go through walkStep: by default a planned step into an actor
+// with a touch hook fires it, as a step of the player's own does; with `touch_from: keys` only the player's own steps
+// and interact fire it, and the actor's own walk into the leader does not.
+TEST(touchFromKeysLeavesPathWalksAndTheActorsOwnWalkOut) {
+	GameData d = test::backgroundData();
+	goatDef(d).wander.reset();
+	goatDef(d).solid = false;
+	for (bool keys : {false, true}) {
+		for (Hook& h : d.areas.at("wren_yard").hooks) {
+			if (h.trigger == HookTrigger::Touch) {
+				h.touchFrom = keys ? TouchFrom::Keys : TouchFrom::Any;
+			}
+		}
+		Session s(d, SessionOptions());
+		inYard(s);
+		s.world().position = {1, 4};
+		PathWalk walk = s.beginWalk({5, 4});
+		WalkStatus status = WalkStatus::Walking;
+		while (status == WalkStatus::Walking && s.mode() == Mode::Field) {
+			status = s.walkStep(walk);
+		}
+		CHECK_EQ(s.mode() == Mode::Event, !keys);
+		CHECK(keys ? s.world().position == (Cell{5, 4}) : s.world().position == (Cell{2, 4}));
+		test::confirmLines(s);
+		s.world().position = {2, 4};
+		s.world().facing = Facing::East;
+		CHECK(s.walk(Facing::East).empty());
+		CHECK(s.mode() == Mode::Event);
+		test::confirmLines(s);
+		CHECK(s.interact().empty());
+		CHECK(s.mode() == Mode::Event);
+		test::confirmLines(s);
+	}
+	GameData wandering = test::backgroundData();
+	int fired[2] = {0, 0};
+	for (bool keys : {false, true}) {
+		for (Hook& h : wandering.areas.at("wren_yard").hooks) {
+			if (h.trigger == HookTrigger::Touch) {
+				h.touchFrom = keys ? TouchFrom::Keys : TouchFrom::Any;
+			}
+		}
+		Session s(wandering, SessionOptions());
+		inYard(s);
+		s.world().position = {3, 5};
+		for (int tick = 0; tick < 2000; ++tick) {
+			s.update(s.data().config.tickMs);
+			if (s.mode() == Mode::Event && s.linePending() && s.lineText().find("The goat bleats") != std::string::npos) {
+				++fired[keys];
+			}
+			if (s.mode() != Mode::Field) {
+				test::confirmLines(s);
+			}
+		}
+	}
+	CHECK(fired[0] > 0);
+	CHECK_EQ(fired[1], 0);
+}
+
+// Return to a town from an interior of it: the list is the visited towns with an arrival marker in the region of the
+// area the party is in, that area left out; a town's interior with no arrival of its own and the same region offers it.
+TEST(aTownsInteriorOffersTheReturnToTownsOfItsRegion) {
+	GameData d = test::data();
+	std::string text = R"({"id": "inn_room", "kind": "town", "region": "coast", "map": ["###", "#.#", "###"], "markers": {"bed": [1, 1]}})";
+	rules::Result<Area> room = parseArea("inn_room.json", text);
+	CHECK(room.ok());
+	d.areas["inn_room"] = *room.value;
+	const auto visitTownsThenRoom = [&](Session& s) {
+		CHECK(s.newGame().empty());
+		test::confirmLines(s);
+		for (const auto& [id, a] : d.areas) {
+			if (a.kind == AreaKind::Town && !a.arrival.empty()) {
+				CHECK(s.devWarp(id, a.arrival).empty());
+				test::confirmLines(s);
+			}
+		}
+		CHECK(s.devWarp("inn_room", "bed").empty());
+		test::confirmLines(s);
+	};
+	Session s(d, SessionOptions());
+	visitTownsThenRoom(s);
+	const std::vector<TravelDestination> towns = s.travelDestinations(TravelKind::Town);
+	CHECK(!towns.empty());
+	CHECK(std::none_of(towns.begin(), towns.end(), [](const TravelDestination& t) { return t.area == "inn_room"; }));
+	CHECK(std::all_of(towns.begin(), towns.end(), [](const TravelDestination& t) { return t.region == "coast"; }));
+	// No region, while the towns name one, offers nothing.
+	d.areas["inn_room"].region = "";
+	Session other(d, SessionOptions());
+	visitTownsThenRoom(other);
+	CHECK(other.travelDestinations(TravelKind::Town).empty());
+}
+
 TEST(visibleEnemiesAnswerToTheirReservedActorNames) {
 	Session s(test::backgroundData(), SessionOptions());
 	inYard(s);

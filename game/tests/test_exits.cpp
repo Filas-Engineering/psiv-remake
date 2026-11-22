@@ -202,8 +202,8 @@ TEST(theDataCheckReachesExitsByTheRule) {
 	CHECK_EQ(unreached(data), 4);
 }
 
-// Followers walk the leader's trail, stand on the leader's cell after an entry (or behind it under `behind`), are saved
-// and block nothing.
+// Followers walk the leader's trail, stand on the leader's cell after an entry (or behind it under `behind` for entries
+// that are no walk through an exit, by followers_arrive_other), are saved and block nothing.
 TEST(followersWalkTheLeadersTrail) {
 	GameData data = withAreas({kMechanisms});
 	Session s(data, SessionOptions());
@@ -228,6 +228,12 @@ TEST(followersWalkTheLeadersTrail) {
 	CHECK(loaded.loadSaveText(text).empty());
 	CHECK(!loaded.followers().empty() && loaded.followers()[0].cell == (Cell{3, 3}));
 	data.config.followersArrive = FollowersArrive::Behind;
+	Session stacked(data, SessionOptions());
+	CHECK(stacked.newGame().empty());
+	test::confirmLines(stacked);
+	CHECK(stacked.devWarpCell("exit_works", {3, 3}).empty());
+	CHECK(stacked.world().trail.empty());
+	data.config.followersArriveOther = FollowersArrive::Behind;
 	Session behind(data, SessionOptions());
 	CHECK(behind.newGame().empty());
 	test::confirmLines(behind);
@@ -236,6 +242,78 @@ TEST(followersWalkTheLeadersTrail) {
 	behind.world().lineup = {"fighter", "medic", "scout"};
 	f = behind.followers();
 	CHECK(f.size() == 2 && f[0].cell == (Cell{4, 3}) && f[1].cell == (Cell{5, 3}));
+}
+
+// The exit walked through places the followers: its own `followers`, else game.json's followers_arrive; a warp does not
+// use it and a load restores the saved trail. A cell that cannot be walked ends the line, and the rest stand on its
+// last cell.
+TEST(theExitTakenPlacesTheFollowers) {
+	std::string room = R"({"id": "follow_lab", "kind": "field", "map": ["#######", "#.....#", "#.....#", "#.....#", "#######"],
+		"markers": {"middle": [3, 2], "west": [1, 2]},
+		"exits": [{"at": [5, 1], "to": "follow_lab", "marker": "middle", "followers": "up"},
+			{"at": [5, 3], "to": "follow_lab", "marker": "middle", "followers": "behind"},
+			{"at": [1, 1], "to": "follow_lab", "marker": "west"},
+			{"at": [1, 3], "to": "follow_lab", "marker": "middle", "followers": "left"}]})";
+	GameData data = withAreas({room.c_str()});
+	Session s(data, SessionOptions());
+	startIn(s, "follow_lab", "middle");
+	const std::vector<std::string> lineup = s.world().lineup;
+	s.world().lineup = {"fighter", "medic", "scout"};
+	const auto cells = [&] {
+		std::vector<Cell> out;
+		for (const FollowerView& f : s.followers()) {
+			out.push_back(f.cell);
+		}
+		return out;
+	};
+	CHECK(s.world().trail.empty());
+	// East, then north onto the `up` exit: the line goes north of the leader, one cell, then stacks there at the wall.
+	CHECK(s.walk(Facing::East).empty());
+	CHECK(s.walk(Facing::East).empty());
+	CHECK(s.walk(Facing::North).empty());
+	CHECK(s.world().position == (Cell{3, 2}));
+	CHECK(cells() == (std::vector<Cell>{{3, 1}, {3, 1}}));
+	// South onto the `behind` exit: the leader arrives facing south, so the line goes north.
+	CHECK(s.walk(Facing::East).empty());
+	CHECK(s.walk(Facing::East).empty());
+	CHECK(s.walk(Facing::South).empty());
+	CHECK(s.world().position == (Cell{3, 2}) && s.world().facing == Facing::South);
+	CHECK(cells() == (std::vector<Cell>{{3, 1}, {3, 1}}));
+	// The `left` exit: two cells west.
+	CHECK(s.walk(Facing::West).empty());
+	CHECK(s.walk(Facing::West).empty());
+	CHECK(s.walk(Facing::South).empty());
+	CHECK(cells() == (std::vector<Cell>{{2, 2}, {1, 2}}));
+	// An exit without its own: game.json's followers_arrive, stacked by default.
+	CHECK(s.walk(Facing::West).empty());
+	CHECK(s.walk(Facing::North).empty());
+	CHECK(s.walk(Facing::West).empty());
+	CHECK(s.world().position == (Cell{1, 2}) && s.world().trail.empty());
+	// A warp uses followers_arrive_other, stacked by default, whatever the exits say.
+	CHECK(s.walk(Facing::South).empty());
+	CHECK(!s.world().trail.empty());
+	CHECK(s.devWarp("follow_lab", "middle").empty());
+	CHECK(s.world().trail.empty());
+	// A load restores the trail the save holds, placed by the exit.
+	CHECK(s.walk(Facing::West).empty());
+	CHECK(s.walk(Facing::West).empty());
+	CHECK(s.walk(Facing::South).empty());
+	const std::vector<Cell> placed = cells();
+	CHECK(placed == (std::vector<Cell>{{2, 2}, {1, 2}}));
+	s.world().lineup = lineup;
+	std::string text;
+	CHECK(s.saveText(text).empty());
+	Session loaded(data, SessionOptions());
+	CHECK(loaded.loadSaveText(text).empty());
+	CHECK(loaded.world().trail == s.world().trail);
+	data.config.followersArrive = FollowersArrive::Right;
+	Session right(data, SessionOptions());
+	startIn(right, "follow_lab", "middle");
+	right.world().lineup = {"fighter", "medic"};
+	CHECK(right.walk(Facing::West).empty());
+	CHECK(right.walk(Facing::North).empty());
+	CHECK(right.walk(Facing::West).empty());
+	CHECK(right.world().position == (Cell{1, 2}) && right.followers()[0].cell == (Cell{2, 2}));
 }
 
 // An area's arrive_notice by the area the party came from: the first entry listing it, else the entry without `from`.

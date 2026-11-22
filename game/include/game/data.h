@@ -268,9 +268,6 @@ enum class VehicleOpening { Roll, Normal };
 // `arrive_notice: false` turns it off there.
 enum class ArriveNotice { Always, Walked, Never };
 
-// Where the followers stand after an area entry (game.json `followers_arrive`): on the leader's cell, or behind it.
-enum class FollowersArrive { Stacked, Behind };
-
 // How a vehicle moves in the field (FLD-061). Its battle stats, attack and skills are core's vehicle of the same id,
 // which fights its vehicle battles (BAT-140).
 struct FieldVehicle {
@@ -385,7 +382,13 @@ struct GameConfig {
 	ArriveNotice arriveNotice = ArriveNotice::Always;
 	// game.json `exit_fires`: what an exit without its own `fires` does.
 	ExitFires exitFires = ExitFires::FromFloor;
+	// game.json `followers_arrive`: arrivals through an exit without its own `followers`, and off a gangway.
 	FollowersArrive followersArrive = FollowersArrive::Stacked;
+	// game.json `followers_arrive_other`: every other area entry (a script's or developer's warp, travel, boarding a ship,
+	// the new game). A load restores the saved trail and a battle's end keeps it.
+	FollowersArrive followersArriveOther = FollowersArrive::Stacked;
+	// game.json `talk_at`: where an actor's talk point answers (R186).
+	TalkAt talkAt = TalkAt::Point;
 	// game.json `step_timing` `exact` (R108; default `ticks`): steps of the leader (on foot, running and aboard), belts and
 	// wandering actors carry the time past each step into the next, to the microsecond, so a step time that is not a whole
 	// number of ticks (or has a fraction) is kept on average over any distance; the carry is saved. With `ticks` a step ends

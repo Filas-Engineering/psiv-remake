@@ -10,6 +10,9 @@ public sealed partial class SampleController
 	// session's path walk moves the leader a cell per area step, and no held direction reaches the session.
 	private (int X, int Y)? _clickWalk;
 	private int _clickWalkMs;
+	// The actor a click landed on: the walk goes up to it where it stands now, choosing again each step, then faces it, and
+	// interacts under the field layout's `click_actor` "interact".
+	private string? _clickActor;
 
 	// A screen pixel of the field view as a cell, by where the last frame drew the map.
 	private (int X, int Y) CellAt(int x, int y) =>
@@ -26,7 +29,8 @@ public sealed partial class SampleController
 		if (input.Raw.Click is { } click && !Ui.Blocks(click.X, click.Y) && _s.FieldInfo() is { PlayerControl: true } field)
 		{
 			(int x, int y) = CellAt(click.X, click.Y);
-			PsivResult started = _s.WalkTo(x, y);
+			_clickActor = _s.Field()?.Actors.FirstOrDefault(a => a.X == x && a.Y == y && a.Visible && a.Removal == ActorRemoval.None)?.Id;
+			PsivResult started = _clickActor is null ? _s.WalkTo(x, y) : PsivResult.Success;
 			Report(started);
 			_clickWalk = started.Ok ? (x, y) : null;
 			// The first step goes at once.
@@ -45,7 +49,7 @@ public sealed partial class SampleController
 		while (_clickWalk is not null && _clickWalkMs >= stepMs)
 		{
 			_clickWalkMs -= stepMs;
-			WalkStatus status = _s.WalkStep();
+			WalkStatus status = _clickActor is { } actor ? ApproachStep(actor) : _s.WalkStep();
 			if (status != WalkStatus.Walking)
 			{
 				if (status == WalkStatus.NoPath)
@@ -61,6 +65,50 @@ public sealed partial class SampleController
 		}
 		_clickWalkMs += dtMs;
 		return true;
+	}
+
+	// One step of the walk up to a clicked actor, as game_cli's `walk to ACTOR` takes it: done (Arrived) once the session's
+	// InteractAt answers the actor from the leader's cell or the leader stands beside it, which the leader then faces;
+	// otherwise a step toward the nearest cell beside the actor that has a path.
+	private WalkStatus ApproachStep(string actor)
+	{
+		if (_s.Field() is not { } view || view.Actors.FirstOrDefault(a => a.Id == actor && a.Visible && a.Removal == ActorRemoval.None) is not { } a)
+		{
+			return WalkStatus.Stopped;
+		}
+		(int lx, int ly) = (view.Info.LeaderX, view.Info.LeaderY);
+		Direction? facing = _s.InteractAt(a.X, a.Y) is { } t && t.Id == actor ? t.Facing : null;
+		foreach (Direction d in new[] { Direction.North, Direction.East, Direction.South, Direction.West })
+		{
+			if (facing is null && StepFrom(lx, ly, d) == (a.X, a.Y))
+			{
+				facing = d;
+			}
+		}
+		if (facing is { } turn)
+		{
+			Report(_s.Face(turn));
+			if (Ui.ParamText("field", "click_actor", UiData(), "walk") == "interact")
+			{
+				Report(_s.Interact());
+			}
+			return WalkStatus.Arrived;
+		}
+		var near = new[] { Direction.North, Direction.East, Direction.South, Direction.West }.Select(d => StepFrom(a.X, a.Y, d))
+			.OrderBy(c => Math.Abs(c.X - lx) + Math.Abs(c.Y - ly));
+		foreach ((int x, int y) in near)
+		{
+			if (!_s.WalkTo(x, y).Ok)
+			{
+				continue;
+			}
+			WalkStatus status = _s.WalkStep();
+			if (status is not (WalkStatus.NoPath or WalkStatus.Arrived))
+			{
+				return status;
+			}
+		}
+		return WalkStatus.NoPath;
 	}
 
 	// The real-time field input (the window's own when no script plays it, `fieldinput realtime` in scripts): walking
@@ -372,6 +420,15 @@ public sealed partial class SampleController
 		{
 			Direction d = (Direction)(((int)facing + quarters) % 4);
 			(int x, int y) = StepFrom(f.LeaderX, f.LeaderY, d);
+			if (_data.TalkAtActor)
+			{
+				(int bx, int by) = StepFrom(x, y, d);
+				if ((_s.InteractAt(x, y) ?? _s.InteractAt(bx, by)) is { Ready: true } at)
+				{
+					return new InteractTarget(at.X, at.Y, at.Facing, PromptWord(at.Kind), at.Ready, at.Across, at.Keeper);
+				}
+				continue;
+			}
 			if (InteractVerb(view, x, y) is { } verb)
 			{
 				return new InteractTarget(x, y, d, verb);

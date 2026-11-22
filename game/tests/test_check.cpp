@@ -451,6 +451,38 @@ TEST(wanderTouchHooksKeepersAndTheBackgroundLimitAreChecked) {
 	CHECK(!step.ok() && step.problems[0].message.key == "data.actor_touch_hooks_only");
 }
 
+// A wanderer's talk point in its home area is refused unless it answers on the actor (`talk_at: actor`), whose home is
+// then where it starts and is used from; talk_at, turns and touch_from are refused on hooks they do not apply to.
+TEST(aWanderersTalkPointLoadsOnlyWhenItAnswersOnTheActor) {
+	const std::string dir = copyData("talk_at", {}, test::backgroundDataDirectory());
+	replaceIn(dir + "/areas/wren_yard.json", "{\"id\": \"yard_goat_touch\", \"trigger\": \"touch\", \"event\": \"yard_goat_bleat\", \"actor\": \"yard_goat\"}",
+		"{\"id\": \"yard_goat\", \"at\": [3, 4], \"event\": \"yard_goat_bleat\"}");
+	CHECK(find(checkData(DataDirectories{dir, "../core/data"}), "data.actor_home_twice"));
+	replaceIn(dir + "/areas/wren_yard.json", "\"event\": \"yard_goat_bleat\"", "\"event\": \"yard_goat_bleat\", \"talk_at\": \"actor\", \"turns\": true");
+	const CheckReport good = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(good.problems.empty());
+	replaceIn(dir + "/areas/wren_yard.json", "\"talk_at\": \"actor\", ", "");
+	replaceIn(dir + "/game.json", "\"background_limit\": 2", "\"background_limit\": 2, \"talk_at\": \"actor\"");
+	CHECK(checkData(DataDirectories{dir, "../core/data"}).problems.empty());
+
+	replaceIn(dir + "/areas/wren_yard.json", "\"id\": \"yard_bell\", \"at\": [3, 0], \"event\": \"yard_bell\"", "\"id\": \"yard_bell\", \"at\": [3, 0], \"event\": \"yard_bell\", \"talk_at\": \"actor\"");
+	CHECK(find(checkData(DataDirectories{dir, "../core/data"}), "data.talk_at_interact_hooks_only"));
+	const auto refused = [](const char* hook) {
+		const std::string text = std::string(R"({"id": "a", "map": ["...", "..."], "markers": {"start": [0, 0]}, "hooks": [)") + hook + "]}";
+		rules::Result<Area> parsed = parseArea("a.json", text);
+		return parsed.ok() ? std::string() : parsed.problems[0].message.key;
+	};
+	CHECK_EQ(refused(R"({"id": "x", "at": [1, 1], "trigger": "step", "event": "e", "talk_at": "actor"})"), std::string("data.talk_at_interact_hooks_only"));
+	CHECK_EQ(refused(R"({"id": "x", "at": [1, 1], "event": "e", "actor_at": [0, 1], "talk_at": "actor"})"), std::string("data.talk_at_interact_hooks_only"));
+	CHECK_EQ(refused(R"({"id": "x", "at": [1, 1], "event": "e", "talk_at": "near"})"), std::string("data.bad_talk_at"));
+	CHECK_EQ(refused(R"({"id": "x", "at": [1, 1], "trigger": "step", "event": "e", "turns": true})"), std::string("data.turns_actor_hooks_only"));
+	CHECK_EQ(refused(R"({"id": "x", "at": [1, 1], "event": "e", "touch_from": "keys"})"), std::string("data.touch_from_touch_hooks_only"));
+	CHECK_EQ(refused(R"({"id": "x", "trigger": "touch", "actor": "goat", "event": "e", "touch_from": "path"})"), std::string("data.bad_touch_from"));
+	const char* exit = R"({"id": "a", "map": ["...", "..."], "markers": {"start": [0, 0]}, "exits": [{"at": [1, 1], "to": "a", "marker": "start", "followers": "aside"}]})";
+	rules::Result<Area> badExit = parseArea("a.json", exit);
+	CHECK(!badExit.ok() && badExit.problems[0].message.key == "data.bad_followers_arrive");
+}
+
 TEST(animationsMayGiveTheirLength) {
 	const std::string dir = copyData("animation_lengths", {});
 	replaceIn(dir + "/game.json", "\"animations\": [\"bow\",", "\"animations\": [{\"id\": \"bow\", \"seconds\": 0.75}, {\"id\": \"dissolve\", \"seconds\": 1.5},");

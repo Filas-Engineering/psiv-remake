@@ -66,6 +66,9 @@ public sealed partial class GameData
 	public int RunSpeedPercent { get; private set; }
 	// Whether game.json sets `followers_arrive` (R166); without it the field layout's param of that name decides.
 	public bool FollowersArriveSet { get; private set; }
+	// Whether game.json's `talk_at` or any interact hook's is "actor" (R186): a talk point may then answer on the cell its
+	// actor stands on, so the prompt asks the session's InteractAt what each cell beside the leader answers.
+	public bool TalkAtActor { get; private set; }
 	// Each wandering or patrolling actor's speed against the area's step time (game.json actors' `wander.speed_percent` or
 	// `patrol.speed_percent`, default 50).
 	public Dictionary<string, int> WanderPercent { get; } = [];
@@ -142,6 +145,7 @@ public sealed partial class GameData
 		d.InteractNearby = root.TryGetProperty("interact", out JsonElement interact) && Text(interact) == "nearby";
 		d.RunSpeedPercent = root.TryGetProperty("run_speed_percent", out JsonElement run) ? Whole(run) ?? 0 : 0;
 		d.FollowersArriveSet = root.TryGetProperty("followers_arrive", out _);
+		d.TalkAtActor |= root.TryGetProperty("talk_at", out JsonElement talkAt) && Text(talkAt) == "actor";
 		// An actor is a name or an object; `wander` is an object with an optional `speed_percent`, or any other value for the
 		// default pace.
 		d.Each(Array(root, "actors").Where(a => a.ValueKind == JsonValueKind.Object && (a.TryGetProperty("wander", out _) || a.TryGetProperty("patrol", out _))), "game.json actors", actor =>
@@ -285,6 +289,7 @@ public sealed partial class GameData
 		AreaKinds[id] = kind;
 		Each(Array(area, "hooks"), $"{file} hooks", hook =>
 		{
+			TalkAtActor |= hook.TryGetProperty("talk_at", out JsonElement talkAt) && Text(talkAt) == "actor";
 			if (hook.TryGetProperty("actor_at", out JsonElement actorAt) && Cell(actorAt) is { } stand)
 			{
 				ActorAt[hook.GetProperty("id").GetString()!] = stand;

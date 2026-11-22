@@ -36,6 +36,18 @@ bool parseEncounterMode(const std::string& text, EncounterMode& out);
 // on any step.
 enum class ExitFires { FromFloor, Always };
 
+// Where the followers stand after an area entry (game.json `followers_arrive` and `followers_arrive_other`, an exit's
+// `followers`): on the leader's cell, behind it against its facing, or toward a direction of the map from it.
+enum class FollowersArrive { Stacked, Behind, Up, Down, Left, Right };
+
+// Where an actor's talk point answers interact (game.json `talk_at`, an interact hook's `talk_at`): on the hook's cells,
+// or on the cell the actor stands on.
+enum class TalkAt { Point, Actor };
+
+// Which steps into its actor fire a touch hook (`touch_from`): any, or only the player's own steps (not a path walk's,
+// not the actor's own walk into the leader). Interact fires it either way.
+enum class TouchFrom { Any, Keys };
+
 struct Exit {
 	Cell at;
 	std::string toArea;
@@ -54,6 +66,8 @@ struct Exit {
 	std::string sound = {};
 	// Unset: game.json's `exit_fires`, or Always for a pit.
 	std::optional<ExitFires> fires = std::nullopt;
+	// Where the followers stand when the party arrives through this exit; unset: game.json's `followers_arrive`.
+	std::optional<FollowersArrive> followers = std::nullopt;
 };
 
 // A field hook (FLD-023): runs one event script when it fires and its flag conditions hold. A Flag hook fires
@@ -82,6 +96,11 @@ struct Hook {
 	std::vector<Cell> cells = {};
 	// Touch hooks: the actor of game.json whose touch fires it, wherever it stands.
 	std::string actor = {};
+	// Interact hooks of an actor: unset follows game.json's `talk_at` (which hooks with `actor_at` or `cells` ignore).
+	std::optional<TalkAt> talkAt = std::nullopt;
+	// Interact hooks of an actor and touch hooks: the actor turns toward the leader as interact or a touch starts the event.
+	bool turns = false;
+	TouchFrom touchFrom = TouchFrom::Any;
 
 	bool covers(Cell cell) const;
 };

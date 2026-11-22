@@ -256,7 +256,7 @@ assets: ui/extras.json: entries[3]: missing field 'page'
 assets: ui/extras.json: entries[4]: unknown field 'colour'
 assets: ui/extras.json: entries[5].children: only the menu screen's entries take 'children'
 assets: ui/extras.json: -: the built-in layout of this screen stands in
-assets: ui/field.json: params.area_banners: unknown param: area_banner, arrive_toast, followers_arrive
+assets: ui/field.json: params.area_banners: unknown param: area_banner, arrive_toast, click_actor, followers_arrive
 assets: ui/field.json: params.followers_arrive: must be "stacked" or "behind": where followers stand when the party arrives
 assets: ui/field.json: -: the built-in layout of this screen stands in
 assets: ui/inn.json: statuses: the screen takes no statuses table

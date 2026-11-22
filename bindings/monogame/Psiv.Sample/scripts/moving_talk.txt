@@ -1,0 +1,68 @@
+# Followers placed by the exit taken and a wanderer's talk point that answers where she stands, on the library data copy
+# made with --moving (make_library_data.py), from saves of the scripted playthrough, with --dev and the built-in field
+# layout: Follow Yard's exit with `followers` "behind" (to Follow Room) puts the line behind the leader against its arrival facing and the
+# one with "up" puts it north of the leader; the ashwife wanders with `talk_at` "actor" and `turns`, the prompt points at
+# the cell she stands on, a click on her walks up to her and faces her without talking (the field layout's `click_actor`
+# is "walk" by default), and Confirm talks to her there while she turns to the leader and stands still.
+
+cmd set text instant
+expect screen Title
+wait 2
+cmd load manual_1
+wait 4
+expect screen Field
+dev encounters off
+fieldinput realtime
+# The `behind` exit: east onto it from beside it, arriving at the middle facing east, the line to the west.
+dev warp follow_yard behind_side
+wait 5
+press Right
+wait 20
+expect state leader follow_room 6 4
+expect actor mystic 5 4
+expect actor medic 4 4
+# The `up` exit: the line goes north of the leader, as far as the wall lets it.
+dev warp follow_yard up_side
+wait 5
+press Right
+wait 20
+expect state leader follow_room 6 4
+expect actor mystic 6 3
+expect actor medic 6 2
+# The ashwife, wandering near her home (3, 2).
+dev warp follow_yard 8 6
+wait 30
+expect state walkstep -
+expect actor ashwife 2 2 west
+# Beside her: the prompt points at her cell.
+dev warp follow_yard 2 3
+wait 2
+expect statehas interactprompt at 2 2
+expect state interacttarget talk at 2 2 facing north
+# She walks on to the west: diagonal to the leader now, nothing to prompt; beside her again, the prompt is on her new cell.
+wait 62
+expect actor ashwife 1 2
+expect state interactprompt none
+dev warp follow_yard 1 3
+wait 2
+expect statehas interactprompt at 1 2
+# A click on her from across the yard walks up to her and faces her; the default `click_actor` "walk" talks to nobody.
+dev warp follow_yard 6 6
+wait 2
+expect actor ashwife 1 2
+clickcell 1 2
+wait 120
+expect screen Field
+expect state leader follow_yard 3 1
+wait 12
+expect actor fighter 3 1 west
+expect state interacttarget talk at 2 1 facing west
+# Confirm talks to her where she stands: she turns to the leader and stands still while the line is up.
+press Enter
+wait 5
+expect screen Dialogue
+expect actor ashwife 2 1 east
+wait 60
+expect actor ashwife 2 1 east
+pressuntil Enter Field 200
+expect screen Field

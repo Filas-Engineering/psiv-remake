@@ -7,8 +7,8 @@ TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arr
 	"chests", "ports", "zones", "helms", "gangway", "changes", "conveyors", "counters", "platforms"]
 LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"]
 ENTRY_FIELDS = {
-	"exits": ["at", "to", "marker", "fall", "require_flag", "block_flag", "closed_tile", "sound", "fires"],
-	"hooks": ["id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid", "actor_at", "across", "cells", "actor"],
+	"exits": ["at", "to", "marker", "fall", "require_flag", "block_flag", "closed_tile", "sound", "fires", "followers"],
+	"hooks": ["id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid", "actor_at", "across", "cells", "actor", "talk_at", "turns", "touch_from"],
 	"shops": ["id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper", "voice", "name"],
 	"rests": ["id", "at", "cost", "keeper", "per_member", "voice", "name"],
 	"chests": ["id", "at", "flag", "items", "equipment", "money"],

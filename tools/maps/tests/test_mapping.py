@@ -233,6 +233,16 @@ class VesselAndChangesTest(TempCase):
 		self.assertEqual("always", back["exits"][0]["fires"])
 		self.assertEqual("place.cot", back["rests"][0]["name"])
 
+	def test_exit_followers_and_actor_hook_rules_survive_a_round_trip(self):
+		area = copy.deepcopy(VESSEL_AREA)
+		area["exits"] = [{"at": [1, 1], "to": "elsewhere", "marker": "door", "followers": "up"}]
+		area["hooks"] = [{"id": "keeper", "at": [1, 0], "event": "e", "talk_at": "actor", "turns": True},
+			{"id": "bump", "trigger": "touch", "event": "e", "actor": "goat", "turns": True, "touch_from": "keys"}]
+		back = self.convert(tiled.area_to_tmj(copy.deepcopy(area), "cells.tsj"))
+		self.assertEqual(areajson.dumps(area), areajson.dumps(back))
+		self.assertEqual("up", back["exits"][0]["followers"])
+		self.assertEqual("keys", back["hooks"][1]["touch_from"])
+
 	def test_a_hooks_actor_cell_survives_a_round_trip(self):
 		area = copy.deepcopy(VESSEL_AREA)
 		area["hooks"] = [{"id": "keeper", "at": [1, 0], "event": "e", "actor_at": [2, 1]}]

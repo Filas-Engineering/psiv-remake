@@ -774,12 +774,23 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 		reader.fail(json, "data.bad_arrive_notice", {arrive});
 	}
 	reader.boolean(json, "party_talk_ambient", c.partyTalkAmbient, false);
-	std::string arriving;
-	reader.text(json, "followers_arrive", arriving, false);
-	if (const int index = arriving.empty() ? 0 : gameEnumIndex("followers_arrive", arriving); index >= 0) {
-		c.followersArrive = static_cast<FollowersArrive>(index);
+	const auto arrival = [&](const char* key, FollowersArrive& out) {
+		std::string arriving;
+		reader.text(json, key, arriving, false);
+		if (const int index = arriving.empty() ? 0 : gameEnumIndex("followers_arrive", arriving); index >= 0) {
+			out = static_cast<FollowersArrive>(index);
+		} else {
+			reader.fail(json, "data.bad_followers_arrive", {arriving});
+		}
+	};
+	arrival("followers_arrive", c.followersArrive);
+	arrival("followers_arrive_other", c.followersArriveOther);
+	std::string talkAt;
+	reader.text(json, "talk_at", talkAt, false);
+	if (const int index = talkAt.empty() ? 0 : gameEnumIndex("talk_at", talkAt); index >= 0) {
+		c.talkAt = static_cast<TalkAt>(index);
 	} else {
-		reader.fail(json, "data.bad_followers_arrive", {arriving});
+		reader.fail(json, "data.bad_talk_at", {talkAt});
 	}
 	std::string fires;
 	reader.text(json, "exit_fires", fires, false);
@@ -1205,7 +1216,9 @@ void checkReferences(const GameData& data, Problems& problems) {
 			problems.add(where, "data.actor_home_marker_missing", {actor.id, actor.area, actor.marker});
 		} else if (actor.at && !home->inside(*actor.at)) {
 			problems.add(where, "data.not_on_map", {"actor '" + actor.id + "'"});
-		} else if (std::any_of(home->hooks.begin(), home->hooks.end(), [&](const Hook& h) { return h.trigger == HookTrigger::Interact && h.id == actor.id; })) {
+		} else if (std::any_of(home->hooks.begin(), home->hooks.end(), [&](const Hook& h) {
+					   return h.trigger == HookTrigger::Interact && h.id == actor.id && (h.actorAt || !h.cells.empty() || h.talkAt.value_or(c.talkAt) != TalkAt::Actor);
+				   })) {
 			problems.add(where, "data.actor_home_twice", {actor.id, actor.area});
 		} else if (actor.wander) {
 			const Cell cell = actor.at ? *actor.at : home->markers.at(actor.marker);
@@ -1331,6 +1344,13 @@ void checkReferences(const GameData& data, Problems& problems) {
 			}
 			if (h.trigger == HookTrigger::Touch && std::find(c.actors.begin(), c.actors.end(), h.actor) == c.actors.end()) {
 				at(h.line, "data.touch_unknown_actor", {h.id, h.actor});
+			}
+			const bool actorHook = h.trigger == HookTrigger::Interact && std::find(c.actors.begin(), c.actors.end(), h.id) != c.actors.end();
+			if (h.talkAt && !actorHook) {
+				at(h.line, "data.talk_at_interact_hooks_only", {h.id});
+			}
+			if (h.turns && h.trigger == HookTrigger::Interact && !actorHook) {
+				at(h.line, "data.turns_actor_hooks_only", {h.id});
 			}
 		}
 		const auto keeperKnown = [&](int line, const std::string& point, const std::string& keeper) {

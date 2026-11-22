@@ -69,7 +69,17 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const G
 		if (!hookIds.insert(h.id).second) {
 			found.add(file, h.line, "check.hook_id_taken", {h.id});
 		}
-		if (h.trigger == HookTrigger::Interact) {
+		const bool onActor = h.trigger == HookTrigger::Interact && !h.actorAt && h.cells.empty() && h.talkAt.value_or(config.talkAt) == TalkAt::Actor &&
+			std::find(actors.begin(), actors.end(), h.id) != actors.end();
+		if (onActor) {
+			// The actor answers where it stands, which starts at its home here or else at the hook's cell; that cell is floor.
+			const auto home = std::find_if(config.actorDefs.begin(), config.actorDefs.end(), [&](const ActorDef& a) { return a.id == h.id && a.area == area.id; });
+			Cell start = h.at;
+			if (home != config.actorDefs.end() && (home->at || area.markers.count(home->marker))) {
+				start = home->at ? *home->at : area.markers.at(home->marker);
+			}
+			uses.push_back({"hook '" + h.id + "'", h.line, {start}, config.interactAcross || h.across});
+		} else if (h.trigger == HookTrigger::Interact) {
 			const std::string what = "hook '" + h.id + "'";
 			addPoint(h.at, what, h.line);
 			for (Cell c : h.cells) {

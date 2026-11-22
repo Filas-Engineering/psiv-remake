@@ -513,6 +513,13 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			} else if (index == -1) {
 				reader.fail(e, "data.bad_exit_fires", {fires});
 			}
+			std::string followers;
+			reader.text(e, "followers", followers, false);
+			if (const int index = followers.empty() ? -2 : gameEnumIndex("followers_arrive", followers); index >= 0) {
+				exit.followers = static_cast<FollowersArrive>(index);
+			} else if (index == -1) {
+				reader.fail(e, "data.bad_followers_arrive", {followers});
+			}
 			checkCell(e, exit.at, "exit");
 			area.exits.push_back(exit);
 		}
@@ -613,6 +620,30 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			} else if (hook.trigger == HookTrigger::Step) {
 				reader.cellField(h, "at", hook.at, true);
 				checkCell(h, hook.at, "hook '" + hook.id + "'");
+			}
+			std::string talkAt;
+			reader.text(h, "talk_at", talkAt, false);
+			if (const int index = talkAt.empty() ? -2 : gameEnumIndex("talk_at", talkAt); index >= 0) {
+				hook.talkAt = static_cast<TalkAt>(index);
+				if (hook.trigger != HookTrigger::Interact || hook.actorAt || !hook.cells.empty()) {
+					reader.fail(h, "data.talk_at_interact_hooks_only", {hook.id});
+				}
+			} else if (index == -1) {
+				reader.fail(h, "data.bad_talk_at", {talkAt});
+			}
+			reader.boolean(h, "turns", hook.turns, false);
+			if (hook.turns && hook.trigger != HookTrigger::Interact && hook.trigger != HookTrigger::Touch) {
+				reader.fail(h, "data.turns_actor_hooks_only", {hook.id});
+			}
+			std::string touchFrom;
+			reader.text(h, "touch_from", touchFrom, false);
+			if (const int index = touchFrom.empty() ? -2 : gameEnumIndex("touch_from", touchFrom); index >= 0) {
+				hook.touchFrom = static_cast<TouchFrom>(index);
+				if (hook.trigger != HookTrigger::Touch) {
+					reader.fail(h, "data.touch_from_touch_hooks_only", {hook.id});
+				}
+			} else if (index == -1) {
+				reader.fail(h, "data.bad_touch_from", {touchFrom});
 			}
 			area.hooks.push_back(hook);
 		}

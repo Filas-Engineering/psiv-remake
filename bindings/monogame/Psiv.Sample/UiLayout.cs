@@ -688,6 +688,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 	// Screen params that take one of two words, the first being what the screen does without the param.
 	private static readonly Dictionary<string, (string A, string B, string What)> WordParams = new()
 	{
+		["click_actor"] = ("walk", "interact", "whether a click on an actor walks up to it and faces it, or also interacts"),
 		["continue"] = ("newest", "choose", "whether Continue loads the newest save or opens the Load list"),
 		["item_order"] = ("items_then_equipment", "equipment_then_items", "whether the Item list puts the bag's items or the worn pieces first"),
 		["macro_flow"] = ("reset", "remember", "whether the menus open at their first row after a macro's round or on Macro and the macro played last"),

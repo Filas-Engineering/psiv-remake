@@ -23,9 +23,10 @@ REQUIRED_MAP_PROPERTIES = ["id"]
 # Per object class: property name to type. "json" is a string property holding JSON text of the given shape.
 OBJECT_PROPERTIES = {
 	"marker": {},
-	"exit": {"to": "string", "marker": "string", "fall": "bool", "require_flag": "string", "block_flag": "string", "closed_tile": "string", "sound": "string", "fires": "string"},
+	"exit": {"to": "string", "marker": "string", "fall": "bool", "require_flag": "string", "block_flag": "string", "closed_tile": "string", "sound": "string", "fires": "string", "followers": "string"},
 	"hook": {"trigger": "string", "event": "string", "require_flag": "string", "block_flag": "string", "once": "bool", "tile": "string", "solid": "string",
-		"actor_at": "json list", "across": "bool", "cells": "json list", "actor": "string"},
+		"actor_at": "json list", "across": "bool", "cells": "json list", "actor": "string", "talk_at": "string", "turns": "bool",
+		"touch_from": "string"},
 	"shop": {"kind": "string", "stock": "json list", "sell_percent": "int", "require_flag": "string", "block_flag": "string", "script_only": "bool", "keeper": "string", "voice": "string", "name": "string"},
 	"rest": {"cost": "int", "script_only": "bool", "keeper": "string", "per_member": "bool", "voice": "string", "name": "string"},
 	"chest": {"flag": "string", "items": "json object", "equipment": "json object", "money": "int"},

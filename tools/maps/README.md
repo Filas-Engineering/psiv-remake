@@ -59,8 +59,8 @@ An object layer. Each object's class (Tiled's Class field, `type` in older versi
 | Class | Name | Properties | Area entry |
 | --- | --- | --- | --- |
 | `marker` | the marker name, unique | none | `markers[name]: [x, y]` |
-| `exit` | ignored | `to` (string), `marker` (string), optional `fall` (bool), `require_flag`, `block_flag`, `closed_tile`, `sound`, `fires` (strings) | `exits[]: {at, to, marker, fall, require_flag, block_flag, closed_tile, sound, fires}` |
-| `hook` | the hook id | `event` (string), optional `trigger`, `require_flag`, `block_flag` (strings), `actor_at` (JSON list `[x, y]`, the cell its actor stands on), `across` (bool), `cells` (JSON list of `[x, y]`, further cells it covers), `actor` (string, a `touch` hook's actor; such a hook has no cell, like `load` and `flag`) | `hooks[]` |
+| `exit` | ignored | `to` (string), `marker` (string), optional `fall` (bool), `require_flag`, `block_flag`, `closed_tile`, `sound`, `fires`, `followers` (strings) | `exits[]: {at, to, marker, fall, require_flag, block_flag, closed_tile, sound, fires, followers}` |
+| `hook` | the hook id | `event` (string), optional `trigger`, `require_flag`, `block_flag` (strings), `actor_at` (JSON list `[x, y]`, the cell its actor stands on), `across` (bool), `cells` (JSON list of `[x, y]`, further cells it covers), `actor` (string, a `touch` hook's actor; such a hook has no cell, like `load` and `flag`), `talk_at`, `touch_from` (strings), `turns` (bool) | `hooks[]` |
 | `shop` | the shop id | `stock` (JSON list), optional `kind`, `require_flag`, `block_flag` (strings), `sell_percent` (int), `script_only` (bool), `keeper` (string, the actor who keeps it), `voice` (string, the keeper's text key prefix), `name` (string, a text key) | `shops[]` |
 | `rest` | the rest point id | optional `cost` (int), `script_only` (bool), `keeper` (string), `per_member` (bool), `voice`, `name` (strings) | `rests[]` |
 | `chest` | the chest id | `flag` (string), optional `items` and `equipment` (JSON objects), `money` (int) | `chests[]` |

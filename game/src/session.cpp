@@ -1466,12 +1466,16 @@ std::optional<Session::ActorHome> Session::actorHome(const Area* area, const std
 	if (!area) {
 		return std::nullopt;
 	}
-	const std::map<std::string, std::size_t>& talkPoints = areaIndex(area->id).talkPoints;
-	if (const auto point = talkPoints.find(actor); point != talkPoints.end() && point->second < area->hooks.size()) {
+	const AreaIndex& index = areaIndex(area->id);
+	const std::map<std::string, std::size_t>& talkPoints = index.talkPoints;
+	const ActorDef* def = actorDef(actor);
+	// A talk point that answers on its actor leaves the actor at its game.json home, where it has one here.
+	const bool homeHere = def && def->area == area->id && (def->at || area->markers.count(def->marker));
+	if (const auto point = talkPoints.find(actor); point != talkPoints.end() && point->second < area->hooks.size() &&
+		!(homeHere && std::find(index.actorTalk.begin(), index.actorTalk.end(), point->second) != index.actorTalk.end())) {
 		const Hook* hook = &area->hooks[point->second];
 		return ActorHome{hook->actorAt.value_or(hook->at), Facing::South, !hook->solidWhileActive || hookHolds(*hook, world_)};
 	}
-	const ActorDef* def = actorDef(actor);
 	if (!def || def->area != area->id) {
 		return std::nullopt;
 	}
@@ -1852,20 +1856,28 @@ std::string Session::enemyActor(int enemyId) const {
 	return "";
 }
 
-const Hook* Session::touchHook(const std::string& actor) const {
+const Hook* Session::touchHook(const std::string& actor, bool deliberate) const {
 	const Area* here = area();
 	if (!here) {
 		return nullptr;
 	}
 	for (const Hook& hook : here->hooks) {
-		if (hook.trigger == HookTrigger::Touch && hook.actor == actor && hookHolds(hook, world_)) {
+		if (hook.trigger == HookTrigger::Touch && hook.actor == actor && (deliberate || hook.touchFrom == TouchFrom::Any) && hookHolds(hook, world_)) {
 			return &hook;
 		}
 	}
 	return nullptr;
 }
 
-const Hook* Session::touchHookAt(Cell cell) const {
+void Session::turnTowardLeader(const std::string& actor) {
+	if (const std::optional<Cell> at = actorCell(actor)) {
+		if (const std::optional<Facing> toward = facingToward(*at, world_.position)) {
+			touchActor(actor).facing = *toward;
+		}
+	}
+}
+
+const Hook* Session::touchHookAt(Cell cell, bool deliberate) const {
 	const Area* here = area();
 	if (!here) {
 		return nullptr;
@@ -1874,7 +1886,7 @@ const Hook* Session::touchHookAt(Cell cell) const {
 	ActorView actor;
 	for (const std::size_t index : areaIndex(here->id).touchActors) {
 		if (actorView(data_.config.actorDefs[index], *here, actor) && actor.visible && actor.cell == cell) {
-			if (const Hook* hook = touchHook(actor.id)) {
+			if (const Hook* hook = touchHook(actor.id, deliberate)) {
 				return hook;
 			}
 		}
@@ -1884,8 +1896,13 @@ const Hook* Session::touchHookAt(Cell cell) const {
 
 // `standing` is actorsHere() as it is now, so the solid actors' cells come from it.
 bool Session::actorMayEnter(const Area& here, const std::string& terrain, Cell next, const std::vector<ActorView>& standing) const {
+	const auto talkPointThere = [&] {
+		const Hook* hook = here.hookAt(next, HookTrigger::Interact);
+		const std::vector<std::size_t>& actorTalk = areaIndex(here.id).actorTalk;
+		return hook && std::find(actorTalk.begin(), actorTalk.end(), static_cast<std::size_t>(hook - here.hooks.data())) == actorTalk.end();
+	};
 	const bool objectThere = objectsMayStand(here, next) &&
-		(here.hookAt(next, HookTrigger::Interact) || here.shopAt(next) || here.restAt(next) || here.chestAt(next) || here.portAt(next) || here.helmAt(next) ||
+		(talkPointThere() || here.shopAt(next) || here.restAt(next) || here.chestAt(next) || here.portAt(next) || here.helmAt(next) ||
 			here.exitAt(next) || here.gangwayAt(next));
 	const bool standingThere = std::any_of(standing.begin(), standing.end(), [&](const ActorView& a) { return a.visible && a.cell == next && !a.onPath; }) ||
 		std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == next; }) || !vehicleAt(next).empty();
@@ -1977,7 +1994,10 @@ void Session::wanderActors(int ms, TickViews& views) {
 		place.facing = f;
 		place.wanderPauseMs = rules.pauseMaxMs > rules.pauseMinMs ? world_.encounterStream.range(rules.pauseMinMs, rules.pauseMaxMs) : rules.pauseMinMs;
 		if (next == world_.position) {
-			if (const Hook* hook = touchHook(def.id); hook && world_.playerControl) {
+			if (const Hook* hook = touchHook(def.id, false); hook && world_.playerControl) {
+				if (hook->turns) {
+					turnTowardLeader(def.id);
+				}
 				startEvent(hook->event);
 				views.stale = true;
 				if (mode() != Mode::Field) {
@@ -2063,7 +2083,10 @@ void Session::patrolActors(int ms, TickViews& views) {
 			place.facing = *toward;
 		}
 		if (*next == world_.position) {
-			if (const Hook* hook = touchHook(def.id); hook && world_.playerControl) {
+			if (const Hook* hook = touchHook(def.id, false); hook && world_.playerControl) {
+				if (hook->turns) {
+					turnTowardLeader(def.id);
+				}
 				startEvent(hook->event);
 				views.stale = true;
 			}
@@ -2509,6 +2532,13 @@ const Session::AreaIndex& Session::areaIndex(const std::string& id) const {
 			index.touchActors.push_back(i);
 		}
 	}
+	for (std::size_t i = 0; i < a->hooks.size(); ++i) {
+		const Hook& h = a->hooks[i];
+		if (h.trigger == HookTrigger::Interact && actorDef(h.id) && !h.actorAt && h.cells.empty() && h.talkAt.value_or(data_.config.talkAt) == TalkAt::Actor) {
+			index.actorTalk.push_back(i);
+			index.gatedHooks = true;
+		}
+	}
 	return index;
 }
 
@@ -2653,6 +2683,10 @@ const Area* Session::areaAt(const std::string& id) const {
 			if ((h.solidWhileActive && !hookStands(h)) || (door && exitOpen(*door, world_))) {
 				passable.insert(h.at);
 			}
+		}
+		// A talk point that answers on its actor's cell is only where the actor starts; the actor blocks where it stands.
+		for (const std::size_t h : index.actorTalk) {
+			passable.insert(base->hooks[h].at);
 		}
 		view->second.first = key;
 	}
@@ -3238,8 +3272,11 @@ void Session::tickField(const FieldInput& input) {
 				return;
 			}
 		}
-		if (const Hook* touch = vehicle ? nullptr : touchHookAt(target)) {
+		if (const Hook* touch = vehicle ? nullptr : touchHookAt(target, !pathStep_)) {
 			stepProgressUs_ = 0;
+			if (touch->turns) {
+				turnTowardLeader(touch->actor);
+			}
 			startEvent(touch->event);
 			if (mode() != Mode::Field) {
 				return;
@@ -3430,6 +3467,7 @@ void Session::arrive(Cell cell) {
 		const std::string marker = boarded->marker;
 		emit(OutputKind::Notice, "game.left_ship");
 		arrivalWalked_ = true;
+		walkedFollowers_ = data_.config.followersArrive;
 		enterArea(shore->id, marker, from);
 		settleField();
 		return;
@@ -3450,6 +3488,7 @@ void Session::arrive(Cell cell) {
 			}
 		}
 		arrivalWalked_ = true;
+		walkedFollowers_ = e.followers.value_or(data_.config.followersArrive);
 		if (!e.sound.empty()) {
 			output_.push_back({OutputKind::Action, {}, "exit sound " + e.sound});
 		}
@@ -3563,6 +3602,8 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 	arrivalWalked_ = false;
 	exitSound_ = pendingExitSound_;
 	pendingExitSound_.clear();
+	arrivalFollowers_ = walkedFollowers_.value_or(data_.config.followersArriveOther);
+	walkedFollowers_.reset();
 	placeFollowers();
 	if (arrivalAnnounced_) {
 		emit(OutputKind::Notice, "game.arrive", {a->id});
@@ -3572,13 +3613,29 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 void Session::placeFollowers() {
 	world_.trail.clear();
 	const Area* a = area();
-	if (data_.config.followersArrive != FollowersArrive::Behind || !a || !world_.aboard.empty()) {
+	if (arrivalFollowers_ == FollowersArrive::Stacked || !a || !world_.aboard.empty()) {
 		return;
 	}
-	const Facing back = static_cast<Facing>((static_cast<int>(world_.facing) + 2) % 4);
+	Facing toward = static_cast<Facing>((static_cast<int>(world_.facing) + 2) % 4);
+	switch (arrivalFollowers_) {
+	case FollowersArrive::Up:
+		toward = Facing::North;
+		break;
+	case FollowersArrive::Down:
+		toward = Facing::South;
+		break;
+	case FollowersArrive::Left:
+		toward = Facing::West;
+		break;
+	case FollowersArrive::Right:
+		toward = Facing::East;
+		break;
+	default:
+		break;
+	}
 	Cell c = world_.position;
 	for (std::size_t i = 0; i < kTrailCells; ++i) {
-		const Cell n = stepFrom(c, back);
+		const Cell n = stepFrom(c, toward);
 		if (!a->walkable(n) || exitOn(*a, n)) {
 			break;
 		}
@@ -3725,7 +3782,7 @@ rules::Message Session::walk(Facing direction, bool running) {
 	const Cell start = world_.position;
 	const Cell target = stepFrom(start, direction);
 	const bool enemyThere = std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; });
-	if (world_.aboard.empty() && touchHookAt(target)) {
+	if (world_.aboard.empty() && touchHookAt(target, !pathStep_)) {
 		// Walking into an actor with a touch hook starts it, once.
 		update(data_.config.tickMs, {true, direction, running});
 		return {};
@@ -3851,10 +3908,12 @@ WalkStatus Session::walkStep(PathWalk& walk) {
 			direction = f;
 		}
 	}
+	pathStep_ = true;
 	if (!this->walk(direction).empty()) {
-		// A visible enemy in the way during the grace period: let the moment pass.
+		// A visible enemy or an actor in the way: let the moment pass.
 		update(data_.config.tickMs);
 	}
+	pathStep_ = false;
 	return WalkStatus::Walking;
 }
 
@@ -3884,14 +3943,29 @@ std::optional<InteractTarget> Session::pointAt(const Area& a, Cell cell, bool& a
 		const auto actor = world_.actors.find(hook.id);
 		return hookHolds(hook, world_) && (actor == world_.actors.end() || actor->second.removed == ActorRemoval::None);
 	};
+	const std::vector<std::size_t>& actorTalk = areaIndex(a.id).actorTalk;
+	const auto onActor = [&](const Hook& hook) {
+		return std::find(actorTalk.begin(), actorTalk.end(), static_cast<std::size_t>(&hook - a.hooks.data())) != actorTalk.end();
+	};
 	// A hook on an exit's cell is a door one talks to while the exit is closed; once it opens the cell is the exit's.
 	const Exit* door = a.exitAt(cell);
-	if (const Hook* hook = a.hookAt(cell, HookTrigger::Interact); hook && !(door && exitOpen(*door, world_))) {
+	if (const Hook* hook = a.hookAt(cell, HookTrigger::Interact); hook && !(door && exitOpen(*door, world_)) && !onActor(*hook)) {
 		t.kind = isActor(hook->id) ? InteractKind::Actor : InteractKind::Talk;
 		t.id = hook->id;
 		t.ready = answers(*hook);
 		acrossable = anyAcross || hook->across;
 		return t;
+	}
+	for (const std::size_t index : actorTalk) {
+		const Hook& hook = a.hooks[index];
+		ActorView actor;
+		if (actorView(*actorDef(hook.id), a, actor) && actor.visible && actor.cell == cell) {
+			t.kind = InteractKind::Actor;
+			t.id = hook.id;
+			t.ready = answers(hook);
+			acrossable = anyAcross || hook.across;
+			return t;
+		}
 	}
 	if (const Chest* chest = a.chestAt(cell)) {
 		t.kind = InteractKind::Chest;
@@ -4133,7 +4207,8 @@ rules::Message Session::interact() {
 	case InteractKind::Talk:
 	case InteractKind::Actor: {
 		const Hook* hook = a.hookAt(target->cell, HookTrigger::Interact);
-		if (!hook) {
+		// An actor may stand on another's talk point that answers on its actor, which is floor.
+		if (!hook || (target->kind == InteractKind::Actor && hook->id != target->id)) {
 			hook = talkPoint(&a, target->id);
 		}
 		if (!hook) {
@@ -4141,6 +4216,9 @@ rules::Message Session::interact() {
 		}
 		if (!target->ready || !hook) {
 			return refusal("no_answer");
+		}
+		if (hook->turns) {
+			turnTowardLeader(hook->trigger == HookTrigger::Touch ? hook->actor : hook->id);
 		}
 		startEvent(hook->event);
 		return {};
