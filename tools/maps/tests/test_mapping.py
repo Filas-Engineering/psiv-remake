@@ -210,6 +210,13 @@ class VesselAndChangesTest(TempCase):
 		self.assertIs(True, back["field_status"])
 		self.assertEqual("raft", back["platforms"][0]["id"])
 
+	def test_an_area_name_as_a_plain_text_key_survives_a_round_trip(self):
+		area = copy.deepcopy(VESSEL_AREA)
+		area["name"] = "area.alt"
+		back = self.convert(tiled.area_to_tmj(copy.deepcopy(area), "cells.tsj"))
+		self.assertEqual(areajson.dumps(area), areajson.dumps(back))
+		self.assertEqual("area.alt", back["name"])
+
 	def test_exit_rules_arrivals_by_origin_field_statuses_and_names_survive_a_round_trip(self):
 		area = copy.deepcopy(VESSEL_AREA)
 		area["arrival"] = area.get("arrival", "deck")

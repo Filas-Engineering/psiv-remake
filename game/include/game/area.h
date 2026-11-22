@@ -292,7 +292,8 @@ struct Area {
 	// `field_paralysis`: rules.json's field paralysis applies to each step taken here (everywhere under its `everywhere`).
 	bool fieldParalysis = false;
 	// `name`: the text key the area shows as, by the area the party came from and by flag, the first entry that holds
-	// (`from` and `flag` both, when both are given), else the entry with neither; empty: `area.<id>`.
+	// (`from` and `flag` both, when both are given), else the entry with neither; empty: `area.<id>`. A plain string is one
+	// entry with neither.
 	struct NameVariant {
 		std::string from;
 		std::string flag;

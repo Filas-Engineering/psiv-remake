@@ -296,7 +296,15 @@ void Battle::useItem(int actor, const Command& command, std::vector<Event>& out)
 		cancel(actor, command, CancelReason::NoItem, "", out);
 		return;
 	}
-	const std::vector<int> targets = executionTargets(actor, item->targeting, item->effects, command.target, out);
+	const bool singleAlly = item->targeting == Targeting::OneAlly || item->targeting == Targeting::OneFallenAlly;
+	const bool namedAlly = singleAlly && command.target >= 0 && command.target < static_cast<int>(combatants_.size()) &&
+		combatants_[command.target].side == combatants_[actor].side && !combatants_[command.target].aboard;
+	std::vector<int> targets = executionTargets(actor, item->targeting, item->effects, command.target, out);
+	const bool noReachSpent = namedAlly && db_->spentOnNoReach(*item) && (targets.empty() || targets == std::vector<int>{command.target}) &&
+		!canAffect(command.target, item->effects);
+	if (noReachSpent) {
+		targets = {command.target};
+	}
 	if (targets.empty()) {
 		cancel(actor, command, CancelReason::NoTarget, "", out);
 		return;
@@ -310,7 +318,8 @@ void Battle::useItem(int actor, const Command& command, std::vector<Event>& out)
 	const bool wasted = item->targeting == Targeting::OneAlly && !combatants_[targets.front()].alive();
 	Attacker flat;
 	flat.groupTarget = item->targeting == Targeting::EnemyGroup || item->targeting == Targeting::AllEnemies;
-	if (!applyEffects(actor, flat, item->id, item->effects, targets, true, out) && !wasted) {
+	const bool applied = !noReachSpent && applyEffects(actor, flat, item->id, item->effects, targets, true, out);
+	if (!applied && (!wasted || noReachSpent)) {
 		Event& kept = emit(out, EventType::ItemHadNoEffect);
 		kept.actor = actor;
 		kept.ability = item->id;

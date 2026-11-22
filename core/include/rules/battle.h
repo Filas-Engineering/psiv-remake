@@ -18,6 +18,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace rules {
@@ -82,6 +83,12 @@ public:
 	Message setCommand(int actor, const Command& command);
 	// What setCommand would answer, without setting anything.
 	Message checkCommand(int actor, const Command& command) const;
+	// The allies a one-ally or one-fallen-ally `command` from `actor` would be refused on with command.no_effect_on_target
+	// (checkCommand with each ally as the target), in combatant order; empty for any other command.
+	std::vector<int> alliesOutOfReach(int actor, const Command& command) const;
+	// For the coming round only: these combatants act first, in this order, ahead of the round's order (the draws are made
+	// as usual). A testing aid: the parts of a combination adjacent on purpose. Recorded with the round.
+	void setLeadOrder(std::vector<int> actors) { leadOrder_ = std::move(actors); }
 	// A party member that does nothing this round: a macro step that lost its turn, or an unnamed member under `none`.
 	bool passing(int actor) const { return actor >= 0 && actor < static_cast<int>(passing_.size()) && passing_[actor]; }
 
@@ -260,6 +267,7 @@ private:
 	std::vector<Command> commands_;
 	std::vector<Command> lastCommands_;
 	std::vector<int> forcedOrder_;
+	std::vector<int> leadOrder_;
 	std::string macroName_;
 	// Per combatant: whether a status supplied this round's command.
 	std::vector<bool> forced_;
@@ -296,6 +304,7 @@ private:
 	friend Result<Battle> replayBattle(const Database& db, const BattleRecord& record, ComboLog& log, std::vector<Event>& events);
 	friend FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& party, Inventory& inventory, const std::string& itemId, int target);
 	friend FieldUse useAbilityOutsideBattle(const Database& db, std::vector<PartyMember>& party, int user, const std::string& abilityId, int target);
+	friend std::vector<int> fieldTargetsOutOfReach(const Database& db, const std::vector<PartyMember>& party, const std::string& id, bool item, int user);
 };
 
 }

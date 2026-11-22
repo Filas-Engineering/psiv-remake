@@ -129,6 +129,13 @@ std::string serializeRecord(const BattleRecord& record) {
 			}
 			s << '\n';
 		}
+		if (!round.leadOrder.empty()) {
+			s << "lead_order";
+			for (int actor : round.leadOrder) {
+				s << ' ' << actor;
+			}
+			s << '\n';
+		}
 	}
 	s << "end\n";
 	const std::string body = s.str();
@@ -276,7 +283,7 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 			RoundInput round;
 			ok = parseInt64(t[1], round.playTimeMs) && text::decode(t[2], round.macroName);
 			record.rounds.push_back(round);
-		} else if ((key == "command" && n == 5) || key == "macro_block" || (key == "pass" && n > 1)) {
+		} else if ((key == "command" && n == 5) || key == "macro_block" || (key == "pass" && n > 1) || (key == "lead_order" && n > 1)) {
 			if (record.rounds.empty()) {
 				return fail("'" + key + "' before any 'round'");
 			}
@@ -286,7 +293,7 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 				ok = parseInt(t[1], c.actor) && parseCommandKind(t[2], c.command.kind) && parseInt(t[4], c.command.target) && text::decode(t[3], c.command.id);
 				round.commands.push_back(c);
 			} else {
-				std::vector<int>& actors = key == "pass" ? round.passed : round.macroBlock;
+				std::vector<int>& actors = key == "pass" ? round.passed : key == "lead_order" ? round.leadOrder : round.macroBlock;
 				for (std::size_t i = 1; i < n && ok; ++i) {
 					int actor = 0;
 					ok = parseInt(t[i], actor);
@@ -361,7 +368,13 @@ Result<Battle> replayBattle(const Database& db, const BattleRecord& record, Comb
 			}
 			battle.passing_[static_cast<std::size_t>(actor)] = true;
 		}
+		for (int actor : round.leadOrder) {
+			if (actor < 0 || actor >= count) {
+				return Result<Battle>::failure(where + "lead order names combatant " + std::to_string(actor));
+			}
+		}
 		battle.forcedOrder_ = round.macroBlock;
+		battle.leadOrder_ = round.leadOrder;
 		battle.macroName_ = round.macroName;
 		battle.playTimeMs_ = round.playTimeMs;
 		const std::vector<Event> roundEvents = battle.resolveRound();

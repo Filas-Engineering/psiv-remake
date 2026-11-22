@@ -47,6 +47,8 @@ struct SaveSummary {
 	bool dev = false;
 	bool damaged = false;
 	std::string error;
+	// The save SaveStore::latest picks (the newest by write time, then sequence, damaged ones aside); one per list at most.
+	bool newest = false;
 };
 
 // The chunked text format described in README.md. Chunks the loader did not recognize are written back from

@@ -105,7 +105,7 @@ static void settle(psiv_session* s) {
 static void testVersion(void) {
 	const char* capabilities = psiv_capabilities();
 	CHECK(capabilities && capabilities == psiv_capabilities() && strncmp(capabilities, "{\"capabilities_schema\": 1, \"versions\": {\"library\": \"", 52) == 0);
-	CHECK(strstr(capabilities, "\"abi\": 18,") && strstr(capabilities, "\"save_schema\": 15,") && strstr(capabilities, "\"picture show <picture>\""));
+	CHECK(strstr(capabilities, "\"abi\": 19,") && strstr(capabilities, "\"save_schema\": 15,") && strstr(capabilities, "\"picture show <picture>\""));
 	CHECK(psiv_abi_version() == PSIV_ABI_VERSION);
 	CHECK(strstr(psiv_version(), "psiv-bindings") != NULL);
 	CHECK(strstr(psiv_version(), "game-0.2") != NULL);
@@ -2748,6 +2748,67 @@ static void testLoadKeysAndDetail(void) {
 	psiv_session_destroy(s);
 }
 
+static void testHostCalls(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/host_calls", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	CHECK(psiv_sizeof("psiv_talk_line") == sizeof(psiv_talk_line) && psiv_sizeof("psiv_inventory_entry") == sizeof(psiv_inventory_entry));
+	const psiv_talk_line* lines = NULL;
+	const char* const* allies = NULL;
+	int32_t count = -1;
+	CHECK(psiv_party_talk_lines(s, NULL, &count) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_party_talk_lines(s, &lines, &count));
+	CHECK(count == 0);
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	/* The fighter alone says nothing; the query shows nothing either way. */
+	CHECK_OK(psiv_party_talk_lines(s, &lines, &count));
+	CHECK(count == 0);
+
+	/* A revive reaches nobody standing, a tonic reaches the fighter. */
+	CHECK_OK(psiv_allies_out_of_reach(s, PSIV_COMMAND_ITEM, "second_wind", NULL, &allies, &count));
+	CHECK(count == 1 && strcmp(allies[0], "fighter") == 0);
+	CHECK_OK(psiv_allies_out_of_reach(s, PSIV_COMMAND_ITEM, "tonic", "", &allies, &count));
+	CHECK(count == 0);
+	CHECK(psiv_allies_out_of_reach(s, 9, "tonic", "", &allies, &count) == PSIV_INVALID_ARGUMENT);
+	CHECK(psiv_allies_out_of_reach(s, PSIV_COMMAND_ITEM, NULL, "", &allies, &count) == PSIV_INVALID_ARGUMENT);
+
+	/* Discard from the field menu; the inventory says what may go. */
+	CHECK(psiv_discard(s, "tonic", 1) == PSIV_REFUSED && errorIs(s, "game.refuse.discard_menu_only"));
+	CHECK_OK(psiv_open_menu(s));
+	const psiv_inventory_entry* bag = NULL;
+	CHECK_OK(psiv_inventory(s, &bag, &count));
+	CHECK(count >= 1 && strcmp(bag[0].id, "tonic") == 0 && bag[0].discardable == 1);
+	CHECK(psiv_discard(s, "tonic", 0) == PSIV_REFUSED && errorIs(s, "game.refuse.discard_one"));
+	CHECK_OK(psiv_discard(s, "tonic", 1));
+	CHECK(psiv_discard(s, "tonic", 1) == PSIV_REFUSED && errorIs(s, "game.refuse.discard_not_held"));
+
+	/* The newest save is marked. */
+	CHECK_OK(psiv_save_manual(s, "manual_1"));
+	CHECK_OK(psiv_save_manual(s, "manual_0"));
+	const psiv_save_summary* list = NULL;
+	CHECK_OK(psiv_saves(s, &list, &count));
+	int newest = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		newest += list[i].newest;
+		CHECK(!list[i].newest || strcmp(list[i].slot, "manual_0") == 0);
+	}
+	CHECK(newest == 1);
+	CHECK_OK(psiv_close_menu(s));
+
+	/* dev combo needs a battle and a member for each part. */
+	CHECK(psiv_dev_combo(s, "storm_spark") == PSIV_REFUSED && errorIs(s, "game.refuse.no_battle"));
+	CHECK_OK(psiv_dev_battle(s, "training"));
+	CHECK(psiv_dev_combo(s, "nothing") == PSIV_REFUSED && errorIs(s, "game.refuse.combo_not_found"));
+	CHECK(psiv_dev_combo(s, "storm_spark") == PSIV_REFUSED && errorIs(s, "game.refuse.combo_no_member"));
+	CHECK(psiv_dev_combo(s, NULL) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_allies_out_of_reach(s, PSIV_COMMAND_ITEM, "second_wind", "fighter", &allies, &count));
+	CHECK(count == 1 && strcmp(allies[0], "fighter") == 0);
+	psiv_session_destroy(s);
+}
+
 int main(int argc, char** argv) {
 	for (int i = 1; i + 1 < argc; i += 2) {
 		if (strcmp(argv[i], "--data") == 0) {
@@ -2809,6 +2870,7 @@ int main(int argc, char** argv) {
 	testFollowersKindsAndUses();
 	testFells();
 	testCogwayAndFormations();
+	testHostCalls();
 	if (failures) {
 		fprintf(stderr, "%d of %d checks failed\n", failures, checks);
 		return 1;

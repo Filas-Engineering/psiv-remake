@@ -62,6 +62,14 @@ std::vector<int> Battle::computeTurnOrder() {
 			std::rotate(later, later + 1, earlier + 1);
 		}
 	}
+	auto front = order.begin();
+	for (int actor : leadOrder_) {
+		const auto at = std::find(front, order.end(), actor);
+		if (at != order.end()) {
+			std::rotate(front, at, at + 1);
+			++front;
+		}
+	}
 	return order;
 }
 

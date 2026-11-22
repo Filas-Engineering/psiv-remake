@@ -21,6 +21,8 @@ struct RoundInput {
 	std::int64_t playTimeMs = 0;
 	// Party combatants that did nothing by choice (Battle::passing); written only when there are any.
 	std::vector<int> passed;
+	// Battle::setLeadOrder's combatants, who acted first; written only when set.
+	std::vector<int> leadOrder;
 };
 
 struct BattleRecord {

@@ -31,6 +31,9 @@ struct BattleRules {
 	bool fieldParalysisEverywhere = false;
 	// `consume_when_no_effect`: a consumable item whose effects changed nothing is used up, in battle and in the field.
 	bool consumeWhenNoEffect = false;
+	// `item_no_reach: consume`: an item used up when it changes nothing is also used up, with its no-effect event, on a
+	// single ally its effects cannot reach, which `refuse` (the default) refuses with nothing spent.
+	bool itemNoReachConsumes = false;
 	// What an affinity is divided by when it scales damage: 100 makes affinities percents.
 	int affinityDivisor = 100;
 	// The affinity a hit without an element takes, and a defending target's for it; unset, the divisor and

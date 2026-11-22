@@ -410,7 +410,12 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	if (!area.arrivalFrom.empty() && !area.arrivalNotFrom.empty()) {
 		reader.fail(json, "data.arrival_from_and_not_from", {});
 	}
-	if (const JsonValue* names = reader.field(json, "name", JsonValue::Type::Array, false)) {
+	if (const JsonValue* plain = json.find("name"); plain && plain->is(JsonValue::Type::String)) {
+		Area::NameVariant v;
+		v.line = plain->line;
+		reader.text(json, "name", v.key, true);
+		area.names.push_back(v);
+	} else if (const JsonValue* names = reader.field(json, "name", JsonValue::Type::Array, false)) {
 		bool fallback = false;
 		for (const JsonValue& n : names->items) {
 			reader.only(n, gameKeys("area", "name[]"));

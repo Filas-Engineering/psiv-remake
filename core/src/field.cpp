@@ -135,7 +135,23 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 	const std::vector<Effect> effects = fieldEffects(item->effects);
 	const std::vector<int> targets = battle.resolveTargets(user, item->targeting, target, effectsRevive(effects), effectsTakeLiving(effects), &effects);
 	if (targets.empty() || (chosen && needsTarget(item->targeting) && !battle.canAffect(target, effects))) {
-		return refuse("field.no_target", {itemId});
+		if (!chosen || !needsTarget(item->targeting) || !db.spentOnNoReach(*item)) {
+			return refuse("field.no_target", {itemId});
+		}
+		Event kept;
+		kept.type = EventType::ItemHadNoEffect;
+		kept.ability = item->id;
+		use.events.push_back(kept);
+		if (--stock->second == 0) {
+			inventory.erase(stock);
+		}
+		Event spent;
+		spent.type = EventType::ResourceSpent;
+		spent.ability = item->id;
+		spent.resource = ResourceKind::Item;
+		spent.amount = 1;
+		use.events.push_back(spent);
+		return use;
 	}
 	if (!battle.applyEffects(-1, Battle::Attacker(), item->id, effects, targets, true, use.events)) {
 		Event& kept = battle.emit(use.events, EventType::ItemHadNoEffect);
@@ -156,6 +172,31 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 	spent.amount = 1;
 	writeBack(battle, party);
 	return use;
+}
+
+std::vector<int> fieldTargetsOutOfReach(const Database& db, const std::vector<PartyMember>& party, const std::string& id, bool item, int user) {
+	const ItemDef* itemDef = item ? db.item(id) : nullptr;
+	const AbilityDef* ability = item ? nullptr : db.ability(id);
+	std::vector<int> out;
+	if ((!itemDef && !ability) || party.empty() || !checkParty(db, party).empty() || (itemDef && db.spentOnNoReach(*itemDef))) {
+		return out;
+	}
+	const Targeting targeting = itemDef ? itemDef->targeting : ability->targeting;
+	const bool field = itemDef ? itemDef->field : ability->field;
+	const std::vector<Effect>& all = itemDef ? itemDef->effects : ability->effects;
+	if (!field || !needsTarget(targeting) || travelEffect(all) || (itemDef && teachEffect(all))) {
+		return out;
+	}
+	const Battle battle = Battle::partyOnly(db, party);
+	const std::vector<Effect> effects = fieldEffects(all);
+	for (int target = 0; target < static_cast<int>(party.size()); ++target) {
+		const int from = itemDef || user < 0 || user >= static_cast<int>(party.size()) ? target : user;
+		const std::vector<int> targets = battle.resolveTargets(from, targeting, target, effectsRevive(effects), effectsTakeLiving(effects), &effects);
+		if (targets.empty() || !battle.canAffect(target, effects)) {
+			out.push_back(target);
+		}
+	}
+	return out;
 }
 
 FieldUse useAbilityOutsideBattle(const Database& db, std::vector<PartyMember>& party, int user, const std::string& abilityId, int target) {

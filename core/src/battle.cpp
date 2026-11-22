@@ -381,6 +381,9 @@ Message Battle::checkCommand(int actor, const Command& command) const {
 		if (actor == vehicleIndex_) {
 			return {"command.vehicle_cannot", {c.defId, toString(command.kind)}};
 		}
+		if (db_->spentOnNoReach(*db_->item(command.id))) {
+			break;
+		}
 		if (const Message refused = checkAllyTarget(actor, db_->item(command.id)->targeting, db_->item(command.id)->effects, command); !refused.key.empty()) {
 			return refused;
 		}
@@ -403,6 +406,24 @@ Message Battle::checkCommand(int actor, const Command& command) const {
 		break;
 	}
 	return {};
+}
+
+std::vector<int> Battle::alliesOutOfReach(int actor, const Command& command) const {
+	std::vector<int> out;
+	if (actor < 0 || actor >= static_cast<int>(combatants_.size())) {
+		return out;
+	}
+	for (int ally = 0; ally < static_cast<int>(combatants_.size()); ++ally) {
+		if (combatants_[ally].side != combatants_[actor].side || combatants_[ally].aboard) {
+			continue;
+		}
+		Command aimed = command;
+		aimed.target = ally;
+		if (checkCommand(actor, aimed).key == "command.no_effect_on_target") {
+			out.push_back(ally);
+		}
+	}
+	return out;
 }
 
 bool Battle::startAuto(const Macro& macro, MacroTrouble mode) {
@@ -514,6 +535,7 @@ std::vector<Event> Battle::resolveRound() {
 		}
 	}
 	input.macroBlock = forcedOrder_;
+	input.leadOrder = leadOrder_;
 	input.macroName = macroName_;
 	input.playTimeMs = playTimeMs_;
 	record_.rounds.push_back(input);
@@ -602,6 +624,7 @@ std::vector<Event> Battle::resolveRound() {
 	std::fill(commands_.begin(), commands_.end(), Command());
 	std::fill(passing_.begin(), passing_.end(), false);
 	forcedOrder_.clear();
+	leadOrder_.clear();
 	macroName_.clear();
 	return out;
 }

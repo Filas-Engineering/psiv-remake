@@ -468,8 +468,10 @@ psiv_inventory_entry entryFor(Session& s, const std::string& id, int count) {
 		e.equipment = 0;
 		e.field = item->field;
 		e.targeting_or_slot = static_cast<int32_t>(item->targeting);
+		e.discardable = item->discardable;
 	} else if (const rules::EquipmentDef* piece = db.equipmentPiece(id)) {
 		e.equipment = 1;
+		e.discardable = 1;
 		e.targeting_or_slot = static_cast<int32_t>(piece->slot);
 		e.hands = piece->hands;
 	}
@@ -519,6 +521,7 @@ uint32_t psiv_sizeof(const char* struct_name) {
 		PSIV_SIZE(psiv_vehicle), PSIV_SIZE(psiv_travel_destination), PSIV_SIZE(psiv_event_position), PSIV_SIZE(psiv_zone), PSIV_SIZE(psiv_element_info),
 		PSIV_SIZE(psiv_route_cell), PSIV_SIZE(psiv_interact_target), PSIV_SIZE(psiv_field_input), PSIV_SIZE(psiv_profile_row), PSIV_SIZE(psiv_scene_camera),
 		PSIV_SIZE(psiv_platform), PSIV_SIZE(psiv_battle_keys), PSIV_SIZE(psiv_macro_step_check), PSIV_SIZE(psiv_macro_trouble_report), PSIV_SIZE(psiv_follower_cell),
+		PSIV_SIZE(psiv_talk_line),
 	};
 #undef PSIV_SIZE
 	if (!struct_name) {
@@ -1254,6 +1257,7 @@ psiv_status psiv_saves(psiv_session* session, const psiv_save_summary** out, int
 			items[i].damaged = s.damaged;
 			items[i].error = session->arena.str(s.error);
 			items[i].dev = s.dev;
+			items[i].newest = s.newest;
 		}
 		*out = items;
 		*count = static_cast<int32_t>(list.size());
@@ -1448,6 +1452,23 @@ psiv_status psiv_leave_vehicle(psiv_session* session) {
 
 psiv_status psiv_party_talk(psiv_session* session) {
 	return guard(session, true, [&] { return refused(session, session->session->partyTalk()); });
+}
+
+psiv_status psiv_party_talk_lines(psiv_session* session, const psiv_talk_line** out, int32_t* count) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		const std::vector<game::TalkLineView> lines = session->session->partyTalkLines();
+		psiv_talk_line* list = session->arena.array<psiv_talk_line>(lines.size());
+		for (std::size_t i = 0; i < lines.size(); ++i) {
+			Arena& a = session->arena;
+			list[i] = {a.str(lines[i].speaker), a.str(lines[i].speakerName), a.str(lines[i].textId), a.str(lines[i].text)};
+		}
+		*out = list;
+		*count = static_cast<int32_t>(lines.size());
+		return PSIV_OK;
+	});
 }
 
 psiv_status psiv_field_info_get(psiv_session* session, psiv_field_info* out) {
@@ -2830,6 +2851,16 @@ psiv_status psiv_sell(psiv_session* session, const char* id, int32_t count) {
 	});
 }
 
+psiv_status psiv_discard(psiv_session* session, const char* id, int32_t count) {
+	const std::string name = str(id);
+	return guard(session, true, [&] {
+		if (!id) {
+			return nullArgument(session, "id");
+		}
+		return refused(session, session->session->discard(name, count));
+	});
+}
+
 psiv_status psiv_rest(psiv_session* session) {
 	return guard(session, true, [&] { return refused(session, session->session->rest()); });
 }
@@ -2857,6 +2888,26 @@ psiv_status psiv_use_ability(psiv_session* session, const char* user, const char
 			return nullArgument(session, "ability");
 		}
 		return refused(session, session->session->useAbility(userId, abilityId, memberId));
+	});
+}
+
+psiv_status psiv_allies_out_of_reach(psiv_session* session, int32_t kind, const char* id, const char* user, const char* const** out, int32_t* count) {
+	const std::string thing = str(id);
+	const std::string userId = str(user);
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		if (!id) {
+			return nullArgument(session, "id");
+		}
+		if (kind < 0 || kind > PSIV_COMMAND_ESCAPE) {
+			return outOfRange(session, "kind", kind);
+		}
+		const std::vector<std::string> allies = session->session->alliesOutOfReach(static_cast<rules::CommandKind>(kind), thing, userId);
+		*out = session->arena.strs(allies);
+		*count = static_cast<int32_t>(allies.size());
+		return PSIV_OK;
 	});
 }
 
@@ -3287,6 +3338,16 @@ psiv_status psiv_dev_money(psiv_session* session, int32_t amount) {
 
 psiv_status psiv_dev_rest(psiv_session* session) {
 	return guard(session, true, [&] { return refused(session, session->session->devRest()); });
+}
+
+psiv_status psiv_dev_combo(psiv_session* session, const char* recipe) {
+	const std::string id = str(recipe);
+	return guard(session, true, [&] {
+		if (!recipe) {
+			return nullArgument(session, "recipe");
+		}
+		return refused(session, session->session->devCombo(id));
+	});
 }
 
 psiv_status psiv_dev_set_level(psiv_session* session, const char* member, int32_t level) {

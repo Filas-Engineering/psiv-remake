@@ -49,6 +49,9 @@ struct Database {
 	const Encounter* encounter(const std::string& id) const;
 	const DifficultyDef* difficulty(const std::string& id) const;
 	const Macro* macro(const std::string& name) const;
+	// Whether the item, used on a single ally its effects cannot reach, is spent with no effect instead of refused: it is
+	// consumed, used up when it changes nothing, and rules.json's item_no_reach is consume.
+	bool spentOnNoReach(const ItemDef& item) const;
 	// Built-in elements, then the declared ones; none is not listed.
 	std::vector<std::string> elementIds() const;
 	bool hasElement(const Element& element) const;

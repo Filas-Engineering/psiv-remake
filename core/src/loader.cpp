@@ -540,6 +540,12 @@ void parseRules(Reader& reader, const JsonValue& root, Database& db) {
 			reader.fail(*root.find("macro_ally_pick"), "load.unknown_choice", {"macro_ally_pick", choice, "original, would_change"});
 		}
 	}
+	if (reader.string(root, "item_no_reach", choice, false)) {
+		rules.itemNoReachConsumes = choice == "consume";
+		if (choice != "consume" && choice != "refuse") {
+			reader.fail(*root.find("item_no_reach"), "load.unknown_choice", {"item_no_reach", choice, "refuse, consume"});
+		}
+	}
 	if (reader.string(root, "auto_policy", choice, false)) {
 		rules.autoExpected = choice == "expected";
 		if (choice != "expected" && choice != "power") {
@@ -863,6 +869,7 @@ void parseItems(Reader& reader, const JsonValue& root, Database& db) {
 			reader.boolean(*entry, "consume_when_no_effect", consume);
 			item.consumeWhenNoEffect = consume;
 		}
+		reader.boolean(*entry, "discardable", item.discardable);
 		reader.string(*entry, "name", item.name);
 		readTargeting(reader, *entry, item.targeting);
 		parseEffects(reader, db, *entry, true, false, item.effects);

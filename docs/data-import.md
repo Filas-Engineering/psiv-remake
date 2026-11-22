@@ -65,6 +65,7 @@ The shipped values below are the placeholder's or the library's defaults, not th
 | `field_poison_every`, `field_poison_status` | 0 (off), `poison` | hit points poison takes per field steps |
 | `field_paralysis` | off | paralysis wearing off by field steps (`from`, `chance`, `by`, `everywhere`) |
 | `consume_when_no_effect` | false | whether an item that changed nothing is used up |
+| `item_no_reach` | `refuse` | whether such an item, used on an ally its effects cannot reach, is spent with no effect (`consume`) instead of refused |
 
 `game.json` (game; [game/README.md](../game/README.md#gamejson)):
 
@@ -92,7 +93,7 @@ The shipped values below are the placeholder's or the library's defaults, not th
 | `exit_fires` | `from_floor` | whether a step from another exit cell takes an exit |
 | `followers_arrive` | `stacked` | where followers stand after an area entry |
 
-Per file: an area's `step_ms` (250), `encounter_mode` (`visible`) and its zones' `visible` values (the ENC-012/013 defaults) and `random` `min_steps`/`max_steps` (12/24), `step_distance`, `grace_steps`, `step_chance`; `presentation.flash_default` (`reduced`) and `flash_original`, `presentation.music.fade_ms` (the host's own); `party.json` characters' growth, `experience_table` and `level_stats` (the level cap is 99); `difficulties.json` presets; the text speeds a host offers (the profile's, not data).
+Per file: an area's `step_ms` (250), `encounter_mode` (`visible`) and its zones' `visible` values (the ENC-012/013 defaults) and `random` `min_steps`/`max_steps` (12/24), `step_distance`, `grace_steps`, `step_chance`; `presentation.flash_default` (`reduced`) and `flash_original`, `presentation.music.fade_ms` (the host's own); `party.json` characters' growth, `experience_table` and `level_stats` (the level cap is 99); `difficulties.json` presets; items.json `discardable` (true: the game's discard may throw any item away; mark story items false); the text speeds a host offers (the profile's, not data).
 
 ## Core battle data
 

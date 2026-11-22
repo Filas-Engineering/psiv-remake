@@ -96,6 +96,8 @@ struct ItemDef {
 	bool consumed = true;
 	// `consume_when_no_effect`: used up even when its effects changed nothing; unset, rules.json's.
 	std::optional<bool> consumeWhenNoEffect = std::nullopt;
+	// `discardable`: false keeps the game's discard from throwing it away (a story item).
+	bool discardable = true;
 };
 
 bool effectsRevive(const std::vector<Effect>& effects);

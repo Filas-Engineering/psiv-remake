@@ -240,6 +240,7 @@ public class NativeLayoutTests
 		Same<PsivMacroStepCheck>("psiv_macro_step_check");
 		Same<PsivMacroTroubleReport>("psiv_macro_trouble_report");
 		Same<PsivFollower>("psiv_follower_cell");
+		Same<PsivTalkLine>("psiv_talk_line");
 		Assert.Equal(0u, Native.SizeOf("no_such_struct"));
 	}
 
@@ -652,6 +653,29 @@ public class SessionTests
 		Assert.True(detail.Attack >= detail.BaseStats!.Strength);
 		Assert.Equal(CreatureKind.Living, detail.Kind);
 		Assert.True(detail.ExperienceForLevel >= detail.ExperienceToNext);
+	}
+
+	[Fact]
+	public void DiscardTheQueryForAlliesOutOfReachTalkLinesTheNewestSaveAndDevCombo()
+	{
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = Paths.FreshDirectory("host_calls"), Seed = 285 });
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.Empty(s.PartyTalkLines());
+		Assert.Equal(new[] { "fighter" }, s.AlliesOutOfReach(CommandKind.Item, "second_wind"));
+		Assert.Empty(s.AlliesOutOfReach(CommandKind.Item, "tonic"));
+		Assert.Equal("game.refuse.discard_menu_only", s.Discard("tonic").Error!.Key);
+		Assert.True(s.OpenMenu().Ok);
+		Assert.True(s.Inventory().Single(e => e.Id == "tonic").Discardable);
+		Assert.True(s.Discard("tonic").Ok);
+		Assert.DoesNotContain(s.Inventory(), e => e.Id == "tonic");
+		Assert.True(s.SaveManual("manual_1").Ok);
+		Assert.True(s.SaveManual("manual_0").Ok);
+		Assert.Equal("manual_0", s.Saves()!.Single(x => x.Newest).Slot);
+		Assert.True(s.CloseMenu().Ok);
+		Assert.Equal("game.refuse.no_battle", s.DevCombo("storm_spark").Error!.Key);
+		Assert.True(s.DevBattle("training").Ok);
+		Assert.Equal("game.refuse.combo_no_member", s.DevCombo("storm_spark").Error!.Key);
 	}
 
 	[Fact]

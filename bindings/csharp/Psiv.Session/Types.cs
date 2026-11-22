@@ -170,9 +170,10 @@ public sealed record Difficulty(string Id, string Name, string Description, int 
 // Every preset in id order; CanChange says SetSettings would accept a change now (a game in progress, outside battle).
 public sealed record Difficulties(IReadOnlyList<Difficulty> Presets, bool CanChange);
 
-// Dev: developer tools marked the saved game.
+// Dev: developer tools marked the saved game. Newest: the save Continue loads (latest WriteTime, then Sequence, damaged
+// ones aside), at most one per list.
 public sealed record SaveSummary(string Slot, string Area, long PlayTimeMs, IReadOnlyList<string> Party, string Difficulty, long WriteTime, ulong Sequence, bool Autosave, bool Damaged, string Error,
-	bool Dev);
+	bool Dev, bool Newest = false);
 
 // Dev: developer tools marked the game. Encounters: false while DevEncounters has turned battles off for this session.
 public sealed record WorldInfo(Mode Mode, MenuKind MenuKind, int Money, long PlayTimeMs, int AutosaveCount, bool GameOver, bool CanRetry, bool PlayerControl,
@@ -222,6 +223,9 @@ public enum ExitFires { FromFloor, Always }
 
 // One who walks behind the leader (a lineup member after the first, then the follower actor) and its cell on the leader's trail.
 public sealed record Follower(string Id, int X, int Y);
+
+// A party talk line for a host's own page: the speaker's id and shown name, the line's string id and its text.
+public sealed record TalkLine(string Speaker, string SpeakerName, string TextId, string Text);
 
 // What the running event shows next (GameSession.NextEventOutput).
 public enum NextOutput { None, Line, Choice, End, Other }
@@ -392,9 +396,9 @@ public sealed record ComboEntry(string Recipe, string Result, string ResultName,
 public sealed record ComboLog(IReadOnlyList<ComboEntry> Entries, int Total);
 
 // Travel: the kind Travel takes a travelling item with, null for others. CallsVehicle: the vehicle an item calls, "" for
-// others. Hands: 2 for a two-handed weapon, 1 for other pieces, 0 for items.
+// others. Hands: 2 for a two-handed weapon, 1 for other pieces, 0 for items. Discardable: Discard may throw it away.
 public sealed record InventoryEntry(string Id, string Name, int Count, bool IsEquipment, bool Field, int TargetingOrSlot, int Price, TravelKind? Travel,
-	string CallsVehicle = "", int Hands = 0)
+	string CallsVehicle = "", int Hands = 0, bool Discardable = true)
 {
 	public Targeting Targeting => (Targeting)TargetingOrSlot;
 	public EquipSlot Slot => (EquipSlot)TargetingOrSlot;

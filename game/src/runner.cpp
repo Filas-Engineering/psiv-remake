@@ -490,6 +490,8 @@ void Runner::dev(const std::vector<std::string>& w) {
 		report(session_.devSetLevel(w[2], n));
 	} else if (w[1] == "vehicle" && w.size() == 5) {
 		report(session_.devVehicle(w[2], w[3], w[4]));
+	} else if (w[1] == "combo" && w.size() == 3) {
+		report(session_.devCombo(w[2]));
 	} else {
 		error("unknown dev command");
 	}
@@ -902,6 +904,8 @@ bool Runner::execute(const std::string& rawLine) {
 		} else {
 			report(session_.unequip(w[1], slot));
 		}
+	} else if (cmd == "discard" && (w.size() == 2 || (w.size() == 3 && toInt(w[2], count)))) {
+		report(session_.discard(w[1], count));
 	} else if ((cmd == "buy" || cmd == "sell") && (w.size() == 2 || (w.size() == 3 && toInt(w[2], count)))) {
 		report(cmd == "buy" ? session_.buy(w[1], count) : session_.sell(w[1], count));
 	} else if (cmd == "rest") {

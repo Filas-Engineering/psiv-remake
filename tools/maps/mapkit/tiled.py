@@ -14,7 +14,7 @@ TILE_IDS = {"floor": 0, "wall": 1, "water": 2, "soft": 3, "barrier": 4, "counter
 FLIP_BITS = 0xF0000000
 MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "number", "music": "string", "region": "string", "arrival": "string",
 	"arrival_from": "json list", "arrival_not_from": "json list", "dungeon_exit": "json object", "arrive_notice": "bool or json", "field_status": "bool",
-	"field_poison": "bool", "field_paralysis": "bool", "name": "json list", "counters": "json list", "platforms": "json list"}
+	"field_poison": "bool", "field_paralysis": "bool", "name": "string or json list", "counters": "json list", "platforms": "json list"}
 # Map properties in the area format's order, as the importer copies them and the exporter writes them.
 AREA_PROPERTIES = ("kind", "encounter_mode", "step_ms", "music", "region", "arrival", "arrival_from", "arrival_not_from", "dungeon_exit", "arrive_notice", "field_status",
 	"field_poison", "field_paralysis", "name", "counters", "platforms")
@@ -130,6 +130,20 @@ def _typed(props, schema, where, problems):
 			if not isinstance(value, (list, dict)):
 				problems.append(f"{where}: property '{name}' must be a bool property or hold a JSON list or object")
 				continue
+		elif want == "string or json list":
+			# An area's name: a text key, or its variants as a JSON list.
+			if kind != "string" or not isinstance(value, str) or value == "":
+				problems.append(f"{where}: property '{name}' must be a string property")
+				continue
+			if value.lstrip().startswith("["):
+				try:
+					value = json.loads(value)
+				except json.JSONDecodeError as e:
+					problems.append(f"{where}: property '{name}' is not valid JSON text: {e.msg} at character {e.pos}")
+					continue
+				if not isinstance(value, list):
+					problems.append(f"{where}: property '{name}' must hold a JSON list")
+					continue
 		elif want == "bool":
 			if kind != "bool" or not isinstance(value, bool):
 				problems.append(f"{where}: property '{name}' must be a bool property")

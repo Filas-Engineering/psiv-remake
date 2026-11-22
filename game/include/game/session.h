@@ -291,6 +291,14 @@ enum class ItemSort { Id, Kind, Name, Count };
 
 const char* toString(ItemSort sort);
 
+// A party talk line for a host's own page: the speaker's id and shown name, the line's string id and its text.
+struct TalkLineView {
+	std::string speaker;
+	std::string speakerName;
+	std::string textId;
+	std::string text;
+};
+
 struct BagEntry {
 	std::string id;
 	int count = 0;
@@ -711,6 +719,9 @@ public:
 	// also comes up by itself, as Ambient output, the first time control returns to the field in an area under it while
 	// the profile's ambient talk is on (FLD-073); World::ambientHeard keeps which ones have.
 	rules::Message partyTalk();
+	// The lines partyTalk would show now, with their speakers, from any mode with a game; nothing is shown, heard or
+	// changed. Empty when nobody talks (and at the title).
+	std::vector<TalkLineView> partyTalkLines() const;
 
 	// Event
 	bool linePending() const;
@@ -795,11 +806,20 @@ public:
 	int restCost(const RestPoint& point) const;
 	rules::Message buy(const std::string& id, int count);
 	rules::Message sell(const std::string& id, int count);
+	// From the field menu: throws `count` of an item or an unworn equipment piece away (notice game.discarded). Refused for
+	// an item whose data says `discardable: false`, for fewer than one and for more than the bag holds.
+	rules::Message discard(const std::string& id, int count);
 	rules::Message rest();
 	// Field use through core (BAT-044). `member` is a character id of the active party, or empty for items and
 	// techniques that work on everyone. An item that would change nothing is not used up.
 	rules::Message useItem(const std::string& item, const std::string& member);
 	rules::Message useAbility(const std::string& user, const std::string& ability, const std::string& member);
+	// The lineup members a one-ally or one-fallen-ally ability or item (`kind` Ability or Item) used by `user` would be
+	// refused on because nothing in it can reach them, so a host can grey them before the player picks: in a live battle
+	// those setCommand refuses with command.no_effect_on_target (rules::Battle::alliesOutOfReach), elsewhere those field use
+	// refuses with field.no_target (rules::fieldTargetsOutOfReach; `user` matters for abilities only). Empty for other
+	// targetings, kinds and unknown ids.
+	std::vector<std::string> alliesOutOfReach(rules::CommandKind kind, const std::string& id, const std::string& user) const;
 	rules::Message equip(const std::string& member, const std::string& equipment);
 	// At a position the piece fits: a hand for weapons and shields (P10).
 	rules::Message equip(const std::string& member, const std::string& equipment, rules::EquipSlot position);
@@ -878,6 +898,11 @@ public:
 	// Ends the live battle: every enemy (victory) or every party combatant (defeat) falls, then a round resolves, so the
 	// battle ends the way that round's outcome leads. `events` gets the round's events.
 	rules::Message devEndBattle(bool victory, std::vector<rules::Event>* events = nullptr);
+	// In a battle, for testing: the recipe's abilities as this round's commands of lineup members who know them now (each
+	// component's tied character when it has one), acting first and in the recipe's order (rules::Battle::setLeadOrder), so
+	// the combination fires when the round resolves unless a part cannot be paid for or its member cannot act. Other
+	// members' commands stand.
+	rules::Message devCombo(const std::string& recipe);
 	// Gives the party a vehicle with field rules, or moves one it has, to a marker of a field area; from the field.
 	rules::Message devVehicle(const std::string& vehicle, const std::string& area, const std::string& marker);
 	// Turns random battles, battles aboard and visible enemies' battles off or on for this session (not saved).

@@ -2,6 +2,16 @@
 
 One line per feature, newest first: name, kind, meaning. Each pass adds its lines at the top.
 
+* `Session::discard`, `psiv_discard`, `GameSession.Discard`, game_cli `discard ID [N]`, items.json `discardable` (session, C API, C#, tool, data key, default true): throw items or unworn pieces away from the field menu, never an item marked `discardable: false`; notice `game.discarded`, refusals `game.refuse.discard_menu_only`, `discard_one`, `discard_not_held`, `not_discardable` in `en` and `ja`; `psiv_inventory_entry.discardable` (R177).
+* `Session::alliesOutOfReach`, `rules::Battle::alliesOutOfReach`, `rules::fieldTargetsOutOfReach`, `psiv_allies_out_of_reach`, `GameSession.AlliesOutOfReach` (session, core, C API, C#): the lineup members a one-ally ability or item would be refused on because nothing in it reaches them, in battle and in the field (R178).
+* `SaveSummary::newest`, `psiv_save_summary.newest`, `SaveSummary.Newest` (save, C API, C#): the save Continue loads, beside the write time (R179).
+* `Session::partyTalkLines`, `TalkLineView`, `psiv_party_talk_lines`, `psiv_talk_line`, `GameSession.PartyTalkLines` (session, C API, C#): party talk lines with speaker ids from any mode, nothing shown or marked (R180).
+* `dev combo RECIPE`, `Session::devCombo`, `rules::Battle::setLeadOrder`, record `lead_order` line, `psiv_dev_combo`, `GameSession.DevCombo` (tool, session, core, C API, C#; dev): a combination's parts as commands leading the round, so it fires; marks the game (R181).
+* rules.json `item_no_reach` (`refuse` default, `consume`; data key) and `Database::spentOnNoReach`: an item used up when it changes nothing is spent with its no-effect event on an ally it cannot reach instead of refused, in battle and in the field (R182).
+* area `name` as a plain text key (area key, also in `tools/maps`): one variant with neither `from` nor `flag` (R183).
+* text keys `ui.battle.stat.attack`, `ui.battle.stat.magic_defense`, `ui.action.extras`, `ui.action.system`, `ui.menu.tab.abilities`, `extras`, `party_talk`, `skills`, `system`, `techniques`, `ui.menu.party_talk`, `ui.menu.open_extras`, `ui.extras.title`, `dev`, `photosensitivity` (data, `en` and `ja`; `glyphs_ja.txt` gains 捨): the words the MonoGame sample kept as its own (R184).
+* `PSIV_ABI_VERSION` 19, `Native.AbiVersion` 19, library 0.18.0 (versions).
+
 * exits' rule (behavior, default changed): an exit takes the leader only on a step from a cell that is no exit, so a party that arrives on a multi-cell exit walks across it and leaves by stepping off and back on; pits still drop the party from any cell (R161).
 * game.json `exit_fires` (`from_floor` default, `always`) and exit `fires` (data keys): today's rule back for the game, or one exit that fires on any step (map-edge exits) (R161).
 * path walking and the data check by the exits' rule (session, check): `walkStep` and game_cli `walk` cross exit cells a step would not leave by and take one that would only as the goal; the check's reach walk does the same and counts a multi-cell exit used from any of its cells (R161).

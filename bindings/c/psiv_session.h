@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 18
+#define PSIV_ABI_VERSION 19
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -494,6 +494,9 @@ typedef struct psiv_save_summary {
 	const char* error;
 	/* 1 when developer tools marked the saved game (see "Developer tools" below). */
 	int32_t dev;
+	/* 1 for the newest save, the one psiv_continue_game loads: the latest write time, then the highest sequence, damaged slots
+	 * aside; at most one per list. write_time is seconds from the session's clock. */
+	int32_t newest;
 } psiv_save_summary;
 
 /* Every slot with a file, manual slots first. PSIV_REFUSED when saving is disabled. */
@@ -600,6 +603,19 @@ PSIV_API psiv_status psiv_leave_vehicle(psiv_session* session);
  * as PSIV_NOTICE_AMBIENT notices the first time control returns to the field in an area under it, while the profile's
  * ambient_talk is on; saves keep which sets have. */
 PSIV_API psiv_status psiv_party_talk(psiv_session* session);
+
+typedef struct psiv_talk_line {
+	/* The speaker's character id and shown name. */
+	const char* speaker;
+	const char* speaker_name;
+	/* The line's string id and its text in the profile's language. */
+	const char* text_id;
+	const char* text;
+} psiv_talk_line;
+
+/* The lines psiv_party_talk would show now, for a host's own page (a menu), from any mode with a game: nothing is shown,
+ * heard or saved. count 0 when nobody talks and at the title. */
+PSIV_API psiv_status psiv_party_talk_lines(psiv_session* session, const psiv_talk_line** out, int32_t* count);
 
 typedef struct psiv_field_info {
 	const char* area_id;
@@ -1565,6 +1581,8 @@ typedef struct psiv_inventory_entry {
 	const char* calls_vehicle;
 	/* Equipment: 2 for a weapon that needs both hands, otherwise 1. Items: 0. */
 	int32_t hands;
+	/* 1 when psiv_discard may throw it away: every piece, and items unless their data says discardable false. */
+	int32_t discardable;
 } psiv_inventory_entry;
 
 /* Items in id order, then unworn equipment in id order. */
@@ -1610,10 +1628,20 @@ PSIV_API psiv_status psiv_open_menu(psiv_session* session); /* MUTATES */
 PSIV_API psiv_status psiv_close_menu(psiv_session* session);
 PSIV_API psiv_status psiv_buy(psiv_session* session, const char* id, int32_t count); /* MUTATES */
 PSIV_API psiv_status psiv_sell(psiv_session* session, const char* id, int32_t count); /* MUTATES */
+/* MUTATES. From the field menu, throws count of an item or an unworn piece away (notice "game.discarded"). PSIV_REFUSED
+ * with game.refuse.discard_menu_only, discard_one (count below 1), not_discardable (an item whose data says discardable
+ * false) or discard_not_held (more than the bag holds). */
+PSIV_API psiv_status psiv_discard(psiv_session* session, const char* id, int32_t count);
 PSIV_API psiv_status psiv_rest(psiv_session* session); /* MUTATES */
 /* MUTATES. Field use from the menu. member is a character id of the active party, or NULL/"" for everyone. */
 PSIV_API psiv_status psiv_use_item(psiv_session* session, const char* item, const char* member);
 PSIV_API psiv_status psiv_use_ability(psiv_session* session, const char* user, const char* ability, const char* member); /* MUTATES */
+/* The character ids of the lineup members a one-ally or one-fallen-ally ability or item (kind PSIV_COMMAND_ABILITY or
+ * PSIV_COMMAND_ITEM) used by user would be refused on because nothing in it can reach them, for greying them before the
+ * player picks: in a live battle the ones psiv_battle_set_command refuses with command.no_effect_on_target, elsewhere the ones
+ * psiv_use_item and psiv_use_ability refuse with field.no_target (user is ignored for items there). count 0 for other
+ * targetings, kinds and unknown ids. */
+PSIV_API psiv_status psiv_allies_out_of_reach(psiv_session* session, int32_t kind, const char* id, const char* user, const char* const** out, int32_t* count);
 /* MUTATES. Puts the piece on where it goes by default: a weapon in the right hand (PSIV_SLOT_WEAPON), a shield in the
  * left (PSIV_SLOT_LEFT_HAND), anything else in its slot. */
 PSIV_API psiv_status psiv_equip(psiv_session* session, const char* member, const char* equipment);
@@ -1797,6 +1825,11 @@ PSIV_API psiv_status psiv_dev_battle(psiv_session* session, const char* encounte
  * the battle ends as that outcome leads (a defeat without a scripted branch is a game over). The round's events are
  * returned and kept as psiv_battle_last_events. game.refuse.no_battle without a live battle. */
 PSIV_API psiv_status psiv_dev_end_battle(psiv_session* session, int32_t victory, const psiv_battle_event** out, int32_t* count);
+/* MUTATES. In a battle, for tests: the recipe's abilities become this round's commands of lineup members who know them
+ * (a component's tied character where it names one), acting first in the recipe's order, so the combination fires when
+ * the round resolves unless a part cannot be paid for or its member cannot act. Other commands stand. PSIV_REFUSED with
+ * game.refuse.no_battle, combo_not_found or combo_no_member (with the ability nobody can use), or the command's refusal. */
+PSIV_API psiv_status psiv_dev_combo(psiv_session* session, const char* recipe);
 /* MUTATES. From the field, gives the party a vehicle with field rules, or moves one it has, to a marker of a field area. */
 PSIV_API psiv_status psiv_dev_vehicle(psiv_session* session, const char* vehicle, const char* area, const char* marker);
 /* MUTATES. Turns random battles, battles aboard and visible enemies' battles off (0) or on for this session; not saved. */

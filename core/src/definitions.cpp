@@ -225,6 +225,10 @@ const EnemyDef* Database::enemy(const std::string& id) const { return findIn(ene
 const Encounter* Database::encounter(const std::string& id) const { return findIn(encounters, id); }
 const DifficultyDef* Database::difficulty(const std::string& id) const { return findIn(difficulties, id); }
 
+bool Database::spentOnNoReach(const ItemDef& item) const {
+	return battleRules.itemNoReachConsumes && item.consumed && item.consumeWhenNoEffect.value_or(battleRules.consumeWhenNoEffect);
+}
+
 const Macro* Database::macro(const std::string& name) const {
 	for (const Macro& m : macros) {
 		if (m.name == name) {

@@ -1525,6 +1525,15 @@ std::vector<SaveSummary> SaveStore::list() const {
 		s.slot = slot;
 		out.push_back(s);
 	}
+	SaveSummary* newest = nullptr;
+	for (SaveSummary& s : out) {
+		if (!s.damaged && (!newest || s.writeTime > newest->writeTime || (s.writeTime == newest->writeTime && s.sequence > newest->sequence))) {
+			newest = &s;
+		}
+	}
+	if (newest) {
+		newest->newest = true;
+	}
 	return out;
 }
 
@@ -1547,20 +1556,12 @@ std::string SaveStore::nextAutosaveSlot() const {
 }
 
 std::string SaveStore::latest() const {
-	std::string best;
-	std::int64_t bestTime = 0;
-	std::uint64_t bestSequence = 0;
 	for (const SaveSummary& s : list()) {
-		if (s.damaged) {
-			continue;
-		}
-		if (best.empty() || s.writeTime > bestTime || (s.writeTime == bestTime && s.sequence > bestSequence)) {
-			best = s.slot;
-			bestTime = s.writeTime;
-			bestSequence = s.sequence;
+		if (s.newest) {
+			return s.slot;
 		}
 	}
-	return best;
+	return "";
 }
 
 std::uint64_t SaveStore::nextSequence() const {

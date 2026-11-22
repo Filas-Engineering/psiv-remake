@@ -578,6 +578,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.clear_not_recorded",
 		"game.clear_recorded",
 		"game.dev_marked",
+		"game.discarded",
 		"game.drop_left",
 		"game.dropped",
 		"game.equipment_returned",
@@ -642,6 +643,9 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.dev_unknown_thing",
 		"game.refuse.dev_unknown_vehicle",
 		"game.refuse.dev_vehicle_outdoors",
+		"game.refuse.discard_menu_only",
+		"game.refuse.discard_not_held",
+		"game.refuse.discard_one",
 		"game.refuse.equip_menu_only",
 		"game.refuse.erase_failed",
 		"game.refuse.in_dungeon",
@@ -688,6 +692,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.nobody_talks",
 		"game.refuse.not_aboard",
 		"game.refuse.not_bought",
+		"game.refuse.not_discardable",
 		"game.refuse.not_dungeon",
 		"game.refuse.not_enough_held",
 		"game.refuse.not_sold",
@@ -4520,6 +4525,20 @@ rules::Message Session::partyTalk() {
 	return best && speak(*best, OutputKind::Line) ? rules::Message() : refusal("nobody_talks");
 }
 
+std::vector<TalkLineView> Session::partyTalkLines() const {
+	std::vector<TalkLineView> out;
+	const TalkSet* best = mode() == Mode::Title ? nullptr : talkSet();
+	if (!best) {
+		return out;
+	}
+	for (const TalkLine& line : best->lines) {
+		if (std::find(world_.lineup.begin(), world_.lineup.end(), line.speaker) != world_.lineup.end()) {
+			out.push_back({line.speaker, displayName(line.speaker), line.text, stringText(line.text)});
+		}
+	}
+	return out;
+}
+
 void Session::openChest(const Chest& chest) {
 	if (world_.flag(chest.flag)) {
 		emit(OutputKind::Notice, "game.chest_empty");
@@ -5396,6 +5415,30 @@ rules::Message Session::sell(const std::string& id, int count) {
 	return {};
 }
 
+rules::Message Session::discard(const std::string& id, int count) {
+	if (menuKind() != MenuKind::Field) {
+		return refusal("discard_menu_only");
+	}
+	if (count < 1) {
+		return refusal("discard_one");
+	}
+	const rules::ItemDef* item = data_.db.item(id);
+	if (item && !item->discardable) {
+		return refusal("not_discardable", {id});
+	}
+	std::map<std::string, int>& bag = item ? world_.items : world_.equipmentBag;
+	auto held = bag.find(id);
+	if (held == bag.end() || held->second < count) {
+		return refusal("discard_not_held", {id});
+	}
+	held->second -= count;
+	if (held->second == 0) {
+		bag.erase(held);
+	}
+	emit(OutputKind::Notice, "game.discarded", {std::to_string(count), id});
+	return {};
+}
+
 // Rest for the whole roster, active or not (FLD-034). A null point is a free rest.
 int Session::restCost(const RestPoint& point) const {
 	return point.perMember ? point.cost * static_cast<int>(world_.lineup.size()) : point.cost;
@@ -5487,6 +5530,37 @@ rules::Message Session::useItem(const std::string& item, const std::string& memb
 	reportFieldUse(use.events, party);
 	settleMachineBank();
 	return {};
+}
+
+std::vector<std::string> Session::alliesOutOfReach(rules::CommandKind kind, const std::string& id, const std::string& user) const {
+	std::vector<std::string> out;
+	if (kind != rules::CommandKind::Ability && kind != rules::CommandKind::Item) {
+		return out;
+	}
+	if (battle_ && battle_->outcome() == rules::Outcome::Ongoing) {
+		for (int actor = 0; actor < battle_->partyCount(); ++actor) {
+			if (battle_->combatant(actor).defId != user) {
+				continue;
+			}
+			const rules::Command command = kind == rules::CommandKind::Ability ? rules::Command::ability(id, -1) : rules::Command::item(id, -1);
+			for (int ally : battle_->alliesOutOfReach(actor, command)) {
+				out.push_back(battle_->combatant(ally).defId);
+			}
+		}
+		return out;
+	}
+	if (mode() == Mode::Title) {
+		return out;
+	}
+	const auto at = std::find(world_.lineup.begin(), world_.lineup.end(), user);
+	const int userIndex = at == world_.lineup.end() ? -1 : static_cast<int>(at - world_.lineup.begin());
+	if (kind == rules::CommandKind::Ability && userIndex < 0) {
+		return out;
+	}
+	for (int target : rules::fieldTargetsOutOfReach(data_.db, activeParty(), id, kind == rules::CommandKind::Item, userIndex)) {
+		out.push_back(world_.lineup[static_cast<std::size_t>(target)]);
+	}
+	return out;
 }
 
 rules::Message Session::useAbility(const std::string& user, const std::string& ability, const std::string& member) {
@@ -6299,6 +6373,52 @@ rules::Message Session::devEndBattle(bool victory, std::vector<rules::Event>* ev
 	if (events) {
 		*events = std::move(round);
 	}
+	return {};
+}
+
+rules::Message Session::devCombo(const std::string& recipe) {
+	if (!battle_ || battle_->outcome() != rules::Outcome::Ongoing) {
+		return refusal("no_battle");
+	}
+	const auto found = std::find_if(data_.db.combos.begin(), data_.db.combos.end(), [&](const rules::ComboRecipe& r) { return r.id == recipe; });
+	if (found == data_.db.combos.end()) {
+		return refusal("combo_not_found", {recipe});
+	}
+	const rules::ComboRecipe& r = *found;
+	std::vector<int> chosen(r.abilities.size(), -1);
+	std::size_t stuck = 0;
+	std::function<bool(std::size_t)> assign = [&](std::size_t component) {
+		if (component == r.abilities.size()) {
+			return true;
+		}
+		for (int actor = 0; actor < battle_->partyCount(); ++actor) {
+			const rules::Combatant& c = battle_->combatant(actor);
+			const bool tiedElsewhere = component < r.characters.size() && !r.characters[component].empty() && r.characters[component] != c.defId;
+			if (tiedElsewhere || c.aboard || !c.alive() || !c.knows(r.abilities[component]) ||
+				std::find(chosen.begin(), chosen.begin() + static_cast<std::ptrdiff_t>(component), actor) != chosen.begin() + static_cast<std::ptrdiff_t>(component)) {
+				continue;
+			}
+			chosen[component] = actor;
+			if (assign(component + 1)) {
+				return true;
+			}
+		}
+		stuck = std::max(stuck, component);
+		return false;
+	};
+	if (!assign(0)) {
+		return refusal("combo_no_member", {r.abilities[stuck]});
+	}
+	for (std::size_t i = 0; i < chosen.size(); ++i) {
+		if (rules::Message refused = battle_->checkCommand(chosen[i], rules::Command::ability(r.abilities[i], -1)); !refused.empty()) {
+			return refused;
+		}
+	}
+	devMark();
+	for (std::size_t i = 0; i < chosen.size(); ++i) {
+		battle_->setCommand(chosen[i], rules::Command::ability(r.abilities[i], -1));
+	}
+	battle_->setLeadOrder(chosen);
 	return {};
 }
 

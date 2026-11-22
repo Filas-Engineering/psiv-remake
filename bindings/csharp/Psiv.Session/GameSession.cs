@@ -315,7 +315,7 @@ public sealed unsafe class GameSession : IDisposable
 		foreach (PsivSaveSummary s in Native.Span<PsivSaveSummary>(p, count))
 		{
 			list.Add(new SaveSummary(Native.Str(s.Slot), Native.Str(s.Area), s.PlayTimeMs, Native.Strs(s.Party, s.PartyCount), Native.Str(s.Difficulty),
-				s.WriteTime, s.Sequence, s.Autosave != 0, s.Damaged != 0, Native.Str(s.Error), s.Dev != 0));
+				s.WriteTime, s.Sequence, s.Autosave != 0, s.Damaged != 0, Native.Str(s.Error), s.Dev != 0, s.Newest != 0));
 		}
 		return list;
 	}
@@ -372,6 +372,18 @@ public sealed unsafe class GameSession : IDisposable
 	static InteractTarget Target(PsivInteractTarget t) =>
 		new((InteractKind)t.Kind, Native.Str(t.Id), t.X, t.Y, (Direction)t.Facing, t.Ready != 0, t.Across != 0, Native.Str(t.Keeper));
 	public PsivResult PartyTalk() => Result(Native.PartyTalk(_handle));
+
+	// The lines PartyTalk would show now, from any mode with a game, without showing or marking anything.
+	public IReadOnlyList<TalkLine> PartyTalkLines()
+	{
+		Must(Native.PartyTalkLines(_handle, out IntPtr p, out int count));
+		var list = new List<TalkLine>(count);
+		foreach (PsivTalkLine x in Native.Span<PsivTalkLine>(p, count))
+		{
+			list.Add(new TalkLine(Native.Str(x.Speaker), Native.Str(x.SpeakerName), Native.Str(x.TextId), Native.Str(x.Text)));
+		}
+		return list;
+	}
 	// Boards the party's vehicle in the faced cell (Interact does the same); LeaveVehicle steps off onto dry ground.
 	public PsivResult Board() => Result(Native.Board(_handle));
 	public PsivResult LeaveVehicle() => Result(Native.LeaveVehicle(_handle));
@@ -926,7 +938,7 @@ public sealed unsafe class GameSession : IDisposable
 
 	private static InventoryEntry ToEntry(in PsivInventoryEntry e) =>
 		new(Native.Str(e.Id), Native.Str(e.Name), e.Count, e.Equipment != 0, e.Field != 0, e.TargetingOrSlot, e.Price, e.Travel < 0 ? null : (TravelKind)e.Travel,
-			Native.Str(e.CallsVehicle), e.Hands);
+			Native.Str(e.CallsVehicle), e.Hands, e.Discardable != 0);
 
 	// Items in id order, then unworn pieces in id order; another ItemSort lists them as one sorted list.
 	public IReadOnlyList<InventoryEntry> Inventory(ItemSort order = ItemSort.Id)
@@ -960,9 +972,18 @@ public sealed unsafe class GameSession : IDisposable
 	public PsivResult CloseMenu() => Result(Native.CloseMenu(_handle));
 	public PsivResult Buy(string id, int count = 1) => Result(Native.Buy(_handle, id, count));
 	public PsivResult Sell(string id, int count = 1) => Result(Native.Sell(_handle, id, count));
+	public PsivResult Discard(string id, int count = 1) => Result(Native.Discard(_handle, id, count));
 	public PsivResult Rest() => Result(Native.Rest(_handle));
 	public PsivResult UseItem(string item, string? member = null) => Result(Native.UseItem(_handle, item, member));
 	public PsivResult UseAbility(string user, string ability, string? member = null) => Result(Native.UseAbility(_handle, user, ability, member));
+
+	// The lineup members a one-ally ability or item used by user would be refused on because nothing in it reaches them:
+	// in a battle as SetCommand refuses, elsewhere as UseItem and UseAbility do (user matters for abilities only there).
+	public IReadOnlyList<string> AlliesOutOfReach(CommandKind kind, string id, string? user = null)
+	{
+		Must(Native.AlliesOutOfReach(_handle, (int)kind, id, user, out IntPtr p, out int count));
+		return Native.Strs(p, count);
+	}
 	public PsivResult Equip(string member, string equipment) => Result(Native.Equip(_handle, member, equipment));
 	public PsivResult EquipAt(string member, string equipment, EquipSlot position) => Result(Native.EquipAt(_handle, member, equipment, (int)position));
 	public PsivResult Unequip(string member, EquipSlot slot) => Result(Native.Unequip(_handle, member, (int)slot));
@@ -1099,6 +1120,7 @@ public sealed unsafe class GameSession : IDisposable
 	public PsivResult DevMoney(int amount) => Result(Native.DevMoney(_handle, amount));
 	// Restores the roster and the vehicles' skill uses as a rest does, free.
 	public PsivResult DevRest() => Result(Native.DevRest(_handle));
+	public PsivResult DevCombo(string recipe) => Result(Native.DevCombo(_handle, recipe));
 	public PsivResult DevSetLevel(string member, int level) => Result(Native.DevSetLevel(_handle, member, level));
 	public PsivResult DevBattle(string encounter) => Result(Native.DevBattle(_handle, encounter));
 	public PsivResult DevVehicle(string vehicle, string area, string marker) => Result(Native.DevVehicle(_handle, vehicle, area, marker));
