@@ -98,9 +98,9 @@ public sealed partial class SampleController
 	// The sample's words for keys the game's text tables do not carry: the field options' help, the credits screen, the
 	// macro editor's auto play, fallback and option actions, the macro option values, the automatic and lost-turn step
 	// statuses, the title's empty erase list, the Items page's actions and discard, the battle's auto macro mark, macro
-	// check, trouble and auto mode lines, the bag line, the auto mode settings, `dev rest` and `combo`, and the camera
-	// overlay's scene camera. T takes a table's own text for the key when it has one, else this English, without counting
-	// the key as missing.
+	// check, trouble and auto mode lines, the bag line, the auto mode settings, `dev rest` and `combo`, the camera
+	// overlay's scene camera, the field menu list's open hint, the shop's and inn's farewell, and the travel messages. T
+	// takes a table's own text for the key when it has one, else this English, without counting the key as missing.
 	private static readonly Dictionary<string, string> SampleWords = new()
 	{
 		["ui.battle.auto_macro_row"] = "{0} (auto)",
@@ -118,6 +118,7 @@ public sealed partial class SampleController
 		["ui.dev.camera_scene_back"] = "scene, back to the leader",
 		["ui.dev.combo"] = "combination {0} leads the round",
 		["ui.dev.rested"] = "rested: hit and technique points refilled",
+		["ui.inn.farewell"] = "Safe travels.",
 		["ui.items.action.discard"] = "Discard",
 		["ui.items.action.look"] = "Look",
 		["ui.items.action.use"] = "Use",
@@ -150,13 +151,17 @@ public sealed partial class SampleController
 		["ui.macros.options_title"] = "The macro's options",
 		["ui.macros.stop_auto_play"] = "Stop auto-battle playing it every round",
 		["ui.macros.use_auto_play"] = "Auto-battle plays it every round",
+		["ui.menu.hint.open"] = "{0} open",
 		["ui.options.always_run_help"] = "Walk at running pace without holding Run; holding Run then walks.",
 		["ui.options.auto_policy"] = "Auto-battle choices",
 		["ui.options.auto_policy_help"] = "How auto-battle's automatic choices pick: by power, by the damage expected, or as the macro and rules say.",
 		["ui.options.auto_trouble"] = "Auto-battle in trouble",
 		["ui.options.auto_trouble_help"] = "What auto-battle does in a round where a member has fallen or a step cannot run: go on, recover, or stop.",
 		["ui.options.interact_prompt_help"] = "Shows the key and a mark over what the leader can talk to, open or board.",
+		["ui.shop.farewell"] = "Come again.",
 		["ui.title.erase_none"] = "No saves to erase.",
+		["ui.travel.arrived"] = "The party arrives at {1}.",
+		["ui.travel.leaving"] = "{0} carries the party to {1}.",
 };
 
 	private string AreaKindText(AreaKind kind) => T(NameKind.AreaKind, (int)kind);

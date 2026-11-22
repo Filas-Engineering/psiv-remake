@@ -235,6 +235,7 @@ def main():
 	motion_more_broken(broken)
 	choices_broken(broken)
 	host_broken(broken)
+	flows_broken(broken, export)
 	bitmap_fonts(export, fonts)
 	if len(sys.argv) > 5:
 		subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("make_layout_assets.py")), str(export), str(fonts), sys.argv[5]], check=True)
@@ -820,6 +821,36 @@ def host_broken(broken):
 	m = json.loads((broken / "assets.json").read_text())
 	m.setdefault("field", {})["exit_markers"] = {"always": {"image": "overlays/no_exit.png", "frames": [0], "ms": 0}, "sometimes": {}}
 	(broken / "assets.json").write_text(json.dumps(m, indent="\t") + "\n")
+
+
+def flows_broken(broken, export):
+	"""A bad value of each field the layout flows added: the Items page's row stacking and count formats, the shop's and
+	the inn's flows, the travel's one-destination rule, Cancel row and message keys, the battle's first command delay and
+	result sequence, a vehicle battle's file without a window its code places by, and the flow, intro and result
+	sequence on screens that take none (docs/ui-layout.md, "Layout flows"; the title's intro and `after_defeat` and the
+	menu's `navigation` are checked on copies in the flows run, the broken copy's title and menu files being unreadable
+	or missing)."""
+	ui = broken / "ui"
+
+	def change(name, edit):
+		data = json.loads((ui / f"{name}.json").read_text())
+		edit(data)
+		(ui / f"{name}.json").write_text(json.dumps(data, indent="\t") + "\n")
+
+	change("menu_items", lambda d: d["params"].update({"stack_rows": "pile", "count_format": "x{1}", "count_format_one": 5}))
+	change("shop", lambda d: d.update({"flow": ["welcome", "quantity", "nap"], "result_sequence": [{"phase": "result"}]}))
+	change("inn", lambda d: d.update({"flow": ["choice", "welcome"]}))
+	change("travel", lambda d: d.update({"params": {"one_destination": "jump", "cancel_row": "never", "leave_key": "Leaving now!", "arrive_key": ""}}))
+	change("sound_test", lambda d: d.update({"intro": [{"name": "studio", "ms": 500}]}))
+
+	def front(d):
+		d["params"]["command_open_delay"] = "soon"
+		d["result_sequence"] = [{"phase": "victory", "ms": -5}, {"phase": "party"}, {"phase": "victory"}, {"ms": 100}]
+	change("battle_front", front)
+	vehicle = json.loads((export / "ui/battle_front.json").read_text())
+	vehicle["windows"] = [w for w in vehicle["windows"] if w["name"] != "keys"]
+	vehicle["flow"] = ["list"]
+	(ui / "battle_front_vehicle.json").write_text(json.dumps(vehicle, indent="\t") + "\n")
 
 
 def broken_layouts(broken):

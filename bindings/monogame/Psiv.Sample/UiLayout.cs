@@ -88,6 +88,12 @@ public sealed class UiScreenLayout
 	public List<string>? MemberCommands { get; set; }
 	// A vehicle's rows in a vehicle battle (`command_rows.vehicle`), with or without `command_top`.
 	public List<string>? VehicleCommands { get; set; }
+	// The shop's or inn's steps in order (`flow`; null: the shop's `steps`, the inn's choice alone).
+	public List<string>? Flow { get; set; }
+	// A battle file's result screen as steps in order (`result_sequence`), each with its length (0: until Confirm).
+	public List<(string Phase, int Ms)>? ResultSequence { get; set; }
+	// The title's intro before its start state (`intro`): each step's name, which the layout's windows show by, and length.
+	public List<(string Name, int Ms)>? Intro { get; set; }
 
 	public bool HasSlot(string slot) => Windows.Any(w => HasSlot(w.Elements, slot));
 
@@ -170,7 +176,8 @@ public sealed class UiLayoutSet
 	public HashSet<string> FromFiles { get; } = [];
 	public bool IsDefault => FromFiles.Count == 0;
 
-	public UiScreenLayout Screen(string name) => Screens.TryGetValue(name, out UiScreenLayout? l) ? l : Defaults.Screens[name];
+	public UiScreenLayout Screen(string name) => Screens.TryGetValue(name, out UiScreenLayout? l) ? l
+		: Defaults.Screens.TryGetValue(name, out UiScreenLayout? d) ? d : Screen(UiFields.Variants[name]);
 
 	private static UiLayoutSet? _defaults;
 
@@ -339,7 +346,9 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["styles.text_styles{}"] = ["size", "color", "role"],
 		["styles.frames{}"] = ["type", "image", "border", "scale", "color", "thickness", "skin"],
 		["styles.cursors{}"] = ["type", "image", "size", "color", "blink_ms"],
-		["screen"] = ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows"],
+		["screen"] = ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows", "flow", "intro", "result_sequence"],
+		["screen.result_sequence[]"] = ["phase", "ms"],
+		["screen.intro[]"] = ["name", "ms"],
 		["screen.places[]"] = ["slot", "label"],
 		["screen.entries[]"] = ["page", "label", "children", "immediate"],
 		["screen.entries[].children[]"] = ["page", "label", "immediate", "when", "enabled"],
@@ -692,6 +701,9 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["continue"] = ("newest", "choose", "whether Continue loads the newest save or opens the Load list"),
 		["item_order"] = ("items_then_equipment", "equipment_then_items", "whether the Item list puts the bag's items or the worn pieces first"),
 		["macro_flow"] = ("reset", "remember", "whether the menus open at their first row after a macro's round or on Macro and the macro played last"),
+		["navigation"] = ("tabs", "list", "whether the field menu's entries are tabs turned with Left and Right or a list chosen with Up, Down and Confirm"),
+		["one_destination"] = ("list", "go", "whether a travel use with one place to go lists it or goes at once"),
+		["stack_rows"] = ("stacked", "single", "whether the Items page lists one row per item with its count or one row per copy"),
 		["unusable"] = ("dim", "hide", "whether abilities not usable in the field show dimmed or not at all"),
 	};
 
@@ -799,6 +811,41 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
 					}
 				}
+				else if (p.Name is "leave_key" or "arrive_key")
+				{
+					string? key = p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : null;
+					if (key is null || key.Length == 0 || !key.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '.'))
+					{
+						Problem($"params.{p.Name}", "must be a text key (lowercase letters, digits, '_' and '.')");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{key}'", out _)!;
+					}
+				}
+				else if (p.Name is "count_format" or "count_format_one")
+				{
+					string? format = p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : null;
+					if (format is null || format.Contains('\'') || !FormatsOne(format))
+					{
+						Problem($"params.{p.Name}", "must be a string that formats the count as {0} (no other placeholders, no single quotes): \"x{0}\", or \"\" for none");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{format}'", out _)!;
+					}
+				}
+				else if (p.Name == "after_defeat")
+				{
+					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("menu" or "start" or "intro"))
+					{
+						Problem($"params.{p.Name}", "must be \"menu\", \"start\" or \"intro\": where the title opens after a defeat");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
+					}
+				}
 				else if (p.Name == "command_axis")
 				{
 					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("row" or "column"))
@@ -841,6 +888,8 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		TitleMenu(root, screen);
 		RowModels(root, screen);
 		MenuEntries(root, screen);
+		Flow(root, screen);
+		ResultSequence(root, screen);
 		int index = 0;
 		foreach (JsonElement w in windows.EnumerateArray())
 		{
@@ -946,6 +995,164 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 						Problem(entry, $"'{key}' is listed twice");
 					}
 				}
+			}
+		}
+	}
+
+	private static bool FormatsOne(string format)
+	{
+		try
+		{
+			_ = string.Format(CultureInfo.InvariantCulture, format, 1);
+			return true;
+		}
+		catch (FormatException)
+		{
+			return false;
+		}
+	}
+
+	// `intro` (title): its steps, and the `after_defeat` param's need of a start state or an intro.
+	private void TitleIntro(JsonElement root, UiScreenLayout screen)
+	{
+		if (root.TryGetProperty("intro", out JsonElement intro))
+		{
+			if (!fields!.Title)
+			{
+				Problem("intro", "only the title screen takes 'intro'");
+			}
+			else if (intro.ValueKind != JsonValueKind.Array || intro.GetArrayLength() == 0)
+			{
+				Problem("intro", "must be a non-empty list of steps");
+			}
+			else
+			{
+				screen.Intro = [];
+				var names = new HashSet<string>();
+				int i = 0;
+				foreach (JsonElement step in intro.EnumerateArray())
+				{
+					string entry = $"intro[{i++}]";
+					if (!Object(step, entry))
+					{
+						continue;
+					}
+					Known(step, entry, Schema["screen.intro[]"]);
+					string? name = Str(step, "name", entry);
+					if (name is null && !step.TryGetProperty("name", out _))
+					{
+						Problem(entry, "missing field 'name'");
+					}
+					else if (name is not null && !names.Add(name))
+					{
+						Problem(entry, $"'{name}' is listed twice");
+					}
+					if (!step.TryGetProperty("ms", out _))
+					{
+						Problem(entry, "missing field 'ms'");
+					}
+					int ms = Int(step, "ms", entry, 0, 1, 60000);
+					if (name is not null && ms > 0 && screen.Intro.All(s => s.Name != name))
+					{
+						screen.Intro.Add((name, ms));
+					}
+				}
+			}
+		}
+		if (root.TryGetProperty("params", out JsonElement ps) && ps.ValueKind == JsonValueKind.Object && ps.TryGetProperty("after_defeat", out JsonElement after)
+			&& after.ValueKind == JsonValueKind.String && fields!.Title)
+		{
+			if (after.GetString() == "start" && !(root.TryGetProperty("start", out JsonElement start) && start.ValueKind == JsonValueKind.True))
+			{
+				Problem("params.after_defeat", "\"start\" needs the file's 'start' true");
+			}
+			else if (after.GetString() == "intro" && !root.TryGetProperty("intro", out _))
+			{
+				Problem("params.after_defeat", "\"intro\" needs the file's 'intro'");
+			}
+		}
+	}
+
+	// `result_sequence` (the battle files): phases from UiFields.ResultPhases, none twice, the result among them.
+	private void ResultSequence(JsonElement root, UiScreenLayout screen)
+	{
+		if (!root.TryGetProperty("result_sequence", out JsonElement sequence))
+		{
+			return;
+		}
+		if (!fields!.Statuses)
+		{
+			Problem("result_sequence", "only the battle screens take 'result_sequence'");
+			return;
+		}
+		if (sequence.ValueKind != JsonValueKind.Array || sequence.GetArrayLength() == 0)
+		{
+			Problem("result_sequence", "must be a non-empty list of steps");
+			return;
+		}
+		var steps = new List<(string, int)>();
+		int i = 0;
+		foreach (JsonElement step in sequence.EnumerateArray())
+		{
+			string entry = $"result_sequence[{i++}]";
+			if (!Object(step, entry))
+			{
+				continue;
+			}
+			Known(step, entry, Schema["screen.result_sequence[]"]);
+			string? phase = Str(step, "phase", entry, UiFields.ResultPhases);
+			int ms = Int(step, "ms", entry, 0, 0, 60000);
+			if (phase is null && !step.TryGetProperty("phase", out _))
+			{
+				Problem(entry, "missing field 'phase'");
+			}
+			else if (phase is not null && steps.Any(s => s.Item1 == phase))
+			{
+				Problem(entry, $"'{phase}' is listed twice");
+			}
+			else if (phase is not null)
+			{
+				steps.Add((phase, ms));
+			}
+		}
+		if (!steps.Any(s => s.Item1 == "result"))
+		{
+			Problem("result_sequence", "needs the step 'result'");
+			return;
+		}
+		screen.ResultSequence = steps;
+	}
+
+	// `flow` (shop, inn): steps from the screen's list, in that list's order, with the one step the screen cannot do without.
+	private void Flow(JsonElement root, UiScreenLayout screen)
+	{
+		if (!root.TryGetProperty("flow", out JsonElement flow))
+		{
+			return;
+		}
+		(string[] steps, string needed)? allowed = fields!.Screen switch
+		{
+			"shop" => (UiFields.ShopFlowSteps, "list"),
+			"inn" => (UiFields.InnFlowSteps, "choice"),
+			_ => null,
+		};
+		if (allowed is not { } a)
+		{
+			Problem("flow", "only the shop and inn screens take 'flow'");
+		}
+		else if (IdList(flow, "flow", a.steps, "steps") is { } ids)
+		{
+			if (!ids.Contains(a.needed))
+			{
+				Problem("flow", $"needs the step '{a.needed}'");
+			}
+			else if (!ids.SequenceEqual(ids.OrderBy(id => Array.IndexOf(a.steps, id))))
+			{
+				Problem("flow", $"must keep the order {string.Join(", ", a.steps)}");
+			}
+			else
+			{
+				screen.Flow = ids;
 			}
 		}
 	}
@@ -1164,6 +1371,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 
 	private void TitleMenu(JsonElement root, UiScreenLayout screen)
 	{
+		TitleIntro(root, screen);
 		bool hasStart = root.TryGetProperty("start", out JsonElement start), hasOptions = root.TryGetProperty("options", out JsonElement options);
 		if ((hasStart || hasOptions) && !fields!.Title)
 		{

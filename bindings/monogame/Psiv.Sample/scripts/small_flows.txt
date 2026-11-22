@@ -1,0 +1,114 @@
+# The layout flows at 320x224 (make_flows_assets.py --small on the small set) on the front data copy, with --dev: the
+# title's intro and start state, the field menu's entries as a list, the Items page one row per copy, the shop's and the
+# inn's flows, and a battle's delayed first command window and result steps. With --window the shot lines save
+# screenshots under build/shots/flows/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+waitstate 30 uifield.title.intro_step studio
+expect state uifield.title.intro_step studio
+shot build/shots/flows/small_intro.png
+wait 40
+expect state uifield.title.intro_step story
+wait 60
+expect state uifield.title.intro false
+expect state uifield.title.start true
+shot build/shots/flows/small_start.png
+press Enter
+wait 3
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev give tonic 2
+
+press M
+wait 3
+expect state page entries
+expect state selected Items
+shot build/shots/flows/small_menu_list.png
+press Enter
+wait 3
+expect state page items
+expect state uifield.menu_items.item_rows 3
+shot build/shots/flows/small_items.png
+press Enter
+wait 3
+expect state uifield.menu_items.target_count_text x3
+shot build/shots/flows/small_items_target.png
+press Escape
+press Escape
+wait 3
+expect state page entries
+press Escape
+wait 3
+expect screen Field
+
+cmd walk stall_front
+press Up
+wait 3
+press Enter
+wait 3
+expect state uifield.shop.flow_step welcome
+shot build/shots/flows/small_shop_welcome.png
+press Enter
+press Enter
+wait 3
+expect state uifield.shop.flow_step list
+press Enter
+wait 3
+expect state uifield.shop.flow_step confirm
+shot build/shots/flows/small_shop_confirm.png
+press Enter
+wait 3
+expect state uifield.shop.flow_step result
+shot build/shots/flows/small_shop_result.png
+press Enter
+press Escape
+press Escape
+wait 3
+expect state uifield.shop.flow_step farewell
+press Enter
+wait 3
+expect screen Field
+
+cmd walk inn_front
+press Left
+wait 3
+press Enter
+wait 3
+expect state uifield.inn.step welcome
+shot build/shots/flows/small_inn_welcome.png
+press Enter
+press Enter
+wait 3
+expect state uifield.inn.step choice
+shot build/shots/flows/small_inn_choice.png
+press Enter
+wait 3
+expect state uifield.inn.step result
+shot build/shots/flows/small_inn_result.png
+press Enter
+press Enter
+wait 3
+expect screen Field
+
+cmd set reward x2
+battlelayout front
+dev battle horde
+wait 80
+expect state battlephase Playback
+waitstate 40 battlephase Command
+dev win
+waitstate 900 battlephase Ended
+expect state uifield.battle_front.result_phase victory
+shot build/shots/flows/small_victory.png
+wait 52
+expect state uifield.battle_front.result_phase result
+shot build/shots/flows/small_result.png
+press Enter
+wait 3
+expect state uifield.battle_front.result_phase level_ups
+shot build/shots/flows/small_levels.png
+press Enter
+wait 4
+expect screen Field

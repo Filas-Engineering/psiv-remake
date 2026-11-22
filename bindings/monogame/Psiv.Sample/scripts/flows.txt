@@ -1,0 +1,416 @@
+# The layout flows (make_flows_assets.py) on the front data copy, with --dev: the title's intro on boot and its start
+# state; the field menu's entries as a list (`navigation` "list"): Left and Right doing nothing, Up and Down choosing,
+# the page shown only once confirmed, Back from the page to the list and from the list closing the menu, a tab's children,
+# a page Extras opens and the System action open at once; the Items page one row per copy with the count drawn apart, and
+# stacked again; the shop's flow (welcome, mode, list, a YES/NO confirm of one, result, farewell); the inn's flow
+# (welcome, price, choice, result over the field after the rest, farewell); travel with one destination going at once,
+# the destinations as plain names without a Cancel row, and the messages before leaving and after arriving (by Confirm,
+# then timed); a battle whose first command window waits 600 ms and whose result plays as steps (victory, result,
+# level-ups); a vehicle battle in its own front layout; and after a defeat the title's intro again. With --window the
+# shot lines save screenshots under build/shots/flows/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+waitstate 30 uifield.title.intro_step studio
+expect state uifield.title.intro true
+expect state uifield.title.intro_step studio
+expect state selected -
+shot build/shots/flows/intro_studio.png
+wait 40
+expect state uifield.title.intro_step story
+expect state uifield.title.intro_index 1
+shot build/shots/flows/intro_story.png
+press Enter
+wait 3
+expect state uifield.title.intro false
+expect state uifield.title.start true
+press Enter
+wait 3
+expect state uifield.title.start false
+expect state selected New game
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+
+# The entries as a list: the page shows only once confirmed; Left and Right do nothing.
+press M
+expect screen Menu
+wait 3
+expect state page entries
+expect state uifield.menu.navigation list
+expect state uifield.menu.page_open false
+expect state uifield.menu.entry_label Items
+expect state selected Items
+shot build/shots/flows/menu_list.png
+press Right
+wait 3
+expect state uifield.menu.list_cursor 0
+press Down
+wait 3
+expect state uifield.menu.list_cursor 1
+expect state selected Status
+expect state page entries
+press Enter
+wait 3
+expect state uifield.menu.page_open true
+expect state page members
+shot build/shots/flows/menu_page.png
+press Escape
+wait 3
+expect state page entries
+expect state uifield.menu.list_cursor 1
+# A tab with children: Confirm lists them, a child opens, Back returns to the children, then to the entries.
+press Down
+press Enter
+wait 3
+expect state page children
+expect state selected Save
+press Down
+press Enter
+wait 3
+expect state tab Options
+press Escape
+wait 3
+expect state page children
+press Escape
+wait 3
+expect state page entries
+press Up 2
+wait 3
+press Escape
+wait 3
+expect screen Field
+
+# A page Extras opens is open at once: an entry's (Back returns to the list) and one the entries leave out (Back closes
+# the menu); so is the System action's page.
+press C
+expect screen Extras
+press Enter
+wait 3
+expect screen Menu
+expect state tab Quests
+expect state uifield.menu.page_open true
+press Escape
+wait 3
+expect state page entries
+expect state uifield.menu.list_cursor 3
+press Escape
+wait 3
+expect screen Field
+press C
+press Down
+press Enter
+wait 3
+expect state tab Codex
+expect state uifield.menu.page_open true
+press Escape
+wait 3
+expect screen Field
+press S
+wait 3
+expect screen Menu
+expect state page system
+expect state uifield.menu.page_open true
+press Escape
+wait 3
+expect screen Field
+
+# The Items page one row per copy (`stack_rows` "single"): each row's name and its count drawn apart, empty for one.
+dev give tonic 2
+press M
+press Enter
+wait 3
+expect state page items
+expect state uifield.menu_items.item_rows 3
+expect state uifield.menu_items.item_rows.0.name Tonic
+expect state uifield.menu_items.item_rows.0.count 1
+expect statenot uifield.menu_items.item_rows.0.count_text x1
+expect state uifield.menu_items.item_count 1
+expect state selected Tonic
+shot build/shots/flows/items_single.png
+# The target choice heads with the item and its count, by `count_format`.
+press Enter
+wait 3
+expect state page target
+expect state uifield.menu_items.target_count 3
+expect state uifield.menu_items.target_count_text x3
+shot build/shots/flows/items_target.png
+press Escape
+wait 3
+assets swap ui/menu_items.json alt/menu_items_stacked.json
+wait 3
+expect state uifield.menu_items.item_rows 1
+expect state uifield.menu_items.item_rows.0.count_text x3
+expect state selected Tonic x3
+shot build/shots/flows/items_stacked.png
+press Escape
+press Escape
+wait 3
+expect screen Field
+
+# The shop's flow: the keeper's welcome alone, Buy or Sell, the list, a YES/NO confirm of one (No back to the list), the
+# result, Back to the choice and the farewell on leaving.
+cmd walk stall_front
+press Up
+wait 3
+press Enter
+expect screen Shop
+wait 3
+expect state uifield.shop.flow_step welcome
+expect state voice ui.shop.welcome
+shot build/shots/flows/shop_welcome.png
+press Enter
+wait 3
+expect state uifield.shop.flow_step mode
+expect state uifield.shop.step choose
+press Enter
+wait 3
+expect state uifield.shop.flow_step list
+expect state uifield.shop.rows.0.name Tonic
+expect state uifield.shop.rows.0.count_text x3
+press Enter
+wait 3
+expect state uifield.shop.flow_step confirm
+expect state voice ui.shop.confirm
+shot build/shots/flows/shop_confirm.png
+press Down
+wait 3
+expect state uifield.shop.confirm_cursor 1
+press Enter
+wait 3
+expect state uifield.shop.flow_step list
+press Enter
+press Enter
+wait 3
+expect state uifield.shop.flow_step result
+expect state voice ui.shop.thanks
+expect state uifield.shop.result_text Bought 1 Tonic for 8.
+shot build/shots/flows/shop_result.png
+press Enter
+wait 3
+expect state uifield.shop.rows.0.count_text x4
+press Escape
+wait 3
+expect state uifield.shop.flow_step mode
+press Escape
+wait 3
+expect state uifield.shop.flow_step farewell
+expect state voice ui.shop.farewell
+shot build/shots/flows/shop_farewell.png
+press Enter
+wait 3
+expect screen Field
+
+# The inn's flow: the welcome, the price line, the choice; the rest closes the inn in the session, and its result and
+# farewell stay over the field until confirmed. Then Leave goes to the farewell too.
+cmd walk inn_front
+press Left
+wait 3
+press Enter
+expect screen Inn
+wait 3
+expect state uifield.inn.step welcome
+expect state voice ui.inn.welcome
+shot build/shots/flows/inn_welcome.png
+press Enter
+wait 3
+expect state uifield.inn.step price
+expect state voice ui.inn.confirm
+shot build/shots/flows/inn_price.png
+press Enter
+wait 3
+expect state uifield.inn.step choice
+press Enter
+wait 3
+expect screen Inn
+expect mode Field
+expect state uifield.inn.step result
+expect state uifield.inn.rested true
+expect state voice ui.inn.thanks
+shot build/shots/flows/inn_result.png
+press Enter
+wait 3
+expect state uifield.inn.step farewell
+expect state voice ui.inn.farewell
+shot build/shots/flows/inn_farewell.png
+press Enter
+wait 3
+expect screen Field
+press Enter
+wait 3
+expect screen Inn
+press Enter
+press Enter
+wait 3
+press Down
+press Enter
+wait 3
+expect state uifield.inn.step farewell
+expect mode Menu
+press Escape
+wait 3
+expect screen Field
+
+# Travel: at Bell Cove the Homing Shell lists two towns as plain names with their regions and no Cancel row (Back
+# cancels); the message before leaving shows, then the session refuses (a dungeon) and the list stays. At Tidewater its
+# one town goes at once with no list: the message before leaving and after arriving, each by Confirm. Then a Waymark Chalk
+# in the kiln: one way out, at once, its messages timed (alt/travel_timed.json, `message_ms` 400).
+dev give homing_shell 2
+dev give waymark_chalk 1
+dev warp saltgrass inn_front
+wait 30
+dev warp bell_cove camp_front
+wait 30
+press M
+press Enter
+wait 3
+expect state selected Homing Shell x2
+press Enter
+wait 4
+expect screen Travel
+expect state destinations saltgrass, tidewater
+expect state uifield.travel.cancel_row false
+expect state uifield.travel.labels 2
+expect state uifield.travel.destinations.0.name Saltgrass Market
+expect state uifield.travel.destinations.0.region coast
+expect state uifield.travel.phase list
+shot build/shots/flows/travel_list.png
+press Down 2
+wait 3
+expect state selected Saltgrass Market (coast)
+press Escape
+wait 3
+expect screen Menu
+expect state page entries
+press Enter
+wait 3
+press Enter
+wait 4
+expect screen Travel
+press Enter
+wait 3
+expect state uifield.travel.phase leave
+expect state uifield.travel.message Homing Shell carries the party to Saltgrass Market.
+press Enter
+wait 3
+expect state uifield.travel.phase list
+expect toast Homing Shell does not work inside a dungeon.
+press Escape
+press Escape
+wait 3
+expect screen Field
+dev warp tidewater inn_front
+wait 30
+press M
+press Enter
+wait 3
+press Enter
+wait 3
+expect screen Travel
+expect state uifield.travel.phase leave
+expect state uifield.travel.message Homing Shell carries the party to Saltgrass Market.
+shot build/shots/flows/travel_leave.png
+press Enter
+wait 4
+expect screen Travel
+expect mode Field
+expect state uifield.travel.phase arrive
+expect state uifield.travel.message The party arrives at Saltgrass Market.
+expect state area Saltgrass Market
+shot build/shots/flows/travel_arrive.png
+press Enter
+wait 3
+expect screen Field
+assets swap ui/travel.json alt/travel_timed.json
+dev warp kiln_upper down_stair
+expect screen Dialogue
+pressuntil Enter Field 200
+press M
+press Enter
+wait 3
+press Down 2
+wait 3
+expect state selected Waymark Chalk x1
+press Enter
+wait 3
+expect screen Travel
+expect state uifield.travel.phase leave
+wait 30
+expect state uifield.travel.phase arrive
+expect mode Field
+wait 30
+expect screen Field
+expect state area Saltgrass Market
+
+# A battle whose first command window waits `command_open_delay` (600 ms) after the intro, and whose result plays as
+# steps: the victory banner alone for 800 ms, the result window (Confirm), then the level-ups (Confirm).
+cmd set reward x2
+battlelayout front
+dev battle horde
+wait 80
+expect state battlephase Playback
+expect state uifield.battle_front.menu_shown false
+shot build/shots/flows/battle_waiting.png
+waitstate 40 battlephase Command
+dev win
+waitstate 900 battlephase Ended
+expect state uifield.battle_front.result_phase victory
+expect statehas windows battle_front/victory
+expect statenot windows battle_front/result
+shot build/shots/flows/result_victory.png
+wait 52
+expect state uifield.battle_front.result_phase result
+expect state uifield.battle_front.result_lines 3
+expect statehas victory Test Fighter reached level 4!
+shot build/shots/flows/result_window.png
+press Enter
+wait 3
+expect state uifield.battle_front.result_phase level_ups
+expect state uifield.battle_front.level_lines 1
+shot build/shots/flows/result_levels.png
+press Enter
+wait 4
+expect screen Field
+
+# A vehicle battle draws its own front layout (battle_front_vehicle): the command window at the top right in its teal
+# outline; the vehicle's command rows as before.
+dev vehicle reed_skimmer reed_path skimmer_front
+dev warp reed_path 16 6
+wait 30
+press Right
+wait 3
+press Enter
+wait 4
+expect state aboard reed_skimmer
+dev battle training
+waitstate 400 battlephase Command
+expect statehas windows battle_front_vehicle/command
+expect state window.command battle_front_vehicle/command 904 16 360x114
+expect statehas battlemenu Attack
+expect state uiframes battle skin 2, vehicle outline 2
+shot build/shots/flows/vehicle_battle.png
+dev win
+waitstate 900 battlephase Ended
+expect state uifield.battle_front_vehicle.result_phase result
+press Enter
+wait 4
+expect screen Field
+
+# After a defeat the title opens on its intro (`after_defeat` "intro"); any key goes to the start state.
+dev warp tidewater inn_front
+wait 30
+dev battle training
+wait 60
+dev lose
+waitstate 600 battlephase Ended
+expect state uifield.battle_front.result_phase victory
+pressuntil Enter Title 200
+expect screen Title
+expect state uifield.title.game_over true
+expect state uifield.title.intro true
+expect state uifield.title.intro_step studio
+shot build/shots/flows/defeat_intro.png
+press Space
+wait 3
+expect state uifield.title.intro false
+expect state uifield.title.start true

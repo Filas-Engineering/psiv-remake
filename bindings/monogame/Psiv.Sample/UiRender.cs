@@ -36,6 +36,8 @@ public sealed class UiContext(UiContext? parent = null)
 	}
 
 	public object? Get(string name) => TryGet(name, out object? v) ? v : null;
+
+	public bool HasOwn(string name) => _values.ContainsKey(name);
 }
 
 public readonly record struct UiDrawn(string Screen, string Window, Rectangle Rect);
@@ -523,6 +525,22 @@ public sealed class UiRenderer
 			_ => [],
 		};
 
+		// A row's names over its element's: `count`, the rows' count, unless the item has a `count` of its own (an item row's
+		// count of copies), which the row then reads.
+		private static Dictionary<string, UiValue> RowLocals(Dictionary<string, UiValue> locals, UiContext itemCtx, int count)
+		{
+			var rowLocals = new Dictionary<string, UiValue>(locals);
+			if (itemCtx.HasOwn("count"))
+			{
+				rowLocals.Remove("count");
+			}
+			else
+			{
+				rowLocals["count"] = new((long)count);
+			}
+			return rowLocals;
+		}
+
 		private UiContext ItemContext(object? item, int i, UiContext parent)
 		{
 			if (item is UiContext c)
@@ -784,7 +802,9 @@ public sealed class UiRenderer
 			for (int i = first; i < end; i++)
 			{
 				UiContext itemCtx = ItemContext(items[i], i, context);
-				var rowLocals = new Dictionary<string, UiValue>(locals) { ["i"] = new((long)i), ["selected"] = new(i == selected), ["count"] = new((long)items.Count) };
+				var rowLocals = RowLocals(locals, itemCtx, items.Count);
+				rowLocals["i"] = new((long)i);
+				rowLocals["selected"] = new(i == selected);
 				int k = i - first;
 				Row(e, surface, RowText(e, items[i], i, itemCtx, rowLocals), x + k / perColumn * columnW, y + k % perColumn * rowH, w, i == selected, RowEnabled(e, itemCtx, rowLocals), size, height, alpha, scope);
 			}
@@ -807,7 +827,10 @@ public sealed class UiRenderer
 			void DrawRow(int i, int ry, bool on)
 			{
 				UiContext itemCtx = ItemContext(items[i], i, context);
-				var rowLocals = new Dictionary<string, UiValue>(locals) { ["i"] = new((long)i), ["selected"] = new(on), ["row_y"] = new((long)ry), ["count"] = new((long)items.Count) };
+				var rowLocals = RowLocals(locals, itemCtx, items.Count);
+				rowLocals["i"] = new((long)i);
+				rowLocals["selected"] = new(on);
+				rowLocals["row_y"] = new((long)ry);
 				if (template.Count > 0)
 				{
 					Elements(template, x, ry, alpha, rowLocals, itemCtx);
@@ -840,7 +863,8 @@ public sealed class UiRenderer
 			{
 				bool has = i < items.Count;
 				UiContext itemCtx = has ? ItemContext(items[i], i, context) : context;
-				var itemLocals = new Dictionary<string, UiValue>(locals) { ["i"] = new((long)i), ["count"] = new((long)count) };
+				var itemLocals = RowLocals(locals, itemCtx, count);
+				itemLocals["i"] = new((long)i);
 				var itemScope = new Scope(r, itemCtx, itemLocals, this);
 				int col = layoutRule == "grid" ? i % columns : layoutRule == "row" ? i : 0;
 				int row = layoutRule == "grid" ? i / columns : layoutRule == "column" ? i : 0;

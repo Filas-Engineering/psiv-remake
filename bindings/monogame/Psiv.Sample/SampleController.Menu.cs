@@ -39,6 +39,11 @@ public sealed partial class SampleController
 		.Set("tabs", MenuEntries.Select(tab => T(MenuLabel(tab))).ToList())
 		.Set("page_ids", MenuEntries.ToList())
 		.Set("tab", _tab)
+		.Set("navigation", MenuListMode ? "list" : "tabs")
+		.Set("list_cursor", _tab)
+		.Set("page_open", MenuPageShown)
+		.Set("entry_label", T(MenuLabel(MenuTab)))
+		.Set("entry_page", MenuTab)
 		.Set("money", T("ui.common.money", _s.WorldInfo().Money))
 		.Set("money_value", _s.WorldInfo().Money)
 		.Set("item_count", _s.Inventory(ItemSort.Id).Count(i => !i.IsEquipment))
@@ -66,7 +71,7 @@ public sealed partial class SampleController
 
 	// The selected tab's children while they are listed, before one is chosen.
 	private List<(string Page, string? Label)>? MenuChildren =>
-		_menuOnly is null && _menuChild is null && OnlyChild is null && Layout.Screen("menu").Children.ContainsKey(MenuTab) ? ShownChildren(MenuTab) : null;
+		MenuPageShown && _menuOnly is null && _menuChild is null && OnlyChild is null && Layout.Screen("menu").Children.ContainsKey(MenuTab) ? ShownChildren(MenuTab) : null;
 
 	private void ResetMenuChild()
 	{
@@ -131,6 +136,7 @@ public sealed partial class SampleController
 	// Where the page is, for headless expectations.
 	private string Page() => Screen switch
 	{
+		Screen.Menu when !MenuPageShown => "entries",
 		Screen.Menu when MenuChildren is not null => "children",
 		Screen.Menu => MenuPage switch
 		{
@@ -164,11 +170,56 @@ public sealed partial class SampleController
 
 	private List<Member> LineupMembers() => _s.Party().Where(m => m.InLineup).ToList();
 
+	// The menu layout's `navigation` "list": the entries are a list chosen with Up, Down and Confirm, and a page shows only
+	// once confirmed.
+	private bool MenuListMode => Ui.ParamText("menu", "navigation", UiData(), "tabs") == "list";
+
+	// In list mode, whether the highlighted entry's page is open; a page Extras or the System action opens is open from the
+	// start.
+	private bool _menuPageOpen;
+	private bool _menuPageNext;
+
+	private bool MenuPageShown => _menuPageOpen || _menuOnly is not null || !MenuListMode;
+
+	private void ResetMenuPage()
+	{
+		_pickMember = null;
+		_list.Reset();
+		_sub.Reset();
+		ResetMenuPages();
+		ResetMenuChild();
+	}
+
+	private void UpdateMenuList(ActionInput input)
+	{
+		if (input.Back)
+		{
+			Report(_s.CloseMenu());
+			return;
+		}
+		int step = input.Pressed(GameAction.Up) ? -1 : input.Pressed(GameAction.Down) ? 1 : 0;
+		if (step != 0)
+		{
+			_tab = (_tab + MenuTabs.Length + step) % MenuTabs.Length;
+			ResetMenuPage();
+		}
+		else if (input.Confirm)
+		{
+			_menuPageOpen = true;
+			ResetMenuPage();
+		}
+	}
+
 	private void UpdateMenu(int dtMs, ActionInput input)
 	{
+		if (!MenuPageShown)
+		{
+			UpdateMenuList(input);
+			return;
+		}
 		if (MenuAtTop())
 		{
-			int step = input.Pressed(GameAction.PagePrev) ? -1 : input.Pressed(GameAction.PageNext) ? 1 : 0;
+			int step = MenuListMode ? 0 : input.Pressed(GameAction.PagePrev) ? -1 : input.Pressed(GameAction.PageNext) ? 1 : 0;
 			if (step != 0)
 			{
 				_tab = (_tab + MenuTabs.Length + step) % MenuTabs.Length;
@@ -185,6 +236,12 @@ public sealed partial class SampleController
 				_list.Reset();
 				_sub.Reset();
 				ResetMenuPages();
+				return;
+			}
+			if (input.Back && MenuListMode && _menuOnly is null)
+			{
+				_menuPageOpen = false;
+				ResetMenuPage();
 				return;
 			}
 			if (input.Back || _menuOnly == "system" && input.Pressed(GameAction.System) && SystemActionOn)
@@ -261,7 +318,7 @@ public sealed partial class SampleController
 			_itemSort = (ItemSort)(((int)_itemSort + 1) % Enum.GetValues<ItemSort>().Length);
 			_list.Reset();
 		}
-		var items = _s.Inventory(_itemSort).Where(i => !i.IsEquipment).ToList();
+		List<InventoryEntry> items = ItemRows();
 		if (_itemActing is not null)
 		{
 			UpdateItemActions(input, items.FirstOrDefault(i => i.Id == _itemActing));
@@ -428,6 +485,10 @@ public sealed partial class SampleController
 			DrawTalkSpeakers(s, t, art, 0, 0, s.Width, s.Height, "talk_speaker");
 			return;
 		}
+		if (!MenuPageShown)
+		{
+			_probeSelected = T(MenuLabel(MenuTab));
+		}
 		Ui.Draw("menu", s, t, UiData()
 			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "menu")))
 			.Set("tabs", MenuTabs.Select(tab => T(MenuLabel(tab))).ToList())
@@ -435,6 +496,11 @@ public sealed partial class SampleController
 			.Set("tab", _tab)
 			.Set("money", T("ui.common.money", _s.WorldInfo().Money))
 			.Set("page", (UiSlot)((x, y, w, h) => DrawMenuPage(s, t, art, x, y, w, h)))
+			.Set("navigation", MenuListMode ? "list" : "tabs")
+			.Set("list_cursor", _tab)
+			.Set("page_open", MenuPageShown)
+			.Set("entry_label", T(MenuLabel(MenuTab)))
+			.Set("entry_page", MenuTab)
 			.Set("hint", MenuHint())
 			.Set("toasts", (UiSlot)((x, y, w, h) => DrawToasts(s, s.Width - x - w, y + h, right: true)))
 			.Set("money_value", _s.WorldInfo().Money)
@@ -449,6 +515,10 @@ public sealed partial class SampleController
 
 	private void DrawMenuPage(IDrawSurface s, IDrawSurface t, Art art, int x, int y, int w, int h)
 	{
+		if (!MenuPageShown)
+		{
+			return;
+		}
 		if (MenuChildren is { } children)
 		{
 			(int tabX, _, int tabW, _) = Ui.SelectedTab;
@@ -601,8 +671,13 @@ public sealed partial class SampleController
 
 	private string MenuHint()
 	{
-		string[] tabs = MenuAtTop() ? [T("ui.menu.hint.tab", Hint(GameAction.PagePrev), Hint(GameAction.PageNext))] : [];
-		string back = T(MenuAtTop() && _menuChild is null ? "ui.menu.hint.close" : "ui.menu.hint.back", Hint(GameAction.Back));
+		if (!MenuPageShown)
+		{
+			return string.Join("   ", T("ui.menu.hint.choose", Hint(GameAction.Up), Hint(GameAction.Down)), T("ui.menu.hint.open", Hint(GameAction.Confirm)),
+				T("ui.menu.hint.close", Hint(GameAction.Back)));
+		}
+		string[] tabs = MenuAtTop() && !MenuListMode ? [T("ui.menu.hint.tab", Hint(GameAction.PagePrev), Hint(GameAction.PageNext))] : [];
+		string back = T(MenuAtTop() && _menuChild is null && (!MenuListMode || _menuOnly is not null) ? "ui.menu.hint.close" : "ui.menu.hint.back", Hint(GameAction.Back));
 		string scroll = T("ui.menu.hint.scroll", Hint(GameAction.Up), Hint(GameAction.Down));
 		string choose = T("ui.menu.hint.choose", Hint(GameAction.Up), Hint(GameAction.Down));
 		string use = T("ui.menu.hint.use", Hint(GameAction.Confirm));
@@ -620,9 +695,28 @@ public sealed partial class SampleController
 		return string.Join("   ", page);
 	}
 
+	// The Items page's rows: one per item with its count, or under the menu_items layout's `stack_rows` "single" one per
+	// copy.
+	private List<InventoryEntry> ItemRows()
+	{
+		List<InventoryEntry> items = [.. _s.Inventory(_itemSort).Where(i => !i.IsEquipment)];
+		return Ui.ParamText("menu_items", "stack_rows", UiData(), "stacked") == "single" ? [.. items.SelectMany(i => Enumerable.Repeat(i, i.Count))] : items;
+	}
+
+	// An item row's fields for a layout that draws the count apart: `name`, `count` (the copies the row stands for) and
+	// `count_text`, the count by the screen's `count_format` ("{0}" when left out) or, for a count of 1, its
+	// `count_format_one` when given.
+	private UiContext CountFields(UiContext row, string screen, string name, int count) =>
+		row.Set("name", name).Set("count", count).Set("count_text", CountText(screen, count));
+
+	private string CountText(string screen, int count) => string.Format(System.Globalization.CultureInfo.InvariantCulture,
+		count == 1 && Layout.Screen(screen).Params.ContainsKey("count_format_one") ? Ui.ParamText(screen, "count_format_one", UiData(), "{0}")
+			: Ui.ParamText(screen, "count_format", UiData(), "{0}"), count);
+
 	private void DrawItemsPage(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{
-		var items = _s.Inventory(_itemSort).Where(i => !i.IsEquipment).ToList();
+		List<InventoryEntry> items = ItemRows();
+		bool single = Ui.ParamText("menu_items", "stack_rows", UiData(), "stacked") == "single";
 		string description = "";
 		if (items.Count > 0)
 		{
@@ -635,13 +729,15 @@ public sealed partial class SampleController
 		Ui.Draw("menu_items", s, t, SetBag(UiArea(x, y, w, h))
 			.Set("picking", _pickAction is not null)
 			.Set("sort_name", T(NameKind.ItemSort, (int)_itemSort))
-			.Set("item_count", items.Count)
-			.Set("item_total", items.Sum(i => i.Count))
-			.Set("items", items.Select(i => T("ui.common.item_count", i.Name, i.Count) +
-				(i.CallsVehicle.Length > 0 ? "  " + T("ui.items.calls", _s.DisplayName(i.CallsVehicle)) : i.Field ? "" : "  " + T("ui.items.battle_only"))).ToList())
+			.Set("item_count", items.DistinctBy(i => i.Id).Count())
+			.Set("item_total", items.DistinctBy(i => i.Id).Sum(i => i.Count))
+			.Set("items", items.Select(i => ItemRowText(i, single)).ToList())
+			.Set("item_rows", items.Select(i => CountFields(new UiContext(UiArea(x, y, w, h)).Set("text", ItemRowText(i, single)), "menu_items", i.Name, single ? 1 : i.Count)).ToList())
 			.Set("list", _list)
 			.Set("description", description)
 			.Set("target_name", _pickAction is null ? "" : _s.DisplayName(_pickAction))
+			.Set("target_count", _pickAction is null ? 0 : items.FirstOrDefault(i => i.Id == _pickAction)?.Count ?? 0)
+			.Set("target_count_text", _pickAction is null ? "" : CountText("menu_items", items.FirstOrDefault(i => i.Id == _pickAction)?.Count ?? 0))
 			.Set("members", _pickAction is null ? new List<string>() : LineupMembers().Select(m => T("ui.menu.member_points", m.Name, m.Hp, m.MaxHp, m.Tp, m.MaxTp)).ToList())
 			.Set("member_rows", TargetRows(UiArea(x, y, w, h), CommandKind.Item, null, m => T("ui.menu.member_points", m.Name, m.Hp, m.MaxHp, m.Tp, m.MaxTp)))
 			.Set("member_list", _sub)
@@ -652,6 +748,8 @@ public sealed partial class SampleController
 			.Set("discard_step", _discardStep ?? "")
 			.Set("discard_count", _discardCount)
 			.Set("discard_max", acting?.Count ?? 0)
+			.Set("discard_name", acting?.Name ?? "")
+			.Set("discard_count_text", acting is null ? "" : CountText("menu_items", _discardCount))
 			.Set("discard_text", _discardStep switch
 			{
 				"count" => T("ui.items.discard_count", acting?.Name ?? "", _discardCount, acting?.Count ?? 0),
@@ -664,6 +762,11 @@ public sealed partial class SampleController
 			.Set("result_text", _itemResult)
 			.Set("result_ok", _itemResultOk));
 	}
+
+	// A row of the Items page's plain list: the name with its count (the name alone for a copy of its own), and what calls a
+	// vehicle or works only in battle.
+	private string ItemRowText(InventoryEntry i, bool single) => (single ? i.Name : T("ui.common.item_count", i.Name, i.Count)) +
+		(i.CallsVehicle.Length > 0 ? "  " + T("ui.items.calls", _s.DisplayName(i.CallsVehicle)) : i.Field ? "" : "  " + T("ui.items.battle_only"));
 
 	// "Make macro" (UI-011): a macro named after the combination, its first 16 bytes, filled by the session.
 	private void MakeComboMacro(ComboEntry entry)

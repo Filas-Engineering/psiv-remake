@@ -914,6 +914,36 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_shop_steps_saves --assets $(BUILD)/shop_run --script $(SAMPLE_SCRIPTS)/shop_steps.txt --frames 1500 \
 		> $(BUILD)/sample_shop_steps_headless.txt || (cat $(BUILD)/sample_shop_steps_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_shop_steps_headless.txt
+	# The layout flows (make_flows_assets.py) on the front data copy: the title's intro, the field menu's entries as a list,
+	# Items rows one per copy with their counts apart, the shop's and inn's flows, travel at once and its messages, a delayed
+	# first command window and the result in steps, a vehicle battle's own layout, and the intro after a defeat (flows); the
+	# same at 320x224 on the small set (small_flows); copies with a bad `after_defeat` and intro, `after_defeat` "intro"
+	# without an intro, and a bad `navigation` report them.
+	python3 -I $(SAMPLE_SCRIPTS)/make_flows_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/flows_assets
+	python3 -I $(SAMPLE_SCRIPTS)/make_flows_assets.py $(BUILD)/export $(BUILD)/small_assets $(BUILD)/small_flows_assets --small
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --check-assets --assets $(BUILD)/flows_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --check-assets --assets $(BUILD)/small_flows_assets
+	rm -rf $(BUILD)/flows_broken_assets
+	cp -R $(BUILD)/flows_assets $(BUILD)/flows_broken_assets
+	cp $(BUILD)/flows_broken_assets/alt/title_broken.json $(BUILD)/flows_broken_assets/ui/title.json
+	cp $(BUILD)/flows_broken_assets/alt/menu_broken.json $(BUILD)/flows_broken_assets/ui/menu.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/flows_broken_assets > $(BUILD)/check_assets_flows.txt
+	grep -qF 'params.after_defeat: must be "menu", "start" or "intro"' $(BUILD)/check_assets_flows.txt
+	grep -qF "intro[0]: field 'ms' must be a whole number from 1 to 60000" $(BUILD)/check_assets_flows.txt
+	grep -qF "intro[1]: 'studio' is listed twice" $(BUILD)/check_assets_flows.txt
+	grep -qF "intro[2]: missing field 'name'" $(BUILD)/check_assets_flows.txt
+	grep -qF 'params.navigation: must be "tabs" or "list"' $(BUILD)/check_assets_flows.txt
+	cp $(BUILD)/flows_broken_assets/alt/title_no_intro.json $(BUILD)/flows_broken_assets/ui/title.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/flows_broken_assets > $(BUILD)/check_assets_flows.txt
+	grep -qF "params.after_defeat: \"intro\" needs the file's 'intro'" $(BUILD)/check_assets_flows.txt
+	@for run in flows:flows_assets:2200 small_flows:small_flows_assets:1500; do \
+		name=$${run%%:*}; rest=$${run#*:}; set=$${rest%%:*}; frames=$${rest#*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves $(BUILD)/$${name}_run; \
+		cp -R $(BUILD)/$$set $(BUILD)/$${name}_run; \
+		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_$${name}_saves --assets $(BUILD)/$${name}_run \
+			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
 	# Flashes by their effect (make_flash_assets.py): a stepped stage strobe past the limit is dropped, a two-step whiteout
 	# is held to a fifth under reduced flash, a slow tint is untouched.
 	python3 -I $(SAMPLE_SCRIPTS)/make_flash_assets.py $(BUILD)/export $(BUILD)/flash_assets

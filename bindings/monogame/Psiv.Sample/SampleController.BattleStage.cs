@@ -129,7 +129,7 @@ public sealed partial class SampleController
 		_stageLayout = StageLayout();
 		_probeSprites.Clear();
 		bool front = _stageLayout == BattleLayout.Front;
-		string screen = front ? "battle_front" : "battle_side";
+		string screen = BattleScreenOf(_stageLayout);
 		string vehicle = info?.Vehicle ?? "";
 		(List<string> Items, List<bool>? Usable)? menu = MenuRows(all);
 		UiContext ui = BattleWindows(s, all, info, menu, target, screen);
@@ -599,7 +599,11 @@ public sealed partial class SampleController
 			})
 			.Set("outcome", OutcomeText(info?.Outcome ?? Outcome.Ongoing));
 		int page = 0, pages = 0;
-		ui.Set("result_lines", b.Phase == BattlePhase.Ended ? ResultPage(ResultLines(info), screen, out page, out pages) : [])
+		List<UiContext> results = b.Phase == BattlePhase.Ended ? ResultLines(info) : [];
+		ui.Set("result_lines", b.Phase == BattlePhase.Ended ? ResultPage(ShownResultLines(results), screen, out page, out pages) : [])
+			.Set("level_lines", LevelLines(results))
+			.Set("result_phase", b.Phase != BattlePhase.Ended ? "" : ResultSequence is { } sequence ? b.ResultStep >= 0 ? sequence[b.ResultStep].Phase : "" : "result")
+			.Set("result_phase_ms", b.Phase == BattlePhase.Ended && ResultSequence is not null ? b.ResultStepMs : 0)
 			.Set("result_page", b.Phase == BattlePhase.Ended ? page + 1 : 0)
 			.Set("result_pages", b.Phase == BattlePhase.Ended ? pages : 0)
 			.Set("result_more", b.Phase == BattlePhase.Ended && page + 1 < pages)
@@ -637,13 +641,26 @@ public sealed partial class SampleController
 			BattlePhase.Top => [.. TopMenu],
 			_ => [],
 		};
-		ui.Set("menu_items", menu is { } m ? m.Items.Select((item, i) => new UiContext(ui).Set("text", item).Set("usable", m.Usable is null || m.Usable[i])
+		// An item option's row also reads its copies as `count` (other rows keep `count` for the rows' count) and as
+		// `count_text`.
+		BattleOption? ItemOption(int i) => b.Phase == BattlePhase.Option && i < b.Options.Count && b.Options[i] is { Command: CommandKind.Item, Uses: >= 0 } o
+			&& !b.Worn.Contains(o.Id) ? o : null;
+		List<UiContext> menuRows = menu is { } m ? [.. m.Items.Select((item, i) => new UiContext(ui).Set("text", item).Set("usable", m.Usable is null || m.Usable[i])
 			.Set("command", i < rowCommands.Count ? rowCommands[i] : "")
 			.Set("icon", i < rowCommands.Count && b.Phase == BattlePhase.Command && _art is { } icons ? icons.CommandIcon(rowCommands[i]) : -1)
 			.Set("name", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Name : item)
 			.Set("cost", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Cost : 0)
 			.Set("uses", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].Uses : -1)
-			.Set("max_uses", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].MaxUses : -1)).ToList() : []);
+			.Set("max_uses", b.Phase == BattlePhase.Option && i < b.Options.Count ? b.Options[i].MaxUses : -1)
+			.Set("count_text", ItemOption(i) is { } counted ? CountText(screen, counted.Uses) : ""))] : [];
+		for (int i = 0; i < menuRows.Count; i++)
+		{
+			if (ItemOption(i) is { } option)
+			{
+				menuRows[i].Set("count", option.Uses);
+			}
+		}
+		ui.Set("menu_items", menuRows);
 		// The enemies standing, by name in the order they first stand, each with how many share it and the first one's level.
 		List<UiContext> groups = [.. _show.All.Select((c, i) => (Shown: c, Index: i)).Where(x => x.Index < all.Count && all[x.Index].Side == Side.Enemy && x.Shown.Alive)
 			.GroupBy(x => _s.DisplayName(x.Shown.Id))
@@ -925,6 +942,11 @@ public sealed partial class SampleController
 		page = Math.Clamp(_battle.ResultPage, 0, pages - 1);
 		return per <= 0 ? lines : [.. lines.Skip(page * per).Take(per)];
 	}
+
+	// The result window's lines: without the level-ups when the result sequence shows them in a step of their own.
+	private List<UiContext> ShownResultLines(List<UiContext> lines) => LevelUpsApart ? [.. lines.Except(LevelLines(lines))] : lines;
+
+	private static List<UiContext> LevelLines(List<UiContext> lines) => [.. lines.Where(l => (string)l.Get("kind")! is "level_up" or "learned")];
 
 	private List<UiContext> ResultLines(BattleInfo? info)
 	{

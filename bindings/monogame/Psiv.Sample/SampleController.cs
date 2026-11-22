@@ -176,6 +176,8 @@ public sealed partial class SampleController
 				Mode.Title => Screen.Title,
 				Mode.Field when _questOverlay => Screen.QuestLog,
 				Mode.Field when _logOverlay => Screen.TextLog,
+				Mode.Field when _innAfter is not null => Screen.Inn,
+				Mode.Field when _travelPhase == "arrive" => Screen.Travel,
 				Mode.Field => Screen.Field,
 				Mode.Event => Screen.Dialogue,
 				Mode.Battle => Screen.Battle,
@@ -302,6 +304,19 @@ public sealed partial class SampleController
 		_menuTabNext = 0;
 		_menuOnly = _menuOnlyNext;
 		_menuOnlyNext = null;
+		_menuPageOpen = _menuPageNext;
+		_menuPageNext = false;
+		// The inn's and the travel's steps after the session has closed them stay while their screen does.
+		if (Screen != Screen.Inn)
+		{
+			_innAfter = null;
+		}
+		if (Screen != Screen.Travel)
+		{
+			_travelPhase = "";
+		}
+		_innStep = InnFlow[0];
+		_shopStep = ShopFlow[0];
 		ResetMenuChild();
 		_pickMember = null;
 		_pickAction = null;
@@ -312,6 +327,8 @@ public sealed partial class SampleController
 		_soundTestTrack = "";
 		_clearRecord = null;
 		_titleStarted = false;
+		_titleEntered = false;
+		_introPlaying = false;
 		ResetMenuPages();
 		_nameEntry.Reset();
 	}
@@ -401,7 +418,7 @@ public sealed partial class SampleController
 		}
 		switch (screen)
 		{
-		case Screen.Title: UpdateTitle(input); break;
+		case Screen.Title: UpdateTitle(dtMs, input); break;
 		case Screen.Field: UpdateField(dtMs, input); break;
 		case Screen.Dialogue: UpdateDialogue(dtMs, input); break;
 		case Screen.Battle when _stage is not null: UpdateStagePreview(dtMs, input); break;
@@ -416,7 +433,7 @@ public sealed partial class SampleController
 		case Screen.Pause: UpdatePause(input); break;
 		case Screen.LoadGame: UpdateLoadGame(input); break;
 		case Screen.SoundTest: UpdateSoundTest(input); break;
-		case Screen.Travel: UpdateTravel(input); break;
+		case Screen.Travel: UpdateTravel(dtMs, input); break;
 		case Screen.Credits: UpdateCredits(dtMs, input); break;
 		case Screen.QuestLog:
 		case Screen.TextLog:

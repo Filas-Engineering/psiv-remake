@@ -4,18 +4,21 @@ namespace Psiv.Sample;
 
 public sealed partial class SampleController
 {
-	// The shop layout's `steps` 1: a buy or sell choice, the list, a quantity with its total and a confirm, then the result;
-	// Back goes a step back, and leaves from the choice. Without it the two tabs as before.
-	private enum ShopStep { Choose, List, Quantity, Result }
-
-	private ShopStep _shopStep;
+	// The shop layout's `flow` (else its `steps` 1: `mode`, `list`, `quantity`, `result`): the shop goes through those steps
+	// in order; Back goes a step back, and leaves from the first. Without either the two tabs as before.
+	private string _shopStep = "";
 	private int _shopChoice;
 	private int _shopCount = 1;
+	private bool _shopYes = true;
 	// The last trade's outcome in the steps (the session's notice or refusal) and whether it went through.
 	private string _shopResult = "";
 	private bool _shopResultOk;
 
-	private bool ShopSteps => Ui.Param("shop", "steps", UiData(), 0) != 0;
+	private static readonly List<string> ShopStepsFlow = ["mode", "list", "quantity", "result"];
+
+	private List<string> ShopFlow => Layout.Screen("shop").Flow ?? ShopStepsFlow;
+
+	private bool ShopSteps => Layout.Screen("shop").Flow is not null || Ui.Param("shop", "steps", UiData(), 0) != 0;
 
 	// A layout that shows `result_text` takes the trades' outcomes there instead of the notices.
 	private bool ShopResultShown => Layout.Screen("shop").Reads("result_text");
@@ -79,11 +82,76 @@ public sealed partial class SampleController
 		Report(traded);
 	}
 
+	// The step after or before `step` in the flow, null past either end.
+	private string? ShopStepBy(string step, int by) =>
+		ShopFlow.IndexOf(step) is var at and >= 0 && at + by >= 0 && at + by < ShopFlow.Count ? ShopFlow[at + by] : null;
+
+	// The next of the steps that follow `step` among `wanted`, else null.
+	private string? ShopNext(string step, params string[] wanted) =>
+		ShopFlow.Skip(ShopFlow.IndexOf(step) + 1).FirstOrDefault(wanted.Contains);
+
+	private void ShopGo(string step)
+	{
+		_shopStep = step;
+		_keeperMoment = step switch { "quantity" or "confirm" => "confirm", "farewell" => "farewell", _ => "welcome" };
+		if (step == "farewell")
+		{
+			_shopResult = "";
+		}
+	}
+
+	// Leaving: the farewell step when the flow has one, else the shop closes.
+	private void ShopLeave()
+	{
+		if (_shopStep != "farewell" && ShopFlow.Contains("farewell"))
+		{
+			ShopGo("farewell");
+			return;
+		}
+		_keeperPoint = null;
+		Report(_s.CloseMenu());
+	}
+
+	// Back from a step: the interactive step before it (the list's choice of buying or selling, the list), else leaving.
+	private void ShopBack(string step)
+	{
+		string? back = step switch
+		{
+			"quantity" or "confirm" or "result" => "list",
+			"list" => ShopFlow.Contains("mode") ? "mode" : null,
+			_ => null,
+		};
+		if (back is null)
+		{
+			ShopLeave();
+		}
+		else
+		{
+			ShopGo(back);
+		}
+	}
+
+	private void ShopTrade(ShopInfo shop, InventoryEntry entry, int count)
+	{
+		PsivResult traded = _tab == 0 ? _s.Buy(entry.Id, count) : _s.Sell(entry.Id, count);
+		RememberTrade(shop, entry, count, traded);
+		if (ShopFlow.Contains("result"))
+		{
+			_shopStep = "result";
+		}
+		else
+		{
+			ShopGo("list");
+		}
+		KeeperAnswered(traded);
+		ShopReport(traded);
+	}
+
 	private void UpdateShopSteps(ActionInput input, ShopInfo? shop)
 	{
 		if (shop is null || shop.Id != _keeperPoint)
 		{
-			_shopStep = ShopStep.Choose;
+			_shopStep = ShopFlow[0];
 			_shopChoice = 0;
 		}
 		KeeperOpened(shop?.Id, "welcome");
@@ -92,13 +160,23 @@ public sealed partial class SampleController
 			return;
 		}
 		List<InventoryEntry> rows = ShopRows(shop);
+		InventoryEntry? entry = rows.Count > 0 ? rows[Math.Clamp(_list.Cursor, 0, rows.Count - 1)] : null;
 		switch (_shopStep)
 		{
-		case ShopStep.Choose:
+		case "welcome":
 			if (input.Back)
 			{
-				_keeperPoint = null;
-				Report(_s.CloseMenu());
+				ShopLeave();
+			}
+			else if (input.Confirm)
+			{
+				ShopGo(ShopStepBy("welcome", 1) ?? "list");
+			}
+			break;
+		case "mode":
+			if (input.Back)
+			{
+				ShopBack("mode");
 				return;
 			}
 			if (input.Pressed(GameAction.Up) || input.Pressed(GameAction.Down))
@@ -109,53 +187,89 @@ public sealed partial class SampleController
 			{
 				_tab = _shopChoice;
 				_list.Reset();
-				_shopStep = ShopStep.List;
+				_shopStep = "list";
 			}
 			break;
-		case ShopStep.List:
+		case "list":
 			if (input.Back)
 			{
-				_shopStep = ShopStep.Choose;
-				_keeperMoment = "welcome";
+				ShopBack("list");
+				return;
+			}
+			// Without a mode step the tab keys switch buying and selling, as on the tabs.
+			if (!ShopFlow.Contains("mode") && (input.Pressed(GameAction.PagePrev) || input.Pressed(GameAction.PageNext)))
+			{
+				_tab = 1 - _tab;
+				_list.Reset();
 				return;
 			}
 			_list.Move(input, rows.Count);
 			if (input.Confirm && rows.Count > 0)
 			{
 				_shopCount = 1;
-				_shopStep = ShopStep.Quantity;
-				_keeperMoment = "confirm";
+				_shopYes = true;
+				if (ShopNext("list", "quantity", "confirm") is { } next)
+				{
+					ShopGo(next);
+				}
+				else
+				{
+					ShopTrade(shop, rows[_list.Cursor], 1);
+				}
 			}
 			break;
-		case ShopStep.Quantity when rows.Count == 0:
-			_shopStep = ShopStep.List;
+		case "quantity" or "confirm" when entry is null:
+			_shopStep = "list";
 			break;
-		case ShopStep.Quantity:
-			InventoryEntry entry = rows[Math.Clamp(_list.Cursor, 0, rows.Count - 1)];
-			int most = ShopMost(shop, entry);
+		case "quantity":
+			int most = ShopMost(shop, entry!);
 			if (input.Back)
 			{
-				_shopStep = ShopStep.List;
-				_keeperMoment = "welcome";
+				ShopBack("quantity");
 				return;
 			}
 			int by = input.Pressed(GameAction.Right) || input.Pressed(GameAction.Up) ? 1 : input.Pressed(GameAction.Left) || input.Pressed(GameAction.Down) ? -1 : 0;
 			_shopCount = (_shopCount - 1 + by + most) % most + 1;
 			if (input.Confirm)
 			{
-				PsivResult traded = _tab == 0 ? _s.Buy(entry.Id, _shopCount) : _s.Sell(entry.Id, _shopCount);
-				RememberTrade(shop, entry, _shopCount, traded);
-				KeeperAnswered(traded);
-				ShopReport(traded);
-				_shopStep = ShopStep.Result;
+				if (ShopNext("quantity", "confirm") is not null)
+				{
+					_shopYes = true;
+					_shopStep = "confirm";
+				}
+				else
+				{
+					ShopTrade(shop, entry!, _shopCount);
+				}
 			}
 			break;
-		case ShopStep.Result:
+		case "confirm":
+			if (input.Back || input.Confirm && !_shopYes)
+			{
+				ShopBack("confirm");
+				return;
+			}
+			if (input.Pressed(GameAction.Up) || input.Pressed(GameAction.Down) || input.Pressed(GameAction.Left) || input.Pressed(GameAction.Right))
+			{
+				_shopYes = !_shopYes;
+			}
+			if (input.Confirm)
+			{
+				ShopTrade(shop, entry!, _shopCount);
+			}
+			break;
+		case "result":
 			if (input.Confirm || input.Back)
 			{
-				_shopStep = ShopStep.List;
-				_keeperMoment = "welcome";
+				ShopGo("list");
 				_list.Move(input, ShopRows(shop).Count);
+			}
+			break;
+		case "farewell":
+			if (input.Confirm || input.Back)
+			{
+				_keeperPoint = null;
+				Report(_s.CloseMenu());
 			}
 			break;
 		}
@@ -184,13 +298,17 @@ public sealed partial class SampleController
 				.Set("hint", T("ui.shop.hint", Hint(GameAction.PagePrev), Hint(GameAction.PageNext), Hint(GameAction.Confirm), Hint(GameAction.Back)))
 				.Set("toasts", (UiSlot)((x, y, _, _) => DrawToasts(t, x, y, right: true)));
 		}
-		ctx.Set("rows", entries.Select(i => new UiContext(ctx).Set("text", i.Name).Set("price", ShopPrice(shop!, i)).Set("have", i.Count)).ToList())
+		ctx.Set("rows", entries.Select(i => CountFields(new UiContext(ctx).Set("text", i.Name).Set("price", ShopPrice(shop!, i)).Set("have", i.Count), "shop", i.Name, i.Count)).ToList())
 			.Set("list", _list)
 			.Set("compare", "");
 		InventoryEntry? at = entries.Count > 0 ? entries[Math.Clamp(_list.Cursor, 0, entries.Count - 1)] : null;
 		bool steps = ShopSteps;
 		ctx.Set("voice_line", shop is null ? "" : ShopVoiceLine(shop, at, steps ? _shopCount : 1));
-		ctx.Set("step", !steps ? "tabs" : _shopStep.ToString().ToLowerInvariant())
+		// The mode step keeps the name the steps gave it.
+		ctx.Set("step", !steps ? "tabs" : _shopStep == "mode" ? "choose" : _shopStep)
+			.Set("flow_step", steps ? _shopStep : "")
+			.Set("confirm_options", new List<string> { T("ui.confirm.yes"), T("ui.confirm.no") })
+			.Set("confirm_cursor", _shopYes ? 0 : 1)
 			.Set("choices", new List<string> { T("ui.shop.buy"), T("ui.shop.sell") })
 			.Set("choice_cursor", _shopChoice)
 			.Set("quantity", steps ? _shopCount : 1)

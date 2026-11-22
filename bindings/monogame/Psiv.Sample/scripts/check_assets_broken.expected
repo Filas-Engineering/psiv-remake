@@ -207,16 +207,25 @@ assets: ui/styles.json: params: field 'dev_draw' must be a whole number from 0 t
 assets: ui/styles.json: params: field 'dev_badge_x' must be a whole number from -1 to 4096
 assets: ui/styles.json: params: field 'dev_scale_bitmap' must be a whole number from 0 to 1
 assets: ui/styles.json: -: the built-in styles stand in
-assets: ui/battle_front.json: params.party_slot_5_x: unknown param: auto_choose, backdrop_h, command_axis, command_top, critical_marks, critical_marks_enemy, critical_marks_party, damage_numbers, dev_badge_y, effect_scale, effect_scale_large, effectiveness_marks, effectiveness_marks_enemy, effectiveness_marks_party, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_figures, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_statuses, enemy_x, game_over_confirm, ground_h, icon_gap, icon_size, item_order, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, macro_auto_first, macro_check, macro_failed, macro_flow, miss_marks, miss_marks_enemy, miss_marks_party, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_figures, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, result_page_lines, stage_bottom, step_aside, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
+assets: ui/battle_front.json: params.party_slot_5_x: unknown param: auto_choose, backdrop_h, command_axis, command_open_delay, command_top, count_format, count_format_one, critical_marks, critical_marks_enemy, critical_marks_party, damage_numbers, dev_badge_y, effect_scale, effect_scale_large, effectiveness_marks, effectiveness_marks_enemy, effectiveness_marks_party, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_figures, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_statuses, enemy_x, game_over_confirm, ground_h, icon_gap, icon_size, item_order, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, macro_auto_first, macro_check, macro_failed, macro_flow, miss_marks, miss_marks_enemy, miss_marks_party, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_figures, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, result_page_lines, stage_bottom, step_aside, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
 assets: ui/battle_front.json: params.command_axis: must be "column" or "row": the keys that move the command cursor
 assets: ui/battle_front.json: params.damage_numbers: must be "applied" or "rolled": whether floating numbers show the change made or what the roll gave
 assets: ui/battle_front.json: params.item_order: must be "items_then_equipment" or "equipment_then_items": whether the Item list puts the bag's items or the worn pieces first
 assets: ui/battle_front.json: params.macro_auto_first: field 'macro_auto_first' reads 'on', which is not a field of the battle_front screen, a window or a variable
 assets: ui/battle_front.json: params.macro_failed: must be "automatic", "attack" or "lose_turn": what a macro step that cannot run does
 assets: ui/battle_front.json: params.macro_flow: must be "reset" or "remember": whether the menus open at their first row after a macro's round or on Macro and the macro played last
+assets: ui/battle_front.json: params.command_open_delay: field 'command_open_delay' reads 'soon', which is not a field of the battle_front screen, a window or a variable
+assets: ui/battle_front.json: result_sequence[0]: field 'ms' must be a whole number from 0 to 60000
+assets: ui/battle_front.json: result_sequence[1]: field 'phase' must be one of victory, result, level_ups
+assets: ui/battle_front.json: result_sequence[2]: 'victory' is listed twice
+assets: ui/battle_front.json: result_sequence[3]: missing field 'phase'
+assets: ui/battle_front.json: result_sequence: needs the step 'result'
 assets: ui/battle_front.json: windows.icons.elements[0].template.elements[1]: field 'visible' reads 'status_nausea', which is not a field of the battle_front screen, a window or a variable
 assets: ui/battle_front.json: windows.icons: lays the menu's rows out across: set the param 'command_axis' to "row" so Left and Right move the cursor
 assets: ui/battle_front.json: -: the built-in layout of this screen stands in
+assets: ui/battle_front_vehicle.json: windows: needs a window named 'keys' (the screen's code places things by it)
+assets: ui/battle_front_vehicle.json: flow: only the shop and inn screens take 'flow'
+assets: ui/battle_front_vehicle.json: -: the built-in layout of this screen stands in
 assets: ui/battle_side.json: params.motion_percent: field 'motion_percent' reads 'speed', which is not a field of the battle_side screen, a window or a variable
 assets: ui/battle_side.json: statuses.nausea: unknown status 'nausea': not a status of the game data the party's slots show
 assets: ui/battle_side.json: statuses.poison: unknown field 'glow'
@@ -260,6 +269,7 @@ assets: ui/field.json: params.area_banners: unknown param: area_banner, arrive_t
 assets: ui/field.json: params.followers_arrive: must be "stacked" or "behind": where followers stand when the party arrives
 assets: ui/field.json: -: the built-in layout of this screen stands in
 assets: ui/inn.json: statuses: the screen takes no statuses table
+assets: ui/inn.json: flow: must keep the order welcome, price, choice, result, farewell
 assets: ui/inn.json: windows.box: unknown field 'colour'
 assets: ui/inn.json: windows.box.elements[3]: unknown element type 'sparkle': fill, outline, box, plate, text, bar, value_bar, image, pointer, rows, list, hints, tabs, scroll_bar, repeater, group, slot, role
 assets: ui/inn.json: windows.box.elements[4]: field 'value' reads 'no_such_field', which is not a field of the inn screen, a window or a variable
@@ -279,6 +289,9 @@ assets: ui/menu_equip.json: places[1]: field 'label' must be a non-empty string
 assets: ui/menu_equip.json: places[2]: 'head' is listed twice
 assets: ui/menu_equip.json: places[3]: missing field 'slot'
 assets: ui/menu_equip.json: -: the built-in layout of this screen stands in
+assets: ui/menu_items.json: params.stack_rows: must be "stacked" or "single": whether the Items page lists one row per item with its count or one row per copy
+assets: ui/menu_items.json: params.count_format: must be a string that formats the count as {0} (no other placeholders, no single quotes): "x{0}", or "" for none
+assets: ui/menu_items.json: params.count_format_one: must be a string that formats the count as {0} (no other placeholders, no single quotes): "x{0}", or "" for none
 assets: ui/menu_items.json: params.actions: no element draws the field 'actions', so the action list an item opens would not show
 assets: ui/menu_items.json: params.discard: no element draws the field 'discard_text', so Discard's count and confirm would not show
 assets: ui/menu_items.json: -: the built-in layout of this screen stands in
@@ -299,15 +312,24 @@ assets: ui/menu_system.json: -: the built-in layout of this screen stands in
 assets: ui/name_entry.json: params.pad_cell_w: field 'pad_cell_w' reads 'cell_size', which is not a field of the name_entry screen, a window or a variable
 assets: ui/name_entry.json: params.pad_spacing: unknown param: backdrop_dim, pad_box_h, pad_cell_h, pad_cell_w, pad_entry_size, pad_gap, pad_label_size, pad_label_y, pad_text_x, pad_text_y
 assets: ui/name_entry.json: -: the built-in layout of this screen stands in
-assets: ui/nonsense.json: -: unknown screen 'nonsense': battle_front, battle_side, confirm, controls, credits, dialogue, extras, field, inn, load_game, menu, menu_abilities, menu_children, menu_codex, menu_combos, menu_equip, menu_items, menu_log, menu_macros, menu_options, menu_order, menu_quests, menu_status, menu_system, name_entry, options, panels, pause, quest_log, save_prompt, save_slots, shop, sound_test, text_log, title, travel or styles
+assets: ui/nonsense.json: -: unknown screen 'nonsense': battle_front, battle_front_vehicle, battle_side, battle_side_vehicle, confirm, controls, credits, dialogue, extras, field, inn, load_game, menu, menu_abilities, menu_children, menu_codex, menu_combos, menu_equip, menu_items, menu_log, menu_macros, menu_options, menu_order, menu_quests, menu_status, menu_system, name_entry, options, panels, pause, quest_log, save_prompt, save_slots, shop, sound_test, text_log, title, travel or styles
 assets: ui/panels.json: params.zoom: unknown param: bottom, gutter, margin, slide
 assets: ui/panels.json: -: the built-in layout of this screen stands in
 assets: ui/shop.json: params.steps: field 'steps' reads 'flow', which is not a field of the shop screen, a window or a variable
 assets: ui/shop.json: entries: only the menu and extras screens take 'entries'
+assets: ui/shop.json: flow[2]: must be one of welcome, mode, list, quantity, confirm, result, farewell
+assets: ui/shop.json: flow: needs the step 'list'
+assets: ui/shop.json: result_sequence: only the battle screens take 'result_sequence'
 assets: ui/shop.json: -: the built-in layout of this screen stands in
+assets: ui/sound_test.json: intro: only the title screen takes 'intro'
 assets: ui/sound_test.json: start: only the title screen takes 'start' and 'options'
 assets: ui/sound_test.json: -: the built-in layout of this screen stands in
 assets: ui/title.json: -: not valid JSON: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 27.
 assets: ui/title.json: -: the built-in layout of this screen stands in
-assets: 0 tilesets, 14 characters, 18 portraits, 41 figures, 18 field enemies, 3 vehicles, 4 backdrops, 27 effects, 4 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 15 layout files (1280x720)
-FAILED: 311 problems.
+assets: ui/travel.json: params.one_destination: must be "list" or "go": whether a travel use with one place to go lists it or goes at once
+assets: ui/travel.json: params.cancel_row: field 'cancel_row' reads 'never', which is not a field of the travel screen, a window or a variable
+assets: ui/travel.json: params.leave_key: must be a text key (lowercase letters, digits, '_' and '.')
+assets: ui/travel.json: params.arrive_key: must be a text key (lowercase letters, digits, '_' and '.')
+assets: ui/travel.json: -: the built-in layout of this screen stands in
+assets: 0 tilesets, 14 characters, 18 portraits, 41 figures, 18 field enemies, 3 vehicles, 4 backdrops, 27 effects, 4 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 14 layout files (1280x720)
+FAILED: 333 problems.

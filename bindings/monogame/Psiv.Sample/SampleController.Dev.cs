@@ -962,7 +962,7 @@ public sealed partial class SampleController
 		int x = battle ? s.Width - s.Measure(badge, Style.Small) - 40 : badgeX < 0 ? (s.Width - s.Measure(badge, Style.Small)) / 2 - 12 : badgeX;
 		bool previewing = _preview is not null || _stageEntry is not null;
 		bool side = _stageLayout == BattleLayout.Side;
-		int y = !battle ? Layout.Styles.Param("dev_badge_y") : !side && previewing ? 12 : Ui.Param(side ? "battle_side" : "battle_front", "dev_badge_y", UiData(), 0);
+		int y = !battle ? Layout.Styles.Param("dev_badge_y") : !side && previewing ? 12 : Ui.Param(BattleScreenOf(_stageLayout), "dev_badge_y", UiData(), 0);
 		if (s is ZoomSurface zoomed && battle && !(!side && previewing))
 		{
 			y = (int)MathF.Round(y / zoomed.Zoom);

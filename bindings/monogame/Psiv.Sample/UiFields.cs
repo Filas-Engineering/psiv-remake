@@ -84,6 +84,13 @@ public static class UiFields
 
 	// What a title layout's `options` may list, in the built-in order. A listed entry still shows only when it can be
 	// chosen: retry after a lost battle that allows one, the sound test after a finished story.
+	// The steps a shop's or an inn's `flow` takes, in the order a flow keeps.
+	// The steps a battle file's `result_sequence` takes.
+	public static readonly string[] ResultPhases = ["victory", "result", "level_ups"];
+
+	public static readonly string[] ShopFlowSteps = ["welcome", "mode", "list", "quantity", "confirm", "result", "farewell"];
+	public static readonly string[] InnFlowSteps = ["welcome", "price", "choice", "result", "farewell"];
+
 	public static readonly string[] TitleEntries = ["retry", "new_game", "continue", "load", "sound_test", "erase", "options", "quit"];
 
 	// The field menu's pages, which its layout's `entries` may list in any order; the built-in menu shows MenuDefault.
@@ -152,11 +159,11 @@ public static class UiFields
 	// The battle's two layouts (the presentation table's `front` and `side`) read the same fields and params.
 	private static readonly string[] BattleData = ["action_chosen", "action_command", "actor_center", "actor_left", "actor_right", "actor_slot", "auto", "banner", "banner_alpha", "banner_big",
 		"banner_cancel", "banner_plate", "command_center", "cursor", "description", "description_shown", "enemy_back", "enemy_count", "enemy_groups", "hint", "hit_fade",
-		"hit_flash", "key_back", "key_confirm", "key_fast_forward", "key_text_log", "list_index", "list_kind", "log_lines", "log_shown", "macro_steps", "macro_trouble",
-		"macro_trouble_text", "members", "menu_items", "menu_shown", "menu_title", "outcome", "page_arrow", "party", "phase", "result_confirm", "result_lines", "result_more", "result_page", "result_pages", "result_step", "target_pulse",
+		"hit_flash", "key_back", "key_confirm", "key_fast_forward", "key_text_log", "level_lines", "list_index", "list_kind", "log_lines", "log_shown", "macro_steps", "macro_trouble",
+		"macro_trouble_text", "members", "menu_items", "menu_shown", "menu_title", "outcome", "page_arrow", "party", "phase", "result_confirm", "result_lines", "result_more", "result_page", "result_pages", "result_phase", "result_phase_ms", "result_step", "target_pulse",
 		"transition_playing", "vehicle"];
 
-	private static readonly string[] BattleItems = ["acting", "alive", "command", "command_icon", "cost", "fallen", "hit", "icon", "hp", "hp_low", "icon_count", "issue", "kind", "level",
+	private static readonly string[] BattleItems = ["acting", "alive", "command", "command_icon", "cost", "count_text", "fallen", "hit", "icon", "hp", "hp_low", "icon_count", "issue", "kind", "level",
 		"max_hp", "max_tp", "max_uses", "name", "newest", "next", "number", "ok", "portrait", "slot", "state", "status_color", "targeted", "tp", "usable", "uses"];
 
 	// A battle item's flag per status of the game data: `status_ID`, true while the combatant shows that status.
@@ -164,7 +171,7 @@ public static class UiFields
 
 	private static readonly string[] BattleSlots = ["anchor", "effects", "icons", "stage", "target_pointer"];
 
-	private static readonly string[] BattleParams = ["auto_choose", "backdrop_h", "command_axis", "command_top", "critical_marks", "critical_marks_enemy", "critical_marks_party", "damage_numbers", "dev_badge_y", "effect_scale", "effect_scale_large", "effectiveness_marks", "effectiveness_marks_enemy", "effectiveness_marks_party", "enemy_back_foot", "enemy_bar_h",
+	private static readonly string[] BattleParams = ["auto_choose", "backdrop_h", "command_axis", "command_open_delay", "command_top", "count_format", "count_format_one", "critical_marks", "critical_marks_enemy", "critical_marks_party", "damage_numbers", "dev_badge_y", "effect_scale", "effect_scale_large", "effectiveness_marks", "effectiveness_marks_enemy", "effectiveness_marks_party", "enemy_back_foot", "enemy_bar_h",
 		"enemy_bar_w", "enemy_bar_y", "enemy_bars", "enemy_figures", "enemy_front_foot", "enemy_icons_y", "enemy_labels", "enemy_rank_spacing_max", "enemy_rank_span", "enemy_ranks_interleaved",
 		"enemy_row_foot", "enemy_row_max", "enemy_row_spacing_max", "enemy_row_span", "enemy_row_stagger", "enemy_size",
 		.. Enumerable.Range(0, 8).SelectMany(n => new[] { $"enemy_slot_{n}_foot", $"enemy_slot_{n}_x" }),
@@ -175,16 +182,24 @@ public static class UiFields
 		"party_x", "pointer_bob", "pointer_member_y", "pointer_size", "pointer_y", "result_page_lines", "stage_bottom", "step_aside", "step_gap",
 		"step_margin", "vehicle_foot", "vehicle_size", "vehicle_x"];
 
+	// Screens with no built-in file, each drawn in place of the one it names when an asset directory gives it: a vehicle
+	// battle's own front and side layouts.
+	public static readonly Dictionary<string, string> Variants = new() { ["battle_front_vehicle"] = "battle_front", ["battle_side_vehicle"] = "battle_side" };
+
 	public static readonly Dictionary<string, ScreenFields> Screens = new()
 	{
 		["battle_front"] = new("battle_front", BattleData, BattleItems, BattleSlots,
 			["command", "description", "keys", "log", "name_plate", "strip"], BattleParams, statuses: true),
 		["battle_side"] = new("battle_side", BattleData, BattleItems, BattleSlots, ["log"], BattleParams, statuses: true),
+		["battle_front_vehicle"] = new("battle_front_vehicle", BattleData, BattleItems, BattleSlots,
+			["command", "description", "keys", "log", "name_plate", "strip"], BattleParams, statuses: true),
+		["battle_side_vehicle"] = new("battle_side_vehicle", BattleData, BattleItems, BattleSlots, ["log"], BattleParams, statuses: true),
 		["title"] = new("title",
 			["title", "subtitle", "game_over", "options", "cursor", "version", "hint", "hero_frame", "creature_frame", "logo", "logo_w", "logo_h", "hero_w", "hero_h",
-				"creature_w", "creature_h", "art_scale", "start", "start_hint", "option_ids", "erasing", "erase_rows", "erase_cursor", "has_save", "save_count", "has_clear", "can_load"],
+				"creature_w", "creature_h", "art_scale", "start", "start_hint", "option_ids", "erasing", "erase_rows", "erase_cursor", "has_save", "save_count", "has_clear", "can_load",
+				"intro", "intro_step", "intro_index", "intro_ms", "intro_step_ms"],
 			slots: ["scene", "toasts"], title: true,
-			parameters: ["continue", "erase"]),
+			parameters: ["after_defeat", "continue", "erase"]),
 		["credits"] = new("credits",
 			["lines", "scroll", "shown", "total", "hint"],
 			itemFields: ["text", "heading", "y"]),
@@ -192,7 +207,7 @@ public static class UiFields
 			["tracks", "list", "playing", "hint"],
 			slots: ["scene"]),
 		["inn"] = new("inn",
-			["cost", "money", "cursor", "bed", "top", "options", "keeper", "per_member", "cost_each", "voice_line", "name", "title"]),
+			["cost", "money", "cursor", "bed", "top", "options", "keeper", "per_member", "cost_each", "voice_line", "name", "title", "step", "rested"]),
 		["save_prompt"] = new("save_prompt",
 			["leave", "leave_selected"],
 			slots: ["backdrop", "slot_list"],
@@ -216,15 +231,17 @@ public static class UiFields
 			["hud", "area", "status", "rows", "cursor", "hint"],
 			slots: ["scene"]),
 		["travel"] = new("travel",
-			["title", "question", "labels", "list", "description", "description_missing", "hint"],
+			["title", "question", "labels", "list", "description", "description_missing", "hint", "destinations", "cancel_row", "phase", "message", "message_ms"],
+			itemFields: ["name", "region", "area"],
 			slots: ["backdrop", "toasts"],
-			parameters: [BackdropDim]),
+			parameters: [BackdropDim, "arrive_key", "cancel_row", "leave_key", "message_ms", "one_destination"]),
 		["shop"] = new("shop",
 			["title", "open", "tab", "tabs", "money", "stall", "rows", "list", "description", "description_missing", "compare", "hint", "money_value", "keeper", "voice_line",
-				"step", "choices", "choice_cursor", "quantity", "quantity_max", "unit_price", "total", "result_text", "result_ok", "name", "bag", "bag_used", "bag_slots"],
-			itemFields: ["text", "price", "have"],
+				"step", "choices", "choice_cursor", "quantity", "quantity_max", "unit_price", "total", "result_text", "result_ok", "name", "bag", "bag_used", "bag_slots",
+				"flow_step", "confirm_options", "confirm_cursor"],
+			itemFields: ["text", "price", "have", "name", "count_text"],
 			slots: ["backdrop", "toasts"],
-			parameters: [BackdropDim, "steps"]),
+			parameters: [BackdropDim, "count_format", "count_format_one", "steps"]),
 		["name_entry"] = new("name_entry",
 			["portrait", "member_name", "entry_h", "hint"],
 			slots: ["backdrop", "entry"],
@@ -235,10 +252,10 @@ public static class UiFields
 			slots: ["frame", "scene"],
 			parameters: ["bottom", "gutter", "margin", "slide"]),
 		["menu"] = new("menu",
-			["tabs", "tab", "money", "hint", "money_value", "party", "page_ids", "item_count", "macro_count"],
+			["tabs", "tab", "money", "hint", "money_value", "party", "page_ids", "item_count", "macro_count", "navigation", "list_cursor", "page_open", "entry_label", "entry_page"],
 			itemFields: ["name", "level", "hp", "max_hp", "tp", "max_tp", "portrait", "alive"],
 			slots: ["backdrop", "page", "toasts"],
-			parameters: [BackdropDim, .. TabParams]),
+			parameters: [BackdropDim, "navigation", .. TabParams]),
 		["menu_children"] = new("menu_children",
 			[.. Area, "label", "children", "child_rows", "list", "tab_x", "tab_w", "list_w", "row_h", "rows_max", "list_pad", "text_size"],
 			itemFields: ["enabled"],
@@ -253,9 +270,9 @@ public static class UiFields
 		["menu_items"] = new("menu_items",
 			[.. Area, "picking", "sort_name", "item_count", "item_total", "items", "list", "description", "target_name", "members", "member_rows", "member_list", "acting", "actions",
 				"action_ids", "action_list", "looking", "look_text", "result_text", "result_ok", "bag", "bag_used", "bag_slots", "discarding", "discard_step",
-				"discard_count", "discard_max", "discard_text"],
-			itemFields: ["name", "reachable"],
-			parameters: ["actions", "discard"]),
+				"discard_count", "discard_max", "discard_text", "item_rows", "target_count", "target_count_text", "discard_name", "discard_count_text"],
+			itemFields: ["name", "reachable", "count_text"],
+			parameters: ["actions", "count_format", "count_format_one", "discard", "stack_rows"]),
 		["menu_equip"] = new("menu_equip",
 			[.. Area, "view", "members", "list", "member_name", "slot_rows", "slot_list", "slot_name", "choices", "choice_list", "right", "worn_text", "has_change",
 				"change_text", "removing", "has_preview", "piece_name", "description", "effects", "effect_lines", "wearers", "can_wear", "refusal", "with_it",

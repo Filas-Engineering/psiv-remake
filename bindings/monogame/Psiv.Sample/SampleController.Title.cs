@@ -19,7 +19,44 @@ public sealed partial class SampleController
 	// The title's start state is up: the layout asks for one and no key has been pressed since the title came up.
 	private bool _titleStarted;
 
-	private bool TitleStart => Layout.Screen("title").Start && !_titleStarted;
+	private bool TitleStart => Layout.Screen("title").Start && !_titleStarted && !_introPlaying;
+
+	// The title layout's `intro` plays: on the first title since the program started, and after a defeat under
+	// `after_defeat` "intro". `_introMs` counts from its start.
+	private bool _introPlaying;
+	private int _introMs;
+	private bool _titleBooted;
+	// The title has decided how it opens since it came up.
+	private bool _titleEntered;
+
+	// How the title opens each time it comes up: after a defeat as the `after_defeat` param says (the menu, the start state,
+	// the intro), else the intro on boot, else the start state as before.
+	private void EnterTitle()
+	{
+		_titleEntered = true;
+		UiScreenLayout layout = Layout.Screen("title");
+		string after = _s.WorldInfo().GameOver ? Ui.ParamText("title", "after_defeat", UiData(), "") : "";
+		_introPlaying = layout.Intro is not null && (after == "intro" || after == "" && !_titleBooted);
+		_introMs = 0;
+		_titleStarted = after == "menu";
+		_titleBooted = true;
+	}
+
+	// The intro's step now: its index, and the milliseconds into it; past the last step, null.
+	private (int Index, int Ms)? IntroAt()
+	{
+		List<(string Name, int Ms)> steps = Layout.Screen("title").Intro ?? [];
+		int ms = _introMs;
+		for (int i = 0; i < steps.Count; i++)
+		{
+			if (ms < steps[i].Ms)
+			{
+				return (i, ms);
+			}
+			ms -= steps[i].Ms;
+		}
+		return null;
+	}
 
 	// The title's entries that can be chosen now, in the layout's order (`options`) or the built-in one.
 	private List<(string Id, string Label, Func<PsivResult> Run)> TitleOptions()
@@ -153,8 +190,21 @@ public sealed partial class SampleController
 		}
 	}
 
-	private void UpdateTitle(ActionInput input)
+	private void UpdateTitle(int dtMs, ActionInput input)
 	{
+		if (!_titleEntered)
+		{
+			EnterTitle();
+		}
+		if (_introPlaying)
+		{
+			_introMs += dtMs;
+			if (AnyPress(input.Raw) || IntroAt() is null)
+			{
+				_introPlaying = false;
+			}
+			return;
+		}
 		if (_erasing)
 		{
 			UpdateErase(input);
@@ -245,7 +295,8 @@ public sealed partial class SampleController
 	{
 		var options = TitleOptions();
 		bool start = TitleStart;
-		_probeSelected = start || options.Count == 0 ? "-" : options[Math.Clamp(_cursor, 0, options.Count - 1)].Label;
+		(int Index, int Ms)? intro = _introPlaying ? IntroAt() : null;
+		_probeSelected = start || intro is not null || options.Count == 0 ? "-" : options[Math.Clamp(_cursor, 0, options.Count - 1)].Label;
 		List<string> eraseRows = _erasing ? EraseRows(ErasableSaves()) : [];
 		if (_erasing)
 		{
@@ -282,6 +333,11 @@ public sealed partial class SampleController
 			.Set("options", options.Select(o => o.Label).ToList())
 			.Set("option_ids", options.Select(o => o.Id).ToList())
 			.Set("start", start)
+			.Set("intro", _introPlaying && intro is not null)
+			.Set("intro_step", intro is { } atIntro ? Layout.Screen("title").Intro![atIntro.Index].Name : "")
+			.Set("intro_index", intro?.Index ?? -1)
+			.Set("intro_ms", intro?.Ms ?? 0)
+			.Set("intro_step_ms", intro is { } stepIntro ? Layout.Screen("title").Intro![stepIntro.Index].Ms : 0)
 			.Set("start_hint", T("ui.title.press_start"))
 			.Set("cursor", _cursor)
 			.Set("erasing", _erasing)

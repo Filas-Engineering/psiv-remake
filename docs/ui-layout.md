@@ -20,7 +20,7 @@ ASSETS/assets.json           "ui_layout": {"enabled": true}
 
 Every file has `"version": 1`.
 
-Screen keys: `title`, `sound_test`, `credits`, `load_game`, `options`, `controls`, `confirm`, `field`, `dialogue`, `name_entry`, `pause`, `travel`, `shop`, `inn`, `save_prompt`, `panels`, `menu`, `menu_status`, `menu_items`, `menu_equip`, `menu_order`, `menu_macros`, `menu_combos`, `menu_quests`, `menu_codex`, `menu_log`, `menu_options`, `menu_abilities`, `menu_system`, `menu_children`, `extras`, `save_slots`, `quest_log`, `text_log`, `battle_front`, `battle_side`. The two battle files are the two stage layouts; the battle presentation table's `layout: front|side` (and its per-encounter and per-area overrides, `--battle-layout` and the `battlelayout` script verb) chooses which one draws.
+Screen keys: `title`, `sound_test`, `credits`, `load_game`, `options`, `controls`, `confirm`, `field`, `dialogue`, `name_entry`, `pause`, `travel`, `shop`, `inn`, `save_prompt`, `panels`, `menu`, `menu_status`, `menu_items`, `menu_equip`, `menu_order`, `menu_macros`, `menu_combos`, `menu_quests`, `menu_codex`, `menu_log`, `menu_options`, `menu_abilities`, `menu_system`, `menu_children`, `extras`, `save_slots`, `quest_log`, `text_log`, `battle_front`, `battle_side`, and the optional `battle_front_vehicle` and `battle_side_vehicle` ("Vehicle battles", below). The two battle files are the two stage layouts; the battle presentation table's `layout: front|side` (and its per-encounter and per-area overrides, `--battle-layout` and the `battlelayout` script verb) chooses which one draws.
 
 ## Export, check and reload
 
@@ -160,7 +160,7 @@ Names an expression may read, checked when the file loads:
 * `W`, `H`: the logical frame (in a screen's params too); `pw`, `ph`: the window's parent's size (window rectangles); `w`, `h`: the window's own size (in its `x` and `y`); `cw`, `ch`: the window's content size; `tw`: a text element's measured width (in its own `x`);
 * another window's edges: `NAME.x`, `NAME.y`, `NAME.w`, `NAME.h`, `NAME.right`, `NAME.bottom` (absolute logical pixels);
 * `size_NAME` for each of the styles' `sizes`;
-* inside a `list`'s `row`, a `rows` or `list`'s `text` and `enabled`, and a `repeater`'s `template`, `empty` and `slots`: the item's fields, `i` (its index), `count`, `selected`, `row_y` (a list row's absolute y), `col`, `row` (a repeater's grid cell), `item` and `text` (a string item).
+* inside a `list`'s `row`, a `rows` or `list`'s `text` and `enabled`, and a `repeater`'s `template`, `empty` and `slots`: the item's fields, `i` (its index), `count` (the rows' count, unless the item has a `count` of its own: "Item rows and counts", below), `selected`, `row_y` (a list row's absolute y), `col`, `row` (a repeater's grid cell), `item` and `text` (a string item).
 
 ### Elements
 
@@ -1405,6 +1405,137 @@ Two `styles.json` params: `dev_scale` (10 to 100, default 100) draws every devel
 `make_talk_data.py GAME CORE OUT` copies the data with the `chapter_one` party talk only in Tidewater and three speakers there: the mystic in two pages, the medic with `{portrait:medic:worried}` and a wait, the scout in one long line, in both languages. `make_talk_assets.py EXPORT BASE OUT [--small]` copies the test assets (or the small set) with `party_talk` "speakers" and a `talk_speaker` window, the Talk tab `immediate`, the party talk first in Extras and the medic's portrait with a `worried` expression; `alt/menu_options_hide.json` (`talk_hide_menu` 1), `alt/menu_plain.json` (no Talk tab) and `alt/menu_options_broken.json` (a bad `party_talk` word, checked on a copy). Runs, from playthrough saves, with `--dev`: `talk_speakers.txt` (1280x720: the reveal at the normal speed, Confirm hurrying and stepping through the pages and speakers, the expression, `expect notext {`, Back, the menu hidden, the page from Extras by Confirm, nobody to talk) and `small_talk.txt` (320x224: the scout's line in two boxes of two rows, the expression, the menu hidden). Screenshots under `build/shots/talk/` and `build/shots/small/` with `--window`.
 
 Text from the game's tables shown outside the dialogue box, narration and their logs (notices, the party talk page, keeper lines, shop and Items results, descriptions, the quest log, the codex, credits, a choice's prompt and answers, the battle's own event lines) goes through the same reading as the text log (`Shown` in `SampleController.Text.cs`): `{var:...}` filled, presentation tags dropped, `{page}` a break (a space, or a row of its own on the party talk page), a `{name}` token the glossary lacks kept as written. Text with no `{` is shown as it is.
+
+## Layout flows
+
+Each of these is optional, as the layout items above are: a set without them behaves as before and the export writes none of them. `--check-assets` checks each and `--capabilities` lists them (`shop_flow_steps`, `inn_flow_steps`, `result_phases`, the screens' fields and params). `scripts/make_flows_assets.py EXPORT BASE OUT [--small]` writes a set that uses them all (below, "The flow runs").
+
+### Field menu: entries as a list
+
+`menu.json` param `navigation`: `"tabs"` (default: the tabs as before) or `"list"`. With `list` the entries are a list: Up and Down choose (wrapping), Left and Right do nothing, Confirm opens the highlighted entry's page (an entry with `children` its children's list, `immediate` acting as the page opens), Back on the page's top returns to the list and Back on the list closes the menu. Inside an open page every key does what it does there (a child page's Back returns to its children's list as before). A page the Extras menu or the System action opens is open from the start (Back from an entry's page returns to the list, from a page the entries leave out closes the menu). The `page` slot draws nothing while the list has the keys; a layout previews the highlighted entry through its fields. Leaving the menu for another screen (a travel list) and coming back opens it on the list. Lists are not clickable, so the mouse does nothing here.
+
+Fields of `menu` (also read by a child's `when` and `enabled`): `navigation` (string), `list_cursor` (int, the highlighted entry; `tab` is the same index), `page_open` (bool, a page is open; always true with tabs), `entry_label`, `entry_page` (string: the highlighted entry's name and page id). The `page` probe reads `entries` while the list has the keys; `selected` reads the entry's name.
+
+```json
+{"version": 1, "params": {"navigation": "list"}, "entries": [{"page": "items"}, {"page": "status"}, {"page": "system", "children": [{"page": "save"}, {"page": "options"}]}], "windows": [
+	{"name": "entries", "x": 12, "y": 12, "w": "W / 4", "h": "len(tabs) * 30 + 48", "frame": "panel", "padding": [24, 24, 24, 24], "elements": [
+		{"type": "rows", "items": "tabs", "selected": "list_cursor", "row_height": 30, "selected_color": "page_open ? 'dim' : 'accent'"}]},
+	{"name": "preview", "visible": "!page_open", "x": "W / 4 + 24", "y": 12, "w": "W - W / 4 - 36", "h": 54, "frame": "panel", "elements": [
+		{"type": "text", "value": "'Open ' + entry_label + '?'", "x": 24, "y": 12, "color": "dim"}]},
+	{"name": "box", "visible": "page_open", "x": "W / 4 + 24", "y": 12, "w": "W - W / 4 - 36", "h": "H - 66", "frame": "panel", "elements": [
+		{"type": "slot", "slot": "page", "x": 24, "y": 24, "w": "cw - 48", "h": "ch - 48"}]}
+]}
+```
+
+### Item rows and counts
+
+Row fields that draw an item's count apart from its name: `name` (string), `count` (int) and `count_text` (string: the count by the screen's `count_format`, a .NET format of `{0}`, default `"{0}"`, or for a count of 1 by `count_format_one` when the file gives it, `""` hiding it). Inside a row, an item that has its own `count` reads it as `count`; the rows' count is then `len(items)` (rows of other items keep `count` for the rows' count as before). The formats are plain strings (no `'`, no placeholder but `{0}`).
+
+* `menu_items`: field `item_rows` (items: `text` as the plain list's row, `name`, `count`, `count_text`); the target choice's `target_count` (int) and `target_count_text`; Discard's `discard_name` and `discard_count_text` (the count chosen). Param `stack_rows`: `"stacked"` (default: one row per item with its count) or `"single"` (one row per copy, each with a count of 1, the plain list's text the name alone; the cursor, actions, uses and Discard work on the copy's item; `item_count` and `item_total` count kinds and copies as before).
+* `shop`: the `rows` items gain `name`, `count` (how many the party has, `have`) and `count_text`.
+* `battle_front`, `battle_side`: an item option's row in `menu_items` gains `count` (the copies in the bag) and `count_text` (`""` on other rows and worn pieces).
+
+```json
+{"version": 1, "params": {"stack_rows": "single", "count_format": "x{0}", "count_format_one": ""}, "windows": [
+	{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+		{"type": "list", "items": "item_rows", "state": "list", "w": "picking ? cw / 2 : cw", "h": "ch - 90", "row_height": 30, "active": "!picking", "row": [
+			{"type": "text", "value": "name", "x": 4, "color": "selected ? 'accent' : 'text'"},
+			{"type": "text", "value": "count_text", "w": "(picking ? area_w / 2 : area_w) - 16", "align": "right", "color": "dim"}]}]}
+]}
+```
+
+### Travel from the menu
+
+Params of `travel.json`:
+
+* `one_destination`: `"list"` (default) or `"go"`: an item or technique from the field menu with exactly one place to go (a town, the way out of a dungeon) goes there at once, with no list (a Back on its message before leaving returns to the menu).
+* `cancel_row` (expression, default 1): 0 leaves the Cancel row (and a port's Leave row) out of the list; Back cancels. Field `cancel_row` (bool); `labels` has no last row then.
+* `leave_key`, `arrive_key` (text keys, plain strings): a message before leaving and after arriving, for an item or technique from the menu: the text of `KEY.THING` (the item's or technique's id) when the tables have it, else `KEY`, with `{0}` the thing's name and `{1}` the destination's. The arrival's message stays over the field until it goes on. The sample's own words give `ui.travel.leaving` and `ui.travel.arrived`. `message_ms` (expression, default 0: Confirm goes on): above 0 a message goes on by itself after that long (Confirm still goes on).
+
+Fields: `destinations` (items: `text` the plain row, `name` the area's name, `region`, `area` the area id), `phase` (`list`, `leave` or `arrive`), `message` (string), `message_ms` (int, how long it has shown). A port uses `cancel_row` and `destinations` only.
+
+```json
+{"version": 1, "params": {"one_destination": "go", "cancel_row": 0, "leave_key": "ui.travel.leaving", "arrive_key": "ui.travel.arrived", "message_ms": 0}, "windows": [
+	{"name": "box", "visible": "phase == 'list'", "x": 60, "y": 80, "w": 520, "h": "len(destinations) * 34 + 90", "frame": "panel", "elements": [
+		{"type": "list", "items": "destinations", "state": "list", "x": 24, "y": 60, "w": "cw - 48", "h": "len(destinations) * 34", "row_height": 34, "row": [
+			{"type": "text", "value": "name", "color": "selected ? 'accent' : 'text'"},
+			{"type": "text", "value": "region", "w": "cw - 64", "align": "right", "style": "small_dim"}]}]},
+	{"name": "message", "visible": "phase != 'list'", "x": 120, "y": "H - 200", "w": "W - 240", "h": 110, "frame": "panel", "elements": [
+		{"type": "text", "value": "message", "x": 28, "y": 24, "w": "cw - 56", "wrap": true, "lines": 2}]}
+]}
+```
+
+### Shop and inn flows
+
+A top-level `flow` (`shop.json`, `inn.json`): the steps the screen goes through, a selection kept in this order; Back goes to the step before that takes a choice, and leaves from the first.
+
+* Shop, from `welcome` (the keeper's line alone; Confirm goes on), `mode` (Buy or Sell; without it the list starts on buying and the tab keys switch), `list` (required), `quantity` (how many, as in the steps), `confirm` (Yes or No on the row: Up, Down, Left or Right switch, Yes trades one, or the quantity when a `quantity` step comes first; No or Back return to the list), `result` (the trade's outcome until Confirm; without it a trade stays on the list), `farewell` (the keeper's line on leaving; Confirm or Back close the shop). Without `flow`, `steps` 0 keeps the tabs and `steps` 1 is `mode`, `list`, `quantity`, `result`. Fields: `flow_step` (the step's name, `''` on the tabs), `step` as before (`choose` for `mode`), `confirm_options` (Yes, No), `confirm_cursor` (int).
+* Inn, from `welcome`, `price` (the price line; Confirm goes on), `choice` (Rest or Leave; required), `result` (the rest's outcome until Confirm: after a rest the session has closed the inn, so the inn's screen stays over the field with the rest point it was; after a refusal back to the choice), `farewell` (on leaving, or after the result of a rest). Default `["choice"]`, as before. Fields: `step` (string), `rested` (bool).
+
+The keeper's line (`voice_line`) by step: `welcome` (welcome, mode, list), `confirm` (`confirm_buy` and so on for a shop's quantity and confirm; an inn's price and choice), `thanks` or `cannot_afford` (result), `farewell` (`VOICE.farewell`, else `ui.shop.farewell` or `ui.inn.farewell`, the sample's own words when the tables have none), with the parameters of "Inn", above.
+
+```json
+{"version": 1, "flow": ["welcome", "mode", "list", "confirm", "result", "farewell"], "windows": [...]}
+```
+
+```json
+{"version": 1, "flow": ["welcome", "price", "choice", "result", "farewell"], "windows": [
+	{"name": "box", "x": 12, "y": "top", "w": "W - 24", "h": 168, "frame": "panel", "elements": [
+		{"type": "text", "value": "voice_line", "x": 24, "y": 24, "w": "cw - 48", "wrap": true, "lines": 2},
+		{"type": "rows", "visible": "step == 'choice'", "items": "options", "selected": "cursor", "x": 54, "y": 84}]}
+]}
+```
+
+### Title: intro and where it opens after a defeat
+
+`title.json` top-level `intro`: steps `{"name": NAME, "ms": 1 to 60000}` (names unique), played in order on the first title since the program started, before the start state (or the menu without one); any key or button but the function keys skips to the start state. Fields: `intro` (bool, it plays), `intro_step` (the step's name), `intro_index` (int), `intro_ms` (int, milliseconds into the step), `intro_step_ms` (int, its length). The layout's windows draw each step by its name (pictures through the title's image fields).
+
+Param `after_defeat` (a plain string): where the title opens after a defeat (`game_over`): `"menu"` (the menu at once), `"start"` (the start state; needs the file's `start`) or `"intro"` (the intro; needs the file's `intro`). Left out, the title opens as each time it comes up, the start state when the file has one (the built-in title has neither, so it opens on the menu).
+
+```json
+{"version": 1, "start": true, "intro": [{"name": "studio", "ms": 1500}, {"name": "story", "ms": 2500}], "params": {"after_defeat": "intro"}, "windows": [
+	{"name": "intro", "visible": "intro", "z": 10, "elements": [
+		{"type": "fill", "w": "W", "h": "H", "color": "black"},
+		{"type": "text", "visible": "intro_step == 'studio'", "value": "'A studio'", "y": "H / 2", "w": "W", "align": "center", "alpha": "min(1, intro_ms * 3.0 / intro_step_ms)"}]},
+	{"name": "box", "visible": "!start && !intro", "anchor": "center", "w": 600, "h": 400, "frame": "panel", "elements": []}
+]}
+```
+
+### Vehicle battles
+
+Screen keys `battle_front_vehicle` and `battle_side_vehicle` (no built-in file, not exported, never missing): in a vehicle battle the stage layout's `_vehicle` file draws in place of its own when the asset directory gives one, so the first menu, the windows, their frames and colors and every param (placement included) can differ; without one the stage layout's file draws as before. Each is a whole battle file with the same fields, slots, params, required windows, `statuses`, `command_rows` (`vehicle` included) and `result_sequence`. Probes name its windows by its key (`battle_front_vehicle/command`).
+
+```json
+{"version": 1, "windows": [..., {"name": "command", "visible": "menu_shown", "x": "W - w - 16", "y": 16, "w": 360, "h": 114, "frame": "vehicle", "elements": [...]}, ...]}
+```
+
+### Battle windows' timing and order
+
+What the battle's windows already take their timing from:
+
+* The command window opens when the playback queued before the members choose has played: `battle:transition_in` (an animation script, 0 frames built in), the intro step (`timings.intro`, 900 ms; `step:intro`), an opening banner when the battle opens with one (`timings.opening`, 1000); each later round after its steps (`timings.round`, `roundend`, ...). The `command` window's own `open` and `close` transitions (kind, `ms`, `step`) then play, shortened by the battle speed.
+* The action's name (front `name_plate`, side `banner` with `banner_plate`) shows during the turn's `banner` phase (`timings.banner`, 420 ms, or a turn script's `banner` phase), with the window's `open` and `close`; a turn script with a `name_window` track shows it only while one plays, fading over its `fade` ([`battle-animation.md`](battle-animation.md), `name_window`).
+* The result: the outcome step (`timings.outcome`, 900; `step:outcome.*`), each level-up and learned notice as a step after it (`timings.notice`, 700 each; `step:notice.game.level_up`), then the result window in phase `ended` (its `open` transition), paged by `result_page_lines`, back to the field on Confirm or Back (`game_over_confirm`, and the timing `game_over_return_ms` after a defeat), then `battle:transition_out`.
+
+Added to either battle file:
+
+* Param `command_open_delay` (expression, milliseconds, default 0): after the battle's opening playback, the first command window waits this long (phase `playback`, no menu); later rounds do not wait.
+* Top-level `result_sequence`: the result screen as steps in order, each `{"phase": PHASE, "ms": 0 to 60000}` with PHASE from `victory` (the outcome alone), `result` (the result window; required) and `level_ups` (the level-ups and what they taught; skipped when nobody gained a level); a step goes on with Confirm, or by itself after `ms` when above 0 (Confirm still goes on), the result step turning its pages first, and Back ends the battle from any step. With a `level_ups` step the level-up and learned notices do not play as steps after the outcome (their lines go to the log, the level-up cue plays as the step comes up) and the result window's `result_lines` leave them out. Fields: `result_phase` (the step's phase in phase `ended`, `result` there without a sequence, `''` before), `result_phase_ms` (int, its time), `level_lines` (items `kind`, `text`: the level-up and learned lines).
+
+```json
+{"version": 1, "params": {"command_open_delay": 600}, "result_sequence": [{"phase": "victory", "ms": 800}, {"phase": "result"}, {"phase": "level_ups"}], "windows": [
+	...,
+	{"name": "victory", "visible": "result_phase == 'victory'", "anchor": "center", "w": 640, "h": 108, "frame": "battle", "elements": [
+		{"type": "text", "value": "outcome", "y": 24, "w": "cw", "align": "center", "style": "title"}]},
+	{"name": "result", "visible": "result_phase == 'result'", ...},
+	{"name": "levels", "visible": "result_phase == 'level_ups'", "anchor": "center", "w": 853, "h": "len(level_lines) * 30 + 78", "frame": "battle", "elements": [
+		{"type": "repeater", "items": "level_lines", "x": 24, "y": 54, "dy": 30, "template": [{"type": "text", "value": "text"}]}]}
+]}
+```
+
+### The flow runs
+
+`make_flows_assets.py EXPORT BASE OUT [--small]` copies the test assets (or with `--small` the small set) with every flow above: the menu's entries as a list with a System entry's children, the System action and Extras entries in and out of the menu's; Items one row per copy (`alt/menu_items_stacked.json` stacked); the shop's and inn's full flows; the title's two-step intro with `after_defeat` "intro"; and the battle's delay and result steps; at 1280x720 also the travel flow (`alt/travel_timed.json` with `message_ms` 400) and a vehicle front layout in a teal outline frame. `alt/title_broken.json`, `alt/title_no_intro.json` and `alt/menu_broken.json` are checked on copies. Runs on the front data copy with `--dev`: `flows.txt` and `small_flows.txt` (README, step 10). Screenshots under `build/shots/flows/` with `--window`.
 
 ## Dialogue control tags (`ui/dialogue.json`, `SampleController.Dialogue.cs`)
 

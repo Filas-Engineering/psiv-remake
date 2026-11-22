@@ -270,7 +270,7 @@ public sealed partial class SampleController
 		}
 		_paused = true;
 		// The windows show the seeked frame as playing there would have: none is still opening or closing.
-		Ui.Settle(StageLayout() == BattleLayout.Front ? "battle_front" : "battle_side");
+		Ui.Settle(BattleScreen);
 		AnimLog($"seek @{Frames(PreviewFrame())}");
 	}
 

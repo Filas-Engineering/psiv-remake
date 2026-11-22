@@ -50,7 +50,15 @@ public sealed partial class SampleController
 
 	// The battle layout's command navigation: `command_axis` "row" makes Left and Right walk the command rows (Up and Down
 	// then do nothing), and `command_top` puts the top-level step (fight, macro, run) before the members' commands each round.
-	private string BattleScreen => StageLayout() == BattleLayout.Front ? "battle_front" : "battle_side";
+	private string BattleScreen => BattleScreenOf(StageLayout());
+
+	// The stage layout's file, or in a vehicle battle its `_vehicle` file when the layouts have one (else the stage
+	// layout's own, so a set without one draws as before).
+	private string BattleScreenOf(BattleLayout layout)
+	{
+		string screen = layout == BattleLayout.Front ? "battle_front" : "battle_side";
+		return _s.BattleInfo() is { Vehicle.Length: > 0 } && Layout.Screens.ContainsKey(screen + "_vehicle") ? screen + "_vehicle" : screen;
+	}
 
 	private bool LayoutSwitch(string name) => Ui.Param(BattleScreen, name, UiData(), 0) != 0;
 
@@ -84,6 +92,72 @@ public sealed partial class SampleController
 		public bool LogShown;
 		// Frame time on the result screen, for a game over's return to the title.
 		public int EndedMs;
+		// The battle file's `result_sequence`: the step showing and its time.
+		public int ResultStep;
+		public int ResultStepMs;
+		// Time the first command window has waited (`command_open_delay`), and whether it has opened.
+		public int CommandWaitMs;
+		public bool CommandsOpened;
+	}
+
+	// The battle file's `result_sequence`, null without one (the result window alone).
+	private List<(string Phase, int Ms)>? ResultSequence => Layout.Screen(BattleScreen).ResultSequence;
+
+	private bool LevelUpsApart => ResultSequence?.Any(s => s.Phase == "level_ups") == true;
+
+	// The first step at or after `from` that has something to show (level-ups only with a level gained), -1 past the end.
+	private int ResultStepFrom(int from)
+	{
+		List<(string Phase, int Ms)> steps = ResultSequence ?? [];
+		for (int i = from; i < steps.Count; i++)
+		{
+			if (steps[i].Phase != "level_ups" || LevelLines(ResultLines(_s.BattleInfo())).Count > 0)
+			{
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	private void NextResultStep()
+	{
+		_battle.ResultStep = ResultStepFrom(_battle.ResultStep + 1);
+		_battle.ResultStepMs = 0;
+		_battle.ResultPage = 0;
+		if (_battle.ResultStep < 0)
+		{
+			EndBattleScreen();
+		}
+		else if (ResultSequence![_battle.ResultStep].Phase == "level_ups")
+		{
+			_audio.PlayCue("level_up");
+		}
+	}
+
+	// The result sequence's steps: each goes on with Confirm or after its `ms` (above 0); the result step turns its pages
+	// first; Back ends the battle at once, as on the result window.
+	private void UpdateResultSequence(int dtMs, ActionInput input)
+	{
+		BattleUi b = _battle;
+		if (b.ResultStep < 0)
+		{
+			EndBattleScreen();
+			return;
+		}
+		(string phase, int ms) = ResultSequence![b.ResultStep];
+		b.ResultStepMs += dtMs;
+		if (input.Back)
+		{
+			EndBattleScreen();
+		}
+		else if (phase == "result" && input.Confirm && b.ResultPage + 1 < ResultPages())
+		{
+			b.ResultPage++;
+		}
+		else if (input.Confirm || ms > 0 && b.ResultStepMs >= ms)
+		{
+			NextResultStep();
+		}
 	}
 
 	private readonly BattleUi _battle = new();
@@ -149,13 +223,15 @@ public sealed partial class SampleController
 
 	private BattleContext Context()
 	{
-		string screen = StageLayout() == BattleLayout.Front ? "battle_front" : "battle_side";
+		string screen = BattleScreen;
 		return new BattleContext(_s, _battle.Labels, PresentationTable, _data, T, target => Marked(screen, new UiContext(), "critical", target)) { Shown = Shown };
 	}
 
 	private void StartBattle()
 	{
 		_battle.Active = true;
+		_battle.CommandWaitMs = 0;
+		_battle.CommandsOpened = false;
 		_battle.Labels = _s.Combatants().Select(c => c.Label).ToList();
 		_battle.Log.Clear();
 		_battle.Auto = false;
@@ -190,6 +266,12 @@ public sealed partial class SampleController
 	// A notice during a battle (a level-up, an autosave) plays as its own step after what is already queued.
 	private void AddBattleNotice(Notice n)
 	{
+		// A result sequence with a level-ups step shows them there, after the result window.
+		if (n.Key is "game.level_up" or "game.learned" && LevelUpsApart)
+		{
+			_battle.Log.Add(n.Text);
+			return;
+		}
 		BattleStep step = Context().Step(StepKind.Notice, n.Text, "notice " + n.Text, []);
 		step.Lines.Add(n.Text);
 		step.LineEvents.Add(-1);
@@ -343,8 +425,15 @@ public sealed partial class SampleController
 				b.Log.Add(T("ui.battle.log.auto_stops"));
 			}
 			PlaybackTimeline(dtMs, input.Down(GameAction.FastForward), input.Confirm);
+			// The battle file's `command_open_delay`: after the intro the first command window waits that long.
+			if (_timeline.Done && !b.CommandsOpened && _s.Mode == Mode.Battle && !b.Auto && b.CommandWaitMs < Ui.Param(BattleScreen, "command_open_delay", UiData(), 0))
+			{
+				b.CommandWaitMs += dtMs;
+				break;
+			}
 			if (_timeline.Done)
 			{
+				b.CommandsOpened = true;
 				_syncChecks++;
 				if (_show.Differences(_s.Combatants(), b.Labels) is { Length: > 0 } differences)
 				{
@@ -357,6 +446,12 @@ public sealed partial class SampleController
 					b.Phase = BattlePhase.Ended;
 					b.ResultPage = 0;
 					b.EndedMs = 0;
+					b.ResultStep = ResultStepFrom(0);
+					b.ResultStepMs = 0;
+					if (b.ResultStep >= 0 && ResultSequence![b.ResultStep].Phase == "level_ups")
+					{
+						_audio.PlayCue("level_up");
+					}
 				}
 				else if (b.Auto)
 				{
@@ -377,6 +472,10 @@ public sealed partial class SampleController
 			if (_outro is null && gameOver && Timing("game_over_return_ms") is > 0 and int back && b.EndedMs >= back)
 			{
 				EndBattleScreen();
+			}
+			else if (_outro is null && confirms && ResultSequence is not null)
+			{
+				UpdateResultSequence(dtMs, input);
 			}
 			else if (_outro is null && confirms && input.Confirm && b.ResultPage + 1 < ResultPages())
 			{
@@ -625,8 +724,8 @@ public sealed partial class SampleController
 	// The result window's pages: one, or as many as the battle layout's `result_page_lines` lines a page make.
 	private int ResultPages()
 	{
-		int per = Ui.Param(StageLayout() == BattleLayout.Front ? "battle_front" : "battle_side", "result_page_lines", UiData(), 0);
-		return per <= 0 ? 1 : Math.Max(1, (ResultLines(_s.BattleInfo()).Count + per - 1) / per);
+		int per = Ui.Param(BattleScreen, "result_page_lines", UiData(), 0);
+		return per <= 0 ? 1 : Math.Max(1, (ShownResultLines(ResultLines(_s.BattleInfo())).Count + per - 1) / per);
 	}
 
 	// Left and Right walk the command rows laid out as one row.

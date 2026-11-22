@@ -119,6 +119,7 @@ public sealed partial class SampleController
 			{
 				_menuOnly = listed ? null : id;
 				_tab = Array.IndexOf(MenuTabs, id);
+				_menuPageOpen = true;
 				_pickMember = null;
 				_pickAction = null;
 				_list.Reset();
@@ -130,7 +131,10 @@ public sealed partial class SampleController
 			{
 				_menuOnlyNext = listed ? null : id;
 				_menuTabNext = listed ? Array.IndexOf(MenuEntries, id) : 0;
-				Report(_s.OpenMenu());
+				_menuPageNext = true;
+				PsivResult opened = _s.OpenMenu();
+				_menuPageNext &= opened.Ok;
+				Report(opened);
 			}
 			break;
 		}

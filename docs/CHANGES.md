@@ -126,6 +126,15 @@ One line per feature, newest first: name, kind, meaning. Each pass adds its line
 
 Newest first. The MonoGame sample (`bindings/monogame/Psiv.Sample`) only.
 
+* battle window timing (layout): battle file param `command_open_delay` (the first command window waits after the opening playback) and top-level `result_sequence` (`victory`, `result`, `level_ups` steps with `ms`, fields `result_phase`, `result_phase_ms`, `level_lines`; level-ups then leave the notice steps and `result_lines`).
+* vehicle battles (layout): optional screen files `battle_front_vehicle` and `battle_side_vehicle` draw a vehicle battle in place of the stage layout's file when given.
+* title intro (layout): `title.json` top-level `intro` (named steps with `ms`, played on boot before the start state; fields `intro`, `intro_step`, `intro_index`, `intro_ms`, `intro_step_ms`) and param `after_defeat` (`menu`, `start`, `intro`).
+* inn flow (layout): `inn.json` top-level `flow` from `welcome`, `price`, `choice`, `result`, `farewell` (fields `step`, `rested`; the result and farewell stay over the field after a rest); default the choice alone, as before.
+* shop flow (layout): `shop.json` top-level `flow` from `welcome`, `mode`, `list`, `quantity`, `confirm`, `result`, `farewell` (fields `flow_step`, `confirm_options`, `confirm_cursor`; keeper line `farewell`); without it `steps` as before.
+* travel flow (layout): travel params `one_destination` (`list`, `go`), `cancel_row`, `leave_key`, `arrive_key`, `message_ms`; fields `destinations` (`name`, `region`, `area`), `phase`, `message`, `message_ms`.
+* item rows (layout): row fields `name`, `count`, `count_text` on the Items page (`item_rows`, the target's and Discard's counts), shop rows and battle item rows; params `count_format`, `count_format_one`, and menu_items `stack_rows` (`stacked`, `single`). An item's own `count` wins over the rows' count inside its row.
+* field menu list mode (layout): menu param `navigation` (`tabs`, `list`; fields `navigation`, `list_cursor`, `page_open`, `entry_label`, `entry_page`): the entries as a list, the page shown only once confirmed.
+
 * interaction prompt on data with `talk_at` "actor" (behavior): the faced-rule prompt asks the session's `InteractAt` for each cell beside the leader, so it points at the cell a wandering actor stands on now; other data as before.
 * click on an actor (behavior) and field layout param `click_actor` (`walk` default, `interact`): the click walks up to the actor where it stands now, choosing again each step, and faces it, and with `interact` talks to it; before, a click on a solid actor's cell found no way.
 * `make_library_data.py --moving`, `moving_talk.txt` (scripts): follower placement by the exit taken (`behind`, `up`) and a wanderer's talk point under `talk_at` "actor"; the library copies also set `followers_arrive_other` "behind", which keeps `library_followers.txt` as it was.
