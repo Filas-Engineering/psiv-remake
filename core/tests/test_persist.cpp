@@ -77,6 +77,17 @@ TEST(macrosRoundTripThroughText) {
 	CHECK(pieces.ok() && pieces.value->at(0).steps[0].piece && pieces.value->at(0).steps[0].kind == CommandKind::Item);
 	CHECK(pieces.ok() && !pieces.value->at(0).steps[1].piece);
 	CHECK(serializeMacros({worn}).find("step scout piece squall_fan enemy - 0\n") != std::string::npos);
+	// A vehicle's step (R95) names the vehicle as its member, beside party and piece steps.
+	const std::string mixed = "macros 2\nmacro mixed\nstep fighter attack - default - -1\nstep reed_skimmer ability hull_vent enemy - 0\n"
+		"step scout piece squall_fan enemy - 1\nstep dune_crawler escape - default - -1\nend\n";
+	const Result<std::vector<Macro>> vehicles = parseMacros(mixed);
+	CHECK(vehicles.ok());
+	if (vehicles.ok()) {
+		const std::vector<MacroStep>& steps = vehicles.value->at(0).steps;
+		CHECK(steps.size() == 4 && steps[1].member == "reed_skimmer" && steps[1].kind == CommandKind::Ability && steps[1].id == "hull_vent");
+		CHECK(steps[1].target.kind == MacroTargetKind::Enemy && steps[1].target.enemySlot == 0 && steps[2].piece && steps[3].kind == CommandKind::Escape);
+		CHECK_EQ(serializeMacros(*vehicles.value), mixed);
+	}
 	// Saves written before piece steps carry version 1, which still reads; "piece" is no command there.
 	const Result<std::vector<Macro>> older = parseMacros("macros 1\nmacro a\nstep fighter item tonic default - -1\nend\n");
 	CHECK(older.ok() && older.value->at(0).steps[0].kind == CommandKind::Item && !older.value->at(0).steps[0].piece);

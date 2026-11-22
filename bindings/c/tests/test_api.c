@@ -2522,6 +2522,22 @@ static void testVehicleBattleFromAMenu(void) {
 	psiv_battle_info info;
 	CHECK_OK(psiv_battle_info_get(s, &info));
 	CHECK(strcmp(info.vehicle, "reed_skimmer") == 0);
+	/* A save made aboard mid-battle holds the macro with the vehicle's step and loads again. */
+	const char* text = NULL;
+	CHECK_OK(psiv_save_text(s, &text));
+	CHECK(text && strstr(text, "step reed_skimmer attack - default - -1\n") != NULL);
+	dataDir = interactDataDir;
+	psiv_session* loaded = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	dataDir = shipped;
+	CHECK_OK(psiv_load_text(loaded, text));
+	const psiv_macro* macros;
+	CHECK_OK(psiv_macro_list(loaded, &macros, &count));
+	const psiv_macro* hull = NULL;
+	for (int32_t i = 0; i < count; ++i) {
+		hull = strcmp(macros[i].name, "hull") == 0 ? &macros[i] : hull;
+	}
+	CHECK(hull && hull->step_count == 1 && strcmp(hull->steps[0].member, "reed_skimmer") == 0);
+	psiv_session_destroy(loaded);
 
 	const psiv_macro_step_result* steps;
 	CHECK_OK(psiv_battle_apply_macro(s, "hull", &steps, &count));

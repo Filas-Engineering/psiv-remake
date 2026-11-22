@@ -2,6 +2,8 @@
 
 One line per feature, newest first: name, kind, meaning. Each pass adds its lines at the top.
 
+* saves with a vehicle's macro step (fix): a save, autosave or event-start world holding a macro with a vehicle's step loads again, saves already written included; the load check takes a vehicle as a step's member, counts only member steps toward five and refuses an unknown vehicle or a vehicle step with an item, piece, defend or member target; save schema 12 unchanged.
+* auto play macro across a battle (checked): `Session::setAutoPlayMacro`, `autobattle on|random MACRO` and `psiv_battle_set_auto_play_macro` try the macro in full every round, a fallen member's step passed by and a stuck step taking core's choice that round only, in party and vehicle battles, as `fight MACRO` does; the save's auto macro without a named one still stops by core's stop rules.
 * `game_cli --capabilities`, `psiv_capabilities`, `GameSession.Capabilities` (tool, C API, C#): what the build supports as JSON, read from the loaders' and the compiler's own tables (game/README.md, "Capabilities").
 * `rules::DataKeySet`, `game::gameDataKeys`, `events::script_commands` (library): the accepted data keys and script commands as tables both the loaders and the report read.
 * `picture show|hide|clear` (script command): a saved stack of story pictures; `presentation.pictures` (game.json key) lists the names when declared (R117).

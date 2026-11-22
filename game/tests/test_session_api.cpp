@@ -327,3 +327,83 @@ TEST(anAutoPlayMacroFillsEachRoundAndFallsBackPerMember) {
 	CHECK_EQ(gone.fillAutoRound().key, std::string("game.refuse.no_macro"));
 	CHECK(gone.battle()->command(0).kind != rules::CommandKind::None);
 }
+
+// R75: an auto play macro is tried in full every round of the battle: a fallen member's step is passed by, a step that
+// cannot be paid for or has no target takes core's automatic choice for that round only, the other steps stand, and a
+// revived member takes its step again. The fighter starts the battle fallen, so the medic's revive has a target. The
+// same holds for a vehicle's step in a battle aboard.
+TEST(anAutoPlayMacroStaysForTheWholeBattle) {
+	auto step = [](const char* member, rules::CommandKind kind, const char* id) {
+		rules::MacroStep made;
+		made.member = member;
+		made.kind = kind;
+		made.id = id;
+		return made;
+	};
+	auto sameCommand = [](const rules::Command& a, const rules::Command& b) { return a.kind == b.kind && a.id == b.id && a.target == b.target; };
+
+	Session s(test::data(), SessionOptions());
+	test::placeParty(s, "tidewater", "guide_front", Facing::North);
+	setParty(s, {"fighter", "mystic", "medic"}, 6);
+	s.world().member("fighter")->hp = 0;
+	s.world().member("mystic")->tp = 7;
+	s.world().macros.push_back({"steady", {step("fighter", rules::CommandKind::Attack, ""), step("mystic", rules::CommandKind::Ability, "spark"),
+		step("medic", rules::CommandKind::Ability, "rekindle")}});
+	CHECK(s.devBattle("endless").empty());
+	CHECK(s.setAutoPlayMacro("steady").empty());
+	bool fighterFell = false;
+	bool fighterBack = false;
+	bool mysticAutomatic = false;
+	for (int round = 0; round < 20 && s.battle(); ++round) {
+		CHECK(s.fillAutoRound().empty());
+		const rules::Battle& b = *s.battle();
+		const bool someoneDown = !b.combatant(0).alive() || !b.combatant(1).alive() || !b.combatant(2).alive();
+		if (!b.combatant(0).alive()) {
+			fighterFell = true;
+			CHECK(b.command(0).kind == rules::CommandKind::None);
+		} else {
+			fighterBack = fighterBack || fighterFell;
+			CHECK(b.command(0).kind == rules::CommandKind::Attack);
+		}
+		if (b.combatant(1).alive() && b.combatant(1).tp >= 3) {
+			CHECK(b.command(1).kind == rules::CommandKind::Ability && b.command(1).id == "spark");
+		} else if (b.combatant(1).alive()) {
+			mysticAutomatic = mysticAutomatic || b.combatant(0).alive();
+			CHECK(sameCommand(b.command(1), rules::autoCommand(b, 1)));
+		}
+		if (b.combatant(2).alive() && someoneDown && b.combatant(2).tp >= 10) {
+			CHECK(b.command(2).kind == rules::CommandKind::Ability && b.command(2).id == "rekindle");
+		} else if (b.combatant(2).alive()) {
+			CHECK(sameCommand(b.command(2), rules::autoCommand(b, 2)));
+		}
+		s.resolveRound();
+	}
+	CHECK(fighterFell && fighterBack && mysticAutomatic);
+
+	Session aboard(test::data(), SessionOptions());
+	test::placeParty(aboard, "reed_path", "skimmer_front", Facing::North);
+	setParty(aboard, {"fighter", "mystic"}, 6);
+	CHECK(aboard.devVehicle("reed_skimmer", "reed_path", "skimmer_front").empty());
+	aboard.world().aboard = "reed_skimmer";
+	aboard.world().vehicles["reed_skimmer"].skillUses = {{"hull_vent", 2}};
+	aboard.world().macros.push_back({"hull", {step("fighter", rules::CommandKind::Attack, ""), step("reed_skimmer", rules::CommandKind::Ability, "hull_vent")}});
+	CHECK(aboard.devBattle("endless").empty());
+	CHECK(aboard.setAutoPlayMacro("hull").empty());
+	int vents = 0;
+	int automatic = 0;
+	for (int round = 0; round < 8 && aboard.battle(); ++round) {
+		CHECK(aboard.fillAutoRound().empty());
+		const rules::Battle& b = *aboard.battle();
+		const int vehicle = b.partyCount() - 1;
+		CHECK(b.command(0).kind == rules::CommandKind::None && b.command(1).kind == rules::CommandKind::None);
+		if (b.vehicleSkillUses().at("hull_vent") > 0) {
+			++vents;
+			CHECK(b.command(vehicle).kind == rules::CommandKind::Ability && b.command(vehicle).id == "hull_vent");
+		} else {
+			++automatic;
+			CHECK(sameCommand(b.command(vehicle), rules::autoCommand(b, vehicle)));
+		}
+		aboard.resolveRound();
+	}
+	CHECK(vents == 2 && automatic > 0);
+}

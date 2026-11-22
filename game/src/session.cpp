@@ -131,11 +131,20 @@ std::string invalidWorld(const GameData& data, const World& w) {
 	bool autoFound = w.autoMacro.empty();
 	for (const rules::Macro& macro : w.macros) {
 		autoFound = autoFound || macro.name == w.autoMacro;
-		if (macro.steps.size() > static_cast<std::size_t>(rules::kMaxPartySize)) {
+		const auto memberSteps = std::count_if(macro.steps.begin(), macro.steps.end(), [&](const rules::MacroStep& s) { return !db.vehicle(s.member); });
+		if (memberSteps > rules::kMaxPartySize) {
 			return named("too many steps in macro", macro.name);
 		}
 		for (const rules::MacroStep& step : macro.steps) {
 			const bool badTarget = step.target.kind == rules::MacroTargetKind::Enemy && (step.target.enemySlot < 0 || step.target.enemySlot >= rules::kMaxEnemies);
+			if (db.vehicle(step.member)) {
+				const bool badCommand = step.piece || step.kind == rules::CommandKind::Item || step.kind == rules::CommandKind::Defend;
+				const bool badId = step.kind == rules::CommandKind::Ability && !db.ability(step.id);
+				if (badCommand || badId || badTarget || step.target.kind == rules::MacroTargetKind::Member) {
+					return named("bad step in macro", macro.name);
+				}
+				continue;
+			}
 			const bool badMember = step.target.kind == rules::MacroTargetKind::Member && !db.character(step.target.member);
 			const rules::EquipmentDef* piece = step.piece ? db.equipmentPiece(step.id) : nullptr;
 			const bool badPiece = step.piece && (step.kind != rules::CommandKind::Item || !piece || !db.ability(piece->use));

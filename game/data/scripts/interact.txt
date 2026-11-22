@@ -7,7 +7,8 @@
 # and running, and `set always_run on` runs. A battle aboard the skimmer opens normally, with no roll. Then battles
 # aboard take commands for the vehicle: a macro holds a step for the skimmer (refused as an item, a defend, a skill it
 # lacks or a member target) beside a member's step it passes by, `attack`, `use` and `escape` name the skimmer, `fight`
-# plays the macro, and the save's auto macro and `autobattle on hull` play it in later battles. Run with --seed 6.
+# plays the macro, and the save's auto macro and `autobattle on hull` play it in later battles. A manual save holds the
+# macro with the skimmer's step and loads again. Run with --seed 6.
 new
 dev warp wren_cellar cellar_door
 rows
@@ -124,4 +125,10 @@ e 2
 escape reed_skimmer
 round
 status
+menu
+save manual_0
+close
+title
+load manual_0
+macros
 quit

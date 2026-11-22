@@ -573,5 +573,34 @@ Mode field, Wren Cellar (11,7) facing east, play time 0:03:07.
   Test Fighter Lv3 HP 86/86 TP 8/8 EXP 56
   Money 131. Items: tonic x1, wake_chime x1.
   Aboard the Reed Skimmer.
+field> menu
+menu> save manual_0
+Saved to manual_0.
+menu> close
+field> title
+title> load manual_0
+Loaded manual_0.
+field> macros
+  opener
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0 (not_in_party)
+    2 fighter attack e0
+    3 engineer ability drowse e1 (not_in_party)
+    4 medic ability mend fighter (not_in_party)
+  tempest
+    0 mystic ability spark e0 (not_in_party)
+    1 scout ability gust e0 (not_in_party)
+    2 engineer ability flare_burst all (not_in_party)
+    3 fighter attack e0
+    4 medic defend (not_in_party)
+  regroup
+    0 medic ability mend fighter (not_in_party)
+    1 fighter ability rally all
+    2 mystic ability frostbite (not_in_party)
+    3 scout attack e0 (not_in_party)
+    4 engineer item tonic mystic (not_in_party)
+  hull (auto)
+    0 fighter attack
+    1 reed_skimmer attack e1
 field> quit
 End of script.

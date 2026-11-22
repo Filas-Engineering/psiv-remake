@@ -2,6 +2,7 @@
 
 #include "game/runner.h"
 #include "game/save.h"
+#include "rules/progression.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -416,6 +417,8 @@ TEST(damagedSavesAreRefusedBeforeAnythingIndexesWithThem) {
 		{"negative money", [](World& w) { w.money = -1; }},
 		{"undeclared flag", [](World& w) { w.flags["made.up"] = true; }},
 		{"macro enemy slot out of range", [](World& w) { w.macros.push_back({"bad", {}}); w.macros.back().steps.push_back({}); w.macros.back().steps.back().member = "fighter"; w.macros.back().steps.back().target.kind = rules::MacroTargetKind::Enemy; w.macros.back().steps.back().target.enemySlot = 40; }},
+		{"macro step for an unknown vehicle", [](World& w) { w.macros.push_back({"bad", {}}); w.macros.back().steps.push_back({}); w.macros.back().steps.back().member = "hovercart"; }},
+		{"vehicle macro step with an item", [](World& w) { w.macros.push_back({"bad", {{"reed_skimmer", rules::CommandKind::Item, "tonic", {}}}}); }},
 		{"unknown vehicle", [](World& w) { w.vehicles["hovercart"] = {w.area, w.position, Facing::South, w.area, w.position}; }},
 		{"vehicle outside its area", [](World& w) { w.vehicles["reed_skimmer"] = {"brine_flats", {900, 2}, Facing::South, "brine_flats", {1, 1}}; }},
 		{"aboard a vehicle not owned", [](World& w) { w.aboard = "reed_skimmer"; }},
@@ -448,4 +451,74 @@ TEST(damagedSavesAreRefusedBeforeAnythingIndexesWithThem) {
 		CHECK_EQ(s.loadSaveText(edited).key, std::string("game.refuse.save_damaged"));
 		CHECK(s.mode() == Mode::Title);
 	}
+}
+
+// R95: a macro with steps for vehicles beside party and piece steps is written to the save as core writes it, loads
+// again, mid-battle aboard too, and the editor keeps working on it.
+TEST(macrosWithVehicleStepsLoadAgain) {
+	Session s(test::data(), SessionOptions());
+	test::placeParty(s, "reed_path", "skimmer_front", Facing::North);
+	World& w = s.world();
+	w.roster.clear();
+	w.lineup.clear();
+	w.macros.clear();
+	for (const char* id : {"fighter", "mystic", "scout", "medic", "engineer"}) {
+		w.roster.push_back(rules::makePartyMember(test::data().db, *test::data().db.character(id), 6));
+		w.lineup.push_back(id);
+	}
+	CHECK(s.devVehicle("reed_skimmer", "reed_path", "skimmer_front").empty());
+	auto step = [](const char* member, rules::CommandKind kind, const char* id, rules::MacroTargetKind target = rules::MacroTargetKind::Default, int enemy = -1) {
+		rules::MacroStep made;
+		made.member = member;
+		made.kind = kind;
+		made.id = id;
+		made.target.kind = target;
+		made.target.enemySlot = enemy;
+		return made;
+	};
+	rules::MacroStep fan = step("scout", rules::CommandKind::Item, "squall_fan", rules::MacroTargetKind::Enemy, 1);
+	fan.piece = true;
+	CHECK(s.openMenu().empty());
+	CHECK(s.createMacro("mixed").empty());
+	const std::vector<rules::MacroStep> steps = {step("fighter", rules::CommandKind::Attack, ""), step("reed_skimmer", rules::CommandKind::Ability, "hull_vent", rules::MacroTargetKind::Enemy, 0),
+		fan, step("mystic", rules::CommandKind::Ability, "spark"), step("medic", rules::CommandKind::Ability, "mend", rules::MacroTargetKind::Self),
+		step("engineer", rules::CommandKind::Attack, ""), step("dune_crawler", rules::CommandKind::Escape, "")};
+	for (std::size_t i = 0; i < steps.size(); ++i) {
+		CHECK(s.setMacroStep("mixed", static_cast<int>(i), steps[i]).empty());
+	}
+	CHECK(s.setAutoMacro("mixed").empty());
+	const std::string text = serializeSave(s.makeSave(false));
+	CHECK(text.find("step reed_skimmer ability hull_vent enemy - 0\nstep scout piece squall_fan enemy - 1\n") != std::string::npos);
+	CHECK(text.find("step dune_crawler escape - default - -1\n") != std::string::npos);
+
+	Session loaded(test::data(), SessionOptions());
+	CHECK(loaded.loadSaveText(text).empty());
+	if (loaded.world().macros.size() != 1) {
+		return;
+	}
+	CHECK_EQ(rules::serializeMacros(loaded.world().macros), rules::serializeMacros(s.world().macros));
+	CHECK_EQ(loaded.world().autoMacro, std::string("mixed"));
+	CHECK(loaded.openMenu().empty());
+	const std::vector<MacroView> views = loaded.macroViews();
+	CHECK(views.size() == 1 && views[0].steps.size() == steps.size() && views[0].steps[1].memberName == "Reed Skimmer");
+	CHECK(loaded.moveMacroStep("mixed", 1, 0).empty());
+	CHECK(loaded.removeMacroStep("mixed", 6).empty());
+	CHECK(loaded.renameMacro("mixed", "afloat").empty());
+	CHECK(loaded.world().macros[0].steps[0].member == "reed_skimmer" && loaded.world().macros[0].steps.size() == steps.size() - 1);
+	Session again(test::data(), SessionOptions());
+	CHECK(again.loadSaveText(serializeSave(loaded.makeSave(false))).empty());
+	CHECK_EQ(rules::serializeMacros(again.world().macros), rules::serializeMacros(loaded.world().macros));
+	CHECK(loaded.deleteMacro("afloat").empty());
+	CHECK(loaded.world().macros.empty() && loaded.world().autoMacro.empty());
+
+	CHECK(s.closeMenu().empty());
+	w.aboard = "reed_skimmer";
+	CHECK(s.devBattle("training").empty());
+	CHECK(s.battle() && s.battle()->setup().vehicle == "reed_skimmer");
+	std::string midBattle;
+	CHECK(s.saveText(midBattle).empty());
+	Session aboard(test::data(), SessionOptions());
+	CHECK(aboard.loadSaveText(midBattle).empty());
+	CHECK_EQ(rules::serializeMacros(aboard.world().macros), rules::serializeMacros(s.world().macros));
+	CHECK_EQ(aboard.world().aboard, std::string("reed_skimmer"));
 }

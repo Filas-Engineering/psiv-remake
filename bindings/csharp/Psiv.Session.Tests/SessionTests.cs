@@ -1161,6 +1161,18 @@ public class DevToolsTests
 		Assert.Null(s.VehicleSkillUses("reed_skimmer", "hull_vent"));
 		s.DevVehicle("reed_skimmer", "reed_path", "skimmer_front").ThrowIfFailed();
 		Assert.Equal(3, s.VehicleSkillUses("reed_skimmer", "hull_vent"));
+
+		// A macro with the vehicle's step beside a member's is saved and loads again.
+		s.OpenMenu().ThrowIfFailed();
+		s.CreateMacro("hull").ThrowIfFailed();
+		s.SetMacroStep("hull", 0, "fighter", CommandKind.Attack).ThrowIfFailed();
+		s.SetMacroStep("hull", 1, "reed_skimmer", CommandKind.Ability, "hull_vent", MacroTargetKind.Enemy, null, 0).ThrowIfFailed();
+		(PsivResult saved, string save) = s.SaveText();
+		Assert.True(saved.Ok);
+		using GameSession other = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, Seed = 285 });
+		other.LoadText(save).ThrowIfFailed();
+		Macro hull = other.MacroList().Single(m => m.Name == "hull");
+		Assert.Equal(("reed_skimmer", CommandKind.Ability, "hull_vent", 0), (hull.Steps[1].Member, hull.Steps[1].CommandKind, hull.Steps[1].Id, hull.Steps[1].TargetEnemy));
 	}
 
 	[Fact]
