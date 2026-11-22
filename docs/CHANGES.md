@@ -2,6 +2,8 @@
 
 One line per feature, newest first: name, kind, meaning. Each pass adds its lines at the top.
 
+* `useAbilityOutsideBattle` and an ability's `attack_stat` (fix): a field ability heals with its `attack_stat` as in battle, through the one attacker the battle builds for an ability; before, it healed with the user's mental. Rules version 15 unchanged (field uses make no battle record).
+
 * `useItemOutsideBattle` with a `consumed: false` item (fix): the field use keeps what its effects did to the party, so a revive and a heal stand a fallen member at the heal as in battle; before, it reported the effects and changed nothing. Rules version 15 unchanged (field uses make no battle record).
 
 * `Session::discard`, `psiv_discard`, `GameSession.Discard`, game_cli `discard ID [N]`, items.json `discardable` (session, C API, C#, tool, data key, default true): throw items or unworn pieces away from the field menu, never an item marked `discardable: false`; notice `game.discarded`, refusals `game.refuse.discard_menu_only`, `discard_one`, `discard_not_held`, `not_discardable` in `en` and `ja`; `psiv_inventory_entry.discardable` (R177).

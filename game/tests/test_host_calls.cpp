@@ -3,10 +3,14 @@
 #include "game/area.h"
 #include "game/save.h"
 
+#include "rules/battle.h"
+#include "rules/formulas.h"
 #include "rules/progression.h"
 
 #include <algorithm>
 #include <fstream>
+#include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -128,6 +132,70 @@ TEST(aFieldReviveOfZeroAndHealEndsAtTheHeal) {
 		if (!ability) {
 			CHECK_EQ(healed, 30);
 		}
+	}
+}
+
+// A field skill with an `attack_stat` heals with that stat from the field menu, as in battle, not with the user's mental:
+// a fighter with no mental stands the fallen scout at the heal and heals the others by it.
+TEST(aFieldAbilityHealsWithItsAttackStat) {
+	const std::vector<std::optional<rules::Stat>> attackStats = {rules::Stat::Strength, rules::Stat::Attack, std::nullopt};
+	for (const std::optional<rules::Stat>& attackStat : attackStats) {
+		GameData data = test::data();
+		data.db.characters.at("fighter").base.mental = 0;
+		data.db.characters.at("fighter").base.strength = 20;
+		data.db.equipment.at("copper_blade").attackBonus = 6;
+		rules::AbilityDef rally;
+		rally.id = "field_rally";
+		rally.name = "Field Rally";
+		rally.kind = rules::AbilityKind::Skill;
+		rally.uses = 3;
+		rally.targeting = rules::Targeting::AllAllies;
+		rally.field = true;
+		rally.attackStat = attackStat;
+		for (const char* status : {"poison", "sleep", "paralysis"}) {
+			rules::Effect cure;
+			cure.kind = rules::EffectKind::CureStatus;
+			cure.status = status;
+			rally.effects.push_back(cure);
+		}
+		rules::Effect revive;
+		revive.kind = rules::EffectKind::Revive;
+		revive.zeroHp = true;
+		rally.effects.push_back(revive);
+		rules::Effect heal;
+		heal.kind = rules::EffectKind::Heal;
+		rally.effects.push_back(heal);
+		for (rules::Effect& effect : rally.effects) {
+			effect.kinds = {rules::CreatureKind::Living};
+		}
+		data.db.abilities[rally.id] = rally;
+		data.db.characters.at("fighter").abilities.push_back(rally.id);
+
+		Session s(data, SessionOptions());
+		test::placeParty(s, "reed_path", "west_gate", Facing::East);
+		setParty(s, {"fighter", "medic", "scout"}, 1);
+		s.world().member("medic")->hp = 1;
+		s.world().member("scout")->hp = 0;
+		const int stat = rules::memberCombatant(s.data().db, *s.world().member("fighter")).effective(attackStat.value_or(rules::Stat::Mental));
+		const int amount = rules::formulas::healAmount(0, stat, rules::formulas::kSpreadMean);
+		CHECK(amount > 1 || !attackStat);
+		CHECK(s.openMenu().empty());
+		s.drainOutput();
+		CHECK(s.useAbility("fighter", "field_rally", "").empty());
+		std::map<std::string, int> healed;
+		std::string revived;
+		for (const Output& o : s.drainOutput()) {
+			if (o.message.key == "game.healed") {
+				healed[o.message.params[0]] = std::stoi(o.message.params[1]);
+			} else if (o.message.key == "game.revived") {
+				revived = o.message.params[0] + " " + o.message.params[1];
+			}
+		}
+		CHECK_EQ(revived, "scout " + std::to_string(amount > 0 ? 0 : 1));
+		CHECK_EQ(healed["medic"], amount);
+		CHECK_EQ(healed["scout"], amount);
+		CHECK_EQ(s.world().member("medic")->hp, 1 + amount);
+		CHECK_EQ(s.world().member("scout")->hp, std::max(1, amount));
 	}
 }
 

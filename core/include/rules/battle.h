@@ -198,6 +198,8 @@ private:
 
 	bool surprised(Side side, int round) const;
 	Attacker attackerOf(int actor) const;
+	// The attacker `ability`'s effects read when `actor` uses it as `kind`, in battle and in the field.
+	Attacker abilityAttacker(int actor, const AbilityDef& ability, CommandKind kind) const;
 	// The target's affinity for an elemental hit, Defend included.
 	int elementAffinity(const Combatant& target, const Element& element) const;
 	const StatusDef* statusWith(int actor, StatusAction action) const;

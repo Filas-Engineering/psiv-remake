@@ -89,3 +89,104 @@ TEST(travelItemsAndTechniquesOnlyTakeTheirCost) {
 	CHECK_EQ(members[kMystic].tp, tp - 8);
 	CHECK_EQ(useAbilityOutsideBattle(data(), members, kScout, "outpath", -1).rejection.key, std::string("field.not_known"));
 }
+
+namespace {
+
+// The fighter with no mental, a strong arm and a blade with an attack bonus, who knows a field skill that cures, stands
+// the fallen at 0 and heals with power 0 every living ally, attacking with `attackStat`.
+Database rallyData(std::optional<Stat> attackStat) {
+	Database db = data();
+	db.characters["fighter"].base.mental = 0;
+	db.characters["fighter"].base.strength = 20;
+	db.equipment["copper_blade"].attackBonus = 6;
+	AbilityDef rally;
+	rally.id = "field_rally";
+	rally.name = "Field Rally";
+	rally.kind = AbilityKind::Skill;
+	rally.uses = 3;
+	rally.targeting = Targeting::AllAllies;
+	rally.field = true;
+	rally.attackStat = attackStat;
+	for (const char* status : {"poison", "sleep", "paralysis"}) {
+		Effect cure;
+		cure.kind = EffectKind::CureStatus;
+		cure.status = status;
+		rally.effects.push_back(cure);
+	}
+	Effect revive;
+	revive.kind = EffectKind::Revive;
+	revive.zeroHp = true;
+	Effect heal;
+	heal.kind = EffectKind::Heal;
+	rally.effects.push_back(revive);
+	rally.effects.push_back(heal);
+	for (Effect& effect : rally.effects) {
+		effect.kinds = {CreatureKind::Living};
+	}
+	db.abilities[rally.id] = rally;
+	db.characters["fighter"].abilities.push_back(rally.id);
+	return db;
+}
+
+// The scout fallen, every other ally at 1 hit point.
+void wound(std::vector<PartyMember>& members) {
+	for (PartyMember& member : members) {
+		member.hp = 1;
+	}
+	members[kScout].hp = 0;
+}
+
+// The rolled heals, by target, when the fighter uses the rally in a battle where everyone else defends; with `mental`, the
+// fighter's mental is that and the rally attacks with it.
+std::map<int, int> battleHeals(Database db, std::optional<int> mental) {
+	if (mental) {
+		db.abilities["field_rally"].attackStat.reset();
+	}
+	BattleSetup setup = makeSetup(db, {"gel_mite"}, 5);
+	wound(setup.party);
+	Battle battle = makeBattle(db, setup);
+	if (mental) {
+		battle.combatant(kFighter).stats.mental = *mental;
+	}
+	CHECK(battle.setCommand(kFighter, Command::ability("field_rally", -1)).empty());
+	othersDefend(battle);
+	std::map<int, int> heals;
+	for (const Event& e : ofType(battle.resolveRound(), EventType::Healed)) {
+		heals[e.target] = e.rolled;
+	}
+	return heals;
+}
+
+}
+
+// A field ability heals as the same ability does in battle for the same user and targets: with its `attack_stat` in place
+// of mental. The battle draws a spread for each heal and the field heals at the spread's mean, so a twin battle whose
+// rally heals with a mental of 128 reads each draw back.
+TEST(fieldAbilitiesAttackWithTheirAttackStatAsInBattle) {
+	const std::vector<std::optional<Stat>> attackStats = {Stat::Strength, Stat::Attack, std::nullopt};
+	for (const std::optional<Stat>& attackStat : attackStats) {
+		const Database db = rallyData(attackStat);
+		std::vector<PartyMember> members;
+		for (const std::string& id : db.lineup) {
+			members.push_back(makePartyMember(db, db.characters.at(id), 1));
+		}
+		wound(members);
+		const int stat = memberCombatant(db, members[kFighter]).effective(attackStat.value_or(Stat::Mental));
+		CHECK(stat > 0 || !attackStat);
+		const std::map<int, int> inBattle = battleHeals(db, std::nullopt);
+		const std::map<int, int> draws = battleHeals(db, 128);
+		CHECK_EQ(inBattle.size(), members.size());
+		CHECK_EQ(draws.size(), members.size());
+
+		const FieldUse use = useAbilityOutsideBattle(db, members, kFighter, "field_rally", -1);
+		CHECK(use.rejection.empty());
+		const std::vector<Event> heals = ofType(use.events, EventType::Healed);
+		CHECK_EQ(heals.size(), members.size());
+		for (const Event& e : heals) {
+			const int spread = draws.at(e.target) - 64;
+			CHECK_EQ(inBattle.at(e.target), formulas::healAmount(0, stat, spread));
+			CHECK_EQ(e.rolled, formulas::healAmount(0, stat, formulas::kSpreadMean));
+		}
+		CHECK_EQ(members[kScout].hp, std::max(1, formulas::healAmount(0, stat, formulas::kSpreadMean)));
+	}
+}

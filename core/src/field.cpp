@@ -248,7 +248,7 @@ FieldUse useAbilityOutsideBattle(const Database& db, std::vector<PartyMember>& p
 	}
 	FieldUse use;
 	battle.payCost(user, *ability, use.events);
-	battle.applyEffects(user, battle.attackerOf(user), ability->id, effects, targets, false, use.events);
+	battle.applyEffects(user, battle.abilityAttacker(user, *ability, CommandKind::Ability), ability->id, effects, targets, false, use.events);
 	writeBack(battle, party);
 	return use;
 }

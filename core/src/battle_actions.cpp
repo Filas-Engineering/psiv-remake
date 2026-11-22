@@ -158,25 +158,8 @@ void Battle::useAbility(int actor, const AbilityDef& ability, int target, Comman
 	e.command = kind;
 	e.target = targets.size() == 1 ? targets.front() : -1;
 	payCost(actor, ability, out);
-	Attacker attacker = attackerOf(actor);
-	if (kind == CommandKind::Attack) {
-		attacker.strength = combatants_[actor].effective(Stat::Attack);
-	}
+	Attacker attacker = abilityAttacker(actor, ability, kind);
 	attacker.rollsToHit = ability.kind == AbilityKind::Attack;
-	attacker.singleTarget = ability.targeting == Targeting::OneEnemy || ability.targeting == Targeting::RandomEnemy;
-	attacker.technique = ability.kind == AbilityKind::Technique;
-	attacker.groupTarget = ability.targeting == Targeting::EnemyGroup || ability.targeting == Targeting::AllEnemies;
-	attacker.changeAmount = attacker.technique ? attacker.mental : attacker.strength;
-	if (ability.attackStat) {
-		attacker.strength = attacker.mental = attacker.changeAmount = combatants_[actor].effective(*ability.attackStat);
-		if (*ability.attackStat == Stat::Attack) {
-			attacker.rollUser = combatants_[actor].effective(Stat::Strength);
-		}
-	}
-	if (kind == CommandKind::Attack) {
-		attacker.element = combatants_[actor].attackElement;
-	}
-	attacker.variance = ability.variance;
 	applyEffects(actor, attacker, ability.id, ability.effects, targets, false, out);
 	for (const Effect& effect : ability.effects) {
 		if (effect.kind == EffectKind::RemoveBeside && !isParty(actor) && !combatants_[actor].gone && combatants_[actor].alive()) {
@@ -256,18 +239,7 @@ void Battle::useWornPiece(int actor, const Command& command, const EquipmentDef&
 	e.ability = piece.id;
 	e.command = CommandKind::Item;
 	e.target = targets.size() == 1 ? targets.front() : -1;
-	Attacker attacker = attackerOf(actor);
-	attacker.singleTarget = ability->targeting == Targeting::OneEnemy || ability->targeting == Targeting::RandomEnemy;
-	attacker.groupTarget = ability->targeting == Targeting::EnemyGroup || ability->targeting == Targeting::AllEnemies;
-	attacker.technique = ability->kind == AbilityKind::Technique;
-	attacker.changeAmount = attacker.technique ? attacker.mental : attacker.strength;
-	if (ability->attackStat) {
-		attacker.strength = attacker.mental = attacker.changeAmount = combatants_[actor].effective(*ability->attackStat);
-		if (*ability->attackStat == Stat::Attack) {
-			attacker.rollUser = combatants_[actor].effective(Stat::Strength);
-		}
-	}
-	attacker.variance = ability->variance;
+	Attacker attacker = abilityAttacker(actor, *ability, CommandKind::Item);
 	if (piece.usePower) {
 		attacker.strength = attacker.mental = attacker.changeAmount = *piece.usePower;
 		attacker.rollUser.reset();
@@ -336,6 +308,26 @@ void Battle::useItem(int actor, const Command& command, std::vector<Event>& out)
 	spent.ability = item->id;
 	spent.resource = ResourceKind::Item;
 	spent.amount = 1;
+}
+
+Battle::Attacker Battle::abilityAttacker(int actor, const AbilityDef& ability, CommandKind kind) const {
+	Attacker attacker = attackerOf(actor);
+	if (kind == CommandKind::Attack) {
+		attacker.strength = combatants_[actor].effective(Stat::Attack);
+		attacker.element = combatants_[actor].attackElement;
+	}
+	attacker.singleTarget = ability.targeting == Targeting::OneEnemy || ability.targeting == Targeting::RandomEnemy;
+	attacker.technique = ability.kind == AbilityKind::Technique;
+	attacker.groupTarget = ability.targeting == Targeting::EnemyGroup || ability.targeting == Targeting::AllEnemies;
+	attacker.changeAmount = attacker.technique ? attacker.mental : attacker.strength;
+	if (ability.attackStat) {
+		attacker.strength = attacker.mental = attacker.changeAmount = combatants_[actor].effective(*ability.attackStat);
+		if (*ability.attackStat == Stat::Attack) {
+			attacker.rollUser = combatants_[actor].effective(Stat::Strength);
+		}
+	}
+	attacker.variance = ability.variance;
+	return attacker;
 }
 
 int Battle::rollSpread() {
