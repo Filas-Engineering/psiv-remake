@@ -161,6 +161,10 @@ assets: ui/battle_side.json: statuses.poison: unknown field 'glow'
 assets: ui/battle_side.json: statuses.poison: field 'color' must be a color name of the styles, #rrggbb or #rrggbbaa: 'mud'
 assets: ui/battle_side.json: statuses.poison: field 'icon' must be one of picture, none
 assets: ui/battle_side.json: statuses.poison: field 'priority' must be a whole number from 0 to 100
+assets: ui/battle_side.json: command_rows: unknown field 'side'
+assets: ui/battle_side.json: command_rows.top[1]: must be one of fight, macro, run
+assets: ui/battle_side.json: command_rows.member: must be a non-empty list of member commands
+assets: ui/battle_side.json: command_rows: needs the param 'command_top' on: the rows are per step of the top-level command flow
 assets: ui/battle_side.json: -: the built-in layout of this screen stands in
 assets: ui/confirm.json: params.backdrop_dim: the screen takes no params
 assets: ui/confirm.json: -: the built-in layout of this screen stands in
@@ -181,6 +185,11 @@ assets: ui/dialogue.json: windows.picture.close: field 'step' must be a whole nu
 assets: ui/dialogue.json: windows.picture.close: field 'step' is for grow, grow_x and grow_y only
 assets: ui/dialogue.json: windows.narration.elements[0]: unknown role 'subtitles': menu, dialogue, battle_numbers, hint, narration
 assets: ui/dialogue.json: -: the built-in layout of this screen stands in
+assets: ui/extras.json: entries[0]: field 'page' must be one of status, items, techniques, skills, abilities, equip, order, macros, combos, quests, codex, log, options, save, system, party_talk, controls, photosensitivity, dev, text_speed, battle_speed, flashing, auto_advance, text_size
+assets: ui/extras.json: entries[2]: 'options' is listed twice
+assets: ui/extras.json: entries[3]: missing field 'page'
+assets: ui/extras.json: entries[4]: unknown field 'colour'
+assets: ui/extras.json: -: the built-in layout of this screen stands in
 assets: ui/field.json: params.area_banners: unknown param: area_banner, arrive_toast
 assets: ui/field.json: -: the built-in layout of this screen stands in
 assets: ui/inn.json: statuses: the screen takes no statuses table
@@ -203,12 +212,17 @@ assets: ui/menu_status.json: places: only the menu_equip screen takes 'places'
 assets: ui/menu_status.json: profile[1]: must be a profile row: name, level, experience, experience_next, kind, hp, max_hp, tp, max_tp, strength, mental, agility, dexterity, defense, critical, evasion, magic_defense, attack_element, data
 assets: ui/menu_status.json: profile[2]: 'name' is listed twice
 assets: ui/menu_status.json: -: the built-in layout of this screen stands in
-assets: ui/nonsense.json: -: unknown screen 'nonsense': battle_front, battle_side, confirm, controls, credits, dialogue, field, inn, load_game, menu, menu_codex, menu_combos, menu_equip, menu_items, menu_log, menu_macros, menu_options, menu_order, menu_quests, menu_status, name_entry, options, panels, pause, quest_log, save_prompt, save_slots, shop, sound_test, text_log, title, travel or styles
+assets: ui/menu_system.json: rows[1]: must be one of save, quit, text_speed, battle_speed, flashing, auto_advance, text_size
+assets: ui/menu_system.json: rows[2]: 'save' is listed twice
+assets: ui/menu_system.json: -: the built-in layout of this screen stands in
+assets: ui/nonsense.json: -: unknown screen 'nonsense': battle_front, battle_side, confirm, controls, credits, dialogue, extras, field, inn, load_game, menu, menu_abilities, menu_codex, menu_combos, menu_equip, menu_items, menu_log, menu_macros, menu_options, menu_order, menu_quests, menu_status, menu_system, name_entry, options, panels, pause, quest_log, save_prompt, save_slots, shop, sound_test, text_log, title, travel or styles
 assets: ui/panels.json: params.zoom: unknown param: bottom, gutter, margin, slide
 assets: ui/panels.json: -: the built-in layout of this screen stands in
+assets: ui/shop.json: entries: only the menu and extras screens take 'entries'
+assets: ui/shop.json: -: the built-in layout of this screen stands in
 assets: ui/sound_test.json: start: only the title screen takes 'start' and 'options'
 assets: ui/sound_test.json: -: the built-in layout of this screen stands in
 assets: ui/title.json: -: not valid JSON: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 27.
 assets: ui/title.json: -: the built-in layout of this screen stands in
 assets: 0 tilesets, 14 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 4 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 20 layout files (1280x720)
-FAILED: 212 problems.
+FAILED: 226 problems.

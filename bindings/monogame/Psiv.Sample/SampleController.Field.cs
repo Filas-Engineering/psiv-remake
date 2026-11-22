@@ -471,6 +471,10 @@ public sealed partial class SampleController
 		{
 			Report(_s.PartyTalk());
 		}
+		else if (input.Pressed(GameAction.Extras))
+		{
+			OpenExtras();
+		}
 		else if (input.Pressed(GameAction.QuestLog))
 		{
 			_questOverlay = true;
@@ -512,6 +516,10 @@ public sealed partial class SampleController
 		else if (input.Pressed(GameAction.PartyTalk))
 		{
 			Report(_s.PartyTalk());
+		}
+		else if (input.Pressed(GameAction.Extras))
+		{
+			OpenExtras();
 		}
 		else if (input.Pressed(GameAction.QuestLog))
 		{

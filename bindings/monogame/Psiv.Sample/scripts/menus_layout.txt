@@ -1,0 +1,203 @@
+# The menu layout items (make_menu_assets.py), with --dev: the Extras menu from the title (settings rows changed in
+# place, the photosensitivity notice, the Controls page listing Extras, the developer console), the field menu's own
+# entries (the technique, skill and ability pages with a field technique used, the system page's rows and slot list,
+# party talk), the Extras menu from the field menu and from the field opening a field menu page, the menu file
+# reloaded. With --window the shot lines save screenshots under build/shots/menus/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 2
+expect state selected New game
+
+# Extras from the title: the field menu's pages are left out there.
+press C
+wait 2
+expect screen Extras
+expect state page extras
+expect state uifield.extras.on_title true
+expect state uifield.extras.rows 7
+expect state uifield.extras.rows.0.id text_speed
+expect state selected Text speed: Instant
+shot build/shots/menus/extras_title.png
+press Right
+wait 2
+expect state selected Text speed: Slow
+press Left
+wait 2
+expect state selected Text speed: Instant
+press Down 5
+wait 2
+expect state selected Photosensitivity notice
+press Enter
+wait 2
+expect state page notice
+expect state uifield.extras.view notice
+shot build/shots/menus/extras_notice.png
+press Escape
+wait 2
+expect state page extras
+press Up
+wait 2
+expect state selected Controls
+press Enter
+wait 2
+expect screen Options
+expect state page controls
+expect binding Extras C | -
+press Up 2
+wait 2
+expect state uifield.controls.actions.15.label Extras
+shot build/shots/menus/controls_extras.png
+press Escape
+wait 2
+expect screen Extras
+press Down 2
+wait 2
+expect state selected Developer console
+press Escape
+wait 2
+expect screen Title
+
+# The field menu's own entries.
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+press M
+expect screen Menu
+expect state tab Items
+expect state uifield.menu.page_ids 10
+shot build/shots/menus/menu_items.png
+press Right
+expect state tab Techniques
+wait 2
+expect state page members
+press Down 2
+press Enter
+wait 2
+expect state page list
+expect state uifield.menu_abilities.kind techniques
+expect state uifield.menu_abilities.abilities.0.cost 3 TP
+expect state selected Mend
+shot build/shots/menus/menu_techniques.png
+press Enter
+wait 2
+expect state page target
+shot build/shots/menus/menu_techniques_target.png
+press Enter
+wait 2
+expect state page list
+press Escape
+press Right
+expect state tab Skills
+press Enter
+wait 2
+expect state page list
+expect state uifield.menu_abilities.kind skills
+shot build/shots/menus/menu_skills.png
+press Escape
+press Right
+expect state tab Abilities
+press Enter
+wait 2
+expect state uifield.menu_abilities.kind abilities
+press Escape
+press Right 3
+expect state tab System
+wait 2
+expect state page system
+expect state uifield.menu_system.rows 4
+expect state selected Save
+shot build/shots/menus/menu_system.png
+press Down
+wait 2
+expect state selected Text speed: Instant
+press Enter
+wait 2
+expect state selected Text speed: Slow
+press Down 2
+wait 2
+expect state selected Quit
+press Up 3
+press Enter
+wait 2
+expect state page slots
+press Enter
+wait 2
+expect state uifield.save_slots.slots.0.empty false
+shot build/shots/menus/menu_system_slots.png
+press Escape
+wait 2
+expect state page system
+press Right
+expect state tab Party_talk
+wait 2
+expect state selected Talk with the party
+press Enter
+wait 2
+expect screen Field
+expect toast Test Mystic: A bell that rings by itself. I would like to meet whoever pulls the rope.
+pressuntil Enter Field 600
+press M
+wait 2
+press Right 7
+press Right
+expect state tab Extras
+wait 2
+expect state selected Open extras
+press Enter
+wait 2
+expect screen Extras
+expect state uifield.extras.rows 9
+shot build/shots/menus/extras_menu.png
+press Down 8
+wait 2
+expect state selected Jobs
+press Enter
+wait 2
+expect screen Menu
+expect state tab Quests
+press Escape
+wait 2
+expect screen Field
+
+# Extras from the field opens a field menu page.
+press C
+wait 2
+expect screen Extras
+press Down 7
+wait 2
+expect state selected Techniques
+press Enter
+wait 2
+expect screen Menu
+expect state tab Techniques
+expect state page members
+press Escape
+wait 2
+expect screen Field
+
+# Hot reload: a menu file with only the system page and the Extras entry, then the first one back.
+assets swap ui/menu.json alt/menu_short.json
+press M
+wait 2
+expect state uifield.menu.page_ids 2
+expect state tab System
+press Escape
+assets swap ui/menu.json alt/menu_full.json
+press M
+wait 2
+expect state uifield.menu.page_ids 10
+press Escape
+wait 2
+
+# The developer console from Extras.
+press C
+press Down 6
+press Enter
+wait 2
+expect screen Field
+expect state console open

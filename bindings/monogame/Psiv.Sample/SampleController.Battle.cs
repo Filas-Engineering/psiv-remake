@@ -21,8 +21,9 @@ public sealed partial class SampleController
 	// The phases with a menu to choose from.
 	private static bool Choosing(BattlePhase phase) => phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro or BattlePhase.Top;
 
-	// The top-level step's rows, before the members' commands when the battle layout's `command_top` is on.
-	private static readonly string[] TopMenu = ["fight", "macro", "run"];
+	// The top-level step's rows, before the members' commands when the battle layout's `command_top` is on; its
+	// `command_rows.top` can leave some out.
+	private string[] TopMenu => [.. Layout.Screen(BattleScreen).TopCommands ?? [.. UiFields.TopCommands]];
 
 	// The battle layout's command navigation: `command_axis` "row" makes Left and Right walk the command rows (Up and Down
 	// then do nothing), and `command_top` puts the top-level step (fight, macro, run) before the members' commands each round.
@@ -75,7 +76,8 @@ public sealed partial class SampleController
 	// Every presentation step started, by its description, for headless expectations.
 	public List<string> PresentedSteps { get; } = [];
 
-	private static readonly string[] CommandMenu = ["attack", "technique", "skill", "item", "defend", "escape", "macro", "auto"];
+	// With `command_top`, the battle layout's `command_rows.member` can leave commands out of the members' rows.
+	private IEnumerable<string> CommandMenu => LayoutSwitch("command_top") ? Layout.Screen(BattleScreen).MemberCommands ?? [.. UiFields.MemberCommands] : UiFields.MemberCommands;
 
 	// A row of the command menu: a command, or in a vehicle battle one of the vehicle's skills.
 	private sealed record CommandRow(string Command, string Text, BattleOption? Option = null)
@@ -248,6 +250,11 @@ public sealed partial class SampleController
 			OpenPause();
 			return;
 		}
+		if (Choosing(b.Phase) && input.Pressed(GameAction.Extras))
+		{
+			OpenExtras();
+			return;
+		}
 		switch (b.Phase)
 		{
 		case BattlePhase.Playback:
@@ -292,13 +299,14 @@ public sealed partial class SampleController
 			}
 			break;
 		case BattlePhase.Top:
-			Move(input, TopMenu.Length);
+			string[] top = TopMenu;
+			Move(input, top.Length);
 			if (!input.Confirm)
 			{
 				break;
 			}
 			b.MenuIndex = _cursor;
-			switch (TopMenu[_cursor])
+			switch (top[_cursor])
 			{
 			case "fight":
 				NextActor(0);

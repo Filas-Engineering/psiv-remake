@@ -190,6 +190,14 @@ public static class Program
 			}
 			if (script is not null && !window)
 			{
+				// PSIV_DIGEST_DIR keeps every run's digests for a before-and-after parity check, named by the arguments so the
+				// same make target writes the same file.
+				if (digests is null && Environment.GetEnvironmentVariable("PSIV_DIGEST_DIR") is { Length: > 0 } digestDir)
+				{
+					Directory.CreateDirectory(digestDir);
+					byte[] hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(string.Join('\n', args)));
+					digests = Path.Combine(digestDir, $"{Path.GetFileNameWithoutExtension(script)}-{Convert.ToHexString(hash, 0, 6)}.txt");
+				}
 				return Headless.Run(session, gameData, script, frames, saves, assets, digests, dev, data, battleLayout, strictText);
 			}
 			try

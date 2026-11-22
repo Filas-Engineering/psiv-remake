@@ -1,0 +1,27 @@
+{
+	"version": 1,
+	"windows": [
+		{"name": "scene", "elements": [
+			{"type": "slot", "slot": "scene"},
+			{"type": "fill", "w": "W", "h": "H", "color": "black", "alpha": 0.55}
+		]},
+		{"name": "box", "anchor": "center", "w": "t(520)", "h": "t(64) + max(1, len(rows)) * t(30) + t(64)", "frame": "panel", "title": "ui.extras.title", "elements": [
+			{"type": "group", "visible": "view == 'list'", "elements": [
+				{"type": "list", "items": "rows", "state": "list", "x": "t(30)", "y": "t(30)", "w": "cw - t(50)", "h": "len(rows) * t(30)", "row_height": "t(30)", "row": [
+					{"type": "fill", "visible": "selected", "x": -6, "y": -3, "w": "cw - t(50) - 14", "h": "t(28)", "color": "row"},
+					{"type": "pointer", "visible": "selected", "x": -4, "y": "(t(28) - 8) / 2 - 6"},
+					{"type": "text", "value": "label", "x": 14, "color": "selected ? 'accent' : 'text'"},
+					{"type": "text", "value": "value == '' ? '' : selected && changeable ? '<  ' + value + '  >' : value", "x": "(cw - t(50)) * 55 / 100",
+						"color": "selected ? 'accent' : 'text'"}
+				]},
+				{"type": "text", "value": "description", "x": "t(30)", "y": "t(34) + len(rows) * t(30)", "wrap": true, "max_width": "cw - t(50)", "lines": 2, "line_height": "t(22)", "style": "small_dim"}
+			]},
+			{"type": "text", "visible": "view == 'notice'", "value": "notice", "x": "t(30)", "y": "t(30)", "wrap": true, "max_width": "cw - t(50)", "lines": 6, "line_height": "t(22)"}
+		]},
+		{"name": "toasts", "elements": [{"type": "slot", "slot": "toasts", "y": "H - t(40)", "w": "W - 48", "h": 0}]},
+		{"name": "hint", "x": 0, "y": "H - t(30)", "h": "t(30)", "elements": [
+			{"type": "fill", "w": "W", "h": "t(30)", "color": "black"},
+			{"type": "text", "value": "hint", "max_width": "W - 32", "w": "W", "align": "center", "y": "t(5)", "style": "small_dim"}
+		]}
+	]
+}

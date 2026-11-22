@@ -154,6 +154,11 @@ public sealed partial class SampleController
 			}
 			return;
 		}
+		if (input.Pressed(GameAction.Extras))
+		{
+			OpenExtras();
+			return;
+		}
 		var options = TitleOptions();
 		Move(input, options.Count);
 		if (input.Confirm && options.Count > 0)

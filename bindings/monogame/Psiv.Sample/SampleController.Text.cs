@@ -81,17 +81,30 @@ public sealed partial class SampleController
 	private string ActionText(GameAction action) => T("ui.action." + Snake(action.ToString()));
 
 	// The sample's words for keys the game's text tables do not carry: the field options' help, the credits screen, the
-	// macro editor's auto play and fallback actions, the automatic step status and the title's empty erase list. T takes a
+	// macro editor's auto play and fallback actions, the automatic step status, the title's empty erase list, the field
+	// menu's newer pages and the Extras menu. T takes a
 	// table's own text for the key when it has one, else this English, without counting the key as missing.
 	private static readonly Dictionary<string, string> SampleWords = new()
 	{
 		["ui.battle.log.auto_play"] = "Auto-battle plays {0} every round.",
+		["ui.action.extras"] = "Extras",
 		["ui.credits.hint"] = "{0} end the credits",
+		["ui.extras.dev"] = "Developer console",
+		["ui.extras.photosensitivity"] = "Photosensitivity notice",
+		["ui.extras.title"] = "Extras",
 		["ui.macro_step_status.automatic"] = "automatic",
 		["ui.macros.fallback_automatic"] = "Stuck steps: automatic choice",
 		["ui.macros.fallback_basic"] = "Stuck steps: basic attack",
 		["ui.macros.stop_auto_play"] = "Stop auto-battle playing it every round",
 		["ui.macros.use_auto_play"] = "Auto-battle plays it every round",
+		["ui.menu.open_extras"] = "Open extras",
+		["ui.menu.party_talk"] = "Talk with the party",
+		["ui.menu.tab.abilities"] = "Abilities",
+		["ui.menu.tab.extras"] = "Extras",
+		["ui.menu.tab.party_talk"] = "Talk",
+		["ui.menu.tab.skills"] = "Skills",
+		["ui.menu.tab.system"] = "System",
+		["ui.menu.tab.techniques"] = "Techniques",
 		["ui.options.always_run_help"] = "Walk at running pace without holding Run; holding Run then walks.",
 		["ui.options.interact_prompt_help"] = "Shows the key and a mark over what the leader can talk to, open or board.",
 		["ui.title.erase_none"] = "No saves to erase.",

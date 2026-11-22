@@ -4,10 +4,15 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-// The field menu: tabs along the top, one page each. Status, Equip and Macros have their own files.
+// The field menu: tabs along the top, one page each, in the menu layout's `entries` order. Status, Equip and Macros have
+// their own files; the technique, skill and system pages are in SampleController.MenuPages.
 public sealed partial class SampleController
 {
-	private static readonly string[] MenuTabs = ["Status", "Items", "Equip", "Save", "Order", "Macros", "Combos", "Quests", "Codex", "Log", "Options"];
+	private string[] MenuTabs => [.. Layout.Screen("menu").Entries?.Select(e => e.Page) ?? UiFields.MenuDefault];
+
+	private string MenuLabel(string page) => Layout.Screen("menu").Entries?.FirstOrDefault(e => e.Page == page).Label ?? "ui.menu.tab." + page;
+
+	private string MenuPage => MenuTabs[Math.Clamp(_tab, 0, MenuTabs.Length - 1)];
 
 	private readonly ScrollList _third = new();
 	// The Items page's order; the bag has none of its own, so this is the sample's own choice and is not saved.
@@ -32,27 +37,31 @@ public sealed partial class SampleController
 	// Where the page is, for headless expectations.
 	private string Page() => Screen switch
 	{
-		Screen.Menu => MenuTabs[_tab] switch
+		Screen.Menu => MenuPage switch
 		{
-			"Status" => _pickMember is null ? "members" : _pickAction is not null ? "target" : _statusPage == 0 ? "stats" : "abilities",
-			"Items" => _pickAction is null ? "items" : "target",
-			"Equip" => _pickMember is null ? "members" : _equipSlot is null ? "slots" : "pieces",
-			"Order" => _orderFrom is null ? "lineup" : "swap",
-			"Macros" => _macroStage.ToString().ToLowerInvariant(),
-			_ => MenuTabs[_tab].ToLowerInvariant(),
+			"status" => _pickMember is null ? "members" : _pickAction is not null ? "target" : _statusPage == 0 ? "stats" : "abilities",
+			"items" => _pickAction is null ? "items" : "target",
+			"equip" => _pickMember is null ? "members" : _equipSlot is null ? "slots" : "pieces",
+			"order" => _orderFrom is null ? "lineup" : "swap",
+			"macros" => _macroStage.ToString().ToLowerInvariant(),
+			"techniques" or "skills" or "abilities" => _pickMember is null ? "members" : _pickAction is not null ? "target" : "list",
+			"system" => _saveMode is null ? "system" : "slots",
+			_ => MenuPage,
 		},
 		Screen.Options => _controlsPage ? "controls" : "options",
+		Screen.Extras => _extrasNotice ? "notice" : "extras",
 		_ => Screen.ToString().ToLowerInvariant(),
 	};
 
-	private bool MenuAtTop() => MenuTabs[_tab] switch
+	private bool MenuAtTop() => MenuPage switch
 	{
-		"Status" => _pickMember is null,
-		"Equip" => _pickMember is null || (!EquipMembersFirst && _equipSlot is null),
-		"Items" => _pickAction is null,
-		"Order" => _orderFrom is null,
-		"Macros" => _macroStage == MacroStage.List,
-		"Save" => SaveAtTop,
+		"status" or "techniques" or "skills" or "abilities" => _pickMember is null,
+		"equip" => _pickMember is null || (!EquipMembersFirst && _equipSlot is null),
+		"items" => _pickAction is null,
+		"order" => _orderFrom is null,
+		"macros" => _macroStage == MacroStage.List,
+		"save" => SaveAtTop,
+		"system" => _saveMode is null,
 		_ => true,
 	};
 
@@ -78,14 +87,23 @@ public sealed partial class SampleController
 				return;
 			}
 		}
-		switch (MenuTabs[_tab])
+		switch (MenuPage)
 		{
-		case "Status": UpdateStatus(input); break;
-		case "Items": UpdateItems(input); break;
-		case "Equip": UpdateEquip(input); break;
-		case "Order": UpdateOrder(input); break;
-		case "Macros": UpdateMacros(input); break;
-		case "Combos":
+		case "status": UpdateStatus(input); break;
+		case "items": UpdateItems(input); break;
+		case "equip": UpdateEquip(input); break;
+		case "order": UpdateOrder(input); break;
+		case "macros": UpdateMacros(input); break;
+		case "techniques" or "skills" or "abilities": UpdateAbilitiesPage(input); break;
+		case "system": UpdateSystemPage(input); break;
+		case "party_talk" when input.Confirm:
+			Report(_s.CloseMenu());
+			Report(_s.PartyTalk());
+			break;
+		case "extras" when input.Confirm:
+			OpenExtras();
+			break;
+		case "combos":
 			ComboLog combos = _s.ComboLog();
 			_list.Move(input, Math.Max(combos.Total, combos.Entries.Count));
 			if (input.Confirm && _list.Cursor < combos.Entries.Count)
@@ -93,19 +111,19 @@ public sealed partial class SampleController
 				MakeComboMacro(combos.Entries[_list.Cursor]);
 			}
 			break;
-		case "Quests":
+		case "quests":
 			_list.MoveView(input, QuestRows().Count);
 			break;
-		case "Codex":
+		case "codex":
 			_list.Move(input, _s.Encyclopedia().Count);
 			break;
-		case "Log":
+		case "log":
 			ScrollTextLog(input);
 			break;
-		case "Save":
+		case "save":
 			UpdateSavePage(input);
 			break;
-		case "Options":
+		case "options":
 			if (input.Confirm)
 			{
 				OpenOptions();
@@ -186,7 +204,8 @@ public sealed partial class SampleController
 	{
 		Ui.Draw("menu", s, t, UiData()
 			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "menu")))
-			.Set("tabs", MenuTabs.Select(tab => T("ui.menu.tab." + tab.ToLowerInvariant())).ToList())
+			.Set("tabs", MenuTabs.Select(tab => T(MenuLabel(tab))).ToList())
+			.Set("page_ids", MenuTabs.ToList())
 			.Set("tab", _tab)
 			.Set("money", T("ui.common.money", _s.WorldInfo().Money))
 			.Set("page", (UiSlot)((x, y, w, h) => DrawMenuPage(s, t, art, x, y, w, h)))
@@ -202,12 +221,20 @@ public sealed partial class SampleController
 
 	private void DrawMenuPage(IDrawSurface s, IDrawSurface t, Art art, int x, int y, int w, int h)
 	{
-		switch (MenuTabs[_tab])
+		switch (MenuPage)
 		{
-		case "Status": DrawStatus(s, t, art, x, y, w, h); break;
-		case "Items": DrawItemsPage(s, t, x, y, w, h); break;
-		case "Equip": DrawEquip(s, t, x, y, w, h); break;
-		case "Order":
+		case "status": DrawStatus(s, t, art, x, y, w, h); break;
+		case "items": DrawItemsPage(s, t, x, y, w, h); break;
+		case "equip": DrawEquip(s, t, x, y, w, h); break;
+		case "techniques" or "skills" or "abilities": DrawAbilitiesPage(s, t, x, y, w, h); break;
+		case "system": DrawSystemPage(s, t, x, y, w, h); break;
+		case "party_talk":
+			MenuRow(s, t, x, y, w, h, T("ui.menu.party_talk"));
+			break;
+		case "extras":
+			MenuRow(s, t, x, y, w, h, T("ui.menu.open_extras"));
+			break;
+		case "order":
 			Ui.Draw("menu_order", s, t, UiArea(x, y, w, h)
 				.Set("rows", LineupMembers().Select((m, i) => (_orderFrom == i ? "> " : "") + $"{i + 1}. {MemberRow(m)}" + string.Concat(m.Statuses.Select(st => $" [{st.Name}]"))).ToList())
 				.Set("lineup", LineupMembers().Select((m, i) => new UiContext().Set("text", MemberRow(m)).Set("name", m.Name).Set("level", m.Level).Set("hp", m.Hp)
@@ -215,17 +242,23 @@ public sealed partial class SampleController
 					.Set("statuses", string.Join(" ", m.Statuses.Select(st => st.Name)))).ToList())
 				.Set("list", _list));
 			break;
-		case "Macros": DrawMacros(s, t, x, y, w, h); break;
-		case "Combos": DrawCombos(s, t, x, y, w, h); break;
-		case "Quests": DrawQuestLog(s, t, x, y, w, h); break;
-		case "Codex": DrawCodex(s, t, x, y, w, h); break;
-		case "Log": DrawTextLog(s, t, x, y, w, h); break;
-		case "Save": DrawSavePage(t, x, y, w, h); break;
-		case "Options":
-			Ui.Draw("menu_options", s, t, UiArea(x, y, w, h).Set("options", new List<string> { T("ui.menu.open_options") }));
-			_probeSelected = T("ui.menu.open_options");
+		case "macros": DrawMacros(s, t, x, y, w, h); break;
+		case "combos": DrawCombos(s, t, x, y, w, h); break;
+		case "quests": DrawQuestLog(s, t, x, y, w, h); break;
+		case "codex": DrawCodex(s, t, x, y, w, h); break;
+		case "log": DrawTextLog(s, t, x, y, w, h); break;
+		case "save": DrawSavePage(t, x, y, w, h); break;
+		case "options":
+			MenuRow(s, t, x, y, w, h, T("ui.menu.open_options"));
 			break;
 		}
+	}
+
+	// A page that is one row, always selected, which Confirm acts on: the menu_options layout.
+	private void MenuRow(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h, string row)
+	{
+		Ui.Draw("menu_options", s, t, UiArea(x, y, w, h).Set("options", new List<string> { row }));
+		_probeSelected = row;
 	}
 
 	private string MenuHint()
@@ -235,14 +268,14 @@ public sealed partial class SampleController
 		string scroll = T("ui.menu.hint.scroll", Hint(GameAction.Up), Hint(GameAction.Down));
 		string choose = T("ui.menu.hint.choose", Hint(GameAction.Up), Hint(GameAction.Down));
 		string use = T("ui.menu.hint.use", Hint(GameAction.Confirm));
-		string[] page = MenuTabs[_tab] switch
+		string[] page = MenuPage switch
 		{
-			"Status" when _pickMember is not null && _pickAction is null =>
+			"status" when _pickMember is not null && _pickAction is null =>
 				[T("ui.menu.hint.stats_or_abilities", Hint(GameAction.PagePrev), Hint(GameAction.PageNext)), .. _statusPage == 0 ? [scroll] : new[] { choose, use }, back],
-			"Quests" or "Log" => [.. tabs, scroll, back],
-			"Order" => [.. tabs, choose, T(_orderFrom is null ? "ui.menu.hint.pick" : "ui.menu.hint.swap", Hint(GameAction.Confirm)), back],
-			"Items" when _pickAction is null => [.. tabs, choose, use, T("ui.menu.hint.sort", Hint(GameAction.PartyTalk)), back],
-			"Macros" when _macroStage == MacroStage.Name =>
+			"quests" or "log" => [.. tabs, scroll, back],
+			"order" => [.. tabs, choose, T(_orderFrom is null ? "ui.menu.hint.pick" : "ui.menu.hint.swap", Hint(GameAction.Confirm)), back],
+			"items" when _pickAction is null => [.. tabs, choose, use, T("ui.menu.hint.sort", Hint(GameAction.PartyTalk)), back],
+			"macros" when _macroStage == MacroStage.Name =>
 				[T("ui.menu.hint.type", Hint(GameAction.Confirm)), T("ui.menu.hint.name_confirm", KeyText(Keys.Enter), Hint(GameAction.Menu)), T("ui.menu.hint.cancel", KeyText(Keys.Escape))],
 			_ => [.. tabs, choose, use, back],
 		};

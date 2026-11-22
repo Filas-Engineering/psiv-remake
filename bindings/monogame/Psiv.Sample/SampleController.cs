@@ -6,7 +6,7 @@ using Psiv.Session;
 
 namespace Psiv.Sample;
 
-public enum Screen { Title, Field, Dialogue, Battle, Menu, Shop, Inn, SavePrompt, NameEntry, QuestLog, TextLog, Options, Pause, LoadGame, Travel, SoundTest, Credits }
+public enum Screen { Title, Field, Dialogue, Battle, Menu, Shop, Inn, SavePrompt, NameEntry, QuestLog, TextLog, Options, Pause, LoadGame, Travel, SoundTest, Credits, Extras }
 
 // The sample's screens: reads the session after each update and draws it through the surface with the
 // sample's own generated pictures (Art), rectangles and text. Holds no game state of its own beyond cursors,
@@ -147,6 +147,10 @@ public sealed partial class SampleController
 			{
 				return Screen.Options;
 			}
+			if (_extrasOverlay)
+			{
+				return Screen.Extras;
+			}
 			if (_pause && (_battle.Active || _s.Mode == Mode.Field))
 			{
 				return Screen.Pause;
@@ -181,7 +185,7 @@ public sealed partial class SampleController
 		}
 	}
 
-	private static bool IsOverlay(Screen screen) => screen is Screen.Options or Screen.Pause or Screen.LoadGame or Screen.SoundTest;
+	private static bool IsOverlay(Screen screen) => screen is Screen.Options or Screen.Pause or Screen.LoadGame or Screen.SoundTest or Screen.Extras;
 
 	private int Px(int value) => (int)MathF.Round(value * _scale);
 
@@ -273,13 +277,14 @@ public sealed partial class SampleController
 	private void ResetUi()
 	{
 		_cursor = 0;
-		_tab = 0;
+		_tab = _menuTabNext;
+		_menuTabNext = 0;
 		_pickMember = null;
 		_pickAction = null;
 		_list.Reset();
 		_sub.Reset();
 		_confirm.Close();
-		_pause = _optionsOverlay = _loadOverlay = _soundTestOverlay = _erasing = false;
+		_pause = _optionsOverlay = _loadOverlay = _soundTestOverlay = _erasing = _extrasOverlay = false;
 		_soundTestTrack = "";
 		_clearRecord = null;
 		_titleStarted = false;
@@ -382,6 +387,7 @@ public sealed partial class SampleController
 		case Screen.SavePrompt: UpdateSavePrompt(input); break;
 		case Screen.NameEntry: UpdateNameEntry(input); break;
 		case Screen.Options: UpdateOptions(input); break;
+		case Screen.Extras: UpdateExtras(input); break;
 		case Screen.Pause: UpdatePause(input); break;
 		case Screen.LoadGame: UpdateLoadGame(input); break;
 		case Screen.SoundTest: UpdateSoundTest(input); break;
@@ -581,6 +587,7 @@ public sealed partial class SampleController
 		case Screen.SavePrompt: DrawSavePrompt(s, t, art); break;
 		case Screen.NameEntry: DrawNameEntry(s, t, art); break;
 		case Screen.Options: DrawOptions(s, t, art); break;
+		case Screen.Extras: DrawExtras(s, t, art); break;
 		case Screen.Pause: DrawPause(s, t, art); break;
 		case Screen.LoadGame: DrawLoadGame(s, t, art); break;
 		case Screen.SoundTest: DrawSoundTest(s, t, art); break;
@@ -635,7 +642,7 @@ public sealed partial class SampleController
 		Settings settings = _s.Settings();
 		return key switch
 		{
-			"tab" => Screen == Screen.Menu ? MenuTabs[_tab] : "-",
+			"tab" => Screen == Screen.Menu ? char.ToUpperInvariant(MenuPage[0]) + MenuPage[1..] : "-",
 			"page" => Page(),
 			"selected" => _probeSelected,
 			"top" => _probeTop.ToString(CultureInfo.InvariantCulture),

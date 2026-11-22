@@ -229,6 +229,7 @@ def main():
 	broken_layouts(broken)
 	looks_broken(broken)
 	items_broken(broken)
+	menus_broken(broken)
 	bitmap_fonts(export, fonts)
 	if len(sys.argv) > 5:
 		subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("make_layout_assets.py")), str(export), str(fonts), sys.argv[5]], check=True)
@@ -699,6 +700,22 @@ def items_broken(broken):
 		d["params"]["dev_scale"] = 5
 		d["params"]["dev_draw"] = 2
 	change("styles", styles)
+
+
+def menus_broken(broken):
+	"""One problem of each kind the menu items' fields can have, in BROKEN's ui/ (docs/ui-layout.md, "Menu entries")."""
+	ui = broken / "ui"
+
+	def change(name, edit):
+		data = json.loads((ui / f"{name}.json").read_text())
+		edit(data)
+		(ui / f"{name}.json").write_text(json.dumps(data, indent="\t") + "\n")
+
+	change("extras", lambda d: d.update({"entries": [{"page": "extras"}, {"page": "options"}, {"page": "options"}, {"label": "ui.title.options"},
+		{"page": "dev", "colour": "red"}]}))
+	change("shop", lambda d: d.update({"entries": [{"page": "items"}]}))
+	change("menu_system", lambda d: d.update({"rows": ["save", "teleport", "save"]}))
+	change("battle_side", lambda d: d.update({"command_rows": {"top": ["fight", "dance"], "member": [], "side": 1}}))
 
 
 def broken_layouts(broken):

@@ -710,7 +710,7 @@ public sealed partial class SampleController
 			return _s.Description(option.Command == CommandKind.Item ? DescriptionKind.Item : DescriptionKind.Ability, option.Id);
 		}
 		// The top-level step's Macro says so when there are none to choose.
-		if (b.Phase == BattlePhase.Top && _cursor < TopMenu.Length && TopMenu[_cursor] == "macro" && _s.Macros().Count == 0)
+		if (b.Phase == BattlePhase.Top && TopMenu is var top && _cursor < top.Length && top[_cursor] == "macro" && _s.Macros().Count == 0)
 		{
 			return T("ui.battle.no_macros");
 		}

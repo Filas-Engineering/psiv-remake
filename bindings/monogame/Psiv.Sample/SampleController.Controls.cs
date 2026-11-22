@@ -14,8 +14,10 @@ public sealed partial class SampleController
 
 	public IReadOnlyList<ControlBinding> Controls() => ControlActions().Select(_bindings.Describe).ToList();
 
-	// The actions the Controls page lists: the real-time field input's own only while it is on.
-	private GameAction[] ControlActions() => [.. Enum.GetValues<GameAction>().Where(a => _realtimeField || !Bindings.FieldActions.Contains(a))];
+	// The actions the Controls page lists: the real-time field input's own only while it is on, Extras only with the controls
+	// layout's `list_extras`.
+	private GameAction[] ControlActions() => [.. Enum.GetValues<GameAction>().Where(a => (_realtimeField || !Bindings.FieldActions.Contains(a))
+		&& (a != GameAction.Extras || Ui.Param("controls", "list_extras", UiData(), 0) != 0))];
 
 	public void BeginCapture(GameAction action) => Capturing = action;
 

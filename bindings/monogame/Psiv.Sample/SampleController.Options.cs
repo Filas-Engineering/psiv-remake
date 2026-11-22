@@ -23,6 +23,7 @@ public sealed partial class SampleController
 	{
 		_optionsOverlay = true;
 		_controlsPage = false;
+		_controlsOnly = false;
 		_optAction = null;
 		_optList.Reset();
 	}
@@ -68,15 +69,11 @@ public sealed partial class SampleController
 		static int Volume(int value, int by) => Math.Clamp(value + 10 * by, 0, 100);
 		return
 		[
-			new(T("ui.options.text_speed"), T(NameKind.TextSpeed, (int)p.TextSpeed), T("ui.options.text_speed_help"),
-				by => _s.SetProfile(p with { TextSpeed = Step(p.TextSpeed, by) })),
-			new(T("ui.options.auto_advance"), OnOffText(p.AutoAdvance), T("ui.options.auto_advance_help"),
-				_ => _s.SetProfile(p with { AutoAdvance = !p.AutoAdvance })),
-			new(T("ui.options.text_size"), $"{p.TextSizePercent}%", T("ui.options.text_size_help"),
-				by => _s.SetProfile(p with { TextSizePercent = Math.Clamp(p.TextSizePercent + 10 * by, 100, 150) })),
-			new(T("ui.options.battle_speed"), SpeedName(p.BattleSpeed), T("ui.options.battle_speed_help"),
-				by => _s.SetProfile(p with { BattleSpeed = Step(p.BattleSpeed, by) })),
-			FlashingRow(),
+			SettingRow("text_speed"),
+			SettingRow("auto_advance"),
+			SettingRow("text_size"),
+			SettingRow("battle_speed"),
+			SettingRow("flashing"),
 			new(T("ui.options.ambient_talk"), OnOffText(p.AmbientTalk), T("ui.options.ambient_talk_help"),
 				_ => _s.SetProfile(p with { AmbientTalk = !p.AmbientTalk })),
 			new(T("ui.options.names"), T(p.ShowShippedNames ? "ui.options.names_shipped" : "ui.options.names_restored"), T("ui.options.names_help"),
@@ -95,6 +92,24 @@ public sealed partial class SampleController
 			.. RealtimeFieldRows(),
 			new(ControlsRow, "", T("ui.options.controls_help"), null),
 		];
+	}
+
+	// A setting the Options screen, the system page and the Extras menu share (UiFields.SettingRows).
+	private OptionRow SettingRow(string id)
+	{
+		Profile p = _s.Profile();
+		return id switch
+		{
+			"text_speed" => new(T("ui.options.text_speed"), T(NameKind.TextSpeed, (int)p.TextSpeed), T("ui.options.text_speed_help"),
+				by => _s.SetProfile(p with { TextSpeed = Step(p.TextSpeed, by) })),
+			"auto_advance" => new(T("ui.options.auto_advance"), OnOffText(p.AutoAdvance), T("ui.options.auto_advance_help"),
+				_ => _s.SetProfile(p with { AutoAdvance = !p.AutoAdvance })),
+			"text_size" => new(T("ui.options.text_size"), $"{p.TextSizePercent}%", T("ui.options.text_size_help"),
+				by => _s.SetProfile(p with { TextSizePercent = Math.Clamp(p.TextSizePercent + 10 * by, 100, 150) })),
+			"battle_speed" => new(T("ui.options.battle_speed"), SpeedName(p.BattleSpeed), T("ui.options.battle_speed_help"),
+				by => _s.SetProfile(p with { BattleSpeed = Step(p.BattleSpeed, by) })),
+			_ => FlashingRow(),
+		};
 	}
 
 	// The flashing level (FlashLevel): `reduced` (the profile's reduced flash: replacements, damping and the flash limit),
@@ -239,6 +254,7 @@ public sealed partial class SampleController
 		if (input.Back)
 		{
 			_controlsPage = false;
+			_optionsOverlay = !_controlsOnly;
 			_optList.Cursor = OptionRows().FindIndex(r => r.Label == ControlsRow);
 			if (SaveControls())
 			{

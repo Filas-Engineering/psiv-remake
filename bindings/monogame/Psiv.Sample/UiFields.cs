@@ -81,6 +81,34 @@ public static class UiFields
 	// chosen: retry after a lost battle that allows one, the sound test after a finished story.
 	public static readonly string[] TitleEntries = ["retry", "new_game", "continue", "load", "sound_test", "erase", "options", "quit"];
 
+	// The field menu's pages, which its layout's `entries` may list in any order; the built-in menu shows MenuDefault.
+	public static readonly string[] MenuPages = ["status", "items", "techniques", "skills", "abilities", "equip", "order", "macros", "combos", "quests", "codex", "log",
+		"options", "save", "system", "party_talk", "extras"];
+
+	public static readonly string[] MenuDefault = ["status", "items", "equip", "save", "order", "macros", "combos", "quests", "codex", "log", "options"];
+
+	// The Extras menu's settings rows, changed in place; in battle only BattleExtras show.
+	public static readonly string[] SettingRows = ["text_speed", "battle_speed", "flashing", "auto_advance", "text_size"];
+
+	public static readonly string[] BattleExtras = ["text_speed", "battle_speed", "flashing"];
+
+	// What an Extras layout's `entries` may list: the field menu's pages but itself (they open the field menu there, from
+	// the field), the options and controls, the photosensitivity notice, the developer tools (with --dev) and the settings rows.
+	public static readonly string[] ExtrasEntries = [.. MenuPages.Where(p => p != "extras"), "controls", "photosensitivity", "dev", .. SettingRows];
+
+	public static readonly string[] ExtrasDefault = ["options", "controls"];
+
+	// The system page's rows (menu_system `rows`): the slot list, quitting to the title, and settings rows.
+	public static readonly string[] SystemRows = ["save", "quit", .. SettingRows];
+
+	public static readonly string[] SystemDefault = ["save", "text_speed", "battle_speed", "auto_advance"];
+
+	// The battle's command rows by step with `command_top` (a battle layout's `command_rows`): the top-level step's and a
+	// member's, each in the built-in order.
+	public static readonly string[] TopCommands = ["fight", "macro", "run"];
+
+	public static readonly string[] MemberCommands = ["attack", "technique", "skill", "item", "defend", "escape", "macro", "auto"];
+
 	// The places an Equip page's `places` may list, in the built-in order.
 	public static readonly string[] EquipPlaces = ["weapon", "left_hand", "head", "body", "arms", "accessory"];
 
@@ -186,7 +214,7 @@ public static class UiFields
 			slots: ["frame", "scene"],
 			parameters: ["bottom", "gutter", "margin", "slide"]),
 		["menu"] = new("menu",
-			["tabs", "tab", "money", "hint", "money_value", "party"],
+			["tabs", "tab", "money", "hint", "money_value", "party", "page_ids"],
 			itemFields: ["name", "level", "hp", "max_hp", "tp", "max_tp", "portrait", "alive"],
 			slots: ["backdrop", "page", "toasts"],
 			parameters: [BackdropDim]),
@@ -208,6 +236,16 @@ public static class UiFields
 			[.. Area, "slots", "list", "active", "system", "system_rows", "system_cursor", "mode"],
 			itemFields: ["head", "enabled", "detail", "detail_color", "number", "slot", "empty", "damaged", "area", "play_time", "difficulty", "party_text", "leader", "level", "written"],
 			parameters: ["system_menu"]),
+		["menu_abilities"] = new("menu_abilities",
+			[.. Area, "view", "kind", "members", "list", "name", "abilities", "sub_list", "description", "picking", "target_name", "targets", "target_list"],
+			itemFields: ["label", "usable", "kind", "cost", "uses"]),
+		["menu_system"] = new("menu_system",
+			[.. Area, "rows", "list", "description"],
+			itemFields: ["id", "label", "value", "changeable"]),
+		["extras"] = new("extras",
+			["rows", "list", "view", "notice", "description", "hint", "in_battle", "on_title"],
+			itemFields: ["id", "label", "value", "changeable"],
+			slots: ["scene", "toasts"]),
 		["menu_order"] = new("menu_order",
 			[.. Area, "rows", "list", "lineup"],
 			itemFields: ["name", "level", "hp", "max_hp", "tp", "max_tp", "number", "picked", "statuses"]),
@@ -247,6 +285,7 @@ public static class UiFields
 			parameters: [BackdropDim, "flashing_original"]),
 		["controls"] = new("controls",
 			[.. Area, "actions", "list", "active", "picking", "action_name", "choices", "choice", "capturing", "ask"],
-			itemFields: ["label", "keys", "buttons", "reset"]),
+			itemFields: ["label", "keys", "buttons", "reset"],
+			parameters: ["list_extras"]),
 	};
 }

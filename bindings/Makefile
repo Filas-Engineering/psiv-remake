@@ -579,6 +579,18 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA)
 		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
 	done
 	$(call small_run,small_dev,1200)
+	# The menu items (make_menu_assets.py): the field menu's own entries with the technique, skill, ability and system pages
+	# and party talk, the Extras menu from the title, the field, the field menu and a battle, the Controls page listing it,
+	# and the battle's command rows by step in both layouts.
+	python3 -I $(SAMPLE_SCRIPTS)/make_menu_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/menu_assets
+	$(SAMPLE_RUN) --check-assets --assets $(BUILD)/menu_assets
+	@for run in menus_layout:1700 menus_battle:2500; do \
+		name=$${run%%:*}; frames=$${run##*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves; \
+		$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_$${name}_saves --assets $(BUILD)/menu_assets --script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames \
+			> $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
 	# Flashes by their effect (make_flash_assets.py): a stepped stage strobe past the limit is dropped, a two-step whiteout
 	# is held to a fifth under reduced flash, a slow tint is untouched.
 	python3 -I $(SAMPLE_SCRIPTS)/make_flash_assets.py $(BUILD)/export $(BUILD)/flash_assets

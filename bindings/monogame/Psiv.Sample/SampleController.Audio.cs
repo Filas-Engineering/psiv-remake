@@ -26,7 +26,7 @@ public sealed partial class SampleController
 	public IAudioOut Audio => _audio;
 
 	private static readonly Screen[] MenuScreens =
-		[Screen.Menu, Screen.Shop, Screen.Inn, Screen.SavePrompt, Screen.NameEntry, Screen.QuestLog, Screen.TextLog, Screen.Options, Screen.Pause, Screen.LoadGame, Screen.SoundTest];
+		[Screen.Menu, Screen.Shop, Screen.Inn, Screen.SavePrompt, Screen.NameEntry, Screen.QuestLog, Screen.TextLog, Screen.Options, Screen.Pause, Screen.LoadGame, Screen.SoundTest, Screen.Extras];
 
 	// The cue for a battle event, played as its line shows.
 	private static string? BattleCue(BattleEvent e, int partyCount) => e.Type switch

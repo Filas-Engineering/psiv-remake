@@ -1,0 +1,75 @@
+# The battle's command rows by step (make_menu_assets.py `command_rows`), with --dev, in both layouts: the top-level step
+# with Fight and Run only, the members' rows without Escape, Macro and Auto, and the Extras menu over the command menus
+# with the battle's settings only. With --window the shot lines save screenshots under build/shots/menus/ (run from
+# bindings/).
+
+cmd set text instant
+expect screen Title
+wait 2
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev encounters off
+
+battlelayout side
+dev battle training
+expect mode Battle
+waitstate 300 battlephase Top
+expect state uifield.battle_side.menu_items 2
+expect state uifield.battle_side.menu_items.1.command run
+shot build/shots/menus/battle_side_top.png
+press Enter
+waitstate 60 battlephase Command
+expect state uifield.battle_side.menu_items 5
+expect state uifield.battle_side.menu_items.4.command defend
+shot build/shots/menus/battle_side_commands.png
+
+# Extras over the command menu: the text speed, the battle speed and the flashing level only.
+press C
+wait 2
+expect screen Extras
+expect state uifield.extras.in_battle true
+expect state uifield.extras.rows 3
+expect state uifield.extras.rows.1.id battle_speed
+press Down
+wait 2
+expect state selected Battle speed: 1x
+press Right
+wait 2
+expect state selected Battle speed: 1.5x
+shot build/shots/menus/extras_battle.png
+press Left
+press Escape
+wait 2
+expect screen Battle
+expect state battlephase Command
+press Escape
+wait 2
+expect state battlephase Top
+dev win
+waitstate 900 battlephase Ended
+press Enter
+pressuntil Enter Field 300
+
+battlelayout front
+dev battle training
+expect mode Battle
+waitstate 300 battlephase Top
+expect state uifield.battle_front.menu_items 2
+press Enter
+waitstate 60 battlephase Command
+expect state uifield.battle_front.menu_items 5
+shot build/shots/menus/battle_front_commands.png
+press Down 4
+press Enter
+wait 2
+expect state battlephase Command
+expect state uifield.battle_front.actor_slot 1
+dev win
+waitstate 900 battlephase Ended
+press Enter
+pressuntil Enter Field 300

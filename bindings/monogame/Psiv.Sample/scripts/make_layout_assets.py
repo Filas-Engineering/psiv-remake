@@ -414,6 +414,57 @@ def screens():
 		]},
 	]}
 
+	L["menu_abilities"] = {"windows": [
+		{"name": "members", "visible": "view == 'members'", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "list", "items": "members", "state": "list", "row_height": "t(18)", "height": "t(16)"},
+		]},
+		{"name": "abilities", "visible": "view == 'list'", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			*heading(value="name"),
+			{"type": "list", "items": "abilities", "state": "sub_list", "active": "!picking", "y": "t(22)", "w": "picking ? cw / 2 : cw", "h": "ch - t(22) - t(30)",
+				"row_height": "t(16)", "row": [
+				*row_style("(picking ? cw / 2 : cw) - 14"),
+				text("label", x=12, max_width="(picking ? cw / 2 : cw) / 2", color="!usable ? 'dim' : selected ? 'accent' : 'text'"),
+				text("cost", x="(picking ? cw / 2 : cw) * 60 / 100", style="small"),
+				text("uses", x="(picking ? cw / 2 : cw) * 80 / 100", style="small"),
+			]},
+			text("description", y="ch - t(26)", wrap=True, max_width="cw", lines=2, line_height="t(13)", style="small"),
+			{"type": "group", "visible": "picking", "x": "cw / 2 + 10", "y": "t(22)", "elements": [
+				text(key="ui.menu.use_on_whom", args=["target_name"], color="accent", max_width="cw / 2 - 10"),
+				{"type": "list", "items": "targets", "state": "target_list", "y": "t(18)", "w": "cw / 2 - 10", "h": "t(18) * 5", "row_height": "t(18)", "height": "t(16)"},
+			]},
+		]},
+	]}
+
+	L["menu_system"] = {"windows": [
+		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
+			{"type": "list", "items": "rows", "state": "list", "w": "cw * 2 / 3", "h": "t(18) * 7", "row_height": "t(18)", "row": [
+				*row_style("cw * 2 / 3 - 14"),
+				text("label", x=12, color="selected ? 'accent' : 'text'"),
+				text("value", x="cw * 2 / 3 * 55 / 100", color="selected ? 'accent' : 'text'"),
+			]},
+			text("description", y="t(18) * 7 + 6", wrap=True, max_width="cw * 2 / 3", lines=2, line_height="t(13)", style="small_dim"),
+		]},
+	]}
+
+	L["extras"] = {"windows": [
+		{"name": "scene", "elements": [{"type": "slot", "slot": "scene"}]},
+		{"name": "dim", "elements": [{"type": "fill", "w": "W", "h": "H", "color": "black", "alpha": 0.5}]},
+		{"name": "box", "anchor": "right", "x": 28, "w": "t(260)", "h": "t(24) + max(1, len(rows)) * t(18) + t(34)", "frame": "panel", "padding": [14, 10, 14, 8],
+			"open": {"kind": "grow_x", "ms": 192, "step": 12}, "elements": [
+			*heading(key="ui.extras.title"),
+			{"type": "list", "items": "rows", "state": "list", "visible": "view == 'list'", "x": 8, "y": "t(24)", "w": "cw - 10", "h": "len(rows) * t(18)", "row_height": "t(18)",
+				"row": [
+				*row_style("cw - 24"),
+				text("label", x=12, color="selected ? 'accent' : 'text'"),
+				text("value", x="cw * 55 / 100", color="selected ? 'accent' : 'text'"),
+			]},
+			text("description", visible="view == 'list'", x=8, y="t(26) + len(rows) * t(18)", wrap=True, max_width="cw - 10", lines=2, line_height="t(13)", style="small_dim"),
+			text("notice", visible="view == 'notice'", x=8, y="t(24)", wrap=True, max_width="cw - 10", lines=6, line_height="t(13)"),
+		]},
+		{"name": "toasts", "elements": [{"type": "slot", "slot": "toasts", "y": f"H - {HINT_H} - 4", "w": "W - 16", "h": 0}]},
+		hint_bar(),
+	]}
+
 	L["menu_quests"] = {"windows": [
 		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
 			{"type": "list", "items": "rows", "state": "list", "view": True, "row_height": "t(16)", "row": [

@@ -68,6 +68,13 @@ public sealed class UiScreenLayout
 	public List<(string Slot, string? Label)>? Places { get; set; }
 	// The status page's profile rows in order (`profile`; null: every one UiFields.ProfileKeys lists).
 	public List<string>? Profile { get; set; }
+	// The field menu's or the Extras menu's entries in order, each with its label's text key (`entries`; null: the built-in ones).
+	public List<(string Page, string? Label)>? Entries { get; set; }
+	// The system page's rows in order (`rows`; null: UiFields.SystemDefault).
+	public List<string>? Rows { get; set; }
+	// A battle layout's command rows per step with `command_top` (`command_rows`: `top`, `member`; a step left out lists all).
+	public List<string>? TopCommands { get; set; }
+	public List<string>? MemberCommands { get; set; }
 }
 
 // One entry of a `tags` table: the action (UiFields.TagActions), the id it uses instead of the tag's value, and the slot
@@ -634,7 +641,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		{
 			return null;
 		}
-		Known(root, "-", ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile"]);
+		Known(root, "-", ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows"]);
 		Version(root);
 		var screen = new UiScreenLayout { Name = name, Source = source };
 		if (!root.TryGetProperty("windows", out JsonElement windows) || windows.ValueKind != JsonValueKind.Array)
@@ -702,6 +709,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		}
 		TitleMenu(root, screen);
 		RowModels(root, screen);
+		MenuEntries(root, screen);
 		int index = 0;
 		foreach (JsonElement w in windows.EnumerateArray())
 		{
@@ -791,6 +799,119 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 					{
 						Problem(entry, $"'{key}' is listed twice");
 					}
+				}
+			}
+		}
+	}
+
+	// A list of ids from `allowed`, none twice, at least one.
+	private List<string>? IdList(JsonElement list, string entry, string[] allowed, string what)
+	{
+		if (list.ValueKind != JsonValueKind.Array || list.GetArrayLength() == 0)
+		{
+			Problem(entry, $"must be a non-empty list of {what}");
+			return null;
+		}
+		var ids = new List<string>();
+		int i = 0;
+		foreach (JsonElement k in list.EnumerateArray())
+		{
+			string at = $"{entry}[{i++}]";
+			string? id = k.ValueKind == JsonValueKind.String ? k.GetString() : null;
+			if (id is null || !allowed.Contains(id))
+			{
+				Problem(at, $"must be one of {string.Join(", ", allowed)}");
+			}
+			else if (ids.Contains(id))
+			{
+				Problem(at, $"'{id}' is listed twice");
+			}
+			else
+			{
+				ids.Add(id);
+			}
+		}
+		return ids;
+	}
+
+	// `entries` (menu, extras), `rows` (menu_system) and `command_rows` (the battle layouts).
+	private void MenuEntries(JsonElement root, UiScreenLayout screen)
+	{
+		string name = fields!.Screen;
+		if (root.TryGetProperty("entries", out JsonElement entries))
+		{
+			string[]? allowed = name switch { "menu" => UiFields.MenuPages, "extras" => UiFields.ExtrasEntries, _ => null };
+			if (allowed is null)
+			{
+				Problem("entries", "only the menu and extras screens take 'entries'");
+			}
+			else if (entries.ValueKind != JsonValueKind.Array || entries.GetArrayLength() == 0)
+			{
+				Problem("entries", "must be a non-empty list of entries");
+			}
+			else
+			{
+				screen.Entries = [];
+				int i = 0;
+				foreach (JsonElement e in entries.EnumerateArray())
+				{
+					string entry = $"entries[{i++}]";
+					if (!Object(e, entry))
+					{
+						continue;
+					}
+					Known(e, entry, ["page", "label"]);
+					string? page = Str(e, "page", entry, allowed);
+					if (page is null)
+					{
+						if (!e.TryGetProperty("page", out _))
+						{
+							Problem(entry, "missing field 'page'");
+						}
+					}
+					else if (screen.Entries.Any(x => x.Page == page))
+					{
+						Problem(entry, $"'{page}' is listed twice");
+					}
+					else
+					{
+						screen.Entries.Add((page, Str(e, "label", entry)));
+					}
+				}
+			}
+		}
+		if (root.TryGetProperty("rows", out JsonElement rows))
+		{
+			if (name != "menu_system")
+			{
+				Problem("rows", "only the menu_system screen takes 'rows'");
+			}
+			else
+			{
+				screen.Rows = IdList(rows, "rows", UiFields.SystemRows, "system rows");
+			}
+		}
+		if (root.TryGetProperty("command_rows", out JsonElement commands))
+		{
+			if (!fields.Statuses)
+			{
+				Problem("command_rows", "only the battle screens take 'command_rows'");
+			}
+			else if (Object(commands, "command_rows"))
+			{
+				Known(commands, "command_rows", ["top", "member"]);
+				if (commands.TryGetProperty("top", out JsonElement top))
+				{
+					screen.TopCommands = IdList(top, "command_rows.top", UiFields.TopCommands, "top-level commands");
+				}
+				if (commands.TryGetProperty("member", out JsonElement member))
+				{
+					screen.MemberCommands = IdList(member, "command_rows.member", UiFields.MemberCommands, "member commands");
+				}
+				bool topOn = screen.Params.TryGetValue("command_top", out UiExpr? on) && (on.Names.Count > 0 || on.Eval(null!).Int != 0);
+				if (!topOn)
+				{
+					Problem("command_rows", "needs the param 'command_top' on: the rows are per step of the top-level command flow");
 				}
 			}
 		}
