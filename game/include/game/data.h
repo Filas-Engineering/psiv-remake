@@ -268,6 +268,9 @@ enum class VehicleOpening { Roll, Normal };
 // `arrive_notice: false` turns it off there.
 enum class ArriveNotice { Always, Walked, Never };
 
+// Where the followers stand after an area entry (game.json `followers_arrive`): on the leader's cell, or behind it.
+enum class FollowersArrive { Stacked, Behind };
+
 // How a vehicle moves in the field (FLD-061). Its battle stats, attack and skills are core's vehicle of the same id,
 // which fights its vehicle battles (BAT-140).
 struct FieldVehicle {
@@ -351,6 +354,12 @@ struct GameConfig {
 	int roundMs = 4000;
 	int autosaveSlots = 3;
 	int manualSlots = 10;
+	// game.json `autosave` (default true) and `autosave_slots` above 0: no autosave is written otherwise (FLOW-050 departs).
+	bool autosave = true;
+	// game.json `bag_slots`: how many slots the item bag has, 0 for no limit; `bag_stacking` `single` makes each item a slot
+	// of its own, `stacks` (default) one slot per item id. Equipment pieces take none.
+	int bagSlots = 0;
+	bool bagSingle = false;
 	std::vector<Boss> bosses;
 	std::vector<FieldVehicle> vehicles;
 	// Hit points a machine member regains with each step the party takes in the field (P6).
@@ -374,6 +383,9 @@ struct GameConfig {
 	VehicleOpening vehicleOpening = VehicleOpening::Roll;
 	// game.json `arrive_notice` (R107).
 	ArriveNotice arriveNotice = ArriveNotice::Always;
+	// game.json `exit_fires`: what an exit without its own `fires` does.
+	ExitFires exitFires = ExitFires::FromFloor;
+	FollowersArrive followersArrive = FollowersArrive::Stacked;
 	// game.json `step_timing` `exact` (R108; default `ticks`): steps of the leader (on foot, running and aboard), belts and
 	// wandering actors carry the time past each step into the next, to the microsecond, so a step time that is not a whole
 	// number of ticks (or has a fraction) is kept on average over any distance; the carry is saved. With `ticks` a step ends

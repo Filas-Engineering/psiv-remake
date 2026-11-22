@@ -225,7 +225,7 @@ void Runner::settle() {
 			if (!options_.autoBattle || (options_.autoBattleEncountersOnly && session_.battleSource() == BattleSource::Event)) {
 				return;
 			}
-			finishBattleAuto(options_.autoBattleMacro, options_.autoBattleTrouble);
+			finishBattleAuto(options_.autoBattleMacro, options_.autoBattleTrouble, options_.autoBattlePolicy);
 			continue;
 		}
 		battleNames_.clear();
@@ -250,8 +250,8 @@ void Runner::settle() {
 	error("the game did not settle");
 }
 
-void Runner::finishBattleAuto(const std::string& macro, rules::MacroTrouble trouble) {
-	report(session_.setAutoPlayMacro(macro, trouble));
+void Runner::finishBattleAuto(const std::string& macro, rules::MacroTrouble trouble, rules::MacroPolicy policy) {
+	report(session_.setAutoPlayMacro(macro, trouble, policy));
 	const AutoBattle played = session_.playBattle();
 	session_.setAutoPlayMacro("");
 	report(played.refusal);
@@ -332,6 +332,9 @@ void Runner::listMacros() {
 		if (view.unnamed != rules::MacroUnnamed::Default) {
 			options += std::string(options.empty() ? "" : ", ") + "unnamed " + rules::toString(view.unnamed);
 		}
+		if (view.policy != rules::MacroPolicy::Default) {
+			options += std::string(options.empty() ? "" : ", ") + "policy " + rules::toString(view.policy);
+		}
 		print("  " + view.name + (view.name == session_.world().autoMacro ? " (auto)" : "") + (options.empty() ? "" : " [" + options + "]"));
 		for (std::size_t i = 0; i < view.steps.size(); ++i) {
 			const rules::MacroStep& step = view.steps[i].step;
@@ -385,6 +388,15 @@ void Runner::macro(const std::vector<std::string>& w) {
 		rules::MacroTrouble trouble = found == views.end() ? rules::MacroTrouble::Default : found->onTrouble;
 		rules::MacroRecoverWho who = found == views.end() ? rules::MacroRecoverWho::Default : found->recoverWho;
 		rules::MacroUnnamed unnamed = found == views.end() ? rules::MacroUnnamed::Default : found->unnamed;
+		rules::MacroPolicy policy = rules::MacroPolicy::Default;
+		if (w[3] == "policy") {
+			if (!rules::parseMacroPolicy(w[4], policy)) {
+				error("macro option NAME policy power|expected|default");
+				return;
+			}
+			report(session_.setMacroPolicy(w[2], policy));
+			return;
+		}
 		const bool ok = w[3] == "on_trouble" ? rules::parseMacroTrouble(w[4], trouble)
 			: w[3] == "recover_who" ? rules::parseMacroRecoverWho(w[4], who)
 			: w[3] == "unnamed" && rules::parseMacroUnnamed(w[4], unnamed);
@@ -472,6 +484,8 @@ void Runner::dev(const std::vector<std::string>& w) {
 		report(session_.devGive(w[2], n));
 	} else if (w[1] == "money" && w.size() == 3 && toInt(w[2], n)) {
 		report(session_.devMoney(n));
+	} else if (w[1] == "rest" && w.size() == 2) {
+		report(session_.devRest());
 	} else if (w[1] == "level" && w.size() == 4 && toInt(w[3], n)) {
 		report(session_.devSetLevel(w[2], n));
 	} else if (w[1] == "vehicle" && w.size() == 5) {
@@ -496,6 +510,94 @@ void Runner::walkTo(Cell goal) {
 		}
 		return;
 	}
+}
+
+// Walks up to an actor where it stands now, choosing again after every step: done once interactAt finds the actor from
+// the leader's cell or the leader stands beside it; otherwise one step toward the nearest cell (by steps along x plus
+// along y) beside the actor or its talk point, or beyond a cell there that is not floor (a counter), that has a path.
+// playthrough.c's approach() is the same, so both terminals stay alike.
+void Runner::approach(const std::string& actor, bool talk) {
+	constexpr int kApproachSteps = 400;
+	const std::string area = session_.world().area;
+	for (int step = 0; step < kApproachSteps; ++step) {
+		if (session_.mode() != Mode::Field) {
+			return;
+		}
+		if (session_.world().area != area) {
+			error("left the area on the way to " + actor);
+			return;
+		}
+		const Area* a = session_.area();
+		std::optional<Cell> stands;
+		for (const ActorView& view : session_.actorsHere()) {
+			if (view.id == actor && view.visible && view.removed == ActorRemoval::None) {
+				stands = view.cell;
+			}
+		}
+		if (!stands || !a->inside(*stands)) {
+			error(actor + " is not here");
+			return;
+		}
+		std::vector<Cell> targets{*stands};
+		for (const Hook& h : a->hooks) {
+			if (h.trigger == HookTrigger::Interact && h.id == actor && h.at != *stands) {
+				targets.push_back(h.at);
+			}
+		}
+		const Cell leader = session_.world().position;
+		std::optional<Facing> facing;
+		for (Cell t : targets) {
+			if (std::optional<InteractTarget> found = session_.interactAt(t); found && found->id == actor && !facing) {
+				facing = found->facing;
+			}
+		}
+		for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
+			if (!facing && stepFrom(leader, f) == *stands) {
+				facing = f;
+			}
+		}
+		if (facing) {
+			report(session_.face(*facing));
+			if (talk) {
+				report(session_.interact());
+			}
+			return;
+		}
+		std::vector<Cell> candidates;
+		for (Cell t : targets) {
+			for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
+				const Cell near = stepFrom(t, f);
+				candidates.push_back(near);
+				if (a->inside(near) && a->rows[near.y][near.x] != '.') {
+					candidates.push_back(stepFrom(near, f));
+				}
+			}
+		}
+		const auto distance = [&](Cell c) { return std::abs(c.x - leader.x) + std::abs(c.y - leader.y); };
+		std::stable_sort(candidates.begin(), candidates.end(), [&](Cell x, Cell y) { return distance(x) < distance(y); });
+		bool moved = false;
+		for (Cell c : candidates) {
+			if (c == leader || !a->inside(c) || a->exitAt(c)) {
+				continue;
+			}
+			PathWalk walk = session_.beginWalk(c);
+			const WalkStatus status = session_.walkStep(walk);
+			if (status == WalkStatus::NoPath || status == WalkStatus::Arrived) {
+				continue;
+			}
+			if (status != WalkStatus::Walking) {
+				return;
+			}
+			settle();
+			moved = true;
+			break;
+		}
+		if (!moved) {
+			error("no way to " + actor);
+			return;
+		}
+	}
+	error("could not reach " + actor);
 }
 
 bool Runner::execute(const std::string& rawLine) {
@@ -596,6 +698,10 @@ bool Runner::execute(const std::string& rawLine) {
 		}
 	} else if (cmd == "face" && w.size() == 2 && parseFacing(w[1], facing)) {
 		report(session_.face(facing));
+	} else if (cmd == "walk" && w.size() == 3 && w[1] == "to") {
+		approach(w[2], false);
+	} else if (cmd == "talk" && w.size() == 2) {
+		approach(w[1], true);
 	} else if (cmd == "walk" && (w.size() == 2 || w.size() == 3)) {
 		const Area* a = session_.area();
 		Cell goal;
@@ -680,10 +786,16 @@ bool Runner::execute(const std::string& rawLine) {
 		listMacros();
 	} else if (cmd == "macro" && w.size() >= 3) {
 		macro(w);
-	} else if (cmd == "autobattle" && (w.size() == 2 || (w.size() <= 4 && w[1] != "off")) && (w[1] == "on" || w[1] == "off" || w[1] == "random")) {
+	} else if (cmd == "autobattle" && (w.size() == 2 || (w.size() <= 5 && w[1] != "off")) && (w[1] == "on" || w[1] == "off" || w[1] == "random")) {
 		options_.autoBattle = w[1] != "off";
 		options_.autoBattleEncountersOnly = w[1] == "random";
 		std::vector<std::string> rest(w.begin() + 2, w.end());
+		options_.autoBattlePolicy = rules::MacroPolicy::Default;
+		if (!rest.empty() && rules::parseMacroPolicy(rest.back(), options_.autoBattlePolicy) && options_.autoBattlePolicy != rules::MacroPolicy::Default) {
+			rest.pop_back();
+		} else {
+			options_.autoBattlePolicy = rules::MacroPolicy::Default;
+		}
 		options_.autoBattleTrouble = rules::MacroTrouble::Default;
 		if (!rest.empty() && rules::parseMacroTrouble(rest.back(), options_.autoBattleTrouble) && options_.autoBattleTrouble != rules::MacroTrouble::Default) {
 			rest.pop_back();
@@ -691,7 +803,7 @@ bool Runner::execute(const std::string& rawLine) {
 			options_.autoBattleTrouble = rules::MacroTrouble::Default;
 		}
 		if (rest.size() > 1) {
-			error("autobattle on|random [MACRO] [continue|recover|stop]");
+			error("autobattle on|random [MACRO] [continue|recover|stop] [power|expected]");
 			rest.clear();
 		}
 		options_.autoBattleMacro = rest.empty() ? "" : rest[0];
@@ -704,12 +816,20 @@ bool Runner::execute(const std::string& rawLine) {
 		report(session_.applyMacro(w[1], &results));
 	} else if (mode == Mode::Battle && cmd == "round") {
 		printEvents(session_.resolveRound());
-	} else if (mode == Mode::Battle && cmd == "auto" && w.size() <= 2) {
+	} else if (mode == Mode::Battle && cmd == "auto" && w.size() <= 3) {
 		rules::MacroTrouble trouble = rules::MacroTrouble::Default;
-		if (w.size() == 2 && (!rules::parseMacroTrouble(w[1], trouble) || trouble == rules::MacroTrouble::Default)) {
-			error("auto [continue|recover|stop]");
+		rules::MacroPolicy policy = rules::MacroPolicy::Default;
+		bool ok = true;
+		for (std::size_t i = 1; i < w.size(); ++i) {
+			if (rules::parseMacroPolicy(w[i], policy) && policy != rules::MacroPolicy::Default && i + 1 == w.size()) {
+				continue;
+			}
+			ok = ok && i == 1 && rules::parseMacroTrouble(w[i], trouble) && trouble != rules::MacroTrouble::Default;
+		}
+		if (!ok) {
+			error("auto [continue|recover|stop] [power|expected]");
 		} else {
-			finishBattleAuto("", trouble);
+			finishBattleAuto("", trouble, policy);
 		}
 	} else if (cmd == "trouble" && w.size() == 2 && (w[1] == "on" || w[1] == "off")) {
 		options_.printTrouble = w[1] == "on";
@@ -936,6 +1056,12 @@ bool Runner::execute(const std::string& rawLine) {
 			print("  platform " + p.id + " at " + std::to_string(p.cell.x) + " " + std::to_string(p.cell.y) + " (" + std::to_string(p.x) + ", " + std::to_string(p.y) +
 				" px) " + where + (p.pauseMs > 0 ? ", resting " + std::to_string(p.pauseMs) + " ms" : "") + (p.carrying ? ", carrying the party" : ""));
 		}
+	} else if (cmd == "followers" && w.size() == 1) {
+		std::string text;
+		for (const FollowerView& f : session_.followers()) {
+			text += (text.empty() ? "" : ", ") + f.id + " " + std::to_string(f.cell.x) + " " + std::to_string(f.cell.y);
+		}
+		print("  followers: " + (text.empty() ? std::string("none") : text));
 	} else if (cmd == "pictures" && w.size() == 1) {
 		std::string text;
 		for (const std::string& p : session_.pictures()) {

@@ -1,0 +1,22 @@
+# `walk to ACTOR` and `talk ACTOR` in Wren Yard on the data copy `make_actor_data ... background` writes: the leader walks up
+# to an actor where it stands now, choosing again after every step while the goat wanders and the lamplighter goes round,
+# faces it and, for `talk`, interacts. The trader and the crow, who have no talk point, only turn the leader; the goat answers
+# with its touch hook's bleat; the lamps' warp on the way to the crow does not stop the walk; an actor not in the area is
+# refused. Run with --seed 6.
+new
+dev warp wren_yard yard_gate
+actors
+walk to yard_trader
+status
+prompt
+walk to yard_goat
+actors
+prompt
+wait 1500
+actors
+talk yard_goat
+walk to yard_crow
+status
+actors
+refused talk yard_owl
+refused walk to dockhand

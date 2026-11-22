@@ -237,6 +237,7 @@ struct MacroView {
 	rules::MacroTrouble onTrouble = rules::MacroTrouble::Default;
 	rules::MacroRecoverWho recoverWho = rules::MacroRecoverWho::Default;
 	rules::MacroUnnamed unnamed = rules::MacroUnnamed::Default;
+	rules::MacroPolicy policy = rules::MacroPolicy::Default;
 };
 
 // One combo log entry joined with its recipe (UI-011).
@@ -369,6 +370,13 @@ struct ActorView {
 	int pathY = 0;
 	int footprintWidth = 0;
 	int footprintHeight = 0;
+};
+
+// One who walks behind the leader (a lineup member after the first, then the script's follower actor) and the cell it
+// stands on: the leader's trail (Session::followers). It blocks nothing.
+struct FollowerView {
+	std::string id;
+	Cell cell;
 };
 
 // A moving platform of the party's area (an area's `platforms`), from Session::platformsHere().
@@ -626,9 +634,25 @@ public:
 	std::vector<PlatformView> platformsHere() const;
 	// The platform the party rides, empty for none. While it moves, the leader's cell follows it and held input waits.
 	const std::string& ridingPlatform() const { return world_.ridingPlatform; }
+	// The lineup after the leader, then the follower actor, each on a cell of the leader's trail: the leader's earlier cells
+	// in the area, newest first, the last one taken by any beyond it; all on the leader's cell after an area entry under
+	// game.json's `followers_arrive` `stacked` (the default), and on the floor straight behind the leader under `behind`,
+	// aboard a vehicle and on a moving platform.
+	std::vector<FollowerView> followers() const;
+	// game.json bag_slots (0: no limit), the slots items fill now, and how many more of `id` the bag takes (equipment and
+	// any item without a limit: up to item_cap).
+	int bagSlots() const { return data_.config.bagSlots; }
+	int bagSlotsUsed() const;
+	int bagRoom(const std::string& id) const;
+	// Whether autosaves are written (game.json autosave and autosave_slots).
+	bool autosaveOn() const { return data_.config.autosave && data_.config.autosaveSlots > 0; }
+	// What the running foreground event shows next (events::Interpreter::next_output), without advancing it; `none` when
+	// none runs.
+	events::Interpreter::NextOutput nextEventOutput() const;
 	// Turns the leader in place.
 	rules::Message face(Facing direction);
-	// A walk to `goal` along the shortest path over walkable cells, avoiding exits other than the goal. Visible
+	// A walk to `goal` along the shortest path over walkable cells, crossing no exit cell a step would take (game.json's
+	// `exit_fires`, an exit's `fires`) other than the goal. Visible
 	// enemies are not avoided, so bumping into one starts its battle. Call walkStep until it returns something
 	// other than Walking, and run events and battles between the calls: an event or battle on the way stops the
 	// walk only if the field does not come back. Walking ends at the goal (Arrived), when the party leaves the
@@ -715,6 +739,8 @@ public:
 	// With a trouble mode in place of the macro's on_trouble or, failing that, rules.json auto_macro_on_trouble (default
 	// Stop, the stop rules). Continue and Recover never stop by themselves (rules::Battle::startAuto).
 	rules::Message startAuto(rules::MacroTrouble trouble);
+	// And with the automatic choice's policy for the battle, over the macro's and rules.json's (Default leaves it to them).
+	rules::Message startAuto(rules::MacroTrouble trouble, rules::MacroPolicy policy);
 	void cancelAuto();
 	bool autoActive() const;
 	bool fillFromAuto();
@@ -734,7 +760,11 @@ public:
 	// (named_macro_on_trouble, default Continue) or, with an empty name, for the save's auto macro (auto_macro_on_trouble,
 	// default Stop). Stop on a named macro plays it under the stop rules, then core's policy.
 	rules::Message setAutoPlayMacro(const std::string& name, rules::MacroTrouble trouble);
+	// `policy`, unless Default, is the automatic choice's policy in those battles, over the macro's and rules.json's
+	// auto_policy (rules::Battle::setAutoPolicy).
+	rules::Message setAutoPlayMacro(const std::string& name, rules::MacroTrouble trouble, rules::MacroPolicy policy);
 	rules::MacroTrouble autoPlayTrouble() const { return autoPlayTrouble_; }
+	rules::MacroPolicy autoPlayPolicy() const { return autoPlayPolicy_; }
 	// The trouble of the round fillAutoRound filled last, with the mode played and who took core's choice
 	// (rules::MacroTroubleReport); empty when no macro filled it.
 	const rules::MacroTroubleReport& lastMacroTrouble() const { return lastMacroTrouble_; }
@@ -809,6 +839,8 @@ public:
 	rules::Message moveMacroStep(const std::string& name, int from, int to);
 	// The macro's on_trouble, recover_who and unnamed; Default leaves each to the caller and rules.json. Saved with it.
 	rules::Message setMacroOptions(const std::string& name, rules::MacroTrouble onTrouble, rules::MacroRecoverWho recoverWho, rules::MacroUnnamed unnamed);
+	// The macro's automatic choice policy (rules::MacroPolicy; Default: rules.json's auto_policy), saved with it.
+	rules::Message setMacroPolicy(const std::string& name, rules::MacroPolicy policy);
 	// A new macro named `name` from a discovered combination (BAT-065, UI-011): one ability step per component, in the
 	// recipe's order, which is a valid order for an ordered recipe too, each with its default target. Each component goes
 	// to a lineup member who knows the ability now (the character a component is tied to), trying the members the log
@@ -836,6 +868,9 @@ public:
 	rules::Message devGive(const std::string& id, int count);
 	// Adds `amount` to the money (negative takes it away), kept between 0 and the cap.
 	rules::Message devMoney(int amount);
+	// Restores the roster and the vehicles' skill uses as a rest does, free, with no notice of resting, no autosave and
+	// nothing else changed.
+	rules::Message devRest();
 	// Sets a roster member's level with no experience into it, and refills it as a rest does, reviving it.
 	rules::Message devSetLevel(const std::string& member, int level);
 	// Starts a battle with the encounter from the field, as a random battle (a vehicle battle while riding).
@@ -955,6 +990,7 @@ private:
 	void pathActors();
 	void movePlatforms(int ms);
 	bool fieldStatusStep();
+	void placeFollowers();
 	// The area the party was in before, kept while it walks (World::cameFrom holds it for areas with `name` variants).
 	std::string previousArea_;
 	// The track a script's `music play` started (empty after `music stop`) until the party enters an area; unset plays the
@@ -1012,6 +1048,9 @@ private:
 	const AreaIndex& areaIndex(const std::string& id) const;
 	// Whether `cell` may hold a hook, exit, shop, rest point, chest, port, helm or gangway cell of the area; true when unsure.
 	bool objectsMayStand(const Area& area, Cell cell) const;
+	// Area::exitAt and exitFiresFrom by the area index.
+	const Exit* exitOn(const Area& area, Cell cell) const;
+	bool exitTakes(const Area& area, const Exit& exit, Cell from) const;
 	// `animationMs` is how long an `anim` plays by the data, 0 for an instant one.
 	void applyActorAction(const events::Action& action, int animationMs);
 	ActorPlace& touchActor(const std::string& actor);
@@ -1120,6 +1159,7 @@ private:
 	std::string resumedSlot_;
 	std::string autoPlayMacro_;
 	rules::MacroTrouble autoPlayTrouble_ = rules::MacroTrouble::Default;
+	rules::MacroPolicy autoPlayPolicy_ = rules::MacroPolicy::Default;
 	rules::MacroTroubleReport lastMacroTrouble_;
 
 	std::optional<rules::Battle> battle_;

@@ -175,7 +175,8 @@ public sealed unsafe class GameSession : IDisposable
 		Must(Native.GameInfoGet(_handle, out PsivGameInfo i));
 		return new GameInfo(Native.Str(i.Title), Native.Str(i.GameBuild), i.RulesVersion, i.TickMs, i.RoundMs, i.ManualSlots, i.AutosaveSlots, i.ItemCap,
 			i.MoneyCap, Native.Strs(i.Languages, i.LanguageCount), Native.Str(i.TitleMusic), Native.Str(i.VictoryMusic), Native.Str(i.DefeatMusic),
-			i.MagicDefense != 0, i.AffinityDivisor, (FlashLevel)i.FlashDefault, i.FlashOriginal != 0, i.PartyTalkAmbient != 0, i.MusicFadeMs, i.CellPixels);
+			i.MagicDefense != 0, i.AffinityDivisor, (FlashLevel)i.FlashDefault, i.FlashOriginal != 0, i.PartyTalkAmbient != 0, i.MusicFadeMs, i.CellPixels,
+			i.Autosave != 0, i.BagSlots, i.BagSingle != 0);
 	}
 
 	public Profile Profile()
@@ -259,7 +260,7 @@ public sealed unsafe class GameSession : IDisposable
 				steps.Add(new MacroStep(Native.Str(s.Member), Native.Str(s.MemberName), (CommandKind)s.CommandKind, Native.Str(s.Id), Native.Str(s.IdName),
 					(MacroTargetKind)s.TargetKind, Native.Str(s.TargetMember), Native.Str(s.TargetMemberName), s.TargetEnemy, (MacroIssue)s.Issue, s.Piece != 0));
 			}
-			list.Add(new Macro(Native.Str(m.Name), steps, (MacroTrouble)m.OnTrouble, (MacroRecoverWho)m.RecoverWho, (MacroUnnamed)m.Unnamed));
+			list.Add(new Macro(Native.Str(m.Name), steps, (MacroTrouble)m.OnTrouble, (MacroRecoverWho)m.RecoverWho, (MacroUnnamed)m.Unnamed, (MacroPolicy)m.Policy));
 		}
 		return list;
 	}
@@ -268,6 +269,8 @@ public sealed unsafe class GameSession : IDisposable
 	// The macro's on_trouble, recover_who and unnamed; Default leaves each to the caller and rules.json. Saved with the macro.
 	public PsivResult SetMacroOptions(string macro, MacroTrouble onTrouble, MacroRecoverWho recoverWho, MacroUnnamed unnamed) =>
 		Result(Native.MacroSetOptions(_handle, macro, (int)onTrouble, (int)recoverWho, (int)unnamed));
+	// The macro's policy for its automatic fallbacks and recover rounds; Default leaves it to rules.json. Saved with the macro.
+	public PsivResult SetMacroPolicy(string macro, MacroPolicy policy) => Result(Native.MacroSetPolicy(_handle, macro, (int)policy));
 	public PsivResult RenameMacro(string name, string newName) => Result(Native.MacroRename(_handle, name, newName));
 	public PsivResult DeleteMacro(string name) => Result(Native.MacroDelete(_handle, name));
 	public PsivResult MoveMacro(string name, int position) => Result(Native.MacroMove(_handle, name, position));
@@ -325,7 +328,7 @@ public sealed unsafe class GameSession : IDisposable
 	{
 		Must(Native.WorldInfoGet(_handle, out PsivWorldInfo w));
 		return new WorldInfo((Mode)w.Mode, (MenuKind)w.MenuKind, w.Money, w.PlayTimeMs, w.AutosaveCount, w.GameOver != 0, w.CanRetry != 0, w.PlayerControl != 0,
-			w.Dev != 0, w.Encounters != 0);
+			w.Dev != 0, w.Encounters != 0, w.BagUsed);
 	}
 
 	public bool Flag(string name) => Native.Flag(_handle, name) != 0;
@@ -449,7 +452,7 @@ public sealed unsafe class GameSession : IDisposable
 		var exits = new List<FieldExit>(xc);
 		foreach (PsivExit x in Native.Span<PsivExit>(xp, xc))
 		{
-			exits.Add(new FieldExit(x.X, x.Y, Native.Str(x.ToArea), Native.Str(x.ToMarker), x.Open != 0, (char)x.ClosedTile, Native.Str(x.Sound)));
+			exits.Add(new FieldExit(x.X, x.Y, Native.Str(x.ToArea), Native.Str(x.ToMarker), x.Open != 0, (char)x.ClosedTile, Native.Str(x.Sound), (ExitFires)x.Fires));
 		}
 		Must(Native.FieldPoints(_handle, out IntPtr pp, out int pc));
 		var points = new List<FieldPoint>(pc);
@@ -518,6 +521,8 @@ public sealed unsafe class GameSession : IDisposable
 	public PsivResult Choose(int index) => Result(Native.Choose(_handle, index));
 
 	public bool CanSkip => Native.CanSkip(_handle) != 0;
+	// What the running event shows next without advancing it: a line, a choice, its end, or something else.
+	public NextOutput NextEventOutput => (NextOutput)Native.EventNextOutput(_handle);
 
 	public PsivResult Skip() => Result(Native.Skip(_handle));
 
@@ -676,6 +681,9 @@ public sealed unsafe class GameSession : IDisposable
 	// As SetAutoPlayMacro with a trouble mode that wins over the macro's and rules.json; with null or "" it applies to the
 	// save's auto macro.
 	public PsivResult SetAutoPlayMacro(string? macro, MacroTrouble trouble) => Result(Native.BattleSetAutoPlayMacroTrouble(_handle, macro ?? "", (int)trouble));
+	// And with a policy for those battles' automatic choices, over the macro's and rules.json's.
+	public PsivResult SetAutoPlayMacro(string? macro, MacroTrouble trouble, MacroPolicy policy) =>
+		Result(Native.BattleSetAutoPlayMacroPolicy(_handle, macro ?? "", (int)trouble, (int)policy));
 
 	// Each step's state this round, for marking a macro before the player confirms it.
 	public PsivResult CheckMacro(string macro, out IReadOnlyList<MacroStepCheck> steps)
@@ -943,10 +951,10 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			stock.Add(ToEntry(e));
 		}
-		return new ShopInfo(Native.Str(s.Id), s.SellPercent, stock, (ShopKind)s.Kind, Native.Str(s.Voice));
+		return new ShopInfo(Native.Str(s.Id), s.SellPercent, stock, (ShopKind)s.Kind, Native.Str(s.Voice), Native.Str(s.NameKey), Native.Str(s.Name));
 	}
 
-	public InnInfo? Inn() => Read(Native.InnGet(_handle, out PsivInnInfo i)) ? new InnInfo(Native.Str(i.Id), i.Cost, Native.Str(i.Voice), i.PerMember != 0) : null;
+	public InnInfo? Inn() => Read(Native.InnGet(_handle, out PsivInnInfo i)) ? new InnInfo(Native.Str(i.Id), i.Cost, Native.Str(i.Voice), i.PerMember != 0, Native.Str(i.NameKey), Native.Str(i.Name)) : null;
 
 	public PsivResult OpenMenu() => Result(Native.OpenMenu(_handle));
 	public PsivResult CloseMenu() => Result(Native.CloseMenu(_handle));
@@ -1089,6 +1097,8 @@ public sealed unsafe class GameSession : IDisposable
 	public PsivResult DevSetFlag(string flag, bool value) => Result(Native.DevSetFlag(_handle, flag, value ? 1 : 0));
 	public PsivResult DevGive(string id, int count) => Result(Native.DevGive(_handle, id, count));
 	public PsivResult DevMoney(int amount) => Result(Native.DevMoney(_handle, amount));
+	// Restores the roster and the vehicles' skill uses as a rest does, free.
+	public PsivResult DevRest() => Result(Native.DevRest(_handle));
 	public PsivResult DevSetLevel(string member, int level) => Result(Native.DevSetLevel(_handle, member, level));
 	public PsivResult DevBattle(string encounter) => Result(Native.DevBattle(_handle, encounter));
 	public PsivResult DevVehicle(string vehicle, string area, string marker) => Result(Native.DevVehicle(_handle, vehicle, area, marker));
@@ -1124,6 +1134,21 @@ public sealed unsafe class GameSession : IDisposable
 	{
 		Must(Native.Pictures(_handle, out IntPtr p, out int count));
 		return Native.Strs(p, count);
+	}
+
+	// The followers on the leader's trail, in order; empty outside an area.
+	public IReadOnlyList<Follower> Followers()
+	{
+		if (!Read(Native.Followers(_handle, out IntPtr p, out int count)))
+		{
+			return [];
+		}
+		var list = new List<Follower>(count);
+		foreach (PsivFollower x in Native.Span<PsivFollower>(p, count))
+		{
+			list.Add(new Follower(Native.Str(x.Id), x.X, x.Y));
+		}
+		return list;
 	}
 
 	// The party's area's moving platforms; empty outside an area or where there are none.

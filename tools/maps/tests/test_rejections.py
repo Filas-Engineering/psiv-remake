@@ -123,7 +123,7 @@ class MapRejectionTest(TempCase):
 		self.rejects(tmj, "the map needs a string property 'id'")
 		tmj = sample_tmj()
 		tmj["properties"].append({"name": "weather", "type": "string", "value": "rain"})
-		self.rejects(tmj, "the map: unknown property 'weather' (allowed: arrival, arrive_notice, counters, dungeon_exit, encounter_mode, field_status, id, kind, music, name, platforms, region, step_ms)")
+		self.rejects(tmj, "the map: unknown property 'weather' (allowed: arrival, arrival_from, arrival_not_from, arrive_notice, counters, dungeon_exit, encounter_mode, field_paralysis, field_poison, field_status, id, kind, music, name, platforms, region, step_ms)")
 		tmj = sample_tmj()
 		next(p for p in tmj["properties"] if p["name"] == "step_ms").update({"type": "string", "value": "250"})
 		self.rejects(tmj, "the map: property 'step_ms' must be an int or float property")

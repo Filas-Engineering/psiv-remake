@@ -67,7 +67,7 @@ const TextTable& problemText() {
 		{"load.experience_table_rises", "experience_table must rise from level to level, not to {0}"},
 		{"load.field_cannot_empty", "field '{0}' cannot be empty"},
 		{"load.field_out_of_range", "field '{0}' must be between {1} and {2}"},
-		{"load.field_use_allows_only_heal", "field use allows only heal, cure_status, revive, travel and teach effects"},
+		{"load.field_use_allows_only_heal", "field use needs a heal, cure_status, revive, set_hp_percent, grant_affinity, travel or teach effect, and allows besides it only modify_stat, reset_stat, strip_modifiers and grant_affinity for the battle, which it skips"},
 		{"load.field_use_needs_party_target", "field use needs a party target (one_ally, all_allies, self or one_fallen_ally)"},
 		{"load.field_whole_number", "field '{0}' must be a whole number"},
 		{"load.field_wrong_type", "field '{0}' must be a {1}, found {2}"},

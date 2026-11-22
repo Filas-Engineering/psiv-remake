@@ -13,19 +13,21 @@ KIND_OF_CHARACTER = {c: k for k, c in KINDS.items()}
 TILE_IDS = {"floor": 0, "wall": 1, "water": 2, "soft": 3, "barrier": 4, "counter": 5}
 FLIP_BITS = 0xF0000000
 MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "number", "music": "string", "region": "string", "arrival": "string",
-	"dungeon_exit": "json object", "arrive_notice": "bool", "field_status": "bool", "name": "json list", "counters": "json list", "platforms": "json list"}
+	"arrival_from": "json list", "arrival_not_from": "json list", "dungeon_exit": "json object", "arrive_notice": "bool or json", "field_status": "bool",
+	"field_poison": "bool", "field_paralysis": "bool", "name": "json list", "counters": "json list", "platforms": "json list"}
 # Map properties in the area format's order, as the importer copies them and the exporter writes them.
-AREA_PROPERTIES = ("kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "arrive_notice", "field_status", "name", "counters", "platforms")
+AREA_PROPERTIES = ("kind", "encounter_mode", "step_ms", "music", "region", "arrival", "arrival_from", "arrival_not_from", "dungeon_exit", "arrive_notice", "field_status",
+	"field_poison", "field_paralysis", "name", "counters", "platforms")
 REQUIRED_MAP_PROPERTIES = ["id"]
 
 # Per object class: property name to type. "json" is a string property holding JSON text of the given shape.
 OBJECT_PROPERTIES = {
 	"marker": {},
-	"exit": {"to": "string", "marker": "string", "fall": "bool", "require_flag": "string", "block_flag": "string", "closed_tile": "string", "sound": "string"},
+	"exit": {"to": "string", "marker": "string", "fall": "bool", "require_flag": "string", "block_flag": "string", "closed_tile": "string", "sound": "string", "fires": "string"},
 	"hook": {"trigger": "string", "event": "string", "require_flag": "string", "block_flag": "string", "once": "bool", "tile": "string", "solid": "string",
 		"actor_at": "json list", "across": "bool", "cells": "json list", "actor": "string"},
-	"shop": {"kind": "string", "stock": "json list", "sell_percent": "int", "require_flag": "string", "block_flag": "string", "script_only": "bool", "keeper": "string", "voice": "string"},
-	"rest": {"cost": "int", "script_only": "bool", "keeper": "string", "per_member": "bool", "voice": "string"},
+	"shop": {"kind": "string", "stock": "json list", "sell_percent": "int", "require_flag": "string", "block_flag": "string", "script_only": "bool", "keeper": "string", "voice": "string", "name": "string"},
+	"rest": {"cost": "int", "script_only": "bool", "keeper": "string", "per_member": "bool", "voice": "string", "name": "string"},
 	"chest": {"flag": "string", "items": "json object", "equipment": "json object", "money": "int"},
 	"port": {"marker": "string", "flag": "string", "ship": "string", "block_flag": "string"},
 	"zone": {"table": "json list", "visible": "json object", "random": "json object"},
@@ -113,6 +115,20 @@ def _typed(props, schema, where, problems):
 			# A whole number of milliseconds, or one with a fraction (step_ms).
 			if kind not in ("int", "float") or not isinstance(value, (int, float)) or isinstance(value, bool):
 				problems.append(f"{where}: property '{name}' must be an int or float property")
+				continue
+		elif want == "bool or json" and kind == "bool":
+			if not isinstance(value, bool):
+				problems.append(f"{where}: property '{name}' must be a bool property")
+				continue
+		elif want == "bool or json":
+			# An area's arrive_notice by where the party came from: a JSON object or list in a string property.
+			try:
+				value = json.loads(value) if kind == "string" and isinstance(value, str) else None
+			except json.JSONDecodeError as e:
+				problems.append(f"{where}: property '{name}' is not valid JSON text: {e.msg} at character {e.pos}")
+				continue
+			if not isinstance(value, (list, dict)):
+				problems.append(f"{where}: property '{name}' must be a bool property or hold a JSON list or object")
 				continue
 		elif want == "bool":
 			if kind != "bool" or not isinstance(value, bool):

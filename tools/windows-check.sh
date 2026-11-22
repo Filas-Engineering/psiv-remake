@@ -110,6 +110,12 @@ docker run --rm --platform linux/amd64 -v "$ROOT":/src:ro "$IMAGE" sh -euc '
 	cmp build/background_c.txt build/background_cpp.txt
 	tr -d "\r" < build/background_c.txt | cmp - ../game/tests/expected/background.txt
 	diff -r build/background_saves_c build/background_saves_cpp
+	script=../game/data/scripts/approach.txt
+	wine ../game/game_cli.exe --data ../game/build/background_data/game/data --seed 6 --script $script --saves build/approach_saves_cpp > build/approach_cpp.txt
+	wine build/c_playthrough.exe --data ../game/build/background_data/game/data --seed 6 --script $script --saves build/approach_saves_c > build/approach_c.txt
+	cmp build/approach_c.txt build/approach_cpp.txt
+	tr -d "\r" < build/approach_c.txt | cmp - ../game/tests/expected/approach.txt
+	diff -r build/approach_saves_c build/approach_saves_cpp
 	script=../game/data/scripts/scene.txt
 	wine ../game/game_cli.exe --data ../game/build/scene_data/game/data --seed 6 --script $script --saves build/scene_saves_cpp > build/scene_cpp.txt
 	wine build/c_playthrough.exe --data ../game/build/scene_data/game/data --seed 6 --script $script --saves build/scene_saves_c > build/scene_c.txt
@@ -122,5 +128,5 @@ docker run --rm --platform linux/amd64 -v "$ROOT":/src:ro "$IMAGE" sh -euc '
 	cmp build/motion_c.txt build/motion_cpp.txt
 	tr -d "\r" < build/motion_c.txt | cmp - ../game/tests/expected/motion.txt
 	diff -r build/motion_saves_c build/motion_saves_cpp
-	echo "== windows: C API tests passed; the C playthrough, macro script, actor script, party script, trouble script, interaction script, background script, scene script and motion script match game_cli.exe and their golden transcripts, saves included"
+	echo "== windows: C API tests passed; the C playthrough, macro script, actor script, party script, trouble script, interaction script, background script, approach script, scene script and motion script match game_cli.exe and their golden transcripts, saves included"
 '

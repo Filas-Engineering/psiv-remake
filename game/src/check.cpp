@@ -200,6 +200,8 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const G
 	// cell that a flag's change turns to floor counts as floor.
 	Area view = area;
 	view.passable = switchable;
+	// Exit and gangway cells a step from a cell the party stands on takes.
+	std::set<Cell> used;
 	const std::set<Cell> reached = [&] {
 		auto solidHere = [&](Cell c) { return solids.count(c) && !switchable.count(c); };
 		// A platform's docks are stood on while it is there, and it carries the party from one to the other (only from `from`
@@ -235,41 +237,71 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const G
 			}
 			return std::any_of(vehicles.begin(), vehicles.end(), [&](const FieldVehicle& v) { return v.canCross(area.rows[c.y][c.x]); });
 		};
+		// A cell is stood on when the party can be there without leaving: floor, a way in on an exit cell, or an exit cell
+		// stepped onto from another exit cell that does not take it (`fires: from_floor`). An exit cell a step takes is
+		// reached (used) but never walked through.
+		std::set<Cell> standing;
 		std::set<Cell> cells;
 		std::deque<Cell> queue;
 		for (const std::string& marker : entrances) {
 			auto it = area.markers.find(marker);
-			if (it != area.markers.end() && cells.insert(it->second).second) {
+			if (it != area.markers.end() && standing.insert(it->second).second) {
+				cells.insert(it->second);
 				queue.push_back(it->second);
 			}
 		}
-		// Arriving on an exit cell does not take the exit, so the party walks out from it; walking onto one leaves.
-		const std::set<Cell> arrivals(cells);
 		while (!queue.empty()) {
 			const Cell c = queue.front();
 			queue.pop_front();
-			if (exitCells.count(c) && !arrivals.count(c)) {
-				continue;
-			}
 			std::vector<Cell> next = {Cell{c.x, c.y - 1}, Cell{c.x + 1, c.y}, Cell{c.x, c.y + 1}, Cell{c.x - 1, c.y}};
 			if (const auto ride = carried.find(c); ride != carried.end()) {
 				next.insert(next.end(), ride->second.begin(), ride->second.end());
 			}
 			for (Cell step : next) {
-				if (crossable(step) && cells.insert(step).second) {
+				if (!crossable(step)) {
+					continue;
+				}
+				const auto exit = exitCells.find(step);
+				if (exit != exitCells.end() && (exit->second == &gangway || exitFiresFrom(area, *exit->second, c, config.exitFires))) {
+					cells.insert(step);
+					used.insert(step);
+					continue;
+				}
+				if (standing.insert(step).second) {
+					cells.insert(step);
 					queue.push_back(step);
 				}
 			}
 		}
 		return cells;
 	}();
+	// The cells of a multi-cell exit (touching exits to the same marker) are used together: a cell that only other exit
+	// cells touch is part of an exit taken from the floor beside another of its cells.
+	const auto usedTogether = [&](const Exit& start) {
+		std::set<Cell> seen{start.at};
+		std::deque<Cell> queue{start.at};
+		while (!queue.empty()) {
+			const Cell c = queue.front();
+			queue.pop_front();
+			if (used.count(c)) {
+				return true;
+			}
+			for (Cell n : {Cell{c.x, c.y - 1}, Cell{c.x + 1, c.y}, Cell{c.x, c.y + 1}, Cell{c.x - 1, c.y}}) {
+				const Exit* e = area.exitAt(n);
+				if (e && e->toArea == start.toArea && e->toMarker == start.toMarker && seen.insert(n).second) {
+					queue.push_back(n);
+				}
+			}
+		}
+		return false;
+	};
 	for (const Exit& e : area.exits) {
-		if (!reached.count(e.at)) {
+		if (!usedTogether(e)) {
 			found.add(file, e.line, "check.exit_not_reached", {e.toArea, cellText(e.at)});
 		}
 	}
 	for (Cell g : area.gangway) {
-		if (!reached.count(g)) {
+		if (!used.count(g)) {
 			found.add(file, 0, "check.exit_not_reached", {"ashore", cellText(g)});
 		}
 	}

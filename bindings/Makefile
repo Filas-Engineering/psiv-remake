@@ -59,6 +59,7 @@ PARTY_SCRIPT = $(GAME)/data/scripts/party.txt
 TROUBLE_SCRIPT = $(GAME)/data/scripts/trouble.txt
 INTERACT_SCRIPT = $(GAME)/data/scripts/interact.txt
 BACKGROUND_SCRIPT = $(GAME)/data/scripts/background.txt
+APPROACH_SCRIPT = $(GAME)/data/scripts/approach.txt
 SCENE_SCRIPT = $(GAME)/data/scripts/scene.txt
 MAKE_ACTOR_DATA = $(GAME)/build/make_actor_data$(EXE)
 # The placeholder data with Wren Hollow added, for the actor script and the tests that play it.
@@ -261,6 +262,13 @@ native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI) $(ACTOR_DATA) $(INTERACT
 	cmp $(BUILD)/background_c.txt $(GAME)/tests/expected/background.txt
 	diff -r $(BUILD)/background_saves_c $(BUILD)/background_saves_cpp
 	@echo "C background script matches the C++ session: transcript and every save file"
+	rm -rf $(BUILD)/approach_saves_cpp $(BUILD)/approach_saves_c
+	$(GAME_CLI) --data $(BACKGROUND_DATA) --seed 6 --script $(APPROACH_SCRIPT) --saves $(BUILD)/approach_saves_cpp > $(BUILD)/approach_cpp.txt
+	./$(PLAYTHROUGH) --data $(BACKGROUND_DATA) --seed 6 --script $(APPROACH_SCRIPT) --saves $(BUILD)/approach_saves_c > $(BUILD)/approach_c.txt
+	cmp $(BUILD)/approach_c.txt $(BUILD)/approach_cpp.txt
+	cmp $(BUILD)/approach_c.txt $(GAME)/tests/expected/approach.txt
+	diff -r $(BUILD)/approach_saves_c $(BUILD)/approach_saves_cpp
+	@echo "C approach script matches the C++ session: transcript and every save file"
 	rm -rf $(BUILD)/scene_saves_cpp $(BUILD)/scene_saves_c
 	$(GAME_CLI) --data $(SCENE_DATA) --seed 6 --script $(SCENE_SCRIPT) --saves $(BUILD)/scene_saves_cpp > $(BUILD)/scene_cpp.txt
 	./$(PLAYTHROUGH) --data $(SCENE_DATA) --seed 6 --script $(SCENE_SCRIPT) --saves $(BUILD)/scene_saves_c > $(BUILD)/scene_c.txt

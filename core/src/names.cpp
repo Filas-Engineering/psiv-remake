@@ -48,10 +48,12 @@ const char* const kMacroStepStatuses[] = {"applied", "retargeted", "fell_back", 
 const char* const kMacroTroubles[] = {"default", "continue", "recover", "stop"};
 const char* const kMacroRecoverWho[] = {"default", "all", "uncovered", "troubled"};
 const char* const kMacroUnnamed[] = {"default", "attack", "none", "auto"};
+const char* const kMacroPolicies[] = {"default", "power", "expected"};
 // The choices data may name: everything but "default".
 const char* const kMacroTroubleChoices[] = {"continue", "recover", "stop"};
 const char* const kMacroRecoverWhoChoices[] = {"all", "uncovered", "troubled"};
 const char* const kMacroUnnamedChoices[] = {"attack", "none", "auto"};
+const char* const kMacroPolicyChoices[] = {"power", "expected"};
 const char* const kMacroFallbacks[] = {"basic_attack", "automatic", "attack", "lose_turn"};
 const char* const kMacroIssues[] = {
 	"none", "not_in_party", "actor_defeated", "caught_off_guard", "cannot_act", "forced_by_status", "unknown_ability",
@@ -100,6 +102,7 @@ const char* toString(MacroIssue value) { return nameOf(kMacroIssues, value); }
 const char* toString(MacroTrouble value) { return nameOf(kMacroTroubles, value); }
 const char* toString(MacroRecoverWho value) { return nameOf(kMacroRecoverWho, value); }
 const char* toString(MacroUnnamed value) { return nameOf(kMacroUnnamed, value); }
+const char* toString(MacroPolicy value) { return nameOf(kMacroPolicies, value); }
 const char* toString(MacroFallback value) { return nameOf(kMacroFallbacks, value); }
 const char* toString(ScriptedEndKind value) { return nameOf(kScriptedEndKinds, value); }
 const char* toString(AutoStop value) { return nameOf(kAutoStops, value); }
@@ -147,6 +150,7 @@ bool parseMacroIssue(const std::string& text, MacroIssue& out) { return parseNam
 bool parseMacroTrouble(const std::string& text, MacroTrouble& out) { return parseName(kMacroTroubles, text, out); }
 bool parseMacroRecoverWho(const std::string& text, MacroRecoverWho& out) { return parseName(kMacroRecoverWho, text, out); }
 bool parseMacroUnnamed(const std::string& text, MacroUnnamed& out) { return parseName(kMacroUnnamed, text, out); }
+bool parseMacroPolicy(const std::string& text, MacroPolicy& out) { return parseName(kMacroPolicies, text, out); }
 bool parseMacroFallback(const std::string& text, MacroFallback& out) { return parseName(kMacroFallbacks, text, out); }
 bool parseScriptedEndKind(const std::string& text, ScriptedEndKind& out) { return parseName(kScriptedEndKinds, text, out); }
 bool parseAutoStop(const std::string& text, AutoStop& out) { return parseName(kAutoStops, text, out); }
@@ -175,6 +179,7 @@ const std::vector<DataEnum>& coreDataEnums() {
 		enumOf("forced_target", kForcedTargets),
 		enumOf("macro_command", kCommandKinds),
 		enumOf("macro_on_trouble", kMacroTroubleChoices),
+		enumOf("macro_policy", kMacroPolicyChoices),
 		enumOf("macro_recover_who", kMacroRecoverWhoChoices),
 		enumOf("macro_unnamed", kMacroUnnamedChoices),
 		enumOf("macro_target", kMacroTargets),

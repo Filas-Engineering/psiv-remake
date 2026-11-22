@@ -135,6 +135,14 @@ bool exitOpen(const Exit& exit, const World& world) {
 	return (exit.requireFlag.empty() || world.flag(exit.requireFlag)) && (exit.blockFlag.empty() || !world.flag(exit.blockFlag));
 }
 
+ExitFires exitFires(const Exit& exit, ExitFires gameDefault) {
+	return exit.fires.value_or(exit.fall ? ExitFires::Always : gameDefault);
+}
+
+bool exitFiresFrom(const Area& area, const Exit& exit, Cell from, ExitFires gameDefault) {
+	return exitFires(exit, gameDefault) == ExitFires::Always || !area.exitAt(from);
+}
+
 bool platformHolds(const Platform& platform, const World& world) {
 	return (platform.requireFlag.empty() || world.flag(platform.requireFlag)) && (platform.blockFlag.empty() || !world.flag(platform.blockFlag));
 }
@@ -156,6 +164,20 @@ const Platform* Area::platform(const std::string& id) const {
 		}
 	}
 	return nullptr;
+}
+
+bool Area::announcesFrom(const std::string& from) const {
+	for (const NoticeRule& rule : arriveNotices) {
+		if (rule.from.empty() || std::find(rule.from.begin(), rule.from.end(), from) != rule.from.end()) {
+			return rule.notice;
+		}
+	}
+	return arriveNotice;
+}
+
+bool Area::registersFrom(const std::string& from) const {
+	const auto listed = [&](const std::vector<std::string>& areas) { return std::find(areas.begin(), areas.end(), from) != areas.end(); };
+	return (arrivalFrom.empty() || listed(arrivalFrom)) && !listed(arrivalNotFrom);
 }
 
 const Shop* Area::shopAt(Cell cell) const {
@@ -348,8 +370,46 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		reader.fail(json, "data.bad_encounter_mode", {});
 	}
 	stepTime(reader, json, area.stepMs, area.stepUs, 50, 5000);
-	reader.boolean(json, "arrive_notice", area.arriveNotice, false);
+	if (const JsonValue* notice = json.find("arrive_notice"); notice && !notice->is(JsonValue::Type::Bool)) {
+		std::vector<const JsonValue*> entries;
+		if (notice->is(JsonValue::Type::Object)) {
+			entries.push_back(notice);
+		} else if (notice->is(JsonValue::Type::Array)) {
+			for (const JsonValue& e : notice->items) {
+				entries.push_back(&e);
+			}
+		}
+		if (entries.empty()) {
+			reader.fail(*notice, "data.bad_area_arrive_notice", {});
+		}
+		bool fallback = false;
+		for (const JsonValue* e : entries) {
+			if (!e->is(JsonValue::Type::Object)) {
+				reader.fail(*e, "data.bad_area_arrive_notice", {});
+				continue;
+			}
+			reader.only(*e, gameKeys("area", "arrive_notice[]"));
+			Area::NoticeRule rule;
+			rule.line = e->line;
+			reader.texts(*e, "from", rule.from, false);
+			reader.boolean(*e, "notice", rule.notice, true);
+			if (fallback) {
+				reader.fail(*e, "data.area_arrive_notice_after_default", {});
+			}
+			fallback = fallback || rule.from.empty();
+			area.arriveNotices.push_back(rule);
+		}
+	} else {
+		reader.boolean(json, "arrive_notice", area.arriveNotice, false);
+	}
 	reader.boolean(json, "field_status", area.fieldStatus, false);
+	reader.boolean(json, "field_poison", area.fieldPoison, false);
+	reader.boolean(json, "field_paralysis", area.fieldParalysis, false);
+	reader.texts(json, "arrival_from", area.arrivalFrom, false);
+	reader.texts(json, "arrival_not_from", area.arrivalNotFrom, false);
+	if (!area.arrivalFrom.empty() && !area.arrivalNotFrom.empty()) {
+		reader.fail(json, "data.arrival_from_and_not_from", {});
+	}
 	if (const JsonValue* names = reader.field(json, "name", JsonValue::Type::Array, false)) {
 		bool fallback = false;
 		for (const JsonValue& n : names->items) {
@@ -441,6 +501,13 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			reader.text(e, "to", exit.toArea, true);
 			reader.text(e, "marker", exit.toMarker, true);
 			reader.boolean(e, "fall", exit.fall, false);
+			std::string fires;
+			reader.text(e, "fires", fires, false);
+			if (const int index = fires.empty() ? -2 : gameEnumIndex("exit_fires", fires); index >= 0) {
+				exit.fires = static_cast<ExitFires>(index);
+			} else if (index == -1) {
+				reader.fail(e, "data.bad_exit_fires", {fires});
+			}
 			checkCell(e, exit.at, "exit");
 			area.exits.push_back(exit);
 		}
@@ -583,6 +650,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			reader.text(s, "block_flag", shop.blockFlag, false);
 			reader.text(s, "keeper", shop.keeper, false);
 			reader.text(s, "voice", shop.voice, false);
+			reader.text(s, "name", shop.name, false);
 			area.shops.push_back(shop);
 		}
 	}
@@ -601,6 +669,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			reader.text(r, "keeper", rest.keeper, false);
 			reader.boolean(r, "per_member", rest.perMember, false);
 			reader.text(r, "voice", rest.voice, false);
+			reader.text(r, "name", rest.name, false);
 			area.rests.push_back(rest);
 		}
 	}
@@ -618,6 +687,9 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			checkCell(c, chest.at, "chest '" + chest.id + "'");
 			area.chests.push_back(chest);
 		}
+	}
+	if (area.arrival.empty() && (!area.arrivalFrom.empty() || !area.arrivalNotFrom.empty())) {
+		reader.fail(json, "data.arrival_from_without_arrival", {});
 	}
 	if (!area.arrival.empty() && !area.markers.count(area.arrival)) {
 		reader.fail(json, "data.arrival_marker_missing", {area.arrival});

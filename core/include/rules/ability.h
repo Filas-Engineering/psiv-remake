@@ -47,6 +47,9 @@ struct Effect {
 	bool livingTarget = false;
 	// Revive (`hp`): the hit points it stands the target up with, in place of `power`'s percent; capped at the maximum.
 	int flatHp = 0;
+	// Revive `hp: 0`: the target stands at 0 for the rest of the action, so its later heals count from 0, and at 1 if
+	// nothing raised it.
+	bool zeroHp = false;
 	// StripModifiers (`equipment_affinities`): also takes away what worn pieces did to the target's element affinities, for
 	// the rest of the battle.
 	bool equipmentAffinities = false;
@@ -91,6 +94,8 @@ struct ItemDef {
 	bool field = false;
 	// False for an item that is never used up.
 	bool consumed = true;
+	// `consume_when_no_effect`: used up even when its effects changed nothing; unset, rules.json's.
+	std::optional<bool> consumeWhenNoEffect = std::nullopt;
 };
 
 bool effectsRevive(const std::vector<Effect>& effects);
@@ -101,5 +106,9 @@ const Effect* teachEffect(const std::vector<Effect>& effects);
 // The Travel effect of a field item or technique, or null. The game moves the party; core only takes the cost, and a
 // battle refuses the command.
 const Effect* travelEffect(const std::vector<Effect>& effects);
+// Effects that mean nothing outside battle (modify_stat, reset_stat, strip_modifiers, grant_affinity that is not
+// permanent): a field use skips them.
+bool battleOnlyEffect(const Effect& effect);
+std::vector<Effect> fieldEffects(const std::vector<Effect>& effects);
 
 }

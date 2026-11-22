@@ -366,9 +366,10 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 			break;
 		}
 		case EffectKind::Revive:
-			reader.integer(*entry, "hp", effect.flatHp, false, 1, 99999);
-			reader.integer(*entry, "power", effect.power, effect.flatHp == 0, 0, 100);
-			if (effect.flatHp > 0 && entry->find("power")) {
+			reader.integer(*entry, "hp", effect.flatHp, false, 0, 99999);
+			effect.zeroHp = entry->find("hp") && effect.flatHp == 0;
+			reader.integer(*entry, "power", effect.power, !entry->find("hp"), 0, 100);
+			if (entry->find("hp") && entry->find("power")) {
 				reader.fail(*entry->find("power"), "load.revive_hp_or_power", {});
 			}
 			reader.boolean(*entry, "living_target", effect.livingTarget);
@@ -477,12 +478,21 @@ void readFieldFlag(Reader& reader, const JsonValue& entry, Targeting targeting, 
 	if (!allySide) {
 		reader.fail(*entry.find("field"), "load.field_use_needs_party_target", {});
 	}
+	// Effects that mean nothing outside battle are skipped there, so they may come with ones that act at once.
+	bool acts = false;
 	for (const Effect& effect : effects) {
+		if (battleOnlyEffect(effect)) {
+			continue;
+		}
 		if (effect.kind != EffectKind::Heal && effect.kind != EffectKind::CureStatus && effect.kind != EffectKind::Revive && effect.kind != EffectKind::Travel && effect.kind != EffectKind::Teach &&
 			effect.kind != EffectKind::SetHpPercent && effect.kind != EffectKind::GrantAffinity) {
 			reader.fail(*entry.find("field"), "load.field_use_allows_only_heal", {});
 			return;
 		}
+		acts = true;
+	}
+	if (!acts) {
+		reader.fail(*entry.find("field"), "load.field_use_allows_only_heal", {});
 	}
 }
 
@@ -632,6 +642,7 @@ void parseRules(Reader& reader, const JsonValue& root, Database& db) {
 		reader.integer(*paralysis, "from", rules.fieldParalysisFrom, true, 0, 1000);
 		reader.integer(*paralysis, "chance", rules.fieldParalysisChance, true, 1, 1000);
 		reader.integer(*paralysis, "by", rules.fieldParalysisBy, true, 1, 1000);
+		reader.boolean(*paralysis, "everywhere", rules.fieldParalysisEverywhere);
 		if (rules.fieldParalysisBy <= rules.fieldParalysisFrom) {
 			reader.fail(*paralysis, "load.field_paralysis_order", {});
 		}
@@ -696,6 +707,7 @@ void parseRules(Reader& reader, const JsonValue& root, Database& db) {
 	if (reader.get(root, "rest_revives", Type::Bool, true)) {
 		reader.boolean(root, "rest_revives", rules.restRevives);
 	}
+	reader.boolean(root, "consume_when_no_effect", rules.consumeWhenNoEffect);
 }
 
 void parseStatuses(Reader& reader, const JsonValue& root, Database& db) {
@@ -846,6 +858,11 @@ void parseItems(Reader& reader, const JsonValue& root, Database& db) {
 		reader.setContext("item '" + item.id + "'");
 		reader.rejectUnknownKeys(*entry, dataKeys("items.json", "items[]"));
 		reader.boolean(*entry, "consumed", item.consumed);
+		if (entry->find("consume_when_no_effect")) {
+			bool consume = false;
+			reader.boolean(*entry, "consume_when_no_effect", consume);
+			item.consumeWhenNoEffect = consume;
+		}
 		reader.string(*entry, "name", item.name);
 		readTargeting(reader, *entry, item.targeting);
 		parseEffects(reader, db, *entry, true, false, item.effects);
@@ -1398,6 +1415,10 @@ void parseParty(Reader& reader, const JsonValue& root, Database& db) {
 		if (reader.string(*entry, "unnamed", choice, false) && (!parseMacroUnnamed(choice, macro.unnamed) || macro.unnamed == MacroUnnamed::Default)) {
 			reader.fail(*entry->find("unnamed"), "load.unknown_choice", {"unnamed", choice, "attack, none, auto"});
 			macro.unnamed = MacroUnnamed::Default;
+		}
+		if (reader.string(*entry, "policy", choice, false) && (!parseMacroPolicy(choice, macro.policy) || macro.policy == MacroPolicy::Default)) {
+			reader.fail(*entry->find("policy"), "load.unknown_choice", {"policy", choice, "power, expected"});
+			macro.policy = MacroPolicy::Default;
 		}
 		std::set<std::string> members;
 		for (const JsonValue* stepEntry : reader.objects(*entry, "steps", true)) {

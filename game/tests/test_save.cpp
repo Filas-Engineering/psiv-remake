@@ -156,7 +156,7 @@ TEST(damagedAndNewerSavesAreRefused) {
 	CHECK(r.error.find("damaged") != std::string::npos);
 
 	std::string newer = text;
-	newer.replace(0, std::string("PSR-SAVE 14").size(), "PSR-SAVE 15");
+	newer.replace(0, std::string("PSR-SAVE 15").size(), "PSR-SAVE 16");
 	r = parseSave(resign(newer));
 	CHECK(!r.ok());
 	CHECK(r.error.find("newer build") != std::string::npos);
@@ -315,7 +315,7 @@ TEST(schemaOneSavesMigrateToTheCurrentSchema) {
 	CHECK_EQ(w.encounterStream.state(), 7u);
 
 	const std::string again = serializeSave(*save.value);
-	CHECK(again.compare(0, 12, "PSR-SAVE 14\n") == 0);
+	CHECK(again.compare(0, 12, "PSR-SAVE 15\n") == 0);
 	CHECK(again.find("chunk battle 3 ") != std::string::npos);
 	CHECK(again.find("chunk quests 1 ") != std::string::npos);
 	CHECK(again.find("chunk actors 2 ") != std::string::npos);
@@ -425,6 +425,7 @@ TEST(damagedSavesAreRefusedBeforeAnythingIndexesWithThem) {
 		{"unknown follower", [](World& w) { w.follower = "ghost"; }},
 		{"actor outside its area", [](World& w) { w.actors["peddler"] = {w.area, {-1, -1}, Facing::South, true}; }},
 		{"way out outside its area", [](World& w) { w.dungeonExitArea = w.area; w.dungeonExitCell = {0, -7}; }},
+		{"follower outside the area", [](World& w) { w.trail = {{0, -7}}; }},
 		{"unknown ship port", [](World& w) { w.shipPort = "atlantis"; }},
 		{"unknown job", [](World& w) { w.jobs["imaginary"] = JobState::Accepted; }},
 		{"negative grace", [](World& w) { w.graceMs = -1; }},

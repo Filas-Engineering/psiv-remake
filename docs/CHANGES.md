@@ -2,6 +2,28 @@
 
 One line per feature, newest first: name, kind, meaning. Each pass adds its lines at the top.
 
+* exits' rule (behavior, default changed): an exit takes the leader only on a step from a cell that is no exit, so a party that arrives on a multi-cell exit walks across it and leaves by stepping off and back on; pits still drop the party from any cell (R161).
+* game.json `exit_fires` (`from_floor` default, `always`) and exit `fires` (data keys): today's rule back for the game, or one exit that fires on any step (map-edge exits) (R161).
+* path walking and the data check by the exits' rule (session, check): `walkStep` and game_cli `walk` cross exit cells a step would not leave by and take one that would only as the goal; the check's reach walk does the same and counts a multi-cell exit used from any of its cells (R161).
+* area `arrive_notice` as a list of `{from, notice}` entries (area key): the notice, and `Session::arrivalAnnounced`, by the area the party came from (R162).
+* area `arrival_from`, `arrival_not_from` (area keys): a town registers as a place to return to only when entered from a listed area, or from one not listed (R162).
+* area `field_poison`, `field_paralysis` (area keys) and rules.json `field_paralysis.everywhere` (data key): field poison and paralysis apart, `field_status` both; paralysis wearing off in every area (R163).
+* game_cli `walk` refusing a goal an actor stands on (documented): no path, as before (R164).
+* shop and rest point `name` (area key), `psiv_shop_info.name_key`/`name`, `psiv_inn_info.name_key`/`name` (data, C fields): a display name for hosts (R165).
+* `Session::followers`, `FollowerView`, game.json `followers_arrive` (`stacked` default, `behind`), world chunk `trail`, `psiv_followers`, `GameSession.Followers`, game_cli `followers` (session, data key, save, C API, C#, tool): the followers' cells on the leader's trail, blocking nothing (R166).
+* `events::Interpreter::next_output`, `Session::nextEventOutput`, `psiv_event_next_output`, `GameSession.NextEventOutput` (interpreter, session, C API, C#): whether the event shows a line, a choice, its end or something else next, without advancing it (R167).
+* field use and battle-only effects (load rule): `modify_stat`, `reset_stat`, `strip_modifiers` and a battle's `grant_affinity` load on field items and abilities beside an effect that acts, and the field use skips them; only such effects on a field use stay a load error (R168).
+* revive `hp: 0` (data key): the target stands at 0 for the rest of the action, so a heal after it lands exactly its amount; with nothing raising it, the floor of 1 (R169).
+* game_cli `walk to ACTOR`, `talk ACTOR` (tool, C playthrough): walk up to an actor where it stands now, choosing again each step, face it and, for `talk`, interact; `data/scripts/approach.txt` (golden `tests/expected/approach.txt`) on the Wren Yard copy (R170).
+* rules.json and item `consume_when_no_effect` (data keys, default false): a consumable item that changed nothing is used up anyway, in battle and in the field, with its no-effect event; a refused target still spends nothing (R171).
+* macro `policy` (`power`, `expected`; data macros, saves, `Session::setMacroPolicy`, `psiv_macro_set_policy`, `macro option NAME policy`) and the caller's policy (`Battle::setAutoPolicy`, `Session::setAutoPlayMacro(name, trouble, policy)`, `startAuto(trouble, policy)`, `psiv_battle_set_auto_play_macro_policy`, `autobattle ... [power|expected]`, `auto [MODE] [POLICY]`): the automatic choice's policy, the call over the macro over rules.json `auto_policy`; macros text version 4 (R173).
+* game.json `bag_slots`, `bag_stacking` (`stacks` default, `single`) (data keys), `Session::bagSlotsUsed`, `bagRoom`, `psiv_game_info.bag_slots`/`bag_single`, `psiv_world_info.bag_used`: a bag of limited slots; shops refuse, chests stay shut, drops are left, story gives always land (R174).
+* game.json `autosave` (data key, default true) and `autosave_slots: 0`, `Session::autosaveOn`, `psiv_game_info.autosave`: no autosaves at all, departing from FLOW-050 (R175).
+* docs/data-import.md "Values a converter must set deliberately" (docs, test `everyPlayShapingKeyIsInTheConverterList`): every play-shaping rules.json and game.json key with its default, kept complete by a test over the key tables (R176).
+* `dev rest`, `Session::devRest`, `psiv_dev_rest`, `GameSession.DevRest` (tool, session, C API, C#): a free rest for testing, marking the game (R172).
+* `psiv_exit.fires`, `PSIV_EXIT_FIRES_*`, `psiv_follower_cell`, `PSIV_NEXT_*`, `psiv_dev_rest`, `psiv_macro_set_policy`, `psiv_battle_set_auto_play_macro_policy`, `psiv_macro_policy`, `psiv_macro.policy`, `PSIV_NAME_MACRO_POLICY` (C API).
+* save schema 15, `PSIV_ABI_VERSION` 18, library 0.17.0 (versions).
+
 * field ticks with many actors (performance): actors are indexed by id and by home area once per session, so a tick builds each actor's view a few times (the leader's step, wanderers and patrols, visible enemies) instead of once per wanderer, per path actor and per id lookup; results and the encounter stream unchanged.
 * `walk` path search (performance): a grid over the area, with the solid actors' cells taken once per step instead of once per cell searched and objects looked up in a per-area cell index; same paths, same ends (no path, 4000 steps).
 * `Session::area()` with gated exits or solid-while-active hooks (performance): the view's key reads only what can change, so it no longer walks every hook on each call.

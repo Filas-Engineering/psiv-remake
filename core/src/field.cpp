@@ -78,6 +78,7 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 	}
 
 	FieldUse use;
+	const bool consumeAnyway = item->consumed && item->consumeWhenNoEffect.value_or(db.battleRules.consumeWhenNoEffect);
 	if (travelEffect(item->effects)) {
 		// The game has already moved the party; using the item only spends it.
 		if (--stock->second == 0) {
@@ -94,27 +95,33 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 	if (const Effect* teach = teachEffect(item->effects)) {
 		PartyMember& learner = party[static_cast<std::size_t>(target)];
 		const std::vector<std::string> known = knownAbilities(db, learner);
-		if (std::find(known.begin(), known.end(), teach->ability) != known.end()) {
+		const bool knew = std::find(known.begin(), known.end(), teach->ability) != known.end();
+		if (knew) {
 			Event kept;
 			kept.type = EventType::ItemHadNoEffect;
 			kept.ability = item->id;
 			use.events.push_back(kept);
-			return use;
-		}
-		learner.taught.push_back(teach->ability);
-		const AbilityDef* taught = db.ability(teach->ability);
-		if (taught && taught->kind == AbilityKind::Skill && !learner.skillUses.count(taught->id)) {
-			learner.skillUses[taught->id] = maxSkillUses(db, learner, taught->id);
+			if (!consumeAnyway) {
+				return use;
+			}
+		} else {
+			learner.taught.push_back(teach->ability);
+			const AbilityDef* taught = db.ability(teach->ability);
+			if (taught && taught->kind == AbilityKind::Skill && !learner.skillUses.count(taught->id)) {
+				learner.skillUses[taught->id] = maxSkillUses(db, learner, taught->id);
+			}
 		}
 		if (--stock->second == 0) {
 			inventory.erase(stock);
 		}
-		Event learned;
-		learned.type = EventType::Message;
-		learned.target = target;
-		learned.message = "field.learned";
-		learned.params = {learner.characterId, teach->ability};
-		use.events.push_back(learned);
+		if (!knew) {
+			Event learned;
+			learned.type = EventType::Message;
+			learned.target = target;
+			learned.message = "field.learned";
+			learned.params = {learner.characterId, teach->ability};
+			use.events.push_back(learned);
+		}
 		Event spent;
 		spent.type = EventType::ResourceSpent;
 		spent.ability = item->id;
@@ -125,14 +132,17 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 	}
 	Battle battle = Battle::partyOnly(db, party);
 	const int user = chosen ? target : 0;
-	const std::vector<int> targets = battle.resolveTargets(user, item->targeting, target, effectsRevive(item->effects), effectsTakeLiving(item->effects), &item->effects);
-	if (targets.empty() || (chosen && needsTarget(item->targeting) && !battle.canAffect(target, item->effects))) {
+	const std::vector<Effect> effects = fieldEffects(item->effects);
+	const std::vector<int> targets = battle.resolveTargets(user, item->targeting, target, effectsRevive(effects), effectsTakeLiving(effects), &effects);
+	if (targets.empty() || (chosen && needsTarget(item->targeting) && !battle.canAffect(target, effects))) {
 		return refuse("field.no_target", {itemId});
 	}
-	if (!battle.applyEffects(-1, Battle::Attacker(), item->id, item->effects, targets, true, use.events)) {
+	if (!battle.applyEffects(-1, Battle::Attacker(), item->id, effects, targets, true, use.events)) {
 		Event& kept = battle.emit(use.events, EventType::ItemHadNoEffect);
 		kept.ability = item->id;
-		return use;
+		if (!consumeAnyway) {
+			return use;
+		}
 	}
 	if (!item->consumed) {
 		return use;
@@ -190,13 +200,14 @@ FieldUse useAbilityOutsideBattle(const Database& db, std::vector<PartyMember>& p
 	case CancelReason::NoTarget:
 		return refuse("field.no_target", {abilityId});
 	}
-	const std::vector<int> targets = battle.resolveTargets(user, ability->targeting, target, ability->revives(), effectsTakeLiving(ability->effects), &ability->effects);
-	if (targets.empty() || (chosen && needsTarget(ability->targeting) && !battle.canAffect(target, ability->effects))) {
+	const std::vector<Effect> effects = fieldEffects(ability->effects);
+	const std::vector<int> targets = battle.resolveTargets(user, ability->targeting, target, effectsRevive(effects), effectsTakeLiving(effects), &effects);
+	if (targets.empty() || (chosen && needsTarget(ability->targeting) && !battle.canAffect(target, effects))) {
 		return refuse("field.no_target", {abilityId});
 	}
 	FieldUse use;
 	battle.payCost(user, *ability, use.events);
-	battle.applyEffects(user, battle.attackerOf(user), ability->id, ability->effects, targets, false, use.events);
+	battle.applyEffects(user, battle.attackerOf(user), ability->id, effects, targets, false, use.events);
 	writeBack(battle, party);
 	return use;
 }

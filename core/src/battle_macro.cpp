@@ -220,7 +220,7 @@ std::vector<MacroStepResult> Battle::planMacro(const Macro& macro, MacroFallback
 		if (automatic && (refused || isCostIssue(issue) || nobodyToChange)) {
 			result.status = MacroStepStatus::Automatic;
 			result.issue = refused || isCostIssue(issue) ? issue : MacroIssue::NoTarget;
-			command = autoCommand(*this, actor);
+			command = autoCommand(*this, actor, autoExpected(&macro));
 		} else if (failing && (refused || isCostIssue(issue) || nobodyToChange)) {
 			fail(refused || isCostIssue(issue) ? issue : MacroIssue::NoTarget);
 		} else if (refused || nobodyToChange) {
@@ -230,7 +230,7 @@ std::vector<MacroStepResult> Battle::planMacro(const Macro& macro, MacroFallback
 			if (targets.empty() && automatic) {
 				result.status = MacroStepStatus::Automatic;
 				issue = MacroIssue::NoTarget;
-				command = autoCommand(*this, actor);
+				command = autoCommand(*this, actor, autoExpected(&macro));
 			} else if (targets.empty() && failing) {
 				fail(MacroIssue::NoTarget);
 				issue = MacroIssue::None;
@@ -258,6 +258,11 @@ std::vector<MacroStepResult> Battle::planMacro(const Macro& macro, MacroFallback
 		results.push_back(result);
 	}
 	return results;
+}
+
+bool Battle::autoExpected(const Macro* macro) const {
+	const MacroPolicy policy = autoPolicy_ != MacroPolicy::Default ? autoPolicy_ : macro ? macro->policy : MacroPolicy::Default;
+	return policy == MacroPolicy::Default ? db_->battleRules.autoExpected : policy == MacroPolicy::Expected;
 }
 
 std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro, MacroFallback fallback) {
@@ -290,7 +295,7 @@ std::vector<MacroStepResult> Battle::applyMacro(const Macro& macro, MacroFallbac
 		if (unnamed == MacroUnnamed::None) {
 			passing_[i] = true;
 		} else {
-			commands_[i] = autoCommand(*this, i);
+			commands_[i] = autoCommand(*this, i, autoExpected(&macro));
 		}
 	}
 	return results;
@@ -355,7 +360,7 @@ MacroTroubleReport Battle::applyMacroRound(const Macro& macro, MacroTrouble mode
 		if ((who == MacroRecoverWho::Uncovered && covered) || !combatants_[i].alive()) {
 			continue;
 		}
-		if (setCommand(i, autoCommand(*this, i)).empty()) {
+		if (setCommand(i, autoCommand(*this, i, autoExpected(&macro))).empty()) {
 			report.recovered.push_back(i);
 		}
 	}

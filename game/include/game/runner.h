@@ -19,6 +19,8 @@ struct RunnerOptions {
 	// With autoBattle, the trouble mode in place of the macro's and the rules' (Session::setAutoPlayMacro);
 	// `autobattle on|random [MACRO] continue|recover|stop` sets it.
 	rules::MacroTrouble autoBattleTrouble = rules::MacroTrouble::Default;
+	// With autoBattle, the automatic choice's policy in place of the macro's and the rules' (`... power|expected`).
+	rules::MacroPolicy autoBattlePolicy = rules::MacroPolicy::Default;
 	// Print a line for each auto round in which macro trouble holds (`trouble on|off`).
 	bool printTrouble = false;
 	// Print each command before running it, so a scripted run reads as a transcript.
@@ -49,7 +51,8 @@ private:
 	void printOutput(const std::vector<Output>& outputs);
 	void flushOutput();
 	void printEvents(const std::vector<rules::Event>& events);
-	void finishBattleAuto(const std::string& macro = "", rules::MacroTrouble trouble = rules::MacroTrouble::Default);
+	void finishBattleAuto(const std::string& macro = "", rules::MacroTrouble trouble = rules::MacroTrouble::Default,
+		rules::MacroPolicy policy = rules::MacroPolicy::Default);
 	void fight(const std::string& macro, rules::MacroFallback fallback);
 	void printTrouble(const rules::MacroTroubleReport& trouble);
 	void checkMacro(const std::string& name);
@@ -58,6 +61,7 @@ private:
 	void status();
 	void dev(const std::vector<std::string>& w);
 	void walkTo(Cell goal);
+	void approach(const std::string& actor, bool talk);
 	std::string battleName(int index) const;
 
 	Session& session_;

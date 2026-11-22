@@ -213,6 +213,10 @@ Command expectedAttack(const Battle& battle, int actor, const std::vector<const 
 }
 
 Command autoCommand(const Battle& battle, int actor) {
+	return autoCommand(battle, actor, battle.autoExpected(nullptr));
+}
+
+Command autoCommand(const Battle& battle, int actor, bool expected) {
 	const Database& db = battle.database();
 	const Combatant& self = battle.combatant(actor);
 
@@ -257,7 +261,7 @@ Command autoCommand(const Battle& battle, int actor) {
 			return Command::ability(ability->id, weakest);
 		}
 	}
-	if (db.battleRules.autoExpected) {
+	if (expected) {
 		return expectedAttack(battle, actor, usable, weakestFoe);
 	}
 	const AbilityDef* strongest = nullptr;

@@ -35,6 +35,7 @@ public struct PsivGameInfo
 	public int FlashDefault, FlashOriginal;
 	public int PartyTalkAmbient, MusicFadeMs;
 	public int CellPixels;
+	public int Autosave, BagSlots, BagSingle;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -72,7 +73,7 @@ public struct PsivWorldInfo
 {
 	public int Mode, MenuKind, Money;
 	public long PlayTimeMs;
-	public int AutosaveCount, GameOver, CanRetry, PlayerControl, Dev, Encounters;
+	public int AutosaveCount, GameOver, CanRetry, PlayerControl, Dev, Encounters, BagUsed;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -99,7 +100,10 @@ public struct PsivEnemy { public int Id; public IntPtr Encounter, Zone; public i
 public struct PsivMarker { public IntPtr Name; public int X, Y; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivExit { public int X, Y; public IntPtr ToArea, ToMarker; public int Open, ClosedTile; public IntPtr Sound; }
+public struct PsivExit { public int X, Y; public IntPtr ToArea, ToMarker; public int Open, ClosedTile; public IntPtr Sound; public int Fires; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivFollower { public IntPtr Id; public int X, Y; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivInteractTarget { public int Kind; public IntPtr Id; public int X, Y, Facing, Ready, Across; public IntPtr Keeper; }
@@ -294,7 +298,7 @@ public struct PsivMacroStep
 }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivMacro { public IntPtr Name; public int StepCount; public IntPtr Steps; public int OnTrouble, RecoverWho, Unnamed; }
+public struct PsivMacro { public IntPtr Name; public int StepCount; public IntPtr Steps; public int OnTrouble, RecoverWho, Unnamed, Policy; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivMacroStepCheck { public IntPtr Member; public int Actor, Issue; public IntPtr Status, RefusalKey, RefusalText; public int Ok; }
@@ -398,10 +402,10 @@ public struct PsivComboEntry
 public struct PsivInventoryEntry { public IntPtr Id, Name; public int Count, Equipment, Field, TargetingOrSlot, Price, Travel; public IntPtr CallsVehicle; public int Hands; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivShopInfo { public IntPtr Id; public int SellPercent, StockCount; public IntPtr Stock; public int Kind; public IntPtr Voice; }
+public struct PsivShopInfo { public IntPtr Id; public int SellPercent, StockCount; public IntPtr Stock; public int Kind; public IntPtr Voice, NameKey, Name; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivInnInfo { public IntPtr Id; public int Cost; public IntPtr Voice; public int PerMember; }
+public struct PsivInnInfo { public IntPtr Id; public int Cost; public IntPtr Voice; public int PerMember; public IntPtr NameKey, Name; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivJob { public IntPtr Id, Title; public int State; }
@@ -461,7 +465,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 17;
+	public const uint AbiVersion = 18;
 	// PSIV_SLOT_COUNT: the places a member wears equipment, which the member structs index by psiv_equip_slot.
 	public const int SlotCount = 7;
 
@@ -499,6 +503,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_macro_move_step", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroMoveStep(SessionHandle s, string macro, int from, int to);
 	[LibraryImport(Library, EntryPoint = "psiv_macro_from_combo", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroFromCombo(SessionHandle s, string recipe, string name);
 	[LibraryImport(Library, EntryPoint = "psiv_macro_set_options", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroSetOptions(SessionHandle s, string macro, int onTrouble, int recoverWho, int unnamed);
+	[LibraryImport(Library, EntryPoint = "psiv_macro_set_policy", StringMarshalling = StringMarshalling.Utf8)] public static partial int MacroSetPolicy(SessionHandle s, string macro, int policy);
 
 	[LibraryImport(Library, EntryPoint = "psiv_new_game")] public static partial int NewGame(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_continue_game")] public static partial int ContinueGame(SessionHandle s);
@@ -548,6 +553,8 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_choice_get")] public static partial int ChoiceGet(SessionHandle s, out PsivChoice choice);
 	[LibraryImport(Library, EntryPoint = "psiv_choose")] public static partial int Choose(SessionHandle s, int index);
 	[LibraryImport(Library, EntryPoint = "psiv_can_skip")] public static partial int CanSkip(SessionHandle s);
+	[LibraryImport(Library, EntryPoint = "psiv_event_next_output")] public static partial int EventNextOutput(SessionHandle s);
+	[LibraryImport(Library, EntryPoint = "psiv_followers")] public static partial int Followers(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_skip")] public static partial int Skip(SessionHandle s);
 
 	[LibraryImport(Library, EntryPoint = "psiv_cameras")] public static partial int Cameras(SessionHandle s, out IntPtr list, out int count);
@@ -569,6 +576,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_battle_fill_auto_round")] public static partial int BattleFillAutoRound(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_set_auto_play_macro", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleSetAutoPlayMacro(SessionHandle s, string macro);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_set_auto_play_macro_trouble", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleSetAutoPlayMacroTrouble(SessionHandle s, string macro, int trouble);
+	[LibraryImport(Library, EntryPoint = "psiv_battle_set_auto_play_macro_policy", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleSetAutoPlayMacroPolicy(SessionHandle s, string macro, int trouble, int policy);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_macro_check", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleMacroCheck(SessionHandle s, string macro, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_macro_trouble", StringMarshalling = StringMarshalling.Utf8)] public static partial int BattleMacroTrouble(SessionHandle s, string? macro, out PsivMacroTroubleReport report);
 	[LibraryImport(Library, EntryPoint = "psiv_battle_play")] public static partial int BattlePlay(SessionHandle s, int maxRounds, out PsivAutoBattle played);
@@ -622,6 +630,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_dev_set_flag", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevSetFlag(SessionHandle s, string flag, int value);
 	[LibraryImport(Library, EntryPoint = "psiv_dev_give", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevGive(SessionHandle s, string id, int count);
 	[LibraryImport(Library, EntryPoint = "psiv_dev_money")] public static partial int DevMoney(SessionHandle s, int amount);
+	[LibraryImport(Library, EntryPoint = "psiv_dev_rest")] public static partial int DevRest(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_dev_set_level", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevSetLevel(SessionHandle s, string member, int level);
 	[LibraryImport(Library, EntryPoint = "psiv_dev_battle", StringMarshalling = StringMarshalling.Utf8)] public static partial int DevBattle(SessionHandle s, string encounter);
 	[LibraryImport(Library, EntryPoint = "psiv_dev_end_battle")] public static partial int DevEndBattle(SessionHandle s, int victory, out IntPtr list, out int count);

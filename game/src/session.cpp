@@ -35,9 +35,10 @@ constexpr std::size_t kInstantActionRecords = 256;
 constexpr int kMaxWalkSteps = 4000;
 // No view of the actor in Session::TickViews.
 constexpr std::size_t kAway = static_cast<std::size_t>(-1);
-// Session::AreaIndex::objects bits: something stands on the cell, a platform's end is there.
+// Session::AreaIndex::objects bits: something stands on the cell, a platform's end is there, an exit is there.
 constexpr std::uint8_t kObject = 1;
 constexpr std::uint8_t kPlatformEnd = 2;
+constexpr std::uint8_t kExit = 4;
 
 // Adds the time from its making to its end to `total`, in microseconds.
 struct Timer {
@@ -50,6 +51,8 @@ private:
 	std::uint64_t& total_;
 	std::chrono::steady_clock::time_point start_;
 };
+// Cells of the leader's trail kept: more than a lineup's followers and the follower actor need.
+constexpr std::size_t kTrailCells = 8;
 
 // A save is plain text a player can edit, so everything in it that names data or indexes a map is checked against the
 // data before the world is used. Returns what is wrong, in English, or empty.
@@ -236,6 +239,11 @@ std::string invalidWorld(const GameData& data, const World& w) {
 	}
 	if (!w.follower.empty() && std::find(data.config.actors.begin(), data.config.actors.end(), w.follower) == data.config.actors.end()) {
 		return named("unknown follower", w.follower);
+	}
+	for (Cell c : w.trail) {
+		if (!cellIn(w.area, c)) {
+			return "a follower's cell is outside the area";
+		}
 	}
 	if (!w.dungeonExitArea.empty() && !cellIn(w.dungeonExitArea, w.dungeonExitCell)) {
 		return "the way out of the dungeon is outside its area";
@@ -562,6 +570,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.autosaved",
 		"game.barrier_broken",
 		"game.battle_start",
+		"game.bag_full",
 		"game.boarded",
 		"game.boarded_ship",
 		"game.bought",
@@ -569,6 +578,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.clear_not_recorded",
 		"game.clear_recorded",
 		"game.dev_marked",
+		"game.drop_left",
 		"game.dropped",
 		"game.equipment_returned",
 		"game.equipped",
@@ -612,6 +622,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.reason.vehicle",
 		"game.refuse.aboard",
 		"game.refuse.blocked",
+		"game.refuse.bag_full",
 		"game.refuse.buy_one",
 		"game.refuse.call_outdoors",
 		"game.refuse.combo_no_member",
@@ -2444,6 +2455,9 @@ const Session::AreaIndex& Session::areaIndex(const std::string& id) const {
 	}
 	for (const Exit& e : a->exits) {
 		mark(e.at);
+		if (a->inside(e.at)) {
+			index.objects[static_cast<std::size_t>(e.at.y) * static_cast<std::size_t>(index.width) + static_cast<std::size_t>(e.at.x)] |= kExit;
+		}
 		index.gatedExits = index.gatedExits || !e.requireFlag.empty() || !e.blockFlag.empty();
 	}
 	for (const Shop& x : a->shops) {
@@ -2499,6 +2513,19 @@ bool Session::objectsMayStand(const Area& area, Cell cell) const {
 		return true;
 	}
 	return (index.objects[static_cast<std::size_t>(cell.y) * static_cast<std::size_t>(index.width) + static_cast<std::size_t>(cell.x)] & kObject) != 0;
+}
+
+const Exit* Session::exitOn(const Area& area, Cell cell) const {
+	const AreaIndex& index = areaIndex(area.id);
+	if (area.inside(cell) && index.width == area.width() && index.height == area.height() &&
+		!(index.objects[static_cast<std::size_t>(cell.y) * static_cast<std::size_t>(index.width) + static_cast<std::size_t>(cell.x)] & kExit)) {
+		return nullptr;
+	}
+	return area.exitAt(cell);
+}
+
+bool Session::exitTakes(const Area& area, const Exit& exit, Cell from) const {
+	return exitFires(exit, data_.config.exitFires) == ExitFires::Always || !exitOn(area, from);
 }
 
 const Area* Session::area() const {
@@ -2885,6 +2912,7 @@ rules::Message Session::newGame() {
 	modes_.transition(Mode::Field);
 	enterArea(c.startArea, c.startMarker);
 	world_.facing = c.startFacing;
+	placeFollowers();
 	settleField();
 	return {};
 }
@@ -3052,7 +3080,7 @@ rules::Message Session::loadText(const std::string& text, const std::string& slo
 	previousArea_ = world_.cameFrom;
 	modes_.transition(Mode::Field);
 	const Area* a = area();
-	arrivalAnnounced_ = a->arriveNotice && data_.config.arriveNotice == ArriveNotice::Always;
+	arrivalAnnounced_ = a->announcesFrom("") && data_.config.arriveNotice == ArriveNotice::Always;
 	exitSound_.clear();
 	if (pacingOn()) {
 		pacing_.enterArea(a->id, a->kind == AreaKind::Dungeon);
@@ -3309,11 +3337,14 @@ void Session::settleMachineBank() {
 	}
 }
 
-// Field poison and paralysis (rules.json, areas with `field_status`): each step counts toward them. Returns false after a
-// game over.
+// Field poison and paralysis (rules.json; areas with `field_status`, `field_poison`, `field_paralysis`, and every area for
+// paralysis under its `everywhere`): each step counts toward them. Returns false after a game over.
 bool Session::fieldStatusStep() {
 	const rules::BattleRules& r = data_.db.battleRules;
-	if (!area()->fieldStatus || (r.fieldPoisonEvery <= 0 && r.fieldParalysisChance <= 0)) {
+	const Area& here = *area();
+	const bool poison = r.fieldPoisonEvery > 0 && (here.fieldStatus || here.fieldPoison);
+	const bool paralysisHere = r.fieldParalysisChance > 0 && (here.fieldStatus || here.fieldParalysis || r.fieldParalysisEverywhere);
+	if (!poison && !paralysisHere) {
 		return true;
 	}
 	++world_.fieldSteps;
@@ -3325,7 +3356,7 @@ bool Session::fieldStatusStep() {
 		const auto has = [&](const std::string& status) {
 			return std::find_if(m->statuses.begin(), m->statuses.end(), [&](const rules::ActiveStatus& s) { return s.id == status; });
 		};
-		if (r.fieldPoisonEvery > 0 && world_.fieldSteps % r.fieldPoisonEvery == 0 && has(r.fieldPoisonStatus) != m->statuses.end()) {
+		if (poison && world_.fieldSteps % r.fieldPoisonEvery == 0 && has(r.fieldPoisonStatus) != m->statuses.end()) {
 			--m->hp;
 			if (m->hp == 0) {
 				m->statuses.clear();
@@ -3334,7 +3365,7 @@ bool Session::fieldStatusStep() {
 			}
 		}
 		const auto paralysis = has(r.fieldParalysisStatus);
-		if (r.fieldParalysisChance > 0 && paralysis != m->statuses.end() && world_.fieldSteps >= r.fieldParalysisFrom &&
+		if (paralysisHere && paralysis != m->statuses.end() && world_.fieldSteps >= r.fieldParalysisFrom &&
 			(world_.fieldSteps >= r.fieldParalysisBy || world_.encounterStream.range(1, r.fieldParalysisChance) == 1)) {
 			m->statuses.erase(paralysis);
 			emit(OutputKind::Notice, "game.paralysis_worn_off", {id});
@@ -3350,6 +3381,14 @@ bool Session::fieldStatusStep() {
 void Session::arrive(Cell cell) {
 	const Cell from = world_.position;
 	world_.position = cell;
+	if (!world_.aboard.empty()) {
+		world_.trail.clear();
+	} else if (from != cell) {
+		world_.trail.insert(world_.trail.begin(), from);
+		if (world_.trail.size() > kTrailCells) {
+			world_.trail.resize(kTrailCells);
+		}
+	}
 	const Platform* boarded = world_.aboard.empty() ? dockedPlatformAt(cell) : nullptr;
 	world_.ridingPlatform = boarded ? boarded->id : "";
 	if (boarded) {
@@ -3390,7 +3429,7 @@ void Session::arrive(Cell cell) {
 		settleField();
 		return;
 	}
-	if (const Exit* exit = a.exitAt(cell)) {
+	if (const Exit* exit = exitOn(a, cell); exit && exitTakes(a, *exit, from)) {
 		const Exit e = *exit;
 		if (e.fall) {
 			emit(OutputKind::Notice, "game.fell");
@@ -3457,6 +3496,7 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 	}
 	stopBackground();
 	const Area* before = area();
+	const std::string cameIn = before ? before->id : "";
 	if (a->kind != AreaKind::Dungeon) {
 		world_.dungeonExitArea.clear();
 		world_.dungeonExitCell = {};
@@ -3487,7 +3527,9 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 		world_.vehicles[world_.aboard].area = a->id;
 		world_.vehicles[world_.aboard].cell = cell;
 	}
-	world_.visitedAreas.insert(a->id);
+	if (a->registersFrom(cameIn)) {
+		world_.visitedAreas.insert(a->id);
+	}
 	world_.fieldSteps = 0;
 	for (const std::string& flag : data_.config.areaFlags) {
 		world_.flags.erase(flag);
@@ -3512,13 +3554,56 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 		}
 	}
 	const ArriveNotice rule = data_.config.arriveNotice;
-	arrivalAnnounced_ = a->arriveNotice && (rule == ArriveNotice::Always || (rule == ArriveNotice::Walked && arrivalWalked_));
+	arrivalAnnounced_ = a->announcesFrom(cameIn) && (rule == ArriveNotice::Always || (rule == ArriveNotice::Walked && arrivalWalked_));
 	arrivalWalked_ = false;
 	exitSound_ = pendingExitSound_;
 	pendingExitSound_.clear();
+	placeFollowers();
 	if (arrivalAnnounced_) {
 		emit(OutputKind::Notice, "game.arrive", {a->id});
 	}
+}
+
+void Session::placeFollowers() {
+	world_.trail.clear();
+	const Area* a = area();
+	if (data_.config.followersArrive != FollowersArrive::Behind || !a || !world_.aboard.empty()) {
+		return;
+	}
+	const Facing back = static_cast<Facing>((static_cast<int>(world_.facing) + 2) % 4);
+	Cell c = world_.position;
+	for (std::size_t i = 0; i < kTrailCells; ++i) {
+		const Cell n = stepFrom(c, back);
+		if (!a->walkable(n) || exitOn(*a, n)) {
+			break;
+		}
+		c = n;
+		world_.trail.push_back(c);
+	}
+}
+
+std::vector<FollowerView> Session::followers() const {
+	std::vector<std::string> ids;
+	if (world_.lineup.size() > 1) {
+		ids.assign(world_.lineup.begin() + 1, world_.lineup.end());
+	}
+	if (!world_.follower.empty()) {
+		ids.push_back(world_.follower);
+	}
+	const bool together = !world_.aboard.empty() || !world_.ridingPlatform.empty();
+	std::vector<FollowerView> out;
+	for (std::size_t i = 0; i < ids.size(); ++i) {
+		Cell cell = world_.position;
+		if (!together && !world_.trail.empty()) {
+			cell = world_.trail[std::min(i, world_.trail.size() - 1)];
+		}
+		out.push_back({ids[i], cell});
+	}
+	return out;
+}
+
+events::Interpreter::NextOutput Session::nextEventOutput() const {
+	return interpreter_ && mode() == Mode::Event ? interpreter_->next_output() : events::Interpreter::NextOutput::none;
 }
 
 void Session::settleField() {
@@ -3726,6 +3811,10 @@ WalkStatus Session::walkStep(PathWalk& walk) {
 			return WalkStatus::NoPath;
 		}
 		const auto reached = [&](Cell c) { return from[at(c)] != kNone; };
+		const auto leaves = [&](Cell c, Cell n) {
+			const Exit* exit = exitOn(a, n);
+			return exit && exitTakes(a, *exit, c);
+		};
 		std::deque<Cell> queue{world_.position};
 		from[at(world_.position)] = at(world_.position);
 		while (!queue.empty() && !(goalInside && reached(walk.goal))) {
@@ -3733,7 +3822,7 @@ WalkStatus Session::walkStep(PathWalk& walk) {
 			queue.pop_front();
 			for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
 				const Cell n = stepFrom(c, f);
-				if (!a.inside(n) || reached(n) || !canEnter(a, n, standing) || (((objectsMayStand(a, n) && a.exitAt(n)) || belts[at(n)]) && n != walk.goal)) {
+				if (!a.inside(n) || reached(n) || !canEnter(a, n, standing) || ((belts[at(n)] || leaves(c, n)) && n != walk.goal)) {
 					continue;
 				}
 				from[at(n)] = at(c);
@@ -4387,6 +4476,7 @@ rules::Message Session::travel(TravelKind kind, const std::string& destination, 
 	enterAreaAt(to.area, to.cell);
 	if (turn) {
 		world_.facing = arrival;
+		placeFollowers();
 	}
 	settleField();
 	return {};
@@ -4435,6 +4525,18 @@ void Session::openChest(const Chest& chest) {
 		emit(OutputKind::Notice, "game.chest_empty");
 		return;
 	}
+	if (data_.config.bagSlots > 0) {
+		// The whole chest or nothing: it stays shut, to be opened once the bag has room.
+		int slots = 0;
+		for (const auto& [id, n] : chest.items) {
+			const auto held = world_.items.find(id);
+			slots += data_.config.bagSingle ? n : held == world_.items.end() || held->second <= 0 ? 1 : 0;
+		}
+		if (bagSlotsUsed() + slots > data_.config.bagSlots) {
+			emit(OutputKind::Notice, "game.bag_full");
+			return;
+		}
+	}
 	for (const auto& [id, n] : chest.items) {
 		giveThing(id, n);
 		emit(OutputKind::Notice, "game.found", {std::to_string(n), id});
@@ -4449,6 +4551,30 @@ void Session::openChest(const Chest& chest) {
 	}
 	world_.flags[chest.flag] = true;
 	refreshJournal(true);
+}
+
+int Session::bagSlotsUsed() const {
+	int used = 0;
+	for (const auto& [id, n] : world_.items) {
+		used += n <= 0 ? 0 : data_.config.bagSingle ? n : 1;
+	}
+	return used;
+}
+
+int Session::bagRoom(const std::string& id) const {
+	const bool item = data_.db.item(id) != nullptr;
+	const std::map<std::string, int>& bag = item ? world_.items : world_.equipmentBag;
+	const auto found = bag.find(id);
+	const int held = found == bag.end() ? 0 : found->second;
+	const int cap = std::max(0, data_.config.itemCap - held);
+	if (!item || data_.config.bagSlots <= 0) {
+		return cap;
+	}
+	const int free = data_.config.bagSlots - bagSlotsUsed();
+	if (data_.config.bagSingle) {
+		return std::max(0, std::min(cap, free));
+	}
+	return held > 0 || free > 0 ? cap : 0;
 }
 
 void Session::giveThing(const std::string& id, int count) {
@@ -4730,9 +4856,14 @@ rules::Message Session::startAuto() {
 }
 
 rules::Message Session::startAuto(rules::MacroTrouble trouble) {
+	return startAuto(trouble, rules::MacroPolicy::Default);
+}
+
+rules::Message Session::startAuto(rules::MacroTrouble trouble, rules::MacroPolicy policy) {
 	if (!battle_) {
 		return refusal("no_battle");
 	}
+	battle_->setAutoPolicy(policy);
 	if (world_.autoMacro.empty()) {
 		return refusal("no_auto_macro");
 	}
@@ -4786,11 +4917,16 @@ rules::Message Session::setAutoPlayMacro(const std::string& name) {
 }
 
 rules::Message Session::setAutoPlayMacro(const std::string& name, rules::MacroTrouble trouble) {
+	return setAutoPlayMacro(name, trouble, rules::MacroPolicy::Default);
+}
+
+rules::Message Session::setAutoPlayMacro(const std::string& name, rules::MacroTrouble trouble, rules::MacroPolicy policy) {
 	if (!name.empty() && std::none_of(world_.macros.begin(), world_.macros.end(), [&](const rules::Macro& m) { return m.name == name; })) {
 		return refusal("no_macro", {name});
 	}
 	autoPlayMacro_ = name;
 	autoPlayTrouble_ = trouble;
+	autoPlayPolicy_ = policy;
 	return {};
 }
 
@@ -4823,6 +4959,7 @@ rules::Message Session::fillAutoRound() {
 		return refusal("no_battle");
 	}
 	lastMacroTrouble_ = rules::MacroTroubleReport();
+	battle_->setAutoPolicy(autoPlayPolicy_);
 	rules::Message refused;
 	const auto named = std::find_if(world_.macros.begin(), world_.macros.end(), [&](const rules::Macro& m) { return m.name == autoPlayMacro_; });
 	if (!autoPlayMacro_.empty() && named == world_.macros.end()) {
@@ -4843,7 +4980,7 @@ rules::Message Session::fillAutoRound() {
 		return {};
 	}
 	if (!world_.autoMacro.empty() && battle_->round() == 0 && !battle_->autoActive()) {
-		const rules::Message notStarted = startAuto(autoPlayMacro_.empty() ? autoPlayTrouble_ : rules::MacroTrouble::Default);
+		const rules::Message notStarted = startAuto(autoPlayMacro_.empty() ? autoPlayTrouble_ : rules::MacroTrouble::Default, autoPlayPolicy_);
 		refused = refused.empty() ? notStarted : refused;
 	}
 	if (!fillFromAuto()) {
@@ -4949,8 +5086,14 @@ void Session::finishBattle() {
 		emit(OutputKind::Notice, outcome == rules::Outcome::Victory ? "game.victory" : "game.scripted_end", {std::to_string(experience), std::to_string(money)});
 		for (const rules::Inventory* drops : {&rewards.items, &rewards.equipment}) {
 			for (const auto& [id, n] : *drops) {
-				giveThing(id, n);
-				emit(OutputKind::Notice, "game.dropped", {std::to_string(n), id});
+				const int kept = data_.config.bagSlots > 0 ? std::min(n, bagRoom(id)) : n;
+				if (kept > 0) {
+					giveThing(id, kept);
+					emit(OutputKind::Notice, "game.dropped", {std::to_string(kept), id});
+				}
+				if (kept < n) {
+					emit(OutputKind::Notice, "game.drop_left", {std::to_string(n - kept), id});
+				}
 			}
 		}
 		for (std::size_t i = 0; i < state.size() && i < rewards.memberExperience.size(); ++i) {
@@ -5063,6 +5206,10 @@ SaveFile Session::makeSave(bool autosave) const {
 }
 
 void Session::autosave(std::string reason) {
+	if (!autosaveOn()) {
+		autosaveReason_.clear();
+		return;
+	}
 	Timer timer(stats_.autosaveUs);
 	++stats_.autosaves;
 	++autosaveCount_;
@@ -5213,6 +5360,9 @@ rules::Message Session::buy(const std::string& id, int count) {
 	auto held = bag.find(id);
 	if ((held == bag.end() ? 0 : held->second) + count > data_.config.itemCap) {
 		return refusal("carry_cap", {std::to_string(data_.config.itemCap)});
+	}
+	if (count > bagRoom(id)) {
+		return refusal("bag_full", {std::to_string(data_.config.bagSlots)});
 	}
 	world_.money -= static_cast<int>(total);
 	giveThing(id, count);
@@ -5505,6 +5655,7 @@ std::vector<MacroView> Session::macroViews() const {
 		view.onTrouble = macro.onTrouble;
 		view.recoverWho = macro.recoverWho;
 		view.unnamed = macro.unnamed;
+		view.policy = macro.policy;
 		out.push_back(std::move(view));
 	}
 	return out;
@@ -5578,6 +5729,18 @@ rules::Message Session::setMacroOptions(const std::string& name, rules::MacroTro
 	macro->onTrouble = onTrouble;
 	macro->recoverWho = recoverWho;
 	macro->unnamed = unnamed;
+	return {};
+}
+
+rules::Message Session::setMacroPolicy(const std::string& name, rules::MacroPolicy policy) {
+	if (menuKind() != MenuKind::Field) {
+		return refusal("macro_menu_only");
+	}
+	auto macro = findMacro(world_.macros, name);
+	if (macro == world_.macros.end()) {
+		return refusal("no_macro", {name});
+	}
+	macro->policy = policy;
 	return {};
 }
 
@@ -6064,6 +6227,21 @@ rules::Message Session::devGive(const std::string& id, int count) {
 	} else {
 		host_->take_item(id, -count);
 	}
+	return {};
+}
+
+rules::Message Session::devRest() {
+	if (rules::Message refused = devNeedsGame(); !refused.empty()) {
+		return refused;
+	}
+	devMark();
+	for (rules::PartyMember& m : world_.roster) {
+		rules::rest(m, data_.db);
+	}
+	for (auto& [id, place] : world_.vehicles) {
+		place.skillUses.clear();
+	}
+	settleMachineBank();
 	return {};
 }
 

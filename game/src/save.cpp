@@ -237,6 +237,13 @@ std::string worldChunk(const World& w) {
 	if (w.fieldSteps > 0) {
 		o.key("field_steps").num(w.fieldSteps).end();
 	}
+	if (!w.trail.empty()) {
+		o.key("trail");
+		for (Cell c : w.trail) {
+			o.num(c.x).num(c.y);
+		}
+		o.end();
+	}
 	if (!w.cameFrom.empty()) {
 		o.key("came_from").text(w.cameFrom).end();
 	}
@@ -561,6 +568,7 @@ bool readWorld(const std::string& payload, World& w, std::string& error) {
 	w.visitedAreas.clear();
 	w.enemies.clear();
 	w.follower.clear();
+	w.trail.clear();
 	w.areaSteps = 0;
 	w.onceHooks.clear();
 	w.areaMusic.clear();
@@ -630,6 +638,13 @@ bool readWorld(const std::string& payload, World& w, std::string& error) {
 			w.cameFrom = in.text(l[1]);
 		} else if (k == "field_steps" && in.need(l, 1)) {
 			w.fieldSteps = in.integer(l[1]);
+		} else if (k == "trail") {
+			if (l.size() < 3 || l.size() % 2 == 0) {
+				in.fail("bad trail line");
+			}
+			for (std::size_t i = 1; i + 1 < l.size(); i += 2) {
+				w.trail.push_back({in.integer(l[i]), in.integer(l[i + 1])});
+			}
 		} else if (k == "riding_platform" && in.need(l, 1)) {
 			w.ridingPlatform = in.text(l[1]);
 		} else if (k == "step_carry" && in.need(l, 1)) {

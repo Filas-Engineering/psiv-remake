@@ -107,6 +107,11 @@ public:
 	// Turns auto-battle on with this macro. Returns false when the battle has already ended. Stop keeps the stop rules
 	// (BAT-104); Continue and Recover fill every round with applyMacroRound and stop only on a cancel or the battle's end.
 	bool startAuto(const Macro& macro, MacroTrouble mode = MacroTrouble::Stop);
+	// The automatic choice's policy for this battle, over a macro's own and rules.json's auto_policy; Default leaves it to
+	// them. autoExpected says what applies to `macro`'s automatic choices (nullptr: none's).
+	void setAutoPolicy(MacroPolicy policy) { autoPolicy_ = policy; }
+	MacroPolicy autoPolicy() const { return autoPolicy_; }
+	bool autoExpected(const Macro* macro) const;
 	MacroTrouble autoTrouble() const { return autoMode_; }
 	// The trouble of the last round fillFromAuto filled from the macro.
 	const MacroTroubleReport& lastAutoTrouble() const { return lastAutoTrouble_; }
@@ -283,6 +288,7 @@ private:
 	bool autoActive_ = false;
 	bool autoCancelRequested_ = false;
 	bool autoMemberFell_ = false;
+	MacroPolicy autoPolicy_ = MacroPolicy::Default;
 	AutoStop autoStop_ = AutoStop::None;
 	MacroTrouble autoMode_ = MacroTrouble::Stop;
 	MacroTroubleReport lastAutoTrouble_;

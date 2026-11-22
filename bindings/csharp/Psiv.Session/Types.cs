@@ -62,6 +62,8 @@ public enum MacroTrouble { Default, Continue, Recover, Stop }
 public enum MacroRecoverWho { Default, All, Uncovered, Troubled }
 // What a member the macro has no step for does.
 public enum MacroUnnamed { Default, Attack, None, Auto }
+// The automatic choice's policy (rules.json auto_policy); Default leaves it to the next level: the caller, the macro, rules.json.
+public enum MacroPolicy { Default, Power, Expected }
 public enum MacroTargetKind { Default, Self, Member, Enemy, All }
 
 public enum MacroIssue
@@ -101,7 +103,7 @@ public enum NameKind
 	RewardMultiplier, BattleSource, Side, CommandKind, AbilityKind, Targeting, EquipSlot, Outcome, EventType, CancelReason,
 	Effectiveness, StatusEnd, ResourceKind, Element, Stat, Opening, AutoStop, MacroStepStatus, MacroIssue, ActionType, MacroTargetKind,
 	DescriptionKind, ItemSort, CameraTarget, TravelKind, DevList, CreatureKind, ShopKind, ActorVanish, ActorRemoval, AnimationEnd,
-	InteractKind, MacroFallback, MacroTrouble, MacroRecoverWho, MacroUnnamed,
+	InteractKind, MacroFallback, MacroTrouble, MacroRecoverWho, MacroUnnamed, MacroPolicy,
 }
 
 // The id lists of DevIds: what the developer commands take. Markers are "area:marker".
@@ -148,7 +150,8 @@ public sealed record SessionOptions
 // TitleMusic, VictoryMusic and DefeatMusic are game.json's tracks, "" when the data names none.
 public sealed record GameInfo(string Title, string GameBuild, int RulesVersion, int TickMs, int RoundMs, int ManualSlots, int AutosaveSlots, int ItemCap, int MoneyCap,
 	IReadOnlyList<string> Languages, string TitleMusic, string VictoryMusic, string DefeatMusic, bool MagicDefense = false, int AffinityDivisor = 100,
-	FlashLevel FlashDefault = FlashLevel.Reduced, bool FlashOriginal = true, bool PartyTalkAmbient = true, int MusicFadeMs = -1, int CellPixels = 16);
+	FlashLevel FlashDefault = FlashLevel.Reduced, bool FlashOriginal = true, bool PartyTalkAmbient = true, int MusicFadeMs = -1, int CellPixels = 16,
+	bool Autosave = true, int BagSlots = 0, bool BagSingle = false);
 
 // An element the data knows. Element values past Holy are the ones rules.json declares, numbered by Index.
 public sealed record ElementInfo(Element Index, string Id, string Name);
@@ -173,7 +176,7 @@ public sealed record SaveSummary(string Slot, string Area, long PlayTimeMs, IRea
 
 // Dev: developer tools marked the game. Encounters: false while DevEncounters has turned battles off for this session.
 public sealed record WorldInfo(Mode Mode, MenuKind MenuKind, int Money, long PlayTimeMs, int AutosaveCount, bool GameOver, bool CanRetry, bool PlayerControl,
-	bool Dev, bool Encounters);
+	bool Dev, bool Encounters, int BagUsed = 0);
 
 // The running event and the source line its interpreter is at.
 public sealed record EventPosition(string Event, string File, int Line);
@@ -211,7 +214,17 @@ public sealed record Marker(string Name, int X, int Y);
 
 // Open: its flags let the party through. ClosedTile: the map character it is drawn as while closed ('#' unless the data
 // names another, a door drawn as floor); FieldRows and the grid show it then.
-public sealed record FieldExit(int X, int Y, string ToArea, string ToMarker, bool Open = true, char ClosedTile = '#', string Sound = "");
+public sealed record FieldExit(int X, int Y, string ToArea, string ToMarker, bool Open = true, char ClosedTile = '#', string Sound = "",
+	ExitFires Fires = ExitFires.FromFloor);
+
+// When stepping onto an exit takes it: only from a cell that is no exit, or on any step.
+public enum ExitFires { FromFloor, Always }
+
+// One who walks behind the leader (a lineup member after the first, then the follower actor) and its cell on the leader's trail.
+public sealed record Follower(string Id, int X, int Y);
+
+// What the running event shows next (GameSession.NextEventOutput).
+public enum NextOutput { None, Line, Choice, End, Other }
 
 // What Interact would act on now: the cell acted on, where the leader faces to use it (Interact turns it there), Ready
 // false when Interact would refuse, Across when used across a counter, Keeper a shop's or rest point's keeper ("" for none).
@@ -361,7 +374,7 @@ public sealed record MacroStep(string Member, string MemberName, CommandKind Com
 	string TargetMember, string TargetMemberName, int TargetEnemy, MacroIssue Issue, bool Piece = false);
 
 public sealed record Macro(string Name, IReadOnlyList<MacroStep> Steps, MacroTrouble OnTrouble = MacroTrouble.Default,
-	MacroRecoverWho RecoverWho = MacroRecoverWho.Default, MacroUnnamed Unnamed = MacroUnnamed.Default);
+	MacroRecoverWho RecoverWho = MacroRecoverWho.Default, MacroUnnamed Unnamed = MacroUnnamed.Default, MacroPolicy Policy = MacroPolicy.Default);
 
 // One step's state this round (psiv_battle_macro_check): Ok, or the issue, the status behind it and what setting it by hand
 // would be refused with.
@@ -388,10 +401,11 @@ public sealed record InventoryEntry(string Id, string Name, int Count, bool IsEq
 }
 
 // Voice: the keeper's text key prefix (VOICE.welcome, .confirm, .thanks, .cannot_afford), "" for a host's default lines.
-public sealed record ShopInfo(string Id, int SellPercent, IReadOnlyList<InventoryEntry> Stock, ShopKind Kind = ShopKind.General, string Voice = "");
+public sealed record ShopInfo(string Id, int SellPercent, IReadOnlyList<InventoryEntry> Stock, ShopKind Kind = ShopKind.General, string Voice = "",
+	string NameKey = "", string Name = "");
 
 // Cost: what resting costs now, per member of the lineup when PerMember.
-public sealed record InnInfo(string Id, int Cost, string Voice = "", bool PerMember = false);
+public sealed record InnInfo(string Id, int Cost, string Voice = "", bool PerMember = false, string NameKey = "", string Name = "");
 
 public sealed record Job(string Id, string Title, JobState State);
 

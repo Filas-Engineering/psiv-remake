@@ -32,6 +32,10 @@ inline constexpr const char* kMapTiles = ".#~:%=";
 const char* toString(EncounterMode mode);
 bool parseEncounterMode(const std::string& text, EncounterMode& out);
 
+// When stepping onto an exit takes it (game.json `exit_fires`, an exit's `fires`): only from a cell that is no exit, or
+// on any step.
+enum class ExitFires { FromFloor, Always };
+
 struct Exit {
 	Cell at;
 	std::string toArea;
@@ -48,6 +52,8 @@ struct Exit {
 	char closedTile = '#';
 	// A sound cue (a presentation.audio id) a host plays as the party leaves by this exit; empty for none.
 	std::string sound = {};
+	// Unset: game.json's `exit_fires`, or Always for a pit.
+	std::optional<ExitFires> fires = std::nullopt;
 };
 
 // A field hook (FLD-023): runs one event script when it fires and its flag conditions hold. A Flag hook fires
@@ -138,6 +144,8 @@ struct Shop {
 	// A text key prefix for the keeper's lines (R113): a host shows PREFIX.welcome, .confirm, .thanks and
 	// .cannot_afford where the tables have them, else its own default lines. Empty for the defaults.
 	std::string voice = {};
+	// A text key of the shop's display name for hosts; empty for none.
+	std::string name = {};
 };
 
 struct RestPoint {
@@ -149,6 +157,8 @@ struct RestPoint {
 	// The price is cost times the lineup's size (R113; Session::restCost).
 	bool perMember = false;
 	std::string voice = {};
+	// As Shop::name.
+	std::string name = {};
 };
 
 struct Chest {
@@ -267,8 +277,20 @@ struct Area {
 	std::int64_t stepUs = 250000;
 	// False when the area's own `arrive_notice` is false: entering it shows no arrival notice (GameConfig::arriveNotice).
 	bool arriveNotice = true;
-	// `field_status`: rules.json's field poison and paralysis rules apply to each step taken here.
+	// `arrive_notice` as a list: the first entry whose `from` lists the area the party came from, or that has no `from`,
+	// gives the notice in place of arriveNotice; none matching leaves arriveNotice.
+	struct NoticeRule {
+		std::vector<std::string> from;
+		bool notice = true;
+		int line = 0;
+	};
+	std::vector<NoticeRule> arriveNotices;
+	// `field_status`: both of the two below.
 	bool fieldStatus = false;
+	// `field_poison`: rules.json's field poison applies to each step taken here.
+	bool fieldPoison = false;
+	// `field_paralysis`: rules.json's field paralysis applies to each step taken here (everywhere under its `everywhere`).
+	bool fieldParalysis = false;
 	// `name`: the text key the area shows as, by the area the party came from and by flag, the first entry that holds
 	// (`from` and `flag` both, when both are given), else the entry with neither; empty: `area.<id>`.
 	struct NameVariant {
@@ -284,6 +306,10 @@ struct Area {
 	std::string region;
 	// A town's marker where a return to it lands (FLD-051); a town without one is no destination.
 	std::string arrival;
+	// `arrival_from`, `arrival_not_from`: entering the town registers it as a destination only from a listed area, or only
+	// from an area not listed.
+	std::vector<std::string> arrivalFrom;
+	std::vector<std::string> arrivalNotFrom;
 	// A dungeon's way out for the dungeon-exit item and technique; without one, the cell the party entered from.
 	std::optional<DungeonExitTarget> dungeonExit;
 	std::vector<std::string> rows;
@@ -334,11 +360,18 @@ struct Area {
 	const Shop* shop(const std::string& id) const;
 	const RestPoint* rest(const std::string& id) const;
 	const Platform* platform(const std::string& id) const;
+	// Whether entering from `from` (the area the party was in, empty for none) announces the area, and registers it as a
+	// town to return to.
+	bool announcesFrom(const std::string& from) const;
+	bool registersFrom(const std::string& from) const;
 };
 
 // Whether the flags let the party use it now.
 bool portOpen(const Port& port, const World& world);
 bool exitOpen(const Exit& exit, const World& world);
+ExitFires exitFires(const Exit& exit, ExitFires gameDefault);
+// Whether a step from `from` onto `exit` takes it: a FromFloor exit does not when `from` is an exit cell of the area.
+bool exitFiresFrom(const Area& area, const Exit& exit, Cell from, ExitFires gameDefault);
 bool platformHolds(const Platform& platform, const World& world);
 
 // Errors are "file:line: message", one per line.

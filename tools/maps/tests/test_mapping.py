@@ -210,6 +210,22 @@ class VesselAndChangesTest(TempCase):
 		self.assertIs(True, back["field_status"])
 		self.assertEqual("raft", back["platforms"][0]["id"])
 
+	def test_exit_rules_arrivals_by_origin_field_statuses_and_names_survive_a_round_trip(self):
+		area = copy.deepcopy(VESSEL_AREA)
+		area["arrival"] = area.get("arrival", "deck")
+		area["arrival_from"] = ["saltgrass"]
+		area["arrive_notice"] = [{"from": ["saltgrass"], "notice": False}, {"notice": True}]
+		area["field_poison"] = True
+		area["field_paralysis"] = True
+		area["exits"] = [{"at": [1, 1], "to": "elsewhere", "marker": "door", "fires": "always"}]
+		area["shops"] = [{"id": "stall", "at": [1, 0], "stock": ["tonic"], "name": "place.stall"}]
+		area["rests"] = [{"id": "cot", "cost": 5, "name": "place.cot"}]
+		back = self.convert(tiled.area_to_tmj(copy.deepcopy(area), "cells.tsj"))
+		self.assertEqual(areajson.dumps(area), areajson.dumps(back))
+		self.assertEqual({"from": ["saltgrass"], "notice": False}, back["arrive_notice"][0])
+		self.assertEqual("always", back["exits"][0]["fires"])
+		self.assertEqual("place.cot", back["rests"][0]["name"])
+
 	def test_a_hooks_actor_cell_survives_a_round_trip(self):
 		area = copy.deepcopy(VESSEL_AREA)
 		area["hooks"] = [{"id": "keeper", "at": [1, 0], "event": "e", "actor_at": [2, 1]}]

@@ -10,6 +10,7 @@
 #include "rules/names.h"
 #include "rules/types.h"
 
+#include <cstdio>
 #include <filesystem>
 #include <regex>
 #include <set>
@@ -124,4 +125,29 @@ TEST(theCapabilitiesReportIsJsonWithEveryTable) {
 	CHECK(text.find("\"area_kind\": [\"town\", \"field\", \"dungeon\", \"vessel\"]") != std::string::npos);
 	// Stable: the same text every time.
 	CHECK(capabilitiesJson() == text);
+}
+
+// docs/data-import.md lists every rules.json and game.json key that shapes play, so a key added to a loader's table
+// without a line there fails here; the structural keys (files, names, lists of content) are exempt.
+TEST(everyPlayShapingKeyIsInTheConverterList) {
+	std::string doc;
+	CHECK(readFile("../docs/data-import.md", doc));
+	const std::size_t start = doc.find("## Values a converter must set deliberately");
+	CHECK(start != std::string::npos);
+	const std::size_t end = doc.find("\n## ", start + 1);
+	const std::string section = doc.substr(start, end == std::string::npos ? std::string::npos : end - start);
+	const std::set<std::string> structural = {"title", "core_data", "areas", "events", "glossary", "languages", "journal", "actors", "presentation", "flags",
+		"vars", "clear_flag", "start", "join_levels", "prices", "bosses", "vehicles", "credits", "nameless_actors"};
+	std::vector<std::string> missing;
+	for (const rules::DataKeySet& set : {rules::dataKeys("rules.json", ""), gameKeys("game.json", "")}) {
+		for (const std::string& key : set.keys) {
+			if (!structural.count(key) && section.find("`" + key + "`") == std::string::npos) {
+				missing.push_back(set.file + " " + key);
+			}
+		}
+	}
+	for (const std::string& m : missing) {
+		std::fprintf(stderr, "missing from the converter list: %s\n", m.c_str());
+	}
+	CHECK(missing.empty());
 }

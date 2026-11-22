@@ -180,10 +180,10 @@ inline std::string makeBackground(const std::string& game, const std::string& co
 	if (!patched || !game::writeFileAtomic(data + "/game.json", config, problem)) {
 		return "cannot add Wren Yard to game.json " + problem;
 	}
-	const std::string en = "\n\t\t\"area.wren_yard\": \"Wren Yard\",\n\t\t\"area.wren_den\": \"Wren Den\",\n\t\t\"credits.wren_end.title\": \"Wren Hollow\",\n"
+	const std::string en = "\n\t\t\"area.wren_yard\": \"Wren Yard\",\n\t\t\"area.wren_den\": \"Wren Den\",\n\t\t\"place.yard_stall\": \"Yard Stall\",\n\t\t\"credits.wren_end.title\": \"Wren Hollow\",\n"
 		"\t\t\"credits.wren_end.cast\": \"The yard trader, the goat and the crow\",\n\t\t\"credits.wren_end.thanks\": \"With thanks\",\n"
 		"\t\t\"credits.wren_end.player\": \"And to you, for walking every room\",";
-	const std::string ja = "\n\t\t\"area.wren_yard\": \"みそさざいの にわ\",\n\t\t\"area.wren_den\": \"みそさざいの ほらあな\",\n\t\t\"credits.wren_end.title\": \"みそさざいの くぼち\",\n"
+	const std::string ja = "\n\t\t\"area.wren_yard\": \"みそさざいの にわ\",\n\t\t\"place.yard_stall\": \"にわの みせ\",\n\t\t\"area.wren_den\": \"みそさざいの ほらあな\",\n\t\t\"credits.wren_end.title\": \"みそさざいの くぼち\",\n"
 		"\t\t\"credits.wren_end.cast\": \"にわの あきんど、やぎ、そして からす\",\n\t\t\"credits.wren_end.thanks\": \"かんしゃを こめて\",\n"
 		"\t\t\"credits.wren_end.player\": \"そして すべての へやを あるいた あなたに\",";
 	for (const auto& [code, added] : {std::make_pair(std::string("en"), en), std::make_pair(std::string("ja"), ja)}) {

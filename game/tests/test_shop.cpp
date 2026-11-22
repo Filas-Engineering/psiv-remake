@@ -152,3 +152,60 @@ TEST(levelUpsReportLearnedAbilities) {
 	CHECK(s.world().enemies.empty());
 	CHECK_EQ(s.world().graceMs, test::data().config.graceMs);
 }
+
+// game.json bag_slots (R174): shops refuse what the bag cannot hold, whole purchases only; a chest that does not fit stays
+// shut and opens later; under bag_stacking single every item is a slot; equipment takes none.
+TEST(theBagHasSlotsWhenTheDataGivesThem) {
+	GameData data = test::data();
+	data.config.bagSlots = 2;
+	Session s(data, SessionOptions());
+	openStall(s);
+	s.world().money = 10000;
+	s.world().items = {{"tonic", 1}};
+	CHECK_EQ(s.bagSlotsUsed(), 1);
+	CHECK(s.buy("clear_gel", 1).empty());
+	CHECK_EQ(s.bagRoom("spark_flask"), 0);
+	CHECK_EQ(s.buy("spark_flask", 1).key, std::string("game.refuse.bag_full"));
+	CHECK(s.buy("tonic", 5).empty());
+	CHECK(s.buy("grip_bands", 1).empty());
+	CHECK(s.closeMenu().empty());
+	test::placeParty(s, "tidewater", "crate_front", Facing::South);
+	s.world().items = {{"clear_gel", 1}, {"spark_flask", 1}};
+	CHECK(s.interact().empty());
+	CHECK(test::outputHas(s.drainOutput(), "the chest stays shut"));
+	CHECK(!s.world().flag("chest.tidewater_crate"));
+	s.world().items.erase("spark_flask");
+	CHECK(s.interact().empty());
+	CHECK(s.world().flag("chest.tidewater_crate") && s.world().items.at("tonic") == 2);
+
+	data.config.bagSingle = true;
+	Session single(data, SessionOptions());
+	openStall(single);
+	single.world().money = 10000;
+	single.world().items = {{"tonic", 1}};
+	CHECK_EQ(single.bagRoom("tonic"), 1);
+	CHECK_EQ(single.buy("tonic", 2).key, std::string("game.refuse.bag_full"));
+	CHECK(single.buy("tonic", 1).empty());
+	CHECK_EQ(single.bagSlotsUsed(), 2);
+}
+
+// game.json autosave false (R175): no autosave is written at any point, and the session says so.
+TEST(autosavesCanBeTurnedOff) {
+	GameData data = test::data();
+	data.config.autosave = false;
+	SessionOptions options;
+	options.saveDirectory = test::freshDirectory("no_autosave");
+	Session s(data, options);
+	CHECK(!s.autosaveOn());
+	CHECK(s.newGame().empty());
+	test::confirmLines(s);
+	CHECK(s.devWarp("reed_path", "west_gate").empty());
+	for (const Output& o : s.drainOutput()) {
+		CHECK(o.kind != OutputKind::Autosave);
+	}
+	CHECK_EQ(s.autosaveCount(), 0);
+	data.config.autosave = true;
+	data.config.autosaveSlots = 0;
+	Session none(data, SessionOptions());
+	CHECK(!none.autosaveOn());
+}

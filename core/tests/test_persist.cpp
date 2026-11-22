@@ -92,7 +92,7 @@ TEST(macrosRoundTripThroughText) {
 	const Result<std::vector<Macro>> older = parseMacros("macros 1\nmacro a\nstep fighter item tonic default - -1\nend\n");
 	CHECK(older.ok() && older.value->at(0).steps[0].kind == CommandKind::Item && !older.value->at(0).steps[0].piece);
 	CHECK(parseMacros("macros 1\nmacro a\nstep fighter piece squall_fan default - -1\nend\n").error.find("bad step") != std::string::npos);
-	CHECK(parseMacros("macros 4\nend\n").error.find("version 4 is not supported") != std::string::npos);
+	CHECK(parseMacros("macros 5\nend\n").error.find("version 5 is not supported") != std::string::npos);
 	// Version 3 adds a macro's options line; text without options is still written as version 2.
 	std::vector<Macro> optioned = {{"a", {}}, {"b", {}}};
 	CHECK_EQ(serializeMacros(optioned), std::string("macros 2\nmacro a\nmacro b\nend\n"));

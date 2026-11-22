@@ -32,7 +32,7 @@
 		{"id": "yard_lit", "trigger": "flag", "event": "yard_lit", "require_flag": "yard.lamps_lit", "block_flag": "yard.lit_seen"}
 	],
 	"shops": [
-		{"id": "yard_stall", "at": [9, 2], "stock": ["tonic"], "keeper": "yard_trader"}
+		{"id": "yard_stall", "at": [9, 2], "stock": ["tonic"], "keeper": "yard_trader", "name": "place.yard_stall"}
 	],
 	"zones": [
 		{

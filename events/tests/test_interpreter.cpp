@@ -696,3 +696,64 @@ end
 	CHECK(trace.find("state tile water") != std::string::npos);
 	CHECK(!test::compile_errors("event b skippable\n\tif tile lava\n\t\tsay guide \"x\"\n\tend\nend\n").empty());
 }
+
+TEST(next_output_looks_past_the_line_shown_without_running_anything) {
+	Program p = test::compile_ok(R"(event a unskippable
+	say guide "one"
+	set seen
+	say guide "two"
+	call b
+	if seen
+		say guide "three"
+	end
+end
+
+event b unskippable
+	say guide "inner"
+	var x = 2
+end
+)");
+	RecordingHost host;
+	host.set_line_duration(1.0);
+	Interpreter it(p, host);
+	CHECK(it.next_output() == Interpreter::NextOutput::none);
+	it.start("a");
+	it.step(0);
+	CHECK(host.trace.size() == 1u && host.trace.back() == "say guide \"one\"");
+	CHECK(it.next_output() == Interpreter::NextOutput::line);
+	CHECK(host.trace.size() == 1u);
+	host.advance(1.0);
+	it.step(1.0);
+	CHECK(host.trace.back() == "say guide \"two\"");
+	CHECK(it.next_output() == Interpreter::NextOutput::other);
+	host.advance(1.0);
+	it.step(1.0);
+	CHECK(host.trace.back() == "say guide \"inner\"");
+	CHECK(it.next_output() == Interpreter::NextOutput::other);
+	host.advance(1.0);
+	it.step(1.0);
+	CHECK(host.trace.back() == "say guide \"three\"");
+	CHECK(it.next_output() == Interpreter::NextOutput::end);
+	host.advance(1.0);
+	it.step(1.0);
+	CHECK(it.status() != Status::running);
+	CHECK(it.next_output() == Interpreter::NextOutput::none);
+}
+
+TEST(next_output_names_a_choice_ahead) {
+	Program p = test::compile_ok(R"(event a unskippable
+	say guide "one"
+	ask "Sure?"
+	yes
+		say guide "yes"
+	end
+end
+)");
+	RecordingHost host;
+	host.set_line_duration(1.0);
+	host.queue_choices({0});
+	Interpreter it(p, host);
+	it.start("a");
+	it.step(0);
+	CHECK(it.next_output() == Interpreter::NextOutput::choice);
+}

@@ -314,7 +314,9 @@ void Battle::useItem(int actor, const Command& command, std::vector<Event>& out)
 		Event& kept = emit(out, EventType::ItemHadNoEffect);
 		kept.actor = actor;
 		kept.ability = item->id;
-		return;
+		if (!item->consumeWhenNoEffect.value_or(db_->battleRules.consumeWhenNoEffect)) {
+			return;
+		}
 	}
 	if (!item->consumed) {
 		return;
@@ -397,6 +399,8 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 	bool changed = false;
 	for (int target : targets) {
 		bool missed = false;
+		// A revive with `hp: 0` stands the target at 0 for the rest of the action; its event's amount is settled at the end.
+		std::optional<std::size_t> standingAtZero;
 		// A fallen target's revives come first, so the other effects reach it once it stands, whatever the listed order.
 		std::vector<const Effect*> ordered;
 		for (const Effect& effect : effects) {
@@ -414,7 +418,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 		for (const Effect* listed : ordered) {
 			const Effect& effect = *listed;
 			Combatant& t = combatants_[target];
-			if (missed || t.gone || (effect.kind != EffectKind::Revive && !t.alive())) {
+			if (missed || t.gone || (effect.kind != EffectKind::Revive && !t.alive() && !(standingAtZero && t.hp == 0))) {
 				break;
 			}
 			if (!effect.reaches(t.kind)) {
@@ -733,9 +737,12 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				break;
 			}
 			case EffectKind::Revive:
-				if (!t.alive()) {
-					t.hp = effect.flatHp > 0 ? std::min(effect.flatHp, t.stats.maxHp) : formulas::reviveHp(t.stats.maxHp, effect.power);
+				if (!t.alive() && !standingAtZero) {
+					t.hp = effect.zeroHp ? 0 : effect.flatHp > 0 ? std::min(effect.flatHp, t.stats.maxHp) : formulas::reviveHp(t.stats.maxHp, effect.power);
 					removeStatus(target, kDefeatedStatus);
+					if (effect.zeroHp) {
+						standingAtZero = out.size();
+					}
 					Event& e = emit(out, EventType::Revived);
 					e.actor = user;
 					e.target = target;
@@ -745,6 +752,11 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				}
 				break;
 			}
+		}
+		if (standingAtZero && combatants_[target].hp == 0) {
+			combatants_[target].hp = 1;
+			out[*standingAtZero].amount = 1;
+			out[*standingAtZero].hp = 1;
 		}
 	}
 	return changed;

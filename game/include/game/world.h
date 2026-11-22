@@ -203,6 +203,9 @@ struct World {
 	// Steps taken since entering an area with `field_status`, which its poison and paralysis rules count (world chunk line
 	// `field_steps`, written when above 0).
 	int fieldSteps = 0;
+	// The leader's earlier cells in the area, newest first, where the followers walk (Session::followers); empty puts them
+	// all on the leader's cell (world chunk line `trail`, written when not empty).
+	std::vector<Cell> trail;
 	// Under machine_step_heal_fallen `heal`: hit points fallen machine members gained by steps while down, by character id,
 	// added when something stands them up (party chunk `machine_bank` lines, written only while above 0).
 	std::map<std::string, int> machineBank;

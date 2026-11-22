@@ -32,6 +32,68 @@ Start from a copy of the placeholder data, which passes the check, and replace o
 
 Keeping the placeholder files until yours replace them keeps the references working: placeholder areas still have the exits the start needs, placeholder scripts still define the events placeholder hooks run. Remove the placeholder content last, and run the check once more.
 
+## Values a converter must set deliberately
+
+The shipped values below are the placeholder's or the library's defaults, not the original's. Each shapes play; set every one on purpose (and keep the default only where it is what the original does). `game/tests/test_capabilities.cpp` (`everyPlayShapingKeyIsInTheConverterList`) fails when a key of `rules.json` or of `game.json`'s top level is neither listed here nor one of the structural keys that test names, so this list follows the loaders' key tables.
+
+`rules.json` (core; [core/README.md](../core/README.md)):
+
+| Key | Default | What it changes |
+| --- | --- | --- |
+| `surprise_rounds` | 1 (required) | rounds the side that ambushes acts alone |
+| `rest_revives` | true in the placeholder (required) | whether a rest stands the fallen up |
+| `machine_recover_hp` | 1 (required) | hit points a fallen machine member stands up with after battle |
+| `affinity_divisor` | 100 | the scale of every affinity (normal, weak, immune) |
+| `neutral_affinity` | the divisor | the affinity of hits without an element |
+| `defend_affinity` | 25 * divisor / 100 | a defending combatant's affinity for hits without an element |
+| `defend_elemental`, `defend_elements` | false, none | whether Defend also lowers elemental hits, and which |
+| `defend_timing` | `round` | Defend from the round's start or from the defender's turn |
+| `effectiveness_baseline`, `element_baselines` | the divisor, none | what an elemental hit is compared with for its weak or resisted label |
+| `elements` | none (the placeholder adds `tide`) | elements beyond the built-in ones |
+| `magic_defense` | false | elemental damage against magic defense instead of mental |
+| `damage_variance` | core's spread | the damage roll's variance and distribution |
+| `critical_bonus` | `quarter` | the critical bonus formula (`low_byte` the original's byte rule) |
+| `immune_min_damage`, `damage_wraparound`, `stat_wraparound` | false, false, none | the original's floors and 8-bit wraparounds |
+| `escape_party_first_round` | false | escape always works in a round the party opens |
+| `target_weights` | none | weights of enemies' random target picks by slot |
+| `instant_defeat_kinds` | none | creature kinds instant defeat reaches |
+| `ambush_opening` | `party_first` | who acts first when the party ambushes |
+| `macro_ally_pick` | `original` | whether macro ally picks pass by allies the effect would not change |
+| `auto_policy` | `power` | how automatic choices pick an attack (`expected` weighs the foes) |
+| `auto_macro_on_trouble`, `named_macro_on_trouble` | `stop`, `continue` | what repeating a macro does when a step is in trouble |
+| `macro_recover_who`, `macro_unnamed` | `all`, `attack` | who takes core's choice in a recover round; what a member without a step does |
+| `field_poison_every`, `field_poison_status` | 0 (off), `poison` | hit points poison takes per field steps |
+| `field_paralysis` | off | paralysis wearing off by field steps (`from`, `chance`, `by`, `everywhere`) |
+| `consume_when_no_effect` | false | whether an item that changed nothing is used up |
+
+`game.json` (game; [game/README.md](../game/README.md#gamejson)):
+
+| Key | Default | What it changes |
+| --- | --- | --- |
+| `item_cap`, `money_cap` | 99, 999999 | how many of an item, and how much money, the party holds |
+| `bag_slots`, `bag_stacking` | 0 (no limit), `stacks` | the bag's slots and whether each item is a slot |
+| `tick_ms` | 50 | the field's tick: every step lands on one |
+| `grace_ms` | 3000 | visible enemies' grace after a battle or an area entry |
+| `round_ms` | 4000 | play time per battle round |
+| `manual_slots`, `autosave_slots`, `autosave` | 10, 3, true | save slots, and whether autosaves are written |
+| `machine_step_heal`, `machine_step_heal_fallen` | 0, `off` | hit points machine members regain per step, and for the fallen |
+| `outside_experience_until` | none | members outside the lineup share experience until a flag |
+| `leave_equipment` | `keep` | what a member leaving the party does with its equipment |
+| `random_encounters_everywhere` | false | every area in random encounter mode |
+| `grace_after_battle` | false | zones' grace steps start again after each battle |
+| `interact`, `interact_across` | `faced`, false | what interact reaches |
+| `run_speed_percent` | none (no running) | running speed |
+| `vehicle_opening` | `roll` | how battles aboard open |
+| `background_limit` | 4 | background events at once |
+| `arrive_notice` | `always` | when an area announces itself |
+| `step_timing` | `ticks` | whether step times keep their fraction |
+| `party_talk_ambient` | true | ambient party talk on arrival |
+| `cell_pixels` | 16 | pixels per cell for pixel paths and platforms |
+| `exit_fires` | `from_floor` | whether a step from another exit cell takes an exit |
+| `followers_arrive` | `stacked` | where followers stand after an area entry |
+
+Per file: an area's `step_ms` (250), `encounter_mode` (`visible`) and its zones' `visible` values (the ENC-012/013 defaults) and `random` `min_steps`/`max_steps` (12/24), `step_distance`, `grace_steps`, `step_chance`; `presentation.flash_default` (`reduced`) and `flash_original`, `presentation.music.fade_ms` (the host's own); `party.json` characters' growth, `experience_table` and `level_stats` (the level cap is 99); `difficulties.json` presets; the text speeds a host offers (the profile's, not data).
+
 ## Core battle data
 
 All in `core/data/` (or the directory `--core` names). Full reference: [core/README.md, "Data formats"](../core/README.md#data-formats).
@@ -80,7 +142,13 @@ Difficulty overlays that scale enemies, abilities and rewards. Reference: [diffi
 
 Core's English message templates for battle and field results. The loader requires a template for every key core can emit with your data. Reference: [text_en.json](../core/README.md#text_enjson).
 
-### The latest options
+### Exits, arrivals by origin and the newest options
+
+Exits (one default changed; [game/README.md](../game/README.md#areas)): an exit takes the party only on a step from a cell that is no exit, so a party that arrives on one cell of a wide door or stair walks across the rest of it, and leaves by stepping off and back on. Where the original leaves from any step onto it (a map edge), give the exit `"fires": "always"`; for the old rule everywhere, `game.json` `"exit_fires": "always"`. Pits (`fall`) drop the party from any step. The check reaches exits by the same rule and counts a wide exit (touching exits to one marker) used from any of its cells.
+
+Optional, data without them as before: an area's `arrive_notice` as `[{"from": ["reed_path"], "notice": false}, {"notice": true}]` (the notice by the area the party came from); `arrival_from` / `arrival_not_from` (a town registers as a place to return to only when entered from, or not from, those areas); `field_poison`, `field_paralysis` (with `field_status` both) and `rules.json` `field_paralysis.everywhere`; a shop's or rest point's `name` (a text key); `game.json` `followers_arrive` (`stacked` or `behind`); revive `hp: 0` (a heal after it counts from 0); field items and abilities may carry `modify_stat`, `reset_stat`, `strip_modifiers` and a battle's `grant_affinity` beside an effect that acts outside battle, which the field use skips. `tools/maps` carries the new area and exit fields.
+
+### The options before
 
 Every one is optional; data without them loads and plays as before (two default rules changed with rules version 15, below). Core: enemies' and vehicles' `stats.attack` (an attack apart from strength) and any piece's `stats.attack`; characters' `skill_uses` (`{"skill": [[level, uses], ...]}`); `revive` with `living_target` and `hp`; effects `set_hp_percent` (`power` percent) and `grant_affinity` (`element`, `affinity`, `permanent`); `strip_modifiers` with `equipment_affinities`; combos' `orders` (component index lists); `rules.json` `field_poison_every`, `field_poison_status`, `field_paralysis` (`status`, `from`, `chance`, `by`). Default rules now: a one-ally or one-fallen-ally battle command naming an ally none of its effects can affect is refused (`command.no_effect_on_target`), and a fallen target takes an action's revives first. Game: actors' `wander` `stand_percent` and `axis`, `patrol` and `path`, `game.json` `cell_pixels` and `machine_step_heal_fallen`, `flags` entries `{"id", "reset": "area"}`; areas' `platforms`, `field_status` and `name` variants; an interact hook on a gated exit's cell (a door); the script tests `leader`, `music`, `area` and `tile`. References: [core/README.md](../core/README.md#changes-a-host-must-make), [game/README.md](../game/README.md#areas), [events/FORMAT.md](../events/FORMAT.md#conditions). `tools/maps` carries `platforms`, `field_status` and `name` as map properties.
 

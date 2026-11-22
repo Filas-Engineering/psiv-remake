@@ -247,7 +247,7 @@ TEST(restoringTechniquePointsWorksInBattleOnly) {
 
 	auto files = dataTexts();
 	replaceOnce(files["abilities.json"], "{\"id\": \"calm_tide\", \"name\": \"Calm Tide\", \"kind\": \"skill\", \"uses\": 2,", "{\"id\": \"calm_tide\", \"name\": \"Calm Tide\", \"kind\": \"skill\", \"uses\": 2, \"field\": true,");
-	expectError(files, "field use allows only heal");
+	expectError(files, "field use needs a heal");
 }
 
 // B10: an enemy's howl strips every raise at once, and a dust does the same to an enemy.

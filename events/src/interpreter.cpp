@@ -917,6 +917,57 @@ Interpreter::Position Interpreter::position() const {
 	return out;
 }
 
+Interpreter::NextOutput Interpreter::next_output() const {
+	if (status_ != Status::running || frames_.empty()) {
+		return NextOutput::none;
+	}
+	const int size = static_cast<int>(program_.code.size());
+	int pc = main_.pc;
+	if (pc < 0 || pc >= size) {
+		return NextOutput::other;
+	}
+	const Op waitingOn = program_.code[pc].op;
+	if (main_.wait == WaitKind::background && waitingOn == Op::ret) {
+		return NextOutput::end;
+	}
+	if (main_.wait == WaitKind::handle && waitingOn == Op::say) {
+		++pc;
+	} else if (main_.wait != WaitKind::none) {
+		return NextOutput::other;
+	}
+	std::size_t depth = frames_.size();
+	for (int guard = 0; guard < size; ++guard) {
+		if (pc < 0 || pc >= size) {
+			return NextOutput::other;
+		}
+		const Instruction& ins = program_.code[pc];
+		switch (ins.op) {
+		case Op::say:
+			return NextOutput::line;
+		case Op::choice:
+			return NextOutput::choice;
+		case Op::jump:
+			pc = ins.target;
+			break;
+		case Op::set_flag:
+		case Op::clear_flag:
+		case Op::var_set:
+		case Op::var_add:
+			++pc;
+			break;
+		case Op::ret:
+			if (depth == 1) {
+				return NextOutput::end;
+			}
+			pc = frames_[--depth].return_pc;
+			break;
+		default:
+			return NextOutput::other;
+		}
+	}
+	return NextOutput::other;
+}
+
 SaveState Interpreter::save() const {
 	SaveState state;
 	state.fingerprint = program_.fingerprint;

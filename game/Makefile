@@ -54,7 +54,7 @@ maps-check:
 
 # Re-records the golden transcripts of the scripted playthrough, the vehicle and travel script, the Ashen Fells
 # script, the macro script, the actor script, the party script, the trouble script, the interaction script, the
-# background script, the scene script and the motion script after a deliberate change.
+# background script, the approach script, the scene script and the motion script after a deliberate change.
 expected: all
 	rm -rf $(BUILD)/cli_saves
 	./$(CLI) --seed 6 --auto-battle --script data/scripts/playthrough.txt --saves $(BUILD)/cli_saves > tests/expected/playthrough.txt
@@ -77,6 +77,8 @@ expected: all
 	./$(MAKE_ACTOR_DATA) data ../core/data tests/fixtures/actors $(BUILD)/background_data background
 	rm -rf $(BUILD)/background_saves
 	./$(CLI) --data $(BACKGROUND_DATA) --seed 6 --script data/scripts/background.txt --saves $(BUILD)/background_saves > tests/expected/background.txt
+	rm -rf $(BUILD)/approach_saves
+	./$(CLI) --data $(BACKGROUND_DATA) --seed 6 --script data/scripts/approach.txt --saves $(BUILD)/approach_saves > tests/expected/approach.txt
 	./$(MAKE_ACTOR_DATA) data ../core/data tests/fixtures/actors $(BUILD)/scene_data scene
 	rm -rf $(BUILD)/scene_saves
 	./$(CLI) --data $(SCENE_DATA) --seed 6 --script data/scripts/scene.txt --saves $(BUILD)/scene_saves > tests/expected/scene.txt
@@ -138,6 +140,10 @@ test: all maps-check
 	./$(CLI) --data $(BACKGROUND_DATA) --seed 6 --script data/scripts/background.txt --saves $(BUILD)/background_saves > $(BUILD)/background.log
 	cmp $(BUILD)/background.log tests/expected/background.txt
 	@echo "background script matches tests/expected/background.txt"
+	rm -rf $(BUILD)/approach_saves
+	./$(CLI) --data $(BACKGROUND_DATA) --seed 6 --script data/scripts/approach.txt --saves $(BUILD)/approach_saves > $(BUILD)/approach.log
+	cmp $(BUILD)/approach.log tests/expected/approach.txt
+	@echo "approach script matches tests/expected/approach.txt"
 	./$(MAKE_ACTOR_DATA) data ../core/data tests/fixtures/actors $(BUILD)/scene_data scene
 	./$(CLI) --check $(SCENE_DATA) > $(BUILD)/check_scene.log || (cat $(BUILD)/check_scene.log; exit 1)
 	@tail -n 1 $(BUILD)/check_scene.log

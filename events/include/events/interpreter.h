@@ -61,6 +61,12 @@ public:
 	};
 	Position position() const;
 
+	// For hosts: what the innermost running event shows next, without running anything. It looks past the line its main
+	// thread shows now, through jumps, returns and flag and variable changes (which show nothing); a branch on a
+	// condition or a choice's answer, a wait, a block and any other command give `other`.
+	enum class NextOutput { none, line, choice, end, other };
+	NextOutput next_output() const;
+
 private:
 	struct Thread {
 		int pc = -1;

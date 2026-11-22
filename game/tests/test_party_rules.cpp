@@ -231,3 +231,23 @@ TEST(theEmberStepsExerciseTheConsoleTheSpringAndTheSentinel) {
 		CHECK(s.world().jobs.at("steps_courier") == JobState::Missed);
 	}
 }
+
+// A macro's automatic choice policy (R173): set from the field menu, saved, and the caller's auto play policy kept.
+TEST(aMacrosPolicyIsSavedAndTheCallersIsKept) {
+	Session s(test::data(), SessionOptions());
+	CHECK(s.newGame().empty());
+	test::confirmLines(s);
+	CHECK(s.openMenu().empty());
+	CHECK(s.createMacro("careful").empty());
+	CHECK(s.setMacroPolicy("careful", rules::MacroPolicy::Expected).empty());
+	CHECK(!s.setMacroPolicy("missing", rules::MacroPolicy::Power).empty());
+	std::string text;
+	CHECK(s.saveText(text).empty());
+	CHECK(text.find("macros 4\n") != std::string::npos);
+	Session loaded(test::data(), SessionOptions());
+	CHECK(loaded.loadSaveText(text).empty());
+	const std::vector<MacroView> views = loaded.macroViews();
+	CHECK(std::any_of(views.begin(), views.end(), [](const MacroView& v) { return v.name == "careful" && v.policy == rules::MacroPolicy::Expected; }));
+	CHECK(loaded.setAutoPlayMacro("careful", rules::MacroTrouble::Recover, rules::MacroPolicy::Power).empty());
+	CHECK(loaded.autoPlayPolicy() == rules::MacroPolicy::Power);
+}

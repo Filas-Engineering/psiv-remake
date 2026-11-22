@@ -10,7 +10,7 @@ namespace rules {
 
 namespace {
 
-constexpr int kMacrosVersion = 3;
+constexpr int kMacrosVersion = 4;
 constexpr int kComboLogVersion = 1;
 
 // Reads "<kind> <version>" ... "end", calling `line` for every line between. Returns an error or "". Versions from
@@ -61,15 +61,21 @@ std::string readVersioned(const std::string& text, const char* kind, int oldest,
 
 std::string serializeMacros(const std::vector<Macro>& macros) {
 	const auto hasOptions = [](const Macro& m) {
-		return m.onTrouble != MacroTrouble::Default || m.recoverWho != MacroRecoverWho::Default || m.unnamed != MacroUnnamed::Default;
+		return m.onTrouble != MacroTrouble::Default || m.recoverWho != MacroRecoverWho::Default || m.unnamed != MacroUnnamed::Default || m.policy != MacroPolicy::Default;
 	};
+	const auto hasPolicy = [](const Macro& m) { return m.policy != MacroPolicy::Default; };
 	std::ostringstream s;
-	// Version 3 only adds the options line, so text without options stays version 2 for older builds.
-	s << "macros " << (std::any_of(macros.begin(), macros.end(), hasOptions) ? kMacrosVersion : 2) << '\n';
+	// Version 3 adds the options line and version 4 its policy, so text without them keeps the older version for older builds.
+	const int version = std::any_of(macros.begin(), macros.end(), hasPolicy) ? kMacrosVersion : std::any_of(macros.begin(), macros.end(), hasOptions) ? 3 : 2;
+	s << "macros " << version << '\n';
 	for (const Macro& macro : macros) {
 		s << "macro " << text::encode(macro.name) << '\n';
 		if (hasOptions(macro)) {
-			s << "options " << toString(macro.onTrouble) << ' ' << toString(macro.recoverWho) << ' ' << toString(macro.unnamed) << '\n';
+			s << "options " << toString(macro.onTrouble) << ' ' << toString(macro.recoverWho) << ' ' << toString(macro.unnamed);
+			if (version >= 4) {
+				s << ' ' << toString(macro.policy);
+			}
+			s << '\n';
 		}
 		for (const MacroStep& step : macro.steps) {
 			s << "step " << text::encode(step.member) << ' ' << (step.piece ? "piece" : toString(step.kind)) << ' ' << text::encode(step.id) << ' '
@@ -93,12 +99,13 @@ Result<std::vector<Macro>> parseMacros(const std::string& text) {
 			macros.push_back(macro);
 			return "";
 		}
-		if (t[0] == "options" && t.size() == 4 && version >= 3) {
+		if (t[0] == "options" && ((t.size() == 4 && version == 3) || (t.size() == 5 && version >= 4))) {
 			if (macros.empty()) {
 				return "'options' before any 'macro'";
 			}
 			Macro& macro = macros.back();
-			if (!parseMacroTrouble(t[1], macro.onTrouble) || !parseMacroRecoverWho(t[2], macro.recoverWho) || !parseMacroUnnamed(t[3], macro.unnamed)) {
+			if (!parseMacroTrouble(t[1], macro.onTrouble) || !parseMacroRecoverWho(t[2], macro.recoverWho) || !parseMacroUnnamed(t[3], macro.unnamed) ||
+				(t.size() == 5 && !parseMacroPolicy(t[4], macro.policy))) {
 				return "bad options";
 			}
 			return "";

@@ -2,14 +2,15 @@
 
 import json
 
-TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "arrive_notice", "field_status", "name", "map", "markers", "exits", "hooks", "shops", "rests",
+TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "arrival_from", "arrival_not_from", "dungeon_exit", "arrive_notice",
+	"field_status", "field_poison", "field_paralysis", "name", "map", "markers", "exits", "hooks", "shops", "rests",
 	"chests", "ports", "zones", "helms", "gangway", "changes", "conveyors", "counters", "platforms"]
 LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"]
 ENTRY_FIELDS = {
-	"exits": ["at", "to", "marker", "fall", "require_flag", "block_flag", "closed_tile", "sound"],
+	"exits": ["at", "to", "marker", "fall", "require_flag", "block_flag", "closed_tile", "sound", "fires"],
 	"hooks": ["id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid", "actor_at", "across", "cells", "actor"],
-	"shops": ["id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper", "voice"],
-	"rests": ["id", "at", "cost", "keeper", "per_member", "voice"],
+	"shops": ["id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper", "voice", "name"],
+	"rests": ["id", "at", "cost", "keeper", "per_member", "voice", "name"],
 	"chests": ["id", "at", "flag", "items", "equipment", "money"],
 	"ports": ["id", "at", "marker", "flag", "ship", "block_flag"],
 	"zones": ["id", "from", "to", "table", "visible", "random"],

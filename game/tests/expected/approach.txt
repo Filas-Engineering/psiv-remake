@@ -1,0 +1,89 @@
+The Bell at Tidewater (seed 6)
+title> new
+You arrive at Tidewater Landing.
+  (fade in 1)
+The ferry bumps against the pilings of Tidewater Landing.
+  (move dockhand to dock_front)
+  (move dockhand to greet_spot)
+  (face dockhand fighter)
+Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  (move dockhand to dock_front)
+  (move dockhand to 10 0 2)
+  (face dockhand dock_front)
+New job: The dockhand's lost crate.
+New encyclopedia entry: Tidewater Landing.
+[Autosaved to auto_0 (event end).]
+field> dev warp wren_yard yard_gate
+Developer tools changed this game. It and its saves are marked.
+You arrive at Wren Yard.
+  (spawn yard_lamps)
+[Autosaved to auto_1 (area entry).]
+field> actors
+  yard_trader at 9 1 facing south shown solid
+  yard_goat at 3 4 facing south shown solid look goat wanders
+  yard_lamplighter at 1 2 facing east shown solid
+  yard_crow at 10 1 facing south shown look crow
+field> walk to yard_trader
+  (yard_lamps: move yard_lamplighter to lamp_east)
+  (yard_lamps: anim yard_lamplighter hop)
+  (yard_lamps: move yard_lamplighter via yard_middle to lamp_west pathfind)
+  (yard_lamps: face yard_lamplighter south)
+  (yard_lamps: sound lookout_creak)
+field> status
+Mode field, Wren Yard (8,1) facing east, play time 0:00:01.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 0
+  Money 50. Items: tonic x1.
+field> prompt
+  prompt: nothing
+field> walk to yard_goat
+  (yard_lamps: move yard_lamplighter to lamp_east)
+  (yard_lamps: anim yard_lamplighter hop)
+field> actors
+  yard_trader at 9 1 facing south shown solid
+  yard_goat at 3 2 facing north shown solid look goat wanders
+  yard_lamplighter at 12 3 facing east shown solid
+  yard_crow at 10 1 facing south shown look crow
+field> prompt
+  prompt: actor yard_goat at 3 2 facing west
+field> wait 1500
+  (yard_lamps: move yard_lamplighter via yard_middle to lamp_west pathfind)
+  (yard_lamps: face yard_lamplighter south)
+  (yard_lamps: sound lookout_creak)
+  (yard_lamps: move yard_lamplighter to lamp_east)
+  (yard_lamps: anim yard_lamplighter hop)
+field> actors
+  yard_trader at 9 1 facing south shown solid
+  yard_goat at 3 2 facing north shown solid look goat wanders
+  yard_lamplighter at 12 3 facing east shown solid
+  yard_crow at 10 1 facing south shown look crow
+field> talk yard_goat
+The goat bleats and butts the leader's knee.
+  (hide yard_goat with dissolve)
+  (show yard_goat with fade_in)
+field> walk to yard_crow
+  (yard_lamps: move yard_lamplighter via yard_middle to lamp_west pathfind)
+  (yard_lamps: face yard_lamplighter south)
+  (yard_lamps: sound lookout_creak)
+  (yard_lamps: hide yard_lamplighter with fade_out)
+  (yard_lamps: end)
+The yard lamps glow, one by one.
+You arrive at Wren Yard.
+  (warp wren_yard yard_gate)
+  (spawn yard_lamps)
+[Autosaved to auto_2 (event end).]
+  (yard_lamps: hide yard_lamplighter with fade_out)
+  (yard_lamps: end)
+field> status
+Mode field, Wren Yard (10,2) facing north, play time 0:00:08.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 0
+  Money 50. Items: tonic x1.
+field> actors
+  yard_trader at 9 1 facing south shown solid
+  yard_goat at 3 2 facing west shown solid look goat wanders
+  yard_lamplighter at 1 3 facing south hidden faded
+  yard_crow at 10 1 facing south shown look crow
+field> refused talk yard_owl
+! yard_owl is not here
+field> refused walk to dockhand
+! dockhand is not here
+End of script.

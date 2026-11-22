@@ -672,7 +672,16 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.integer(json, "tick_ms", c.tickMs, false, 10, 1000);
 	reader.integer(json, "grace_ms", c.graceMs, false, 0, 60000);
 	reader.integer(json, "round_ms", c.roundMs, false, 0, 60000);
-	reader.integer(json, "autosave_slots", c.autosaveSlots, false, 1, 9);
+	reader.integer(json, "autosave_slots", c.autosaveSlots, false, 0, 9);
+	reader.boolean(json, "autosave", c.autosave, false);
+	reader.integer(json, "bag_slots", c.bagSlots, false, 0, 9999);
+	std::string stacking;
+	reader.text(json, "bag_stacking", stacking, false);
+	if (const int index = stacking.empty() ? 0 : gameEnumIndex("bag_stacking", stacking); index >= 0) {
+		c.bagSingle = index == 1;
+	} else {
+		reader.fail(json, "data.bad_bag_stacking", {stacking});
+	}
 	reader.integer(json, "manual_slots", c.manualSlots, false, 1, 99);
 	reader.integer(json, "machine_step_heal", c.machineStepHeal, false, 0, 999);
 	// A boolean is the key's first form: true stands machines up.
@@ -765,6 +774,20 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 		reader.fail(json, "data.bad_arrive_notice", {arrive});
 	}
 	reader.boolean(json, "party_talk_ambient", c.partyTalkAmbient, false);
+	std::string arriving;
+	reader.text(json, "followers_arrive", arriving, false);
+	if (const int index = arriving.empty() ? 0 : gameEnumIndex("followers_arrive", arriving); index >= 0) {
+		c.followersArrive = static_cast<FollowersArrive>(index);
+	} else {
+		reader.fail(json, "data.bad_followers_arrive", {arriving});
+	}
+	std::string fires;
+	reader.text(json, "exit_fires", fires, false);
+	if (const int index = fires.empty() ? 0 : gameEnumIndex("exit_fires", fires); index >= 0) {
+		c.exitFires = static_cast<ExitFires>(index);
+	} else {
+		reader.fail(json, "data.bad_exit_fires", {fires});
+	}
 	std::string timing;
 	reader.text(json, "step_timing", timing, false);
 	if (const int index = timing.empty() ? 0 : gameEnumIndex("step_timing", timing); index >= 0) {
@@ -1251,6 +1274,20 @@ void checkReferences(const GameData& data, Problems& problems) {
 				at(v.line, "data.unknown_area", {v.from});
 			}
 		}
+		for (const Area::NoticeRule& rule : area.arriveNotices) {
+			for (const std::string& from : rule.from) {
+				if (!data.area(from)) {
+					at(rule.line, "data.unknown_area", {from});
+				}
+			}
+		}
+		for (const std::vector<std::string>* list : {&area.arrivalFrom, &area.arrivalNotFrom}) {
+			for (const std::string& from : *list) {
+				if (!data.area(from)) {
+					at(0, "data.unknown_area", {from});
+				}
+			}
+		}
 		if (!area.music.empty() && std::find(shown.audio.begin(), shown.audio.end(), area.music) == shown.audio.end()) {
 			at(0, "data.music_not_audio", {area.music});
 		}
@@ -1315,10 +1352,16 @@ void checkReferences(const GameData& data, Problems& problems) {
 		for (const RestPoint& r : area.rests) {
 			keeperKnown(r.line, r.id, r.keeper);
 			voiceUsed(r.line, r.id, r.voice);
+			if (!r.name.empty()) {
+				textExists(c.languages.front().text, r.name);
+			}
 		}
 		for (const Shop& s : area.shops) {
 			keeperKnown(s.line, s.id, s.keeper);
 			voiceUsed(s.line, s.id, s.voice);
+			if (!s.name.empty()) {
+				textExists(c.languages.front().text, s.name);
+			}
 			for (const StockEntry& entry : s.stock) {
 				if (!knownThing(db, entry.id) || data.price(entry.id) < 0) {
 					at(s.line, "data.shop_stock_unknown", {s.id, entry.id});

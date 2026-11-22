@@ -518,7 +518,7 @@ uint32_t psiv_sizeof(const char* struct_name) {
 		PSIV_SIZE(psiv_member_detail), PSIV_SIZE(psiv_combo_entry), PSIV_SIZE(psiv_combat_view), PSIV_SIZE(psiv_equip_preview), PSIV_SIZE(psiv_difficulty), PSIV_SIZE(psiv_camera),
 		PSIV_SIZE(psiv_vehicle), PSIV_SIZE(psiv_travel_destination), PSIV_SIZE(psiv_event_position), PSIV_SIZE(psiv_zone), PSIV_SIZE(psiv_element_info),
 		PSIV_SIZE(psiv_route_cell), PSIV_SIZE(psiv_interact_target), PSIV_SIZE(psiv_field_input), PSIV_SIZE(psiv_profile_row), PSIV_SIZE(psiv_scene_camera),
-		PSIV_SIZE(psiv_platform), PSIV_SIZE(psiv_battle_keys), PSIV_SIZE(psiv_macro_step_check), PSIV_SIZE(psiv_macro_trouble_report),
+		PSIV_SIZE(psiv_platform), PSIV_SIZE(psiv_battle_keys), PSIV_SIZE(psiv_macro_step_check), PSIV_SIZE(psiv_macro_trouble_report), PSIV_SIZE(psiv_follower_cell),
 	};
 #undef PSIV_SIZE
 	if (!struct_name) {
@@ -639,6 +639,8 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 		return value >= 0 && value <= PSIV_RECOVER_TROUBLED ? rules::toString(static_cast<rules::MacroRecoverWho>(value)) : "";
 	case PSIV_NAME_MACRO_UNNAMED:
 		return value >= 0 && value <= PSIV_UNNAMED_AUTO ? rules::toString(static_cast<rules::MacroUnnamed>(value)) : "";
+	case PSIV_NAME_MACRO_POLICY:
+		return value >= 0 && value <= PSIV_POLICY_EXPECTED ? rules::toString(static_cast<rules::MacroPolicy>(value)) : "";
 	default:
 		return "";
 	}
@@ -803,6 +805,9 @@ psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out) {
 		out->party_talk_ambient = c.partyTalkAmbient;
 		out->music_fade_ms = c.presentation.music.fadeMs;
 		out->cell_pixels = c.cellPixels;
+		out->autosave = session->session->autosaveOn();
+		out->bag_slots = c.bagSlots;
+		out->bag_single = c.bagSingle;
 		return PSIV_OK;
 	});
 }
@@ -991,6 +996,7 @@ psiv_status psiv_macro_list(psiv_session* session, const psiv_macro** out, int32
 			list[i].on_trouble = static_cast<int32_t>(view.onTrouble);
 			list[i].recover_who = static_cast<int32_t>(view.recoverWho);
 			list[i].unnamed = static_cast<int32_t>(view.unnamed);
+			list[i].policy = static_cast<int32_t>(view.policy);
 		}
 		*out = list;
 		*count = static_cast<int32_t>(views.size());
@@ -1102,6 +1108,19 @@ psiv_status psiv_macro_move_step(psiv_session* session, const char* macro, int32
 			return nullArgument(session, "macro");
 		}
 		return refused(session, session->session->moveMacroStep(name, from, to));
+	});
+}
+
+psiv_status psiv_macro_set_policy(psiv_session* session, const char* macro, int32_t policy) {
+	const std::string name = str(macro);
+	return guard(session, true, [&] {
+		if (!macro) {
+			return nullArgument(session, "macro");
+		}
+		if (policy < PSIV_POLICY_DEFAULT || policy > PSIV_POLICY_EXPECTED) {
+			return outOfRange(session, "policy", policy);
+		}
+		return refused(session, session->session->setMacroPolicy(name, static_cast<rules::MacroPolicy>(policy)));
 	});
 }
 
@@ -1267,6 +1286,7 @@ psiv_status psiv_world_info_get(psiv_session* session, psiv_world_info* out) {
 		out->player_control = g.world().playerControl;
 		out->dev = g.devMarked();
 		out->encounters = g.encountersOn();
+		out->bag_used = g.bagSlotsUsed();
 		return PSIV_OK;
 	});
 }
@@ -1591,6 +1611,7 @@ psiv_status psiv_field_exits(psiv_session* session, const psiv_exit** out, int32
 			list[i].open = game::exitOpen(a->exits[i], session->session->world());
 			list[i].closed_tile = a->exits[i].closedTile ? a->exits[i].closedTile : a->rows[a->exits[i].at.y][a->exits[i].at.x];
 			list[i].sound = session->arena.str(a->exits[i].sound);
+			list[i].fires = static_cast<int32_t>(game::exitFires(a->exits[i], session->data->config.exitFires));
 		}
 		*out = list;
 		*count = static_cast<int32_t>(a->exits.size());
@@ -1756,6 +1777,25 @@ psiv_status psiv_platforms(psiv_session* session, const psiv_platform** out, int
 	});
 }
 
+psiv_status psiv_followers(psiv_session* session, const psiv_follower_cell** out, int32_t* count) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		if (!currentArea(session)) {
+			return notFound(session, "area");
+		}
+		const std::vector<game::FollowerView> followers = session->session->followers();
+		psiv_follower_cell* list = session->arena.array<psiv_follower_cell>(followers.size());
+		for (std::size_t i = 0; i < followers.size(); ++i) {
+			list[i] = {session->arena.str(followers[i].id), followers[i].cell.x, followers[i].cell.y};
+		}
+		*out = list;
+		*count = static_cast<int32_t>(followers.size());
+		return PSIV_OK;
+	});
+}
+
 psiv_status psiv_actor_ids(psiv_session* session, const char* const** out, int32_t* count) {
 	return guard(session, false, [&] {
 		if (!out || !count) {
@@ -1793,6 +1833,10 @@ psiv_status psiv_animations(psiv_session* session, const psiv_animation** out, i
 }
 
 // Events
+
+int32_t psiv_event_next_output(const psiv_session* session) {
+	return session ? static_cast<int32_t>(session->session->nextEventOutput()) : PSIV_NEXT_NONE;
+}
 
 int32_t psiv_line_pending(const psiv_session* session) {
 	return session && session->session->linePending();
@@ -2247,6 +2291,19 @@ psiv_status psiv_battle_set_auto_play_macro_trouble(psiv_session* session, const
 			return outOfRange(session, "trouble", trouble);
 		}
 		return refused(session, session->session->setAutoPlayMacro(name, static_cast<rules::MacroTrouble>(trouble)));
+	});
+}
+
+psiv_status psiv_battle_set_auto_play_macro_policy(psiv_session* session, const char* macro, int32_t trouble, int32_t policy) {
+	const std::string name = str(macro);
+	return guard(session, true, [&] {
+		if (trouble < PSIV_MACRO_TROUBLE_DEFAULT || trouble > PSIV_MACRO_TROUBLE_STOP) {
+			return outOfRange(session, "trouble", trouble);
+		}
+		if (policy < PSIV_POLICY_DEFAULT || policy > PSIV_POLICY_EXPECTED) {
+			return outOfRange(session, "policy", policy);
+		}
+		return refused(session, session->session->setAutoPlayMacro(name, static_cast<rules::MacroTrouble>(trouble), static_cast<rules::MacroPolicy>(policy)));
 	});
 }
 
@@ -2719,6 +2776,8 @@ psiv_status psiv_shop_get(psiv_session* session, psiv_shop_info* out) {
 		out->stock = stock;
 		out->kind = static_cast<int32_t>(shop->kind);
 		out->voice = session->arena.str(shop->voice);
+		out->name_key = session->arena.str(shop->name);
+		out->name = session->arena.str(shop->name.empty() ? "" : session->session->render({shop->name, {}}));
 		return PSIV_OK;
 	});
 }
@@ -2737,6 +2796,8 @@ psiv_status psiv_inn_get(psiv_session* session, psiv_inn_info* out) {
 		out->cost = session->session->restCost(*inn);
 		out->voice = session->arena.str(inn->voice);
 		out->per_member = inn->perMember;
+		out->name_key = session->arena.str(inn->name);
+		out->name = session->arena.str(inn->name.empty() ? "" : session->session->render({inn->name, {}}));
 		return PSIV_OK;
 	});
 }
@@ -3222,6 +3283,10 @@ psiv_status psiv_dev_give(psiv_session* session, const char* id, int32_t count) 
 
 psiv_status psiv_dev_money(psiv_session* session, int32_t amount) {
 	return guard(session, true, [&] { return refused(session, session->session->devMoney(amount)); });
+}
+
+psiv_status psiv_dev_rest(psiv_session* session) {
+	return guard(session, true, [&] { return refused(session, session->session->devRest()); });
 }
 
 psiv_status psiv_dev_set_level(psiv_session* session, const char* member, int32_t level) {

@@ -105,7 +105,7 @@ static void settle(psiv_session* s) {
 static void testVersion(void) {
 	const char* capabilities = psiv_capabilities();
 	CHECK(capabilities && capabilities == psiv_capabilities() && strncmp(capabilities, "{\"capabilities_schema\": 1, \"versions\": {\"library\": \"", 52) == 0);
-	CHECK(strstr(capabilities, "\"abi\": 17,") && strstr(capabilities, "\"save_schema\": 14,") && strstr(capabilities, "\"picture show <picture>\""));
+	CHECK(strstr(capabilities, "\"abi\": 18,") && strstr(capabilities, "\"save_schema\": 15,") && strstr(capabilities, "\"picture show <picture>\""));
 	CHECK(psiv_abi_version() == PSIV_ABI_VERSION);
 	CHECK(strstr(psiv_version(), "psiv-bindings") != NULL);
 	CHECK(strstr(psiv_version(), "game-0.2") != NULL);
@@ -688,7 +688,7 @@ static void testFieldAndMenus(void) {
 	/* The guide stands on a floor cell, which is therefore not walkable. */
 	CHECK((grid[2 * 14 + 5] & PSIV_CELL_TERRAIN_MASK) == PSIV_CELL_FLOOR && !(grid[2 * 14 + 5] & PSIV_CELL_WALKABLE));
 	CHECK_OK(psiv_field_exits(s, &exits, &count));
-	CHECK(count == 1 && exits[0].x == 13 && strcmp(exits[0].to_area, "reed_path") == 0);
+	CHECK(count == 1 && exits[0].x == 13 && strcmp(exits[0].to_area, "reed_path") == 0 && exits[0].fires == PSIV_EXIT_FIRES_FROM_FLOOR);
 	CHECK_OK(psiv_field_markers(s, &markers, &count));
 	CHECK(count == 16);
 	CHECK_OK(psiv_field_points(s, &points, &count));
@@ -1261,6 +1261,21 @@ static void testBackground(void) {
 		CHECK(points[i].kind == PSIV_POINT_SHOP || points[i].keeper[0] == 0);
 	}
 	CHECK(kept == 1);
+
+	/* The stall's display name and the followers. */
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	psiv_shop_info stall;
+	CHECK_OK(psiv_shop_get(s, &stall));
+	CHECK(strcmp(stall.name_key, "place.yard_stall") == 0 && strcmp(stall.name, "Yard Stall") == 0);
+	CHECK_OK(psiv_close_menu(s));
+	CHECK(psiv_event_next_output(s) == PSIV_NEXT_NONE && psiv_event_next_output(NULL) == PSIV_NEXT_NONE);
+	const psiv_follower_cell* followers;
+	CHECK(psiv_followers(s, NULL, &count) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_followers(s, &followers, &count));
+	for (int32_t i = 0; i < count; ++i) {
+		CHECK(followers[i].id[0] != 0);
+	}
 
 	/* Step progress and the directions open. */
 	psiv_field_info field;
@@ -2118,6 +2133,8 @@ static void testDevTools(void) {
 	CHECK_OK(psiv_dev_give(s, "tonic", 3));
 	CHECK(psiv_dev_give(s, "tonic", 0) == PSIV_REFUSED && errorIs(s, "game.refuse.dev_bad_count"));
 	CHECK_OK(psiv_dev_money(s, 1000));
+	CHECK_OK(psiv_dev_rest(s));
+	CHECK(psiv_dev_rest(NULL) != PSIV_OK);
 	CHECK_OK(psiv_world_info_get(s, &world));
 	CHECK(world.money == 1050);
 	CHECK_OK(psiv_dev_set_level(s, "fighter", 9));
@@ -2596,6 +2613,14 @@ static void testMacroTrouble(void) {
 	const char* text = NULL;
 	CHECK_OK(psiv_save_text(s, &text));
 	CHECK(text && strstr(text, "macros 3\n") && strstr(text, "options recover uncovered none\n"));
+	CHECK(psiv_macro_set_policy(s, "solo", 5) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_macro_set_policy(s, "solo", PSIV_POLICY_EXPECTED));
+	CHECK_OK(psiv_macro_list(s, &macros, &count));
+	CHECK(count > 0 && macros[count - 1].policy == PSIV_POLICY_EXPECTED);
+	CHECK_OK(psiv_save_text(s, &text));
+	CHECK(text && strstr(text, "macros 4\n") && strstr(text, "options recover uncovered none expected\n"));
+	CHECK_OK(psiv_macro_set_policy(s, "solo", PSIV_POLICY_DEFAULT));
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_MACRO_POLICY, PSIV_POLICY_POWER), "power") == 0);
 	CHECK_OK(psiv_close_menu(s));
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_MACRO_TROUBLE, PSIV_MACRO_TROUBLE_STOP), "stop") == 0);
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_MACRO_RECOVER_WHO, PSIV_RECOVER_UNCOVERED), "uncovered") == 0);
@@ -2615,6 +2640,8 @@ static void testMacroTrouble(void) {
 	CHECK(trouble.holds == 0 && trouble.mode == PSIV_MACRO_TROUBLE_DEFAULT && trouble.troubled_step_count == 0);
 	CHECK(psiv_battle_set_auto_play_macro_trouble(s, "solo", 7) == PSIV_INVALID_ARGUMENT);
 	CHECK_OK(psiv_battle_set_auto_play_macro_trouble(s, "solo", PSIV_MACRO_TROUBLE_CONTINUE));
+	CHECK(psiv_battle_set_auto_play_macro_policy(s, "solo", PSIV_MACRO_TROUBLE_CONTINUE, 9) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_battle_set_auto_play_macro_policy(s, "solo", PSIV_MACRO_TROUBLE_CONTINUE, PSIV_POLICY_DEFAULT));
 	CHECK_OK(psiv_battle_fill_auto_round(s));
 	CHECK_OK(psiv_battle_macro_trouble(s, NULL, &trouble));
 	CHECK(trouble.holds == 0 && trouble.mode == PSIV_MACRO_TROUBLE_CONTINUE);

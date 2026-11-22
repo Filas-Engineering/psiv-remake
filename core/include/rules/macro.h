@@ -40,6 +40,8 @@ enum class MacroTrouble { Default, Continue, Recover, Stop };
 enum class MacroRecoverWho { Default, All, Uncovered, Troubled };
 // What a member the macro has no step for does in a round the macro fills: a basic attack, nothing, or core's choice.
 enum class MacroUnnamed { Default, Attack, None, Auto };
+// The automatic choice's policy (rules.json auto_policy) for a macro's automatic fallbacks and recover rounds.
+enum class MacroPolicy { Default, Power, Expected };
 
 struct Macro {
 	std::string name;
@@ -47,6 +49,7 @@ struct Macro {
 	MacroTrouble onTrouble = MacroTrouble::Default;
 	MacroRecoverWho recoverWho = MacroRecoverWho::Default;
 	MacroUnnamed unnamed = MacroUnnamed::Default;
+	MacroPolicy policy = MacroPolicy::Default;
 };
 
 // Applied with an issue (Silenced, NotEnoughTp, NoUsesLeft, NoItem, NoTarget) means the command is set as

@@ -167,3 +167,29 @@ TEST(theExpectedPolicyWeighsInstantDefeatAgainstTheTargets) {
 	prefer.abilities["rime_drill"].autoHint = AutoHint::None;
 	CHECK(vehicleChoice(prefer).id == "hull_vent");
 }
+
+// The policy per macro and per call (R173): the battle's setAutoPolicy, then the macro's policy, then rules.json; a
+// macro's policy is saved with its options.
+TEST(theAutoPolicyComesFromTheCallThenTheMacroThenTheRules) {
+	const Database db = hexData(true, false);
+	BattleSetup setup = makeSetup(db, {"gel_mite", "gel_mite", "gel_mite"}, 7);
+	setup.flags.vehicleBattle = true;
+	setup.vehicle = "reed_skimmer";
+	Battle battle = makeBattle(db, setup);
+	const int skimmer = static_cast<int>(setup.party.size());
+	Macro macro;
+	macro.name = "careful";
+	macro.policy = MacroPolicy::Expected;
+	CHECK(!battle.autoExpected(nullptr) && battle.autoExpected(&macro));
+	CHECK(autoCommand(battle, skimmer).id == "hull_vent");
+	battle.setAutoPolicy(MacroPolicy::Expected);
+	CHECK(autoCommand(battle, skimmer).id == "hull_hex");
+	battle.setAutoPolicy(MacroPolicy::Power);
+	CHECK(!battle.autoExpected(&macro));
+	const Result<std::vector<Macro>> parsed = parseMacros(serializeMacros({macro}));
+	CHECK(parsed.ok() && parsed.value->front().policy == MacroPolicy::Expected);
+	CHECK(serializeMacros({macro}).rfind("macros 4\n", 0) == 0);
+	macro.policy = MacroPolicy::Default;
+	macro.unnamed = MacroUnnamed::Auto;
+	CHECK(serializeMacros({macro}).rfind("macros 3\n", 0) == 0);
+}

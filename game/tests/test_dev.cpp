@@ -204,3 +204,27 @@ TEST(devListsNameTheDataIds) {
 	CHECK(parseDevList("equipment", parsed) && parsed == DevList::Equipment);
 	CHECK(!parseDevList("bogus", parsed));
 }
+
+// dev rest restores the roster and the vehicles' skill uses as a rest does and changes nothing else; it marks the game.
+TEST(devRestRestoresAsARestDoes) {
+	Session s(test::data(), SessionOptions());
+	CHECK(!s.devRest().empty());
+	s.newGame();
+	test::confirmLines(s);
+	rules::PartyMember& fighter = *s.world().member("fighter");
+	fighter.hp = 1;
+	fighter.tp = 0;
+	fighter.statuses = {{"poison", 0}};
+	VehiclePlace skimmer;
+	skimmer.area = "brine_flats";
+	skimmer.skillUses = {{"hull_vent", 0}};
+	s.world().vehicles["reed_skimmer"] = skimmer;
+	const World before = s.world();
+	CHECK(s.devRest().empty());
+	const rules::PartyMember& rested = *s.world().member("fighter");
+	const rules::Stats stats = rules::memberStats(s.data().db, rested);
+	CHECK(rested.hp == stats.maxHp && rested.tp == stats.maxTp && rested.statuses.empty());
+	CHECK(s.world().vehicles.at("reed_skimmer").skillUses.empty());
+	CHECK(s.devMarked());
+	CHECK(s.world().money == before.money && s.world().position == before.position && s.world().playTimeMs == before.playTimeMs && rested.level == before.member("fighter")->level);
+}

@@ -1,6 +1,7 @@
 #include "fixtures.h"
 #include "rules/auto_policy.h"
 #include "rules/loader.h"
+#include "rules/progression.h"
 #include "test.h"
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <optional>
 #include <utility>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace rules;
@@ -324,6 +326,100 @@ TEST(revivesStandAtTheirExactAmount) {
 		const FieldUse used = useAbilityOutsideBattle(db, party, kMedic, "raise_exact", kFighter);
 		CHECK(used.rejection.empty());
 		CHECK_EQ(party[kFighter].hp, expected);
+	}
+}
+
+// A revive of `hp: 0` stands the target at 0 for the rest of the action, so a heal after it lands exactly its amount (not one
+// more, as after `hp: 1`); with nothing raising it, the target stands at 1.
+TEST(aReviveOfZeroLetsTheHealAfterItCountFromZero) {
+	for (const auto& [effects, expected] : std::vector<std::pair<std::string, int>>{
+			 {"{\"type\": \"revive\", \"hp\": 0}, {\"type\": \"heal\", \"power\": 30}", 30},
+			 {"{\"type\": \"revive\", \"hp\": 1}, {\"type\": \"heal\", \"power\": 30}", 31},
+			 {"{\"type\": \"revive\", \"hp\": 0}", 1}}) {
+		std::map<std::string, std::string> texts = dataTexts();
+		replaceOnce(texts["items.json"], "{\"id\": \"tonic\"", "{\"id\": \"mend\", \"name\": \"Mend\", \"target\": \"one_fallen_ally\", \"field\": true, \"effects\": [" + effects + "]}, {\"id\": \"tonic\"");
+		const Result<Database> loaded = loadDatabaseFromTexts(texts);
+		CHECK(loaded.ok());
+		if (!loaded.ok()) {
+			continue;
+		}
+		const Database& db = *loaded.value;
+		Battle battle = makeBattle(db, {"gel_mite"}, 1, Inventory{{"mend", 1}});
+		battle.combatant(kFighter).hp = 0;
+		addStatus(battle, kFighter, "defeated", 0);
+		CHECK(battle.setCommand(kMedic, Command::item("mend", kFighter)).key.empty());
+		othersDefend(battle);
+		const std::optional<Event> revived = firstBy(battle.resolveRound(), EventType::Revived, kMedic);
+		CHECK(revived && revived->hp == (expected == 1 ? 1 : expected == 30 ? 0 : 1));
+		CHECK_EQ(battle.partyState()[kFighter].hp, expected);
+
+		std::vector<PartyMember> party = makeSetup(db, {"gel_mite"}, 1).party;
+		party[kFighter].hp = 0;
+		party[kFighter].statuses.push_back({"defeated", 0});
+		Inventory inventory{{"mend", 1}};
+		CHECK(useItemOutsideBattle(db, party, inventory, "mend", kFighter).rejection.empty());
+		CHECK_EQ(party[kFighter].hp, expected);
+	}
+}
+
+// Field use skips the effects that mean nothing outside battle (modify_stat, reset_stat, strip_modifiers, grant_affinity for
+// the battle) and still loads with them beside one that acts; with only those it is refused at load.
+TEST(fieldUseSkipsBattleOnlyEffects) {
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["items.json"], "{\"id\": \"tonic\"", "{\"id\": \"brace\", \"name\": \"Brace\", \"target\": \"one_ally\", \"field\": true, \"effects\": [{\"type\": \"reset_stat\", \"stat\": \"defense\"}, {\"type\": \"modify_stat\", \"stat\": \"defense\", \"direction\": \"up\", \"power\": 5}, {\"type\": \"strip_modifiers\"}, {\"type\": \"heal\", \"power\": 10}]}, {\"id\": \"tonic\"");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok());
+	if (loaded.ok()) {
+		std::vector<PartyMember> party = makeSetup(*loaded.value, {"gel_mite"}, 1).party;
+		const int max = memberStats(*loaded.value, party[kFighter]).maxHp;
+		party[kFighter].hp = max - 20;
+		Inventory inventory{{"brace", 1}};
+		const FieldUse used = useItemOutsideBattle(*loaded.value, party, inventory, "brace", kFighter);
+		CHECK(used.rejection.empty());
+		CHECK_EQ(party[kFighter].hp, max - 10);
+		CHECK(!inventory.count("brace"));
+		party[kFighter].hp = max;
+		inventory["brace"] = 1;
+		CHECK(useItemOutsideBattle(*loaded.value, party, inventory, "brace", kFighter).rejection.empty() && inventory.count("brace"));
+	}
+	std::map<std::string, std::string> only = dataTexts();
+	replaceOnce(only["items.json"], "{\"id\": \"tonic\"", "{\"id\": \"brace\", \"name\": \"Brace\", \"target\": \"one_ally\", \"field\": true, \"effects\": [{\"type\": \"reset_stat\", \"stat\": \"defense\"}]}, {\"id\": \"tonic\"");
+	CHECK(!loadDatabaseFromTexts(only).ok());
+}
+
+// consume_when_no_effect (rules.json, an item's own wins): a consumable item that changed nothing is used up, in battle and
+// in the field, with its no-effect event; never one with consumed false.
+TEST(itemsThatChangeNothingCanStillBeUsedUp) {
+	for (const auto& [rulesKey, itemKeys, used] : std::vector<std::tuple<std::string, std::string, bool>>{
+			 {"", "", false},
+			 {"\"consume_when_no_effect\": true,", "", true},
+			 {"\"consume_when_no_effect\": true,", "\"consume_when_no_effect\": false, ", false},
+			 {"", "\"consume_when_no_effect\": true, ", true},
+			 {"\"consume_when_no_effect\": true,", "\"consumed\": false, ", false}}) {
+		std::map<std::string, std::string> texts = dataTexts();
+		replaceOnce(texts["rules.json"], "{", "{" + rulesKey);
+		replaceOnce(texts["items.json"], "{\"id\": \"tonic\",", "{\"id\": \"tonic\", " + itemKeys);
+		const Result<Database> loaded = loadDatabaseFromTexts(texts);
+		CHECK(loaded.ok());
+		if (!loaded.ok()) {
+			continue;
+		}
+		const Database& db = *loaded.value;
+		Battle battle = makeBattle(db, {"gel_mite"}, 1, Inventory{{"tonic", 2}});
+		CHECK(battle.setCommand(kMedic, Command::item("tonic", kFighter)).key.empty());
+		othersDefend(battle);
+		enemiesDefend(battle);
+		const std::vector<Event> events = battle.resolveRound();
+		CHECK(!ofType(events, EventType::ItemHadNoEffect).empty());
+		CHECK_EQ(ofType(events, EventType::ResourceSpent).empty(), !used);
+		CHECK_EQ(battle.inventory().at("tonic"), used ? 1 : 2);
+
+		std::vector<PartyMember> party = makeSetup(db, {"gel_mite"}, 1).party;
+		Inventory inventory{{"tonic", 2}};
+		const FieldUse field = useItemOutsideBattle(db, party, inventory, "tonic", kFighter);
+		CHECK(field.rejection.empty());
+		CHECK(std::any_of(field.events.begin(), field.events.end(), [](const Event& e) { return e.type == EventType::ItemHadNoEffect; }));
+		CHECK_EQ(inventory.at("tonic"), used ? 1 : 2);
 	}
 }
 

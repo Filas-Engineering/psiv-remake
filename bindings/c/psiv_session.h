@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 17
+#define PSIV_ABI_VERSION 18
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -175,6 +175,9 @@ typedef enum psiv_macro_trouble { PSIV_MACRO_TROUBLE_DEFAULT, PSIV_MACRO_TROUBLE
 typedef enum psiv_macro_recover_who { PSIV_RECOVER_DEFAULT, PSIV_RECOVER_ALL, PSIV_RECOVER_UNCOVERED, PSIV_RECOVER_TROUBLED } psiv_macro_recover_who;
 /* What a member the macro has no step for does (rules::MacroUnnamed). */
 typedef enum psiv_macro_unnamed { PSIV_UNNAMED_DEFAULT, PSIV_UNNAMED_ATTACK, PSIV_UNNAMED_NONE, PSIV_UNNAMED_AUTO } psiv_macro_unnamed;
+/* The automatic choice's policy (rules::MacroPolicy, rules.json auto_policy); DEFAULT leaves it to the next level: the
+ * caller, then the macro, then rules.json. */
+typedef enum psiv_macro_policy { PSIV_POLICY_DEFAULT, PSIV_POLICY_POWER, PSIV_POLICY_EXPECTED } psiv_macro_policy;
 typedef enum psiv_macro_issue {
 	PSIV_ISSUE_NONE, PSIV_ISSUE_NOT_IN_PARTY, PSIV_ISSUE_ACTOR_DEFEATED, PSIV_ISSUE_CAUGHT_OFF_GUARD, PSIV_ISSUE_CANNOT_ACT,
 	PSIV_ISSUE_FORCED_BY_STATUS, PSIV_ISSUE_UNKNOWN_ABILITY, PSIV_ISSUE_SILENCED, PSIV_ISSUE_NOT_ENOUGH_TP, PSIV_ISSUE_NO_USES_LEFT,
@@ -233,7 +236,7 @@ typedef enum psiv_name_kind {
 	PSIV_NAME_ACTION_TYPE, PSIV_NAME_MACRO_TARGET_KIND, PSIV_NAME_DESCRIPTION_KIND, PSIV_NAME_ITEM_SORT, PSIV_NAME_CAMERA_TARGET,
 	PSIV_NAME_TRAVEL_KIND, PSIV_NAME_DEV_LIST, PSIV_NAME_CREATURE_KIND, PSIV_NAME_SHOP_KIND, PSIV_NAME_ACTOR_VANISH, PSIV_NAME_ACTOR_REMOVAL,
 	PSIV_NAME_ANIMATION_END, PSIV_NAME_INTERACT_KIND, PSIV_NAME_MACRO_FALLBACK, PSIV_NAME_MACRO_TROUBLE, PSIV_NAME_MACRO_RECOVER_WHO,
-	PSIV_NAME_MACRO_UNNAMED
+	PSIV_NAME_MACRO_UNNAMED, PSIV_NAME_MACRO_POLICY
 } psiv_name_kind;
 
 /* The stable name of an enum value as the C++ libraries spell it, lowercase with underscores ("field",
@@ -307,6 +310,13 @@ typedef struct psiv_game_info {
 	/* game.json cell_pixels: pixels per cell for the pixel positions the session reports (psiv_actor's path_x and path_y,
 	 * psiv_platform's x and y); scale them to the host's own cell size. */
 	int32_t cell_pixels;
+	/* 1 when autosaves are written: game.json autosave (default true) and autosave_slots above 0. With 0 no autosave and
+	 * no retry after a game over. */
+	int32_t autosave;
+	/* game.json bag_slots: the item bag's slots, 0 for no limit (psiv_world_info.bag_used says how many are filled), and 1
+	 * under bag_stacking single, where each item is a slot of its own. Equipment pieces take no slot. */
+	int32_t bag_slots;
+	int32_t bag_single;
 } psiv_game_info;
 
 PSIV_API psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out);
@@ -405,6 +415,8 @@ typedef struct psiv_macro {
 	int32_t on_trouble;
 	int32_t recover_who;
 	int32_t unnamed;
+	/* A psiv_macro_policy: the policy of the macro's automatic fallbacks and recover rounds. */
+	int32_t policy;
 } psiv_macro;
 
 /* The save's macros in order, with their steps. */
@@ -440,6 +452,9 @@ PSIV_API psiv_status psiv_macro_move_step(psiv_session* session, const char* mac
 /* MUTATES. The macro's on_trouble (psiv_macro_trouble), recover_who (psiv_macro_recover_who) and unnamed
  * (psiv_macro_unnamed); DEFAULT leaves each to the caller and rules.json. Saved with the macro. */
 PSIV_API psiv_status psiv_macro_set_options(psiv_session* session, const char* macro, int32_t on_trouble, int32_t recover_who, int32_t unnamed);
+/* MUTATES. The macro's policy (psiv_macro_policy) for its automatic fallbacks and recover rounds; DEFAULT leaves it to
+ * rules.json's auto_policy. Saved with the macro. Field menu only, as psiv_macro_set_options. */
+PSIV_API psiv_status psiv_macro_set_policy(psiv_session* session, const char* macro, int32_t policy);
 /* MUTATES. A new macro named `name` from a discovered combination (its psiv_combo_entry recipe): one ability step per
  * component in the recipe's order, default targets, each component given to a lineup member who knows the ability now
  * (the character it is tied to; the members the log recorded are tried first). Refusals: the name rules of
@@ -497,6 +512,8 @@ typedef struct psiv_world_info {
 	int32_t dev;
 	/* 0 while psiv_dev_encounters has turned battles off for this session. */
 	int32_t encounters;
+	/* The item bag's slots filled now (psiv_game_info.bag_slots). */
+	int32_t bag_used;
 } psiv_world_info;
 
 PSIV_API int32_t psiv_mode_get(const psiv_session* session); /* a psiv_mode, or -1 for a NULL session */
@@ -534,8 +551,8 @@ PSIV_API psiv_status psiv_walk(psiv_session* session, int32_t direction);
 PSIV_API psiv_status psiv_face(psiv_session* session, int32_t direction);
 
 typedef enum psiv_walk_status { PSIV_WALK_WALKING, PSIV_WALK_ARRIVED, PSIV_WALK_LEFT_AREA, PSIV_WALK_STOPPED, PSIV_WALK_NO_PATH, PSIV_WALK_TOO_LONG } psiv_walk_status;
-/* MUTATES. Starts a walk to (x, y) along the shortest path over walkable cells, avoiding exits other than
- * the goal; visible enemies are not avoided, so bumping into one starts its battle. Then call psiv_walk_step
+/* MUTATES. Starts a walk to (x, y) along the shortest path over walkable cells, crossing no exit cell a step would
+ * leave by (psiv_exit's fires) other than the goal; a goal a solid actor stands on has no path; visible enemies are not avoided, so bumping into one starts its battle. Then call psiv_walk_step
  * until it reports anything but PSIV_WALK_WALKING, running events and battles between the calls: an event
  * or battle on the way only stops the walk (STOPPED) if the field does not come back. */
 PSIV_API psiv_status psiv_walk_to(psiv_session* session, int32_t x, int32_t y);
@@ -679,7 +696,26 @@ typedef struct psiv_exit {
 	int32_t closed_tile;
 	/* The sound cue (an audio id) played as the party leaves by it, "" for none. */
 	const char* sound;
+	/* A psiv_exit_fires: whether a step onto it from another exit cell takes it (PSIV_EXIT_FIRES_ALWAYS) or only a step
+	 * from a cell that is no exit (PSIV_EXIT_FIRES_FROM_FLOOR): the exit's `fires`, else game.json's exit_fires, a pit
+	 * always. */
+	int32_t fires;
 } psiv_exit;
+
+typedef enum psiv_exit_fires { PSIV_EXIT_FIRES_FROM_FLOOR, PSIV_EXIT_FIRES_ALWAYS } psiv_exit_fires;
+
+/* One who walks behind the leader: a lineup member after the first, then the script's follower actor. */
+typedef struct psiv_follower_cell {
+	/* A character id, or the follower actor's id. */
+	const char* id;
+	int32_t x;
+	int32_t y;
+} psiv_follower_cell;
+
+/* The followers in order, each on a cell of the leader's trail (its earlier cells in the area, newest first; the last
+ * one taken by any beyond the trail), all on the leader's cell after an area entry (or straight behind it under game.json's
+ * followers_arrive behind), aboard and on a moving platform. They block nothing. PSIV_NOT_FOUND outside an area. */
+PSIV_API psiv_status psiv_followers(psiv_session* session, const psiv_follower_cell** out, int32_t* count);
 
 typedef struct psiv_point {
 	int32_t kind;
@@ -892,6 +928,12 @@ PSIV_API psiv_status psiv_line_confirm(psiv_session* session); /* MUTATES */
 PSIV_API int32_t psiv_choice_pending(const psiv_session* session);
 PSIV_API psiv_status psiv_choice_get(psiv_session* session, psiv_choice* out);
 PSIV_API psiv_status psiv_choose(psiv_session* session, int32_t index); /* MUTATES */
+/* What the running event shows next, from where it stands, without advancing it: a psiv_next_output. It looks past the
+ * line shown now through jumps, returns and flag and variable changes; PSIV_NEXT_OTHER for anything else (a branch on a
+ * condition, a wait, an action, a battle); PSIV_NEXT_NONE outside an event. A host can hold a narration window that goes
+ * on by itself while the next output is another line. */
+typedef enum psiv_next_output { PSIV_NEXT_NONE, PSIV_NEXT_LINE, PSIV_NEXT_CHOICE, PSIV_NEXT_END, PSIV_NEXT_OTHER } psiv_next_output;
+PSIV_API int32_t psiv_event_next_output(const psiv_session* session);
 PSIV_API int32_t psiv_can_skip(const psiv_session* session);
 /* MUTATES. PSIV_REFUSED when the scene cannot be skipped now. */
 PSIV_API psiv_status psiv_skip(psiv_session* session);
@@ -1140,6 +1182,9 @@ PSIV_API psiv_status psiv_battle_set_auto_play_macro(psiv_session* session, cons
  * round with per-step fallback; RECOVER gives the members recover_who names core's automatic choice in a round where
  * trouble holds; STOP follows core's stop rules, then core's policy. */
 PSIV_API psiv_status psiv_battle_set_auto_play_macro_trouble(psiv_session* session, const char* macro, int32_t trouble);
+/* MUTATES. As psiv_battle_set_auto_play_macro_trouble with a psiv_macro_policy for those battles' automatic choices that
+ * wins over the macro's policy and rules.json's auto_policy (DEFAULT leaves it to them). */
+PSIV_API psiv_status psiv_battle_set_auto_play_macro_policy(psiv_session* session, const char* macro, int32_t trouble, int32_t policy);
 
 /* One step's state this round, for marking a macro before the player confirms it (rules::Battle::checkMacro). */
 typedef struct psiv_macro_step_check {
@@ -1538,6 +1583,9 @@ typedef struct psiv_shop_info {
 	/* The keeper's text key prefix (the area data's `voice`): a host shows VOICE.welcome, .confirm, .thanks and
 	 * .cannot_afford where the tables have them, else its own default lines; "" for the defaults. */
 	const char* voice;
+	/* The display name's text key (the area data's `name`) and the name in the profile's language; both "" for none. */
+	const char* name_key;
+	const char* name;
 } psiv_shop_info;
 
 typedef struct psiv_inn_info {
@@ -1548,6 +1596,9 @@ typedef struct psiv_inn_info {
 	const char* voice;
 	/* 1 when the price is per member of the lineup. */
 	int32_t per_member;
+	/* As psiv_shop_info's name_key and name. */
+	const char* name_key;
+	const char* name;
 } psiv_inn_info;
 
 /* PSIV_NOT_FOUND unless a shop is open. */
@@ -1735,6 +1786,9 @@ PSIV_API psiv_status psiv_dev_set_flag(psiv_session* session, const char* flag, 
 PSIV_API psiv_status psiv_dev_give(psiv_session* session, const char* id, int32_t count);
 /* MUTATES. Adds amount to the money (negative takes it away), kept between 0 and the cap. Not in a battle. */
 PSIV_API psiv_status psiv_dev_money(psiv_session* session, int32_t amount);
+/* MUTATES. Restores the roster (hit points, technique points, skill uses, statuses, the fallen as rest_revives says) and
+ * refills the vehicles' skill uses as a rest does, free; levels, play time, money and position stay. Not in a battle. */
+PSIV_API psiv_status psiv_dev_rest(psiv_session* session);
 /* MUTATES. Sets a roster member's level (1 to 99) with no experience into it and refills it as a rest does, reviving it. */
 PSIV_API psiv_status psiv_dev_set_level(psiv_session* session, const char* member, int32_t level);
 /* MUTATES. From the field, a battle with the encounter as a random battle (a vehicle battle while riding). */

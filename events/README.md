@@ -78,6 +78,8 @@ interpreter.step(delta_seconds);   // returns Status::running until done
 
 `step()` runs until every thread is blocked, then returns. A thread blocks on a timed `wait`, on a host handle that is not done yet (an action, a dialogue line, a choice, a battle, a menu or a rest), on a `together` block whose branches are still running or a `race` none of whose branches has finished, or on `sync` or the end of an event while `nowait` actions are still running. Time passed to `step()` only counts against waits that were already in progress when the step began. A wait that starts during a step begins counting at the next step.
 
+`next_output()` says what the innermost running event shows next without running anything (`NextOutput`: `line`, `choice`, `end`, `other`, `none` while nothing runs): it looks past the line its main thread shows now, through `goto`s and the jumps that close blocks, returns from `call`s and flag and variable changes; a branch on a condition, a choice's answer, a wait, a block, an action and every other command give `other`. A host holds a narration window that goes on by itself while the answer is `line`.
+
 `position()` says where a running event is, for tools such as a script line overlay: the innermost event (one a `call` runs, inside its caller) and the file and source line of the instruction its main thread is at, which is the command it waits on; while the main thread waits on a `together` or `race` block, the first live branch's. Every `Instruction` keeps its `file` and `source_line`, so nothing extra is compiled for it. It is empty while nothing runs.
 
 Runtime problems put the interpreter in `Status::error`, with `error()` giving `file:line: message`. Examples are a host returning an out-of-range choice index, a host that returns no handle for a menu or rest it does not support, calls nested more than 32 deep, or 100,000 commands in one step without a wait. Everything in flight is cancelled when this happens.
@@ -204,6 +206,8 @@ This round, last: `credits <credits>` and `end game` ([FORMAT.md](FORMAT.md), "M
 - `host.h`: the virtual `Host::play_credits(credits)`, a blocking call like `open_name_entry` whose default returns 0 (a runtime error at the line), and `Host::end_game()`, which does nothing by default. A skip stops at `credits`. After `end_game` returns, the interpreter cancels every branch and handle and reports `Status::finished`; it applies while skipping.
 - `RecordingHost` logs `credits <id>` (done at once) and `end game`.
 - The parser reads a line starting `end game` as the command, never as a block's `end`; both are errors in background events and parallel blocks. Scripts that use neither keep their fingerprint and code; the save text is unchanged.
+
+Latest pass: `Interpreter::next_output()` and `Interpreter::NextOutput` (above). No save, format, fingerprint or host call changed.
 
 This round, in a later pass: `party order` and `silent` on `party add`, `party remove` and `party swap` ([FORMAT.md](FORMAT.md), "Game state").
 

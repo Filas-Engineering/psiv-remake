@@ -4,7 +4,8 @@
 # macro every round with per-step fallback, `recover` hands every member to core's choice in each round trouble holds,
 # and `stop` follows core's stop rules and then core's policy (`trouble on` prints each round's trouble). Then the macro's
 # own options (`macro option`), `macro check` in a battle the script plays by hand, a step that loses its turn and
-# `fight` with failed steps attacking. Run with --seed 6.
+# `fight` with failed steps attacking; last, the macro's `policy` and the same battle under `recover` with the call's
+# policy `power` over it. Run with --seed 6.
 new
 dev warp wren_loft loft_door
 walk ledger_front
@@ -71,4 +72,17 @@ macro pair lose_turn
 round
 fight pair attack
 status
+title
+load manual_1
+menu
+macro option pair policy expected
+refused macro option pair policy later
+macros
+close
+autobattle random pair recover power
+walk 2 3
+walk 7 3
+walk 2 3
+status
+autobattle off
 quit

@@ -246,6 +246,35 @@ TEST(theParalysisRuleShakesItOffBy) {
 	CHECK_EQ(s.world().fieldSteps, 0);
 }
 
+// field_poison alone counts poison steps and leaves paralysis to areas that mark it, or to every area under rules.json's
+// field_paralysis.everywhere.
+TEST(fieldPoisonAndParalysisApartAndParalysisEverywhere) {
+	GameData data = test::motionData();
+	data.areas.at("wren_mill").fieldPoison = true;
+	data.db.battleRules.fieldPoisonEvery = 1;
+	data.db.battleRules.fieldParalysisFrom = 0;
+	data.db.battleRules.fieldParalysisChance = 1000;
+	data.db.battleRules.fieldParalysisBy = 1;
+	Session s(data, SessionOptions());
+	inMill(s);
+	rules::PartyMember& fighter = *s.world().member("fighter");
+	fighter.hp = 5;
+	fighter.statuses = {{"poison", 0}, {"paralysis", 0}};
+	s.world().position = {1, 1};
+	CHECK(s.walk(Facing::East).empty());
+	CHECK_EQ(s.world().member("fighter")->hp, 4);
+	CHECK_EQ(s.world().member("fighter")->statuses.size(), std::size_t(2));
+	data.areas.at("wren_mill").fieldPoison = false;
+	data.db.battleRules.fieldParalysisEverywhere = true;
+	Session t(data, SessionOptions());
+	inMill(t);
+	t.world().member("fighter")->statuses = {{"poison", 0}, {"paralysis", 0}};
+	t.world().position = {1, 1};
+	CHECK(t.walk(Facing::East).empty());
+	CHECK(t.world().member("fighter")->statuses.size() == 1 && t.world().member("fighter")->statuses[0].id == "poison");
+	CHECK(test::outputHas(t.drainOutput(), "can move again"));
+}
+
 // Hosts: whether Load can run now, the keys a battle can carry, and the member detail's added fields.
 TEST(canLoadBattleKeysAndMemberDetailFields) {
 	Session s(test::data(), SessionOptions());

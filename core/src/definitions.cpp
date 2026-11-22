@@ -40,6 +40,29 @@ const Effect* travelEffect(const std::vector<Effect>& effects) {
 	return nullptr;
 }
 
+bool battleOnlyEffect(const Effect& effect) {
+	switch (effect.kind) {
+	case EffectKind::ModifyStat:
+	case EffectKind::ResetStat:
+	case EffectKind::StripModifiers:
+		return true;
+	case EffectKind::GrantAffinity:
+		return !effect.permanent;
+	default:
+		return false;
+	}
+}
+
+std::vector<Effect> fieldEffects(const std::vector<Effect>& effects) {
+	std::vector<Effect> out;
+	for (const Effect& effect : effects) {
+		if (!battleOnlyEffect(effect)) {
+			out.push_back(effect);
+		}
+	}
+	return out;
+}
+
 const Effect* teachEffect(const std::vector<Effect>& effects) {
 	for (const Effect& effect : effects) {
 		if (effect.kind == EffectKind::Teach) {

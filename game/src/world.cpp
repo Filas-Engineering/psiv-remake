@@ -253,6 +253,7 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 	if (a.platforms != b.platforms) return differs("platforms");
 	if (a.ridingPlatform != b.ridingPlatform) return differs("ridingPlatform");
 	if (a.fieldSteps != b.fieldSteps) return differs("fieldSteps");
+	if (a.trail != b.trail) return differs("trail");
 	if (a.cameFrom != b.cameFrom) return differs("cameFrom");
 	if (a.randomThreshold != b.randomThreshold) return differs("randomThreshold");
 	if (a.encounterStream.state() != b.encounterStream.state()) return differs("encounterStream");

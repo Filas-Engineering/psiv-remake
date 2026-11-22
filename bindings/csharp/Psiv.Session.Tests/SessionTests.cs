@@ -239,6 +239,7 @@ public class NativeLayoutTests
 		Same<PsivFieldInput>("psiv_field_input");
 		Same<PsivMacroStepCheck>("psiv_macro_step_check");
 		Same<PsivMacroTroubleReport>("psiv_macro_trouble_report");
+		Same<PsivFollower>("psiv_follower_cell");
 		Assert.Equal(0u, Native.SizeOf("no_such_struct"));
 	}
 
@@ -651,6 +652,19 @@ public class SessionTests
 		Assert.True(detail.Attack >= detail.BaseStats!.Strength);
 		Assert.Equal(CreatureKind.Living, detail.Kind);
 		Assert.True(detail.ExperienceForLevel >= detail.ExperienceToNext);
+	}
+
+	[Fact]
+	public void TheNextEventOutputFollowersAndExitFires()
+	{
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, Seed = 285 });
+		Assert.Equal(NextOutput.None, s.NextEventOutput);
+		Assert.True(s.NewGame().Ok);
+		Assert.NotEqual(NextOutput.None, s.NextEventOutput);
+		Settle(s);
+		Assert.Equal(NextOutput.None, s.NextEventOutput);
+		Assert.Empty(s.Followers());
+		Assert.All(s.Field()!.Exits, x => Assert.Equal(ExitFires.FromFloor, x.Fires));
 	}
 
 	[Fact]

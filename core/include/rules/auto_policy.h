@@ -10,6 +10,8 @@ namespace rules {
 // by allies it would not change (Battle::wouldChange): kinds its effects do not reach, nothing to heal. Abilities whose
 // `auto` hint is Never are left out, and Prefer ones come before the rest, Avoid ones after. With rules.json auto_policy
 // expected the attack is the one with the largest expected effect on the foes, aimed where it has it (core/README.md).
+// The policy is the battle's (Battle::autoExpected: the caller's setAutoPolicy, else rules.json); the second form names it.
 Command autoCommand(const Battle& battle, int actor);
+Command autoCommand(const Battle& battle, int actor, bool expected);
 
 }

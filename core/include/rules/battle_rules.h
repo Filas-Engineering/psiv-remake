@@ -27,6 +27,10 @@ struct BattleRules {
 	int fieldParalysisChance = 0;
 	int fieldParalysisBy = 0;
 	std::string fieldParalysisStatus = "paralysis";
+	// `field_paralysis.everywhere`: the paralysis rule counts steps in every area, not only in areas that mark it.
+	bool fieldParalysisEverywhere = false;
+	// `consume_when_no_effect`: a consumable item whose effects changed nothing is used up, in battle and in the field.
+	bool consumeWhenNoEffect = false;
 	// What an affinity is divided by when it scales damage: 100 makes affinities percents.
 	int affinityDivisor = 100;
 	// The affinity a hit without an element takes, and a defending target's for it; unset, the divisor and
