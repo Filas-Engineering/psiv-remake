@@ -128,9 +128,14 @@ public sealed partial class Art
 	}
 
 	// The bitmap font for a text language and role: the role's own, else the language's font for every role. The hint
-	// without its own font draws in the menu's.
+	// without its own font draws in the menu's, the narration in the dialogue's.
 	public BitmapFont? BitmapFontFor(string language, TextRole role) =>
-		_bitmapFonts.GetValueOrDefault((language, role)) ?? (role == TextRole.Hint ? BitmapFontFor(language, TextRole.Menu) : _bitmapFonts.GetValueOrDefault((language, null)));
+		_bitmapFonts.GetValueOrDefault((language, role)) ?? role switch
+		{
+			TextRole.Hint => BitmapFontFor(language, TextRole.Menu),
+			TextRole.Narration => BitmapFontFor(language, TextRole.Dialogue),
+			_ => _bitmapFonts.GetValueOrDefault((language, null)),
+		};
 
 	// The picture on a cell of an active tile step hook, from the field's overlay, or null for the generated rune.
 	public int? TileHookOverlay(int clockMs) => _tileHookOverlay is { } o ? o.Images[o.Idle.FrameAt(clockMs, loop: true)] : null;

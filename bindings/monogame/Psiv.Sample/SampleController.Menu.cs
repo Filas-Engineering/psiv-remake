@@ -12,6 +12,8 @@ public sealed partial class SampleController
 	private readonly ScrollList _third = new();
 	// The Items page's order; the bag has none of its own, so this is the sample's own choice and is not saved.
 	private ItemSort _itemSort = ItemSort.Id;
+	// The text log's lines as the last frame showed them, joined by " | ".
+	private string _probeLogLines = "-";
 	// The lineup position picked first on the Order page.
 	private int? _orderFrom;
 
@@ -355,12 +357,17 @@ public sealed partial class SampleController
 		UiContext data = UiArea(x, y, w, h);
 		int width = Ui.Param("menu_log", "wrap_width", data, w - 20);
 		int rows = Math.Max(1, Ui.Param("menu_log", "rows", data, h / Px(22)));
-		List<string> lines = _s.TextLog().SelectMany(page => Style.Wrap(t, page, width, Style.Small)).ToList();
+		// The log keeps each line as written; its control tags are acted on in the dialogue, not shown here.
+		List<string> lines = _s.TextLog()
+			.Select(entry => string.Join(" ", Parse(entry, null).Select(page => page.Text.Trim()).Where(text => text.Length > 0)))
+			.SelectMany(entry => Style.Wrap(t, entry, width, ToastTextSize())).ToList();
 		int back = Math.Clamp(_list.Cursor, 0, Math.Max(0, lines.Count - rows));
 		_list.Cursor = back;
 		int first = Math.Max(0, lines.Count - rows - back);
+		List<string> shown = lines.Skip(first).Take(rows).ToList();
+		_probeLogLines = shown.Count == 0 ? "none" : string.Join(" | ", shown);
 		Ui.Draw("menu_log", s, t, data
-			.Set("lines", lines.Skip(first).Take(rows).ToList())
+			.Set("lines", shown)
 			.Set("first", first)
 			.Set("rows", rows)
 			.Set("total", lines.Count));

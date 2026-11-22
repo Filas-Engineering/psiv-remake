@@ -1,12 +1,12 @@
 {
 	"version": 1,
-	"params": {"wrap_width": "area_w - 20", "rows": "max(1, area_h / t(22))"},
+	"params": {"wrap_width": "area_w - 20", "rows": "max(1, area_h / t(size_small + 6))"},
 	"windows": [
 		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
-			{"type": "repeater", "items": "lines", "dy": "t(22)", "template": [
+			{"type": "repeater", "items": "lines", "dy": "t(size_small + 6)", "template": [
 				{"type": "text", "value": "text", "style": "small"}
 			]},
-			{"type": "scroll_bar", "visible": "total > rows", "x": "cw - 6", "h": "rows * t(22) - 6", "top": "first", "rows": "rows", "count": "total"}
+			{"type": "scroll_bar", "visible": "total > rows", "x": "cw - 6", "h": "rows * t(size_small + 6) - 6", "top": "first", "rows": "rows", "count": "total"}
 		]}
 	]
 }

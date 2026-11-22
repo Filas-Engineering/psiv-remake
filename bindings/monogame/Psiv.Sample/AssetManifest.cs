@@ -151,7 +151,7 @@ public sealed class AssetManifest
 	public static readonly string[] FigureAnimations = ["attack", "cast", "item", "defend", "hurt", "defeat"];
 	// The terrain under the party, as a battle backdrop's scope: floor, water and soft ground.
 	public static readonly string[] TerrainNames = ["floor", "water", "soft"];
-	public static readonly string[] RoleNames = ["menu", "dialogue", "battle_numbers", "hint"];
+	public static readonly string[] RoleNames = ["menu", "dialogue", "battle_numbers", "hint", "narration"];
 	// What a member chose for the round, as the battle layouts' `command` field and the `command_icons` entry name it.
 	public static readonly string[] CommandNames = ["attack", "technique", "skill", "combo", "item", "defend", "escape"];
 

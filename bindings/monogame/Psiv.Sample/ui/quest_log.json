@@ -2,8 +2,8 @@
 	"version": 1,
 	"windows": [
 		{"name": "backdrop", "elements": [{"type": "slot", "slot": "backdrop"}]},
-		{"name": "box", "x": 24, "y": 40, "w": "W - 48", "h": "H - 72", "frame": "panel", "title": "ui.quest_log.title", "elements": [
-			{"type": "slot", "slot": "quests", "x": 32, "y": 32, "w": "W - 112", "h": "H - 120"}
+		{"name": "box", "x": "min(24, W / 40)", "y": "min(40, max(16, H / 12))", "w": "W - 2 * min(24, W / 40)", "h": "H - min(40, max(16, H / 12)) - min(32, H / 18)", "frame": "panel", "title": "ui.quest_log.title", "elements": [
+			{"type": "slot", "slot": "quests", "x": "min(32, cw / 16)", "y": "min(32, ch / 3)", "w": "cw - 2 * min(32, cw / 16)", "h": "ch - min(32, ch / 3) - min(16, ch / 9)"}
 		]}
 	]
 }

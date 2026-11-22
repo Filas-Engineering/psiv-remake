@@ -1,0 +1,55 @@
+# The followers after a load and after warps: they stand on the leader's cell when the field comes up, and trail out
+# one cell behind each other within two steps of walking, after a load from the title, a warp to another area and a
+# warp inside the same area.
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+wait 180
+press M
+press Right 3
+press Down
+press Enter
+press Escape
+expect screen Field
+cmd title
+wait 3
+press Down 2
+press Enter
+press Enter
+wait 5
+expect screen Field
+expect actor fighter 5 3 north
+expect actor mystic hidden
+expect actor medic hidden
+# Two steps west after the load.
+hold Left 40
+wait 20
+expect actor fighter 3 3 west
+expect actor mystic 4 3 west
+expect actor medic 5 3
+dev warp reed_path west_gate
+wait 5
+expect actor fighter 1 4 west
+expect actor mystic hidden
+expect actor medic hidden
+hold Right 60
+wait 20
+expect actor fighter 5 4 east
+expect actor mystic 4 4 east
+expect actor medic 3 4 east
+dev warp reed_path 3 4
+wait 5
+expect actor fighter 3 4 east
+expect actor mystic hidden
+hold Right 60
+wait 20
+expect actor fighter 7 4 east
+expect actor mystic 6 4 east
+expect actor medic 5 4 east

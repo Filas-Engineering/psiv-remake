@@ -273,9 +273,13 @@ public sealed class UiRenderer
 						{
 							continue;
 						}
-						// A closing window shows its frame only, going the way it came.
+						// A closing window goes the way it came; its content shows while the frame has its full size.
 						Transform(tr, 1f - p, state.Rect, out Rectangle closing, out float closingFade);
 						Frame(w, closing, closingFade);
+						if (!tr.Kind.StartsWith("grow", StringComparison.Ordinal))
+						{
+							Content(w, closing, closingFade);
+						}
 						continue;
 					}
 					if (p < 1f && tr is not null)
@@ -291,20 +295,24 @@ public sealed class UiRenderer
 				r.Drawn.Add(new UiDrawn(layout.Name, w.Name, rect));
 				Frame(w, rect, fade);
 				// A growing window shows its frame only, its title and elements once it has its size.
-				if (growing)
+				if (!growing)
 				{
-					continue;
+					Content(w, rect, fade);
 				}
-				if (w.Title is { } title && Str(title, Root()) is { Length: > 0 } text)
-				{
-					Plate(title, text, rect.X, rect.Y, 16, -14, fade, Root());
-				}
-				int pl = w.Padding.Length == 4 ? w.Padding[0].Int(Root()) : 0, pt = w.Padding.Length == 4 ? w.Padding[1].Int(Root()) : 0;
-				int pr = w.Padding.Length == 4 ? w.Padding[2].Int(Root()) : 0, pb = w.Padding.Length == 4 ? w.Padding[3].Int(Root()) : 0;
-				var locals = new Dictionary<string, UiValue> { ["cw"] = new((long)(rect.Width - pl - pr)), ["ch"] = new((long)(rect.Height - pt - pb)) };
-				_window = w.Name;
-				Elements(w.Elements, rect.X + pl, rect.Y + pt, fade, locals, ctx);
 			}
+		}
+
+		private void Content(UiWindow w, Rectangle rect, float fade)
+		{
+			if (w.Title is { } title && Str(title, Root()) is { Length: > 0 } text)
+			{
+				Plate(title, text, rect.X, rect.Y, 16, -14, fade, Root());
+			}
+			int pl = w.Padding.Length == 4 ? w.Padding[0].Int(Root()) : 0, pt = w.Padding.Length == 4 ? w.Padding[1].Int(Root()) : 0;
+			int pr = w.Padding.Length == 4 ? w.Padding[2].Int(Root()) : 0, pb = w.Padding.Length == 4 ? w.Padding[3].Int(Root()) : 0;
+			var locals = new Dictionary<string, UiValue> { ["cw"] = new((long)(rect.Width - pl - pr)), ["ch"] = new((long)(rect.Height - pt - pb)) };
+			_window = w.Name;
+			Elements(w.Elements, rect.X + pl, rect.Y + pt, fade, locals, ctx);
 		}
 
 		public (List<(int Start, int Length)> Spans, int Lines)? WrapOf(string window, string element)

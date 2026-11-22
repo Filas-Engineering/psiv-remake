@@ -741,7 +741,8 @@ def broken_layouts(broken):
 	picture = next(w for w in dialogue["windows"] if w["name"] == "picture")
 	picture["open"] = {"kind": "fade", "step": 8}
 	picture["close"] = {"kind": "shrink", "step": -1}
-	dialogue["params"] = {"box_h": "(70", "box_width": 300}
+	dialogue["params"] = {"box_h": "(70", "box_width": 300, "narration_cps": "speed_of_sound"}
+	dialogue["windows"].append({"name": "narration", "elements": [{"type": "role", "role": "subtitles"}]})
 	(ui / "dialogue.json").write_text(json.dumps(dialogue, indent="\t") + "\n")
 	confirm = json.loads((ui / "confirm.json").read_text())
 	confirm["params"] = {"backdrop_dim": 0.3}

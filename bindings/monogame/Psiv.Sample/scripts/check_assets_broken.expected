@@ -54,7 +54,7 @@ assets: audio/ambient/marsh_wind.wav: audio[33]: bad loop points 2 to 1: the fil
 assets: assets.json: audio[55]: unknown music 'not_a_track': not an id the game or the sample plays as music
 assets: assets.json: battle_figures: field 'reference_height' must be a whole number from 1 to 720
 assets: assets.json: figures[3]: 'natural': true needs battle_figures' reference_height, the screen height the figure was drawn for
-assets: assets.json: bitmap_fonts.fonts[2]: unknown role 'subtitles': menu, dialogue, battle_numbers, hint
+assets: assets.json: bitmap_fonts.fonts[2]: unknown role 'subtitles': menu, dialogue, battle_numbers, hint, narration
 assets: assets.json: bitmap_fonts.fonts[2]: field 'scale' must be a number above 0, at most 64
 assets: assets.json: bitmap_fonts.fonts[3]: a second font for en
 assets: fonts/ja_partial.json: bitmap_fonts.fonts[4]: lacks 2 glyphs the ja text tables use for dialogue: 灰降
@@ -165,7 +165,8 @@ assets: ui/battle_side.json: -: the built-in layout of this screen stands in
 assets: ui/confirm.json: params.backdrop_dim: the screen takes no params
 assets: ui/confirm.json: -: the built-in layout of this screen stands in
 assets: ui/dialogue.json: params.box_h: field 'box_h': expected ')' at character 4 of '(70'
-assets: ui/dialogue.json: params.box_width: unknown param: box_h, box_margin, box_top, picture_stack
+assets: ui/dialogue.json: params.box_width: unknown param: box_h, box_margin, box_top, picture_stack, narration_lines, narration_cps, narration_delay_ms, narration_width
+assets: ui/dialogue.json: params.narration_cps: field 'narration_cps' reads 'speed_of_sound', which is not a field of the dialogue screen, a window or a variable
 assets: ui/dialogue.json: tags.bell.values.1: must be a non-empty string: the id the tag's value stands for
 assets: ui/dialogue.json: tags.bell.values.2: must be a non-empty string: the id the tag's value stands for
 assets: ui/dialogue.json: tags.bell: field 'id' leaves the tag's value unread: give 'values' and 'default' without it
@@ -178,6 +179,7 @@ assets: ui/dialogue.json: windows.picture.open: field 'step' is for grow, grow_x
 assets: ui/dialogue.json: windows.picture.close: field 'kind' must be one of none, fade, grow, grow_x, grow_y, slide
 assets: ui/dialogue.json: windows.picture.close: field 'step' must be a whole number from 0 to 1024
 assets: ui/dialogue.json: windows.picture.close: field 'step' is for grow, grow_x and grow_y only
+assets: ui/dialogue.json: windows.narration.elements[0]: unknown role 'subtitles': menu, dialogue, battle_numbers, hint, narration
 assets: ui/dialogue.json: -: the built-in layout of this screen stands in
 assets: ui/field.json: params.area_banners: unknown param: area_banner, arrive_toast
 assets: ui/field.json: -: the built-in layout of this screen stands in
@@ -209,4 +211,4 @@ assets: ui/sound_test.json: -: the built-in layout of this screen stands in
 assets: ui/title.json: -: not valid JSON: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 27.
 assets: ui/title.json: -: the built-in layout of this screen stands in
 assets: 0 tilesets, 14 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 4 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 20 layout files (1280x720)
-FAILED: 210 problems.
+FAILED: 212 problems.

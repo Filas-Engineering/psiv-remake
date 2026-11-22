@@ -8,7 +8,7 @@ namespace Psiv.Sample;
 
 // Which text a bitmap font entry may be given for: the dialogue box's lines and speaker plate, the floating numbers and
 // words over battle targets, everything else, and the dialogue box's key hint (which falls back to the menu's font).
-public enum TextRole { Menu, Dialogue, BattleNumbers, Hint }
+public enum TextRole { Menu, Dialogue, BattleNumbers, Hint, Narration }
 
 // Where a glyph's rectangle sits in the sheet, where it is drawn from the pen position and the line's top (Offset), and
 // how far it moves the pen, all in file pixels.

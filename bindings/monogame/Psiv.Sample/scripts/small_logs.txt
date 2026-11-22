@@ -1,0 +1,44 @@
+# The text log and the quest log laid out by the built-in files at the small example set's 320x224 and at 192x144, on
+# the control tags data copy (make_tag_data.py) with --dev. After the tags scene the log holds its lines without their
+# tags: the page break joins the pages, the waits are gone and the values are in; each line wraps to the log window's
+# width. With --window the shot lines save screenshots under build/shots/small/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev event dialogue_tags
+pressuntil Enter Field 400
+wait 10
+press L
+wait 2
+expect screen TextLog
+expect state windows text_log/backdrop 0 0 320x224, text_log/box 8 18 304x194, menu_log/page 27 50 266x141
+expect state loglines away, and the whole town pretends not to | hear it. Nobody says the word cove out loud | before noon. | Dockhand: Did you hear that creak? The | whole pier is trembling! I am not staying | to find out.
+shot build/shots/small/text_log.png
+press Up 20
+expect state loglines better hear this. The cove bell rang three | times at midnight, and nobody was there to | pull the rope. | Harbor Guide: Listen... There it is again. | Test Fighter, keep your 50 coins close and | a Tonic handy.
+expect statenot loglines {
+press Escape
+press Q
+wait 2
+expect screen QuestLog
+expect state windows quest_log/backdrop 0 0 320x224, quest_log/box 8 18 304x194, menu_quests/page 27 50 266x146
+shot build/shots/small/quest_log.png
+press Escape
+
+# The smallest frame: the window, the page and the wrap follow it.
+assets swap ui/styles.json alt/styles_tiny.json
+wait 2
+press L
+wait 2
+expect state windows text_log/backdrop 0 0 192x144, text_log/box 4 16 184x120, menu_log/page 15 48 162x75
+expect state loglines that creak? The whole | pier is trembling! I am | not staying to find out.
+shot build/shots/small/text_log_tiny.png
+press Escape
+press Q
+wait 2
+expect state windows quest_log/backdrop 0 0 192x144, quest_log/box 4 16 184x120, menu_quests/page 15 48 162x75
+shot build/shots/small/quest_log_tiny.png
+press Escape

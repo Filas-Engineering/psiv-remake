@@ -43,7 +43,12 @@ public sealed partial class SampleController
 	// The bitmap font for each role in the text language, as `ROLE FILE` or `ROLE -`; the hint only when it has a font
 	// other than the menu's.
 	private string BitmapFontProbe() => string.Join(", ", Enum.GetValues<TextRole>()
-		.Where(r => r != TextRole.Hint || _art?.BitmapFontFor(_s.Profile().TextLanguage, r) != _art?.BitmapFontFor(_s.Profile().TextLanguage, TextRole.Menu))
+		.Where(r => r switch
+		{
+			TextRole.Hint => _art?.BitmapFontFor(_s.Profile().TextLanguage, r) != _art?.BitmapFontFor(_s.Profile().TextLanguage, TextRole.Menu),
+			TextRole.Narration => _art?.BitmapFontFor(_s.Profile().TextLanguage, r) != _art?.BitmapFontFor(_s.Profile().TextLanguage, TextRole.Dialogue),
+			_ => true,
+		})
 		.Select(r => $"{Snake(r.ToString())} {_art?.BitmapFontFor(_s.Profile().TextLanguage, r)?.Key ?? "-"}"));
 
 	private string T(string key, params object[] parameters)

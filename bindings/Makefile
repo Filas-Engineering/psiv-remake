@@ -130,6 +130,16 @@ define tag_run
 	@tail -n 1 $(BUILD)/sample_$(1)_headless.txt
 endef
 
+# A run of the narration scene with --dev on its own copy of the narration assets: $(1) the script's name, $(2) more
+# options.
+define narration_run
+	rm -rf $(BUILD)/sample_$(1)_saves $(BUILD)/$(1)_run_assets
+	cp -R $(BUILD)/narration_assets $(BUILD)/$(1)_run_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/narration_data/game/data --dev $(2) --saves $(BUILD)/sample_$(1)_saves \
+		--assets $(BUILD)/$(1)_run_assets --script $(SAMPLE_SCRIPTS)/$(1).txt --frames 900 > $(BUILD)/sample_$(1)_headless.txt || (cat $(BUILD)/sample_$(1)_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_$(1)_headless.txt
+endef
+
 .PHONY: all test native-test dotnet dotnet-test dotnet-missing clean deps
 
 all: $(LIB) $(PLAYTHROUGH) $(TESTS)
@@ -416,6 +426,18 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA)
 	python3 -I $(SAMPLE_SCRIPTS)/make_tag_data.py $(GAME)/data $(CORE)/data $(BUILD)/tag_data
 	$(call tag_run,dialogue_tags,)
 	$(call tag_run,dialogue_tags_ja,--language ja --strict-text)
+	# Narration gathered in a window without a box over stacked still pictures, in English and Japanese.
+	python3 -I $(SAMPLE_SCRIPTS)/make_narration_data.py $(GAME)/data $(CORE)/data $(BUILD)/narration_data
+	python3 -I $(SAMPLE_SCRIPTS)/make_narration_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/narration_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/narration_data/game/data --check-assets --assets $(BUILD)/narration_assets
+	$(call narration_run,narration,)
+	$(call narration_run,narration_ja,--language ja --strict-text)
+	# The text and quest logs laid out by the built-in files at 320x224 and 192x144, after the tags scene.
+	rm -rf $(BUILD)/sample_small_logs_saves $(BUILD)/small_logs_assets
+	cp -R $(BUILD)/small_assets $(BUILD)/small_logs_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/tag_data/game/data --dev --saves $(BUILD)/sample_small_logs_saves --assets $(BUILD)/small_logs_assets \
+		--script $(SAMPLE_SCRIPTS)/small_logs.txt --frames 600 > $(BUILD)/sample_small_logs_headless.txt || (cat $(BUILD)/sample_small_logs_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_small_logs_headless.txt
 	# The dialogue's fx, music_pause and music_resume tags with the example animation set, on a copy since the run swaps in
 	# a dialogue layout; and a layout whose fx tag names a script that is not a screen effect, or none, as problems.
 	rm -rf $(BUILD)/sample_dialogue_fx_saves $(BUILD)/dialogue_fx_assets $(BUILD)/dialogue_fx_broken_assets
@@ -436,6 +458,10 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA)
 	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_field_walk_saves --script $(SAMPLE_SCRIPTS)/field_walk.txt --frames 1100 > $(BUILD)/sample_field_walk_headless.txt \
 		|| (cat $(BUILD)/sample_field_walk_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_field_walk_headless.txt
+	rm -rf $(BUILD)/sample_field_trail_saves
+	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_field_trail_saves --script $(SAMPLE_SCRIPTS)/field_trail.txt --frames 800 > $(BUILD)/sample_field_trail_headless.txt \
+		|| (cat $(BUILD)/sample_field_trail_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_field_trail_headless.txt
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_field_interact_saves --script $(SAMPLE_SCRIPTS)/field_interact.txt --frames 700 > $(BUILD)/sample_field_interact_headless.txt \
 		|| (cat $(BUILD)/sample_field_interact_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_field_interact_headless.txt

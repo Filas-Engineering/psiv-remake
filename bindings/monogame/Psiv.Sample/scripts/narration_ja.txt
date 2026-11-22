@@ -1,0 +1,47 @@
+# The same in Japanese (--language ja --strict-text). Narration without a box (make_narration_data.py, make_narration_assets.py), with --dev: the dialogue layout's
+# `narration` window gathers the narration lines, four at once, over the still pictures the `picture` tags put on the
+# stack, in the narration text style. Each line waits 200 ms (`narration_delay_ms`), then reveals at 40 characters a
+# second (`narration_cps` at Normal text speed); Confirm shows the rest, the next Confirm the next line. The fifth line
+# starts the window afresh; the guide's line after them comes in the box, the narration gone. With --window the shot
+# lines save screenshots under build/shots/narration/ja_ (run from bindings/).
+
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev event narration
+waitstate 10 narrationreveal 0/16
+# 12 frames of 16 ms: still inside the 200 ms delay.
+wait 12
+expect state narrationreveal 0/16
+expect state pictures chart
+# 26 frames: 416 ms, 216 ms past the delay: 8 characters at 40 a second.
+wait 14
+expect state narrationreveal 8/16
+expect state narration 夜明け前、海から
+press Enter
+expect state narrationreveal 16/16
+press Enter
+waitstate 10 narrationreveal 0/15
+expect state pictures chart tower
+press Enter 2
+waitstate 10 narrationreveal 0/22
+press Enter 2
+waitstate 10 narrationreveal 0/9
+press Enter
+expect state narration 夜明け前、海から霧が入ってきた。 | 昼には鐘楼も灰色の影になった。 | 誰も鐘を鳴らさないのに、皆がその音を聞いた。 | 港は息をひそめた。
+expect state windows dialogue/pictures 340 40 600x260, dialogue/narration 120 200 1040x128
+expect state uifield.dialogue.box_visible false
+shot build/shots/narration/ja_four_lines.png
+# The fifth line does not fit: the window starts afresh.
+press Enter
+waitstate 10 narrationreveal 0/12
+press Enter
+expect state narration そして霧は一度に晴れた。
+shot build/shots/narration/ja_fresh.png
+press Enter
+waitstatehas 10 line 今の、見た？
+expect state narration none
+expect state pictures -
+expect state uifield.dialogue.box_visible true
+shot build/shots/narration/ja_speaker.png
+pressuntil Enter Field 30

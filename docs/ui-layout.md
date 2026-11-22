@@ -142,7 +142,7 @@ Drawn in `z` order (default 0; equal `z` in file order), each as its frame, its 
 | `title` | a text key, or a `plate` element (`key`/`value`, `x` default 16, `y` default -14, relative to the window, `size` default small, `color` default accent) |
 | `padding` | `[left, top, right, bottom]` expressions: the elements' origin and the content size `cw`, `ch` |
 | `visible` | a condition (below); a hidden window draws nothing |
-| `open`, `close` | transitions: `{"kind": "none|fade|grow|grow_x|grow_y|slide", "ms": 200, "from": "left|right|top|bottom", "step": 0}`. Open plays when the window becomes visible, or when its screen comes up; close plays the frame only, going the way it came. `grow` grows both sides from the middle, `grow_x` only the width and `grow_y` only the height; a growing window shows its frame only, its title and elements once it has its size. `step` (grow kinds only, 0 to 1024 logical pixels, default 0: smoothly) grows by whole steps, at least one step, never past the window's size. In battle, the battle speed shortens them |
+| `open`, `close` | transitions: `{"kind": "none|fade|grow|grow_x|grow_y|slide", "ms": 200, "from": "left|right|top|bottom", "step": 0}`. Open plays when the window becomes visible, or when its screen comes up; close goes the way it came. One rule for the content: a window's title and elements draw on every frame its frame has its full size, with the transition's fade and offset (fade and slide carry the content in and out with the frame); `grow` grows both sides from the middle, `grow_x` only the width and `grow_y` only the height, and a growing or shrinking window shows its frame only, its content from the frame it has its size. `step` (grow kinds only, 0 to 1024 logical pixels, default 0: smoothly) grows by whole steps, at least one step, never past the window's size. In battle, the battle speed shortens them |
 | `blocks_clicks` | true: a mouse click inside it does not reach click-to-walk |
 | `elements` | the list below |
 
@@ -656,6 +656,8 @@ Params: `wrap_width` (the width the log wraps to), `rows` (the lines shown, at l
 
 Fields: area fields; `lines` (list of strings: the lines shown); `first` (int: the first shown); `rows` (int: the lines that fit); `total` (int: all wrapped lines).
 
+Each logged line shows without its control tags, as the dialogue showed it: `{page}` joins the pages with a space, `{wait:N}`, `{portrait:...}` and the layout's tags are gone and `{var:ID}` shows the value. Lines wrap to `wrap_width` at the styles' `small` text size (16 in the built-in styles). The built-in file steps lines `t(size_small + 6)` apart (22 at 100%). Probe: `loglines`, the lines the last frame showed joined by ` | ` (`none` for an empty log, `-` before the log was drawn).
+
 ### quest_log, text_log (`ui/quest_log.json`, `ui/text_log.json`)
 
 The overlays from the field.
@@ -663,6 +665,14 @@ The overlays from the field.
 Windows: `backdrop`, `box` (the panel and its title).
 
 Slots: `backdrop`; `quests` (draws `menu_quests` into its rectangle) or `log` (draws `menu_log`).
+
+The built-in files place the box and the slot by the frame's size, so the logs open laid out at any resolution (the 1280x720 rectangles are as before): the box `min(24, W / 40)` in from the sides, `min(40, max(16, H / 12))` from the top (the title plate stays on screen) and `min(32, H / 18)` from the bottom; the slot `min(32, cw / 16)` in from the box's sides and `min(32, ch / 3)` down (under the panel's top band), with `min(36, ch / 9)` (log) or `min(16, ch / 9)` (quests) left under it. `menu_quests` rows are `t(size_body + 10)` high.
+
+```json
+{"name": "box", "x": "min(24, W / 40)", "y": "min(40, max(16, H / 12))", "w": "W - 2 * min(24, W / 40)", "h": "H - min(40, max(16, H / 12)) - min(32, H / 18)", "frame": "panel"}
+```
+
+`scripts/small_logs.txt` (on the control tags data copy and a copy of the small set, with `--dev`) opens both after the tags scene at 320x224 and at 192x144 (`alt/styles_tiny.json`), checking the rectangles and `loglines`.
 
 ### load_game (`ui/load_game.json`)
 
@@ -903,6 +913,26 @@ Two top-level fields of `title.json` (only that file takes them):
 	{"name": "box", "visible": "!start", "anchor": "center", "w": 600, "h": 400, "frame": "panel", "elements": []}
 ]}
 ```
+
+### Dialogue: narration without a box
+
+A dialogue file with a window named `narration` lays out narration (`narrate` lines, events/FORMAT.md: a line without a speaker) in that window instead of the box: the box's `box_visible` is false while one shows, and each narration line joins the ones already in the window, up to `narration_lines` wrapped lines; a line that would not fit starts the window afresh, and a speaker's line or a choice clears it, as leaving the event does. A line longer than the window shows its first `narration_lines` lines. The window needs no frame; draw it at any rectangle, over the picture stack by `z`.
+
+Params (expressions of the common names): `narration_lines` (4), `narration_cps` (0: the text speed's characters a second; above 0, the characters a second at Normal, scaled by the text speed option as the `text_speed` timings scale: Slow halves it with the built-in timings, Instant shows each line at once), `narration_delay_ms` (0: how long each line waits before it reveals), `narration_width` (the width lines wrap to; default the `narration` window's width). Lines wrap at the styles' `narration` text style's size (else the body size) in the `narration` font role, which falls back to `dialogue` ([`assets.md`](assets.md), bitmap_fonts).
+
+Fields: `narration_visible` (bool, the window has lines), `narration_rows` (items: `text`, the row as revealed so far; `full`, the whole row; `shown`, it is all shown), `narration_all_shown` (bool, the line now is all shown, for a next hint). Confirm shows the rest of the line, then goes on; auto-advance waits as for a box; Skip, the text log and every tag act as for the box (a narration line's tags act when it comes up). Probes: `narration` (the rows as shown, joined by ` | `, `none`), `narrationreveal` (`SHOWN/TOTAL` of the line now, `-`).
+
+```json
+{"version": 1, "params": {"picture_stack": 1, "narration_lines": 4, "narration_cps": 40, "narration_delay_ms": 200}, "windows": [
+	{"name": "narration", "visible": "narration_visible", "x": 120, "y": 200, "w": "W - 240", "h": "4 * t(32)", "z": 10, "elements": [
+		{"type": "role", "role": "narration"},
+		{"type": "repeater", "items": "narration_rows", "dy": "t(32)", "template": [{"type": "text", "value": "text", "style": "narration"}]},
+		{"type": "role", "role": "menu"},
+		{"type": "text", "visible": "narration_all_shown", "value": "hint", "y": "4 * t(32) + 8", "w": "cw", "align": "right", "style": "hint"}]}
+]}
+```
+
+The built-in file has no `narration` window, so narration stays in the box. `scripts/make_narration_data.py` writes a data copy with the event `narration` (five narration lines, the first two showing still pictures, then the guide's line) and `make_narration_assets.py` an asset copy whose dialogue layout keeps the pictures as a stack side by side and has the window above (with a 0.45 black fill behind the rows); `scripts/narration.txt` and `narration_ja.txt` (`--language ja --strict-text`) check four lines shown together without a box over both pictures, the 200 ms delay and 40 characters a second (8 characters 416 ms into a line), the fifth line starting afresh and the guide's line back in the box; screenshots under `build/shots/narration/`.
 
 ### Dialogue: cases and the picture stack
 

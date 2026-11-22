@@ -1352,6 +1352,10 @@ def main_small(export, fonts, test, out):
 	(out / "alt/styles_dev_off.json").write_text(json.dumps(dict(styles, params=dict(styles["params"], dev_draw=0)), indent="\t") + "\n")
 	# Smaller small text, which every screen's notices take (small_toasts.txt).
 	(out / "alt/styles_small10.json").write_text(json.dumps(dict(styles, sizes=dict(styles["sizes"], small=10)), indent="\t") + "\n")
+	# The smallest frames the logs are laid out in by the built-in files (small_logs.txt): 192x144 with the developer
+	# tools at 60%.
+	(out / "alt/styles_tiny.json").write_text(json.dumps(dict(styles, resolution={"width": 192, "height": 144},
+		params=dict(styles["params"], dev_scale=60)), indent="\t") + "\n")
 	for name, layout in sorted(small_screens(builtin).items()):
 		dump(out / "ui" / f"{name}.json", layout)
 

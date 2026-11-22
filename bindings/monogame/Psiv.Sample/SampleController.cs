@@ -365,6 +365,10 @@ public sealed partial class SampleController
 		{
 			_clickWalk = null;
 		}
+		if (_s.Mode != Mode.Event)
+		{
+			_narration.Clear();
+		}
 		switch (screen)
 		{
 		case Screen.Title: UpdateTitle(input); break;
@@ -679,6 +683,8 @@ public sealed partial class SampleController
 			_ when key.StartsWith("window.", StringComparison.Ordinal) => WindowProbe(key["window.".Length..]),
 			_ when key.StartsWith("uifield.", StringComparison.Ordinal) => FieldProbe(key["uifield.".Length..]),
 			"wrapped" => _probeWrapped,
+			"loglines" => _probeLogLines,
+			"narration" or "narrationreveal" => NarrationState(key),
 			// The characters of the line on screen that the dialogue's bitmap font draws in the fallback font.
 			"fontmissing" or "reveal" or "tags" or "pagetext" or "dialoguepage" or "lineportrait" or "shownportrait" or "dialogueoverlaps" or "picture" or "pictures" => DialogueState(key),
 			// How a person's sheet draws the facing it was last drawn in: `west: east mirrored 3 4 5`, or `generated`.

@@ -307,7 +307,7 @@ public sealed partial class GameData
 		IEnumerable<(string Key, string Text, bool Dialogue)> lines = TextTables.GetValueOrDefault(language) ?? [];
 		lines = role switch
 		{
-			TextRole.Dialogue => lines.Where(l => l.Dialogue || l.Key.StartsWith("ui.dialogue.", StringComparison.Ordinal)),
+			TextRole.Dialogue or TextRole.Narration => lines.Where(l => l.Dialogue || l.Key.StartsWith("ui.dialogue.", StringComparison.Ordinal)),
 			TextRole.BattleNumbers => lines.Where(l => l.Key.StartsWith("ui.battle.float.", StringComparison.Ordinal) || l.Key.StartsWith("name.status.", StringComparison.Ordinal))
 				.Append(("", "0123456789+", false)),
 			TextRole.Hint => lines.Where(l => l.Key is "ui.dialogue.next" or "ui.dialogue.skip" || l.Key.StartsWith("ui.key.", StringComparison.Ordinal)

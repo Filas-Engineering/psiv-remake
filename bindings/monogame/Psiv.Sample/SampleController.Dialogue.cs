@@ -436,6 +436,12 @@ public sealed partial class SampleController
 			Report(_s.Skip());
 			return;
 		}
+		if (_s.Line() is { } narrated && IsNarration(narrated))
+		{
+			UpdateNarration(narrated, dtMs, input);
+			return;
+		}
+		_narration.Clear();
 		if (_s.Line() is { } line)
 		{
 			bool fresh = line.Display != _lastLine;
@@ -514,7 +520,8 @@ public sealed partial class SampleController
 		DrawDarkness(s, "dialogue");
 		int y = DialogueTop(s, field);
 		// Between lines (a script actor walking, a fade) the field shows without an empty box.
-		bool box = _s.LinePending || _s.Choice() is not null;
+		bool narrating = _s.Line() is { } said && IsNarration(said);
+		bool box = !narrating && (_s.LinePending || _s.Choice() is not null);
 		if (box)
 		{
 			_dialogueAt = y > s.Height / 2 ? "bottom" : "top";
@@ -523,6 +530,7 @@ public sealed partial class SampleController
 			.Set("top", y)
 			.Set("box_visible", box)
 			.Set("next_arrow_ms", Timing("next_arrow_ms"));
+		NarrationFields(ctx, narrating ? _s.Line() : null);
 		Line? line = box ? _s.Line() : null;
 		Choice? choice = box && line is null ? _s.Choice() : null;
 		DialogueBox? shown = line is null ? null : BoxOf(line);
