@@ -1148,8 +1148,9 @@ private:
 	bool arrivalAnnounced_ = true;
 	std::string exitSound_;
 	std::string pendingExitSound_;
-	// The followers' placement the walk into the area under way asked for (an exit's, or game.json's for an exit or a
-	// gangway), and the placement of the last entry; unset at an entry is game.json's `followers_arrive_other`.
+	// The followers' placement the area entry under way asked for (an exit's, or game.json's for an exit or a gangway; a
+	// town return's, port's, arrival marker's or script warp's own), and the placement of the last entry; unset at an
+	// entry is game.json's `followers_arrive_other`.
 	std::optional<FollowersArrive> walkedFollowers_;
 	FollowersArrive arrivalFollowers_ = FollowersArrive::Stacked;
 	// A path walk's step is under way, which touch hooks with `touch_from: keys` do not answer.

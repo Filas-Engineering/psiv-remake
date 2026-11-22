@@ -243,6 +243,23 @@ class VesselAndChangesTest(TempCase):
 		self.assertEqual("up", back["exits"][0]["followers"])
 		self.assertEqual("keys", back["hooks"][1]["touch_from"])
 
+	def test_follower_placement_of_a_return_an_arrival_and_a_port_survives_a_round_trip(self):
+		area = copy.deepcopy(VESSEL_AREA)
+		area["kind"] = "town"
+		area["arrival"] = area.get("arrival", "deck")
+		area["arrival_followers"] = "right"
+		area["return"] = {"followers": "behind", "marker": "gate", "area": "saltgrass"}
+		area["ports"] = [{"id": "pier", "at": [1, 1], "marker": "deck", "followers": "up"}]
+		back = self.convert(tiled.area_to_tmj(copy.deepcopy(area), "cells.tsj"))
+		self.assertEqual(areajson.dumps(area), areajson.dumps(back))
+		self.assertEqual("right", back["arrival_followers"])
+		self.assertEqual(["area", "marker", "followers"], list(back["return"]))
+		self.assertEqual("up", back["ports"][0]["followers"])
+		area["return"] = {"area": "saltgrass", "at": [1, 1], "door": "x"}
+		with self.assertRaises(areajson.AreaError) as caught:
+			areajson.normalize(area)
+		self.assertIn("return: unknown field 'door'", caught.exception.problems)
+
 	def test_a_hooks_actor_cell_survives_a_round_trip(self):
 		area = copy.deepcopy(VESSEL_AREA)
 		area["hooks"] = [{"id": "keeper", "at": [1, 0], "event": "e", "actor_at": [2, 1]}]

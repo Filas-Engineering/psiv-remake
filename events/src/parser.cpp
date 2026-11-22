@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 #include <initializer_list>
+#include <set>
 
 namespace events {
 
@@ -1145,6 +1146,12 @@ private:
 			s = action(ActionType::warp);
 			a.name(s.ins.action.subject, "a map name");
 			a.name(s.ins.action.target, "a marker name");
+			if (a.keyword("followers")) {
+				static const std::set<std::string> placements = {"behind", "down", "left", "right", "stacked", "up"};
+				if (a.name(s.ins.action.followers, "stacked, behind, up, down, left or right") && !placements.count(s.ins.action.followers)) {
+					a.error("script.expected_found", {"stacked, behind, up, down, left or right", "name '" + s.ins.action.followers + "'"});
+				}
+			}
 		} else if (cmd == "learn") {
 			s = simple(Op::learn);
 			a.name(s.ins.name, "a party member name");

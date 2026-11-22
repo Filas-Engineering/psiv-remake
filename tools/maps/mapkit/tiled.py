@@ -13,11 +13,11 @@ KIND_OF_CHARACTER = {c: k for k, c in KINDS.items()}
 TILE_IDS = {"floor": 0, "wall": 1, "water": 2, "soft": 3, "barrier": 4, "counter": 5}
 FLIP_BITS = 0xF0000000
 MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "number", "music": "string", "region": "string", "arrival": "string",
-	"arrival_from": "json list", "arrival_not_from": "json list", "dungeon_exit": "json object", "arrive_notice": "bool or json", "field_status": "bool",
-	"field_poison": "bool", "field_paralysis": "bool", "name": "string or json list", "counters": "json list", "platforms": "json list"}
+	"arrival_followers": "string", "arrival_from": "json list", "arrival_not_from": "json list", "dungeon_exit": "json object", "return": "json object",
+	"arrive_notice": "bool or json", "field_status": "bool", "field_poison": "bool", "field_paralysis": "bool", "name": "string or json list", "counters": "json list", "platforms": "json list"}
 # Map properties in the area format's order, as the importer copies them and the exporter writes them.
-AREA_PROPERTIES = ("kind", "encounter_mode", "step_ms", "music", "region", "arrival", "arrival_from", "arrival_not_from", "dungeon_exit", "arrive_notice", "field_status",
-	"field_poison", "field_paralysis", "name", "counters", "platforms")
+AREA_PROPERTIES = ("kind", "encounter_mode", "step_ms", "music", "region", "arrival", "arrival_followers", "arrival_from", "arrival_not_from", "dungeon_exit", "return",
+	"arrive_notice", "field_status", "field_poison", "field_paralysis", "name", "counters", "platforms")
 REQUIRED_MAP_PROPERTIES = ["id"]
 
 # Per object class: property name to type. "json" is a string property holding JSON text of the given shape.
@@ -30,7 +30,7 @@ OBJECT_PROPERTIES = {
 	"shop": {"kind": "string", "stock": "json list", "sell_percent": "int", "require_flag": "string", "block_flag": "string", "script_only": "bool", "keeper": "string", "voice": "string", "name": "string"},
 	"rest": {"cost": "int", "script_only": "bool", "keeper": "string", "per_member": "bool", "voice": "string", "name": "string"},
 	"chest": {"flag": "string", "items": "json object", "equipment": "json object", "money": "int"},
-	"port": {"marker": "string", "flag": "string", "ship": "string", "block_flag": "string"},
+	"port": {"marker": "string", "flag": "string", "ship": "string", "block_flag": "string", "followers": "string"},
 	"zone": {"table": "json list", "visible": "json object", "random": "json object"},
 	"helm": {},
 	"gangway": {},

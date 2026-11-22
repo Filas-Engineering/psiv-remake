@@ -307,7 +307,7 @@ end
 | `party save [<name>]` | `party save before_split` (a snapshot of who is in the lineup and the reserve, each in order; without a name, `default`) |
 | `party restore [<name>]` | `party restore before_split` (puts that lineup and reserve back; without a name, `default`) |
 | `party swap <slot\|member> <member> [equipment keep\|bag] [silent]` | `party swap 2 drifter` or `party swap guide drifter equipment bag silent` (the member in lineup slot 2, 1 being the leader, or the named lineup member goes to the reserve and `drifter` takes that slot; `silent`: no notice) |
-| `warp <map> <marker>` | `warp lighthouse_base door_inside` |
+| `warp <map> <marker> [followers <placement>]` | `warp lighthouse_base door_inside` (`followers stacked`, `behind`, `up`, `down`, `left` or `right`: where the game stands the followers on arrival; left out, the game's own rule) |
 | `vehicle give <vehicle> <map> <marker>` | `vehicle give skiff harbor pier_end` (the party now has it, standing there) |
 | `vehicle place <vehicle> <map> <marker>` | `vehicle place skiff harbor pier_end` (moves a vehicle the party has) |
 | `vehicle remove <vehicle>` | `vehicle remove skiff` (the party no longer has it) |

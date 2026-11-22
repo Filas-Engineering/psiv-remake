@@ -246,6 +246,19 @@ TEST(register_and_unregister_town_reach_the_host) {
 	CHECK_EQ(unknown.size(), 1u);
 }
 
+TEST(a_warp_carries_its_follower_placement_to_the_host) {
+	Program p = test::compile_ok("event a unskippable\n\twarp shore landing followers left\n\twarp shore pier\nend\n");
+	CHECK(p.code[0].action.followers == "left" && p.code[1].action.followers.empty());
+	RecordingHost host;
+	Interpreter it(p, host);
+	CHECK(it.start("a"));
+	test::run(it, host);
+	CHECK(with_prefix(host.trace, "action warp ") == (std::vector<std::string>{"action warp shore landing followers left", "action warp shore pier"}));
+	auto d = test::compile_errors("event a unskippable\n\twarp shore landing followers sideways\n\twarp shore landing followers\nend\n");
+	CHECK(test::has_diagnostic(d, 2, "stacked, behind, up, down, left or right"));
+	CHECK(test::has_diagnostic(d, 3, "stacked, behind, up, down, left or right"));
+}
+
 TEST(a_choice_header_reaches_the_host_with_the_options) {
 	Program p = test::compile_ok("event a unskippable\n\tchoice \"Where to?\" header @trip.header into trip.pick\n\toption \"North\"\n\toption \"South\"\n\tend\n"
 		"\tchoice header \"Pick one\"\n\toption \"A\"\n\toption \"B\"\n\tend\nend\n");

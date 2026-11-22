@@ -376,3 +376,48 @@ TEST(aReturnToATownCanLandOutsideIt) {
 	CHECK(s.devWarp("reed_path", "west_gate").empty());
 	CHECK(s.arrivalAnnounced());
 }
+
+// A town's `return` and `arrival_followers`, a port's and a script warp's `followers` place the followers on landing;
+// each left out is game.json's followers_arrive_other.
+TEST(returnsPortsArrivalsAndWarpsPlaceTheirOwnFollowers) {
+	GameData d = test::withScript("events/bell_cove.ev", "event cove_bell unskippable\n\twarp tidewater start followers down\nend\n");
+	d.areas.at("tidewater").arrivalFollowers = FollowersArrive::Up;
+	DungeonExitTarget way;
+	way.area = "reed_path";
+	way.at = {2, 4};
+	way.facing = Facing::West;
+	way.followers = FollowersArrive::Behind;
+	d.areas.at("saltgrass").returnTo = way;
+	d.areas.at("lantern_barge").arrivalFollowers = FollowersArrive::Right;
+	for (Port& p : d.areas.at("cinder_quay").ports) {
+		p.followers = FollowersArrive::Up;
+	}
+	Session s(d, SessionOptions());
+	CHECK(s.newGame().empty());
+	test::confirmLines(s);
+	const auto first = [&] { return s.world().trail.empty() ? Cell{-1, -1} : s.world().trail.front(); };
+	test::placeParty(s, "reed_path", "east_gate", Facing::East);
+	s.world().visitedAreas = {"tidewater", "saltgrass"};
+	s.world().items["homing_shell"] = 2;
+	CHECK(s.openMenu().empty());
+	CHECK(s.travel(TravelKind::Town, "saltgrass", "", "homing_shell").empty());
+	CHECK(s.world().area == "reed_path" && s.world().position == (Cell{2, 4}) && first() == (Cell{3, 4}));
+	CHECK(s.openMenu().empty());
+	CHECK(s.travel(TravelKind::Town, "tidewater", "", "homing_shell").empty());
+	CHECK(s.world().area == "tidewater" && s.world().position == (Cell{3, 4}) && first() == (Cell{3, 3}));
+	s.world().flags["travel.isles_open"] = true;
+	s.world().flags["travel.dock_open"] = true;
+	test::placeParty(s, "saltgrass", "pier_front", Facing::North);
+	CHECK(s.interact().empty());
+	CHECK(s.travel(TravelKind::Port, "quay_pier").empty());
+	CHECK(s.world().area == "cinder_quay" && s.world().position == (Cell{6, 5}) && first() == (Cell{6, 4}));
+	test::placeParty(s, "cinder_quay", "dock_front", Facing::South);
+	CHECK(s.interact().empty());
+	CHECK(s.world().area == "lantern_barge" && s.world().position == (Cell{1, 2}) && first() == (Cell{2, 2}));
+	test::placeParty(s, "bell_cove", "bell_front", Facing::East);
+	CHECK(s.interact().empty());
+	test::confirmLines(s);
+	CHECK(s.world().area == "tidewater" && s.world().position == (Cell{3, 4}) && first() == (Cell{3, 5}));
+	CHECK(s.devWarp("tidewater", "start").empty());
+	CHECK(s.world().trail.empty());
+}

@@ -36,8 +36,8 @@ bool parseEncounterMode(const std::string& text, EncounterMode& out);
 // on any step.
 enum class ExitFires { FromFloor, Always };
 
-// Where the followers stand after an area entry (game.json `followers_arrive` and `followers_arrive_other`, an exit's
-// `followers`): on the leader's cell, behind it against its facing, or toward a direction of the map from it.
+// Where the followers stand after an area entry (game.json `followers_arrive` and `followers_arrive_other`, an exit's,
+// a port's, a `return`'s or a script warp's `followers`, `arrival_followers`): on the leader's cell, behind it against its facing, or toward a direction of the map from it.
 enum class FollowersArrive { Stacked, Behind, Up, Down, Left, Right };
 
 // Where an actor's talk point answers interact (game.json `talk_at`, an interact hook's `talk_at`): on the hook's cells,
@@ -206,6 +206,8 @@ struct Port {
 	// helm, among the open ports of the same ship. Empty: the destination menu opens at the port, among the ports
 	// without a ship.
 	std::string ship = {};
+	// Where the followers stand when the party arrives at this port; unset: game.json's `followers_arrive_other`.
+	std::optional<FollowersArrive> followers = std::nullopt;
 	int line = 0;
 };
 
@@ -225,6 +227,8 @@ struct DungeonExitTarget {
 	Cell at;
 	// Left out, the party keeps the facing it had.
 	std::optional<Facing> facing;
+	// A town's `return` only: where the followers stand on landing; unset: game.json's `followers_arrive_other`.
+	std::optional<FollowersArrive> followers = std::nullopt;
 	int line = 0;
 };
 
@@ -326,6 +330,9 @@ struct Area {
 	std::string region;
 	// A town's marker where a return to it lands (FLD-051); a town without one is no destination.
 	std::string arrival;
+	// `arrival_followers`: where the followers stand when the party lands on `arrival` (a return to the town without a
+	// `return`, boarding the vessel); unset: game.json's `followers_arrive_other`.
+	std::optional<FollowersArrive> arrivalFollowers;
 	// `arrival_from`, `arrival_not_from`: entering the town registers it as a destination only from a listed area, or only
 	// from an area not listed.
 	std::vector<std::string> arrivalFrom;

@@ -40,8 +40,10 @@ Every problem in a map is printed as `MAP.tmj: text`, all of them in one run, an
 | `music` | string | `music` (an audio id from `game.json`) |
 | `region` | string | `region` (the world or region the area belongs to) |
 | `arrival` | string | `arrival` (a town's marker where a return to it lands) |
+| `arrival_followers` | string | `arrival_followers` (where the followers stand on landing at `arrival`: `stacked`, `behind`, `up`, `down`, `left`, `right`) |
 | `arrival_from`, `arrival_not_from` | string holding a JSON list | `arrival_from`, `arrival_not_from` (the areas entering from which registers the town, or does not: `["reed_path"]`) |
 | `dungeon_exit` | string holding a JSON object | `dungeon_exit` (a dungeon's way out: `{"area": "saltgrass", "marker": "east_gate", "facing": "west"}`, or `at` `[x, y]` in place of `marker`) |
+| `return` | string holding a JSON object | `return` (where a return to the town lands: `{"area": "reed_path", "marker": "west_gate", "facing": "east", "followers": "behind"}`, or `at` `[x, y]` in place of `marker`) |
 | `arrive_notice` | bool, or string holding a JSON list or object | `arrive_notice` (false: entering the area announces nothing; `[{"from": ["reed_path"], "notice": false}, {"notice": true}]` by where the party came from) |
 | `field_status`, `field_poison`, `field_paralysis` | bool | the same keys (field poison and paralysis by steps here) |
 | `counters` | string holding a JSON list | `counters` (cells marked as counters besides the `=` tiles: `[[4, 2], [5, 2]]`) |
@@ -64,7 +66,7 @@ An object layer. Each object's class (Tiled's Class field, `type` in older versi
 | `shop` | the shop id | `stock` (JSON list), optional `kind`, `require_flag`, `block_flag` (strings), `sell_percent` (int), `script_only` (bool), `keeper` (string, the actor who keeps it), `voice` (string, the keeper's text key prefix), `name` (string, a text key) | `shops[]` |
 | `rest` | the rest point id | optional `cost` (int), `script_only` (bool), `keeper` (string), `per_member` (bool), `voice`, `name` (strings) | `rests[]` |
 | `chest` | the chest id | `flag` (string), optional `items` and `equipment` (JSON objects), `money` (int) | `chests[]` |
-| `port` | the port id | `marker` (string), optional `flag`, `ship` (strings) | `ports[]` |
+| `port` | the port id | `marker` (string), optional `flag`, `ship`, `block_flag`, `followers` (strings) | `ports[]` |
 | `zone` | the zone id | `table` (JSON list), optional `visible`, `random` (JSON objects) | `zones[]` |
 | `helm` | the helm id | none | `helms[]: {id, at}` |
 | `gangway` | ignored | none | `gangway[]: [x, y]`, one object per cell |

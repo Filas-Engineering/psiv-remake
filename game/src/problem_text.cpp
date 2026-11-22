@@ -67,6 +67,7 @@ const rules::TextTable& problemText() {
 			{"data.area_arrive_notice_after_default", "an arrive_notice entry after the one without from is never used"},
 			{"data.arrival_from_and_not_from", "arrival_from and arrival_not_from cannot both be given"},
 			{"data.arrival_from_without_arrival", "arrival_from and arrival_not_from need an arrival marker"},
+			{"data.arrival_followers_unused", "arrival_followers needs an arrival marker that the party lands on: a town with a return lands elsewhere"},
 			{"data.bad_leave_equipment", "leave_equipment '{0}' must be keep or bag"},
 			{"data.bad_machine_step_heal_fallen", "machine_step_heal_fallen '{0}' must be off, heal, stand, true or false"},
 			{"data.bad_map_character", "map rows use '.' for floor, '#' for wall, '~' for water, ':' for soft ground, '%' for a barrier and '=' for a counter"},

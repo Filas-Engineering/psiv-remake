@@ -189,7 +189,12 @@ Every CLI command is a library call, so a build pipeline can run them without th
 
 ## Changes a host must make
 
-Newest: towns registered by story and choice headers ([FORMAT.md](FORMAT.md), "Game state" and "Choices").
+Newest: a warp's follower placement ([FORMAT.md](FORMAT.md), "Game state").
+
+- `host.h`: `Action::followers`, a warp's `followers <placement>` (`stacked`, `behind`, `up`, `down`, `left` or `right`), empty without one. `describe(Action)` adds ` followers <placement>` to a warp that has one.
+- Scripts that use none of the new syntax keep their fingerprint and code.
+
+Before that: towns registered by story and choice headers ([FORMAT.md](FORMAT.md), "Game state" and "Choices").
 
 - `program.h`: `Op::register_town` (appended, name `register town`): `Instruction::name` the area, `number` 1 for `unregister town`. A `switch` over `Op` needs the new case.
 - `host.h`: `ChoiceRequest::header` (empty without one) and the virtual `Host::register_town(area, registered)`, whose default does nothing. `describe(ChoiceRequest)` adds ` header <text>` after the prompt; `collect_texts` gives the header the role `choice header`.

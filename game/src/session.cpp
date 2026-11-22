@@ -1,5 +1,6 @@
 #include "game/session.h"
 
+#include "game/capabilities.h"
 #include "game/encounters.h"
 
 #include "events/glossary.h"
@@ -772,6 +773,9 @@ public:
 		if (action.type == events::ActionType::warp) {
 			s_.actionRoute_.clear();
 			s_.leaveVehicleBehind();
+			if (const int index = action.followers.empty() ? -1 : gameEnumIndex("followers_arrive", action.followers); index >= 0) {
+				s_.walkedFollowers_ = static_cast<FollowersArrive>(index);
+			}
 			s_.enterArea(action.subject, action.target);
 		} else {
 			const double seconds = events::action_seconds(shown, names.durations, names.subjectDurations);
@@ -4405,6 +4409,7 @@ void Session::boardShip(const Port& port) {
 	const std::string from = port.id;
 	const Area& ship = *data_.area(port.ship);
 	emit(OutputKind::Notice, "game.boarded_ship", {ship.id});
+	walkedFollowers_ = ship.arrivalFollowers;
 	enterArea(ship.id, ship.arrival, world_.position);
 	world_.shipPort = from;
 	settleField();
@@ -4588,6 +4593,11 @@ rules::Message Session::travel(TravelKind kind, const std::string& destination, 
 	portId_.clear();
 	if (town && town->returnTo) {
 		arrivingFrom_ = town->id;
+		walkedFollowers_ = town->returnTo->followers;
+	} else if (town) {
+		walkedFollowers_ = town->arrivalFollowers;
+	} else if (kind == TravelKind::Port) {
+		walkedFollowers_ = data_.port(to.id)->followers;
 	}
 	enterAreaAt(to.area, to.cell);
 	if (turn) {

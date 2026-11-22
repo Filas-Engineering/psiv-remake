@@ -333,6 +333,16 @@ void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 	}
 }
 
+void readFollowers(JsonReader& reader, const JsonValue& json, const char* key, std::optional<FollowersArrive>& out) {
+	std::string word;
+	reader.text(json, key, word, false);
+	if (const int index = word.empty() ? -2 : gameEnumIndex("followers_arrive", word); index >= 0) {
+		out = static_cast<FollowersArrive>(index);
+	} else if (index == -1) {
+		reader.fail(json, "data.bad_followers_arrive", {word});
+	}
+}
+
 }
 
 rules::Result<Area> parseArea(const std::string& file, const std::string& text) {
@@ -513,13 +523,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			} else if (index == -1) {
 				reader.fail(e, "data.bad_exit_fires", {fires});
 			}
-			std::string followers;
-			reader.text(e, "followers", followers, false);
-			if (const int index = followers.empty() ? -2 : gameEnumIndex("followers_arrive", followers); index >= 0) {
-				exit.followers = static_cast<FollowersArrive>(index);
-			} else if (index == -1) {
-				reader.fail(e, "data.bad_followers_arrive", {followers});
-			}
+			readFollowers(reader, e, "followers", exit.followers);
 			checkCell(e, exit.at, "exit");
 			area.exits.push_back(exit);
 		}
@@ -746,6 +750,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		} else if (!facing.empty()) {
 			t.facing = parsed;
 		}
+		readFollowers(reader, *way, "followers", t.followers);
 		if (area.kind != owner) {
 			reader.fail(*way, wrongOwner, {});
 		}
@@ -754,6 +759,10 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	area.returnTo = target("return", gameKeys("area", "return"), "data.return_needs_place", AreaKind::Town, "data.return_not_town");
 	if (area.arrival.empty() && !area.returnTo && (!area.arrivalFrom.empty() || !area.arrivalNotFrom.empty())) {
 		reader.fail(json, "data.arrival_from_without_arrival", {});
+	}
+	readFollowers(reader, json, "arrival_followers", area.arrivalFollowers);
+	if (area.arrivalFollowers && (area.arrival.empty() || area.returnTo)) {
+		reader.fail(json, "data.arrival_followers_unused", {});
 	}
 	if (!area.arrival.empty() && !area.markers.count(area.arrival)) {
 		reader.fail(json, "data.arrival_marker_missing", {area.arrival});
@@ -770,6 +779,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			reader.text(p, "flag", port.flag, false);
 			reader.text(p, "ship", port.ship, false);
 			reader.text(p, "block_flag", port.blockFlag, false);
+			readFollowers(reader, p, "followers", port.followers);
 			if (!area.inside(port.at)) {
 				reader.fail(p, "data.not_on_map", {"port '" + port.id + "'"});
 			}

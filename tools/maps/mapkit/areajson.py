@@ -2,8 +2,8 @@
 
 import json
 
-TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "arrival_from", "arrival_not_from", "dungeon_exit", "arrive_notice",
-	"field_status", "field_poison", "field_paralysis", "name", "map", "markers", "exits", "hooks", "shops", "rests",
+TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "arrival_followers", "arrival_from", "arrival_not_from", "dungeon_exit", "return",
+	"arrive_notice", "field_status", "field_poison", "field_paralysis", "name", "map", "markers", "exits", "hooks", "shops", "rests",
 	"chests", "ports", "zones", "helms", "gangway", "changes", "conveyors", "counters", "platforms"]
 LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"]
 ENTRY_FIELDS = {
@@ -12,13 +12,14 @@ ENTRY_FIELDS = {
 	"shops": ["id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper", "voice", "name"],
 	"rests": ["id", "at", "cost", "keeper", "per_member", "voice", "name"],
 	"chests": ["id", "at", "flag", "items", "equipment", "money"],
-	"ports": ["id", "at", "marker", "flag", "ship", "block_flag"],
+	"ports": ["id", "at", "marker", "flag", "ship", "block_flag", "followers"],
 	"zones": ["id", "from", "to", "table", "visible", "random"],
 	"helms": ["id", "at"],
 	"changes": ["flag", "tile", "cells"],
 	"conveyors": ["cells", "direction", "step_ms", "require_flag", "block_flag"],
 }
 DUNGEON_EXIT_FIELDS = ["area", "at", "marker", "facing"]
+RETURN_FIELDS = ["area", "at", "marker", "facing", "followers"]
 STOCK_FIELDS = ["id", "require_flag", "block_flag"]
 TABLE_FIELDS = ["encounter", "weight"]
 VISIBLE_FIELDS = ["spawns", "cap", "detection_radius", "leash_radius", "chase_speed_percent", "chase_ms", "wander_speed_percent", "wander_percent"]
@@ -53,6 +54,8 @@ def normalize(area):
 		out["markers"] = dict(out["markers"])
 	if "dungeon_exit" in out:
 		out["dungeon_exit"] = _ordered(out["dungeon_exit"], DUNGEON_EXIT_FIELDS, "dungeon_exit", problems)
+	if "return" in out:
+		out["return"] = _ordered(out["return"], RETURN_FIELDS, "return", problems)
 	for field in LIST_FIELDS:
 		if field not in out:
 			continue

@@ -482,6 +482,18 @@ TEST(aWanderersTalkPointLoadsOnlyWhenItAnswersOnTheActor) {
 	const char* exit = R"({"id": "a", "map": ["...", "..."], "markers": {"start": [0, 0]}, "exits": [{"at": [1, 1], "to": "a", "marker": "start", "followers": "aside"}]})";
 	rules::Result<Area> badExit = parseArea("a.json", exit);
 	CHECK(!badExit.ok() && badExit.problems[0].message.key == "data.bad_followers_arrive");
+	const auto town = [](const std::string& keys) {
+		rules::Result<Area> parsed = parseArea("t.json", R"({"id": "t", "kind": "town", "map": ["...", "..."], "markers": {"start": [0, 0]}, )" + keys + "}");
+		return parsed.ok() ? std::string() : parsed.problems[0].message.key;
+	};
+	CHECK_EQ(town(R"("arrival": "start", "arrival_followers": "right")"), std::string());
+	CHECK_EQ(town(R"("return": {"area": "b", "marker": "gate", "followers": "behind"})"), std::string());
+	CHECK_EQ(town(R"("ports": [{"id": "p", "at": [1, 1], "marker": "start", "followers": "up"}])"), std::string());
+	CHECK_EQ(town(R"("arrival": "start", "arrival_followers": "aside")"), std::string("data.bad_followers_arrive"));
+	CHECK_EQ(town(R"("return": {"area": "b", "marker": "gate", "followers": "aside"})"), std::string("data.bad_followers_arrive"));
+	CHECK_EQ(town(R"("ports": [{"id": "p", "at": [1, 1], "marker": "start", "followers": "aside"}])"), std::string("data.bad_followers_arrive"));
+	CHECK_EQ(town(R"("arrival_followers": "up")"), std::string("data.arrival_followers_unused"));
+	CHECK_EQ(town(R"("arrival": "start", "arrival_followers": "up", "return": {"area": "b", "marker": "gate"})"), std::string("data.arrival_followers_unused"));
 }
 
 TEST(animationsMayGiveTheirLength) {

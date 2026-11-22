@@ -393,7 +393,8 @@ struct GameConfig {
 	// game.json `followers_arrive`: arrivals through an exit without its own `followers`, and off a gangway.
 	FollowersArrive followersArrive = FollowersArrive::Stacked;
 	// game.json `followers_arrive_other`: every other area entry (a script's or developer's warp, travel, boarding a ship,
-	// the new game). A load restores the saved trail and a battle's end keeps it.
+	// the new game) whose warp, `return`, port or `arrival_followers` sets none. A load restores the saved trail and a
+	// battle's end keeps it.
 	FollowersArrive followersArriveOther = FollowersArrive::Stacked;
 	// game.json `followers_on_exits`: the arrival line may place followers on exit cells, which fire only on the
 	// leader's own step; false ends it at the first exit cell.

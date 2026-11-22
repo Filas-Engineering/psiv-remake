@@ -153,6 +153,9 @@ std::string describe(const Action& action) {
 	case ActionType::face:
 	case ActionType::warp:
 		out += " " + action.subject + " " + action.target;
+		if (!action.followers.empty()) {
+			out += " followers " + action.followers;
+		}
 		break;
 	case ActionType::animate:
 		out += " " + action.subject + " " + action.target;

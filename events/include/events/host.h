@@ -93,6 +93,9 @@ struct Action {
 	// reached over `seconds` (0 cuts). camera_reset: back on the party leader over `seconds`.
 	// music_play: `fade <ms>` (above 0) or `cut` (0); -1 when the script gives neither and the game's own rule holds.
 	int fade_ms = -1;
+	// warp: `followers <placement>` (stacked, behind, up, down, left or right), where the game stands the followers on
+	// arrival; empty for the game's own rule.
+	std::string followers;
 	// show_actor, hide_actor: `target` may name a transition (`show <actor> with <animation>`), played for `seconds`.
 	// Reach the end state at once, with no transition, and report done
 	// immediately. Set when the interpreter rebuilds the screen after a skip

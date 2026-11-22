@@ -63,7 +63,7 @@ const std::vector<CommandInfo>& script_commands() {
 		{"var", {"var <name> = <integer>", "var <name> += <integer>", "var <name> -= <integer>"}, true, false},
 		{"vehicle", {"vehicle give <vehicle> <map> <marker>", "vehicle place <vehicle> <map> <marker>", "vehicle remove <vehicle>"}, false, false},
 		{"wait", {"wait <seconds>"}, true, true},
-		{"warp", {"warp <map> <marker>"}, false, false},
+		{"warp", {"warp <map> <marker> [followers <placement>]"}, false, false},
 		{"while", {"while <condition> ... end"}, true, false},
 	};
 	return commands;
