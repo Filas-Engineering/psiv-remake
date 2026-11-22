@@ -77,6 +77,8 @@ public sealed class UiScreenLayout
 	// A battle layout's command rows per step with `command_top` (`command_rows`: `top`, `member`; a step left out lists all).
 	public List<string>? TopCommands { get; set; }
 	public List<string>? MemberCommands { get; set; }
+	// A vehicle's rows in a vehicle battle (`command_rows.vehicle`), with or without `command_top`.
+	public List<string>? VehicleCommands { get; set; }
 
 	public bool HasSlot(string slot) => Windows.Any(w => HasSlot(w.Elements, slot));
 
@@ -329,7 +331,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["screen"] = ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows"],
 		["screen.places[]"] = ["slot", "label"],
 		["screen.entries[]"] = ["page", "label"],
-		["screen.command_rows"] = ["top", "member"],
+		["screen.command_rows"] = ["top", "member", "vehicle"],
 		["screen.options[]"] = ["id", "when"],
 		["screen.tags{}"] = ["action", "id", "slot", "values", "default", "cases"],
 		["screen.tags{}.cases[]"] = ["value", "from", "to", "action", "id", "ids", "slot"],
@@ -708,6 +710,28 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 				{
 					screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
 				}
+				else if (p.Name == "narration_wait")
+				{
+					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("press" or "auto"))
+					{
+						Problem($"params.{p.Name}", "must be \"press\" or \"auto\": whether narration lines wait for a press");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
+					}
+				}
+				else if (p.Name == "followers_arrive")
+				{
+					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("stacked" or "behind"))
+					{
+						Problem($"params.{p.Name}", "must be \"stacked\" or \"behind\": where followers stand when the party arrives");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
+					}
+				}
 				else if (p.Name == "command_axis")
 				{
 					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("row" or "column"))
@@ -948,8 +972,12 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 				{
 					screen.MemberCommands = IdList(member, "command_rows.member", UiFields.MemberCommands, "member commands");
 				}
+				if (commands.TryGetProperty("vehicle", out JsonElement vehicle))
+				{
+					screen.VehicleCommands = IdList(vehicle, "command_rows.vehicle", UiFields.VehicleCommands, "vehicle commands");
+				}
 				bool topOn = screen.Params.TryGetValue("command_top", out UiExpr? on) && (on.Names.Count > 0 || on.Eval(null!).Int != 0);
-				if (!topOn)
+				if (!topOn && (screen.TopCommands is not null || screen.MemberCommands is not null))
 				{
 					Problem("command_rows", "needs the param 'command_top' on: the rows are per step of the top-level command flow");
 				}

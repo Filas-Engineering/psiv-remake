@@ -1,0 +1,47 @@
+# Followers on arrival with the field layout's `followers_arrive` "behind" (scripts/make_scene_assets.py's SCENE copy,
+# its alt/field_behind.json swapped in, so hot reload too): after an exit, a warp and a load each follower stands a cell
+# behind the one before, against the leader's facing, at once; a cell that cannot be walked leaves the rest stacked on
+# the leader. Without the param (field_trail.txt) they stack as before. Screenshots under build/shots/arrive/ with --window.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+assets swap ui/field.json alt/field_behind.json
+# An exit: Tidewater's east gate to the reed path's west gate, facing east; the cell behind the exit's is the map's edge.
+cmd walk east_gate
+hold Right 20
+wait 30
+expect state leader reed_path 1 4
+expect actor fighter 1 4 east
+expect actor mystic 0 4 east
+expect actor medic hidden
+shot build/shots/arrive/exit.png
+# A warp within the area.
+dev warp reed_path 10 4
+wait 5
+expect actor fighter 10 4 east
+expect actor mystic 9 4 east
+expect actor medic 8 4 east
+shot build/shots/arrive/warp.png
+# A load from the title, saved two cells further on.
+cmd walk 12 4
+cmd menu
+cmd save manual_1
+cmd close
+dev warp reed_path 5 6
+wait 5
+cmd title
+wait 3
+cmd load manual_1
+wait 5
+expect state leader reed_path 12 4
+expect actor mystic 11 4 east
+expect actor medic 10 4 east
+shot build/shots/arrive/load.png

@@ -693,7 +693,7 @@ def items_broken(broken):
 	change("sound_test", lambda d: d.update({"start": True, "options": ["new_game"]}))
 	change("menu_equip", lambda d: d.update({"places": [{"slot": "tail"}, {"slot": "head", "label": ""}, {"slot": "head"}, {"label": "ui.stat.defense"}]}))
 	change("menu_status", lambda d: d.update({"profile": ["name", "shoe_size", "name"], "places": [{"slot": "head"}]}))
-	change("field", lambda d: d.update({"params": {"arrive_toast": 0, "area_banners": 0}}))
+	change("field", lambda d: d.update({"params": {"arrive_toast": 0, "area_banners": 0, "followers_arrive": "beside"}}))
 	change("dialogue", lambda d: d["tags"].update({"snd": {"cases": [{"value": "1", "from": 2, "action": "cue"}, {"from": 5, "to": 1, "action": "music"},
 		{"from": 1, "to": 3, "action": "music_stop", "ids": ["title"]}, {"value": "4"}]}}))
 
@@ -716,7 +716,7 @@ def menus_broken(broken):
 		{"page": "dev", "colour": "red"}]}))
 	change("shop", lambda d: d.update({"entries": [{"page": "items"}]}))
 	change("menu_system", lambda d: d.update({"rows": ["save", "teleport", "save"]}))
-	change("battle_side", lambda d: d.update({"command_rows": {"top": ["fight", "dance"], "member": [], "side": 1}}))
+	change("battle_side", lambda d: d.update({"command_rows": {"top": ["fight", "dance"], "member": [], "side": 1, "vehicle": ["attack", "fly"]}}))
 
 
 def dialogue_items_broken(broken):
@@ -731,12 +731,13 @@ def dialogue_items_broken(broken):
 
 	change("name_entry", lambda d: d.update({"params": {"pad_cell_w": "cell_size", "pad_spacing": 3}}))
 	change("shop", lambda d: d.update({"params": {"steps": "flow"}}))
-	change("dialogue", lambda d: d["params"].update({"narration_when": "starts_with(line_key)"}))
+	change("dialogue", lambda d: d["params"].update({"narration_when": "starts_with(line_key)", "narration_wait": "later"}))
 
 	def styles(d):
 		d["params"]["dev_badge_x"] = -5
 		d["params"]["dev_scale_bitmap"] = 2
 		d["timings"]["music_fade_ms"] = -1
+		d["timings"]["game_over_return_ms"] = -1
 	change("styles", styles)
 	m = json.loads((broken / "assets.json").read_text())
 	m["ui"]["page_arrow"] = "ui/no_arrow.png"

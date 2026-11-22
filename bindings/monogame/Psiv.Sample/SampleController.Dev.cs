@@ -467,6 +467,7 @@ public sealed partial class SampleController
 		if (_dataDir is not null)
 		{
 			_data = GameData.Load(_s, _dataDir);
+			LogDataProblems();
 		}
 		_actorIds = [.. _s.ActorIds()];
 		_gameInfo = null;

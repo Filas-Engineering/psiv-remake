@@ -56,6 +56,7 @@ public static class UiFields
 		["list_repeat_ms"] = 0,
 		["run_speed_percent"] = 200,
 		["music_fade_ms"] = 800,
+		["game_over_return_ms"] = 0,
 	};
 
 	// Numbers the code's own drawing reads (styles.json `params`), with the sample's values as defaults: the field's cell
@@ -113,6 +114,12 @@ public static class UiFields
 
 	public static readonly string[] MemberCommands = ["attack", "technique", "skill", "item", "defend", "escape", "macro", "auto"];
 
+	// A vehicle's rows (`command_rows.vehicle`): its attack, its skills (one row each), the party's macros, auto-battle and
+	// escape; without the list the first, second and last.
+	public static readonly string[] VehicleCommands = ["attack", "skills", "macro", "auto", "escape"];
+
+	public static readonly string[] VehicleDefault = ["attack", "skills", "escape"];
+
 	// The places an Equip page's `places` may list, in the built-in order.
 	public static readonly string[] EquipPlaces = ["weapon", "left_hand", "head", "body", "arms", "accessory"];
 
@@ -154,12 +161,12 @@ public static class UiFields
 	private static readonly string[] BattleSlots = ["anchor", "effects", "icons", "stage", "target_pointer"];
 
 	private static readonly string[] BattleParams = ["backdrop_h", "command_axis", "command_top", "critical_marks", "critical_marks_enemy", "critical_marks_party", "dev_badge_y", "effect_scale", "effect_scale_large", "effectiveness_marks", "effectiveness_marks_enemy", "effectiveness_marks_party", "enemy_back_foot", "enemy_bar_h",
-		"enemy_bar_w", "enemy_bar_y", "enemy_bars", "enemy_front_foot", "enemy_icons_y", "enemy_labels", "enemy_rank_spacing_max", "enemy_rank_span", "enemy_ranks_interleaved",
+		"enemy_bar_w", "enemy_bar_y", "enemy_bars", "enemy_figures", "enemy_front_foot", "enemy_icons_y", "enemy_labels", "enemy_rank_spacing_max", "enemy_rank_span", "enemy_ranks_interleaved",
 		"enemy_row_foot", "enemy_row_max", "enemy_row_spacing_max", "enemy_row_span", "enemy_row_stagger", "enemy_size",
 		.. Enumerable.Range(0, 8).SelectMany(n => new[] { $"enemy_slot_{n}_foot", $"enemy_slot_{n}_x" }),
-		"enemy_statuses", "enemy_x", "ground_h", "icon_gap", "icon_size", "label_h", "label_max_width", "label_pad", "label_text_y", "label_y", "log_rows", "log_wrap_margin",
+		"enemy_statuses", "enemy_x", "game_over_confirm", "ground_h", "icon_gap", "icon_size", "label_h", "label_max_width", "label_pad", "label_text_y", "label_y", "log_rows", "log_wrap_margin",
 		"miss_marks", "miss_marks_enemy", "miss_marks_party", "motion_percent", "number_critical_size", "number_gap", "number_member_y", "number_rise", "number_size", "number_tp_size", "number_word_size", "number_y", "party_dx",
-		"party_dy", "party_foot", "party_size",
+		"party_dy", "party_figures", "party_foot", "party_size",
 		.. Enumerable.Range(0, 5).SelectMany(n => new[] { $"party_slot_{n}_foot", $"party_slot_{n}_x" }),
 		"party_x", "pointer_bob", "pointer_member_y", "pointer_size", "pointer_y", "result_page_lines", "stage_bottom", "step_aside", "step_gap",
 		"step_margin", "vehicle_foot", "vehicle_size", "vehicle_x"];
@@ -192,13 +199,14 @@ public static class UiFields
 			["hud", "area", "status", "banner_visible", "banner_title", "banner_kind", "banner_alpha", "banner_drop", "banner_ms", "banner_left_ms", "toasts", "hint",
 				"prompt_visible", "prompt_key", "prompt_text", "prompt_x", "prompt_y", "prompt_ready"],
 			itemFields: ["text", "alpha", "box_alpha", "width"],
-			parameters: ["area_banner", "arrive_toast"]),
+			parameters: ["area_banner", "arrive_toast", "followers_arrive"]),
 		["dialogue"] = new("dialogue",
 			["banner_visible", "banner_title", "banner_kind", "banner_alpha", "banner_drop", "banner_ms", "banner_left_ms", "top", "box_visible", "has_line", "speaker",
 				"portrait", "line", "revealed", "all_shown", "line_step", "hint", "next_arrow_ms", "arrow", "has_choice", "prompt", "options", "cursor", "picture",
 				"picture_w", "picture_h", "pictures", "narration_visible", "narration_rows", "narration_all_shown", "shown_ms", "line_key", "picture_top", "picture_names", "page_arrow"],
 			itemFields: ["picture", "picture_w", "picture_h", "text", "full", "shown"],
-			parameters: ["box_h", "box_margin", "box_top", "picture_stack", "narration_lines", "narration_cps", "narration_delay_ms", "narration_width", "narration_when"],
+			parameters: ["box_h", "box_margin", "box_top", "picture_stack", "narration_lines", "narration_cps", "narration_delay_ms", "narration_hold_ms", "narration_wait", "narration_width",
+				"narration_when"],
 			tags: true),
 		["pause"] = new("pause",
 			["hud", "area", "status", "rows", "cursor", "hint"],

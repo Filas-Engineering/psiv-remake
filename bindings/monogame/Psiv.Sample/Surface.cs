@@ -491,7 +491,40 @@ public sealed class RecordingSurface : IDrawSurface
 	public void BeginFrame()
 	{
 		FrameText.Clear();
+		_ops.Clear();
 		_digest = 14695981039346656037ul;
+	}
+
+	// The frame's fills and pictures in order, each with the clip it was drawn under, for PixelAt. Text is left out.
+	private readonly List<(int Image, Rectangle Rect, Color Color, bool FlipX, Rectangle? Clip)> _ops = [];
+	private Rectangle? _clip;
+
+	// The color the last frame left at a pixel of the logical frame, as the window would draw it without its text:
+	// every fill and picture over it blended in order, pictures sampled nearest-neighbor and tinted. `#rrggbb`.
+	// A picture's pixel, as made.
+	public Color ImagePixel(int image, int x, int y) => _pixels[image].Pixels[y * _pixels[image].W + x];
+
+	public string PixelAt(int x, int y)
+	{
+		Color d = Color.Transparent;
+		foreach ((int image, Rectangle rect, Color color, bool flipX, Rectangle? clip) in _ops)
+		{
+			if (!rect.Contains(x, y) || clip is { } c && !c.Contains(x, y))
+			{
+				continue;
+			}
+			Color src = color;
+			if (image >= 0)
+			{
+				(int iw, int ih, Color[] pixels) = _pixels[image];
+				int u = (x - rect.X) * iw / rect.Width, v = (y - rect.Y) * ih / rect.Height;
+				Color p = pixels[v * iw + (flipX ? iw - 1 - u : u)];
+				src = new Color(p.R * color.R / 255, p.G * color.G / 255, p.B * color.B / 255, p.A * color.A / 255);
+			}
+			int keep = 255 - src.A;
+			d = new Color(src.R + d.R * keep / 255, src.G + d.G * keep / 255, src.B + d.B * keep / 255, src.A + d.A * keep / 255);
+		}
+		return $"#{d.R:x2}{d.G:x2}{d.B:x2}";
 	}
 
 	public void EndFrame() => Digests.Add(_digest);
@@ -514,6 +547,7 @@ public sealed class RecordingSurface : IDrawSurface
 
 	public void Fill(int x, int y, int w, int h, Color color)
 	{
+		_ops.Add((-1, new Rectangle(x, y, w, h), color, false, _clip));
 		Rects++;
 		Mix(1, x, y, w, h, color.PackedValue);
 	}
@@ -559,6 +593,7 @@ public sealed class RecordingSurface : IDrawSurface
 			throw new ArgumentOutOfRangeException(nameof(image));
 		}
 		Images++;
+		_ops.Add((image, new Rectangle(x, y, w, h), tint, flipX, _clip));
 		Mix(9, (long)_contents[image], x, y, w, h, tint.PackedValue, flipX ? 1 : 0);
 	}
 
@@ -579,6 +614,7 @@ public sealed class RecordingSurface : IDrawSurface
 			throw new ArgumentOutOfRangeException(nameof(image));
 		}
 		Images++;
+		_ops.Add((image, new Rectangle(x, y, w, h), tint, false, _clip));
 		Mix(3, (long)_contents[image], x, y, w, h, tint.PackedValue);
 	}
 
@@ -589,6 +625,7 @@ public sealed class RecordingSurface : IDrawSurface
 			throw new InvalidOperationException($"a clip of {w}x{h} inside another clip, or an empty one");
 		}
 		_clipped = true;
+		_clip = new Rectangle(x, y, w, h);
 		Mix(4, x, y, w, h);
 	}
 
@@ -599,6 +636,7 @@ public sealed class RecordingSurface : IDrawSurface
 			throw new InvalidOperationException("an unclip without a clip");
 		}
 		_clipped = false;
+		_clip = null;
 		Mix(5);
 	}
 

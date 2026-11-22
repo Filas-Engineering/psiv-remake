@@ -54,6 +54,8 @@ public sealed partial class SampleController
 		public readonly List<string> Log = [];
 		public bool Auto;
 		public bool LogShown;
+		// Frame time on the result screen, for a game over's return to the title.
+		public int EndedMs;
 	}
 
 	private readonly BattleUi _battle = new();
@@ -85,16 +87,17 @@ public sealed partial class SampleController
 		public bool Usable => Option?.Usable ?? true;
 	}
 
-	// A vehicle has only its attack, its skills and escape; the members have the whole menu.
+	// A vehicle has its attack, its skills and escape, or the battle layout's `command_rows.vehicle`; the members have the
+	// whole menu.
 	private List<CommandRow> CommandRows()
 	{
 		IReadOnlyList<Combatant> all = StageCombatants();
 		string vehicle = StageInfo()?.Vehicle ?? "";
 		if (vehicle.Length > 0 && _battle.Actor < all.Count && all[_battle.Actor].Id == vehicle && _stage is null)
 		{
-			return [new("attack", T("ui.battle.command.attack")),
-				.. _s.BattleOptions(_battle.Actor).Where(o => o.AbilityKind == AbilityKind.Skill).Select(o => new CommandRow("skill", OptionText(o), o)),
-				new("escape", T("ui.battle.command.escape"))];
+			return [.. (Layout.Screen(BattleScreen).VehicleCommands ?? [.. UiFields.VehicleDefault]).SelectMany(c => c == "skills"
+				? _s.BattleOptions(_battle.Actor).Where(o => o.AbilityKind == AbilityKind.Skill).Select(o => new CommandRow("skill", OptionText(o), o))
+				: [new CommandRow(c, T("ui.battle.command." + c))])];
 		}
 		return [.. CommandMenu.Select(c => new CommandRow(c, T("ui.battle.command." + c)))];
 	}
@@ -277,6 +280,7 @@ public sealed partial class SampleController
 				{
 					b.Phase = BattlePhase.Ended;
 					b.ResultPage = 0;
+					b.EndedMs = 0;
 				}
 				else if (b.Auto)
 				{
@@ -289,11 +293,20 @@ public sealed partial class SampleController
 			}
 			break;
 		case BattlePhase.Ended:
-			if (_outro is null && input.Confirm && b.ResultPage + 1 < ResultPages())
+			// A game over returns to the title by itself after the timing `game_over_return_ms` (0 waits), and on Confirm
+			// or Back unless the battle layout's `game_over_confirm` is 0.
+			bool gameOver = _s.BattleInfo()?.GameOver == true;
+			b.EndedMs += dtMs;
+			bool confirms = !gameOver || Ui.Param(BattleScreen, "game_over_confirm", UiData(), 1) != 0;
+			if (_outro is null && gameOver && Timing("game_over_return_ms") is > 0 and int back && b.EndedMs >= back)
+			{
+				EndBattleScreen();
+			}
+			else if (_outro is null && confirms && input.Confirm && b.ResultPage + 1 < ResultPages())
 			{
 				b.ResultPage++;
 			}
-			else if (_outro is null && (input.Confirm || input.Back))
+			else if (_outro is null && confirms && (input.Confirm || input.Back))
 			{
 				EndBattleScreen();
 			}

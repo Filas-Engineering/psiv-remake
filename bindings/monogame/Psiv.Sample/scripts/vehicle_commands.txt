@@ -1,0 +1,41 @@
+# Macro and Auto in a vehicle battle's command rows (scripts/make_scene_assets.py's SCENE copy, whose battle layouts list
+# `command_rows.vehicle`: attack, the skills, macro, auto, escape). Aboard the reed skimmer: a first battle where the
+# Macro row applies the party's first macro through ApplyMacro (with the fallback for the steps the vehicle cannot run)
+# and the round plays; then Auto starts auto-battle (StartAuto) and the battle plays to its end. Screenshots under
+# build/shots/vehicle_commands/ with --window.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev vehicle reed_skimmer reed_path skimmer_front
+cmd walk 13 4
+cmd walk 9 6
+cmd walk 16 6
+press Right
+wait 3
+press Enter
+wait 4
+expect state aboard reed_skimmer
+battlelayout side
+dev battle training
+waitstate 300 battlephase Command
+expect statehas battlemenu Macro
+expect statehas battlemenu Auto
+shot build/shots/vehicle_commands/rows.png
+press Down 3
+expect statehas battlemenu [Macro]
+press Enter
+expect state battlephase Macro
+shot build/shots/vehicle_commands/macros.png
+press Enter
+waitstate 600 battlephase Command
+press Down 4
+expect statehas battlemenu [Auto]
+press Enter
+expect state battlephase Playback
+waitstate 3000 battlephase Ended
+press Enter
+waitstate 300 battlephase -
+expect state aboard reed_skimmer

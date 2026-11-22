@@ -1,0 +1,23 @@
+# The real-time glide on Belt Yard (scripts/make_belt_data.py), whose step time of 262.5 ms lands on the session's
+# 50 ms ticks only at 300: each step glides until the tick the session lands it on (FieldInfo.StepLandsInUs), so the
+# leader never stands at a cell's end waiting, and the next step starts on the frame it lands. The `glide` probe reads the
+# library's timing. With --window --pacing-log the run measures the window's frame pacing.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+fieldinput realtime
+dev warp belt_yard 1 1
+wait 10
+expect statehas glide lands
+hold Right 30
+expect state walkstep east 3 1 206/300 100%
+hold Right 20
+expect state walkstep east 4 1 226/300 100%
+shot build/shots/glide/walking.png
+hold Right 40
+wait 30
+expect state leader belt_yard 6 1
+expect state walkstep -

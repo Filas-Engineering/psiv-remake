@@ -1,0 +1,50 @@
+# The keeper's line with its parameters (the hall data copy, scripts/make_scene_data.py; the SCENE asset copy's
+# alt/shop_steps.json swapped in): Tidewater's stall speaks with `voice.hall_stall`, {0} the shop's kind word, {1} the
+# item, {2} the count, {3} the total and {4} the price of one; buying confirms and thanks with `confirm_buy` and
+# `thanks_buy`, selling confirms with the plain `confirm` (it has no `confirm_sell`) and thanks with `thanks_sell`.
+# Screenshots under build/shots/shop_voice/ with --window.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+assets swap ui/shop.json alt/shop_steps.json
+wait 300
+cmd walk stall_front
+press Up
+wait 3
+press Enter
+expect screen Shop
+wait 2
+expect state voice voice.hall_stall.welcome
+expect state uifield.shop.voice_line Welcome to the Shop stall.
+press Enter
+wait 2
+press Enter
+press Right 2
+wait 2
+expect state voice voice.hall_stall.confirm_buy
+expect state uifield.shop.voice_line 3 Tonic at 8 each, 24 in all?
+shot build/shots/shop_voice/confirm_buy.png
+press Enter
+wait 2
+expect state voice voice.hall_stall.thanks_buy
+expect state uifield.shop.voice_line 3 Tonic, 24 paid. Thank you!
+press Enter
+wait 2
+press Escape
+wait 2
+press Down
+press Enter
+wait 2
+press Enter
+press Right
+wait 2
+expect state voice voice.hall_stall.confirm
+expect state uifield.shop.voice_line Part with 2 Tonic for 8?
+press Enter
+wait 2
+expect state voice voice.hall_stall.thanks_sell
+expect state uifield.shop.voice_line 8 for 2 Tonic. A fair trade.
+shot build/shots/shop_voice/thanks_sell.png

@@ -323,7 +323,7 @@ A picture per command a member can choose for the round: `attack`, `technique`, 
 "pictures": {"chart": "pictures/chart.png", "tower": "pictures/tower.png"}
 ```
 
-Still pictures by name (letters, digits and `_`), which the dialogue's `picture` tags show in the dialogue layout's picture window ([`ui-layout.md`](ui-layout.md), "The `tags` table"); `{picture:chart}` shows the first. Any size; the built-in window draws it at its size in pixels (`picture_w`, `picture_h`). Asset key `picture:NAME`; the state probe `picture` reads the name shown. Nothing generated has one.
+Still pictures by name (letters, digits and `_`), which the dialogue's `picture` tags and the scripts' `picture show` (game.json's `presentation.pictures`) show in the dialogue layout's picture window, as one stack ([`ui-layout.md`](ui-layout.md), "The `tags` table" and "Dialogue: cases and the picture stack"); `{picture:chart}` shows the first. A script's picture without an entry is logged once and not drawn. Any size; the built-in window draws it at its size in pixels (`picture_w`, `picture_h`). Asset key `picture:NAME`; the state probe `picture` reads the name shown. Nothing generated has one.
 
 ### keepers
 
@@ -355,6 +355,7 @@ Whole-area pictures in place of tile drawing, by area id. Without the section ev
 * Map changes by flag: the picture shows the map as written. Each frame, for each change of the area in data order whose flag is set, a cell of that change shows the change's picture (`changes` above, or `maps/AREA@FLAG.png`) cut out at that cell, a later change winning a cell, as in the game. Any other cell whose terrain is not as written (a change without a picture, a barrier a vehicle broke) is drawn from the area's tileset, as without a picture. Only the changed cells are cut from a change's picture; the rest of it is never drawn.
 * `enabled: false` loads none of it and turns the file convention off (the export writes it so: a still picture cannot reproduce the water's frames, so the export's map pictures are a starting point, not a round trip). An explicit entry replaces the convention for its area. A picture in `maps/` that neither an entry nor the convention names is a problem (a misspelled area, most likely).
 * A change's picture or an above picture without a ground picture is a problem; the ground is required.
+* The above picture covers everything sorted by row wherever it is opaque, standing or mid-step: the party and its followers, a vehicle parked or ridden, script actors (one at its talk point's `actor_at` too), wanderers, visible enemies and the points' objects. Only the speech bubbles, the `!` marks and the pose marks go over it. The probe `abovecover` checks it pixel by pixel; `scripts/above_cover.txt` plays Wren Yard and Wren Hollow under a checkered above picture.
 * Asset keys: `map:AREA`, `map:AREA:above`, `map:AREA@FLAG`. The state probe `fieldpicture` reads `AREA [above] patched N tiled N` (cells drawn from change pictures and from tiles in the last frame) or `-`.
 
 ### objects

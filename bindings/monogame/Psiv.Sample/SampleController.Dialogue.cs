@@ -50,6 +50,36 @@ public sealed partial class SampleController
 	private readonly List<string> _pictureStack = [];
 
 	private bool PictureStack => Ui.Param("dialogue", "picture_stack", UiData(), 0) != 0;
+	// The script's story pictures (GameSession.Pictures) already reported as lacking an asset picture, once a run.
+	private readonly HashSet<string> _storyPictureProblems = [];
+
+	// The one picture stack, bottom first: the script's story pictures in the session's order (saved, and up over the
+	// field until a script hides them), then the dialogue tags' pictures (gone with the event) that the script has not
+	// put up; the top one is last.
+	private List<string> StoryPictures()
+	{
+		IReadOnlyList<string> script = _s.Mode is Mode.Field or Mode.Event ? _s.Pictures() : [];
+		return [.. script, .. _pictureStack.Where(name => !script.Contains(name))];
+	}
+
+	// The stack's pictures the assets have, as the layout's `pictures` items, the top last; a script's picture the assets
+	// lack is a problem, logged once.
+	private List<int> StoryPictureImages(Art art, List<string> names)
+	{
+		var images = new List<int>();
+		foreach (string name in names)
+		{
+			if (art.NamedPicture(name) is int image)
+			{
+				images.Add(image);
+			}
+			else if (_storyPictureProblems.Add(name))
+			{
+				_log($"picture problem: no picture '{name}' in the assets' pictures for the script's story picture");
+			}
+		}
+		return images;
+	}
 	// The `{portrait:ID:EXPRESSION}` ids already reported as lacking their expression, once a run.
 	private readonly HashSet<string> _portraitProblems = [];
 	// The surface the last frame drew on, which measures the box's text between frames, and the box it last fitted.
@@ -444,6 +474,12 @@ public sealed partial class SampleController
 			UpdateNarration(narrated, dtMs, input);
 			return;
 		}
+		if (_narrationHeld && _narration.Count > 0 && (_s.Line() is not null || _s.Choice() is not null))
+		{
+			_narrationHeld = !input.Confirm;
+			return;
+		}
+		_narrationHeld = false;
 		_narration.Clear();
 		if (_s.Line() is { } line)
 		{
@@ -521,15 +557,28 @@ public sealed partial class SampleController
 	{
 		bool field = DrawField(s, art);
 		DrawDarkness(s, "dialogue");
-		int y = DialogueTop(s, field);
+		DrawDialogueLayer(s, t, art, DialogueTop(s, field), _s.Line() is { } said && IsNarration(said) || _narrationHeld && _narration.Count > 0);
+	}
+
+	// The script's story pictures over the field outside an event, through the dialogue layout with no box; nothing is
+	// drawn while there are none, so the dialogue layout's windows stay off the field.
+	private void DrawFieldPictures(IDrawSurface s, IDrawSurface t, Art art)
+	{
+		if (_s.Pictures().Count > 0)
+		{
+			DrawDialogueLayer(s, t, art, DialogueTop(s, true), false, boxless: true);
+		}
+	}
+
+	private void DrawDialogueLayer(IDrawSurface s, IDrawSurface t, Art art, int y, bool narrating, bool boxless = false)
+	{
 		// Between lines (a script actor walking, a fade) the field shows without an empty box.
-		bool narrating = _s.Line() is { } said && IsNarration(said);
-		bool box = !narrating && (_s.LinePending || _s.Choice() is not null);
+		bool box = !boxless && !narrating && (_s.LinePending || _s.Choice() is not null);
 		if (box)
 		{
 			_dialogueAt = y > s.Height / 2 ? "bottom" : "top";
 		}
-		UiContext ctx = SetBanner(UiData(), y > s.Height / 2 && _panels.Count == 0)
+		UiContext ctx = SetBanner(UiData(), !boxless && y > s.Height / 2 && _panels.Count == 0)
 			.Set("top", y)
 			.Set("box_visible", box)
 			.Set("next_arrow_ms", Timing("next_arrow_ms"));
@@ -553,11 +602,13 @@ public sealed partial class SampleController
 			.Set("prompt", choice is null ? "" : choice.Prompt.Length == 0 ? T("ui.dialogue.choose") : choice.Prompt)
 			.Set("options", choice?.Options.ToList() ?? [])
 			.Set("cursor", _cursor);
-		int picture = _picture.Length > 0 ? art.NamedPicture(_picture) ?? -1 : -1;
+		List<string> names = StoryPictures();
+		List<int> images = StoryPictureImages(art, names);
+		int picture = names.Count > 0 && art.NamedPicture(names[^1]) is int top ? top : -1;
 		RouteFields(ctx, _s.Line()).Set("picture", picture)
 			.Set("picture_w", picture >= 0 ? art.SizeOf(picture).W : 0)
 			.Set("picture_h", picture >= 0 ? art.SizeOf(picture).H : 0)
-			.Set("pictures", _pictureStack.Select(name => art.NamedPicture(name) ?? -1).Where(image => image >= 0).Select(image => new UiContext()
+			.Set("pictures", images.Select(image => new UiContext()
 				.Set("picture", image).Set("picture_w", art.SizeOf(image).W).Set("picture_h", art.SizeOf(image).H)).ToList());
 		// The wrapped line's probe, measured while the dialogue's font draws it: the line count, then each line's width.
 		var widths = new List<int>();
@@ -595,11 +646,11 @@ public sealed partial class SampleController
 		}
 		if (key == "picture")
 		{
-			return _picture.Length > 0 ? _picture : "-";
+			return StoryPictures() is { Count: > 0 } up ? up[^1] : "-";
 		}
 		if (key == "pictures")
 		{
-			return _pictureStack.Count > 0 ? string.Join(" ", _pictureStack) : "-";
+			return StoryPictures() is { Count: > 0 } stack ? string.Join(" ", stack) : "-";
 		}
 		if (line is null)
 		{

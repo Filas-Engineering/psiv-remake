@@ -9,8 +9,9 @@ namespace Psiv.Sample;
 // `battle_scripted` for an event's battle, `title`, and nothing on a battle's result screen.
 public sealed partial class SampleController
 {
-	// The layout's `music_fade_ms`: a track's cross-fade into the next, 0 cutting.
-	private int CrossfadeMs => Timing("music_fade_ms");
+	// A track's cross-fade into the next, 0 cutting: game.json's `presentation.music.fade_ms` when it gives one, else the
+	// layout's `music_fade_ms`.
+	private int CrossfadeMs => (_gameInfo ??= _s.GameInfo()).MusicFadeMs is >= 0 and int data ? data : Timing("music_fade_ms");
 	private const int StopFadeMs = 150;
 	// Rate limits: one reveal tick per this much frame time, and one footstep per this much.
 	private const int StepCueMs = 200;
@@ -23,6 +24,8 @@ public sealed partial class SampleController
 	private int _lastTextTickMs = int.MinValue / 2;
 	private int _lastStepMs = int.MinValue / 2;
 	private (string Area, int X, int Y) _leaderCell;
+	// The area the exit sound was last checked in.
+	private string _soundArea = "";
 
 	public IAudioOut Audio => _audio;
 
@@ -58,8 +61,9 @@ public sealed partial class SampleController
 		switch (a.Type)
 		{
 		case ActionType.MusicPlay:
+			// The script's own `fade <ms>` or `cut` (FadeMs), else the game's fade.
 			_scriptMusic = a.Subject;
-			_audio.PlayMusic(a.Subject, fade);
+			_audio.PlayMusic(a.Subject, a.Instant ? 0 : a.FadeMs >= 0 ? a.FadeMs : fade);
 			return 0;
 		case ActionType.MusicStop:
 			_scriptMusic = "";
@@ -182,6 +186,15 @@ public sealed partial class SampleController
 		}
 		_refused = false;
 
+		// The exit's `sound` as the party arrives through it.
+		if (_s.FieldInfo() is { } arrived && arrived.AreaId != _soundArea)
+		{
+			if (_soundArea.Length > 0 && arrived.ExitSound.Length > 0)
+			{
+				_audio.PlayCue(arrived.ExitSound);
+			}
+			_soundArea = arrived.AreaId;
+		}
 		if (after == Screen.Field && _s.FieldInfo() is { } field)
 		{
 			(string, int, int) cell = (field.AreaId, field.LeaderX, field.LeaderY);

@@ -44,7 +44,8 @@ public sealed partial class SampleController
 		// Scenes, sound and warps have their own presentation; the length is what the event waits, 0 for done at once.
 		int? ownMs = a.Type switch
 		{
-			ActionType.PanelShow or ActionType.PanelHide or ActionType.PanelClear or ActionType.CameraCut or ActionType.CameraMove or ActionType.Shake => PresentScene(a),
+			ActionType.PanelShow or ActionType.PanelHide or ActionType.PanelClear or ActionType.CameraCut or ActionType.CameraMove or ActionType.Shake or ActionType.CameraTo
+				or ActionType.CameraReset => PresentScene(a),
 			ActionType.MusicPlay or ActionType.MusicStop or ActionType.MusicFade or ActionType.AmbientPlay or ActionType.AmbientStop or ActionType.Sound => PresentAudio(a),
 			// The new area's banner shows the arrival; the session has already moved the party.
 			ActionType.Warp => 0,

@@ -85,7 +85,8 @@ Milliseconds unless said. Defaults are the sample's values.
 | `toast_ms`, `toast_fade_ms` | 4000, 400 | how long a notice stays, and its fade at the end |
 | `panel_transition_ms` | 350 | a comic panel's slide when its action names no duration |
 | `list_repeat_delay_ms`, `list_repeat_ms` | 0, 0 | a held direction repeats in every screen but the field and dialogue after the delay, then every `list_repeat_ms` (0: no repeat) |
-| `music_fade_ms` | 800 | a track's cross-fade into the next on an area change, a script's music, a battle's start and end, and the dialogue's `music` tag (also the ambient loop's); 0 cuts (`"timings": {"music_fade_ms": 0}`). Stopping the music keeps its 150 ms fade |
+| `music_fade_ms` | 800 | the fallback when `game.json`'s `presentation.music.fade_ms` gives none (`GameInfo.MusicFadeMs` -1): a track's cross-fade into the next on an area change, a script's music, a battle's start and end, and the dialogue's `music` tag (also the ambient loop's); 0 cuts (`"timings": {"music_fade_ms": 0}`). Stopping the music keeps its 150 ms fade |
+| `game_over_return_ms` | 0 | a lost battle's result screen goes back to the title by itself this long after it comes up; 0 waits for Confirm (`"timings": {"game_over_return_ms": 1500}`). The battle layouts' `game_over_confirm` decides whether Confirm also returns |
 | `run_speed_percent` | 200 | the real-time field input's run: a step takes the area's (or vehicle's) step time times 100 over this, 100 at least (`"timings": {"run_speed_percent": 250}`) |
 
 ### Params
@@ -266,7 +267,12 @@ The map draws first, in code. Window: `box` (the bed, the cost and money line, R
 
 Fields: `top` (int, the box's top as the dialogue box would sit), `bed` (image, the area tileset's bed), `cost`, `money` (int), `options` (list of strings), `cursor` (int), `keeper` (image: the portrait the assets' `keepers` give the rest point, -1 without one; [`assets.md`](assets.md), "keepers"; the built-in file does not draw it), `per_member` (bool: the area data's `per_member`, so `cost` is the whole lineup's) and `cost_each` (int: the price per member, `cost` otherwise), `voice_line` (string: the keeper's line, below). The built-in file draws none of the last three.
 
-The keeper's line (`voice_line`, inn and shop): the point's voice (`InnInfo.Voice`, `ShopInfo.Voice`, the area data's `voice`) followed by `.welcome` when a shop opens, `.confirm` (with the cost) when an inn opens, `.thanks` after a purchase, sale or rest (the inn closes, so its thanks shows as a notice), `.cannot_afford` after a refusal for money; the tables' text for that key, else `ui.shop.*` or `ui.inn.*` with the same ending. The sample never asks a shop's `.confirm`. The state probe `voice` reads the key the last frame used.
+The keeper's line (`voice_line`, inn and shop): the point's voice (`InnInfo.Voice`, `ShopInfo.Voice`, the area data's `voice`) followed by `.welcome` when a shop opens, `.confirm` (with the cost) when an inn opens, `.thanks` after a purchase, sale or rest (the inn closes, so its thanks shows as a notice), `.cannot_afford` after a refusal for money; the tables' text for that key, else `ui.shop.*` or `ui.inn.*` with the same ending. A shop's `confirm` and `thanks` first try `MOMENT_buy` or `MOMENT_sell` by the side of the trade (`VOICE.confirm_buy`, `VOICE.thanks_sell`, then `ui.shop.confirm_buy` and so on), falling back to the plain ending, so data adds the split only where it wants it. A shop's line takes, in order, `{0}` the shop's kind word, `{1}` the item's name, `{2}` the quantity, `{3}` the total price and `{4}` the price of one: those of the trade for `thanks`, those of the row and count chosen for `confirm`, empty for `welcome` and `cannot_afford`. An inn's line keeps the library's `{0}`, the price (`ui.inn.confirm` is the library's text with that parameter), and has no others. The state probe `voice` reads the key the last frame used.
+
+```json
+"voice.stall.confirm_buy": "{2} {1} at {4} each, {3} in all?",
+"voice.stall.thanks_sell": "{3} for {2} {1}. A fair trade."
+```
 
 The state probe `keeper` reads the keeper's portrait id the last shop or inn frame gave its layout, `-` for none.
 
@@ -508,7 +514,7 @@ Param `steps` (0 or 1, default 0: the two tabs as before). With 1 the shop goes 
   (`psiv_shop_buy` and `psiv_shop_sell` with a count), Back goes back to the list.
 * `result`: the trade's outcome; the keeper says `thanks` or `cannot_afford`. Confirm or Back goes back to the list.
 
-The keeper's line is `voice_line` (VOICE.MOMENT, else `ui.shop.MOMENT`). `result_text` (string) is the last trade's
+The keeper's line is `voice_line` (VOICE.MOMENT, else `ui.shop.MOMENT`, with the buying and selling keys and parameters of "Inn", above). `result_text` (string) is the last trade's
 outcome, the session's notice (`Bought 3 Tonic for 24.`) or refusal, and `result_ok` (bool) whether it went through.
 When the layout shows `result_text` (any element reads it), trade outcomes and the shop's other notices go there and
 to the log instead of the notices, in steps or on the tabs.
@@ -954,6 +960,12 @@ Screen fields of `battle_front` and `battle_side`:
 * `action_command` string: the command of the turn playing, as the `command` item field names it (`attack`, `technique`, `skill`, `combo`, `item`, `defend`, `escape`), `''` between turns. `action_chosen` bool: a party member acts with anything but a plain attack, for a name window shown only then.
 * `result_page`, `result_pages` int and `result_more` bool: the result window's page (1-based), how many, and whether one follows (below, `result_page_lines`).
 * `result_step` bool: the result (and level-up) screen is up. `transition_playing` bool: a battle-in or battle-out transition script runs ([`battle-animation.md`](battle-animation.md), transitions). Both are also animation script conditions, so a layout and the scripts can hide the party panel or the figures while they last: `"visible": "!result_step && !transition_playing"`.
+
+Params `party_figures` and `enemy_figures` (expressions, default 1) on either battle file leave that side's figures (with their shadows; a vehicle is the party's) out of the `stage` slot while 0, the backdrop and the other side staying; their places still anchor effects and numbers, and the probe `figures` leaves hidden party figures out. Param `game_over_confirm` (default 1): 0 makes a lost battle's result screen ignore Confirm and Back, so only the timing `game_over_return_ms` returns to the title.
+
+```json
+"params": {"party_figures": "result_step ? 0 : 1", "game_over_confirm": 0}
+```
 * `page_arrow` image: as the dialogue's, for a next-page mark under `result_more`: `{"type": "image", "visible": "result_more", "image": "page_arrow", "x": "cw - 28", "y": "ch - 24", "w": 16, "h": 16}`.
 
 Item fields of `party`, `members` and `vehicle`: `fallen` (bool, shown as down), `slot` (int, its index: the marching slot), and one `status_ID` bool per status of the game data (`status_poison`, `status_sleep`, ...; `defeated` excluded), true while the playback shows it. A name that is not `status_` and a status of the data is a problem. `menu_items` items gain `command` (the command row's id, `fight`/`macro`/`run` on the top-level step, `''` in lists) and `icon` (the command's picture from `command_icons` or generated, -1 off the command rows).
@@ -979,7 +991,11 @@ A battle file that lays the menu's rows out across, a `repeater` over `menu_item
 "params": {"command_axis": "row", "command_top": 1, "result_page_lines": 2, "enemy_statuses": 1}
 ```
 
-`command_rows` (a top-level object of either battle file, with `command_top` on): which commands each step shows, in order. `top` from `fight`, `macro`, `run`; `member` from `attack`, `technique`, `skill`, `item`, `defend`, `escape`, `macro`, `auto`; a step left out shows all. A vehicle's rows stay its own. An unknown or repeated command, an empty list, an unknown field, or `command_rows` without `command_top` is a problem.
+`command_rows` (a top-level object of either battle file, with `command_top` on): which commands each step shows, in order. `top` from `fight`, `macro`, `run`; `member` from `attack`, `technique`, `skill`, `item`, `defend`, `escape`, `macro`, `auto`; a step left out shows all. `vehicle` (with or without `command_top`) from `attack`, `skills` (one row per skill of the vehicle), `macro` (the party's macros through `ApplyMacro`, a step the vehicle cannot run taking the layout's macro fallback), `auto` (auto-battle through `StartAuto`) and `escape` lists a vehicle's rows in a vehicle battle; without it `attack`, `skills`, `escape` as before. An unknown or repeated command, an empty list, an unknown field, or `top` or `member` without `command_top` is a problem.
+
+```json
+"command_rows": {"vehicle": ["attack", "skills", "macro", "auto", "escape"]}
+```
 
 ```json
 {"version": 1, "params": {"command_top": 1}, "command_rows": {"top": ["fight", "run"], "member": ["attack", "technique", "skill", "item", "defend"]}, "windows": [...]}
@@ -1056,6 +1072,12 @@ Fields: `narration_visible` (bool, the window has lines), `narration_rows` (item
 
 `narration_when` (param) chooses which lines go to the window: `"all"` (the default: every line without a speaker), `"tagged"` (only lines that start with `{narration}`; the tag draws nothing) or an expression over the dialogue's fields, read as the line shows: `line_key`, `speaker`, `picture_top`, `picture_names` and the common names (`"starts_with(line_key, 'tale.') || picture_top == 'tower'"`). Whatever the mode, a line starting with `{narration:on}` goes to the window and one starting with `{narration:off}` to the box. Lines not routed use the box as usual. `starts_with(a, b)` is an expression function on every screen. `narration` is a built-in tag, which a `tags` table cannot map.
 
+`narration_wait` (param, `"press"` default or `"auto"`) and the line tag `{narration:nowait}`: under `auto`, or on a line carrying the tag, a narration line goes on by itself once revealed and held `narration_hold_ms` (param; else `narration_delay_ms`), and the next joins the window without a press, unless the line leaves the window full, which waits for Confirm as before. When the next is a speaker's line or a choice, the window stays (box hidden) until a press, then clears; an event that ends after such a line closes the window with it, so give an event's last narration line no `nowait` under `press`, or keep `press` for it. Confirm still shows a revealing line at once and Skip still skips. `{narration:nowait}` routes as `{narration}` does under `tagged` and draws nothing. `make_narration_assets.py` writes `alt/dialogue_auto.json` (`auto`, hold 400 ms); `scripts/narration_auto.txt` checks four lines gathering with no press, the full window waiting, the hurry, and the held window before the guide's line.
+
+```json
+"params": {"narration_wait": "auto", "narration_hold_ms": 400}
+```
+
 ```json
 "params": {"narration_when": "tagged"}
 ```
@@ -1080,6 +1102,8 @@ Cue and music ids a tags table names (an entry's or case's `id`, `ids`, `values`
 
 The dialogue param `picture_stack` (default 0): 1 keeps the still pictures as a stack: `picture` puts one on top (moving it up if it is already there), `picture_hide` takes that one off wherever it is (the one under it shows again), a `picture_hide` with no id (no value and no `id`, `values` or `default` in its entry) takes the top one off, and only `picture_clear` takes all. Without the stack a `picture_hide` with no id hides the picture up. Without it a picture replaces the one up, as before. The field `pictures` lists the stack bottom first, each item with `picture`, `picture_w`, `picture_h`; `picture` stays the top one. Probe: `pictures` (`chart tower`, `-`).
 
+The script's story pictures (`picture show|hide|clear` in events, `GameSession.Pictures()`, saved with the game) and the tags' pictures make one stack: the script's at the bottom in the session's order, then the tags' that the script has not put up, the top last. `picture`, `pictures`, `picture_top`, `picture_names` and the probes `picture` and `pictures` read that stack; without `picture_stack` only the top one shows, as before. A tag's `picture_hide` and `picture_clear` take only the tags' pictures; the script's go only by its own commands. The tags' pictures go with the event; the script's stay up over the field afterwards, drawn through the dialogue layout's windows with no box (`box_visible` false), above the map and under the field's own windows, until a script hides them, and they come back with a load. Nothing of the dialogue layout is drawn on the field while there are none, so runs without script pictures draw as before. A script picture the assets' `pictures` lack is logged once (`picture problem: ...`) and left out.
+
 ```json
 "params": {"picture_stack": 1}
 ```
@@ -1094,6 +1118,12 @@ Params of `field.json`: `arrive_toast` (default 1; 0: the arrival notice, `game.
 
 ```json
 {"version": 1, "params": {"arrive_toast": 0, "area_banner": 0}, "windows": []}
+```
+
+`followers_arrive` (param of `field.json`): `"stacked"` (default: after an exit, a warp, travel or a load the followers stand on the leader, not drawn, until it walks) or `"behind"` (each follower stands a cell behind the one before it, against the leader's facing, drawn at once, while those cells can be walked; the rest stay stacked; aboard a vehicle they ride inside as before). The session keeps no follower cells, so this is the sample's trail only. Any other value is a problem. `scripts/arrive_behind.txt` checks an exit, a warp and a load.
+
+```json
+{"version": 1, "params": {"followers_arrive": "behind"}, "windows": []}
 ```
 
 ### Row models

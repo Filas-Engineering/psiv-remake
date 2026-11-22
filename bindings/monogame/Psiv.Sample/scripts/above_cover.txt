@@ -1,0 +1,45 @@
+# The area's above picture over everything standing on the map (scripts/make_scene_assets.py's ABOVE copy, on the
+# background data copy): Wren Yard's above picture is opaque magenta on every other cell. The guide's party joins (two
+# followers), the skimmer is parked in the yard, the goat and the lamplighter wander, the trader keeps the stall and the
+# bell is a sign; in Wren Hollow the tallykeeper stands behind its counter (its talk point's actor_at). `abovecover` compares, for each thing drawn on the map, every pixel where the above picture is opaque
+# with the frame's pixel there: it must be the above picture's, standing still and mid-step. `pixel.X.Y` and
+# `cellpixel.X.Y` read single pixels. With --window the shot lines save screenshots under build/shots/above/.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 800
+dev warp wren_yard yard_middle
+dev vehicle reed_skimmer wren_yard pen_side
+wait 30
+expect state fieldpicture wren_yard above patched 0 tiled 0
+expect state vehicles reed_skimmer 5 5
+fieldinput realtime
+hold Left 20
+expect statehas walkstep west
+expect statenot abovecover uncovered
+hold Up 12
+wait 40
+expect statenot abovecover uncovered
+expect statehas abovecover sprites
+shot build/shots/above/yard.png
+# Even cells are covered, odd ones show the ground.
+expect statehas cellpixel.6.4 ff00ff
+expect statehas cellpixel.6.3 466e3c
+hold Right 9
+expect statehas walkstep east
+expect statenot abovecover uncovered
+shot build/shots/above/mid_step.png
+wait 120
+expect statenot abovecover uncovered
+dev warp wren_hollow hollow_door
+wait 30
+expect actor tallykeeper 4 1
+expect statenot abovecover uncovered
+shot build/shots/above/hollow.png

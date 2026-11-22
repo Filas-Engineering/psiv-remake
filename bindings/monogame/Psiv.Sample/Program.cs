@@ -876,7 +876,7 @@ public static class Headless
 				Console.WriteLine($"[{frame}] FAIL: no text {key} in language {session.Profile().TextLanguage}");
 			}
 		}
-		SampleController NewController() => new(session, data, line => Console.WriteLine($"[{frame}] {line}"), controls, audio, assets, dev, dataDir, battleLayout) { MissingText = MissingText };
+		SampleController NewController() => new(session, data, line => Console.WriteLine($"[{frame}] {line}"), controls, audio, assets, dev, dataDir, battleLayout) { MissingText = MissingText, PixelAt = surface.PixelAt, ImagePixel = surface.ImagePixel };
 		SampleController controller = NewController();
 		var input = new InputState();
 		try

@@ -2,7 +2,8 @@
 """Writes the asset directory scripts/narration.txt plays: a copy of TEST (the test assets) with its
 `alt/assets_more.json` as the manifest, for the still pictures `chart` and `tower`; the styles with a `narration` text
 style; and a dialogue layout with the still pictures kept as a stack (`picture_stack`), drawn side by side at the top,
-and a `narration` window without a frame under them, holding four lines, with its own reveal speed and line delay.
+and a `narration` window without a frame under them, holding four lines, with its own reveal speed and line delay;
+alt/dialogue_auto.json is that layout with `narration_wait` "auto" and `narration_hold_ms` 400 (scripts/narration_auto.txt).
 
 With --route (scripts/narration_route.txt): the same, plus a 16x16 page arrow picture as the UI skin's `page_arrow`
 (drawn at the box's right by the `page_arrow` field once the line is all shown, with `shown_ms` at its left), and two dialogue
@@ -87,6 +88,9 @@ def main():
 		]},
 	]
 	save(out / "ui" / "dialogue.json", dialogue)
+	auto = json.loads(json.dumps(dialogue))
+	auto["params"].update(narration_wait="auto", narration_hold_ms=400)
+	save(out / "alt" / "dialogue_auto.json", auto)
 	if "--route" in sys.argv[4:]:
 		route(out, dialogue)
 

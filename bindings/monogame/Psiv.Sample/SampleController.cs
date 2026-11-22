@@ -72,6 +72,7 @@ public sealed partial class SampleController
 		_log = log ?? (_ => { });
 		_audio = audio ?? new RecordingAudio();
 		_actorIds = [.. session.ActorIds()];
+		LogDataProblems();
 		ControlsPath = controlsPath;
 		_bindings = Bindings.Load(controlsPath, _log);
 		_field.Flag = session.Flag;
@@ -94,6 +95,14 @@ public sealed partial class SampleController
 
 	private BattlePresentation PresentationTable => _assets?.Battle ?? (_defaultPresentation ??= BattlePresentation.Defaults());
 	private BattlePresentation? _defaultPresentation;
+
+	private void LogDataProblems()
+	{
+		foreach (string problem in _data.Problems)
+		{
+			_log("data problem: " + problem);
+		}
+	}
 
 	private void LogAssetProblems()
 	{
@@ -658,6 +667,60 @@ public sealed partial class SampleController
 	}
 
 	// `expect state KEY VALUE` in headless scripts reads these: where the screens stand and what the session holds.
+	// The headless surface's color at a pixel of the last frame (`#rrggbb`), for the `pixel.X.Y` probe; null in a window.
+	public Func<int, int, string>? PixelAt { get; init; }
+	public Func<int, int, int, Color>? ImagePixel { get; init; }
+
+	// `cellpixel.X.Y[.DX.DY]`: the color at a field cell's center as the last frame drew the field, moved DX and DY
+	// pixels, for checking what covers a person standing there.
+	private string CellPixel(string at)
+	{
+		int[] n = [.. at.Split('.').Select(v => int.TryParse(v, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int i) ? i : int.MinValue)];
+		if (n.Length is not (2 or 4) || n.Contains(int.MinValue) || PixelAt is not { } pixel)
+		{
+			return "-";
+		}
+		(int x, int y) = CellCenter(n[0], n[1]);
+		return pixel(x + (n.Length == 4 ? n[2] : 0), y + (n.Length == 4 ? n[3] : 0));
+	}
+
+	// Whether the area's above picture covers everything standing on the map wherever it is opaque: each sprite's cell and
+	// the half cell above it, every pixel where the above picture is opaque and no bubble or mark is drawn over it on
+	// purpose, compared with what the last frame left there.
+	// `N sprites, P pixels covered` and then `uncovered: WHO COUNT, ...`, or `-` without an above picture or headless.
+	private string AboveCover()
+	{
+		if (_field.DrawnAbove is not { } above || PixelAt is not { } pixel || ImagePixel is not { } source || _art is null)
+		{
+			return "-";
+		}
+		(int w, int h) = _art.SizeOf(above.Image);
+		int checkedPixels = 0;
+		var uncovered = new SortedDictionary<string, int>(StringComparer.Ordinal);
+		foreach ((string who, Rectangle rect) in _field.DrawnSprites)
+		{
+			Rectangle r = Rectangle.Intersect(Rectangle.Intersect(rect, above.Rect), new Rectangle(0, 0, LogicalSize.Width, LogicalSize.Height));
+			for (int y = r.Top; y < r.Bottom; y++)
+			{
+				for (int x = r.Left; x < r.Right; x++)
+				{
+					Color c = source(above.Image, (x - above.Rect.X) * w / above.Rect.Width, (y - above.Rect.Y) * h / above.Rect.Height);
+					if (c.A < 255 || _field.DrawnOverlays.Any(o => o.Contains(x, y)))
+					{
+						continue;
+					}
+					checkedPixels++;
+					if (pixel(x, y) != $"#{c.R:x2}{c.G:x2}{c.B:x2}")
+					{
+						uncovered[who] = uncovered.GetValueOrDefault(who) + 1;
+					}
+				}
+			}
+		}
+		string seen = $"{_field.DrawnSprites.Count} sprites, {checkedPixels} pixels covered";
+		return uncovered.Count == 0 ? seen : seen + ", uncovered: " + string.Join(", ", uncovered.Select(u => $"{u.Key} {u.Value}"));
+	}
+
 	public string State(string key)
 	{
 		static string OnOff(bool on) => on ? "on" : "off";
@@ -715,6 +778,12 @@ public sealed partial class SampleController
 			"voice" => _probeVoice,
 			"titlesizes" => _probeTitleSizes,
 			_ when key.StartsWith("window.", StringComparison.Ordinal) => WindowProbe(key["window.".Length..]),
+			_ when key.StartsWith("pixel.", StringComparison.Ordinal) => key.Split('.') is [_, string px, string py] && int.TryParse(px, CultureInfo.InvariantCulture, out int x) &&
+				int.TryParse(py, CultureInfo.InvariantCulture, out int y) && PixelAt is { } pixel ? pixel(x, y) : "-",
+			_ when key.StartsWith("cellpixel.", StringComparison.Ordinal) => CellPixel(key["cellpixel.".Length..]),
+			"scenecamera" => SceneCameraProbe(),
+			"abovecover" => AboveCover(),
+			"glide" => _s.FieldInfo() is { } glide ? $"next {glide.NextTickUs} lands {glide.StepLandsInUs} run {glide.RunStepLandsInUs}" : "-",
 			_ when key.StartsWith("uifield.", StringComparison.Ordinal) => FieldProbe(key["uifield.".Length..]),
 			"wrapped" => _probeWrapped,
 			"loglines" => _probeLogLines,

@@ -1,0 +1,37 @@
+# Narration that goes on by itself (make_narration_data.py, make_narration_assets.py's alt/dialogue_auto.json swapped
+# in, so hot reload too): with `narration_wait` "auto" each line waits its 200 ms delay, reveals at 40 characters a
+# second, stays 400 ms (`narration_hold_ms`) and the next one joins the window with no press, until the fourth fills
+# the window and waits for Confirm. The fifth starts the window afresh and goes on; the guide's line after it waits
+# behind the kept window for a press, then shows in the box. Confirm still hurries a line and Skip still skips.
+# Screenshots under build/shots/narration/auto_*.png with --window.
+
+assets swap ui/dialogue.json alt/dialogue_auto.json
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev event narration
+waitstate 10 narrationreveal 0/40
+# Line one: 200 ms delay, 1000 ms of reveal, 400 ms held, then line two starts without a press.
+waitstatehas 120 narration dawn. | B
+# A press hurries line two; the hold still runs before line three.
+wait 15
+press Enter
+expect state narrationreveal 40/40
+expect statenot narration Nobody
+waitstate 60 narrationreveal 0/44
+waitstate 200 narrationreveal 27/27
+wait 60
+expect state narrationreveal 27/27
+expect state narration The fog came in off the sea before dawn. | By noon the bell tower was a grey shape. | Nobody rang the bell, yet everyone heard it. | The harbor held its breath.
+shot build/shots/narration/auto_full.png
+press Enter
+waitstate 10 narrationreveal 0/33
+waitstate 200 narrationreveal 33/33
+wait 30
+expect state narration Then the fog lifted, all at once.
+expect state uifield.dialogue.box_visible false
+shot build/shots/narration/auto_held.png
+press Enter
+wait 2
+expect state narration none
+expect state uifield.dialogue.box_visible true

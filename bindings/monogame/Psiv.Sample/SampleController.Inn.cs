@@ -21,7 +21,7 @@ public sealed partial class SampleController
 			if (rested.Ok)
 			{
 				_keeperPoint = null;
-				Say(VoiceLine(inn.Voice, "inn", "thanks", inn.Cost));
+				Say(VoiceLine(inn.Voice, "inn", "thanks", "", inn.Cost));
 			}
 			Report(rested);
 		}
@@ -38,7 +38,7 @@ public sealed partial class SampleController
 			.Set("cost", inn?.Cost ?? 0)
 			.Set("per_member", inn?.PerMember ?? false)
 			.Set("cost_each", inn is { PerMember: true } ? inn.Cost / Math.Max(1, LineupMembers().Count) : inn?.Cost ?? 0)
-			.Set("voice_line", inn is null ? "" : VoiceLine(inn.Voice, "inn", _keeperMoment, inn.Cost))
+			.Set("voice_line", inn is null ? "" : VoiceLine(inn.Voice, "inn", _keeperMoment, "", inn.Cost))
 			.Set("money", _s.WorldInfo().Money)
 			.Set("options", new List<string> { T("ui.inn.rest"), T("ui.inn.leave") })
 			.Set("cursor", _cursor)

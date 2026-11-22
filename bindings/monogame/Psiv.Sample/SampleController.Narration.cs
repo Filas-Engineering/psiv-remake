@@ -29,6 +29,8 @@ public sealed partial class SampleController
 		{
 			return tag == "on";
 		}
+		// `{narration:nowait}` leaves the routing to the mode; under `tagged` it routes as `{narration}` does.
+		tag = tag == "nowait" ? "" : tag;
 		UiValue when = Ui.ParamValue("dialogue", "narration_when", RouteFields(UiData(), line), new UiValue("all"));
 		return when.Raw switch
 		{
@@ -42,8 +44,8 @@ public sealed partial class SampleController
 	private UiContext RouteFields(UiContext ctx, Line? line) => ctx
 		.Set("line_key", line?.TextId ?? "")
 		.Set("speaker", line?.SpeakerName ?? "")
-		.Set("picture_top", _picture)
-		.Set("picture_names", _pictureStack.ToList());
+		.Set("picture_top", StoryPictures() is { Count: > 0 } up ? up[^1] : "")
+		.Set("picture_names", StoryPictures());
 
 	private string NarrationText(Line line) =>
 		string.Join(" ", PagesOf(line).Select(page => page.Text.Trim()).Where(text => text.Length > 0));
@@ -136,12 +138,40 @@ public sealed partial class SampleController
 		}
 		else if (input.Confirm || (done && _s.Profile().AutoAdvance && _shownMs >= Math.Max(Timing("auto_advance_min_ms"), text.Length * Timing("auto_advance_ms_per_char"))))
 		{
-			_narration.Add(text);
-			_s.ConfirmLine();
-			_lastLine = "";
-			_audio.PlayCue("line");
+			_narrationHeld = false;
+			NextNarration(text);
+		}
+		else if (done && NarrationGoesOn(line, text) && _shownMs >= NarrationHoldMs())
+		{
+			// What comes next may not be narration: the window then stays until a press (UpdateDialogue).
+			_narrationHeld = true;
+			NextNarration(text);
 		}
 	}
+
+	private void NextNarration(string text)
+	{
+		_narration.Add(text);
+		_s.ConfirmLine();
+		_lastLine = "";
+		_audio.PlayCue("line");
+	}
+
+	// The window kept up after a line that went on by itself, until a press, while a speaker's line or a choice waits.
+	private bool _narrationHeld;
+
+	// Whether a shown line goes on without a press: the dialogue's `narration_wait` "auto" or the line's
+	// `{narration:nowait}`, unless it leaves the window full.
+	private bool NarrationGoesOn(Line line, string text)
+	{
+		bool auto = Ui.ParamText("dialogue", "narration_wait", UiData(), "press") == "auto" ||
+			ControlTag().Matches(line.Text).Any(m => m.Groups[1].Value == "narration" && m.Groups[2].Value == "nowait");
+		int rows = _narration.Sum(entry => NarrationRows(entry).Count) + NarrationRows(text).Count;
+		return auto && rows < Math.Max(1, DialogueParam("narration_lines", 4));
+	}
+
+	// How long a line that goes on by itself stays once shown: `narration_hold_ms`, else `narration_delay_ms`.
+	private int NarrationHoldMs() => DialogueParam("narration_hold_ms", 0) is > 0 and int hold ? hold : DialogueParam("narration_delay_ms", 0);
 
 	// The window's rows: the entries shown, then the line revealing now as far as it has come, at most `narration_lines`.
 	private List<(string Text, string Full)> NarrationShown(Line? line)

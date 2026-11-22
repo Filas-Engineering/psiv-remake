@@ -1,0 +1,92 @@
+# Story pictures, the scene camera, music fades, an exit's sound and the ambient talk option on the hall data copy
+# (scripts/make_scene_data.py) with scripts/make_scene_assets.py's SCENE copy. The script's pictures and the dialogue
+# tag's picture make one stack (the script's first, the tag's on top); the script's stay up over the field after the
+# event, through a save and a load. The camera eases to the hall's far corner and back during the plinth's event,
+# eases to the top right corner during the lantern's and stays there on the field after it (clicks walk to the cell
+# under the pointer as drawn), and jumps back at the bell's. The lantern's track
+# fades over its own 300 ms, the area change over game.json's 400, and the door plays its sound. game.json turns
+# ambient party talk off, so the options page leaves its row out. Screenshots under build/shots/scene/ with --window.
+
+cmd set text instant
+expect screen Title
+press Down 3
+press Enter
+expect screen Options
+press Down 5
+expect statehas selected Names
+press Escape
+press Up 3
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev warp gallery_hall plinth_front
+wait 10
+expect state scenecamera leader
+expect state pictures -
+press Up
+press Enter
+wait 20
+expect state pictures harbor_dawn tag_card
+expect state picture tag_card
+shot build/shots/scene/plinth_card.png
+press Enter
+waitstatehas 60 scenecamera 1000
+expect statehas scenecamera held 29 17
+waitstate 120 scenecamera held 29 17
+wait 20
+shot build/shots/scene/far_corner.png
+press Enter
+waitstatehas 60 scenecamera leader
+wait 40
+expect state scenecamera leader
+expect state pictures harbor_dawn beacon tag_card
+press Enter
+pressuntil Enter Field 200
+wait 20
+expect screen Field
+expect state pictures harbor_dawn beacon
+expect statehas windows dialogue/picture
+shot build/shots/scene/field_pictures.png
+audio mark
+cmd walk lantern_front
+wait 5
+press Up
+press Enter
+wait 60
+expect statehas scenecamera held 30 1
+expect audio music field_marsh_reeds fade 300
+expect state pictures -
+waitstate 120 scenecamera held 30 1
+wait 10
+expect screen Field
+expect statenot windows dialogue/picture
+shot build/shots/scene/field_camera.png
+clickcell 24 4
+wait 2
+expect state walk 24 4
+wait 120
+expect state leader gallery_hall 24 4
+cmd walk bell_front
+wait 5
+press Up
+press Enter
+wait 30
+expect screen Field
+expect state scenecamera leader
+expect state pictures farewell
+cmd menu
+cmd save manual_1
+cmd close
+cmd title
+wait 3
+cmd load manual_1
+wait 10
+expect screen Field
+expect state pictures farewell
+audio mark
+cmd walk hall_door
+hold Down 20
+wait 20
+expect state leader wren_gallery 4 3
+expect audio cue gallery_door
+expect audio fade 400

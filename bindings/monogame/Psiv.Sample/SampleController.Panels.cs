@@ -135,6 +135,11 @@ public sealed partial class SampleController
 			return a.Type == ActionType.CameraMove && !a.Instant ? Math.Max(1, (int)(a.Duration * 1000)) : 0;
 		case ActionType.Shake:
 			return a.Instant ? 0 : Math.Max(1, (int)(a.Seconds * 1000));
+		// The event waits out the move's seconds while SceneFocus follows the session's camera.
+		case ActionType.CameraTo:
+		case ActionType.CameraReset:
+			_sceneJumpPending |= a.Instant;
+			return a.Instant ? 0 : (int)((a.Duration > 0 ? a.Duration : a.Seconds) * 1000);
 		}
 		return 0;
 	}
@@ -233,6 +238,56 @@ public sealed partial class SampleController
 		}
 		float t = Ease(_cameraMove.Progress);
 		return (_cameraFrom.X + (x - _cameraFrom.X) * t, _cameraFrom.Y + (y - _cameraFrom.Y) * t);
+	}
+
+	// The session's scene camera (`camera to`, `camera reset`): the state last seen, where the ease started, where the field
+	// was last centered, and the state an instant action jumped to. The session runs the camera down on its ticks, so
+	// between ticks the ease goes on by frame time, at most a tick ahead of it.
+	private (bool Held, int X, int Y, int TotalMs) _sceneKey;
+	private (float X, float Y) _sceneFrom;
+	private (float X, float Y)? _lastFocus;
+	private (bool Held, int X, int Y, int TotalMs)? _sceneJump;
+	private bool _sceneJumpPending;
+	private int _sceneMs = -1;
+	private int _sceneMsClock;
+
+	// Where the scene camera centers the field: easing from where the view was to its cell over its time while held,
+	// and back to the leader over its time once reset; null when it is not held and not on its way back.
+	private (float X, float Y)? SceneFocus(List<string> lineup)
+	{
+		SceneCamera c = _s.SceneCamera();
+		var key = (c.Held, c.X, c.Y, c.TotalMs);
+		(float X, float Y) leader = _field.Leader(lineup);
+		if (key != _sceneKey)
+		{
+			_sceneFrom = _lastFocus ?? leader;
+			_sceneKey = key;
+		}
+		if (_sceneJumpPending)
+		{
+			_sceneJump = key;
+			_sceneJumpPending = false;
+		}
+		if (c.Ms != _sceneMs)
+		{
+			_sceneMs = c.Ms;
+			_sceneMsClock = _clockMs;
+		}
+		int left = Math.Max(0, c.Ms - Math.Min(_clockMs - _sceneMsClock, (_gameInfo ??= _s.GameInfo()).TickMs));
+		float t = c.TotalMs > 0 && left > 0 && _sceneJump != key ? Ease(1f - left / (float)c.TotalMs) : 1f;
+		if (!c.Held && t >= 1f)
+		{
+			return null;
+		}
+		(float X, float Y) to = c.Held ? (c.X, c.Y) : leader;
+		return (_sceneFrom.X + (to.X - _sceneFrom.X) * t, _sceneFrom.Y + (to.Y - _sceneFrom.Y) * t);
+	}
+
+	// The scene camera as the `scenecamera` probe reads it: `held X Y` or `leader`, then `MS/TOTAL` while it moves.
+	private string SceneCameraProbe()
+	{
+		SceneCamera c = _s.SceneCamera();
+		return (c.Held ? $"held {c.X} {c.Y}" : "leader") + (c.Ms > 0 ? $" {c.Ms}/{c.TotalMs}" : "");
 	}
 
 	// A panel's cell size: the field's, times its camera's zoom, and a third more while that camera is the scene's.

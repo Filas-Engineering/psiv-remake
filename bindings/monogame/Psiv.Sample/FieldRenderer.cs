@@ -244,6 +244,12 @@ public sealed class FieldRenderer
 
 	// The people drawn in the last frame, actors and party members, by id: where, whether between cells, facing, pose.
 	public Dictionary<string, DrawnPerson> DrawnActors { get; } = [];
+	// Everything the last frame stood on the map (people, vehicles, enemies, points' objects), each with its cell and the
+	// half cell above it as drawn, and the area's above picture with where it went; for the `abovecover` probe.
+	public List<(string Who, Rectangle Rect)> DrawnSprites { get; } = [];
+	public (int Image, Rectangle Rect)? DrawnAbove { get; private set; }
+	// The bubbles and marks the last frame drew over the above picture, on purpose.
+	public List<Rectangle> DrawnOverlays { get; } = [];
 	// The sheet pose each person posing in the last frame drew from its asset sheet, by id.
 	public Dictionary<string, string> DrawnSheetPoses { get; } = [];
 	// The vehicles the last frame drew, by id: "X Y" of the cell under each, with " aboard" for the one the party rides.
@@ -573,6 +579,32 @@ public sealed class FieldRenderer
 
 	public static string KindName(AreaKind kind) => kind switch { AreaKind.Town => "Town", AreaKind.Dungeon => "Dungeon", _ => "Field" };
 
+	// Where followers stand when the party arrives (an exit, a warp, travel, a load): false stacks them on the leader until
+	// it walks; true (the field layout's `followers_arrive` "behind") puts each a cell behind the one before, against the
+	// leader's facing, while those cells can be walked, the rest stacked. The session keeps no follower cells: the trail is
+	// the sample's.
+	public bool FollowersBehind { get; set; }
+
+	private void Arrive(FieldView view, IReadOnlyList<string> lineup)
+	{
+		FieldInfo f = view.Info;
+		_trail.Clear();
+		(int dx, int dy) = f.Facing switch { Direction.North => (0, 1), Direction.South => (0, -1), Direction.East => (-1, 0), _ => (1, 0) };
+		(int x, int y) = (f.LeaderX, f.LeaderY);
+		int count = Math.Min(_followers.Length, Math.Max(0, lineup.Count - 1));
+		while (FollowersBehind && f.Aboard.Length == 0 && _trail.Count < count && view.Cell(x + dx, y + dy).HasFlag(CellFlags.Walkable))
+		{
+			(x, y) = (x + dx, y + dy);
+			_trail.Add((x, y));
+		}
+		for (int i = 0; i < _followers.Length; i++)
+		{
+			(int fx, int fy) = i < _trail.Count ? _trail[i] : (f.LeaderX, f.LeaderY);
+			_followers[i].Snap(fx, fy);
+			_followers[i].Facing = f.Facing;
+		}
+	}
+
 	// Follows the view's positions; `clockMs` is the controller's clock, so the glides advance with the
 	// frame time the session got. `lineup` is the party in walking order (the leader first).
 	public void Track(FieldView view, int clockMs, IReadOnlyList<string> lineup)
@@ -586,12 +618,7 @@ public sealed class FieldRenderer
 		{
 			_area = f.AreaId;
 			_leader.Snap(f.LeaderX, f.LeaderY);
-			_trail.Clear();
-			foreach (Glide g in _followers)
-			{
-				g.Snap(f.LeaderX, f.LeaderY);
-				g.Facing = f.Facing;
-			}
+			Arrive(view, lineup);
 			_enemies.Clear();
 			_enemyWalks.Clear();
 			_enemyRoutes.Clear();
@@ -619,7 +646,8 @@ public sealed class FieldRenderer
 		}
 		else if (_leader.X != oldX || _leader.Y != oldY)
 		{
-			_trail.Clear();
+			// A warp or a load within the area: the leader is put down, and the followers arrive with it.
+			Arrive(view, lineup);
 		}
 		_leader.Facing = f.Facing;
 		// The members ride along aboard a vehicle, so they leave the trail and stand with the leader.
@@ -805,6 +833,9 @@ public sealed class FieldRenderer
 		{
 			CameraX = cameraX;
 			CameraY = cameraY;
+			DrawnSprites.Clear();
+			DrawnOverlays.Clear();
+			DrawnAbove = null;
 		}
 		// Screen positions of a cell's top left corner.
 		int ox = viewport.X - cameraX, oy = viewport.Y - cameraY;
@@ -914,12 +945,27 @@ public sealed class FieldRenderer
 		var talkers = new HashSet<string>();
 		// A bubble sits on the cell above its talker, so it is left out while the leader stands there.
 		bool BubbleFree(int x, int y) => _leader.X != x || _leader.Y != y - 1;
-		void Put(float cx, float cy, Action<int, int> draw, float sortBias = 0f)
+		// Speech bubbles, the `!` marks and pose marks go over the above picture, drawn after it.
+		void Overlay(int image, int x, int y, int w, int h)
+		{
+			overlays.Add(() => s.Image(image, x, y, w, h, Color.White));
+			if (record)
+			{
+				DrawnOverlays.Add(new Rectangle(x, y, w, h));
+			}
+		}
+		// What the next Put stands for, in DrawnSprites when it is not named.
+		string putWho = "object";
+		void Put(float cx, float cy, Action<int, int> draw, float sortBias = 0f, string? who = null)
 		{
 			int sx = ox + (int)MathF.Round(cx * tile), sy = oy + (int)MathF.Round(cy * tile);
 			if (sx > viewport.X - tile * 2 && sy > viewport.Y - tile * 2 && sx < viewport.Right + tile && sy < viewport.Bottom + tile)
 			{
 				sprites.Add((cy + sortBias, () => draw(sx, sy)));
+				if (record)
+				{
+					DrawnSprites.Add((who ?? putWho, new Rectangle(sx, sy - tile / 2, tile, tile + tile / 2)));
+				}
 			}
 		}
 		// A person, actor or party member, in its pose if it is playing one: the shadow stays on the ground while a
@@ -977,6 +1023,7 @@ public sealed class FieldRenderer
 				DrawnActors[id] = new DrawnPerson(px, py, walking, facing, pose, marks.Length > 0);
 			}
 			lift = Px(lift + raise);
+			putWho = id.Length > 0 ? id : "person";
 			Put(px, py, (sx, sy) =>
 			{
 				if (look is not null || creature || art.PersonShadow(who))
@@ -994,17 +1041,23 @@ public sealed class FieldRenderer
 				}
 				if (alert)
 				{
-					overlays.Add(() => s.Image(art.Alert, sx + tile / 4, sy - lift - tile / 2 - Px(8), tile / 2, tile / 2 + Px(8), Color.White));
+					Overlay(art.Alert, sx + tile / 4, sy - lift - tile / 2 - Px(8), tile / 2, tile / 2 + Px(8));
 				}
 				foreach (MotionMark mark in marks)
 				{
-					overlays.Add(() => s.Image(mark.Image, sx + mark.Dx * tile / Pixels.Size, sy - lift + mark.Dy * tile / Pixels.Size, tile, tile, Color.White));
+					Overlay(mark.Image, sx + mark.Dx * tile / Pixels.Size, sy - lift + mark.Dy * tile / Pixels.Size, tile, tile);
 				}
 				extra?.Invoke(sx, sy - lift);
 			}, sortBias);
 		}
-		DrawnConveyors = view.Points.Count(p => p.Kind == PointKind.Conveyor);
-		RunningConveyors = view.Points.Count(p => p.Kind == PointKind.Conveyor && p.Active);
+		// Belts sharing a cell (one per flag state, so a belt can reverse) draw one: the running one, else the first.
+		var belts = new HashSet<FieldPoint>();
+		foreach (IGrouping<(int, int), FieldPoint> cell in view.Points.Where(p => p.Kind == PointKind.Conveyor).GroupBy(p => (p.X, p.Y)))
+		{
+			belts.Add(cell.FirstOrDefault(p => p.Active) ?? cell.First());
+		}
+		DrawnConveyors = belts.Count;
+		RunningConveyors = belts.Count(p => p.Active);
 		// A tile step hook fires on every cell its character marks in the map as written, so its rune goes on each of them
 		// while its flags hold, as a step hook point's does.
 		int tileCells = 0, activeCells = 0;
@@ -1073,6 +1126,7 @@ public sealed class FieldRenderer
 		}
 		foreach (FieldPoint p in view.Points)
 		{
+			putWho = $"{p.Kind.ToString().ToLowerInvariant()}:{p.Id}";
 			// An interact hook solid only while its flags hold shows nothing while they do not: the party walks over its cell.
 			if (p.Kind == PointKind.Talk && !p.Active && map?.SolidWhileActive.Contains(p.Id) == true)
 			{
@@ -1088,11 +1142,8 @@ public sealed class FieldRenderer
 				PutObject(own, p.X, p.Y, opened);
 				if (p.Kind == PointKind.Talk && p.Active && BubbleFree(p.X, p.Y))
 				{
-					overlays.Add(() =>
-					{
-						int bob = (int)(2 * MathF.Sin(clockMs / 300f + p.X));
-						s.Image(art.Bubble, ox + p.X * tile + tile / 2, oy + p.Y * tile - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8), Color.White);
-					});
+					int bob = (int)(2 * MathF.Sin(clockMs / 300f + p.X));
+					Overlay(art.Bubble, ox + p.X * tile + tile / 2, oy + p.Y * tile - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8));
 				}
 				continue;
 			}
@@ -1126,7 +1177,7 @@ public sealed class FieldRenderer
 			case PointKind.Gangway:
 				DrawGangway(s, ox + p.X * tile, oy + p.Y * tile, tile, pulse);
 				break;
-			case PointKind.Conveyor when !look.Conveyors:
+			case PointKind.Conveyor when !look.Conveyors || !belts.Contains(p):
 				break;
 			case PointKind.Conveyor when art.ConveyorOverlay(p.Direction, p.Active, clockMs) is int belt:
 				s.Image(belt, ox + p.X * tile, oy + p.Y * tile, tile, tile, Color.White);
@@ -1144,7 +1195,7 @@ public sealed class FieldRenderer
 						if (p.Active && BubbleFree(p.X, p.Y))
 						{
 							int bob = (int)(2 * MathF.Sin(clockMs / 300f + p.X));
-							overlays.Add(() => s.Image(art.Bubble, sx + tile / 2, sy - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8), Color.White));
+							Overlay(art.Bubble, sx + tile / 2, sy - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8));
 						}
 					});
 				}
@@ -1167,6 +1218,7 @@ public sealed class FieldRenderer
 			// The ridden vehicle glides with the leader and is drawn over it, the leader raised to sit in the hull.
 			(float vx, float vy, Direction facing) = v.Aboard ? (_leader.PX, _leader.PY, f.Facing) : (v.X, v.Y, v.Facing);
 			int image = art.VehicleFrame(v.Id, facing, clockMs);
+			putWho = "vehicle:" + v.Id;
 			Put(vx, vy, (sx, sy) =>
 			{
 				s.Image(art.Shadow, sx, sy + Px(3), tile, tile, Color.White);
@@ -1195,7 +1247,7 @@ public sealed class FieldRenderer
 				: !a.Scripted && art.StartFacing(a.Id) is { } start ? start : w.Facing;
 			string? creatureKey = a.SpriteEnemy.Length > 0 ? EnemyEncounter(a.SpriteEnemy) ?? a.SpriteEnemy : null;
 			Person(a.Id, w.PX, w.PY, facing, w.Frame, w.Walking, extra: talks
-				? (sx, sy) => overlays.Add(() => s.Image(art.Bubble, sx + tile / 2, sy - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8), Color.White))
+				? (sx, sy) => Overlay(art.Bubble, sx + tile / 2, sy - tile / 2 + bob, tile / 2 + Px(8), tile / 2 + Px(8))
 				: null, figure: a.Look.Length > 0 ? a.Look : null, creatureKey: creatureKey, played: played);
 		}
 		if (record)
@@ -1216,6 +1268,7 @@ public sealed class FieldRenderer
 			{
 				DrawnEnemies[e.Actor] = scripted is { Walking: true } || g.Progress < 1f ? "walking" : $"{e.X} {e.Y}";
 			}
+			putWho = "enemy:" + (e.Actor.Length > 0 ? e.Actor : e.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
 			Put(ex, ey, (sx, sy) =>
 			{
 				s.Image(art.Shadow, sx, sy + Px(2), tile, tile, Color.White);
@@ -1223,7 +1276,7 @@ public sealed class FieldRenderer
 				s.Image(creature, body.X, body.Y, body.Width, body.Height, Color.White);
 				if (chasing)
 				{
-					overlays.Add(() => s.Image(art.Alert, sx + tile / 4, sy - tile / 2 - Px(8), tile / 2, tile / 2 + Px(8), Color.White));
+					Overlay(art.Alert, sx + tile / 4, sy - tile / 2 - Px(8), tile / 2, tile / 2 + Px(8));
 				}
 			});
 		}
@@ -1276,6 +1329,10 @@ public sealed class FieldRenderer
 		if (picture?.Above is int above)
 		{
 			s.Image(above, ox, oy, f.Width * tile, f.Height * tile, Color.White);
+			if (record)
+			{
+				DrawnAbove = (above, new Rectangle(ox, oy, f.Width * tile, f.Height * tile));
+			}
 		}
 		foreach (Action draw in overlays)
 		{

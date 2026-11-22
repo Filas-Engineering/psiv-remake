@@ -1,0 +1,32 @@
+# Belt Yard (scripts/make_belt_data.py): an area step time with a fraction and two belts on the same cells, gated by one
+# flag, under the real-time field input. Before the flag only the east belt shows (4 drawn, 4 running) and carries the
+# leader east at 188 ms a cell; with the flag set the same cells show the west belt, which carries it back at 234 ms.
+# No data problem is logged. With --window the shot lines save screenshots under build/shots/belts/.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+fieldinput realtime
+dev warp belt_yard yard_west
+wait 10
+expect state leader belt_yard 1 2
+expect state conveyors 4/4
+shot build/shots/belts/east.png
+press Right
+waitstatehas 60 walkstep carried
+expect state walkstep carried 3 2 0/188 100%
+waitstate 120 leader belt_yard 6 2
+wait 20
+expect state leader belt_yard 6 2
+dev flag belt.reversed on
+wait 2
+expect state conveyors 4/4
+shot build/shots/belts/west.png
+press Left
+waitstatehas 60 walkstep carried
+expect state walkstep carried 4 2 0/234 100%
+waitstate 120 leader belt_yard 1 2
+wait 20
+expect state leader belt_yard 1 2

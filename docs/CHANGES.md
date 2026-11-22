@@ -54,6 +54,19 @@ One line per feature, newest first: name, kind, meaning. Each pass adds its line
 
 Newest first. The MonoGame sample (`bindings/monogame/Psiv.Sample`) only.
 
+* `make_scene_data.py`, `make_scene_assets.py`, `scene.txt`, `shop_voice.txt`, `vehicle_commands.txt`, `game_over.txt`, `arrive_behind.txt`, `above_cover.txt`, `glide.txt`, `narration_auto.txt` (headless runs): this pass's items played.
+* `narration_wait` (`press`, `auto`) and `narration_hold_ms` (dialogue params), `{narration:nowait}` (built-in tag value): narration lines that go on by themselves until the window is full; the window waits for a press before a speaker's line or a choice.
+* `party_figures`, `enemy_figures` (battle params, expressions, default 1): a side's figures left out of the `stage` slot, the backdrop staying.
+* Keeper line parameters (shop `voice_line`): `{0}` kind word, `{1}` item, `{2}` quantity, `{3}` total, `{4}` price of one; `VOICE.confirm_buy`, `.confirm_sell`, `.thanks_buy`, `.thanks_sell` (and `ui.shop.*` alike) when the tables have them.
+* `followers_arrive` (field param: `stacked`, `behind`): followers placed behind the leader after an exit, warp, travel or load.
+* `game_over_return_ms` (timing, default 0) and `game_over_confirm` (battle param, default 1): a lost battle's result screen returns to the title by itself; Confirm can be turned off.
+* `abovecover`, `pixel.X.Y`, `cellpixel.X.Y` (state probes): the area's above picture checked pixel by pixel over everything on the map (it covers all of it; bubbles and marks go over it by design).
+* `command_rows.vehicle` (battle layout field: `attack`, `skills`, `macro`, `auto`, `escape`): Macro (`ApplyMacro`) and Auto (`StartAuto`) in a vehicle battle's rows.
+* Real-time glide by the library's landing (behavior, `glide` probe): a step the session lands later than its step time (`StepLandsInUs`, `RunStepLandsInUs`) glides on to it instead of stopping at the cell's end.
+* Exit sounds, music fades and the ambient talk option (behavior): `FieldInfo.ExitSound` played on arrival, `PresentationAction.FadeMs` and `GameInfo.MusicFadeMs` over the layout's `music_fade_ms`, no ambient talk row when `GameInfo.PartyTalkAmbient` is false.
+* Scene camera (behavior, `scenecamera` probe): the field centered on `SceneCamera()`, easing to its cell and back to the leader, jumping on instant actions, held on the field after the event.
+* Story pictures from scripts (behavior): `Pictures()` and the dialogue tags' pictures as one stack, the script's at the bottom, drawn over the field after the event until hidden and kept by loads.
+* Data read as the library accepts it (fix): fractional step times, belts sharing cells (the running one drawn and carrying, so a belt reverses with its flag), names or objects with an `id`; an unreadable entry logs `data problem:` and is skipped instead of stopping the sample; `make_belt_data.py`, `belts.txt` (headless run).
 * `--capabilities` (sample option) and `check_capabilities.py` (make check): every asset, layout, dialogue, animation, presentation, action and script name this build accepts, as JSON with `schema_version`; the script player refuses verbs and `expect state` keys it does not list.
 * `shop_steps.txt`, `make_shop_assets.py` (headless run): the shop in steps and on the tabs.
 * `result_text`, `result_ok` (shop fields): a trade's outcome; a layout that reads `result_text` takes the shop's notices there instead of the toasts.

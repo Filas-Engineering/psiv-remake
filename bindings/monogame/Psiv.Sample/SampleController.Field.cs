@@ -87,7 +87,7 @@ public sealed partial class SampleController
 		public int X { get; } = x;
 		public int Y { get; } = y;
 		public int ElapsedMs { get; set; } = elapsedMs;
-		public int LengthMs { get; } = lengthMs;
+		public int LengthMs { get; set; } = lengthMs;
 		// False for a conveyor's move, which the session made before the sample saw it.
 		public bool Led { get; } = led;
 		public bool Arrived { get; set; } = !led;
@@ -203,6 +203,10 @@ public sealed partial class SampleController
 				left -= part;
 				f = _s.FieldInfo()!;
 				walk.Arrived |= (f.LeaderX, f.LeaderY) == (walk.X, walk.Y);
+				if (!walk.Arrived)
+				{
+					LandWith(walk, f);
+				}
 				bool ended = walk.ElapsedMs >= walk.LengthMs && walk.Arrived;
 				if (!ended && walk.ElapsedMs < 2 * walk.LengthMs)
 				{
@@ -228,7 +232,7 @@ public sealed partial class SampleController
 			Direction next = _bufferedDirection != Direction.None ? _bufferedDirection : _heldDirections.Count > 0 ? _heldDirections[^1] : Direction.None;
 			_bufferedDirection = Direction.None;
 			// A running belt takes no input.
-			bool onBelt = SessionRun ? f.ConveyorStepMs > 0 : _data.BeltMs.GetValueOrDefault(f.AreaId)?.ContainsKey((f.LeaderX, f.LeaderY)) == true;
+			bool onBelt = SessionRun ? f.ConveyorStepMs > 0 : _data.BeltMsAt(f.AreaId, f.LeaderX, f.LeaderY, _s.Flag) is not null;
 			if (next == Direction.None || !f.PlayerControl || onBelt || _s.Field() is not { } view)
 			{
 				Carry(left);
@@ -251,12 +255,27 @@ public sealed partial class SampleController
 				int length = Math.Max(1, _running ? f.RunStepMs : f.LeaderStepMs);
 				int gone = Math.Clamp(f.StepProgressMs, 0, length - 1);
 				_walk = new WalkStep(next, x, y, gone, length, Math.Max(1, f.StepMs) * 100 / length, led: true);
-				_field.LeaderStep = (x, y, length, gone);
+				LandWith(_walk, f);
+				_field.LeaderStep = (x, y, _walk.LengthMs, gone);
 				continue;
 			}
 			_walk = new WalkStep(next, x, y, 0, Math.Max(1, f.LeaderStepMs * 100 / percent), percent, led: true);
+			LandWith(_walk, f);
 			_field.LeaderStep = (x, y, _walk.LengthMs, 0);
 		}
+	}
+
+	// A step the session will land later than its glide ends (a step time that is not a whole number of ticks, the tick's
+	// phase) glides on until the tick it lands on (FieldInfo.StepLandsInUs, RunStepLandsInUs while running, which count
+	// from the next tick for a step not yet under way), so the leader never stands at the end of a cell waiting for it.
+	// One the session lands sooner keeps its length.
+	private static int LandsInMs(long us) => (int)((us + 999) / 1000);
+
+	private void LandWith(WalkStep walk, FieldInfo f)
+	{
+		int session = LandsInMs(SessionRun && _running ? f.RunStepLandsInUs : f.StepLandsInUs);
+		int drawn = walk.ElapsedMs + (SessionRun ? session : session * 100 / Math.Max(1, walk.Percent));
+		walk.LengthMs = Math.Max(walk.LengthMs, drawn);
 	}
 
 	// The session's update for part of the frame; false once the field is left (an event, a battle, another area), which
@@ -298,7 +317,7 @@ public sealed partial class SampleController
 			return;
 		}
 		if (Feed(Direction.None, ms) && _s.FieldInfo() is { } now && Math.Abs(now.LeaderX - f.LeaderX) + Math.Abs(now.LeaderY - f.LeaderY) == 1 &&
-			_data.BeltMs.GetValueOrDefault(f.AreaId)?.TryGetValue((f.LeaderX, f.LeaderY), out int beltMs) == true)
+			_data.BeltMsAt(f.AreaId, f.LeaderX, f.LeaderY, _s.Flag) is int beltMs)
 		{
 			_walk = new WalkStep(Direction.None, now.LeaderX, now.LeaderY, 0, beltMs, 100, led: false);
 			_field.LeaderStep = (now.LeaderX, now.LeaderY, beltMs, 0);
@@ -560,8 +579,11 @@ public sealed partial class SampleController
 		{
 			lineup.Add(follower);
 		}
+		_field.FollowersBehind = Ui.ParamText("field", "followers_arrive", UiData(), "stacked") == "behind";
 		_field.Track(view, _clockMs, lineup);
-		_field.Draw(s, art, view, _clockMs, lineup, _camera is null ? null : CameraFocus(view), ShakeOffset(), Layout.Styles.Param("field_cell"));
+		(float X, float Y)? focus = SceneFocus(lineup) ?? (_camera is null ? null : CameraFocus(view));
+		_field.Draw(s, art, view, _clockMs, lineup, focus, ShakeOffset(), Layout.Styles.Param("field_cell"));
+		_lastFocus = focus ?? _field.Leader(lineup);
 		if (_clickWalk is { } goal)
 		{
 			(int gx, int gy) = CellCenter(goal.X, goal.Y);
@@ -576,10 +598,11 @@ public sealed partial class SampleController
 		return true;
 	}
 
-	// The field: the map, then the HUD, the area banner, the toasts and the keys' hint over it.
+	// The field: the map, the script's story pictures, then the HUD, the area banner, the toasts and the keys' hint over it.
 	private void DrawFieldScreen(IDrawSurface s, IDrawSurface t, Art art)
 	{
 		DrawField(s, art);
+		DrawFieldPictures(s, t, art);
 		bool aboard = _s.FieldInfo()?.Aboard.Length > 0;
 		UiContext ctx = SetBanner(SetHud(UiData()), true);
 		// The interaction prompt: the pointer bobbing over what the leader would act on, and the layout's `prompt` fields.

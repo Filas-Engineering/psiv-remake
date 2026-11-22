@@ -146,6 +146,7 @@ assets: ui/styles.json: colors.mud: must be #rrggbb or #rrggbbaa
 assets: ui/styles.json: frames.battle: field 'skin' must be one of menu, battle
 assets: ui/styles.json: frames.ink: 'skin' is for a generated frame only
 assets: ui/styles.json: timings: field 'music_fade_ms' must be a whole number from 0 to 100000
+assets: ui/styles.json: timings: field 'game_over_return_ms' must be a whole number from 0 to 100000
 assets: ui/styles.json: params: unknown field 'toast_size'
 assets: ui/styles.json: params: field 'toast_h' must be a whole number from 0 to 4096
 assets: ui/styles.json: params: field 'field_cell' must be a whole number from 8 to 256
@@ -154,7 +155,7 @@ assets: ui/styles.json: params: field 'dev_draw' must be a whole number from 0 t
 assets: ui/styles.json: params: field 'dev_badge_x' must be a whole number from -1 to 4096
 assets: ui/styles.json: params: field 'dev_scale_bitmap' must be a whole number from 0 to 1
 assets: ui/styles.json: -: the built-in styles stand in
-assets: ui/battle_front.json: params.party_slot_5_x: unknown param: backdrop_h, command_axis, command_top, critical_marks, critical_marks_enemy, critical_marks_party, dev_badge_y, effect_scale, effect_scale_large, effectiveness_marks, effectiveness_marks_enemy, effectiveness_marks_party, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_statuses, enemy_x, ground_h, icon_gap, icon_size, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, miss_marks, miss_marks_enemy, miss_marks_party, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, result_page_lines, stage_bottom, step_aside, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
+assets: ui/battle_front.json: params.party_slot_5_x: unknown param: backdrop_h, command_axis, command_top, critical_marks, critical_marks_enemy, critical_marks_party, dev_badge_y, effect_scale, effect_scale_large, effectiveness_marks, effectiveness_marks_enemy, effectiveness_marks_party, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_figures, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_statuses, enemy_x, game_over_confirm, ground_h, icon_gap, icon_size, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, miss_marks, miss_marks_enemy, miss_marks_party, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_figures, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, result_page_lines, stage_bottom, step_aside, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
 assets: ui/battle_front.json: params.command_axis: must be "column" or "row": the keys that move the command cursor
 assets: ui/battle_front.json: windows.icons.elements[0].template.elements[1]: field 'visible' reads 'status_nausea', which is not a field of the battle_front screen, a window or a variable
 assets: ui/battle_front.json: windows.icons: lays the menu's rows out across: set the param 'command_axis' to "row" so Left and Right move the cursor
@@ -168,14 +169,16 @@ assets: ui/battle_side.json: statuses.poison: field 'priority' must be a whole n
 assets: ui/battle_side.json: command_rows: unknown field 'side'
 assets: ui/battle_side.json: command_rows.top[1]: must be one of fight, macro, run
 assets: ui/battle_side.json: command_rows.member: must be a non-empty list of member commands
+assets: ui/battle_side.json: command_rows.vehicle[1]: must be one of attack, skills, macro, auto, escape
 assets: ui/battle_side.json: command_rows: needs the param 'command_top' on: the rows are per step of the top-level command flow
 assets: ui/battle_side.json: -: the built-in layout of this screen stands in
 assets: ui/confirm.json: params.backdrop_dim: the screen takes no params
 assets: ui/confirm.json: -: the built-in layout of this screen stands in
 assets: ui/dialogue.json: params.box_h: field 'box_h': expected ')' at character 4 of '(70'
-assets: ui/dialogue.json: params.box_width: unknown param: box_h, box_margin, box_top, picture_stack, narration_lines, narration_cps, narration_delay_ms, narration_width, narration_when
+assets: ui/dialogue.json: params.box_width: unknown param: box_h, box_margin, box_top, picture_stack, narration_lines, narration_cps, narration_delay_ms, narration_hold_ms, narration_wait, narration_width, narration_when
 assets: ui/dialogue.json: params.narration_cps: field 'narration_cps' reads 'speed_of_sound', which is not a field of the dialogue screen, a window or a variable
 assets: ui/dialogue.json: params.narration_when: field 'narration_when': starts_with takes 2 arguments at character 22 of 'starts_with(line_key)'
+assets: ui/dialogue.json: params.narration_wait: must be "press" or "auto": whether narration lines wait for a press
 assets: ui/dialogue.json: tags.bell.values.1: must be a non-empty string: the id the tag's value stands for
 assets: ui/dialogue.json: tags.bell.values.2: must be a non-empty string: the id the tag's value stands for
 assets: ui/dialogue.json: tags.bell: field 'id' leaves the tag's value unread: give 'values' and 'default' without it
@@ -195,7 +198,8 @@ assets: ui/extras.json: entries[2]: 'options' is listed twice
 assets: ui/extras.json: entries[3]: missing field 'page'
 assets: ui/extras.json: entries[4]: unknown field 'colour'
 assets: ui/extras.json: -: the built-in layout of this screen stands in
-assets: ui/field.json: params.area_banners: unknown param: area_banner, arrive_toast
+assets: ui/field.json: params.area_banners: unknown param: area_banner, arrive_toast, followers_arrive
+assets: ui/field.json: params.followers_arrive: must be "stacked" or "behind": where followers stand when the party arrives
 assets: ui/field.json: -: the built-in layout of this screen stands in
 assets: ui/inn.json: statuses: the screen takes no statuses table
 assets: ui/inn.json: windows.box: unknown field 'colour'
@@ -234,4 +238,4 @@ assets: ui/sound_test.json: -: the built-in layout of this screen stands in
 assets: ui/title.json: -: not valid JSON: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 27.
 assets: ui/title.json: -: the built-in layout of this screen stands in
 assets: 0 tilesets, 14 characters, 18 portraits, 42 figures, 18 field enemies, 3 vehicles, 4 backdrops, 28 effects, 5 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 19 layout files (1280x720)
-FAILED: 235 problems.
+FAILED: 239 problems.

@@ -57,6 +57,7 @@ public sealed partial class SampleController
 		if (input.Confirm && list.Count > 0)
 		{
 			PsivResult traded = _tab == 0 ? _s.Buy(list[_list.Cursor].Id) : _s.Sell(list[_list.Cursor].Id);
+			RememberTrade(shop, list[_list.Cursor], 1, traded);
 			KeeperAnswered(traded);
 			ShopReport(traded);
 		}
@@ -143,6 +144,7 @@ public sealed partial class SampleController
 			if (input.Confirm)
 			{
 				PsivResult traded = _tab == 0 ? _s.Buy(entry.Id, _shopCount) : _s.Sell(entry.Id, _shopCount);
+				RememberTrade(shop, entry, _shopCount, traded);
 				KeeperAnswered(traded);
 				ShopReport(traded);
 				_shopStep = ShopStep.Result;
@@ -170,7 +172,7 @@ public sealed partial class SampleController
 			.Set("tab", _tab)
 			.Set("money_value", _s.WorldInfo().Money)
 			.Set("keeper", shop is null ? -1 : Keeper(art, shop.Id))
-			.Set("voice_line", shop is null ? "" : VoiceLine(shop.Voice, "shop", _keeperMoment));
+			.Set("voice_line", "");
 		List<InventoryEntry> entries = shop is null ? [] : ShopRows(shop);
 		if (shop is not null)
 		{
@@ -185,6 +187,7 @@ public sealed partial class SampleController
 			.Set("compare", "");
 		InventoryEntry? at = entries.Count > 0 ? entries[Math.Clamp(_list.Cursor, 0, entries.Count - 1)] : null;
 		bool steps = ShopSteps;
+		ctx.Set("voice_line", shop is null ? "" : ShopVoiceLine(shop, at, steps ? _shopCount : 1));
 		ctx.Set("step", !steps ? "tabs" : _shopStep.ToString().ToLowerInvariant())
 			.Set("choices", new List<string> { T("ui.shop.buy"), T("ui.shop.sell") })
 			.Set("choice_cursor", _shopChoice)
@@ -238,16 +241,44 @@ public sealed partial class SampleController
 	private void KeeperAnswered(PsivResult result) =>
 		_keeperMoment = result.Ok ? "thanks" : result.Error!.Key == "game.refuse.no_money" ? "cannot_afford" : _keeperMoment;
 
-	// The keeper's line: VOICE.MOMENT when the point has a voice and the tables have that key, else ui.shop.MOMENT or
-	// ui.inn.MOMENT.
-	private string VoiceLine(string voice, string kind, string moment, params object[] parameters)
+	// The keeper's line, the first key the tables have of: VOICE.MOMENT_SIDE and VOICE.MOMENT when the point has a voice,
+	// then ui.KIND.MOMENT_SIDE and ui.KIND.MOMENT. SIDE (`buy` or `sell`) is given for a shop's `confirm` and `thanks`.
+	private string VoiceLine(string voice, string kind, string moment, string side, params object[] parameters)
 	{
 		string[] values = [.. parameters.Select(p => Convert.ToString(p, System.Globalization.CultureInfo.InvariantCulture) ?? "")];
-		string key = voice + "." + moment;
-		string own = voice.Length > 0 ? _s.FormatText(key, values) : key;
-		_probeVoice = own != key ? key : $"ui.{kind}.{moment}";
-		return own != key ? own : T($"ui.{kind}.{moment}", parameters);
+		IEnumerable<string> prefixes = voice.Length > 0 ? [voice, $"ui.{kind}"] : [$"ui.{kind}"];
+		foreach (string prefix in prefixes)
+		{
+			foreach (string key in side.Length > 0 ? new[] { $"{prefix}.{moment}_{side}", $"{prefix}.{moment}" } : [$"{prefix}.{moment}"])
+			{
+				if (_s.FormatText(key, values) is var text && text != key)
+				{
+					_probeVoice = key;
+					return text;
+				}
+			}
+		}
+		_probeVoice = $"ui.{kind}.{moment}";
+		return T($"ui.{kind}.{moment}", parameters);
 	}
+
+	// A shop keeper's line, with {0} the shop's kind word, {1} the item's name, {2} the quantity, {3} the total price and
+	// {4} the price of one: after a trade those of the trade, while confirming those of the row and count chosen, empty
+	// when there are none (the welcome).
+	private string ShopVoiceLine(ShopInfo shop, InventoryEntry? at, int count)
+	{
+		string side = _keeperMoment is "confirm" or "thanks" ? (_tab == 0 ? "buy" : "sell") : "";
+		object[] values = _keeperMoment == "thanks" && _voiceTrade is { } traded ? [T(NameKind.ShopKind, (int)shop.Kind), traded.Name, traded.Count, traded.Count * traded.Unit, traded.Unit]
+			: _keeperMoment == "confirm" && at is not null ? [T(NameKind.ShopKind, (int)shop.Kind), at.Name, count, ShopPrice(shop, at) * count, ShopPrice(shop, at)]
+			: [T(NameKind.ShopKind, (int)shop.Kind), "", "", "", ""];
+		return VoiceLine(shop.Voice, "shop", _keeperMoment, side, values);
+	}
+
+	// The last trade, for the keeper's thanks: the item's name, the count and the price of one.
+	private (string Name, int Count, int Unit)? _voiceTrade;
+
+	private void RememberTrade(ShopInfo shop, InventoryEntry entry, int count, PsivResult traded) =>
+		_voiceTrade = traded.Ok ? (entry.Name, count, ShopPrice(shop, entry)) : _voiceTrade;
 
 	// The text key of the keeper's line the last shop or inn frame showed.
 	private string _probeVoice = "-";

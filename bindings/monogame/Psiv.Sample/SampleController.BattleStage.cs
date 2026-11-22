@@ -200,7 +200,18 @@ public sealed partial class SampleController
 		var hovering = new List<string>();
 		// The figures' pictures go on the stage when the layout draws its `stage` slot; where each lands is known now.
 		var pictures = new List<Action>();
-		void Picture(int image, int x, int y, int w, int h, Color tint) => pictures.Add(() => s.Image(image, x, y, w, h, tint));
+		// The battle layout's `party_figures` and `enemy_figures` (expressions, default 1) leave a side's figures out of the
+		// stage slot, its backdrop staying; their places still anchor effects and numbers.
+		bool partyFigures = Ui.Param(screen, "party_figures", ui, 1) != 0, enemyFigures = Ui.Param(screen, "enemy_figures", ui, 1) != 0;
+		bool hideFigure = false;
+		var hidden = new List<Action>();
+		void Picture(int image, int x, int y, int w, int h, Color tint)
+		{
+			if (!hideFigure)
+			{
+				pictures.Add(() => s.Image(image, x, y, w, h, tint));
+			}
+		}
 		bool Behind(int i) => front && i < partyCount;
 		ctx.Behind = Behind;
 		_probeFigureLooks.Clear();
@@ -210,6 +221,7 @@ public sealed partial class SampleController
 			Combatant c = all[i];
 			ShownCombatant sc = shown[i];
 			bool enemy = c.Side == Side.Enemy;
+			hideFigure = !(enemy ? enemyFigures : partyFigures);
 			string id = enemy ? sc.Id : c.Id;
 			// In a vehicle battle the members ride inside it: only the vehicle stands on the field, at the party's middle.
 			if (vehicle.Length > 0 && !enemy && c.Id != vehicle)
@@ -239,7 +251,7 @@ public sealed partial class SampleController
 			Figure figure = enemy ? art.BattleFigure(id, true)
 				: c.Id == vehicle ? (front ? art.VehicleBackFigure(c.Id) : art.VehicleFigure(c.Id))
 				: front ? art.BackFigure(c.Id) : art.BattleFigure(c.Id, false);
-			if (!enemy)
+			if (!enemy && !hideFigure)
 			{
 				figures.Add($"{c.Id} {(c.Id == vehicle ? "vehicle " : "")}{(front ? "back" : "side")}");
 			}
@@ -294,10 +306,11 @@ public sealed partial class SampleController
 			{
 				image = s.Derive(image, "palette:" + string.Join(",", palette.Select(p => $"{p.From.PackedValue:x}>{p.To.PackedValue:x}")), (px, _, _) => Recolor(px, palette));
 			}
-			FigurePicture(s, pictures, image, body, tint * alpha, fl, foot + (int)MathF.Round(dy) + jolt.Y + figureShift.Y, i);
+			FigurePicture(s, hideFigure ? hidden : pictures, image, body, tint * alpha, fl, foot + (int)MathF.Round(dy) + jolt.Y + figureShift.Y, i);
 			_probeFigureLooks[c.Label] = $"pose {animation} frame {(fl.Frame >= 0 ? fl.Frame : cell)} offset {(int)MathF.Round(dx)},{(int)MathF.Round(dy)}" +
 				$" color #{tint.R:x2}{tint.G:x2}{tint.B:x2} alpha {alpha.ToString("0.00", CultureInfo.InvariantCulture)}" + (fl.Life.Length > 0 ? " " + fl.Life : "");
 		}
+		hideFigure = false;
 		_lastBodies = new Dictionary<int, Rectangle>(bodies);
 		_probeFigures = figures.Count == 0 ? "none" : string.Join(", ", figures);
 		_probeFigurePoses = posed.Count == 0 ? "none" : string.Join(", ", posed);

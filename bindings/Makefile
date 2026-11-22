@@ -461,6 +461,7 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/narration_data/game/data --check-assets --assets $(BUILD)/narration_assets
 	$(call narration_run,narration,)
 	$(call narration_run,narration_ja,--language ja --strict-text)
+	$(call narration_run,narration_auto,)
 	# The text and quest logs laid out by the built-in files at 320x224 and 192x144, after the tags scene.
 	rm -rf $(BUILD)/sample_small_logs_saves $(BUILD)/small_logs_assets
 	cp -R $(BUILD)/small_assets $(BUILD)/small_logs_assets
@@ -491,6 +492,38 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(SAMPLE_RUN) --dev --saves $(BUILD)/sample_field_trail_saves --script $(SAMPLE_SCRIPTS)/field_trail.txt --frames 800 > $(BUILD)/sample_field_trail_headless.txt \
 		|| (cat $(BUILD)/sample_field_trail_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_field_trail_headless.txt
+	# A step time with a fraction and two belts on the same cells that reverse with a flag, which the sample reads
+	# without a problem, under the real-time field input.
+	rm -rf $(BUILD)/sample_belts_saves
+	python3 -I $(SAMPLE_SCRIPTS)/make_belt_data.py $(GAME)/data $(CORE)/data $(BUILD)/belt_data
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/belt_data/game/data --dev --saves $(BUILD)/sample_belts_saves \
+		--script $(SAMPLE_SCRIPTS)/belts.txt --frames 700 > $(BUILD)/sample_belts_headless.txt || (cat $(BUILD)/sample_belts_headless.txt; exit 1)
+	! grep "data problem" $(BUILD)/sample_belts_headless.txt
+	@tail -n 1 $(BUILD)/sample_belts_headless.txt
+	# The real-time glide landing with the session on Belt Yard's 262.5 ms steps.
+	rm -rf $(BUILD)/sample_glide_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/belt_data/game/data --dev --saves $(BUILD)/sample_glide_saves \
+		--script $(SAMPLE_SCRIPTS)/glide.txt --frames 500 > $(BUILD)/sample_glide_headless.txt || (cat $(BUILD)/sample_glide_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_glide_headless.txt
+	# Scene presentation: story pictures, the scene camera, music fades, an exit's sound, the ambient talk option and the
+	# keeper's line with its parameters on the hall data copy; Macro and Auto aboard, the game over's return and followers arriving behind on the default data, each
+	# on its own copy of the scene assets (they swap files in); the above picture over everything on the background data.
+	python3 -I $(SAMPLE_SCRIPTS)/make_scene_data.py $(SCENE_DATA)/../.. $(BUILD)/hall_data
+	python3 -I $(SAMPLE_SCRIPTS)/make_scene_assets.py monogame/Psiv.Sample/ui $(BUILD)/scene_assets $(BUILD)/above_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/hall_data/game/data --check-assets --assets $(BUILD)/scene_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --check-assets --assets $(BUILD)/above_assets
+	@for run in scene:$(BUILD)/hall_data/game/data:2400 shop_voice:$(BUILD)/hall_data/game/data:1200 vehicle_commands:$(GAME)/data:5000 game_over:$(GAME)/data:3000 arrive_behind:$(GAME)/data:1400; do \
+		name=$${run%%:*}; rest=$${run#*:}; data=$${rest%%:*}; frames=$${rest#*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves $(BUILD)/$${name}_run_assets; \
+		cp -R $(BUILD)/scene_assets $(BUILD)/$${name}_run_assets; \
+		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $$data --dev --saves $(BUILD)/sample_$${name}_saves --assets $(BUILD)/$${name}_run_assets \
+			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
+	rm -rf $(BUILD)/sample_above_cover_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --dev --saves $(BUILD)/sample_above_cover_saves --assets $(BUILD)/above_assets \
+		--script $(SAMPLE_SCRIPTS)/above_cover.txt --frames 1400 > $(BUILD)/sample_above_cover_headless.txt || (cat $(BUILD)/sample_above_cover_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_above_cover_headless.txt
 	$(SAMPLE_RUN) --saves $(BUILD)/sample_field_interact_saves --script $(SAMPLE_SCRIPTS)/field_interact.txt --frames 700 > $(BUILD)/sample_field_interact_headless.txt \
 		|| (cat $(BUILD)/sample_field_interact_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_field_interact_headless.txt
