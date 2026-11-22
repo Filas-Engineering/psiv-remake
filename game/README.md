@@ -42,6 +42,7 @@ make test     # area files against their Tiled sources, the data check, unit tes
               # first) with tests/expected/motion.txt, then the bot on the main route and on the kiln route
 make maps     # regenerates data/areas/NAME.json from each data/maps/NAME.tmj (../tools/maps/tiled_to_area.py)
 make expected # re-records the eleven golden transcripts after a deliberate change
+make perf     # the stress world of tests/stress_data.h played by its script in both step timings with --profile; not part of make test
 make clean
 ```
 
@@ -63,6 +64,7 @@ Run tests from `game/`, because they load `data/`. One test by name: `./build/ga
 ./build/game_cli --data build/scene_data/game/data --seed 6 --script data/scripts/scene.txt --saves build/scene_saves   # pictures, scene camera, music fades, exit sound
 ./build/make_actor_data data ../core/data tests/fixtures/actors build/motion_data motion             # the actor data with Wren Mill
 ./build/game_cli --data build/motion_data/game/data --seed 6 --script data/scripts/motion.txt --saves build/motion_saves   # wanderers, patrols, paths, platforms
+./build/game_cli --data DIR --script FILE --profile # also prints to stderr the time per command and Session::stats() (counts and timers)
 ./build/game_cli --bot --seed 2                     # pacing tables for visible and random encounters
 ./build/game_cli --bot --seed 2 --encounters random --route data/routes/main.route
 ./build/game_cli --bot --seed 2 --route data/routes/kiln.route --goal saltgrass.kiln_done   # finished when that flag is set, not the bosses

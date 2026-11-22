@@ -12,6 +12,7 @@ LIB_OBJS = $(patsubst src/%.cpp,$(BUILD)/src/%.o,$(wildcard src/*.cpp))
 TEST_OBJS = $(patsubst tests/%.cpp,$(BUILD)/tests/%.o,$(wildcard tests/*.cpp))
 CLI_OBJS = $(BUILD)/cli/game_cli.o
 MAKE_ACTOR_DATA = $(BUILD)/make_actor_data
+MAKE_STRESS_DATA = $(BUILD)/make_stress_data
 # The placeholder data with Wren Hollow and Wren Loft added, for data/scripts/actors.txt and data/scripts/party.txt
 # (tests/actor_data.h).
 ACTOR_DATA = $(BUILD)/actor_data/game/data
@@ -24,12 +25,12 @@ SCENE_DATA = $(BUILD)/scene_data/game/data
 # The actor data with Wren Mill (wandering, patrols, pixel paths, moving platforms), for data/scripts/motion.txt.
 MOTION_DATA = $(BUILD)/motion_data/game/data
 
-.PHONY: all test clean deps maps maps-check expected
+.PHONY: all test clean deps maps maps-check expected perf
 
 PYTHON = python3 -I
 MAP_SOURCES = $(wildcard data/maps/*.tmj)
 
-all: $(LIB) $(CLI) $(TESTS) $(MAKE_ACTOR_DATA)
+all: $(LIB) $(CLI) $(TESTS) $(MAKE_ACTOR_DATA) $(MAKE_STRESS_DATA)
 
 # The sibling libraries decide for themselves whether they are up to date.
 deps:
@@ -156,6 +157,17 @@ test: all maps-check
 	./$(CLI) --bot --seed 2 --route data/routes/kiln.route --goal saltgrass.kiln_done > $(BUILD)/bot_kiln.log
 	@cat $(BUILD)/bot_kiln.log
 
+# The full-size stress world (tests/stress_data.h) played by its script in both step timings, with game_cli's profile;
+# not part of `make test`.
+perf: all
+	@for t in ticks exact; do \
+		./$(MAKE_STRESS_DATA) data ../core/data $(BUILD)/stress_$$t timing=$$t || exit 1; \
+		rm -rf $(BUILD)/stress_$$t/saves; \
+		echo "== step_timing $$t"; \
+		./$(CLI) --data $(BUILD)/stress_$$t/game/data --seed 6 --script $(BUILD)/stress_$$t/stress.txt --saves $(BUILD)/stress_$$t/saves --profile \
+			> $(BUILD)/stress_$$t.log || exit 1; \
+	done
+
 clean:
 	rm -rf $(BUILD)
 
@@ -176,4 +188,7 @@ $(BUILD)/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
--include $(LIB_OBJS:.o=.d) $(TEST_OBJS:.o=.d) $(CLI_OBJS:.o=.d) $(BUILD)/tools/make_actor_data.d
+$(MAKE_STRESS_DATA): $(BUILD)/tools/make_stress_data.o $(LIB) $(CORE_LIB) $(EVENTS_LIB)
+	$(CXX) $(CXXFLAGS) $(BUILD)/tools/make_stress_data.o $(LIB) $(CORE_LIB) $(EVENTS_LIB) -o $@
+
+-include $(LIB_OBJS:.o=.d) $(TEST_OBJS:.o=.d) $(CLI_OBJS:.o=.d) $(BUILD)/tools/make_actor_data.d $(BUILD)/tools/make_stress_data.d

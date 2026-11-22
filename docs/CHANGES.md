@@ -2,6 +2,11 @@
 
 One line per feature, newest first: name, kind, meaning. Each pass adds its lines at the top.
 
+* field ticks with many actors (performance): actors are indexed by id and by home area once per session, so a tick builds each actor's view a few times (the leader's step, wanderers and patrols, visible enemies) instead of once per wanderer, per path actor and per id lookup; results and the encounter stream unchanged.
+* `walk` path search (performance): a grid over the area, with the solid actors' cells taken once per step instead of once per cell searched and objects looked up in a per-area cell index; same paths, same ends (no path, 4000 steps).
+* `Session::area()` with gated exits or solid-while-active hooks (performance): the view's key reads only what can change, so it no longer walks every hook on each call.
+* `SessionStats`, `Session::stats()`, `game_cli --profile` (session, tool): counts and wall time of field ticks, wanderers, patrols, visible enemies, background events, path searches, settles, autosaves and loads; the profile prints them and the time per script command to stderr.
+* `make perf`, `make_stress_data`, `tests/stress_data.h`, test `stressWorldStaysWithinWorkBounds` (tool, test): a synthetic world (300 areas, 700 actors, 1900 hooks, 3500 events) and a script timed in both step timings; the test bounds actor views and path cells on a small copy.
 * macro `on_trouble` (`continue`, `recover`, `stop`; data macros, saves, `Session::setMacroOptions`, `psiv_macro_set_options`, `macro option`): what repeating the macro does in a round where trouble holds (R151).
 * rules.json `auto_macro_on_trouble` (default `stop`) and `named_macro_on_trouble` (default `continue`) (data keys): the trouble mode of the save's auto macro and of a named auto play macro (R151).
 * `Session::setAutoPlayMacro(name, trouble)`, `psiv_battle_set_auto_play_macro_trouble`, `autobattle on|random [NAME] [continue|recover|stop]`, `auto [MODE]` (session, C API, tool): the caller's trouble mode, over the macro's and the rules' (R151).

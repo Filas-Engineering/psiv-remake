@@ -1,4 +1,4 @@
-.PHONY: all test clean acceptance bindings linux-check
+.PHONY: all test clean acceptance bindings linux-check perf
 
 all clean:
 	$(MAKE) -C core $@
@@ -11,6 +11,10 @@ test:
 	$(MAKE) -C game $@
 	python3 -I -m unittest discover -s tools/text/tests
 	python3 -I -m unittest discover -s tools/maps/tests
+
+# Times the full-size stress world in game_cli (game/Makefile); not part of `make test`.
+perf:
+	$(MAKE) -C game perf
 
 acceptance:
 	$(MAKE) -C acceptance test

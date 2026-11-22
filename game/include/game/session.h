@@ -500,6 +500,32 @@ struct PathWalk {
 	int steps = 0;
 };
 
+// Work the session has done since it was made, for performance checks (`game_cli --profile`, tests/test_perf.cpp): counts,
+// and wall time in microseconds, each timer including the work of those it calls.
+struct SessionStats {
+	std::uint64_t ticks = 0;
+	// Path searches of walkStep and the cells they reached.
+	std::uint64_t walkPlans = 0;
+	std::uint64_t walkCells = 0;
+	// Actor views built (actorsHere and the wanderers' updates of single actors).
+	std::uint64_t actorViews = 0;
+	// Wandering and patrolling actors considered in field ticks.
+	std::uint64_t wanderTurns = 0;
+	std::uint64_t settles = 0;
+	std::uint64_t autosaves = 0;
+	std::uint64_t saveBytes = 0;
+	std::uint64_t loads = 0;
+	std::uint64_t tickUs = 0;
+	std::uint64_t wanderUs = 0;
+	std::uint64_t patrolUs = 0;
+	std::uint64_t enemyUs = 0;
+	std::uint64_t backgroundUs = 0;
+	std::uint64_t planUs = 0;
+	std::uint64_t settleUs = 0;
+	std::uint64_t autosaveUs = 0;
+	std::uint64_t loadUs = 0;
+};
+
 // The game: world state, modes, the event host, battles, encounters, saves and pacing. An engine calls
 // update() every frame and the mode's operations on input; everything it shows comes from drainOutput(),
 // the event line and choice accessors, battle() and the core events resolveRound() returns.
@@ -847,6 +873,7 @@ public:
 	// The active party's average level in hundredths.
 	int averageLevelX100() const;
 	SaveFile makeSave(bool autosave) const;
+	const SessionStats& stats() const { return stats_; }
 
 private:
 	class GameHost;
@@ -881,6 +908,8 @@ private:
 	// Whether the leader can move onto `cell`: on foot floor that nothing stands on, including the party's vehicles;
 	// aboard, terrain the vehicle crosses that nothing stands on.
 	bool canEnter(const Area& area, Cell cell) const;
+	// The same with the cells solid actors stand on given (actorCells()), for many cells at a time.
+	bool canEnter(const Area& area, Cell cell, const std::set<Cell>& standing) const;
 	// The id of a vehicle of the party standing on `cell` of the party's area, the ridden one left out.
 	std::string vehicleAt(Cell cell) const;
 	// Leaves the ridden vehicle where it stands without stepping off, when a warp or a travel takes the party away.
@@ -909,10 +938,20 @@ private:
 	// The touch hook of the actor standing on `cell` of the party's area whose flags hold, or null.
 	const Hook* touchHookAt(Cell cell) const;
 	const Hook* touchHook(const std::string& actor) const;
+	// actorsHere() kept up to date through a field tick: the view of the actor last touched is rebuilt, and all of them
+	// after an event, which may change anything. `slot` is each view's place in `views` by the actor's place in game.json.
+	struct TickViews {
+		std::vector<ActorView> views;
+		std::vector<std::size_t> slot;
+		bool stale = true;
+		const ActorDef* touched = nullptr;
+	};
+	void refreshViews(TickViews& views, const Area& here) const;
+	const ActorView* viewOf(const TickViews& views, const ActorDef& def) const;
 	// Steps every wandering actor of the party's area by one tick, after the leader's step.
-	void wanderActors(int ms);
+	void wanderActors(int ms, TickViews& views);
 	// Then the patrols, the paths and the platforms.
-	void patrolActors(int ms);
+	void patrolActors(int ms, TickViews& views);
 	void pathActors();
 	void movePlatforms(int ms);
 	bool fieldStatusStep();
@@ -954,6 +993,25 @@ private:
 		bool visible = true;
 	};
 	std::optional<ActorHome> actorHome(const Area* area, const std::string& actor) const;
+	// The view actorsHere() gives of one actor in `here`; false when it is not there.
+	bool actorView(const ActorDef& def, const Area& here, ActorView& view) const;
+	const ActorDef* actorDef(const std::string& id) const;
+	// What an area's data holds, by area id, built at first use: the objects on each cell, the talk points, the actors that
+	// may stand there unmoved and what area()'s view depends on. The data does not change under a session.
+	struct AreaIndex {
+		int width = 0;
+		int height = 0;
+		std::vector<std::uint8_t> objects;
+		std::map<std::string, std::size_t> talkPoints;
+		std::vector<std::size_t> homeActors;
+		std::vector<std::size_t> touchActors;
+		bool gatedExits = false;
+		bool gatedHooks = false;
+		std::vector<std::size_t> whileActiveHooks;
+	};
+	const AreaIndex& areaIndex(const std::string& id) const;
+	// Whether `cell` may hold a hook, exit, shop, rest point, chest, port, helm or gangway cell of the area; true when unsure.
+	bool objectsMayStand(const Area& area, Cell cell) const;
 	// `animationMs` is how long an `anim` plays by the data, 0 for an instant one.
 	void applyActorAction(const events::Action& action, int animationMs);
 	ActorPlace& touchActor(const std::string& actor);
@@ -962,6 +1020,8 @@ private:
 	std::vector<Cell> actorRoute(const Area& area, const std::string& actor, Cell from, const std::vector<Cell>& stops, bool pathfind) const;
 	// Cells solid actors stand on in the party's area, `except` left out.
 	std::set<Cell> actorCells(const std::string& except = "") const;
+	// The same from actorsHere() as it is now.
+	std::set<Cell> actorCells(const std::vector<ActorView>& views, const std::string& except) const;
 	void removeActor(const std::string& actor, bool untilReload);
 	void advanceActors(int ms);
 	void giveThing(const std::string& id, int count);
@@ -1039,6 +1099,12 @@ private:
 	mutable std::map<std::string, std::pair<std::string, Area>> areaViews_;
 	// Actors whose cell blocks walking while they are shown: game.json homes with `solid`, and talk points with `actor_at`.
 	std::set<std::string> solidActors_;
+	std::map<std::string, std::size_t> actorDefIndex_;
+	mutable std::map<std::string, AreaIndex> areaIndex_;
+	// The index last asked for.
+	mutable std::string indexedId_;
+	mutable const AreaIndex* indexed_ = nullptr;
+	mutable SessionStats stats_;
 	// The route of the actor action being started, for its presented record.
 	std::vector<Cell> actionRoute_;
 

@@ -14,6 +14,7 @@
 #include "rules/text.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <deque>
@@ -32,6 +33,23 @@ constexpr std::size_t kTextLogPages = 500;
 constexpr std::size_t kMaxNameLength = 16;
 constexpr std::size_t kInstantActionRecords = 256;
 constexpr int kMaxWalkSteps = 4000;
+// No view of the actor in Session::TickViews.
+constexpr std::size_t kAway = static_cast<std::size_t>(-1);
+// Session::AreaIndex::objects bits: something stands on the cell, a platform's end is there.
+constexpr std::uint8_t kObject = 1;
+constexpr std::uint8_t kPlatformEnd = 2;
+
+// Adds the time from its making to its end to `total`, in microseconds.
+struct Timer {
+	explicit Timer(std::uint64_t& total) : total_(total), start_(std::chrono::steady_clock::now()) {}
+	~Timer() { total_ += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_).count()); }
+	Timer(const Timer&) = delete;
+	Timer& operator=(const Timer&) = delete;
+
+private:
+	std::uint64_t& total_;
+	std::chrono::steady_clock::time_point start_;
+};
 
 // A save is plain text a player can edit, so everything in it that names data or indexes a map is checked against the
 // data before the world is used. Returns what is wrong, in English, or empty.
@@ -1388,6 +1406,7 @@ Session::Session(const GameData& data, SessionOptions options) : data_(data), op
 		if (!actor.area.empty() && actor.solid && (!actor.path || actor.path->footprintWidth > 0)) {
 			solidActors_.insert(actor.id);
 		}
+		actorDefIndex_.emplace(actor.id, static_cast<std::size_t>(&actor - data_.config.actorDefs.data()));
 	}
 	for (const auto& [id, a] : data_.areas) {
 		for (const Hook& h : a.hooks) {
@@ -1431,10 +1450,12 @@ std::optional<Session::ActorHome> Session::actorHome(const Area* area, const std
 	if (!area) {
 		return std::nullopt;
 	}
-	if (const Hook* hook = talkPoint(area, actor)) {
+	const std::map<std::string, std::size_t>& talkPoints = areaIndex(area->id).talkPoints;
+	if (const auto point = talkPoints.find(actor); point != talkPoints.end() && point->second < area->hooks.size()) {
+		const Hook* hook = &area->hooks[point->second];
 		return ActorHome{hook->actorAt.value_or(hook->at), Facing::South, !hook->solidWhileActive || hookHolds(*hook, world_)};
 	}
-	const ActorDef* def = data_.config.actorDef(actor);
+	const ActorDef* def = actorDef(actor);
 	if (!def || def->area != area->id) {
 		return std::nullopt;
 	}
@@ -1469,15 +1490,19 @@ ActorPlace& Session::touchActor(const std::string& actor) {
 }
 
 std::set<Cell> Session::actorCells(const std::string& except) const {
+	return solidActors_.empty() ? std::set<Cell>() : actorCells(actorsHere(), except);
+}
+
+std::set<Cell> Session::actorCells(const std::vector<ActorView>& views, const std::string& except) const {
 	std::set<Cell> cells;
 	if (solidActors_.empty()) {
 		return cells;
 	}
-	for (const ActorView& a : actorsHere()) {
+	for (const ActorView& a : views) {
 		if (!a.solid || a.id == except) {
 			continue;
 		}
-		const ActorDef* def = data_.config.actorDef(a.id);
+		const ActorDef* def = actorDef(a.id);
 		if (def && def->path) {
 			const auto place = world_.actors.find(a.id);
 			for (const Cell c : pathCells(*def, a.home, place == world_.actors.end() ? 0 : place->second.pathTick)) {
@@ -1826,11 +1851,13 @@ const Hook* Session::touchHook(const std::string& actor) const {
 
 const Hook* Session::touchHookAt(Cell cell) const {
 	const Area* here = area();
-	if (!here || std::none_of(here->hooks.begin(), here->hooks.end(), [](const Hook& h) { return h.trigger == HookTrigger::Touch; })) {
+	if (!here) {
 		return nullptr;
 	}
-	for (const ActorView& actor : actorsHere()) {
-		if (actor.visible && actor.cell == cell) {
+	// Of actorsHere(), only the views of actors that touch hooks name are needed.
+	ActorView actor;
+	for (const std::size_t index : areaIndex(here->id).touchActors) {
+		if (actorView(data_.config.actorDefs[index], *here, actor) && actor.visible && actor.cell == cell) {
 			if (const Hook* hook = touchHook(actor.id)) {
 				return hook;
 			}
@@ -1839,37 +1866,74 @@ const Hook* Session::touchHookAt(Cell cell) const {
 	return nullptr;
 }
 
+// `standing` is actorsHere() as it is now, so the solid actors' cells come from it.
 bool Session::actorMayEnter(const Area& here, const std::string& terrain, Cell next, const std::vector<ActorView>& standing) const {
-	const bool objectThere = here.hookAt(next, HookTrigger::Interact) || here.shopAt(next) || here.restAt(next) || here.chestAt(next) || here.portAt(next) ||
-		here.helmAt(next) || here.exitAt(next) || here.gangwayAt(next);
+	const bool objectThere = objectsMayStand(here, next) &&
+		(here.hookAt(next, HookTrigger::Interact) || here.shopAt(next) || here.restAt(next) || here.chestAt(next) || here.portAt(next) || here.helmAt(next) ||
+			here.exitAt(next) || here.gangwayAt(next));
 	const bool standingThere = std::any_of(standing.begin(), standing.end(), [&](const ActorView& a) { return a.visible && a.cell == next && !a.onPath; }) ||
 		std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == next; }) || !vehicleAt(next).empty();
+	const bool solidThere = std::any_of(standing.begin(), standing.end(), [&](const ActorView& a) {
+		// Only a path actor's view has a footprint.
+		if (!a.solid || (a.footprintWidth <= 0 && a.cell != next)) {
+			return false;
+		}
+		const ActorDef* def = actorDef(a.id);
+		if (!def || !def->path) {
+			return a.cell == next;
+		}
+		const auto place = world_.actors.find(a.id);
+		const std::vector<Cell> cells = pathCells(*def, a.home, place == world_.actors.end() ? 0 : place->second.pathTick);
+		return std::find(cells.begin(), cells.end(), next) != cells.end();
+	});
 	return here.inside(next) && terrain.find(here.rows[next.y][next.x]) != std::string::npos && !here.closed.count(next) && !objectThere && !standingThere &&
-		!actorCells().count(next);
+		!solidThere;
 }
 
-void Session::wanderActors(int ms) {
+void Session::refreshViews(TickViews& views, const Area& here) const {
+	if (!views.stale && views.touched) {
+		const std::size_t at = views.slot[static_cast<std::size_t>(views.touched - data_.config.actorDefs.data())];
+		views.stale = at == kAway || !actorView(*views.touched, here, views.views[at]);
+	}
+	views.touched = nullptr;
+	if (views.stale) {
+		views.views = actorsHere();
+		views.slot.assign(data_.config.actorDefs.size(), kAway);
+		for (std::size_t i = 0; i < views.views.size(); ++i) {
+			if (const auto found = actorDefIndex_.find(views.views[i].id); found != actorDefIndex_.end()) {
+				views.slot[found->second] = i;
+			}
+		}
+		views.stale = false;
+	}
+}
+
+const ActorView* Session::viewOf(const TickViews& views, const ActorDef& def) const {
+	const std::size_t at = views.slot[static_cast<std::size_t>(&def - data_.config.actorDefs.data())];
+	return at == kAway ? nullptr : &views.views[at];
+}
+
+void Session::wanderActors(int ms, TickViews& views) {
 	const Area* here = area();
 	if (!here) {
 		return;
 	}
+	Timer timer(stats_.wanderUs);
 	for (const ActorDef& def : data_.config.actorDefs) {
 		if (!def.wander || def.area != world_.area) {
 			continue;
 		}
-		const ActorView* view = nullptr;
-		const std::vector<ActorView> standing = actorsHere();
-		for (const ActorView& v : standing) {
-			if (v.id == def.id) {
-				view = &v;
-			}
-		}
+		++stats_.wanderTurns;
+		refreshViews(views, *here);
+		const std::vector<ActorView>& standing = views.views;
+		const ActorView* view = viewOf(views, def);
 		if (!view || !view->wanders) {
 			continue;
 		}
 		const ActorWander& rules = *def.wander;
 		const Cell home = def.at ? *def.at : here->markers.at(def.marker);
 		ActorPlace& place = touchActor(def.id);
+		views.touched = &def;
 		if (place.wanderPauseMs > 0) {
 			place.wanderPauseMs = std::max(0, place.wanderPauseMs - ms);
 			continue;
@@ -1899,6 +1963,7 @@ void Session::wanderActors(int ms) {
 		if (next == world_.position) {
 			if (const Hook* hook = touchHook(def.id); hook && world_.playerControl) {
 				startEvent(hook->event);
+				views.stale = true;
 				if (mode() != Mode::Field) {
 					return;
 				}
@@ -1914,7 +1979,7 @@ void Session::wanderActors(int ms) {
 
 std::optional<Cell> Session::settlePatrol(const ActorDef& def, ActorPlace& place) const {
 	const std::vector<PatrolStep>& steps = def.patrol->steps;
-	const Area* here = area();
+	const Area* here = nullptr;
 	for (std::size_t guard = 0; guard <= steps.size(); ++guard) {
 		place.patrolStep %= static_cast<int>(steps.size());
 		const PatrolStep& step = steps[static_cast<std::size_t>(place.patrolStep)];
@@ -1922,6 +1987,9 @@ std::optional<Cell> Session::settlePatrol(const ActorDef& def, ActorPlace& place
 			return stepFrom(place.cell, *step.walk);
 		}
 		std::optional<Cell> goal = step.to;
+		if (!step.toMarker.empty() && !here) {
+			here = area();
+		}
 		if (!step.toMarker.empty() && here && here->markers.count(step.toMarker)) {
 			goal = here->markers.at(step.toMarker);
 		}
@@ -1942,21 +2010,25 @@ std::optional<Cell> Session::settlePatrol(const ActorDef& def, ActorPlace& place
 	return std::nullopt;
 }
 
-void Session::patrolActors(int ms) {
+void Session::patrolActors(int ms, TickViews& views) {
 	const Area* here = area();
 	if (!here) {
 		return;
 	}
+	Timer timer(stats_.patrolUs);
 	for (const ActorDef& def : data_.config.actorDefs) {
 		if (!def.patrol || def.area != world_.area || mode() != Mode::Field) {
 			continue;
 		}
-		const std::vector<ActorView> standing = actorsHere();
-		const auto view = std::find_if(standing.begin(), standing.end(), [&](const ActorView& v) { return v.id == def.id; });
-		if (view == standing.end() || !view->patrols) {
+		++stats_.wanderTurns;
+		refreshViews(views, *here);
+		const std::vector<ActorView>& standing = views.views;
+		const ActorView* view = viewOf(views, def);
+		if (!view || !view->patrols) {
 			continue;
 		}
 		ActorPlace& place = touchActor(def.id);
+		views.touched = &def;
 		if (place.wanderPauseMs > 0) {
 			place.wanderPauseMs = std::max(0, place.wanderPauseMs - ms);
 			continue;
@@ -1977,6 +2049,7 @@ void Session::patrolActors(int ms) {
 		if (*next == world_.position) {
 			if (const Hook* hook = touchHook(def.id); hook && world_.playerControl) {
 				startEvent(hook->event);
+				views.stale = true;
 			}
 			continue;
 		}
@@ -2012,11 +2085,16 @@ std::vector<Cell> Session::pathCells(const ActorDef& def, Cell anchor, int tick)
 }
 
 void Session::pathActors() {
-	for (const ActorView& view : actorsHere()) {
-		const ActorDef* def = data_.config.actorDef(view.id);
-		if (def && def->path && view.onPath) {
-			ActorPlace& place = touchActor(def->id);
-			place.pathTick = (place.pathTick + 1) % (def->path->ticks * static_cast<int>(def->path->offsets.size()));
+	const Area* here = area();
+	if (!here) {
+		return;
+	}
+	// Of actorsHere(), only the path actors' views are needed.
+	ActorView view;
+	for (const ActorDef& def : data_.config.actorDefs) {
+		if (def.path && actorView(def, *here, view) && view.onPath) {
+			ActorPlace& place = touchActor(def.id);
+			place.pathTick = (place.pathTick + 1) % (def.path->ticks * static_cast<int>(def.path->offsets.size()));
 		}
 	}
 }
@@ -2050,6 +2128,14 @@ void Session::resetPlatforms(bool keep) {
 }
 
 const Platform* Session::dockedPlatformAt(Cell cell) const {
+	// Entering an area puts each of its platforms in World::platforms.
+	if (world_.platforms.empty()) {
+		return nullptr;
+	}
+	if (const AreaIndex& index = areaIndex(world_.area); cell.x >= 0 && cell.y >= 0 && cell.x < index.width && cell.y < index.height &&
+		!(index.objects[static_cast<std::size_t>(cell.y) * static_cast<std::size_t>(index.width) + static_cast<std::size_t>(cell.x)] & kPlatformEnd)) {
+		return nullptr;
+	}
 	const Area* here = area();
 	if (!here) {
 		return nullptr;
@@ -2236,61 +2322,183 @@ std::vector<ActorView> Session::actorsHere() const {
 	if (!here) {
 		return out;
 	}
-	for (const ActorDef& def : data_.config.actorDefs) {
-		ActorView view;
-		view.id = def.id;
-		view.spriteEnemy = def.spriteEnemy;
-		view.look = def.look;
-		auto it = world_.actors.find(def.id);
-		if (it != world_.actors.end()) {
-			const ActorPlace& p = it->second;
-			if (p.area != world_.area) {
-				continue;
+	// Only actors with a home here or a place a script gave them here can be here, in game.json order.
+	std::vector<std::size_t> order = areaIndex(here->id).homeActors;
+	for (const auto& [id, place] : world_.actors) {
+		if (place.area == world_.area) {
+			if (const auto def = actorDefIndex_.find(id); def != actorDefIndex_.end()) {
+				order.push_back(def->second);
 			}
-			view.cell = p.cell;
-			view.facing = p.facing;
-			view.visible = p.visible && p.removed == ActorRemoval::None;
-			view.scripted = true;
-			view.vanish = p.vanish;
-			view.animation = p.animation;
-			view.animationMs = p.animationMs;
-			view.animationTotalMs = p.animationTotalMs;
-			view.removed = p.removed;
-		} else if (const std::optional<ActorHome> home = actorHome(here, def.id)) {
-			view.cell = home->cell;
-			view.facing = home->facing;
-			view.visible = home->visible;
-		} else {
-			continue;
 		}
-		view.solid = view.visible && solidActors_.count(def.id) > 0;
-		if (it != world_.actors.end() && (!it->second.lookEnemy.empty() || !it->second.look.empty())) {
-			view.spriteEnemy = it->second.lookEnemy;
-			view.look = it->second.look;
+	}
+	std::sort(order.begin(), order.end());
+	order.erase(std::unique(order.begin(), order.end()), order.end());
+	ActorView view;
+	for (const std::size_t index : order) {
+		if (actorView(data_.config.actorDefs[index], *here, view)) {
+			out.push_back(view);
 		}
-		const bool moving = view.visible && def.area == world_.area &&
-			std::none_of(background_.begin(), background_.end(), [&](const BackgroundRun& run) {
-				const std::vector<events::ActorState>& touched = run.interpreter->presentation().actors;
-				return std::any_of(touched.begin(), touched.end(), [&](const events::ActorState& a) { return a.actor == def.id; });
-			});
-		view.wanders = def.wander && moving;
-		view.patrols = def.patrol && moving;
-		view.onPath = def.path && moving;
-		if (def.path) {
-			view.home = view.cell;
-			const int size = data_.config.cellPixels;
-			const int tick = it != world_.actors.end() ? it->second.pathTick : 0;
-			const auto& offset = def.path->offsets[static_cast<std::size_t>(tick / def.path->ticks) % def.path->offsets.size()];
-			view.pathX = offset.first;
-			view.pathY = offset.second;
-			const auto cellOf = [size](int pixel) { return pixel >= 0 ? pixel / size : -((-pixel + size - 1) / size); };
-			view.cell = {cellOf(view.home.x * size + offset.first), cellOf(view.home.y * size + offset.second)};
-			view.footprintWidth = def.path->footprintWidth;
-			view.footprintHeight = def.path->footprintHeight;
-		}
-		out.push_back(view);
 	}
 	return out;
+}
+
+bool Session::actorView(const ActorDef& def, const Area& here, ActorView& view) const {
+	++stats_.actorViews;
+	view = ActorView();
+	view.id = def.id;
+	view.spriteEnemy = def.spriteEnemy;
+	view.look = def.look;
+	auto it = world_.actors.find(def.id);
+	if (it != world_.actors.end()) {
+		const ActorPlace& p = it->second;
+		if (p.area != world_.area) {
+			return false;
+		}
+		view.cell = p.cell;
+		view.facing = p.facing;
+		view.visible = p.visible && p.removed == ActorRemoval::None;
+		view.scripted = true;
+		view.vanish = p.vanish;
+		view.animation = p.animation;
+		view.animationMs = p.animationMs;
+		view.animationTotalMs = p.animationTotalMs;
+		view.removed = p.removed;
+	} else if (const std::optional<ActorHome> home = actorHome(&here, def.id)) {
+		view.cell = home->cell;
+		view.facing = home->facing;
+		view.visible = home->visible;
+	} else {
+		return false;
+	}
+	view.solid = view.visible && solidActors_.count(def.id) > 0;
+	if (it != world_.actors.end() && (!it->second.lookEnemy.empty() || !it->second.look.empty())) {
+		view.spriteEnemy = it->second.lookEnemy;
+		view.look = it->second.look;
+	}
+	const bool moving = view.visible && def.area == world_.area &&
+		std::none_of(background_.begin(), background_.end(), [&](const BackgroundRun& run) {
+			const std::vector<events::ActorState>& touched = run.interpreter->presentation().actors;
+			return std::any_of(touched.begin(), touched.end(), [&](const events::ActorState& a) { return a.actor == def.id; });
+		});
+	view.wanders = def.wander && moving;
+	view.patrols = def.patrol && moving;
+	view.onPath = def.path && moving;
+	if (def.path) {
+		view.home = view.cell;
+		const int size = data_.config.cellPixels;
+		const int tick = it != world_.actors.end() ? it->second.pathTick : 0;
+		const auto& offset = def.path->offsets[static_cast<std::size_t>(tick / def.path->ticks) % def.path->offsets.size()];
+		view.pathX = offset.first;
+		view.pathY = offset.second;
+		const auto cellOf = [size](int pixel) { return pixel >= 0 ? pixel / size : -((-pixel + size - 1) / size); };
+		view.cell = {cellOf(view.home.x * size + offset.first), cellOf(view.home.y * size + offset.second)};
+		view.footprintWidth = def.path->footprintWidth;
+		view.footprintHeight = def.path->footprintHeight;
+	}
+	return true;
+}
+
+const ActorDef* Session::actorDef(const std::string& id) const {
+	const auto found = actorDefIndex_.find(id);
+	return found == actorDefIndex_.end() ? nullptr : &data_.config.actorDefs[found->second];
+}
+
+const Session::AreaIndex& Session::areaIndex(const std::string& id) const {
+	if (indexed_ && indexedId_ == id) {
+		return *indexed_;
+	}
+	const auto found = areaIndex_.find(id);
+	if (found != areaIndex_.end()) {
+		indexedId_ = id;
+		indexed_ = &found->second;
+		return found->second;
+	}
+	AreaIndex& index = areaIndex_[id];
+	indexedId_ = id;
+	indexed_ = &index;
+	const Area* a = data_.area(id);
+	if (!a) {
+		return index;
+	}
+	index.width = a->width();
+	index.height = a->height();
+	index.objects.assign(static_cast<std::size_t>(index.width) * static_cast<std::size_t>(index.height), 0);
+	const auto mark = [&](Cell c) {
+		if (a->inside(c)) {
+			index.objects[static_cast<std::size_t>(c.y) * static_cast<std::size_t>(index.width) + static_cast<std::size_t>(c.x)] |= kObject;
+		}
+	};
+	for (std::size_t i = 0; i < a->hooks.size(); ++i) {
+		const Hook& h = a->hooks[i];
+		mark(h.at);
+		for (const Cell c : h.cells) {
+			mark(c);
+		}
+		if (h.trigger == HookTrigger::Interact) {
+			index.talkPoints.emplace(h.id, i);
+		}
+		if (h.solidWhileActive) {
+			index.whileActiveHooks.push_back(i);
+		}
+		index.gatedHooks = index.gatedHooks || h.solidWhileActive || a->exitAt(h.at);
+	}
+	for (const Exit& e : a->exits) {
+		mark(e.at);
+		index.gatedExits = index.gatedExits || !e.requireFlag.empty() || !e.blockFlag.empty();
+	}
+	for (const Shop& x : a->shops) {
+		if (x.at) {
+			mark(*x.at);
+		}
+	}
+	for (const RestPoint& x : a->rests) {
+		if (x.at) {
+			mark(*x.at);
+		}
+	}
+	for (const Chest& x : a->chests) {
+		mark(x.at);
+	}
+	for (const Port& x : a->ports) {
+		mark(x.at);
+	}
+	for (const Helm& x : a->helms) {
+		mark(x.at);
+	}
+	for (const Cell c : a->gangway) {
+		mark(c);
+	}
+	for (const Platform& p : a->platforms) {
+		for (const Cell c : {p.from, p.to}) {
+			if (a->inside(c)) {
+				index.objects[static_cast<std::size_t>(c.y) * static_cast<std::size_t>(index.width) + static_cast<std::size_t>(c.x)] |= kPlatformEnd;
+			}
+		}
+	}
+	std::set<std::string> touching;
+	for (const Hook& h : a->hooks) {
+		if (h.trigger == HookTrigger::Touch) {
+			touching.insert(h.actor);
+		}
+	}
+	for (std::size_t i = 0; i < data_.config.actorDefs.size(); ++i) {
+		const ActorDef& def = data_.config.actorDefs[i];
+		if (def.area == id || index.talkPoints.count(def.id)) {
+			index.homeActors.push_back(i);
+		}
+		if (touching.count(def.id) && actorDef(def.id) == &def) {
+			index.touchActors.push_back(i);
+		}
+	}
+	return index;
+}
+
+bool Session::objectsMayStand(const Area& area, Cell cell) const {
+	const AreaIndex& index = areaIndex(area.id);
+	if (!area.inside(cell) || index.width != area.width() || index.height != area.height()) {
+		return true;
+	}
+	return (index.objects[static_cast<std::size_t>(cell.y) * static_cast<std::size_t>(index.width) + static_cast<std::size_t>(cell.x)] & kObject) != 0;
 }
 
 const Area* Session::area() const {
@@ -2345,8 +2553,9 @@ const Area* Session::areaAt(const std::string& id) const {
 	}
 	const auto broken = world_.brokenCells.find(id);
 	const bool here = id == world_.area && !world_.brokenHere.empty();
-	const bool gatedExits = std::any_of(base->exits.begin(), base->exits.end(), [](const Exit& e) { return !e.requireFlag.empty() || !e.blockFlag.empty(); });
-	const bool gatedHooks = std::any_of(base->hooks.begin(), base->hooks.end(), [&](const Hook& h) { return h.solidWhileActive || base->exitAt(h.at); });
+	const AreaIndex& index = areaIndex(id);
+	const bool gatedExits = index.gatedExits;
+	const bool gatedHooks = index.gatedHooks;
 	if (base->changes.empty() && broken == world_.brokenCells.end() && !here && !gatedExits && !gatedHooks) {
 		return base;
 	}
@@ -2370,8 +2579,9 @@ const Area* Session::areaAt(const std::string& id) const {
 	for (const Exit& e : base->exits) {
 		key += exitOpen(e, world_) ? '1' : '0';
 	}
-	for (const Hook& h : base->hooks) {
-		key += !h.solidWhileActive || hookStands(h) ? '1' : '0';
+	// Hooks solid only while active are all the key needs: every other hook adds the same '1' each time.
+	for (const std::size_t h : index.whileActiveHooks) {
+		key += hookStands(base->hooks[h]) ? '1' : '0';
 	}
 	auto view = areaViews_.find(id);
 	if (view == areaViews_.end()) {
@@ -2794,6 +3004,8 @@ rules::Message Session::loadText(const std::string& text, const std::string& slo
 	if (mode() != Mode::Title) {
 		return refusal("load_title");
 	}
+	Timer timer(stats_.loadUs);
+	++stats_.loads;
 	rules::Result<SaveFile> save = parseSave(text);
 	if (!save.ok()) {
 		return refusal("save_damaged", {slot, save.error});
@@ -2939,6 +3151,8 @@ void Session::addTime(int ms) {
 }
 
 void Session::tickField(const FieldInput& input) {
+	Timer timer(stats_.tickUs);
+	++stats_.ticks;
 	const int tick = data_.config.tickMs;
 	addTime(tick);
 	if (pacingOn()) {
@@ -2947,6 +3161,8 @@ void Session::tickField(const FieldInput& input) {
 	advanceActors(tick);
 	world_.graceMs = std::max(0, world_.graceMs - tick);
 	const Area& a = *area();
+	// Built where the leader's step first needs them; an arrival may change anything.
+	TickViews views;
 	const FieldVehicle* vehicle = riding();
 	const Conveyor* belt = nullptr;
 	for (const Conveyor& c : a.conveyors) {
@@ -2967,7 +3183,9 @@ void Session::tickField(const FieldInput& input) {
 		const std::int64_t beltUs = data_.config.exactSteps ? belt->stepUs : belt->stepMs * 1000LL;
 		if (conveyorUs_ >= beltUs) {
 			conveyorUs_ = data_.config.exactSteps ? std::min(conveyorUs_ - beltUs, beltUs - 1) : 0;
-			if (canEnter(a, target) && !blockedByEnemy) {
+			refreshViews(views, a);
+			if (canEnter(a, target, actorCells(views.views, "")) && !blockedByEnemy) {
+				views.stale = true;
 				arrive(target);
 				if (mode() != Mode::Field) {
 					return;
@@ -2997,10 +3215,12 @@ void Session::tickField(const FieldInput& input) {
 		const bool blockedByEnemy = std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; });
 		// Under `exact` the time past the step carries into the next (a step shorter than a tick still takes one).
 		const std::int64_t stepUs = data_.config.exactSteps ? leaderStepUs(input.running) : leaderStepMs(input.running) * 1000LL;
-		if (canEnter(a, target) && !blockedByEnemy) {
+		refreshViews(views, a);
+		if (canEnter(a, target, actorCells(views.views, "")) && !blockedByEnemy) {
 			stepProgressUs_ += tick * 1000LL;
 			if (stepProgressUs_ >= stepUs) {
 				stepProgressUs_ = data_.config.exactSteps ? std::min(stepProgressUs_ - stepUs, stepUs - 1) : 0;
+				views.stale = true;
 				arrive(target);
 				if (mode() != Mode::Field) {
 					return;
@@ -3013,20 +3233,23 @@ void Session::tickField(const FieldInput& input) {
 		stepProgressUs_ = 0;
 	}
 	// After the leader's step, in this order: wandering actors, patrols, paths, platforms, visible enemies, background events.
-	wanderActors(tick);
+	wanderActors(tick, views);
 	if (mode() != Mode::Field) {
 		return;
 	}
-	patrolActors(tick);
+	patrolActors(tick, views);
 	if (mode() != Mode::Field) {
 		return;
 	}
 	pathActors();
 	movePlatforms(tick);
 	if (encounterMode() == EncounterMode::Visible && world_.area == a.id && encountersOn_) {
+		Timer enemies(stats_.enemyUs);
 		std::vector<Cell> wanderers;
-		for (const ActorView& v : actorsHere()) {
-			const ActorDef* def = data_.config.actorDef(v.id);
+		// The paths' ticks since leave every view's id, solid, cell and home as they were, which is all this reads.
+		refreshViews(views, a);
+		for (const ActorView& v : views.views) {
+			const ActorDef* def = actorDef(v.id);
 			if (v.solid && def && (def->wander || def->patrol)) {
 				wanderers.push_back(v.cell);
 			}
@@ -3042,6 +3265,7 @@ void Session::tickField(const FieldInput& input) {
 		}
 	}
 	if (!background_.empty()) {
+		Timer background(stats_.backgroundUs);
 		stepBackground(tick);
 	}
 }
@@ -3301,6 +3525,8 @@ void Session::settleField() {
 	if (mode() != Mode::Field || gameOver_) {
 		return;
 	}
+	Timer timer(stats_.settleUs);
+	++stats_.settles;
 	if (loadHooksPending_) {
 		for (const Hook& hook : area()->hooks) {
 			if (hook.trigger == HookTrigger::Load && !loadHooksFired_.count(hook.id) && hookHolds(hook, world_)) {
@@ -3314,8 +3540,11 @@ void Session::settleField() {
 		loadHooksPending_ = false;
 	}
 	for (const Hook& hook : area()->hooks) {
+		if (hook.trigger != HookTrigger::Flag) {
+			continue;
+		}
 		const std::string onceKey = world_.area + "/" + hook.id;
-		if (hook.trigger == HookTrigger::Flag && hookHolds(hook, world_) && !(hook.once && world_.onceHooks.count(onceKey))) {
+		if (hookHolds(hook, world_) && !(hook.once && world_.onceHooks.count(onceKey))) {
 			if (hook.once) {
 				world_.onceHooks.insert(onceKey);
 			}
@@ -3465,37 +3694,62 @@ WalkStatus Session::walkStep(PathWalk& walk) {
 		return WalkStatus::Arrived;
 	}
 	const Area& a = *area();
-	// A belt carries the party wherever it runs, so the path crosses none but the goal.
-	std::set<Cell> belts;
-	for (const Conveyor& c : a.conveyors) {
-		belts.insert(c.cells.begin(), c.cells.end());
-	}
-	for (const Platform& p : a.platforms) {
-		for (int i = 0; i <= p.length(); ++i) {
-			belts.insert(p.cellAt(i));
-		}
-	}
-	std::map<Cell, Cell> from;
-	std::deque<Cell> queue{world_.position};
-	from[world_.position] = world_.position;
-	while (!queue.empty() && !from.count(walk.goal)) {
-		const Cell c = queue.front();
-		queue.pop_front();
-		for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
-			const Cell n = stepFrom(c, f);
-			if (from.count(n) || !canEnter(a, n) || ((a.exitAt(n) || belts.count(n)) && n != walk.goal)) {
-				continue;
-			}
-			from[n] = c;
-			queue.push_back(n);
-		}
-	}
-	if (!from.count(walk.goal)) {
-		return WalkStatus::NoPath;
-	}
 	Cell next = walk.goal;
-	while (from[next] != world_.position) {
-		next = from[next];
+	{
+		Timer timer(stats_.planUs);
+		++stats_.walkPlans;
+		// Cells by y * width + x: the leader stands inside the area, and no cell outside it can be entered.
+		const int width = a.width();
+		const auto at = [width](Cell c) { return static_cast<std::size_t>(c.y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(c.x); };
+		const std::size_t cells = static_cast<std::size_t>(width) * static_cast<std::size_t>(a.height());
+		// A belt carries the party wherever it runs, so the path crosses none but the goal.
+		std::vector<char> belts(cells, 0);
+		for (const Conveyor& c : a.conveyors) {
+			for (const Cell b : c.cells) {
+				if (a.inside(b)) {
+					belts[at(b)] = 1;
+				}
+			}
+		}
+		for (const Platform& p : a.platforms) {
+			for (int i = 0; i <= p.length(); ++i) {
+				if (a.inside(p.cellAt(i))) {
+					belts[at(p.cellAt(i))] = 1;
+				}
+			}
+		}
+		const std::set<Cell> standing = actorCells();
+		constexpr std::size_t kNone = static_cast<std::size_t>(-1);
+		std::vector<std::size_t> from(cells, kNone);
+		const bool goalInside = a.inside(walk.goal);
+		if (!a.inside(world_.position)) {
+			return WalkStatus::NoPath;
+		}
+		const auto reached = [&](Cell c) { return from[at(c)] != kNone; };
+		std::deque<Cell> queue{world_.position};
+		from[at(world_.position)] = at(world_.position);
+		while (!queue.empty() && !(goalInside && reached(walk.goal))) {
+			const Cell c = queue.front();
+			queue.pop_front();
+			for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
+				const Cell n = stepFrom(c, f);
+				if (!a.inside(n) || reached(n) || !canEnter(a, n, standing) || (((objectsMayStand(a, n) && a.exitAt(n)) || belts[at(n)]) && n != walk.goal)) {
+					continue;
+				}
+				from[at(n)] = at(c);
+				queue.push_back(n);
+				++stats_.walkCells;
+			}
+		}
+		if (!goalInside || !reached(walk.goal)) {
+			return WalkStatus::NoPath;
+		}
+		const std::size_t start = at(world_.position);
+		std::size_t step = at(walk.goal);
+		while (from[step] != start) {
+			step = from[step];
+		}
+		next = {static_cast<int>(step % static_cast<std::size_t>(width)), static_cast<int>(step / static_cast<std::size_t>(width))};
 	}
 	Facing direction = Facing::North;
 	for (Facing f : {Facing::North, Facing::East, Facing::South, Facing::West}) {
@@ -3839,15 +4093,22 @@ std::string Session::vehicleAt(Cell cell) const {
 }
 
 bool Session::canEnter(const Area& area, Cell cell) const {
-	if (!vehicleAt(cell).empty() || actorCells().count(cell)) {
+	return canEnter(area, cell, actorCells());
+}
+
+bool Session::canEnter(const Area& area, Cell cell, const std::set<Cell>& standing) const {
+	if (!vehicleAt(cell).empty() || standing.count(cell)) {
 		return false;
 	}
+	// A cell no object can stand on is walkable when it is floor and no exit is closed there.
+	const bool objects = objectsMayStand(area, cell);
 	const FieldVehicle* vehicle = riding();
 	if (!vehicle) {
-		return area.walkable(cell) || dockedPlatformAt(cell);
+		const bool walkable = objects ? area.walkable(cell) : area.inside(cell) && area.rows[cell.y][cell.x] == '.' && !area.closed.count(cell);
+		return walkable || dockedPlatformAt(cell);
 	}
-	return area.inside(cell) && vehicle->canCross(area.rows[cell.y][cell.x]) && !area.closed.count(cell) && !area.hookAt(cell, HookTrigger::Interact) && !area.shopAt(cell) &&
-		!area.restAt(cell) && !area.chestAt(cell) && !area.portAt(cell);
+	return area.inside(cell) && vehicle->canCross(area.rows[cell.y][cell.x]) && !area.closed.count(cell) &&
+		(!objects || (!area.hookAt(cell, HookTrigger::Interact) && !area.shopAt(cell) && !area.restAt(cell) && !area.chestAt(cell) && !area.portAt(cell)));
 }
 
 std::vector<VehicleView> Session::vehiclesHere() const {
@@ -4802,6 +5063,8 @@ SaveFile Session::makeSave(bool autosave) const {
 }
 
 void Session::autosave(std::string reason) {
+	Timer timer(stats_.autosaveUs);
+	++stats_.autosaves;
 	++autosaveCount_;
 	areasSinceAutosave_ = {world_.area};
 	autosaveReason_.clear();
@@ -4820,7 +5083,9 @@ void Session::autosave(std::string reason) {
 	}
 	const std::string slot = store_->nextAutosaveSlot();
 	std::string error;
-	if (!store_->write(slot, serializeSave(save), error)) {
+	const std::string text = serializeSave(save);
+	stats_.saveBytes += text.size();
+	if (!store_->write(slot, text, error)) {
 		emit(OutputKind::Warning, "game.autosave_failed", {error});
 		return;
 	}

@@ -5,9 +5,12 @@
 #include "game/save.h"
 #include "game/session.h"
 
+#include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
+#include <map>
+#include <sstream>
 #include <string>
 
 namespace {
@@ -18,6 +21,7 @@ void usage() {
 				 "  game_cli [--data DIR] [--core DIR] [--seed N] [--saves DIR] [--auto-battle] [--encounters visible|random]\n"
 				 "                                  --auto-battle starts as `autobattle on`; the command changes it at any time\n"
 				 "  game_cli --script FILE ...      run the commands in FILE, print the transcript, then exit\n"
+				 "                                  --profile also prints to stderr the time per command and what the session did\n"
 				 "  game_cli --bot [--route FILE] [--goal FLAG]  walk the route in both encounter modes and print pacing tables;\n"
 				 "                                  it finishes when every boss flag (or FLAG) is set\n"
 				 "  game_cli --capabilities         print what this build supports as JSON (versions, data keys, script commands)\n"
@@ -46,6 +50,30 @@ void commands() {
 				 "        trouble on|off | quests | codex | log | pacing | title\n";
 }
 
+double secondsSince(std::chrono::steady_clock::time_point start) {
+	return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+}
+
+// The script's commands by their first word: time and count; then the session's counters and timers.
+void printProfile(double loadSeconds, double scriptSeconds, const std::map<std::string, std::pair<double, int>>& commands, const game::SessionStats& s) {
+	std::ostringstream out;
+	out.setf(std::ios::fixed);
+	out.precision(3);
+	out << "profile: load " << loadSeconds << " s, script " << scriptSeconds << " s\n";
+	for (const auto& [verb, spent] : commands) {
+		out << "profile: command " << verb << " " << spent.first << " s, " << spent.second << " times\n";
+	}
+	const auto ms = [](std::uint64_t us) { return static_cast<double>(us) / 1000.0; };
+	out << "profile: field ticks " << s.ticks << ", " << ms(s.tickUs) << " ms (wanderers " << ms(s.wanderUs) << ", patrols " << ms(s.patrolUs) << ", visible enemies "
+		<< ms(s.enemyUs) << ", background events " << ms(s.backgroundUs) << ")\n";
+	out << "profile: walk plans " << s.walkPlans << ", cells " << s.walkCells << ", " << ms(s.planUs) << " ms\n";
+	out << "profile: actor views " << s.actorViews << ", wanderer and patrol turns " << s.wanderTurns << "\n";
+	out << "profile: field settles " << s.settles << ", " << ms(s.settleUs) << " ms (autosaves included)\n";
+	out << "profile: autosaves " << s.autosaves << ", " << s.saveBytes << " bytes, " << ms(s.autosaveUs) << " ms\n";
+	out << "profile: loads " << s.loads << ", " << ms(s.loadUs) << " ms\n";
+	std::cerr << out.str();
+}
+
 bool parseSeed(const std::string& text, std::uint64_t& out) {
 	char* end = nullptr;
 	out = std::strtoull(text.c_str(), &end, 10);
@@ -67,6 +95,7 @@ int main(int argc, char** argv) {
 	bool used = false;
 	bool check = false;
 	bool autoBattle = false;
+	bool profile = false;
 	std::optional<game::EncounterMode> mode;
 	for (int i = 1; i < argc; ++i) {
 		const std::string arg = argv[i];
@@ -99,6 +128,8 @@ int main(int argc, char** argv) {
 			mode = m;
 		} else if (arg == "--auto-battle") {
 			autoBattle = true;
+		} else if (arg == "--profile") {
+			profile = true;
 		} else if (arg == "--bot") {
 			bot = true;
 		} else if (arg == "--capabilities") {
@@ -120,7 +151,9 @@ int main(int argc, char** argv) {
 		return report.ok() ? 0 : 1;
 	}
 
+	const auto loadStart = std::chrono::steady_clock::now();
 	rules::Result<game::GameData> data = game::loadGameData(game::DataDirectories{dataDir, coreDir});
+	const double loadSeconds = secondsSince(loadStart);
 	if (!data.ok()) {
 		std::cerr << data.error << "\n";
 		return 1;
@@ -181,7 +214,30 @@ int main(int argc, char** argv) {
 			return 1;
 		}
 		std::cout << data.value->config.title << " (seed " << seed << ")\n";
-		runner.runScript(text);
+		if (profile) {
+			std::map<std::string, std::pair<double, int>> commands;
+			std::istringstream in(text);
+			std::string line;
+			const auto scriptStart = std::chrono::steady_clock::now();
+			runner.settle();
+			while (std::getline(in, line)) {
+				std::istringstream words(line.substr(0, line.find('#')));
+				std::string verb;
+				words >> verb;
+				const auto start = std::chrono::steady_clock::now();
+				const bool more = runner.execute(line);
+				if (!verb.empty()) {
+					commands[verb].first += secondsSince(start);
+					++commands[verb].second;
+				}
+				if (!more) {
+					break;
+				}
+			}
+			printProfile(loadSeconds, secondsSince(scriptStart), commands, session.stats());
+		} else {
+			runner.runScript(text);
+		}
 		std::cout << "End of script.\n";
 		return runner.errors() == 0 ? 0 : 3;
 	}
