@@ -1,5 +1,6 @@
 #include "game/area.h"
 
+#include "game/capabilities.h"
 #include "game/data.h"
 #include "rules/text.h"
 
@@ -22,24 +23,21 @@ const char* toString(AreaKind kind) {
 	return "field";
 }
 
-namespace {
-
-const char* const kShopKinds[] = {"general", "weapon", "armor", "tool", "gift"};
-
-}
-
 const char* toString(ShopKind kind) {
-	return kShopKinds[static_cast<int>(kind)];
+	for (const rules::DataEnum& e : gameDataEnums()) {
+		if (e.name == "shop_kind") {
+			return e.values[static_cast<std::size_t>(kind)].c_str();
+		}
+	}
+	return "general";
 }
 
 bool parseShopKind(const std::string& text, ShopKind& out) {
-	for (int i = 0; i < 5; ++i) {
-		if (text == kShopKinds[i]) {
-			out = static_cast<ShopKind>(i);
-			return true;
-		}
+	const int index = gameEnumIndex("shop_kind", text);
+	if (index >= 0) {
+		out = static_cast<ShopKind>(index);
 	}
-	return false;
+	return index >= 0;
 }
 
 const char* toString(EncounterMode mode) {
@@ -47,15 +45,11 @@ const char* toString(EncounterMode mode) {
 }
 
 bool parseEncounterMode(const std::string& text, EncounterMode& out) {
-	if (text == "visible") {
-		out = EncounterMode::Visible;
-		return true;
+	const int index = gameEnumIndex("encounter_mode", text);
+	if (index >= 0) {
+		out = static_cast<EncounterMode>(index);
 	}
-	if (text == "random") {
-		out = EncounterMode::Random;
-		return true;
-	}
-	return false;
+	return index >= 0;
 }
 
 bool Zone::contains(Cell cell) const {
@@ -232,7 +226,7 @@ const JsonValue* array(JsonReader& reader, const JsonValue& object, const char* 
 }
 
 void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
-	reader.only(z, {"id", "from", "to", "table", "visible", "random"});
+	reader.only(z, gameKeys("area", "zones[]"));
 	zone.line = z.line;
 	reader.text(z, "id", zone.id, true);
 	reader.cellField(z, "from", zone.from, true);
@@ -243,7 +237,7 @@ void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 				reader.fail(t, "data.table_entry_object", {});
 				continue;
 			}
-			reader.only(t, {"encounter", "weight"});
+			reader.only(t, gameKeys("area", "zones[].table[]"));
 			TableEntry entry;
 			reader.text(t, "encounter", entry.encounter, true);
 			reader.integer(t, "weight", entry.weight, false, 1, 1000);
@@ -255,7 +249,7 @@ void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 	}
 	if (const JsonValue* v = reader.field(z, "visible", JsonValue::Type::Object, false)) {
 		VisibleRules& r = zone.visible;
-		reader.only(*v, {"spawns", "cap", "detection_radius", "leash_radius", "chase_speed_percent", "chase_ms", "wander_speed_percent", "wander_percent"});
+		reader.only(*v, gameKeys("area", "zones[].visible"));
 		if (const JsonValue* spawns = reader.field(*v, "spawns", JsonValue::Type::Array, true)) {
 			for (const JsonValue& s : spawns->items) {
 				Cell c;
@@ -274,7 +268,7 @@ void readZone(JsonReader& reader, const JsonValue& z, Zone& zone) {
 	}
 	if (const JsonValue* v = reader.field(z, "random", JsonValue::Type::Object, false)) {
 		RandomRules& r = zone.random;
-		reader.only(*v, {"min_steps", "max_steps", "step_distance", "grace_steps", "step_chance", "vehicle_step_chance", "safe_near_exits", "grace_after_battle"});
+		reader.only(*v, gameKeys("area", "zones[].random"));
 		reader.integer(*v, "grace_steps", r.graceSteps, false, 0, 1000);
 		reader.integer(*v, "step_chance", r.stepChance, false, 1, 10000);
 		reader.integer(*v, "vehicle_step_chance", r.vehicleStepChance, false, 1, 10000);
@@ -313,21 +307,16 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		reader.fail(json, "data.area_object", {});
 		return rules::Result<Area>::failure(reader.problems(), reader.errors());
 	}
-	reader.only(json, {"id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "map", "markers", "exits", "hooks",
-		"shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes", "conveyors", "arrive_notice", "counters"});
+	reader.only(json, gameKeys("area", ""));
 	reader.text(json, "id", area.id, true);
 	reader.text(json, "music", area.music, false);
 	reader.text(json, "region", area.region, false);
 	reader.text(json, "arrival", area.arrival, false);
 	std::string kind = "field";
 	reader.text(json, "kind", kind, false);
-	if (kind == "town") {
-		area.kind = AreaKind::Town;
-	} else if (kind == "dungeon") {
-		area.kind = AreaKind::Dungeon;
-	} else if (kind == "vessel") {
-		area.kind = AreaKind::Vessel;
-	} else if (kind != "field") {
+	if (const int index = gameEnumIndex("area_kind", kind); index >= 0) {
+		area.kind = static_cast<AreaKind>(index);
+	} else {
 		reader.fail(json, "data.bad_area_kind", {});
 	}
 	std::string mode = "visible";
@@ -387,9 +376,10 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* exits = array(reader, json, "exits")) {
 		for (const JsonValue& e : exits->items) {
-			reader.only(e, {"at", "to", "marker", "fall", "require_flag", "block_flag", "closed_tile"});
+			reader.only(e, gameKeys("area", "exits[]"));
 			Exit exit;
 			exit.line = e.line;
+			reader.text(e, "sound", exit.sound, false);
 			reader.text(e, "require_flag", exit.requireFlag, false);
 			reader.text(e, "block_flag", exit.blockFlag, false);
 			std::string closedTile;
@@ -414,7 +404,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* hooks = array(reader, json, "hooks")) {
 		for (const JsonValue& h : hooks->items) {
-			reader.only(h, {"id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid", "actor_at", "across", "cells", "actor"});
+			reader.only(h, gameKeys("area", "hooks[]"));
 			Hook hook;
 			hook.line = h.line;
 			reader.boolean(h, "once", hook.once, false);
@@ -427,30 +417,29 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			}
 			std::string solid = "always";
 			reader.text(h, "solid", solid, false);
-			if (solid != "always" && solid != "while_active") {
+			const int solidIndex = gameEnumIndex("hook_solid", solid);
+			if (solidIndex < 0) {
 				reader.fail(h, "data.bad_hook_solid", {solid});
 			}
-			hook.solidWhileActive = solid == "while_active";
+			hook.solidWhileActive = solidIndex == 1;
 			reader.text(h, "id", hook.id, true);
 			reader.text(h, "event", hook.event, true);
 			reader.text(h, "require_flag", hook.requireFlag, false);
 			reader.text(h, "block_flag", hook.blockFlag, false);
 			std::string trigger = "interact";
 			reader.text(h, "trigger", trigger, false);
-			if (trigger == "step") {
-				hook.trigger = HookTrigger::Step;
-			} else if (trigger == "load") {
-				hook.trigger = HookTrigger::Load;
-			} else if (trigger == "flag") {
-				hook.trigger = HookTrigger::Flag;
+			const int triggerIndex = gameEnumIndex("hook_trigger", trigger);
+			if (triggerIndex >= 0) {
+				hook.trigger = static_cast<HookTrigger>(triggerIndex);
+			} else {
+				reader.fail(h, "data.bad_trigger", {});
+			}
+			if (hook.trigger == HookTrigger::Flag) {
 				if (hook.blockFlag.empty() && !hook.once) {
 					reader.fail(h, "data.flag_hook_needs_block_flag", {hook.id});
 				}
-			} else if (trigger == "touch") {
-				hook.trigger = HookTrigger::Touch;
+			} else if (hook.trigger == HookTrigger::Touch) {
 				reader.text(h, "actor", hook.actor, true);
-			} else if (trigger != "interact") {
-				reader.fail(h, "data.bad_trigger", {});
 			}
 			if (hook.trigger != HookTrigger::Touch && h.is(JsonValue::Type::Object) && h.find("actor")) {
 				reader.fail(h, "data.actor_touch_hooks_only", {hook.id});
@@ -515,7 +504,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* shops = array(reader, json, "shops")) {
 		for (const JsonValue& s : shops->items) {
-			reader.only(s, {"id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper", "voice"});
+			reader.only(s, gameKeys("area", "shops[]"));
 			Shop shop;
 			shop.line = s.line;
 			reader.text(s, "id", shop.id, true);
@@ -535,7 +524,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 					if (item.is(JsonValue::Type::String) && !item.string.empty()) {
 						entry.id = item.string;
 					} else if (item.is(JsonValue::Type::Object)) {
-						reader.only(item, {"id", "require_flag", "block_flag"});
+						reader.only(item, gameKeys("area", "shops[].stock[]"));
 						reader.text(item, "id", entry.id, true);
 						reader.text(item, "require_flag", entry.requireFlag, false);
 						reader.text(item, "block_flag", entry.blockFlag, false);
@@ -556,7 +545,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* rests = array(reader, json, "rests")) {
 		for (const JsonValue& r : rests->items) {
-			reader.only(r, {"id", "at", "cost", "keeper", "per_member", "voice"});
+			reader.only(r, gameKeys("area", "rests[]"));
 			RestPoint rest;
 			rest.line = r.line;
 			reader.text(r, "id", rest.id, true);
@@ -574,7 +563,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* chests = array(reader, json, "chests")) {
 		for (const JsonValue& c : chests->items) {
-			reader.only(c, {"id", "at", "flag", "items", "equipment", "money"});
+			reader.only(c, gameKeys("area", "chests[]"));
 			Chest chest;
 			chest.line = c.line;
 			reader.text(c, "id", chest.id, true);
@@ -591,7 +580,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 		reader.fail(json, "data.arrival_marker_missing", {area.arrival});
 	}
 	if (const JsonValue* way = reader.field(json, "dungeon_exit", JsonValue::Type::Object, false)) {
-		reader.only(*way, {"area", "at", "marker", "facing"});
+		reader.only(*way, gameKeys("area", "dungeon_exit"));
 		DungeonExitTarget target;
 		target.line = way->line;
 		reader.text(*way, "area", target.area, true);
@@ -615,7 +604,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* ports = array(reader, json, "ports")) {
 		for (const JsonValue& p : ports->items) {
-			reader.only(p, {"id", "at", "marker", "flag", "ship", "block_flag"});
+			reader.only(p, gameKeys("area", "ports[]"));
 			Port port;
 			port.line = p.line;
 			reader.text(p, "id", port.id, true);
@@ -648,7 +637,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* helms = array(reader, json, "helms")) {
 		for (const JsonValue& h : helms->items) {
-			reader.only(h, {"id", "at"});
+			reader.only(h, gameKeys("area", "helms[]"));
 			Helm helm;
 			helm.line = h.line;
 			reader.text(h, "id", helm.id, true);
@@ -673,7 +662,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* changes = array(reader, json, "changes")) {
 		for (const JsonValue& c : changes->items) {
-			reader.only(c, {"flag", "tile", "cells"});
+			reader.only(c, gameKeys("area", "changes[]"));
 			CellChange change;
 			change.line = c.line;
 			reader.text(c, "flag", change.flag, true);
@@ -700,7 +689,7 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	if (const JsonValue* conveyors = array(reader, json, "conveyors")) {
 		for (const JsonValue& c : conveyors->items) {
-			reader.only(c, {"cells", "direction", "step_ms", "require_flag", "block_flag"});
+			reader.only(c, gameKeys("area", "conveyors[]"));
 			Conveyor conveyor;
 			conveyor.line = c.line;
 			std::string direction;

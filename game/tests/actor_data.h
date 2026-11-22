@@ -201,4 +201,48 @@ inline std::string makeBackground(const std::string& game, const std::string& co
 	return "";
 }
 
+// The actor data with Wren Gallery added from FIXTURES/../scene, for data/scripts/scene.txt: its area (an exit with a
+// sound) and events, game.json's `presentation.pictures`, `music.fade_ms` 400 and the exit's cue, and its text. A copy of
+// its own, so the other scripts play without it.
+inline std::string makeScene(const std::string& game, const std::string& core, const std::string& fixtures, const std::string& out) {
+	std::string problem = make(game, core, fixtures, out);
+	if (!problem.empty()) {
+		return problem;
+	}
+	namespace fs = std::filesystem;
+	std::error_code error;
+	const std::string data = out + "/game/data";
+	const std::string from = fixtures + "/../scene";
+	fs::copy_file(from + "/wren_gallery.json", data + "/areas/wren_gallery.json", error);
+	if (!error) {
+		fs::copy_file(from + "/gallery.ev", data + "/events/gallery.ev", error);
+	}
+	if (error) {
+		return "cannot copy Wren Gallery: " + error.message();
+	}
+	std::string config;
+	if (!game::readFile(data + "/game.json", config)) {
+		return "cannot read " + data + "/game.json";
+	}
+	const bool patched = appendToList(config, "areas", "\"areas/wren_gallery.json\"") && appendToList(config, "events", "\"events/gallery.ev\"") &&
+		insertAfter(config, "\"audio\": [", "\"gallery_door\", ") &&
+		insertAfter(config, "\"presentation\": {", "\n\t\t\"pictures\": [\"beacon\", \"farewell\", \"harbor_dawn\", \"storm\"],") &&
+		insertAfter(config, "\"music\": {", "\"fade_ms\": 400, ");
+	if (!patched || !game::writeFileAtomic(data + "/game.json", config, problem)) {
+		return "cannot add Wren Gallery to game.json " + problem;
+	}
+	for (const auto& [code, name] : {std::make_pair(std::string("en"), std::string("Wren Gallery")), std::make_pair(std::string("ja"), std::string("みそさざいの がろう"))}) {
+		std::string text;
+		std::string strings;
+		std::string lines;
+		const std::string table = data + "/text/" + code;
+		if (!game::readFile(table + ".json", text) || !game::readFile(table + ".strings", strings) || !game::readFile(from + "/gallery_" + code + ".strings", lines) ||
+			!insertAfter(text, "\"text\": {", "\n\t\t\"area.wren_gallery\": \"" + name + "\",") || !game::writeFileAtomic(table + ".json", text, problem) ||
+			!game::writeFileAtomic(table + ".strings", strings + lines, problem)) {
+			return "cannot add Wren Gallery's " + code + " text " + problem;
+		}
+	}
+	return "";
+}
+
 }

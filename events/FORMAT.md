@@ -38,10 +38,10 @@ Every event is marked `skippable`, `unskippable` or `background` (see [Backgroun
 
 When the player skips a skippable event, the rest of the scene plays at once:
 
-- Every command that changes the game applies, in order, exactly as when the scene is watched: flags, variables, items, party (snapshots and swaps included), player control, warps and rests.
+- Every command that changes the game applies, in order, exactly as when the scene is watched: flags, variables, items, party (snapshots and swaps included), story pictures, player control, warps and rests.
 - Lines are not shown. The game's text log still gets them, marked as skipped.
 - Waits take no time.
-- Moves, places, animations, camera, panels, fades, music and ambient sound complete at once: the game puts everything at its end state without playing it (an actor a standard animation hides is hidden). Shakes and one-shot sounds are dropped, because they leave nothing behind.
+- Moves, places, animations, camera (`camera to` and `camera reset` included), panels, fades, music and ambient sound complete at once: the game puts everything at its end state without playing it (an actor a standard animation hides is hidden). Shakes and one-shot sounds are dropped, because they leave nothing behind.
 - The skip stops at the next `choice`, `ask`, `battle`, `shop`, `save prompt`, `name entry` or `credits`. The player answers or fights as usual and can skip again afterwards.
 
 So the game after a skip is the same as after watching the same choices and battles, whenever the player skips. Write the scene once; there is nothing to add for skipping.
@@ -195,15 +195,30 @@ Live panels are comic-style frames, each showing what a named camera sees in the
 | `panel clear [nowait]` | `panel clear` |
 | `camera cut <camera> [nowait]` | `camera cut pier_wide` |
 | `camera move <camera> <seconds> [nowait]` | `camera move pier_follow 2.0` |
+| `camera to <marker> [seconds] [nowait]` | `camera to pier_end 1.5` |
+| `camera to <x> <y> [seconds] [nowait]` | `camera to 4 7` |
+| `camera reset [seconds] [nowait]` | `camera reset 0.5` |
 | `fade out [seconds] [nowait]` | `fade out 1.0` (default 0.5) |
 | `fade in [seconds] [nowait]` | `fade in 1.5` |
 | `shake <seconds> [strength <n>] [nowait]` | `shake 0.8 strength 0.4` (default strength 1) |
+
+- `camera to` moves the scene camera, the view of the live scene outside panels, to a marker of the map the party is on or to a cell (two whole numbers of 0 or more, column then row) over `seconds`, or at once without them; it stays there after the event until a `camera reset`, which takes it back to the party leader over `seconds`, or until the party enters an area. A `camera cut` or `camera move` to a named camera and a `camera to` or `camera reset` replace one another: the last one is what a skip or a restore rebuilds.
+
+## Story pictures
+
+| Command | Example |
+| --- | --- |
+| `picture show <picture>` | `picture show harbor_dawn` (puts the picture on top of the ones up) |
+| `picture hide [<picture>]` | `picture hide storm` (takes that picture down; without a name, the top one) |
+| `picture clear` | `picture clear` (takes every picture down) |
+
+Pictures are still images over the scene, such as the story stills of a prologue. The game keeps them as an ordered stack, bottom first, which stays through lines, the end of the event and area changes, and is saved with the game. The commands are game state, like `give`: they change the game at once, apply while skipping, and are not allowed inside `together` or `race` or in a background event. What the game does with a hide of a picture that is not up is its own business (`../game` warns and changes nothing). With a registry that lists `picture` names, every name must be listed; a registry that lists none accepts any name.
 
 ## Audio
 
 | Command | Example |
 | --- | --- |
-| `music play <track> [nowait]` | `music play tide_theme` |
+| `music play <track> [fade <ms>\|cut] [nowait]` | `music play tide_theme`, `music play tide_theme fade 1200`, `music play storm cut` (`fade`: the change of track fades over that many milliseconds, 1 to 60000; `cut`: it changes at once; neither: the game's rule) |
 | `music stop [nowait]` | `music stop` |
 | `music fade <seconds> [nowait]` | `music fade 1.0` (fades out, then stops) |
 | `music area <track>` | `music area harbor_storm` (the area the party is in plays this track from now on, saved with the game, until the party leaves or a script changes it) |
@@ -262,7 +277,7 @@ end
 
 - `spawn <event>` starts a background event and goes straight on to the next line. It works in any event, applies while skipping and is not allowed inside `together` or `race`. The event it names must be marked `background`.
 - A game may also start one itself, as it starts any event; `../game` runs a hook's event in the background when that event is marked `background`.
-- Only these commands compile in a background event: `move`, `place`, `face`, `anim`, `show`, `hide`, `remove`, `look`, `wait`, `sync`, `sound`, `set`, `clear`, `var`, `if`, `while`, `label`, `goto`, `call`, `return`, `spawn`, `together`, `race` and `sequence` (with the parallel rules above). Dialogue, choices, battles, menus, rests, credits, `end game`, warps, party, items, money, vehicles, camera, panels, fades, shakes, music and ambient sound are errors at their line. `call` may name only another background event.
+- Only these commands compile in a background event: `move`, `place`, `face`, `anim`, `show`, `hide`, `remove`, `look`, `wait`, `sync`, `sound`, `set`, `clear`, `var`, `if`, `while`, `label`, `goto`, `call`, `return`, `spawn`, `together`, `race` and `sequence` (with the parallel rules above). Dialogue, choices, battles, menus, rests, credits, `end game`, warps, party, items, money, vehicles, camera, panels, pictures, fades, shakes, music and ambient sound are errors at their line. `call` may name only another background event.
 - `nowait`, `sync` and timing work as in any event: a move waits until the game reports it done unless it is `nowait`.
 - Each background event runs in its own interpreter over the same program (`Interpreter`), and is saved with the same save state. When it runs, what pauses it, what stops it and how many may run at once are the game's rules; `../game/README.md` ("Background events") gives them for that library.
 
@@ -464,7 +479,7 @@ duration move 1.5      # every move
 duration move traveler 2.5   # moves of one actor
 ```
 
-`duration` takes an action name, an optional subject (actor, camera, panel or track) and seconds. The action names are `move`, `face`, `anim`, `show`, `hide`, `panel_show`, `panel_hide`, `panel_clear`, `camera_cut`, `camera_move`, `fade_in`, `fade_out`, `shake`, `music_play`, `music_stop`, `music_fade`, `ambient_play`, `ambient_stop`, `sound`, `warp` and `place`. Menus and rests take no time. An action with no `duration` lasts the seconds written in the script (fades, camera moves, shakes, music fades) or a standard animation's own (see [Actors](#actors)), or no time at all. The game's data carries the same table (`presentation.durations` in `game.json`, see `../game/README.md`), and the game reports each action's seconds by this rule (`events::action_seconds`), so an engine and this tool time a scene alike.
+`duration` takes an action name, an optional subject (actor, camera, panel or track) and seconds. The action names are `move`, `face`, `anim`, `show`, `hide`, `panel_show`, `panel_hide`, `panel_clear`, `camera_cut`, `camera_move`, `camera_to`, `camera_reset`, `fade_in`, `fade_out`, `shake`, `music_play`, `music_stop`, `music_fade`, `ambient_play`, `ambient_stop`, `sound`, `warp` and `place`. Menus and rests take no time. An action with no `duration` lasts the seconds written in the script (fades, camera moves, `camera to` and `camera reset`, shakes, music fades; a `music play` fade is the game's to play and takes no script time) or a standard animation's own (see [Actors](#actors)), or no time at all. The game's data carries the same table (`presentation.durations` in `game.json`, see `../game/README.md`), and the game reports each action's seconds by this rule (`events::action_seconds`), so an engine and this tool time a scene alike.
 
 ## Lint
 
@@ -499,6 +514,7 @@ enemy lamp_moth
 vehicle skiff
 shop vendor_stall
 rest harbor_inn
+picture harbor_dawn storm
 
 flag harbor.met_guide
 flag scene.door_open local default true
@@ -506,7 +522,7 @@ var harbor.first_stop
 var market.offer local default 30
 ```
 
-- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `place`, `face`, `anim`, `remove` and `look` subject), `marker` (`move`, `place`, `face` and `warp` targets and `via` markers), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation` (`anim` and the `with` of `show` and `hide`; the standard animations need no line), `portrait` (the `as` of `say`), `item` (also the `item` test), `member` (`party add`, `party remove`, both members of `party swap`, every member of `party order`, `name entry` and the `party` test), `encounter`, `enemy` (`until defeat` and `look ... enemy`), `vehicle` (`battle ... aboard`, the `vehicle` commands and the `vehicle` and `aboard` tests), `ability` (`learn`), `map`, `shop`, `rest` and `credits` (the `credits` command). Panel IDs are not listed; each scene names its own.
+- A kind and one or more names per line. The kinds are `actor` (also every `say` speaker and every `show`, `move`, `place`, `face`, `anim`, `remove` and `look` subject), `marker` (`move`, `place`, `face`, `camera to` and `warp` targets and `via` markers), `camera`, `layout` (the `layout` of `panel show`), `audio` (music, ambient sounds and sound cues), `animation` (`anim` and the `with` of `show` and `hide`; the standard animations need no line), `portrait` (the `as` of `say`), `item` (also the `item` test), `member` (`party add`, `party remove`, both members of `party swap`, every member of `party order`, `name entry` and the `party` test), `encounter`, `enemy` (`until defeat` and `look ... enemy`), `vehicle` (`battle ... aboard`, the `vehicle` commands and the `vehicle` and `aboard` tests), `ability` (`learn`), `map`, `shop`, `rest`, `credits` (the `credits` command) and `picture` (`picture show` and a named `picture hide`; checked only when the registry lists at least one). Panel IDs are not listed; each scene names its own.
 - `map_markers <map> <marker>...` lists the markers on one map; they count as listed markers. A marker on several maps is listed for each. `warp <map> <marker>` to a marker that is not on that map is an error. The checker also follows the map the party is on through each event, from its last `warp` (and from the start, see `event_map`), so a `move` to a marker on another map is an error too. Where the map cannot be known (after a branch that warps on one side only, a `call`, a `label`, or in a loop that warps), nothing more is checked until the next `warp`.
 - `event_map <map> <event>...` says the game starts those events on that map, for example from a hook in that area. An event listed for one map starts the move check on it; one listed for several, or none, starts with the map unknown.
 - `enemy <name>...` lists the enemies a `battle ... until defeat` may name.

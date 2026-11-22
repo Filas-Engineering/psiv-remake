@@ -57,6 +57,9 @@ const game::GameData& interactData();
 const std::string& backgroundDataDirectory();
 const game::GameData& backgroundData();
 game::GameData backgroundDataWithScript(const std::string& file, const std::string& text);
+// The actor data with Wren Gallery added (actor_data::makeScene), in build/test_saves/scene_data/game/data, loaded once.
+const std::string& sceneDataDirectory();
+const game::GameData& sceneData();
 
 }
 

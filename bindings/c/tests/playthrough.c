@@ -670,6 +670,46 @@ static void stepTime(void) {
 	print("  play time %lld ms; a step takes %d ms, %d ms with the run input", (long long)world.play_time_ms, field.leader_step_ms, field.run_step_ms);
 }
 
+/* `pictures`: the story pictures up, bottom first. */
+static void pictures(void) {
+	const char* const* list = NULL;
+	int32_t count = 0;
+	char text[1024] = "";
+	psiv_pictures(S, &list, &count);
+	for (int32_t i = 0; i < count; ++i) {
+		snprintf(text + strlen(text), sizeof text - strlen(text), "%s%s", i ? ", " : "", list[i]);
+	}
+	print("  pictures: %s", count ? text : "none");
+}
+
+/* `camera`: the scene camera, held on a cell or on the leader, with the move's time left. */
+static void sceneCamera(void) {
+	psiv_scene_camera c;
+	char moving[64] = "";
+	psiv_scene_camera_get(S, &c);
+	if (c.ms > 0) {
+		snprintf(moving, sizeof moving, ", %d/%d ms", c.ms, c.total_ms);
+	}
+	if (c.held) {
+		print("  camera: at %d %d%s", c.x, c.y, moving);
+	} else if (c.ms > 0) {
+		print("  camera: leader (returning%s)", moving);
+	} else {
+		print("  camera: leader");
+	}
+}
+
+/* `motion`: when the next tick and the step's landing come, and the last exit's sound. */
+static void motion(void) {
+	psiv_field_info field;
+	if (psiv_field_info_get(S, &field) != PSIV_OK) {
+		error("there is no area");
+		return;
+	}
+	print("  motion: next tick in %lld us, a step lands in %lld us, %lld us running; last exit sound %s", (long long)field.next_tick_us,
+		(long long)field.step_lands_in_us, (long long)field.run_step_lands_in_us, field.exit_sound[0] ? field.exit_sound : "none");
+}
+
 static void actors(void) {
 	const psiv_actor* list;
 	int32_t count = 0;
@@ -1095,6 +1135,12 @@ static int execute(const char* rawLine) {
 		credits();
 	} else if (strcmp(cmd, "background") == 0 && wordCount == 1) {
 		background();
+	} else if (strcmp(cmd, "pictures") == 0 && wordCount == 1) {
+		pictures();
+	} else if (strcmp(cmd, "camera") == 0 && wordCount == 1) {
+		sceneCamera();
+	} else if (strcmp(cmd, "motion") == 0 && wordCount == 1) {
+		motion();
 	} else if (strcmp(cmd, "rows") == 0 && wordCount == 1) {
 		rows();
 	} else if (strcmp(cmd, "prompt") == 0 && wordCount == 1) {

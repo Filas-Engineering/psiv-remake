@@ -181,6 +181,12 @@ private:
 		case ActionType::camera_move:
 			name(NameKind::camera, a.subject, line);
 			break;
+		case ActionType::camera_to:
+			if (!a.has_position) {
+				name(NameKind::marker, a.target, line);
+				on_map(a.target, map, line, ", where the party is at this point");
+			}
+			break;
 		case ActionType::music_play:
 		case ActionType::ambient_play:
 		case ActionType::sound:
@@ -200,6 +206,7 @@ private:
 		case ActionType::music_stop:
 		case ActionType::music_fade:
 		case ActionType::ambient_stop:
+		case ActionType::camera_reset:
 			break;
 		}
 	}
@@ -256,6 +263,12 @@ private:
 			break;
 		case Op::credits:
 			name(NameKind::credits, ins.name, s.line);
+			break;
+		case Op::picture:
+			// A registry that lists no picture leaves picture names to the game.
+			if (registry_.names.count(NameKind::picture)) {
+				name(NameKind::picture, ins.name, s.line);
+			}
 			break;
 		case Op::vehicle_give:
 		case Op::vehicle_place:

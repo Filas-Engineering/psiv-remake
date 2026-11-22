@@ -1,5 +1,6 @@
 #include "psiv_session.h"
 
+#include "game/capabilities.h"
 #include "game/data.h"
 #include "game/save.h"
 #include "game/session.h"
@@ -26,7 +27,6 @@
 #include <utility>
 #include <vector>
 
-#define PSIV_BINDING_VERSION "0.13.0"
 
 static_assert(PSIV_MODE_SHOP == static_cast<int>(game::Mode::Shop), "psiv_mode");
 static_assert(PSIV_MENU_CREDITS == static_cast<int>(game::MenuKind::Credits), "psiv_menu_kind");
@@ -63,6 +63,8 @@ static_assert(PSIV_MACRO_FALLBACK_AUTOMATIC == static_cast<int>(rules::MacroFall
 static_assert(PSIV_ISSUE_NO_TARGET == static_cast<int>(rules::MacroIssue::NoTarget), "psiv_macro_issue");
 static_assert(PSIV_MACRO_TARGET_ALL == static_cast<int>(rules::MacroTargetKind::All), "psiv_macro_target_kind");
 static_assert(PSIV_ACTION_PLACE == static_cast<int>(events::ActionType::place_actor), "psiv_action_type");
+static_assert(PSIV_ABI_VERSION == game::kAbiVersion, "PSIV_ABI_VERSION and game::kAbiVersion move together");
+static_assert(PSIV_ACTION_CAMERA_RESET == static_cast<int>(events::ActionType::camera_reset), "psiv_action_type");
 static_assert(PSIV_VANISH_BLINKED_OUT == static_cast<int>(game::ActorVanish::BlinkedOut), "psiv_actor_vanish");
 static_assert(PSIV_REMOVAL_FOR_GOOD == static_cast<int>(game::ActorRemoval::ForGood), "psiv_actor_removal");
 static_assert(PSIV_ANIMATION_END_HIDDEN == static_cast<int>(events::AnimationEnd::hidden), "psiv_animation_end");
@@ -189,6 +191,7 @@ void fillAction(const game::PresentedAction& r, psiv_action& out, Arena& arena) 
 	}
 	out.route_count = static_cast<int32_t>(r.route.size());
 	out.route = route;
+	out.fade_ms = r.action.fade_ms;
 }
 
 std::string str(const char* text) {
@@ -486,8 +489,13 @@ uint32_t psiv_abi_version(void) {
 }
 
 const char* psiv_version(void) {
-	static const std::string version = std::string("psiv-bindings " PSIV_BINDING_VERSION " (game ") + game::kGameBuild + ", rules " + std::to_string(rules::kRulesVersion) + ")";
+	static const std::string version = std::string("psiv-bindings ") + game::kLibraryVersion + " (game " + game::kGameBuild + ", rules " + std::to_string(rules::kRulesVersion) + ")";
 	return version.c_str();
+}
+
+const char* psiv_capabilities(void) {
+	static const std::string capabilities = game::capabilitiesJson();
+	return capabilities.c_str();
 }
 
 uint32_t psiv_sizeof(const char* struct_name) {
@@ -505,7 +513,7 @@ uint32_t psiv_sizeof(const char* struct_name) {
 		PSIV_SIZE(psiv_macro_step), PSIV_SIZE(psiv_macro), PSIV_SIZE(psiv_stat_bonus), PSIV_SIZE(psiv_affinity), PSIV_SIZE(psiv_status_resist),
 		PSIV_SIZE(psiv_member_detail), PSIV_SIZE(psiv_combo_entry), PSIV_SIZE(psiv_combat_view), PSIV_SIZE(psiv_equip_preview), PSIV_SIZE(psiv_difficulty), PSIV_SIZE(psiv_camera),
 		PSIV_SIZE(psiv_vehicle), PSIV_SIZE(psiv_travel_destination), PSIV_SIZE(psiv_event_position), PSIV_SIZE(psiv_zone), PSIV_SIZE(psiv_element_info),
-		PSIV_SIZE(psiv_route_cell), PSIV_SIZE(psiv_interact_target), PSIV_SIZE(psiv_field_input), PSIV_SIZE(psiv_profile_row),
+		PSIV_SIZE(psiv_route_cell), PSIV_SIZE(psiv_interact_target), PSIV_SIZE(psiv_field_input), PSIV_SIZE(psiv_profile_row), PSIV_SIZE(psiv_scene_camera),
 	};
 #undef PSIV_SIZE
 	if (!struct_name) {
@@ -593,7 +601,7 @@ const char* psiv_name_of(int32_t kind, int32_t value) {
 	case PSIV_NAME_MACRO_ISSUE:
 		return value >= 0 && value <= PSIV_ISSUE_NO_TARGET ? rules::toString(static_cast<rules::MacroIssue>(value)) : "";
 	case PSIV_NAME_ACTION_TYPE:
-		return value >= 0 && value <= PSIV_ACTION_PLACE ? events::action_type_name(static_cast<events::ActionType>(value)) : "";
+		return value >= 0 && value <= PSIV_ACTION_CAMERA_RESET ? events::action_type_name(static_cast<events::ActionType>(value)) : "";
 	case PSIV_NAME_MACRO_TARGET_KIND:
 		return value >= 0 && value <= PSIV_MACRO_TARGET_ALL ? rules::toString(static_cast<rules::MacroTargetKind>(value)) : "";
 	case PSIV_NAME_CAMERA_TARGET:
@@ -779,6 +787,8 @@ psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out) {
 		out->affinity_divisor = session->data->db.battleRules.affinityDivisor;
 		out->flash_default = static_cast<int32_t>(c.presentation.flashDefault);
 		out->flash_original = c.presentation.flashOriginal;
+		out->party_talk_ambient = c.partyTalkAmbient;
+		out->music_fade_ms = c.presentation.music.fadeMs;
 		return PSIV_OK;
 	});
 }
@@ -1423,6 +1433,10 @@ psiv_status psiv_field_info_get(psiv_session* session, psiv_field_info* out) {
 		out->step_progress_us = motion.stepProgressUs;
 		out->conveyor_step_us = motion.conveyorStepUs;
 		out->conveyor_progress_us = motion.conveyorProgressUs;
+		out->exit_sound = session->arena.str(session->session->exitSound());
+		out->next_tick_us = motion.nextTickUs;
+		out->step_lands_in_us = motion.stepLandsInUs;
+		out->run_step_lands_in_us = motion.runStepLandsInUs;
 		return PSIV_OK;
 	});
 }
@@ -1537,6 +1551,7 @@ psiv_status psiv_field_exits(psiv_session* session, const psiv_exit** out, int32
 			list[i].to_marker = session->arena.str(a->exits[i].toMarker);
 			list[i].open = game::exitOpen(a->exits[i], session->session->world());
 			list[i].closed_tile = a->exits[i].closedTile ? a->exits[i].closedTile : a->rows[a->exits[i].at.y][a->exits[i].at.x];
+			list[i].sound = session->arena.str(a->exits[i].sound);
 		}
 		*out = list;
 		*count = static_cast<int32_t>(a->exits.size());
@@ -2724,6 +2739,29 @@ psiv_status psiv_credits_info_get(psiv_session* session, psiv_credits_info* out)
 		}
 		*out = {session->arena.str(credits->id), session->arena.str(credits->music), static_cast<int32_t>(credits->entries.size()), credits->shown,
 			credits->elapsedMs, credits->totalMs};
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_pictures(psiv_session* session, const char* const** out, int32_t* count) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		const std::vector<std::string>& pictures = session->session->pictures();
+		*out = session->arena.strs(pictures);
+		*count = static_cast<int32_t>(pictures.size());
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_scene_camera_get(psiv_session* session, psiv_scene_camera* out) {
+	return guard(session, false, [&] {
+		if (!out) {
+			return nullArgument(session, "out");
+		}
+		const game::World::SceneCamera& c = session->session->sceneCamera();
+		*out = {c.held ? 1 : 0, c.cell.x, c.cell.y, c.ms, c.totalMs};
 		return PSIV_OK;
 	});
 }

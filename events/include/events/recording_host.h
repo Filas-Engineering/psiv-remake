@@ -110,6 +110,10 @@ public:
 	Handle play_credits(const std::string& credits) override;
 	// Logged as `end game`.
 	void end_game() override;
+	// Logged as `picture show <name>`, `picture hide [<name>]` and `picture clear`.
+	void show_picture(const std::string& picture) override;
+	void hide_picture(const std::string& picture) override;
+	void clear_pictures() override;
 
 protected:
 	// Hooks for hosts built on this one (TimingHost). The defaults use the

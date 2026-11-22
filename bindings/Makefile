@@ -58,6 +58,7 @@ ACTORS_SCRIPT = $(GAME)/data/scripts/actors.txt
 PARTY_SCRIPT = $(GAME)/data/scripts/party.txt
 INTERACT_SCRIPT = $(GAME)/data/scripts/interact.txt
 BACKGROUND_SCRIPT = $(GAME)/data/scripts/background.txt
+SCENE_SCRIPT = $(GAME)/data/scripts/scene.txt
 MAKE_ACTOR_DATA = $(GAME)/build/make_actor_data$(EXE)
 # The placeholder data with Wren Hollow added, for the actor script and the tests that play it.
 ACTOR_DATA = $(BUILD)/actor_data/game/data
@@ -65,6 +66,8 @@ ACTOR_DATA = $(BUILD)/actor_data/game/data
 INTERACT_DATA = $(BUILD)/interact_data/game/data
 # The actor data with Wren Yard (background events and wandering actors), for the background script and its tests.
 BACKGROUND_DATA = $(BUILD)/background_data/game/data
+# The actor data with Wren Gallery (story pictures, the scene camera, music fades, an exit's sound), for the scene script.
+SCENE_DATA = $(BUILD)/scene_data/game/data
 SAMPLE = monogame/Psiv.Sample/Psiv.Sample.csproj
 SAMPLE_SCRIPT = monogame/Psiv.Sample/scripts/smoke.txt
 SAMPLE_LARGE_SCRIPT = monogame/Psiv.Sample/scripts/large_areas.txt
@@ -164,7 +167,10 @@ $(INTERACT_DATA): $(MAKE_ACTOR_DATA)
 $(BACKGROUND_DATA): $(MAKE_ACTOR_DATA)
 	./$(MAKE_ACTOR_DATA) $(GAME)/data $(CORE)/data $(GAME)/tests/fixtures/actors $(BUILD)/background_data background
 
-.PHONY: $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA)
+$(SCENE_DATA): $(MAKE_ACTOR_DATA)
+	./$(MAKE_ACTOR_DATA) $(GAME)/data $(CORE)/data $(GAME)/tests/fixtures/actors $(BUILD)/scene_data scene
+
+.PHONY: $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DATA)
 
 $(LIB): $(LIB_OBJS) $(DEP_LIBS)
 	$(CXX) $(SHARED_FLAGS) $(LIB_OBJS) $(DEP_LIBS) -o $@
@@ -190,8 +196,8 @@ else
 test: dotnet-missing
 endif
 
-native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI) $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA)
-	./$(TESTS) --data $(GAME)/data --actor-data $(ACTOR_DATA) --interact-data $(INTERACT_DATA) --background-data $(BACKGROUND_DATA) --scratch $(BUILD)/scratch
+native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI) $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DATA)
+	./$(TESTS) --data $(GAME)/data --actor-data $(ACTOR_DATA) --interact-data $(INTERACT_DATA) --background-data $(BACKGROUND_DATA) --scene-data $(SCENE_DATA) --scratch $(BUILD)/scratch
 	rm -rf $(BUILD)/saves_cpp $(BUILD)/saves_c
 	$(GAME_CLI) --data $(GAME)/data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/saves_cpp > $(BUILD)/playthrough_cpp.txt
 	./$(PLAYTHROUGH) --data $(GAME)/data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/saves_c > $(BUILD)/playthrough_c.txt
@@ -241,13 +247,20 @@ native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI) $(ACTOR_DATA) $(INTERACT
 	cmp $(BUILD)/background_c.txt $(GAME)/tests/expected/background.txt
 	diff -r $(BUILD)/background_saves_c $(BUILD)/background_saves_cpp
 	@echo "C background script matches the C++ session: transcript and every save file"
+	rm -rf $(BUILD)/scene_saves_cpp $(BUILD)/scene_saves_c
+	$(GAME_CLI) --data $(SCENE_DATA) --seed 6 --script $(SCENE_SCRIPT) --saves $(BUILD)/scene_saves_cpp > $(BUILD)/scene_cpp.txt
+	./$(PLAYTHROUGH) --data $(SCENE_DATA) --seed 6 --script $(SCENE_SCRIPT) --saves $(BUILD)/scene_saves_c > $(BUILD)/scene_c.txt
+	cmp $(BUILD)/scene_c.txt $(BUILD)/scene_cpp.txt
+	cmp $(BUILD)/scene_c.txt $(GAME)/tests/expected/scene.txt
+	diff -r $(BUILD)/scene_saves_c $(BUILD)/scene_saves_cpp
+	@echo "C scene script matches the C++ session: transcript and every save file"
 
 dotnet: $(LIB)
 	$(DOTNET) build csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj -nologo -v q -warnaserror
 	$(DOTNET) build $(SAMPLE) -nologo -v q -warnaserror
 
-dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA)
-	PSIV_DATA_DIR=$(CURDIR)/$(GAME)/data PSIV_ACTOR_DATA_DIR=$(CURDIR)/$(ACTOR_DATA) PSIV_INTERACT_DATA_DIR=$(CURDIR)/$(INTERACT_DATA) PSIV_BACKGROUND_DATA_DIR=$(CURDIR)/$(BACKGROUND_DATA) $(DOTNET) test csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj --no-build -nologo
+dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DATA)
+	PSIV_DATA_DIR=$(CURDIR)/$(GAME)/data PSIV_ACTOR_DATA_DIR=$(CURDIR)/$(ACTOR_DATA) PSIV_INTERACT_DATA_DIR=$(CURDIR)/$(INTERACT_DATA) PSIV_BACKGROUND_DATA_DIR=$(CURDIR)/$(BACKGROUND_DATA) PSIV_SCENE_DATA_DIR=$(CURDIR)/$(SCENE_DATA) $(DOTNET) test csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj --no-build -nologo
 	rm -rf $(BUILD)/sample_saves
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_saves --script $(SAMPLE_SCRIPT) --frames 2000 --frame-digests $(BUILD)/digests_smoke.txt > $(BUILD)/sample_headless.txt \
 		|| (cat $(BUILD)/sample_headless.txt; exit 1)

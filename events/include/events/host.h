@@ -54,6 +54,8 @@ enum class ActionType {
 	sound,
 	warp,
 	place_actor,
+	camera_to,
+	camera_reset,
 };
 
 // EVT-023: every action except warp only changes what is on screen or heard.
@@ -85,6 +87,10 @@ struct Action {
 	bool pathfind = false;
 	// place_actor: north, east, south or west, or empty to keep the actor's facing.
 	std::string facing;
+	// camera_to: the scene camera's goal, a marker in `target` or a cell (x column, y row) in `position` with has_position,
+	// reached over `seconds` (0 cuts). camera_reset: back on the party leader over `seconds`.
+	// music_play: `fade <ms>` (above 0) or `cut` (0); -1 when the script gives neither and the game's own rule holds.
+	int fade_ms = -1;
 	// show_actor, hide_actor: `target` may name a transition (`show <actor> with <animation>`), played for `seconds`.
 	// Reach the end state at once, with no transition, and report done
 	// immediately. Set when the interpreter rebuilds the screen after a skip
@@ -244,6 +250,11 @@ public:
 	// `end game`: the story is over. The event ends after this call; the game decides what comes next (records the
 	// cleared game and goes back to the title, say). The default does nothing.
 	virtual void end_game();
+	// `picture show`, `picture hide` and `picture clear`: the stack of story pictures on screen, game state saved with the
+	// game. hide_picture with an empty name takes off the top one. The defaults do nothing.
+	virtual void show_picture(const std::string& picture);
+	virtual void hide_picture(const std::string& picture);
+	virtual void clear_pictures();
 };
 
 // What a standard animation leaves behind once it has played (FORMAT.md, "Actors").

@@ -4,11 +4,11 @@
 # * the C API as a DLL (bindings/c), checked to export exactly the header's PSIV_API functions, with the C tests
 #   linked against it;
 # * the C playthrough and game_cli.exe on the scripted playthrough, the macro script, the actor script, the party
-#   script, the interaction script and the background script, compared the way bindings/Makefile does: the two
+#   script, the interaction script, the background script and the scene script, compared the way bindings/Makefile does: the two
 #   transcripts byte for byte, the golden transcript (line ends aside: standard output writes CR LF on Windows), and every
-#   save file the two runs wrote; the actor, party, interaction and background scripts play the data make_actor_data.exe
-#   writes (the placeholder data with Wren Hollow and Wren Loft added, for the interaction script Wren Cellar and the
-#   interaction rules, and for the background script Wren Yard).
+#   save file the two runs wrote; the actor, party, interaction, background and scene scripts play the data
+#   make_actor_data.exe writes (the placeholder data with Wren Hollow and Wren Loft added, for the interaction script Wren
+#   Cellar and the interaction rules, for the background script Wren Yard, and for the scene script Wren Gallery).
 # It does not cover MSVC, the acceptance suites, the C# wrapper or the MonoGame sample.
 # The repo is mounted read-only and copied inside the container.
 set -eu
@@ -46,6 +46,7 @@ docker run --rm --platform linux/amd64 -v "$ROOT":/src:ro "$IMAGE" sh -euc '
 	wine make_actor_data.exe data ../core/data tests/fixtures/actors build/actor_data
 	wine make_actor_data.exe data ../core/data tests/fixtures/actors build/interact_data interact
 	wine make_actor_data.exe data ../core/data tests/fixtures/actors build/background_data background
+	wine make_actor_data.exe data ../core/data tests/fixtures/actors build/scene_data scene
 	echo "== windows: core, events and game unit tests passed"
 
 	cd /work/bindings
@@ -62,7 +63,7 @@ docker run --rm --platform linux/amd64 -v "$ROOT":/src:ro "$IMAGE" sh -euc '
 	$cc $cflags c/tests/test_api.c build/libpsiv_session.dll.a -o build/c_tests.exe
 	$cc $cflags c/tests/playthrough.c build/libpsiv_session.dll.a -o build/c_playthrough.exe
 	wine build/c_tests.exe --data ../game/data --actor-data ../game/build/actor_data/game/data --interact-data ../game/build/interact_data/game/data \
-		--background-data ../game/build/background_data/game/data --scratch build/scratch
+		--background-data ../game/build/background_data/game/data --scene-data ../game/build/scene_data/game/data --scratch build/scratch
 	script=../game/data/scripts/playthrough.txt
 	wine ../game/game_cli.exe --data ../game/data --seed 6 --auto-battle --script $script --saves build/saves_cpp > build/playthrough_cpp.txt
 	wine build/c_playthrough.exe --data ../game/data --seed 6 --auto-battle --script $script --saves build/saves_c > build/playthrough_c.txt
@@ -100,5 +101,11 @@ docker run --rm --platform linux/amd64 -v "$ROOT":/src:ro "$IMAGE" sh -euc '
 	cmp build/background_c.txt build/background_cpp.txt
 	tr -d "\r" < build/background_c.txt | cmp - ../game/tests/expected/background.txt
 	diff -r build/background_saves_c build/background_saves_cpp
-	echo "== windows: C API tests passed; the C playthrough, macro script, actor script, party script, interaction script and background script match game_cli.exe and their golden transcripts, saves included"
+	script=../game/data/scripts/scene.txt
+	wine ../game/game_cli.exe --data ../game/build/scene_data/game/data --seed 6 --script $script --saves build/scene_saves_cpp > build/scene_cpp.txt
+	wine build/c_playthrough.exe --data ../game/build/scene_data/game/data --seed 6 --script $script --saves build/scene_saves_c > build/scene_c.txt
+	cmp build/scene_c.txt build/scene_cpp.txt
+	tr -d "\r" < build/scene_c.txt | cmp - ../game/tests/expected/scene.txt
+	diff -r build/scene_saves_c build/scene_saves_cpp
+	echo "== windows: C API tests passed; the C playthrough, macro script, actor script, party script, interaction script, background script and scene script match game_cli.exe and their golden transcripts, saves included"
 '

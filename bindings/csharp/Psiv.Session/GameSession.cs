@@ -34,6 +34,9 @@ public sealed unsafe class GameSession : IDisposable
 
 	public static uint LibraryAbiVersion => Native.AbiVersionOf();
 
+	// What this build supports, as JSON (bindings/README.md, "Capabilities").
+	public static string Capabilities => Native.Str(Native.Capabilities());
+
 	public static string NameOf(NameKind kind, int value) => Native.Str(Native.NameOf((int)kind, value));
 
 	// Also the spellings older files use for reward multipliers and event types; null for an unknown name.
@@ -172,7 +175,7 @@ public sealed unsafe class GameSession : IDisposable
 		Must(Native.GameInfoGet(_handle, out PsivGameInfo i));
 		return new GameInfo(Native.Str(i.Title), Native.Str(i.GameBuild), i.RulesVersion, i.TickMs, i.RoundMs, i.ManualSlots, i.AutosaveSlots, i.ItemCap,
 			i.MoneyCap, Native.Strs(i.Languages, i.LanguageCount), Native.Str(i.TitleMusic), Native.Str(i.VictoryMusic), Native.Str(i.DefeatMusic),
-			i.MagicDefense != 0, i.AffinityDivisor, (FlashLevel)i.FlashDefault, i.FlashOriginal != 0);
+			i.MagicDefense != 0, i.AffinityDivisor, (FlashLevel)i.FlashDefault, i.FlashOriginal != 0, i.PartyTalkAmbient != 0, i.MusicFadeMs);
 	}
 
 	public Profile Profile()
@@ -406,7 +409,8 @@ public sealed unsafe class GameSession : IDisposable
 		return new FieldInfo(Native.Str(f.AreaId), Native.Str(f.AreaName), (AreaKind)f.AreaKind, (EncounterMode)f.EncounterMode, f.Width, f.Height, f.StepMs,
 			f.LeaderX, f.LeaderY, (Direction)f.Facing, f.PlayerControl != 0, f.GraceMs, Native.Str(f.Music), Native.Str(f.Region), Native.Str(f.Aboard), f.LeaderStepMs,
 			Native.Str(f.ShipPort), f.RunStepMs, f.StepProgressMs, f.ConveyorStepMs, f.ConveyorProgressMs, f.StepMask,
-			f.AnnounceArrival != 0, f.LeaderStepUs, f.RunStepUs, f.StepProgressUs, f.ConveyorStepUs, f.ConveyorProgressUs);
+			f.AnnounceArrival != 0, f.LeaderStepUs, f.RunStepUs, f.StepProgressUs, f.ConveyorStepUs, f.ConveyorProgressUs, Native.Str(f.ExitSound), f.NextTickUs,
+			f.StepLandsInUs, f.RunStepLandsInUs);
 	}
 
 	public IReadOnlyList<string> FieldRows()
@@ -442,7 +446,7 @@ public sealed unsafe class GameSession : IDisposable
 		var exits = new List<FieldExit>(xc);
 		foreach (PsivExit x in Native.Span<PsivExit>(xp, xc))
 		{
-			exits.Add(new FieldExit(x.X, x.Y, Native.Str(x.ToArea), Native.Str(x.ToMarker), x.Open != 0, (char)x.ClosedTile));
+			exits.Add(new FieldExit(x.X, x.Y, Native.Str(x.ToArea), Native.Str(x.ToMarker), x.Open != 0, (char)x.ClosedTile, Native.Str(x.Sound)));
 		}
 		Must(Native.FieldPoints(_handle, out IntPtr pp, out int pc));
 		var points = new List<FieldPoint>(pc);
@@ -525,7 +529,7 @@ public sealed unsafe class GameSession : IDisposable
 		}
 		return new(a.Handle, (ActionPhase)a.Phase, (ActionType)a.Type, Native.Str(a.Subject), Native.Str(a.Target), Native.Str(a.Slot), a.HasPosition != 0, a.X, a.Y, a.Z,
 			a.Seconds, a.Speed, a.Strength, a.Loop != 0, a.Instant != 0, Native.Str(a.Description), a.Duration, new ValueList<string>(Native.Strs(a.Waypoints, a.WaypointCount)),
-			a.Pathfind != 0, Native.Str(a.Facing), new ValueList<RouteCell>(route));
+			a.Pathfind != 0, Native.Str(a.Facing), new ValueList<RouteCell>(route), a.FadeMs);
 	}
 
 	public IReadOnlyList<Camera> Cameras()
@@ -1081,6 +1085,19 @@ public sealed unsafe class GameSession : IDisposable
 			list.Add(new EventPosition(Native.Str(at.Event), Native.Str(at.File), at.Line));
 		}
 		return list;
+	}
+
+	// The story pictures up now, bottom first; draw them in that order.
+	public IReadOnlyList<string> Pictures()
+	{
+		Must(Native.Pictures(_handle, out IntPtr p, out int count));
+		return Native.Strs(p, count);
+	}
+
+	public SceneCamera SceneCamera()
+	{
+		Must(Native.SceneCameraGet(_handle, out PsivSceneCamera c));
+		return new SceneCamera(c.Held != 0, c.X, c.Y, c.Ms, c.TotalMs);
 	}
 
 	// Null while no credits play.

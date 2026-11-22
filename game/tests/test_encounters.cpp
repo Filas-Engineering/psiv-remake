@@ -296,3 +296,34 @@ TEST(randomOpeningRollsTheFastestLivingMemberAgainstTheAwareness) {
 		CHECK(start && start->opening == rules::Opening::EnemyFirst);
 	}
 }
+
+TEST(visibleEnemiesNeverStepOntoAWanderersCell) {
+	const Area a = room();
+	World free;
+	free.position = {1, 4};
+	free.enemies.push_back(enemyAt({4, 4}, Facing::West, EnemyState::Chasing));
+	World blocked = free;
+	for (int i = 0; i < 15; ++i) {
+		tickVisibleEnemies(free, a, 50, 250);
+		tickVisibleEnemies(blocked, a, 50, 250, false, 0, {Cell{3, 4}});
+	}
+	CHECK(free.enemies[0].position.x < 4);
+	CHECK(blocked.enemies[0].position == (Cell{4, 4}));
+}
+
+TEST(exactStepTimingPricesAVisibleEnemysCellToTheHundredthOfAMillisecond) {
+	const Area a = room();
+	World ticks;
+	ticks.position = {1, 1};
+	ticks.enemies.push_back(enemyAt({7, 4}, Facing::West, EnemyState::Returning));
+	ticks.enemies[0].spawn = {1, 4};
+	// A 133.5 ms step costs 13300 under ticks (whole milliseconds) and 13350 under exact.
+	ticks.enemies[0].moveProgress = 13340;
+	World exact = ticks;
+	tickVisibleEnemies(ticks, a, 0, 133);
+	tickVisibleEnemies(exact, a, 0, 133, false, 133500);
+	CHECK(ticks.enemies[0].position == (Cell{6, 4}));
+	CHECK(ticks.enemies[0].moveProgress == 40);
+	CHECK(exact.enemies[0].position == (Cell{7, 4}));
+	CHECK(exact.enemies[0].moveProgress == 13340);
+}

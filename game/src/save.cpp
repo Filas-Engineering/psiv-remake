@@ -216,6 +216,12 @@ std::string worldChunk(const World& w) {
 	if (!w.areaMusic.empty()) {
 		o.key("area_music").text(w.areaMusic).end();
 	}
+	for (const std::string& picture : w.pictures) {
+		o.key("picture").text(picture).end();
+	}
+	if (w.sceneCamera.held || w.sceneCamera.ms > 0) {
+		o.key("scene_camera").num(w.sceneCamera.held ? 1 : 0).num(w.sceneCamera.cell.x).num(w.sceneCamera.cell.y).num(w.sceneCamera.ms).num(w.sceneCamera.totalMs).end();
+	}
 	if (w.stepCarryUs != 0) {
 		o.key("step_carry").num(w.stepCarryUs).end();
 	}
@@ -526,6 +532,8 @@ bool readWorld(const std::string& payload, World& w, std::string& error) {
 	w.areaSteps = 0;
 	w.onceHooks.clear();
 	w.areaMusic.clear();
+	w.pictures.clear();
+	w.sceneCamera = {};
 	for (const auto& l : in.lines()) {
 		const std::string& k = l[0];
 		if (k == "flag" && in.need(l, 2)) {
@@ -566,6 +574,16 @@ bool readWorld(const std::string& payload, World& w, std::string& error) {
 			w.onceHooks.insert(in.text(l[1]));
 		} else if (k == "area_music" && in.need(l, 1)) {
 			w.areaMusic = in.text(l[1]);
+		} else if (k == "picture" && in.need(l, 1)) {
+			w.pictures.push_back(in.text(l[1]));
+		} else if (k == "scene_camera" && in.need(l, 5)) {
+			w.sceneCamera.held = in.integer(l[1]) == 1;
+			w.sceneCamera.cell = {in.integer(l[2]), in.integer(l[3])};
+			w.sceneCamera.ms = in.integer(l[4]);
+			w.sceneCamera.totalMs = in.integer(l[5]);
+			if (w.sceneCamera.ms < 0 || w.sceneCamera.totalMs < w.sceneCamera.ms) {
+				in.fail("bad scene_camera line");
+			}
 		} else if (k == "step_carry" && in.need(l, 1)) {
 			w.stepCarryUs = in.num(l[1]);
 		} else if (k == "conveyor_carry" && in.need(l, 1)) {
@@ -1042,6 +1060,12 @@ bool migrate10to11(std::vector<Chunk>&, std::string&) {
 	return true;
 }
 
+// Schema 11 to 12: the story pictures and the scene camera (world chunk lines `picture` and `scene_camera`); a schema 11
+// save has neither, so no picture is up and the camera follows the leader.
+bool migrate11to12(std::vector<Chunk>&, std::string&) {
+	return true;
+}
+
 struct Migration {
 	int from;
 	bool (*apply)(std::vector<Chunk>& chunks, std::string& error);
@@ -1059,6 +1083,7 @@ const Migration kMigrations[] = {
 	{8, migrate8to9},
 	{9, migrate9to10},
 	{10, migrate10to11},
+	{11, migrate11to12},
 };
 
 std::string headerChunk(const SaveFile& save) {

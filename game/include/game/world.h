@@ -164,6 +164,20 @@ struct World {
 	std::set<std::string> onceHooks;
 	// The track a script set for the area the party is in, until it leaves; empty plays the area's own.
 	std::string areaMusic;
+	// Story pictures a script's `picture show` put up and nothing has taken down, bottom first (world chunk `picture` lines).
+	std::vector<std::string> pictures;
+	// Where a script's `camera to` put the scene camera (`held`, on `cell`) or that `camera reset` sends it back to the
+	// leader (not held), with the milliseconds of the move left and in all (world chunk line `scene_camera`, written while
+	// held or moving). Entering an area resets it.
+	struct SceneCamera {
+		bool held = false;
+		Cell cell;
+		int ms = 0;
+		int totalMs = 0;
+		bool operator==(const SceneCamera& o) const { return held == o.held && cell == o.cell && ms == o.ms && totalMs == o.totalMs; }
+		bool operator!=(const SceneCamera& o) const { return !(*this == o); }
+	};
+	SceneCamera sceneCamera;
 	// Under game.json's `step_timing` `exact` (R108), the time carried toward the leader's next step and the belt's next
 	// carry in microseconds, and the update time not yet a whole tick in milliseconds; the session keeps them while it
 	// runs and puts them here for a save (world chunk lines `step_carry`, `conveyor_carry`, `tick_carry`, written only

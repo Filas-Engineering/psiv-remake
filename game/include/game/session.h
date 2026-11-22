@@ -392,6 +392,12 @@ struct FieldMotion {
 	std::int64_t conveyorProgressUs = 0;
 	// The directions a step would move the leader now (canStep): 1 north, 2 east, 4 south, 8 west.
 	int stepMask = 0;
+	// Update time until the next field tick, when a step can start or land (game.json `tick_ms` less the time already
+	// passed toward it), and until the tick on which the step under way (or one started now) lands with the input held,
+	// walking and with the run input: a host glides the leader over that time so it arrives as the session moves it.
+	std::int64_t nextTickUs = 0;
+	std::int64_t stepLandsInUs = 0;
+	std::int64_t runStepLandsInUs = 0;
 };
 
 // Ways to travel at once (FLD-051): from a port to another open port, back to a town visited before in the region the
@@ -513,6 +519,15 @@ public:
 	// Whether the last area entry announced itself (game.arrive and a host's banner, R107): game.json's arrive_notice and
 	// the area's own.
 	bool arrivalAnnounced() const { return arrivalAnnounced_; }
+	// The sound cue of the exit the party left by at the last area entry (an area exit's `sound`); empty when it came
+	// another way or the exit has none.
+	const std::string& exitSound() const { return exitSound_; }
+	// The story pictures up now, bottom first (scripts' `picture show`, `hide` and `clear`). They stay through lines,
+	// the end of the event and area changes, and the save keeps them.
+	const std::vector<std::string>& pictures() const { return world_.pictures; }
+	// The scene camera a script's `camera to` or `camera reset` set: held on a cell, or going back to the leader while
+	// `ms` is above 0; neither when it follows the leader as usual.
+	const World::SceneCamera& sceneCamera() const { return world_.sceneCamera; }
 	// Turns the leader in place.
 	rules::Message face(Facing direction);
 	// A walk to `goal` along the shortest path over walkable cells, avoiding exits other than the goal. Visible
@@ -880,7 +895,10 @@ private:
 	std::int64_t conveyorUs_ = 0;
 	// The area entry under way came from walking through an exit or a gangway, and whether the last one announced itself.
 	bool arrivalWalked_ = false;
+	void moveSceneCamera(const events::Action& action, int ms);
 	bool arrivalAnnounced_ = true;
+	std::string exitSound_;
+	std::string pendingExitSound_;
 	std::optional<Facing> latchedDirection_;
 	// Not saved: hooks fire once per area entry and autosave points are judged per session (FLOW-050).
 	bool loadHooksPending_ = false;

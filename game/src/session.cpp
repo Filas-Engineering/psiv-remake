@@ -700,13 +700,18 @@ public:
 		if (timed && names.animationSeconds.count(action.target)) {
 			shown.seconds = names.animationSeconds.at(action.target);
 		}
+		if (action.type == events::ActionType::music_play && action.fade_ms < 0) {
+			shown.fade_ms = names.music.fadeMs;
+		}
 		if (action.type == events::ActionType::warp) {
 			s_.actionRoute_.clear();
 			s_.leaveVehicleBehind();
 			s_.enterArea(action.subject, action.target);
 		} else {
 			const double seconds = events::action_seconds(shown, names.durations, names.subjectDurations);
-			s_.applyActorAction(shown, action.instant ? 0 : static_cast<int>(std::lround(seconds * 1000)));
+			const int ms = action.instant ? 0 : static_cast<int>(std::lround(seconds * 1000));
+			s_.applyActorAction(shown, ms);
+			s_.moveSceneCamera(shown, ms);
 		}
 		HandleState state;
 		state.kind = HandleKind::Action;
@@ -714,7 +719,7 @@ public:
 		const bool finished = s_.presenter()->begin(handle, shown);
 		// An instant action has its end state on screen once begin returns, whatever the presenter says.
 		s_.handles_[handle].done = finished || action.instant;
-		s_.output_.push_back({OutputKind::Action, {}, events::describe(action) + (action.instant ? " (instant)" : "")});
+		s_.output_.push_back({OutputKind::Action, {}, events::describe(shown) + (action.instant ? " (instant)" : "")});
 		return handle;
 	}
 
@@ -1071,6 +1076,34 @@ public:
 	}
 
 	void set_area_music(const std::string& track) override { s_.world_.areaMusic = track; }
+
+	void show_picture(const std::string& picture) override {
+		s_.world_.pictures.push_back(picture);
+		s_.output_.push_back({OutputKind::Action, {}, "picture show " + picture});
+	}
+
+	void hide_picture(const std::string& picture) override {
+		std::vector<std::string>& shown = s_.world_.pictures;
+		// A name shown twice: the upper one goes.
+		std::size_t at = shown.size();
+		for (std::size_t i = shown.size(); i-- > 0;) {
+			if (picture.empty() || shown[i] == picture) {
+				at = i;
+				break;
+			}
+		}
+		if (at == shown.size()) {
+			s_.warn(picture.empty() ? std::string("picture hide: no picture is up") : "picture hide: '" + picture + "' is not up");
+			return;
+		}
+		s_.output_.push_back({OutputKind::Action, {}, "picture hide " + shown[at]});
+		shown.erase(shown.begin() + static_cast<std::ptrdiff_t>(at));
+	}
+
+	void clear_pictures() override {
+		s_.world_.pictures.clear();
+		s_.output_.push_back({OutputKind::Action, {}, "picture clear"});
+	}
 
 	void remove_actor(const std::string& actor, bool untilReload) override { s_.removeActor(actor, untilReload); }
 
@@ -1646,7 +1679,41 @@ void Session::removeActor(const std::string& actor, bool untilReload) {
 	place.animationTotalMs = 0;
 }
 
+void Session::moveSceneCamera(const events::Action& action, int ms) {
+	World::SceneCamera& camera = world_.sceneCamera;
+	if (action.type == events::ActionType::camera_reset) {
+		camera = {};
+		camera.ms = camera.totalMs = std::max(0, ms);
+		return;
+	}
+	if (action.type != events::ActionType::camera_to) {
+		return;
+	}
+	const Area* here = area();
+	std::optional<Cell> cell;
+	if (action.has_position) {
+		cell = Cell{static_cast<int>(action.position.x), static_cast<int>(action.position.y)};
+	} else if (here && here->markers.count(action.target)) {
+		cell = here->markers.at(action.target);
+	}
+	if (!cell || !here || cell->x >= here->width() || cell->y >= here->height()) {
+		warn("camera to " + (action.has_position ? std::to_string(static_cast<int>(action.position.x)) + " " + std::to_string(static_cast<int>(action.position.y)) : action.target) +
+			": not a cell of the area");
+		return;
+	}
+	camera.held = true;
+	camera.cell = *cell;
+	camera.ms = camera.totalMs = std::max(0, ms);
+}
+
 void Session::advanceActors(int ms) {
+	World::SceneCamera& camera = world_.sceneCamera;
+	if (camera.ms > 0) {
+		camera.ms = std::max(0, camera.ms - ms);
+		if (camera.ms == 0) {
+			camera.totalMs = 0;
+		}
+	}
 	for (auto& [id, place] : world_.actors) {
 		if (place.animationMs > 0) {
 			place.animationMs -= ms;
@@ -2405,6 +2472,7 @@ rules::Message Session::loadText(const std::string& text, const std::string& slo
 	modes_.transition(Mode::Field);
 	const Area* a = area();
 	arrivalAnnounced_ = a->arriveNotice && data_.config.arriveNotice == ArriveNotice::Always;
+	exitSound_.clear();
 	if (pacingOn()) {
 		pacing_.enterArea(a->id, a->kind == AreaKind::Dungeon);
 	}
@@ -2581,7 +2649,14 @@ void Session::tickField(const FieldInput& input) {
 		return;
 	}
 	if (encounterMode() == EncounterMode::Visible && world_.area == a.id && encountersOn_) {
-		if (std::optional<EncounterStart> contact = tickVisibleEnemies(world_, a, tick, a.stepMs, !world_.aboard.empty())) {
+		std::vector<Cell> wanderers;
+		for (const ActorView& v : actorsHere()) {
+			const ActorDef* def = data_.config.actorDef(v.id);
+			if (v.solid && def && def->wander) {
+				wanderers.push_back(v.cell);
+			}
+		}
+		if (std::optional<EncounterStart> contact = tickVisibleEnemies(world_, a, tick, a.stepMs, !world_.aboard.empty(), data_.config.exactSteps ? a.stepUs : 0, wanderers)) {
 			startFieldBattle(*contact);
 			return;
 		}
@@ -2656,6 +2731,10 @@ void Session::arrive(Cell cell) {
 			}
 		}
 		arrivalWalked_ = true;
+		if (!e.sound.empty()) {
+			output_.push_back({OutputKind::Action, {}, "exit sound " + e.sound});
+		}
+		pendingExitSound_ = e.sound;
 		enterArea(e.toArea, e.toMarker, from);
 		settleField();
 		return;
@@ -2714,6 +2793,7 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 		world_.brokenHere.clear();
 		world_.areaMusic.clear();
 	}
+	world_.sceneCamera = {};
 	world_.areaSteps = 0;
 	if (a->kind != AreaKind::Vessel) {
 		world_.shipPort.clear();
@@ -2751,6 +2831,8 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 	const ArriveNotice rule = data_.config.arriveNotice;
 	arrivalAnnounced_ = a->arriveNotice && (rule == ArriveNotice::Always || (rule == ArriveNotice::Walked && arrivalWalked_));
 	arrivalWalked_ = false;
+	exitSound_ = pendingExitSound_;
+	pendingExitSound_.clear();
 	if (arrivalAnnounced_) {
 		emit(OutputKind::Notice, "game.arrive", {a->id});
 	}
@@ -3166,6 +3248,14 @@ FieldMotion Session::fieldMotion() const {
 	m.runStepMs = leaderStepMs(true);
 	m.stepUs = data_.config.exactSteps ? leaderStepUs(false) : m.stepMs * 1000LL;
 	m.runStepUs = data_.config.exactSteps ? leaderStepUs(true) : m.runStepMs * 1000LL;
+	const std::int64_t tickUs = data_.config.tickMs * 1000LL;
+	m.nextTickUs = tickUs - tickRemainderMs_ * 1000LL;
+	auto landsIn = [&](std::int64_t stepUs) {
+		const std::int64_t ticks = std::max<std::int64_t>(1, (stepUs - stepProgressUs_ + tickUs - 1) / tickUs);
+		return ticks * tickUs - tickRemainderMs_ * 1000LL;
+	};
+	m.stepLandsInUs = landsIn(m.stepUs);
+	m.runStepLandsInUs = landsIn(m.runStepUs);
 	for (const Conveyor& c : a->conveyors) {
 		const bool holds = (c.requireFlag.empty() || world_.flag(c.requireFlag)) && (c.blockFlag.empty() || !world_.flag(c.blockFlag));
 		if (holds && std::find(c.cells.begin(), c.cells.end(), world_.position) != c.cells.end()) {

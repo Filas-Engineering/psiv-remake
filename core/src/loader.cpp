@@ -55,7 +55,7 @@ void insertUnique(Map& map, const std::string& id, Value value, Reader& reader, 
 
 // Hit points start at 1, since a combatant at 0 is defeated; every formula works with the other stats at 0.
 void parseStatsObject(Reader& reader, const JsonValue* stats, Stats& out, bool growth) {
-	reader.rejectUnknownKeys(*stats, {"hp", "tp", "strength", "mental", "agility", "dexterity", "defense", "level", "critical", "evasion", "magic_defense"});
+	reader.rejectUnknownKeys(*stats, dataKeys("shared", "stats"));
 	reader.integer(*stats, "hp", out.maxHp, true, growth ? 0 : 1, 99999);
 	reader.integer(*stats, "tp", out.maxTp, true, 0, 9999);
 	reader.integer(*stats, "strength", out.strength, true, 0, 999);
@@ -124,7 +124,7 @@ void parseEquipmentAffinities(Reader& reader, const Database& db, const JsonValu
 			}
 			continue;
 		}
-		reader.rejectUnknownKeys(value, {"set"});
+		reader.rejectUnknownKeys(value, dataKeys("equipment.json", "equipment[].affinities set"));
 		if (reader.integer(value, "set", affinity, true, 0, highest)) {
 			piece.setAffinities[element] = affinity;
 		}
@@ -211,7 +211,7 @@ bool readVariance(Reader& reader, const JsonValue& object, const char* key, std:
 	if (!entry) {
 		return false;
 	}
-	reader.rejectUnknownKeys(*entry, {"percent", "distribution"});
+	reader.rejectUnknownKeys(*entry, dataKeys("shared", "variance"));
 	DamageVariance variance;
 	reader.integer(*entry, "percent", variance.percent, true, 0, 100);
 	std::string shape;
@@ -289,9 +289,9 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 				effect.kinds.push_back(kind);
 			}
 		}
+		reader.rejectUnknownKeys(*entry, dataKeys("shared", std::string("effects[] ") + toString(effect.kind)));
 		switch (effect.kind) {
 		case EffectKind::PhysicalDamage: {
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power", "element", "stat_percent", "stat_permille", "stat_value"});
 			if (combo) {
 				rejectComboPower(reader, *entry);
 			} else {
@@ -312,12 +312,10 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 			break;
 		}
 		case EffectKind::Heal:
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power", "stat_value"});
 			reader.integer(*entry, "power", effect.power, true, 0, 9999);
 			readStatValue(reader, *entry, item, effect);
 			break;
 		case EffectKind::ElementalDamage: {
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power", "element", "stat_percent", "stat_permille", "stat_value"});
 			if (combo) {
 				rejectComboPower(reader, *entry);
 			} else {
@@ -331,17 +329,14 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 			break;
 		}
 		case EffectKind::ApplyStatus:
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "status", "threshold", "user_stat", "target_stat", "user_power", "element", "always_lands"});
 			readStatusRef(reader, db, *entry, "status", effect.status, true);
 			reader.integer(*entry, "threshold", effect.threshold, false, 0, 255);
 			readRoll(reader, db, *entry, item, combo, effect);
 			break;
 		case EffectKind::CureStatus:
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "status"});
 			readStatusRef(reader, db, *entry, "status", effect.status, true);
 			break;
 		case EffectKind::ModifyStat: {
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "stat", "direction", "threshold", "power", "user_stat", "target_stat", "user_power", "element", "always_lands"});
 			reader.integer(*entry, "power", effect.power, item, 1, 999);
 			std::string text;
 			if (reader.string(*entry, "stat", text) && !parseStat(text, effect.stat)) {
@@ -367,11 +362,9 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 			break;
 		}
 		case EffectKind::Revive:
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power"});
 			reader.integer(*entry, "power", effect.power, true, 1, 100);
 			break;
 		case EffectKind::Travel: {
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "to"});
 			if (combo) {
 				reader.fail(*entry->find("type"), "load.travel_not_in_combo", {});
 			}
@@ -382,17 +375,14 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 			break;
 		}
 		case EffectKind::InstantDefeat: {
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "threshold", "element", "user_stat", "target_stat", "user_power", "always_lands"});
 			reader.integer(*entry, "threshold", effect.threshold, false, 0, 255);
 			readRoll(reader, db, *entry, item, combo, effect);
 			break;
 		}
 		case EffectKind::RestoreTp:
-			reader.rejectUnknownKeys(*entry, {"type", "kinds", "power"});
 			reader.integer(*entry, "power", effect.power, true, 1, 999);
 			break;
 		case EffectKind::StripModifiers:
-			reader.rejectUnknownKeys(*entry, {"type", "kinds"});
 			break;
 		case EffectKind::Summon:
 		case EffectKind::Merge:
@@ -401,20 +391,15 @@ void parseEffects(Reader& reader, const Database& db, const JsonValue& object, b
 		case EffectKind::SelfDestruct:
 		case EffectKind::RemoveBeside:
 			if (effect.kind == EffectKind::Split) {
-				reader.rejectUnknownKeys(*entry, {"type", "count"});
 				reader.integer(*entry, "count", effect.count, true, 2, kMaxEnemies);
 			} else if (effect.kind == EffectKind::SelfDestruct || effect.kind == EffectKind::RemoveBeside) {
-				reader.rejectUnknownKeys(*entry, {"type", "rewards"});
 				reader.boolean(*entry, "rewards", effect.rewards);
-			} else {
-				reader.rejectUnknownKeys(*entry, {"type"});
 			}
 			if ((item && effect.kind != EffectKind::Transform) || combo) {
 				reader.fail(*entry->find("type"), "load.enemy_effect_only", {type});
 			}
 			break;
 		case EffectKind::Teach:
-			reader.rejectUnknownKeys(*entry, {"type", "ability"});
 			if (!item) {
 				reader.fail(*entry->find("type"), "load.teach_only_items", {});
 			}
@@ -495,9 +480,7 @@ void checkSelfEffects(Reader& reader, const JsonValue& entry, Targeting targetin
 
 void parseRules(Reader& reader, const JsonValue& root, Database& db) {
 	BattleRules& rules = db.battleRules;
-	reader.rejectUnknownKeys(root, {"surprise_rounds", "rest_revives", "machine_recover_hp", "affinity_divisor", "magic_defense", "instant_defeat_kinds", "ambush_opening",
-		"elements", "neutral_affinity", "defend_affinity", "defend_elemental", "defend_elements", "damage_variance", "defend_timing", "immune_min_damage",
-		"critical_bonus", "damage_wraparound", "escape_party_first_round", "target_weights", "stat_wraparound", "macro_ally_pick", "auto_policy", "effectiveness_baseline", "element_baselines"});
+	reader.rejectUnknownKeys(root, dataKeys("rules.json", ""));
 	std::string choice;
 	if (reader.string(root, "defend_timing", choice, false)) {
 		rules.defendFromTurn = choice == "turn";
@@ -561,7 +544,7 @@ void parseRules(Reader& reader, const JsonValue& root, Database& db) {
 		for (const JsonValue& entry : list->items) {
 			std::string id;
 			if (entry.is(Type::Object)) {
-				reader.rejectUnknownKeys(entry, {"id", "normal"});
+				reader.rejectUnknownKeys(entry, dataKeys("rules.json", "elements[]"));
 				if (!reader.string(entry, "id", id)) {
 					continue;
 				}
@@ -658,7 +641,7 @@ void parseRules(Reader& reader, const JsonValue& root, Database& db) {
 }
 
 void parseStatuses(Reader& reader, const JsonValue& root, Database& db) {
-	reader.rejectUnknownKeys(root, {"statuses"});
+	reader.rejectUnknownKeys(root, dataKeys("statuses.json", ""));
 	std::vector<std::pair<std::string, const JsonValue*>> removals;
 	for (const JsonValue* entry : reader.objects(root, "statuses", true)) {
 		StatusDef status;
@@ -666,8 +649,7 @@ void parseStatuses(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("status '" + status.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "action", "forced_target", "blocks_techniques", "wakes_on_damage", "stats_to_one", "removes",
-			"duration", "enemy_duration", "recover_chance", "stacking", "persists_outside_battle", "counts_toward_defeat", "survives_defeat", "rest_cures", "damage_cap"});
+		reader.rejectUnknownKeys(*entry, dataKeys("statuses.json", "statuses[]"));
 		reader.string(*entry, "name", status.name);
 		std::string text;
 		if (reader.string(*entry, "action", text, false) && !parseStatusAction(text, status.action)) {
@@ -730,14 +712,14 @@ void parseStatuses(Reader& reader, const JsonValue& root, Database& db) {
 }
 
 void parseAbilities(Reader& reader, const JsonValue& root, Database& db) {
-	reader.rejectUnknownKeys(root, {"abilities"});
+	reader.rejectUnknownKeys(root, dataKeys("abilities.json", ""));
 	for (const JsonValue* entry : reader.objects(root, "abilities", true)) {
 		AbilityDef ability;
 		if (!reader.string(*entry, "id", ability.id)) {
 			continue;
 		}
 		reader.setContext("ability '" + ability.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "kind", "cost", "uses", "target", "effects", "field", "family", "attack_stat", "variance", "auto"});
+		reader.rejectUnknownKeys(*entry, dataKeys("abilities.json", "abilities[]"));
 		readVariance(reader, *entry, "variance", ability.variance);
 		std::string hint;
 		if (reader.string(*entry, "auto", hint, false)) {
@@ -791,14 +773,14 @@ void parseAbilities(Reader& reader, const JsonValue& root, Database& db) {
 }
 
 void parseItems(Reader& reader, const JsonValue& root, Database& db) {
-	reader.rejectUnknownKeys(root, {"items"});
+	reader.rejectUnknownKeys(root, dataKeys("items.json", ""));
 	for (const JsonValue* entry : reader.objects(root, "items", true)) {
 		ItemDef item;
 		if (!reader.string(*entry, "id", item.id)) {
 			continue;
 		}
 		reader.setContext("item '" + item.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "target", "effects", "field", "consumed"});
+		reader.rejectUnknownKeys(*entry, dataKeys("items.json", "items[]"));
 		reader.boolean(*entry, "consumed", item.consumed);
 		reader.string(*entry, "name", item.name);
 		readTargeting(reader, *entry, item.targeting);
@@ -812,14 +794,14 @@ void parseItems(Reader& reader, const JsonValue& root, Database& db) {
 }
 
 void parseEquipment(Reader& reader, const JsonValue& root, Database& db) {
-	reader.rejectUnknownKeys(root, {"equipment"});
+	reader.rejectUnknownKeys(root, dataKeys("equipment.json", ""));
 	for (const JsonValue* entry : reader.objects(root, "equipment", true)) {
 		EquipmentDef piece;
 		if (!reader.string(*entry, "id", piece.id)) {
 			continue;
 		}
 		reader.setContext("equipment '" + piece.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "slot", "category", "stats", "element", "attack", "abilities", "status_resist", "use", "hands", "use_from_bag", "affinities", "use_power"});
+		reader.rejectUnknownKeys(*entry, dataKeys("equipment.json", "equipment[]"));
 		parseEquipmentAffinities(reader, db, *entry, piece);
 		reader.string(*entry, "name", piece.name);
 		std::string slot;
@@ -936,7 +918,7 @@ void readAbilityList(Reader& reader, const Database& db, const JsonValue& entry,
 void parseLearns(Reader& reader, const Database& db, const JsonValue& entry, CharacterDef& character) {
 	for (const JsonValue* learnEntry : reader.objects(entry, "learns", false)) {
 		LearnedAbility learned;
-		reader.rejectUnknownKeys(*learnEntry, {"level", "ability"});
+		reader.rejectUnknownKeys(*learnEntry, dataKeys("party.json", "characters[].learns[]"));
 		reader.integer(*learnEntry, "level", learned.level, true, 2, formulas::kMaxLevel);
 		if (!reader.string(*learnEntry, "ability", learned.ability)) {
 			continue;
@@ -1094,7 +1076,7 @@ void parseProfile(Reader& reader, const JsonValue& entry, std::vector<ProfileRow
 			reader.fail(row, "load.profile_not_list", {});
 			continue;
 		}
-		reader.rejectUnknownKeys(row, {"key", "value"});
+		reader.rejectUnknownKeys(row, dataKeys("party.json", "characters[].profile[]"));
 		ProfileRow r;
 		side(row, "key", r.key);
 		side(row, "value", r.value);
@@ -1109,8 +1091,7 @@ void parseCharacters(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("character '" + character.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "base", "growth", "basic_attack", "abilities", "learns", "affinities", "status_resist", "equip", "equipment", "kind",
-			"vulnerable", "teachable", "experience_table", "level_stats", "profile"});
+		reader.rejectUnknownKeys(*entry, dataKeys("party.json", "characters[]"));
 		reader.string(*entry, "name", character.name);
 		readAbilityList(reader, db, *entry, character.teachable, false, "teachable");
 		reader.boolean(*entry, "vulnerable", character.vulnerable);
@@ -1135,7 +1116,7 @@ void parseVehicles(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("vehicle '" + vehicle.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "stats", "basic_attack", "abilities", "affinities", "status_resist"});
+		reader.rejectUnknownKeys(*entry, dataKeys("party.json", "vehicles[]"));
 		reader.string(*entry, "name", vehicle.name);
 		parseStats(reader, *entry, "stats", vehicle.stats, false);
 		readBasicAttack(reader, db, *entry, vehicle.basicAttack);
@@ -1178,7 +1159,7 @@ void parseMacroTarget(Reader& reader, const Database& db, const JsonValue& entry
 		reader.fail(*target, "load.target_shape", {});
 		return;
 	}
-	reader.rejectUnknownKeys(*target, {"enemy", "member"});
+	reader.rejectUnknownKeys(*target, dataKeys("party.json", "macros[].steps[].target"));
 	if (target->keys.size() != 1) {
 		reader.fail(*target, "load.target_needs_enemy_or_member", {});
 		return;
@@ -1195,7 +1176,7 @@ void parseMacroTarget(Reader& reader, const Database& db, const JsonValue& entry
 }
 
 void parseMacroStep(Reader& reader, const Database& db, const JsonValue& entry, MacroStep& step) {
-	reader.rejectUnknownKeys(entry, {"member", "command", "id", "target", "piece"});
+	reader.rejectUnknownKeys(entry, dataKeys("party.json", "macros[].steps[]"));
 	if (!reader.string(entry, "member", step.member)) {
 		return;
 	}
@@ -1253,7 +1234,7 @@ void parseMacroStep(Reader& reader, const Database& db, const JsonValue& entry, 
 }
 
 void parseParty(Reader& reader, const JsonValue& root, Database& db) {
-	reader.rejectUnknownKeys(root, {"characters", "vehicles", "lineup", "inventory", "equipment_bag", "macros"});
+	reader.rejectUnknownKeys(root, dataKeys("party.json", ""));
 	parseCharacters(reader, root, db);
 	parseVehicles(reader, root, db);
 
@@ -1306,7 +1287,7 @@ void parseParty(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("macro '" + macro.name + "'");
-		reader.rejectUnknownKeys(*entry, {"name", "steps"});
+		reader.rejectUnknownKeys(*entry, dataKeys("party.json", "macros[]"));
 		if (db.macro(macro.name)) {
 			reader.fail(*entry, "load.duplicate_macro_name", {macro.name});
 		}
@@ -1357,7 +1338,7 @@ void parseAiCondition(Reader& reader, const JsonValue& entry, AiCondition& out) 
 			reader.fail(*entry.find(all ? "all" : "any"), "load.ai_condition_parts", {std::to_string(kMaxAiConditionParts)});
 		}
 		for (const JsonValue* part : parts) {
-			reader.rejectUnknownKeys(*part, {"when", "all", "any", "enemy", "turns", "count", "compare"});
+			reader.rejectUnknownKeys(*part, dataKeys("enemies.json", "enemies[].overrides[] condition part"));
 			out.parts.emplace_back();
 			parseAiCondition(reader, *part, out.parts.back());
 		}
@@ -1410,7 +1391,7 @@ void parseAiCondition(Reader& reader, const JsonValue& entry, AiCondition& out) 
 }
 
 void parseAiOverride(Reader& reader, const Database& db, const EnemyDef& enemy, const JsonValue& entry, AiOverride& out) {
-	reader.rejectUnknownKeys(entry, {"when", "all", "any", "ability", "target", "target_status", "enemy", "turns", "count", "compare"});
+	reader.rejectUnknownKeys(entry, dataKeys("enemies.json", "enemies[].overrides[]"));
 	parseAiCondition(reader, entry, out);
 	std::string text;
 	if (reader.string(entry, "ability", out.ability) && !enemyKnows(enemy, out.ability)) {
@@ -1500,15 +1481,14 @@ void checkEnemyLinks(Reader& reader, const JsonValue& root, const Database& db) 
 }
 
 void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
-	reader.rejectUnknownKeys(root, {"enemies", "encounters"});
+	reader.rejectUnknownKeys(root, dataKeys("enemies.json", ""));
 	for (const JsonValue* entry : reader.objects(root, "enemies", true)) {
 		EnemyDef enemy;
 		if (!reader.string(*entry, "id", enemy.id)) {
 			continue;
 		}
 		reader.setContext("enemy '" + enemy.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "stats", "basic_attack", "abilities", "affinities", "status_resist", "slots", "overrides", "experience",
-			"currency", "kind", "vulnerable", "statuses", "summons", "merges_into", "next_form", "flying", "next_form_at", "merges_with", "transforms_into", "splits_into", "attack_element", "keeps_ambush"});
+		reader.rejectUnknownKeys(*entry, dataKeys("enemies.json", "enemies[]"));
 		reader.string(*entry, "merges_with", enemy.mergesWith, false);
 		std::string attackElement;
 		if (reader.string(*entry, "attack_element", attackElement, false) && !readElement(db, attackElement, enemy.attackElement)) {
@@ -1575,11 +1555,11 @@ void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("encounter '" + encounter.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "enemies", "escape", "awareness", "escape_rating", "drop", "replace_fallen"});
+		reader.rejectUnknownKeys(*entry, dataKeys("enemies.json", "encounters[]"));
 		reader.boolean(*entry, "escape", encounter.escapeAllowed);
 		reader.boolean(*entry, "replace_fallen", encounter.replaceFallen);
 		if (const JsonValue* drop = reader.get(*entry, "drop", Type::Object, false)) {
-			reader.rejectUnknownKeys(*drop, {"item", "equipment", "rate"});
+			reader.rejectUnknownKeys(*drop, dataKeys("enemies.json", "encounters[].drop"));
 			if (reader.string(*drop, "equipment", encounter.drop.equipment, false)) {
 				if (drop->find("item")) {
 					reader.fail(*drop, "load.drop_item_or_equipment", {});
@@ -1609,7 +1589,7 @@ void parseEnemies(Reader& reader, const JsonValue& root, Database& db) {
 			if (item.is(Type::String) && !item.string.empty()) {
 				slot.enemy = item.string;
 			} else if (item.is(Type::Object)) {
-				reader.rejectUnknownKeys(item, {"enemy", "group"});
+				reader.rejectUnknownKeys(item, dataKeys("enemies.json", "encounters[].enemies[]"));
 				reader.string(item, "enemy", slot.enemy);
 				reader.string(item, "group", slot.group, false);
 			} else {
@@ -1657,7 +1637,7 @@ void parseComboComponents(Reader& reader, const Database& db, const JsonValue& e
 		if (item.is(Type::String) && !item.string.empty()) {
 			ability = item.string;
 		} else if (item.is(Type::Object)) {
-			reader.rejectUnknownKeys(item, {"ability", "character"});
+			reader.rejectUnknownKeys(item, dataKeys("combos.json", "combos[].abilities[]"));
 			reader.string(item, "ability", ability);
 			if (reader.string(item, "character", character)) {
 				const CharacterDef* def = db.character(character);
@@ -1717,7 +1697,7 @@ void parseEnemyCombos(Reader& reader, const JsonValue& root, Database& db, std::
 			continue;
 		}
 		reader.setContext("enemy combo '" + combo.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "parts", "result", "ordered"});
+		reader.rejectUnknownKeys(*entry, dataKeys("combos.json", "enemy_combos[]"));
 		reader.boolean(*entry, "ordered", combo.ordered);
 		if (!ids.insert(combo.id).second) {
 			reader.fail(*entry, "load.duplicate_id", {combo.id});
@@ -1729,7 +1709,7 @@ void parseEnemyCombos(Reader& reader, const JsonValue& root, Database& db, std::
 					reader.fail(item, "load.enemy_combo_part_shape", {});
 					continue;
 				}
-				reader.rejectUnknownKeys(item, {"enemy", "ability"});
+				reader.rejectUnknownKeys(item, dataKeys("combos.json", "enemy_combos[].parts[]"));
 				reader.string(item, "enemy", part.enemy);
 				reader.string(item, "ability", part.ability);
 				const EnemyDef* enemy = db.enemy(part.enemy);
@@ -1758,7 +1738,7 @@ void parseEnemyCombos(Reader& reader, const JsonValue& root, Database& db, std::
 }
 
 void parseCombos(Reader& reader, const JsonValue& root, Database& db) {
-	reader.rejectUnknownKeys(root, {"combos", "enemy_combos"});
+	reader.rejectUnknownKeys(root, dataKeys("combos.json", ""));
 	std::set<std::string> ids;
 	std::set<std::vector<std::string>> recipes;
 	for (const JsonValue* entry : reader.objects(root, "combos", true)) {
@@ -1767,7 +1747,7 @@ void parseCombos(Reader& reader, const JsonValue& root, Database& db) {
 			continue;
 		}
 		reader.setContext("combo '" + combo.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "abilities", "ordered", "result"});
+		reader.rejectUnknownKeys(*entry, dataKeys("combos.json", "combos[]"));
 		if (!ids.insert(combo.id).second) {
 			reader.fail(*entry, "load.duplicate_id", {combo.id});
 		}
@@ -1797,7 +1777,7 @@ void parseCombos(Reader& reader, const JsonValue& root, Database& db) {
 }
 
 void parseEnemyOverlay(Reader& reader, const Database& db, const JsonValue& entry, EnemyOverlay& overlay) {
-	reader.rejectUnknownKeys(entry, {"id", "stats_percent", "add_abilities", "slots", "overrides", "status_resist"});
+	reader.rejectUnknownKeys(entry, dataKeys("difficulties.json", "difficulties[].enemies[]"));
 	if (!reader.string(entry, "id", overlay.enemy)) {
 		return;
 	}
@@ -1807,7 +1787,7 @@ void parseEnemyOverlay(Reader& reader, const Database& db, const JsonValue& entr
 		return;
 	}
 	if (const JsonValue* stats = reader.get(entry, "stats_percent", Type::Object, false)) {
-		reader.rejectUnknownKeys(*stats, {"hp", "tp", "strength", "mental", "agility", "dexterity", "defense"});
+		reader.rejectUnknownKeys(*stats, dataKeys("difficulties.json", "difficulties[].enemies[].stats_percent"));
 		for (const char* key : kStatKeys) {
 			// The spec caps how far a preset may move hit points, attack and defense.
 			const bool capped = std::string(key) == "hp" || std::string(key) == "strength" || std::string(key) == "defense";
@@ -1838,19 +1818,19 @@ void parseEnemyOverlay(Reader& reader, const Database& db, const JsonValue& entr
 }
 
 void parseDifficulties(Reader& reader, const JsonValue& root, Database& db) {
-	reader.rejectUnknownKeys(root, {"difficulties"});
+	reader.rejectUnknownKeys(root, dataKeys("difficulties.json", ""));
 	for (const JsonValue* entry : reader.objects(root, "difficulties", true)) {
 		DifficultyDef difficulty;
 		if (!reader.string(*entry, "id", difficulty.id)) {
 			continue;
 		}
 		reader.setContext("difficulty '" + difficulty.id + "'");
-		reader.rejectUnknownKeys(*entry, {"id", "name", "reward_percent", "abilities", "enemies"});
+		reader.rejectUnknownKeys(*entry, dataKeys("difficulties.json", "difficulties[]"));
 		reader.string(*entry, "name", difficulty.name);
 		reader.integer(*entry, "reward_percent", difficulty.rewardPercent, false, 1, 1000);
 		for (const JsonValue* abilityEntry : reader.objects(*entry, "abilities", false)) {
 			AbilityOverlay overlay;
-			reader.rejectUnknownKeys(*abilityEntry, {"id", "power_percent", "cost", "uses"});
+			reader.rejectUnknownKeys(*abilityEntry, dataKeys("difficulties.json", "difficulties[].abilities[]"));
 			if (!reader.string(*abilityEntry, "id", overlay.ability)) {
 				continue;
 			}

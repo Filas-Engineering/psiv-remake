@@ -1,3 +1,4 @@
+#include "game/capabilities.h"
 #include "game/check.h"
 #include "game/data.h"
 #include "game/runner.h"
@@ -19,6 +20,7 @@ void usage() {
 				 "  game_cli --script FILE ...      run the commands in FILE, print the transcript, then exit\n"
 				 "  game_cli --bot [--route FILE] [--goal FLAG]  walk the route in both encounter modes and print pacing tables;\n"
 				 "                                  it finishes when every boss flag (or FLAG) is set\n"
+				 "  game_cli --capabilities         print what this build supports as JSON (versions, data keys, script commands)\n"
 				 "  game_cli --registry             print the registry built from the data, for event_cli check --registry\n"
 				 "  game_cli --used                 print the string IDs the game shows itself, for event_cli check --used\n"
 				 "  game_cli --check DIR [--core DIR]  load a data directory, print every problem and what loaded\n"
@@ -96,6 +98,9 @@ int main(int argc, char** argv) {
 			autoBattle = true;
 		} else if (arg == "--bot") {
 			bot = true;
+		} else if (arg == "--capabilities") {
+			std::cout << game::capabilitiesJson();
+			return 0;
 		} else if (arg == "--registry") {
 			registry = true;
 		} else if (arg == "--used") {

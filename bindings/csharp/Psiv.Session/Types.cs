@@ -67,7 +67,7 @@ public enum MacroIssue
 public enum ActionType
 {
 	Move, Face, Animate, ShowActor, HideActor, PanelShow, PanelHide, PanelClear, CameraCut, CameraMove, FadeIn, FadeOut,
-	Shake, MusicPlay, MusicStop, MusicFade, AmbientPlay, AmbientStop, Sound, Warp, Place,
+	Shake, MusicPlay, MusicStop, MusicFade, AmbientPlay, AmbientStop, Sound, Warp, Place, CameraTo, CameraReset,
 }
 
 public enum ActionPhase { Begin, Cancel }
@@ -142,7 +142,7 @@ public sealed record SessionOptions
 // TitleMusic, VictoryMusic and DefeatMusic are game.json's tracks, "" when the data names none.
 public sealed record GameInfo(string Title, string GameBuild, int RulesVersion, int TickMs, int RoundMs, int ManualSlots, int AutosaveSlots, int ItemCap, int MoneyCap,
 	IReadOnlyList<string> Languages, string TitleMusic, string VictoryMusic, string DefeatMusic, bool MagicDefense = false, int AffinityDivisor = 100,
-	FlashLevel FlashDefault = FlashLevel.Reduced, bool FlashOriginal = true);
+	FlashLevel FlashDefault = FlashLevel.Reduced, bool FlashOriginal = true, bool PartyTalkAmbient = true, int MusicFadeMs = -1);
 
 // An element the data knows. Element values past Holy are the ones rules.json declares, numbered by Index.
 public sealed record ElementInfo(Element Index, string Id, string Name);
@@ -175,6 +175,10 @@ public enum CreditsEntryKind { Heading, Line }
 public sealed record CreditsEntry(CreditsEntryKind Kind, string Key, string Text, int Gap, int PauseMs);
 // The credits playing (MenuKind.Credits): Shown entries have come up after ElapsedMs of play time; CloseMenu() says they
 // finished.
+// The scene camera scripts' `camera to` and `camera reset` set: Held on the cell X, Y, or on the leader; Ms and TotalMs the
+// move toward it (or back to the leader) left and in all, 0 once arrived.
+public sealed record SceneCamera(bool Held, int X, int Y, int Ms, int TotalMs);
+
 public sealed record CreditsInfo(string Id, string Music, int Shown, long ElapsedMs, long TotalMs, ValueList<CreditsEntry> Entries);
 
 // An encounter zone of the party's area: the rectangle it covers (corners included), its table and its visible spawns.
@@ -191,7 +195,8 @@ public sealed record Zone(string Id, int FromX, int FromY, int ToX, int ToY, IRe
 public sealed record FieldInfo(string AreaId, string AreaName, AreaKind AreaKind, EncounterMode EncounterMode, int Width, int Height, int StepMs,
 	int LeaderX, int LeaderY, Direction Facing, bool PlayerControl, int GraceMs, string Music, string Region, string Aboard, int LeaderStepMs, string ShipPort = "", int RunStepMs = 0,
 	int StepProgressMs = 0, int ConveyorStepMs = 0, int ConveyorProgressMs = 0, int StepMask = 0, bool AnnounceArrival = true, long LeaderStepUs = 0,
-	long RunStepUs = 0, long StepProgressUs = 0, long ConveyorStepUs = 0, long ConveyorProgressUs = 0);
+	long RunStepUs = 0, long StepProgressUs = 0, long ConveyorStepUs = 0, long ConveyorProgressUs = 0, string ExitSound = "", long NextTickUs = 0,
+	long StepLandsInUs = 0, long RunStepLandsInUs = 0);
 
 // Actor: the reserved name scripts address it by ("enemy.<zone>.<n>"); an action with that subject moves or turns this enemy.
 public sealed record FieldEnemy(int Id, string Encounter, string Zone, int X, int Y, Direction Facing, EnemyState State, string Actor = "");
@@ -200,7 +205,7 @@ public sealed record Marker(string Name, int X, int Y);
 
 // Open: its flags let the party through. ClosedTile: the map character it is drawn as while closed ('#' unless the data
 // names another, a door drawn as floor); FieldRows and the grid show it then.
-public sealed record FieldExit(int X, int Y, string ToArea, string ToMarker, bool Open = true, char ClosedTile = '#');
+public sealed record FieldExit(int X, int Y, string ToArea, string ToMarker, bool Open = true, char ClosedTile = '#', string Sound = "");
 
 // What Interact would act on now: the cell acted on, where the leader faces to use it (Interact turns it there), Ready
 // false when Interact would refuse, Across when used across a counter, Keeper a shop's or rest point's keeper ("" for none).
@@ -260,7 +265,7 @@ public sealed record Choice(string Prompt, bool YesNo, IReadOnlyList<string> Opt
 // Duration is how long the animation lasts by the data (game.json's presentation durations, else Seconds), 0 for none.
 public sealed record PresentationAction(ulong Handle, ActionPhase Phase, ActionType Type, string Subject, string Target, string Slot, bool HasPosition,
 	double X, double Y, double Z, double Seconds, double Speed, double Strength, bool Loop, bool Instant, string Description, double Duration,
-	IReadOnlyList<string>? Waypoints = null, bool Pathfind = false, string Facing = "", IReadOnlyList<RouteCell>? Route = null);
+	IReadOnlyList<string>? Waypoints = null, bool Pathfind = false, string Facing = "", IReadOnlyList<RouteCell>? Route = null, int FadeMs = -1);
 
 // A camera scripts may name and what game.json says it looks at: Area and Marker for a Marker target, Follow for a Follow
 // target; Zoom is 1 when the data gives none.

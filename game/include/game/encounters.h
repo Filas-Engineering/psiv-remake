@@ -7,6 +7,7 @@
 #include "rules/database.h"
 #include "rules/types.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -35,8 +36,11 @@ std::optional<EncounterStart> leaderBump(World& world, Cell target);
 
 // Advances every visible enemy by one tick: wander, detect, chase, leash. Returns a contact when a chasing
 // enemy reaches the leader. `leaderStepMs` is the leader's walking time per cell, which enemy speeds scale. With
-// `leaderUnseen` (the party rides a vehicle) no enemy notices or chases the leader, as during the grace period.
-std::optional<EncounterStart> tickVisibleEnemies(World& world, const Area& area, int tickMs, int leaderStepMs, bool leaderUnseen = false);
+// `leaderUnseen` (the party rides a vehicle) no enemy notices or chases the leader, as during the grace period. With
+// `leaderStepUs` above 0 (game.json `step_timing` `exact`) the cell's cost is that time to the hundredth of a millisecond
+// instead of `leaderStepMs`. No enemy steps onto a cell of `blocked` (wandering actors).
+std::optional<EncounterStart> tickVisibleEnemies(World& world, const Area& area, int tickMs, int leaderStepMs, bool leaderUnseen = false,
+	std::int64_t leaderStepUs = 0, const std::vector<Cell>& blocked = {});
 
 // The leader finished a step onto `cell` in random mode. Returns a battle when the counter passes the
 // threshold (ENC-040), with its opening rolled from the party's highest agility against the encounter's awareness

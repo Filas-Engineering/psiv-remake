@@ -1,5 +1,6 @@
 #include "game/data.h"
 
+#include "game/capabilities.h"
 #include "game/save.h"
 
 #include "events/compiler.h"
@@ -282,7 +283,7 @@ void readCameras(JsonReader& reader, const JsonValue& presentation, std::vector<
 		if (entry.is(JsonValue::Type::String) && !entry.string.empty()) {
 			camera.id = entry.string;
 		} else if (entry.is(JsonValue::Type::Object)) {
-			reader.only(entry, {"id", "area", "marker", "follow", "zoom"});
+			reader.only(entry, gameKeys("game.json", "presentation.cameras[]"));
 			reader.text(entry, "id", camera.id, true);
 			reader.text(entry, "area", camera.area, false);
 			reader.text(entry, "marker", camera.marker, false);
@@ -323,10 +324,10 @@ void readActors(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 		if (entry.is(JsonValue::Type::String) && !entry.string.empty()) {
 			actor.id = entry.string;
 		} else if (entry.is(JsonValue::Type::Object)) {
-			reader.only(entry, {"id", "sprite", "area", "at", "facing", "solid", "wander"});
+			reader.only(entry, gameKeys("game.json", "actors[]"));
 			reader.text(entry, "id", actor.id, true);
 			if (const JsonValue* sprite = reader.field(entry, "sprite", JsonValue::Type::Object, false)) {
-				reader.only(*sprite, {"enemy", "look"});
+				reader.only(*sprite, gameKeys("game.json", "actors[].sprite"));
 				reader.text(*sprite, "enemy", actor.spriteEnemy, false);
 				reader.text(*sprite, "look", actor.look, false);
 				if (actor.spriteEnemy.empty() == actor.look.empty()) {
@@ -352,7 +353,7 @@ void readActors(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 			}
 			reader.boolean(entry, "solid", actor.solid, false);
 			if (const JsonValue* wander = reader.field(entry, "wander", JsonValue::Type::Object, false)) {
-				reader.only(*wander, {"radius", "from", "to", "speed_percent", "pause_ms", "terrain"});
+				reader.only(*wander, gameKeys("game.json", "actors[].wander"));
 				ActorWander w;
 				reader.integer(*wander, "radius", w.radius, false, 1, 99);
 				if (wander->find("from") || wander->find("to")) {
@@ -405,7 +406,7 @@ void readAnimations(JsonReader& reader, const JsonValue& presentation, Presentat
 		if (entry.is(JsonValue::Type::String) && !entry.string.empty()) {
 			id = entry.string;
 		} else if (entry.is(JsonValue::Type::Object)) {
-			reader.only(entry, {"id", "seconds"});
+			reader.only(entry, gameKeys("game.json", "presentation.animations[]"));
 			reader.text(entry, "id", id, true);
 			double seconds = 0;
 			reader.number(entry, "seconds", seconds, true, 0, 60);
@@ -419,11 +420,7 @@ void readAnimations(JsonReader& reader, const JsonValue& presentation, Presentat
 }
 
 void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
-	reader.only(json, {"title", "core_data", "areas", "events", "glossary", "languages", "journal", "actors", "presentation", "flags",
-		"vars", "clear_flag", "start", "join_levels", "prices", "item_cap", "money_cap", "tick_ms", "grace_ms", "round_ms",
-		"autosave_slots", "manual_slots", "bosses", "vehicles", "machine_step_heal", "outside_experience_until", "leave_equipment", "random_encounters_everywhere",
-		"nameless_actors", "grace_after_battle", "interact", "interact_across", "run_speed_percent", "vehicle_opening", "background_limit",
-		"credits", "arrive_notice", "step_timing", "party_talk_ambient"});
+	reader.only(json, gameKeys("game.json", ""));
 	reader.text(json, "title", c.title, true);
 	reader.text(json, "core_data", c.coreData, true);
 	reader.texts(json, "areas", c.areaFiles, true);
@@ -431,7 +428,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.text(json, "glossary", c.glossaryFile, true);
 	if (const JsonValue* list = reader.field(json, "languages", JsonValue::Type::Array, true)) {
 		for (const JsonValue& l : list->items) {
-			reader.only(l, {"code", "strings", "text"});
+			reader.only(l, gameKeys("game.json", "languages[]"));
 			LanguageFiles files;
 			reader.text(l, "code", files.code, true);
 			reader.text(l, "strings", files.strings, true);
@@ -451,7 +448,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	readActors(reader, json, c);
 	reader.texts(json, "nameless_actors", c.namelessActors, false);
 	if (const JsonValue* p = reader.field(json, "presentation", JsonValue::Type::Object, false)) {
-		reader.only(*p, {"audio", "cameras", "layouts", "animations", "portraits", "music", "durations", "flash_default", "flash_original"});
+		reader.only(*p, gameKeys("game.json", "presentation"));
 		std::string flash;
 		reader.text(*p, "flash_default", flash, false);
 		if (!flash.empty() && !parseFlashLevel(flash, c.presentation.flashDefault)) {
@@ -463,8 +460,10 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 		reader.texts(*p, "layouts", c.presentation.layouts, false);
 		readAnimations(reader, *p, c.presentation);
 		reader.texts(*p, "portraits", c.presentation.portraits, false);
+		reader.texts(*p, "pictures", c.presentation.pictures, false);
 		if (const JsonValue* m = reader.field(*p, "music", JsonValue::Type::Object, false)) {
-			reader.only(*m, {"title", "victory", "defeat", "encounters", "vehicles", "areas"});
+			reader.only(*m, gameKeys("game.json", "presentation.music"));
+			reader.integer(*m, "fade_ms", c.presentation.music.fadeMs, false, 0, 60000);
 			reader.text(*m, "title", c.presentation.music.title, false);
 			reader.text(*m, "victory", c.presentation.music.victory, false);
 			reader.text(*m, "defeat", c.presentation.music.defeat, false);
@@ -493,7 +492,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 					for (const JsonValue* entry : entries) {
 						AreaTrack t;
 						if (entry->is(JsonValue::Type::Object)) {
-							reader.only(*entry, {"flag", "track"});
+							reader.only(*entry, gameKeys("game.json", "presentation.music.areas entry"));
 							reader.text(*entry, "flag", t.flag, true);
 							reader.text(*entry, "track", t.track, true);
 						} else if (entry->is(JsonValue::Type::String) && !entry->string.empty()) {
@@ -510,7 +509,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 		}
 		if (const JsonValue* list = reader.field(*p, "durations", JsonValue::Type::Array, false)) {
 			for (const JsonValue& d : list->items) {
-				reader.only(d, {"action", "subject", "seconds"});
+				reader.only(d, gameKeys("game.json", "presentation.durations[]"));
 				std::string action;
 				std::string subject;
 				double seconds = 0;
@@ -532,7 +531,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.counts(json, "vars", c.vars, false, -999999, 999999);
 	reader.text(json, "clear_flag", c.clearFlag, false);
 	if (const JsonValue* start = reader.field(json, "start", JsonValue::Type::Object, true)) {
-		reader.only(*start, {"area", "marker", "facing", "lineup", "level", "money", "items"});
+		reader.only(*start, gameKeys("game.json", "start"));
 		reader.text(*start, "area", c.startArea, true);
 		reader.text(*start, "marker", c.startMarker, true);
 		std::string facing = "south";
@@ -561,18 +560,18 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.text(json, "outside_experience_until", c.outsideExperienceUntil, false);
 	std::string leaving = "keep";
 	reader.text(json, "leave_equipment", leaving, false);
-	if (leaving == "bag") {
-		c.leaveEquipment = LeaveEquipment::Bag;
-	} else if (leaving != "keep") {
+	if (const int index = gameEnumIndex("leave_equipment", leaving); index >= 0) {
+		c.leaveEquipment = static_cast<LeaveEquipment>(index);
+	} else {
 		reader.fail(json, "data.bad_leave_equipment", {leaving});
 	}
 	reader.boolean(json, "random_encounters_everywhere", c.randomEncountersEverywhere, false);
 	reader.boolean(json, "grace_after_battle", c.graceAfterBattle, false);
 	std::string reach = "faced";
 	reader.text(json, "interact", reach, false);
-	if (reach == "nearby") {
-		c.interactReach = InteractReach::Nearby;
-	} else if (reach != "faced") {
+	if (const int index = gameEnumIndex("interact", reach); index >= 0) {
+		c.interactReach = static_cast<InteractReach>(index);
+	} else {
 		reader.fail(json, "data.bad_interact", {reach});
 	}
 	reader.boolean(json, "interact_across", c.interactAcross, false);
@@ -588,12 +587,12 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 				reader.fail(o, "data.field_wrong_type", {credits.id, "object"});
 				continue;
 			}
-			reader.only(o, {"music", "entries"});
+			reader.only(o, gameKeys("game.json", "credits.<id>"));
 			reader.text(o, "music", credits.music, false);
 			if (const JsonValue* entries = reader.field(o, "entries", JsonValue::Type::Array, true)) {
 				for (const JsonValue& e : entries->items) {
 					CreditsEntry entry;
-					reader.only(e, {"heading", "line", "gap", "pause_ms"});
+					reader.only(e, gameKeys("game.json", "credits.<id>.entries[]"));
 					std::string heading;
 					reader.text(e, "heading", heading, false);
 					reader.text(e, "line", entry.key, false);
@@ -617,37 +616,36 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	const auto opening = [&](const JsonValue& object, const char* key, VehicleOpening& out) {
 		std::string text;
 		reader.text(object, key, text, false);
-		if (text == "normal") {
-			out = VehicleOpening::Normal;
-		} else if (text == "roll") {
-			out = VehicleOpening::Roll;
-		} else if (!text.empty()) {
+		if (text.empty()) {
+			return false;
+		}
+		const int index = gameEnumIndex("vehicle_opening", text);
+		if (index < 0) {
 			reader.fail(object, "data.bad_vehicle_opening", {text});
 			return false;
 		}
-		return !text.empty();
+		out = static_cast<VehicleOpening>(index);
+		return true;
 	};
 	opening(json, "vehicle_opening", c.vehicleOpening);
 	std::string arrive;
 	reader.text(json, "arrive_notice", arrive, false);
-	if (arrive == "walked") {
-		c.arriveNotice = ArriveNotice::Walked;
-	} else if (arrive == "never") {
-		c.arriveNotice = ArriveNotice::Never;
-	} else if (!arrive.empty() && arrive != "always") {
+	if (const int index = arrive.empty() ? 0 : gameEnumIndex("arrive_notice", arrive); index >= 0) {
+		c.arriveNotice = static_cast<ArriveNotice>(index);
+	} else {
 		reader.fail(json, "data.bad_arrive_notice", {arrive});
 	}
 	reader.boolean(json, "party_talk_ambient", c.partyTalkAmbient, false);
 	std::string timing;
 	reader.text(json, "step_timing", timing, false);
-	if (timing == "exact") {
-		c.exactSteps = true;
-	} else if (!timing.empty() && timing != "ticks") {
+	if (const int index = timing.empty() ? 0 : gameEnumIndex("step_timing", timing); index >= 0) {
+		c.exactSteps = index == 1;
+	} else {
 		reader.fail(json, "data.bad_step_timing", {timing});
 	}
 	if (const JsonValue* bosses = reader.field(json, "bosses", JsonValue::Type::Array, false)) {
 		for (const JsonValue& b : bosses->items) {
-			reader.only(b, {"encounter", "flag"});
+			reader.only(b, gameKeys("game.json", "bosses[]"));
 			Boss boss;
 			reader.text(b, "encounter", boss.encounter, true);
 			reader.text(b, "flag", boss.flag, true);
@@ -656,7 +654,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	}
 	if (const JsonValue* vehicles = reader.field(json, "vehicles", JsonValue::Type::Array, false)) {
 		for (const JsonValue& v : vehicles->items) {
-			reader.only(v, {"id", "crosses", "breaks", "breaks_for_good", "speed_percent", "encounters", "call_item", "opening"});
+			reader.only(v, gameKeys("game.json", "vehicles[]"));
 			FieldVehicle vehicle;
 			reader.text(v, "id", vehicle.id, true);
 			const auto terrains = [&](const char* key, std::string& out, bool required) {
@@ -695,7 +693,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 						reader.fail(t, "data.table_entry_object", {});
 						continue;
 					}
-					reader.only(t, {"encounter", "weight"});
+					reader.only(t, gameKeys("game.json", "vehicles[].encounters[]"));
 					TableEntry entry;
 					reader.text(t, "encounter", entry.encounter, true);
 					reader.integer(t, "weight", entry.weight, false, 1, 1000);
@@ -718,10 +716,10 @@ void readRange(JsonReader& reader, const JsonValue& object, FlagRange& range) {
 }
 
 void readJournal(JsonReader& reader, const JsonValue& json, Journal& j) {
-	reader.only(json, {"objectives", "jobs", "encyclopedia", "party_talk"});
+	reader.only(json, gameKeys("journal.json", ""));
 	if (const JsonValue* list = reader.field(json, "objectives", JsonValue::Type::Array, false)) {
 		for (const JsonValue& o : list->items) {
-			reader.only(o, {"id", "text", "after", "until"});
+			reader.only(o, gameKeys("journal.json", "objectives[]"));
 			Objective objective;
 			reader.text(o, "id", objective.id, true);
 			reader.text(o, "text", objective.text, true);
@@ -731,7 +729,7 @@ void readJournal(JsonReader& reader, const JsonValue& json, Journal& j) {
 	}
 	if (const JsonValue* list = reader.field(json, "jobs", JsonValue::Type::Array, false)) {
 		for (const JsonValue& o : list->items) {
-			reader.only(o, {"id", "title", "available", "accepted", "completed", "missed"});
+			reader.only(o, gameKeys("journal.json", "jobs[]"));
 			Job job;
 			reader.text(o, "id", job.id, true);
 			reader.text(o, "title", job.title, true);
@@ -744,7 +742,7 @@ void readJournal(JsonReader& reader, const JsonValue& json, Journal& j) {
 	}
 	if (const JsonValue* list = reader.field(json, "encyclopedia", JsonValue::Type::Array, false)) {
 		for (const JsonValue& o : list->items) {
-			reader.only(o, {"id", "title", "text", "flag"});
+			reader.only(o, gameKeys("journal.json", "encyclopedia[]"));
 			EncyclopediaEntry entry;
 			reader.text(o, "id", entry.id, true);
 			reader.text(o, "title", entry.title, true);
@@ -755,14 +753,14 @@ void readJournal(JsonReader& reader, const JsonValue& json, Journal& j) {
 	}
 	if (const JsonValue* list = reader.field(json, "party_talk", JsonValue::Type::Array, false)) {
 		for (const JsonValue& o : list->items) {
-			reader.only(o, {"id", "area", "after", "until", "lines"});
+			reader.only(o, gameKeys("journal.json", "party_talk[]"));
 			TalkSet set;
 			reader.text(o, "id", set.id, true);
 			reader.text(o, "area", set.area, false);
 			readRange(reader, o, set.range);
 			if (const JsonValue* lines = reader.field(o, "lines", JsonValue::Type::Array, true)) {
 				for (const JsonValue& l : lines->items) {
-					reader.only(l, {"speaker", "text"});
+					reader.only(l, gameKeys("journal.json", "party_talk[].lines[]"));
 					TalkLine line;
 					reader.text(l, "speaker", line.speaker, true);
 					reader.text(l, "text", line.text, true);
@@ -818,6 +816,7 @@ events::Registry buildRegistry(const GameData& data, Problems& problems) {
 	for (const std::string& n : c.presentation.animations) r.add(events::NameKind::animation, n);
 	for (const std::string& n : c.presentation.portraits) r.add(events::NameKind::portrait, n);
 	for (const Credits& n : c.credits) r.add(events::NameKind::credits, n.id);
+	for (const std::string& n : c.presentation.pictures) r.add(events::NameKind::picture, n);
 	std::set<std::string> flags;
 	auto declareFlag = [&](const std::string& name, const std::string& where) {
 		if (!flags.insert(name).second) {
@@ -1135,6 +1134,11 @@ void checkReferences(const GameData& data, Problems& problems) {
 				at(line, "data.voice_unused", {point, voice});
 			}
 		};
+		for (const Exit& e : area.exits) {
+			if (!e.sound.empty() && std::find(shown.audio.begin(), shown.audio.end(), e.sound) == shown.audio.end()) {
+				at(e.line, "data.exit_sound_not_audio", {e.sound});
+			}
+		}
 		for (const RestPoint& r : area.rests) {
 			keeperKnown(r.line, r.id, r.keeper);
 			voiceUsed(r.line, r.id, r.voice);
@@ -1504,7 +1508,7 @@ std::string registryText(const events::Registry& registry) {
 		{events::NameKind::portrait, "portrait"}, {events::NameKind::item, "item"}, {events::NameKind::member, "member"},
 		{events::NameKind::encounter, "encounter"}, {events::NameKind::map, "map"}, {events::NameKind::shop, "shop"},
 		{events::NameKind::rest_point, "rest"}, {events::NameKind::enemy, "enemy"}, {events::NameKind::vehicle, "vehicle"}, {events::NameKind::ability, "ability"},
-		{events::NameKind::credits, "credits"},
+		{events::NameKind::credits, "credits"}, {events::NameKind::picture, "picture"},
 	};
 	for (const auto& [kind, word] : kinds) {
 		auto it = registry.names.find(kind);

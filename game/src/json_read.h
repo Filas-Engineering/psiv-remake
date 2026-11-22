@@ -2,6 +2,7 @@
 
 #include "game/world.h"
 
+#include "rules/data_keys.h"
 #include "rules/json.h"
 #include "rules/result.h"
 
@@ -24,7 +25,7 @@ public:
 	std::string errors() const;
 
 	// Rejects keys outside `known`, which catches typos in data.
-	void only(const rules::JsonValue& object, const std::vector<std::string>& known);
+	void only(const rules::JsonValue& object, const rules::DataKeySet& known);
 
 	const rules::JsonValue* field(const rules::JsonValue& object, const char* key, rules::JsonValue::Type type, bool required);
 	void text(const rules::JsonValue& object, const char* key, std::string& out, bool required);

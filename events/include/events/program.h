@@ -80,6 +80,7 @@ enum class Op {
 	party_order,
 	credits,
 	end_game,
+	picture,
 };
 
 const char* op_name(Op op);
@@ -99,6 +100,7 @@ struct Instruction {
 	// (`default` when the script names none). party_swap uses `swap` alone. spawn: the background event. actor_look: the
 	// actor, with action.subject `enemy` and action.target the enemy, action.target alone the look, or both empty for the
 	// game's own figure. party_add, party_remove: the member, with `number` 1 for `silent`. party_order: `names` alone. credits: the credits id.
+	// picture: the picture, with `number` 0 for show, 1 for hide (an empty name hides the top one) and 2 for clear.
 	std::string name;
 	// fork: 1 for a `race`, which ends when its first branch does.
 	std::int64_t number = 0;

@@ -6,7 +6,7 @@ TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arr
 	"chests", "ports", "zones", "helms", "gangway", "changes", "conveyors", "counters"]
 LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"]
 ENTRY_FIELDS = {
-	"exits": ["at", "to", "marker", "fall", "require_flag", "block_flag", "closed_tile"],
+	"exits": ["at", "to", "marker", "fall", "require_flag", "block_flag", "closed_tile", "sound"],
 	"hooks": ["id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid", "actor_at", "across", "cells", "actor"],
 	"shops": ["id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper", "voice"],
 	"rests": ["id", "at", "cost", "keeper", "per_member", "voice"],

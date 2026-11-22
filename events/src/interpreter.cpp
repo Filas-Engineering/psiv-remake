@@ -263,6 +263,8 @@ void Interpreter::execute(Thread& thread) {
 			// The new map places its own actors and cameras.
 			presentation_.actors.clear();
 			presentation_.camera.clear();
+			presentation_.camera_to = false;
+			presentation_.camera_reset = false;
 			for (auto it = dirty_.begin(); it != dirty_.end();) {
 				it = it->rfind("actor:", 0) == 0 || *it == "camera" ? dirty_.erase(it) : std::next(it);
 			}
@@ -432,6 +434,15 @@ void Interpreter::execute(Thread& thread) {
 		skip_depth_ = -1;
 		status_ = Status::finished;
 		return;
+	case Op::picture:
+		if (ins.number == 0) {
+			host_.show_picture(ins.name);
+		} else if (ins.number == 1) {
+			host_.hide_picture(ins.name);
+		} else {
+			host_.clear_pictures();
+		}
+		break;
 	case Op::actor_look:
 		host_.set_actor_look(ins.name, ins.action.subject == "enemy" ? ins.action.target : std::string(),
 			ins.action.subject == "enemy" ? std::string() : ins.action.target);
@@ -687,6 +698,17 @@ void Interpreter::record(const Action& action) {
 	case ActionType::camera_cut:
 	case ActionType::camera_move:
 		p.camera = action.subject;
+		p.camera_to = false;
+		p.camera_reset = false;
+		break;
+	case ActionType::camera_to:
+	case ActionType::camera_reset:
+		p.camera.clear();
+		p.camera_to = action.type == ActionType::camera_to;
+		p.camera_reset = !p.camera_to;
+		p.camera_marker = p.camera_to && !action.has_position ? action.target : std::string();
+		p.camera_has_position = p.camera_to && action.has_position;
+		p.camera_position = p.camera_has_position ? action.position : Vec3();
 		break;
 	case ActionType::fade_in:
 	case ActionType::fade_out:
@@ -728,6 +750,8 @@ void Interpreter::mark_dirty(const Action& action) {
 		break;
 	case ActionType::camera_cut:
 	case ActionType::camera_move:
+	case ActionType::camera_to:
+	case ActionType::camera_reset:
 		dirty_.insert("camera");
 		break;
 	case ActionType::fade_in:
@@ -773,6 +797,13 @@ void Interpreter::rebuild(bool everything) {
 	}
 	if (!p.camera.empty() && wanted("camera")) {
 		issue_instant(make(ActionType::camera_cut, p.camera));
+	} else if (p.camera_to && wanted("camera")) {
+		Action to = make(ActionType::camera_to, std::string(), p.camera_marker);
+		to.has_position = p.camera_has_position;
+		to.position = p.camera_position;
+		issue_instant(to);
+	} else if (p.camera_reset && wanted("camera")) {
+		issue_instant(make(ActionType::camera_reset));
 	}
 	for (const ActorState& a : p.actors) {
 		if (!wanted("actor:" + a.actor)) {

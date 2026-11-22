@@ -1,0 +1,89 @@
+The Bell at Tidewater (seed 6)
+title> new
+You arrive at Tidewater Landing.
+  (fade in 1)
+The ferry bumps against the pilings of Tidewater Landing.
+  (move dockhand to dock_front)
+  (move dockhand to greet_spot)
+  (face dockhand fighter)
+Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  (move dockhand to dock_front)
+  (move dockhand to 10 0 2)
+  (face dockhand dock_front)
+New job: The dockhand's lost crate.
+New encyclopedia entry: Tidewater Landing.
+[Autosaved to auto_0 (event end).]
+field> dev warp wren_gallery gallery_door
+Developer tools changed this game. It and its saves are marked.
+You arrive at Wren Gallery.
+[Autosaved to auto_1 (area entry).]
+field> pictures
+  pictures: none
+field> camera
+  camera: leader
+field> motion
+  motion: next tick in 50000 us, a step lands in 250000 us, 250000 us running; last exit sound none
+field> walk easel_front
+field> face north
+field> talk
+  (picture show harbor_dawn)
+The first canvas shows the harbor at dawn.
+  (picture show storm)
+  (picture show beacon)
+Behind it, a storm, and the beacon that rode it out.
+  (picture hide storm)
+  (camera to 8 3)
+  (music play title_harbor_dawn fade 800)
+The storm canvas goes back on its hook.
+  (music play title_harbor_dawn cut)
+  (camera to window_front 1.5)
+field> pictures
+  pictures: harbor_dawn, beacon
+field> camera
+  camera: at 6 1, 1500/1500 ms
+field> wait 500
+field> camera
+  camera: at 6 1, 1000/1500 ms
+field> motion
+  motion: next tick in 50000 us, a step lands in 250000 us, 250000 us running; last exit sound none
+field> menu
+menu> save manual_1
+Saved to manual_1.
+menu> close
+field> title
+title> load manual_1
+Loaded manual_1.
+field> pictures
+  pictures: harbor_dawn, beacon
+field> camera
+  camera: at 6 1, 1000/1500 ms
+field> walk window_front
+field> face north
+field> talk
+  (camera reset 0.5)
+  (music play field_marsh_reeds fade 400)
+The window looks out on the canal.
+  (picture hide beacon)
+  (picture clear)
+  (picture show farewell)
+One small sketch is left on the sill: a wave goodbye.
+  (camera to far_corner 2)
+You arrive at Wren Gallery.
+  (warp wren_gallery gallery_door)
+field> pictures
+  pictures: farewell
+field> camera
+  camera: leader
+field> wait 300
+field> camera
+  camera: leader
+field> walk gallery_door
+field> s
+  (exit sound gallery_door)
+You arrive at Wren Loft.
+[Autosaved to auto_2 (area entry).]
+field> motion
+  motion: next tick in 50000 us, a step lands in 250000 us, 250000 us running; last exit sound gallery_door
+field> pictures
+  pictures: farewell
+End of script.

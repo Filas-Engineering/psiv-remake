@@ -20,6 +20,7 @@ static const char* actorDataDir = "";
 /* The same with Wren Cellar and the interaction rules turned on (actor_data::makeInteract); empty skips testInteraction. */
 static const char* interactDataDir = "";
 static const char* backgroundDataDir = "";
+static const char* sceneDataDir = "";
 static const char* scratch = "build/scratch";
 static int failures;
 static int checks;
@@ -101,6 +102,9 @@ static void settle(psiv_session* s) {
 }
 
 static void testVersion(void) {
+	const char* capabilities = psiv_capabilities();
+	CHECK(capabilities && capabilities == psiv_capabilities() && strncmp(capabilities, "{\"capabilities_schema\": 1, \"versions\": {\"library\": \"", 52) == 0);
+	CHECK(strstr(capabilities, "\"abi\": 15,") && strstr(capabilities, "\"save_schema\": 12,") && strstr(capabilities, "\"picture show <picture>\""));
 	CHECK(psiv_abi_version() == PSIV_ABI_VERSION);
 	CHECK(strstr(psiv_version(), "psiv-bindings") != NULL);
 	CHECK(strstr(psiv_version(), "game-0.2") != NULL);
@@ -2389,6 +2393,167 @@ static void testCogwayAndFormations(void) {
 	psiv_session_destroy(s);
 }
 
+/* Wren Gallery: story pictures, the scene camera, music fades from the command or game.json, an exit's sound, and when
+ * the next tick and a step's landing come. */
+static void testScene(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/scene", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	const char* shipped = dataDir;
+	dataDir = sceneDataDir;
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	dataDir = shipped;
+	CHECK(psiv_sizeof("psiv_scene_camera") == sizeof(psiv_scene_camera));
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_ACTION_TYPE, PSIV_ACTION_CAMERA_TO), "camera to") == 0);
+	CHECK(strcmp(psiv_name_of(PSIV_NAME_ACTION_TYPE, PSIV_ACTION_CAMERA_RESET), "camera reset") == 0);
+	psiv_game_info game;
+	CHECK_OK(psiv_game_info_get(s, &game));
+	CHECK(game.music_fade_ms == 400 && game.party_talk_ambient == 1);
+	const char* const* pictures = NULL;
+	int32_t count = -1;
+	psiv_scene_camera camera;
+	CHECK(psiv_pictures(s, NULL, &count) == PSIV_INVALID_ARGUMENT && psiv_scene_camera_get(s, NULL) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_pictures(s, &pictures, &count));
+	CHECK(count == 0);
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK_OK(psiv_dev_warp(s, "wren_gallery", "gallery_door"));
+	settle(s);
+	const psiv_action* actions;
+	CHECK_OK(psiv_actions_poll(s, &actions, &count));
+	psiv_field_info field;
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.exit_sound, "") == 0 && field.next_tick_us == 50000 && field.step_lands_in_us == 250000 && field.run_step_lands_in_us == 250000);
+	const psiv_exit* exits;
+	CHECK_OK(psiv_field_exits(s, &exits, &count));
+	CHECK(count == 1 && strcmp(exits[0].sound, "gallery_door") == 0);
+
+	walkThrough(s, 2, 1);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	CHECK_OK(psiv_pictures(s, &pictures, &count));
+	CHECK(count == 2 && strcmp(pictures[0], "harbor_dawn") == 0 && strcmp(pictures[1], "beacon") == 0);
+	CHECK_OK(psiv_scene_camera_get(s, &camera));
+	CHECK(camera.held && camera.x == 6 && camera.y == 1 && camera.ms == 1500 && camera.total_ms == 1500);
+	int fades = 0;
+	int cameras = 0;
+	CHECK_OK(psiv_actions_poll(s, &actions, &count));
+	for (int32_t i = 0; i < count; ++i) {
+		if (actions[i].type == PSIV_ACTION_MUSIC_PLAY) {
+			CHECK(actions[i].fade_ms == (fades == 0 ? 800 : 0));
+			++fades;
+		} else if (actions[i].type == PSIV_ACTION_CAMERA_TO) {
+			CHECK(cameras == 1 ? strcmp(actions[i].target, "window_front") == 0 && actions[i].seconds == 1.5 : actions[i].has_position && actions[i].x == 8 && actions[i].y == 3);
+			++cameras;
+		} else {
+			CHECK(actions[i].fade_ms == -1);
+		}
+	}
+	CHECK(fades == 2 && cameras == 2);
+	CHECK_OK(psiv_update(s, 500, PSIV_DIRECTION_NONE));
+	CHECK_OK(psiv_scene_camera_get(s, &camera));
+	CHECK(camera.ms == 1000);
+
+	walkThrough(s, 6, 1);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_NORTH));
+	CHECK_OK(psiv_interact(s));
+	settle(s);
+	CHECK_OK(psiv_actions_poll(s, &actions, &count));
+	fades = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		if (actions[i].type == PSIV_ACTION_MUSIC_PLAY) {
+			CHECK(actions[i].fade_ms == 400);
+			++fades;
+		}
+	}
+	CHECK(fades == 1);
+	CHECK_OK(psiv_pictures(s, &pictures, &count));
+	CHECK(count == 1 && strcmp(pictures[0], "farewell") == 0);
+	CHECK_OK(psiv_scene_camera_get(s, &camera));
+	CHECK(!camera.held && camera.ms == 0);
+
+	walkThrough(s, 4, 3);
+	CHECK_OK(psiv_walk(s, PSIV_DIRECTION_SOUTH));
+	settle(s);
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.area_id, "wren_loft") == 0 && strcmp(field.exit_sound, "gallery_door") == 0);
+	psiv_session_destroy(s);
+}
+
+/* A battle aboard the skimmer driven the way a battle screen would: a macro with the vehicle's step, auto play with a
+ * named macro and with the save's auto macro, then the battle played out. */
+static void testVehicleBattleFromAMenu(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/vehicle_battle", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	const char* shipped = dataDir;
+	dataDir = interactDataDir;
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	dataDir = shipped;
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK_OK(psiv_dev_warp(s, "wren_cellar", "cellar_door"));
+	settle(s);
+	CHECK_OK(psiv_dev_vehicle(s, "reed_skimmer", "wren_cellar", "skiff_post"));
+	CHECK_OK(psiv_open_menu(s));
+	CHECK_OK(psiv_macro_create(s, "hull"));
+	CHECK_OK(psiv_macro_set_step(s, "hull", 0, "reed_skimmer", PSIV_COMMAND_ATTACK, NULL, PSIV_MACRO_TARGET_DEFAULT, NULL, -1));
+	CHECK_OK(psiv_settings_set_auto_macro(s, "hull"));
+	CHECK_OK(psiv_close_menu(s));
+	const psiv_marker* markers;
+	int32_t count = 0;
+	CHECK_OK(psiv_field_markers(s, &markers, &count));
+	int32_t frontX = -1;
+	int32_t frontY = -1;
+	for (int32_t i = 0; i < count; ++i) {
+		if (strcmp(markers[i].name, "skiff_front") == 0) {
+			frontX = markers[i].x;
+			frontY = markers[i].y;
+		}
+	}
+	walkThrough(s, frontX, frontY);
+	CHECK_OK(psiv_face(s, PSIV_DIRECTION_EAST));
+	CHECK_OK(psiv_board(s));
+	CHECK_OK(psiv_dev_battle(s, "marsh"));
+	CHECK(psiv_mode_get(s) == PSIV_MODE_BATTLE);
+	psiv_battle_info info;
+	CHECK_OK(psiv_battle_info_get(s, &info));
+	CHECK(strcmp(info.vehicle, "reed_skimmer") == 0);
+
+	const psiv_macro_step_result* steps;
+	CHECK_OK(psiv_battle_apply_macro(s, "hull", &steps, &count));
+	CHECK(count == 1 && strcmp(steps[0].member, "reed_skimmer") == 0 && steps[0].status == PSIV_MACRO_APPLIED);
+	const psiv_battle_event* events;
+	CHECK_OK(psiv_battle_resolve_round(s, &events, &count));
+	if (psiv_mode_get(s) == PSIV_MODE_BATTLE) {
+		CHECK_OK(psiv_battle_apply_macro_fallback(s, "hull", PSIV_MACRO_FALLBACK_AUTOMATIC, &steps, &count));
+		CHECK(count == 1 && strcmp(steps[0].member, "reed_skimmer") == 0);
+		CHECK_OK(psiv_battle_resolve_round(s, &events, &count));
+	}
+	if (psiv_mode_get(s) == PSIV_MODE_BATTLE) {
+		CHECK_OK(psiv_battle_set_auto_play_macro(s, "hull"));
+		CHECK_OK(psiv_battle_fill_auto_round(s));
+		CHECK_OK(psiv_battle_resolve_round(s, &events, &count));
+		CHECK_OK(psiv_battle_set_auto_play_macro(s, NULL));
+	}
+	if (psiv_mode_get(s) == PSIV_MODE_BATTLE) {
+		int32_t filled = 0;
+		CHECK_OK(psiv_battle_start_auto(s));
+		CHECK_OK(psiv_battle_fill_from_auto(s, &filled));
+		CHECK(filled == 1);
+		CHECK_OK(psiv_battle_resolve_round(s, &events, &count));
+	}
+	psiv_auto_battle played;
+	if (psiv_mode_get(s) == PSIV_MODE_BATTLE) {
+		CHECK_OK(psiv_battle_play(s, 0, &played));
+	}
+	CHECK(psiv_mode_get(s) == PSIV_MODE_FIELD);
+	psiv_session_destroy(s);
+}
+
 int main(int argc, char** argv) {
 	for (int i = 1; i + 1 < argc; i += 2) {
 		if (strcmp(argv[i], "--data") == 0) {
@@ -2399,6 +2564,8 @@ int main(int argc, char** argv) {
 			interactDataDir = argv[i + 1];
 		} else if (strcmp(argv[i], "--background-data") == 0) {
 			backgroundDataDir = argv[i + 1];
+		} else if (strcmp(argv[i], "--scene-data") == 0) {
+			sceneDataDir = argv[i + 1];
 		} else if (strcmp(argv[i], "--scratch") == 0) {
 			scratch = argv[i + 1];
 		}
@@ -2419,6 +2586,10 @@ int main(int argc, char** argv) {
 	}
 	if (interactDataDir[0]) {
 		testInteraction();
+		testVehicleBattleFromAMenu();
+	}
+	if (sceneDataDir[0]) {
+		testScene();
 	}
 	if (backgroundDataDir[0]) {
 		testBackground();

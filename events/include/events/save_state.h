@@ -71,8 +71,15 @@ struct PresentationState {
 	std::string ambient;
 	bool fade_set = false;
 	bool faded_out = false;
-	// The last camera cut or move; empty when unset.
+	// The last camera cut or move; empty when unset, or when a `camera to` or `camera reset` came after it.
 	std::string camera;
+	// The last `camera to` (at camera_marker, or the cell in camera_position with camera_has_position) or `camera reset`
+	// since the last cut or move.
+	bool camera_to = false;
+	bool camera_reset = false;
+	std::string camera_marker;
+	bool camera_has_position = false;
+	Vec3 camera_position;
 	// The panels on screen, in the order they were first shown: the page.
 	std::vector<PanelState> panels;
 	// Sorted by actor.
@@ -100,6 +107,9 @@ struct SaveState {
 	// Values of the registry's local flags (0 or 1) and variables.
 	std::map<std::string, std::int64_t> locals;
 };
+
+// The newest version of the text form (events-save N).
+constexpr int kSaveTextVersion = 5;
 
 // The text form ends with a checksum of everything before it, so damage is
 // detected (SAV-014): save_state_from_text rejects a text whose checksum

@@ -1,8 +1,9 @@
 #pragma once
 
+#include "rules/data_keys.h"
+
 #include "rules/json.h"
 
-#include <initializer_list>
 #include <string>
 #include <utility>
 #include <vector>
@@ -23,7 +24,7 @@ public:
 	bool boolean(const JsonValue& object, const char* key, bool& out);
 	std::vector<const JsonValue*> objects(const JsonValue& object, const char* key, bool required);
 	std::vector<std::string> strings(const JsonValue& object, const char* key, bool required);
-	void rejectUnknownKeys(const JsonValue& object, std::initializer_list<const char*> allowed);
+	void rejectUnknownKeys(const JsonValue& object, const DataKeySet& allowed);
 
 private:
 	std::string file_;

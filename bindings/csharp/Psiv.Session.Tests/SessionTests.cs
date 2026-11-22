@@ -65,6 +65,16 @@ internal static class Paths
 		}
 	}
 
+	// The actor data with Wren Gallery (actor_data::makeScene): PSIV_SCENE_DATA_DIR, else where game's `make test` writes it.
+	public static string SceneData
+	{
+		get
+		{
+			string? fromEnvironment = Environment.GetEnvironmentVariable("PSIV_SCENE_DATA_DIR");
+			return Path.GetFullPath(!string.IsNullOrEmpty(fromEnvironment) ? fromEnvironment : Path.Combine(Game, "build", "scene_data", "game", "data"));
+		}
+	}
+
 	public static string FreshDirectory(string name)
 	{
 		string path = Path.Combine(Path.GetTempPath(), "psiv-tests-" + Environment.ProcessId, name);
@@ -148,8 +158,15 @@ public class NativeLayoutTests
 	{
 		Assert.Equal(Native.AbiVersion, GameSession.LibraryAbiVersion);
 		Assert.Contains("psiv-bindings", GameSession.LibraryVersion);
+		using (var capabilities = System.Text.Json.JsonDocument.Parse(GameSession.Capabilities))
+		{
+			Assert.Equal(1, capabilities.RootElement.GetProperty("capabilities_schema").GetInt32());
+			Assert.Equal((int)Native.AbiVersion, capabilities.RootElement.GetProperty("versions").GetProperty("abi").GetInt32());
+			Assert.Contains(capabilities.RootElement.GetProperty("script").GetProperty("commands").EnumerateArray(), c => c.GetProperty("name").GetString() == "picture");
+		}
 		Same<PsivAbilityInfo>("psiv_ability_info");
 		Same<PsivAction>("psiv_action");
+		Same<PsivSceneCamera>("psiv_scene_camera");
 		Same<PsivActor>("psiv_actor");
 		Same<PsivActiveStatus>("psiv_active_status");
 		Same<PsivBattleEvent>("psiv_battle_event");
@@ -574,6 +591,39 @@ public class SessionTests
 		Assert.Equal((mask, 0, 0, 0), (info.StepMask, info.StepProgressMs, info.ConveyorStepMs, info.ConveyorProgressMs));
 		s.Update(100, Direction.South);
 		Assert.Equal(100, s.FieldInfo()!.StepProgressMs);
+	}
+
+	[Fact]
+	public void PicturesTheSceneCameraMusicFadesAndAnExitsSoundInWrenGallery()
+	{
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.SceneData, Seed = 285 });
+		GameInfo game = s.GameInfo();
+		Assert.Equal((true, 400), (game.PartyTalkAmbient, game.MusicFadeMs));
+		Assert.Empty(s.Pictures());
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.True(s.DevWarp("wren_gallery", "gallery_door").Ok);
+		Settle(s);
+		s.PollActions();
+		Assert.Equal("gallery_door", s.Field()!.Exits.Single().Sound);
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "easel_front"));
+		Assert.True(s.Face(Direction.North).Ok);
+		Assert.True(s.Interact().Ok);
+		Settle(s);
+		Assert.Equal(new[] { "harbor_dawn", "beacon" }, s.Pictures());
+		Assert.Equal(new SceneCamera(true, 6, 1, 1500, 1500), s.SceneCamera());
+		IReadOnlyList<PresentationAction> actions = s.PollActions();
+		Assert.Equal(new[] { 800, 0 }, actions.Where(a => a.Type == ActionType.MusicPlay).Select(a => a.FadeMs));
+		Assert.Equal(2, actions.Count(a => a.Type == ActionType.CameraTo));
+		s.Update(500);
+		Assert.Equal(1000, s.SceneCamera().Ms);
+		FieldInfo info = s.FieldInfo()!;
+		Assert.Equal((50000L, 250000L, ""), (info.NextTickUs, info.StepLandsInUs, info.ExitSound));
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "gallery_door"));
+		Assert.True(s.Walk(Direction.South).Ok);
+		Settle(s);
+		Assert.Equal(("wren_loft", "gallery_door"), (s.FieldInfo()!.AreaId, s.FieldInfo()!.ExitSound));
+		Assert.Equal(new SceneCamera(false, 0, 0, 0, 0), s.SceneCamera());
 	}
 
 	[Fact]

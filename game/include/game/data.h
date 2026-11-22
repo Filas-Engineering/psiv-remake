@@ -118,6 +118,9 @@ struct MusicNames {
 	std::map<std::string, std::string> vehicles;
 	// By area id, in order; the first whose flag is set (or that has none) gives the area's track, in place of the area's own.
 	std::map<std::string, std::vector<AreaTrack>> areas;
+	// `fade_ms`: how long a change of track fades, for area changes and script `music play` without its own `fade` or
+	// `cut`; -1 when the data names none and the host's own rule holds.
+	int fadeMs = -1;
 };
 
 // Names the scripts may use for presentation; the engine owns the assets behind them. None of this is part of the
@@ -131,6 +134,8 @@ struct PresentationNames {
 	// Seconds an animation lasts, for the names listed with them; in place of a standard animation's own length.
 	std::map<std::string, double> animationSeconds;
 	std::vector<std::string> portraits;
+	// Story pictures scripts' `picture` commands may name; when empty, any name.
+	std::vector<std::string> pictures;
 	MusicNames music;
 	// Authored seconds per action type, and per type and subject (BAT-102, EVT-062), in the timing rule of
 	// events::action_seconds.

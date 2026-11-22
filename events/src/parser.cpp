@@ -1,6 +1,9 @@
 #include "parser.h"
 
+#include "events/language.h"
+
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <initializer_list>
@@ -16,6 +19,16 @@ struct Context {
 	// Inside an event marked `background`.
 	bool background = false;
 };
+
+// The condition test a word starts, other than `except`; null for none.
+const ConditionInfo* condition_test(const std::string& word, TermTest except) {
+	for (const ConditionInfo& c : condition_tests()) {
+		if (!c.word.empty() && c.word == word && c.test != except) {
+			return &c;
+		}
+	}
+	return nullptr;
+}
 
 bool one_of(const std::string& word, std::initializer_list<const char*> words) {
 	for (const char* w : words) {
@@ -322,15 +335,16 @@ private:
 			// `vehicle`, `aboard`, `party` and `item` followed by a name test the game; alone they are still flag names.
 			const Token* test = a.peek();
 			const Token* subject = a.peek(1);
-			if (test && subject && test->kind == TokenKind::word && test->text == "money" && subject->kind != TokenKind::word) {
+			if (test && subject && test->kind == TokenKind::word && condition_test(test->text, TermTest::none) &&
+				condition_test(test->text, TermTest::none)->test == TermTest::money && subject->kind != TokenKind::word) {
 				term.test = TermTest::money;
 				if (!parse_value_test(a, term)) {
 					return false;
 				}
 				term.is_flag = false;
-			} else if (test && subject && test->kind == TokenKind::word && subject->kind == TokenKind::word && one_of(test->text, {"vehicle", "aboard", "party", "item"}) &&
+			} else if (test && subject && test->kind == TokenKind::word && subject->kind == TokenKind::word && condition_test(test->text, TermTest::money) &&
 				!one_of(subject->text, {"and", "or"})) {
-				term.test = test->text == "vehicle" ? TermTest::owns : test->text == "aboard" ? TermTest::aboard : test->text == "party" ? TermTest::member : TermTest::holds;
+				term.test = condition_test(test->text, TermTest::money)->test;
 				const char* what = term.test == TermTest::member ? "a member name" : term.test == TermTest::holds ? "an item name" : "a vehicle name";
 				a.keyword(test->text.c_str());
 				if (!a.name(term.name, what)) {
@@ -714,26 +728,20 @@ private:
 			return;
 		}
 
-		static const std::initializer_list<const char*> known = {
-			"ambient", "anim", "ask", "battle", "call", "camera", "choice", "clear", "credits", "end", "equip", "face", "fade", "follower", "give", "goto",
-			"hide", "if", "label", "learn", "lock", "look", "money", "move", "music", "name", "narrate", "panel", "party", "place", "race",
-			"remove", "rest", "return", "save", "say", "sequence", "set", "shake", "shop", "show", "sound", "spawn", "sync", "take", "together",
-			"unequip", "unlock", "var", "vehicle", "wait", "warp", "while",
-		};
-		if (!one_of(cmd, known)) {
+		const CommandInfo* command = script_command(cmd);
+		if (!command) {
 			error(l.number, "script.unknown_command", {cmd});
 			++pos_;
 			return;
 		}
 
-		if (ctx.background && !one_of(cmd, {"anim", "call", "clear", "face", "goto", "hide", "if", "label", "look", "move", "place", "race", "remove", "return",
-						  "sequence", "set", "show", "sound", "spawn", "sync", "together", "var", "wait", "while"})) {
+		if (ctx.background && !command->background) {
 			error(l.number, "script.background_not_allowed", {cmd});
 			skip_command(ctx);
 			return;
 		}
 		const bool areaMusic = cmd == "music" && l.tokens.size() > 1 && l.tokens[1].text == "area";
-		if (ctx.parallel && (areaMusic || !one_of(cmd, {"ambient", "anim", "camera", "face", "fade", "hide", "move", "music", "panel", "place", "sequence", "shake", "show", "sound", "wait"}))) {
+		if (ctx.parallel && (areaMusic || !command->parallel)) {
 			error(l.number, "script.allowed_inside_only_actor_camera", {cmd, ctx.parallel});
 			skip_command(ctx);
 			return;
@@ -965,6 +973,20 @@ private:
 		} else if (cmd == "spawn") {
 			s = simple(Op::spawn);
 			a.name(s.ins.name, "a background event name");
+		} else if (cmd == "picture") {
+			s = simple(Op::picture);
+			if (a.keyword("show")) {
+				a.name(s.ins.name, "a picture name");
+			} else if (a.keyword("hide")) {
+				s.ins.number = 1;
+				if (!a.done()) {
+					a.name(s.ins.name, "a picture name");
+				}
+			} else if (a.keyword("clear")) {
+				s.ins.number = 2;
+			} else {
+				a.expected("'show', 'hide' or 'clear'");
+			}
 		} else if (cmd == "look") {
 			s = simple(Op::actor_look);
 			a.name(s.ins.name, "an actor name");
@@ -999,8 +1021,28 @@ private:
 				s.ins.action.type = ActionType::camera_move;
 				a.name(s.ins.action.subject, "a camera name");
 				a.number(s.ins.action.seconds, "a blend time in seconds");
+			} else if (a.keyword("to")) {
+				s.ins.action.type = ActionType::camera_to;
+				if (a.next_is_number()) {
+					s.ins.action.has_position = true;
+					if (a.number(s.ins.action.position.x, "a cell's x") && a.number(s.ins.action.position.y, "a cell's y") &&
+						(s.ins.action.position.x != std::floor(s.ins.action.position.x) || s.ins.action.position.y != std::floor(s.ins.action.position.y) ||
+							s.ins.action.position.x < 0 || s.ins.action.position.y < 0)) {
+						a.error("script.camera_cell", {});
+					}
+				} else {
+					a.name(s.ins.action.target, "a marker or a cell's x and y");
+				}
+				if (a.next_is_number()) {
+					a.number(s.ins.action.seconds, "a move time in seconds");
+				}
+			} else if (a.keyword("reset")) {
+				s.ins.action.type = ActionType::camera_reset;
+				if (a.next_is_number()) {
+					a.number(s.ins.action.seconds, "a move time in seconds");
+				}
 			} else {
-				a.expected("'cut' or 'move'");
+				a.expected("'cut', 'move', 'to' or 'reset'");
 			}
 			action_options(ctx, a, s, false, false, false);
 		} else if (cmd == "fade") {
@@ -1029,6 +1071,15 @@ private:
 			s = action(ActionType::music_play);
 			if (a.keyword("play")) {
 				a.name(s.ins.action.subject, "a track name");
+				if (a.keyword("cut")) {
+					s.ins.action.fade_ms = 0;
+				} else if (a.keyword("fade")) {
+					double ms = 0;
+					if (a.number(ms, "a fade time in milliseconds") && (ms < 1 || ms > 60000 || ms != std::floor(ms))) {
+						a.error("script.music_fade_ms", {});
+					}
+					s.ins.action.fade_ms = static_cast<int>(ms);
+				}
 			} else if (a.keyword("stop")) {
 				s.ins.action.type = ActionType::music_stop;
 			} else if (a.keyword("fade")) {

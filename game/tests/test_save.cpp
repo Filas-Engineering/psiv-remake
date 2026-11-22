@@ -155,7 +155,7 @@ TEST(damagedAndNewerSavesAreRefused) {
 	CHECK(r.error.find("damaged") != std::string::npos);
 
 	std::string newer = text;
-	newer.replace(0, std::string("PSR-SAVE 11").size(), "PSR-SAVE 12");
+	newer.replace(0, std::string("PSR-SAVE 12").size(), "PSR-SAVE 13");
 	r = parseSave(resign(newer));
 	CHECK(!r.ok());
 	CHECK(r.error.find("newer build") != std::string::npos);
@@ -314,7 +314,7 @@ TEST(schemaOneSavesMigrateToTheCurrentSchema) {
 	CHECK_EQ(w.encounterStream.state(), 7u);
 
 	const std::string again = serializeSave(*save.value);
-	CHECK(again.compare(0, 12, "PSR-SAVE 11\n") == 0);
+	CHECK(again.compare(0, 12, "PSR-SAVE 12\n") == 0);
 	CHECK(again.find("chunk battle 3 ") != std::string::npos);
 	CHECK(again.find("chunk quests 1 ") != std::string::npos);
 	CHECK(again.find("chunk actors 2 ") != std::string::npos);

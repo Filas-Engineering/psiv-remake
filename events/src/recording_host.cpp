@@ -253,6 +253,18 @@ void RecordingHost::end_game() {
 	trace.push_back("end game");
 }
 
+void RecordingHost::show_picture(const std::string& picture) {
+	trace.push_back("picture show " + picture);
+}
+
+void RecordingHost::hide_picture(const std::string& picture) {
+	trace.push_back("picture hide" + (picture.empty() ? std::string() : " " + picture));
+}
+
+void RecordingHost::clear_pictures() {
+	trace.push_back("picture clear");
+}
+
 void RecordingHost::save_party(const std::string& snapshot) {
 	trace.push_back("party save " + snapshot);
 	party_snapshots[snapshot] = party;

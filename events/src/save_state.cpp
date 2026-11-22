@@ -8,9 +8,9 @@ namespace events {
 namespace {
 
 const char* const header = "events-save";
-// Version 4 adds each actor's route (`via`, `pathfind`) and `placed`; a state that uses none of them is written as
-// version 3, so older builds still read it.
-const int version = 4;
+// Version 4 adds each actor's route (`via`, `pathfind`) and `placed`, version 5 the scene camera (`camera to`, `camera
+// reset`); a state is written in the oldest version that holds what it uses, so older builds still read it.
+const int version = kSaveTextVersion;
 const int oldest_version = 3;
 const char* const checksum_mark = " sum ";
 // Stands in for an empty word, which the space-separated form cannot hold.
@@ -121,6 +121,10 @@ bool read_bool(std::istringstream& in, bool& out) {
 	return true;
 }
 
+bool uses_scene_camera(const PresentationState& p) {
+	return p.camera_to || p.camera_reset;
+}
+
 bool uses_routes(const PresentationState& p) {
 	for (const ActorState& a : p.actors) {
 		if (!a.via.empty() || a.pathfind || a.placed) {
@@ -133,6 +137,10 @@ bool uses_routes(const PresentationState& p) {
 void write_presentation(std::ostringstream& out, const PresentationState& p, int file_version) {
 	out << ' ' << p.music_set << ' ' << word(p.music) << ' ' << p.ambient_set << ' ' << word(p.ambient);
 	out << ' ' << p.fade_set << ' ' << p.faded_out << ' ' << word(p.camera);
+	if (file_version >= 5) {
+		out << ' ' << p.camera_to << ' ' << p.camera_reset << ' ' << word(p.camera_marker) << ' ' << p.camera_has_position << ' '
+			<< real(p.camera_position.x) << ' ' << real(p.camera_position.y);
+	}
 	out << ' ' << p.panels.size();
 	for (const PanelState& panel : p.panels) {
 		out << ' ' << word(panel.panel) << ' ' << word(panel.camera) << ' ' << word(panel.slot);
@@ -154,6 +162,10 @@ void write_presentation(std::ostringstream& out, const PresentationState& p, int
 bool read_presentation(std::istringstream& in, PresentationState& p, int file_version) {
 	if (!read_bool(in, p.music_set) || !read_word(in, p.music) || !read_bool(in, p.ambient_set) || !read_word(in, p.ambient) ||
 		!read_bool(in, p.fade_set) || !read_bool(in, p.faded_out) || !read_word(in, p.camera)) {
+		return false;
+	}
+	if (file_version >= 5 && (!read_bool(in, p.camera_to) || !read_bool(in, p.camera_reset) || !read_word(in, p.camera_marker) ||
+								 !read_bool(in, p.camera_has_position) || !(in >> p.camera_position.x >> p.camera_position.y))) {
 		return false;
 	}
 	std::size_t count = 0;
@@ -208,12 +220,14 @@ bool PanelState::operator==(const PanelState& other) const {
 
 bool PresentationState::operator==(const PresentationState& other) const {
 	return music_set == other.music_set && music == other.music && ambient_set == other.ambient_set && ambient == other.ambient &&
-		fade_set == other.fade_set && faded_out == other.faded_out && camera == other.camera && panels == other.panels && actors == other.actors;
+		fade_set == other.fade_set && faded_out == other.faded_out && camera == other.camera && camera_to == other.camera_to &&
+		camera_reset == other.camera_reset && camera_marker == other.camera_marker && camera_has_position == other.camera_has_position &&
+		camera_position.x == other.camera_position.x && camera_position.y == other.camera_position.y && panels == other.panels && actors == other.actors;
 }
 
 std::string save_state_to_text(const SaveState& state) {
 	std::ostringstream out;
-	const int file_version = uses_routes(state.presentation) ? version : oldest_version;
+	const int file_version = uses_scene_camera(state.presentation) ? 5 : uses_routes(state.presentation) ? 4 : oldest_version;
 	out << header << ' ' << file_version << ' ' << state.fingerprint << ' ' << static_cast<int>(state.status) << ' ' << state.skip_depth;
 	out << ' ' << word(state.event) << ' ' << word(to_hex(state.start_world));
 	out << ' ' << state.frames.size();

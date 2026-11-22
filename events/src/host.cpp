@@ -59,6 +59,10 @@ const char* action_type_name(ActionType type) {
 		return "warp";
 	case ActionType::place_actor:
 		return "place";
+	case ActionType::camera_to:
+		return "camera to";
+	case ActionType::camera_reset:
+		return "camera reset";
 	}
 	return "unknown";
 }
@@ -89,7 +93,7 @@ bool is_direction(const std::string& word) {
 }
 
 bool parse_action_type(const std::string& name, ActionType& type) {
-	for (int i = 0; i <= static_cast<int>(ActionType::place_actor); ++i) {
+	for (int i = 0; i <= static_cast<int>(ActionType::camera_reset); ++i) {
 		std::string candidate = action_type_name(static_cast<ActionType>(i));
 		for (char& c : candidate) {
 			if (c == ' ') {
@@ -166,12 +170,30 @@ std::string describe(const Action& action) {
 			out += " with " + action.target;
 		}
 		break;
+	case ActionType::music_play:
+		out += " " + action.subject;
+		if (action.fade_ms == 0) {
+			out += " cut";
+		} else if (action.fade_ms > 0) {
+			out += " fade " + std::to_string(action.fade_ms);
+		}
+		break;
 	case ActionType::panel_hide:
 	case ActionType::camera_cut:
-	case ActionType::music_play:
 	case ActionType::ambient_play:
 	case ActionType::sound:
 		out += " " + action.subject;
+		break;
+	case ActionType::camera_to:
+		out += " " + (action.has_position ? num(action.position.x) + " " + num(action.position.y) : action.target);
+		if (action.seconds > 0) {
+			out += " " + num(action.seconds);
+		}
+		break;
+	case ActionType::camera_reset:
+		if (action.seconds > 0) {
+			out += " " + num(action.seconds);
+		}
 		break;
 	case ActionType::camera_move:
 		out += " " + action.subject + " " + num(action.seconds);
@@ -366,5 +388,11 @@ Handle Host::play_credits(const std::string&) {
 }
 
 void Host::end_game() {}
+
+void Host::show_picture(const std::string&) {}
+
+void Host::hide_picture(const std::string&) {}
+
+void Host::clear_pictures() {}
 
 }

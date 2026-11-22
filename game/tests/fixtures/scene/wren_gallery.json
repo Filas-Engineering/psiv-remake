@@ -1,0 +1,27 @@
+{
+	"id": "wren_gallery",
+	"kind": "town",
+	"encounter_mode": "random",
+	"step_ms": 250,
+	"region": "coast",
+	"map": [
+		"##########",
+		"#........#",
+		"#........#",
+		"#........#",
+		"####.#####"
+	],
+	"markers": {
+		"gallery_door": [4, 3],
+		"easel_front": [2, 1],
+		"window_front": [6, 1],
+		"far_corner": [8, 3]
+	},
+	"exits": [
+		{"at": [4, 4], "to": "wren_loft", "marker": "loft_door", "sound": "gallery_door"}
+	],
+	"hooks": [
+		{"id": "gallery_easel", "at": [2, 0], "event": "gallery_easel"},
+		{"id": "gallery_window", "at": [6, 0], "event": "gallery_window"}
+	]
+}

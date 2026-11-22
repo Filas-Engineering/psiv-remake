@@ -97,10 +97,10 @@ std::vector<std::string> Reader::strings(const JsonValue& object, const char* ke
 	return result;
 }
 
-void Reader::rejectUnknownKeys(const JsonValue& object, std::initializer_list<const char*> allowed) {
+void Reader::rejectUnknownKeys(const JsonValue& object, const DataKeySet& allowed) {
 	for (std::size_t i = 0; i < object.keys.size(); ++i) {
 		bool known = false;
-		for (const char* key : allowed) {
+		for (const std::string& key : allowed.keys) {
 			if (object.keys[i] == key) {
 				known = true;
 				break;

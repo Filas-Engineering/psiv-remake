@@ -209,12 +209,13 @@ class VesselAndChangesTest(TempCase):
 
 	def test_a_closed_exits_tile_and_a_hooks_counter_and_cells_survive_a_round_trip(self):
 		area = copy.deepcopy(VESSEL_AREA)
-		area["exits"] = [{"at": [1, 1], "to": "elsewhere", "marker": "door", "require_flag": "door.open", "closed_tile": "normal"}]
+		area["exits"] = [{"at": [1, 1], "to": "elsewhere", "marker": "door", "require_flag": "door.open", "closed_tile": "normal", "sound": "door_creak"}]
 		area["hooks"] = [{"id": "table", "at": [1, 0], "event": "e", "across": True, "cells": [[2, 0], [3, 0]]}]
 		back = self.convert(tiled.area_to_tmj(copy.deepcopy(area), "cells.tsj"))
 		self.assertEqual(areajson.dumps(area), areajson.dumps(back))
 		self.assertIn('{"id": "table", "at": [1, 0], "event": "e", "across": true, "cells": [[2, 0], [3, 0]]}', areajson.dumps(back))
 		self.assertEqual("normal", back["exits"][0]["closed_tile"])
+		self.assertEqual("door_creak", back["exits"][0]["sound"])
 
 	def test_a_touch_hook_a_keeper_and_a_voice_survive_a_round_trip(self):
 		area = copy.deepcopy(VESSEL_AREA)

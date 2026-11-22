@@ -45,11 +45,15 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 14
+#define PSIV_ABI_VERSION 15
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
 PSIV_API const char* psiv_version(void);
+/* What this build supports, as JSON with a stable key order: the versions, every data key the loaders accept by file
+ * and object with their fixed word sets, every script command and condition, the standard animations and the text key
+ * families a host provides (bindings/README.md, "Capabilities"). The string lives as long as the library. */
+PSIV_API const char* psiv_capabilities(void);
 
 /* sizeof the named struct ("psiv_battle_event"), or 0 for an unknown name, so a foreign binding can check
  * its struct layouts against this build. */
@@ -173,7 +177,7 @@ typedef enum psiv_action_type {
 	PSIV_ACTION_MOVE, PSIV_ACTION_FACE, PSIV_ACTION_ANIMATE, PSIV_ACTION_SHOW_ACTOR, PSIV_ACTION_HIDE_ACTOR, PSIV_ACTION_PANEL_SHOW,
 	PSIV_ACTION_PANEL_HIDE, PSIV_ACTION_PANEL_CLEAR, PSIV_ACTION_CAMERA_CUT, PSIV_ACTION_CAMERA_MOVE, PSIV_ACTION_FADE_IN, PSIV_ACTION_FADE_OUT,
 	PSIV_ACTION_SHAKE, PSIV_ACTION_MUSIC_PLAY, PSIV_ACTION_MUSIC_STOP, PSIV_ACTION_MUSIC_FADE, PSIV_ACTION_AMBIENT_PLAY, PSIV_ACTION_AMBIENT_STOP,
-	PSIV_ACTION_SOUND, PSIV_ACTION_WARP, PSIV_ACTION_PLACE
+	PSIV_ACTION_SOUND, PSIV_ACTION_WARP, PSIV_ACTION_PLACE, PSIV_ACTION_CAMERA_TO, PSIV_ACTION_CAMERA_RESET
 } psiv_action_type;
 /* How a hidden actor left: a plain hide, or the standard animation that hid it (fade_out, dissolve, blink_out). */
 typedef enum psiv_actor_vanish { PSIV_VANISH_NONE, PSIV_VANISH_FADED, PSIV_VANISH_DISSOLVED, PSIV_VANISH_BLINKED_OUT } psiv_actor_vanish;
@@ -285,6 +289,12 @@ typedef struct psiv_game_info {
 	 * starts a profile whose default is original at reduced). */
 	int32_t flash_default;
 	int32_t flash_original;
+	/* game.json party_talk_ambient: 0 when entering an area never starts party talk by itself, so a host hides its option
+	 * for it (the profile's ambient_talk then changes nothing). */
+	int32_t party_talk_ambient;
+	/* game.json presentation.music.fade_ms: how long a change of area track fades; -1 when the data names none and the
+	 * host's own rule holds. Script music plays carry their own in psiv_action.fade_ms. */
+	int32_t music_fade_ms;
 } psiv_game_info;
 
 PSIV_API psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out);
@@ -601,6 +611,15 @@ typedef struct psiv_field_info {
 	int64_t step_progress_us;
 	int64_t conveyor_step_us;
 	int64_t conveyor_progress_us;
+	/* The sound cue of the exit the party left by at the last area entry (psiv_exit.sound), "" when it came another way
+	 * or the exit has none: play it with the area change. */
+	const char* exit_sound;
+	/* Microseconds of update time until the next field tick (when a step can start or land), and until the tick on which
+	 * the step under way, or one started now, lands with the input held, walking and with the run input: glide the leader
+	 * over that time so it arrives when the session moves it, with no wait at the end of the cell. */
+	int64_t next_tick_us;
+	int64_t step_lands_in_us;
+	int64_t run_step_lands_in_us;
 } psiv_field_info;
 
 typedef struct psiv_enemy {
@@ -632,6 +651,8 @@ typedef struct psiv_exit {
 	/* The map character a closed exit is drawn as, which psiv_field_rows and psiv_field_grid show while it is closed: '#'
 	 * unless the data's closed_tile names another (a door drawn as floor). */
 	int32_t closed_tile;
+	/* The sound cue (an audio id) played as the party leaves by it, "" for none. */
+	const char* sound;
 } psiv_exit;
 
 typedef struct psiv_point {
@@ -842,6 +863,9 @@ typedef struct psiv_action {
 	 * when it had no cell in the area, and for a place). Empty for anything else. Walk the actor along it. */
 	int32_t route_count;
 	const psiv_route_cell* route;
+	/* PSIV_ACTION_MUSIC_PLAY: how long the change of track fades, in milliseconds: the script's `fade <ms>`, 0 for its
+	 * `cut`, else game.json's presentation.music.fade_ms; -1 when neither gives one and the host's own rule holds. */
+	int32_t fade_ms;
 } psiv_action;
 
 typedef void (*psiv_action_callback)(void* user, const psiv_action* action);
@@ -1447,6 +1471,24 @@ typedef struct psiv_credits_info {
 } psiv_credits_info;
 /* PSIV_NOT_FOUND while no credits play. */
 PSIV_API psiv_status psiv_credits_info_get(psiv_session* session, psiv_credits_info* out);
+
+/* The story pictures up now, bottom first: draw them in that order over the field or the dialogue. Scripts' `picture
+ * show`, `picture hide [name]` (the top one without a name) and `picture clear` change them; they stay through lines,
+ * the end of the event and area changes, and saves keep them. Empty at the title. */
+PSIV_API psiv_status psiv_pictures(psiv_session* session, const char* const** out, int32_t* count);
+
+/* The scene camera scripts' `camera to` and `camera reset` set. held: 1 while it stays on the cell x, y (`camera to`),
+ * 0 while it follows the party leader as usual. ms and total_ms: the move toward that cell, or back to the leader after
+ * `camera reset`, left and in all; 0 once it has arrived. Move the view from where it is to the goal over ms. Entering an
+ * area puts it back on the leader; saves keep it. */
+typedef struct psiv_scene_camera {
+	int32_t held;
+	int32_t x;
+	int32_t y;
+	int32_t ms;
+	int32_t total_ms;
+} psiv_scene_camera;
+PSIV_API psiv_status psiv_scene_camera_get(psiv_session* session, psiv_scene_camera* out);
 /* The entries in order. PSIV_NOT_FOUND while no credits play. */
 PSIV_API psiv_status psiv_credits_entries(psiv_session* session, const psiv_credits_entry** out, int32_t* count);
 

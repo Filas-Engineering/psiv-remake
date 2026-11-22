@@ -33,6 +33,7 @@ public struct PsivGameInfo
 	public int MagicDefense;
 	public int AffinityDivisor;
 	public int FlashDefault, FlashOriginal;
+	public int PartyTalkAmbient, MusicFadeMs;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -85,6 +86,8 @@ public struct PsivFieldInfo
 	public int StepProgressMs, ConveyorStepMs, ConveyorProgressMs, StepMask;
 	public int AnnounceArrival;
 	public long LeaderStepUs, RunStepUs, StepProgressUs, ConveyorStepUs, ConveyorProgressUs;
+	public IntPtr ExitSound;
+	public long NextTickUs, StepLandsInUs, RunStepLandsInUs;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -94,7 +97,7 @@ public struct PsivEnemy { public int Id; public IntPtr Encounter, Zone; public i
 public struct PsivMarker { public IntPtr Name; public int X, Y; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivExit { public int X, Y; public IntPtr ToArea, ToMarker; public int Open, ClosedTile; }
+public struct PsivExit { public int X, Y; public IntPtr ToArea, ToMarker; public int Open, ClosedTile; public IntPtr Sound; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivInteractTarget { public int Kind; public IntPtr Id; public int X, Y, Facing, Ready, Across; public IntPtr Keeper; }
@@ -170,7 +173,11 @@ public struct PsivAction
 	public IntPtr Facing;
 	public int RouteCount;
 	public IntPtr Route;
+	public int FadeMs;
 }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivSceneCamera { public int Held, X, Y, Ms, TotalMs; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivCamera { public IntPtr Id; public int Target; public IntPtr Area, Marker, Follow; public double Zoom; }
@@ -411,12 +418,13 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 14;
+	public const uint AbiVersion = 15;
 	// PSIV_SLOT_COUNT: the places a member wears equipment, which the member structs index by psiv_equip_slot.
 	public const int SlotCount = 7;
 
 	[LibraryImport(Library, EntryPoint = "psiv_abi_version")] public static partial uint AbiVersionOf();
 	[LibraryImport(Library, EntryPoint = "psiv_version")] public static partial IntPtr Version();
+	[LibraryImport(Library, EntryPoint = "psiv_capabilities")] public static partial IntPtr Capabilities();
 	[LibraryImport(Library, EntryPoint = "psiv_sizeof", StringMarshalling = StringMarshalling.Utf8)] public static partial uint SizeOf(string name);
 	[LibraryImport(Library, EntryPoint = "psiv_name_of")] public static partial IntPtr NameOf(int kind, int value);
 	[LibraryImport(Library, EntryPoint = "psiv_parse_name", StringMarshalling = StringMarshalling.Utf8)] public static partial int ParseName(int kind, string text, out int value);
@@ -578,6 +586,8 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_background_events")] public static partial int BackgroundEvents(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_credits_info_get")] public static partial int CreditsInfoGet(SessionHandle s, out PsivCreditsInfo info);
 	[LibraryImport(Library, EntryPoint = "psiv_credits_entries")] public static partial int CreditsEntries(SessionHandle s, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_pictures")] public static partial int Pictures(SessionHandle s, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_scene_camera_get")] public static partial int SceneCameraGet(SessionHandle s, out PsivSceneCamera camera);
 	[LibraryImport(Library, EntryPoint = "psiv_field_zones")] public static partial int FieldZones(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_save_text")] public static partial int SaveText(SessionHandle s, out IntPtr text);
 	[LibraryImport(Library, EntryPoint = "psiv_load_text", StringMarshalling = StringMarshalling.Utf8)] public static partial int LoadText(SessionHandle s, string text);

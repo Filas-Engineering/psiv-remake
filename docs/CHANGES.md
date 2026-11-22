@@ -1,3 +1,22 @@
+# Changes
+
+One line per feature, newest first: name, kind, meaning. Each pass adds its lines at the top.
+
+* `game_cli --capabilities`, `psiv_capabilities`, `GameSession.Capabilities` (tool, C API, C#): what the build supports as JSON, read from the loaders' and the compiler's own tables (game/README.md, "Capabilities").
+* `rules::DataKeySet`, `game::gameDataKeys`, `events::script_commands` (library): the accepted data keys and script commands as tables both the loaders and the report read.
+* `picture show|hide|clear` (script command): a saved stack of story pictures; `presentation.pictures` (game.json key) lists the names when declared (R117).
+* `camera to <marker>|<x> <y> [seconds]`, `camera reset [seconds]` (script command): moves the scene camera to a cell and back to the leader, saved mid-move (R118).
+* `psiv_pictures`, `psiv_scene_camera_get`, `PSIV_ACTION_CAMERA_TO`, `PSIV_ACTION_CAMERA_RESET` (C API, ABI 15): the picture stack and the scene camera for hosts.
+* exit `sound` (area key): a cue played when the party leaves by that exit, `psiv_field_info.exit_sound` (R119).
+* `presentation.music.fade_ms` (game.json key) and `music play <track> fade <ms>|cut` (script option): music fades as data, `psiv_action.fade_ms` (R120).
+* `psiv_game_info.party_talk_ambient` (C API field): a host can hide the ambient talk option (R121).
+* visible enemies avoid wanderers (rule): no visible enemy steps onto a blocking wanderer's cell; no golden changed, so no option (R121).
+* exact steps for visible enemies (rule, `step_timing: "exact"`): their cell cost keeps the step time's fraction; they still step on ticks (R122).
+* `FieldMotion::nextTickUs`, `stepLandsInUs`, `runStepLandsInUs` (session, C fields): when the next tick and a step's landing come, for a glide with no wait (R122).
+* save schema 12 (save format): world chunk `picture` and `scene_camera` lines; schemas 1 to 11 load.
+* `events-save 5` (interpreter save text): the last `camera to` or `camera reset`, written only when used.
+* battles aboard from a host's menus (checked): macros with vehicle steps, named auto macros and auto-battle work through the existing C calls (R123).
+* quantity buying and selling (checked): `buy`/`sell` with a count already make one price, money and carry check; keepers' `.confirm` documented (R124).
 
 ## Sample
 

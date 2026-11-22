@@ -89,6 +89,7 @@ const rules::TextTable& problemText() {
 			{"data.element_name_missing", "every language needs name.element.{0} for the element rules.json declares"},
 			{"data.exit_leads_missing_marker", "exit leads to missing marker '{0} {1}'"},
 			{"data.exit_leads_unknown_area", "exit leads to area '{0}', which no file in game.json's areas defines"},
+			{"data.exit_sound_not_audio", "the exit's sound '{0}' is not one of game.json's presentation.audio"},
 			{"data.field_cannot_empty", "field '{0}' cannot be empty"},
 			{"data.field_out_of_range", "field '{0}' must be a whole number from {1} to {2}"},
 			{"data.field_wrong_type", "field '{0}' must be a {1}"},

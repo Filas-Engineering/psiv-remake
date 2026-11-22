@@ -1,0 +1,37 @@
+# Story pictures, the scene camera, music fades and an exit's sound in Wren Gallery, on the data copy
+# `make_actor_data ... scene` writes, reached by a developer warp. The easel shows three pictures and hides one by name,
+# cuts the camera to a cell and moves it to a marker over 1.5 s (the field's ticks run it down), and plays a track with
+# its own fade, then a cut. A save and load keep the pictures and the camera. The window sends the camera back to the
+# leader, plays a track with game.json's fade_ms (400), pops the top picture, clears the rest and shows a last one; its
+# warp within the gallery resets the camera and keeps the picture. Leaving by the door plays its sound. Run with --seed 6.
+new
+dev warp wren_gallery gallery_door
+pictures
+camera
+motion
+walk easel_front
+face north
+talk
+pictures
+camera
+wait 500
+camera
+motion
+menu
+save manual_1
+close
+title
+load manual_1
+pictures
+camera
+walk window_front
+face north
+talk
+pictures
+camera
+wait 300
+camera
+walk gallery_door
+s
+motion
+pictures

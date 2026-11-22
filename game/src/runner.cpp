@@ -825,6 +825,21 @@ bool Runner::execute(const std::string& rawLine) {
 		for (const EventPosition& at : running) {
 			print("  background: " + at.event + " at " + at.file + ":" + std::to_string(at.line));
 		}
+	} else if (cmd == "pictures" && w.size() == 1) {
+		std::string text;
+		for (const std::string& p : session_.pictures()) {
+			text += (text.empty() ? "" : ", ") + p;
+		}
+		print("  pictures: " + (text.empty() ? std::string("none") : text));
+	} else if (cmd == "camera" && w.size() == 1) {
+		const World::SceneCamera& c = session_.sceneCamera();
+		const std::string moving = c.ms > 0 ? ", " + std::to_string(c.ms) + "/" + std::to_string(c.totalMs) + " ms" : "";
+		print(c.held ? "  camera: at " + std::to_string(c.cell.x) + " " + std::to_string(c.cell.y) + moving
+					 : "  camera: leader" + (c.ms > 0 ? " (returning" + moving + ")" : std::string()));
+	} else if (cmd == "motion" && w.size() == 1) {
+		const FieldMotion m = session_.fieldMotion();
+		print("  motion: next tick in " + std::to_string(m.nextTickUs) + " us, a step lands in " + std::to_string(m.stepLandsInUs) + " us, " +
+			std::to_string(m.runStepLandsInUs) + " us running; last exit sound " + (session_.exitSound().empty() ? std::string("none") : session_.exitSound()));
 	} else if (cmd == "rows" && w.size() == 1) {
 		if (const Area* a = session_.area()) {
 			for (const std::string& r : a->rows) {

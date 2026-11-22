@@ -46,6 +46,8 @@ struct Exit {
 	// The map character the cell is drawn as while the exit is closed (a door): '#' by default, 0 for the tile the map
 	// has there. It blocks walking whatever it is.
 	char closedTile = '#';
+	// A sound cue (a presentation.audio id) a host plays as the party leaves by this exit; empty for none.
+	std::string sound = {};
 };
 
 // A field hook (FLD-023): runs one event script when it fires and its flag conditions hold. A Flag hook fires

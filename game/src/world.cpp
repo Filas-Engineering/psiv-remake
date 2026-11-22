@@ -246,6 +246,8 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 	if (a.areaSteps != b.areaSteps) return differs("areaSteps");
 	if (a.onceHooks != b.onceHooks) return differs("onceHooks");
 	if (a.areaMusic != b.areaMusic) return differs("areaMusic");
+	if (a.pictures != b.pictures) return differs("pictures");
+	if (a.sceneCamera != b.sceneCamera) return differs("sceneCamera");
 	if (a.randomThreshold != b.randomThreshold) return differs("randomThreshold");
 	if (a.encounterStream.state() != b.encounterStream.state()) return differs("encounterStream");
 	if (a.jobs != b.jobs) return differs("jobs");

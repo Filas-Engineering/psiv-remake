@@ -184,6 +184,28 @@ game::GameData backgroundDataWithScript(const std::string& file, const std::stri
 	return replaceScript(backgroundData(), backgroundDataDirectory(), file, text);
 }
 
+const std::string& sceneDataDirectory() {
+	static const std::string directory = [] {
+		const std::string root = freshDirectory("scene_data");
+		const std::string problem = actor_data::makeScene("data", "../core/data", "tests/fixtures/actors", root);
+		if (!problem.empty()) {
+			std::cout << "cannot make the scene data: " << problem << "\n";
+			std::exit(1);
+		}
+		return root + "/game/data";
+	}();
+	return directory;
+}
+
+const game::GameData& sceneData() {
+	static const rules::Result<game::GameData> loaded = game::loadGameData(sceneDataDirectory());
+	if (!loaded.ok()) {
+		std::cout << "cannot load the scene data: " << loaded.error << "\n";
+		std::exit(1);
+	}
+	return *loaded.value;
+}
+
 }
 
 int main(int argc, char** argv) {

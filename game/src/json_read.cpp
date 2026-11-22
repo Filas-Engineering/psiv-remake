@@ -20,9 +20,9 @@ std::string JsonReader::errors() const {
 	return rules::formatProblems(problems_, problemText());
 }
 
-void JsonReader::only(const JsonValue& object, const std::vector<std::string>& known) {
+void JsonReader::only(const JsonValue& object, const rules::DataKeySet& known) {
 	for (std::size_t i = 0; i < object.keys.size(); ++i) {
-		if (std::find(known.begin(), known.end(), object.keys[i]) == known.end()) {
+		if (std::find(known.keys.begin(), known.keys.end(), object.keys[i]) == known.keys.end()) {
 			fail(object.values[i], "data.unknown_field", {object.keys[i]});
 		}
 	}

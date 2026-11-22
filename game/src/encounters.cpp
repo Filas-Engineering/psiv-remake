@@ -55,8 +55,9 @@ bool occupied(const World& world, Cell cell, int exceptId) {
 	return false;
 }
 
-bool enemyCanStand(const World& world, const Area& area, Cell cell, int id) {
-	return area.walkable(cell) && !area.exitAt(cell) && cell != world.position && !occupied(world, cell, id);
+bool enemyCanStand(const World& world, const Area& area, Cell cell, int id, const std::vector<Cell>& blocked) {
+	return area.walkable(cell) && !area.exitAt(cell) && cell != world.position && !occupied(world, cell, id) &&
+		std::find(blocked.begin(), blocked.end(), cell) == blocked.end();
 }
 
 const Facing kFacings[] = {Facing::North, Facing::East, Facing::South, Facing::West};
@@ -156,8 +157,10 @@ std::optional<EncounterStart> leaderBump(World& world, Cell target) {
 	return std::nullopt;
 }
 
-std::optional<EncounterStart> tickVisibleEnemies(World& world, const Area& area, int tickMs, int leaderStepMs, bool leaderUnseen) {
-	const int cellCost = leaderStepMs * 100;
+std::optional<EncounterStart> tickVisibleEnemies(World& world, const Area& area, int tickMs, int leaderStepMs, bool leaderUnseen, std::int64_t leaderStepUs,
+	const std::vector<Cell>& blocked) {
+	// Progress is milliseconds times percent, so a cell costs the step time times 100.
+	const int cellCost = leaderStepUs > 0 ? static_cast<int>(std::max<std::int64_t>(1, leaderStepUs / 10)) : leaderStepMs * 100;
 	const bool quiet = world.graceMs > 0 || leaderUnseen;
 	for (VisibleEnemy& e : world.enemies) {
 		const Zone* zone = area.zone(e.zone);
@@ -199,7 +202,7 @@ std::optional<EncounterStart> tickVisibleEnemies(World& world, const Area& area,
 						inRearArc(world.position, world.facing, e.position));
 					return start;
 				}
-				if (manhattan(next, world.position) < manhattan(e.position, world.position) && enemyCanStand(world, area, next, e.id)) {
+				if (manhattan(next, world.position) < manhattan(e.position, world.position) && enemyCanStand(world, area, next, e.id, blocked)) {
 					e.facing = f;
 					e.position = next;
 					break;
@@ -213,7 +216,7 @@ std::optional<EncounterStart> tickVisibleEnemies(World& world, const Area& area,
 			}
 			for (Facing f : towardOrder(e.position, e.spawn)) {
 				const Cell next = stepFrom(e.position, f);
-				if (manhattan(next, e.spawn) < manhattan(e.position, e.spawn) && enemyCanStand(world, area, next, e.id)) {
+				if (manhattan(next, e.spawn) < manhattan(e.position, e.spawn) && enemyCanStand(world, area, next, e.id, blocked)) {
 					e.facing = f;
 					e.position = next;
 					break;
@@ -223,7 +226,7 @@ std::optional<EncounterStart> tickVisibleEnemies(World& world, const Area& area,
 			const Facing f = kFacings[world.encounterStream.range(0, 3)];
 			const Cell next = stepFrom(e.position, f);
 			e.facing = f;
-			if (distance2(next, e.spawn) <= r.leashRadius * r.leashRadius && enemyCanStand(world, area, next, e.id)) {
+			if (distance2(next, e.spawn) <= r.leashRadius * r.leashRadius && enemyCanStand(world, area, next, e.id, blocked)) {
 				e.position = next;
 			}
 		}

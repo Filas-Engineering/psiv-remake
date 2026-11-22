@@ -123,6 +123,8 @@ const char* op_name(Op op) {
 		return "credits";
 	case Op::end_game:
 		return "end game";
+	case Op::picture:
+		return "picture";
 	}
 	return "unknown";
 }

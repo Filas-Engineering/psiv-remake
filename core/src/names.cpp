@@ -1,5 +1,7 @@
 #include "rules/names.h"
 
+#include "rules/data_keys.h"
+
 namespace rules {
 
 namespace {
@@ -140,5 +142,31 @@ bool parseCancelReason(const std::string& text, CancelReason& out) { return pars
 bool parseEffectiveness(const std::string& text, Effectiveness& out) { return parseName(kEffectiveness, text, out); }
 bool parseStatusEnd(const std::string& text, StatusEnd& out) { return parseName(kStatusEnds, text, out); }
 bool parseResourceKind(const std::string& text, ResourceKind& out) { return parseName(kResources, text, out); }
+
+template <std::size_t N>
+DataEnum enumOf(const char* name, const char* const (&names)[N]) {
+	return DataEnum{name, std::vector<std::string>(names, names + N)};
+}
+
+const std::vector<DataEnum>& coreDataEnums() {
+	static const std::vector<DataEnum> enums = {
+		enumOf("ability_kind", kAbilityKinds),
+		enumOf("ai_condition", kAiConditions),
+		enumOf("ai_target_rule", kAiTargetRules),
+		enumOf("creature_kind", kCreatureKinds),
+		enumOf("effect_type", kEffectKinds),
+		enumOf("equip_slot", kEquipSlots),
+		enumOf("forced_target", kForcedTargets),
+		enumOf("macro_command", kCommandKinds),
+		enumOf("macro_target", kMacroTargets),
+		enumOf("opening", kOpenings),
+		enumOf("stat", kStats),
+		enumOf("status_action", kStatusActions),
+		enumOf("status_stacking", kStatusStackings),
+		enumOf("targeting", kTargetings),
+		enumOf("travel_target", kTravelTargets),
+	};
+	return enums;
+}
 
 }

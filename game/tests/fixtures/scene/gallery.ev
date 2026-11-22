@@ -1,0 +1,31 @@
+# Wren Gallery, for story pictures, the scene camera and music fades: the easel puts three pictures up and takes one down
+# by name, cuts the camera to a cell and then moves it to a marker over a second and a half, and plays a track with its own
+# fade and then cut; the window sends the camera back to the leader, plays a track with game.json's fade, takes the top
+# picture down, clears the rest, shows a last one and warps within the gallery, which resets the camera and keeps the
+# picture.
+
+event gallery_easel skippable
+	picture show harbor_dawn
+	narrate @gallery.easel.dawn
+	picture show storm
+	picture show beacon
+	narrate @gallery.easel.storm
+	picture hide storm
+	camera to 8 3
+	music play title_harbor_dawn fade 800
+	narrate @gallery.easel.beacon
+	music play title_harbor_dawn cut
+	camera to window_front 1.5 nowait
+end
+
+event gallery_window skippable
+	camera reset 0.5
+	music play field_marsh_reeds
+	narrate @gallery.window.view
+	picture hide
+	picture clear
+	picture show farewell
+	narrate @gallery.window.farewell
+	camera to far_corner 2 nowait
+	warp wren_gallery gallery_door
+end
