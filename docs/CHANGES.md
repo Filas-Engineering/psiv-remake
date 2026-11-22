@@ -2,6 +2,8 @@
 
 One line per feature, newest first: name, kind, meaning. Each pass adds its lines at the top.
 
+* `useItemOutsideBattle` with a `consumed: false` item (fix): the field use keeps what its effects did to the party, so a revive and a heal stand a fallen member at the heal as in battle; before, it reported the effects and changed nothing. Rules version 15 unchanged (field uses make no battle record).
+
 * `Session::discard`, `psiv_discard`, `GameSession.Discard`, game_cli `discard ID [N]`, items.json `discardable` (session, C API, C#, tool, data key, default true): throw items or unworn pieces away from the field menu, never an item marked `discardable: false`; notice `game.discarded`, refusals `game.refuse.discard_menu_only`, `discard_one`, `discard_not_held`, `not_discardable` in `en` and `ja`; `psiv_inventory_entry.discardable` (R177).
 * `Session::alliesOutOfReach`, `rules::Battle::alliesOutOfReach`, `rules::fieldTargetsOutOfReach`, `psiv_allies_out_of_reach`, `GameSession.AlliesOutOfReach` (session, core, C API, C#): the lineup members a one-ally ability or item would be refused on because nothing in it reaches them, in battle and in the field (R178).
 * `SaveSummary::newest`, `psiv_save_summary.newest`, `SaveSummary.Newest` (save, C API, C#): the save Continue loads, beside the write time (R179).

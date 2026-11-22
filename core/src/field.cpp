@@ -160,6 +160,7 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 			return use;
 		}
 	}
+	writeBack(battle, party);
 	if (!item->consumed) {
 		return use;
 	}
@@ -170,7 +171,6 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 	spent.ability = item->id;
 	spent.resource = ResourceKind::Item;
 	spent.amount = 1;
-	writeBack(battle, party);
 	return use;
 }
 

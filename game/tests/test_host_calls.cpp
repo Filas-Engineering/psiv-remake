@@ -80,6 +80,57 @@ TEST(alliesOutOfReachAreTheOnesTheSessionWouldRefuse) {
 	CHECK_EQ(s.setCommand(0, rules::Command::item("tonic", 1)).key, std::string("command.no_effect_on_target"));
 }
 
+// A revive of `hp: 0` and a heal, used from the field menu, stand a fallen member at exactly the heal, as in battle, for an
+// item (a reusable one too) and a technique, on one ally and on all; a living target the revive passes by takes the heal.
+TEST(aFieldReviveOfZeroAndHealEndsAtTheHeal) {
+	GameData data = test::data();
+	rules::Effect revive;
+	revive.kind = rules::EffectKind::Revive;
+	revive.zeroHp = true;
+	revive.livingTarget = true;
+	rules::Effect heal;
+	heal.kind = rules::EffectKind::Heal;
+	heal.power = 30;
+	data.db.items.at("second_wind").effects = {revive, heal};
+	data.db.items["reusable_wind"] = data.db.items.at("second_wind");
+	data.db.items.at("reusable_wind").id = "reusable_wind";
+	data.db.items.at("reusable_wind").consumed = false;
+	data.db.items["wide_wind"] = data.db.items.at("second_wind");
+	data.db.items.at("wide_wind").id = "wide_wind";
+	data.db.items.at("wide_wind").targeting = rules::Targeting::AllAllies;
+	data.db.abilities.at("rekindle").effects = {revive, heal};
+	data.db.abilities.at("wide_mend").effects = {revive, heal};
+	for (const std::string& use : std::vector<std::string>{"second_wind", "reusable_wind", "wide_wind", "rekindle", "wide_mend", "rekindle living"}) {
+		Session s(data, SessionOptions());
+		test::placeParty(s, "reed_path", "west_gate", Facing::East);
+		setParty(s, {"medic", "scout"}, 20);
+		const bool living = use == "rekindle living";
+		const int before = living ? s.world().member("scout")->hp - 40 : 0;
+		s.world().member("scout")->hp = before;
+		s.world().items = {{"second_wind", 1}, {"reusable_wind", 1}, {"wide_wind", 1}};
+		CHECK(s.openMenu().empty());
+		s.drainOutput();
+		const bool ability = use.rfind("rekindle", 0) == 0 || use == "wide_mend";
+		const std::string id = living ? "rekindle" : use;
+		const std::string target = use.rfind("wide", 0) == 0 ? "" : "scout";
+		CHECK((ability ? s.useAbility("medic", id, target) : s.useItem(id, target)).empty());
+		int healed = -1;
+		bool revived = false;
+		for (const Output& o : s.drainOutput()) {
+			if (!o.message.params.empty() && o.message.params[0] == "scout") {
+				healed = o.message.key == "game.healed" ? std::stoi(o.message.params[1]) : healed;
+				revived = revived || o.message.key == "game.revived";
+			}
+		}
+		CHECK(healed > 1);
+		CHECK_EQ(revived, !living);
+		CHECK_EQ(s.world().member("scout")->hp, before + healed);
+		if (!ability) {
+			CHECK_EQ(healed, 30);
+		}
+	}
+}
+
 // Each save summary says whether it is the one SaveStore::latest picks; a damaged slot never is.
 TEST(saveSummariesMarkTheNewest) {
 	SessionOptions options;
