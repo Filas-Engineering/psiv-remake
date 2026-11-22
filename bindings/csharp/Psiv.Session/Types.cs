@@ -142,7 +142,7 @@ public sealed record SessionOptions
 // TitleMusic, VictoryMusic and DefeatMusic are game.json's tracks, "" when the data names none.
 public sealed record GameInfo(string Title, string GameBuild, int RulesVersion, int TickMs, int RoundMs, int ManualSlots, int AutosaveSlots, int ItemCap, int MoneyCap,
 	IReadOnlyList<string> Languages, string TitleMusic, string VictoryMusic, string DefeatMusic, bool MagicDefense = false, int AffinityDivisor = 100,
-	FlashLevel FlashDefault = FlashLevel.Reduced, bool FlashOriginal = true, bool PartyTalkAmbient = true, int MusicFadeMs = -1);
+	FlashLevel FlashDefault = FlashLevel.Reduced, bool FlashOriginal = true, bool PartyTalkAmbient = true, int MusicFadeMs = -1, int CellPixels = 16);
 
 // An element the data knows. Element values past Holy are the ones rules.json declares, numbered by Index.
 public sealed record ElementInfo(Element Index, string Id, string Name);
@@ -196,7 +196,7 @@ public sealed record FieldInfo(string AreaId, string AreaName, AreaKind AreaKind
 	int LeaderX, int LeaderY, Direction Facing, bool PlayerControl, int GraceMs, string Music, string Region, string Aboard, int LeaderStepMs, string ShipPort = "", int RunStepMs = 0,
 	int StepProgressMs = 0, int ConveyorStepMs = 0, int ConveyorProgressMs = 0, int StepMask = 0, bool AnnounceArrival = true, long LeaderStepUs = 0,
 	long RunStepUs = 0, long StepProgressUs = 0, long ConveyorStepUs = 0, long ConveyorProgressUs = 0, string ExitSound = "", long NextTickUs = 0,
-	long StepLandsInUs = 0, long RunStepLandsInUs = 0);
+	long StepLandsInUs = 0, long RunStepLandsInUs = 0, string RidingPlatform = "", string AreaNameKey = "");
 
 // Actor: the reserved name scripts address it by ("enemy.<zone>.<n>"); an action with that subject moves or turns this enemy.
 public sealed record FieldEnemy(int Id, string Encounter, string Zone, int X, int Y, Direction Facing, EnemyState State, string Actor = "");
@@ -223,7 +223,19 @@ public sealed record FieldPoint(PointKind Kind, string Id, int X, int Y, string 
 // host's own. Wanders: it walks about by itself now (game.json `wander`).
 public sealed record FieldActor(string Id, string Name, int X, int Y, Direction Facing, bool Visible, bool Scripted, bool Solid = false,
 	ActorVanish Vanish = ActorVanish.None, string Animation = "", int AnimationMs = 0, int AnimationTotalMs = 0, ActorRemoval Removal = ActorRemoval.None,
-	string SpriteEnemy = "", string Look = "", bool Wanders = false);
+	string SpriteEnemy = "", string Look = "", bool Wanders = false, bool Patrols = false, bool OnPath = false, int HomeX = 0, int HomeY = 0, int PathX = 0,
+	int PathY = 0, int FootprintW = 0, int FootprintH = 0);
+
+public enum PlatformMode { Loop, OneWay, Triggered }
+
+// A moving platform of the party's area: X, Y the cell it stands on, PixelX, PixelY its place at GameInfo.CellPixels; End 0
+// docked at From, 1 at To, -1 between; Carrying while the party rides it (FieldInfo.RidingPlatform).
+public sealed record Platform(string Id, PlatformMode Mode, int FromX, int FromY, int ToX, int ToY, int X, int Y, int PixelX, int PixelY, int End, int PauseMs,
+	bool Carrying, long PositionUs, long RunUs);
+
+// The keys a battle's events and notices can carry with this data: core's Message and status keys, the session's notices
+// around battles and the cancel reasons by name (text keys cancel.<name>).
+public sealed record BattleKeys(IReadOnlyList<string> Messages, IReadOnlyList<string> Notices, IReadOnlyList<string> CancelReasons);
 
 public sealed record RouteCell(int X, int Y);
 
@@ -284,7 +296,9 @@ public sealed record Combatant(int Index, string Id, string Name, string Label, 
 public sealed record BattleInfo(bool Live, string Encounter, BattleSource Source, int Round, int PartyCount, int CombatantCount, Outcome Outcome,
 	bool EscapeAllowed, bool AutoActive, bool PartyActsNextRound, bool GameOver, string Music, string Vehicle, int FormationSize = 0);
 
-public sealed record BattleOption(string Id, string Name, CommandKind Command, AbilityKind? AbilityKind, Targeting Targeting, int Cost, int Uses, CancelReason Unusable)
+// MaxUses: a skill's maximum for that member (its character's skill_uses by level); -1 for anything else.
+public sealed record BattleOption(string Id, string Name, CommandKind Command, AbilityKind? AbilityKind, Targeting Targeting, int Cost, int Uses, CancelReason Unusable,
+	int MaxUses = -1)
 {
 	public bool Usable => Unusable == CancelReason.None;
 }
@@ -299,7 +313,7 @@ public sealed record BattleEvent(
 	Stat Stat, CancelReason Cancel, StatusEnd StatusEnd, Outcome Outcome, ResourceKind Resource, Opening Opening, bool Succeeded, bool GameOver,
 	int Experience, int Currency, IReadOnlyDictionary<string, int> Items, string Macro, IReadOnlyList<int> Participants, IReadOnlyList<int> Order,
 	IReadOnlyList<string> Ids, IReadOnlyList<string> Groups, int PartyCount, bool EscapeAllowed, bool DefeatHasBranch, bool VehicleBattle,
-	IReadOnlyList<RecordedCommand> Commands);
+	IReadOnlyList<RecordedCommand> Commands, int Rolled = 0);
 
 public sealed record Member(string Id, string Name, bool InLineup, int Level, int Experience, int Hp, int MaxHp, int Tp, int MaxTp, int Strength, int Mental,
 	int Agility, int Dexterity, int Defense, IReadOnlyList<ActiveStatus> Statuses, IReadOnlyList<string> Equipment, IReadOnlyList<string> EquipmentNames);
@@ -321,7 +335,8 @@ public sealed record ProfileRow(string Key, string KeyText, bool KeyNumber, stri
 // element the member takes at other than the normal rate, the list in the data's element order with names.
 public sealed record MemberDetail(string Id, int ExperienceToNext, int Critical, int Evasion, Element AttackElement, IReadOnlyList<StatBonus> EquipmentBonus,
 	IReadOnlyDictionary<Element, int> Affinities, IReadOnlyList<StatusResist> StatusResists, int MagicDefense = 0, IReadOnlyList<Affinity>? AffinityList = null,
-	IReadOnlyList<ProfileRow>? Profile = null);
+	IReadOnlyList<ProfileRow>? Profile = null, int Attack = 0, StatBonus? BaseStats = null, int ExperienceForLevel = 0, int TotalExperience = 0,
+	CreatureKind Kind = CreatureKind.Living, bool Vulnerable = false);
 
 // A member's battle numbers, built by the code that sets up a battle combatant.
 public sealed record CombatView(StatBonus Stats, string BasicAttack, string BasicAttackName, Element AttackElement, IReadOnlyList<string> Abilities,

@@ -75,6 +75,16 @@ internal static class Paths
 		}
 	}
 
+	// The actor data with Wren Mill (actor_data::makeMotion): PSIV_MOTION_DATA_DIR, else where game's `make test` writes it.
+	public static string MotionData
+	{
+		get
+		{
+			string? fromEnvironment = Environment.GetEnvironmentVariable("PSIV_MOTION_DATA_DIR");
+			return Path.GetFullPath(!string.IsNullOrEmpty(fromEnvironment) ? fromEnvironment : Path.Combine(Game, "build", "motion_data", "game", "data"));
+		}
+	}
+
 	public static string FreshDirectory(string name)
 	{
 		string path = Path.Combine(Path.GetTempPath(), "psiv-tests-" + Environment.ProcessId, name);
@@ -591,6 +601,48 @@ public class SessionTests
 		Assert.Equal((mask, 0, 0, 0), (info.StepMask, info.StepProgressMs, info.ConveyorStepMs, info.ConveyorProgressMs));
 		s.Update(100, Direction.South);
 		Assert.Equal(100, s.FieldInfo()!.StepProgressMs);
+	}
+
+	[Fact]
+	public void PatrolsPathsAndThePlatformThatCarriesThePartyInWrenMill()
+	{
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.MotionData, Seed = 285 });
+		Assert.Equal(16, s.GameInfo().CellPixels);
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.True(s.DevWarp("wren_mill", "mill_door").Ok);
+		Settle(s);
+		IReadOnlyList<FieldActor> actors = s.Field()!.Actors;
+		Assert.True(actors.Single(a => a.Id == "mill_hand").Patrols);
+		FieldActor wheel = actors.Single(a => a.Id == "mill_wheel");
+		Assert.Equal((true, 11, 4, 1, 1), (wheel.OnPath, wheel.HomeX, wheel.HomeY, wheel.FootprintW, wheel.FootprintH));
+		Platform raft = s.Platforms().First();
+		Assert.Equal(("raft", PlatformMode.Triggered, 0, 96), (raft.Id, raft.Mode, raft.End, raft.PixelX));
+		Assert.Equal(WalkStatus.Arrived, WalkToMarker(s, "raft_bank"));
+		Assert.True(s.Walk(Direction.East).Ok);
+		Assert.Equal(("raft", "area.wren_mill"), (s.FieldInfo()!.RidingPlatform, s.FieldInfo()!.AreaNameKey));
+		s.Update(1000);
+		Assert.Equal((1, true), (s.Platforms().First().End, s.Platforms().First().Carrying));
+		Assert.True(s.Walk(Direction.East).Ok);
+		Assert.Equal(("", 10), (s.FieldInfo()!.RidingPlatform, s.FieldInfo()!.LeaderX));
+	}
+
+	[Fact]
+	public void CanLoadBattleKeysMemberDetailAndRolledDamage()
+	{
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, Seed = 285 });
+		Assert.True(s.CanLoad);
+		BattleKeys keys = s.BattleKeys();
+		Assert.Contains("battle.instant_defeat", keys.Messages);
+		Assert.Contains("game.victory", keys.Notices);
+		Assert.Equal("actor_unable", keys.CancelReasons[0]);
+		Assert.True(s.NewGame().Ok);
+		Settle(s);
+		Assert.False(s.CanLoad);
+		MemberDetail detail = s.MemberDetail("fighter")!;
+		Assert.True(detail.Attack >= detail.BaseStats!.Strength);
+		Assert.Equal(CreatureKind.Living, detail.Kind);
+		Assert.True(detail.ExperienceForLevel >= detail.ExperienceToNext);
 	}
 
 	[Fact]

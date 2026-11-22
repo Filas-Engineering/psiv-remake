@@ -34,6 +34,7 @@ public struct PsivGameInfo
 	public int AffinityDivisor;
 	public int FlashDefault, FlashOriginal;
 	public int PartyTalkAmbient, MusicFadeMs;
+	public int CellPixels;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -88,6 +89,7 @@ public struct PsivFieldInfo
 	public long LeaderStepUs, RunStepUs, StepProgressUs, ConveyorStepUs, ConveyorProgressUs;
 	public IntPtr ExitSound;
 	public long NextTickUs, StepLandsInUs, RunStepLandsInUs;
+	public IntPtr RidingPlatform, AreaNameKey;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -114,6 +116,26 @@ public struct PsivActor
 	public int AnimationMs, AnimationTotalMs, Removal;
 	public IntPtr SpriteEnemy, Look;
 	public int Wanders;
+	public int Patrols, OnPath, HomeX, HomeY, PathX, PathY, FootprintW, FootprintH;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivPlatform
+{
+	public IntPtr Id;
+	public int Mode, FromX, FromY, ToX, ToY, X, Y, PixelX, PixelY, End, PauseMs, Carrying;
+	public long PositionUs, RunUs;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivBattleKeys
+{
+	public int MessageCount;
+	public IntPtr Messages;
+	public int NoticeCount;
+	public IntPtr Notices;
+	public int CancelReasonCount;
+	public IntPtr CancelReasons;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -213,7 +235,7 @@ public struct PsivBattleInfo
 }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivBattleOption { public IntPtr Id, Name; public int Command, AbilityKind, Targeting, Cost, Uses, Unusable; }
+public struct PsivBattleOption { public IntPtr Id, Name; public int Command, AbilityKind, Targeting, Cost, Uses, Unusable, MaxUses; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivMacroStepResult { public IntPtr Member; public int Actor, Status, Issue, CommandKind; public IntPtr CommandId; public int CommandTarget; }
@@ -241,6 +263,7 @@ public struct PsivBattleEvent
 	public IntPtr Ids, Groups;
 	public int PartyCount, EscapeAllowed, DefeatHasBranch, VehicleBattle, CommandCount;
 	public IntPtr Commands;
+	public int Rolled;
 }
 
 [InlineArray(Native.SlotCount)]
@@ -304,6 +327,9 @@ public struct PsivMemberDetail
 	public int MagicDefense;
 	public int ProfileCount;
 	public IntPtr Profile;
+	public int Attack;
+	public PsivStatBonus BaseStats;
+	public int ExperienceForLevel, TotalExperience, CreatureKind, Vulnerable;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -418,7 +444,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 15;
+	public const uint AbiVersion = 16;
 	// PSIV_SLOT_COUNT: the places a member wears equipment, which the member structs index by psiv_equip_slot.
 	public const int SlotCount = 7;
 
@@ -587,6 +613,9 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_credits_info_get")] public static partial int CreditsInfoGet(SessionHandle s, out PsivCreditsInfo info);
 	[LibraryImport(Library, EntryPoint = "psiv_credits_entries")] public static partial int CreditsEntries(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_pictures")] public static partial int Pictures(SessionHandle s, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_platforms")] public static partial int Platforms(SessionHandle s, out IntPtr list, out int count);
+	[LibraryImport(Library, EntryPoint = "psiv_can_load")] public static partial int CanLoad(SessionHandle s);
+	[LibraryImport(Library, EntryPoint = "psiv_battle_keys_get")] public static partial int BattleKeysGet(SessionHandle s, out PsivBattleKeys keys);
 	[LibraryImport(Library, EntryPoint = "psiv_scene_camera_get")] public static partial int SceneCameraGet(SessionHandle s, out PsivSceneCamera camera);
 	[LibraryImport(Library, EntryPoint = "psiv_field_zones")] public static partial int FieldZones(SessionHandle s, out IntPtr list, out int count);
 	[LibraryImport(Library, EntryPoint = "psiv_save_text")] public static partial int SaveText(SessionHandle s, out IntPtr text);

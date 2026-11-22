@@ -44,7 +44,7 @@ enum class Targeting { OneEnemy, EnemyGroup, AllEnemies, OneAlly, AllAllies, Sel
 
 enum class AbilityKind { Attack, Technique, Skill, Combo };
 
-enum class EffectKind { PhysicalDamage, ElementalDamage, Heal, ApplyStatus, CureStatus, ModifyStat, Revive, Travel, InstantDefeat, RestoreTp, StripModifiers, Summon, Merge, Teach, Transform, Split, SelfDestruct, RemoveBeside };
+enum class EffectKind { PhysicalDamage, ElementalDamage, Heal, ApplyStatus, CureStatus, ModifyStat, Revive, Travel, InstantDefeat, RestoreTp, StripModifiers, Summon, Merge, Teach, Transform, Split, SelfDestruct, RemoveBeside, SetHpPercent, GrantAffinity };
 // What a combatant is (B6, P6). Spirit is a kind of living being: an effect aimed at the living reaches it too.
 enum class CreatureKind { Living, Spirit, Machine };
 

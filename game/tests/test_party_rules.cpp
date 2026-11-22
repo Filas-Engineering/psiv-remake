@@ -83,6 +83,23 @@ TEST(machineMembersRegainHitPointsAsThePartyWalks) {
 	CHECK_EQ(s.world().member("mystic")->hp, 10);
 }
 
+// game.json machine_step_heal_fallen: the step heal reaches a fallen machine member too, which so stands up.
+TEST(fallenMachineMembersStandUpWithTheStepHealWhenTheDataSaysSo) {
+	GameData data = test::data();
+	data.config.machineStepHeal = 2;
+	data.config.machineStepHealFallen = true;
+	Session s(data, SessionOptions());
+	toField(s);
+	addMember(s, "cogwright", true);
+	s.world().member("cogwright")->hp = 0;
+	const Cell start = s.world().position;
+	s.walk(Facing::East);
+	if (s.world().position != start) {
+		CHECK_EQ(s.world().member("cogwright")->hp, 2);
+		CHECK(test::outputHas(s.drainOutput(), "starts up again"));
+	}
+}
+
 // P8, F14: a script teaches an ability for good and sets a follower; both are saved.
 TEST(scriptsTeachAbilitiesAndSetAFollower) {
 	const GameData data = test::withScript("events/bell_cove.ev",

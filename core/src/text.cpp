@@ -14,6 +14,7 @@ namespace {
 
 // Keys core returns from setCommand, canEquip, equip and the out-of-battle functions, or emits in Message events.
 const char* const kFixedKeys[] = {
+	"battle.affinity_changed",
 	"battle.instant_defeat",
 	"battle.instant_defeat_immune",
 	"battle.instant_defeat_resisted",
@@ -32,6 +33,7 @@ const char* const kFixedKeys[] = {
 	"command.field_only",
 	"command.forced_by_status",
 	"command.no_combatant",
+	"command.no_effect_on_target",
 	"command.unknown_ability",
 	"command.unknown_item",
 	"command.vehicle_cannot",

@@ -90,9 +90,27 @@ struct ActorPlace {
 	// A script's `look`: an enemy's field figure or a host's look in place of game.json's; both empty for game.json's.
 	std::string lookEnemy = {};
 	std::string look = {};
-	// Its wander (game.json `wander`): hundredths of a cell travelled toward the next step, and the pause left after one.
+	// Its wander or patrol (game.json `wander`, `patrol`): hundredths of a cell travelled toward the next step, and the pause
+	// left after one.
 	int wanderProgress = 0;
 	int wanderPauseMs = 0;
+	// Its patrol: the entry it is on and the cells of that entry's walk already taken.
+	int patrolStep = 0;
+	int patrolWalked = 0;
+	// Its path (game.json `path`): field ticks into the loop.
+	int pathTick = 0;
+};
+
+// Where a moving platform of the party's area is: microseconds along its run from `from` (0) to `to` (cells times its
+// step time), the way it goes next (1 toward `to`, -1 toward `from`), the rest left at an end, and whether the party
+// boarded it at the end it stands at (a triggered platform leaves only then).
+struct PlatformPlace {
+	std::int64_t positionUs = 0;
+	int heading = 1;
+	int pauseMs = 0;
+	bool boarded = false;
+	bool operator==(const PlatformPlace& o) const { return positionUs == o.positionUs && heading == o.heading && pauseMs == o.pauseMs && boarded == o.boarded; }
+	bool operator!=(const PlatformPlace& o) const { return !(*this == o); }
 };
 
 // A vehicle the party has (FLD-060). While the party rides it, `area` and `cell` follow the party.
@@ -178,6 +196,16 @@ struct World {
 		bool operator!=(const SceneCamera& o) const { return !(*this == o); }
 	};
 	SceneCamera sceneCamera;
+	// The moving platforms of the party's area by id, set on entering it (world chunk `platform` lines, written only for an
+	// area with platforms), and the one the party rides, empty for none (`riding_platform`).
+	std::map<std::string, PlatformPlace> platforms;
+	std::string ridingPlatform;
+	// Steps taken since entering an area with `field_status`, which its poison and paralysis rules count (world chunk line
+	// `field_steps`, written when above 0).
+	int fieldSteps = 0;
+	// The area the party was in before this one, for area names that depend on it (world chunk line `came_from`, written
+	// only while the current area has `name` variants).
+	std::string cameFrom;
 	// Under game.json's `step_timing` `exact` (R108), the time carried toward the leader's next step and the belt's next
 	// carry in microseconds, and the update time not yet a whole tick in milliseconds; the session keeps them while it
 	// runs and puts them here for a save (world chunk lines `step_carry`, `conveyor_carry`, `tick_carry`, written only

@@ -1,0 +1,30 @@
+{
+	"id": "wren_mill",
+	"kind": "town",
+	"encounter_mode": "random",
+	"step_ms": 250,
+	"region": "coast",
+	"map": [
+		"##############",
+		"#.....~~~~...#",
+		"#.....~~~~...#",
+		"#.....~~~~...#",
+		"#.....~~~~...#",
+		"##.###########"
+	],
+	"markers": {
+		"mill_door": [2, 4],
+		"raft_bank": [5, 2],
+		"far_bank": [11, 2]
+	},
+	"exits": [
+		{"at": [2, 5], "to": "wren_loft", "marker": "loft_door"}
+	],
+	"hooks": [
+		{"id": "mill_sign", "at": [1, 0], "event": "mill_sign"}
+	],
+	"platforms": [
+		{"id": "raft", "from": [6, 2], "to": [9, 2], "step_ms": 200, "pause_ms": 400, "mode": "triggered"},
+		{"id": "skiff", "from": [6, 4], "to": [9, 4], "step_ms": 300, "pause_ms": 500}
+	]
+}

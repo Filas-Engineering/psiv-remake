@@ -175,7 +175,7 @@ public sealed unsafe class GameSession : IDisposable
 		Must(Native.GameInfoGet(_handle, out PsivGameInfo i));
 		return new GameInfo(Native.Str(i.Title), Native.Str(i.GameBuild), i.RulesVersion, i.TickMs, i.RoundMs, i.ManualSlots, i.AutosaveSlots, i.ItemCap,
 			i.MoneyCap, Native.Strs(i.Languages, i.LanguageCount), Native.Str(i.TitleMusic), Native.Str(i.VictoryMusic), Native.Str(i.DefeatMusic),
-			i.MagicDefense != 0, i.AffinityDivisor, (FlashLevel)i.FlashDefault, i.FlashOriginal != 0, i.PartyTalkAmbient != 0, i.MusicFadeMs);
+			i.MagicDefense != 0, i.AffinityDivisor, (FlashLevel)i.FlashDefault, i.FlashOriginal != 0, i.PartyTalkAmbient != 0, i.MusicFadeMs, i.CellPixels);
 	}
 
 	public Profile Profile()
@@ -410,7 +410,7 @@ public sealed unsafe class GameSession : IDisposable
 			f.LeaderX, f.LeaderY, (Direction)f.Facing, f.PlayerControl != 0, f.GraceMs, Native.Str(f.Music), Native.Str(f.Region), Native.Str(f.Aboard), f.LeaderStepMs,
 			Native.Str(f.ShipPort), f.RunStepMs, f.StepProgressMs, f.ConveyorStepMs, f.ConveyorProgressMs, f.StepMask,
 			f.AnnounceArrival != 0, f.LeaderStepUs, f.RunStepUs, f.StepProgressUs, f.ConveyorStepUs, f.ConveyorProgressUs, Native.Str(f.ExitSound), f.NextTickUs,
-			f.StepLandsInUs, f.RunStepLandsInUs);
+			f.StepLandsInUs, f.RunStepLandsInUs, Native.Str(f.RidingPlatform), Native.Str(f.AreaNameKey));
 	}
 
 	public IReadOnlyList<string> FieldRows()
@@ -461,7 +461,7 @@ public sealed unsafe class GameSession : IDisposable
 		{
 			actors.Add(new FieldActor(Native.Str(a.Id), Native.Str(a.Name), a.X, a.Y, (Direction)a.Facing, a.Visible != 0, a.Scripted != 0, a.Solid != 0,
 				(ActorVanish)a.Vanish, Native.Str(a.Animation), a.AnimationMs, a.AnimationTotalMs, (ActorRemoval)a.Removal, Native.Str(a.SpriteEnemy), Native.Str(a.Look),
-				a.Wanders != 0));
+				a.Wanders != 0, a.Patrols != 0, a.OnPath != 0, a.HomeX, a.HomeY, a.PathX, a.PathY, a.FootprintW, a.FootprintH));
 		}
 		return new FieldView(info, grid, enemies, markers, exits, points, actors, FieldVehicles());
 	}
@@ -631,7 +631,7 @@ public sealed unsafe class GameSession : IDisposable
 		foreach (PsivBattleOption o in Native.Span<PsivBattleOption>(p, count))
 		{
 			list.Add(new BattleOption(Native.Str(o.Id), Native.Str(o.Name), (CommandKind)o.Command, o.AbilityKind < 0 ? null : (AbilityKind)o.AbilityKind,
-				(Targeting)o.Targeting, o.Cost, o.Uses, (CancelReason)o.Unusable));
+				(Targeting)o.Targeting, o.Cost, o.Uses, (CancelReason)o.Unusable, o.MaxUses));
 		}
 		return list;
 	}
@@ -747,7 +747,7 @@ public sealed unsafe class GameSession : IDisposable
 				(Outcome)e.Outcome, (ResourceKind)e.Resource, (Opening)e.Opening, e.Succeeded != 0, e.GameOver != 0, e.Experience, e.Currency, items,
 				Native.Str(e.Macro), Native.Span<int>(e.Participants, e.ParticipantCount).ToArray(), Native.Span<int>(e.Order, e.OrderCount).ToArray(),
 				Native.Strs(e.Ids, e.IdCount), Native.Strs(e.Groups, e.IdCount), e.PartyCount, e.EscapeAllowed != 0, e.DefeatHasBranch != 0,
-				e.VehicleBattle != 0, commands));
+				e.VehicleBattle != 0, commands, e.Rolled));
 		}
 		return list;
 	}
@@ -836,7 +836,7 @@ public sealed unsafe class GameSession : IDisposable
 			profile.Add(new ProfileRow(Native.Str(r.Key), Native.Str(r.KeyText), r.KeyNumber != 0, Native.Str(r.Value), Native.Str(r.ValueText), r.ValueNumber != 0));
 		}
 		return new MemberDetail(Native.Str(d.Id), d.ExperienceToNext, d.Critical, d.Evasion, (Element)d.AttackElement, bonuses, affinities, resists, d.MagicDefense, affinityList,
-			profile);
+			profile, d.Attack, ToBonus(d.BaseStats), d.ExperienceForLevel, d.TotalExperience, (CreatureKind)d.CreatureKind, d.Vulnerable != 0);
 	}
 
 	private static StatBonus ToBonus(in PsivStatBonus b) => new(b.MaxHp, b.MaxTp, b.Strength, b.Mental, b.Agility, b.Dexterity, b.Defense, b.Critical, b.Evasion, b.MagicDefense);
@@ -1092,6 +1092,31 @@ public sealed unsafe class GameSession : IDisposable
 	{
 		Must(Native.Pictures(_handle, out IntPtr p, out int count));
 		return Native.Strs(p, count);
+	}
+
+	// The party's area's moving platforms; empty outside an area or where there are none.
+	public IReadOnlyList<Platform> Platforms()
+	{
+		if (!Read(Native.Platforms(_handle, out IntPtr p, out int count)))
+		{
+			return [];
+		}
+		var list = new List<Platform>(count);
+		foreach (PsivPlatform x in Native.Span<PsivPlatform>(p, count))
+		{
+			list.Add(new Platform(Native.Str(x.Id), (PlatformMode)x.Mode, x.FromX, x.FromY, x.ToX, x.ToY, x.X, x.Y, x.PixelX, x.PixelY, x.End, x.PauseMs, x.Carrying != 0,
+				x.PositionUs, x.RunUs));
+		}
+		return list;
+	}
+
+	// Whether Load may run now (from the title only), for a menu that shows or hides it.
+	public bool CanLoad => Native.CanLoad(_handle) != 0;
+
+	public BattleKeys BattleKeys()
+	{
+		Must(Native.BattleKeysGet(_handle, out PsivBattleKeys k));
+		return new BattleKeys(Native.Strs(k.Messages, k.MessageCount), Native.Strs(k.Notices, k.NoticeCount), Native.Strs(k.CancelReasons, k.CancelReasonCount));
 	}
 
 	public SceneCamera SceneCamera()

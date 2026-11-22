@@ -1726,17 +1726,17 @@ TEST(theAttackStatAddsBothHandsWeaponAttackBonuses) {
 	const Result<Database> weapon = loads("\"stats\": {\"strength\": 4, \"critical\": 4}", "\"stats\": {\"strength\": 4, \"critical\": 4, \"attack\": 9}");
 	CHECK(weapon.ok() && weapon.value->equipmentPiece("copper_blade")->attackBonus == 9 && weapon.value->equipmentPiece("copper_blade")->bonus.strength == 4);
 	const Result<Database> shield = loads("\"stats\": {\"defense\": 4}", "\"stats\": {\"defense\": 4, \"attack\": 2}");
-	CHECK(!shield.ok() && shield.error.find("only weapons have an attack bonus") != std::string::npos);
+	CHECK(shield.ok() && shield.value->equipmentPiece("driftwood_buckler")->attackBonus == 2);
 	std::map<std::string, std::string> lowered = texts;
 	replaceOnce(lowered["abilities.json"], "\"stat\": \"strength\", \"direction\": \"up\"", "\"stat\": \"attack\", \"direction\": \"up\"");
 	const Result<Database> changed = loadDatabaseFromTexts(lowered);
-	CHECK(!changed.ok() && changed.error.find("attack is strength plus the weapons' attack bonuses, which stat cannot change") != std::string::npos);
+	CHECK(!changed.ok() && changed.error.find("attack is strength plus the worn pieces' attack bonuses (or an enemy's or vehicle's own attack), which stat cannot change") != std::string::npos);
 	std::map<std::string, std::string> wrapped = texts;
 	replaceOnce(wrapped["rules.json"], "{", "{\"stat_wraparound\": [\"attack\"],");
 	CHECK(!loadDatabaseFromTexts(wrapped).ok());
 	std::map<std::string, std::string> enemy = texts;
 	replaceOnce(enemy["enemies.json"], "\"strength\": 11,", "\"strength\": 11, \"attack\": 4,");
-	CHECK(!loadDatabaseFromTexts(enemy).ok());
+	CHECK(loadDatabaseFromTexts(enemy).ok());
 }
 
 namespace {
@@ -2144,4 +2144,209 @@ TEST(aMacroStepForAVehicleActsOnlyInBattlesAboard) {
 	CHECK(!unknown.ok());
 	const Result<Database> member = loads("{\"member\": \"reed_skimmer\", \"command\": \"ability\", \"id\": \"hull_patch\", \"target\": {\"member\": \"fighter\"}}");
 	CHECK(!member.ok());
+}
+
+// Enemies' and vehicles' optional stats.attack is what their basic attacks hit with, strength staying for rolls and
+// abilities that name it; left out, attack is strength. Any worn piece's stats.attack adds to a member's attack.
+TEST(enemiesAndVehiclesMayHaveAnAttackApartFromStrength) {
+	const std::map<std::string, std::string> texts = dataTexts();
+	std::map<std::string, std::string> changed = texts;
+	replaceOnce(changed["enemies.json"], "\"strength\": 11,", "\"strength\": 11, \"attack\": 30,");
+	replaceOnce(changed["party.json"], "\"strength\": 20, \"mental\": 8, \"agility\": 6", "\"strength\": 20, \"attack\": 45, \"mental\": 8, \"agility\": 6");
+	replaceOnce(changed["equipment.json"], "\"stats\": {\"defense\": 4}", "\"stats\": {\"defense\": 4, \"attack\": 3}");
+	const Result<Database> loaded = loadDatabaseFromTexts(changed);
+	CHECK(loaded.ok());
+	if (!loaded.ok()) {
+		return;
+	}
+	const Database& db = *loaded.value;
+	CHECK_EQ(db.enemy("gel_mite")->stats.attack, 30);
+	BattleSetup setup = makeSetup(db, {"gel_mite"}, 3);
+	setup.party[kFighter].equipment[EquipSlot::LeftHand] = "driftwood_buckler";
+	const Battle battle = makeBattle(db, setup);
+	CHECK_EQ(battle.combatant(kFirstEnemy).effective(Stat::Strength), 11);
+	CHECK_EQ(battle.combatant(kFirstEnemy).effective(Stat::Attack), 30);
+	CHECK_EQ(battle.combatant(kFighter).effective(Stat::Attack), makeBattle(data(), setup).combatant(kFighter).effective(Stat::Attack) + 3);
+	BattleSetup aboard = makeSetup(db, {"gel_mite"}, 3);
+	aboard.flags.vehicleBattle = true;
+	aboard.vehicle = "reed_skimmer";
+	const Battle vehicle = makeBattle(db, aboard);
+	const int index = static_cast<int>(aboard.party.size());
+	CHECK_EQ(vehicle.combatant(index).effective(Stat::Strength), 20);
+	CHECK_EQ(vehicle.combatant(index).effective(Stat::Attack), 45);
+	// The default data has none, so attack is strength.
+	const Battle plain = makeBattle(data(), {"gel_mite"}, 3);
+	CHECK_EQ(plain.combatant(kFirstEnemy).effective(Stat::Attack), plain.combatant(kFirstEnemy).effective(Stat::Strength));
+	std::map<std::string, std::string> character = texts;
+	replaceOnce(character["party.json"], "\"strength\": ", "\"attack\": 5, \"strength\": ");
+	const Result<Database> refused = loadDatabaseFromTexts(character);
+	CHECK(!refused.ok() && refused.error.find("a stats 'attack' is for enemies, vehicles and equipment") != std::string::npos);
+}
+
+// Damage and heal events carry the rolled amount beside the amount that changed, which the hit points cap; the rolled
+// amount is not serialized, so records and transcripts read as before.
+TEST(damageAndHealEventsCarryTheRolledAmount) {
+	Battle battle = makeBattle(data(), {"gel_mite"}, 3, Inventory{{"tonic", 1}});
+	sturdyParty(battle);
+	sturdy(battle, kFirstEnemy);
+	battle.setCommand(1, Command::item("tonic", kFighter));
+	othersDefend(battle);
+	const std::optional<Event> heal = firstBy(battle.resolveRound(), EventType::Healed, 1);
+	CHECK(heal && heal->amount == 0 && heal->rolled > 0);
+	battle.combatant(kFirstEnemy).hp = 1;
+	battle.setCommand(kFighter, Command::attack(kFirstEnemy));
+	othersDefend(battle);
+	const std::optional<Event> hit = firstBy(battle.resolveRound(), EventType::DamageDealt, kFighter);
+	CHECK(hit && hit->amount == 1 && hit->rolled > 1);
+	CHECK(hit && serializeEvent(*hit).find("rolled") == std::string::npos);
+}
+
+// party.json `skill_uses` sets a member's maximum uses of a skill by level, stepwise; rest refills to it.
+TEST(skillUsesFollowTheCharactersTableByLevel) {
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["party.json"], "\"abilities\": [\"rally\", \"focus_shot\"],", "\"abilities\": [\"rally\", \"focus_shot\"], \"skill_uses\": {\"focus_shot\": [[2, 5], [6, 8]]},");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok());
+	if (!loaded.ok()) {
+		return;
+	}
+	const Database& db = *loaded.value;
+	PartyMember low = makePartyMember(db, *db.character("fighter"), 1);
+	CHECK_EQ(maxSkillUses(db, low, "focus_shot"), 3);
+	CHECK_EQ(low.skillUses.at("focus_shot"), 3);
+	PartyMember mid = makePartyMember(db, *db.character("fighter"), 4);
+	CHECK_EQ(mid.skillUses.at("focus_shot"), 5);
+	PartyMember high = makePartyMember(db, *db.character("fighter"), 7);
+	high.skillUses["focus_shot"] = 0;
+	rest(high, db);
+	CHECK_EQ(high.skillUses.at("focus_shot"), 8);
+	replaceOnce(texts["party.json"], "[[2, 5], [6, 8]]", "[[6, 5], [2, 8]]");
+	CHECK(!loadDatabaseFromTexts(texts).ok());
+}
+
+// A revive with `living_target` may be aimed at a living ally: it passes the ally by and the other effects apply; `hp`
+// stands a fallen one up with that many hit points; and a fallen target gets its revive first whatever the order.
+TEST(reviveOptionsAndOrderOnFallenTargets) {
+	Database db = data();
+	AbilityDef& rekindle = db.abilities["rekindle"];
+	Effect heal;
+	heal.kind = EffectKind::Heal;
+	heal.power = 20;
+	rekindle.effects.insert(rekindle.effects.begin(), heal);
+	rekindle.effects.back().livingTarget = true;
+	Battle battle = makeBattle(db, {"brass_warden"}, 1);
+	sturdy(battle, kFirstEnemy);
+	battle.combatant(kScout).hp = 5;
+	CHECK(battle.setCommand(kMedic, Command::ability("rekindle", kScout)).key.empty());
+	othersDefend(battle);
+	std::vector<Event> events = battle.resolveRound();
+	CHECK(ofType(events, EventType::Revived).empty());
+	CHECK(battle.combatant(kScout).hp > 5);
+	battle.combatant(kScout).hp = 0;
+	battle.combatant(kScout).statuses = {{kDefeatedStatus, 0}};
+	rekindle.effects.back().flatHp = 7;
+	Battle again = makeBattle(db, {"brass_warden"}, 1);
+	sturdy(again, kFirstEnemy);
+	again.combatant(kScout).hp = 0;
+	again.combatant(kScout).statuses = {{kDefeatedStatus, 0}};
+	CHECK(again.setCommand(kMedic, Command::ability("rekindle", kScout)).key.empty());
+	othersDefend(again);
+	events = again.resolveRound();
+	const std::vector<Event> revived = ofType(events, EventType::Revived);
+	CHECK(revived.size() == 1 && revived[0].amount == 7);
+	// The heal listed before the revive still reaches the member it stood up.
+	CHECK(!ofType(events, EventType::Healed).empty() && again.combatant(kScout).hp > 7);
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["abilities.json"], "{\"type\": \"revive\", \"kinds\": [\"living\"], \"power\": 50}", "{\"type\": \"revive\", \"kinds\": [\"living\"], \"hp\": 40, \"living_target\": true}");
+	CHECK(loadDatabaseFromTexts(texts).ok());
+	replaceOnce(texts["abilities.json"], "\"hp\": 40,", "\"hp\": 40, \"power\": 5,");
+	CHECK(!loadDatabaseFromTexts(texts).ok());
+}
+
+// With no ally named, a one-fallen-ally revive passes by fallen allies it cannot reach (a machine for a living-only revive).
+TEST(theDefaultFallenAllyPickSkipsWhatTheReviveCannotReach) {
+	Database db = data();
+	db.characters["fighter"].kind = CreatureKind::Machine;
+	Battle battle = makeBattle(db, {"brass_warden"}, 1);
+	sturdy(battle, kFirstEnemy);
+	for (int member : {kFighter, kScout}) {
+		battle.combatant(member).hp = 0;
+		battle.combatant(member).statuses = {{kDefeatedStatus, 0}};
+	}
+	CHECK_EQ(battle.setCommand(kMedic, Command::ability("rekindle", kFighter)).key, std::string("command.no_effect_on_target"));
+	CHECK(battle.setCommand(kMedic, Command::ability("rekindle", -1)).key.empty());
+	othersDefend(battle);
+	const std::vector<Event> revived = ofType(battle.resolveRound(), EventType::Revived);
+	CHECK(revived.size() == 1 && revived[0].target == kScout);
+}
+
+// set_hp_percent sets hit points to a percent of the maximum, lowering them too; grant_affinity changes an element's
+// affinity, kept by the member when permanent; strip_modifiers with equipment_affinities takes the pieces' share away.
+TEST(setHpPercentGrantAffinityAndStrippingEquipmentAffinities) {
+	Database db = data();
+	AbilityDef halve;
+	halve.id = "halve";
+	halve.name = "Halve";
+	halve.kind = AbilityKind::Technique;
+	halve.targeting = Targeting::OneAlly;
+	Effect set;
+	set.kind = EffectKind::SetHpPercent;
+	set.power = 50;
+	Effect grant;
+	grant.kind = EffectKind::GrantAffinity;
+	grant.element = Element::Heat;
+	grant.affinity = 0;
+	grant.permanent = true;
+	halve.effects = {set, grant};
+	db.abilities[halve.id] = halve;
+	db.characters["medic"].abilities.push_back(halve.id);
+	Battle battle = makeBattle(db, {"brass_warden"}, 1);
+	sturdy(battle, kFirstEnemy);
+	const int max = battle.combatant(kScout).stats.maxHp;
+	CHECK(battle.setCommand(kMedic, Command::ability("halve", kScout)).key.empty());
+	othersDefend(battle);
+	const std::vector<Event> events = battle.resolveRound();
+	CHECK_EQ(battle.combatant(kScout).hp, std::max(1, max * 50 / 100));
+	CHECK(!ofType(events, EventType::DamageDealt).empty() || battle.combatant(kScout).hp == max);
+	CHECK_EQ(battle.combatant(kScout).affinity(Element::Heat), 0);
+	const std::vector<PartyMember> after = battle.partyState();
+	CHECK_EQ(after[kScout].affinities.at(Element::Heat), 0);
+	// The member carries it into the next battle and the record keeps it.
+	BattleSetup next = makeSetup(db, {"brass_warden"}, 2);
+	next.party = after;
+	const Battle carried = makeBattle(db, next);
+	CHECK_EQ(carried.combatant(kScout).affinity(Element::Heat), 0);
+	const Result<BattleRecord> parsed = parseRecord(serializeRecord(carried.record()));
+	CHECK(parsed.ok() && parsed.value->setup.party[kScout].affinities.at(Element::Heat) == 0);
+
+	Database pieces = data();
+	pieces.equipment["calm_charm"].affinities[Element::Chill] = 50;
+	pieces.abilities["purge"].effects.clear();
+	Effect strip;
+	strip.kind = EffectKind::StripModifiers;
+	strip.equipmentAffinities = true;
+	pieces.abilities["purge"].effects = {strip};
+	BattleSetup setup = makeSetup(pieces, {"brass_warden"}, 1);
+	setup.party[kMystic].equipment[EquipSlot::Accessory] = "calm_charm";
+	Battle stripped = makeBattle(pieces, setup);
+	sturdy(stripped, kFirstEnemy);
+	const int worn = stripped.combatant(kMystic).affinity(Element::Chill);
+	CHECK(stripped.setCommand(kMedic, Command::ability("purge", kMystic)).key.empty());
+	othersDefend(stripped);
+	stripped.resolveRound();
+	CHECK(stripped.combatant(kMystic).affinity(Element::Chill) != worn);
+	CHECK_EQ(stripped.combatant(kMystic).affinity(Element::Chill), makeBattle(data(), {"brass_warden"}, 1).combatant(kMystic).affinity(Element::Chill));
+}
+
+// rules.json field_poison_every and field_paralysis load with their status ids checked.
+TEST(fieldStatusRulesLoadAndCheckTheirStatuses) {
+	std::map<std::string, std::string> texts = dataTexts();
+	replaceOnce(texts["rules.json"], "{", "{\"field_poison_every\": 4, \"field_paralysis\": {\"from\": 7, \"chance\": 8, \"by\": 25},");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok() && loaded.value->battleRules.fieldPoisonEvery == 4 && loaded.value->battleRules.fieldParalysisBy == 25);
+	std::map<std::string, std::string> wrong = texts;
+	replaceOnce(wrong["rules.json"], "{", "{\"field_poison_status\": \"blight\",");
+	CHECK(!loadDatabaseFromTexts(wrong).ok());
+	replaceOnce(texts["rules.json"], "\"by\": 25", "\"by\": 5");
+	CHECK(!loadDatabaseFromTexts(texts).ok());
 }

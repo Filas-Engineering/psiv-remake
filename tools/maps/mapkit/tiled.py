@@ -13,9 +13,9 @@ KIND_OF_CHARACTER = {c: k for k, c in KINDS.items()}
 TILE_IDS = {"floor": 0, "wall": 1, "water": 2, "soft": 3, "barrier": 4, "counter": 5}
 FLIP_BITS = 0xF0000000
 MAP_PROPERTIES = {"id": "string", "kind": "string", "encounter_mode": "string", "step_ms": "number", "music": "string", "region": "string", "arrival": "string",
-	"dungeon_exit": "json object", "arrive_notice": "bool", "counters": "json list"}
+	"dungeon_exit": "json object", "arrive_notice": "bool", "field_status": "bool", "name": "json list", "counters": "json list", "platforms": "json list"}
 # Map properties in the area format's order, as the importer copies them and the exporter writes them.
-AREA_PROPERTIES = ("kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "arrive_notice", "counters")
+AREA_PROPERTIES = ("kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "arrive_notice", "field_status", "name", "counters", "platforms")
 REQUIRED_MAP_PROPERTIES = ["id"]
 
 # Per object class: property name to type. "json" is a string property holding JSON text of the given shape.

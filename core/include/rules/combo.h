@@ -21,6 +21,9 @@ struct ComboRecipe {
 	std::vector<std::string> characters = {};
 	// When set, the abilities must run in the listed order.
 	bool ordered = false;
+	// `orders`: further orders that fire it besides the listed one, each the component indexes in turn order; with any, the
+	// recipe fires in those orders only (as if ordered).
+	std::vector<std::vector<int>> orders = {};
 };
 
 // One part of an enemy combination: an enemy of this id using this ability.

@@ -264,6 +264,17 @@ struct MemberDetail {
 	rules::StatusResists statusResist;
 	// The character's `profile` rows from party.json, in order (R111).
 	std::vector<rules::ProfileRow> profile;
+	// Strength plus both hands' weapon `stats.attack`: what basic attacks and `attack_stat: "attack"` hit with.
+	int attack = 0;
+	// The level's stats without equipment.
+	rules::Stats baseStats;
+	// The experience this level takes in all (experience counts from 0 at each level); 0 at the level cap.
+	int experienceForLevel = 0;
+	// Every point of experience it has had: what each level before this one took, plus what it has in this one.
+	int totalExperience = 0;
+	rules::CreatureKind kind = rules::CreatureKind::Living;
+	// Instant defeat can strike it (party.json `vulnerable`).
+	bool vulnerable = false;
 };
 
 // Orders for listing the bag. The bag itself has no order (items and pieces are kept by id), so a sort is a read and
@@ -340,6 +351,49 @@ struct ActorView {
 	std::string look = {};
 	// It walks about by itself now (game.json `wander`): shown, not removed, in its home area and in no running event.
 	bool wanders = false;
+	// It walks its patrol now (game.json `patrol`), under the same conditions.
+	bool patrols = false;
+	// It moves along its path now (game.json `path`), under the same conditions. The path's offsets are from `home` (its
+	// game.json home, or where a script last put it; only path actors report one), in pixels at game.json's `cell_pixels`: draw it at home times the cell
+	// size plus (pathX, pathY). `cell` is the cell holding that point. With a footprint it blocks every cell the footprint
+	// (cells wide and high, from that point) overlaps; without one it blocks nothing.
+	bool onPath = false;
+	Cell home;
+	int pathX = 0;
+	int pathY = 0;
+	int footprintWidth = 0;
+	int footprintHeight = 0;
+};
+
+// A moving platform of the party's area (an area's `platforms`), from Session::platformsHere().
+struct PlatformView {
+	std::string id;
+	PlatformMode mode = PlatformMode::Loop;
+	Cell from;
+	Cell to;
+	// The cell it stands on now (the nearest along its run) and its exact place in pixels at game.json's `cell_pixels`,
+	// the top left of the cell it covers.
+	Cell cell;
+	int x = 0;
+	int y = 0;
+	// At an end, where the party may step on or off: 0 at `from`, 1 at `to`, -1 between them.
+	int end = -1;
+	// The milliseconds it still rests at that end before it may leave.
+	int pauseMs = 0;
+	// The party rides it.
+	bool carrying = false;
+	// Microseconds along its run from `from`, and the whole run.
+	std::int64_t positionUs = 0;
+	std::int64_t runUs = 0;
+};
+
+// The keys a battle's events and the session's battle notices can carry, for a host to check its presentation data
+// against: core's Message keys and status message keys with this data, the session's notices around battles, and core's
+// cancel reasons (`cancel.<reason>` in the text tables).
+struct BattleKeys {
+	std::vector<std::string> messages;
+	std::vector<std::string> notices;
+	std::vector<std::string> cancelReasons;
 };
 
 // One of the party's vehicles in the party's area, from Session::vehiclesHere() (FLD-060).
@@ -491,6 +545,14 @@ public:
 	rules::Message newGame();
 	rules::Message continueGame();
 	rules::Message load(const std::string& slot);
+	// Whether load() may run from the current state (the spec allows it from the title only), for a host that shows or
+	// hides Load; saves() says whether there is anything to load.
+	bool canLoad() const;
+	// The text key area `id` shows as now: its `name` variant for the area the party came from and the flags, else
+	// `area.<id>`. displayName() and the arrival notice use it.
+	std::string areaNameKey(const std::string& id) const;
+	// What battle events and notices can carry with this data (BattleKeys).
+	BattleKeys battleKeys() const;
 	// Deletes a manual or autosave slot's file, damaged ones included, in any mode; the game being played is not touched.
 	// Refused as load() refuses a slot it cannot read: no saving, an unknown slot name or an empty slot. Erasing the
 	// autosave a retry would load ends that retry.
@@ -528,6 +590,10 @@ public:
 	// The scene camera a script's `camera to` or `camera reset` set: held on a cell, or going back to the leader while
 	// `ms` is above 0; neither when it follows the leader as usual.
 	const World::SceneCamera& sceneCamera() const { return world_.sceneCamera; }
+	// The moving platforms of the party's area, in the area's order.
+	std::vector<PlatformView> platformsHere() const;
+	// The platform the party rides, empty for none. While it moves, the leader's cell follows it and held input waits.
+	const std::string& ridingPlatform() const { return world_.ridingPlatform; }
 	// Turns the leader in place.
 	rules::Message face(Facing direction);
 	// A walk to `goal` along the shortest path over walkable cells, avoiding exits other than the goal. Visible
@@ -821,6 +887,30 @@ private:
 	const Hook* touchHook(const std::string& actor) const;
 	// Steps every wandering actor of the party's area by one tick, after the leader's step.
 	void wanderActors(int ms);
+	// Then the patrols, the paths and the platforms.
+	void patrolActors(int ms);
+	void pathActors();
+	void movePlatforms(int ms);
+	bool fieldStatusStep();
+	// The area the party was in before, kept while it walks (World::cameFrom holds it for areas with `name` variants).
+	std::string previousArea_;
+	// The track a script's `music play` started (empty after `music stop`) until the party enters an area; unset plays the
+	// area's track. Not saved: after a load the area's track plays.
+	std::optional<std::string> scriptTrack_;
+	// The `leader`, `music`, `area` and `tile` condition tests.
+	bool stateTest(const std::string& test, const std::string& value) const;
+	// Puts the area's platforms where entering it does, keeping those `keep` lists.
+	void resetPlatforms(bool keep);
+	// Whether an actor walking by itself may step onto `next` (terrain, points, exits, other actors, enemies, vehicles).
+	bool actorMayEnter(const Area& area, const std::string& terrain, Cell next, const std::vector<ActorView>& standing) const;
+	// Finishes the patrol entries with nothing left to walk (their facing and pause) until one has a cell to walk to or a
+	// pause starts; returns that cell, if any.
+	std::optional<Cell> settlePatrol(const ActorDef& def, ActorPlace& place) const;
+	// The cells a path actor's footprint overlaps with its anchor and tick.
+	std::vector<Cell> pathCells(const ActorDef& def, Cell anchor, int tick) const;
+	// A platform of the party's area at an end on `cell`, or null.
+	const Platform* dockedPlatformAt(Cell cell) const;
+	bool platformDocked(const std::string& id) const;
 	VisibleEnemy* visibleEnemyByActor(const std::string& actor);
 	// What answers on `cell` of `area` for interact, its facing and cell left to the caller; `acrossable` is set when it
 	// may be used across a counter.

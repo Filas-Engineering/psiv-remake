@@ -394,6 +394,7 @@ void fillEvent(Session& s, const std::vector<std::string>& names, const rules::E
 	out.escape_allowed = e.flags.escapeAllowed;
 	out.defeat_has_branch = e.flags.defeatHasBranch;
 	out.vehicle_battle = e.flags.vehicleBattle;
+	out.rolled = e.rolled;
 	psiv_recorded_command* commands = a.array<psiv_recorded_command>(e.commands.size());
 	for (std::size_t i = 0; i < e.commands.size(); ++i) {
 		commands[i].actor = e.commands[i].actor;
@@ -514,6 +515,7 @@ uint32_t psiv_sizeof(const char* struct_name) {
 		PSIV_SIZE(psiv_member_detail), PSIV_SIZE(psiv_combo_entry), PSIV_SIZE(psiv_combat_view), PSIV_SIZE(psiv_equip_preview), PSIV_SIZE(psiv_difficulty), PSIV_SIZE(psiv_camera),
 		PSIV_SIZE(psiv_vehicle), PSIV_SIZE(psiv_travel_destination), PSIV_SIZE(psiv_event_position), PSIV_SIZE(psiv_zone), PSIV_SIZE(psiv_element_info),
 		PSIV_SIZE(psiv_route_cell), PSIV_SIZE(psiv_interact_target), PSIV_SIZE(psiv_field_input), PSIV_SIZE(psiv_profile_row), PSIV_SIZE(psiv_scene_camera),
+		PSIV_SIZE(psiv_platform), PSIV_SIZE(psiv_battle_keys),
 	};
 #undef PSIV_SIZE
 	if (!struct_name) {
@@ -789,6 +791,7 @@ psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out) {
 		out->flash_original = c.presentation.flashOriginal;
 		out->party_talk_ambient = c.partyTalkAmbient;
 		out->music_fade_ms = c.presentation.music.fadeMs;
+		out->cell_pixels = c.cellPixels;
 		return PSIV_OK;
 	});
 }
@@ -1437,6 +1440,8 @@ psiv_status psiv_field_info_get(psiv_session* session, psiv_field_info* out) {
 		out->next_tick_us = motion.nextTickUs;
 		out->step_lands_in_us = motion.stepLandsInUs;
 		out->run_step_lands_in_us = motion.runStepLandsInUs;
+		out->riding_platform = session->arena.str(session->session->ridingPlatform());
+		out->area_name_key = session->arena.str(session->session->areaNameKey(a->id));
 		return PSIV_OK;
 	});
 }
@@ -1687,10 +1692,32 @@ psiv_status psiv_field_actors(psiv_session* session, const psiv_actor** out, int
 			const game::ActorView& a = actors[i];
 			list[i] = {arena.str(a.id), arena.str(session->session->displayName(a.id)), a.cell.x, a.cell.y, static_cast<int32_t>(a.facing), a.visible, a.scripted,
 				a.solid, static_cast<int32_t>(a.vanish), arena.str(a.animation), a.animationMs, a.animationTotalMs, static_cast<int32_t>(a.removed),
-				arena.str(a.spriteEnemy), arena.str(a.look), a.wanders};
+				arena.str(a.spriteEnemy), arena.str(a.look), a.wanders, a.patrols, a.onPath, a.home.x, a.home.y, a.pathX, a.pathY, a.footprintWidth,
+				a.footprintHeight};
 		}
 		*out = list;
 		*count = static_cast<int32_t>(actors.size());
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_platforms(psiv_session* session, const psiv_platform** out, int32_t* count) {
+	return guard(session, false, [&] {
+		if (!out || !count) {
+			return nullArgument(session, out ? "count" : "out");
+		}
+		if (!currentArea(session)) {
+			return notFound(session, "area");
+		}
+		const std::vector<game::PlatformView> platforms = session->session->platformsHere();
+		psiv_platform* list = session->arena.array<psiv_platform>(platforms.size());
+		for (std::size_t i = 0; i < platforms.size(); ++i) {
+			const game::PlatformView& p = platforms[i];
+			list[i] = {session->arena.str(p.id), static_cast<int32_t>(p.mode), p.from.x, p.from.y, p.to.x, p.to.y, p.cell.x, p.cell.y, p.x, p.y, p.end, p.pauseMs,
+				p.carrying, p.positionUs, p.runUs};
+		}
+		*out = list;
+		*count = static_cast<int32_t>(platforms.size());
 		return PSIV_OK;
 	});
 }
@@ -2023,6 +2050,11 @@ psiv_status psiv_battle_options(psiv_session* session, int32_t actor, const psiv
 			o.cost = def->cost;
 			auto uses = c.skillUses.find(id);
 			o.uses = def->uses > 0 ? (uses == c.skillUses.end() ? 0 : uses->second) : -1;
+			o.max_uses = -1;
+			if (def->kind == rules::AbilityKind::Skill) {
+				const rules::PartyMember* member = session->session->world().member(c.defId);
+				o.max_uses = member && b->isParty(actor) ? rules::maxSkillUses(db, *member, id) : def->uses;
+			}
 			o.unusable = static_cast<int32_t>(b->checkUsable(actor, *def));
 			options.push_back(o);
 		}
@@ -2038,6 +2070,7 @@ psiv_status psiv_battle_options(psiv_session* session, int32_t actor, const psiv
 			o.ability_kind = -1;
 			o.targeting = static_cast<int32_t>(def->targeting);
 			o.uses = n;
+			o.max_uses = -1;
 			o.unusable = PSIV_CANCEL_NONE;
 			options.push_back(o);
 		}
@@ -2336,7 +2369,7 @@ psiv_status psiv_member_abilities(psiv_session* session, const char* member, con
 			if (def->kind == rules::AbilityKind::Skill) {
 				auto left = m->skillUses.find(abilityId);
 				uses = left == m->skillUses.end() ? 0 : left->second;
-				maxUses = def->uses;
+				maxUses = rules::maxSkillUses(db, *m, abilityId);
 			}
 			abilities.push_back({a.str(abilityId), a.str(session->session->displayName(abilityId)), static_cast<int32_t>(def->kind), static_cast<int32_t>(def->targeting), def->cost, def->field,
 				uses, maxUses, travelKind(def->effects)});
@@ -2399,6 +2432,13 @@ psiv_status psiv_member_detail_get(psiv_session* session, const char* member, ps
 		}
 		out->profile_count = n;
 		out->profile = rows;
+		out->attack = detail->attack;
+		const rules::Stats& b = detail->baseStats;
+		out->base_stats = {b.maxHp, b.maxTp, b.strength, b.mental, b.agility, b.dexterity, b.defense, b.critical, b.evasion, b.magicDefense};
+		out->experience_for_level = detail->experienceForLevel;
+		out->total_experience = detail->totalExperience;
+		out->creature_kind = static_cast<int32_t>(detail->kind);
+		out->vulnerable = detail->vulnerable;
 		return PSIV_OK;
 	});
 }
@@ -2739,6 +2779,22 @@ psiv_status psiv_credits_info_get(psiv_session* session, psiv_credits_info* out)
 		}
 		*out = {session->arena.str(credits->id), session->arena.str(credits->music), static_cast<int32_t>(credits->entries.size()), credits->shown,
 			credits->elapsedMs, credits->totalMs};
+		return PSIV_OK;
+	});
+}
+
+int32_t psiv_can_load(psiv_session* session) {
+	return session && session->session->canLoad() ? 1 : 0;
+}
+
+psiv_status psiv_battle_keys_get(psiv_session* session, psiv_battle_keys* out) {
+	return guard(session, false, [&] {
+		if (!out) {
+			return nullArgument(session, "out");
+		}
+		const game::BattleKeys keys = session->session->battleKeys();
+		*out = {static_cast<int32_t>(keys.messages.size()), session->arena.strs(keys.messages), static_cast<int32_t>(keys.notices.size()),
+			session->arena.strs(keys.notices), static_cast<int32_t>(keys.cancelReasons.size()), session->arena.strs(keys.cancelReasons)};
 		return PSIV_OK;
 	});
 }

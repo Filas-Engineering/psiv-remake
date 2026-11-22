@@ -801,6 +801,12 @@ bool Runner::execute(const std::string& rawLine) {
 				if (a.wanders) {
 					text += " wanders";
 				}
+				if (a.patrols) {
+					text += " patrols";
+				}
+				if (a.onPath) {
+					text += " path " + std::to_string(a.pathX) + " " + std::to_string(a.pathY) + " from " + std::to_string(a.home.x) + " " + std::to_string(a.home.y);
+				}
 				print(text);
 			}
 		}
@@ -824,6 +830,16 @@ bool Runner::execute(const std::string& rawLine) {
 		}
 		for (const EventPosition& at : running) {
 			print("  background: " + at.event + " at " + at.file + ":" + std::to_string(at.line));
+		}
+	} else if (cmd == "platforms" && w.size() == 1) {
+		const std::vector<PlatformView> platforms = session_.platformsHere();
+		if (platforms.empty()) {
+			print("  platforms: none");
+		}
+		for (const PlatformView& p : platforms) {
+			const std::string where = p.end == 0 ? "docked at from" : p.end == 1 ? "docked at to" : "moving";
+			print("  platform " + p.id + " at " + std::to_string(p.cell.x) + " " + std::to_string(p.cell.y) + " (" + std::to_string(p.x) + ", " + std::to_string(p.y) +
+				" px) " + where + (p.pauseMs > 0 ? ", resting " + std::to_string(p.pauseMs) + " ms" : "") + (p.carrying ? ", carrying the party" : ""));
 		}
 	} else if (cmd == "pictures" && w.size() == 1) {
 		std::string text;

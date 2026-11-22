@@ -72,6 +72,10 @@ struct Event {
 	std::string message;
 	std::vector<std::string> params;
 	int amount = 0;
+	// DamageDealt and Healed: the amount the roll gave before the target's hit points (or technique points), a shield's
+	// damage cap or its maximum took any off; `amount` is what changed. Not serialized, so records and transcripts read
+	// as before.
+	int rolled = 0;
 	// Hit points after the change.
 	int hp = -1;
 	// StatusApplied: rounds it lasts, 0 for no round limit.

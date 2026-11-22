@@ -88,6 +88,12 @@ std::string invalidWorld(const GameData& data, const World& w) {
 				return named("unknown taught ability", ability);
 			}
 		}
+		for (const auto& [element, affinity] : m.affinities) {
+			const std::vector<std::string> known = db.elementIds();
+			if (std::find(known.begin(), known.end(), element.id) == known.end() || affinity < 0 || affinity > 10000) {
+				return named("bad granted affinity", element.id);
+			}
+		}
 	}
 	std::set<std::string> inLineup;
 	for (const std::string& id : w.lineup) {
@@ -179,9 +185,18 @@ std::string invalidWorld(const GameData& data, const World& w) {
 		if (std::find(data.config.actors.begin(), data.config.actors.end(), id) == data.config.actors.end() || (!place.area.empty() && !cellIn(place.area, place.cell)) ||
 			place.animationMs < 0 || place.animationTotalMs < place.animationMs || place.animation.empty() != (place.animationTotalMs == 0) ||
 			(!place.lookEnemy.empty() && !db.enemy(place.lookEnemy)) || (!place.lookEnemy.empty() && !place.look.empty()) || place.wanderProgress < 0 ||
-			place.wanderPauseMs < 0) {
+			place.wanderPauseMs < 0 || place.patrolStep < 0 || place.patrolWalked < 0 || place.pathTick < 0) {
 			return named("unknown actor or cell outside its area for", id);
 		}
+	}
+	for (const auto& [id, place] : w.platforms) {
+		const Platform* platform = here.platform(id);
+		if (!platform || place.positionUs > platform->length() * platform->stepMs * 1000LL) {
+			return named("unknown platform or place outside its run for", id);
+		}
+	}
+	if (!w.ridingPlatform.empty() && !w.platforms.count(w.ridingPlatform)) {
+		return named("riding a platform not in the area", w.ridingPlatform);
 	}
 	for (const auto& [id, place] : w.vehicles) {
 		const FieldVehicle* field = data.vehicle(id);
@@ -564,10 +579,13 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.level_up",
 		"game.loaded",
 		"game.loaded_text",
+		"game.machine_stood_up",
 		"game.money_given",
 		"game.money_taken",
 		"game.named",
 		"game.no_effect",
+		"game.paralysis_worn_off",
+		"game.poison_fell",
 		"game.port_open",
 		"game.reason.after_rest",
 		"game.reason.area_entry",
@@ -711,6 +729,11 @@ public:
 		}
 		if (action.type == events::ActionType::music_play && action.fade_ms < 0) {
 			shown.fade_ms = names.music.fadeMs;
+		}
+		if (action.type == events::ActionType::music_play) {
+			s_.scriptTrack_ = action.subject;
+		} else if (action.type == events::ActionType::music_stop) {
+			s_.scriptTrack_ = std::string();
 		}
 		if (action.type == events::ActionType::warp) {
 			s_.actionRoute_.clear();
@@ -1040,7 +1063,7 @@ public:
 		m->taught.push_back(ability);
 		const rules::AbilityDef* def = s_.data_.db.ability(ability);
 		if (def && def->kind == rules::AbilityKind::Skill && !m->skillUses.count(ability)) {
-			m->skillUses[ability] = def->uses;
+			m->skillUses[ability] = rules::maxSkillUses(s_.data_.db, *m, ability);
 		}
 		s_.emit(OutputKind::Notice, "game.learned", {member, ability});
 	}
@@ -1167,6 +1190,8 @@ public:
 		const auto held = bag.find(item);
 		return held == bag.end() ? 0 : held->second;
 	}
+
+	bool game_state(const std::string& test, const std::string& value) override { return s_.stateTest(test, value); }
 
 	std::string snapshot_world() override { return serializeWorldChunks(s_.world_); }
 
@@ -1334,6 +1359,8 @@ public:
 		return held == bag.end() ? 0 : held->second;
 	}
 
+	bool game_state(const std::string& test, const std::string& value) override { return s_.stateTest(test, value); }
+
 	std::int64_t money() override { return s_.world_.money; }
 	void remove_actor(const std::string& actor, bool untilReload) override { s_.removeActor(actor, untilReload); }
 	void spawn_event(const std::string& event) override { s_.spawnBackground(event); }
@@ -1358,7 +1385,7 @@ Session::Session(const GameData& data, SessionOptions options) : data_(data), op
 		actions_ = std::make_unique<ActionQueue>(data_.config.presentation, actionRoute_, options_.presentation, options_.onAction);
 	}
 	for (const ActorDef& actor : data_.config.actorDefs) {
-		if (!actor.area.empty() && actor.solid) {
+		if (!actor.area.empty() && actor.solid && (!actor.path || actor.path->footprintWidth > 0)) {
 			solidActors_.insert(actor.id);
 		}
 	}
@@ -1447,7 +1474,16 @@ std::set<Cell> Session::actorCells(const std::string& except) const {
 		return cells;
 	}
 	for (const ActorView& a : actorsHere()) {
-		if (a.solid && a.id != except) {
+		if (!a.solid || a.id == except) {
+			continue;
+		}
+		const ActorDef* def = data_.config.actorDef(a.id);
+		if (def && def->path) {
+			const auto place = world_.actors.find(a.id);
+			for (const Cell c : pathCells(*def, a.home, place == world_.actors.end() ? 0 : place->second.pathTick)) {
+				cells.insert(c);
+			}
+		} else {
 			cells.insert(a.cell);
 		}
 	}
@@ -1803,6 +1839,15 @@ const Hook* Session::touchHookAt(Cell cell) const {
 	return nullptr;
 }
 
+bool Session::actorMayEnter(const Area& here, const std::string& terrain, Cell next, const std::vector<ActorView>& standing) const {
+	const bool objectThere = here.hookAt(next, HookTrigger::Interact) || here.shopAt(next) || here.restAt(next) || here.chestAt(next) || here.portAt(next) ||
+		here.helmAt(next) || here.exitAt(next) || here.gangwayAt(next);
+	const bool standingThere = std::any_of(standing.begin(), standing.end(), [&](const ActorView& a) { return a.visible && a.cell == next && !a.onPath; }) ||
+		std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == next; }) || !vehicleAt(next).empty();
+	return here.inside(next) && terrain.find(here.rows[next.y][next.x]) != std::string::npos && !here.closed.count(next) && !objectThere && !standingThere &&
+		!actorCells().count(next);
+}
+
 void Session::wanderActors(int ms) {
 	const Area* here = area();
 	if (!here) {
@@ -1837,8 +1882,16 @@ void Session::wanderActors(int ms) {
 			continue;
 		}
 		place.wanderProgress = data_.config.exactSteps ? std::min(place.wanderProgress - wanderStep, wanderStep - 1) : 0;
+		if (rules.standPercent > 0 && world_.encounterStream.range(1, 100) <= rules.standPercent) {
+			place.wanderPauseMs = rules.pauseMaxMs > rules.pauseMinMs ? world_.encounterStream.range(rules.pauseMinMs, rules.pauseMaxMs) : rules.pauseMinMs;
+			continue;
+		}
 		static const Facing kTurns[] = {Facing::North, Facing::East, Facing::South, Facing::West};
-		const Facing f = kTurns[world_.encounterStream.range(0, 3)];
+		static const Facing kAlongX[] = {Facing::East, Facing::West};
+		static const Facing kAlongY[] = {Facing::North, Facing::South};
+		const Facing f = rules.axis == WanderAxis::X ? kAlongX[world_.encounterStream.range(0, 1)]
+			: rules.axis == WanderAxis::Y            ? kAlongY[world_.encounterStream.range(0, 1)]
+													 : kTurns[world_.encounterStream.range(0, 3)];
 		const Cell from = place.cell;
 		const Cell next = stepFrom(from, f);
 		place.facing = f;
@@ -1853,15 +1906,245 @@ void Session::wanderActors(int ms) {
 			continue;
 		}
 		const auto distance = [&](Cell c) { return std::abs(c.x - home.x) + std::abs(c.y - home.y); };
-		const bool objectThere = here->hookAt(next, HookTrigger::Interact) || here->shopAt(next) || here->restAt(next) || here->chestAt(next) || here->portAt(next) ||
-			here->helmAt(next) || here->exitAt(next) || here->gangwayAt(next);
-		const bool standingThere = std::any_of(standing.begin(), standing.end(), [&](const ActorView& a) { return a.visible && a.cell == next; }) ||
-			std::any_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == next; }) || !vehicleAt(next).empty();
-		if (here->inside(next) && rules.terrain.find(here->rows[next.y][next.x]) != std::string::npos && !here->closed.count(next) && !objectThere && !standingThere &&
-			(rules.covers(home, next) || distance(next) < distance(from))) {
+		if (actorMayEnter(*here, rules.terrain, next, standing) && (rules.covers(home, next) || distance(next) < distance(from))) {
 			place.cell = next;
 		}
 	}
+}
+
+std::optional<Cell> Session::settlePatrol(const ActorDef& def, ActorPlace& place) const {
+	const std::vector<PatrolStep>& steps = def.patrol->steps;
+	const Area* here = area();
+	for (std::size_t guard = 0; guard <= steps.size(); ++guard) {
+		place.patrolStep %= static_cast<int>(steps.size());
+		const PatrolStep& step = steps[static_cast<std::size_t>(place.patrolStep)];
+		if (step.walk && place.patrolWalked < step.count) {
+			return stepFrom(place.cell, *step.walk);
+		}
+		std::optional<Cell> goal = step.to;
+		if (!step.toMarker.empty() && here && here->markers.count(step.toMarker)) {
+			goal = here->markers.at(step.toMarker);
+		}
+		if (goal && place.cell != *goal) {
+			return place.cell.x != goal->x ? Cell{place.cell.x + (goal->x > place.cell.x ? 1 : -1), place.cell.y}
+										   : Cell{place.cell.x, place.cell.y + (goal->y > place.cell.y ? 1 : -1)};
+		}
+		if (step.face) {
+			place.facing = *step.face;
+		}
+		place.patrolStep = (place.patrolStep + 1) % static_cast<int>(steps.size());
+		place.patrolWalked = 0;
+		if (step.pauseMs > 0) {
+			place.wanderPauseMs = step.pauseMs;
+			return std::nullopt;
+		}
+	}
+	return std::nullopt;
+}
+
+void Session::patrolActors(int ms) {
+	const Area* here = area();
+	if (!here) {
+		return;
+	}
+	for (const ActorDef& def : data_.config.actorDefs) {
+		if (!def.patrol || def.area != world_.area || mode() != Mode::Field) {
+			continue;
+		}
+		const std::vector<ActorView> standing = actorsHere();
+		const auto view = std::find_if(standing.begin(), standing.end(), [&](const ActorView& v) { return v.id == def.id; });
+		if (view == standing.end() || !view->patrols) {
+			continue;
+		}
+		ActorPlace& place = touchActor(def.id);
+		if (place.wanderPauseMs > 0) {
+			place.wanderPauseMs = std::max(0, place.wanderPauseMs - ms);
+			continue;
+		}
+		const std::optional<Cell> next = settlePatrol(def, place);
+		if (!next) {
+			continue;
+		}
+		place.wanderProgress += ms * def.patrol->speedPercent;
+		const int stepLength = data_.config.exactSteps ? static_cast<int>(std::max<std::int64_t>(1, here->stepUs / 10)) : here->stepMs * 100;
+		if (place.wanderProgress < stepLength) {
+			continue;
+		}
+		place.wanderProgress = data_.config.exactSteps ? std::min(place.wanderProgress - stepLength, stepLength - 1) : 0;
+		if (const std::optional<Facing> toward = facingToward(place.cell, *next)) {
+			place.facing = *toward;
+		}
+		if (*next == world_.position) {
+			if (const Hook* hook = touchHook(def.id); hook && world_.playerControl) {
+				startEvent(hook->event);
+			}
+			continue;
+		}
+		if (!actorMayEnter(*here, def.patrol->terrain, *next, standing)) {
+			continue;
+		}
+		place.cell = *next;
+		const PatrolStep& step = def.patrol->steps[static_cast<std::size_t>(place.patrolStep)];
+		if (step.walk) {
+			++place.patrolWalked;
+		}
+		settlePatrol(def, place);
+	}
+}
+
+std::vector<Cell> Session::pathCells(const ActorDef& def, Cell anchor, int tick) const {
+	std::vector<Cell> cells;
+	const ActorPath& path = *def.path;
+	if (path.footprintWidth <= 0) {
+		return cells;
+	}
+	const int size = data_.config.cellPixels;
+	const auto& offset = path.offsets[static_cast<std::size_t>(tick / path.ticks) % path.offsets.size()];
+	const int left = anchor.x * size + offset.first;
+	const int top = anchor.y * size + offset.second;
+	const auto cellOf = [size](int pixel) { return pixel >= 0 ? pixel / size : -((-pixel + size - 1) / size); };
+	for (int y = cellOf(top); y <= cellOf(top + path.footprintHeight * size - 1); ++y) {
+		for (int x = cellOf(left); x <= cellOf(left + path.footprintWidth * size - 1); ++x) {
+			cells.push_back({x, y});
+		}
+	}
+	return cells;
+}
+
+void Session::pathActors() {
+	for (const ActorView& view : actorsHere()) {
+		const ActorDef* def = data_.config.actorDef(view.id);
+		if (def && def->path && view.onPath) {
+			ActorPlace& place = touchActor(def->id);
+			place.pathTick = (place.pathTick + 1) % (def->path->ticks * static_cast<int>(def->path->offsets.size()));
+		}
+	}
+}
+
+void Session::resetPlatforms(bool keep) {
+	const Area* here = area();
+	std::map<std::string, PlatformPlace> kept;
+	if (keep) {
+		kept.swap(world_.platforms);
+	}
+	world_.platforms.clear();
+	if (!keep) {
+		world_.ridingPlatform.clear();
+	}
+	if (!here) {
+		return;
+	}
+	for (const Platform& p : here->platforms) {
+		if (kept.count(p.id)) {
+			world_.platforms[p.id] = kept[p.id];
+			continue;
+		}
+		PlatformPlace place;
+		if (p.mode == PlatformMode::OneWay && platformHolds(p, world_)) {
+			place.positionUs = p.length() * p.stepMs * 1000LL;
+			place.heading = -1;
+		}
+		place.pauseMs = p.pauseMs;
+		world_.platforms[p.id] = place;
+	}
+}
+
+const Platform* Session::dockedPlatformAt(Cell cell) const {
+	const Area* here = area();
+	if (!here) {
+		return nullptr;
+	}
+	for (const Platform& p : here->platforms) {
+		const auto place = world_.platforms.find(p.id);
+		if (place == world_.platforms.end()) {
+			continue;
+		}
+		const std::int64_t run = p.length() * p.stepMs * 1000LL;
+		if ((place->second.positionUs == 0 && p.from == cell) || (place->second.positionUs == run && p.to == cell)) {
+			return &p;
+		}
+	}
+	return nullptr;
+}
+
+bool Session::platformDocked(const std::string& id) const {
+	const Area* here = area();
+	const Platform* p = here ? here->platform(id) : nullptr;
+	const auto place = world_.platforms.find(id);
+	return p && place != world_.platforms.end() && (place->second.positionUs == 0 || place->second.positionUs == p->length() * p->stepMs * 1000LL);
+}
+
+void Session::movePlatforms(int ms) {
+	const Area* here = area();
+	if (!here) {
+		return;
+	}
+	for (const Platform& p : here->platforms) {
+		PlatformPlace& place = world_.platforms[p.id];
+		const std::int64_t stepUs = p.stepMs * 1000LL;
+		const std::int64_t run = p.length() * stepUs;
+		const bool holds = platformHolds(p, world_);
+		const bool atEnd = place.positionUs == 0 || place.positionUs == run;
+		if (p.mode == PlatformMode::OneWay) {
+			const std::int64_t goal = holds ? run : 0;
+			if (place.positionUs == goal) {
+				place.pauseMs = std::max(0, place.pauseMs - ms);
+				continue;
+			}
+			if (atEnd && place.pauseMs > 0) {
+				place.pauseMs = std::max(0, place.pauseMs - ms);
+				continue;
+			}
+			place.heading = goal > place.positionUs ? 1 : -1;
+		} else if (atEnd) {
+			if (place.pauseMs > 0) {
+				place.pauseMs = std::max(0, place.pauseMs - ms);
+				continue;
+			}
+			if (!holds || (p.mode == PlatformMode::Triggered && (world_.ridingPlatform != p.id || !place.boarded))) {
+				continue;
+			}
+			place.heading = place.positionUs == 0 ? 1 : -1;
+		}
+		place.positionUs = std::clamp<std::int64_t>(place.positionUs + place.heading * ms * 1000LL, 0, run);
+		if (place.positionUs == 0 || place.positionUs == run) {
+			place.pauseMs = p.pauseMs;
+			place.boarded = false;
+		}
+		if (world_.ridingPlatform == p.id) {
+			world_.position = p.cellAt(static_cast<int>((place.positionUs + stepUs / 2) / stepUs));
+		}
+	}
+}
+
+std::vector<PlatformView> Session::platformsHere() const {
+	std::vector<PlatformView> out;
+	const Area* here = area();
+	if (!here) {
+		return out;
+	}
+	const int size = data_.config.cellPixels;
+	for (const Platform& p : here->platforms) {
+		const auto found = world_.platforms.find(p.id);
+		const PlatformPlace place = found == world_.platforms.end() ? PlatformPlace{} : found->second;
+		const std::int64_t stepUs = p.stepMs * 1000LL;
+		PlatformView view;
+		view.id = p.id;
+		view.mode = p.mode;
+		view.from = p.from;
+		view.to = p.to;
+		view.positionUs = place.positionUs;
+		view.runUs = p.length() * stepUs;
+		view.cell = p.cellAt(static_cast<int>((place.positionUs + stepUs / 2) / stepUs));
+		const std::int64_t travelled = place.positionUs * size / stepUs;
+		view.x = p.from.x * size + static_cast<int>(p.to.x > p.from.x ? travelled : p.to.x < p.from.x ? -travelled : 0);
+		view.y = p.from.y * size + static_cast<int>(p.to.y > p.from.y ? travelled : p.to.y < p.from.y ? -travelled : 0);
+		view.end = place.positionUs == 0 ? 0 : place.positionUs == view.runUs ? 1 : -1;
+		view.pauseMs = view.end >= 0 ? place.pauseMs : 0;
+		view.carrying = world_.ridingPlatform == p.id;
+		out.push_back(view);
+	}
+	return out;
 }
 
 bool Session::backgroundEvent(const std::string& event) const {
@@ -1985,11 +2268,26 @@ std::vector<ActorView> Session::actorsHere() const {
 			view.spriteEnemy = it->second.lookEnemy;
 			view.look = it->second.look;
 		}
-		view.wanders = def.wander && view.visible && def.area == world_.area &&
+		const bool moving = view.visible && def.area == world_.area &&
 			std::none_of(background_.begin(), background_.end(), [&](const BackgroundRun& run) {
 				const std::vector<events::ActorState>& touched = run.interpreter->presentation().actors;
 				return std::any_of(touched.begin(), touched.end(), [&](const events::ActorState& a) { return a.actor == def.id; });
 			});
+		view.wanders = def.wander && moving;
+		view.patrols = def.patrol && moving;
+		view.onPath = def.path && moving;
+		if (def.path) {
+			view.home = view.cell;
+			const int size = data_.config.cellPixels;
+			const int tick = it != world_.actors.end() ? it->second.pathTick : 0;
+			const auto& offset = def.path->offsets[static_cast<std::size_t>(tick / def.path->ticks) % def.path->offsets.size()];
+			view.pathX = offset.first;
+			view.pathY = offset.second;
+			const auto cellOf = [size](int pixel) { return pixel >= 0 ? pixel / size : -((-pixel + size - 1) / size); };
+			view.cell = {cellOf(view.home.x * size + offset.first), cellOf(view.home.y * size + offset.second)};
+			view.footprintWidth = def.path->footprintWidth;
+			view.footprintHeight = def.path->footprintHeight;
+		}
 		out.push_back(view);
 	}
 	return out;
@@ -2048,7 +2346,7 @@ const Area* Session::areaAt(const std::string& id) const {
 	const auto broken = world_.brokenCells.find(id);
 	const bool here = id == world_.area && !world_.brokenHere.empty();
 	const bool gatedExits = std::any_of(base->exits.begin(), base->exits.end(), [](const Exit& e) { return !e.requireFlag.empty() || !e.blockFlag.empty(); });
-	const bool gatedHooks = std::any_of(base->hooks.begin(), base->hooks.end(), [](const Hook& h) { return h.solidWhileActive; });
+	const bool gatedHooks = std::any_of(base->hooks.begin(), base->hooks.end(), [&](const Hook& h) { return h.solidWhileActive || base->exitAt(h.at); });
 	if (base->changes.empty() && broken == world_.brokenCells.end() && !here && !gatedExits && !gatedHooks) {
 		return base;
 	}
@@ -2109,7 +2407,8 @@ const Area* Session::areaAt(const std::string& id) const {
 		std::set<Cell>& passable = view->second.second.passable;
 		passable.clear();
 		for (const Hook& h : base->hooks) {
-			if (h.solidWhileActive && !hookStands(h)) {
+			const Exit* door = h.trigger == HookTrigger::Interact ? base->exitAt(h.at) : nullptr;
+			if ((h.solidWhileActive && !hookStands(h)) || (door && exitOpen(*door, world_))) {
 				passable.insert(h.at);
 			}
 		}
@@ -2211,7 +2510,7 @@ std::string Session::displayName(const std::string& id) const {
 		return inLanguage("vehicle", v->name);
 	}
 	if (data_.area(id)) {
-		return text("area." + id);
+		return text(areaNameKey(id));
 	}
 	return id;
 }
@@ -2340,6 +2639,7 @@ rules::Message Session::newGame() {
 	}
 	const GameConfig& c = data_.config;
 	world_ = World();
+	previousArea_.clear();
 	world_.encounterStream.restore(options_.seed);
 	for (const events::Declaration& d : data_.program.declarations) {
 		if (!d.local && d.initial != 0) {
@@ -2398,6 +2698,64 @@ rules::Message Session::load(const std::string& slot) {
 		return refusal("slot_unreadable", {slot});
 	}
 	return loadText(text, slot);
+}
+
+std::string Session::areaNameKey(const std::string& id) const {
+	const Area* a = data_.area(id);
+	if (a) {
+		for (const Area::NameVariant& v : a->names) {
+			const bool from = v.from.empty() || (id == world_.area && v.from == world_.cameFrom);
+			if (from && (v.flag.empty() || world_.flag(v.flag))) {
+				return v.key;
+			}
+		}
+	}
+	return "area." + id;
+}
+
+bool Session::stateTest(const std::string& test, const std::string& value) const {
+	if (test == "leader") {
+		return !world_.lineup.empty() && world_.lineup.front() == value;
+	}
+	if (test == "music") {
+		return (scriptTrack_ ? *scriptTrack_ : areaMusic()) == value;
+	}
+	if (test == "area") {
+		return world_.area == value;
+	}
+	const Area* here = area();
+	if (test != "tile" || !here || !here->inside(world_.position)) {
+		return false;
+	}
+	if (value == "counter" && here->counters.count(world_.position)) {
+		return true;
+	}
+	static const std::map<std::string, char> terrain = {{"floor", '.'}, {"water", '~'}, {"soft", ':'}, {"barrier", '%'}, {"counter", '='}};
+	const auto it = terrain.find(value);
+	return it != terrain.end() && here->rows[world_.position.y][world_.position.x] == it->second;
+}
+
+bool Session::canLoad() const {
+	return mode() == Mode::Title;
+}
+
+BattleKeys Session::battleKeys() const {
+	BattleKeys keys;
+	for (const std::string& key : rules::messageKeys(data_.db)) {
+		if (key.rfind("battle.", 0) == 0 || key.rfind("status.", 0) == 0) {
+			keys.messages.push_back(key);
+		}
+	}
+	keys.notices = {"game.auto_on", "game.battle_start", "game.dropped", "game.fallen", "game.game_over", "game.got_away", "game.learned", "game.level_up",
+		"game.scripted_end", "game.victory"};
+	for (rules::AutoStop stop : {rules::AutoStop::Cancelled, rules::AutoStop::MemberFell, rules::AutoStop::CannotPay, rules::AutoStop::BattleEnded}) {
+		keys.notices.push_back(std::string("auto.stopped.") + rules::toString(stop));
+	}
+	std::sort(keys.notices.begin(), keys.notices.end());
+	for (int i = static_cast<int>(rules::CancelReason::ActorUnable); i <= static_cast<int>(rules::CancelReason::NoTarget); ++i) {
+		keys.cancelReasons.push_back(rules::toString(static_cast<rules::CancelReason>(i)));
+	}
+	return keys;
 }
 
 rules::Message Session::eraseSave(const std::string& slot) {
@@ -2478,6 +2836,8 @@ rules::Message Session::loadText(const std::string& text, const std::string& slo
 	}
 	world_.stepCarryUs = world_.conveyorCarryUs = 0;
 	world_.tickCarryMs = 0;
+	resetPlatforms(true);
+	previousArea_ = world_.cameFrom;
 	modes_.transition(Mode::Field);
 	const Area* a = area();
 	arrivalAnnounced_ = a->arriveNotice && data_.config.arriveNotice == ArriveNotice::Always;
@@ -2614,7 +2974,7 @@ void Session::tickField(const FieldInput& input) {
 				}
 			}
 		}
-	} else if (input.held && world_.playerControl) {
+	} else if (input.held && world_.playerControl && (world_.ridingPlatform.empty() || platformDocked(world_.ridingPlatform))) {
 		world_.facing = input.direction;
 		if (vehicle) {
 			world_.vehicles[world_.aboard].facing = input.direction;
@@ -2652,17 +3012,28 @@ void Session::tickField(const FieldInput& input) {
 	} else {
 		stepProgressUs_ = 0;
 	}
-	// After the leader's step, in this order: wandering actors, visible enemies, background events.
+	// After the leader's step, in this order: wandering actors, patrols, paths, platforms, visible enemies, background events.
 	wanderActors(tick);
 	if (mode() != Mode::Field) {
 		return;
 	}
+	patrolActors(tick);
+	if (mode() != Mode::Field) {
+		return;
+	}
+	pathActors();
+	movePlatforms(tick);
 	if (encounterMode() == EncounterMode::Visible && world_.area == a.id && encountersOn_) {
 		std::vector<Cell> wanderers;
 		for (const ActorView& v : actorsHere()) {
 			const ActorDef* def = data_.config.actorDef(v.id);
-			if (v.solid && def && def->wander) {
+			if (v.solid && def && (def->wander || def->patrol)) {
 				wanderers.push_back(v.cell);
+			}
+			if (v.solid && def && def->path) {
+				for (const Cell c : pathCells(*def, v.home, world_.actors.count(v.id) ? world_.actors.at(v.id).pathTick : 0)) {
+					wanderers.push_back(c);
+				}
 			}
 		}
 		if (std::optional<EncounterStart> contact = tickVisibleEnemies(world_, a, tick, a.stepMs, !world_.aboard.empty(), data_.config.exactSteps ? a.stepUs : 0, wanderers)) {
@@ -2683,15 +3054,62 @@ void Session::healMachinesOnStep() {
 	for (const std::string& id : world_.lineup) {
 		rules::PartyMember* m = world_.member(id);
 		const rules::CharacterDef* character = data_.db.character(id);
-		if (m && character && character->kind == rules::CreatureKind::Machine && m->hp > 0) {
+		if (m && character && character->kind == rules::CreatureKind::Machine && (m->hp > 0 || data_.config.machineStepHealFallen)) {
+			if (m->hp == 0) {
+				m->statuses.clear();
+				emit(OutputKind::Notice, "game.machine_stood_up", {id});
+			}
 			m->hp = std::min(m->hp + data_.config.machineStepHeal, rules::memberStats(data_.db, *m).maxHp);
 		}
 	}
 }
 
+// Field poison and paralysis (rules.json, areas with `field_status`): each step counts toward them. Returns false after a
+// game over.
+bool Session::fieldStatusStep() {
+	const rules::BattleRules& r = data_.db.battleRules;
+	if (!area()->fieldStatus || (r.fieldPoisonEvery <= 0 && r.fieldParalysisChance <= 0)) {
+		return true;
+	}
+	++world_.fieldSteps;
+	for (const std::string& id : world_.lineup) {
+		rules::PartyMember* m = world_.member(id);
+		if (!m || m->hp <= 0) {
+			continue;
+		}
+		const auto has = [&](const std::string& status) {
+			return std::find_if(m->statuses.begin(), m->statuses.end(), [&](const rules::ActiveStatus& s) { return s.id == status; });
+		};
+		if (r.fieldPoisonEvery > 0 && world_.fieldSteps % r.fieldPoisonEvery == 0 && has(r.fieldPoisonStatus) != m->statuses.end()) {
+			--m->hp;
+			if (m->hp == 0) {
+				m->statuses.clear();
+				emit(OutputKind::Notice, "game.poison_fell", {id});
+				continue;
+			}
+		}
+		const auto paralysis = has(r.fieldParalysisStatus);
+		if (r.fieldParalysisChance > 0 && paralysis != m->statuses.end() && world_.fieldSteps >= r.fieldParalysisFrom &&
+			(world_.fieldSteps >= r.fieldParalysisBy || world_.encounterStream.range(1, r.fieldParalysisChance) == 1)) {
+			m->statuses.erase(paralysis);
+			emit(OutputKind::Notice, "game.paralysis_worn_off", {id});
+		}
+	}
+	if (std::none_of(world_.lineup.begin(), world_.lineup.end(), [&](const std::string& id) { return world_.member(id) && world_.member(id)->hp > 0; })) {
+		enterGameOver();
+		return false;
+	}
+	return true;
+}
+
 void Session::arrive(Cell cell) {
 	const Cell from = world_.position;
 	world_.position = cell;
+	const Platform* boarded = world_.aboard.empty() ? dockedPlatformAt(cell) : nullptr;
+	world_.ridingPlatform = boarded ? boarded->id : "";
+	if (boarded) {
+		world_.platforms[boarded->id].boarded = true;
+	}
 	int longestGrace = 0;
 	for (const Zone& zone : area()->zones) {
 		longestGrace = std::max(longestGrace, zone.random.graceSteps);
@@ -2706,6 +3124,9 @@ void Session::arrive(Cell cell) {
 		pacing_.step();
 	}
 	healMachinesOnStep();
+	if (!fieldStatusStep()) {
+		return;
+	}
 	if (const FieldVehicle* vehicle = riding(); vehicle && vehicle->breaks.find(area()->rows[cell.y][cell.x]) != std::string::npos) {
 		if (vehicle->breaksForGood) {
 			world_.brokenCells[world_.area].insert(cell);
@@ -2756,7 +3177,7 @@ void Session::arrive(Cell cell) {
 			}
 		}
 	}
-	if (!encountersOn_) {
+	if (!encountersOn_ || !world_.ridingPlatform.empty()) {
 		return;
 	}
 	if (const FieldVehicle* vehicle = riding()) {
@@ -2801,7 +3222,10 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 	if (world_.area != a->id) {
 		world_.brokenHere.clear();
 		world_.areaMusic.clear();
+		previousArea_ = world_.area;
 	}
+	world_.cameFrom = a->names.empty() ? "" : previousArea_;
+	scriptTrack_.reset();
 	world_.sceneCamera = {};
 	world_.areaSteps = 0;
 	if (a->kind != AreaKind::Vessel) {
@@ -2819,6 +3243,11 @@ void Session::enterAreaAt(const std::string& areaId, Cell cell, std::optional<Ce
 		world_.vehicles[world_.aboard].cell = cell;
 	}
 	world_.visitedAreas.insert(a->id);
+	world_.fieldSteps = 0;
+	for (const std::string& flag : data_.config.areaFlags) {
+		world_.flags.erase(flag);
+	}
+	resetPlatforms(false);
 	stepProgressUs_ = 0;
 	if (encounterMode() == EncounterMode::Visible) {
 		spawnVisibleEnemies(world_, *a);
@@ -2936,7 +3365,8 @@ bool Session::canStep(Facing direction) const {
 			std::find(c.cells.begin(), c.cells.end(), world_.position) != c.cells.end();
 	});
 	const Cell target = stepFrom(world_.position, direction);
-	return !belt && canEnter(a, target) &&
+	const bool carried = !world_.ridingPlatform.empty() && !platformDocked(world_.ridingPlatform);
+	return !belt && !carried && canEnter(a, target) &&
 		std::none_of(world_.enemies.begin(), world_.enemies.end(), [&](const VisibleEnemy& e) { return e.position == target; });
 }
 
@@ -3019,6 +3449,11 @@ WalkStatus Session::walkStep(PathWalk& walk) {
 	for (const Conveyor& c : a.conveyors) {
 		belts.insert(c.cells.begin(), c.cells.end());
 	}
+	for (const Platform& p : a.platforms) {
+		for (int i = 0; i <= p.length(); ++i) {
+			belts.insert(p.cellAt(i));
+		}
+	}
 	std::map<Cell, Cell> from;
 	std::deque<Cell> queue{world_.position};
 	from[world_.position] = world_.position;
@@ -3080,7 +3515,9 @@ std::optional<InteractTarget> Session::pointAt(const Area& a, Cell cell, bool& a
 		const auto actor = world_.actors.find(hook.id);
 		return hookHolds(hook, world_) && (actor == world_.actors.end() || actor->second.removed == ActorRemoval::None);
 	};
-	if (const Hook* hook = a.hookAt(cell, HookTrigger::Interact)) {
+	// A hook on an exit's cell is a door one talks to while the exit is closed; once it opens the cell is the exit's.
+	const Exit* door = a.exitAt(cell);
+	if (const Hook* hook = a.hookAt(cell, HookTrigger::Interact); hook && !(door && exitOpen(*door, world_))) {
 		t.kind = isActor(hook->id) ? InteractKind::Actor : InteractKind::Talk;
 		t.id = hook->id;
 		t.ready = answers(*hook);
@@ -3386,7 +3823,7 @@ bool Session::canEnter(const Area& area, Cell cell) const {
 	}
 	const FieldVehicle* vehicle = riding();
 	if (!vehicle) {
-		return area.walkable(cell);
+		return area.walkable(cell) || dockedPlatformAt(cell);
 	}
 	return area.inside(cell) && vehicle->canCross(area.rows[cell.y][cell.x]) && !area.closed.count(cell) && !area.hookAt(cell, HookTrigger::Interact) && !area.shopAt(cell) &&
 		!area.restAt(cell) && !area.chestAt(cell) && !area.portAt(cell);
@@ -5027,6 +5464,16 @@ std::optional<MemberDetail> Session::memberDetail(const std::string& member) con
 	detail.attackElement = combatant.attackElement;
 	detail.statusResist = combatant.statusResist;
 	detail.profile = data_.db.character(member)->profile;
+	const rules::CharacterDef& character = *data_.db.character(member);
+	detail.attack = combatant.effective(rules::Stat::Attack);
+	detail.baseStats = rules::statsAtLevel(character, m->level);
+	detail.experienceForLevel = m->level >= rules::formulas::kMaxLevel ? 0 : rules::experienceToNextLevel(character, m->level);
+	detail.totalExperience = m->experience;
+	for (int level = 1; level < m->level; ++level) {
+		detail.totalExperience += rules::experienceToNextLevel(character, level);
+	}
+	detail.kind = character.kind;
+	detail.vulnerable = character.vulnerable;
 	for (const auto& [slot, id] : m->equipment) {
 		if (const rules::EquipmentDef* piece = data_.db.equipmentPiece(id)) {
 			detail.equipmentBonus[slot] = piece->bonus;

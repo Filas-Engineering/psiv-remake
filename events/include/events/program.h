@@ -11,8 +11,10 @@ namespace events {
 enum class Compare { eq, ne, lt, le, gt, ge };
 
 // A term that tests the game instead of a flag or variable: `vehicle <id>` (the party has it), `aboard <id>` (the party
-// rides it), `party <member>` (the member is in the active party) or `item <id>` (the party holds at least one).
-enum class TermTest { none, owns, aboard, member, holds, money };
+// rides it), `party <member>` (the member is in the active party) or `item <id>` (the party holds at least one); `leader
+// <member>` (it leads the party), `music <track>` (the track playing), `area <map>` (the party is there) and `tile <terrain>`
+// (the leader stands on floor, water, soft, barrier or counter) ask the host's game_state.
+enum class TermTest { none, owns, aboard, member, holds, money, leader, music, area, tile };
 
 struct Term {
 	bool negate = false;

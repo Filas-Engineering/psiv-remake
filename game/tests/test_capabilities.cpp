@@ -75,7 +75,7 @@ TEST(theLoadersCheckKeysOnlyAgainstTheReportedSets) {
 	for (const auto& named : namedInSource("src/area.cpp", "gameKeys")) {
 		game.insert(named);
 	}
-	for (int k = 0; k <= static_cast<int>(rules::EffectKind::RemoveBeside); ++k) {
+	for (int k = 0; k <= static_cast<int>(rules::EffectKind::GrantAffinity); ++k) {
 		core.insert({"shared", std::string("effects[] ") + rules::toString(static_cast<rules::EffectKind>(k))});
 	}
 	std::set<std::pair<std::string, std::string>> coreTable;

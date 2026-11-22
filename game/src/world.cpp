@@ -151,7 +151,8 @@ bool sameStatuses(const std::vector<rules::ActiveStatus>& a, const std::vector<r
 
 bool sameMember(const rules::PartyMember& a, const rules::PartyMember& b) {
 	return a.characterId == b.characterId && a.level == b.level && a.experience == b.experience && a.hp == b.hp &&
-		a.tp == b.tp && a.skillUses == b.skillUses && a.equipment == b.equipment && sameStatuses(a.statuses, b.statuses) && a.taught == b.taught;
+		a.tp == b.tp && a.skillUses == b.skillUses && a.equipment == b.equipment && sameStatuses(a.statuses, b.statuses) && a.taught == b.taught &&
+		a.affinities == b.affinities;
 }
 
 bool sameMacro(const rules::Macro& a, const rules::Macro& b) {
@@ -223,7 +224,8 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 				p.second.animation == q.second.animation && p.second.animationMs == q.second.animationMs &&
 				p.second.animationTotalMs == q.second.animationTotalMs && p.second.removed == q.second.removed &&
 				p.second.lookEnemy == q.second.lookEnemy && p.second.look == q.second.look && p.second.wanderProgress == q.second.wanderProgress &&
-				p.second.wanderPauseMs == q.second.wanderPauseMs;
+				p.second.wanderPauseMs == q.second.wanderPauseMs && p.second.patrolStep == q.second.patrolStep &&
+				p.second.patrolWalked == q.second.patrolWalked && p.second.pathTick == q.second.pathTick;
 		});
 	};
 	if (!sameActors(a.actors, b.actors)) return differs("actors");
@@ -248,6 +250,10 @@ bool sameWorld(const World& a, const World& b, std::string* diff) {
 	if (a.areaMusic != b.areaMusic) return differs("areaMusic");
 	if (a.pictures != b.pictures) return differs("pictures");
 	if (a.sceneCamera != b.sceneCamera) return differs("sceneCamera");
+	if (a.platforms != b.platforms) return differs("platforms");
+	if (a.ridingPlatform != b.ridingPlatform) return differs("ridingPlatform");
+	if (a.fieldSteps != b.fieldSteps) return differs("fieldSteps");
+	if (a.cameFrom != b.cameFrom) return differs("cameFrom");
 	if (a.randomThreshold != b.randomThreshold) return differs("randomThreshold");
 	if (a.encounterStream.state() != b.encounterStream.state()) return differs("encounterStream");
 	if (a.jobs != b.jobs) return differs("jobs");

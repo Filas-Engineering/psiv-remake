@@ -41,6 +41,9 @@ void writeBack(const Battle& battle, std::vector<PartyMember>& party) {
 		party[i].hp = c.hp;
 		party[i].tp = c.tp;
 		party[i].skillUses = c.skillUses;
+		for (const auto& [element, affinity] : c.grantedAffinities) {
+			party[i].affinities[element] = affinity;
+		}
 		party[i].statuses.clear();
 		for (const ActiveStatus& active : c.statuses) {
 			const StatusDef* def = battle.database().status(active.id);
@@ -101,7 +104,7 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 		learner.taught.push_back(teach->ability);
 		const AbilityDef* taught = db.ability(teach->ability);
 		if (taught && taught->kind == AbilityKind::Skill && !learner.skillUses.count(taught->id)) {
-			learner.skillUses[taught->id] = taught->uses;
+			learner.skillUses[taught->id] = maxSkillUses(db, learner, taught->id);
 		}
 		if (--stock->second == 0) {
 			inventory.erase(stock);
@@ -122,8 +125,8 @@ FieldUse useItemOutsideBattle(const Database& db, std::vector<PartyMember>& part
 	}
 	Battle battle = Battle::partyOnly(db, party);
 	const int user = chosen ? target : 0;
-	const std::vector<int> targets = battle.resolveTargets(user, item->targeting, target, effectsRevive(item->effects));
-	if (targets.empty()) {
+	const std::vector<int> targets = battle.resolveTargets(user, item->targeting, target, effectsRevive(item->effects), effectsTakeLiving(item->effects), &item->effects);
+	if (targets.empty() || (chosen && needsTarget(item->targeting) && !battle.canAffect(target, item->effects))) {
 		return refuse("field.no_target", {itemId});
 	}
 	if (!battle.applyEffects(-1, Battle::Attacker(), item->id, item->effects, targets, true, use.events)) {
@@ -187,8 +190,8 @@ FieldUse useAbilityOutsideBattle(const Database& db, std::vector<PartyMember>& p
 	case CancelReason::NoTarget:
 		return refuse("field.no_target", {abilityId});
 	}
-	const std::vector<int> targets = battle.resolveTargets(user, ability->targeting, target, ability->revives());
-	if (targets.empty()) {
+	const std::vector<int> targets = battle.resolveTargets(user, ability->targeting, target, ability->revives(), effectsTakeLiving(ability->effects), &ability->effects);
+	if (targets.empty() || (chosen && needsTarget(ability->targeting) && !battle.canAffect(target, ability->effects))) {
 		return refuse("field.no_target", {abilityId});
 	}
 	FieldUse use;

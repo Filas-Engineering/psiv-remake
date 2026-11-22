@@ -1,0 +1,45 @@
+# Actors that move by themselves and moving platforms in Wren Mill, on the data copy `make_actor_data ... motion` writes,
+# reached by a developer warp. The cat wanders along x only and spends half its turns standing; the mill hand walks its
+# patrol (two cells north, a turn and a pause, back home); the water wheel follows its pixel path, its footprint blocking
+# the cells it overlaps. The raft waits at its bank until the party boards it, carries it across (held input waits) and
+# lets it off on the far bank; a save mid-ride and a load come back aboard; the skiff shuttles by itself. Run with --seed 6.
+new
+dev warp wren_mill mill_door
+actors
+platforms
+wait 300
+actors
+wait 600
+actors
+platforms
+walk raft_bank
+face east
+platforms
+e
+platforms
+refused e
+wait 200
+platforms
+status
+wait 800
+platforms
+status
+e
+platforms
+status
+actors
+platforms
+w
+wait 250
+menu
+save manual_1
+close
+title
+load manual_1
+platforms
+status
+wait 1000
+platforms
+w
+status
+platforms

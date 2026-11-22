@@ -1,5 +1,6 @@
 #include "fixtures.h"
 #include "rules/formulas.h"
+#include "rules/loader.h"
 #include "rules/progression.h"
 #include "test.h"
 
@@ -485,4 +486,37 @@ TEST(aComponentsAttackStatCountsInTheCombination) {
 	const int guard = mite.effective(Stat::Mental);
 	CHECK(hit && hit->amount >= formulas::damage(attack, guard, bonus, mite.affinity(Element::Shock), formulas::kSpreadMin));
 	CHECK(hit && hit->amount <= formulas::damage(attack, guard, bonus, mite.affinity(Element::Shock), formulas::kSpreadMax));
+}
+
+// A recipe's `orders` lists further orders that fire it, so one combination id covers several orders of the same abilities.
+TEST(aRecipeFiresInEachOfItsOrders) {
+	for (bool gustFirst : {true, false}) {
+		Database db = orderedData("");
+		for (ComboRecipe& recipe : db.combos) {
+			if (recipe.id == "cinder_gale") {
+				recipe.orders = {{1, 0}};
+			}
+		}
+		db.characters["mystic"].base.agility = gustFirst ? 200 : 400;
+		db.characters["scout"].base.agility = gustFirst ? 400 : 200;
+		Battle battle = makeBattle(db, {"brass_warden"}, 6);
+		battle.combatant(kFirstEnemy).hp = 5000;
+		battle.setCommand(kMystic, Command::ability("ember", kFirstEnemy));
+		battle.setCommand(kScout, Command::ability("gust", kFirstEnemy));
+		othersDefend(battle);
+		const std::vector<Event> combos = ofType(battle.resolveRound(), EventType::ComboTriggered);
+		CHECK(combos.size() == 1 && combos[0].combo == "cinder_gale");
+	}
+	std::map<std::string, std::string> texts = dataTexts();
+	const auto swap = [&](const std::string& from, const std::string& to) {
+		std::string& text = texts["combos.json"];
+		const std::size_t at = text.find(from);
+		CHECK(at != std::string::npos);
+		text.replace(at, from.size(), to);
+	};
+	swap("\"ordered\": true, \"result\": \"cinder_gale\"", "\"ordered\": true, \"orders\": [[1, 0]], \"result\": \"cinder_gale\"");
+	const Result<Database> loaded = loadDatabaseFromTexts(texts);
+	CHECK(loaded.ok() && !loaded.value->combos.empty());
+	swap("\"orders\": [[1, 0]]", "\"orders\": [[1, 1]]");
+	CHECK(!loadDatabaseFromTexts(texts).ok());
 }

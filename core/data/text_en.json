@@ -1,5 +1,6 @@
 {
 	"text": {
+		"battle.affinity_changed": "{0}'s affinity to {1} changes.",
 		"battle.instant_defeat": "{0} is struck down in one blow!",
 		"battle.instant_defeat_immune": "{0} cannot be struck down that way.",
 		"battle.instant_defeat_resisted": "{0} withstands the blow.",
@@ -80,6 +81,7 @@
 		"status.sleep.removed": "{0} wakes up.",
 		"status.sleep.resisted": "{0} stays awake.",
 
+		"command.no_effect_on_target": "{0} would do nothing to {1}.",
 		"cancel.actor_unable": "{0} cannot act ({1}).",
 		"cancel.no_item": "{0} tries {1} but has none left.",
 		"cancel.no_target": "{0} tries {1} but has no target.",

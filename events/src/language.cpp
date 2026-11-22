@@ -83,6 +83,10 @@ const std::vector<ConditionInfo>& condition_tests() {
 		{"party", "[not] party <member>", TermTest::member},
 		{"item", "[not] item <item>", TermTest::holds},
 		{"money", "[not] money ==|!=|<|<=|>|>= <integer>", TermTest::money},
+		{"leader", "[not] leader <member>", TermTest::leader},
+		{"music", "[not] music <track>", TermTest::music},
+		{"area", "[not] area <map>", TermTest::area},
+		{"tile", "[not] tile floor|water|soft|barrier|counter", TermTest::tile},
 		{"", "[not] <flag>", TermTest::none},
 		{"", "[not] <variable> ==|!=|<|<=|>|>= <integer>", TermTest::none},
 	};

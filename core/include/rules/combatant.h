@@ -33,6 +33,10 @@ struct Combatant {
 	std::vector<std::string> abilities;
 	std::map<std::string, int> skillUses;
 	Affinities affinities;
+	// A party member's affinities before its pieces applied (`strip_modifiers` with `equipment_affinities` goes back to them),
+	// and those a permanent `grant_affinity` gave it in this battle, which the member keeps.
+	Affinities unequippedAffinities = {};
+	Affinities grantedAffinities = {};
 	// The affinity for an element the data leaves out: the rules' divisor, so that element does normal damage.
 	int neutralAffinity = 100;
 	StatusResists statusResist;

@@ -42,6 +42,18 @@ struct Effect {
 	std::optional<int> userPower = {};
 	// No roll and no random draw; the immunities that need no roll still hold.
 	bool alwaysLands = false;
+	// Revive (`living_target`): the action may be aimed at a living ally, whom the revive passes by while the action's other
+	// effects still apply.
+	bool livingTarget = false;
+	// Revive (`hp`): the hit points it stands the target up with, in place of `power`'s percent; capped at the maximum.
+	int flatHp = 0;
+	// StripModifiers (`equipment_affinities`): also takes away what worn pieces did to the target's element affinities, for
+	// the rest of the battle.
+	bool equipmentAffinities = false;
+	// GrantAffinity: the element (in `element`) takes this affinity; with `permanent` a party member keeps it after the
+	// battle (saved with the member), otherwise until the battle ends.
+	int affinity = 0;
+	bool permanent = false;
 	bool reaches(CreatureKind kind) const;
 };
 
@@ -82,6 +94,8 @@ struct ItemDef {
 };
 
 bool effectsRevive(const std::vector<Effect>& effects);
+// A revive among them may be aimed at a living ally (`living_target`).
+bool effectsTakeLiving(const std::vector<Effect>& effects);
 // The Teach effect of a field item, or null. Like travel, it acts on the party between battles only.
 const Effect* teachEffect(const std::vector<Effect>& effects);
 // The Travel effect of a field item or technique, or null. The game moves the party; core only takes the cost, and a

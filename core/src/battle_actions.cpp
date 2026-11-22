@@ -397,7 +397,22 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 	bool changed = false;
 	for (int target : targets) {
 		bool missed = false;
+		// A fallen target's revives come first, so the other effects reach it once it stands, whatever the listed order.
+		std::vector<const Effect*> ordered;
 		for (const Effect& effect : effects) {
+			if (effect.kind == EffectKind::Revive || combatants_[target].alive()) {
+				ordered.push_back(&effect);
+			}
+		}
+		if (!combatants_[target].alive()) {
+			for (const Effect& effect : effects) {
+				if (effect.kind != EffectKind::Revive) {
+					ordered.push_back(&effect);
+				}
+			}
+		}
+		for (const Effect* listed : ordered) {
+			const Effect& effect = *listed;
 			Combatant& t = combatants_[target];
 			if (missed || t.gone || (effect.kind != EffectKind::Revive && !t.alive())) {
 				break;
@@ -469,6 +484,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				e.actor = user;
 				e.target = target;
 				e.amount = healed;
+				e.rolled = amount;
 				e.hp = t.hp;
 				changed = changed || healed > 0;
 				break;
@@ -599,6 +615,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 				e.actor = user;
 				e.target = target;
 				e.amount = restored;
+				e.rolled = effect.power;
 				e.resource = ResourceKind::Tp;
 				changed = changed || restored > 0;
 				break;
@@ -606,6 +623,13 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 			case EffectKind::StripModifiers: {
 				const std::vector<ActiveModifier> modifiers = t.modifiers;
 				t.modifiers.clear();
+				if (effect.equipmentAffinities && isParty(target) && db_->character(t.defId) && t.affinities != t.unequippedAffinities) {
+					t.affinities = t.unequippedAffinities;
+					for (const auto& [element, affinity] : t.grantedAffinities) {
+						t.affinities[element] = affinity;
+					}
+					changed = true;
+				}
 				for (const ActiveModifier& modifier : modifiers) {
 					Event& e = emit(out, EventType::StatModified);
 					e.actor = user;
@@ -665,9 +689,38 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 			case EffectKind::SelfDestruct:
 			case EffectKind::RemoveBeside:
 				break;
+			case EffectKind::SetHpPercent: {
+				const int before = t.hp;
+				t.hp = std::max(1, t.stats.maxHp * effect.power / 100);
+				if (t.hp == before) {
+					break;
+				}
+				Event& e = emit(out, t.hp > before ? EventType::Healed : EventType::DamageDealt);
+				e.actor = user;
+				e.target = target;
+				e.amount = std::abs(t.hp - before);
+				e.rolled = e.amount;
+				e.hp = t.hp;
+				changed = true;
+				break;
+			}
+			case EffectKind::GrantAffinity: {
+				t.affinities[effect.element] = effect.affinity;
+				t.unequippedAffinities[effect.element] = effect.affinity;
+				if (effect.permanent && isParty(target) && db_->character(t.defId)) {
+					t.grantedAffinities[effect.element] = effect.affinity;
+				}
+				Event& e = emit(out, EventType::Message);
+				e.actor = user;
+				e.target = target;
+				e.message = "battle.affinity_changed";
+				e.params = {t.defId, effect.element.id};
+				changed = true;
+				break;
+			}
 			case EffectKind::Revive:
 				if (!t.alive()) {
-					t.hp = formulas::reviveHp(t.stats.maxHp, effect.power);
+					t.hp = effect.flatHp > 0 ? std::min(effect.flatHp, t.stats.maxHp) : formulas::reviveHp(t.stats.maxHp, effect.power);
 					removeStatus(target, kDefeatedStatus);
 					Event& e = emit(out, EventType::Revived);
 					e.actor = user;
@@ -685,6 +738,7 @@ bool Battle::applyEffects(int user, const Attacker& attacker, const std::string&
 
 int Battle::dealDamage(int user, int target, int amount, Element element, Effectiveness effectiveness, std::vector<Event>& out) {
 	Combatant& t = combatants_[target];
+	const int rolled = amount;
 	for (const ActiveStatus& active : t.statuses) {
 		const StatusDef* def = db_->status(active.id);
 		if (def && def->damageCap > 0) {
@@ -700,6 +754,7 @@ int Battle::dealDamage(int user, int target, int amount, Element element, Effect
 	e.actor = user;
 	e.target = target;
 	e.amount = dealt;
+	e.rolled = rolled;
 	e.hp = t.hp;
 	e.element = element;
 	e.effectiveness = effectiveness;

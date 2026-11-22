@@ -135,6 +135,29 @@ bool exitOpen(const Exit& exit, const World& world) {
 	return (exit.requireFlag.empty() || world.flag(exit.requireFlag)) && (exit.blockFlag.empty() || !world.flag(exit.blockFlag));
 }
 
+bool platformHolds(const Platform& platform, const World& world) {
+	return (platform.requireFlag.empty() || world.flag(platform.requireFlag)) && (platform.blockFlag.empty() || !world.flag(platform.blockFlag));
+}
+
+int Platform::length() const {
+	return std::abs(to.x - from.x) + std::abs(to.y - from.y);
+}
+
+Cell Platform::cellAt(int cells) const {
+	const int dx = to.x > from.x ? 1 : to.x < from.x ? -1 : 0;
+	const int dy = to.y > from.y ? 1 : to.y < from.y ? -1 : 0;
+	return {from.x + dx * cells, from.y + dy * cells};
+}
+
+const Platform* Area::platform(const std::string& id) const {
+	for (const Platform& p : platforms) {
+		if (p.id == id) {
+			return &p;
+		}
+	}
+	return nullptr;
+}
+
 const Shop* Area::shopAt(Cell cell) const {
 	for (const Shop& s : shops) {
 		if (s.at == cell) {
@@ -326,6 +349,26 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 	}
 	stepTime(reader, json, area.stepMs, area.stepUs, 50, 5000);
 	reader.boolean(json, "arrive_notice", area.arriveNotice, false);
+	reader.boolean(json, "field_status", area.fieldStatus, false);
+	if (const JsonValue* names = reader.field(json, "name", JsonValue::Type::Array, false)) {
+		bool fallback = false;
+		for (const JsonValue& n : names->items) {
+			reader.only(n, gameKeys("area", "name[]"));
+			Area::NameVariant v;
+			v.line = n.line;
+			reader.text(n, "from", v.from, false);
+			reader.text(n, "flag", v.flag, false);
+			reader.text(n, "key", v.key, true);
+			if (fallback) {
+				reader.fail(n, "data.area_name_after_default", {v.key});
+			}
+			fallback = fallback || (v.from.empty() && v.flag.empty());
+			area.names.push_back(v);
+		}
+		if (!fallback) {
+			reader.fail(*names, "data.area_name_needs_default", {});
+		}
+	}
 	reader.texts(json, "map", area.rows, true);
 	for (const std::string& row : area.rows) {
 		if (row.size() != area.rows[0].size()) {
@@ -710,6 +753,44 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 				}
 			}
 			area.conveyors.push_back(conveyor);
+		}
+	}
+	if (const JsonValue* platforms = array(reader, json, "platforms")) {
+		for (const JsonValue& p : platforms->items) {
+			reader.only(p, gameKeys("area", "platforms[]"));
+			Platform platform;
+			platform.line = p.line;
+			platform.stepMs = area.stepMs;
+			reader.text(p, "id", platform.id, true);
+			reader.cellField(p, "from", platform.from, true);
+			reader.cellField(p, "to", platform.to, true);
+			reader.integer(p, "step_ms", platform.stepMs, false, 16, 10000);
+			reader.integer(p, "pause_ms", platform.pauseMs, false, 0, 600000);
+			std::string mode;
+			reader.text(p, "mode", mode, false);
+			if (const int index = mode.empty() ? 0 : gameEnumIndex("platform_mode", mode); index >= 0) {
+				platform.mode = static_cast<PlatformMode>(index);
+			} else {
+				reader.fail(p, "data.bad_platform_mode", {mode});
+			}
+			reader.text(p, "require_flag", platform.requireFlag, false);
+			reader.text(p, "block_flag", platform.blockFlag, false);
+			if (platform.from == platform.to || (platform.from.x != platform.to.x && platform.from.y != platform.to.y)) {
+				reader.fail(p, "data.platform_not_straight", {platform.id});
+			}
+			for (const Cell end : {platform.from, platform.to}) {
+				if (!area.inside(end)) {
+					reader.fail(p, "data.not_on_map", {"platform '" + platform.id + "'"});
+				} else if (area.rows[end.y][end.x] == '.' || area.rows[end.y][end.x] == '#') {
+					reader.fail(p, "data.platform_dock_not_open", {platform.id, std::to_string(end.x) + " " + std::to_string(end.y)});
+				}
+			}
+			for (const Platform& other : area.platforms) {
+				if (other.id == platform.id) {
+					reader.fail(p, "data.platform_listed_twice", {platform.id});
+				}
+			}
+			area.platforms.push_back(platform);
 		}
 	}
 	if (!reader.ok()) {

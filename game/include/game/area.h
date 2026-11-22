@@ -93,6 +93,29 @@ struct Conveyor {
 	int line = 0;
 };
 
+// How a platform moves: back and forth for good, once from `from` to `to` when its flags come to hold (and back while they
+// do not), or to the other end each time the party boards it.
+enum class PlatformMode { Loop, OneWay, Triggered };
+
+// A moving platform (`platforms`): it runs between two cells of a row or a column, one cell per `step_ms`, resting
+// `pause_ms` at each end. Docked at an end, the party may step onto it; it carries the party and lets it off at an end.
+struct Platform {
+	std::string id;
+	Cell from;
+	Cell to;
+	int stepMs = 250;
+	int pauseMs = 1000;
+	PlatformMode mode = PlatformMode::Loop;
+	std::string requireFlag;
+	std::string blockFlag;
+	int line = 0;
+
+	// Cells between the two ends.
+	int length() const;
+	// The cell `cells` cells from `from` toward `to`.
+	Cell cellAt(int cells) const;
+};
+
 // An item or equipment id a shop sells while its flags hold; prices come from the game's price table.
 struct StockEntry {
 	std::string id;
@@ -244,6 +267,17 @@ struct Area {
 	std::int64_t stepUs = 250000;
 	// False when the area's own `arrive_notice` is false: entering it shows no arrival notice (GameConfig::arriveNotice).
 	bool arriveNotice = true;
+	// `field_status`: rules.json's field poison and paralysis rules apply to each step taken here.
+	bool fieldStatus = false;
+	// `name`: the text key the area shows as, by the area the party came from and by flag, the first entry that holds
+	// (`from` and `flag` both, when both are given), else the entry with neither; empty: `area.<id>`.
+	struct NameVariant {
+		std::string from;
+		std::string flag;
+		std::string key;
+		int line = 0;
+	};
+	std::vector<NameVariant> names;
 	// The track for the area outside events and battles, an audio id from game.json; empty when the data names none.
 	std::string music;
 	// The world or region the area belongs to (FLD-050); a return to a town reaches only towns of the same region.
@@ -269,6 +303,7 @@ struct Area {
 	std::set<Cell> counters;
 	std::vector<CellChange> changes;
 	std::vector<Conveyor> conveyors;
+	std::vector<Platform> platforms;
 	// Cells of interact hooks that are solid only while active and are not now; the session's view of the area sets them.
 	std::set<Cell> passable = {};
 	// Closed exits drawn as something other than a wall; the session's view of the area sets them.
@@ -298,11 +333,13 @@ struct Area {
 	const Port* port(const std::string& id) const;
 	const Shop* shop(const std::string& id) const;
 	const RestPoint* rest(const std::string& id) const;
+	const Platform* platform(const std::string& id) const;
 };
 
 // Whether the flags let the party use it now.
 bool portOpen(const Port& port, const World& world);
 bool exitOpen(const Exit& exit, const World& world);
+bool platformHolds(const Platform& platform, const World& world);
 
 // Errors are "file:line: message", one per line.
 rules::Result<Area> parseArea(const std::string& file, const std::string& text);

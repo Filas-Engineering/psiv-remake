@@ -115,7 +115,13 @@ public:
 	// Random enemy targeting returns every candidate; the battle draws one at execution. A single ally target stays
 	// as named, fallen or not, and a gone foe resolves to the first living one: replacing it is the battle's job
 	// when the action runs.
-	std::vector<int> resolveTargets(int user, Targeting targeting, int requested, bool revives) const;
+	// `living`: a one-fallen-ally action may be aimed at a living ally (a revive's `living_target`). With `effects`, a
+	// one-ally or one-fallen-ally action with no ally named passes by allies none of them can affect (canAffect).
+	std::vector<int> resolveTargets(int user, Targeting targeting, int requested, bool revives, bool living = false, const std::vector<Effect>* effects = nullptr) const;
+	// Whether any of the effects can act on the combatant: on a fallen one a revive that reaches its kind, on a living one an
+	// effect other than a revive that reaches its kind (a status it is fully immune to does not count).
+	bool canAffect(int target, const std::vector<Effect>& effects) const;
+	Message checkAllyTarget(int actor, Targeting targeting, const std::vector<Effect>& effects, const Command& command) const;
 	std::vector<int> livingFoes(int actor) const;
 	std::vector<int> allies(int actor) const;
 	// Whether any of `effects` reaches the target's kind and would change it now: a heal with hit points missing, a

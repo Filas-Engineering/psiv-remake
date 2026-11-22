@@ -200,6 +200,16 @@ class VesselAndChangesTest(TempCase):
 		self.assertEqual(133.5, back["step_ms"])
 		self.assertEqual("counter", tiled.tileset()["tiles"][5]["properties"][0]["value"])
 
+	def test_moving_platforms_and_field_status_survive_a_round_trip(self):
+		area = copy.deepcopy(VESSEL_AREA)
+		area["field_status"] = True
+		area["name"] = [{"from": "saltgrass", "key": "area.alt"}, {"key": "area.x"}]
+		area["platforms"] = [{"id": "raft", "from": [1, 1], "to": [3, 1], "step_ms": 200, "pause_ms": 400, "mode": "triggered"}]
+		back = self.convert(tiled.area_to_tmj(copy.deepcopy(area), "cells.tsj"))
+		self.assertEqual(areajson.dumps(area), areajson.dumps(back))
+		self.assertIs(True, back["field_status"])
+		self.assertEqual("raft", back["platforms"][0]["id"])
+
 	def test_a_hooks_actor_cell_survives_a_round_trip(self):
 		area = copy.deepcopy(VESSEL_AREA)
 		area["hooks"] = [{"id": "keeper", "at": [1, 0], "event": "e", "actor_at": [2, 1]}]

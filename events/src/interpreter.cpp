@@ -496,6 +496,9 @@ bool Interpreter::evaluate(const Condition& condition) {
 			value = host_.in_party(term.name);
 		} else if (term.test == TermTest::holds) {
 			value = host_.item_count(term.name) > 0;
+		} else if (term.test == TermTest::leader || term.test == TermTest::music || term.test == TermTest::area || term.test == TermTest::tile) {
+			static const char* const words[] = {"leader", "music", "area", "tile"};
+			value = host_.game_state(words[static_cast<int>(term.test) - static_cast<int>(TermTest::leader)], term.name);
 		} else if (term.is_flag) {
 			value = read_flag(term.name);
 		} else {

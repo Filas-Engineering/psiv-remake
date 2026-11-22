@@ -21,6 +21,8 @@ INTERACT_DATA = $(BUILD)/interact_data/game/data
 BACKGROUND_DATA = $(BUILD)/background_data/game/data
 # The actor data with Wren Gallery (story pictures, the scene camera, music fades, an exit's sound), for data/scripts/scene.txt.
 SCENE_DATA = $(BUILD)/scene_data/game/data
+# The actor data with Wren Mill (wandering, patrols, pixel paths, moving platforms), for data/scripts/motion.txt.
+MOTION_DATA = $(BUILD)/motion_data/game/data
 
 .PHONY: all test clean deps maps maps-check expected
 
@@ -50,8 +52,8 @@ maps-check:
 	@echo "data/areas matches data/maps ($(words $(MAP_SOURCES)) maps)"
 
 # Re-records the golden transcripts of the scripted playthrough, the vehicle and travel script, the Ashen Fells
-# script, the macro script, the actor script, the party script, the interaction script, the background script and the
-# scene script after a deliberate change.
+# script, the macro script, the actor script, the party script, the interaction script, the background script, the
+# scene script and the motion script after a deliberate change.
 expected: all
 	rm -rf $(BUILD)/cli_saves
 	./$(CLI) --seed 6 --auto-battle --script data/scripts/playthrough.txt --saves $(BUILD)/cli_saves > tests/expected/playthrough.txt
@@ -75,6 +77,9 @@ expected: all
 	./$(MAKE_ACTOR_DATA) data ../core/data tests/fixtures/actors $(BUILD)/scene_data scene
 	rm -rf $(BUILD)/scene_saves
 	./$(CLI) --data $(SCENE_DATA) --seed 6 --script data/scripts/scene.txt --saves $(BUILD)/scene_saves > tests/expected/scene.txt
+	./$(MAKE_ACTOR_DATA) data ../core/data tests/fixtures/actors $(BUILD)/motion_data motion
+	rm -rf $(BUILD)/motion_saves
+	./$(CLI) --data $(MOTION_DATA) --seed 6 --script data/scripts/motion.txt --saves $(BUILD)/motion_saves > tests/expected/motion.txt
 
 test: all maps-check
 	./$(CLI) --check data > $(BUILD)/check.log || (cat $(BUILD)/check.log; exit 1)
@@ -133,6 +138,13 @@ test: all maps-check
 	./$(CLI) --data $(SCENE_DATA) --seed 6 --script data/scripts/scene.txt --saves $(BUILD)/scene_saves > $(BUILD)/scene.log
 	cmp $(BUILD)/scene.log tests/expected/scene.txt
 	@echo "scene script matches tests/expected/scene.txt"
+	./$(MAKE_ACTOR_DATA) data ../core/data tests/fixtures/actors $(BUILD)/motion_data motion
+	./$(CLI) --check $(MOTION_DATA) > $(BUILD)/check_motion.log || (cat $(BUILD)/check_motion.log; exit 1)
+	@tail -n 1 $(BUILD)/check_motion.log
+	rm -rf $(BUILD)/motion_saves
+	./$(CLI) --data $(MOTION_DATA) --seed 6 --script data/scripts/motion.txt --saves $(BUILD)/motion_saves > $(BUILD)/motion.log
+	cmp $(BUILD)/motion.log tests/expected/motion.txt
+	@echo "motion script matches tests/expected/motion.txt"
 	./$(CLI) --bot --seed 2 > $(BUILD)/bot.log
 	@cat $(BUILD)/bot.log
 	./$(CLI) --bot --seed 2 --route data/routes/kiln.route --goal saltgrass.kiln_done > $(BUILD)/bot_kiln.log

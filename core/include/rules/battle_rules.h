@@ -16,6 +16,16 @@ struct BattleRules {
 	bool restRevives = true;
 	// Hit points a fallen machine member stands up with after a won or escaped battle; 0 leaves it down (P6).
 	int machineRecoverHp = 1;
+	// Field statuses (areas with `field_status`): every `fieldPoisonEvery` steps since the area was entered a poisoned
+	// member loses 1 hit point (0: never); a paralyzed member shakes it off on a 1 in `fieldParalysisChance` roll each step
+	// from step `fieldParalysisFrom`, and surely at step `fieldParalysisBy` (chance 0: never). The status ids are
+	// `fieldPoisonStatus` and `fieldParalysisStatus`.
+	int fieldPoisonEvery = 0;
+	std::string fieldPoisonStatus = "poison";
+	int fieldParalysisFrom = 0;
+	int fieldParalysisChance = 0;
+	int fieldParalysisBy = 0;
+	std::string fieldParalysisStatus = "paralysis";
 	// What an affinity is divided by when it scales damage: 100 makes affinities percents.
 	int affinityDivisor = 100;
 	// The affinity a hit without an element takes, and a defending target's for it; unset, the divisor and

@@ -23,7 +23,7 @@ std::string describe(const Condition& condition) {
 		if (t.negate) {
 			out += "not ";
 		}
-		static const char* const tests[] = {"", "vehicle ", "aboard ", "party ", "item "};
+		static const char* const tests[] = {"", "vehicle ", "aboard ", "party ", "item ", "money", "leader ", "music ", "area ", "tile "};
 		out += tests[static_cast<int>(t.test)];
 		out += t.name;
 		if (!t.is_flag) {

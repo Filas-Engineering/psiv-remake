@@ -83,7 +83,13 @@ bool Battle::wouldChange(int target, const std::vector<Effect>& effects) const {
 		case EffectKind::Split:
 		case EffectKind::SelfDestruct:
 		case EffectKind::RemoveBeside:
+		case EffectKind::GrantAffinity:
 			return true;
+		case EffectKind::SetHpPercent:
+			if (t.hp != std::max(1, t.stats.maxHp * effect.power / 100)) {
+				return true;
+			}
+			break;
 		}
 	}
 	return false;
@@ -215,6 +221,8 @@ int Battle::macroAllyTarget(int actor, const std::vector<Effect>& effects) const
 	case EffectKind::Split:
 	case EffectKind::SelfDestruct:
 	case EffectKind::RemoveBeside:
+	case EffectKind::SetHpPercent:
+	case EffectKind::GrantAffinity:
 		return requested;
 	}
 	int best = -1;
@@ -272,7 +280,7 @@ std::vector<int> Battle::executionTargets(int user, Targeting targeting, const s
 	if (forced_[user] && requested >= 0 && combatants_[requested].alive()) {
 		return {requested};
 	}
-	const std::vector<int> targets = resolveTargets(user, targeting, aimAt(user, targeting, effects, requested, out), effectsRevive(effects));
+	const std::vector<int> targets = resolveTargets(user, targeting, aimAt(user, targeting, effects, requested, out), effectsRevive(effects), effectsTakeLiving(effects), &effects);
 	if (targeting == Targeting::RandomEnemy && !targets.empty()) {
 		return {targets[rng_.range(0, static_cast<int>(targets.size()) - 1)]};
 	}
@@ -280,7 +288,20 @@ std::vector<int> Battle::executionTargets(int user, Targeting targeting, const s
 }
 
 // A single ally target stays as named, fallen or not; -1 is the user. A fallen-ally target that is back up has none.
-std::vector<int> Battle::resolveTargets(int user, Targeting targeting, int requested, bool revives) const {
+bool Battle::canAffect(int target, const std::vector<Effect>& effects) const {
+	const Combatant& t = combatants_[target];
+	if (t.gone) {
+		return false;
+	}
+	return std::any_of(effects.begin(), effects.end(), [&](const Effect& e) {
+		if (!e.reaches(t.kind) || (e.kind == EffectKind::Revive) == t.alive()) {
+			return false;
+		}
+		return e.kind != EffectKind::ApplyStatus || t.resistance(e.status) < 100;
+	});
+}
+
+std::vector<int> Battle::resolveTargets(int user, Targeting targeting, int requested, bool revives, bool living, const std::vector<Effect>* effects) const {
 	const bool validIndex = requested >= 0 && requested < static_cast<int>(combatants_.size());
 	const bool requestedAlly = validIndex && combatants_[requested].side == combatants_[user].side && !combatants_[requested].aboard;
 	std::vector<int> result;
@@ -310,17 +331,26 @@ std::vector<int> Battle::resolveTargets(int user, Targeting targeting, int reque
 		result = livingFoes(user);
 		break;
 	case Targeting::OneAlly:
+		if (!requestedAlly && effects && !canAffect(user, *effects)) {
+			for (int ally : allies(user)) {
+				if (canAffect(ally, *effects)) {
+					result.push_back(ally);
+					break;
+				}
+			}
+			break;
+		}
 		result.push_back(requestedAlly ? requested : user);
 		break;
 	case Targeting::OneFallenAlly:
 		if (requestedAlly) {
-			if (!combatants_[requested].alive()) {
+			if (!combatants_[requested].alive() || living) {
 				result.push_back(requested);
 			}
 			break;
 		}
 		for (int ally : allies(user)) {
-			if (!combatants_[ally].alive()) {
+			if (!combatants_[ally].alive() && (!effects || canAffect(ally, *effects))) {
 				result.push_back(ally);
 				break;
 			}

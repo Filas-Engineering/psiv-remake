@@ -533,3 +533,20 @@ TEST(creditsAreLoadedCheckedAndNamedForScripts) {
 	CHECK(find(empty, "data.credits_empty"));
 	CHECK(find(empty, "data.unknown_field"));
 }
+
+// Arriving on an exit cell does not take the exit, so the check walks out from an arrival marker standing on one: both
+// rooms behind such doors are reached, and a room walled off from them is still reported.
+TEST(theCheckWalksOutFromArrivalsOnExitCells) {
+	const std::string dir = copyData("arrival_on_exit", {"door_a.json", "door_b.json"});
+	const CheckReport r = checkData(DataDirectories{dir, ""});
+	int unreached = 0;
+	std::string which;
+	for (const rules::Problem& p : r.problems) {
+		if (p.message.key == "check.marker_not_reached" && (ends(p.file, "door_a.json") || ends(p.file, "door_b.json"))) {
+			++unreached;
+			which = p.message.params.empty() ? "" : p.message.params[0];
+		}
+	}
+	CHECK_EQ(unreached, 1);
+	CHECK_EQ(which, std::string("sealed"));
+}

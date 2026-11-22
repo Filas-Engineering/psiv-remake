@@ -2,8 +2,8 @@
 
 import json
 
-TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "arrive_notice", "map", "markers", "exits", "hooks", "shops", "rests",
-	"chests", "ports", "zones", "helms", "gangway", "changes", "conveyors", "counters"]
+TOP_FIELDS = ["id", "kind", "encounter_mode", "step_ms", "music", "region", "arrival", "dungeon_exit", "arrive_notice", "field_status", "name", "map", "markers", "exits", "hooks", "shops", "rests",
+	"chests", "ports", "zones", "helms", "gangway", "changes", "conveyors", "counters", "platforms"]
 LIST_FIELDS = ["exits", "hooks", "shops", "rests", "chests", "ports", "zones", "helms", "gangway", "changes", "conveyors"]
 ENTRY_FIELDS = {
 	"exits": ["at", "to", "marker", "fall", "require_flag", "block_flag", "closed_tile", "sound"],

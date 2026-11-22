@@ -68,6 +68,9 @@ INTERACT_DATA = $(BUILD)/interact_data/game/data
 BACKGROUND_DATA = $(BUILD)/background_data/game/data
 # The actor data with Wren Gallery (story pictures, the scene camera, music fades, an exit's sound), for the scene script.
 SCENE_DATA = $(BUILD)/scene_data/game/data
+# The actor data with Wren Mill (wandering, patrols, pixel paths, moving platforms), for the motion script.
+MOTION_DATA = $(BUILD)/motion_data/game/data
+MOTION_SCRIPT = $(GAME)/data/scripts/motion.txt
 SAMPLE = monogame/Psiv.Sample/Psiv.Sample.csproj
 SAMPLE_SCRIPT = monogame/Psiv.Sample/scripts/smoke.txt
 SAMPLE_LARGE_SCRIPT = monogame/Psiv.Sample/scripts/large_areas.txt
@@ -170,7 +173,10 @@ $(BACKGROUND_DATA): $(MAKE_ACTOR_DATA)
 $(SCENE_DATA): $(MAKE_ACTOR_DATA)
 	./$(MAKE_ACTOR_DATA) $(GAME)/data $(CORE)/data $(GAME)/tests/fixtures/actors $(BUILD)/scene_data scene
 
-.PHONY: $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DATA)
+$(MOTION_DATA): $(MAKE_ACTOR_DATA)
+	./$(MAKE_ACTOR_DATA) $(GAME)/data $(CORE)/data $(GAME)/tests/fixtures/actors $(BUILD)/motion_data motion
+
+.PHONY: $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DATA) $(MOTION_DATA)
 
 $(LIB): $(LIB_OBJS) $(DEP_LIBS)
 	$(CXX) $(SHARED_FLAGS) $(LIB_OBJS) $(DEP_LIBS) -o $@
@@ -196,8 +202,8 @@ else
 test: dotnet-missing
 endif
 
-native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI) $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DATA)
-	./$(TESTS) --data $(GAME)/data --actor-data $(ACTOR_DATA) --interact-data $(INTERACT_DATA) --background-data $(BACKGROUND_DATA) --scene-data $(SCENE_DATA) --scratch $(BUILD)/scratch
+native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI) $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DATA) $(MOTION_DATA)
+	./$(TESTS) --data $(GAME)/data --actor-data $(ACTOR_DATA) --interact-data $(INTERACT_DATA) --background-data $(BACKGROUND_DATA) --scene-data $(SCENE_DATA) --motion-data $(MOTION_DATA) --scratch $(BUILD)/scratch
 	rm -rf $(BUILD)/saves_cpp $(BUILD)/saves_c
 	$(GAME_CLI) --data $(GAME)/data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/saves_cpp > $(BUILD)/playthrough_cpp.txt
 	./$(PLAYTHROUGH) --data $(GAME)/data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/saves_c > $(BUILD)/playthrough_c.txt
@@ -254,13 +260,20 @@ native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI) $(ACTOR_DATA) $(INTERACT
 	cmp $(BUILD)/scene_c.txt $(GAME)/tests/expected/scene.txt
 	diff -r $(BUILD)/scene_saves_c $(BUILD)/scene_saves_cpp
 	@echo "C scene script matches the C++ session: transcript and every save file"
+	rm -rf $(BUILD)/motion_saves_cpp $(BUILD)/motion_saves_c
+	$(GAME_CLI) --data $(MOTION_DATA) --seed 6 --script $(MOTION_SCRIPT) --saves $(BUILD)/motion_saves_cpp > $(BUILD)/motion_cpp.txt
+	./$(PLAYTHROUGH) --data $(MOTION_DATA) --seed 6 --script $(MOTION_SCRIPT) --saves $(BUILD)/motion_saves_c > $(BUILD)/motion_c.txt
+	cmp $(BUILD)/motion_c.txt $(BUILD)/motion_cpp.txt
+	cmp $(BUILD)/motion_c.txt $(GAME)/tests/expected/motion.txt
+	diff -r $(BUILD)/motion_saves_c $(BUILD)/motion_saves_cpp
+	@echo "C motion script matches the C++ session: transcript and every save file"
 
 dotnet: $(LIB)
 	$(DOTNET) build csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj -nologo -v q -warnaserror
 	$(DOTNET) build $(SAMPLE) -nologo -v q -warnaserror
 
-dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DATA)
-	PSIV_DATA_DIR=$(CURDIR)/$(GAME)/data PSIV_ACTOR_DATA_DIR=$(CURDIR)/$(ACTOR_DATA) PSIV_INTERACT_DATA_DIR=$(CURDIR)/$(INTERACT_DATA) PSIV_BACKGROUND_DATA_DIR=$(CURDIR)/$(BACKGROUND_DATA) PSIV_SCENE_DATA_DIR=$(CURDIR)/$(SCENE_DATA) $(DOTNET) test csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj --no-build -nologo
+dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DATA) $(MOTION_DATA)
+	PSIV_DATA_DIR=$(CURDIR)/$(GAME)/data PSIV_ACTOR_DATA_DIR=$(CURDIR)/$(ACTOR_DATA) PSIV_INTERACT_DATA_DIR=$(CURDIR)/$(INTERACT_DATA) PSIV_BACKGROUND_DATA_DIR=$(CURDIR)/$(BACKGROUND_DATA) PSIV_SCENE_DATA_DIR=$(CURDIR)/$(SCENE_DATA) PSIV_MOTION_DATA_DIR=$(CURDIR)/$(MOTION_DATA) $(DOTNET) test csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj --no-build -nologo
 	rm -rf $(BUILD)/sample_saves
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(GAME)/data --saves $(BUILD)/sample_saves --script $(SAMPLE_SCRIPT) --frames 2000 --frame-digests $(BUILD)/digests_smoke.txt > $(BUILD)/sample_headless.txt \
 		|| (cat $(BUILD)/sample_headless.txt; exit 1)

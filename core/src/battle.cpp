@@ -24,6 +24,7 @@ Combatant fromEnemy(const Database& db, const EnemyDef& def, const std::string& 
 	c.tp = def.stats.maxTp;
 	c.basicAttack = def.basicAttack;
 	c.attackElement = def.attackElement;
+	c.attackBonus = def.stats.attack >= 0 ? def.stats.attack - def.stats.strength : 0;
 	c.abilities = def.abilities;
 	c.affinities = def.affinities;
 	c.statusResist = def.statusResist;
@@ -54,6 +55,7 @@ Combatant fromVehicle(const Database& db, const VehicleDef& def, const std::map<
 	c.hp = def.stats.maxHp;
 	c.tp = def.stats.maxTp;
 	c.basicAttack = def.basicAttack;
+	c.attackBonus = def.stats.attack >= 0 ? def.stats.attack - def.stats.strength : 0;
 	c.abilities = def.abilities;
 	c.affinities = def.affinities;
 	c.statusResist = def.statusResist;
@@ -110,6 +112,10 @@ Combatant memberCombatant(const Database& db, const PartyMember& member) {
 	c.abilities = knownAbilities(db, member);
 	c.skillUses = member.skillUses;
 	c.affinities = def.affinities;
+	for (const auto& [element, affinity] : member.affinities) {
+		c.affinities[element] = affinity;
+	}
+	c.unequippedAffinities = c.affinities;
 	c.statusResist = def.statusResist;
 	c.kind = def.kind;
 	const std::vector<CreatureKind>& felled = db.battleRules.instantDefeatKinds;
@@ -129,6 +135,12 @@ Combatant memberCombatant(const Database& db, const PartyMember& member) {
 	}
 	for (const auto& [element, affinity] : set) {
 		c.affinities[element] = affinity;
+	}
+	for (const auto& [slot, id] : member.equipment) {
+		const EquipmentDef* piece = db.equipmentPiece(id);
+		if (piece->slot != EquipSlot::Weapon) {
+			c.attackBonus += piece->attackBonus;
+		}
 	}
 	// Both hands' weapons add their attack bonuses. The right hand's weapon gives the attack and its element, the left
 	// hand's what the right lacks. A weapon that reaches more than one enemy in either hand makes the attack reach them
@@ -296,6 +308,16 @@ bool Battle::sideActsNextRound(Side side) const {
 	return !surprised(side, round_ + 1);
 }
 
+// A single ally named for a one-ally or one-fallen-ally action must be one the action can affect, so nothing is spent on
+// a target nothing can act on.
+Message Battle::checkAllyTarget(int actor, Targeting targeting, const std::vector<Effect>& effects, const Command& command) const {
+	if ((targeting != Targeting::OneAlly && targeting != Targeting::OneFallenAlly) || command.target < 0 ||
+		combatants_[command.target].side != combatants_[actor].side || canAffect(command.target, effects)) {
+		return {};
+	}
+	return {"command.no_effect_on_target", {command.id, combatants_[command.target].defId}};
+}
+
 Message Battle::setCommand(int actor, const Command& command) {
 	if (actor < 0 || actor >= static_cast<int>(combatants_.size())) {
 		return {"command.no_combatant", {std::to_string(actor)}};
@@ -328,6 +350,9 @@ Message Battle::setCommand(int actor, const Command& command) {
 		if (travelEffect(ability->effects)) {
 			return {"command.field_only", {command.id}};
 		}
+		if (const Message refused = checkAllyTarget(actor, ability->targeting, ability->effects, command); !refused.key.empty()) {
+			return refused;
+		}
 		break;
 	}
 	case CommandKind::Item:
@@ -342,6 +367,9 @@ Message Battle::setCommand(int actor, const Command& command) {
 		}
 		if (actor == vehicleIndex_) {
 			return {"command.vehicle_cannot", {c.defId, toString(command.kind)}};
+		}
+		if (const Message refused = checkAllyTarget(actor, db_->item(command.id)->targeting, db_->item(command.id)->effects, command); !refused.key.empty()) {
+			return refused;
 		}
 		break;
 	case CommandKind::Escape:
@@ -801,6 +829,9 @@ std::vector<PartyMember> Battle::partyState() const {
 		party[i].hp = combatants_[i].hp;
 		party[i].tp = combatants_[i].tp;
 		party[i].skillUses = combatants_[i].skillUses;
+		for (const auto& [element, affinity] : combatants_[i].grantedAffinities) {
+			party[i].affinities[element] = affinity;
+		}
 		party[i].statuses.clear();
 		for (const ActiveStatus& active : combatants_[i].statuses) {
 			const StatusDef* def = db_->status(active.id);

@@ -1,0 +1,6 @@
+# Wren Mill, for actors that move by themselves and moving platforms: the sign sends the party back to the door.
+
+event mill_sign skippable
+	narrate @mill.sign.read
+	warp wren_mill mill_door
+end

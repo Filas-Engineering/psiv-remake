@@ -245,4 +245,54 @@ inline std::string makeScene(const std::string& game, const std::string& core, c
 	return "";
 }
 
+// The actor data with Wren Mill added from FIXTURES/../motion, for data/scripts/motion.txt: its area (a raft that carries
+// the party when boarded and a skiff that shuttles by itself) and event, its actors in game.json (a cat wandering along x
+// that often stands, a mill hand on patrol and a water wheel on a pixel path with a footprint), `cell_pixels` 16 and its
+// text. A copy of its own, so the other scripts play without it.
+inline std::string makeMotion(const std::string& game, const std::string& core, const std::string& fixtures, const std::string& out) {
+	std::string problem = make(game, core, fixtures, out);
+	if (!problem.empty()) {
+		return problem;
+	}
+	namespace fs = std::filesystem;
+	std::error_code error;
+	const std::string data = out + "/game/data";
+	const std::string from = fixtures + "/../motion";
+	fs::copy_file(from + "/wren_mill.json", data + "/areas/wren_mill.json", error);
+	if (!error) {
+		fs::copy_file(from + "/mill.ev", data + "/events/mill.ev", error);
+	}
+	if (error) {
+		return "cannot copy Wren Mill: " + error.message();
+	}
+	std::string config;
+	if (!game::readFile(data + "/game.json", config)) {
+		return "cannot read " + data + "/game.json";
+	}
+	const bool patched = insertAfter(config, "{", "\n\t\"cell_pixels\": 16,") && appendToList(config, "areas", "\"areas/wren_mill.json\"") &&
+		appendToList(config, "events", "\"events/mill.ev\"") && insertAfter(config, "\"nameless_actors\": [", "\"mill_cat\", \"mill_hand\", \"mill_wheel\", ") &&
+		insertAfter(config, "\"actors\": [",
+			"{\"id\": \"mill_cat\", \"sprite\": {\"look\": \"cat\"}, \"area\": \"wren_mill\", \"at\": [3, 1], \"solid\": false, "
+			"\"wander\": {\"radius\": 2, \"speed_percent\": 100, \"pause_ms\": [200, 200], \"stand_percent\": 50, \"axis\": \"x\"}}, "
+			"{\"id\": \"mill_hand\", \"area\": \"wren_mill\", \"at\": [4, 4], \"facing\": \"north\", "
+			"\"patrol\": {\"speed_percent\": 100, \"steps\": [{\"walk\": \"north\", \"count\": 2, \"face\": \"east\", \"pause_ms\": 400}, {\"to\": [4, 4], \"face\": \"north\"}]}}, "
+			"{\"id\": \"mill_wheel\", \"sprite\": {\"look\": \"wheel\"}, \"area\": \"wren_mill\", \"at\": [11, 4], "
+			"\"path\": {\"offsets\": [[0, 0], [4, -2], [8, 0], [4, 2]], \"ticks\": 2, \"footprint\": [1, 1]}}, ");
+	if (!patched || !game::writeFileAtomic(data + "/game.json", config, problem)) {
+		return "cannot add Wren Mill to game.json " + problem;
+	}
+	for (const auto& [code, name] : {std::make_pair(std::string("en"), std::string("Wren Mill")), std::make_pair(std::string("ja"), std::string("みそさざいの こなひき"))}) {
+		std::string text;
+		std::string strings;
+		std::string lines;
+		const std::string table = data + "/text/" + code;
+		if (!game::readFile(table + ".json", text) || !game::readFile(table + ".strings", strings) || !game::readFile(from + "/mill_" + code + ".strings", lines) ||
+			!insertAfter(text, "\"text\": {", "\n\t\t\"area.wren_mill\": \"" + name + "\",") || !game::writeFileAtomic(table + ".json", text, problem) ||
+			!game::writeFileAtomic(table + ".strings", strings + lines, problem)) {
+			return "cannot add Wren Mill's " + code + " text " + problem;
+		}
+	}
+	return "";
+}
+
 }

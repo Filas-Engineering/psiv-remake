@@ -89,7 +89,7 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const G
 	}
 	for (const ActorDef& actor : config.actorDefs) {
 		const auto marker = area.markers.find(actor.marker);
-		if (actor.area == area.id && actor.solid && (actor.at || marker != area.markers.end())) {
+		if (actor.area == area.id && actor.solid && !actor.path && (actor.at || marker != area.markers.end())) {
 			addSolid(actor.at ? *actor.at : marker->second, "actor '" + actor.id + "'", 0, false);
 		}
 	}
@@ -130,8 +130,16 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const G
 	for (Cell g : area.gangway) {
 		exitCells.emplace(g, &gangway);
 	}
+	// A door: an interact hook on a gated exit's cell answers while the exit is closed, and the exit takes the cell once open.
+	std::set<Cell> doors;
 	for (const Exit& e : area.exits) {
-		if (const Solid* s = solidAt(e.at)) {
+		const Hook* hook = area.hookAt(e.at, HookTrigger::Interact);
+		if (hook && hook->at == e.at && (!e.requireFlag.empty() || !e.blockFlag.empty())) {
+			doors.insert(e.at);
+		}
+	}
+	for (const Exit& e : area.exits) {
+		if (const Solid* s = solidAt(e.at); s && !doors.count(e.at)) {
 			found.add(file, e.line, "check.exit_on_object", {e.toArea, s->what});
 		}
 		if (!exitCells.emplace(e.at, &e).second) {
@@ -194,7 +202,21 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const G
 	view.passable = switchable;
 	const std::set<Cell> reached = [&] {
 		auto solidHere = [&](Cell c) { return solids.count(c) && !switchable.count(c); };
+		// A platform's docks are stood on while it is there, and it carries the party from one to the other (only from `from`
+		// to `to` for a one-way platform, which never goes back while its flags hold).
+		std::map<Cell, std::vector<Cell>> carried;
+		for (const Platform& p : area.platforms) {
+			carried[p.from].push_back(p.to);
+			if (p.mode != PlatformMode::OneWay) {
+				carried[p.to].push_back(p.from);
+			} else {
+				carried[p.to];
+			}
+		}
 		auto crossable = [&](Cell c) {
+			if (carried.count(c) || doors.count(c)) {
+				return true;
+			}
 			const auto solid = solids.find(c);
 			if (solid != solids.end() && !solid->second.point) {
 				return false;
@@ -221,13 +243,19 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const G
 				queue.push_back(it->second);
 			}
 		}
+		// Arriving on an exit cell does not take the exit, so the party walks out from it; walking onto one leaves.
+		const std::set<Cell> arrivals(cells);
 		while (!queue.empty()) {
 			const Cell c = queue.front();
 			queue.pop_front();
-			if (exitCells.count(c)) {
+			if (exitCells.count(c) && !arrivals.count(c)) {
 				continue;
 			}
-			for (Cell step : {Cell{c.x, c.y - 1}, Cell{c.x + 1, c.y}, Cell{c.x, c.y + 1}, Cell{c.x - 1, c.y}}) {
+			std::vector<Cell> next = {Cell{c.x, c.y - 1}, Cell{c.x + 1, c.y}, Cell{c.x, c.y + 1}, Cell{c.x - 1, c.y}};
+			if (const auto ride = carried.find(c); ride != carried.end()) {
+				next.insert(next.end(), ride->second.begin(), ride->second.end());
+			}
+			for (Cell step : next) {
 				if (crossable(step) && cells.insert(step).second) {
 					queue.push_back(step);
 				}

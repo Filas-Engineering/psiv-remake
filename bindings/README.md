@@ -287,6 +287,22 @@ Devices: headless runs always use `RecordingAudio`. The window uses `MonoGameAud
 
 ## Changes a host must make
 
+Newest: `PSIV_ABI_VERSION` 16, library version 0.15.0 (167 `PSIV_API` functions), `Native.AbiVersion` 16; save schema 13 (schemas 1 to 12 load); rules version 15. Motion, platforms, host queries and rule items (`../game/README.md`, "Patrols and paths", "Areas"; `../core/README.md`, "Changes a host must make"; checklist R126 to R149):
+
+* New functions: `psiv_platforms(session, &list, &count)` (struct `psiv_platform`: `id`, `mode` a `psiv_platform_mode`, `from_x`/`from_y`, `to_x`/`to_y`, `x`/`y` the cell, `pixel_x`/`pixel_y` at `cell_pixels`, `end` 0/1/-1, `pause_ms`, `carrying`, `position_us`, `run_us`; C# `Platforms()`, record `Platform`, enum `PlatformMode`), `psiv_can_load(session)` (C# `CanLoad`), `psiv_battle_keys_get(session, &keys)` (struct `psiv_battle_keys`: `messages`, `notices`, `cancel_reasons` with counts; C# `BattleKeys()`).
+* Fields appended: `psiv_actor.patrols`, `on_path`, `home_x`, `home_y`, `path_x`, `path_y`, `footprint_w`, `footprint_h` (C# `FieldActor.Patrols` ... `FootprintH`); `psiv_field_info.riding_platform`, `area_name_key` (C# `FieldInfo.RidingPlatform`, `AreaNameKey`); `psiv_game_info.cell_pixels` (C# `GameInfo.CellPixels`); `psiv_member_detail.attack`, `base_stats`, `experience_for_level`, `total_experience`, `creature_kind`, `vulnerable` (C# `MemberDetail.Attack`, `BaseStats`, `ExperienceForLevel`, `TotalExperience`, `Kind`, `Vulnerable`); `psiv_battle_option.max_uses` (C# `BattleOption.MaxUses`); `psiv_battle_event.rolled` (C# `BattleEvent.Rolled`). Every C# record parameter added has a default, so positional constructions compile as before. `psiv_ability_info.max_uses` now follows a character's `skill_uses`. `psiv_field_info.area_name` follows an area's `name` variants.
+* New battle refusal key `command.no_effect_on_target` from `psiv_battle_set_command`; new notices `game.machine_stood_up`, `game.paralysis_worn_off`, `game.poison_fell`; message `battle.affinity_changed`.
+* The C playthrough and `game_cli` both play `../game/data/scripts/motion.txt` on the motion data copy (`actors`, `platforms`), compared with each other, the golden and every save file (`make bindings`, `tools/windows-check.sh`); the C tests take `--motion-data`.
+
+What the MonoGame sample should adopt (not changed here; it builds and runs as before):
+
+* Draw path actors (`FieldActor.OnPath`) at `(HomeX, HomeY) * cell + (PathX, PathY) * cell / GameInfo.CellPixels` each frame, not snapped to `X`, `Y`; patrolling actors as wanderers are drawn (their cell changes between ticks; slide between cells).
+* Draw `Platforms()` at `PixelX`, `PixelY` scaled by `cell / CellPixels`, and while `FieldInfo.RidingPlatform` names one draw the leader and followers on it, stop the real-time glide and gate input on `FieldInfo.StepMask` (0 while it moves).
+* Show or hide Load on the title and the Save page with `CanLoad`; check the battle presentation table and the battle log's lines against `BattleKeys()` in `--check-assets`.
+* Bind the status page's attack, base stats (`BaseStats` against the totals), experience bar (`Experience` of `ExperienceForLevel`), total experience and kind; show `BattleOption.MaxUses` beside a skill's uses; let the battle presentation choose `BattleEvent.Rolled` or `Amount` for floating numbers.
+* Handle the refusal `command.no_effect_on_target` in the battle's target picker (grey out such allies) and the field notices `game.poison_fell`, `game.paralysis_worn_off`, `game.machine_stood_up`.
+* Use `FieldInfo.AreaName` (now variant-aware) for the arrival banner; nothing else changes for doors, area flags or the new conditions.
+
 Latest: `PSIV_ABI_VERSION` 15, library version 0.14.0 (164 `PSIV_API` functions), `Native.AbiVersion` 15; save schema 12 (schemas 1 to 11 load). Scene presentation (`../game/README.md`, "Story pictures and the scene camera", "game.json" and "Areas"; `../events/FORMAT.md`, "Story pictures", "Camera, panels and the screen" and "Audio"; checklist R117 to R124):
 
 * New functions: `psiv_pictures(session, &names, &count)` (the story pictures up, bottom first; C# `Pictures()`) and `psiv_scene_camera_get(session, &camera)` (struct `psiv_scene_camera`: `held`, `x`, `y`, `ms`, `total_ms`; C# `SceneCamera()` and record `SceneCamera`).

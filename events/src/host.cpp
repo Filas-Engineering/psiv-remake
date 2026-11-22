@@ -337,6 +337,10 @@ int Host::item_count(const std::string&) {
 	return 0;
 }
 
+bool Host::game_state(const std::string&, const std::string&) {
+	return false;
+}
+
 bool Host::aboard_vehicle(const std::string&) {
 	return false;
 }

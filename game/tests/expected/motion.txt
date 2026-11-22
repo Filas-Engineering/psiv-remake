@@ -1,0 +1,110 @@
+The Bell at Tidewater (seed 6)
+title> new
+You arrive at Tidewater Landing.
+  (fade in 1)
+The ferry bumps against the pilings of Tidewater Landing.
+  (move dockhand to dock_front)
+  (move dockhand to greet_spot)
+  (face dockhand fighter)
+Dockhand: Mind the ropes. The guide waits by the noticeboard.
+  (move dockhand to dock_front)
+  (move dockhand to 10 0 2)
+  (face dockhand dock_front)
+New job: The dockhand's lost crate.
+New encyclopedia entry: Tidewater Landing.
+[Autosaved to auto_0 (event end).]
+field> dev warp wren_mill mill_door
+Developer tools changed this game. It and its saves are marked.
+You arrive at Wren Mill.
+[Autosaved to auto_1 (area entry).]
+field> actors
+  mill_cat at 3 1 facing south shown look cat wanders
+  mill_hand at 4 4 facing north shown solid patrols
+  mill_wheel at 11 4 facing south shown solid look wheel path 0 0 from 11 4
+field> platforms
+  platform raft at 6 2 (96, 32 px) docked at from, resting 400 ms
+  platform skiff at 6 4 (96, 64 px) docked at from, resting 500 ms
+field> wait 300
+field> actors
+  mill_cat at 2 1 facing west shown look cat wanders
+  mill_hand at 4 3 facing north shown solid patrols
+  mill_wheel at 11 4 facing south shown solid look wheel path 4 2 from 11 4
+field> wait 600
+field> actors
+  mill_cat at 3 1 facing east shown look cat wanders
+  mill_hand at 4 2 facing east shown solid patrols
+  mill_wheel at 11 3 facing south shown solid look wheel path 4 -2 from 11 4
+field> platforms
+  platform raft at 6 2 (96, 32 px) docked at from
+  platform skiff at 7 4 (117, 64 px) moving
+field> walk raft_bank
+field> face east
+field> platforms
+  platform raft at 6 2 (96, 32 px) docked at from
+  platform skiff at 8 4 (130, 64 px) moving
+field> e
+field> platforms
+  platform raft at 6 2 (100, 32 px) moving, carrying the party
+  platform skiff at 7 4 (117, 64 px) moving
+field> refused e
+! The way is blocked.
+field> wait 200
+field> platforms
+  platform raft at 7 2 (116, 32 px) moving, carrying the party
+  platform skiff at 7 4 (106, 64 px) moving
+field> status
+Mode field, Wren Mill (7,2) facing east, play time 0:00:02.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 0
+  Money 50. Items: tonic x1.
+field> wait 800
+field> platforms
+  platform raft at 9 2 (144, 32 px) docked at to, carrying the party
+  platform skiff at 6 4 (101, 64 px) moving
+field> status
+Mode field, Wren Mill (9,2) facing east, play time 0:00:03.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 0
+  Money 50. Items: tonic x1.
+field> e
+field> platforms
+  platform raft at 9 2 (144, 32 px) docked at to
+  platform skiff at 7 4 (114, 64 px) moving
+field> status
+Mode field, Wren Mill (10,2) facing east, play time 0:00:03.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 0
+  Money 50. Items: tonic x1.
+field> actors
+  mill_cat at 4 1 facing east shown look cat wanders
+  mill_hand at 4 2 facing east shown solid patrols
+  mill_wheel at 11 4 facing south shown solid look wheel path 0 0 from 11 4
+field> platforms
+  platform raft at 9 2 (144, 32 px) docked at to
+  platform skiff at 7 4 (114, 64 px) moving
+field> w
+field> wait 250
+field> menu
+menu> save manual_1
+Saved to manual_1.
+menu> close
+field> title
+title> load manual_1
+Loaded manual_1.
+field> platforms
+  platform raft at 8 2 (120, 32 px) moving, carrying the party
+  platform skiff at 9 4 (141, 64 px) moving
+field> status
+Mode field, Wren Mill (8,2) facing west, play time 0:00:04.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 0
+  Money 50. Items: tonic x1.
+field> wait 1000
+field> platforms
+  platform raft at 6 2 (96, 32 px) docked at from, carrying the party
+  platform skiff at 8 4 (120, 64 px) moving
+field> w
+field> status
+Mode field, Wren Mill (5,2) facing west, play time 0:00:05.
+  Test Fighter Lv3 HP 86/86 TP 8/8 EXP 0
+  Money 50. Items: tonic x1.
+field> platforms
+  platform raft at 6 2 (96, 32 px) docked at from
+  platform skiff at 7 4 (106, 64 px) moving
+End of script.

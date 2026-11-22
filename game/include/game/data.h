@@ -172,6 +172,9 @@ struct Credits {
 	int line = 0;
 };
 
+// Which way a wanderer may step: any of the four, or only along x (east, west) or y (north, south).
+enum class WanderAxis { Both, X, Y };
+
 // How an actor walks about by itself (game.json actors' `wander`), around its home, a cell at a time, by the same field ticks
 // and encounter stream as visible enemies' wander.
 struct ActorWander {
@@ -187,8 +190,40 @@ struct ActorWander {
 	int pauseMaxMs = 3000;
 	// The map characters it may stand on.
 	std::string terrain = ".";
+	// The chance, in percent, that a turn is spent standing instead of stepping; drawn only when above 0.
+	int standPercent = 0;
+	WanderAxis axis = WanderAxis::Both;
 
 	bool covers(Cell home, Cell cell) const;
+};
+
+// One entry of an actor's patrol: a walk of `count` cells one way, or a walk to a marker or cell (along x, then along y),
+// then optionally a facing and a pause. An entry may also only turn or only pause.
+struct PatrolStep {
+	std::optional<Facing> walk = std::nullopt;
+	int count = 0;
+	std::string toMarker = {};
+	std::optional<Cell> to = std::nullopt;
+	std::optional<Facing> face = std::nullopt;
+	int pauseMs = 0;
+	int line = 0;
+};
+
+// game.json actors' `patrol`: a looping list of steps walked from its home at `speed_percent` of the area's step time
+// over `terrain`; a cell that is taken makes it wait and try again at its next step.
+struct ActorPatrol {
+	std::vector<PatrolStep> steps;
+	int speedPercent = 50;
+	std::string terrain = ".";
+};
+
+// game.json actors' `path`: pixel offsets from its home, one entry per `ticks` field ticks, looping. Not bound to cells:
+// it blocks nothing, unless it has a footprint (cells wide and high), which blocks every cell the footprint overlaps now.
+struct ActorPath {
+	std::vector<std::pair<int, int>> offsets;
+	int ticks = 1;
+	int footprintWidth = 0;
+	int footprintHeight = 0;
 };
 
 // One of game.json's `actors`. A plain id stands at the talk point named after it; an object can also draw it with
@@ -210,6 +245,10 @@ struct ActorDef {
 	int line = 0;
 	// Walks about its home by itself; needs a home.
 	std::optional<ActorWander> wander = std::nullopt;
+	// Walks a fixed loop from its home; needs a home, and never with `wander` or `path`.
+	std::optional<ActorPatrol> patrol = std::nullopt;
+	// Moves by pixel offsets from its home; needs a home, and never with `wander` or `patrol`.
+	std::optional<ActorPath> path = std::nullopt;
 };
 
 // The two tables of one language: the dialogue string table (events format) and the game's own text table
@@ -280,6 +319,9 @@ struct GameConfig {
 	PresentationNames presentation;
 	// Every flag and variable a script, hook or journal entry uses, except chest flags, which the areas declare.
 	std::vector<std::string> flags;
+	// Flags written as `{"id", "reset": "area"}`: cleared whenever the party enters an area (a door opened by talking that
+	// shuts again when the area is entered anew).
+	std::set<std::string> areaFlags;
 	std::map<std::string, int> vars;
 	// The flag the last story event sets; control returning after it writes the clear-data record (SAV-024).
 	std::string clearFlag;
@@ -310,6 +352,8 @@ struct GameConfig {
 	std::vector<FieldVehicle> vehicles;
 	// Hit points a machine member regains with each step the party takes in the field (P6).
 	int machineStepHeal = 0;
+	// The step heal also reaches fallen machine members, which so stand up (game.json `machine_step_heal_fallen`).
+	bool machineStepHealFallen = false;
 	// Members who have joined and are out of the party get the same experience share as those in it until this flag
 	// is set (SAV-032); empty gives them none.
 	std::string outsideExperienceUntil = {};
@@ -338,6 +382,9 @@ struct GameConfig {
 	bool partyTalkAmbient = true;
 	std::vector<Credits> credits = {};
 	const Credits* creditsById(const std::string& id) const;
+	// Pixels per cell for the data that moves in pixels (actors' `path`) and the pixel positions the session reports
+	// (paths, platforms).
+	int cellPixels = 16;
 };
 
 struct LanguageTables {

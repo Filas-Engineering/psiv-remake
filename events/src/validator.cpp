@@ -102,8 +102,14 @@ private:
 		for (const Term& t : c.terms) {
 			if (t.test == TermTest::owns || t.test == TermTest::aboard) {
 				name(NameKind::vehicle, t.name, line);
-			} else if (t.test == TermTest::member) {
+			} else if (t.test == TermTest::member || t.test == TermTest::leader) {
 				name(NameKind::member, t.name, line);
+			} else if (t.test == TermTest::music) {
+				name(NameKind::audio, t.name, line);
+			} else if (t.test == TermTest::area) {
+				name(NameKind::map, t.name, line);
+			} else if (t.test == TermTest::tile) {
+				continue;
 			} else if (t.test == TermTest::holds) {
 				name(NameKind::item, t.name, line);
 			} else if (t.test == TermTest::money) {

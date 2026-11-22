@@ -87,10 +87,9 @@ TEST(itemsUseFlatPowerAndAreConsumed) {
 TEST(reviveTechniqueNeedsADefeatedAlly) {
 	Battle battle = makeBattle(data(), {"brass_warden"}, 1);
 	const int tp = battle.combatant(kMedic).tp;
-	battle.setCommand(kMedic, Command::ability("rekindle", kScout));
+	CHECK_EQ(battle.setCommand(kMedic, Command::ability("rekindle", kScout)).key, std::string("command.no_effect_on_target"));
 	othersDefend(battle);
-	const std::optional<Event> failed = firstBy(battle.resolveRound(), EventType::ActionCancelled, kMedic);
-	CHECK(failed && failed->cancel == CancelReason::NoTarget);
+	battle.resolveRound();
 	CHECK_EQ(battle.combatant(kMedic).tp, tp);
 
 	battle.combatant(kScout).hp = 0;

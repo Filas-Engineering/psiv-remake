@@ -60,6 +60,9 @@ game::GameData backgroundDataWithScript(const std::string& file, const std::stri
 // The actor data with Wren Gallery added (actor_data::makeScene), in build/test_saves/scene_data/game/data, loaded once.
 const std::string& sceneDataDirectory();
 const game::GameData& sceneData();
+// The actor data with Wren Mill added (actor_data::makeMotion), in build/test_saves/motion_data/game/data, loaded once.
+const std::string& motionDataDirectory();
+const game::GameData& motionData();
 
 }
 

@@ -345,9 +345,18 @@ private:
 			} else if (test && subject && test->kind == TokenKind::word && subject->kind == TokenKind::word && condition_test(test->text, TermTest::money) &&
 				!one_of(subject->text, {"and", "or"})) {
 				term.test = condition_test(test->text, TermTest::money)->test;
-				const char* what = term.test == TermTest::member ? "a member name" : term.test == TermTest::holds ? "an item name" : "a vehicle name";
+				const char* what = term.test == TermTest::member || term.test == TermTest::leader ? "a member name"
+					: term.test == TermTest::holds                                               ? "an item name"
+					: term.test == TermTest::music                                               ? "a track name"
+					: term.test == TermTest::area                                                ? "an area name"
+					: term.test == TermTest::tile                                                ? "floor, water, soft, barrier or counter"
+																								 : "a vehicle name";
 				a.keyword(test->text.c_str());
 				if (!a.name(term.name, what)) {
+					return false;
+				}
+				if (term.test == TermTest::tile && !one_of(term.name, {"floor", "water", "soft", "barrier", "counter"})) {
+					a.expected(what);
 					return false;
 				}
 			} else if (!parse_value_test(a, term)) {

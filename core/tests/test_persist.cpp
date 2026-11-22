@@ -120,7 +120,7 @@ TEST(everyPublicEnumHasAParser) {
 	CHECK_EQ(checkNames(parseSide), 2);
 	CHECK_EQ(checkNames(parseTargeting), 8);
 	CHECK_EQ(checkNames(parseAbilityKind), 4);
-	CHECK_EQ(checkNames(parseEffectKind), 18);
+	CHECK_EQ(checkNames(parseEffectKind), 20);
 	CHECK_EQ(checkNames(parseCreatureKind), 3);
 	CHECK_EQ(checkNames(parseTravelTarget), 2);
 	CHECK_EQ(checkNames(parseEquipSlot), 7);

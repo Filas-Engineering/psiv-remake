@@ -1,0 +1,14 @@
+{
+	"id": "door_a",
+	"kind": "town",
+	"map": [
+		"#######",
+		"#..#..#",
+		"#..####",
+		"##.####"
+	],
+	"markers": {"back": [2, 3], "inner": [1, 1], "sealed": [4, 1]},
+	"exits": [
+		{"at": [2, 3], "to": "door_b", "marker": "back"}
+	]
+}

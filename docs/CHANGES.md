@@ -2,8 +2,38 @@
 
 One line per feature, newest first: name, kind, meaning. Each pass adds its lines at the top.
 
+* ways in on exit cells (data check fix): the reach walk leaves from an arrival marker standing on an exit cell, so rooms behind such doors count as reached (R150).
+* doors (area rule): an `interact` hook on a gated exit's cell answers while the exit is shut; once open the exit takes the cell (R145).
+* `flags` entries `{"id", "reset": "area"}` (game.json key): flags that clear whenever the party enters an area (R146).
+* `leader <member>`, `music <track>`, `area <map>`, `tile <terrain>` (script conditions): the leader, the track playing, the area, the terrain under the leader; `Host::game_state` (R147).
+* area `name` (area key), `Session::areaNameKey`, `psiv_field_info.area_name_key` (data, session, C field): an area's shown name by where the party came from or by flag (R148).
+* opposite belts on one cell, fractional belt steps (checked): only the active belt moves the party; exact timing keeps the fraction (R149).
+* actors' `wander` `stand_percent`, `axis` (game.json keys): a turn's chance of standing; steps along x or y only (R126).
+* actors' `patrol` (game.json key): a looping route of walks, walks to markers or cells, facings and pauses; waits at a taken cell; saved (R127).
+* actors' `path`, `cell_pixels` (game.json keys): pixel offsets from the home per field tick, a footprint that blocks the cells it overlaps; saved (R128).
+* area `platforms` (area key): moving platforms (`loop`, `one_way`, `triggered`) that carry the party between docks, no battle rolls aboard, saved mid-ride, joined by the data check (R129).
+* `Session::platformsHere`, `ridingPlatform`, `psiv_platforms`, `psiv_field_info.riding_platform`, `game_cli platforms` (session, C API, tool): platforms for hosts (R129).
+* `Session::canLoad`, `psiv_can_load`, `GameSession.CanLoad` (session, C API, C#): whether Load can run now (R130).
+* `Session::battleKeys`, `psiv_battle_keys_get`, `GameSession.BattleKeys` (session, C API, C#): the message keys, notices and cancel reasons a battle can emit (R131).
+* `MemberDetail` `attack`, `baseStats`, `experienceForLevel`, `totalExperience`, `kind`, `vulnerable`; `psiv_battle_option.max_uses` (session, C fields): member detail a layout binds (R132).
+* `Event::rolled`, `psiv_battle_event.rolled` (core, C field): the rolled damage or heal beside the amount that changed; not serialized (R133).
+* enemies' and vehicles' `stats.attack` (data key): an attack apart from strength; absent, attack is strength (R134).
+* any piece's `stats.attack` (data key): counts into the attack stat, not only weapons (R135).
+* characters' `skill_uses` (data key): a skill's maximum uses by level, stepwise; `rules::maxSkillUses` (R136).
+* revive `living_target` and `hp`, effect `set_hp_percent` (data keys): revives aimed at the living, flat revives, hit points set to a percent (R137).
+* combos' `orders` (data key): further orders that fire the same recipe (R138).
+* `strip_modifiers` `equipment_affinities` (data key): also takes away what pieces did to element affinities (R139).
+* effect `grant_affinity` (data key): an element affinity for the battle or, `permanent`, for good (saved with the member) (R140).
+* area `field_status`, rules.json `field_poison_every`, `field_poison_status`, `field_paralysis` (data keys): poison and paralysis by field steps (R141).
+* single-ally targets nothing can affect refused (rule fix, rules version 15): `command.no_effect_on_target`; default picks pass them by (R142).
+* revives first on fallen targets (rule fix, rules version 15): the other effects then reach a target the revive stood up (R143).
+* `machine_step_heal_fallen` (game.json key): the step heal stands fallen machines up (R144).
+* save schema 13, `PSIV_ABI_VERSION` 16, library 0.15.0, rules version 15 (versions).
+* `data/scripts/motion.txt` (script, golden `tests/expected/motion.txt`): Wren Mill on the `make_actor_data ... motion` copy.
+
 * saves with a vehicle's macro step (fix): a save, autosave or event-start world holding a macro with a vehicle's step loads again, saves already written included; the load check takes a vehicle as a step's member, counts only member steps toward five and refuses an unknown vehicle or a vehicle step with an item, piece, defend or member target; save schema 12 unchanged.
 * auto play macro across a battle (checked): `Session::setAutoPlayMacro`, `autobattle on|random MACRO` and `psiv_battle_set_auto_play_macro` try the macro in full every round, a fallen member's step passed by and a stuck step taking core's choice that round only, in party and vehicle battles, as `fight MACRO` does; the save's auto macro without a named one still stops by core's stop rules.
+||||||| parent of ca6785b (feat: actor patrols, paths and moving platforms; enemy attack stat, skill uses by level, revive and combo options, field statuses, door hooks, area-reset flags, script state tests, area name variants, rolled amounts; fix revive targeting and the data check for arrivals on exit cells)
 * `game_cli --capabilities`, `psiv_capabilities`, `GameSession.Capabilities` (tool, C API, C#): what the build supports as JSON, read from the loaders' and the compiler's own tables (game/README.md, "Capabilities").
 * `rules::DataKeySet`, `game::gameDataKeys`, `events::script_commands` (library): the accepted data keys and script commands as tables both the loaders and the report read.
 * `picture show|hide|clear` (script command): a saved stack of story pictures; `presentation.pictures` (game.json key) lists the names when declared (R117).

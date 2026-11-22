@@ -54,12 +54,12 @@ TEST(machineMembersTakeOnlyMachineHealing) {
 	Battle battle = makeBattle(db, setup);
 	sturdy(battle, kFirstEnemy);
 	battle.combatant(kCogwright).hp = 20;
-	battle.setCommand(kMedic, Command::ability("mend", kCogwright));
-	battle.setCommand(kFighter, Command::item("tonic", kCogwright));
+	// Named outright, a heal that cannot reach a machine is refused, so nothing is spent on it.
+	CHECK_EQ(battle.setCommand(kMedic, Command::ability("mend", kCogwright)).key, std::string("command.no_effect_on_target"));
+	CHECK_EQ(battle.setCommand(kFighter, Command::item("tonic", kCogwright)).key, std::string("command.no_effect_on_target"));
 	othersDefend(battle);
 	std::vector<Event> events = battle.resolveRound();
 	CHECK_EQ(battle.combatant(kCogwright).hp, 20);
-	CHECK(firstBy(events, EventType::ItemHadNoEffect, kFighter).has_value());
 	CHECK_EQ(battle.inventory().at("tonic"), 1);
 
 	battle.setCommand(kCogwright, Command::ability("self_repair", kCogwright));

@@ -209,6 +209,9 @@ public:
 	// holds. The defaults say nobody and none.
 	virtual bool in_party(const std::string& member);
 	virtual int item_count(const std::string& item);
+	// For the `leader`, `music`, `area` and `tile` tests (`test` is that word): whether the game is in that state now. The
+	// default says no.
+	virtual bool game_state(const std::string& test, const std::string& value);
 	// The member learns the ability for good.
 	virtual void teach_ability(const std::string& member, const std::string& ability);
 	// A character who walks with the party without joining it; empty for none.

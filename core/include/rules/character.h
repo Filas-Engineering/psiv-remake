@@ -50,6 +50,9 @@ struct CharacterDef {
 	std::vector<std::string> teachable = {};
 	// Presentation only: rows a status screen lists in this order (age, home, ...).
 	std::vector<ProfileRow> profile = {};
+	// party.json `skill_uses`: per skill, (level, uses) rows in rising level order; from a row's level the member's maximum
+	// uses of that skill are its uses, in place of the skill's own `uses` (before the first row, the skill's own).
+	std::map<std::string, std::vector<std::pair<int, int>>> skillUses = {};
 };
 
 // The persistent state of a party member between battles. The host owns it.
@@ -67,6 +70,9 @@ struct PartyMember {
 	std::vector<ActiveStatus> statuses = {};
 	// Abilities learned for good outside the level table, from a story event or a found object (P8).
 	std::vector<std::string> taught = {};
+	// Element affinities a permanent `grant_affinity` gave it, which stand in for the character's own before its pieces
+	// apply.
+	Affinities affinities = {};
 };
 
 }

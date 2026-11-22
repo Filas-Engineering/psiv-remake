@@ -155,6 +155,9 @@ std::string partyChunk(const World& w) {
 		for (const std::string& ability : m.taught) {
 			o.key("taught").text(ability).end();
 		}
+		for (const auto& [element, affinity] : m.affinities) {
+			o.key("affinity").text(element.id).num(affinity).end();
+		}
 	}
 	for (const auto& [id, name] : w.memberNames) {
 		o.key("named").text(id).text(name).end();
@@ -222,6 +225,18 @@ std::string worldChunk(const World& w) {
 	if (w.sceneCamera.held || w.sceneCamera.ms > 0) {
 		o.key("scene_camera").num(w.sceneCamera.held ? 1 : 0).num(w.sceneCamera.cell.x).num(w.sceneCamera.cell.y).num(w.sceneCamera.ms).num(w.sceneCamera.totalMs).end();
 	}
+	for (const auto& [id, place] : w.platforms) {
+		o.key("platform").text(id).num(place.positionUs).num(place.heading).num(place.pauseMs).num(place.boarded ? 1 : 0).end();
+	}
+	if (!w.ridingPlatform.empty()) {
+		o.key("riding_platform").text(w.ridingPlatform).end();
+	}
+	if (w.fieldSteps > 0) {
+		o.key("field_steps").num(w.fieldSteps).end();
+	}
+	if (!w.cameFrom.empty()) {
+		o.key("came_from").text(w.cameFrom).end();
+	}
 	if (w.stepCarryUs != 0) {
 		o.key("step_carry").num(w.stepCarryUs).end();
 	}
@@ -252,6 +267,12 @@ std::string actorsChunk(const World& w) {
 		}
 		if (place.wanderProgress != 0 || place.wanderPauseMs != 0) {
 			o.key("wander").text(id).num(place.wanderProgress).num(place.wanderPauseMs).end();
+		}
+		if (place.patrolStep != 0 || place.patrolWalked != 0) {
+			o.key("patrol").text(id).num(place.patrolStep).num(place.patrolWalked).end();
+		}
+		if (place.pathTick != 0) {
+			o.key("path").text(id).num(place.pathTick).end();
 		}
 	}
 	return o.str();
@@ -476,6 +497,12 @@ bool readParty(const std::string& payload, World& w, std::string& error) {
 			} else {
 				w.roster.back().statuses.push_back({in.text(l[1]), in.integer(l[2])});
 			}
+		} else if (k == "affinity" && in.need(l, 2)) {
+			if (w.roster.empty()) {
+				in.fail("'affinity' before any member");
+			} else {
+				w.roster.back().affinities[rules::Element(in.text(l[1]))] = in.integer(l[2]);
+			}
 		} else if (k == "taught" && in.need(l, 1)) {
 			if (w.roster.empty()) {
 				in.fail("'taught' before any member");
@@ -584,6 +611,22 @@ bool readWorld(const std::string& payload, World& w, std::string& error) {
 			if (w.sceneCamera.ms < 0 || w.sceneCamera.totalMs < w.sceneCamera.ms) {
 				in.fail("bad scene_camera line");
 			}
+		} else if (k == "platform" && in.need(l, 5)) {
+			PlatformPlace place;
+			place.positionUs = in.num(l[2]);
+			place.heading = in.integer(l[3]);
+			place.pauseMs = in.integer(l[4]);
+			place.boarded = in.integer(l[5]) != 0;
+			if (place.positionUs < 0 || (place.heading != 1 && place.heading != -1) || place.pauseMs < 0) {
+				in.fail("bad platform line");
+			}
+			w.platforms[in.text(l[1])] = place;
+		} else if (k == "came_from" && in.need(l, 1)) {
+			w.cameFrom = in.text(l[1]);
+		} else if (k == "field_steps" && in.need(l, 1)) {
+			w.fieldSteps = in.integer(l[1]);
+		} else if (k == "riding_platform" && in.need(l, 1)) {
+			w.ridingPlatform = in.text(l[1]);
 		} else if (k == "step_carry" && in.need(l, 1)) {
 			w.stepCarryUs = in.num(l[1]);
 		} else if (k == "conveyor_carry" && in.need(l, 1)) {
@@ -792,8 +835,8 @@ bool readActors(const std::string& payload, World& w, std::string& error) {
 			}
 			place.visible = in.num(l[6]) != 0;
 			w.actors[in.text(l[1])] = place;
-		} else if ((l[0] == "vanish" || l[0] == "anim" || l[0] == "removed" || l[0] == "look" || l[0] == "wander") &&
-			in.need(l, l[0] == "anim" ? 4 : l[0] == "look" || l[0] == "wander" ? 3 : 2)) {
+		} else if ((l[0] == "vanish" || l[0] == "anim" || l[0] == "removed" || l[0] == "look" || l[0] == "wander" || l[0] == "patrol" || l[0] == "path") &&
+			in.need(l, l[0] == "anim" ? 4 : l[0] == "look" || l[0] == "wander" || l[0] == "patrol" ? 3 : 2)) {
 			auto actor = w.actors.find(in.text(l[1]));
 			if (actor == w.actors.end()) {
 				in.fail("'" + l[0] + "' for an actor with no 'actor' line");
@@ -811,6 +854,11 @@ bool readActors(const std::string& payload, World& w, std::string& error) {
 			} else if (l[0] == "wander") {
 				actor->second.wanderProgress = in.integer(l[2]);
 				actor->second.wanderPauseMs = in.integer(l[3]);
+			} else if (l[0] == "patrol") {
+				actor->second.patrolStep = in.integer(l[2]);
+				actor->second.patrolWalked = in.integer(l[3]);
+			} else if (l[0] == "path") {
+				actor->second.pathTick = in.integer(l[2]);
 			}
 		} else {
 			in.fail("unknown line '" + l[0] + "'");
@@ -1066,6 +1114,13 @@ bool migrate11to12(std::vector<Chunk>&, std::string&) {
 	return true;
 }
 
+// Schema 12 to 13: actors' patrols and paths (actors chunk lines `patrol` and `path`) and the moving platforms of the party's
+// area (world chunk lines `platform` and `riding_platform`); a schema 12 save has none, so patrols start from their first
+// entry, paths from their first offset, and the area's platforms from where entering the area puts them.
+bool migrate12to13(std::vector<Chunk>&, std::string&) {
+	return true;
+}
+
 struct Migration {
 	int from;
 	bool (*apply)(std::vector<Chunk>& chunks, std::string& error);
@@ -1084,6 +1139,7 @@ const Migration kMigrations[] = {
 	{9, migrate9to10},
 	{10, migrate10to11},
 	{11, migrate11to12},
+	{12, migrate12to13},
 };
 
 std::string headerChunk(const SaveFile& save) {

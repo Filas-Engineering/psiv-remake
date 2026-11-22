@@ -25,6 +25,21 @@ bool componentMatches(const Database& db, const ComboRecipe& recipe, std::size_t
 // Participant k used abilities[k] and is characters[k]. An ordered recipe, and every four-member one, maps
 // participant k to component k; an unordered one accepts any one-to-one mapping.
 bool recipeMatches(const Database& db, const ComboRecipe& recipe, const std::vector<std::string>& abilities, const std::vector<std::string>& characters) {
+	if (!recipe.orders.empty()) {
+		std::vector<std::vector<int>> orders = {{}};
+		for (std::size_t k = 0; k < recipe.abilities.size(); ++k) {
+			orders.front().push_back(static_cast<int>(k));
+		}
+		orders.insert(orders.end(), recipe.orders.begin(), recipe.orders.end());
+		return std::any_of(orders.begin(), orders.end(), [&](const std::vector<int>& order) {
+			for (std::size_t k = 0; k < order.size(); ++k) {
+				if (!componentMatches(db, recipe, static_cast<std::size_t>(order[k]), abilities[k], characters[k])) {
+					return false;
+				}
+			}
+			return true;
+		});
+	}
 	const bool ordered = recipe.ordered || recipe.abilities.size() == static_cast<std::size_t>(kMaxComboParticipants);
 	std::vector<std::size_t> assignment(recipe.abilities.size());
 	std::iota(assignment.begin(), assignment.end(), std::size_t(0));

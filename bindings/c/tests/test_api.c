@@ -21,6 +21,7 @@ static const char* actorDataDir = "";
 static const char* interactDataDir = "";
 static const char* backgroundDataDir = "";
 static const char* sceneDataDir = "";
+static const char* motionDataDir = "";
 static const char* scratch = "build/scratch";
 static int failures;
 static int checks;
@@ -104,7 +105,7 @@ static void settle(psiv_session* s) {
 static void testVersion(void) {
 	const char* capabilities = psiv_capabilities();
 	CHECK(capabilities && capabilities == psiv_capabilities() && strncmp(capabilities, "{\"capabilities_schema\": 1, \"versions\": {\"library\": \"", 52) == 0);
-	CHECK(strstr(capabilities, "\"abi\": 15,") && strstr(capabilities, "\"save_schema\": 12,") && strstr(capabilities, "\"picture show <picture>\""));
+	CHECK(strstr(capabilities, "\"abi\": 16,") && strstr(capabilities, "\"save_schema\": 13,") && strstr(capabilities, "\"picture show <picture>\""));
 	CHECK(psiv_abi_version() == PSIV_ABI_VERSION);
 	CHECK(strstr(psiv_version(), "psiv-bindings") != NULL);
 	CHECK(strstr(psiv_version(), "game-0.2") != NULL);
@@ -520,6 +521,7 @@ static void testBattleStream(void) {
 			case PSIV_EVENT_DAMAGE_DEALT:
 				CHECK(e->target >= 0 && e->target < combatantCount);
 				CHECK(e->hp == (hp[e->target] - e->amount > 0 ? hp[e->target] - e->amount : 0));
+				CHECK(e->rolled >= e->amount && (e->hp > 0 || e->rolled >= hp[e->target]));
 				hp[e->target] = e->hp;
 				break;
 			case PSIV_EVENT_HEALED:
@@ -2570,6 +2572,100 @@ static void testVehicleBattleFromAMenu(void) {
 	psiv_session_destroy(s);
 }
 
+/* Wren Mill: a patrol, a pixel path with a footprint, the triggered raft carrying the party, and their field info. */
+static void testMotion(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/motion", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	const char* shipped = dataDir;
+	dataDir = motionDataDir;
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	dataDir = shipped;
+	CHECK(psiv_sizeof("psiv_platform") == sizeof(psiv_platform) && psiv_sizeof("psiv_battle_keys") == sizeof(psiv_battle_keys));
+	psiv_game_info game;
+	CHECK_OK(psiv_game_info_get(s, &game));
+	CHECK(game.cell_pixels == 16);
+	const psiv_platform* platforms = NULL;
+	int32_t count = -1;
+	CHECK(psiv_platforms(s, &platforms, &count) == PSIV_NOT_FOUND);
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK_OK(psiv_dev_warp(s, "wren_mill", "mill_door"));
+	settle(s);
+	CHECK(psiv_platforms(s, NULL, &count) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_platforms(s, &platforms, &count));
+	CHECK(count == 2 && strcmp(platforms[0].id, "raft") == 0 && platforms[0].mode == PSIV_PLATFORM_TRIGGERED && platforms[0].end == 0);
+	CHECK(platforms[0].pixel_x == 6 * 16 && platforms[0].pixel_y == 2 * 16 && platforms[0].run_us == 600000);
+	const psiv_actor* actors;
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	int sawPatrol = 0;
+	int sawPath = 0;
+	for (int32_t i = 0; i < count; ++i) {
+		sawPatrol = sawPatrol || (strcmp(actors[i].id, "mill_hand") == 0 && actors[i].patrols && !actors[i].on_path);
+		sawPath = sawPath || (strcmp(actors[i].id, "mill_wheel") == 0 && actors[i].on_path && actors[i].home_x == 11 && actors[i].home_y == 4 &&
+			actors[i].footprint_w == 1 && actors[i].footprint_h == 1 && actors[i].path_x == 0);
+	}
+	CHECK(sawPatrol && sawPath);
+	CHECK_OK(psiv_update(s, 100, PSIV_DIRECTION_NONE));
+	CHECK_OK(psiv_field_actors(s, &actors, &count));
+	for (int32_t i = 0; i < count; ++i) {
+		if (strcmp(actors[i].id, "mill_wheel") == 0) {
+			CHECK(actors[i].path_x == 4 && actors[i].path_y == -2 && actors[i].x == 11 && actors[i].y == 3);
+		}
+	}
+	walkThrough(s, 5, 2);
+	CHECK_OK(psiv_walk(s, PSIV_DIRECTION_EAST));
+	psiv_field_info field;
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.riding_platform, "raft") == 0 && field.step_mask == 0 && strcmp(field.area_name_key, "area.wren_mill") == 0);
+	CHECK_OK(psiv_update(s, 1000, PSIV_DIRECTION_NONE));
+	CHECK_OK(psiv_platforms(s, &platforms, &count));
+	CHECK(platforms[0].end == 1 && platforms[0].carrying && platforms[0].x == 9);
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(field.leader_x == 9 && field.leader_y == 2);
+	CHECK_OK(psiv_walk(s, PSIV_DIRECTION_EAST));
+	CHECK_OK(psiv_field_info_get(s, &field));
+	CHECK(strcmp(field.riding_platform, "") == 0 && field.leader_x == 10);
+	psiv_session_destroy(s);
+}
+
+/* Load from the title only, the keys a battle can carry, the member detail's added fields and a skill's maximum. */
+static void testLoadKeysAndDetail(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/load_keys", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	CHECK(psiv_can_load(s) == 1 && psiv_can_load(NULL) == 0);
+	psiv_battle_keys keys;
+	CHECK(psiv_battle_keys_get(s, NULL) == PSIV_INVALID_ARGUMENT);
+	CHECK_OK(psiv_battle_keys_get(s, &keys));
+	CHECK(keys.message_count > 9 && keys.notice_count > 0 && keys.cancel_reason_count == 6);
+	CHECK(strcmp(keys.cancel_reasons[0], "actor_unable") == 0);
+	int sawInstant = 0;
+	for (int32_t i = 0; i < keys.message_count; ++i) {
+		sawInstant = sawInstant || strcmp(keys.messages[i], "battle.instant_defeat") == 0;
+	}
+	CHECK(sawInstant);
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK(psiv_can_load(s) == 0);
+	psiv_member_detail detail;
+	CHECK_OK(psiv_member_detail_get(s, "fighter", &detail));
+	CHECK(detail.attack >= detail.base_stats.strength && detail.creature_kind == PSIV_CREATURE_LIVING && detail.experience_for_level >= detail.experience_to_next);
+	CHECK(detail.total_experience >= 0);
+	const psiv_ability_info* abilities;
+	int32_t count;
+	CHECK_OK(psiv_member_abilities(s, "fighter", &abilities, &count));
+	for (int32_t i = 0; i < count; ++i) {
+		if (strcmp(abilities[i].id, "focus_shot") == 0) {
+			CHECK(abilities[i].max_uses == 3);
+		}
+	}
+	psiv_session_destroy(s);
+}
+
 int main(int argc, char** argv) {
 	for (int i = 1; i + 1 < argc; i += 2) {
 		if (strcmp(argv[i], "--data") == 0) {
@@ -2582,6 +2678,8 @@ int main(int argc, char** argv) {
 			backgroundDataDir = argv[i + 1];
 		} else if (strcmp(argv[i], "--scene-data") == 0) {
 			sceneDataDir = argv[i + 1];
+		} else if (strcmp(argv[i], "--motion-data") == 0) {
+			motionDataDir = argv[i + 1];
 		} else if (strcmp(argv[i], "--scratch") == 0) {
 			scratch = argv[i + 1];
 		}
@@ -2607,6 +2705,10 @@ int main(int argc, char** argv) {
 	if (sceneDataDir[0]) {
 		testScene();
 	}
+	if (motionDataDir[0]) {
+		testMotion();
+	}
+	testLoadKeysAndDetail();
 	if (backgroundDataDir[0]) {
 		testBackground();
 		testDenAndCredits();

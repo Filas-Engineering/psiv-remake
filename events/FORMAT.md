@@ -126,8 +126,9 @@ A condition is one or more tests:
 - `vehicle <vehicle>` is true when the party has that vehicle, and `aboard <vehicle>` when it rides it.
 - `party <member>` is true when the member is in the active party, and `item <item>` when the party holds at least one of the item or equipment piece.
 - `money <op> <integer>` compares the party's money, with the operators of a variable test: `if money >= 20`.
+- `leader <member>` is true when that member leads the party, `music <track>` when that track plays (the last `music play` of a script until the party enters an area or `music stop`, else the area's track), `area <map>` when the party is in that area, and `tile floor|water|soft|barrier|counter` when the leader stands on that terrain (the host's `game_state`; the default host says no).
 
-`not` works on each of these. A flag may still be named `vehicle`, `aboard`, `party` or `item`: the word starts one of these tests only when a name follows it. `money` followed by a comparison is always the party's money, so a variable named `money` cannot be compared.
+`not` works on each of these. A flag may still be named `vehicle`, `aboard`, `party`, `item`, `leader`, `music`, `area` or `tile`: the word starts one of these tests only when a name follows it. `money` followed by a comparison is always the party's money, so a variable named `money` cannot be compared.
 
 Join tests with `and` or with `or`, but not with both in one condition. Nest ifs instead.
 

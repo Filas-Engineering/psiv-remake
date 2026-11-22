@@ -671,6 +671,25 @@ static void stepTime(void) {
 }
 
 /* `pictures`: the story pictures up, bottom first. */
+/* `platforms`: each moving platform of the area, where it is and whether it carries the party. */
+static void platforms(void) {
+	const psiv_platform* list = NULL;
+	int32_t count = 0;
+	psiv_platforms(S, &list, &count);
+	if (count == 0) {
+		print("  platforms: none");
+	}
+	for (int32_t i = 0; i < count; ++i) {
+		const psiv_platform* p = &list[i];
+		char rest[64] = "";
+		if (p->end >= 0 && p->pause_ms > 0) {
+			snprintf(rest, sizeof rest, ", resting %d ms", (int)p->pause_ms);
+		}
+		print("  platform %s at %d %d (%d, %d px) %s%s%s", p->id, (int)p->x, (int)p->y, (int)p->pixel_x, (int)p->pixel_y,
+			p->end == 0 ? "docked at from" : p->end == 1 ? "docked at to" : "moving", rest, p->carrying ? ", carrying the party" : "");
+	}
+}
+
 static void pictures(void) {
 	const char* const* list = NULL;
 	int32_t count = 0;
@@ -744,7 +763,13 @@ static void actors(void) {
 			n += snprintf(text + n, sizeof text - (size_t)n, " look %s", a->look);
 		}
 		if (a->wanders) {
-			snprintf(text + n, sizeof text - (size_t)n, " wanders");
+			n += snprintf(text + n, sizeof text - (size_t)n, " wanders");
+		}
+		if (a->patrols) {
+			n += snprintf(text + n, sizeof text - (size_t)n, " patrols");
+		}
+		if (a->on_path) {
+			snprintf(text + n, sizeof text - (size_t)n, " path %d %d from %d %d", (int)a->path_x, (int)a->path_y, (int)a->home_x, (int)a->home_y);
 		}
 		print("%s", text);
 	}
@@ -1135,6 +1160,8 @@ static int execute(const char* rawLine) {
 		credits();
 	} else if (strcmp(cmd, "background") == 0 && wordCount == 1) {
 		background();
+	} else if (strcmp(cmd, "platforms") == 0 && wordCount == 1) {
+		platforms();
 	} else if (strcmp(cmd, "pictures") == 0 && wordCount == 1) {
 		pictures();
 	} else if (strcmp(cmd, "camera") == 0 && wordCount == 1) {

@@ -228,6 +228,7 @@ Confidence: high.
   - $EE (the $6E bits plus "woken this round") is "skip this turn" at execution (~8039).
   - $C4 (dead, android-dead, woken this round) is "retarget away from" (~8335).
   Confidence: high.
+- Reported by the data-import work, not verified here: defeating a boss form outright before its turn ends the battle rather than bringing the next form. Core today brings `next_form` whenever a form falls (and at `next_form_at`), so this note is not built; confirming it needs the boss's form routine read. Confidence: unverified.
 
 ## 8. Vehicle battles
 

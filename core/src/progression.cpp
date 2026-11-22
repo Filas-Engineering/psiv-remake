@@ -18,7 +18,7 @@ void addUnique(std::vector<std::string>& list, const std::string& id) {
 void grantSkillUses(PartyMember& member, const Database& db, const std::string& abilityId) {
 	const AbilityDef* ability = db.ability(abilityId);
 	if (ability && ability->kind == AbilityKind::Skill && !member.skillUses.count(abilityId)) {
-		member.skillUses[abilityId] = ability->uses;
+		member.skillUses[abilityId] = maxSkillUses(db, member, abilityId);
 	}
 }
 
@@ -63,6 +63,21 @@ Stats statsAtLevel(const CharacterDef& character, int level) {
 	s.magicDefense = b.magicDefense + g.magicDefense * gained;
 	s.level = capped;
 	return s;
+}
+
+int maxSkillUses(const Database& db, const PartyMember& member, const std::string& ability) {
+	const AbilityDef* def = db.ability(ability);
+	int uses = def ? def->uses : 0;
+	const CharacterDef* character = db.character(member.characterId);
+	const auto rows = character ? character->skillUses.find(ability) : decltype(character->skillUses)::const_iterator();
+	if (character && rows != character->skillUses.end()) {
+		for (const auto& [level, value] : rows->second) {
+			if (level <= member.level) {
+				uses = value;
+			}
+		}
+	}
+	return uses;
 }
 
 int experienceToNextLevel(const CharacterDef& character, int level) {

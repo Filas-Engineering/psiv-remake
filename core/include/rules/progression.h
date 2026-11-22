@@ -18,6 +18,9 @@ Stats statsAtLevel(const CharacterDef& character, int level);
 // The character's `experience_table` up to its end, then the formula's curve.
 int experienceToNextLevel(const CharacterDef& character, int level);
 
+// The member's maximum uses of a skill at its level: the character's `skill_uses` row for it, else the skill's `uses`.
+int maxSkillUses(const Database& db, const PartyMember& member, const std::string& ability);
+
 // Level stats plus equipment bonuses.
 Stats memberStats(const Database& db, const PartyMember& member);
 

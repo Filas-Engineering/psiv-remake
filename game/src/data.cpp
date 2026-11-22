@@ -11,6 +11,7 @@
 #include "json_read.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <set>
 
@@ -381,10 +382,108 @@ void readActors(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 				if (w.terrain.empty() || w.terrain.find_first_not_of(kMapTiles) != std::string::npos || w.terrain.find('#') != std::string::npos) {
 					reader.fail(*wander, "data.bad_wander_terrain", {actor.id, w.terrain});
 				}
+				reader.integer(*wander, "stand_percent", w.standPercent, false, 0, 100);
+				std::string axis;
+				reader.text(*wander, "axis", axis, false);
+				if (const int index = axis.empty() ? 0 : gameEnumIndex("wander_axis", axis); index >= 0) {
+					w.axis = static_cast<WanderAxis>(index);
+				} else {
+					reader.fail(*wander, "data.bad_wander_axis", {actor.id, axis});
+				}
 				if (actor.area.empty()) {
 					reader.fail(*wander, "data.wander_needs_home", {actor.id});
 				}
 				actor.wander = w;
+			}
+			if (const JsonValue* patrol = reader.field(entry, "patrol", JsonValue::Type::Object, false)) {
+				reader.only(*patrol, gameKeys("game.json", "actors[].patrol"));
+				ActorPatrol p;
+				if (const JsonValue* steps = reader.field(*patrol, "steps", JsonValue::Type::Array, true)) {
+					for (const JsonValue& item : steps->items) {
+						PatrolStep step;
+						step.line = item.line;
+						if (!item.is(JsonValue::Type::Object)) {
+							reader.fail(item, "data.bad_patrol_step", {actor.id});
+							continue;
+						}
+						reader.only(item, gameKeys("game.json", "actors[].patrol.steps[]"));
+						const auto direction = [&](const char* key, std::optional<Facing>& out) {
+							std::string word;
+							reader.text(item, key, word, false);
+							Facing f = Facing::South;
+							if (word.empty()) {
+								return;
+							}
+							if (gameEnumIndex("facing", word) < 0 || !parseFacing(word, f)) {
+								reader.fail(item, "data.bad_direction", {word});
+								return;
+							}
+							out = f;
+						};
+						direction("walk", step.walk);
+						direction("face", step.face);
+						if (const JsonValue* to = item.find("to")) {
+							Cell cell;
+							if (to->is(JsonValue::Type::String) && !to->string.empty()) {
+								step.toMarker = to->string;
+							} else if (reader.cell(*to, cell)) {
+								step.to = cell;
+							}
+						}
+						step.count = step.walk ? 1 : 0;
+						reader.integer(item, "count", step.count, false, 1, 99);
+						reader.integer(item, "pause_ms", step.pauseMs, false, 0, 600000);
+						const bool toTarget = step.to || !step.toMarker.empty();
+						if ((step.walk && toTarget) || (item.find("count") && !step.walk) || (!step.walk && !toTarget && !step.face && !item.find("pause_ms"))) {
+							reader.fail(item, "data.bad_patrol_step", {actor.id});
+						}
+						p.steps.push_back(step);
+					}
+					if (steps->items.empty()) {
+						reader.fail(*steps, "data.bad_patrol_step", {actor.id});
+					}
+				}
+				reader.integer(*patrol, "speed_percent", p.speedPercent, false, 1, 1000);
+				reader.text(*patrol, "terrain", p.terrain, false);
+				if (p.terrain.empty() || p.terrain.find_first_not_of(kMapTiles) != std::string::npos || p.terrain.find('#') != std::string::npos) {
+					reader.fail(*patrol, "data.bad_patrol_terrain", {actor.id, p.terrain});
+				}
+				actor.patrol = p;
+			}
+			if (const JsonValue* path = reader.field(entry, "path", JsonValue::Type::Object, false)) {
+				reader.only(*path, gameKeys("game.json", "actors[].path"));
+				ActorPath p;
+				if (const JsonValue* offsets = reader.field(*path, "offsets", JsonValue::Type::Array, true)) {
+					for (const JsonValue& o : offsets->items) {
+						if (o.items.size() != 2 || !o.items[0].is(JsonValue::Type::Number) || !o.items[1].is(JsonValue::Type::Number) ||
+							std::abs(o.items[0].number) > 100000 || std::abs(o.items[1].number) > 100000 || o.items[0].number != std::floor(o.items[0].number) ||
+							o.items[1].number != std::floor(o.items[1].number)) {
+							reader.fail(o, "data.bad_path", {actor.id});
+							continue;
+						}
+						p.offsets.emplace_back(static_cast<int>(o.items[0].number), static_cast<int>(o.items[1].number));
+					}
+					if (offsets->items.empty()) {
+						reader.fail(*offsets, "data.bad_path", {actor.id});
+					}
+				}
+				reader.integer(*path, "ticks", p.ticks, false, 1, 1000);
+				if (const JsonValue* footprint = reader.field(*path, "footprint", JsonValue::Type::Array, false)) {
+					Cell size;
+					if (!reader.cell(*footprint, size) || size.x < 1 || size.x > 16 || size.y < 1 || size.y > 16) {
+						reader.fail(*footprint, "data.bad_footprint", {actor.id});
+					} else {
+						p.footprintWidth = size.x;
+						p.footprintHeight = size.y;
+					}
+				}
+				actor.path = p;
+			}
+			if ((actor.wander ? 1 : 0) + (actor.patrol ? 1 : 0) + (actor.path ? 1 : 0) > 1) {
+				reader.fail(entry, "data.moves_more_than_one_way", {actor.id});
+			}
+			if ((actor.patrol || actor.path) && actor.area.empty()) {
+				reader.fail(entry, "data.moving_actor_needs_home", {actor.id});
 			}
 		} else {
 			reader.fail(entry, "data.actor_shape", {});
@@ -527,7 +626,26 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 			}
 		}
 	}
-	reader.texts(json, "flags", c.flags, false);
+	if (const JsonValue* flags = reader.field(json, "flags", JsonValue::Type::Array, false)) {
+		for (const JsonValue& f : flags->items) {
+			if (f.is(JsonValue::Type::String) && !f.string.empty()) {
+				c.flags.push_back(f.string);
+			} else if (f.is(JsonValue::Type::Object)) {
+				reader.only(f, gameKeys("game.json", "flags[]"));
+				std::string id;
+				std::string reset;
+				reader.text(f, "id", id, true);
+				reader.text(f, "reset", reset, true);
+				if (gameEnumIndex("flag_reset", reset) < 0) {
+					reader.fail(f, "data.bad_flag_reset", {id, reset});
+				}
+				c.flags.push_back(id);
+				c.areaFlags.insert(id);
+			} else {
+				reader.fail(f, "data.flag_shape", {});
+			}
+		}
+	}
 	reader.counts(json, "vars", c.vars, false, -999999, 999999);
 	reader.text(json, "clear_flag", c.clearFlag, false);
 	if (const JsonValue* start = reader.field(json, "start", JsonValue::Type::Object, true)) {
@@ -557,6 +675,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.integer(json, "autosave_slots", c.autosaveSlots, false, 1, 9);
 	reader.integer(json, "manual_slots", c.manualSlots, false, 1, 99);
 	reader.integer(json, "machine_step_heal", c.machineStepHeal, false, 0, 999);
+	reader.boolean(json, "machine_step_heal_fallen", c.machineStepHealFallen, false);
 	reader.text(json, "outside_experience_until", c.outsideExperienceUntil, false);
 	std::string leaving = "keep";
 	reader.text(json, "leave_equipment", leaving, false);
@@ -577,6 +696,7 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.boolean(json, "interact_across", c.interactAcross, false);
 	reader.integer(json, "run_speed_percent", c.runSpeedPercent, false, 101, 1000);
 	reader.integer(json, "background_limit", c.backgroundLimit, false, 1, 32);
+	reader.integer(json, "cell_pixels", c.cellPixels, false, 1, 1024);
 	if (const JsonValue* all = reader.field(json, "credits", JsonValue::Type::Object, false)) {
 		for (std::size_t i = 0; i < all->keys.size(); ++i) {
 			const JsonValue& o = all->values[i];
@@ -1060,6 +1180,39 @@ void checkReferences(const GameData& data, Problems& problems) {
 			if (!actor.wander->covers(cell, cell)) {
 				problems.add(where, "data.wander_home_outside", {actor.id});
 			}
+		} else if (actor.patrol) {
+			// One round walked on the map as written, so a step off its terrain or a round that drifts shows at load.
+			const Cell start = actor.at ? *actor.at : home->markers.at(actor.marker);
+			const auto standable = [&](Cell c) { return home->inside(c) && actor.patrol->terrain.find(home->rows[c.y][c.x]) != std::string::npos; };
+			Cell cell = start;
+			bool blocked = false;
+			for (const PatrolStep& step : actor.patrol->steps) {
+				std::optional<Cell> goal = step.to;
+				if (!step.toMarker.empty()) {
+					const auto marker = home->markers.find(step.toMarker);
+					if (marker == home->markers.end()) {
+						problems.add(where, "data.patrol_marker_missing", {actor.id, step.toMarker, actor.area});
+						blocked = true;
+						break;
+					}
+					goal = marker->second;
+				}
+				for (int i = 0; !blocked && i < (step.walk ? step.count : 0); ++i) {
+					cell = stepFrom(cell, *step.walk);
+					blocked = !standable(cell);
+				}
+				while (!blocked && goal && cell != *goal) {
+					cell = cell.x != goal->x ? Cell{cell.x + (goal->x > cell.x ? 1 : -1), cell.y} : Cell{cell.x, cell.y + (goal->y > cell.y ? 1 : -1)};
+					blocked = !standable(cell);
+				}
+				if (blocked) {
+					problems.add(where, "data.patrol_blocked", {actor.id, std::to_string(cell.x) + " " + std::to_string(cell.y)});
+					break;
+				}
+			}
+			if (!blocked && cell != start) {
+				problems.add(where, "data.patrol_not_a_loop", {actor.id, std::to_string(cell.x) + " " + std::to_string(cell.y)});
+			}
 		}
 	}
 	for (const std::string& actor : c.namelessActors) {
@@ -1082,6 +1235,13 @@ void checkReferences(const GameData& data, Problems& problems) {
 			}
 		};
 		textExists(c.languages.front().text, "area." + areaId);
+		for (const Area::NameVariant& v : area.names) {
+			textExists(c.languages.front().text, v.key);
+			flagAt(v.line, v.flag);
+			if (!v.from.empty() && !data.area(v.from)) {
+				at(v.line, "data.unknown_area", {v.from});
+			}
+		}
 		if (!area.music.empty() && std::find(shown.audio.begin(), shown.audio.end(), area.music) == shown.audio.end()) {
 			at(0, "data.music_not_audio", {area.music});
 		}
@@ -1105,6 +1265,10 @@ void checkReferences(const GameData& data, Problems& problems) {
 			} else if (way->marker.empty() && !to->walkable(way->at)) {
 				at(way->line, "data.dungeon_exit_not_walkable", {way->area, "(" + std::to_string(way->at.x) + "," + std::to_string(way->at.y) + ")"});
 			}
+		}
+		for (const Platform& platform : area.platforms) {
+			flagAt(platform.line, platform.requireFlag);
+			flagAt(platform.line, platform.blockFlag);
 		}
 		for (const Conveyor& conveyor : area.conveyors) {
 			flagAt(conveyor.line, conveyor.requireFlag);

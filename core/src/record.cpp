@@ -102,6 +102,9 @@ std::string serializeRecord(const BattleRecord& record) {
 		for (const std::string& id : member.taught) {
 			s << "member_taught " << text::encode(id) << '\n';
 		}
+		for (const auto& [element, affinity] : member.affinities) {
+			s << "member_affinity " << text::encode(element.id) << ' ' << affinity << '\n';
+		}
 	}
 	for (const ComboLogEntry& entry : record.knownCombos) {
 		s << "known_combo " << text::encode(entry.recipe) << ' ' << entry.playTimeMs << ' ' << text::encodeList(entry.characters) << '\n';
@@ -201,6 +204,14 @@ Result<BattleRecord> parseRecord(const std::string& text) {
 			std::string id;
 			ok = text::decode(t[1], id) && !id.empty();
 			setup.party.back().taught.push_back(id);
+		} else if (key == "member_affinity" && n == 3) {
+			if (setup.party.empty()) {
+				return fail("'member_affinity' before any 'member'");
+			}
+			std::string id;
+			int affinity = 0;
+			ok = text::decode(t[1], id) && parseInt(t[2], affinity) && !id.empty();
+			setup.party.back().affinities[Element(id)] = affinity;
 		} else if (key == "escape_rating" && n == 2) {
 			ok = parseInt(t[1], setup.escapeRating);
 		} else if (key == "scripted_end" && n == 4) {

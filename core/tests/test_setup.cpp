@@ -279,15 +279,17 @@ TEST(retargetTiesGoByACoinFlipPerLaterCandidate) {
 	}
 }
 
-// A one-ally action on a fallen ally is not moved: it does nothing, and its cost is still paid.
+// A one-ally action whose ally falls before it runs is not moved: it does nothing, and its cost is still paid (the
+// original's rule). Named when the ally is already down, it is refused (command.no_effect_on_target).
 TEST(aFallenAllyTargetIsKeptAndTheCostPaid) {
 	Battle battle = makeBattle(data(), {"brass_warden"}, 1);
-	battle.combatant(kFighter).hp = 0;
-	battle.combatant(kFighter).statuses = {{kDefeatedStatus, 0}};
 	const int tp = battle.combatant(kMedic).tp;
 	const int tonics = battle.inventory().at("tonic");
 	battle.setCommand(kMedic, Command::ability("mend", kFighter));
 	battle.setCommand(kScout, Command::item("tonic", kFighter));
+	battle.combatant(kFighter).hp = 0;
+	battle.combatant(kFighter).statuses = {{kDefeatedStatus, 0}};
+	CHECK_EQ(battle.setCommand(kMedic, Command::ability("mend", kFighter)).key, std::string("command.no_effect_on_target"));
 	othersDefend(battle);
 	const std::vector<Event> events = battle.resolveRound();
 	CHECK(ofType(events, EventType::Retargeted).empty());

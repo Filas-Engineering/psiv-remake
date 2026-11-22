@@ -27,6 +27,10 @@ bool effectsRevive(const std::vector<Effect>& effects) {
 	return false;
 }
 
+bool effectsTakeLiving(const std::vector<Effect>& effects) {
+	return std::any_of(effects.begin(), effects.end(), [](const Effect& e) { return e.kind == EffectKind::Revive && e.livingTarget; });
+}
+
 const Effect* travelEffect(const std::vector<Effect>& effects) {
 	for (const Effect& effect : effects) {
 		if (effect.kind == EffectKind::Travel) {

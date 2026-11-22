@@ -661,3 +661,38 @@ end
 	}
 	CHECK_EQ(test::join(seen), test::join(expected));
 }
+
+namespace {
+
+// Answers the leader, music, area and tile tests from fixed values.
+struct StateHost : RecordingHost {
+	bool game_state(const std::string& test, const std::string& value) override {
+		trace.push_back("state " + test + " " + value);
+		return (test == "leader" && value == "fighter") || (test == "music" && value == "harbor_theme") || (test == "area" && value == "cove") ||
+			(test == "tile" && value == "water");
+	}
+};
+
+}
+
+TEST(leader_music_area_and_tile_conditions_ask_the_host) {
+	Program p = test::compile_ok(R"(event a skippable
+	if leader fighter and music harbor_theme and area cove and tile water
+		say guide "all four"
+	end
+	if leader medic or not tile floor
+		say guide "either"
+	end
+end
+)");
+	StateHost host;
+	Interpreter it(p, host);
+	CHECK(it.start("a"));
+	CHECK(it.skip());
+	test::run(it, host);
+	CHECK(it.status() == Status::finished);
+	const std::string trace = test::join(host.trace);
+	CHECK(trace.find("all four") != std::string::npos && trace.find("either") != std::string::npos);
+	CHECK(trace.find("state tile water") != std::string::npos);
+	CHECK(!test::compile_errors("event b skippable\n\tif tile lava\n\t\tsay guide \"x\"\n\tend\nend\n").empty());
+}

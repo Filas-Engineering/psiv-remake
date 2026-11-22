@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 15
+#define PSIV_ABI_VERSION 16
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -295,6 +295,9 @@ typedef struct psiv_game_info {
 	/* game.json presentation.music.fade_ms: how long a change of area track fades; -1 when the data names none and the
 	 * host's own rule holds. Script music plays carry their own in psiv_action.fade_ms. */
 	int32_t music_fade_ms;
+	/* game.json cell_pixels: pixels per cell for the pixel positions the session reports (psiv_actor's path_x and path_y,
+	 * psiv_platform's x and y); scale them to the host's own cell size. */
+	int32_t cell_pixels;
 } psiv_game_info;
 
 PSIV_API psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out);
@@ -620,6 +623,12 @@ typedef struct psiv_field_info {
 	int64_t next_tick_us;
 	int64_t step_lands_in_us;
 	int64_t run_step_lands_in_us;
+	/* The moving platform the party rides (psiv_platforms), "" for none: while it moves the leader's cell follows it and
+	 * held input waits; draw the party (followers too) on it. */
+	const char* riding_platform;
+	/* The text key area_name comes from: the area's `name` variant for where the party came from and the flags, else
+	 * "area.<id>". */
+	const char* area_name_key;
 } psiv_field_info;
 
 typedef struct psiv_enemy {
@@ -730,6 +739,18 @@ typedef struct psiv_actor {
 	/* 1 while it walks about by itself (game.json `wander`): shown, not removed, in its home area and in no running event. A
 	 * script's `look` replaces sprite_enemy and look; `look <actor> default` brings back game.json's. */
 	int32_t wanders;
+	/* 1 while it walks its patrol (game.json `patrol`), under the same conditions as wanders. */
+	int32_t patrols;
+	/* 1 while it moves along its pixel path (game.json `path`). Draw it at home times the cell size plus (path_x, path_y), in
+	 * psiv_game_info's cell_pixels; x and y are then the cell holding that point. With a footprint (cells wide and high,
+	 * from that point) it blocks every cell the footprint overlaps; with none (0) it blocks nothing. */
+	int32_t on_path;
+	int32_t home_x;
+	int32_t home_y;
+	int32_t path_x;
+	int32_t path_y;
+	int32_t footprint_w;
+	int32_t footprint_h;
 } psiv_actor;
 
 /* A cell of a route. */
@@ -749,8 +770,38 @@ typedef struct psiv_animation {
 	int32_t end;
 } psiv_animation;
 
+typedef enum psiv_platform_mode { PSIV_PLATFORM_LOOP, PSIV_PLATFORM_ONE_WAY, PSIV_PLATFORM_TRIGGERED } psiv_platform_mode;
+
+/* A moving platform of the party's area (the area's `platforms`). */
+typedef struct psiv_platform {
+	const char* id;
+	/* A psiv_platform_mode. */
+	int32_t mode;
+	int32_t from_x;
+	int32_t from_y;
+	int32_t to_x;
+	int32_t to_y;
+	/* The cell it stands on (the nearest along its run), and its place in pixels (psiv_game_info's cell_pixels): the top
+	 * left of the cell-sized square it covers, which moves smoothly between cells. */
+	int32_t x;
+	int32_t y;
+	int32_t pixel_x;
+	int32_t pixel_y;
+	/* 0 docked at from, 1 docked at to (the party may step on or off), -1 between them. */
+	int32_t end;
+	/* Milliseconds it still rests at that end. */
+	int32_t pause_ms;
+	/* 1 while it carries the party. */
+	int32_t carrying;
+	/* Microseconds along its run from `from`, and the whole run. */
+	int64_t position_us;
+	int64_t run_us;
+} psiv_platform;
+
 /* PSIV_NOT_FOUND outside an area (at the title before a game). */
 PSIV_API psiv_status psiv_field_info_get(psiv_session* session, psiv_field_info* out);
+/* The party's area's moving platforms, in the area's order; none in most areas. PSIV_NOT_FOUND outside an area. */
+PSIV_API psiv_status psiv_platforms(psiv_session* session, const psiv_platform** out, int32_t* count);
 /* width * height bytes, row-major from the top left, each a psiv_cell terrain plus PSIV_CELL_WALKABLE. A closed exit has
  * the terrain of its closed_tile and is not walkable. */
 PSIV_API psiv_status psiv_field_grid(psiv_session* session, const uint8_t** out, int32_t* count);
@@ -992,6 +1043,8 @@ typedef struct psiv_battle_option {
 	int32_t uses;
 	/* The psiv_cancel_reason it would be cancelled with now, PSIV_CANCEL_NONE when usable. */
 	int32_t unusable;
+	/* Skills: the member's maximum uses (its character's skill_uses by level, else the skill's); otherwise -1. */
+	int32_t max_uses;
 } psiv_battle_option;
 
 /* PSIV_NOT_FOUND when there is neither a battle nor an ended one. */
@@ -1124,6 +1177,9 @@ typedef struct psiv_battle_event {
 	int32_t vehicle_battle;
 	int32_t command_count;
 	const psiv_recorded_command* commands;
+	/* DamageDealt and Healed: what the roll gave before the target's hit points (technique points for a TP restore), a
+	 * shield's damage cap or the maximum took any off; amount is what changed. Show either. */
+	int32_t rolled;
 } psiv_battle_event;
 
 /* MUTATES. Resolves one round and returns its events. The battle ends inside this call when an outcome is
@@ -1278,6 +1334,17 @@ typedef struct psiv_member_detail {
 	/* The character's profile rows in the data's order; none when it has no `profile`. */
 	int32_t profile_count;
 	const psiv_profile_row* profile;
+	/* Strength plus every worn piece's stats.attack: what basic attacks and attack_stat "attack" hit with. */
+	int32_t attack;
+	/* The level's stats without equipment. */
+	psiv_stat_bonus base_stats;
+	/* The experience this level takes in all (experience counts from 0 at each level; 0 at the level cap), and every point
+	 * of experience the member has had. */
+	int32_t experience_for_level;
+	int32_t total_experience;
+	/* A psiv_creature_kind, and 1 when instant defeat can fell it. */
+	int32_t creature_kind;
+	int32_t vulnerable;
 } psiv_member_detail;
 
 /* PSIV_NOT_FOUND for a character not in the roster. */
@@ -1471,6 +1538,23 @@ typedef struct psiv_credits_info {
 } psiv_credits_info;
 /* PSIV_NOT_FOUND while no credits play. */
 PSIV_API psiv_status psiv_credits_info_get(psiv_session* session, psiv_credits_info* out);
+
+/* Whether psiv_load may run from the current state (from the title only), for a host that shows or hides Load;
+ * psiv_saves says whether there is anything to load. */
+PSIV_API int32_t psiv_can_load(psiv_session* session);
+
+/* The keys battle events and the session's battle notices can carry with this data, for a host to check its presentation
+ * data against: core's Message and status message keys, the notices around battles (game.*, auto.stopped.*), and the
+ * cancel reasons by name (psiv_cancel_reason without none; their text keys are cancel.<name>). Each list sorted. */
+typedef struct psiv_battle_keys {
+	int32_t message_count;
+	const char* const* messages;
+	int32_t notice_count;
+	const char* const* notices;
+	int32_t cancel_reason_count;
+	const char* const* cancel_reasons;
+} psiv_battle_keys;
+PSIV_API psiv_status psiv_battle_keys_get(psiv_session* session, psiv_battle_keys* out);
 
 /* The story pictures up now, bottom first: draw them in that order over the field or the dialogue. Scripts' `picture
  * show`, `picture hide [name]` (the top one without a name) and `picture clear` change them; they stay through lines,
