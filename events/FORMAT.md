@@ -189,6 +189,7 @@ Labels belong to their event. A loop that never waits is stopped with a runtime 
 | `move <actor> [via <marker>...] to <x> <y> <z> [speed <n>] [pathfind] [nowait]` | `move vendor via stall_counter to 4 0 -2.5 nowait` |
 | `place <actor> <marker> [facing <direction>] [nowait]` | `place keeper stall_counter facing south` |
 | `place <actor> <x> <y> <z> [facing <direction>] [nowait]` | `place vendor 4 0 -2.5` |
+| `place leader at <actor> [facing <direction>\|facing same]` | `place leader at drifter facing same` |
 | `face <actor> <actor, marker or direction> [nowait]` | `face guide traveler`, `face guide west` |
 | `anim <actor> <animation> [loop] [nowait]` | `anim keeper bow loop`, `anim vendor dissolve` |
 | `show <actor> [with <animation>] [nowait]` | `show traveler`, `show traveler with fade_in` |
@@ -200,6 +201,7 @@ Labels belong to their event. A loop that never waits is stopped with a runtime 
 
 - `move` walks to each `via` marker in turn, then to the target. `pathfind` asks the game to find its own way around what stands in the way; without it each leg is straight, as the game defines it.
 - `place` puts the actor there at once, with no walk, facing `facing` if given (`north`, `east`, `south` or `west`), otherwise as it faced.
+- `place leader at` puts the party leader on the cell the named actor stands on now, for good: game state, like `warp`, so it applies while skipping and is not allowed inside `together` or `race` or in a background event. `facing` turns the leader that way, `facing same` the way the actor faces; left out, the leader keeps its facing. It is how a member who joins and leads takes the place of the actor that stood for it (`party add drifter`, `party order drifter`, `hide drifter`, `place leader at drifter facing same`); the actor stays where it is, so hide or remove it. What the game does when the actor is not in the area, or the party rides a vehicle, is its own business (`../game` warns and changes nothing). With a registry the actor is a listed `actor`. A line `place leader at <name>` always reads this way; an actor named `leader` is still placed on a marker named `at` when nothing, `facing` or `nowait` follows it. Scripts without the form keep their fingerprint.
 - A direction (`north`, `east`, `south`, `west`) after `face` always means the direction, so an actor or marker with such a name cannot be faced by name.
 - `remove` takes the actor out of the game: gone for good, or `until reload`, until the party next enters an area. It changes the game at once, like `give`, applies while skipping and is not allowed inside `together` or `race`. It is also the way to despawn an actor; there is no other command for it.
 - `move ... via` is the multi-point path: the actor walks to each `via` marker in turn, then to the target.

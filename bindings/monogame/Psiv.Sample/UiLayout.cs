@@ -707,6 +707,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["click_actor"] = ("walk", "interact", "whether a click on an actor walks up to it and faces it, or also interacts"),
 		["continue"] = ("newest", "choose", "whether Continue loads the newest save or opens the Load list"),
 		["item_order"] = ("items_then_equipment", "equipment_then_items", "whether the Item list puts the bag's items or the worn pieces first"),
+		["map_hold_events"] = ("show", "wait", "whether an event's lines and actions go on under the dark screen after an area change or wait for the hold and its fade-in"),
 		["macro_flow"] = ("reset", "remember", "whether the menus open at their first row after a macro's round or on Macro and the macro played last"),
 		["navigation"] = ("tabs", "list", "whether the field menu's entries are tabs turned with Left and Right or a list chosen with Up, Down and Confirm"),
 		["one_destination"] = ("list", "go", "whether a travel use with one place to go lists it or goes at once"),
@@ -869,6 +870,18 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 					else
 					{
 						screen.Params[p.Name] = UiExpr.Parse($"'{format}'", out _)!;
+					}
+				}
+				else if (p.Name == "intro_end_music")
+				{
+					string? music = p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : null;
+					if (music is null || music.Length == 0 || !music.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_'))
+					{
+						Problem($"params.{p.Name}", "must be \"keep\", \"stop\" or a track id: what plays once the title's intro ends or is skipped");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{music}'", out _)!;
 					}
 				}
 				else if (p.Name == "after_defeat")

@@ -1,0 +1,47 @@
+# A vehicle's move sound once per step aboard (make_vehicle_sound_data.py's copy, `move_ms` 0, with --dev): a scripted
+# path walk takes its seven steps in one update, and the seven sounds play one a step's time apart, not on one frame; a
+# click-walk path and the real-time input play one for each step they take.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev vehicle reed_skimmer reed_path skimmer_front
+cmd walk 13 4
+cmd walk 9 6
+cmd walk 16 6
+press Right
+wait 3
+press Enter
+wait 4
+expect state aboard reed_skimmer
+expect state vehicles reed_skimmer 17 6 aboard
+
+# A scripted walk: seven steps at once.
+audio mark
+cmd walk 10 6
+wait 1
+expect state vehicles reed_skimmer 10 6 aboard
+expect audiocount 1 cue lookout_creak
+wait 6
+expect audiocount 1 cue lookout_creak
+wait 2
+expect audiocount 2 cue lookout_creak
+wait 60
+expect audiocount 7 cue lookout_creak
+
+# A click-walk path: five steps, five sounds.
+audio mark
+clickcell 15 6
+wait 90
+expect state vehicles reed_skimmer 15 6 aboard
+expect audiocount 5 cue lookout_creak
+
+# The real-time input: three steps west, three sounds.
+fieldinput realtime
+audio mark
+hold Left 22
+wait 30
+expect state vehicles reed_skimmer 12 6 aboard
+expect audiocount 3 cue lookout_creak

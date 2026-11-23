@@ -761,7 +761,27 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 		if (!parseFacing(facing, c.startFacing)) {
 			reader.fail(*start, "data.bad_facing", {});
 		}
-		reader.texts(*start, "lineup", c.startLineup, true);
+		// A lineup entry is a character id, or `{"id", "level"}` for a member who starts at a level of its own.
+		if (const JsonValue* lineup = reader.field(*start, "lineup", JsonValue::Type::Array, true)) {
+			for (const JsonValue& entry : lineup->items) {
+				if (entry.is(JsonValue::Type::String)) {
+					c.startLineup.push_back(entry.string);
+				} else if (entry.is(JsonValue::Type::Object)) {
+					reader.only(entry, gameKeys("game.json", "start.lineup[]"));
+					std::string id;
+					int level = 0;
+					reader.text(entry, "id", id, true);
+					reader.integer(entry, "level", level, true, 1, rules::formulas::kMaxLevel);
+					if (c.startLevels.count(id)) {
+						reader.fail(entry, "data.start_level_twice", {id});
+					}
+					c.startLineup.push_back(id);
+					c.startLevels[id] = level;
+				} else {
+					reader.fail(entry, "data.bad_start_lineup_entry", {});
+				}
+			}
+		}
 		reader.integer(*start, "level", c.startLevel, false, 1, rules::formulas::kMaxLevel);
 		reader.integer(*start, "money", c.startMoney, false, 0, 999999);
 		reader.counts(*start, "items", c.startItems, false, 1, 99);
@@ -1650,6 +1670,10 @@ void checkReferences(const GameData& data, Problems& problems) {
 	}
 	for (const std::string& key : sessionTextKeys()) {
 		textExists("the session", key);
+	}
+	// An item used up when it changes nothing (consume_when_no_effect) is told with its own notice.
+	if (std::any_of(db.items.begin(), db.items.end(), [&](const auto& item) { return item.second.consumed && item.second.consumeWhenNoEffect.value_or(db.battleRules.consumeWhenNoEffect); })) {
+		textExists("the session", "game.no_effect_used");
 	}
 	for (const events::Instruction& in : data.program.code) {
 		if (in.op == events::Op::register_town && !registrableTown(in.name)) {

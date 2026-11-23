@@ -1790,7 +1790,7 @@ Params of `menu_system.json`:
 * `picker_confirm` (`"rows"` default, or `"close"`): after Confirm sets a level, the picker returns to the rows, or closes the field menu.
 * `row_value` (`"show"` default, or `"hide"`): a settings row's `text` is its label alone and its `value` empty, for rows drawn without the current value.
 
-The page probe reads `picker` while the picker is open; the `selected` probe reads the picker's row then.
+The page probe reads `picker` while the picker is open; the `selected` probe reads the picker's row then. Only setting rows open a picker: `save` opens the slot list (with `save_slots`' `flow`), `controls` the Controls page and `quit` its question, as without the picker (`scripts/system_rows.txt`).
 
 The row `controls` in `rows` opens the Controls page over the menu (the options screen on its Controls page alone, as the Extras menu's `controls` does); Back leaves it for the system page's rows. Its row has no value; its description is `ui.options.controls_help`.
 
@@ -1853,6 +1853,34 @@ A choice's prompt with `{page}` breaks shows its earlier pages first, each as a 
 ### The options runs
 
 `make_options_data.py GAME_DATA CORE_DATA OUT` copies the data with five text and five battle speed levels, the chest's opened notice on and the Reed Path's cache a `crate`, and a party of two facing the cache with two macros. `make_options_assets.py EXPORT BASE OUT [--small]` writes the set above (the menu's Status, Items and System entries, the system page's picker, label-only rows and Controls row, eight lettered macro slots with the steps beside them); `alt/menu_system_close.json` closes the menu from the picker, and `alt/menu_system_broken.json` and `alt/battle_broken.json` are checked on copies. `make_options_assets.py --hold SET OUT` copies a set with `alt/dialogue_hold.json` (the reveal hold and the open cue). `options_flows.txt` and `options_small.txt` (with `--dev`) play the options sets, `reveal_hold_narration.txt` the narration set and `reveal_hold_talk.txt` the talk set with the hold swapped in; screenshots under `build/shots/options/` with `--window`.
+
+## The title's music after its intro, events through the map load hold, a vehicle's move sound
+
+Each optional as the flows above: a set without the two params plays and draws as before.
+
+### Title: the music after the intro
+
+`intro_end_music` (param of `title.json`, a plain string): what plays once the title's `intro` ends by itself or a key skips it (to the start state, or to the menu without one). `"keep"` (default: the title's track goes on), `"stop"` (the music stops; the title stays silent until it is left) or a track id (lowercase letters, digits and `_`: that track takes over, cross-fading as any change of track; give it in `game.json`'s `presentation.audio` so an asset can stand for it). It holds until the title is left; the next time the title comes up it applies again only after an intro played on it (`after_defeat` "intro"). A title without `intro` never reaches it. Another value is a problem (`params.intro_end_music: must be "keep", "stop" or a track id`). The `music` probe reads the track.
+
+```json
+{"version": 1, "intro": [{"name": "studio", "ms": 600}], "params": {"intro_end_music": "victory_bright_sail"}, "windows": [...]}
+```
+
+### Field: events through the map load hold
+
+`map_hold_events` (param of `field.json`): `"show"` (default: an event that runs as the screen goes dark after an area change, an arrival's load hook or a scene that warped, goes on under the dark screen, so its next line shows at once behind the hold) or `"wait"`: while `map_load_hold_ms` and the 250 ms fade-in run, an event waits (the session gets no time and no input from the sample, Skip included, and the field is drawn with no dialogue box), and its line shows, with the dialogue open cue and the reveal, once the screen has faded in. The `line` probe reads `-` while it waits. The area's music starts as the fade-in begins, so after a travel item or a return lands the party, the landing area's track plays before an arrival event that speaks and then warps onward can take the party further; an arrival event whose first command is a warp leaves before the sample sees the landing area at all, as before. `"wait"` is not the default because runs written for the dark-screen line (`arrival_followers.txt`, `warp_place.txt`) read it within the hold.
+
+```json
+{"version": 1, "params": {"map_hold_events": "wait"}, "windows": []}
+```
+
+### A vehicle's move sound
+
+`game.json`'s `presentation.sounds.vehicles` `move` (library; [`../game/README.md`](../game/README.md), game.json) comes as one `sound` action per step aboard (every `move_ms` of moving when that is above 0). A path walk can take several steps in one session call (a script's `cmd walk`, as `game_cli`'s `walk` does), whose sounds came in one batch and played on one frame; the sample now queues the ridden vehicle's move sound and plays the next once `move_ms` (or, at 0, the vehicle's step time) has passed since the one before, so the sounds heard match the steps and keep their pace; leaving the field (a battle, an event, the title) drops the ones still waiting. Every other sound plays as it comes.
+
+### The arrival hold and vehicle sound runs
+
+`make_arrival_hold_data.py ARRIVAL_DATA OUT` copies `make_arrival_data.py`'s copy with the load hook's event on the field Saltgrass's `return` lands on saying a line, warping to Tidewater and saying another. `make_arrival_hold_assets.py EXPORT BASE OUT` copies the test assets with a one-step title `intro` and `intro_end_music` "victory_bright_sail" (`alt/title_stop.json` "stop", `alt/title_broken.json` a value that is no track id, checked on a copy) and the field's `map_hold_events` "wait". Runs with `--dev`: `arrival_hold.txt` (the intro skipped, the shell's landing held, the field's track with the fade-in, the line after it, the same after the event's warp) and `title_music_stop.txt` (the intro ending into silence). `make_vehicle_sound_data.py GAME CORE OUT [--move-ms N]` gives the reed skimmer the move sound `lookout_creak`: `vehicle_sounds.txt` (`move_ms` 0: a scripted walk's seven sounds a step apart, a click-walk's five, the real-time input's three) and `vehicle_sounds_ms.txt` (`move_ms` 300: two sounds 300 ms apart), each counted with `expect audiocount`.
 
 ## Dialogue control tags (`ui/dialogue.json`, `SampleController.Dialogue.cs`)
 

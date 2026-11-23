@@ -65,6 +65,7 @@ const std::vector<rules::DataKeySet>& gameDataKeys() {
 		rules::DataKeySet("game.json", "presentation.music.areas entry", {"flag", "track"}),
 		rules::DataKeySet("game.json", "presentation.music.vehicles entry", {"battle", "field"}),
 		rules::DataKeySet("game.json", "start", {"area", "marker", "facing", "lineup", "level", "money", "items"}),
+		rules::DataKeySet("game.json", "start.lineup[]", {"id", "level"}),
 		rules::DataKeySet("game.json", "vehicles[]", {"id", "crosses", "breaks", "breaks_for_good", "speed_percent", "encounters", "call_item", "opening"}),
 		rules::DataKeySet("game.json", "vehicles[].encounters[]", {"encounter", "weight"}),
 		rules::DataKeySet("journal.json", "", {"objectives", "jobs", "encyclopedia", "party_talk"}),

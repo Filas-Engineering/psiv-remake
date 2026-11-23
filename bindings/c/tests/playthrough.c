@@ -150,6 +150,20 @@ static const char* battleName(int index) {
 	return index >= 0 && index < battleNameCount ? battleNames[index] : "?";
 }
 
+/* An item that changed nothing was used up when its action spends it after the no-effect event. */
+static int usedUp(const psiv_battle_event* events, int32_t count, int32_t at) {
+	for (int32_t j = at + 1; j < count; ++j) {
+		const psiv_battle_event* next = &events[j];
+		if (next->type == PSIV_EVENT_ACTION_STARTED || next->type == PSIV_EVENT_ROUND_STARTED || next->type == PSIV_EVENT_BATTLE_ENDED) {
+			break;
+		}
+		if (next->type == PSIV_EVENT_RESOURCE_SPENT && next->resource == PSIV_RESOURCE_ITEM && strcmp(next->ability, events[at].ability) == 0) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static void printEvents(const psiv_battle_event* events, int32_t count) {
 	for (int32_t i = 0; i < count; ++i) {
 		const psiv_battle_event* e = &events[i];
@@ -181,7 +195,7 @@ static void printEvents(const psiv_battle_event* events, int32_t count) {
 			print("  A new combination joins the combo log.");
 			break;
 		case PSIV_EVENT_ITEM_HAD_NO_EFFECT:
-			print("  %s has no effect and is kept.", displayName(e->ability));
+			print(usedUp(events, count, i) ? "  %s has no effect and is used up." : "  %s has no effect and is kept.", displayName(e->ability));
 			break;
 		case PSIV_EVENT_MISSED:
 			print("  %s evades.", battleName(e->target));

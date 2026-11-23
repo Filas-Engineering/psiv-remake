@@ -1,0 +1,17 @@
+# The title's intro ending by itself under `intro_end_music` "stop" (make_arrival_hold_assets.py's alt/title_stop.json as
+# the title, on make_arrival_hold_data.py's copy): the title's track plays through the intro and stops as it ends; the
+# new game's area plays its own.
+
+cmd set text instant
+expect screen Title
+wait 1
+expect state uifield.title.intro true
+expect state music title_harbor_dawn
+audio mark
+wait 40
+expect state uifield.title.intro false
+expect state music -
+expect audio music stop
+pressuntil Enter Field 400
+wait 2
+expect state music field_marsh_reeds

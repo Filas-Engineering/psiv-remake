@@ -1,6 +1,7 @@
 #include "test.h"
 
 #include "game/area.h"
+#include "game/runner.h"
 #include "game/save.h"
 
 #include "rules/battle.h"
@@ -11,6 +12,7 @@
 #include <fstream>
 #include <map>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -278,4 +280,35 @@ TEST(anAreaNameMayBeAPlainTextKey) {
 	CHECK(!empty.ok() && empty.problems[0].message.key == "data.field_cannot_empty");
 	const rules::Result<Area> number = parseArea("nook.json", R"({"id": "nook", "map": ["###", "#.#", "###"], "markers": {"start": [1, 1]}, "name": 4})");
 	CHECK(!number.ok() && number.problems[0].message.key == "data.field_wrong_type");
+}
+
+// An item that changed nothing is kept by default and used up under consume_when_no_effect: the field's notice and the
+// terminal log say which.
+TEST(anItemWithNoEffectSaysWhetherItWasKeptOrUsedUp) {
+	for (const bool consume : {false, true}) {
+		GameData data = test::data();
+		data.db.items.at("tonic").consumeWhenNoEffect = consume;
+		Session s(data, SessionOptions());
+		test::placeParty(s, "reed_path", "west_gate", Facing::East);
+		setParty(s, {"medic"}, 5);
+		s.world().items = {{"tonic", 2}};
+		CHECK(s.openMenu().empty());
+		CHECK_EQ(s.useItem("tonic", "medic").key, std::string(consume ? "game.no_effect_used" : "game.no_effect"));
+		CHECK_EQ(s.world().items["tonic"], consume ? 1 : 2);
+	}
+	for (const bool consume : {false, true}) {
+		GameData data = test::data();
+		data.db.items.at("tonic").consumeWhenNoEffect = consume;
+		Session s(data, SessionOptions());
+		test::placeParty(s, "reed_path", "west_gate", Facing::East);
+		setParty(s, {"medic"}, 20);
+		s.world().items = {{"tonic", 2}};
+		std::ostringstream out;
+		Runner runner(s, out);
+		CHECK(s.devBattle("training").empty());
+		runner.settle();
+		runner.execute("item medic tonic p1");
+		runner.execute("round");
+		CHECK(out.str().find(consume ? "  Tonic has no effect and is used up.\n" : "  Tonic has no effect and is kept.\n") != std::string::npos);
+	}
 }

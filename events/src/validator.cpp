@@ -198,6 +198,9 @@ private:
 		case ActionType::sound:
 			name(NameKind::audio, a.subject, line);
 			break;
+		case ActionType::place_leader:
+			name(NameKind::actor, a.subject, line);
+			break;
 		case ActionType::warp:
 			name(NameKind::map, a.subject, line);
 			name(NameKind::marker, a.target, line);

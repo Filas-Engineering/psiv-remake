@@ -794,6 +794,11 @@ private:
 			return;
 		}
 		const bool areaMusic = cmd == "music" && l.tokens.size() > 1 && l.tokens[1].text == "area";
+		if (place_leader(l) && (ctx.background || ctx.parallel)) {
+			error(l.number, ctx.background ? "script.background_not_allowed" : "script.allowed_inside_only_actor_camera", ctx.background ? std::vector<std::string>{"place leader"} : std::vector<std::string>{"place leader", ctx.parallel});
+			skip_command(ctx);
+			return;
+		}
 		if (ctx.parallel && (areaMusic || !command->parallel)) {
 			error(l.number, "script.allowed_inside_only_actor_camera", {cmd, ctx.parallel});
 			skip_command(ctx);
@@ -827,6 +832,14 @@ private:
 
 	// After rejecting a block command, consume its block so its `end` does
 	// not close the wrong parent.
+	// `place leader at <actor> ...`: the leader to an actor's cell. A marker named `at` after an actor named `leader`
+	// still reads as the plain place when nothing or `facing`/`nowait` follows it.
+	static bool place_leader(const SourceLine& l) {
+		return l.tokens.size() >= 4 && l.tokens[0].text == "place" && l.tokens[1].kind == TokenKind::word && l.tokens[1].text == "leader" &&
+			l.tokens[2].kind == TokenKind::word && l.tokens[2].text == "at" && l.tokens[3].kind == TokenKind::word && l.tokens[3].text != "facing" &&
+			l.tokens[3].text != "nowait";
+	}
+
 	void skip_command(const Context& ctx) {
 		std::string cmd = head();
 		if (one_of(cmd, {"if", "while", "choice", "ask", "battle", "together", "race", "sequence"}) && !(cmd == "choice" && choice_clear())) {
@@ -963,6 +976,16 @@ private:
 			s = simple(Op::jump);
 			s.kind = cmd == "label" ? StmtKind::label : StmtKind::go_to;
 			a.name(s.ins.name, "a label name");
+		} else if (cmd == "place" && place_leader(lines_[pos_])) {
+			s = action(ActionType::place_leader);
+			a.expect_keyword("leader");
+			a.expect_keyword("at");
+			a.name(s.ins.action.subject, "an actor name");
+			if (a.keyword("facing")) {
+				if (a.name(s.ins.action.facing, "north, east, south, west or same") && !is_direction(s.ins.action.facing) && s.ins.action.facing != "same") {
+					a.error("script.expected_found", {"north, east, south, west or same", "name '" + s.ins.action.facing + "'"});
+				}
+			}
 		} else if (cmd == "move" || cmd == "place") {
 			s = action(cmd == "move" ? ActionType::move : ActionType::place_actor);
 			a.name(s.ins.action.subject, "an actor name");

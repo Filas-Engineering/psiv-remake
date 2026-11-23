@@ -384,6 +384,19 @@ TEST(anActorCellApartFromItsTalkPointIsSolidButNotAPoint) {
 	const CheckReport moved = checkData(DataDirectories{dir, "../core/data"});
 	CHECK(find(moved, "check.marker_on_object") && find(moved, "check.marker_on_object")->message.params[1] == "actor 'tallykeeper'");
 	CHECK(!find(moved, "check.marker_not_reached"));
+
+	// An actor its flags can hide is not always there, so a marker on its cell is a place to arrive; so is the cell of a
+	// talk point solid only while its flags hold, but not of one that is always solid.
+	replaceIn(dir + "/game.json", "}, \"tallykeeper\", ", "}, {\"id\": \"tallykeeper\", \"block_flag\": \"cove.quiet_seen\"}, ");
+	const CheckReport flagged = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(!find(flagged, "check.marker_on_object"));
+	CHECK(flagged.problems.empty());
+	replaceIn(dir + "/areas/nook.json", "\"far\": [1, 3]}", "\"far\": [1, 3], \"post\": [5, 1]}");
+	replaceIn(dir + "/areas/nook.json", "\"actor_at\": [1, 3]}", "\"actor_at\": [1, 3]},\n\t\t{\"id\": \"nook_post\", \"at\": [5, 1], \"event\": \"hollow_keeper\"}");
+	const CheckReport post = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(find(post, "check.marker_on_object") && find(post, "check.marker_on_object")->message.params[0] == "post");
+	replaceIn(dir + "/areas/nook.json", "\"id\": \"nook_post\", \"at\": [5, 1],", "\"id\": \"nook_post\", \"at\": [5, 1], \"solid\": \"while_active\", \"require_flag\": \"cove.quiet_seen\",");
+	CHECK(checkData(DataDirectories{dir, "../core/data"}).problems.empty());
 }
 
 TEST(actorHomesFiguresAndActorCellsAreChecked) {
@@ -650,4 +663,33 @@ TEST(aTownsReturnIsChecked) {
 	dir = copyData("return_field", {});
 	replaceIn(dir + "/areas/reed_path.json", "\"kind\": \"field\",", "\"kind\": \"field\", \"return\": {\"area\": \"tidewater\", \"marker\": \"start\"},");
 	CHECK(find(checkData(DataDirectories{dir, "../core/data"}), "data.return_not_town"));
+}
+
+// A starting lineup entry may give its member a level of its own; the plain id keeps `start.level`.
+TEST(aStartingLineupEntryMayCarryItsOwnLevel) {
+	const std::string dir = copyData("start_levels", {});
+	replaceIn(dir + "/game.json", "\"lineup\": [\"fighter\"]", "\"lineup\": [\"fighter\", {\"id\": \"mystic\", \"level\": 7}]");
+	CHECK(checkData(DataDirectories{dir, "../core/data"}).problems.empty());
+	rules::Result<GameData> loaded = loadGameData(DataDirectories{dir, "../core/data"});
+	CHECK(loaded.ok());
+	if (loaded.ok()) {
+		Session s(*loaded.value, SessionOptions());
+		CHECK(s.newGame().empty());
+		CHECK_EQ(s.world().roster.size(), 2u);
+		CHECK(s.world().roster.size() == 2 && s.world().roster[0].characterId == "fighter" && s.world().roster[0].level == 3);
+		CHECK(s.world().roster.size() == 2 && s.world().roster[1].characterId == "mystic" && s.world().roster[1].level == 7);
+		CHECK(s.world().lineup == (std::vector<std::string>{"fighter", "mystic"}));
+	}
+
+	const auto problems = [&](const std::string& lineup) {
+		const std::string bad = copyData("start_levels_bad", {});
+		replaceIn(bad + "/game.json", "\"lineup\": [\"fighter\"]", "\"lineup\": " + lineup);
+		return checkData(DataDirectories{bad, "../core/data"});
+	};
+	CHECK(find(problems("[\"fighter\", {\"id\": \"mystic\", \"level\": 0}]"), "data.field_out_of_range"));
+	CHECK(find(problems("[{\"id\": \"nobody\", \"level\": 2}]"), "data.unknown_character_starting_lineup"));
+	CHECK(find(problems("[{\"id\": \"fighter\", \"level\": 2}, {\"id\": \"fighter\", \"level\": 4}]"), "data.start_level_twice"));
+	CHECK(find(problems("[{\"id\": \"fighter\", \"level\": 2, \"rank\": 1}]"), "data.unknown_field"));
+	CHECK(find(problems("[\"fighter\", 4]"), "data.bad_start_lineup_entry"));
+	CHECK(find(problems("[{\"id\": \"fighter\"}]"), "data.missing_field"));
 }

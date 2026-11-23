@@ -66,9 +66,11 @@ enum class ActionType {
 	place_actor,
 	camera_to,
 	camera_reset,
+	// `place leader at <actor>`: the party leader stands on the actor's cell from now on, game state like warp.
+	place_leader,
 };
 
-// EVT-023: every action except warp only changes what is on screen or heard.
+// EVT-023: every action except warp and place_leader only changes what is on screen or heard.
 // While skipping, the interpreter applies these to its presentation state
 // instead of calling the host, and rebuilds the screen when the skip stops.
 bool presentation_only(ActionType type);
@@ -95,7 +97,8 @@ struct Action {
 	// around what stands in the way.
 	std::vector<std::string> waypoints;
 	bool pathfind = false;
-	// place_actor: north, east, south or west, or empty to keep the actor's facing.
+	// place_actor: north, east, south or west, or empty to keep the actor's facing. place_leader: the same for the leader,
+	// whose actor is `subject`, or `same` for that actor's facing.
 	std::string facing;
 	// camera_to: the scene camera's goal, a marker in `target` or a cell (x column, y row) in `position` with has_position,
 	// reached over `seconds` (0 cuts). camera_reset: back on the party leader over `seconds`.

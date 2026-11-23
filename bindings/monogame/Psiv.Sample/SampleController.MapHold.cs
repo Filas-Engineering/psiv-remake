@@ -15,6 +15,11 @@ public sealed partial class SampleController
 	private int _mapHoldMs;
 	private string _mapHoldArea = "";
 
+	// The field layout's `map_hold_events` "wait": an event running through the hold and its fade-in (one that started on
+	// landing, or a scene that warped) waits, drawn as the field with no line, until the screen has faded in; the area's
+	// music starts as the fade-in begins, so it plays before the event can go on and warp the party further.
+	private bool MapHoldWaits => _mapHoldMs > 0 && _s.Mode == Mode.Event && Ui.ParamText("field", "map_hold_events", UiData(), "show") == "wait";
+
 	private void UpdateMapHold(int dtMs)
 	{
 		GameInfo game = _gameInfo ??= _s.GameInfo();

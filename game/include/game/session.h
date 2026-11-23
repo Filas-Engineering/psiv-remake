@@ -1128,6 +1128,7 @@ private:
 	// The same from actorsHere() as it is now.
 	std::set<Cell> actorCells(const std::vector<ActorView>& views, const std::string& except) const;
 	void removeActor(const std::string& actor, bool untilReload);
+	std::optional<events::Action> placeLeaderAt(const events::Action& action);
 	void advanceActors(int ms);
 	void giveThing(const std::string& id, int count);
 	void reportFieldUse(const std::vector<rules::Event>& events, const std::vector<rules::PartyMember>& party);

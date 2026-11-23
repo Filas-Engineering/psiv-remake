@@ -48,6 +48,8 @@ public sealed partial class GameData
 	public HashSet<string> Vehicles { get; } = [];
 	// The vehicles game.json gives field rules, which the field draws.
 	public HashSet<string> FieldVehicles { get; } = [];
+	// game.json `presentation.sounds.vehicles`: each vehicle's move sound and its `move_ms` (0: every step).
+	public Dictionary<string, (string Move, int MoveMs)> VehicleMoveSounds { get; } = [];
 	// What each of those crosses (`crosses`, and `barrier` when it `breaks` barriers), and each area's conveyor cells
 	// with their time per cell: where the real-time field input expects the leader's next step to go, and how fast.
 	public Dictionary<string, HashSet<string>> VehicleCrosses { get; } = [];
@@ -185,6 +187,17 @@ public sealed partial class GameData
 			// An entry is a name, or an object with its `id` and `seconds`.
 			d.Animations.UnionWith(Array(presentation, "animations").Select(IdOf).OfType<string>());
 			d.Portraits.UnionWith(Array(presentation, "portraits").Select(IdOf).OfType<string>());
+			if (presentation.TryGetProperty("sounds", out JsonElement sounds) && sounds.ValueKind == JsonValueKind.Object &&
+				sounds.TryGetProperty("vehicles", out JsonElement vehicleSounds) && vehicleSounds.ValueKind == JsonValueKind.Object)
+			{
+				foreach (JsonProperty v in vehicleSounds.EnumerateObject())
+				{
+					if (v.Value.ValueKind == JsonValueKind.Object && v.Value.TryGetProperty("move", out JsonElement move) && Text(move) is { Length: > 0 } cue)
+					{
+						d.VehicleMoveSounds[v.Name] = (cue, v.Value.TryGetProperty("move_ms", out JsonElement ms) ? Whole(ms) ?? 0 : 0);
+					}
+				}
+			}
 		}
 		string core = Path.GetFullPath(Path.Combine(dataDir, root.TryGetProperty("core_data", out JsonElement coreData) ? Text(coreData) ?? "" : ""));
 		d.Guard("party.json", () =>

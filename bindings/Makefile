@@ -1072,6 +1072,41 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/warp_place_data/game/data --dev --saves $(BUILD)/sample_warp_place_saves \
 		--script $(SAMPLE_SCRIPTS)/warp_place.txt --frames 300 > $(BUILD)/sample_warp_place_headless.txt || { cat $(BUILD)/sample_warp_place_headless.txt; exit 1; }
 	tail -n 1 $(BUILD)/sample_warp_place_headless.txt
+	# The title's music after its intro and an arrival event through the map load hold (make_arrival_hold_data.py over the
+	# arrival copy, make_arrival_hold_assets.py): `intro_end_music` a track on a skip (arrival_hold) and "stop" as the intro
+	# ends (title_music_stop); under `map_hold_events` "wait" no line while the screen is dark, the landing area's music
+	# starting with the fade-in before the event warps onward; a copy whose `intro_end_music` is no track id reports it.
+	python3 -I $(SAMPLE_SCRIPTS)/make_arrival_hold_data.py $(BUILD)/arrival_data $(BUILD)/arrival_hold_data
+	python3 -I $(SAMPLE_SCRIPTS)/make_arrival_hold_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/arrival_hold_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/arrival_hold_data/game/data --check-assets --assets $(BUILD)/arrival_hold_assets
+	rm -rf $(BUILD)/arrival_hold_broken_assets
+	cp -R $(BUILD)/arrival_hold_assets $(BUILD)/arrival_hold_broken_assets
+	cp $(BUILD)/arrival_hold_broken_assets/alt/title_broken.json $(BUILD)/arrival_hold_broken_assets/ui/title.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/arrival_hold_broken_assets > $(BUILD)/check_assets_arrival_hold.txt
+	grep -qF "params.intro_end_music: must be \"keep\", \"stop\" or a track id" $(BUILD)/check_assets_arrival_hold.txt
+	rm -rf $(BUILD)/sample_arrival_hold_saves $(BUILD)/arrival_hold_run
+	cp -R $(BUILD)/arrival_hold_assets $(BUILD)/arrival_hold_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/arrival_hold_data/game/data --dev --saves $(BUILD)/sample_arrival_hold_saves --assets $(BUILD)/arrival_hold_run \
+		--script $(SAMPLE_SCRIPTS)/arrival_hold.txt --frames 600 > $(BUILD)/sample_arrival_hold_headless.txt || { cat $(BUILD)/sample_arrival_hold_headless.txt; exit 1; }
+	tail -n 1 $(BUILD)/sample_arrival_hold_headless.txt
+	rm -rf $(BUILD)/sample_title_music_stop_saves $(BUILD)/title_music_stop_run
+	cp -R $(BUILD)/arrival_hold_assets $(BUILD)/title_music_stop_run
+	cp $(BUILD)/title_music_stop_run/alt/title_stop.json $(BUILD)/title_music_stop_run/ui/title.json
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/arrival_hold_data/game/data --dev --saves $(BUILD)/sample_title_music_stop_saves --assets $(BUILD)/title_music_stop_run \
+		--script $(SAMPLE_SCRIPTS)/title_music_stop.txt --frames 200 > $(BUILD)/sample_title_music_stop_headless.txt || { cat $(BUILD)/sample_title_music_stop_headless.txt; exit 1; }
+	tail -n 1 $(BUILD)/sample_title_music_stop_headless.txt
+	# A vehicle's move sound (make_vehicle_sound_data.py): one per step aboard, a step's time apart, for a scripted path
+	# walk that takes seven steps in one update, a click-walk path and the real-time input (vehicle_sounds); every
+	# `move_ms` 300 of moving, 300 ms apart (vehicle_sounds_ms).
+	python3 -I $(SAMPLE_SCRIPTS)/make_vehicle_sound_data.py $(GAME)/data $(CORE)/data $(BUILD)/vehicle_sound_data
+	python3 -I $(SAMPLE_SCRIPTS)/make_vehicle_sound_data.py $(GAME)/data $(CORE)/data $(BUILD)/vehicle_sound_ms_data --move-ms 300
+	@for run in vehicle_sounds:vehicle_sound_data:900 vehicle_sounds_ms:vehicle_sound_ms_data:500; do \
+		name=$${run%%:*}; rest=$${run#*:}; data=$${rest%%:*}; frames=$${rest#*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves; \
+		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/$$data/game/data --dev --saves $(BUILD)/sample_$${name}_saves \
+			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
 	# The save flow, the travel messages and a kept choice (make_keep_data.py, make_keep_assets.py): Homing Shell and
 	# Homeward refused on their pages, a return with no notice, saving from the system page with its rows under the slot
 	# list and the saved message and overwrite question in the layout's window, the guide's topics kept above her line and
@@ -1119,6 +1154,14 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
 		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
 	done
+	# The system page's rows that are no setting under the picker (system_rows, the options set with the keep set's save
+	# flow): Save opens the slot list and its steps, Controls the Controls page, Quit its question, none a picker.
+	rm -rf $(BUILD)/sample_system_rows_saves $(BUILD)/system_rows_run
+	cp -R $(BUILD)/options_assets $(BUILD)/system_rows_run
+	cp $(BUILD)/keep_assets/ui/save_slots.json $(BUILD)/system_rows_run/ui/save_slots.json
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/options_data/game/data --dev --saves $(BUILD)/sample_system_rows_saves --assets $(BUILD)/system_rows_run \
+		--script $(SAMPLE_SCRIPTS)/system_rows.txt --frames 300 > $(BUILD)/sample_system_rows_headless.txt || { cat $(BUILD)/sample_system_rows_headless.txt; exit 1; }
+	tail -n 1 $(BUILD)/sample_system_rows_headless.txt
 	# The dialogue layout's reveal hold in narration and in the party talk by speaker (make_options_assets.py --hold over
 	# the narration and talk sets): a press does not complete, holding Confirm reveals at reveal_hold_cps, the open sound
 	# only for the dialogue box.

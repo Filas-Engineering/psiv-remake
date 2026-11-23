@@ -92,11 +92,11 @@ public sealed partial class SampleController
 		static int Volume(int value, int by) => Math.Clamp(value + 10 * by, 0, 100);
 		return
 		[
-			SettingRow("text_speed"),
-			SettingRow("auto_advance"),
-			SettingRow("text_size"),
-			SettingRow("battle_speed"),
-			SettingRow("flashing"),
+			SettingRow("text_speed")!,
+			SettingRow("auto_advance")!,
+			SettingRow("text_size")!,
+			SettingRow("battle_speed")!,
+			SettingRow("flashing")!,
 			.. (_s.GameInfo().PartyTalkAmbient ? new OptionRow[] { new(T("ui.options.ambient_talk"), OnOffText(p.AmbientTalk), T("ui.options.ambient_talk_help"),
 				_ => _s.SetProfile(p with { AmbientTalk = !p.AmbientTalk })) } : []),
 			new(T("ui.options.names"), T(p.ShowShippedNames ? "ui.options.names_shipped" : "ui.options.names_restored"), T("ui.options.names_help"),
@@ -118,7 +118,8 @@ public sealed partial class SampleController
 	}
 
 	// A setting the Options screen, the system page and the Extras menu share (UiFields.SettingRows).
-	private OptionRow SettingRow(string id)
+	// A settings row by id (UiFields.SettingRows); null for any other id, a row that is no setting (save, quit, controls).
+	private OptionRow? SettingRow(string id)
 	{
 		Profile p = _s.Profile();
 		return id switch
@@ -146,7 +147,8 @@ public sealed partial class SampleController
 				by => ChangeAutoMode(() => _bindings.AutoPolicy = Step(_bindings.AutoPolicy, by)),
 				[.. Enum.GetValues<MacroPolicy>().Select(v => T(NameKind.MacroPolicy, (int)v))], (int)_bindings.AutoPolicy,
 				i => ChangeAutoMode(() => _bindings.AutoPolicy = (MacroPolicy)i)),
-			_ => FlashingRow(),
+			"flashing" => FlashingRow(),
+			_ => null,
 		};
 	}
 

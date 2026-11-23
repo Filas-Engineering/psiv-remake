@@ -86,7 +86,7 @@ public sealed partial class SampleController
 		{
 			if (by != 0)
 			{
-				Report(SettingRow(id).Change!(by));
+				Report(SettingRow(id)!.Change!(by));
 			}
 			return;
 		}
@@ -147,7 +147,7 @@ public sealed partial class SampleController
 		string description = "";
 		if (rows.Count > 0 && rows[Math.Clamp(_extrasList.Cursor, 0, rows.Count - 1)].Id is var at && UiFields.SettingRows.Contains(at))
 		{
-			description = SettingRow(at).Description;
+			description = SettingRow(at)!.Description;
 		}
 		Ui.Draw("extras", s, t, data
 			.Set("scene", (UiSlot)((_, _, _, _) => DrawUnder("extras", () =>

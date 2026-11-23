@@ -1,0 +1,27 @@
+# A vehicle's move sound every `move_ms` of moving (make_vehicle_sound_data.py --move-ms 300, with --dev): the session
+# counts 875 ms over a scripted walk's seven steps of 125 ms, so two sounds, which play 300 ms apart.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev vehicle reed_skimmer reed_path skimmer_front
+cmd walk 13 4
+cmd walk 9 6
+cmd walk 16 6
+press Right
+wait 3
+press Enter
+wait 4
+expect state aboard reed_skimmer
+audio mark
+cmd walk 10 6
+wait 1
+expect audiocount 1 cue lookout_creak
+wait 16
+expect audiocount 1 cue lookout_creak
+wait 2
+expect audiocount 2 cue lookout_creak
+wait 60
+expect audiocount 2 cue lookout_creak

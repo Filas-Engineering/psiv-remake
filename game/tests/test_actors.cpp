@@ -354,3 +354,36 @@ end
 	s.confirmLine();
 	CHECK(s.mode() == Mode::Field);
 }
+
+// `place leader at ACTOR`: the leader stands on the actor's current cell from then on, facing as the script says, and
+// hosts see it as a place of the leader's member there; an actor not in the area changes nothing.
+TEST(placeLeaderAtAnActorPutsTheLeaderOnItsCurrentCell) {
+	const GameData d = test::actorDataWithScript("events/hollow.ev", R"(event hollow_keeper unskippable
+	place hollow_drifter west_post facing east
+	place leader at hollow_drifter facing same
+	say tallykeeper "Here."
+	place leader at hollow_drifter facing north
+	place leader at nobody_here
+	say tallykeeper "Still here."
+end
+)");
+	Session s(d, SessionOptions());
+	test::placeParty(s, "wren_hollow", "counter_front", Facing::North);
+	s.pollActions();
+	const std::string leader = s.world().lineup.front();
+	CHECK(s.interact().empty());
+	std::vector<PresentedAction> actions = s.pollActions();
+	CHECK_EQ(actions.size(), 2u);
+	CHECK(actions.size() == 2 && actions[1].action.type == events::ActionType::place_actor && actions[1].action.subject == leader &&
+		actions[1].action.has_position && actions[1].action.position.x == 1 && actions[1].action.position.z == 4 && actions[1].action.facing == "east");
+	CHECK(s.world().position == (Cell{1, 4}));
+	CHECK(s.world().facing == Facing::East);
+	CHECK(s.followers().empty() || s.followers().front().cell == (Cell{1, 4}));
+	s.confirmLine();
+	actions = s.pollActions();
+	CHECK(actions.size() == 1 && actions[0].action.facing == "north");
+	CHECK(s.world().facing == Facing::North);
+	s.confirmLine();
+	CHECK(s.mode() == Mode::Field);
+	CHECK(s.world().position == (Cell{1, 4}));
+}

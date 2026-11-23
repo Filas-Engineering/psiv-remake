@@ -4,6 +4,7 @@
 #include "events/registry.h"
 #include "events/save_state.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -402,4 +403,65 @@ end
 	CHECK(test::has_diagnostic(early, 4, "'option back' must be the last option"));
 	Program plain = test::compile_ok("event a unskippable\n\tchoice \"Q\"\n\toption \"A\"\n\toption \"B\"\n\tend\nend\n");
 	CHECK(!plain.code[0].choice.back);
+}
+
+TEST(place_leader_at_an_actor_is_game_state_the_host_applies_even_while_skipping) {
+	const char* const scene = R"(event a skippable
+	party add drifter
+	place leader at keeper facing same
+	say guide "Here."
+	place leader at keeper facing west
+	place leader at keeper
+	place keeper stall facing south
+end
+)";
+	Program p = test::compile_ok(scene);
+	CHECK(p.code[1].action.type == ActionType::place_leader && p.code[1].action.subject == "keeper" && p.code[1].action.facing == "same");
+	CHECK(p.code[3].action.facing == "west" && p.code[4].action.facing.empty());
+	CHECK(p.code[5].action.type == ActionType::place_actor);
+	CHECK_EQ(events::describe(p.code[1].action), std::string("place leader at keeper facing same"));
+	CHECK_EQ(events::describe(p.code[4].action), std::string("place leader at keeper"));
+	CHECK(!events::presentation_only(ActionType::place_leader));
+	ActionType type = ActionType::move;
+	CHECK(events::parse_action_type("place_leader", type) && type == ActionType::place_leader);
+
+	RecordingHost host;
+	Interpreter it(p, host);
+	CHECK(it.start("a"));
+	CHECK(it.skip());
+	test::run(it, host);
+	CHECK(it.status() == Status::finished);
+	// Skipped, the leader's places still reach the host, at once; the keeper's place is rebuilt at its end state.
+	CHECK_EQ(with_prefix(host.trace, "action place leader").size(), 3u);
+	CHECK(std::count(host.instant_calls.begin(), host.instant_calls.end(), "place leader at keeper facing west") == 1);
+	CHECK(it.presentation().actors.size() == 1u && it.presentation().actors[0].actor == "keeper");
+
+	// A marker named `at` after an actor named `leader` is still a plain place; scripts without the form keep their
+	// fingerprint (fixed before the form existed).
+	Program plain = test::compile_ok("event a unskippable\n\tplace leader at\n\tplace leader at facing east\n\tplace keeper stall facing south\nend\n");
+	CHECK(plain.code[0].action.type == ActionType::place_actor && plain.code[0].action.target == "at");
+	CHECK(plain.code[1].action.type == ActionType::place_actor && plain.code[1].action.facing == "east");
+	CHECK_EQ(test::compile_ok("event a unskippable\n\tplace keeper stall facing south\nend\n").fingerprint, 12031419254205967245ull);
+
+	auto d = test::compile_errors(R"(event a unskippable
+	place leader at keeper facing up
+	place leader at keeper nowait
+	together
+		place leader at keeper
+		wait 1
+	end
+end
+
+event b background
+	place leader at keeper
+end
+)");
+	CHECK(test::has_diagnostic(d, 2, "expected north, east, south, west or same"));
+	CHECK(test::has_diagnostic(d, 3, "unexpected name 'nowait'"));
+	CHECK(test::has_diagnostic(d, 5, "'place leader' is not allowed inside 'together'"));
+	CHECK(test::has_diagnostic(d, 11, "'place leader'"));
+	events::Registry r;
+	r.add(events::NameKind::actor, "keeper");
+	CHECK(compile_with(r, "event e unskippable\n\tplace leader at keeper\nend\n").empty());
+	CHECK(test::has_diagnostic(compile_with(r, "event e unskippable\n\tplace leader at stranger\nend\n"), 2, "unknown actor 'stranger'"));
 }

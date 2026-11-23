@@ -4,7 +4,25 @@ namespace Psiv.Session;
 // combatant labels (Combatant.Label), by combatant index.
 public static class BattleText
 {
-	public static string? Describe(GameSession session, IReadOnlyList<string> labels, BattleEvent e)
+	// An item that changed nothing was used up when its action spends it after the no-effect event at `at`.
+	public static bool UsedUp(IReadOnlyList<BattleEvent> events, int at)
+	{
+		for (int j = at + 1; j < events.Count; j++)
+		{
+			BattleEvent next = events[j];
+			if (next.Type is BattleEventType.ActionStarted or BattleEventType.RoundStarted or BattleEventType.BattleEnded)
+			{
+				break;
+			}
+			if (next.Type == BattleEventType.ResourceSpent && next.Resource == ResourceKind.Item && next.Ability == events[at].Ability)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public static string? Describe(GameSession session, IReadOnlyList<string> labels, BattleEvent e, bool usedUp = false)
 	{
 		string Name(int index) => index >= 0 && index < labels.Count ? labels[index] : "?";
 		string Stat() => GameSession.NameOf(NameKind.Stat, (int)e.Stat);
@@ -18,7 +36,7 @@ public static class BattleText
 			BattleEventType.ActionCancelled or BattleEventType.Message => e.Text,
 			BattleEventType.ComboTriggered => $"Combo: {session.DisplayName(e.Ability)}.",
 			BattleEventType.ComboDiscovered => "  A new combination joins the combo log.",
-			BattleEventType.ItemHadNoEffect => $"  {session.DisplayName(e.Ability)} has no effect and is kept.",
+			BattleEventType.ItemHadNoEffect => $"  {session.DisplayName(e.Ability)} has no effect and is {(usedUp ? "used up" : "kept")}.",
 			BattleEventType.Missed => $"  {Name(e.Target)} evades.",
 			BattleEventType.Critical => "  Critical hit!",
 			BattleEventType.DamageDealt => $"  {Name(e.Target)} takes {e.Amount} damage.",

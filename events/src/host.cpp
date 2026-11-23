@@ -63,6 +63,8 @@ const char* action_type_name(ActionType type) {
 		return "camera to";
 	case ActionType::camera_reset:
 		return "camera reset";
+	case ActionType::place_leader:
+		return "place leader";
 	}
 	return "unknown";
 }
@@ -93,7 +95,7 @@ bool is_direction(const std::string& word) {
 }
 
 bool parse_action_type(const std::string& name, ActionType& type) {
-	for (int i = 0; i <= static_cast<int>(ActionType::camera_reset); ++i) {
+	for (int i = 0; i <= static_cast<int>(ActionType::place_leader); ++i) {
 		std::string candidate = action_type_name(static_cast<ActionType>(i));
 		for (char& c : candidate) {
 			if (c == ' ') {
@@ -196,6 +198,12 @@ std::string describe(const Action& action) {
 	case ActionType::camera_reset:
 		if (action.seconds > 0) {
 			out += " " + num(action.seconds);
+		}
+		break;
+	case ActionType::place_leader:
+		out += " at " + action.subject;
+		if (!action.facing.empty()) {
+			out += " facing " + action.facing;
 		}
 		break;
 	case ActionType::camera_move:
@@ -313,7 +321,7 @@ const char* battle_opening_name(BattleOpening opening) {
 }
 
 bool presentation_only(ActionType type) {
-	return type != ActionType::warp;
+	return type != ActionType::warp && type != ActionType::place_leader;
 }
 
 Handle Host::open_shop(const std::string&) {

@@ -26,6 +26,10 @@ public sealed partial class SampleController
 	private (string Area, int X, int Y) _leaderCell;
 	// The area the exit sound was last checked in.
 	private string _soundArea = "";
+	// The ridden vehicle's move sound, one per step the session took aboard: a path walk takes several steps in one update,
+	// so each waits until `move_ms` (or, at 0, the step's time aboard) has passed since the one before.
+	private readonly Queue<(string Cue, int SpacingMs)> _moveCues = new();
+	private int _moveCueWaitMs;
 
 	public IAudioOut Audio => _audio;
 
@@ -87,7 +91,11 @@ public sealed partial class SampleController
 			_audio.StopAmbient(a.Instant ? 0 : StopFadeMs);
 			return 0;
 		default:
-			if (!a.Instant)
+			if (!a.Instant && _s.FieldInfo() is { Aboard.Length: > 0 } aboard && _data.VehicleMoveSounds.TryGetValue(aboard.Aboard, out var move) && move.Move == a.Subject)
+			{
+				_moveCues.Enqueue((a.Subject, move.MoveMs > 0 ? move.MoveMs : Math.Max(1, aboard.LeaderStepMs)));
+			}
+			else if (!a.Instant)
 			{
 				_audio.PlayCue(a.Subject);
 			}
@@ -105,6 +113,12 @@ public sealed partial class SampleController
 			if (_soundTestTrack.Length > 0)
 			{
 				return _soundTestTrack;
+			}
+			// After the intro: the title's track goes on (`keep`), stops, or gives way to the named track.
+			string afterIntro = _introLeft ? Ui.ParamText("title", "intro_end_music", UiData(), "keep") : "keep";
+			if (afterIntro != "keep")
+			{
+				return afterIntro == "stop" ? "" : afterIntro;
 			}
 			return game.TitleMusic.Length > 0 ? game.TitleMusic : "title";
 		}
@@ -191,6 +205,20 @@ public sealed partial class SampleController
 			_audio.PlayCue("refuse");
 		}
 		_refused = false;
+
+		// The move sounds waiting, off the field (a battle, an event's warp, the title) dropped. The wait keeps what a frame
+		// overshot, so a steady walk plays them at its own pace.
+		_moveCueWaitMs = Math.Max(_moveCueWaitMs - dtMs, -dtMs);
+		if (_s.Mode != Mode.Field)
+		{
+			_moveCues.Clear();
+		}
+		if (_moveCues.Count > 0 && _moveCueWaitMs <= 0)
+		{
+			(string cue, int spacing) = _moveCues.Dequeue();
+			_audio.PlayCue(cue);
+			_moveCueWaitMs += spacing;
+		}
 
 		// The exit's `sound` as the party arrives through it.
 		if (_s.FieldInfo() is { } arrived && arrived.AreaId != _soundArea)

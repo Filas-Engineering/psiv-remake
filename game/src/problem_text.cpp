@@ -168,6 +168,8 @@ const rules::TextTable& problemText() {
 			{"data.spawn_outside_zone", "a spawn point of zone '{0}' is outside the zone"},
 			{"data.speaker_not_character", "speaker '{0}' is not a character"},
 			{"data.start_lineup_size", "the starting lineup needs 1 to 5 members"},
+			{"data.start_level_twice", "the starting lineup gives '{0}' a level twice"},
+			{"data.bad_start_lineup_entry", "a starting lineup entry is a character id or {\"id\", \"level\"}"},
 			{"data.start_marker_missing", "start marker '{0} {1}' does not exist"},
 			{"data.stock_entry_shape", "a stock entry must be an id or an object with an id"},
 			{"data.string_not_in_dialogue_table", "string '{0}' is not in the dialogue table"},

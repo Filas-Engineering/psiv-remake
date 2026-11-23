@@ -26,6 +26,8 @@ public sealed partial class SampleController
 	private bool _introPlaying;
 	private int _introMs;
 	private bool _titleBooted;
+	// The intro played on this title and ended or was skipped: the title param `intro_end_music` then says what plays.
+	private bool _introLeft;
 	// The title has decided how it opens since it came up.
 	private bool _titleEntered;
 
@@ -42,6 +44,7 @@ public sealed partial class SampleController
 			? steps.TakeWhile(st => $"intro:{st.Name}" != after).Sum(st => st.Ms) : 0;
 		_titleStarted = after == "menu";
 		_titleBooted = true;
+		_introLeft = false;
 	}
 
 	// The intro's step now: its index, and the milliseconds into it; past the last step, null.
@@ -204,6 +207,7 @@ public sealed partial class SampleController
 			if (AnyPress(input.Raw) || IntroAt() is null)
 			{
 				_introPlaying = false;
+				_introLeft = true;
 			}
 			return;
 		}

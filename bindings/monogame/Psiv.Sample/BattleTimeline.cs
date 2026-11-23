@@ -482,7 +482,7 @@ public sealed class BattleContext(GameSession session, List<string> labels, Batt
 			{
 				labels.Add(FinalLabel(e.Target));
 			}
-			if (Describe(e) is { } line)
+			if (Describe(e, BattleText.UsedUp(step.Events, step.Events.IndexOf(e))) is { } line)
 			{
 				step.Lines.Add(line);
 				step.LineEvents.Add(step.Events.IndexOf(e));
@@ -496,7 +496,7 @@ public sealed class BattleContext(GameSession session, List<string> labels, Batt
 	}
 
 	// One log line per event, as the terminal front end phrases them, in the text language.
-	private string? Describe(BattleEvent e)
+	private string? Describe(BattleEvent e, bool usedUp)
 	{
 		string Stat() => T("ui.battle.stat." + GameSession.NameOf(NameKind.Stat, (int)e.Stat));
 		return e.Type switch
@@ -513,7 +513,7 @@ public sealed class BattleContext(GameSession session, List<string> labels, Batt
 			BattleEventType.ActionCancelled or BattleEventType.Message => Shown(e.Text),
 			BattleEventType.ComboTriggered => T("ui.battle.log.combo", Name(e.Ability)),
 			BattleEventType.ComboDiscovered => T("ui.battle.log.combo_found"),
-			BattleEventType.ItemHadNoEffect => T("ui.battle.log.no_effect", Name(e.Ability)),
+			BattleEventType.ItemHadNoEffect => T(usedUp ? "ui.battle.log.no_effect_used" : "ui.battle.log.no_effect", Name(e.Ability)),
 			BattleEventType.Missed => T("ui.battle.log.evades", Label(e.Target)),
 			BattleEventType.Critical when criticalLine?.Invoke(e.Target) == false => null,
 			BattleEventType.Critical => T("ui.battle.log.critical"),

@@ -131,7 +131,7 @@ public sealed partial class SampleController
 
 	private void UpdateSystemPicker(ActionInput input)
 	{
-		OptionRow row = SettingRow(_sysPicker!);
+		OptionRow row = SettingRow(_sysPicker!)!;
 		_sysPickerList.Move(input, row.Levels!.Count);
 		if (input.Back)
 		{
@@ -188,11 +188,6 @@ public sealed partial class SampleController
 			_controlsOnly = true;
 			_optSub.Reset();
 			break;
-		case string setting when SystemPicker && SettingRow(setting) is { Levels: not null } picked:
-			_sysPicker = setting;
-			_sysPickerList.Reset();
-			_sysPickerList.Cursor = Math.Max(0, picked.Current);
-			break;
 		case "save":
 			_saveMode = "save";
 			_list.Reset();
@@ -200,8 +195,13 @@ public sealed partial class SampleController
 		case "quit":
 			_confirm.Ask(T("ui.pause.quit_confirm"), () => Report(_s.QuitToTitle()));
 			break;
-		case string setting:
-			Report(SettingRow(setting).Change!(1));
+		case string setting when SystemPicker && SettingRow(setting) is { Levels: not null } picked:
+			_sysPicker = setting;
+			_sysPickerList.Reset();
+			_sysPickerList.Cursor = Math.Max(0, picked.Current);
+			break;
+		case string setting when SettingRow(setting) is { Change: not null } row:
+			Report(row.Change(1));
 			break;
 		}
 	}
@@ -239,7 +239,7 @@ public sealed partial class SampleController
 			.Set("rows", items)
 			.Set("list", _sub)
 			.Set("description", picking is not null ? PickerPrompt(_sysPicker!)
-				: rows[cursor] is "save" or "quit" ? "" : rows[cursor] == "controls" ? T("ui.options.controls_help") : SettingRow(rows[cursor]).Description)
+				: rows[cursor] is "save" or "quit" ? "" : rows[cursor] == "controls" ? T("ui.options.controls_help") : SettingRow(rows[cursor])?.Description ?? "")
 			.Set("picking", picking is not null)
 			.Set("picker_setting", _sysPicker ?? "")
 			.Set("picker_title", picking?.Label ?? "")
@@ -252,7 +252,7 @@ public sealed partial class SampleController
 	// menu_system layout's `row_value` "hide" the label alone (`value` then empty).
 	private UiContext SettingItem(UiContext parent, string id)
 	{
-		OptionRow row = SettingRow(id);
+		OptionRow row = SettingRow(id)!;
 		bool hide = Ui.ParamText("menu_system", "row_value", UiData(), "show") == "hide";
 		return new UiContext(parent).Set("id", id).Set("text", hide ? row.Label : $"{row.Label}: {row.Value}").Set("label", row.Label).Set("value", hide ? "" : row.Value)
 			.Set("changeable", row.Change is not null);

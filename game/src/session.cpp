@@ -779,6 +779,16 @@ public:
 				s_.walkedFollowers_ = static_cast<FollowersArrive>(index);
 			}
 			s_.enterArea(action.subject, action.target);
+		} else if (action.type == events::ActionType::place_leader) {
+			// Hosts see a script's `place` of the leader's member on that cell, which the world now keeps.
+			const std::optional<events::Action> placed = s_.placeLeaderAt(action);
+			if (!placed) {
+				HandleState state;
+				state.kind = HandleKind::Action;
+				state.done = true;
+				return s_.newHandle(state);
+			}
+			shown = *placed;
 		} else {
 			const double seconds = events::action_seconds(shown, names.durations, names.subjectDurations);
 			const int ms = action.instant ? 0 : static_cast<int>(std::lround(seconds * 1000));
@@ -1764,6 +1774,45 @@ void Session::applyActorAction(const events::Action& action, int animationMs) {
 	default:
 		break;
 	}
+}
+
+// `place leader at <actor>`: the leader stands on the actor's current cell, facing as the script says, the followers
+// stacked on it. Refused aboard, on a platform, with no lineup or with the actor not in the area.
+std::optional<events::Action> Session::placeLeaderAt(const events::Action& action) {
+	const auto refuse = [&](const std::string& why) -> std::optional<events::Action> {
+		warn("cannot place the leader at '" + action.subject + "': " + why);
+		return std::nullopt;
+	};
+	if (world_.lineup.empty()) {
+		return refuse("no one is in the lineup");
+	}
+	if (!world_.aboard.empty() || !world_.ridingPlatform.empty()) {
+		return refuse("the party is aboard");
+	}
+	std::optional<ActorView> found;
+	for (const ActorView& view : actorsHere()) {
+		if (view.id == action.subject) {
+			found = view;
+		}
+	}
+	if (!found) {
+		return refuse("not an actor in this area");
+	}
+	world_.position = found->cell;
+	if (action.facing == "same") {
+		world_.facing = found->facing;
+	} else if (!action.facing.empty()) {
+		parseFacing(action.facing, world_.facing);
+	}
+	world_.trail.clear();
+	events::Action shown;
+	shown.type = events::ActionType::place_actor;
+	shown.subject = world_.lineup.front();
+	shown.has_position = true;
+	shown.position = {static_cast<double>(found->cell.x), 0, static_cast<double>(found->cell.y)};
+	shown.facing = toString(world_.facing);
+	shown.instant = action.instant;
+	return shown;
 }
 
 void Session::removeActor(const std::string& actor, bool untilReload) {
@@ -3028,7 +3077,8 @@ rules::Message Session::newGame() {
 		}
 	}
 	for (const std::string& id : c.startLineup) {
-		world_.roster.push_back(rules::makePartyMember(data_.db, *data_.db.character(id), c.startLevel));
+		const auto own = c.startLevels.find(id);
+		world_.roster.push_back(rules::makePartyMember(data_.db, *data_.db.character(id), own == c.startLevels.end() ? c.startLevel : own->second));
 		world_.lineup.push_back(id);
 	}
 	world_.money = c.startMoney;
@@ -5804,7 +5854,11 @@ rules::Message Session::useItem(const std::string& item, const std::string& memb
 		world_.items.erase(held);
 	}
 	if (std::any_of(use.events.begin(), use.events.end(), [](const rules::Event& e) { return e.type == rules::EventType::ItemHadNoEffect; })) {
-		return {"game.no_effect", {item}};
+		// Spent under consume_when_no_effect or item_no_reach "consume": gone from the bag, so not "would have".
+		const bool spent = std::any_of(use.events.begin(), use.events.end(), [](const rules::Event& e) {
+			return e.type == rules::EventType::ResourceSpent && e.resource == rules::ResourceKind::Item;
+		});
+		return {spent ? "game.no_effect_used" : "game.no_effect", {item}};
 	}
 	for (std::size_t i = 0; i < party.size(); ++i) {
 		*world_.member(world_.lineup[i]) = party[i];

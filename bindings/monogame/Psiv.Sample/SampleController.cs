@@ -407,6 +407,10 @@ public sealed partial class SampleController
 		{
 			_confirm.Update(input);
 		}
+		else if (MapHoldWaits)
+		{
+			// The event waits for the hold and its fade-in.
+		}
 		else if (!(UpdateOutro(dtMs) && screen is Screen.Field or Screen.Battle))
 		{
 			UpdateScreen(screen, dtMs, input);
@@ -653,6 +657,9 @@ public sealed partial class SampleController
 		{
 		case Screen.Title: DrawTitle(s, t, art); break;
 		case Screen.Field: DrawFieldScreen(s, t, art); break;
+		case Screen.Dialogue when MapHoldWaits:
+			DrawField(s, art);
+			break;
 		case Screen.Dialogue: DrawDialogue(s, t, art); break;
 		case Screen.Battle when _timeline.Current is { Kind: StepKind.Transition, Run: { } intro } && TransitionPhase(intro, _timeline.Elapsed).Phase != "reveal" && _battle.Phase == BattlePhase.Playback:
 			DrawField(s, art);
@@ -792,7 +799,7 @@ public sealed partial class SampleController
 			"prompt" => _confirm.Question ?? "none",
 			"buffer" => Screen == Screen.NameEntry ? _nameEntry.Buffer : _macroName.Buffer,
 			"cell" => Screen == Screen.NameEntry ? _nameEntry.Cell : _macroName.Cell,
-			"line" => _s.Line()?.Text ?? "-",
+			"line" => MapHoldWaits ? "-" : _s.Line()?.Text ?? "-",
 			"speaker" => _s.Line() is { } spoken ? (spoken.SpeakerName.Length > 0 ? spoken.SpeakerName : "none") : "-",
 			"conveyors" => $"{_field.RunningConveyors}/{_field.DrawnConveyors}",
 			// The area banner's title while it shows (it follows the session's arrival announcement), `-` otherwise.

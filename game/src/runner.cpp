@@ -104,7 +104,21 @@ std::string Runner::battleName(int index) const {
 void Runner::printEvents(const std::vector<rules::Event>& events) {
 	const rules::TextTable& text = session_.language().text;
 	auto name = [&](const std::string& id) { return session_.displayName(id); };
-	for (const rules::Event& e : events) {
+	// An item that changed nothing was used up when its action spends it after the no-effect event.
+	auto usedUp = [&](std::size_t at) {
+		for (std::size_t j = at + 1; j < events.size(); ++j) {
+			const rules::Event& next = events[j];
+			if (next.type == rules::EventType::ActionStarted || next.type == rules::EventType::RoundStarted || next.type == rules::EventType::BattleEnded) {
+				break;
+			}
+			if (next.type == rules::EventType::ResourceSpent && next.resource == rules::ResourceKind::Item && next.ability == events[at].ability) {
+				return true;
+			}
+		}
+		return false;
+	};
+	for (std::size_t at = 0; at < events.size(); ++at) {
+		const rules::Event& e = events[at];
 		if (e.type == rules::EventType::EnemyJoined && e.target == static_cast<int>(battleNames_.size()) && !e.ids.empty()) {
 			const rules::EnemyDef* def = session_.data().db.enemy(e.ids.front());
 			const std::string base = def ? def->name : e.ids.front();
@@ -141,7 +155,7 @@ void Runner::printEvents(const std::vector<rules::Event>& events) {
 			print("  A new combination joins the combo log.");
 			break;
 		case rules::EventType::ItemHadNoEffect:
-			print("  " + name(e.ability) + " has no effect and is kept.");
+			print("  " + name(e.ability) + (usedUp(at) ? " has no effect and is used up." : " has no effect and is kept."));
 			break;
 		case rules::EventType::Missed:
 			print("  " + battleName(e.target) + " evades.");

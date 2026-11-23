@@ -290,6 +290,13 @@ void Interpreter::execute(Thread& thread) {
 			start_action(thread, ins, action);
 			return;
 		}
+		if (ins.action.type == ActionType::place_leader) {
+			// Game state: the host applies it also while skipping, at once.
+			Action action = ins.action;
+			action.instant = skipping;
+			start_action(thread, ins, action);
+			return;
+		}
 		record(ins.action);
 		if (skipping) {
 			mark_dirty(ins.action);
@@ -752,6 +759,7 @@ void Interpreter::record(const Action& action) {
 	case ActionType::shake:
 	case ActionType::sound:
 	case ActionType::warp:
+	case ActionType::place_leader:
 		break;
 	}
 }
@@ -793,6 +801,7 @@ void Interpreter::mark_dirty(const Action& action) {
 	case ActionType::shake:
 	case ActionType::sound:
 	case ActionType::warp:
+	case ActionType::place_leader:
 		break;
 	}
 }

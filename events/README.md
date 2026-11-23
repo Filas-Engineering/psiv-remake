@@ -124,8 +124,9 @@ Handles. `start_action`, `show_line`, `present_choice`, `start_battle`, `open_sh
 | sound | cue | | | playback started |
 | warp | map | marker | | map loaded, party placed |
 | place_actor | actor | marker, or `position` if `has_position` | `facing` (a direction, or empty to keep it) | actor stands there (at once) |
+| place_leader | actor | | `facing` (a direction, `same`, or empty to keep it) | the leader stands on the actor's cell (at once) |
 
-- `Action::instant`: put the end state on screen at once, with no transition, and return a handle that is already done. If the end state is already there (that music is already playing, the actor already stands on the marker), do nothing. The interpreter sets it when it rebuilds the screen after a skip or a restore. A warp issued while skipping is also instant: skip the transition, but load the map; its handle may take as long as loading does. `presentation_only(type)` is true for every type but warp (EVT-023).
+- `Action::instant`: put the end state on screen at once, with no transition, and return a handle that is already done. If the end state is already there (that music is already playing, the actor already stands on the marker), do nothing. The interpreter sets it when it rebuilds the screen after a skip or a restore. A warp issued while skipping is also instant: skip the transition, but load the map; its handle may take as long as loading does. `presentation_only(type)` is true for every type but warp and place_leader (EVT-023).
 - `get_flag`, `set_flag`, `get_var`, `set_var`, `give_item`, `take_item`, `add_party_member`, `remove_party_member` and `set_player_control` are synchronous and go to the game's own state. Unknown flags must read as false and unknown variables as 0.
 - `give_vehicle(vehicle, map, marker)`, `place_vehicle(...)` and `remove_vehicle(vehicle)` (the `vehicle` commands) and `has_vehicle(vehicle)` and `aboard_vehicle(vehicle)` (the `vehicle` and `aboard` tests) are synchronous too. They have defaults that do nothing and report no vehicle, so a host without vehicles need not override them; a game that keeps vehicles in its state saves them with the rest of it and includes them in `snapshot_world`.
 - `remove_actor(actor, until_reload)` (`remove`) is synchronous and game state: the actor is gone for good, or until the party next enters an area. The default does nothing.
@@ -189,7 +190,12 @@ Every CLI command is a library call, so a build pipeline can run them without th
 
 ## Changes a host must make
 
-Newest: a choice's `option back` ([FORMAT.md](FORMAT.md), "Choices").
+Newest: `place leader at <actor>` ([FORMAT.md](FORMAT.md), "Actors").
+
+- `host.h`: `ActionType::place_leader` (appended after `camera_reset`, name `place leader`): `subject` the actor, `facing` a direction, `same` (the actor's facing) or empty (keep the leader's). A `switch` over `ActionType` needs the new case. It is game state like `warp`: `presentation_only` is false for it, it reaches the host also while skipping (`instant` set then), it is not recorded in `SaveState::presentation` and is never rebuilt. `describe(Action)` gives `place leader at <actor> [facing <word>]`; `parse_action_type` reads `place_leader`.
+- The compiler refuses it inside `together`, `race` and background events (`script.allowed_inside_only_actor_camera`, `script.background_not_allowed`, naming `place leader`). No new op, code layout or save text version; scripts without it keep their fingerprint.
+
+Before that: a choice's `option back` ([FORMAT.md](FORMAT.md), "Choices").
 
 - `host.h`: `ChoiceRequest::back`: the choice ends with a hidden branch (not in `options`) that `result(handle)` answers with `options.size()`; `describe(ChoiceRequest)` adds ` back` after the options. `into` records 0 for it. `event_cli time` lists `back` among a choice's paths.
 - Diagnostics `script.choice_back_twice`, `script.choice_back_not_last`. No new op, code layout, save text version or fingerprint change for scripts without it.

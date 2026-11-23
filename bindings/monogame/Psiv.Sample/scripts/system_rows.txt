@@ -1,0 +1,74 @@
+# The system page's rows that are no setting under `settings` "picker" (make_options_data.py's copy, make_options_assets.py's
+# set with make_keep_assets.py's save_slots.json, so the save flow has its steps, with --dev): Confirm on Save opens the
+# slot list (slots, the saved message, then the overwrite question and saved again), not a picker; Confirm on Controls
+# opens the Controls page; Confirm on Quit asks before going to the title (Back keeps the menu). Before the fix Save and Quit opened the
+# flashing setting's picker.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+
+press M
+expect screen Menu
+press Right 2
+expect state tab System
+expect state page system
+expect state selected Save
+press Enter
+wait 3
+expect statenot page picker
+expect state uifield.menu_system.picking false
+expect state uifield.save_slots.flow_step slots
+press Enter
+wait 3
+expect state uifield.save_slots.flow_step saved
+expect state uifield.save_slots.message Saved to manual_0.
+press Enter
+wait 3
+expect state uifield.save_slots.flow_step slots
+press Enter
+wait 3
+expect state uifield.save_slots.flow_step confirm
+expect state uifield.save_slots.message Overwrite manual_0?
+press Enter
+wait 3
+expect state uifield.save_slots.flow_step saved
+press Enter
+wait 3
+press Escape
+wait 3
+expect state page system
+expect state selected Save
+
+# Controls opens the Controls page, not a picker.
+press Down 3
+expect state selected Controls
+press Enter
+wait 2
+expect screen Options
+expect state page controls
+press Escape
+wait 2
+expect state page system
+
+# Quit asks first; Back keeps the menu, the question answered goes to the title.
+press Down
+expect state selected Quit
+press Enter
+wait 2
+expect statenot page picker
+expect state uifield.menu_system.picking false
+expect state prompt Quit to the title? Play since the last save is lost.
+press Escape
+wait 2
+expect state prompt none
+expect screen Menu
+expect state page system
+press Enter
+wait 2
+press Down
+press Enter
+wait 5
+expect screen Title

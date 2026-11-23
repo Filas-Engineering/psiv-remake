@@ -395,6 +395,8 @@ struct GameConfig {
 	// game.json `start_towns`: towns the party may return to from a new game on, as if visited.
 	std::vector<std::string> startTowns;
 	int startLevel = 1;
+	// `start.lineup` entries written as `{"id", "level"}`: that member's own starting level, over `startLevel`.
+	std::map<std::string, int> startLevels;
 	int startMoney = 0;
 	rules::Inventory startItems;
 	// Level a character has when an event first adds it.

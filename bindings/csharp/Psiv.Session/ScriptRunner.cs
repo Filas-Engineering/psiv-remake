@@ -72,9 +72,9 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 
 	public void PrintEvents(IReadOnlyList<BattleEvent> events)
 	{
-		foreach (BattleEvent e in events)
+		for (int i = 0; i < events.Count; i++)
 		{
-			if (BattleText.Describe(session, _battleNames, e) is { } line)
+			if (BattleText.Describe(session, _battleNames, events[i], BattleText.UsedUp(events, i)) is { } line)
 			{
 				Print(line);
 			}

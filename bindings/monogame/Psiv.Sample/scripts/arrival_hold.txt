@@ -1,0 +1,61 @@
+# The title's music after its intro and an arrival event through the map load hold (make_arrival_hold_data.py's copy,
+# make_arrival_hold_assets.py's set, with --dev): Enter skips the intro and `intro_end_music` puts its track in place of
+# the title's; a Homing Shell lands on Saltgrass's `return`, whose load hook speaks, warps to Tidewater and speaks again;
+# under the field's `map_hold_events` "wait" the event waits through the hold (300 ms) and its fade-in (250 ms): no line
+# while the screen is dark, the landing area's track starting as the fade-in begins, so it plays before the event warps
+# the party onward, and the same again after the warp. With --window the shot lines save screenshots under
+# build/shots/arrival_hold/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+wait 1
+expect state uifield.title.intro true
+expect state music title_harbor_dawn
+audio mark
+wait 10
+press Enter
+wait 2
+expect state uifield.title.intro false
+expect state music victory_bright_sail
+expect audio music victory_bright_sail
+pressuntil Enter Field 400
+wait 2
+expect state music field_marsh_reeds
+dev encounters off
+
+# The shell lands on the field; the arrival event waits under the dark screen, the field's track starts with the fade-in.
+press M
+press Right
+wait 3
+expect state tab Items
+press Enter
+wait 4
+expect screen Travel
+audio mark
+press Enter
+wait 2
+expect state leader arrival_field 3 4
+expect state line -
+expect state music -
+shot build/shots/arrival_hold/held.png
+waitstate 60 music town_canal_market
+expect state line -
+waitstate 30 maphold 0
+expect state line A word while the line stands still.
+expect state music town_canal_market
+expect audio music town_canal_market
+expect noaudio music town_tide_bells
+shot build/shots/arrival_hold/line.png
+
+# The event's own warp holds its next line the same way.
+audio mark
+press Enter
+wait 2
+expect state leader tidewater 3 6
+expect state line -
+waitstate 60 music town_tide_bells
+expect state line -
+waitstate 30 maphold 0
+waitstate 10 line The line stands on the leader.
+expect audio music town_tide_bells
+pressuntil Enter Field 400

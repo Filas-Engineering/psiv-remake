@@ -10,6 +10,8 @@ namespace game {
 
 namespace {
 
+const Cell kSides[] = {Cell{0, -1}, Cell{1, 0}, Cell{0, 1}, Cell{-1, 0}};
+
 std::string join(const std::string& directory, const std::string& file) {
 	return directory.empty() ? file : directory + "/" + file;
 }
@@ -33,11 +35,13 @@ private:
 // What stands on a solid cell. A point is used from a floor cell beside it (interact hooks, shops, rest points, chests
 // with a cell, ports and helms), so the party must reach one; a cell that is only solid (where an actor stands apart
 // from its talk point, or a standing solid actor's home; a wanderer, patrol or path leaves its home) blocks the way and
-// is never used.
+// is never used. A conditional one is not always there (its flags, or its actor's, can take it away), so the party may
+// arrive on its cell.
 struct Solid {
 	std::string what;
 	int line = 0;
 	bool point = true;
+	bool conditional = false;
 };
 
 // A town's `return` that lands on a cell of the area checked.
@@ -60,8 +64,8 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 	const std::vector<std::string>& actors = config.actors;
 	const std::vector<FieldVehicle>& vehicles = config.vehicles;
 	std::map<Cell, Solid> solids;
-	auto addSolid = [&](Cell c, const std::string& what, int line, bool point = true) {
-		auto [it, added] = solids.emplace(c, Solid{what, line, point});
+	auto addSolid = [&](Cell c, const std::string& what, int line, bool point = true, bool conditional = false) {
+		auto [it, added] = solids.emplace(c, Solid{what, line, point, conditional});
 		if (!added) {
 			found.add(file, line, "check.cell_shared", {what, it->second.what, cellText(c)});
 		}
@@ -70,6 +74,15 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 	auto addPoint = [&](Cell c, const std::string& what, int line) {
 		addSolid(c, what, line);
 		uses.push_back({what, line, {c}, config.interactAcross});
+	};
+	const auto actorFlagged = [&](const std::string& id) {
+		return std::any_of(config.actorDefs.begin(), config.actorDefs.end(), [&](const ActorDef& a) { return a.id == id && (!a.requireFlag.empty() || !a.blockFlag.empty()); });
+	};
+	// A talk point solid only while active stands aside when its flags or its actor say so; its actor's cell too, or when
+	// the actor's own flags hide it.
+	const auto hookSwitches = [&](const Hook& h) {
+		return h.trigger == HookTrigger::Interact && h.solidWhileActive &&
+			(!h.requireFlag.empty() || !h.blockFlag.empty() || std::find(actors.begin(), actors.end(), h.id) != actors.end());
 	};
 	std::set<std::string> hookIds;
 	// The cells of talk points that answer on their actor: floor, as the session has them; the actor blocks only where a
@@ -93,6 +106,9 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 		} else if (h.trigger == HookTrigger::Interact) {
 			const std::string what = "hook '" + h.id + "'";
 			addPoint(h.at, what, h.line);
+			if (Solid& placed = solids.at(h.at); placed.what == what) {
+				placed.conditional = hookSwitches(h);
+			}
 			for (Cell c : h.cells) {
 				addSolid(c, what, h.line);
 				uses.back().cells.push_back(c);
@@ -105,13 +121,14 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 	}
 	for (const Hook& h : area.hooks) {
 		if (h.trigger == HookTrigger::Interact && h.actorAt) {
-			addSolid(*h.actorAt, "actor '" + h.id + "'", h.line, false);
+			const bool flagged = (h.solidWhileActive && (!h.requireFlag.empty() || !h.blockFlag.empty())) || actorFlagged(h.id);
+			addSolid(*h.actorAt, "actor '" + h.id + "'", h.line, false, flagged);
 		}
 	}
 	for (const ActorDef& actor : config.actorDefs) {
 		const auto marker = area.markers.find(actor.marker);
 		if (actor.area == area.id && actor.solid && !actor.path && !actor.wander && !actor.patrol && (actor.at || marker != area.markers.end())) {
-			addSolid(actor.at ? *actor.at : marker->second, "actor '" + actor.id + "'", 0, false);
+			addSolid(actor.at ? *actor.at : marker->second, "actor '" + actor.id + "'", 0, false, !actor.requireFlag.empty() || !actor.blockFlag.empty());
 		}
 	}
 	for (const Shop& s : area.shops) {
@@ -142,7 +159,7 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 	};
 
 	for (const auto& [name, cell] : area.markers) {
-		if (const Solid* s = solidAt(cell)) {
+		if (const Solid* s = solidAt(cell); s && !s->conditional) {
 			found.add(file, area.markerLines.count(name) ? area.markerLines.at(name) : 0, "check.marker_on_object", {name, s->what});
 		}
 	}
@@ -211,8 +228,7 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 	// stands, and the first cell beside it a walk reaches never needs a way through the hook itself.
 	std::set<Cell> switchable;
 	for (const Hook& h : area.hooks) {
-		const bool changes = !h.requireFlag.empty() || !h.blockFlag.empty() || std::find(actors.begin(), actors.end(), h.id) != actors.end();
-		if (h.trigger == HookTrigger::Interact && h.solidWhileActive && changes) {
+		if (hookSwitches(h)) {
 			switchable.insert(h.at);
 		}
 	}
@@ -327,13 +343,22 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 			found.add(file, 0, "check.exit_not_reached", {"ashore", cellText(g)});
 		}
 	}
+	// The party arrives on a conditional solid's cell once it has stood aside, and walks off it to a cell beside.
+	auto arrivable = [&](Cell c) {
+		if (reached.count(c)) {
+			return true;
+		}
+		const Solid* s = solidAt(c);
+		return s && s->conditional && std::any_of(std::begin(kSides), std::end(kSides), [&](Cell d) { return reached.count(Cell{c.x + d.x, c.y + d.y}) > 0; });
+	};
 	for (const auto& [name, cell] : area.markers) {
-		if (!reached.count(cell) && !solidAt(cell)) {
+		const Solid* s = solidAt(cell);
+		if ((!s || s->conditional) && !arrivable(cell)) {
 			found.add(file, area.markerLines.count(name) ? area.markerLines.at(name) : 0, "check.marker_not_reached", {name});
 		}
 	}
 	for (const Landing& l : landings) {
-		if (!reached.count(l.cell)) {
+		if (!arrivable(l.cell)) {
 			found.add(l.town->file, l.town->returnTo->line, "check.return_not_reached", {l.town->id, area.id, cellText(l.cell)});
 		}
 	}
