@@ -176,6 +176,11 @@ public sealed partial class Art
 	// Whether the field draws the ground shadow under a person: not when its sheet turns it off.
 	public bool PersonShadow(string id) => !_people.TryGetValue(id, out var sheet) || sheet.Entry.Shadow != false;
 
+	private readonly Dictionary<int, byte[]> _indexPlanes = [];
+
+	// A person's frame's palette index per pixel when its sheet is an indexed PNG, else null.
+	public byte[]? IndexPlane(int image) => _indexPlanes.GetValueOrDefault(image);
+
 	private (int W, int H, Color[] Pixels) File(string relative)
 	{
 		string full = Path.GetFullPath(Path.Combine(_assetDir, relative));
@@ -198,9 +203,11 @@ public sealed partial class Art
 	// `natural`: a battle figure, which stands at the natural multiple when battle_figures gives a reference height and
 	// the entry no scale.
 	// `mirrored`: each frame flipped left to right.
-	private int[] Cut(GridImage grid, bool natural = false, bool mirrored = false)
+	// `indexed`: a person's sheet, whose frames from an indexed PNG keep their palette indexes (IndexPlane).
+	private int[] Cut(GridImage grid, bool natural = false, bool mirrored = false, bool indexed = false)
 	{
 		(int w, _, Color[] pixels) = File(grid.Path);
+		byte[]? plane = indexed ? Png.ReadIndexes(Path.GetFullPath(Path.Combine(_assetDir, grid.Path)), out _, out _) : null;
 		var images = new int[grid.Cells];
 		for (int cell = 0; cell < grid.Cells; cell++)
 		{
@@ -216,6 +223,19 @@ public sealed partial class Art
 			}
 			images[cell] = _s.CreateImage(grid.FrameWidth, grid.FrameHeight, frame);
 			_sizes[images[cell]] = (grid.FrameWidth, grid.FrameHeight);
+			if (plane is not null)
+			{
+				var cellPlane = new byte[grid.FrameWidth * grid.FrameHeight];
+				for (int y = 0; y < grid.FrameHeight; y++)
+				{
+					Array.Copy(plane, (cy + y) * w + cx, cellPlane, y * grid.FrameWidth, grid.FrameWidth);
+					if (mirrored)
+					{
+						Array.Reverse(cellPlane, y * grid.FrameWidth, grid.FrameWidth);
+					}
+				}
+				_indexPlanes[images[cell]] = cellPlane;
+			}
 			float? fit = grid.Scale ?? (natural && _naturalMultiple > 0 ? -1f : grid.Foot is not null ? 0f : null);
 			if (fit is float f)
 			{
@@ -355,10 +375,10 @@ public sealed partial class Art
 		}
 		foreach (CharacterEntry c in m.Characters)
 		{
-			_people[c.Id] = (c, Cut(c.Image));
+			_people[c.Id] = (c, Cut(c.Image, indexed: true));
 			if (c.Facing?.Mirror.Count > 0)
 			{
-				_mirroredPeople[c.Id] = Cut(c.Image, mirrored: true);
+				_mirroredPeople[c.Id] = Cut(c.Image, mirrored: true, indexed: true);
 			}
 			_fromFile["character:" + c.Id] = c.Image.Path;
 		}

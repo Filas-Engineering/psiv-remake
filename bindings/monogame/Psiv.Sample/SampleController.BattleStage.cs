@@ -665,6 +665,19 @@ public sealed partial class SampleController
 				menuRows[i].Set("count", option.Uses);
 			}
 		}
+		// Under `macro_slots` each slot row's label, macro and state (`empty`, `set`) with the state's color from the layout's
+		// `option_states`; `macro_lines` the highlighted macro's steps for a window beside the list.
+		List<string> slotMacros = b.Phase == BattlePhase.Macro && MacroSlotLabels is not null ? BattleMacros() : [];
+		Dictionary<string, string> slotColors = Layout.Screen(screen).OptionStates;
+		for (int i = 0; i < menuRows.Count && i < slotMacros.Count; i++)
+		{
+			string state = slotMacros[i].Length > 0 ? "set" : "empty";
+			menuRows[i].Set("slot_label", SlotLabel(MacroSlotLabels![i])).Set("macro", slotMacros[i]).Set("state", state).Set("state_color", slotColors.GetValueOrDefault(state) ?? "");
+		}
+		string highlighted = slotMacros.Count > 0 ? slotMacros[Math.Clamp(_cursor, 0, slotMacros.Count - 1)] : "";
+		List<string> macroLines = highlighted.Length == 0 ? [] : [.. (_s.MacroList().FirstOrDefault(m => m.Name == highlighted)?.Steps ?? []).Select(StepText)];
+		_probeMacroLines = slotMacros.Count == 0 ? "-" : macroLines.Count == 0 ? "none" : string.Join(" | ", macroLines);
+		ui.Set("macro_lines", macroLines);
 		ui.Set("menu_items", menuRows);
 		// The command rows of the member or vehicle choosing, kept while a list one of them opened is up, so a layout can
 		// draw that list in a window of its own beside them.
@@ -751,6 +764,9 @@ public sealed partial class SampleController
 		_ => T("ui.battle.title.battle"),
 	};
 
+	// A macro slot's label: one with a '.' is a text key, anything else shows as written.
+	private string SlotLabel(string label) => label.Contains('.') ? T(label) : label;
+
 	// The command menu's rows for the phase, and which can be chosen; null outside the menus.
 	private (List<string> Items, List<bool>? Usable)? MenuRows(IReadOnlyList<Combatant> all)
 	{
@@ -762,6 +778,8 @@ public sealed partial class SampleController
 			BattlePhase.Option => (b.Options.Select(OptionText).ToList(), b.Options.Select(o => o.Usable).ToList()),
 			BattlePhase.Target => (b.Targets.Select(t => t < all.Count ? (all[t].Side == Side.Party ? all[t].Name : all[t].Label) : "?").ToList(),
 				b.Refused.Count == 0 ? null : [.. b.Targets.Select(t => !b.Refused.Contains(t))]),
+			BattlePhase.Macro when MacroSlotLabels is { } slots => ([.. BattleMacros().Select((m, i) => SlotLabel(slots[i]) + "  " + (m.Length > 0 ? m : T("ui.battle.macro_slot_empty")))],
+				[.. BattleMacros().Select(m => m.Length > 0)]),
 			BattlePhase.Macro => ([.. BattleMacros().Select(m => LayoutSwitch("macro_auto_first") && m == _s.Settings().AutoMacro ? T("ui.battle.auto_macro_row", m) : m)], null),
 			BattlePhase.AutoChoice => (_autoChoiceStep == 0 ? [.. AutoTroubles.Select(t => T(NameKind.MacroTrouble, (int)t))] : [.. AutoPolicies.Select(p => T(NameKind.MacroPolicy, (int)p))], null),
 			_ => null,
@@ -775,7 +793,7 @@ public sealed partial class SampleController
 	{
 		trouble = false;
 		List<string> macros = _battle.Phase == BattlePhase.Macro && LayoutSwitch("macro_check") ? BattleMacros() : [];
-		if (macros.Count == 0)
+		if (macros.Count == 0 || macros[Math.Clamp(_cursor, 0, macros.Count - 1)].Length == 0)
 		{
 			_probeMacroCheck = "-";
 			return [];
@@ -821,7 +839,7 @@ public sealed partial class SampleController
 			return Description(option.Command == CommandKind.Item ? DescriptionKind.Item : DescriptionKind.Ability, option.Id);
 		}
 		// The top-level step's Macro says so when there are none to choose.
-		if (b.Phase == BattlePhase.Top && TopMenu is var top && _cursor < top.Length && top[_cursor] == "macro" && _s.Macros().Count == 0)
+		if (b.Phase == BattlePhase.Top && TopMenu is var top && _cursor < top.Length && top[_cursor] == "macro" && _s.Macros().Count == 0 && MacroSlotLabels is null)
 		{
 			return T("ui.battle.no_macros");
 		}

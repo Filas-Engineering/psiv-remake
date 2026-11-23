@@ -187,6 +187,9 @@ int TimingHost::pick_choice(const ChoiceRequest& request) {
 		for (const Text& option : request.options) {
 			options.push_back(describe(option));
 		}
+		if (request.back) {
+			options.push_back("back");
+		}
 	}
 	return next_pick(label, options);
 }

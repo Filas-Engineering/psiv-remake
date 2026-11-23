@@ -183,7 +183,7 @@ class ObjectRejectionTest(TempCase):
 	def test_unknown_and_mistyped_properties(self):
 		tmj = sample_tmj()
 		obj(tmj, "box")["properties"].append({"name": "gold", "type": "int", "value": 5})
-		self.rejects(tmj, "object 11 ('box'), a chest: unknown property 'gold' (allowed: equipment, flag, items, money)")
+		self.rejects(tmj, "object 11 ('box'), a chest: unknown property 'gold' (allowed: equipment, flag, items, kind, money)")
 		tmj = sample_tmj()
 		prop(obj(tmj, "box"), "money").update({"type": "string", "value": "9"})
 		self.rejects(tmj, "property 'money' must be an int property")

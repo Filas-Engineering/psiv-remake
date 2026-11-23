@@ -520,6 +520,49 @@ void readAnimations(JsonReader& reader, const JsonValue& presentation, Presentat
 	}
 }
 
+// game.json `presentation.options.<setting>`: `{"levels": [{"id", "label", "value"}], "default": ID}`; without `default`
+// the level named as the built-in default ("normal", "1x"), else the first.
+void readOptionLevels(JsonReader& reader, const JsonValue& options, const char* setting, int minValue, int maxValue, OptionLevels& out) {
+	const JsonValue* o = reader.field(options, setting, JsonValue::Type::Object, false);
+	if (!o) {
+		return;
+	}
+	reader.only(*o, gameKeys("game.json", "presentation.options.<setting>"));
+	const OptionLevels builtin = builtinOptionLevels(setting);
+	out = OptionLevels{};
+	out.declared = true;
+	const JsonValue* list = reader.field(*o, "levels", JsonValue::Type::Array, true);
+	for (std::size_t i = 0; list && i < list->items.size(); ++i) {
+		const JsonValue& l = list->items[i];
+		reader.only(l, gameKeys("game.json", "presentation.options.<setting>.levels[]"));
+		OptionLevel level;
+		reader.text(l, "id", level.id, true);
+		reader.text(l, "label", level.label, false);
+		reader.integer(l, "value", level.value, true, minValue, maxValue);
+		if (level.id.empty() || level.id.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_.") != std::string::npos) {
+			reader.fail(l, "data.bad_option_level", {setting, level.id});
+		} else if (std::any_of(out.levels.begin(), out.levels.end(), [&](const OptionLevel& x) { return x.id == level.id; })) {
+			reader.fail(l, "data.option_level_twice", {setting, level.id});
+		}
+		if (level.label.empty()) {
+			level.label = std::string("ui.") + setting + "." + level.id;
+		}
+		out.levels.push_back(level);
+	}
+	if (list && list->items.empty()) {
+		reader.fail(*list, "data.option_levels_empty", {setting});
+	}
+	std::string def = builtin.levels[builtin.defaultIndex].id;
+	const bool named = o->find("default") != nullptr;
+	reader.text(*o, "default", def, false);
+	const auto at = std::find_if(out.levels.begin(), out.levels.end(), [&](const OptionLevel& x) { return x.id == def; });
+	if (at != out.levels.end()) {
+		out.defaultIndex = static_cast<int>(at - out.levels.begin());
+	} else if (named) {
+		reader.fail(*o, "data.option_default_unknown", {setting, def});
+	}
+}
+
 void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 	reader.only(json, gameKeys("game.json", ""));
 	reader.text(json, "title", c.title, true);
@@ -558,6 +601,12 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 		reader.boolean(*p, "flash_original", c.presentation.flashOriginal, false);
 		reader.integer(*p, "map_load_hold_ms", c.presentation.mapLoadHoldMs, false, 0, 60000);
 		reader.boolean(*p, "map_load_hold_on_load", c.presentation.mapLoadHoldOnLoad, false);
+		reader.boolean(*p, "chest_opened_notice", c.presentation.chestOpenedNotice, false);
+		if (const JsonValue* o = reader.field(*p, "options", JsonValue::Type::Object, false)) {
+			reader.only(*o, gameKeys("game.json", "presentation.options"));
+			readOptionLevels(reader, *o, "text_speed", 0, 100000, c.presentation.textSpeed);
+			readOptionLevels(reader, *o, "battle_speed", 10, 1000, c.presentation.battleSpeed);
+		}
 		reader.texts(*p, "audio", c.presentation.audio, false);
 		if (const JsonValue* s = reader.field(*p, "sounds", JsonValue::Type::Object, false)) {
 			FieldSounds& sounds = c.presentation.sounds;
@@ -1226,6 +1275,25 @@ void checkReferences(const GameData& data, Problems& problems) {
 			problems.add(where, "data.sound_not_audio", {cue});
 		}
 	};
+	if (shown.chestOpenedNotice) {
+		for (const LanguageTables& language : data.languages) {
+			if (language.text.count("game.chest_opened")) {
+				continue;
+			}
+			std::set<std::string> missing;
+			for (const auto& entry : data.areas) {
+				for (const Chest& chest : entry.second.chests) {
+					const std::string key = "game.chest_opened" + (chest.kind.empty() ? "" : "." + chest.kind);
+					if (!language.text.count(key)) {
+						missing.insert(key);
+					}
+				}
+			}
+			for (const std::string& key : missing) {
+				problems.add("game.json presentation", "data.chest_opened_text_missing", {language.code, key});
+			}
+		}
+	}
 	soundListed("game.json sounds chest", sounds.chest);
 	soundListed("game.json sounds travel", sounds.town);
 	soundListed("game.json sounds travel", sounds.dungeonExit);
@@ -1630,6 +1698,8 @@ void loadInto(const DataDirectories& directories, GameData& data, Problems& prob
 		return;
 	}
 	JsonReader reader(configPath);
+	data.config.presentation.textSpeed = builtinOptionLevels("text_speed");
+	data.config.presentation.battleSpeed = builtinOptionLevels("battle_speed");
 	readConfig(reader, *json.value, data.config);
 	if (!reader.ok()) {
 		problems.add(reader.problems());
@@ -1929,6 +1999,23 @@ std::string gameStringsText(const events::GameStrings& strings) {
 	std::string out = "# String IDs the game shows itself, built from the game data by game_cli --used.\n";
 	for (const auto& [id, line] : strings.ids) {
 		out += id + "\n";
+	}
+	return out;
+}
+
+}
+
+namespace game {
+
+OptionLevels builtinOptionLevels(const std::string& setting) {
+	OptionLevels out;
+	if (setting == "text_speed") {
+		out.levels = {{"slow", "ui.text_speed.slow", 25}, {"normal", "ui.text_speed.normal", 50}, {"fast", "ui.text_speed.fast", 100},
+			{"instant", "ui.text_speed.instant", 0}};
+		out.defaultIndex = static_cast<int>(TextSpeed::Normal);
+	} else {
+		out.levels = {{"1x", "ui.multiplier.x1", 100}, {"1.5x", "ui.multiplier.x1_5", 150}, {"2x", "ui.multiplier.x2", 200}, {"3x", "ui.multiplier.x3", 300}};
+		out.defaultIndex = static_cast<int>(BattleSpeed::X1);
 	}
 	return out;
 }

@@ -361,3 +361,45 @@ end
 	test::run(it, host);
 	CHECK(it.status() == Status::finished && !it.kept_choice(picked, states));
 }
+
+// `option back`: a hidden last branch the host answers with the index after the options; `into` records 0, a kept choice
+// keeps it as picked, and the syntax is checked. Scripts without it keep their fingerprint.
+TEST(option_back_is_a_hidden_branch_the_host_answers_past_the_options) {
+	const std::string script = R"(event a unskippable
+	choice "Where to?" keep into trip.pick
+	option "North"
+		set went.north
+	option "South"
+		set went.south
+	option back
+		set went.back
+	end
+	wait 1
+end
+)";
+	Program p = test::compile_ok(script);
+	CHECK(p.code[0].choice.back && p.code[0].choice.options.size() == 2 && p.code[0].targets.size() == 3);
+	RecordingHost host;
+	host.queue_choices({2});
+	Interpreter it(p, host);
+	CHECK(it.start("a"));
+	it.step(0);
+	CHECK(host.flags["went.back"] && !host.flags["went.north"] && host.vars["trip.pick"] == 0);
+	int picked = -1;
+	std::vector<std::string> states;
+	CHECK(it.kept_choice(picked, states) && picked == 2);
+	CHECK(with_prefix(host.trace, "choice ") == (std::vector<std::string>{"choice \"Where to?\" keep [\"North\" | \"South\"] back -> 2"}));
+	RecordingHost picks;
+	picks.queue_choices({1});
+	Interpreter south(p, picks);
+	CHECK(south.start("a"));
+	south.step(0);
+	CHECK(picks.flags["went.south"] && picks.vars["trip.pick"] == 2);
+
+	auto twice = test::compile_errors("event a unskippable\n\tchoice \"Q\"\n\toption \"A\"\n\toption back\n\toption back\n\tend\nend\n");
+	CHECK(test::has_diagnostic(twice, 5, "only one 'option back'"));
+	auto early = test::compile_errors("event a unskippable\n\tchoice \"Q\"\n\toption back\n\toption \"A\"\n\toption \"B\"\n\tend\nend\n");
+	CHECK(test::has_diagnostic(early, 4, "'option back' must be the last option"));
+	Program plain = test::compile_ok("event a unskippable\n\tchoice \"Q\"\n\toption \"A\"\n\toption \"B\"\n\tend\nend\n");
+	CHECK(!plain.code[0].choice.back);
+}

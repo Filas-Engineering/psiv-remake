@@ -724,6 +724,10 @@ rules::Result<Area> parseArea(const std::string& file, const std::string& text) 
 			reader.counts(c, "items", chest.items, false, 1, 99);
 			reader.counts(c, "equipment", chest.equipment, false, 1, 99);
 			reader.integer(c, "money", chest.money, false, 0, 1000000);
+			reader.text(c, "kind", chest.kind, false);
+			if (!chest.kind.empty() && chest.kind.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_") != std::string::npos) {
+				reader.fail(c, "data.bad_chest_kind", {chest.kind});
+			}
 			checkCell(c, chest.at, "chest '" + chest.id + "'");
 			area.chests.push_back(chest);
 		}

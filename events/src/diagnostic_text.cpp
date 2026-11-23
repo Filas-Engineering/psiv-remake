@@ -40,6 +40,8 @@ const std::map<std::string, std::string>& diagnostic_text() {
 		{"script.camera_cell", "a camera cell is two whole numbers of 0 or more"},
 		{"script.cannot_used_as_flag_variable", "'{0}' cannot be used as a flag or variable name"},
 		{"script.choice_needs_at_least_two", "choice: needs at least two options"},
+		{"script.choice_back_twice", "choice: only one 'option back'"},
+		{"script.choice_back_not_last", "choice: 'option back' must be the last option"},
 		{"script.commands_come_after_first", "commands must come after the first '{0}'"},
 		{"script.comparison_use", "'{0}' is not a comparison; use ==, !=, <, <=, > or >="},
 		{"script.declared_as_flag", "'{0}' is declared as a flag, not a variable"},

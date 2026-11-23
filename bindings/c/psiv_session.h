@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 22
+#define PSIV_ABI_VERSION 23
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -352,8 +352,39 @@ typedef struct psiv_profile {
 PSIV_API psiv_status psiv_profile_get(psiv_session* session, psiv_profile* out);
 /* MUTATES. Applies at once and writes the profile file. Refuses a language the game has no tables for. */
 PSIV_API psiv_status psiv_profile_set(psiv_session* session, const psiv_profile* profile);
-/* MUTATES. One setting by its profile file key (text_speed, show_shipped_names, text_language, ...). */
+/* MUTATES. One setting by its profile file key (text_speed, show_shipped_names, text_language, ...); text_speed and
+ * battle_speed also take the id of one of psiv_option_levels_get's levels. */
 PSIV_API psiv_status psiv_profile_set_value(psiv_session* session, const char* key, const char* value);
+
+/* The profile settings a game may give levels of its own (game.json presentation.options). */
+typedef enum psiv_option_setting { PSIV_OPTION_TEXT_SPEED, PSIV_OPTION_BATTLE_SPEED } psiv_option_setting;
+
+typedef struct psiv_option_level {
+	const char* id;
+	/* The text key of its name and that name in the profile's language. */
+	const char* label_key;
+	const char* label;
+	/* Text speed: characters a second, 0 for a page shown at once. Battle speed: percent of the normal pace. */
+	int32_t value;
+} psiv_option_level;
+
+typedef struct psiv_option_levels {
+	const psiv_option_level* levels;
+	int32_t count;
+	/* The level the profile stands at, and the one a new profile starts at. */
+	int32_t current;
+	int32_t default_index;
+	/* 1 when the game lists its own levels; 0 for the built-in four, whose indexes are psiv_text_speed and
+	 * psiv_battle_speed values (profile text_speed and battle_speed). */
+	int32_t declared;
+} psiv_option_levels;
+
+/* A psiv_option_setting's levels. With levels of the game's own, the profile keeps the chosen level's id (profile file
+ * text_speed_level, battle_speed_level) and its text_speed and battle_speed hold the built-in level of the same name,
+ * if any; setting one of those through psiv_profile_set moves to the level of that name, or to the default. */
+PSIV_API psiv_status psiv_option_levels_get(psiv_session* session, int32_t setting, psiv_option_levels* out);
+/* MUTATES. Chooses a level by index and writes the profile. */
+PSIV_API psiv_status psiv_option_level_set(psiv_session* session, int32_t setting, int32_t index);
 
 typedef struct psiv_settings {
 	const char* difficulty;
@@ -775,6 +806,8 @@ typedef struct psiv_point {
 	int32_t direction;
 	/* Shops and rests: the actor who keeps it (the area data's `keeper`), "" for none; "" for every other kind. */
 	const char* keeper;
+	/* Chests: the area data's `kind` (a free id such as "box"), "" for none; "" for every other kind. */
+	const char* chest_kind;
 } psiv_point;
 
 /* One of the party's vehicles in its area. */
@@ -968,8 +1001,12 @@ typedef struct psiv_choice {
 	/* option_count state words from the script (`option <text> state <word> [if <condition>]`), "" for none; NULL when
 	   no option has one. A host maps them to its own looks. */
 	const char* const* states;
-	/* The kept choice's picked option; -1 for a choice waiting on an answer. */
+	/* The kept choice's picked option (option_count when answered by its back option); -1 for a choice waiting on an
+	   answer. */
 	int32_t picked;
+	/* 1 when the script's choice has `option back`: a hidden branch, drawn as no row, that psiv_choose_back (or
+	   psiv_choose with option_count) answers when the player backs out; 0: Back answers nothing. */
+	int32_t back;
 } psiv_choice;
 
 PSIV_API int32_t psiv_line_pending(const psiv_session* session);
@@ -981,7 +1018,10 @@ PSIV_API psiv_status psiv_choice_get(psiv_session* session, psiv_choice* out);
 /* The last answered `choice ... keep` of the running event, with `picked` set, which stays on screen under the lines and
    choices that follow until `choice clear` or the event ends. PSIV_NOT_FOUND when there is none. */
 PSIV_API psiv_status psiv_kept_choice_get(psiv_session* session, psiv_choice* out);
-PSIV_API psiv_status psiv_choose(psiv_session* session, int32_t index); /* MUTATES */
+/* MUTATES. index from 0; with the choice's `back`, option_count answers its back option. */
+PSIV_API psiv_status psiv_choose(psiv_session* session, int32_t index);
+/* MUTATES. Answers the choice's back option; refused (game.refuse.no_back_option) when it has none. */
+PSIV_API psiv_status psiv_choose_back(psiv_session* session);
 /* What the running event shows next, from where it stands, without advancing it: a psiv_next_output. It looks past the
  * line shown now through jumps, returns and flag and variable changes; PSIV_NEXT_OTHER for anything else (a branch on a
  * condition, a wait, an action, a battle); PSIV_NEXT_NONE outside an event. A host can hold a narration window that goes

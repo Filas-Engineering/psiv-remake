@@ -14,7 +14,14 @@ public sealed partial class SampleController
 		_ => 1f,
 	};
 
-	private int SpeedPercent() => (int)MathF.Round(SpeedOf(_s.Profile().BattleSpeed) * 100);
+	// The battle speed as a factor: the game's own level's percent (presentation.options), else the built-in enum's.
+	private float BattleSpeedFactor()
+	{
+		OptionLevels levels = _s.OptionLevels(OptionSetting.BattleSpeed);
+		return levels.Declared ? levels.Levels[levels.Current].Value / 100f : SpeedOf(_s.Profile().BattleSpeed);
+	}
+
+	private int SpeedPercent() => (int)MathF.Round(BattleSpeedFactor() * 100);
 
 	private enum BattlePhase { Command, Option, Target, Macro, Playback, Ended, Top, AutoChoice }
 
@@ -26,6 +33,7 @@ public sealed partial class SampleController
 	// on the macro played last; "reset" (the default) opens both at their first row.
 	private bool MacroFlowRemember => Ui.ParamText(BattleScreen, "macro_flow", UiData(), "reset") == "remember";
 	private string _lastMacro = "";
+	private string _probeMacroLines = "-";
 	private bool _macroRound;
 
 	// The battle layout's `macro_failed`: what a macro picked from the menu does with a step that cannot run (`automatic`,
@@ -558,7 +566,7 @@ public sealed partial class SampleController
 			case "fight":
 				NextActor(0);
 				break;
-			case "macro" when _s.Macros().Count == 0:
+			case "macro" when _s.Macros().Count == 0 && MacroSlotLabels is null:
 				Say(T("ui.battle.no_macros"));
 				b.Log.Add(T("ui.battle.no_macros"));
 				break;
@@ -723,6 +731,11 @@ public sealed partial class SampleController
 			{
 				b.Phase = b.FromTop ? BattlePhase.Top : BattlePhase.Command;
 			}
+			else if (input.Confirm && macros[_cursor].Length == 0)
+			{
+				// An empty slot of `macro_slots`: nothing to play.
+				_audio.PlayCue("refuse");
+			}
 			else if (input.Confirm)
 			{
 				_lastMacro = macros[_cursor];
@@ -787,11 +800,18 @@ public sealed partial class SampleController
 	// The macro list's row for the macro played last under `macro_flow` "remember", else the first.
 	private int LastMacroRow() => MacroFlowRemember ? Math.Max(0, BattleMacros().IndexOf(_lastMacro)) : 0;
 
+	// The battle layout's `macro_slots`: the Macro command's fixed slots by label, null without them.
+	private List<string>? MacroSlotLabels => Layout.Screen(BattleScreen).MacroSlots;
+
 	// The party's macros, or with the battle layout's `macro_auto_first` the one auto-battle plays (Settings.AutoMacro)
-	// first.
+	// first. Under `macro_slots` one entry per slot: the save's macros in order, "" for an empty slot.
 	private List<string> BattleMacros()
 	{
 		IReadOnlyList<string> macros = _s.Macros();
+		if (MacroSlotLabels is { } slots)
+		{
+			return [.. slots.Select((_, i) => i < macros.Count ? macros[i] : "")];
+		}
 		string auto = _s.Settings().AutoMacro;
 		return LayoutSwitch("macro_auto_first") && macros.Contains(auto) ? [auto, .. macros.Where(m => m != auto)] : [.. macros];
 	}
@@ -884,7 +904,7 @@ public sealed partial class SampleController
 	// The battle probes `expect state` reads.
 	private string BattleState(string key) => key switch
 	{
-		"timescale" => ((int)MathF.Round(SpeedOf(_s.Profile().BattleSpeed) * 100)).ToString(CultureInfo.InvariantCulture),
+		"timescale" => SpeedPercent().ToString(CultureInfo.InvariantCulture),
 		"step" => _timeline.Current?.Description ?? "-",
 		"battlephase" => _battle.Active ? _battle.Phase.ToString() : "-",
 		"battlelog" => string.Join(" | ", _battle.Log),
@@ -909,6 +929,8 @@ public sealed partial class SampleController
 		"victory" => _probeVictory,
 		"formation" => $"{_show.Slots}: " + string.Join(" ", _show.All.Where(c => c.Position >= 0).Select(c => c.Position.ToString(CultureInfo.InvariantCulture))),
 		// The command menu's rows for the phase, the one under the cursor in brackets.
+		// Under the battle layout's `macro_slots`, the highlighted slot's macro steps (`none` for an empty slot), `-` off the list.
+		"macrolines" => _battle.Active && _battle.Phase == BattlePhase.Macro ? _probeMacroLines : "-",
 		"battlemenu" => _battle.Active && MenuRows(StageCombatants()) is { } menu
 			? string.Join(" | ", menu.Items.Select((item, i) => i == _cursor ? $"[{item}]" : item)) : "-",
 		// The rows of that menu that cannot be chosen (greyed), `-` for none.

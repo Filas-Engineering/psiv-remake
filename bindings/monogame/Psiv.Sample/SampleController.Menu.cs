@@ -124,6 +124,7 @@ public sealed partial class SampleController
 		_equipChange = null;
 		_macroStage = MacroStage.List;
 		_saveMode = null;
+		_sysPicker = null;
 		_saveStep = "";
 		_saveMessage = "";
 		_systemCursor = 0;
@@ -149,7 +150,7 @@ public sealed partial class SampleController
 			"order" => _orderFrom is null ? "lineup" : "swap",
 			"macros" => _macroStage.ToString().ToLowerInvariant(),
 			"techniques" or "skills" or "abilities" => _pickMember is null ? "members" : _pickAction is not null ? "target" : "list",
-			"system" => _saveMode is null ? "system" : "slots",
+			"system" => _saveMode is not null ? "slots" : _sysPicker is not null ? "picker" : "system",
 			"party_talk" when _talkSpeakers is not null => "speakers",
 			_ => MenuPage,
 		},
@@ -166,7 +167,7 @@ public sealed partial class SampleController
 		"order" => _orderFrom is null,
 		"macros" => _macroStage == MacroStage.List,
 		"save" => SaveAtTop,
-		"system" => _saveMode is null,
+		"system" => _saveMode is null && _sysPicker is null,
 		"party_talk" => _talkSpeakers is null,
 		_ => true,
 	};

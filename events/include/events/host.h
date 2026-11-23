@@ -34,6 +34,9 @@ struct ChoiceRequest {
 	bool yes_no = false;
 	// `keep`: once answered, the choice stays on screen with the picked row until `choice clear` or the event ends.
 	bool keep = false;
+	// `option back`: a hidden last branch, drawn as no row, that the host answers with the result options.size() when the
+	// player backs out of the choice; without it Back answers nothing.
+	bool back = false;
 	// Each option's state word (`option <text> state <word> [if <condition>]`), "" for none, filled as the choice is
 	// presented; empty when no option has one.
 	std::vector<std::string> states;

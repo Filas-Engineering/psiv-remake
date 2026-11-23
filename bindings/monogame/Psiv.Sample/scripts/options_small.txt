@@ -1,0 +1,40 @@
+# The system page's label-only rows and picker and the battle's macro slots on the small set at 320x224
+# (make_options_assets.py --small over the small set, make_options_data.py), with --dev: the page half the area wide,
+# its rows by label, the picker beside it inside the frame, and the eight slots with the macro's steps beside them, each
+# window inside the logical frame. With --window the shot lines save screenshots under build/shots/options/.
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+wait 300
+press M
+expect screen Menu
+press Right 2
+expect state tab System
+press Down
+expect state selected Text speed
+expect state uifield.menu_system.rows 5
+shot build/shots/options/small_rows.png
+press Enter
+expect state page picker
+expect state selected Instant
+expect state uifield.menu_system.picker_rows 5
+expect statehas windows menu_system/page 78 48 116x124, menu_system/picker 198 48 112x108
+shot build/shots/options/small_picker.png
+press Up
+press Enter
+expect state text_speed fast
+pressuntil Escape Field 20
+
+battlelayout front
+dev battle training
+waitstate 400 battlephase Command
+press Down 6
+press Enter
+expect state battlephase Macro
+expect statehas battlemenu [A  strike]
+expect state macrolines Test Fighter: attack -> enemy 1 | Test Mystic: attack -> enemy 1
+expect statehas windows battle_front/slots 8 24 120x152, battle_front/macro_detail 134 24 170x52
+shot build/shots/options/small_macro_slots.png

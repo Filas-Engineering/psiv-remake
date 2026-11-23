@@ -577,3 +577,51 @@ TEST(aKeptChoiceStaysUnderTheLinesAndChoicesThatFollow) {
 	CHECK(transcript.find("  (kept: Ask about? > Quiet)") != std::string::npos);
 	CHECK(transcript.find("(kept:") == transcript.rfind("(kept:"));
 }
+
+// `option back`: the choice says it takes Back, chooseBack (or the index after the options) runs the back branch, a kept
+// choice answered so reports the back index, a choice without it refuses, and game_cli answers it with `choose back`.
+TEST(aChoicesBackOptionRunsWhenThePlayerBacksOut) {
+	const GameData d = test::withScript("events/bell_cove.ev",
+		"event cove_bell unskippable\n"
+		"\tchoice \"Ask about?\" keep\n"
+		"\toption \"Bell\"\n"
+		"\t\tsay guide \"It rings at night.\"\n"
+		"\toption \"Quiet\"\n"
+		"\t\tsay guide \"It is quiet.\"\n"
+		"\toption back\n"
+		"\t\tsay guide \"Another time, then.\"\n"
+		"\tend\n"
+		"\tchoice \"Again?\"\n"
+		"\toption \"Yes\"\n"
+		"\toption \"No\"\n"
+		"\tend\n"
+		"end\n");
+	Session s(d, SessionOptions());
+	test::placeParty(s, "bell_cove", "bell_front", Facing::East);
+	CHECK(s.interact().empty());
+	std::optional<ChoiceView> c = s.choiceView();
+	CHECK(c && c->back && c->options.size() == 2);
+	CHECK(s.choose(3).key == "game.refuse.pick_option");
+	CHECK(s.chooseBack().empty());
+	std::optional<ChoiceView> kept = s.keptChoice();
+	CHECK(s.linePending() && kept && kept->picked == 2 && s.line() && s.line()->text == "Another time, then.");
+	s.confirmLine();
+	c = s.choiceView();
+	CHECK(c && !c->back);
+	CHECK(s.chooseBack().key == "game.refuse.no_back_option");
+	CHECK(s.choose(2).key == "game.refuse.pick_option");
+
+	Session byIndex(d, SessionOptions());
+	test::placeParty(byIndex, "bell_cove", "bell_front", Facing::East);
+	CHECK(byIndex.interact().empty());
+	CHECK(byIndex.choose(2).empty() && byIndex.line() && byIndex.line()->text == "Another time, then.");
+
+	std::ostringstream out;
+	Session played(d, SessionOptions());
+	Runner runner(played, out);
+	test::placeParty(played, "bell_cove", "bell_front", Facing::East);
+	runner.runScript("interact\nchoose back\n");
+	const std::string transcript = out.str();
+	CHECK(transcript.find("Ask about? [0] Bell [1] Quiet | keep | back") != std::string::npos);
+	CHECK(transcript.find("  (kept: Ask about? > back)") != std::string::npos);
+}

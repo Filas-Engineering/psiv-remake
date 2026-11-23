@@ -525,6 +525,21 @@ private:
 			b.present = true;
 			Text label;
 			Args o = args();
+			// `option back`: no row; the host answers it when the player backs out (the last branch, after every option).
+			if (o.keyword("back")) {
+				o.finish();
+				if (s.ins.choice.back) {
+					error(b.line, "script.choice_back_twice", {});
+				}
+				s.ins.choice.back = true;
+				++pos_;
+				stop = parse_block(ctx, {"option", "end"}, b.body);
+				s.branches.push_back(std::move(b));
+				if (stop == "option") {
+					error(line().number, "script.choice_back_not_last", {});
+				}
+				continue;
+			}
 			o.text(label, "option text (a quoted string or @string.id)");
 			OptionState state;
 			if (o.keyword("state") && o.name(state.word, "a state word after 'state'") && o.keyword("if")) {

@@ -59,9 +59,13 @@ public sealed record MapPatch(string Flag, string Path, (int X, int Y)[] Cells);
 public sealed record MapEntry(string Area, string Ground, string? Above, int Cell, List<MapPatch> Patches);
 
 // When a timed piece of an area's motion plays: its clock starts at the controller's zero (global) or when the area was
-// entered (Entry), DelayMs later on the entry clock, and it shows while every one of Flags is set and none of UnlessFlags.
-public sealed record MotionWhen(bool Entry, string[] Flags, string[] UnlessFlags, int DelayMs = 0)
+// entered (Entry), DelayMs later on the entry clock (with DelayMax above it, a whole number of milliseconds from DelayMs
+// to DelayMax drawn for each entry from the session's seed, the piece's Key and the entry's time), and it shows while
+// every one of Flags is set and none of UnlessFlags.
+public sealed record MotionWhen(bool Entry, string[] Flags, string[] UnlessFlags, int DelayMs = 0, int DelayMax = 0, string Key = "")
 {
+	public long DelayFor(long enteredMs) => DelayMax > DelayMs ? DelayMs + MotionTiming.Draw(Key, enteredMs, DelayMax - DelayMs + 1) : DelayMs;
+
 	// The piece's milliseconds on its clock, or null while it is off: its flags keep it off, or its delay has not run out.
 	public long? Time(long clockMs, long enteredMs, Func<string, bool> flag)
 	{
@@ -73,7 +77,7 @@ public sealed record MotionWhen(bool Entry, string[] Flags, string[] UnlessFlags
 		{
 			return clockMs;
 		}
-		long t = Math.Max(0, clockMs - enteredMs) - DelayMs;
+		long t = Math.Max(0, clockMs - enteredMs) - DelayFor(enteredMs);
 		return t < 0 ? null : t;
 	}
 }
@@ -132,6 +136,10 @@ public static class MotionTiming
 		return min + (long)(h % (ulong)choices) * times.Grain;
 	}
 
+	// A whole number from 0 below `choices`, from the seed, a piece's key and a count (a loop, an entry's time).
+	public static long Draw(string key, long count, int choices) =>
+		(long)(Mix(Seed ^ Mix(Fnv(key)) ^ Mix((ulong)count * 0x9E3779B97F4A7C15UL)) % (ulong)Math.Max(1, choices));
+
 	public static int IndexAt(StepTimes times, long ms)
 	{
 		long t = ms * 60;
@@ -183,8 +191,10 @@ public static class MotionTiming
 // Exact-color replacement in steps: each step's pairs, looping by Times. One step is a still recolor. An area's track
 // recolors its Targets (null: the ground, change and above pictures and the frame runs), its `actors` target limited to
 // the People drawn and the Sheets worn when either is given.
+// IndexSteps (an area's `indexes`, with the `actors` target only): each step's palette index to color pairs, applied to
+// people's frames cut from indexed sheets by the pixels' indexes, so equal colors at different indexes part.
 public sealed record PaletteTrack(IReadOnlyList<(Color From, Color To)>[] Steps, StepTimes Times, MotionWhen When, string[]? Targets = null, string[]? People = null,
-	string[]? Sheets = null)
+	string[]? Sheets = null, IReadOnlyList<(int Index, Color To)>[]? IndexSteps = null)
 {
 	public static readonly string[] DefaultTargets = ["ground", "above", "runs"];
 
@@ -217,10 +227,11 @@ public sealed record LayerBand(int First, int Last, float Scroll, float Speed, b
 // travelling Speed pixels a second.
 public sealed record LayerWave(bool Columns, float Amplitude, float Wavelength, float Speed);
 
-// A picture behind the area (Front false) or in front of everything on it, moving Scroll times the camera and Speed
-// picture pixels a second, repeated along the axes it repeats on; At moves it that many picture pixels.
+// A picture behind the area (Front false), over the people (Above) or in front of everything on it, moving Scroll times
+// the camera and Speed picture pixels a second, repeated along the axes it repeats on; At moves it that many picture
+// pixels, from where the camera stood on entering the area when AlignGround.
 public sealed record AreaLayer(string Image, int Width, int Height, bool Front, float ScrollX, float ScrollY, float SpeedX, float SpeedY, bool RepeatX, bool RepeatY,
-	List<LayerBand> Bands, LayerWave? Wave, MotionWhen When, float AtX, float AtY, string? Name = null);
+	List<LayerBand> Bands, LayerWave? Wave, MotionWhen When, float AtX, float AtY, string? Name = null, bool Above = false, bool AlignGround = false);
 
 // An area's motion, from its maps entry: Cell picture pixels a cell, as the entry's pictures.
 public sealed record AreaMotion(int Cell, List<PaletteTrack> Palettes, List<AreaRun> Runs, List<AreaLayer> Layers, List<IdleLoop>? Idle = null);
@@ -344,12 +355,13 @@ public sealed class AssetManifest
 		["maps.areas[].animated[]"] = ["cells", "pixels", "image", "frames", "ms", "ticks", "layer", "clock", "delay", "flag", "unless_flag"],
 		["maps.areas[].animated[].layer"] = ["ground", "above"],
 		["maps.areas[].idle[]"] = ["actor", "object", "frames", "ms", "ticks", "clock", "delay", "flag", "unless_flag"],
-		["maps.areas[].layers[]"] = ["image", "name", "place", "scroll", "speed", "at", "repeat", "bands", "wave", "clock", "delay", "flag", "unless_flag"],
+		["maps.areas[].layers[]"] = ["image", "name", "place", "scroll", "speed", "at", "repeat", "bands", "wave", "clock", "delay", "flag", "unless_flag", "above", "align"],
 		["maps.areas[].layers[].bands[]"] = ["rows", "lines", "scroll", "speed"],
-		["maps.areas[].palettes[]"] = ["colors", "steps", "ms", "ticks", "clock", "delay", "flag", "unless_flag", "targets", "people", "sheets"],
+		["maps.areas[].palettes[]"] = ["colors", "indexes", "steps", "ms", "ticks", "clock", "delay", "flag", "unless_flag", "targets", "people", "sheets"],
 		["maps.areas[].palettes[].targets"] = ["ground", "above", "runs", "tiles", "layers", "layer:NAME", "actors"],
 		["step_range"] = ["min", "max"],
 		["maps.areas[].layers[].place"] = ["back", "front"],
+		["maps.areas[].layers[].align"] = ["origin", "ground"],
 		["maps.areas[].layers[].repeat"] = ["both", "x", "y", "none"],
 		["maps.areas[].layers[].wave"] = ["axis", "amplitude", "wavelength", "speed"],
 		["maps.areas[].layers[].wave.axis"] = ["lines", "columns"],
@@ -1684,12 +1696,29 @@ public sealed class AssetManifest
 			{
 				Problem(entry, $"flag '{both}' is in both 'flag' and 'unless_flag', so the piece never shows");
 			}
-			int delay = Int(e, "delay", entry, 0, 0, 600000);
+			int delay = 0, delayMax = 0;
+			if (e.TryGetProperty("delay", out JsonElement d) && d.ValueKind == JsonValueKind.Object)
+			{
+				Fields(d, $"{entry}.delay", Schema["step_range"]);
+				bool whole(JsonElement x) => x.ValueKind == JsonValueKind.Number && x.TryGetInt32(out int n) && n >= 0 && n <= 600000;
+				if (!d.TryGetProperty("min", out JsonElement lo) || !d.TryGetProperty("max", out JsonElement hi) || !whole(lo) || !whole(hi) || lo.GetInt32() > hi.GetInt32())
+				{
+					Problem(entry, "field 'delay': a random delay must be {\"min\": N, \"max\": N}, whole milliseconds from 0 to 600000, min at most max");
+				}
+				else
+				{
+					(delay, delayMax) = (lo.GetInt32(), hi.GetInt32());
+				}
+			}
+			else
+			{
+				delay = Int(e, "delay", entry, 0, 0, 600000);
+			}
 			if (e.TryGetProperty("delay", out _) && clock != "entry")
 			{
 				Problem(entry, "'delay' needs 'clock': \"entry\": it holds the piece off that long after the party enters the area");
 			}
-			return clock is null ? null : new MotionWhen(clock == "entry", flags, unless, delay);
+			return clock is null ? null : new MotionWhen(clock == "entry", flags, unless, delay, delayMax, entry);
 		}
 
 		// Palette tracks: named source colors and steps of replacements for them. An area's (`area` given) may name what they
@@ -1702,7 +1731,41 @@ public sealed class AssetManifest
 				int before = m.Problems.Count;
 				Fields(p, trackEntry, Schema[area is null ? "palettes[]" : "maps.areas[].palettes[]"]);
 				var colors = new Dictionary<string, Color>();
-				if (!p.TryGetProperty("colors", out JsonElement named) || named.ValueKind != JsonValueKind.Object || !named.EnumerateObject().Any())
+				// An area's track may name palette indexes of indexed people's sheets (`indexes`) in place of colors.
+				var indexes = new Dictionary<string, int>();
+				bool byIndex = area is not null && p.TryGetProperty("indexes", out JsonElement indexed);
+				p.TryGetProperty("colors", out JsonElement named);
+				if (byIndex && p.TryGetProperty("colors", out _))
+				{
+					Problem(trackEntry, "takes 'colors' (exact colors) or 'indexes' (palette indexes of indexed sheets), not both");
+				}
+				else if (byIndex)
+				{
+					JsonElement map = p.GetProperty("indexes");
+					if (map.ValueKind != JsonValueKind.Object || !map.EnumerateObject().Any())
+					{
+						Problem(trackEntry, "'indexes' must name at least one palette index: {\"NAME\": N}");
+					}
+					else
+					{
+						foreach (JsonProperty c in map.EnumerateObject())
+						{
+							if (c.Value.ValueKind != JsonValueKind.Number || !c.Value.TryGetInt32(out int n) || n < 0 || n > 255)
+							{
+								Problem(trackEntry, $"index '{c.Name}' must be a palette index from 0 to 255");
+							}
+							else if (indexes.FirstOrDefault(o => o.Value == n) is { Key: { } same })
+							{
+								Problem(trackEntry, $"indexes '{same}' and '{c.Name}' are the same index");
+							}
+							else
+							{
+								indexes[c.Name] = n;
+							}
+						}
+					}
+				}
+				else if (named.ValueKind != JsonValueKind.Object || !named.EnumerateObject().Any())
 				{
 					Problem(trackEntry, "'colors' must name at least one source color: {\"NAME\": \"#rrggbb\"}");
 				}
@@ -1721,6 +1784,7 @@ public sealed class AssetManifest
 					}
 				}
 				var steps = new List<IReadOnlyList<(Color, Color)>>();
+				var indexSteps = new List<IReadOnlyList<(int, Color)>>();
 				if (!p.TryGetProperty("steps", out JsonElement list) || list.ValueKind != JsonValueKind.Array || list.GetArrayLength() == 0)
 				{
 					Problem(trackEntry, "'steps' must be a list of at least one step, each {\"NAME\": \"#rrggbb\"}");
@@ -1732,7 +1796,22 @@ public sealed class AssetManifest
 					{
 						string stepEntry = $"{trackEntry}.steps[{i++}]";
 						var pairs = new List<(Color, Color)>();
-						if (IsObject(step, stepEntry))
+						var indexPairs = new List<(int, Color)>();
+						if (byIndex && IsObject(step, stepEntry))
+						{
+							foreach (JsonProperty c in step.EnumerateObject())
+							{
+								if (!indexes.TryGetValue(c.Name, out int from))
+								{
+									Problem(stepEntry, $"names no index '{c.Name}' of 'indexes'");
+								}
+								else if (Rgb(c.Value, stepEntry, $"color '{c.Name}'") is Color to)
+								{
+									indexPairs.Add((from, to));
+								}
+							}
+						}
+						else if (IsObject(step, stepEntry))
 						{
 							foreach (JsonProperty c in step.EnumerateObject())
 							{
@@ -1747,6 +1826,7 @@ public sealed class AssetManifest
 							}
 						}
 						steps.Add(pairs);
+						indexSteps.Add(indexPairs);
 					}
 				}
 				StepTimes? times = Times(p, trackEntry, Math.Max(1, steps.Count), key);
@@ -1756,12 +1836,34 @@ public sealed class AssetManifest
 				{
 					(targets, people, sheets) = Targets(p, trackEntry);
 				}
+				if (byIndex)
+				{
+					IndexedSheets(trackEntry, targets, people, sheets);
+				}
 				if (m.Problems.Count == before && times is not null && when is not null)
 				{
-					tracks.Add(new PaletteTrack([.. steps], times, when, targets, people, sheets));
+					tracks.Add(new PaletteTrack([.. steps], times, when, targets, people, sheets, byIndex ? [.. indexSteps] : null));
 				}
 			}
 			return tracks;
+		}
+
+		// A track by palette index recolors people only (`targets` exactly `actors`), and every sheet it reaches (those of
+		// `people` and `sheets`, or every characters entry) must be an indexed PNG, whose indexes it names.
+		private void IndexedSheets(string entry, string[]? targets, string[]? people, string[]? sheets)
+		{
+			if (targets is not ["actors"])
+			{
+				Problem(entry, "'indexes' recolors people's sheets by palette index: it needs \"targets\": [\"actors\"]");
+				return;
+			}
+			foreach (CharacterEntry c in m.Characters.Where(c => people is null && sheets is null || people?.Contains(c.Id) == true || sheets?.Contains(c.Id) == true))
+			{
+				if (Png.ReadHeader(m.Full(c.Image.Path), out _) is { ColorType: not 3 })
+				{
+					Problem(entry, $"'indexes' needs indexed sheets, and {c.Id}'s sheet {c.Image.Path} is not an indexed PNG (color type 3, a palette): save it with a palette");
+				}
+			}
 		}
 
 		// What an area's palette track recolors (`targets`, default the ground, change and above pictures and the frame runs),
@@ -1874,6 +1976,12 @@ public sealed class AssetManifest
 				string? file = Str(l, "image", layerEntry);
 				Png.Header? header = file is null ? null : Header(file, layerEntry);
 				string? place = OneOf(l, "place", layerEntry, "maps.areas[].layers[].place", "back");
+				bool aboveFolk = Bool(l, "above", layerEntry, false);
+				if (aboveFolk && place == "front")
+				{
+					Problem(layerEntry, "'above' draws a back layer over the people, under the above picture; a front layer is over everything already");
+				}
+				string? align = OneOf(l, "align", layerEntry, "maps.areas[].layers[].align", "origin");
 				string? repeat = OneOf(l, "repeat", layerEntry, "maps.areas[].layers[].repeat", "both");
 				float[] scroll = Floats(l, "scroll", layerEntry, 2, -16, 16) ?? [1, 1];
 				float[] speed = Floats(l, "speed", layerEntry, 2, -10000, 10000) ?? [0, 0];
@@ -1943,10 +2051,10 @@ public sealed class AssetManifest
 						Problem(layerEntry, "a wave over columns does not go with 'bands', which move rows");
 					}
 				}
-				if (When(l, layerEntry) is { } when && header is { } size && place is not null && repeat is not null)
+				if (When(l, layerEntry) is { } when && header is { } size && place is not null && repeat is not null && align is not null)
 				{
 					layers.Add(new AreaLayer(file!, size.Width, size.Height, place == "front", scroll[0], scroll[1], speed[0], speed[1], repeat is "both" or "x",
-						repeat is "both" or "y", bands, wave, when, at[0], at[1], name));
+						repeat is "both" or "y", bands, wave, when, at[0], at[1], name, aboveFolk && place != "front", align == "ground"));
 				}
 			}
 			foreach ((string trackEntry, string t) in _layerTargets.Where(t => !names.Contains(t.Target[6..])))

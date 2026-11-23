@@ -1,0 +1,37 @@
+# The dialogue layout's `reveal_confirm` "hold" in the party talk by speaker (make_options_assets.py --hold over the talk
+# assets, make_talk_data.py), from saves of the scripted playthrough on that copy, with --dev: a press does not complete
+# a speaker's box, holding Confirm reveals it at `reveal_hold_cps` 200 in place of Normal's 50, and a shown box goes on
+# with a press; `dialogue_open_sound` belongs to the dialogue box and does not play for the speakers' window.
+
+cmd set text normal
+expect screen Title
+wait 2
+cmd load manual_1
+wait 4
+expect screen Field
+dev encounters off
+dev warp tidewater stall_front
+wait 300
+assets swap ui/dialogue.json alt/dialogue_hold.json
+wait 2
+audio mark
+press M
+expect screen Menu
+press Right
+wait 2
+expect state page speakers
+expect statehas talk 1/3 mystic page 1/2 person:mystic
+# A press reveals no more than the frame's own share.
+press Enter
+expect statenot talk 1/3 mystic page 1/2 person:mystic 20/20
+expect statehas talk 1/3 mystic page 1/2 person:mystic
+# Held: 20 characters at 200 a second in about six frames.
+hold Enter 8
+expect state talk 1/3 mystic page 1/2 person:mystic 20/20
+wait 1
+press Enter
+wait 1
+expect statehas talk 1/3 mystic page 2/2 person:mystic
+expect audiocount 0 cue brass_alarm
+press Escape
+expect state page party_talk

@@ -248,6 +248,9 @@ std::string describe(const ChoiceRequest& request) {
 			}
 		}
 		out += "]";
+		if (request.back) {
+			out += " back";
+		}
 	}
 	return out;
 }

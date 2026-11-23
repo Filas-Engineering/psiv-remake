@@ -64,6 +64,9 @@ struct EncyclopediaView {
 	std::string text;
 };
 
+// The profile settings a game may give its own levels (game.json presentation.options).
+enum class OptionSetting { TextSpeed, BattleSpeed };
+
 // Macro slots per save: the original's eight (BAT-055, BAT-057).
 inline constexpr int kMaxMacros = 8;
 
@@ -121,8 +124,10 @@ struct ChoiceView {
 	std::vector<std::string> states;
 	// `keep`: once answered, the choice stays on screen (Session::keptChoice) until `choice clear` or the event ends.
 	bool keep = false;
-	// The kept choice's picked option; -1 for the choice waiting on an answer.
+	// The kept choice's picked option, options.size() when answered by `option back`; -1 for the choice waiting on an answer.
 	int picked = -1;
+	// `option back`: a hidden branch answered by chooseBack (or choose(options.size())) when the player backs out.
+	bool back = false;
 };
 
 // Plays presentation-only script actions (moves, cameras, panels, audio). Warps are applied to the world before
@@ -579,8 +584,16 @@ public:
 	int autosaveCount() const { return autosaveCount_; }
 	const SaveStore* store() const { return store_ ? &*store_ : nullptr; }
 	const Profile& profile() const { return profile_; }
-	// Applies at once and writes the profile file (SAV-005). Refuses a text language the game has no tables for.
+	// Applies at once and writes the profile file (SAV-005). Refuses a text language the game has no tables for and a
+	// speed level id that is none of optionLevels' (game.unknown_option_level).
 	rules::Message setProfile(const Profile& profile);
+	// The text or battle speed levels a host offers (game.json presentation.options, else the built-in four), the one the
+	// profile stands at, and choosing one by index (writes the profile).
+	const OptionLevels& optionLevels(OptionSetting setting) const;
+	int optionLevel(OptionSetting setting) const;
+	// The index of the level with that id, -1 for none.
+	int optionLevelIndex(OptionSetting setting, const std::string& id) const;
+	rules::Message setOptionLevel(OptionSetting setting, int index);
 	// The tables of the profile's text language.
 	const LanguageTables& language() const;
 
@@ -746,7 +759,10 @@ public:
 	// The last answered `choice ... keep` of the running event, with `picked` and the states it was shown with, drawn under
 	// the lines and choices that follow until `choice clear` or the event's end; nullopt when none.
 	std::optional<ChoiceView> keptChoice() const;
+	// `index` the option's; with `option back`, options.size() answers the hidden back branch.
 	rules::Message choose(int index);
+	// Answers the choice's `option back` (the player backed out); refused when it has none (game.refuse.no_back_option).
+	rules::Message chooseBack();
 	bool canSkip() const;
 	bool skip();
 	// The last 500 pages since the game was loaded, rendered for the current profile, skipped ones marked.

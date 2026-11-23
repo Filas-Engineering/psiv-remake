@@ -32,6 +32,7 @@
 		"game.drop_left": "{1}を{0}個のこした。",
 		"game.refuse.bag_full": "持てるのは{0}までです。",
 		"game.chest_empty": "箱は空だ。",
+		"game.chest_opened": "箱を開けた。",
 		"game.clear_not_recorded": "開発ツールの印があるため、クリア記録は書かれなかった。",
 		"game.clear_recorded": "物語は完結した。クリアデータを記録した。",
 		"game.dev_marked": "開発ツールがこのゲームを変えた。ゲームとセーブに印がついた。",
@@ -130,6 +131,7 @@
 		"game.refuse.no_answer": "返事がない。",
 		"game.refuse.no_auto_macro": "オートバトルのマクロが決まっていない。",
 		"game.refuse.no_battle": "戦闘中ではない。",
+		"game.refuse.no_back_option": "この選択は戻れない。",
 		"game.refuse.no_choice": "選ぶものがない。",
 		"game.refuse.no_control_act": "今は行動できない。",
 		"game.refuse.no_control_move": "今は動けない。",
@@ -182,6 +184,7 @@
 		"game.refuse.travel_menu_only": "移動はフィールドメニューから選ぶ。",
 		"game.refuse.unknown_difficulty": "{0}という難易度はない。",
 		"game.refuse.unknown_language": "言語{0}のテキストはない。",
+		"game.refuse.unknown_option_level": "その段階はない（{0}）。",
 		"game.refuse.vehicle_not_owned": "{0}はまだ持っていない。",
 		"game.refuse.walk_field_only": "歩けるのはフィールドだけです。",
 

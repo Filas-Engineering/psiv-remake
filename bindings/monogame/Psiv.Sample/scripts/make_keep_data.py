@@ -7,7 +7,11 @@
   heard, `plain` on the last), a line with the guide's portrait over the kept choice, a nested yes/no, `choice clear`,
   a last line; the flags `keep.bell_heard` and `keep.ferry_heard`;
 * the event `keep_cli` for the terminal runs (keep_cli.txt), started by Saltgrass's flag hook on `keep.cli`: a kept
-  choice answered, a line, the same choice kept again with another answer, a line, so the kept choice changes.
+  choice answered, a line, the same choice kept again with another answer, a line, so the kept choice changes;
+* the event `keep_pages` (choice_flows.txt): a kept choice whose prompt is three pages, with `option back`, then a
+  choice without one;
+* the event `keep_back`, started by Saltgrass's flag hook on `keep.back`: a kept choice with `option back`, whose back
+  branch says the guide's last line.
 
 Usage: make_keep_data.py GAME_DATA CORE_DATA OUT
 
@@ -31,6 +35,7 @@ LINES = {
 		"keep.more_line = The cove keeps its own hours.",
 		"keep.ferry_line = The ferry runs when the tide allows.",
 		"keep.done = Come back if you think of more.",
+		"keep.pages = The bell rings at night.{page}The ferry runs by the tide.{page}Which shall I tell you about?",
 	],
 	"ja": [
 		"keep.prompt = 調べてくれるかい？",
@@ -43,6 +48,7 @@ LINES = {
 		"keep.more_line = 気が変わったらまた来てくれ。",
 		"keep.ferry_line = 気が変わったらまた来てくれ。",
 		"keep.done = 気が変わったらまた来てくれ。",
+		"keep.pages = 鐘は夜に鳴る。{page}港は潮で動く。{page}どちらを調べてくれるかい？",
 	],
 }
 
@@ -83,6 +89,34 @@ event keep_cli unskippable
 	end
 	say guide @keep.done
 end
+
+event keep_pages unskippable
+	choice @keep.pages keep
+	option @keep.bell
+		say guide @keep.bell_line
+	option @keep.ferry
+		say guide @keep.ferry_line
+	option back
+		say guide @keep.done
+	end
+	choice @keep.more
+	option @keep.bell
+	option @keep.ferry
+	end
+	choice clear
+end
+
+event keep_back unskippable
+	set keep.back_done
+	choice @keep.prompt keep
+	option @keep.bell
+		say guide @keep.bell_line
+	option @keep.ferry
+		say guide @keep.ferry_line
+	option back
+		say guide @keep.done
+	end
+end
 """
 
 
@@ -105,13 +139,14 @@ def main():
 	game_json = load(data / "game.json")
 	game_json["start"].update({"area": "saltgrass", "marker": "south_gate", "facing": "north", "lineup": ["fighter", "mystic"], "level": 10,
 		"items": {"tonic": 1, "homing_shell": 2}})
-	game_json["flags"] = sorted(game_json["flags"] + ["keep.bell_heard", "keep.cli", "keep.cli_done", "keep.ferry_heard"])
+	game_json["flags"] = sorted(game_json["flags"] + ["keep.back", "keep.back_done", "keep.bell_heard", "keep.cli", "keep.cli_done", "keep.ferry_heard"])
 	(data / "events" / "keep.ev").write_text(EVENTS)
 	game_json["events"].append("events/keep.ev")
 	save(data / "game.json", game_json)
 	saltgrass_file = data / "areas" / "saltgrass.json"
 	saltgrass = load(saltgrass_file)
 	saltgrass["hooks"].append({"id": "keep_cli", "trigger": "flag", "event": "keep_cli", "require_flag": "keep.cli", "block_flag": "keep.cli_done"})
+	saltgrass["hooks"].append({"id": "keep_back", "trigger": "flag", "event": "keep_back", "require_flag": "keep.back", "block_flag": "keep.back_done"})
 	save(saltgrass_file, saltgrass)
 	for language in game_json["languages"]:
 		strings_file = data / language["strings"]

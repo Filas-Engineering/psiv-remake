@@ -189,7 +189,12 @@ Every CLI command is a library call, so a build pipeline can run them without th
 
 ## Changes a host must make
 
-Newest: a choice that stays on screen and option states ([FORMAT.md](FORMAT.md), "Choices").
+Newest: a choice's `option back` ([FORMAT.md](FORMAT.md), "Choices").
+
+- `host.h`: `ChoiceRequest::back`: the choice ends with a hidden branch (not in `options`) that `result(handle)` answers with `options.size()`; `describe(ChoiceRequest)` adds ` back` after the options. `into` records 0 for it. `event_cli time` lists `back` among a choice's paths.
+- Diagnostics `script.choice_back_twice`, `script.choice_back_not_last`. No new op, code layout, save text version or fingerprint change for scripts without it.
+
+Before that: a choice that stays on screen and option states ([FORMAT.md](FORMAT.md), "Choices").
 
 - `program.h`: `Op::choice_clear` (appended, name `choice clear`). A `switch` over `Op` needs the new case. `OptionState` (`word`, `has_condition`, `condition`) and `Instruction::option_states`, one per option or empty when no option has a state.
 - `host.h`: `ChoiceRequest::keep` and `ChoiceRequest::states` (each option's state word, "" for none, evaluated as the choice is presented; empty when no option has one). `describe(ChoiceRequest)` adds ` keep` after the header and ` state <word>` after an option that has one.

@@ -1,0 +1,149 @@
+# The system page's picker, five speed levels from the data, a chest's opened notice and the battle's macro slots
+# (make_options_data.py, make_options_assets.py), with --dev. The chest says it opened before what it held. The system
+# page lists its rows by label alone; Confirm on Text speed opens its five levels with its own prompt in the page's
+# message line, Back closes only the picker, Confirm sets the level and returns to the rows (alt/menu_system_close.json:
+# closes the menu); Battle speed takes a level of its own, which the battle's time scale follows; Controls opens the
+# Controls page and Back returns to the rows. In a battle the Macro command lists eight lettered slots, the save's two
+# macros set and the rest empty, colored by state, the highlighted macro's steps beside them; an empty slot refuses, a
+# set one plays. Run at 1280x720 and on the small set at 320x224 (options_small.txt). With --window the shot lines save
+# screenshots under build/shots/options/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+expect state area Reed Path
+expect state text_speed instant
+dev encounters off
+# The arrival's notices gone first.
+wait 300
+
+# The cache: the crate's own opened line, then what it held, as two notices in that order.
+press Enter
+wait 2
+expect state toasts The crate has been pried open. | Found 1 Second Wind. | Found 30 money.
+shot build/shots/options/chest.png
+wait 300
+
+# The system page: labels only, the description of the row under the cursor.
+press M
+expect screen Menu
+press Right 2
+expect state tab System
+expect state page system
+expect state selected Save
+press Down
+expect state selected Text speed
+expect state uifield.menu_system.description How fast dialogue text appears. Confirm shows the rest of a line at once.
+shot build/shots/options/rows.png
+
+# Text speed's picker: five levels, the cursor on the one in force, the prompt in the message line.
+press Enter
+expect state page picker
+expect state selected Instant
+expect state uifield.menu_system.picker_title Text speed
+expect state uifield.menu_system.description How fast should text appear?
+expect state uifield.menu_system.picking true
+shot build/shots/options/picker.png
+# Back closes the picker only; the level stays.
+press Escape
+expect screen Menu
+expect state page system
+expect state selected Text speed
+expect state text_speed instant
+# Confirm on Slowest sets it and returns to the rows.
+press Enter
+press Up 4
+expect state selected Slowest
+press Enter
+expect state page system
+expect state text_speed slowest
+expect state selected Text speed
+
+# Battle speed: Fastest (4x), the fifth level.
+press Down
+expect state selected Battle speed
+press Enter
+expect state selected Normal
+press Down 3
+expect state selected Fastest
+press Enter
+expect state battle_speed 4x
+
+# Controls opens the Controls page; Back returns to the system page's rows.
+press Down
+expect state selected Controls
+expect state uifield.menu_system.description Rebind each action's keys and gamepad buttons.
+press Enter
+expect screen Options
+expect state page controls
+press Escape
+expect screen Menu
+expect state page system
+expect state selected Controls
+
+# Under picker_confirm "close" Confirm in the picker closes the menu.
+assets swap ui/menu_system.json alt/menu_system_close.json
+wait 2
+press Up 2
+expect state selected Text speed
+press Enter
+press Down 4
+expect state selected Instant
+press Enter
+expect screen Field
+expect state text_speed instant
+
+# The levels reveal at their values: about a second into a line, Slowest (12 characters a second) shows 11 of its
+# characters and Normal (50) 48.
+cmd set text slowest
+expect state text_speed slowest
+dev event cove_quiet
+wait 2
+expect mode Event
+wait 60
+expect state reveal 11/69
+pressuntil Enter Field 60
+cmd set text normal
+dev event cove_quiet
+wait 2
+expect mode Event
+wait 60
+expect state reveal 48/69
+pressuntil Enter Field 60
+
+# A battle at Fastest: the time scale is the level's 400 percent. The macro command lists the eight slots.
+cmd set text instant
+battlelayout front
+dev battle training
+waitstate 400 battlephase Command
+expect state timescale 400
+expect state battlemenu [Attack] | Technique | Skill | Item | Defend | Escape | Macro | Auto
+press Down 6
+press Enter
+expect state battlephase Macro
+expect state battlemenu [A  strike] | B  guard | C  - empty - | D  - empty - | E  - empty - | F  - empty - | G  - empty - | H  - empty -
+expect state battleunusable C  - empty - | D  - empty - | E  - empty - | F  - empty - | G  - empty - | H  - empty -
+expect state macrolines Test Fighter: attack -> enemy 1 | Test Mystic: attack -> enemy 1
+expect state uifield.battle_front.macro_lines 2
+shot build/shots/options/macro_slots.png
+# An empty slot refuses and stays on the list.
+press Down 2
+audio mark
+press Enter
+expect audio cue refuse
+expect state battlephase Macro
+expect state macrolines none
+shot build/shots/options/macro_empty.png
+# Back to the commands; the macro again and the set slot plays its round.
+press Escape
+expect state battlephase Command
+# The cursor stays on the row it had in the list (the third), as before.
+expect state battlemenu Attack | Technique | [Skill] | Item | Defend | Escape | Macro | Auto
+press Down 4
+press Enter
+press Down
+expect state macrolines Test Fighter: defend -> default | Test Mystic: defend -> default
+press Enter
+expect state battlephase Playback
+expect statehas battlelog round 1

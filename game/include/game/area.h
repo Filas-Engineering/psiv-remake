@@ -188,6 +188,9 @@ struct Chest {
 	rules::Inventory items;
 	std::map<std::string, int> equipment;
 	int money = 0;
+	// A free id naming what the chest is (`chest`, `box`, ...), for the opened notice's text key and a host's picture;
+	// empty for none.
+	std::string kind;
 	int line = 0;
 };
 

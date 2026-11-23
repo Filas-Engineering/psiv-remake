@@ -160,6 +160,10 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 				{
 					text.Append(" | keep");
 				}
+				if (choice.Back)
+				{
+					text.Append(" | back");
+				}
 				Print(text.ToString());
 				return;
 			}
@@ -174,7 +178,7 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 	private void PrintKept()
 	{
 		Choice? kept = session.KeptChoice();
-		string text = kept is null ? "" : (kept.Prompt.Length == 0 ? "Choose:" : kept.Prompt) + " > " + kept.Options[kept.Picked];
+		string text = kept is null ? "" : (kept.Prompt.Length == 0 ? "Choose:" : kept.Prompt) + " > " + (kept.Picked >= 0 && kept.Picked < kept.Options.Count ? kept.Options[kept.Picked] : "back");
 		if (text.Length > 0 && text != _lastKept)
 		{
 			Print("  (kept: " + text + ")");
@@ -424,6 +428,10 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 			{
 				Error(usage);
 			}
+		}
+		else if (cmd == "choose" && w.Length == 2 && w[1] == "back")
+		{
+			Report(session.ChooseBack());
 		}
 		else if (cmd == "choose" && w.Length == 2 && ToInt(w[1], out count))
 		{

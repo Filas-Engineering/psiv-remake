@@ -146,6 +146,28 @@ struct FieldSounds {
 	std::map<std::string, VehicleSounds> vehicles;
 };
 
+// One level of a setting a host offers as a list (game.json `presentation.options.text_speed` and `.battle_speed`).
+// `value` is the host's number for it: characters a second for text speed (0 shows a page at once), percent of the
+// normal pace for battle speed.
+struct OptionLevel {
+	std::string id;
+	// A text key; default `ui.text_speed.<id>` or `ui.battle_speed.<id>`.
+	std::string label;
+	int value = 0;
+};
+
+// A setting's levels: the data's, or the built-in four (optionLevels) when it declares none.
+struct OptionLevels {
+	std::vector<OptionLevel> levels;
+	// Index of the level a profile without a choice stands at.
+	int defaultIndex = 0;
+	bool declared = false;
+};
+
+// The levels a game that declares none offers, in the profile's enum order: text speed `slow` 25, `normal` 50, `fast` 100,
+// `instant` 0 (labels ui.text_speed.<id>); battle speed `1x` 100, `1.5x` 150, `2x` 200, `3x` 300 (ui.multiplier.x1 ...).
+OptionLevels builtinOptionLevels(const std::string& setting);
+
 // Names the scripts may use for presentation; the engine owns the assets behind them. None of this is part of the
 // content hash.
 struct PresentationNames {
@@ -173,6 +195,11 @@ struct PresentationNames {
 	int mapLoadHoldMs = 0;
 	bool mapLoadHoldOnLoad = false;
 	FieldSounds sounds;
+	// `options.text_speed`, `options.battle_speed`: empty `levels` until the loader fills the built-in ones.
+	OptionLevels textSpeed;
+	OptionLevels battleSpeed;
+	// `chest_opened_notice`: opening a chest first says it opened (game.chest_opened.<kind>, else game.chest_opened).
+	bool chestOpenedNotice = false;
 
 	const CameraDef* camera(const std::string& id) const;
 	// The length of one play of `name`: the data's seconds, else a standard animation's own, else 0.

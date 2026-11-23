@@ -203,6 +203,8 @@ public sealed class FieldRenderer
 	private bool _justEntered;
 	// The clock when the party entered the area shown, where the `entry` clocks of its motion start.
 	private int _enteredMs;
+	private int _entryFocusMs = int.MinValue;
+	private (float X, float Y) _entryFocus;
 	private int _lastClock = -1;
 	private readonly Glide _leader = new();
 	private readonly Glide[] _followers = [new(), new(), new(), new(), new()];
@@ -942,6 +944,13 @@ public sealed class FieldRenderer
 		int Px(int pixels) => pixels * tile / Tile;
 		int cameraX = Axis(focus.X, tile, f.Width * tile, viewport.Width) + shake.X;
 		int cameraY = Axis(focus.Y, tile, f.Height * tile, viewport.Height) + shake.Y;
+		// Where the camera stood on the first frame drawn after the party entered, for layers aligned with the ground there.
+		if (_entryFocusMs != _enteredMs)
+		{
+			_entryFocusMs = _enteredMs;
+			_entryFocus = focus;
+		}
+		(int X, int Y) entryCamera = (Axis(_entryFocus.X, tile, f.Width * tile, viewport.Width), Axis(_entryFocus.Y, tile, f.Height * tile, viewport.Height));
 		if (record)
 		{
 			CameraX = cameraX;
@@ -976,7 +985,7 @@ public sealed class FieldRenderer
 			shown.Add("sprites " + string.Join(" ", spriteSteps));
 		}
 		int Paint(int image) => paint?.Invoke(image) ?? image;
-		int behind = motion is null ? 0 : DrawLayers(s, motion, front: false, viewport, cameraX, cameraY, tile, clockMs, paintLayer);
+		int behind = motion is null ? 0 : DrawLayers(s, motion, LayerPlace.Back, viewport, cameraX, cameraY, entryCamera, tile, clockMs, paintLayer);
 
 		CellFlags Terrain(int x, int y) => view.Cell(x, y) & CellFlags.TerrainMask;
 		void Tiled(int x, int y)
@@ -1184,6 +1193,10 @@ public sealed class FieldRenderer
 			else if (look is null && !walking && !creature && IdleFrame(motion, clockMs, d => d.Actor == id) is int cell && art.SheetCell(id, cell) is int idle)
 			{
 				image = idle;
+			}
+			if (paintsPeople && RecolorByIndex(s, art, areaSteps.Where(n => n.Track.RecolorsPerson(id, who))) is { } byIndex)
+			{
+				image = byIndex(image);
 			}
 			if (paintsPeople && Recolor(s, areaSteps.Where(n => n.Track.RecolorsPerson(id, who))) is { } recolor)
 			{
@@ -1512,6 +1525,7 @@ public sealed class FieldRenderer
 		{
 			draw();
 		}
+		int overPeople = motion is null ? 0 : DrawLayers(s, motion, LayerPlace.Above, viewport, cameraX, cameraY, entryCamera, tile, clockMs, paintLayer);
 		if (picture?.Above is int above)
 		{
 			above = paintAbove?.Invoke(above) ?? above;
@@ -1524,14 +1538,14 @@ public sealed class FieldRenderer
 		if (motion is not null)
 		{
 			DrawRuns(s, motion, above: true, ox, oy, tile, clockMs, image => paintRuns?.Invoke(image) ?? image, runFrames);
-			int front = DrawLayers(s, motion, front: true, viewport, cameraX, cameraY, tile, clockMs, paintLayer);
+			int front = DrawLayers(s, motion, LayerPlace.Front, viewport, cameraX, cameraY, entryCamera, tile, clockMs, paintLayer);
 			if (motion.Motion.Runs.Count > 0)
 			{
 				shown.Add("runs " + string.Join(",", runFrames));
 			}
 			if (motion.Motion.Layers.Count > 0)
 			{
-				shown.Add($"back {behind} front {front}");
+				shown.Add($"back {behind} front {front}" + (motion.Motion.Layers.Any(l => l.Above) ? $" above {overPeople}" : ""));
 			}
 			if (motion.Motion.Idle is { } loops)
 			{
@@ -1582,6 +1596,31 @@ public sealed class FieldRenderer
 		return image => s.Derive(image, key, (px, _, _) => SampleController.Recolor(px, pairs));
 	}
 
+	// Tracks by palette index (`indexes`) over a person's frame cut from an indexed sheet: each pixel whose index a showing
+	// step names takes its color, the first track naming an index winning; frames without indexes stay as they are.
+	private static Func<int, int>? RecolorByIndex(IDrawSurface s, Art art, IEnumerable<(PaletteTrack Track, int? Step)> tracks)
+	{
+		var pairs = new Dictionary<int, Color>();
+		foreach ((PaletteTrack t, int? step) in tracks)
+		{
+			if (t.IndexSteps is { } steps && step is int k)
+			{
+				foreach ((int index, Color to) in steps[k])
+				{
+					pairs.TryAdd(index, to);
+				}
+			}
+		}
+		if (pairs.Count == 0)
+		{
+			return null;
+		}
+		string key = "area_index:" + string.Join(",", pairs.Select(p => $"{p.Key}>{p.Value.PackedValue:x}"));
+		return image => art.IndexPlane(image) is { } plane
+			? s.Derive(image, key, (px, _, _) => [.. px.Select((c, i) => c.A == 255 && i < plane.Length && pairs.TryGetValue(plane[i], out Color to) ? to : c)])
+			: image;
+	}
+
 	// The frame the area's first idle loop that `matches` and shows stands at, or null.
 	private int? IdleFrame(LoadedMotion? motion, int clockMs, Func<IdleLoop, bool> matches)
 	{
@@ -1618,14 +1657,19 @@ public sealed class FieldRenderer
 		}
 	}
 
-	// The layers behind the area or in front of everything on it, at the pictures' scale (`tile` screen pixels a cell of
-	// the entry's), each moving its scroll factor times the camera plus its speed, repeated across the viewport along the
-	// axes it repeats on; bands and a wave over lines move rows apart, a wave over columns columns. How many showed.
-	private int DrawLayers(IDrawSurface s, LoadedMotion motion, bool front, Rectangle viewport, int cameraX, int cameraY, int tile, int clockMs, Func<AreaLayer, Func<int, int>?> paint)
+	private enum LayerPlace { Back, Above, Front }
+
+	// The layers behind the area, over the people (`above`) or in front of everything on it, at the pictures' scale (`tile`
+	// screen pixels a cell of the entry's), each moving its scroll factor times the camera plus its speed, repeated across
+	// the viewport along the axes it repeats on; bands and a wave over lines move rows apart, a wave over columns columns.
+	// A layer aligned with the ground (`align` "ground") moves from where the camera stood on entering, so it stands on the
+	// ground there as at scroll 1 whatever the way in. How many showed.
+	private int DrawLayers(IDrawSurface s, LoadedMotion motion, LayerPlace place, Rectangle viewport, int cameraX, int cameraY, (int X, int Y) entryCamera, int tile,
+		int clockMs, Func<AreaLayer, Func<int, int>?> paint)
 	{
 		double k = tile / (double)motion.Motion.Cell;
 		int drawn = 0;
-		foreach (LoadedLayer loaded in motion.Layers.Where(l => l.Layer.Front == front))
+		foreach (LoadedLayer loaded in motion.Layers.Where(l => place switch { LayerPlace.Front => l.Layer.Front, LayerPlace.Above => l.Layer.Above, _ => !l.Layer.Front && !l.Layer.Above }))
 		{
 			AreaLayer l = loaded.Layer;
 			if (MotionMs(l.When, clockMs) is not long ms)
@@ -1635,7 +1679,8 @@ public sealed class FieldRenderer
 			drawn++;
 			Func<int, int>? recolor = paint(l);
 			double sec = ms / 1000.0, w = l.Width * k, h = l.Height * k;
-			double Origin(int view, int camera, float scroll, float speed, float at) => view - camera * (double)scroll + (speed * sec + at) * k;
+			double Origin(int view, int camera, int entered, float scroll, float speed, float at) => view - camera * (double)scroll + (speed * sec + at) * k
+				+ (l.AlignGround ? entered * (scroll - 1.0) : 0);
 			// A wave or a band can move a row or column out by up to a copy, so one more copy is drawn on each side.
 			int extra = loaded.Strips.Length > 0 ? 1 : 0;
 			IEnumerable<double> Copies(double start, double size, int from, int length, bool repeat)
@@ -1660,7 +1705,7 @@ public sealed class FieldRenderer
 					s.Image(recolor?.Invoke(image) ?? image, left, top, right - left, bottom - top, Color.White);
 				}
 			}
-			double x0 = Origin(viewport.X, cameraX, l.ScrollX, l.SpeedX, l.AtX), y0 = Origin(viewport.Y, cameraY, l.ScrollY, l.SpeedY, l.AtY);
+			double x0 = Origin(viewport.X, cameraX, entryCamera.X, l.ScrollX, l.SpeedX, l.AtX), y0 = Origin(viewport.Y, cameraY, entryCamera.Y, l.ScrollY, l.SpeedY, l.AtY);
 			if (loaded.Strips.Length == 0)
 			{
 				foreach (double y in Copies(y0, h, viewport.Y, viewport.Height, l.RepeatY))
@@ -1694,7 +1739,7 @@ public sealed class FieldRenderer
 						// A band of screen lines takes the row whose top line it holds, wherever the layer stands.
 						int line = (int)Math.Round(y + r * k) - viewport.Y;
 						LayerBand? band = rowBand ?? l.Bands.FirstOrDefault(b => b.Lines && b.First <= line && line <= b.Last);
-						double rowX = (band is not null ? Origin(viewport.X, cameraX, band.Scroll, band.Speed, l.AtX) : x0) + Wave(r) * k;
+						double rowX = (band is not null ? Origin(viewport.X, cameraX, entryCamera.X, band.Scroll, band.Speed, l.AtX) : x0) + Wave(r) * k;
 						foreach (double x in Copies(rowX, w, viewport.X, viewport.Width, l.RepeatX))
 						{
 							Draw(loaded.Strips[r], x, y + r * k, w, k);

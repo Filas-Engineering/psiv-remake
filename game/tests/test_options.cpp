@@ -695,3 +695,189 @@ TEST(theTerminalLogShowsAnEnemyTransforming) {
 	}
 	CHECK(out.str().find("  Moss Pupa becomes Moss Moth.\n") != std::string::npos);
 }
+
+namespace {
+
+// A copy of the shipped data with `insert` put at the start of game.json's presentation object, checked.
+CheckReport checkWithPresentation(const std::string& name, const std::string& insert, std::string* gameDir = nullptr) {
+	const std::string root = test::freshDirectory(name);
+	std::filesystem::create_directories(root + "/game");
+	std::filesystem::create_directories(root + "/core");
+	std::filesystem::copy("data", root + "/game/data", std::filesystem::copy_options::recursive);
+	std::filesystem::copy("../core/data", root + "/core/data", std::filesystem::copy_options::recursive);
+	std::string text;
+	CHECK(readFile(root + "/game/data/game.json", text));
+	text.replace(text.find("\"presentation\": {"), 17, "\"presentation\": {" + insert);
+	std::string problem;
+	CHECK(writeFileAtomic(root + "/game/data/game.json", text, problem));
+	if (gameDir) {
+		*gameDir = root;
+	}
+	return checkData(DataDirectories{root + "/game/data", root + "/core/data"});
+}
+
+bool hasProblem(const CheckReport& report, const char* key) {
+	return std::any_of(report.problems.begin(), report.problems.end(), [&](const rules::Problem& p) { return p.message.key == key; });
+}
+
+std::vector<std::string> noticeKeys(Session& s) {
+	std::vector<std::string> keys;
+	for (const Output& o : s.drainOutput()) {
+		if (o.kind == OutputKind::Notice) {
+			keys.push_back(o.message.key);
+		}
+	}
+	return keys;
+}
+
+}
+
+// presentation.chest_opened_notice: off by default (the find alone); on, the opened line comes first, by the chest's
+// kind when the language has that key, else the generic line; an empty chest says only that it is empty.
+TEST(aChestCanSayItOpenedBeforeWhatItHeld) {
+	auto open = [](GameData d) {
+		Session s(d, SessionOptions());
+		test::placeParty(s, "reed_path", "cache_front", Facing::North);
+		s.drainOutput();
+		CHECK(s.interact().empty());
+		std::vector<std::string> keys = noticeKeys(s);
+		CHECK(s.interact().empty());
+		const std::vector<std::string> again = noticeKeys(s);
+		CHECK(again == std::vector<std::string>{"game.chest_empty"});
+		return keys;
+	};
+	const std::vector<std::string> found = {"game.found", "game.found_money"};
+	CHECK(open(test::data()) == found);
+
+	GameData on = test::data();
+	on.config.presentation.chestOpenedNotice = true;
+	CHECK(open(on) == (std::vector<std::string>{"game.chest_opened", "game.found", "game.found_money"}));
+
+	GameData boxed = test::data();
+	boxed.config.presentation.chestOpenedNotice = true;
+	for (auto& [id, area] : boxed.areas) {
+		for (Chest& chest : area.chests) {
+			chest.kind = chest.id == "reed_cache" ? "crate" : chest.kind;
+		}
+	}
+	CHECK(open(boxed) == (std::vector<std::string>{"game.chest_opened", "game.found", "game.found_money"}));
+	for (LanguageTables& language : boxed.languages) {
+		language.text["game.chest_opened.crate"] = "The crate has been pried open.";
+	}
+	CHECK(open(boxed) == (std::vector<std::string>{"game.chest_opened.crate", "game.found", "game.found_money"}));
+	Session s(boxed, SessionOptions());
+	test::placeParty(s, "reed_path", "cache_front", Facing::North);
+	s.drainOutput();
+	CHECK(s.interact().empty());
+	const std::vector<Output> lines = s.drainOutput();
+	CHECK(!lines.empty() && lines.front().text == "The crate has been pried open.");
+}
+
+// A chest's kind is an id; with the notice on, a language with neither the kind's key nor the generic one is a problem.
+TEST(theDataCheckReadsChestKindsAndTheOpenedNoticesText) {
+	CHECK(checkWithPresentation("chest_kind_ok", "\"chest_opened_notice\": true, ").problems.empty());
+	std::string root;
+	checkWithPresentation("chest_kind_bad", "\"chest_opened_notice\": true, ", &root);
+	for (const char* lang : {"en", "ja"}) {
+		std::string text;
+		CHECK(readFile(root + "/game/data/text/" + lang + ".json", text));
+		text.erase(text.find("\t\t\"game.chest_opened\""), text.find('\n', text.find("\t\t\"game.chest_opened\"")) - text.find("\t\t\"game.chest_opened\"") + 1);
+		std::string problem;
+		CHECK(writeFileAtomic(root + "/game/data/text/" + lang + ".json", text, problem));
+	}
+	auto kind = [&](const std::string& word) {
+		std::string area;
+		CHECK(readFile(root + "/game/data/areas/reed_path.json", area));
+		const std::size_t at = area.find("\"id\": \"reed_cache\"");
+		area.replace(at, area.find("\"at\"", at) - at, "\"id\": \"reed_cache\", \"kind\": \"" + word + "\", ");
+		std::string problem;
+		CHECK(writeFileAtomic(root + "/game/data/areas/reed_path.json", area, problem));
+		return checkData(DataDirectories{root + "/game/data", root + "/core/data"});
+	};
+	const CheckReport missing = kind("crate");
+	CHECK(hasProblem(missing, "data.chest_opened_text_missing"));
+	CHECK(std::any_of(missing.problems.begin(), missing.problems.end(), [](const rules::Problem& p) {
+		return p.message.params.size() == 2 && p.message.params[1] == "game.chest_opened.crate"; }));
+	CHECK(hasProblem(kind("Old Box"), "data.bad_chest_kind"));
+}
+
+// Without presentation.options the built-in four levels, the index the profile's enum; with five declared levels the
+// profile keeps the chosen id (written as text_speed_level), a new profile starts at the default, an old one's word
+// finds its level, an enum change through setProfile moves to the level of that name, and an unknown id is refused.
+TEST(speedLevelsComeFromTheDataWithTheBuiltInFourAsTheDefault) {
+	Session plain(test::data(), SessionOptions());
+	const OptionLevels& builtin = plain.optionLevels(OptionSetting::TextSpeed);
+	CHECK(!builtin.declared && builtin.levels.size() == 4 && builtin.levels[3].id == "instant" && builtin.levels[1].value == 50);
+	CHECK_EQ(plain.optionLevel(OptionSetting::TextSpeed), 1);
+	CHECK_EQ(plain.optionLevels(OptionSetting::BattleSpeed).levels[2].value, 200);
+	CHECK(plain.setOptionLevel(OptionSetting::TextSpeed, 2).empty());
+	CHECK(plain.profile().textSpeed == TextSpeed::Fast && plain.profile().textSpeedLevel.empty());
+	CHECK(plain.setOptionLevel(OptionSetting::BattleSpeed, 3).empty());
+	CHECK(plain.profile().battleSpeed == BattleSpeed::X3);
+	CHECK_EQ(plain.setOptionLevel(OptionSetting::TextSpeed, 4).key, std::string("game.refuse.unknown_option_level"));
+	Profile wrong = plain.profile();
+	wrong.textSpeedLevel = "brisk";
+	CHECK_EQ(plain.setProfile(wrong).key, std::string("game.refuse.unknown_option_level"));
+
+	const std::string five = "\"options\": {\"text_speed\": {\"levels\": [{\"id\": \"slowest\", \"value\": 12}, {\"id\": \"slow\", \"value\": 25}, "
+		"{\"id\": \"normal\", \"value\": 50}, {\"id\": \"fast\", \"value\": 100}, {\"id\": \"instant\", \"value\": 0}], \"default\": \"slow\"}, "
+		"\"battle_speed\": {\"levels\": [{\"id\": \"half\", \"label\": \"ui.multiplier.x1\", \"value\": 50}, {\"id\": \"1x\", \"value\": 100}, {\"id\": \"2x\", \"value\": 200}]}}, ";
+	std::string root;
+	CHECK(checkWithPresentation("speed_levels", five, &root).problems.empty());
+	rules::Result<GameData> loaded = loadGameData(DataDirectories{root + "/game/data", root + "/core/data"});
+	CHECK(loaded.ok());
+	SessionOptions options;
+	options.saveDirectory = root + "/saves";
+	{
+		Session s(*loaded.value, options);
+		const OptionLevels& text = s.optionLevels(OptionSetting::TextSpeed);
+		CHECK(text.declared && text.levels.size() == 5 && text.levels[0].label == "ui.text_speed.slowest");
+		CHECK_EQ(s.optionLevel(OptionSetting::TextSpeed), 1);
+		CHECK_EQ(s.optionLevel(OptionSetting::BattleSpeed), 1);
+		CHECK(s.setOptionLevel(OptionSetting::TextSpeed, 0).empty());
+		CHECK_EQ(s.profile().textSpeedLevel, std::string("slowest"));
+		CHECK(s.setOptionLevel(OptionSetting::BattleSpeed, 0).empty());
+	}
+	{
+		Session s(*loaded.value, options);
+		CHECK_EQ(s.optionLevel(OptionSetting::TextSpeed), 0);
+		CHECK_EQ(s.optionLevel(OptionSetting::BattleSpeed), 0);
+		Profile p = s.profile();
+		p.textSpeed = TextSpeed::Fast;
+		CHECK(s.setProfile(p).empty());
+		CHECK_EQ(s.optionLevel(OptionSetting::TextSpeed), 3);
+		CHECK_EQ(s.profile().textSpeedLevel, std::string("fast"));
+	}
+	std::string written;
+	CHECK(readFile(root + "/saves/profile.cfg", written));
+	CHECK(written.find("text_speed_level fast\n") != std::string::npos && written.find("battle_speed_level half\n") != std::string::npos);
+	Profile old;
+	old.textSpeed = TextSpeed::Instant;
+	std::string problem;
+	std::filesystem::create_directories(root + "/old");
+	CHECK(writeFileAtomic(root + "/old/profile.cfg", serializeProfile(old), problem));
+	SessionOptions oldOptions;
+	oldOptions.saveDirectory = root + "/old";
+	Session fromOld(*loaded.value, oldOptions);
+	CHECK_EQ(fromOld.optionLevel(OptionSetting::TextSpeed), 4);
+	// A level id this game does not list, from another game's profile, is left alone and does not block other settings.
+	Profile foreign;
+	foreign.textSpeedLevel = "glacial";
+	std::filesystem::create_directories(root + "/foreign");
+	CHECK(writeFileAtomic(root + "/foreign/profile.cfg", serializeProfile(foreign), problem));
+	SessionOptions foreignOptions;
+	foreignOptions.saveDirectory = root + "/foreign";
+	Session fromForeign(*loaded.value, foreignOptions);
+	CHECK_EQ(fromForeign.optionLevel(OptionSetting::TextSpeed), 2);
+	Profile louder = fromForeign.profile();
+	louder.musicVolume = 40;
+	CHECK(fromForeign.setProfile(louder).empty());
+	CHECK(serializeProfile(old).find("text_speed_level") == std::string::npos);
+
+	CHECK(hasProblem(checkWithPresentation("speed_levels_twice", "\"options\": {\"text_speed\": {\"levels\": [{\"id\": \"a\", \"value\": 1}, {\"id\": \"a\", \"value\": 2}]}}, "),
+		"data.option_level_twice"));
+	CHECK(hasProblem(checkWithPresentation("speed_levels_default", "\"options\": {\"battle_speed\": {\"levels\": [{\"id\": \"a\", \"value\": 100}], \"default\": \"b\"}}, "),
+		"data.option_default_unknown"));
+	CHECK(hasProblem(checkWithPresentation("speed_levels_empty", "\"options\": {\"text_speed\": {\"levels\": []}}, "), "data.option_levels_empty"));
+	CHECK(hasProblem(checkWithPresentation("speed_levels_id", "\"options\": {\"text_speed\": {\"levels\": [{\"id\": \"Fast!\", \"value\": 9}]}}, "), "data.bad_option_level"));
+}

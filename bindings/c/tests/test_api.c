@@ -105,7 +105,7 @@ static void settle(psiv_session* s) {
 static void testVersion(void) {
 	const char* capabilities = psiv_capabilities();
 	CHECK(capabilities && capabilities == psiv_capabilities() && strncmp(capabilities, "{\"capabilities_schema\": 1, \"versions\": {\"library\": \"", 52) == 0);
-	CHECK(strstr(capabilities, "\"abi\": 22,") && strstr(capabilities, "\"save_schema\": 16,") && strstr(capabilities, "\"picture show <picture>\""));
+	CHECK(strstr(capabilities, "\"abi\": 23,") && strstr(capabilities, "\"save_schema\": 16,") && strstr(capabilities, "\"picture show <picture>\""));
 	CHECK(psiv_abi_version() == PSIV_ABI_VERSION);
 	CHECK(strstr(psiv_version(), "psiv-bindings") != NULL);
 	CHECK(strstr(psiv_version(), "game-0.2") != NULL);
@@ -2764,6 +2764,60 @@ static void testLoadKeysAndDetail(void) {
 	psiv_session_destroy(s);
 }
 
+/* The built-in speed levels (the game lists none) by index, the profile's enum following; a chest's kind on its point. */
+static void testOptionLevels(void) {
+	char saves[512];
+	snprintf(saves, sizeof saves, "%s/option_levels", scratch);
+	makeDirectory(saves);
+	removeFiles(saves);
+	psiv_session* s = create(saves, -1, PSIV_PRESENTATION_INSTANT);
+	CHECK(psiv_sizeof("psiv_option_level") == sizeof(psiv_option_level) && psiv_sizeof("psiv_option_levels") == sizeof(psiv_option_levels));
+	psiv_option_levels levels;
+	CHECK_OK(psiv_option_levels_get(s, PSIV_OPTION_TEXT_SPEED, &levels));
+	CHECK(levels.count == 4 && levels.current == PSIV_TEXT_NORMAL && levels.default_index == PSIV_TEXT_NORMAL && levels.declared == 0);
+	CHECK(levels.count == 4 && strcmp(levels.levels[3].id, "instant") == 0 && levels.levels[3].value == 0 && strcmp(levels.levels[0].label_key, "ui.text_speed.slow") == 0);
+	CHECK(levels.count == 4 && strcmp(levels.levels[0].label, "Slow") == 0);
+	CHECK_OK(psiv_option_level_set(s, PSIV_OPTION_TEXT_SPEED, PSIV_TEXT_FAST));
+	psiv_profile p;
+	CHECK_OK(psiv_profile_get(s, &p));
+	CHECK(p.text_speed == PSIV_TEXT_FAST);
+	CHECK_OK(psiv_option_levels_get(s, PSIV_OPTION_BATTLE_SPEED, &levels));
+	CHECK(levels.count == 4 && levels.levels[1].value == 150 && strcmp(levels.levels[1].label, "1.5x") == 0);
+	p.battle_speed = PSIV_BATTLE_X2;
+	CHECK_OK(psiv_profile_set(s, &p));
+	CHECK_OK(psiv_option_levels_get(s, PSIV_OPTION_BATTLE_SPEED, &levels));
+	CHECK(levels.current == PSIV_BATTLE_X2);
+	psiv_error e;
+	CHECK(psiv_option_level_set(s, PSIV_OPTION_BATTLE_SPEED, 4) == PSIV_REFUSED);
+	psiv_last_error(s, &e);
+	CHECK(strcmp(e.key, "game.refuse.unknown_option_level") == 0);
+	CHECK(psiv_option_level_set(s, 2, 0) == PSIV_INVALID_ARGUMENT);
+	/* No choice to back out of. */
+	CHECK(psiv_choose_back(s) == PSIV_REFUSED);
+	psiv_last_error(s, &e);
+	CHECK(strcmp(e.key, "game.refuse.no_choice") == 0);
+	CHECK(psiv_option_levels_get(s, PSIV_OPTION_TEXT_SPEED, NULL) == PSIV_INVALID_ARGUMENT);
+
+	CHECK_OK(psiv_new_game(s));
+	settle(s);
+	CHECK_OK(psiv_dev_warp(s, "reed_path", "cache_front"));
+	settle(s);
+	const psiv_point* points = NULL;
+	int32_t count = 0;
+	int chests = 0;
+	CHECK_OK(psiv_field_points(s, &points, &count));
+	for (int32_t i = 0; i < count; ++i) {
+		if (points[i].kind == PSIV_POINT_CHEST) {
+			++chests;
+			CHECK(strcmp(points[i].chest_kind, "") == 0);
+		} else {
+			CHECK(points[i].chest_kind && points[i].chest_kind[0] == 0);
+		}
+	}
+	CHECK(chests == 1);
+	psiv_session_destroy(s);
+}
+
 static void testHostCalls(void) {
 	char saves[512];
 	snprintf(saves, sizeof saves, "%s/host_calls", scratch);
@@ -2887,6 +2941,7 @@ int main(int argc, char** argv) {
 	testFells();
 	testCogwayAndFormations();
 	testHostCalls();
+	testOptionLevels();
 	if (failures) {
 		fprintf(stderr, "%d of %d checks failed\n", failures, checks);
 		return 1;

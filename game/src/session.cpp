@@ -674,6 +674,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.no_answer",
 		"game.refuse.no_auto_macro",
 		"game.refuse.no_battle",
+		"game.refuse.no_back_option",
 		"game.refuse.no_choice",
 		"game.refuse.no_control_act",
 		"game.refuse.no_control_move",
@@ -726,6 +727,7 @@ const std::vector<std::string>& sessionTextKeys() {
 		"game.refuse.travel_menu_only",
 		"game.refuse.unknown_difficulty",
 		"game.refuse.unknown_language",
+		"game.refuse.unknown_option_level",
 		"game.refuse.vehicle_not_owned",
 		"game.refuse.walk_field_only",
 		"game.rest_no_money",
@@ -1442,6 +1444,14 @@ Session::Session(const GameData& data, SessionOptions options) : data_(data), op
 				solidActors_.insert(h.id);
 			}
 		}
+	}
+	// A new profile starts at the game's default levels; one read from the file keeps its own.
+	const PresentationNames& shownSettings = data_.config.presentation;
+	if (shownSettings.textSpeed.declared) {
+		profile_.textSpeedLevel = shownSettings.textSpeed.levels[shownSettings.textSpeed.defaultIndex].id;
+	}
+	if (shownSettings.battleSpeed.declared) {
+		profile_.battleSpeedLevel = shownSettings.battleSpeed.levels[shownSettings.battleSpeed.defaultIndex].id;
 	}
 	if (!options_.saveDirectory.empty()) {
 		store_.emplace(options_.saveDirectory, data_.config.manualSlots, data_.config.autosaveSlots);
@@ -2812,9 +2822,79 @@ std::string Session::displayName(const std::string& id) const {
 	return id;
 }
 
-rules::Message Session::setProfile(const Profile& profile) {
-	if (std::none_of(data_.languages.begin(), data_.languages.end(), [&](const LanguageTables& l) { return l.code == profile.textLanguage; })) {
-		return refusal("unknown_language", {profile.textLanguage});
+const OptionLevels& Session::optionLevels(OptionSetting setting) const {
+	return setting == OptionSetting::TextSpeed ? data_.config.presentation.textSpeed : data_.config.presentation.battleSpeed;
+}
+
+int Session::optionLevel(OptionSetting setting) const {
+	const OptionLevels& levels = optionLevels(setting);
+	const bool text = setting == OptionSetting::TextSpeed;
+	if (!levels.declared) {
+		return text ? static_cast<int>(profile_.textSpeed) : static_cast<int>(profile_.battleSpeed);
+	}
+	auto find = [&](const std::string& id) {
+		const auto at = std::find_if(levels.levels.begin(), levels.levels.end(), [&](const OptionLevel& l) { return l.id == id; });
+		return at == levels.levels.end() ? -1 : static_cast<int>(at - levels.levels.begin());
+	};
+	int at = find(text ? profile_.textSpeedLevel : profile_.battleSpeedLevel);
+	if (at < 0) {
+		at = find(text ? toString(profile_.textSpeed) : toString(profile_.battleSpeed));
+	}
+	return at < 0 ? levels.defaultIndex : at;
+}
+
+int Session::optionLevelIndex(OptionSetting setting, const std::string& id) const {
+	const std::vector<OptionLevel>& levels = optionLevels(setting).levels;
+	const auto at = std::find_if(levels.begin(), levels.end(), [&](const OptionLevel& l) { return l.id == id; });
+	return at == levels.end() ? -1 : static_cast<int>(at - levels.begin());
+}
+
+rules::Message Session::setOptionLevel(OptionSetting setting, int index) {
+	const OptionLevels& levels = optionLevels(setting);
+	if (index < 0 || index >= static_cast<int>(levels.levels.size())) {
+		return refusal("unknown_option_level", {std::to_string(index)});
+	}
+	Profile p = profile_;
+	(setting == OptionSetting::TextSpeed ? p.textSpeedLevel : p.battleSpeedLevel) = levels.levels[static_cast<std::size_t>(index)].id;
+	return setProfile(p);
+}
+
+rules::Message Session::setProfile(const Profile& given) {
+	if (std::none_of(data_.languages.begin(), data_.languages.end(), [&](const LanguageTables& l) { return l.code == given.textLanguage; })) {
+		return refusal("unknown_language", {given.textLanguage});
+	}
+	// A level id names one of the game's levels; without levels of its own a built-in id sets the enum. A host that changed
+	// only the enum (the C struct has no level) moves to the level of that name, or leaves the choice to the enum.
+	Profile profile = given;
+	for (OptionSetting setting : {OptionSetting::TextSpeed, OptionSetting::BattleSpeed}) {
+		const bool text = setting == OptionSetting::TextSpeed;
+		const OptionLevels& levels = optionLevels(setting);
+		std::string& level = text ? profile.textSpeedLevel : profile.battleSpeedLevel;
+		const std::string& before = text ? profile_.textSpeedLevel : profile_.battleSpeedLevel;
+		const bool enumChanged = text ? profile.textSpeed != profile_.textSpeed : profile.battleSpeed != profile_.battleSpeed;
+		if (levels.declared && enumChanged && level == before) {
+			level = text ? toString(profile.textSpeed) : toString(profile.battleSpeed);
+			if (std::none_of(levels.levels.begin(), levels.levels.end(), [&](const OptionLevel& l) { return l.id == level; })) {
+				level.clear();
+			}
+			continue;
+		}
+		const bool known = std::any_of(levels.levels.begin(), levels.levels.end(), [&](const OptionLevel& l) { return l.id == level; });
+		// An id the profile file brought that this game does not list stays as it was, unused, until a level is chosen.
+		if (level.empty() || (!known && level == before)) {
+			continue;
+		}
+		if (!known) {
+			return refusal("unknown_option_level", {level});
+		}
+		if (text) {
+			parseTextSpeed(level, profile.textSpeed);
+		} else {
+			parseBattleSpeed(level, profile.battleSpeed);
+		}
+		if (!levels.declared) {
+			level.clear();
+		}
 	}
 	profile_ = profile;
 	if (profile_.flashing != FlashLevel::Unset) {
@@ -4712,6 +4792,10 @@ void Session::openChest(const Chest& chest) {
 			return;
 		}
 	}
+	if (data_.config.presentation.chestOpenedNotice) {
+		const std::string own = "game.chest_opened." + chest.kind;
+		emit(OutputKind::Notice, !chest.kind.empty() && language().text.count(own) ? own : "game.chest_opened");
+	}
 	for (const auto& [id, n] : chest.items) {
 		giveThing(id, n);
 		emit(OutputKind::Notice, "game.found", {std::to_string(n), id});
@@ -4894,6 +4978,7 @@ ChoiceView Session::choiceViewOf(const events::ChoiceRequest& request) const {
 	ChoiceView view;
 	view.states = request.states;
 	view.keep = request.keep;
+	view.back = request.back;
 	view.prompt = request.prompt.value.empty() ? "" : scriptText(request.prompt);
 	view.header = request.header.value.empty() ? "" : scriptText(request.header);
 	view.headerId = request.header.is_id ? request.header.value : "";
@@ -4914,7 +4999,8 @@ rules::Message Session::choose(int index) {
 		return refusal("no_choice");
 	}
 	const int count = request->yes_no ? 2 : static_cast<int>(request->options.size());
-	if (index < 0 || index >= count) {
+	// The hidden back branch answers past the options.
+	if (index < 0 || index >= count + (request->back ? 1 : 0)) {
 		return refusal("pick_option", {std::to_string(count - 1)});
 	}
 	HandleState& state = handles_[choiceHandle_];
@@ -4922,6 +5008,17 @@ rules::Message Session::choose(int index) {
 	state.result = index;
 	pumpEvent(0);
 	return {};
+}
+
+rules::Message Session::chooseBack() {
+	const events::ChoiceRequest* request = choice();
+	if (!request) {
+		return refusal("no_choice");
+	}
+	if (!request->back) {
+		return refusal("no_back_option");
+	}
+	return choose(static_cast<int>(request->options.size()));
 }
 
 bool Session::canSkip() const {

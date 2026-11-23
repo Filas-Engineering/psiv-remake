@@ -97,7 +97,7 @@ public sealed partial class SampleController
 
 	// The sample's words for keys the game's text tables do not carry: the field options' help, the credits screen, the
 	// macro editor's auto play, fallback and option actions, the macro option values, the automatic and lost-turn step
-	// statuses, a vehicle's grouped command rows, the title's empty erase list, the Items page's actions and discard, the battle's auto macro mark, macro
+	// statuses, a vehicle's grouped command rows, the title's empty erase list, the Items page's actions and discard, the system page picker's prompts, the battle's auto macro mark, macro
 	// check, trouble and auto mode lines, the bag line, the auto mode settings, `dev rest` and `combo`, the camera
 	// overlay's scene camera, the field menu list's open hint, the shop's and inn's farewell, and the travel messages. T
 	// takes a table's own text for the key when it has one, else this English, without counting the key as missing.
@@ -110,6 +110,7 @@ public sealed partial class SampleController
 		["ui.battle.log.auto_play"] = "Auto-battle plays {0} every round.",
 		["ui.battle.log.trouble"] = "Trouble ({0}): {1}; automatic choice for {2}.",
 		["ui.battle.log.trouble_nobody"] = "nobody",
+		["ui.battle.macro_slot_empty"] = "- empty -",
 		["ui.battle.macro_step_issue"] = "{0}: {1}",
 		["ui.battle.macro_trouble"] = "This round would be in trouble.",
 		["ui.battle.title.auto_policy"] = "Choices",
@@ -155,11 +156,18 @@ public sealed partial class SampleController
 		["ui.macros.use_auto_play"] = "Auto-battle plays it every round",
 		["ui.menu.hint.open"] = "{0} open",
 		["ui.options.always_run_help"] = "Walk at running pace without holding Run; holding Run then walks.",
+		["ui.options.auto_advance_prompt"] = "Should lines go on by themselves?",
 		["ui.options.auto_policy"] = "Auto-battle choices",
 		["ui.options.auto_policy_help"] = "How auto-battle's automatic choices pick: by power, by the damage expected, or as the macro and rules say.",
+		["ui.options.auto_policy_prompt"] = "How should auto-battle choose?",
 		["ui.options.auto_trouble"] = "Auto-battle in trouble",
 		["ui.options.auto_trouble_help"] = "What auto-battle does in a round where a member has fallen or a step cannot run: go on, recover, or stop.",
+		["ui.options.auto_trouble_prompt"] = "What should auto-battle do in trouble?",
+		["ui.options.battle_speed_prompt"] = "How fast should battles play?",
+		["ui.options.flashing_prompt"] = "How much flashing may the screen show?",
 		["ui.options.interact_prompt_help"] = "Shows the key and a mark over what the leader can talk to, open or board.",
+		["ui.options.text_size_prompt"] = "How large should text be?",
+		["ui.options.text_speed_prompt"] = "How fast should text appear?",
 		["ui.shop.farewell"] = "Come again.",
 		["ui.title.erase_none"] = "No saves to erase.",
 		["ui.travel.arrived"] = "The party arrives at {1}.",

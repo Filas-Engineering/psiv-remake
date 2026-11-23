@@ -54,7 +54,7 @@ public sealed partial class SampleController
 	// without it the dialogue's own speed.
 	private int NarrationCps()
 	{
-		int cps = CharsPerSecond(_s.Profile().TextSpeed);
+		int cps = ProfileCps();
 		int own = DialogueParam("narration_cps", 0);
 		return cps == int.MaxValue || own <= 0 ? cps : (int)Math.Max(1, (long)own * cps / CharsPerSecond(TextSpeed.Normal));
 	}

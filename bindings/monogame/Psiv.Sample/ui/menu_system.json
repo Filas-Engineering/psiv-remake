@@ -2,13 +2,21 @@
 	"version": 1,
 	"windows": [
 		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w", "h": "area_h", "elements": [
-			{"type": "list", "items": "rows", "state": "list", "w": "cw", "h": "ch - t(56)", "row_height": "t(30)", "row": [
+			{"type": "list", "items": "rows", "state": "list", "active": "!picking", "w": "cw", "h": "ch - t(56)", "row_height": "t(30)", "row": [
 				{"type": "fill", "visible": "selected", "x": -6, "y": -3, "w": "cw - 14", "h": "t(28)", "color": "row"},
 				{"type": "pointer", "visible": "selected", "x": -4, "y": "(t(28) - 8) / 2 - 6"},
 				{"type": "text", "value": "label", "x": 14, "color": "selected ? 'accent' : 'text'"},
 				{"type": "text", "value": "value", "x": "cw * 55 / 100", "color": "selected ? 'accent' : 'text'"}
 			]},
 			{"type": "text", "value": "description", "x": 14, "y": "ch - t(56) + t(8)", "wrap": true, "max_width": "cw - 40", "lines": 2, "line_height": "t(22)", "style": "small_dim"}
+		]},
+		{"name": "picker", "visible": "picking", "x": "area_x + area_w * 55 / 100 - 24", "y": "area_y", "w": "min(t(280), area_w * 45 / 100 + 24)", "h": "len(picker_rows) * t(30) + t(56)", "frame": "panel", "elements": [
+			{"type": "text", "value": "picker_title", "x": 20, "y": "t(10)", "style": "small_dim"},
+			{"type": "list", "items": "picker_rows", "state": "picker_list", "active": "picking", "x": 20, "y": "t(38)", "w": "cw - 26", "h": "ch - t(44)", "row_height": "t(30)", "row": [
+				{"type": "fill", "visible": "selected", "x": -6, "y": -3, "w": "cw - 14", "h": "t(28)", "color": "row"},
+				{"type": "pointer", "visible": "selected", "x": -4, "y": "(t(28) - 8) / 2 - 6"},
+				{"type": "text", "value": "text", "x": 14, "color": "selected ? 'accent' : current ? 'good' : 'text'"}
+			]}
 		]}
 	]
 }

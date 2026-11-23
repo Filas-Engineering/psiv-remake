@@ -130,14 +130,17 @@ public static class UiFields
 
 	public static readonly string[] ExtrasDefault = ["options", "controls"];
 
-	// The system page's rows (menu_system `rows`): the slot list, quitting to the title, and settings rows.
-	public static readonly string[] SystemRows = ["save", "quit", .. SettingRows];
+	// The system page's rows (menu_system `rows`): the slot list, quitting to the title, the Controls page and settings rows.
+	public static readonly string[] SystemRows = ["save", "quit", "controls", .. SettingRows];
 
 	public static readonly string[] SystemDefault = ["save", "text_speed", "battle_speed", "auto_advance"];
 
 	// The battle's command rows by step with `command_top` (a battle layout's `command_rows`): the top-level step's and a
 	// member's, each in the built-in order.
 	public static readonly string[] TopCommands = ["fight", "macro", "run"];
+
+	// A macro slot row's `state` under the battle layouts' `macro_slots`, which `option_states` may color.
+	public static readonly string[] MacroSlotStates = ["empty", "set"];
 
 	public static readonly string[] MemberCommands = ["attack", "technique", "skill", "item", "defend", "escape", "macro", "auto"];
 
@@ -179,12 +182,12 @@ public static class UiFields
 	// The battle's two layouts (the presentation table's `front` and `side`) read the same fields and params.
 	private static readonly string[] BattleData = ["action_chosen", "action_command", "actor_center", "actor_left", "actor_right", "actor_slot", "auto", "banner", "banner_alpha", "banner_big",
 		"banner_cancel", "banner_plate", "command_center", "command_items", "cursor", "defeat_name", "defeat_text", "description", "description_shown", "enemy_back", "enemy_count", "enemy_groups", "hint", "hit_fade",
-		"hit_flash", "key_back", "key_confirm", "key_fast_forward", "key_text_log", "level_lines", "level_more", "level_page", "level_pages", "list_index", "list_kind", "log_lines", "log_shown", "macro_steps", "macro_trouble",
+		"hit_flash", "key_back", "key_confirm", "key_fast_forward", "key_text_log", "level_lines", "level_more", "level_page", "level_pages", "list_index", "list_kind", "log_lines", "log_shown", "macro_lines", "macro_steps", "macro_trouble",
 		"macro_trouble_text", "members", "menu_items", "menu_shown", "menu_title", "outcome", "page_arrow", "party", "phase", "result_confirm", "result_lines", "result_more", "result_page", "result_pages", "result_phase", "result_phase_ms", "result_step", "target_pulse",
 		"transition_playing", "vehicle"];
 
 	private static readonly string[] BattleItems = ["acting", "alive", "command", "command_icon", "cost", "count_text", "fallen", "hit", "icon", "hp", "hp_low", "icon_count", "issue", "kind", "level",
-		"max_hp", "max_tp", "max_uses", "name", "newest", "next", "number", "ok", "portrait", "slot", "state", "status_color", "targeted", "tp", "usable", "uses"];
+		"macro", "max_hp", "max_tp", "max_uses", "name", "newest", "next", "number", "ok", "portrait", "slot", "slot_label", "state", "state_color", "status_color", "targeted", "tp", "usable", "uses"];
 
 	// A battle item's flag per status of the game data: `status_ID`, true while the combatant shows that status.
 	public const string StatusFlag = "status_";
@@ -247,10 +250,10 @@ public static class UiFields
 			["banner_visible", "banner_title", "banner_kind", "banner_alpha", "banner_drop", "banner_ms", "banner_left_ms", "top", "box_visible", "has_line", "speaker",
 				"portrait", "line", "revealed", "all_shown", "line_step", "hint", "next_arrow_ms", "arrow", "has_choice", "prompt", "options", "cursor", "picture",
 				"picture_w", "picture_h", "pictures", "narration_visible", "narration_rows", "narration_all_shown", "shown_ms", "line_key", "picture_top", "picture_names", "page_arrow", "choice_header",
-				"option_rows", "kept_visible", "kept_prompt", "kept_header", "kept_options", "kept_rows", "kept_cursor"],
+				"option_rows", "prompt_page", "prompt_pages", "choice_back", "kept_visible", "kept_prompt", "kept_header", "kept_options", "kept_rows", "kept_cursor"],
 			itemFields: ["picture", "picture_w", "picture_h", "text", "full", "shown", "state", "state_color", "picked"],
 			parameters: ["box_h", "box_margin", "box_top", "dialogue_open_sound", "picture_stack", "narration_lines", "narration_cps", "narration_delay_ms", "narration_hold_ms", "narration_wait", "narration_width",
-				"narration_when", "reveal_confirm", "reveal_hold_cps"],
+				"narration_when", "prompt_pages", "reveal_confirm", "reveal_hold_cps"],
 			tags: true),
 		["pause"] = new("pause",
 			["hud", "area", "status", "rows", "cursor", "hint"],
@@ -319,9 +322,9 @@ public static class UiFields
 			itemFields: ["label", "usable", "kind", "cost", "uses", "name", "reachable"],
 			parameters: ["unusable"]),
 		["menu_system"] = new("menu_system",
-			[.. Area, "rows", "list", "description"],
-			itemFields: ["id", "label", "value", "changeable"],
-			parameters: ["system_action"]),
+			[.. Area, "rows", "list", "description", "picking", "picker_setting", "picker_title", "picker_prompt", "picker_rows", "picker_list"],
+			itemFields: ["id", "label", "value", "changeable", "current"],
+			parameters: ["system_action", "settings", "picker_confirm", "row_value"]),
 		["extras"] = new("extras",
 			["rows", "list", "view", "notice", "description", "hint", "in_battle", "on_title"],
 			itemFields: ["id", "label", "value", "changeable"],

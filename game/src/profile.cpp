@@ -47,7 +47,7 @@ const char* onOff(bool value) {
 }
 
 const char* const kKeys[] = {"text_speed", "auto_advance", "show_shipped_names", "text_language", "text_size", "battle_speed",
-	"ambient_talk", "reduced_flash", "music_volume", "ambient_volume", "effects_volume", "always_run", "flashing", "flash_notice_seen"};
+	"ambient_talk", "reduced_flash", "music_volume", "ambient_volume", "effects_volume", "always_run", "flashing", "flash_notice_seen", "text_speed_level", "battle_speed_level"};
 
 bool knownKey(const std::string& key) {
 	for (const char* k : kKeys) {
@@ -153,6 +153,11 @@ std::string setProfileValue(Profile& p, const std::string& key, const std::strin
 		ok = parseFlashLevel(value, p.flashing);
 	} else if (key == "flash_notice_seen") {
 		ok = parseSwitch(value, p.flashNoticeSeen);
+	} else if (key == "text_speed_level" || key == "battle_speed_level") {
+		ok = value.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_.") == std::string::npos;
+		if (ok) {
+			(key == "text_speed_level" ? p.textSpeedLevel : p.battleSpeedLevel) = value;
+		}
 	} else {
 		return "unknown setting '" + key + "'";
 	}
@@ -181,6 +186,12 @@ std::string serializeProfile(const Profile& p) {
 	}
 	if (p.flashNoticeSeen) {
 		line("flash_notice_seen", onOff(p.flashNoticeSeen));
+	}
+	if (!p.textSpeedLevel.empty()) {
+		line("text_speed_level", p.textSpeedLevel);
+	}
+	if (!p.battleSpeedLevel.empty()) {
+		line("battle_speed_level", p.battleSpeedLevel);
 	}
 	for (const auto& [key, value] : p.unknown) {
 		out += key + " " + value + "\n";

@@ -12,7 +12,7 @@ const std::vector<CommandInfo>& script_commands() {
 		{"camera", {"camera cut <camera> [nowait]", "camera move <camera> <seconds> [nowait]", "camera to <marker> [seconds] [nowait]", "camera to <x> <y> [seconds] [nowait]",
 					   "camera reset [seconds] [nowait]"},
 			false, true},
-		{"choice", {"choice [<text>] [header <text>] [keep] [into <variable>] option <text> [state <word> [if <condition>]] ... end", "choice clear"}, false, false},
+		{"choice", {"choice [<text>] [header <text>] [keep] [into <variable>] option <text> [state <word> [if <condition>]] ... [option back] end", "choice clear"}, false, false},
 		{"clear", {"clear <flag>"}, true, false},
 		{"credits", {"credits <credits>"}, false, false},
 		{"end", {"end game"}, false, false},

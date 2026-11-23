@@ -44,6 +44,10 @@ struct Profile {
 	// match. Both are written only when set, as alwaysRun is.
 	FlashLevel flashing = FlashLevel::Unset;
 	bool flashNoticeSeen = false;
+	// The id of the text or battle speed level chosen among the game's own (game.json presentation.options), empty when
+	// the game declares none or none was chosen; Session::textSpeedLevel resolves it. Written only when set.
+	std::string textSpeedLevel;
+	std::string battleSpeedLevel;
 	// Lines this build does not know, kept and written back unchanged so a newer build's settings survive.
 	std::vector<std::pair<std::string, std::string>> unknown;
 };

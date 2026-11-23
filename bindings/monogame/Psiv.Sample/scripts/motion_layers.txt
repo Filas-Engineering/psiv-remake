@@ -1,0 +1,56 @@
+# Layers aligned with the ground and drawn over the people, a recolor by palette index and a random entry delay
+# (scripts/make_motion_layers_assets.py, on the background data copy, seed 1), with --dev. Saltgrass Market's veil
+# repeats every two cells at half the camera's pace, aligned with the ground where the party enters: on arriving its pink
+# cells are the even cells, by the south gate (the camera far from its origin both ways) and by the inn (another way
+# in, through Tidewater), and it covers the leader standing on one. A track by `layer:veil` turns it cyan under its flag.
+# The fighter's coat is one color at two palette indexes: the upper (index 2) turns red, the lower stays. The floor's
+# track starts a random 200 to 800 ms after each entry, drawn from the seed and the entry's time, so the two entries
+# below wait different lengths, the same on every run. `fieldmotion` reads the tracks and layers, `cellpixel.X.Y[.DX.DY]` the colors. With --window the shot
+# lines save screenshots under build/shots/motion_layers/ (the pixel probes read only headless).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+
+# By the south gate: the even cells pink, the leader (24, 34) under the veil, the odd ones the floor.
+dev warp saltgrass south_gate
+wait 1
+expect state fieldmotion palettes -,0,- back 0 front 0 above 1
+expect statehas cellpixel.24.34 ff00ff
+expect statehas cellpixel.22.32 ff00ff
+expect statehas cellpixel.23.32 746c66
+expect statehas cellpixel.24.33 746c66
+shot build/shots/motion_layers/gate_veil.png
+# The floor's delay: still off 24 frames later, on at 25.
+wait 24
+expect state fieldmotion palettes -,0,- back 0 front 0 above 1
+wait 1
+expect state fieldmotion palettes -,0,0 back 0 front 0 above 1
+expect statehas cellpixel.23.32 00a000
+
+# By the inn, entered again: the even cells pink again; the leader (36, 5) on an odd row shows the coat, its upper part
+# red by index, its lower part (the same color at another index) as drawn.
+dev warp tidewater start
+wait 2
+dev warp saltgrass inn_front
+wait 1
+expect state fieldmotion palettes -,0,- back 0 front 0 above 1
+expect statehas cellpixel.34.4 ff00ff
+expect statehas cellpixel.35.4 746c66
+expect statehas cellpixel.36.5 ff0000
+expect statehas cellpixel.36.5.0.12 c0a000
+shot build/shots/motion_layers/inn_veil_coat.png
+# This entry's delay is another draw: off 18 frames later, on at 19.
+wait 18
+expect state fieldmotion palettes -,0,- back 0 front 0 above 1
+wait 1
+expect state fieldmotion palettes -,0,0 back 0 front 0 above 1
+
+# The `layer:veil` track reaches the layer over the people.
+dev flag cogway.loud on
+wait 1
+expect state fieldmotion palettes 0,0,0 back 0 front 0 above 1
+expect statehas cellpixel.34.4 00ffff
+shot build/shots/motion_layers/veil_recolored.png

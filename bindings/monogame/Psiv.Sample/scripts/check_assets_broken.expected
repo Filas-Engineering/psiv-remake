@@ -247,7 +247,7 @@ assets: ui/battle_side.json: -: the built-in layout of this screen stands in
 assets: ui/confirm.json: params.backdrop_dim: the screen takes no params
 assets: ui/confirm.json: -: the built-in layout of this screen stands in
 assets: ui/dialogue.json: params.box_h: field 'box_h': expected ')' at character 4 of '(70'
-assets: ui/dialogue.json: params.box_width: unknown param: box_h, box_margin, box_top, dialogue_open_sound, picture_stack, narration_lines, narration_cps, narration_delay_ms, narration_hold_ms, narration_wait, narration_width, narration_when, reveal_confirm, reveal_hold_cps
+assets: ui/dialogue.json: params.box_width: unknown param: box_h, box_margin, box_top, dialogue_open_sound, picture_stack, narration_lines, narration_cps, narration_delay_ms, narration_hold_ms, narration_wait, narration_width, narration_when, prompt_pages, reveal_confirm, reveal_hold_cps
 assets: ui/dialogue.json: params.narration_cps: field 'narration_cps' reads 'speed_of_sound', which is not a field of the dialogue screen, a window or a variable
 assets: ui/dialogue.json: params.narration_when: field 'narration_when': starts_with takes 2 arguments at character 22 of 'starts_with(line_key)'
 assets: ui/dialogue.json: params.narration_wait: must be "press" or "auto": whether narration lines wait for a press
@@ -317,7 +317,7 @@ assets: ui/menu_status.json: profile[1]: must be a profile row: name, level, exp
 assets: ui/menu_status.json: profile[2]: 'name' is listed twice
 assets: ui/menu_status.json: -: the built-in layout of this screen stands in
 assets: ui/menu_system.json: params.system_action: field 'system_action' reads 'always', which is not a field of the menu_system screen, a window or a variable
-assets: ui/menu_system.json: rows[1]: must be one of save, quit, text_speed, battle_speed, flashing, auto_advance, text_size, auto_trouble, auto_policy
+assets: ui/menu_system.json: rows[1]: must be one of save, quit, controls, text_speed, battle_speed, flashing, auto_advance, text_size, auto_trouble, auto_policy
 assets: ui/menu_system.json: rows[2]: 'save' is listed twice
 assets: ui/menu_system.json: -: the built-in layout of this screen stands in
 assets: ui/name_entry.json: params.pad_cell_w: field 'pad_cell_w' reads 'cell_size', which is not a field of the name_entry screen, a window or a variable

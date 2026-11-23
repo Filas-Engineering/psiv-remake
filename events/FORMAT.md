@@ -116,6 +116,21 @@ choice clear
 say guide @harbor.farewell
 ```
 
+A choice may end with `option back`, a branch with no text that the game draws as no row and runs when the player backs out (Back or Cancel); without it, backing out of a choice does nothing, as before. It must be the last option, and a choice has at most one; it counts toward the two options a choice needs. `into` records 0 for it (no option was picked). The host answers it with the result after the last option (`ChoiceRequest::back` says the choice has one); a kept choice answered by it keeps that result as its pick, so no row is marked. Scripts without it keep their fingerprint, and the compiled layout and the save text are unchanged.
+
+```
+choice @harbor.topics_prompt keep
+option @harbor.topic_bell
+	say guide @harbor.bell_story
+option @harbor.topic_ferry
+	say guide @harbor.ferry_story
+option back
+	say guide @harbor.farewell
+end
+```
+
+A prompt may hold `{page}` breaks like any line; how the game pages it is the host's (the MonoGame sample shows the earlier pages as lines and the options with the last).
+
 ## Flags and variables
 
 Flags are true or false and start false. Variables are whole numbers and start at 0. A registry can declare other starting values, and flags and variables that belong to one event (see [Registry](#registry)).

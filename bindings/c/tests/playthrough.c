@@ -311,7 +311,7 @@ static void printKept(void) {
 	Buffer text;
 	bclear(&text);
 	if (psiv_kept_choice_get(S, &kept) == PSIV_OK) {
-		badd(&text, "%s > %s", kept.prompt[0] ? kept.prompt : "Choose:", kept.options[kept.picked]);
+		badd(&text, "%s > %s", kept.prompt[0] ? kept.prompt : "Choose:", kept.picked >= 0 && kept.picked < kept.option_count ? kept.options[kept.picked] : "back");
 	}
 	if (text.length && strcmp(text.text, lastKept) != 0) {
 		print("  (kept: %s)", text.text);
@@ -376,6 +376,9 @@ static void settle(void) {
 			}
 			if (choice.keep) {
 				badd(&text, " | keep");
+			}
+			if (choice.back) {
+				badd(&text, " | back");
 			}
 			print("%s", text.text);
 			return;
@@ -1258,6 +1261,8 @@ static int execute(const char* rawLine) {
 		} else {
 			error(usage);
 		}
+	} else if (strcmp(cmd, "choose") == 0 && wordCount == 2 && strcmp(words[1], "back") == 0) {
+		report(psiv_choose_back(S));
 	} else if (strcmp(cmd, "choose") == 0 && wordCount == 2 && toInt(words[1], &count)) {
 		report(psiv_choose(S, count));
 	} else if (strcmp(cmd, "skip") == 0) {

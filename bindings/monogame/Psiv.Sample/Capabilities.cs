@@ -26,10 +26,10 @@ public static class Capabilities
 		"darkness", "description", "destinations", "dev", "devdraw", "deverror", "devmark", "dialogue", "dialogueoverlaps", "dialoguepage", "difficulty", "effectsize",
 		"encounters", "enemygroups", "enemyplaces", "enemyicons", "enemymarks", "exitmarks", "fieldinput", "fieldlook", "fieldmarks", "fieldmotion", "fieldpicture", "figureposes", "figures", "figuresizes", "flash",
 		"flashing", "flying", "follower", "fontmissing", "formation", "glide", "held", "hudmark", "interact_prompt", "interactprompt", "interacttarget", "itemsort", "keeper", "language",
-		"leader", "leaderpos", "line", "lineportrait", "loglines", "macrocheck", "macros", "maphold", "marks", "menukind", "music", "narration", "narrationreveal", "numbers", "objects", "overlaps",
+		"leader", "leaderpos", "line", "lineportrait", "loglines", "macrocheck", "macrolines", "macros", "maphold", "marks", "menukind", "music", "narration", "narrationreveal", "numbers", "objects", "overlaps",
 		"overlays", "page", "pagetext", "panels", "paneltiles", "party", "partyplaces", "partystatus", "paused", "picture", "pictures", "platforms", "playtime", "preview", "prompt", "ranks",
 		"reduced_flash", "released", "reload", "reveal", "reward", "scenecamera", "screenlight", "selected", "shake", "shipped_names", "shown", "shownportrait", "speaker", "speed", "spritesteps", "step", "strip",
-		"tab", "tags", "talk", "text_size", "text_speed", "tilehooks", "timescale", "titleart", "titlesizes", "toastboxes", "top", "transition", "uiframes", "vehicles", "victory", "voice",
+		"tab", "tags", "talk", "text_size", "text_speed", "tilehooks", "timescale", "titleart", "titlesizes", "toastboxes", "toasts", "top", "transition", "uiframes", "vehicles", "victory", "voice",
 		"volumes", "walk", "walkbuffer", "walkstep", "windows", "wrapped"];
 
 	// Probes that take a name after the dot: `uifield.SCREEN.FIELD`, `window.NAME`, `figure.NAME` and so on.
@@ -91,6 +91,8 @@ public static class Capabilities
 			List(w, "top_commands", UiFields.TopCommands);
 			List(w, "member_commands", UiFields.MemberCommands);
 			List(w, "vehicle_commands", UiFields.VehicleCommands);
+			List(w, "macro_slot_states", UiFields.MacroSlotStates);
+			List(w, "picker_settings", UiFields.SettingRows);
 			w.WritePropertyName("screens");
 			w.WriteStartObject();
 			foreach ((string key, UiFields.ScreenFields s) in UiFields.Screens.OrderBy(s => s.Key, StringComparer.Ordinal))

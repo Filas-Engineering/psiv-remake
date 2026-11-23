@@ -512,7 +512,7 @@ uint32_t psiv_sizeof(const char* struct_name) {
 		PSIV_SIZE(psiv_combatant), PSIV_SIZE(psiv_enemy), PSIV_SIZE(psiv_error), PSIV_SIZE(psiv_exit), PSIV_SIZE(psiv_field_info),
 		PSIV_SIZE(psiv_game_info), PSIV_SIZE(psiv_glossary_entry), PSIV_SIZE(psiv_inn_info), PSIV_SIZE(psiv_inventory_entry),
 		PSIV_SIZE(psiv_item_count), PSIV_SIZE(psiv_job), PSIV_SIZE(psiv_line), PSIV_SIZE(psiv_macro_step_result), PSIV_SIZE(psiv_marker),
-		PSIV_SIZE(psiv_member), PSIV_SIZE(psiv_notice), PSIV_SIZE(psiv_point), PSIV_SIZE(psiv_profile), PSIV_SIZE(psiv_quest_log),
+		PSIV_SIZE(psiv_member), PSIV_SIZE(psiv_notice), PSIV_SIZE(psiv_option_level), PSIV_SIZE(psiv_option_levels), PSIV_SIZE(psiv_point), PSIV_SIZE(psiv_profile), PSIV_SIZE(psiv_quest_log),
 		PSIV_SIZE(psiv_recorded_command), PSIV_SIZE(psiv_save_summary), PSIV_SIZE(psiv_session_options), PSIV_SIZE(psiv_settings),
 		PSIV_SIZE(psiv_shop_info), PSIV_SIZE(psiv_world_info), PSIV_SIZE(psiv_problem), PSIV_SIZE(psiv_level_up), PSIV_SIZE(psiv_battle_result),
 		PSIV_SIZE(psiv_auto_round), PSIV_SIZE(psiv_auto_battle), PSIV_SIZE(psiv_pacing_area), PSIV_SIZE(psiv_pacing_boss),
@@ -889,12 +889,63 @@ psiv_status psiv_profile_set_value(psiv_session* session, const char* key, const
 		if (!value) {
 			return nullArgument(session, "value");
 		}
+		if (k == "text_speed" || k == "battle_speed") {
+			// A level id of the game's own levels (presentation.options), the built-in words among them.
+			const game::OptionSetting setting = k == "text_speed" ? game::OptionSetting::TextSpeed : game::OptionSetting::BattleSpeed;
+			const int level = session->session->optionLevelIndex(setting, v);
+			if (level >= 0) {
+				return refused(session, session->session->setOptionLevel(setting, level));
+			}
+		}
 		game::Profile p = session->session->profile();
 		const std::string problem = game::setProfileValue(p, k, v);
 		if (!problem.empty()) {
 			return fail(session, PSIV_REFUSED, "binding.profile_value", {k, v}, problem);
 		}
 		return refused(session, session->session->setProfile(p));
+	});
+}
+
+static bool optionSetting(int32_t setting, game::OptionSetting& out) {
+	if (setting != PSIV_OPTION_TEXT_SPEED && setting != PSIV_OPTION_BATTLE_SPEED) {
+		return false;
+	}
+	out = setting == PSIV_OPTION_TEXT_SPEED ? game::OptionSetting::TextSpeed : game::OptionSetting::BattleSpeed;
+	return true;
+}
+
+psiv_status psiv_option_levels_get(psiv_session* session, int32_t setting, psiv_option_levels* out) {
+	return guard(session, false, [&] {
+		if (!out) {
+			return nullArgument(session, "out");
+		}
+		game::OptionSetting which;
+		if (!optionSetting(setting, which)) {
+			return outOfRange(session, "setting", setting);
+		}
+		const game::OptionLevels& levels = session->session->optionLevels(which);
+		psiv_option_level* list = session->arena.array<psiv_option_level>(levels.levels.size());
+		for (std::size_t i = 0; i < levels.levels.size(); ++i) {
+			const game::OptionLevel& l = levels.levels[i];
+			list[i] = {session->arena.str(l.id), session->arena.str(l.label), session->arena.str(session->session->render(rules::Message{l.label, {}})), l.value};
+		}
+		*out = psiv_option_levels();
+		out->levels = list;
+		out->count = static_cast<int32_t>(levels.levels.size());
+		out->current = session->session->optionLevel(which);
+		out->default_index = levels.defaultIndex;
+		out->declared = levels.declared;
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_option_level_set(psiv_session* session, int32_t setting, int32_t index) {
+	return guard(session, true, [&] {
+		game::OptionSetting which;
+		if (!optionSetting(setting, which)) {
+			return outOfRange(session, "setting", setting);
+		}
+		return refused(session, session->session->setOptionLevel(which, index));
 	});
 }
 
@@ -1674,37 +1725,37 @@ psiv_status psiv_field_points(psiv_session* session, const psiv_point** out, int
 				continue;
 			}
 			const bool holds = (h.requireFlag.empty() || w.flag(h.requireFlag)) && (h.blockFlag.empty() || !w.flag(h.blockFlag));
-			points.push_back({h.trigger == game::HookTrigger::Interact ? PSIV_POINT_TALK : PSIV_POINT_STEP, arena.str(h.id), h.at.x, h.at.y, arena.str(h.event), holds, 0, 0, 0, ""});
+			points.push_back({h.trigger == game::HookTrigger::Interact ? PSIV_POINT_TALK : PSIV_POINT_STEP, arena.str(h.id), h.at.x, h.at.y, arena.str(h.event), holds, 0, 0, 0, "", ""});
 			for (game::Cell c : h.cells) {
-				points.push_back({PSIV_POINT_TALK, arena.str(h.id), c.x, c.y, arena.str(h.event), holds, 0, 0, 0, ""});
+				points.push_back({PSIV_POINT_TALK, arena.str(h.id), c.x, c.y, arena.str(h.event), holds, 0, 0, 0, "", ""});
 			}
 		}
 		for (const game::Chest& c : a->chests) {
-			points.push_back({PSIV_POINT_CHEST, arena.str(c.id), c.at.x, c.at.y, "", !w.flag(c.flag), 0, 0, 0, ""});
+			points.push_back({PSIV_POINT_CHEST, arena.str(c.id), c.at.x, c.at.y, "", !w.flag(c.flag), 0, 0, 0, "", arena.str(c.kind)});
 		}
 		for (const game::Shop& shop : a->shops) {
 			if (shop.at) {
-				points.push_back({PSIV_POINT_SHOP, arena.str(shop.id), shop.at->x, shop.at->y, "", session->session->shopOpen(shop), 0, static_cast<int32_t>(shop.kind), 0, arena.str(shop.keeper)});
+				points.push_back({PSIV_POINT_SHOP, arena.str(shop.id), shop.at->x, shop.at->y, "", session->session->shopOpen(shop), 0, static_cast<int32_t>(shop.kind), 0, arena.str(shop.keeper), ""});
 			}
 		}
 		for (const game::RestPoint& r : a->rests) {
 			if (r.at) {
-				points.push_back({PSIV_POINT_REST, arena.str(r.id), r.at->x, r.at->y, "", 1, session->session->restCost(r), 0, 0, arena.str(r.keeper)});
+				points.push_back({PSIV_POINT_REST, arena.str(r.id), r.at->x, r.at->y, "", 1, session->session->restCost(r), 0, 0, arena.str(r.keeper), ""});
 			}
 		}
 		for (const game::Port& p : a->ports) {
-			points.push_back({PSIV_POINT_PORT, arena.str(p.id), p.at.x, p.at.y, "", game::portOpen(p, w), 0, 0, 0, ""});
+			points.push_back({PSIV_POINT_PORT, arena.str(p.id), p.at.x, p.at.y, "", game::portOpen(p, w), 0, 0, 0, "", ""});
 		}
 		for (const game::Helm& h : a->helms) {
-			points.push_back({PSIV_POINT_HELM, arena.str(h.id), h.at.x, h.at.y, "", 1, 0, 0, 0, ""});
+			points.push_back({PSIV_POINT_HELM, arena.str(h.id), h.at.x, h.at.y, "", 1, 0, 0, 0, "", ""});
 		}
 		for (game::Cell g : a->gangway) {
-			points.push_back({PSIV_POINT_GANGWAY, "", g.x, g.y, "", 1, 0, 0, 0, ""});
+			points.push_back({PSIV_POINT_GANGWAY, "", g.x, g.y, "", 1, 0, 0, 0, "", ""});
 		}
 		for (const game::Conveyor& c : a->conveyors) {
 			const bool holds = (c.requireFlag.empty() || w.flag(c.requireFlag)) && (c.blockFlag.empty() || !w.flag(c.blockFlag));
 			for (game::Cell cell : c.cells) {
-				points.push_back({PSIV_POINT_CONVEYOR, "", cell.x, cell.y, "", holds, 0, 0, static_cast<int32_t>(c.direction), ""});
+				points.push_back({PSIV_POINT_CONVEYOR, "", cell.x, cell.y, "", holds, 0, 0, static_cast<int32_t>(c.direction), "", ""});
 			}
 		}
 		psiv_point* list = arena.array<psiv_point>(points.size());
@@ -1925,6 +1976,7 @@ static void fillChoice(psiv_session* session, const game::ChoiceView& c, psiv_ch
 	out.keep = c.keep;
 	out.states = c.states.empty() ? nullptr : session->arena.strs(c.states);
 	out.picked = c.picked;
+	out.back = c.back;
 }
 
 psiv_status psiv_choice_get(psiv_session* session, psiv_choice* out) {
@@ -1957,6 +2009,10 @@ psiv_status psiv_kept_choice_get(psiv_session* session, psiv_choice* out) {
 
 psiv_status psiv_choose(psiv_session* session, int32_t index) {
 	return guard(session, true, [&] { return refused(session, session->session->choose(index)); });
+}
+
+psiv_status psiv_choose_back(psiv_session* session) {
+	return guard(session, true, [&] { return refused(session, session->session->chooseBack()); });
 }
 
 int32_t psiv_can_skip(const psiv_session* session) {

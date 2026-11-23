@@ -29,7 +29,7 @@ OBJECT_PROPERTIES = {
 		"touch_from": "string"},
 	"shop": {"kind": "string", "stock": "json list", "sell_percent": "int", "require_flag": "string", "block_flag": "string", "script_only": "bool", "keeper": "string", "voice": "string", "name": "string"},
 	"rest": {"cost": "int", "script_only": "bool", "keeper": "string", "per_member": "bool", "voice": "string", "name": "string"},
-	"chest": {"flag": "string", "items": "json object", "equipment": "json object", "money": "int"},
+	"chest": {"flag": "string", "items": "json object", "equipment": "json object", "money": "int", "kind": "string"},
 	"port": {"marker": "string", "flag": "string", "ship": "string", "block_flag": "string", "followers": "string"},
 	"zone": {"table": "json list", "visible": "json object", "random": "json object"},
 	"helm": {},

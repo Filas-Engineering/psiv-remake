@@ -160,7 +160,8 @@ bool Interpreter::resolve_wait(Thread& thread) {
 				if (ins.choice.yes_no) {
 					write_flag(ins.name, picked == 0);
 				} else {
-					write_var(ins.name, picked + 1);
+					// The hidden back branch records 0: no option was picked.
+					write_var(ins.name, ins.choice.back && picked == static_cast<int>(ins.choice.options.size()) ? 0 : picked + 1);
 				}
 			}
 			if (ins.op == Op::choice && ins.choice.keep) {

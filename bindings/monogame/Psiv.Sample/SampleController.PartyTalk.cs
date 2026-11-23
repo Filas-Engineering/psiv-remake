@@ -56,7 +56,7 @@ public sealed partial class SampleController
 		DialogueBox box = TalkBox();
 		if (!Revealed(box, _talkMs).Done)
 		{
-			_talkMs += dtMs + HeldRevealMs(dtMs, input, CharsPerSecond(_s.Profile().TextSpeed));
+			_talkMs += dtMs + HeldRevealMs(dtMs, input, ProfileCps());
 			if (_clockMs - _lastTextTickMs >= Timing("text_tick_ms"))
 			{
 				_audio.PlayCue("text");

@@ -253,6 +253,9 @@ void Runner::settle() {
 			if (c->keep) {
 				text += " | keep";
 			}
+			if (c->back) {
+				text += " | back";
+			}
 			print(text);
 			return;
 		}
@@ -264,7 +267,8 @@ void Runner::settle() {
 // A kept choice under the next line or choice, printed once each time it changes.
 void Runner::printKept() {
 	const std::optional<ChoiceView> kept = session_.keptChoice();
-	const std::string text = kept ? (kept->prompt.empty() ? std::string("Choose:") : kept->prompt) + " > " + kept->options[kept->picked] : "";
+	const std::string picked = !kept ? "" : kept->picked >= 0 && kept->picked < static_cast<int>(kept->options.size()) ? kept->options[kept->picked] : "back";
+	const std::string text = kept ? (kept->prompt.empty() ? std::string("Choose:") : kept->prompt) + " > " + picked : "";
 	if (!text.empty() && text != lastKept_) {
 		print("  (kept: " + text + ")");
 	}
@@ -767,6 +771,8 @@ bool Runner::execute(const std::string& rawLine) {
 		} else {
 			error("travel port DEST | travel town DEST THING [USER] | travel dungeon_exit THING [USER]");
 		}
+	} else if (cmd == "choose" && w.size() == 2 && w[1] == "back") {
+		report(session_.chooseBack());
 	} else if (cmd == "choose" && w.size() == 2 && toInt(w[1], count)) {
 		report(session_.choose(count));
 	} else if (cmd == "skip") {
@@ -960,6 +966,16 @@ bool Runner::execute(const std::string& rawLine) {
 		} else {
 			static const std::map<std::string, std::string> shortNames = {{"text", "text_speed"}, {"battle", "battle_speed"}, {"shipped", "show_shipped_names"}};
 			auto shortName = shortNames.find(w[1]);
+			const std::string key = shortName == shortNames.end() ? w[1] : shortName->second;
+			if (key == "text_speed" || key == "battle_speed") {
+				// A level id of the game's own levels (presentation.options), the built-in words among them.
+				const OptionSetting setting = key == "text_speed" ? OptionSetting::TextSpeed : OptionSetting::BattleSpeed;
+				const int level = session_.optionLevelIndex(setting, w[2]);
+				if (level >= 0) {
+					report(session_.setOptionLevel(setting, level));
+					return true;
+				}
+			}
 			Profile profile = session_.profile();
 			const std::string problem = setProfileValue(profile, shortName == shortNames.end() ? w[1] : shortName->second, w[2]);
 			if (problem.empty()) {

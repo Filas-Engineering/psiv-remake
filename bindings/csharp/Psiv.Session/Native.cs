@@ -40,6 +40,12 @@ public struct PsivGameInfo
 }
 
 [StructLayout(LayoutKind.Sequential)]
+public struct PsivOptionLevel { public IntPtr Id, LabelKey, Label; public int Value; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivOptionLevels { public IntPtr Levels; public int Count, Current, DefaultIndex, Declared; }
+
+[StructLayout(LayoutKind.Sequential)]
 public struct PsivProfile
 {
 	public int TextSpeed, AutoAdvance, ShowShippedNames;
@@ -165,7 +171,7 @@ public struct PsivRouteCell { public int X, Y; }
 public struct PsivAnimation { public IntPtr Id; public double Seconds; public int Standard, End; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivPoint { public int Kind; public IntPtr Id; public int X, Y; public IntPtr Event; public int Active, Cost, ShopKind, Direction; public IntPtr Keeper; }
+public struct PsivPoint { public int Kind; public IntPtr Id; public int X, Y; public IntPtr Event; public int Active, Cost, ShopKind, Direction; public IntPtr Keeper, ChestKind; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivVehicle { public IntPtr Id, Name; public int X, Y, Facing, Aboard; }
@@ -196,7 +202,7 @@ public struct PsivTravelDestination { public IntPtr Id, Area, AreaName, Region; 
 public struct PsivLine { public IntPtr SpeakerId, SpeakerName, TextId, Text, Portrait, Display; }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct PsivChoice { public IntPtr Prompt; public int YesNo, OptionCount; public IntPtr Options, Header, HeaderId; public int Keep; public IntPtr States; public int Picked; }
+public struct PsivChoice { public IntPtr Prompt; public int YesNo, OptionCount; public IntPtr Options, Header, HeaderId; public int Keep; public IntPtr States; public int Picked, Back; }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct PsivAction
@@ -481,7 +487,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 22;
+	public const uint AbiVersion = 23;
 	// PSIV_SLOT_COUNT: the places a member wears equipment, which the member structs index by psiv_equip_slot.
 	public const int SlotCount = 7;
 
@@ -503,6 +509,8 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_profile_get")] public static partial int ProfileGet(SessionHandle s, out PsivProfile profile);
 	[LibraryImport(Library, EntryPoint = "psiv_profile_set")] public static partial int ProfileSet(SessionHandle s, in PsivProfile profile);
 	[LibraryImport(Library, EntryPoint = "psiv_profile_set_value", StringMarshalling = StringMarshalling.Utf8)] public static partial int ProfileSetValue(SessionHandle s, string key, string value);
+	[LibraryImport(Library, EntryPoint = "psiv_option_levels_get")] public static partial int OptionLevelsGet(SessionHandle s, int setting, out PsivOptionLevels levels);
+	[LibraryImport(Library, EntryPoint = "psiv_option_level_set")] public static partial int OptionLevelSet(SessionHandle s, int setting, int index);
 	[LibraryImport(Library, EntryPoint = "psiv_settings_get")] public static partial int SettingsGet(SessionHandle s, out PsivSettings settings);
 	[LibraryImport(Library, EntryPoint = "psiv_settings_set", StringMarshalling = StringMarshalling.Utf8)] public static partial int SettingsSet(SessionHandle s, string difficulty, int reward);
 	[LibraryImport(Library, EntryPoint = "psiv_difficulties")] public static partial int Difficulties(SessionHandle s, out IntPtr list, out int count, out int canChange);
@@ -570,6 +578,7 @@ public static unsafe partial class Native
 	[LibraryImport(Library, EntryPoint = "psiv_choice_get")] public static partial int ChoiceGet(SessionHandle s, out PsivChoice choice);
 	[LibraryImport(Library, EntryPoint = "psiv_kept_choice_get")] public static partial int KeptChoiceGet(SessionHandle s, out PsivChoice choice);
 	[LibraryImport(Library, EntryPoint = "psiv_choose")] public static partial int Choose(SessionHandle s, int index);
+	[LibraryImport(Library, EntryPoint = "psiv_choose_back")] public static partial int ChooseBack(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_can_skip")] public static partial int CanSkip(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_event_next_output")] public static partial int EventNextOutput(SessionHandle s);
 	[LibraryImport(Library, EntryPoint = "psiv_followers")] public static partial int Followers(SessionHandle s, out IntPtr list, out int count);

@@ -743,7 +743,7 @@ Fields:
 The technique, skill and ability pages and the system page ("Menu entries", below).
 
 - menu_abilities. Windows `members`, `abilities` (the area). Fields: area fields, `view` (`members` or `list`), `kind` (`techniques`, `skills` or `abilities`), `members` (list of strings), `list` (scroll list), `name` (string, the member), `abilities` (list of items: `text`, `label` (the name with `  *` when usable here), `usable` (bool), `kind`, `cost`, `uses` (strings)), `sub_list`, `description`, `picking` (bool), `target_name`, `targets` (list of strings), `target_rows` (as menu_status's), `target_list`.
-- menu_system. Window `page` (the area). Fields: area fields, `rows` (list of items: `id`, `text` (label and value), `label`, `value` (strings), `changeable` (bool)), `list` (scroll list), `description` (a settings row's help). The slot list draws through `save_slots`.
+- menu_system. Windows `page` (the area) and `picker` (a settings row's levels, drawn only while `picking`; nothing draws it otherwise, so the page is as before). Fields: area fields, `rows` (list of items: `id`, `text` (label and value, or the label alone under `row_value` "hide"), `label`, `value` (strings), `changeable` (bool)), `list` (scroll list), `description` (a settings row's help, or the picker's prompt while it is open), `picking` (bool), `picker_setting` (the row's id), `picker_title` (its label), `picker_prompt` (its prompt), `picker_rows` (items: `text` (the level's name), `current` (bool: the level in force)), `picker_list` (scroll list). The slot list draws through `save_slots`. "The system page's picker, speed levels and macro slots", below, has the params `settings`, `picker_confirm` and `row_value`.
 
 Params:
 - menu_abilities `unusable`: `"dim"` (default: the abilities not usable in the field are listed, their names dimmed by the built-in file's `usable` color) or `"hide"` (they are left out of the list, so the cursor, the description and the `abilities` items have only those usable here; a member with none shows `ui.status.no_abilities`).
@@ -1205,7 +1205,7 @@ Three optional fields; the export writes none of them, and without them the menu
   * `extras`: one row; Confirm opens the Extras menu over the field menu.
 * `children` (an entry of `menu.json`'s `entries`): `[{"page": ID, "label": TEXT_KEY}]`, the same shape and pages as the entries (`label` default `ui.menu.tab.ID`). The tab still takes its name from its own entry, but in place of its page it lists the children under the tab (the `menu_children` layout); Up and Down choose, Confirm opens that page in the page's place (the `tab` probe then reads the child's page id) and Back at the page's top returns to the list, which keeps its cursor. Left and Right turn the tabs from the list and from a child page's top; Back on the list closes the menu. The entry's own page is not opened unless it is also one of its children; the `page` probe reads `children` on the list. A page only a child lists counts as one the entries leave out for the Extras menu and the System action (it opens alone).
 * `immediate` (an entry or child of `menu.json`, `true` or `false`): a page that needs no further choice acts at once: `party_talk` starts the party talk as its tab (or child) opens, as Confirm on its row would (with "speakers", on the first speaker), and `extras` opens the Extras menu; on an entry with `children`, a single child opens in place of the list (Back then closes the menu). It acts once each time the page opens; a Confirm in the frame it opens is that once. On any other page, or not a boolean, it is a problem. `small_more.txt` checks both on the small set.
-* `rows` (`menu_system.json`): the system page's rows in order from `save`, `quit`, `text_speed`, `battle_speed`, `flashing`, `auto_advance`, `text_size`, `auto_trouble`, `auto_policy` (default `save`, `text_speed`, `battle_speed`, `auto_advance`). `auto_trouble` and `auto_policy` are the sample's own settings, kept in `controls.json`'s `battle` object (`"auto_trouble": "continue"`, `"auto_policy": "power"`, written only when one is not `default`): the trouble mode and policy auto play goes under (`SetAutoPlayMacro(name or null, mode, policy)`), `default` leaving both to the macro and rules.json as before; the state probes `auto_trouble` and `auto_policy` read them.
+* `rows` (`menu_system.json`): the system page's rows in order from `save`, `quit`, `controls` (the Controls page; Back returns to the rows), `text_speed`, `battle_speed`, `flashing`, `auto_advance`, `text_size`, `auto_trouble`, `auto_policy` (default `save`, `text_speed`, `battle_speed`, `auto_advance`). `auto_trouble` and `auto_policy` are the sample's own settings, kept in `controls.json`'s `battle` object (`"auto_trouble": "continue"`, `"auto_policy": "power"`, written only when one is not `default`): the trouble mode and policy auto play goes under (`SetAutoPlayMacro(name or null, mode, policy)`), `default` leaving both to the macro and rules.json as before; the state probes `auto_trouble` and `auto_policy` read them.
 * `entries` (`extras.json`): the Extras menu's entries, the same shape, from the field menu's pages but `extras`, and `controls` (the Controls page; Back leaves it for the Extras menu), `photosensitivity` (the flashing notice, `ui.options.flashing_notice`, in the box), `dev` (the developer console; shown only with `--dev`), and the settings rows above (Left, Right or Confirm change them in place). Default: `options`, `controls`. A field menu page opens the field menu on that page; when the menu's entries leave the page out, the field menu opens with that page as its only tab, until it closes (the menu opened again shows its own entries). On the title the field menu's pages but `options` are left out; in a battle only `text_speed`, `battle_speed`, `flashing`, `auto_trouble` and `auto_policy` show.
 
 An unknown or repeated page or row, a missing `page`, an unknown field, `children` that are not a non-empty list or on the Extras menu's entries, a child's unknown or repeated page or missing `page`, children under a child, or `entries` or `rows` on another screen is a problem.
@@ -1777,6 +1777,82 @@ During `map_load_hold_ms` the music stops only when the new area plays another t
 ### The keep runs
 
 `make_arrival_data.py GAME_DATA CORE_DATA OUT` copies the data with a party of two in a generated interior, Saltgrass's `return` on a generated field whose load hook warps with and without `followers`, and `map_load_hold_ms` 300 with the field playing Saltgrass's track; `arrival_followers.txt` (with `--dev`) checks the follower in the draw list after every frame (the script verb `watch PROBE not VALUE`, `watch off`) through the landing, the scene's warps and lines, a step, a developer's warp, a save and a load and a battle's end, then the music through the hold. `make_keep_data.py GAME_DATA CORE_DATA OUT` copies the data with the guide's topics as a kept choice with states (`keep_talk`) and a party with Homeward; `make_keep_assets.py EXPORT BASE OUT` writes the set above (the menu's Items, Techniques and System entries, the save flow over the system page, travel's `used_toast` 0 and `refusal` "page", `result_text` on the Items and abilities pages, the dialogue's states and kept choice); `alt/save_slots_broken.json` and `alt/dialogue_broken.json` are checked on copies. `keep_flows.txt` (with `--dev`) plays them; screenshots under `build/shots/keep/` with `--window`.
+
+## The system page's picker, speed levels and macro slots
+
+Also here: a choice that Back answers and a prompt in pages (the dialogue). Each optional as the flows above: a set without them behaves and draws as before (the built-in `menu_system.json` gains a `picker` window that shows only while a picker is open, and its rows list is `active` only while none is), the export writes none of the params, `--check-assets` checks each and `--capabilities` lists them (`picker_settings`, `macro_slot_states`, the screens' fields and params). `scripts/make_options_assets.py` writes a set that uses them all (below, "The options runs").
+
+### The system page: a picker, rows by label, Controls
+
+Params of `menu_system.json`:
+
+* `settings` (`"step"` default, or `"picker"`): Confirm on a settings row opens a list of the setting's levels in the layout's `picker` window, the cursor on the level in force, the setting's prompt (`ui.options.<id>_prompt`, the sample's own English when the text tables have none) in the page's message line (`description`) and in `picker_prompt`. Up and Down choose, Confirm sets the level, Back closes only the picker (the level stays); Left and Right do not turn the tabs while it is open. Every settings row has levels: `text_speed` and `battle_speed` the game's levels ("Speed levels", below), `auto_advance` off and on, `text_size` 100% to 150% by 10, `flashing` its levels (Original only when offered), `auto_trouble` and `auto_policy` their modes. Under `"step"` Confirm steps the value as before.
+* `picker_confirm` (`"rows"` default, or `"close"`): after Confirm sets a level, the picker returns to the rows, or closes the field menu.
+* `row_value` (`"show"` default, or `"hide"`): a settings row's `text` is its label alone and its `value` empty, for rows drawn without the current value.
+
+The page probe reads `picker` while the picker is open; the `selected` probe reads the picker's row then.
+
+The row `controls` in `rows` opens the Controls page over the menu (the options screen on its Controls page alone, as the Extras menu's `controls` does); Back leaves it for the system page's rows. Its row has no value; its description is `ui.options.controls_help`.
+
+```json
+{"version": 1, "params": {"settings": "picker", "picker_confirm": "rows", "row_value": "hide"},
+	"rows": ["save", "text_speed", "battle_speed", "controls", "quit"],
+	"windows": [
+		{"name": "page", "x": "area_x", "y": "area_y", "w": "area_w / 2", "h": "area_h", "frame": "panel", "padding": [20, 20, 20, 20], "elements": [
+			{"type": "list", "items": "rows", "state": "list", "active": "!picking", "w": "cw", "h": "ch - 2 * t(30)", "row_height": "t(30)", "row": [
+				{"type": "text", "value": "label", "x": 4, "color": "selected ? 'accent' : 'text'"}]},
+			{"type": "text", "value": "description", "x": 4, "y": "ch - 2 * t(30)", "wrap": true, "max_width": "cw - 8", "lines": 2, "style": "small_dim"}]},
+		{"name": "picker", "visible": "picking", "x": "area_x + area_w / 2 + 4", "y": "area_y", "w": "area_w / 2 - 4", "h": "len(picker_rows) * t(30) + t(30) + 40", "frame": "panel", "padding": [20, 20, 20, 20], "elements": [
+			{"type": "text", "value": "picker_title", "x": 4, "style": "small_dim"},
+			{"type": "list", "items": "picker_rows", "state": "picker_list", "active": "picking", "y": "t(30)", "w": "cw", "h": "ch - t(30)", "row_height": "t(30)", "row": [
+				{"type": "text", "value": "text", "x": 4, "color": "selected ? 'accent' : current ? 'good' : 'text'"}]}]}
+	]}
+```
+
+At 320x224 (`make_options_assets.py --small`) the page is half the menu's area wide with rows `t(size_small)` high in the `small` style and the picker beside it, both inside the menu's box (`scripts/options_small.txt` checks the rectangles).
+
+### Speed levels
+
+Text speed and battle speed offer the game's own levels when `game.json` lists them (`presentation.options`, [`../game/README.md`](../game/README.md), "The profile's speed levels"; `GameSession.OptionLevels`, `SetOptionLevel`): the Options screen, the system page and the Extras menu step through them (wrapping as before) and show each level's name (its label's text, the sample's own word for a key the tables lack); the picker lists them. A text level's `value` is characters a second (0 shows a page at once) for the dialogue, narration (scaled as `narration_cps` is) and the party talk; a battle level's is percent of the normal pace for the battle's time scale. Without levels of the game's own every setting reads as before, the styles' `text_speed` timings included. The state probes `text_speed` and `battle_speed` read the level's id.
+
+### Battle: macro slots
+
+Top-level `macro_slots` (`battle_front.json`, `battle_side.json`): one to eight slot labels (a save holds at most eight macros); a label with a `.` is a text key, any other shows as written. With it the Macro command (a member's or the top-level step's) always opens a list of that many slots, even with no macro at all, the save's macros filling them in their order (`Macros()`; a deleted macro moves the ones after it up a slot) and the rest empty. Each row of `menu_items` gains `slot_label`, `macro` (the macro's name, `''` for an empty slot), `state` (`empty` or `set`) and `state_color` (the state's color from the file's `option_states`, as the dialogue's: `{"empty": "dim", "set": "good"}`; `''` for a state it does not list); `text` is the label and the name (or `ui.battle.macro_slot_empty`), and an empty slot's row is not `usable`. The field `macro_lines` (strings) holds the highlighted slot's macro steps for a window beside the list (empty for an empty slot). Confirm on an empty slot plays the `refuse` cue and stays on the list; on a set one it plays the macro as before. `macro_auto_first` does not reorder the slots. Without `macro_slots`, a party with no macros hears that it has none and stays on the top menu, as before. Probe `macrolines`: the highlighted slot's steps joined by ` | `, `none` for an empty slot, `-` off the list.
+
+```json
+{"version": 1, "macro_slots": ["A", "B", "C", "D", "E", "F", "G", "H"], "option_states": {"empty": "dim", "set": "good"}, "windows": [
+	{"name": "command", "visible": "menu_shown && list_kind != 'macro'", ...},
+	{"name": "slots", "visible": "menu_shown && list_kind == 'macro'", "x": 8, "y": "strip.y - h - 4", "w": 220, "h": "len(menu_items) * t(24) + 16", "frame": "battle", "elements": [
+		{"type": "repeater", "items": "menu_items", "x": 14, "y": 8, "dy": "t(24)", "template": [
+			{"type": "pointer", "visible": "i == cursor", "x": -12, "y": 0},
+			{"type": "text", "value": "slot_label", "style": "small", "color": "i == cursor ? 'accent' : 'text'"},
+			{"type": "text", "value": "state == 'set' ? macro : '-'", "x": 24, "style": "small", "color": "i == cursor ? 'accent' : state_color != '' ? state_color : 'text'"}]}]},
+	{"name": "macro_detail", "visible": "menu_shown && list_kind == 'macro'", "x": 234, "y": "slots.y", "w": 420, "h": "max(1, len(macro_lines)) * t(24) + 16", "frame": "battle", "elements": [
+		{"type": "repeater", "items": "macro_lines", "x": 10, "y": 8, "dy": "t(24)", "template": [{"type": "text", "value": "text", "style": "small"}]}]}
+]}
+```
+
+### The chest's opened notice
+
+`game.json`'s `presentation.chest_opened_notice` (library; [`../game/README.md`](../game/README.md), game.json) gives the opened line (`game.chest_opened.<kind>` or `game.chest_opened`) as a notice before the found notices; the sample shows them as its notices in that order, the opened line first. The state probe `toasts` reads the notices on screen, oldest first, joined by ` | `.
+
+### Dialogue: a choice that Back answers, and a prompt in pages
+
+A script choice with `option back` ([`../events/FORMAT.md`](../events/FORMAT.md), "Choices"; `Choice.Back`, `GameSession.ChooseBack`) is answered by Back: the hidden branch runs, no row having been drawn for it. Without one, Back does nothing on a choice, as before. A kept choice answered so marks no row (`kept_cursor` is the option count). Field `choice_back` (bool): the choice takes Back.
+
+A choice's prompt with `{page}` breaks shows its earlier pages first, each as a whole line with no speaker in the box (`has_line` true, `line` the page, `has_choice` false), Confirm going on (with the `line` cue; Up and Down do nothing); the options come with the last page, which `prompt` holds. Fields `prompt_page` (from 1) and `prompt_pages` (1 for a prompt without breaks). The kept choice's `kept_prompt` is its prompt's last page. Param `prompt_pages` (`"page"` default, or `"together"`): `together` shows the whole prompt with the options in one box, as the sample did before; no earlier run had a prompt with breaks, so paging is the default. `scripts/choice_flows.txt` plays a three-page prompt and the back option on the keep copy (`keep_pages`).
+
+```json
+{"version": 1, "params": {"prompt_pages": "page"}, "windows": [...]}
+```
+
+### Dialogue: the reveal hold and the open cue, where they apply
+
+`reveal_confirm` "hold" and `reveal_hold_cps` take effect in the dialogue box, narration and the party talk by speaker: a press there reveals no more than one frame held does, holding Confirm reveals at `reveal_hold_cps` when faster than the text's own pace, and a shown page goes on with a press. `dialogue_open_sound` plays when the dialogue box opens (for a line or a choice after a frame without one); narration (no box) and the party talk's speaker window do not play it. `late_flows.txt` covers the box, `reveal_hold_narration.txt` narration and `reveal_hold_talk.txt` the speakers.
+
+### The options runs
+
+`make_options_data.py GAME_DATA CORE_DATA OUT` copies the data with five text and five battle speed levels, the chest's opened notice on and the Reed Path's cache a `crate`, and a party of two facing the cache with two macros. `make_options_assets.py EXPORT BASE OUT [--small]` writes the set above (the menu's Status, Items and System entries, the system page's picker, label-only rows and Controls row, eight lettered macro slots with the steps beside them); `alt/menu_system_close.json` closes the menu from the picker, and `alt/menu_system_broken.json` and `alt/battle_broken.json` are checked on copies. `make_options_assets.py --hold SET OUT` copies a set with `alt/dialogue_hold.json` (the reveal hold and the open cue). `options_flows.txt` and `options_small.txt` (with `--dev`) play the options sets, `reveal_hold_narration.txt` the narration set and `reveal_hold_talk.txt` the talk set with the hold swapped in; screenshots under `build/shots/options/` with `--window`.
 
 ## Dialogue control tags (`ui/dialogue.json`, `SampleController.Dialogue.cs`)
 

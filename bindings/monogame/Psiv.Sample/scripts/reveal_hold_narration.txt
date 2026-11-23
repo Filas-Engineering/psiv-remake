@@ -1,0 +1,45 @@
+# The dialogue layout's `reveal_confirm` "hold" in narration (make_options_assets.py --hold over the narration assets,
+# make_narration_data.py), with --dev: a press does not complete a narration line, holding Confirm reveals it at
+# `reveal_hold_cps` 200 in place of the 40 a second of `narration_cps`, and a shown line goes on with a press; the
+# `dialogue_open_sound` plays when the box opens for the guide's line after the narration, not for narration, which has
+# no box.
+
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+assets swap ui/dialogue.json alt/dialogue_hold.json
+wait 2
+cmd set text normal
+audio mark
+dev event narration
+waitstate 10 narrationreveal 0/40
+wait 26
+expect state narrationreveal 8/40
+# A press is one frame held: three characters more at 200 a second, the line not completed.
+press Enter
+expect state narrationreveal 11/40
+# Held: 200 a second, five times the line's own pace; 40 characters in 12 frames of 16 ms.
+hold Enter 4
+expect statenot narrationreveal 40/40
+hold Enter 8
+expect state narrationreveal 40/40
+expect audiocount 0 cue brass_alarm
+# The other four lines each held to their end and gone on from; then the guide's line opens the box.
+press Enter
+hold Enter 20
+press Enter
+hold Enter 20
+press Enter
+hold Enter 20
+press Enter
+hold Enter 20
+expect state narration Then the fog lifted, all at once.
+expect audiocount 0 cue brass_alarm
+# The last line goes on to the guide's, which waits under the narration for a press (narration_wait).
+press Enter
+wait 2
+expect audiocount 0 cue brass_alarm
+press Enter
+waitstate 10 speaker Harbor Guide
+expect audiocount 1 cue brass_alarm
+pressuntil Enter Field 60

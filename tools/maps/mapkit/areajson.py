@@ -11,7 +11,7 @@ ENTRY_FIELDS = {
 	"hooks": ["id", "at", "trigger", "event", "require_flag", "block_flag", "once", "tile", "solid", "actor_at", "across", "cells", "actor", "talk_at", "turns", "touch_from"],
 	"shops": ["id", "at", "kind", "stock", "sell_percent", "require_flag", "block_flag", "keeper", "voice", "name"],
 	"rests": ["id", "at", "cost", "keeper", "per_member", "voice", "name"],
-	"chests": ["id", "at", "flag", "items", "equipment", "money"],
+	"chests": ["id", "at", "flag", "items", "equipment", "money", "kind"],
 	"ports": ["id", "at", "marker", "flag", "ship", "block_flag", "followers"],
 	"zones": ["id", "from", "to", "table", "visible", "random"],
 	"helms": ["id", "at"],

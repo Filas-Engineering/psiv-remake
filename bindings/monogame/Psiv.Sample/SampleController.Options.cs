@@ -17,7 +17,30 @@ public sealed partial class SampleController
 	private GameAction? _optAction;
 
 	// One setting: its label, its value as shown, what it changes, and how it steps (null: it cannot be changed here).
-	private sealed record OptionRow(string Label, string Value, string Description, Func<int, PsivResult>? Change);
+	// Settings rows also list their levels by name with the one in force and how to choose one, for the system page's
+	// picker (menu_system `settings` "picker").
+	private sealed record OptionRow(string Label, string Value, string Description, Func<int, PsivResult>? Change,
+		IReadOnlyList<string>? Levels = null, int Current = -1, Func<int, PsivResult>? Pick = null);
+
+	// A text or battle speed row with the game's own levels (presentation.options): the level's name, stepping and
+	// choosing by index. Null without them, where the built-in enum's row stands.
+	private OptionRow? LevelRow(OptionSetting setting, string label, string help)
+	{
+		OptionLevels levels = _s.OptionLevels(setting);
+		if (!levels.Declared)
+		{
+			return null;
+		}
+		List<string> names = [.. levels.Levels.Select(LevelName)];
+		int at = levels.Current, n = levels.Levels.Count;
+		return new(label, names[at], help, by => _s.SetOptionLevel(setting, (at + by + n) % n), names, at, i => _s.SetOptionLevel(setting, i));
+	}
+
+	// The id of the game's own level in force, null without levels of its own.
+	private string? LevelId(OptionSetting setting) => _s.OptionLevels(setting) is { Declared: true } l ? l.Levels[l.Current].Id : null;
+
+	// A level's name: the session's text, or the sample's own words for a key the tables lack.
+	private string LevelName(OptionLevel level) => level.Label == level.LabelKey ? T(level.LabelKey) : level.Label;
 
 	private void OpenOptions()
 	{
@@ -100,19 +123,29 @@ public sealed partial class SampleController
 		Profile p = _s.Profile();
 		return id switch
 		{
-			"text_speed" => new(T("ui.options.text_speed"), T(NameKind.TextSpeed, (int)p.TextSpeed), T("ui.options.text_speed_help"),
-				by => _s.SetProfile(p with { TextSpeed = Step(p.TextSpeed, by) })),
+			"text_speed" => LevelRow(OptionSetting.TextSpeed, T("ui.options.text_speed"), T("ui.options.text_speed_help"))
+				?? new(T("ui.options.text_speed"), T(NameKind.TextSpeed, (int)p.TextSpeed), T("ui.options.text_speed_help"),
+				by => _s.SetProfile(p with { TextSpeed = Step(p.TextSpeed, by) }),
+				[.. Enum.GetValues<TextSpeed>().Select(v => T(NameKind.TextSpeed, (int)v))], (int)p.TextSpeed, i => _s.SetProfile(p with { TextSpeed = (TextSpeed)i })),
 			"auto_advance" => new(T("ui.options.auto_advance"), OnOffText(p.AutoAdvance), T("ui.options.auto_advance_help"),
-				_ => _s.SetProfile(p with { AutoAdvance = !p.AutoAdvance })),
+				_ => _s.SetProfile(p with { AutoAdvance = !p.AutoAdvance }),
+				[OnOffText(false), OnOffText(true)], p.AutoAdvance ? 1 : 0, i => _s.SetProfile(p with { AutoAdvance = i == 1 })),
 			"text_size" => new(T("ui.options.text_size"), $"{p.TextSizePercent}%", T("ui.options.text_size_help"),
-				by => _s.SetProfile(p with { TextSizePercent = Math.Clamp(p.TextSizePercent + 10 * by, 100, 150) })),
-			"battle_speed" => new(T("ui.options.battle_speed"), SpeedName(p.BattleSpeed), T("ui.options.battle_speed_help"),
-				by => _s.SetProfile(p with { BattleSpeed = Step(p.BattleSpeed, by) })),
+				by => _s.SetProfile(p with { TextSizePercent = Math.Clamp(p.TextSizePercent + 10 * by, 100, 150) }),
+				[.. Enumerable.Range(0, 6).Select(i => $"{100 + 10 * i}%")], (p.TextSizePercent - 100) / 10, i => _s.SetProfile(p with { TextSizePercent = 100 + 10 * i })),
+			"battle_speed" => LevelRow(OptionSetting.BattleSpeed, T("ui.options.battle_speed"), T("ui.options.battle_speed_help"))
+				?? new(T("ui.options.battle_speed"), SpeedName(p.BattleSpeed), T("ui.options.battle_speed_help"),
+				by => _s.SetProfile(p with { BattleSpeed = Step(p.BattleSpeed, by) }),
+				[.. Enum.GetValues<BattleSpeed>().Select(SpeedName)], (int)p.BattleSpeed, i => _s.SetProfile(p with { BattleSpeed = (BattleSpeed)i })),
 			// The sample's own, kept in controls.json beside the auto play macro.
 			"auto_trouble" => new(T("ui.options.auto_trouble"), T(NameKind.MacroTrouble, (int)_bindings.AutoTrouble), T("ui.options.auto_trouble_help"),
-				by => ChangeAutoMode(() => _bindings.AutoTrouble = Step(_bindings.AutoTrouble, by))),
+				by => ChangeAutoMode(() => _bindings.AutoTrouble = Step(_bindings.AutoTrouble, by)),
+				[.. Enum.GetValues<MacroTrouble>().Select(v => T(NameKind.MacroTrouble, (int)v))], (int)_bindings.AutoTrouble,
+				i => ChangeAutoMode(() => _bindings.AutoTrouble = (MacroTrouble)i)),
 			"auto_policy" => new(T("ui.options.auto_policy"), T(NameKind.MacroPolicy, (int)_bindings.AutoPolicy), T("ui.options.auto_policy_help"),
-				by => ChangeAutoMode(() => _bindings.AutoPolicy = Step(_bindings.AutoPolicy, by))),
+				by => ChangeAutoMode(() => _bindings.AutoPolicy = Step(_bindings.AutoPolicy, by)),
+				[.. Enum.GetValues<MacroPolicy>().Select(v => T(NameKind.MacroPolicy, (int)v))], (int)_bindings.AutoPolicy,
+				i => ChangeAutoMode(() => _bindings.AutoPolicy = (MacroPolicy)i)),
 			_ => FlashingRow(),
 		};
 	}
@@ -189,7 +222,8 @@ public sealed partial class SampleController
 		FlashLevel[] levels = OriginalOffered ? [FlashLevel.Reduced, FlashLevel.Standard, FlashLevel.Original] : [FlashLevel.Reduced, FlashLevel.Standard];
 		int at = Math.Max(0, Array.IndexOf(levels, Flashing));
 		return new(T("ui.options.flashing"), T("ui.options.flashing." + Flashing.ToString().ToLowerInvariant()), T("ui.options.flashing_help"),
-			by => SetFlashing(levels[(at + by + levels.Length) % levels.Length]));
+			by => SetFlashing(levels[(at + by + levels.Length) % levels.Length]),
+			[.. levels.Select(l => T("ui.options.flashing." + l.ToString().ToLowerInvariant()))], at, i => SetFlashing(levels[i]));
 	}
 
 	// Only while the real-time field input is on, since nothing else reads them.

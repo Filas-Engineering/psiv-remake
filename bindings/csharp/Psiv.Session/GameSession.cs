@@ -219,6 +219,20 @@ public sealed unsafe class GameSession : IDisposable
 
 	public PsivResult SetProfileValue(string key, string value) => Result(Native.ProfileSetValue(_handle, key, value));
 
+	public OptionLevels OptionLevels(OptionSetting setting)
+	{
+		Must(Native.OptionLevelsGet(_handle, (int)setting, out PsivOptionLevels l));
+		var levels = new List<OptionLevel>(l.Count);
+		foreach (PsivOptionLevel level in Native.Span<PsivOptionLevel>(l.Levels, l.Count))
+		{
+			levels.Add(new OptionLevel(Native.Str(level.Id), Native.Str(level.LabelKey), Native.Str(level.Label), level.Value));
+		}
+		return new OptionLevels(levels, l.Current, l.DefaultIndex, l.Declared != 0);
+	}
+
+	// Chooses a level by index and writes the profile.
+	public PsivResult SetOptionLevel(OptionSetting setting, int index) => Result(Native.OptionLevelSet(_handle, (int)setting, index));
+
 	public Settings Settings()
 	{
 		Must(Native.SettingsGet(_handle, out PsivSettings s));
@@ -473,7 +487,7 @@ public sealed unsafe class GameSession : IDisposable
 		foreach (PsivPoint p in Native.Span<PsivPoint>(pp, pc))
 		{
 			points.Add(new FieldPoint((PointKind)p.Kind, Native.Str(p.Id), p.X, p.Y, Native.Str(p.Event), p.Active != 0, p.Cost, (ShopKind)p.ShopKind, (Direction)p.Direction,
-				Native.Str(p.Keeper)));
+				Native.Str(p.Keeper), Native.Str(p.ChestKind)));
 		}
 		Must(Native.FieldActors(_handle, out IntPtr ap, out int ac));
 		var actors = new List<FieldActor>(ac);
@@ -530,9 +544,12 @@ public sealed unsafe class GameSession : IDisposable
 	public Choice? KeptChoice() => Read(Native.KeptChoiceGet(_handle, out PsivChoice c)) ? ToChoice(c) : null;
 
 	private static Choice ToChoice(in PsivChoice c) => new(Native.Str(c.Prompt), c.YesNo != 0, Native.Strs(c.Options, c.OptionCount), Native.Str(c.Header),
-		Native.Str(c.HeaderId), c.States == IntPtr.Zero ? [] : Native.Strs(c.States, c.OptionCount), c.Keep != 0, c.Picked);
+		Native.Str(c.HeaderId), c.States == IntPtr.Zero ? [] : Native.Strs(c.States, c.OptionCount), c.Keep != 0, c.Picked, c.Back != 0);
 
 	public PsivResult Choose(int index) => Result(Native.Choose(_handle, index));
+
+	// Answers the choice's `option back`; refused when it has none.
+	public PsivResult ChooseBack() => Result(Native.ChooseBack(_handle));
 
 	public bool CanSkip => Native.CanSkip(_handle) != 0;
 	// What the running event shows next without advancing it: a line, a choice, its end, or something else.

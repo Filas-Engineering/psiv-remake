@@ -163,6 +163,15 @@ public sealed record Profile(TextSpeed TextSpeed, bool AutoAdvance, bool ShowShi
 	bool AmbientTalk, bool ReducedFlash, int MusicVolume, int AmbientVolume, int EffectsVolume, bool AlwaysRun = false, FlashLevel Flashing = FlashLevel.Unset,
 	bool FlashNoticeSeen = false);
 
+// The profile settings a game may give levels of its own (game.json presentation.options).
+public enum OptionSetting { TextSpeed, BattleSpeed }
+
+// Value: characters a second for text speed (0 shows a page at once), percent of the normal pace for battle speed.
+public sealed record OptionLevel(string Id, string LabelKey, string Label, int Value);
+
+// Declared false: the built-in four, whose indexes are the TextSpeed and BattleSpeed values.
+public sealed record OptionLevels(IReadOnlyList<OptionLevel> Levels, int Current, int DefaultIndex, bool Declared);
+
 public sealed record Settings(string Difficulty, RewardMultiplier RewardMultiplier, string AutoMacro);
 
 public sealed record Difficulty(string Id, string Name, string Description, int RewardPercent);
@@ -240,8 +249,9 @@ public sealed record InteractTarget(InteractKind Kind, string Id, int X, int Y, 
 
 // Active for a shop or a port: open now.
 // Direction: for a conveyor cell, where it carries the party. Keeper: a shop's or rest point's keeper, "" for none.
+// ChestKind: a chest's `kind` from the area data, "" for none.
 public sealed record FieldPoint(PointKind Kind, string Id, int X, int Y, string Event, bool Active, int Cost, ShopKind ShopKind = ShopKind.General, Direction Direction = Direction.North,
-	string Keeper = "");
+	string Keeper = "", string ChestKind = "");
 
 // One of the game's actors in the party's area. Scripted: a script has moved, turned, shown or hidden it; an
 // untouched actor stands at the talk point named after it.
@@ -301,7 +311,10 @@ public sealed record Line(string SpeakerId, string SpeakerName, string TextId, s
 
 // States: each option's state word from the script, "" for none, empty when no option has one. Keep: the choice stays on
 // screen once answered (GameSession.KeptChoice). Picked: the kept choice's picked option, -1 for one waiting on an answer.
-public sealed record Choice(string Prompt, bool YesNo, IReadOnlyList<string> Options, string Header, string HeaderId, IReadOnlyList<string> States, bool Keep, int Picked);
+// Back: the script's `option back`, a hidden branch ChooseBack (or Choose(Options.Count)) answers; a kept choice answered by it
+// has Picked == Options.Count.
+public sealed record Choice(string Prompt, bool YesNo, IReadOnlyList<string> Options, string Header, string HeaderId, IReadOnlyList<string> States, bool Keep, int Picked,
+	bool Back = false);
 
 // Duration is how long the animation lasts by the data (game.json's presentation durations, else Seconds), 0 for none.
 public sealed record PresentationAction(ulong Handle, ActionPhase Phase, ActionType Type, string Subject, string Target, string Slot, bool HasPosition,

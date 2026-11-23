@@ -243,6 +243,13 @@ class VesselAndChangesTest(TempCase):
 		self.assertEqual("up", back["exits"][0]["followers"])
 		self.assertEqual("keys", back["hooks"][1]["touch_from"])
 
+	def test_a_chests_kind_survives_a_round_trip(self):
+		area = copy.deepcopy(VESSEL_AREA)
+		area["chests"] = [{"id": "crate", "at": [1, 1], "flag": "chest.crate", "money": 5, "kind": "box"}]
+		back = self.convert(tiled.area_to_tmj(copy.deepcopy(area), "cells.tsj"))
+		self.assertEqual(areajson.dumps(area), areajson.dumps(back))
+		self.assertEqual("box", back["chests"][0]["kind"])
+
 	def test_follower_placement_of_a_return_an_arrival_and_a_port_survives_a_round_trip(self):
 		area = copy.deepcopy(VESSEL_AREA)
 		area["kind"] = "town"

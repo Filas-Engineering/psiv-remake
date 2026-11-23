@@ -1,0 +1,53 @@
+# A choice whose prompt is three pages and a choice that Back answers (make_keep_data.py's keep_pages, make_keep_assets.py's
+# set), with --dev: the prompt's first two pages show as lines with no options, Confirm going on; the options come with
+# the third page; Back runs the hidden `option back` branch (the guide's farewell), the kept choice marking no row; the
+# next choice has no back option, so Back does nothing and Confirm answers it. With --window the shot lines save
+# screenshots under build/shots/choices/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+wait 300
+dev event keep_pages
+wait 2
+expect screen Dialogue
+expect state uifield.dialogue.has_choice false
+expect state uifield.dialogue.has_line true
+expect state uifield.dialogue.prompt_page 1
+expect state uifield.dialogue.prompt_pages 3
+expect state uifield.dialogue.line The bell rings at night.
+expect state uifield.dialogue.choice_back true
+shot build/shots/choices/prompt_page1.png
+# Up and Down move nothing while a page of the prompt shows; Confirm goes on.
+press Down
+press Enter
+expect state uifield.dialogue.prompt_page 2
+expect state uifield.dialogue.has_choice false
+expect state uifield.dialogue.line The ferry runs by the tide.
+press Enter
+expect state uifield.dialogue.prompt_page 3
+expect state uifield.dialogue.has_choice true
+expect state uifield.dialogue.prompt Which shall I tell you about?
+expect state uifield.dialogue.cursor 0
+shot build/shots/choices/prompt_page3.png
+# Back answers the hidden back option: the farewell, with the kept choice above it and no row marked.
+press Escape
+wait 2
+expect state line Come back if you think of more.
+expect state uifield.dialogue.kept_visible true
+expect state uifield.dialogue.kept_cursor 2
+expect state uifield.dialogue.kept_prompt Which shall I tell you about?
+shot build/shots/choices/backed_out.png
+press Enter
+wait 2
+# A choice without a back option: Back does nothing, Confirm answers.
+expect state uifield.dialogue.has_choice true
+expect state uifield.dialogue.prompt_pages 1
+expect state uifield.dialogue.choice_back false
+press Escape
+wait 2
+expect state uifield.dialogue.has_choice true
+press Enter
+pressuntil Enter Field 60

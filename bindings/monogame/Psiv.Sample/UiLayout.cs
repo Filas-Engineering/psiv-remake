@@ -97,8 +97,10 @@ public sealed class UiScreenLayout
 	// The travel screen's `one_destination_for`: per travel kind (`town`, `dungeon_exit`) or item or technique id, whether
 	// one place to go lists (`list`) or goes at once (`go`); the param `one_destination` for the rest.
 	public Dictionary<string, string> OneDestination { get; } = [];
-	// `option_states` (dialogue): a choice option's state word to the color its row takes.
+	// `option_states` (dialogue, the battle files): a choice option's or macro slot's state word to the color its row takes.
 	public Dictionary<string, string> OptionStates { get; } = [];
+	// `macro_slots` (the battle files): the Macro command's fixed slots by label, the save's macros in order filling them.
+	public List<string>? MacroSlots { get; set; }
 
 	public bool HasSlot(string slot) => Windows.Any(w => HasSlot(w.Elements, slot));
 
@@ -351,7 +353,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["styles.text_styles{}"] = ["size", "color", "role"],
 		["styles.frames{}"] = ["type", "image", "border", "scale", "color", "thickness", "skin"],
 		["styles.cursors{}"] = ["type", "image", "size", "color", "blink_ms"],
-		["screen"] = ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows", "flow", "intro", "result_sequence", "one_destination_for", "option_states"],
+		["screen"] = ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows", "flow", "intro", "result_sequence", "one_destination_for", "option_states", "macro_slots"],
 		["screen.result_sequence[]"] = ["phase", "ms"],
 		["screen.intro[]"] = ["name", "ms"],
 		["screen.places[]"] = ["slot", "label"],
@@ -708,8 +710,12 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["macro_flow"] = ("reset", "remember", "whether the menus open at their first row after a macro's round or on Macro and the macro played last"),
 		["navigation"] = ("tabs", "list", "whether the field menu's entries are tabs turned with Left and Right or a list chosen with Up, Down and Confirm"),
 		["one_destination"] = ("list", "go", "whether a travel use with one place to go lists it or goes at once"),
+		["prompt_pages"] = ("page", "together", "whether a choice's prompt of several pages shows its earlier pages first, the options with its last, or all in one box"),
+		["picker_confirm"] = ("rows", "close", "whether choosing in a settings picker returns to the rows or closes the menu"),
 		["refusal"] = ("toast", "page", "whether a travel item's or technique's refusal shows as a notice or in the page it was used from"),
 		["reveal_confirm"] = ("complete", "hold", "whether a press shows the whole page or holding Confirm only speeds the reveal"),
+		["row_value"] = ("show", "hide", "whether a settings row shows its value beside its label"),
+		["settings"] = ("step", "picker", "whether Confirm on a settings row steps its value or opens a list of its levels"),
 		["stack_rows"] = ("stacked", "single", "whether the Items page lists one row per item with its count or one row per copy"),
 		["unusable"] = ("dim", "hide", "whether abilities not usable in the field show dimmed or not at all"),
 	};
@@ -922,6 +928,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		ResultSequence(root, screen);
 		OneDestinationFor(root, screen);
 		OptionStates(root, screen);
+		MacroSlots(root, screen);
 		int index = 0;
 		foreach (JsonElement w in windows.EnumerateArray())
 		{
@@ -1143,17 +1150,51 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		}
 	}
 
-	// `option_states` (dialogue): each key a state word a script gives options (lowercase letters, digits, '_'), each value a
-	// color of the styles or a color literal.
+	// `macro_slots` (the battle files): one to eight slot labels (the save's macro limit), each a non-empty string.
+	private void MacroSlots(JsonElement root, UiScreenLayout screen)
+	{
+		if (!root.TryGetProperty("macro_slots", out JsonElement list))
+		{
+			return;
+		}
+		if (!fields!.Statuses)
+		{
+			Problem("macro_slots", "only the battle screens take 'macro_slots'");
+			return;
+		}
+		if (list.ValueKind != JsonValueKind.Array || list.GetArrayLength() is < 1 or > 8)
+		{
+			Problem("macro_slots", "must be a list of one to eight slot labels (a save holds at most eight macros)");
+			return;
+		}
+		var labels = new List<string>();
+		int i = 0;
+		foreach (JsonElement label in list.EnumerateArray())
+		{
+			if (label.ValueKind != JsonValueKind.String || label.GetString()!.Length == 0)
+			{
+				Problem($"macro_slots[{i}]", "must be a non-empty label");
+			}
+			else
+			{
+				labels.Add(label.GetString()!);
+			}
+			i++;
+		}
+		screen.MacroSlots = labels;
+	}
+
+	// `option_states` (dialogue, the battle files): each key a state word (lowercase letters, digits, '_'; a script's option
+	// states, or a macro slot's `empty` and `set`), each value a color of the styles or a color literal.
 	private void OptionStates(JsonElement root, UiScreenLayout screen)
 	{
 		if (!root.TryGetProperty("option_states", out JsonElement map))
 		{
 			return;
 		}
-		if (fields!.Screen != "dialogue")
+		if (fields!.Screen != "dialogue" && !fields.Statuses)
 		{
-			Problem("option_states", "only the dialogue screen takes 'option_states'");
+			Problem("option_states", "only the dialogue and battle screens take 'option_states'");
 			return;
 		}
 		if (!Object(map, "option_states"))

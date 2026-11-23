@@ -100,6 +100,14 @@ public sealed partial class SampleController
 		};
 	}
 
+	// The profile's text speed in characters a second: with levels of the game's own (presentation.options) the level's
+	// value, 0 showing a page at once; else the built-in speed's from the layout's timings.
+	private int ProfileCps()
+	{
+		OptionLevels levels = _s.OptionLevels(OptionSetting.TextSpeed);
+		return !levels.Declared ? CharsPerSecond(_s.Profile().TextSpeed) : levels.Levels[levels.Current].Value is > 0 and int cps ? cps : int.MaxValue;
+	}
+
 	// The box's revealed characters and whether it is done, `ms` after it came up (the dialogue's own box by default).
 	// Each character takes 1000 / cps ms, and a punctuation character with a pause holds the next one back that much longer,
 	// as a wait does at its place; a wait after the last character holds the box from being done. Without pauses and waits
@@ -107,7 +115,7 @@ public sealed partial class SampleController
 	private (int Count, bool Done) Revealed(DialogueBox box, int? ms = null)
 	{
 		int lineMs = ms ?? _lineMs;
-		int cps = CharsPerSecond(_s.Profile().TextSpeed);
+		int cps = ProfileCps();
 		if (cps == int.MaxValue)
 		{
 			return (box.End, true);
@@ -500,7 +508,7 @@ public sealed partial class SampleController
 			DialogueBox box = FitBox(line);
 			if (!fresh && !Revealed(box).Done)
 			{
-				_lineMs += dtMs + HeldRevealMs(dtMs, input, CharsPerSecond(_s.Profile().TextSpeed));
+				_lineMs += dtMs + HeldRevealMs(dtMs, input, ProfileCps());
 				if (_clockMs - _lastTextTickMs >= Timing("text_tick_ms"))
 				{
 					_audio.PlayCue("text");
@@ -528,8 +536,30 @@ public sealed partial class SampleController
 		{
 			PlayDialogueOpen(dtMs);
 			_dialogueBoxMs = _clockMs;
+			// A prompt of several pages shows its earlier pages as lines, Confirm going on, and the options with its last.
+			string key = choice.Prompt + "\n" + string.Join("\n", choice.Options);
+			if (key != _promptKey)
+			{
+				_promptKey = key;
+				_promptPage = 0;
+			}
+			if (_promptPage < PromptPages(choice).Count - 1)
+			{
+				if (input.Confirm)
+				{
+					_promptPage++;
+					_audio.PlayCue("line");
+				}
+				return;
+			}
 			Move(input, choice.Options.Count);
-			if (input.Confirm)
+			if (input.Back && choice.Back)
+			{
+				_log("choose: back");
+				Report(_s.ChooseBack());
+				_cursor = 0;
+			}
+			else if (input.Confirm)
 			{
 				_log($"choose: {_cursor} {choice.Options[_cursor]}");
 				Report(_s.Choose(_cursor));
@@ -537,7 +567,24 @@ public sealed partial class SampleController
 			}
 			return;
 		}
+		_promptKey = "";
 		_s.Update(dtMs);
+	}
+
+	// The choice whose prompt pages are being shown and the page up (PromptPages).
+	private string _promptKey = "";
+	private int _promptPage;
+
+	// A choice's prompt by its `{page}` breaks, shown text each; one page under the dialogue layout's `prompt_pages`
+	// "together" (the whole prompt with the options, as before) or for a prompt without breaks.
+	private List<string> PromptPages(Choice choice)
+	{
+		if (choice.Prompt.Length == 0 || !choice.Prompt.Contains("{page}", StringComparison.Ordinal) || Ui.ParamText("dialogue", "prompt_pages", UiData(), "page") == "together")
+		{
+			return [choice.Prompt.Length == 0 ? T("ui.dialogue.choose") : Shown(choice.Prompt)];
+		}
+		List<string> pages = ShownPages(choice.Prompt);
+		return pages.Count == 0 ? [Shown(choice.Prompt)] : pages;
 	}
 
 	// A choice's options as items: `text`, `state` (the script's state word, "" for none), `state_color` (the color the
@@ -631,21 +678,29 @@ public sealed partial class SampleController
 		NarrationFields(ctx, narrating ? _s.Line() : null);
 		Line? line = box ? _s.Line() : null;
 		Choice? choice = box && line is null ? _s.Choice() : null;
+		// An earlier page of a choice's prompt shows as a whole line with no speaker, the options waiting for its last page.
+		List<string> promptPages = choice is null ? [] : PromptPages(choice);
+		int promptPage = choice is not null && _promptKey == choice.Prompt + "\n" + string.Join("\n", choice.Options) ? Math.Min(_promptPage, promptPages.Count - 1) : 0;
+		bool promptPaging = choice is not null && promptPage < promptPages.Count - 1;
 		DialogueBox? shown = line is null ? null : BoxOf(line);
 		(int revealed, bool done) = shown is { } b ? Revealed(b) : (0, false);
 		string portrait = line is null ? "" : line.Display == _lastLine ? _portraitId : line.Portrait;
-		LineFields(ctx, line ?? new Line("", "", "", "", "", ""), shown?.Text ?? "")
-			.Set("has_line", line is not null)
+		string pageText = promptPaging ? promptPages[promptPage] : "";
+		LineFields(ctx, line ?? new Line("", "", "", pageText, "", pageText), shown?.Text ?? pageText)
+			.Set("has_line", line is not null || promptPaging)
 			.Set("portrait", line is { SpeakerName.Length: > 0 } && !(_portraitOff && line.Display == _lastLine)
 				? art.Portrait(portrait, line.SpeakerId.Length > 0 ? line.SpeakerId : line.SpeakerName) : -1)
-			.Set("revealed", revealed)
-			.Set("all_shown", line is not null && done)
+			.Set("revealed", promptPaging ? pageText.Length : revealed)
+			.Set("all_shown", line is not null && done || promptPaging)
 			.Set("shown_ms", line is not null && done ? _shownMs : 0)
-			.Set("hint", line is null ? "" : T("ui.dialogue.next", Hint(GameAction.Confirm)) + (_s.CanSkip ? "   " + T("ui.dialogue.skip", Hint(GameAction.Skip)) : ""))
+			.Set("hint", line is null && !promptPaging ? "" : T("ui.dialogue.next", Hint(GameAction.Confirm)) + (_s.CanSkip ? "   " + T("ui.dialogue.skip", Hint(GameAction.Skip)) : ""))
 			.Set("arrow", art.Pointer)
 			.Set("page_arrow", PageArrow)
-			.Set("has_choice", choice is not null)
-			.Set("prompt", choice is null ? "" : choice.Prompt.Length == 0 ? T("ui.dialogue.choose") : Shown(choice.Prompt))
+			.Set("has_choice", choice is not null && !promptPaging)
+			.Set("prompt", choice is null ? "" : promptPages[^1])
+			.Set("prompt_page", choice is null ? 0 : promptPage + 1)
+			.Set("prompt_pages", choice is null ? 0 : promptPages.Count)
+			.Set("choice_back", choice?.Back ?? false)
 			.Set("options", choice?.Options.Select(Shown).ToList() ?? [])
 			.Set("choice_header", choice is null || choice.Header.Length == 0 ? "" : Shown(choice.Header))
 			.Set("option_rows", OptionRows(choice))
@@ -653,7 +708,7 @@ public sealed partial class SampleController
 		// A `keep` choice the player answered stays under the lines and choices that follow, its picked row marked.
 		Choice? kept = _s.KeptChoice();
 		ctx.Set("kept_visible", kept is not null)
-			.Set("kept_prompt", kept is null ? "" : kept.Prompt.Length == 0 ? T("ui.dialogue.choose") : Shown(kept.Prompt))
+			.Set("kept_prompt", kept is null ? "" : PromptPages(kept)[^1])
 			.Set("kept_header", kept is null || kept.Header.Length == 0 ? "" : Shown(kept.Header))
 			.Set("kept_options", kept?.Options.Select(Shown).ToList() ?? [])
 			.Set("kept_rows", OptionRows(kept))

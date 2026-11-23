@@ -55,7 +55,7 @@ public sealed partial class SampleController
 		UiRenderer ui = Ui;
 		ui.Set = Layout;
 		ui.ClockMs = _clockMs;
-		ui.TimeScale = _battle.Active ? (int)MathF.Round(SpeedOf(_s.Profile().BattleSpeed) * 100) : 100;
+		ui.TimeScale = _battle.Active ? SpeedPercent() : 100;
 		ui.SliceImage = (file, border, scale) => _art?.LayoutSlice(file, border, scale);
 		ui.Picture = file => _art?.LayoutPicture(file) ?? -1;
 		ui.NamedImage = name => _art?.UiImage(name, _clockMs) ?? -1;

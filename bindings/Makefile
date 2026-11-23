@@ -289,6 +289,8 @@ native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI) $(ACTOR_DATA) $(INTERACT
 	./$(PLAYTHROUGH) --data $(BUILD)/keep_data/game/data --seed 6 --script $(SAMPLE_SCRIPTS)/keep_cli.txt --saves $(BUILD)/keep_saves_c > $(BUILD)/keep_c.txt
 	cmp $(BUILD)/keep_c.txt $(BUILD)/keep_cpp.txt
 	grep -qF "  (kept: What shall we talk about? > The ferry)" $(BUILD)/keep_c.txt
+	grep -qF "What shall we talk about? [0] The bell [1] The ferry | keep | back" $(BUILD)/keep_c.txt
+	grep -qF "  (kept: What shall we talk about? > back)" $(BUILD)/keep_c.txt
 	diff -r $(BUILD)/keep_saves_c $(BUILD)/keep_saves_cpp
 	@echo "C kept-choice script matches the C++ session: transcript and every save file"
 
@@ -845,6 +847,26 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --dev --saves $(BUILD)/sample_motion_more_saves --assets $(BUILD)/motion_more_run \
 		--script $(SAMPLE_SCRIPTS)/motion_more.txt --frames 800 > $(BUILD)/sample_motion_more_headless.txt || (cat $(BUILD)/sample_motion_more_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_motion_more_headless.txt
+	# Layers aligned with the ground at any entry and drawn over the people, a recolor by palette index on an indexed
+	# sheet and a random entry delay (make_motion_layers_assets.py), and a copy with a problem of each new kind.
+	python3 -I $(SAMPLE_SCRIPTS)/make_motion_layers_assets.py $(BUILD)/motion_layers_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --check-assets --assets $(BUILD)/motion_layers_assets
+	rm -rf $(BUILD)/motion_layers_broken_assets
+	cp -R $(BUILD)/motion_layers_assets $(BUILD)/motion_layers_broken_assets
+	cp $(BUILD)/motion_layers_broken_assets/alt/assets_broken.json $(BUILD)/motion_layers_broken_assets/assets.json
+	! $(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --check-assets --assets $(BUILD)/motion_layers_broken_assets > $(BUILD)/check_assets_motion_layers.txt
+	grep -qF "is not an indexed PNG (color type 3, a palette)" $(BUILD)/check_assets_motion_layers.txt
+	grep -qF "a random delay must be {\"min\": N, \"max\": N}" $(BUILD)/check_assets_motion_layers.txt
+	grep -qF "index 'a' must be a palette index from 0 to 255" $(BUILD)/check_assets_motion_layers.txt
+	grep -qF "takes 'colors' (exact colors) or 'indexes'" $(BUILD)/check_assets_motion_layers.txt
+	grep -qF "'above' draws a back layer over the people" $(BUILD)/check_assets_motion_layers.txt
+	grep -qF "field 'align' must be one of origin, ground" $(BUILD)/check_assets_motion_layers.txt
+	grep -qF "FAILED: 6 problems." $(BUILD)/check_assets_motion_layers.txt
+	rm -rf $(BUILD)/sample_motion_layers_saves $(BUILD)/motion_layers_run
+	cp -R $(BUILD)/motion_layers_assets $(BUILD)/motion_layers_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --dev --saves $(BUILD)/sample_motion_layers_saves --assets $(BUILD)/motion_layers_run \
+		--script $(SAMPLE_SCRIPTS)/motion_layers.txt --frames 600 > $(BUILD)/sample_motion_layers_headless.txt || (cat $(BUILD)/sample_motion_layers_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_motion_layers_headless.txt
 	# The world motion options (make_motion_options_assets.py: palette track targets, people and sheets, idle loops on a
 	# person and an object, an entry delay, a step of random length, flag lists, layer bands in screen lines), and a copy
 	# with a problem of each new kind.
@@ -1070,6 +1092,56 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/keep_data/game/data --dev --saves $(BUILD)/sample_keep_flows_saves --assets $(BUILD)/keep_run \
 		--script $(SAMPLE_SCRIPTS)/keep_flows.txt --frames 2000 > $(BUILD)/sample_keep_flows_headless.txt || { cat $(BUILD)/sample_keep_flows_headless.txt; exit 1; }
 	tail -n 1 $(BUILD)/sample_keep_flows_headless.txt
+	# The system page's picker, five speed levels from the data, a chest's opened notice and the battle's macro slots
+	# (make_options_data.py, make_options_assets.py): the crate's opened line before its find, label-only rows, Text speed's
+	# five levels in a picker with its prompt, Back and Confirm, picker_confirm "close", Battle speed's fifth level as the
+	# battle's time scale, the Controls row, the levels' reveal, eight lettered macro slots colored by state with the
+	# highlighted macro's steps beside them, an empty slot refused; the same on the small set at 320x224; copies with a
+	# `settings` word and a row that are none and nine macro slots report each.
+	python3 -I $(SAMPLE_SCRIPTS)/make_options_data.py $(GAME)/data $(CORE)/data $(BUILD)/options_data
+	python3 -I $(SAMPLE_SCRIPTS)/make_options_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/options_assets
+	python3 -I $(SAMPLE_SCRIPTS)/make_options_assets.py $(BUILD)/export $(BUILD)/small_assets $(BUILD)/small_options_assets --small
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/options_data/game/data --check-assets --assets $(BUILD)/options_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/options_data/game/data --check-assets --assets $(BUILD)/small_options_assets
+	rm -rf $(BUILD)/options_broken_assets
+	cp -R $(BUILD)/options_assets $(BUILD)/options_broken_assets
+	cp $(BUILD)/options_broken_assets/alt/menu_system_broken.json $(BUILD)/options_broken_assets/ui/menu_system.json
+	cp $(BUILD)/options_broken_assets/alt/battle_broken.json $(BUILD)/options_broken_assets/ui/battle_front.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/options_broken_assets > $(BUILD)/check_assets_options.txt
+	grep -qF 'params.settings: must be "step" or "picker"' $(BUILD)/check_assets_options.txt
+	grep -qF "rows[1]: must be one of save, quit, controls," $(BUILD)/check_assets_options.txt
+	grep -qF "macro_slots: must be a list of one to eight slot labels" $(BUILD)/check_assets_options.txt
+	@for run in options_flows:options_assets:3000 options_small:small_options_assets:1500; do \
+		name=$${run%%:*}; rest=$${run#*:}; set=$${rest%%:*}; frames=$${rest#*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves $(BUILD)/$${name}_run_assets; \
+		cp -R $(BUILD)/$$set $(BUILD)/$${name}_run_assets; \
+		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/options_data/game/data --dev --saves $(BUILD)/sample_$${name}_saves --assets $(BUILD)/$${name}_run_assets \
+			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
+	# The dialogue layout's reveal hold in narration and in the party talk by speaker (make_options_assets.py --hold over
+	# the narration and talk sets): a press does not complete, holding Confirm reveals at reveal_hold_cps, the open sound
+	# only for the dialogue box.
+	python3 -I $(SAMPLE_SCRIPTS)/make_options_assets.py --hold $(BUILD)/narration_assets $(BUILD)/narration_hold_assets
+	python3 -I $(SAMPLE_SCRIPTS)/make_options_assets.py --hold $(BUILD)/talk_assets $(BUILD)/talk_hold_assets
+	rm -rf $(BUILD)/sample_reveal_hold_narration_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/narration_data/game/data --dev --saves $(BUILD)/sample_reveal_hold_narration_saves \
+		--assets $(BUILD)/narration_hold_assets --script $(SAMPLE_SCRIPTS)/reveal_hold_narration.txt --frames 900 > $(BUILD)/sample_reveal_hold_narration_headless.txt \
+		|| { cat $(BUILD)/sample_reveal_hold_narration_headless.txt; exit 1; }
+	tail -n 1 $(BUILD)/sample_reveal_hold_narration_headless.txt
+	rm -rf $(BUILD)/sample_reveal_hold_talk_saves
+	cp -R $(BUILD)/sample_talk_saves $(BUILD)/sample_reveal_hold_talk_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/talk_data/game/data --dev --saves $(BUILD)/sample_reveal_hold_talk_saves \
+		--assets $(BUILD)/talk_hold_assets --script $(SAMPLE_SCRIPTS)/reveal_hold_talk.txt --frames 900 > $(BUILD)/sample_reveal_hold_talk_headless.txt \
+		|| { cat $(BUILD)/sample_reveal_hold_talk_headless.txt; exit 1; }
+	tail -n 1 $(BUILD)/sample_reveal_hold_talk_headless.txt
+	# A choice whose prompt is three pages and one that Back answers (keep_pages on the keep copy): the earlier pages as
+	# lines, the options with the last, Back running the hidden back branch, Back doing nothing on a choice without one.
+	rm -rf $(BUILD)/sample_choice_flows_saves $(BUILD)/choice_flows_run
+	cp -R $(BUILD)/keep_assets $(BUILD)/choice_flows_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/keep_data/game/data --dev --saves $(BUILD)/sample_choice_flows_saves --assets $(BUILD)/choice_flows_run \
+		--script $(SAMPLE_SCRIPTS)/choice_flows.txt --frames 900 > $(BUILD)/sample_choice_flows_headless.txt || { cat $(BUILD)/sample_choice_flows_headless.txt; exit 1; }
+	tail -n 1 $(BUILD)/sample_choice_flows_headless.txt
 	# Flashes by their effect (make_flash_assets.py): a stepped stage strobe past the limit is dropped, a two-step whiteout
 	# is held to a fifth under reduced flash, a slow tint is untouched.
 	python3 -I $(SAMPLE_SCRIPTS)/make_flash_assets.py $(BUILD)/export $(BUILD)/flash_assets

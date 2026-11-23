@@ -198,6 +198,8 @@ public class NativeLayoutTests
 		Same<PsivLine>("psiv_line");
 		Same<PsivMacroStepResult>("psiv_macro_step_result");
 		Same<PsivMarker>("psiv_marker");
+		Same<PsivOptionLevel>("psiv_option_level");
+		Same<PsivOptionLevels>("psiv_option_levels");
 		Same<PsivMember>("psiv_member");
 		Same<PsivNotice>("psiv_notice");
 		Same<PsivPoint>("psiv_point");
@@ -583,6 +585,19 @@ public class SessionTests
 		Assert.Equal((FlashLevel.Reduced, true, true), (p.Flashing, p.FlashNoticeSeen, p.ReducedFlash));
 		Assert.True(s.NewGame().Ok);
 		Assert.Empty(s.MemberDetail("fighter")!.Profile!);
+	}
+
+	[Fact]
+	public void SpeedLevelsAreTheBuiltInFourWithoutTheGamesOwn()
+	{
+		using GameSession s = GameSession.Create(new SessionOptions { DataDirectory = Paths.GameData, SaveDirectory = Paths.FreshDirectory("option_levels"), Seed = 285 });
+		OptionLevels text = s.OptionLevels(OptionSetting.TextSpeed);
+		Assert.Equal((4, 1, 1, false), (text.Levels.Count, text.Current, text.DefaultIndex, text.Declared));
+		Assert.Equal(new OptionLevel("instant", "ui.text_speed.instant", "Instant", 0), text.Levels[3]);
+		Assert.True(s.SetOptionLevel(OptionSetting.BattleSpeed, 2).Ok);
+		Assert.Equal(BattleSpeed.X2, s.Profile().BattleSpeed);
+		Assert.False(s.SetOptionLevel(OptionSetting.TextSpeed, 9).Ok);
+		Assert.Equal("game.refuse.no_choice", s.ChooseBack().Error!.Key);
 	}
 
 	[Fact]
