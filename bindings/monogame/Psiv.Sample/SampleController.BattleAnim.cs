@@ -747,9 +747,13 @@ public sealed partial class SampleController
 		}
 		if (!quiet)
 		{
-			foreach (string cue in unit.Events.Select(e => BattleCue(e, StageInfo()?.PartyCount ?? 0)).OfType<string>().Where(c => EventCueOn(step, c)))
+			foreach (string cue in unit.Events.Select(e => BattleCue(e, StageInfo()?.PartyCount ?? 0)).OfType<string>().Where(c => EventCueOn(step, c)).Distinct())
 			{
-				_audio.PlayCue(cue);
+				if (cue == "enemy_down" || !step.CueFrames.TryGetValue(cue, out long frame) || frame != shownAt)
+				{
+					step.CueFrames[cue] = shownAt;
+					_audio.PlayCue(cue);
+				}
 			}
 		}
 		if (step.Kind != StepKind.Sync)

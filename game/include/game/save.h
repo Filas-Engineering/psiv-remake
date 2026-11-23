@@ -5,6 +5,7 @@
 #include "rules/result.h"
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -14,7 +15,7 @@ namespace game {
 // Schema 2 added the party's statuses and names, core's macro and combo log forms, and the quests and unlocks
 // chunks; schema 3 the actors chunk; schema 4 the talk chunk; schema 5 the travel chunk; schema 6 the dev chunk. Older
 // schemas are migrated in order when they load (SAV-021).
-constexpr int kSaveSchemaVersion = 15;
+constexpr int kSaveSchemaVersion = 16;
 constexpr const char* kSaveMagic = "PSR-SAVE";
 constexpr const char* kClearMagic = "PSR-CLEAR";
 constexpr int kClearVersion = 1;
@@ -31,6 +32,21 @@ struct SaveFile {
 	std::uint64_t sequence = 0;
 	bool autosave = false;
 	std::uint64_t contentHash = 0;
+	// Each lineup member's maximum hit and technique points with its pieces, for the header's `member` lines, which a
+	// slot list reads without the data (Session::makeSave fills it; a member it lacks is written as -1).
+	std::map<std::string, std::pair<int, int>> memberMaxima = {};
+};
+
+// A lineup member as the header gives it. Saves from before schema 16 give the id and level only; the rest is -1.
+struct SaveMemberSummary {
+	std::string id;
+	int level = 0;
+	int hp = -1;
+	int maxHp = -1;
+	int tp = -1;
+	int maxTp = -1;
+	// Status ids that persist outside battle.
+	std::vector<std::string> statuses;
 };
 
 // What a slot list shows (SAV-002), read from the header chunk alone.
@@ -49,6 +65,10 @@ struct SaveSummary {
 	std::string error;
 	// The save SaveStore::latest picks (the newest by write time, then sequence, damaged ones aside); one per list at most.
 	bool newest = false;
+	// -1 in a save from before schema 16.
+	int money = -1;
+	// The lineup in order, from the `party` line and the `member` lines.
+	std::vector<SaveMemberSummary> members;
 };
 
 // The chunked text format described in README.md. Chunks the loader did not recognize are written back from

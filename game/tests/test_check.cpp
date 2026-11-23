@@ -452,6 +452,18 @@ TEST(wanderTouchHooksKeepersAndTheBackgroundLimitAreChecked) {
 	CHECK(!step.ok() && step.problems[0].message.key == "data.actor_touch_hooks_only");
 }
 
+// A wanderer's or patrol's home is no wall for reach, since it walks off it; a standing solid actor's home still is: the
+// bell, used only from the cell below it, is reached through the goat's home while the goat wanders.
+TEST(aMovingActorsHomeDoesNotBlockReach) {
+	const std::string dir = copyData("moving_home", {}, test::backgroundDataDirectory());
+	replaceIn(dir + "/areas/wren_yard.json", "\"#............#\",", "\"#.#.#........#\",");
+	replaceIn(dir + "/game.json", "\"area\": \"wren_yard\", \"at\": [3, 4], \"wander\"", "\"area\": \"wren_yard\", \"at\": [3, 1], \"wander\"");
+	CHECK(checkData(DataDirectories{dir, "../core/data"}).problems.empty());
+	replaceIn(dir + "/game.json", "\"wander\": {\"radius\": 2, \"speed_percent\": 100, \"pause_ms\": [250, 750]}", "\"solid\": true");
+	const CheckReport standing = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(find(standing, "check.object_not_reached") || find(standing, "check.hook_not_reached"));
+}
+
 // A wanderer's talk point in its home area is refused unless it answers on the actor (`talk_at: actor`), whose home is
 // then where it starts and is used from; talk_at, turns and touch_from are refused on hooks they do not apply to.
 TEST(aWanderersTalkPointLoadsOnlyWhenItAnswersOnTheActor) {

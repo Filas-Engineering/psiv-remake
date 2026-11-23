@@ -431,7 +431,8 @@ public sealed partial class SampleController
 		}
 		else if (input.Confirm)
 		{
-			_itemActing = null;
+			// Under the travel layout's `over_page` the action window stays open beneath a travel list and after it.
+			_itemActing = item.Travel is not null && TravelKeepsPage ? _itemActing : null;
 			UseItem(item);
 		}
 	}

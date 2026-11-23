@@ -22,6 +22,13 @@ public sealed partial class SampleController
 
 	private bool TravelCancelRow => Ui.Param("travel", "cancel_row", UiData(), 1) != 0;
 
+	// The layout's `over_page` with `over_menu`: the open page stays as it was under a travel list from the field menu, and
+	// the menu comes back to it when the list closes without travelling.
+	private bool TravelKeepsPage => Ui.Param("travel", "over_menu", UiData(), 0) != 0 && Ui.Param("travel", "over_page", UiData(), 0) != 0;
+
+	private bool KeepsMenuPage(Screen from, Screen to) => TravelKeepsPage && _s.Mode == Mode.Menu && _s.MenuKind == MenuKind.Field
+		&& (from == Screen.Menu && to == Screen.Travel && _travelPick is not null || from == Screen.Travel && to == Screen.Menu);
+
 	// From the field menu: the travel screen when there is somewhere to go, else the session's refusal as a toast; with
 	// "go" for the thing's id, else its kind, in the layout's `one_destination_for`, else its `one_destination`, one place to
 	// go goes at once.

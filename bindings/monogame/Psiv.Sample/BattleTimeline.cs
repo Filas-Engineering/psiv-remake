@@ -75,6 +75,8 @@ public sealed class BattleStep
 	public AnimRun? Held;
 	public long HeldAt;
 	public List<ReleaseUnit> Units = [];
+	// The frame each event cue last played at, so units released on the same frame play a cue once (each enemy_down plays).
+	public Dictionary<string, long> CueFrames = [];
 	public List<Reaction> Reactions = [];
 	public List<string> Lookup = [];
 }

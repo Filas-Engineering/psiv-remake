@@ -237,6 +237,7 @@ def main():
 	host_broken(broken)
 	flows_broken(broken, export)
 	more_flows_broken(broken)
+	late_flows_broken(broken)
 	bitmap_fonts(export, fonts)
 	if len(sys.argv) > 5:
 		subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("make_layout_assets.py")), str(export), str(fonts), sys.argv[5]], check=True)
@@ -878,6 +879,23 @@ def more_flows_broken(broken):
 			{"type": "image", "image": "'picture:chart'", "src": [0, 0, 8], "w": 8, "h": 8},
 			{"type": "image", "image": "page_arrow", "repeat": True, "w": 8, "h": 8}]})
 	change("battle_front_vehicle", vehicle)
+
+
+def late_flows_broken(broken):
+	"""A bad value of each field the late layout flows added: travel's `over_page`, the Load screen's `navigation_hint`, a
+	vehicle battle's `defeat_message` and the dialogue's `reveal_confirm` and `dialogue_open_sound` (docs/ui-layout.md,
+	"Late layout flows")."""
+	ui = broken / "ui"
+
+	def change(name, edit):
+		data = json.loads((ui / f"{name}.json").read_text())
+		edit(data)
+		(ui / f"{name}.json").write_text(json.dumps(data, indent="\t") + "\n")
+
+	change("travel", lambda d: d.update({"params": dict(d.get("params", {}), over_page="1 +")}))
+	change("load_game", lambda d: d.update({"params": dict(d.get("params", {}), navigation_hint="(")}))
+	change("battle_front_vehicle", lambda d: d.update({"params": dict(d.get("params", {}), defeat_message="Fell Last!")}))
+	change("dialogue", lambda d: d.update({"params": dict(d.get("params", {}), reveal_confirm="sometimes", dialogue_open_sound="Big Bang!")}))
 
 
 def broken_layouts(broken):

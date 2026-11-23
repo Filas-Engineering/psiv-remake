@@ -105,7 +105,7 @@ static void settle(psiv_session* s) {
 static void testVersion(void) {
 	const char* capabilities = psiv_capabilities();
 	CHECK(capabilities && capabilities == psiv_capabilities() && strncmp(capabilities, "{\"capabilities_schema\": 1, \"versions\": {\"library\": \"", 52) == 0);
-	CHECK(strstr(capabilities, "\"abi\": 20,") && strstr(capabilities, "\"save_schema\": 15,") && strstr(capabilities, "\"picture show <picture>\""));
+	CHECK(strstr(capabilities, "\"abi\": 21,") && strstr(capabilities, "\"save_schema\": 16,") && strstr(capabilities, "\"picture show <picture>\""));
 	CHECK(psiv_abi_version() == PSIV_ABI_VERSION);
 	CHECK(strstr(psiv_version(), "psiv-bindings") != NULL);
 	CHECK(strstr(psiv_version(), "game-0.2") != NULL);
@@ -357,15 +357,26 @@ static void testSaveAndLoad(void) {
 
 	CHECK_OK(psiv_saves(s, &list, &count));
 	int found = 0;
+	psiv_save_member member = {0};
 	for (int32_t i = 0; i < count; ++i) {
 		if (strcmp(list[i].slot, "manual_3") == 0) {
 			found = 1;
 			CHECK(!list[i].autosave && !list[i].damaged);
 			CHECK(strcmp(list[i].area, "tidewater") == 0);
 			CHECK(list[i].party_count == 1 && strcmp(list[i].party[0], "fighter:3") == 0);
+			CHECK(list[i].money == savedMoney && list[i].member_count == 1);
+			if (list[i].member_count == 1) {
+				const psiv_save_member* m = &list[i].members[0];
+				CHECK(strcmp(m->id, "fighter") == 0 && m->level == 3 && m->status_count == 0);
+				member = *m;
+			}
 		}
 	}
 	CHECK(found);
+	const psiv_member* party;
+	int32_t partyCount;
+	CHECK_OK(psiv_party(s, &party, &partyCount));
+	CHECK(partyCount > 0 && member.hp == party[0].hp && member.max_hp == party[0].max_hp && member.tp == party[0].tp && member.max_tp == party[0].max_tp && member.max_hp > 0);
 
 	CHECK_OK(psiv_quit_to_title(s));
 	CHECK(psiv_mode_get(s) == PSIV_MODE_TITLE);
@@ -2429,7 +2440,7 @@ static void testScene(void) {
 	CHECK(strcmp(psiv_name_of(PSIV_NAME_ACTION_TYPE, PSIV_ACTION_CAMERA_RESET), "camera reset") == 0);
 	psiv_game_info game;
 	CHECK_OK(psiv_game_info_get(s, &game));
-	CHECK(game.music_fade_ms == 400 && game.party_talk_ambient == 1);
+	CHECK(game.music_fade_ms == 400 && game.party_talk_ambient == 1 && game.map_load_hold_ms == 0 && game.map_load_hold_on_load == 0);
 	const char* const* pictures = NULL;
 	int32_t count = -1;
 	psiv_scene_camera camera;

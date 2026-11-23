@@ -493,12 +493,14 @@ public sealed partial class SampleController
 			bool fresh = line.Display != _lastLine;
 			if (fresh)
 			{
+				PlayDialogueOpen(dtMs);
 				StartLine(line);
 			}
+			_dialogueBoxMs = _clockMs;
 			DialogueBox box = FitBox(line);
 			if (!fresh && !Revealed(box).Done)
 			{
-				_lineMs += dtMs;
+				_lineMs += dtMs + HeldRevealMs(dtMs, input, CharsPerSecond(_s.Profile().TextSpeed));
 				if (_clockMs - _lastTextTickMs >= Timing("text_tick_ms"))
 				{
 					_audio.PlayCue("text");
@@ -511,12 +513,12 @@ public sealed partial class SampleController
 			}
 			(int count, bool done) = Revealed(box);
 			ActOnTags(box.Page, box.Start, count);
-			if (input.Confirm && !done)
+			if (input.Confirm && !done && !RevealHolds)
 			{
 				_lineMs = int.MaxValue / 2;
 				ActOnTags(box.Page, box.Start, box.End);
 			}
-			else if (input.Confirm || (done && _s.Profile().AutoAdvance && _shownMs >= Math.Max(Timing("auto_advance_min_ms"), box.End * Timing("auto_advance_ms_per_char"))))
+			else if (input.Confirm && (done || !RevealHolds) || (done && _s.Profile().AutoAdvance && _shownMs >= Math.Max(Timing("auto_advance_min_ms"), box.End * Timing("auto_advance_ms_per_char"))))
 			{
 				NextBox(box);
 			}
@@ -524,6 +526,8 @@ public sealed partial class SampleController
 		}
 		if (_s.Choice() is { } choice)
 		{
+			PlayDialogueOpen(dtMs);
+			_dialogueBoxMs = _clockMs;
 			Move(input, choice.Options.Count);
 			if (input.Confirm)
 			{
@@ -540,6 +544,29 @@ public sealed partial class SampleController
 
 	// The dialogue file's param, else `fallback`.
 	private int DialogueParam(string name, int fallback) => Ui.Param("dialogue", name, UiData(), fallback);
+
+	// The dialogue layout's `reveal_confirm` "hold": a press never completes a page; while Confirm is held the reveal runs
+	// at `reveal_hold_cps` (when that is faster than `cps`), and a page finishes only by its own reveal.
+	private bool RevealHolds => Ui.ParamText("dialogue", "reveal_confirm", UiData(), "complete") == "hold";
+
+	// The reveal's extra milliseconds this frame while Confirm is held under `reveal_confirm` "hold".
+	private int HeldRevealMs(int dtMs, ActionInput input, int cps)
+	{
+		int hold = DialogueParam("reveal_hold_cps", 120);
+		return RevealHolds && input.Down(GameAction.Confirm) && cps is > 0 and < int.MaxValue && hold > cps ? (int)((long)dtMs * (hold - cps) / cps) : 0;
+	}
+
+	// The time of the last frame that showed the box with a line or a choice: a line or choice coming up after a frame
+	// without one opens the box, and plays the dialogue layout's `dialogue_open_sound`.
+	private int _dialogueBoxMs = -1;
+
+	private void PlayDialogueOpen(int dtMs)
+	{
+		if (_dialogueBoxMs != _clockMs - dtMs && Ui.ParamText("dialogue", "dialogue_open_sound", UiData(), "") is { Length: > 0 } cue)
+		{
+			_audio.PlayCue(cue);
+		}
+	}
 
 	private int DialogueHeight => Px(DialogueParam("box_h", DialogueBoxHeight));
 

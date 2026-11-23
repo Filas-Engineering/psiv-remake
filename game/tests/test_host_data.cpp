@@ -184,6 +184,23 @@ TEST(theDataNamesTheDefaultFlashingLevel) {
 	CHECK(hasProblem(loadGameData(root + "/game/data"), "data.bad_flash_default"));
 }
 
+// presentation.map_load_hold_ms and map_load_hold_on_load load, outside the content hash; a hold past a minute is a problem.
+TEST(theDataNamesTheHoldAfterAnAreaChange) {
+	CHECK(test::data().config.presentation.mapLoadHoldMs == 0);
+	CHECK(!test::data().config.presentation.mapLoadHoldOnLoad);
+	const std::string root = copyGameAndCore("map_load_hold");
+	replaceIn(root + "/game/data/game.json", "\"presentation\": {", "\"presentation\": {\"map_load_hold_ms\": 450, \"map_load_hold_on_load\": true, ");
+	const rules::Result<GameData> loaded = loadGameData(root + "/game/data");
+	CHECK(loaded.ok());
+	if (loaded.ok()) {
+		CHECK_EQ(loaded.value->config.presentation.mapLoadHoldMs, 450);
+		CHECK(loaded.value->config.presentation.mapLoadHoldOnLoad);
+		CHECK_EQ(loaded.value->contentHash, test::data().contentHash);
+	}
+	replaceIn(root + "/game/data/game.json", "\"map_load_hold_ms\": 450", "\"map_load_hold_ms\": 60001");
+	CHECK(!loadGameData(root + "/game/data").ok());
+}
+
 // R110: the chosen level and the notice seen are profile settings, written only when set; a chosen level sets
 // reduced_flash to match.
 TEST(theFlashingLevelAndTheNoticeAreProfileSettings) {

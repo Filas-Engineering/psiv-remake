@@ -132,6 +132,10 @@ public sealed partial class SampleController
 			string kind = FieldRenderer.KindName(f?.AreaKind ?? AreaKind.Field).ToLowerInvariant();
 			return battle?.Source == BattleSource.Event ? "battle_scripted" : "battle_" + kind;
 		}
+		if (_mapHoldMs > MapFadeInMs)
+		{
+			return "";
+		}
 		return f is null ? "" : f.Music.Length > 0 ? f.Music : $"{FieldRenderer.KindName(f.AreaKind).ToLowerInvariant()}_{f.AreaId}";
 	}
 

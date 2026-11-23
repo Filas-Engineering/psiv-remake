@@ -1,0 +1,221 @@
+# The late layout flows (make_late_flows_assets.py) on the late flows data copy (make_late_flows_data.py), from saves of
+# the scripted playthrough and one of them rewritten as save schema 15 (make_old_save.py, manual_5), with --dev: the
+# Load screen's blocks with each save's money and its members' hit and technique points (nothing for the old save), the
+# hint naming the grid's directions, then the row's; travel from an item's actions over the Items page, the page and
+# its actions window drawn under the list and open again after a cancel; a defeat shown in a `defeat` step and the
+# result window naming the member the five crushers felled last, without the outcome banner; and the same with Confirm off, the timed
+# defeat step going on by itself and the result staying until the styles' return time. With --window the shot lines
+# save screenshots under build/shots/late_flows/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+waitstate 300 uifield.title.start true
+press Enter
+wait 3
+expect state uifield.title.start false
+
+# The Load screen: money and points from each save's header; the schema 15 save has neither.
+press Down 2
+expect state selected Load
+press Enter
+wait 3
+expect screen LoadGame
+expect state uifield.load_game.navigation grid
+expect state uifield.load_game.slots.0.money 43
+expect state uifield.load_game.slots.0.members.0.id fighter
+expect state uifield.load_game.slots.0.members.0.hp 86
+expect state uifield.load_game.slots.0.members.0.hp_max 86
+expect state uifield.load_game.slots.0.members.1.tp 30
+expect state uifield.load_game.slots.0.members.1.tp_max 30
+expect state uifield.load_game.slots.5.member_count 3
+expect state uifield.load_game.slots.5.money
+expect state uifield.load_game.slots.5.members.0.level 3
+expect state uifield.load_game.slots.5.members.0.hp
+expect state uifield.load_game.slots.5.members.0.tp_max
+expect statehas uifield.load_game.hint Left
+expect statehas uifield.load_game.hint Right
+expect statehas uifield.load_game.hint Up
+shot build/shots/late_flows/load_points.png
+press Right 5
+wait 2
+expect state uifield.load_game.cursor 5
+shot build/shots/late_flows/load_old_save.png
+assets swap ui/load_game.json alt/load_row.json
+wait 6
+expect state uifield.load_game.navigation row
+expect statehas uifield.load_game.hint Left
+expect statenot uifield.load_game.hint Up
+shot build/shots/late_flows/load_row_hint.png
+press Left 5
+wait 2
+expect state uifield.load_game.cursor 0
+press Enter
+wait 6
+expect screen Field
+dev encounters off
+
+# Travel from an item's actions over the Items page: the page and the actions window stay drawn under the list, and a
+# cancel comes back to them as they were.
+dev give homing_shell 1
+dev warp saltgrass inn_front
+wait 30
+dev warp tidewater inn_front
+wait 30
+press M
+press Right
+wait 3
+expect state tab Items
+expect state selected Homing Shell x1
+press Enter
+wait 3
+expect state page actions
+press Enter
+wait 4
+expect screen Travel
+expect state destinations saltgrass
+expect statehas windows menu/box
+expect statehas windows menu_items/actions
+expect statehas windows travel/box
+shot build/shots/late_flows/travel_over_page.png
+press Escape
+wait 3
+expect screen Menu
+expect state tab Items
+expect state page actions
+expect statehas windows menu_items/actions
+shot build/shots/late_flows/travel_back_to_page.png
+press Escape
+wait 3
+expect state page items
+expect state selected Homing Shell x1
+# The return itself: the town sound (presentation.sounds.travel.town), then the screen dark 400 ms after the area change
+# with no music, then the fade-in and the area's track.
+audio mark
+press Enter
+wait 3
+press Enter
+wait 4
+expect screen Travel
+press Enter
+wait 2
+expect screen Field
+expect audio cue brass_alarm
+expect state music -
+shot build/shots/late_flows/map_hold_dark.png
+waitstate 60 maphold 0
+expect statenot music -
+expect state area Saltgrass Market
+
+# Dialogue with Confirm held: the box's opening plays the open sound once for its run (the guide's topics, then her
+# answer in the same box); a press does not complete the answer, holding Confirm reveals it faster, and the page then
+# waits for a press.
+assets swap ui/dialogue.json alt/dialogue_hold.json
+wait 3
+dev warp tidewater inn_front
+wait 2
+waitstate 60 maphold 0
+cmd set text normal
+audio mark
+dev event tidewater_guide
+waitstate 120 uifield.dialogue.has_choice true
+wait 1
+expect screen Dialogue
+expect audiocount 1 cue brass_alarm
+press Enter
+waitstate 60 uifield.dialogue.has_line true
+wait 2
+press Enter
+wait 1
+expect state uifield.dialogue.all_shown false
+expect state uifield.dialogue.has_line true
+hold Enter 40
+expect state uifield.dialogue.all_shown true
+expect screen Dialogue
+shot build/shots/late_flows/dialogue_held.png
+pressuntil Enter Field 300
+expect audiocount 1 cue brass_alarm
+cmd set text instant
+
+# Cues in a seeded battle: each of the three wisps' defeats plays enemy_down once, and the victory plays once.
+battlelayout front
+dev battle late_wisps
+waitstate 400 battlephase Command
+audio mark
+press Enter
+wait 3
+press Enter
+wait 3
+press Enter
+wait 3
+press Enter
+wait 3
+press Enter
+wait 3
+press Enter
+waitstate 900 battlephase Ended
+expect audiocount 3 cue enemy_down
+expect audiocount 1 cue victory
+pressuntil Enter Field 300
+expect screen Field
+
+# A defeat in the result window: no outcome banner, the defeat step names the member who fell last, then the result.
+battlelayout front
+dev battle late_crushers
+waitstate 400 battlephase Command
+press Enter
+wait 3
+press Enter
+wait 3
+press Enter
+wait 3
+press Enter
+wait 3
+press Enter
+wait 3
+press Enter
+waitstate 900 battlephase Ended
+expect state uifield.battle_front.result_phase defeat
+expect statehas uifield.battle_front.defeat_text fell last
+expect statehas uifield.battle_front.defeat_text Test
+expect statehas windows battle_front/defeat
+expect statenot windows battle_front/victory
+shot build/shots/late_flows/defeat_step.png
+press Enter
+wait 3
+expect state uifield.battle_front.result_phase result
+expect statehas uifield.battle_front.result_lines.0.text fell last
+expect statehas battlelog falls
+shot build/shots/late_flows/defeat_result.png
+pressuntil Enter Title 200
+expect screen Title
+
+# With Confirm off the timed defeat step goes on by itself, Confirm does nothing and the return time ends it.
+waitstate 300 uifield.title.start true
+press Enter
+wait 3
+press Down 2
+press Enter
+wait 3
+expect screen LoadGame
+press Enter
+wait 6
+expect screen Field
+dev encounters off
+assets swap ui/styles.json alt/styles_return.json
+assets swap ui/battle_front.json alt/battle_quiet.json
+wait 3
+dev battle training
+waitstate 400 battlephase Command
+dev lose
+waitstate 900 battlephase Ended
+expect state uifield.battle_front.result_phase defeat
+expect state uifield.battle_front.defeat_name Test Medic
+expect state uifield.battle_front.result_confirm false
+waitstate 60 uifield.battle_front.result_phase result
+press Enter
+wait 3
+expect state uifield.battle_front.result_phase result
+expect screen Battle
+shot build/shots/late_flows/defeat_quiet.png
+waitstate 120 battlephase -
+expect screen Title

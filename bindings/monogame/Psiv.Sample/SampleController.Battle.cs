@@ -97,6 +97,8 @@ public sealed partial class SampleController
 		public int ResultStepMs;
 		// The level-ups step's page under `level_page_lines`.
 		public int LevelPage;
+		// The name of the member whose defeat came last in the battle's final round, "" without one.
+		public string LastFallen = "";
 		// Time the first command window has waited (`command_open_delay`), and whether it has opened.
 		public int CommandWaitMs;
 		public bool CommandsOpened;
@@ -107,18 +109,60 @@ public sealed partial class SampleController
 
 	private bool LevelUpsApart => ResultSequence?.Any(s => s.Phase == "level_ups") == true;
 
-	// The first step at or after `from` that has something to show (level-ups only with a level gained), -1 past the end.
+	// The first step at or after `from` that has something to show (level-ups only with a level gained, the defeat only
+	// after one, the victory's outcome not after a defeat `defeat_message` shows), -1 past the end.
 	private int ResultStepFrom(int from)
 	{
 		List<(string Phase, int Ms)> steps = ResultSequence ?? [];
 		for (int i = from; i < steps.Count; i++)
 		{
-			if (steps[i].Phase != "level_ups" || LevelLines(ResultLines(_s.BattleInfo())).Count > 0)
+			bool shows = steps[i].Phase switch
+			{
+				"defeat" => Defeated,
+				"victory" => !Defeated || DefeatKey.Length == 0,
+				"level_ups" => LevelLines(ResultLines(_s.BattleInfo())).Count > 0,
+				_ => true,
+			};
+			if (shows)
 			{
 				return i;
 			}
 		}
 		return -1;
+	}
+
+	private bool Defeated => _s.BattleInfo() is { } info && (info.GameOver || info.Outcome == Outcome.Defeat);
+
+	// The battle layout's `defeat_message`: a text key whose {0} is the member who fell last, shown in the result window
+	// (and the `defeat` step) in place of the outcome banner after a defeat; "" leaves the defeat as it was.
+	private string DefeatKey => Ui.ParamText(BattleScreen, "defeat_message", UiData(), "");
+
+	private string DefeatText => Defeated && DefeatKey.Length > 0 ? T(DefeatKey, _battle.LastFallen) : "";
+
+	// The party member the last CombatantDefeated of the final round's events names; a developer's lose, which drops the
+	// party's hit points to 0 without such an event, gives the last member down.
+	private string LastFallenMember()
+	{
+		IReadOnlyList<Combatant> all = _s.Combatants();
+		BattleEvent? fell = _s.LastEvents().LastOrDefault(e => e.Type == BattleEventType.CombatantDefeated && all.ElementAtOrDefault(e.Target)?.Side == Side.Party);
+		return fell is not null ? all[fell.Target].Name : all.LastOrDefault(c => c.Side == Side.Party && !c.Alive)?.Name ?? "";
+	}
+
+	// After a game over whose layout ignores Confirm, the steps with an `ms` go on by themselves up to the last one shown,
+	// which stays until `game_over_return_ms`.
+	private void UpdateTimedResultSteps(int dtMs)
+	{
+		BattleUi b = _battle;
+		if (b.ResultStep < 0)
+		{
+			return;
+		}
+		b.ResultStepMs += dtMs;
+		int ms = ResultSequence![b.ResultStep].Ms;
+		if (ms > 0 && b.ResultStepMs >= ms && ResultStepFrom(b.ResultStep + 1) >= 0)
+		{
+			NextResultStep();
+		}
 	}
 
 	private void NextResultStep()
@@ -452,6 +496,7 @@ public sealed partial class SampleController
 				_show.Reset(_s.Combatants());
 				if (_s.Mode != Mode.Battle)
 				{
+					b.LastFallen = LastFallenMember();
 					b.Phase = BattlePhase.Ended;
 					b.ResultPage = 0;
 					b.EndedMs = 0;
@@ -486,6 +531,10 @@ public sealed partial class SampleController
 			else if (_outro is null && confirms && ResultSequence is not null)
 			{
 				UpdateResultSequence(dtMs, input);
+			}
+			else if (_outro is null && ResultSequence is not null)
+			{
+				UpdateTimedResultSteps(dtMs);
 			}
 			else if (_outro is null && confirms && input.Confirm && b.ResultPage + 1 < ResultPages())
 			{

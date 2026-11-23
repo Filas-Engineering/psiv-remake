@@ -56,7 +56,7 @@ public sealed partial class SampleController
 		DialogueBox box = TalkBox();
 		if (!Revealed(box, _talkMs).Done)
 		{
-			_talkMs += dtMs;
+			_talkMs += dtMs + HeldRevealMs(dtMs, input, CharsPerSecond(_s.Profile().TextSpeed));
 			if (_clockMs - _lastTextTickMs >= Timing("text_tick_ms"))
 			{
 				_audio.PlayCue("text");
@@ -65,12 +65,12 @@ public sealed partial class SampleController
 		}
 		(int count, bool done) = Revealed(box, _talkMs);
 		ActOnTalkTags(box.Page, box.Start + count);
-		if (input.Confirm && !done)
+		if (input.Confirm && !done && !RevealHolds)
 		{
 			_talkMs = int.MaxValue / 2;
 			ActOnTalkTags(box.Page, box.Start + box.End);
 		}
-		else if (input.Confirm)
+		else if (input.Confirm && (done || !RevealHolds))
 		{
 			NextTalkBox(box);
 		}

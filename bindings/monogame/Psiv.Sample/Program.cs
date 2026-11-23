@@ -620,6 +620,15 @@ public sealed class ScriptPlayer
 					Fail($"{source}: expected {(w[1] == "audio" ? "a" : "no")} call holding '{call}' since the mark, heard [{string.Join(" | ", calls)}]");
 				}
 				break;
+			case "expect" when w.Length >= 4 && w[1] == "audiocount" && int.TryParse(w[2], out int wantCount) && _controller.Audio is RecordingAudio counted:
+				// How many calls since the last `audio mark` are exactly the text.
+				string exact = string.Join(" ", w[3..]);
+				int heardCount = counted.CallsSince(_audioMark).Count(c => c == exact);
+				if (heardCount != wantCount)
+				{
+					Fail($"{source}: expected {wantCount} calls '{exact}' since the mark, heard {heardCount}");
+				}
+				break;
 			case "assets" when w.Length == 2 && w[1] == "reload":
 				_controller.ReloadAssets();
 				break;

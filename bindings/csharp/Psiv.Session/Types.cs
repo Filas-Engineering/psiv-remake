@@ -151,7 +151,7 @@ public sealed record SessionOptions
 public sealed record GameInfo(string Title, string GameBuild, int RulesVersion, int TickMs, int RoundMs, int ManualSlots, int AutosaveSlots, int ItemCap, int MoneyCap,
 	IReadOnlyList<string> Languages, string TitleMusic, string VictoryMusic, string DefeatMusic, bool MagicDefense = false, int AffinityDivisor = 100,
 	FlashLevel FlashDefault = FlashLevel.Reduced, bool FlashOriginal = true, bool PartyTalkAmbient = true, int MusicFadeMs = -1, int CellPixels = 16,
-	bool Autosave = true, int BagSlots = 0, bool BagSingle = false);
+	bool Autosave = true, int BagSlots = 0, bool BagSingle = false, int MapLoadHoldMs = 0, bool MapLoadHoldOnLoad = false);
 
 // An element the data knows. Element values past Holy are the ones rules.json declares, numbered by Index.
 public sealed record ElementInfo(Element Index, string Id, string Name);
@@ -171,9 +171,13 @@ public sealed record Difficulty(string Id, string Name, string Description, int 
 public sealed record Difficulties(IReadOnlyList<Difficulty> Presets, bool CanChange);
 
 // Dev: developer tools marked the saved game. Newest: the save Continue loads (latest WriteTime, then Sequence, damaged
-// ones aside), at most one per list.
+// ones aside), at most one per list. Money is -1 and Members carry only ids and levels in a save from before save schema
+// 16.
 public sealed record SaveSummary(string Slot, string Area, long PlayTimeMs, IReadOnlyList<string> Party, string Difficulty, long WriteTime, ulong Sequence, bool Autosave, bool Damaged, string Error,
-	bool Dev, bool Newest = false);
+	bool Dev, bool Newest = false, int Money = -1, IReadOnlyList<SaveMember>? Members = null);
+
+// A lineup member in a save's header: points -1 in a save from before save schema 16; maxima with its pieces; status ids.
+public sealed record SaveMember(string Id, int Level, int Hp, int MaxHp, int Tp, int MaxTp, IReadOnlyList<string> Statuses);
 
 // Dev: developer tools marked the game. Encounters: false while DevEncounters has turned battles off for this session.
 public sealed record WorldInfo(Mode Mode, MenuKind MenuKind, int Money, long PlayTimeMs, int AutosaveCount, bool GameOver, bool CanRetry, bool PlayerControl,

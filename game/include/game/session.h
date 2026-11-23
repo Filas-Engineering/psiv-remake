@@ -1054,6 +1054,9 @@ private:
 	void endEvent();
 	void dropEvent();
 	void openChest(const Chest& chest);
+	// A `sound` action outside any event (game.json `presentation.sounds`), which nothing waits on; nothing for an empty id.
+	void playFieldSound(const std::string& cue);
+	const VehicleSounds* vehicleSounds(const std::string& vehicle) const;
 	void boardShip(const Port& port);
 	rules::Message callVehicle(const FieldVehicle& vehicle);
 	// Where an actor no script touched stands in `area`: its talk point (or the hook's `actor_at`), or its game.json home.
@@ -1135,6 +1138,8 @@ private:
 	ModeMachine modes_;
 	PacingRecorder pacing_;
 	std::vector<Output> output_;
+	// Moving time aboard since the vehicle's last move sound (presentation.sounds.vehicles `move_ms`).
+	int vehicleMoveMs_ = 0;
 	std::int64_t clockCounter_ = 0;
 
 	int tickRemainderMs_ = 0;

@@ -86,7 +86,7 @@ public static class UiFields
 	// chosen: retry after a lost battle that allows one, the sound test after a finished story.
 	// The steps a shop's or an inn's `flow` takes, in the order a flow keeps.
 	// The steps a battle file's `result_sequence` takes.
-	public static readonly string[] ResultPhases = ["victory", "result", "level_ups"];
+	public static readonly string[] ResultPhases = ["victory", "defeat", "result", "level_ups"];
 
 	public static readonly string[] ShopFlowSteps = ["welcome", "mode", "list", "quantity", "question", "confirm", "result", "farewell"];
 	public static readonly string[] InnFlowSteps = ["welcome", "price", "choice", "result", "decline", "farewell"];
@@ -176,7 +176,7 @@ public static class UiFields
 
 	// The battle's two layouts (the presentation table's `front` and `side`) read the same fields and params.
 	private static readonly string[] BattleData = ["action_chosen", "action_command", "actor_center", "actor_left", "actor_right", "actor_slot", "auto", "banner", "banner_alpha", "banner_big",
-		"banner_cancel", "banner_plate", "command_center", "command_items", "cursor", "description", "description_shown", "enemy_back", "enemy_count", "enemy_groups", "hint", "hit_fade",
+		"banner_cancel", "banner_plate", "command_center", "command_items", "cursor", "defeat_name", "defeat_text", "description", "description_shown", "enemy_back", "enemy_count", "enemy_groups", "hint", "hit_fade",
 		"hit_flash", "key_back", "key_confirm", "key_fast_forward", "key_text_log", "level_lines", "level_more", "level_page", "level_pages", "list_index", "list_kind", "log_lines", "log_shown", "macro_steps", "macro_trouble",
 		"macro_trouble_text", "members", "menu_items", "menu_shown", "menu_title", "outcome", "page_arrow", "party", "phase", "result_confirm", "result_lines", "result_more", "result_page", "result_pages", "result_phase", "result_phase_ms", "result_step", "target_pulse",
 		"transition_playing", "vehicle"];
@@ -189,7 +189,7 @@ public static class UiFields
 
 	private static readonly string[] BattleSlots = ["anchor", "effects", "icons", "stage", "target_pointer"];
 
-	private static readonly string[] BattleParams = ["auto_choose", "backdrop_h", "command_axis", "command_open_delay", "command_top", "count_format", "count_format_one", "critical_marks", "critical_marks_enemy", "critical_marks_party", "damage_numbers", "dev_badge_y", "effect_scale", "effect_scale_large", "effectiveness_marks", "effectiveness_marks_enemy", "effectiveness_marks_party", "enemy_back_foot", "enemy_bar_h",
+	private static readonly string[] BattleParams = ["auto_choose", "backdrop_h", "command_axis", "command_open_delay", "command_top", "count_format", "count_format_one", "critical_marks", "critical_marks_enemy", "critical_marks_party", "damage_numbers", "defeat_message", "dev_badge_y", "effect_scale", "effect_scale_large", "effectiveness_marks", "effectiveness_marks_enemy", "effectiveness_marks_party", "enemy_back_foot", "enemy_bar_h",
 		"enemy_bar_w", "enemy_bar_y", "enemy_bars", "enemy_figures", "enemy_front_foot", "enemy_icons_y", "enemy_labels", "enemy_rank_spacing_max", "enemy_rank_span", "enemy_ranks_interleaved",
 		"enemy_row_foot", "enemy_row_max", "enemy_row_spacing_max", "enemy_row_span", "enemy_row_stagger", "enemy_size",
 		.. Enumerable.Range(0, 8).SelectMany(n => new[] { $"enemy_slot_{n}_foot", $"enemy_slot_{n}_x" }),
@@ -246,8 +246,8 @@ public static class UiFields
 				"portrait", "line", "revealed", "all_shown", "line_step", "hint", "next_arrow_ms", "arrow", "has_choice", "prompt", "options", "cursor", "picture",
 				"picture_w", "picture_h", "pictures", "narration_visible", "narration_rows", "narration_all_shown", "shown_ms", "line_key", "picture_top", "picture_names", "page_arrow", "choice_header"],
 			itemFields: ["picture", "picture_w", "picture_h", "text", "full", "shown"],
-			parameters: ["box_h", "box_margin", "box_top", "picture_stack", "narration_lines", "narration_cps", "narration_delay_ms", "narration_hold_ms", "narration_wait", "narration_width",
-				"narration_when"],
+			parameters: ["box_h", "box_margin", "box_top", "dialogue_open_sound", "picture_stack", "narration_lines", "narration_cps", "narration_delay_ms", "narration_hold_ms", "narration_wait", "narration_width",
+				"narration_when", "reveal_confirm", "reveal_hold_cps"],
 			tags: true),
 		["pause"] = new("pause",
 			["hud", "area", "status", "rows", "cursor", "hint"],
@@ -256,7 +256,7 @@ public static class UiFields
 			["title", "question", "labels", "list", "description", "description_missing", "hint", "destinations", "cancel_row", "phase", "message", "message_ms"],
 			itemFields: ["name", "region", "area"],
 			slots: ["backdrop", "toasts"],
-			parameters: [BackdropDim, "arrive_key", "cancel_row", "leave_key", "message_ms", "one_destination", "over_menu"]),
+			parameters: [BackdropDim, "arrive_key", "cancel_row", "leave_key", "message_ms", "one_destination", "over_menu", "over_page"]),
 		["shop"] = new("shop",
 			["title", "open", "tab", "tabs", "money", "stall", "rows", "list", "description", "description_missing", "compare", "hint", "money_value", "keeper", "voice_line",
 				"step", "choices", "choice_cursor", "quantity", "quantity_max", "unit_price", "total", "result_text", "result_ok", "name", "bag", "bag_used", "bag_slots",
@@ -304,9 +304,9 @@ public static class UiFields
 			parameters: ["members_first", "stats_preview_only"]),
 		["load_game"] = new("load_game",
 			["has_saves", "hint", "slots", "cursor", "navigation", "columns"],
-			itemFields: [.. SlotItems, "autosave", "members", "member_count", "id", "name", "portrait", "sprite", "selected"],
+			itemFields: [.. SlotItems, "autosave", "members", "member_count", "id", "name", "portrait", "sprite", "selected", "money", "hp", "hp_max", "tp", "tp_max", "statuses"],
 			slots: ["scene", "slot_list", "toasts"],
-			parameters: ["columns", "navigation", "select_newest", "show_empty"]),
+			parameters: ["columns", "navigation", "navigation_hint", "select_newest", "show_empty"]),
 		["save_slots"] = new("save_slots",
 			[.. Area, "slots", "list", "active", "system", "system_rows", "system_cursor", "mode"],
 			itemFields: SlotItems,

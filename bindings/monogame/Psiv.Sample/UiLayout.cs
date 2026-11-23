@@ -706,6 +706,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["macro_flow"] = ("reset", "remember", "whether the menus open at their first row after a macro's round or on Macro and the macro played last"),
 		["navigation"] = ("tabs", "list", "whether the field menu's entries are tabs turned with Left and Right or a list chosen with Up, Down and Confirm"),
 		["one_destination"] = ("list", "go", "whether a travel use with one place to go lists it or goes at once"),
+		["reveal_confirm"] = ("complete", "hold", "whether a press shows the whole page or holding Confirm only speeds the reveal"),
 		["stack_rows"] = ("stacked", "single", "whether the Items page lists one row per item with its count or one row per copy"),
 		["unusable"] = ("dim", "hide", "whether abilities not usable in the field show dimmed or not at all"),
 	};
@@ -825,7 +826,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
 					}
 				}
-				else if (p.Name is "leave_key" or "arrive_key")
+				else if (p.Name is "leave_key" or "arrive_key" or "defeat_message")
 				{
 					string? key = p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : null;
 					if (key is null || key.Length == 0 || !key.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '.'))
@@ -835,6 +836,18 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 					else
 					{
 						screen.Params[p.Name] = UiExpr.Parse($"'{key}'", out _)!;
+					}
+				}
+				else if (p.Name == "dialogue_open_sound")
+				{
+					string? cue = p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : null;
+					if (cue is null || !cue.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_'))
+					{
+						Problem($"params.{p.Name}", "must be a cue id (lowercase letters, digits and '_'), or \"\" for none");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{cue}'", out _)!;
 					}
 				}
 				else if (p.Name is "count_format" or "count_format_one")

@@ -383,7 +383,7 @@ public sealed partial class SampleController
 					_beforeOverlay = _lastScreen;
 				}
 			}
-			else if (!IsOverlay(_lastScreen) || screen != _beforeOverlay)
+			else if ((!IsOverlay(_lastScreen) || screen != _beforeOverlay) && !KeepsMenuPage(_lastScreen, screen))
 			{
 				ResetUi();
 			}
@@ -402,6 +402,7 @@ public sealed partial class SampleController
 			UpdateScreen(screen, dtMs, input);
 		}
 		TakeNotices();
+		UpdateMapHold(dtMs);
 		UpdateFx();
 		UpdateAudio(dtMs, screen, Screen, input);
 	}
@@ -683,6 +684,7 @@ public sealed partial class SampleController
 		{
 			DrawTransition(s, coverOut, (long)_outroMs * coverOut.RateMilli);
 		}
+		DrawMapHold(s);
 		DrawFx(s);
 		DrawConfirm(s, t);
 		DrawAnimations(s);
@@ -860,6 +862,7 @@ public sealed partial class SampleController
 			// The notices' boxes the code drew last frame (menu, shop, Load screen...) and the size of their text.
 			"toastboxes" => _toastBoxes.Count == 0 ? "none" : $"text {ToastTextSize()}: " + string.Join(", ", _toastBoxes.Select(r => $"{r.X} {r.Y} {r.Width}x{r.Height}")),
 			"dialogue" => _dialogueAt,
+			"maphold" => _mapHoldMs.ToString(CultureInfo.InvariantCulture),
 			"music" => _audio.Music.Length == 0 ? "-" : _audio.Music,
 			"follower" => _s.Follower() is { Length: > 0 } follower ? follower : "-",
 			"ambient" => _audio.Ambient.Length == 0 ? "-" : _audio.Ambient,

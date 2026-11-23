@@ -607,6 +607,8 @@ public sealed partial class SampleController
 			.Set("level_more", b.Phase == BattlePhase.Ended && levelPage + 1 < levelPages)
 			.Set("result_phase", b.Phase != BattlePhase.Ended ? "" : ResultSequence is { } sequence ? b.ResultStep >= 0 ? sequence[b.ResultStep].Phase : "" : "result")
 			.Set("result_phase_ms", b.Phase == BattlePhase.Ended && ResultSequence is not null ? b.ResultStepMs : 0)
+			.Set("defeat_text", b.Phase == BattlePhase.Ended ? DefeatText : "")
+			.Set("defeat_name", b.Phase == BattlePhase.Ended && Defeated ? b.LastFallen : "")
 			.Set("result_page", b.Phase == BattlePhase.Ended ? page + 1 : 0)
 			.Set("result_pages", b.Phase == BattlePhase.Ended ? pages : 0)
 			.Set("result_more", b.Phase == BattlePhase.Ended && page + 1 < pages)
@@ -689,7 +691,8 @@ public sealed partial class SampleController
 		// The step's words: the action's name over its whole turn (in the front layout a framed name plate, with a cancel),
 		// and the opening, the round, a notice or the outcome on their own, fading in and out.
 		bool turnName = step?.Kind is StepKind.Banner or StepKind.Animate or StepKind.Effect or StepKind.Result or StepKind.Retarget;
-		string banner = step is null || step.Kind is StepKind.Forward or StepKind.Back ? "" : turnName ? BannerOf(step) : step.Text;
+		string banner = step is null || step.Kind is StepKind.Forward or StepKind.Back || step.Kind == StepKind.Outcome && step.Sub == "defeat" && DefeatKey.Length > 0 ? ""
+			: turnName ? BannerOf(step) : step.Text;
 		ui.Set("banner", banner)
 			.Set("banner_plate", turnName || step?.Kind == StepKind.Cancel)
 			.Set("banner_big", step?.Kind is StepKind.Outcome or StepKind.Opening or StepKind.Round)
@@ -985,6 +988,10 @@ public sealed partial class SampleController
 					lines.Add(Line("learned", T("ui.battle.result.learned", ListText(up.Learned.Select(_s.DisplayName)))));
 				}
 			}
+		}
+		else if (info?.GameOver == true && DefeatKey.Length > 0)
+		{
+			lines.Add(Line("defeat", DefeatText));
 		}
 		else if (info?.GameOver == true)
 		{

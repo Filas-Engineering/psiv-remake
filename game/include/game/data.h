@@ -125,6 +125,27 @@ struct MusicNames {
 	int fadeMs = -1;
 };
 
+// A vehicle's field sounds (game.json `presentation.sounds.vehicles`): `move` every step while it moves, or every
+// `move_ms` of moving when above 0, and `board` and `leave`.
+struct VehicleSounds {
+	std::string move;
+	int moveMs = 0;
+	std::string board;
+	std::string leave;
+};
+
+// game.json `presentation.sounds`: audio ids the session plays as instant `sound` actions in the field.
+struct FieldSounds {
+	// Opening a chest that gives something, unless `chests` names the chest's id.
+	std::string chest;
+	std::map<std::string, std::string> chests;
+	// A travel item or technique used: `travel_things` by its id, else the kind's (`town`, `dungeon_exit`).
+	std::string town;
+	std::string dungeonExit;
+	std::map<std::string, std::string> travelThings;
+	std::map<std::string, VehicleSounds> vehicles;
+};
+
 // Names the scripts may use for presentation; the engine owns the assets behind them. None of this is part of the
 // content hash.
 struct PresentationNames {
@@ -147,6 +168,11 @@ struct PresentationNames {
 	// at all (`flash_original`); a host that cannot offer the default falls back to Reduced.
 	FlashLevel flashDefault = FlashLevel::Reduced;
 	bool flashOriginal = true;
+	// `map_load_hold_ms`: how long a host keeps the screen dark after an area change before it fades in and starts the new
+	// area's music; `map_load_hold_on_load` holds after a load too.
+	int mapLoadHoldMs = 0;
+	bool mapLoadHoldOnLoad = false;
+	FieldSounds sounds;
 
 	const CameraDef* camera(const std::string& id) const;
 	// The length of one play of `name`: the data's seconds, else a standard animation's own, else 0.

@@ -120,7 +120,7 @@ public sealed partial class SampleController
 		string text = NarrationText(line);
 		if (!fresh && !NarrationRevealed(text).Done)
 		{
-			_lineMs += dtMs;
+			_lineMs += dtMs + HeldRevealMs(dtMs, input, NarrationCps());
 			if (_clockMs - _lastTextTickMs >= Timing("text_tick_ms"))
 			{
 				_audio.PlayCue("text");
@@ -132,11 +132,11 @@ public sealed partial class SampleController
 			_shownMs += dtMs;
 		}
 		bool done = NarrationRevealed(text).Done;
-		if (input.Confirm && !done)
+		if (input.Confirm && !done && !RevealHolds)
 		{
 			_lineMs = int.MaxValue / 2;
 		}
-		else if (input.Confirm || (done && _s.Profile().AutoAdvance && _shownMs >= Math.Max(Timing("auto_advance_min_ms"), text.Length * Timing("auto_advance_ms_per_char"))))
+		else if (input.Confirm && (done || !RevealHolds) || (done && _s.Profile().AutoAdvance && _shownMs >= Math.Max(Timing("auto_advance_min_ms"), text.Length * Timing("auto_advance_ms_per_char"))))
 		{
 			_narrationHeld = false;
 			NextNarration(text);

@@ -205,6 +205,7 @@ public class NativeLayoutTests
 		Same<PsivQuestLog>("psiv_quest_log");
 		Same<PsivRecordedCommand>("psiv_recorded_command");
 		Same<PsivSaveSummary>("psiv_save_summary");
+		Same<PsivSaveMember>("psiv_save_member");
 		Same<PsivSessionOptions>("psiv_session_options");
 		Same<PsivSettings>("psiv_settings");
 		Same<PsivShopInfo>("psiv_shop_info");
@@ -356,6 +357,11 @@ public class SessionTests
 			Assert.Equal("tidewater", summary.Area);
 			Assert.Equal(["fighter:3"], summary.Party);
 			Assert.False(summary.Autosave);
+			Member fighter = s.Party()[0];
+			Assert.Equal(s.WorldInfo().Money, summary.Money);
+			SaveMember saved = Assert.Single(summary.Members!);
+			Assert.Equal(("fighter", 3, fighter.Hp, fighter.MaxHp, fighter.Tp, fighter.MaxTp), (saved.Id, saved.Level, saved.Hp, saved.MaxHp, saved.Tp, saved.MaxTp));
+			Assert.Empty(saved.Statuses);
 		}
 		using (GameSession s = NewSession(saves))
 		{

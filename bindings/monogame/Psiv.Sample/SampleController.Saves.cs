@@ -246,19 +246,46 @@ public sealed partial class SampleController
 		for (int i = 0; i < slots.Count; i++)
 		{
 			SaveSummary? save = saves.FirstOrDefault(v => v.Slot == slots[i]);
-			List<UiContext> members = save is { Damaged: false } ? [.. save.Party.Select(p => p.Split(':')).Select(p => new UiContext()
-				.Set("id", p[0])
-				.Set("name", _s.DisplayName(p[0]))
-				.Set("level", p.Length > 1 && int.TryParse(p[1], CultureInfo.InvariantCulture, out int level) ? level : 0)
-				.Set("portrait", art.Portrait("", p[0]))
-				.Set("sprite", art.PersonFrame(p[0], Direction.South, 0)))] : [];
+			List<UiContext> members = save is { Damaged: false } ? [.. save.Party.Select(p => p.Split(':')).Select((p, k) =>
+			{
+				SaveMember? points = save.Members?.ElementAtOrDefault(k) is { } m && m.Id == p[0] ? m : null;
+				return new UiContext()
+					.Set("id", p[0])
+					.Set("name", _s.DisplayName(p[0]))
+					.Set("level", p.Length > 1 && int.TryParse(p[1], CultureInfo.InvariantCulture, out int level) ? level : 0)
+					.Set("portrait", art.Portrait("", p[0]))
+					.Set("sprite", art.PersonFrame(p[0], Direction.South, 0))
+					.Set("hp", Known(points?.Hp))
+					.Set("hp_max", Known(points?.MaxHp))
+					.Set("tp", Known(points?.Tp))
+					.Set("tp_max", Known(points?.MaxTp))
+					.Set("statuses", string.Join(" ", (points?.Statuses ?? []).Select(_s.DisplayName)));
+			})] : [];
 			blocks.Add(SlotRow(data, slots[i], i, saves)
+				.Set("money", save is { Damaged: false } ? Known(save.Money) : "")
 				.Set("autosave", save is { Autosave: true })
 				.Set("members", members)
 				.Set("member_count", members.Count)
 				.Set("selected", i == _list.Cursor));
 		}
 		return blocks;
+	}
+
+	// A save from before save schema 16 has no money or points (-1): "", so a layout's text shows nothing.
+	private static object Known(int? value) => value is int v and >= 0 ? v : "";
+
+	// The Load hint: with the layout's `navigation_hint`, the directions its navigation moves by (`ui.saves.hint_grid`,
+	// `ui.saves.hint_row`, each falling back to `ui.saves.hint`).
+	private string LoadHint(UiContext data)
+	{
+		string navigation = Ui.ParamText("load_game", "navigation", data, "list");
+		string[] keys = [Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Left), Hint(GameAction.Right), Hint(GameAction.Confirm), Hint(GameAction.Back)];
+		if (Ui.Param("load_game", "navigation_hint", data, 0) != 0 && navigation is ("grid" or "row") && _s.FormatText("ui.saves.hint_" + navigation, keys) is var own
+			&& own != "ui.saves.hint_" + navigation)
+		{
+			return Shown(own);
+		}
+		return T("ui.saves.hint", keys[0], keys[1], keys[4], keys[5]);
 	}
 
 	private void DrawLoadGame(IDrawSurface s, IDrawSurface t, Art art)
@@ -275,6 +302,6 @@ public sealed partial class SampleController
 			.Set("columns", Math.Max(1, Ui.Param("load_game", "columns", data, 1)))
 			.Set("slot_list", (UiSlot)((x, y, w, h) => DrawSlots(t, _list, x, y, w, h, slots, saves)))
 			.Set("toasts", (UiSlot)((x, y, w, h) => DrawToasts(t, t.Width - x - w, y + h, right: true)))
-			.Set("hint", T("ui.saves.hint", Hint(GameAction.Up), Hint(GameAction.Down), Hint(GameAction.Confirm), Hint(GameAction.Back))));
+			.Set("hint", LoadHint(data)));
 	}
 }

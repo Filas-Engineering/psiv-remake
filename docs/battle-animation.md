@@ -681,7 +681,7 @@ A result step's events are released to the stage by the turn script's `release` 
 * applies it to `BattleShow`: a bar starts running from its old value, a status icon grows in or blinks out, a fall starts the figure's `defeat` (or `fallen`) state, a revival its `rise`;
 * starts its floating number;
 * starts its reactions (`react:` scripts on the figure, below);
-* plays its event cue (`hit`, `miss`, `critical`, `heal`, `status`, `enemy_down`), which today plays when the result step starts, unless it is turned off: a script's `event_cues_off` (inherited through `extends`; the nearest script that has one decides), else `settings.event_cues_off`, is `true` for every event cue or a list of the ones turned off, so a script's own sounds are not doubled. The default is none off.
+* plays its event cue (`hit`, `miss`, `critical`, `heal`, `status`, `enemy_down`), which today plays when the result step starts, unless it is turned off: a script's `event_cues_off` (inherited through `extends`; the nearest script that has one decides), else `settings.event_cues_off`, is `true` for every event cue or a list of the ones turned off, so a script's own sounds are not doubled. The default is none off. When to expect each: a unit plays the cue of each of its events once (a critical hit plays `critical` and `hit` together, being two events); several units released on the same frame of a step (one action's targets) play a cue once, `enemy_down` aside, which plays for every enemy that falls; a `sound` track with `per: release` plays per unit on top of the event cue unless `event_cues_off` turns that cue off; fast-forward plays none; a developer's `win` or `lose` falls in a sync step, which plays none.
 
 ```json
 "settings": {"event_cues_off": ["enemy_down"]},

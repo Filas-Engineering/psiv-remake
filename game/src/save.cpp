@@ -1180,6 +1180,20 @@ std::string headerChunk(const SaveFile& save) {
 		o.text(id + ":" + std::to_string(m ? m->level : 0));
 	}
 	o.end();
+	o.key("money").num(w.money).end();
+	for (const std::string& id : w.lineup) {
+		const rules::PartyMember* m = w.member(id);
+		if (!m) {
+			continue;
+		}
+		const auto maxima = save.memberMaxima.find(id);
+		const bool known = maxima != save.memberMaxima.end();
+		o.key("member").text(id).num(m->hp).num(known ? maxima->second.first : -1).num(m->tp).num(known ? maxima->second.second : -1);
+		for (const rules::ActiveStatus& status : m->statuses) {
+			o.text(status.id);
+		}
+		o.end();
+	}
 	o.key("difficulty").text(w.settings.difficulty).end();
 	if (w.devMarked) {
 		o.key("dev").num(1).end();
@@ -1302,6 +1316,8 @@ rules::Result<SaveFile> parseSave(const std::string& text) {
 					save.autosave = in.num(l[1]) != 0;
 				} else if (l[0] == "content" && in.need(l, 1)) {
 					save.contentHash = std::strtoull(l[1].c_str(), nullptr, 16);
+				} else if (l[0] == "member" && l.size() >= 6) {
+					save.memberMaxima[in.text(l[1])] = {in.integer(l[3]), in.integer(l[5])};
 				}
 			}
 			if (!in.error.empty()) {
@@ -1345,6 +1361,7 @@ rules::Result<SaveSummary> readSummary(const std::string& text) {
 		return R::failure(error);
 	}
 	SaveSummary s;
+	std::vector<SaveMemberSummary> vitals;
 	for (const Chunk& c : file.chunks) {
 		if (c.type != "header") {
 			continue;
@@ -1370,11 +1387,40 @@ rules::Result<SaveSummary> readSummary(const std::string& text) {
 				for (std::size_t i = 1; i < l.size(); ++i) {
 					s.party.push_back(in.text(l[i]));
 				}
+			} else if (k == "money" && in.need(l, 1)) {
+				s.money = in.integer(l[1]);
+			} else if (k == "member" && l.size() >= 6) {
+				SaveMemberSummary m;
+				m.id = in.text(l[1]);
+				m.hp = in.integer(l[2]);
+				m.maxHp = in.integer(l[3]);
+				m.tp = in.integer(l[4]);
+				m.maxTp = in.integer(l[5]);
+				for (std::size_t i = 6; i < l.size(); ++i) {
+					m.statuses.push_back(in.text(l[i]));
+				}
+				vitals.push_back(std::move(m));
 			}
 		}
 		if (!in.error.empty()) {
 			return R::failure(in.error);
 		}
+	}
+	for (const std::string& entry : s.party) {
+		const std::size_t colon = entry.rfind(':');
+		SaveMemberSummary m;
+		m.id = entry.substr(0, colon);
+		if (colon != std::string::npos) {
+			long long level = 0;
+			toInt(entry.substr(colon + 1), level);
+			m.level = static_cast<int>(level);
+		}
+		auto it = std::find_if(vitals.begin(), vitals.end(), [&](const SaveMemberSummary& v) { return v.id == m.id; });
+		if (it != vitals.end()) {
+			it->level = m.level;
+			m = std::move(*it);
+		}
+		s.members.push_back(std::move(m));
 	}
 	return R::success(s);
 }

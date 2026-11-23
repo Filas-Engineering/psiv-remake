@@ -556,7 +556,42 @@ void readConfig(JsonReader& reader, const JsonValue& json, GameConfig& c) {
 			reader.fail(*p, "data.bad_flash_default", {flash});
 		}
 		reader.boolean(*p, "flash_original", c.presentation.flashOriginal, false);
+		reader.integer(*p, "map_load_hold_ms", c.presentation.mapLoadHoldMs, false, 0, 60000);
+		reader.boolean(*p, "map_load_hold_on_load", c.presentation.mapLoadHoldOnLoad, false);
 		reader.texts(*p, "audio", c.presentation.audio, false);
+		if (const JsonValue* s = reader.field(*p, "sounds", JsonValue::Type::Object, false)) {
+			FieldSounds& sounds = c.presentation.sounds;
+			reader.only(*s, gameKeys("game.json", "presentation.sounds"));
+			reader.text(*s, "chest", sounds.chest, false);
+			if (const JsonValue* t = reader.field(*s, "travel", JsonValue::Type::Object, false)) {
+				reader.only(*t, gameKeys("game.json", "presentation.sounds.travel"));
+				reader.text(*t, "town", sounds.town, false);
+				reader.text(*t, "dungeon_exit", sounds.dungeonExit, false);
+			}
+			for (const char* key : {"chests", "travel_things"}) {
+				const JsonValue* m = reader.field(*s, key, JsonValue::Type::Object, false);
+				for (std::size_t i = 0; m && i < m->keys.size(); ++i) {
+					if (!m->values[i].is(JsonValue::Type::String) || m->values[i].string.empty()) {
+						reader.fail(m->values[i], "data.sound_not_text", {m->keys[i]});
+						continue;
+					}
+					(std::string(key) == "chests" ? sounds.chests : sounds.travelThings)[m->keys[i]] = m->values[i].string;
+				}
+			}
+			const JsonValue* v = reader.field(*s, "vehicles", JsonValue::Type::Object, false);
+			for (std::size_t i = 0; v && i < v->keys.size(); ++i) {
+				if (!v->values[i].is(JsonValue::Type::Object)) {
+					reader.fail(v->values[i], "data.sound_not_text", {v->keys[i]});
+					continue;
+				}
+				VehicleSounds& vs = sounds.vehicles[v->keys[i]];
+				reader.only(v->values[i], gameKeys("game.json", "presentation.sounds.vehicles entry"));
+				reader.text(v->values[i], "move", vs.move, false);
+				reader.integer(v->values[i], "move_ms", vs.moveMs, false, 0, 60000);
+				reader.text(v->values[i], "board", vs.board, false);
+				reader.text(v->values[i], "leave", vs.leave, false);
+			}
+		}
 		readCameras(reader, *p, c.presentation.cameras);
 		reader.texts(*p, "layouts", c.presentation.layouts, false);
 		readAnimations(reader, *p, c.presentation);
@@ -1185,6 +1220,40 @@ void checkReferences(const GameData& data, Problems& problems) {
 			problems.add(where, "data.music_not_audio", {track});
 		}
 	};
+	const FieldSounds& sounds = shown.sounds;
+	auto soundListed = [&](const std::string& where, const std::string& cue) {
+		if (!cue.empty() && std::find(shown.audio.begin(), shown.audio.end(), cue) == shown.audio.end()) {
+			problems.add(where, "data.sound_not_audio", {cue});
+		}
+	};
+	soundListed("game.json sounds chest", sounds.chest);
+	soundListed("game.json sounds travel", sounds.town);
+	soundListed("game.json sounds travel", sounds.dungeonExit);
+	for (const auto& entry : sounds.chests) {
+		const std::string& chest = entry.first;
+		const bool known = std::any_of(data.areas.begin(), data.areas.end(),
+			[&](const auto& a) { return std::any_of(a.second.chests.begin(), a.second.chests.end(), [&](const Chest& x) { return x.id == chest; }); });
+		if (!known) {
+			problems.add("game.json sounds chests", "data.sound_unknown_chest", {chest});
+		}
+		soundListed("game.json sounds chest '" + chest + "'", entry.second);
+	}
+	for (const auto& [thing, cue] : sounds.travelThings) {
+		const std::vector<rules::Effect>* effects = db.item(thing) ? &db.item(thing)->effects : db.ability(thing) ? &db.ability(thing)->effects : nullptr;
+		if (!effects || !rules::travelEffect(*effects)) {
+			problems.add("game.json sounds travel_things", "data.sound_not_travel", {thing});
+		}
+		soundListed("game.json sounds travel '" + thing + "'", cue);
+	}
+	for (const auto& [vehicle, vs] : sounds.vehicles) {
+		const std::string& id = vehicle;
+		if (std::none_of(c.vehicles.begin(), c.vehicles.end(), [&](const FieldVehicle& f) { return f.id == id; })) {
+			problems.add("game.json sounds vehicles", "data.sound_unknown_vehicle", {vehicle});
+		}
+		for (const std::string* cue : {&vs.move, &vs.board, &vs.leave}) {
+			soundListed("game.json sounds vehicle '" + vehicle + "'", *cue);
+		}
+	}
 	musicListed("game.json music title", shown.music.title);
 	musicListed("game.json music victory", shown.music.victory);
 	musicListed("game.json music defeat", shown.music.defeat);

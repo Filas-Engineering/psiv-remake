@@ -1,11 +1,14 @@
 #include "test.h"
 
+#include "game/check.h"
 #include "game/encounters.h"
 #include "game/runner.h"
 #include "game/save.h"
 #include "rules/formulas.h"
 #include "rules/progression.h"
 
+#include <algorithm>
+#include <filesystem>
 #include <sstream>
 
 using namespace game;
@@ -178,6 +181,80 @@ TEST(randomBattlesAboardPlayTheVehiclesTrackUnlessTheEncounterHasOne) {
 	test::confirmLines(s);
 	CHECK(s.devBattle("marsh").empty());
 	CHECK_EQ(s.battleMusic(), std::string("battle_marsh_ambush"));
+}
+
+// presentation.sounds: a chest's own sound over the default, a vehicle's board, move (every step, or every move_ms of
+// moving) and leave sounds, each a `sound` action outside any event; unknown ids are problems.
+TEST(fieldSoundsPlayAsSoundActions) {
+	GameData d = test::data();
+	FieldSounds& sounds = d.config.presentation.sounds;
+	sounds.chest = "brass_alarm";
+	sounds.chests["reed_cache"] = "dungeon_firing_floor";
+	sounds.vehicles["reed_skimmer"] = {"battle_marsh_ambush", 0, "brass_alarm", "defeat_low_tide"};
+	Session s(d, SessionOptions());
+	const auto played = [&] {
+		std::vector<std::string> out;
+		for (const PresentedAction& a : s.pollActions()) {
+			if (a.action.type == events::ActionType::sound) {
+				out.push_back(a.action.subject);
+			}
+		}
+		return out;
+	};
+	test::placeParty(s, "reed_path", "cache_front", Facing::North);
+	played();
+	CHECK(s.interact().empty());
+	test::confirmLines(s);
+	CHECK(played() == std::vector<std::string>{"dungeon_firing_floor"});
+	cogway(s, {6, 4}, Facing::South);
+	CHECK(s.devVehicle("reed_skimmer", "cogway", "entry").empty());
+	played();
+	CHECK(s.board().empty());
+	CHECK(played() == std::vector<std::string>{"brass_alarm"});
+	const Cell start = s.world().position;
+	for (Facing f : {Facing::South, Facing::East, Facing::North, Facing::West}) {
+		for (int i = 0; i < 4 && s.world().position == start; ++i) {
+			walk(s, f);
+		}
+	}
+	CHECK(!(s.world().position == start));
+	const std::vector<std::string> moved = played();
+	CHECK(!moved.empty() && std::all_of(moved.begin(), moved.end(), [](const std::string& m) { return m == "battle_marsh_ambush"; }));
+	CHECK(s.leaveVehicle().empty());
+	CHECK(played() == std::vector<std::string>{"defeat_low_tide"});
+
+	GameData every = test::data();
+	every.config.presentation.sounds.vehicles["reed_skimmer"] = {"battle_marsh_ambush", 100000, "", ""};
+	Session t(every, SessionOptions());
+	cogway(t, {6, 4}, Facing::South);
+	CHECK(t.devVehicle("reed_skimmer", "cogway", "entry").empty());
+	CHECK(t.board().empty());
+	t.pollActions();
+	const Cell from = t.world().position;
+	for (Facing f : {Facing::South, Facing::East, Facing::North, Facing::West}) {
+		for (int i = 0; i < 4 && t.world().position == from; ++i) {
+			walk(t, f);
+		}
+	}
+	CHECK(!(t.world().position == from));
+	const std::vector<PresentedAction> quiet = t.pollActions();
+	CHECK(std::none_of(quiet.begin(), quiet.end(), [](const PresentedAction& a) { return a.action.type == events::ActionType::sound; }));
+
+	const std::string root = test::freshDirectory("field_sounds");
+	std::filesystem::create_directories(root + "/game");
+	std::filesystem::create_directories(root + "/core");
+	std::filesystem::copy("data", root + "/game/data", std::filesystem::copy_options::recursive);
+	std::filesystem::copy("../core/data", root + "/core/data", std::filesystem::copy_options::recursive);
+	std::string text;
+	CHECK(readFile(root + "/game/data/game.json", text));
+	text.replace(text.find("\"presentation\": {"), 17, "\"presentation\": {\"sounds\": {\"chest\": \"no_such_cue\", \"chests\": {\"no_such_chest\": \"brass_alarm\"}, "
+		"\"travel_things\": {\"tonic\": \"brass_alarm\"}, \"vehicles\": {\"hovercart\": {\"move\": \"brass_alarm\", \"move_ms\": 300}}}, ");
+	std::string problem;
+	CHECK(writeFileAtomic(root + "/game/data/game.json", text, problem));
+	const CheckReport report = checkData(DataDirectories{root + "/game/data", root + "/core/data"});
+	for (const char* key : {"data.sound_not_audio", "data.sound_unknown_chest", "data.sound_not_travel", "data.sound_unknown_vehicle"}) {
+		CHECK(std::any_of(report.problems.begin(), report.problems.end(), [&](const rules::Problem& p) { return p.message.key == key; }));
+	}
 }
 
 // A vehicle's `field` track plays on the field while the party rides it, over the area's; a script's `music area` wins.

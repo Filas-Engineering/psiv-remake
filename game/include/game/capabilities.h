@@ -8,8 +8,8 @@
 namespace game {
 
 // The library version and C API ABI the bindings build with (bindings/c checks PSIV_ABI_VERSION against it).
-constexpr const char* kLibraryVersion = "0.19.0";
-constexpr int kAbiVersion = 20;
+constexpr const char* kLibraryVersion = "0.20.0";
+constexpr int kAbiVersion = 21;
 // The version of capabilitiesJson()'s layout; bumped when a key of it is renamed, removed or changes meaning.
 constexpr int kCapabilitiesSchema = 1;
 

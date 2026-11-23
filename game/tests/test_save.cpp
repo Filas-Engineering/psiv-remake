@@ -143,6 +143,63 @@ TEST(unknownChunksArePreserved) {
 	CHECK_EQ(serializeSave(*twice.value), again);
 }
 
+// The header gives the money and each lineup member's points, maxima with pieces and statuses; a schema 15 header without
+// them still lists, its members from the party line with -1 for the rest.
+TEST(saveSummariesGiveMoneyAndPointsFromTheHeader) {
+	Session s(test::data(), SessionOptions());
+	s.newGame();
+	test::confirmLines(s);
+	s.world().money = 345;
+	rules::PartyMember& lead = *s.world().member(s.world().lineup.front());
+	lead.hp = 7;
+	lead.statuses = {{"poison", 0}};
+	const std::string text = serializeSave(s.makeSave(false));
+	rules::Result<SaveSummary> summary = readSummary(text);
+	CHECK(summary.ok());
+	CHECK_EQ(summary.value->money, 345);
+	CHECK_EQ(summary.value->members.size(), s.world().lineup.size());
+	for (std::size_t i = 0; i < summary.value->members.size(); ++i) {
+		const SaveMemberSummary& m = summary.value->members[i];
+		const rules::PartyMember& member = *s.world().member(s.world().lineup[i]);
+		const rules::Stats stats = rules::memberStats(test::data().db, member);
+		CHECK_EQ(m.id, member.characterId);
+		CHECK_EQ(m.level, member.level);
+		CHECK_EQ(m.hp, member.hp);
+		CHECK_EQ(m.maxHp, stats.maxHp);
+		CHECK_EQ(m.tp, member.tp);
+		CHECK_EQ(m.maxTp, stats.maxTp);
+		CHECK(m.statuses == (i == 0 ? std::vector<std::string>{"poison"} : std::vector<std::string>{}));
+	}
+	rules::Result<SaveFile> parsed = parseSave(text);
+	CHECK(parsed.ok() && serializeSave(*parsed.value) == text);
+
+	std::string old = text;
+	old.replace(0, 11, "PSR-SAVE 15");
+	old.replace(old.find("schema 16\n"), 10, "schema 15\n");
+	const std::size_t header = old.find('\n', old.find("chunk header 1 ")) + 1;
+	std::size_t removed = 0;
+	for (const char* key : {"money ", "member "}) {
+		for (std::size_t at = old.find(std::string("\n") + key, header); at != std::string::npos && at < old.find("\nchunk ", header);
+				at = old.find(std::string("\n") + key, header)) {
+			const std::size_t end = old.find('\n', at + 1);
+			removed += end - at;
+			old.erase(at, end - at);
+		}
+	}
+	const std::size_t size = old.find("chunk header 1 ") + 15;
+	old.replace(size, old.find('\n', size) - size, std::to_string(std::stoi(old.substr(size)) - static_cast<int>(removed)));
+	old = resign(old);
+	rules::Result<SaveSummary> older = readSummary(old);
+	CHECK(older.ok());
+	CHECK_EQ(older.value->money, -1);
+	CHECK_EQ(older.value->members.size(), s.world().lineup.size());
+	for (const SaveMemberSummary& m : older.value->members) {
+		CHECK_EQ(m.level, s.world().member(m.id)->level);
+		CHECK(m.hp == -1 && m.maxHp == -1 && m.tp == -1 && m.maxTp == -1 && m.statuses.empty());
+	}
+	CHECK(parseSave(old).ok());
+}
+
 TEST(damagedAndNewerSavesAreRefused) {
 	Session s(test::data(), SessionOptions());
 	s.newGame();
@@ -156,7 +213,7 @@ TEST(damagedAndNewerSavesAreRefused) {
 	CHECK(r.error.find("damaged") != std::string::npos);
 
 	std::string newer = text;
-	newer.replace(0, std::string("PSR-SAVE 15").size(), "PSR-SAVE 16");
+	newer.replace(0, std::string("PSR-SAVE 16").size(), "PSR-SAVE 17");
 	r = parseSave(resign(newer));
 	CHECK(!r.ok());
 	CHECK(r.error.find("newer build") != std::string::npos);
@@ -315,7 +372,7 @@ TEST(schemaOneSavesMigrateToTheCurrentSchema) {
 	CHECK_EQ(w.encounterStream.state(), 7u);
 
 	const std::string again = serializeSave(*save.value);
-	CHECK(again.compare(0, 12, "PSR-SAVE 15\n") == 0);
+	CHECK(again.compare(0, 12, "PSR-SAVE 16\n") == 0);
 	CHECK(again.find("chunk battle 3 ") != std::string::npos);
 	CHECK(again.find("chunk quests 1 ") != std::string::npos);
 	CHECK(again.find("chunk actors 2 ") != std::string::npos);
@@ -381,8 +438,8 @@ TEST(dataAndSavesWorkInDirectoriesWithNonAsciiNames) {
 namespace {
 
 // Replaces text inside one chunk, keeping its byte count and the trailer right, as a hand edit that knows the format.
-std::string editSave(const std::string& text, const std::string& from, const std::string& to) {
-	const std::size_t at = text.find(from);
+std::string editSave(const std::string& text, const std::string& from, const std::string& to, const std::string& chunk = "") {
+	const std::size_t at = text.find(from, chunk.empty() ? 0 : text.find("chunk " + chunk + " "));
 	const std::size_t header = text.rfind("\nchunk ", at) + 1;
 	const std::size_t sizeAt = text.rfind(' ', text.find('\n', header)) + 1;
 	const std::size_t lineEnd = text.find('\n', header);
@@ -447,7 +504,7 @@ TEST(damagedSavesAreRefusedBeforeAnythingIndexesWithThem) {
 	}
 	const std::string text = serializeSave(good);
 	const std::string money = "money " + std::to_string(good.world.money) + "\n";
-	for (const std::string& edited : {editSave(text, money, "money 99999999999\n"), editSave(text, money, "money -99999999999\n")}) {
+	for (const std::string& edited : {editSave(text, money, "money 99999999999\n", "inventory"), editSave(text, money, "money -99999999999\n", "inventory")}) {
 		Session s(test::data(), SessionOptions());
 		CHECK_EQ(s.loadSaveText(edited).key, std::string("game.refuse.save_damaged"));
 		CHECK(s.mode() == Mode::Title);

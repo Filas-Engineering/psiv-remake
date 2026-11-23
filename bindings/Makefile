@@ -977,6 +977,25 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
 		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
 	done
+	# The late layout flows (make_late_flows_data.py, make_late_flows_assets.py, over the second flows' copies), from saves
+	# of the scripted playthrough on that data with one rewritten as save schema 15 (make_old_save.py): the Load screen's money and
+	# points (none for the old save) and its hints by navigation, travel over the Items page kept with its actions window,
+	# and a defeat in the result window with Confirm on and off; a copy whose `defeat_message` is no text key reports it.
+	python3 -I $(SAMPLE_SCRIPTS)/make_late_flows_data.py $(BUILD)/more_flows_data $(BUILD)/late_flows_data
+	python3 -I $(SAMPLE_SCRIPTS)/make_late_flows_assets.py $(BUILD)/export $(BUILD)/more_flows_assets $(BUILD)/late_flows_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/late_flows_data/game/data --check-assets --assets $(BUILD)/late_flows_assets
+	rm -rf $(BUILD)/late_flows_broken_assets
+	cp -R $(BUILD)/late_flows_assets $(BUILD)/late_flows_broken_assets
+	cp $(BUILD)/late_flows_broken_assets/alt/battle_broken.json $(BUILD)/late_flows_broken_assets/ui/battle_front.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/late_flows_broken_assets > $(BUILD)/check_assets_late_flows.txt
+	grep -qF "params.defeat_message: must be a text key" $(BUILD)/check_assets_late_flows.txt
+	rm -rf $(BUILD)/sample_late_flows_saves $(BUILD)/late_flows_run
+	cp -R $(BUILD)/sample_more_flows_base_saves $(BUILD)/sample_late_flows_saves
+	python3 -I $(SAMPLE_SCRIPTS)/make_old_save.py $(BUILD)/sample_late_flows_saves/manual_0.sav $(BUILD)/sample_late_flows_saves/manual_5.sav
+	cp -R $(BUILD)/late_flows_assets $(BUILD)/late_flows_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/late_flows_data/game/data --dev --saves $(BUILD)/sample_late_flows_saves --assets $(BUILD)/late_flows_run \
+		--script $(SAMPLE_SCRIPTS)/late_flows.txt --frames 2400 > $(BUILD)/sample_late_flows_headless.txt || { cat $(BUILD)/sample_late_flows_headless.txt; exit 1; }
+	tail -n 1 $(BUILD)/sample_late_flows_headless.txt
 	# Flashes by their effect (make_flash_assets.py): a stepped stage strobe past the limit is dropped, a two-step whiteout
 	# is held to a fifth under reduced flash, a slow tint is untouched.
 	python3 -I $(SAMPLE_SCRIPTS)/make_flash_assets.py $(BUILD)/export $(BUILD)/flash_assets

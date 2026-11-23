@@ -521,7 +521,7 @@ uint32_t psiv_sizeof(const char* struct_name) {
 		PSIV_SIZE(psiv_vehicle), PSIV_SIZE(psiv_travel_destination), PSIV_SIZE(psiv_event_position), PSIV_SIZE(psiv_zone), PSIV_SIZE(psiv_element_info),
 		PSIV_SIZE(psiv_route_cell), PSIV_SIZE(psiv_interact_target), PSIV_SIZE(psiv_field_input), PSIV_SIZE(psiv_profile_row), PSIV_SIZE(psiv_scene_camera),
 		PSIV_SIZE(psiv_platform), PSIV_SIZE(psiv_battle_keys), PSIV_SIZE(psiv_macro_step_check), PSIV_SIZE(psiv_macro_trouble_report), PSIV_SIZE(psiv_follower_cell),
-		PSIV_SIZE(psiv_talk_line),
+		PSIV_SIZE(psiv_talk_line), PSIV_SIZE(psiv_save_member),
 	};
 #undef PSIV_SIZE
 	if (!struct_name) {
@@ -807,6 +807,8 @@ psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out) {
 		out->flash_original = c.presentation.flashOriginal;
 		out->party_talk_ambient = c.partyTalkAmbient;
 		out->music_fade_ms = c.presentation.music.fadeMs;
+		out->map_load_hold_ms = c.presentation.mapLoadHoldMs;
+		out->map_load_hold_on_load = c.presentation.mapLoadHoldOnLoad;
 		out->cell_pixels = c.cellPixels;
 		out->autosave = session->session->autosaveOn();
 		out->bag_slots = c.bagSlots;
@@ -1258,6 +1260,21 @@ psiv_status psiv_saves(psiv_session* session, const psiv_save_summary** out, int
 			items[i].error = session->arena.str(s.error);
 			items[i].dev = s.dev;
 			items[i].newest = s.newest;
+			items[i].money = s.money;
+			psiv_save_member* members = session->arena.array<psiv_save_member>(s.members.size());
+			for (std::size_t k = 0; k < s.members.size(); ++k) {
+				const game::SaveMemberSummary& m = s.members[k];
+				members[k].id = session->arena.str(m.id);
+				members[k].level = m.level;
+				members[k].hp = m.hp;
+				members[k].max_hp = m.maxHp;
+				members[k].tp = m.tp;
+				members[k].max_tp = m.maxTp;
+				members[k].status_count = static_cast<int32_t>(m.statuses.size());
+				members[k].statuses = session->arena.strs(m.statuses);
+			}
+			items[i].member_count = static_cast<int32_t>(s.members.size());
+			items[i].members = members;
 		}
 		*out = items;
 		*count = static_cast<int32_t>(list.size());

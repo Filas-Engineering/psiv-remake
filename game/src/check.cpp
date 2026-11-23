@@ -32,7 +32,8 @@ private:
 
 // What stands on a solid cell. A point is used from a floor cell beside it (interact hooks, shops, rest points, chests
 // with a cell, ports and helms), so the party must reach one; a cell that is only solid (where an actor stands apart
-// from its talk point, or a solid actor's home) blocks the way and is never used.
+// from its talk point, or a standing solid actor's home; a wanderer, patrol or path leaves its home) blocks the way and
+// is never used.
 struct Solid {
 	std::string what;
 	int line = 0;
@@ -105,7 +106,7 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 	}
 	for (const ActorDef& actor : config.actorDefs) {
 		const auto marker = area.markers.find(actor.marker);
-		if (actor.area == area.id && actor.solid && !actor.path && (actor.at || marker != area.markers.end())) {
+		if (actor.area == area.id && actor.solid && !actor.path && !actor.wander && !actor.patrol && (actor.at || marker != area.markers.end())) {
 			addSolid(actor.at ? *actor.at : marker->second, "actor '" + actor.id + "'", 0, false);
 		}
 	}

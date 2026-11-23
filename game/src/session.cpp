@@ -3467,6 +3467,13 @@ void Session::arrive(Cell cell) {
 	}
 	if (!world_.aboard.empty()) {
 		world_.vehicles[world_.aboard].cell = cell;
+		if (const VehicleSounds* sounds = vehicleSounds(world_.aboard); sounds && !sounds->move.empty()) {
+			vehicleMoveMs_ += leaderStepMs(false);
+			if (sounds->moveMs <= 0 || vehicleMoveMs_ >= sounds->moveMs) {
+				vehicleMoveMs_ = sounds->moveMs <= 0 ? 0 : vehicleMoveMs_ - sounds->moveMs;
+				playFieldSound(sounds->move);
+			}
+		}
 	}
 	if (pacingOn()) {
 		pacing_.step();
@@ -4341,8 +4348,30 @@ rules::Message Session::board() {
 	place.homeArea = place.area;
 	place.home = place.cell;
 	stepProgressUs_ = 0;
+	vehicleMoveMs_ = 0;
 	emit(OutputKind::Notice, "game.boarded", {id});
+	if (const VehicleSounds* sounds = vehicleSounds(id)) {
+		playFieldSound(sounds->board);
+	}
 	return {};
+}
+
+const VehicleSounds* Session::vehicleSounds(const std::string& vehicle) const {
+	const auto& vehicles = data_.config.presentation.sounds.vehicles;
+	const auto it = vehicles.find(vehicle);
+	return it == vehicles.end() ? nullptr : &it->second;
+}
+
+void Session::playFieldSound(const std::string& cue) {
+	if (cue.empty()) {
+		return;
+	}
+	events::Action sound;
+	sound.type = events::ActionType::sound;
+	sound.subject = cue;
+	const events::Handle handle = nextHandle_++;
+	presenter()->begin(handle, sound);
+	output_.push_back({OutputKind::Action, {}, events::describe(sound)});
 }
 
 rules::Message Session::leaveVehicle() {
@@ -4372,6 +4401,9 @@ rules::Message Session::leaveVehicle() {
 			world_.facing = f;
 			stepProgressUs_ = 0;
 			emit(OutputKind::Notice, "game.left_vehicle", {id});
+			if (const VehicleSounds* sounds = vehicleSounds(id)) {
+				playFieldSound(sounds->leave);
+			}
 			return {};
 		}
 	}
@@ -4586,6 +4618,9 @@ rules::Message Session::travel(TravelKind kind, const std::string& destination, 
 		} else {
 			emit(OutputKind::Notice, "game.used_ability", {user, thing});
 		}
+		const FieldSounds& sounds = data_.config.presentation.sounds;
+		const auto own = sounds.travelThings.find(thing);
+		playFieldSound(own != sounds.travelThings.end() ? own->second : kind == TravelKind::Town ? sounds.town : sounds.dungeonExit);
 	}
 	leaveVehicleBehind();
 	modes_.transition(Mode::Field);
@@ -4689,6 +4724,9 @@ void Session::openChest(const Chest& chest) {
 		world_.money = std::min(data_.config.moneyCap, world_.money + chest.money);
 		emit(OutputKind::Notice, "game.found_money", {std::to_string(chest.money)});
 	}
+	const FieldSounds& sounds = data_.config.presentation.sounds;
+	const auto own = sounds.chests.find(chest.id);
+	playFieldSound(own != sounds.chests.end() ? own->second : sounds.chest);
 	world_.flags[chest.flag] = true;
 	refreshJournal(true);
 }
@@ -5341,6 +5379,12 @@ SaveFile Session::makeSave(bool autosave) const {
 	save.contentHash = data_.contentHash;
 	save.writeTime = options_.clock ? options_.clock() : 0;
 	save.sequence = store_ ? store_->nextSequence() : 0;
+	for (const std::string& id : world_.lineup) {
+		if (const rules::PartyMember* m = world_.member(id)) {
+			const rules::Stats stats = rules::memberStats(data_.db, *m);
+			save.memberMaxima[id] = {stats.maxHp, stats.maxTp};
+		}
+	}
 	for (const BackgroundRun& run : background_) {
 		save.background.emplace_back(run.event, events::save_state_to_text(run.interpreter->save()));
 	}

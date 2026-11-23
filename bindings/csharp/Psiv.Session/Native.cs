@@ -36,6 +36,7 @@ public struct PsivGameInfo
 	public int PartyTalkAmbient, MusicFadeMs;
 	public int CellPixels;
 	public int Autosave, BagSlots, BagSingle;
+	public int MapLoadHoldMs, MapLoadHoldOnLoad;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -67,6 +68,17 @@ public struct PsivSaveSummary
 	public IntPtr Error;
 	public int Dev;
 	public int Newest;
+	public int Money;
+	public int MemberCount;
+	public IntPtr Members;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PsivSaveMember
+{
+	public IntPtr Id;
+	public int Level, Hp, MaxHp, Tp, MaxTp, StatusCount;
+	public IntPtr Statuses;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -469,7 +481,7 @@ public struct PsivPacingBoss { public IntPtr Flag, Encounter, Area; public int A
 public static unsafe partial class Native
 {
 	public const string Library = "psiv_session";
-	public const uint AbiVersion = 20;
+	public const uint AbiVersion = 21;
 	// PSIV_SLOT_COUNT: the places a member wears equipment, which the member structs index by psiv_equip_slot.
 	public const int SlotCount = 7;
 

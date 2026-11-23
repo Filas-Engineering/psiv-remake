@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 20
+#define PSIV_ABI_VERSION 21
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -317,6 +317,11 @@ typedef struct psiv_game_info {
 	 * under bag_stacking single, where each item is a slot of its own. Equipment pieces take no slot. */
 	int32_t bag_slots;
 	int32_t bag_single;
+	/* game.json presentation.map_load_hold_ms: after an area change (an exit, a warp, travel) the screen stays dark this
+	 * long before it fades in, and the new area's music starts after it; 0 holds nothing. map_load_hold_on_load: 1 when a
+	 * load holds too. */
+	int32_t map_load_hold_ms;
+	int32_t map_load_hold_on_load;
 } psiv_game_info;
 
 PSIV_API psiv_status psiv_game_info_get(psiv_session* session, psiv_game_info* out);
@@ -479,6 +484,20 @@ PSIV_API psiv_status psiv_save_manual(psiv_session* session, const char* slot);
  * when the file stays. Erasing the autosave a retry would load ends that retry. */
 PSIV_API psiv_status psiv_erase_save(psiv_session* session, const char* slot);
 
+/* A lineup member in a save's header. A save from before save schema 16 gives the id and level only: hp, max_hp, tp and
+ * max_tp are -1 and there are no statuses. max_hp and max_tp include the member's pieces. */
+typedef struct psiv_save_member {
+	const char* id;
+	int32_t level;
+	int32_t hp;
+	int32_t max_hp;
+	int32_t tp;
+	int32_t max_tp;
+	/* Ids of the statuses that persist outside battle. */
+	int32_t status_count;
+	const char* const* statuses;
+} psiv_save_member;
+
 typedef struct psiv_save_summary {
 	const char* slot;
 	const char* area;
@@ -497,6 +516,11 @@ typedef struct psiv_save_summary {
 	/* 1 for the newest save, the one psiv_continue_game loads: the latest write time, then the highest sequence, damaged slots
 	 * aside; at most one per list. write_time is seconds from the session's clock. */
 	int32_t newest;
+	/* The party's money; -1 in a save from before save schema 16. */
+	int32_t money;
+	/* The lineup in order, as party lists it. */
+	int32_t member_count;
+	const psiv_save_member* members;
 } psiv_save_summary;
 
 /* Every slot with a file, manual slots first. PSIV_REFUSED when saving is disabled. */

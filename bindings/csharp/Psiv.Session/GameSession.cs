@@ -176,7 +176,7 @@ public sealed unsafe class GameSession : IDisposable
 		return new GameInfo(Native.Str(i.Title), Native.Str(i.GameBuild), i.RulesVersion, i.TickMs, i.RoundMs, i.ManualSlots, i.AutosaveSlots, i.ItemCap,
 			i.MoneyCap, Native.Strs(i.Languages, i.LanguageCount), Native.Str(i.TitleMusic), Native.Str(i.VictoryMusic), Native.Str(i.DefeatMusic),
 			i.MagicDefense != 0, i.AffinityDivisor, (FlashLevel)i.FlashDefault, i.FlashOriginal != 0, i.PartyTalkAmbient != 0, i.MusicFadeMs, i.CellPixels,
-			i.Autosave != 0, i.BagSlots, i.BagSingle != 0);
+			i.Autosave != 0, i.BagSlots, i.BagSingle != 0, i.MapLoadHoldMs, i.MapLoadHoldOnLoad != 0);
 	}
 
 	public Profile Profile()
@@ -315,7 +315,9 @@ public sealed unsafe class GameSession : IDisposable
 		foreach (PsivSaveSummary s in Native.Span<PsivSaveSummary>(p, count))
 		{
 			list.Add(new SaveSummary(Native.Str(s.Slot), Native.Str(s.Area), s.PlayTimeMs, Native.Strs(s.Party, s.PartyCount), Native.Str(s.Difficulty),
-				s.WriteTime, s.Sequence, s.Autosave != 0, s.Damaged != 0, Native.Str(s.Error), s.Dev != 0, s.Newest != 0));
+				s.WriteTime, s.Sequence, s.Autosave != 0, s.Damaged != 0, Native.Str(s.Error), s.Dev != 0, s.Newest != 0, s.Money,
+				[.. Native.Span<PsivSaveMember>(s.Members, s.MemberCount).ToArray().Select(m => new SaveMember(Native.Str(m.Id), m.Level, m.Hp, m.MaxHp, m.Tp, m.MaxTp,
+					Native.Strs(m.Statuses, m.StatusCount)))]));
 		}
 		return list;
 	}

@@ -1520,7 +1520,7 @@ What the battle's windows already take their timing from:
 Added to either battle file:
 
 * Param `command_open_delay` (expression, milliseconds, default 0): after the battle's opening playback, the first command window waits this long (phase `playback`, no menu); later rounds do not wait.
-* Top-level `result_sequence`: the result screen as steps in order, each `{"phase": PHASE, "ms": 0 to 60000}` with PHASE from `victory` (the outcome alone), `result` (the result window; required) and `level_ups` (the level-ups and what they taught; skipped when nobody gained a level); a step goes on with Confirm, or by itself after `ms` when above 0 (Confirm still goes on), the result step turning its pages first, and Back ends the battle from any step. With a `level_ups` step the level-up and learned notices do not play as steps after the outcome (their lines go to the log, the level-up cue plays as the step comes up) and the result window's `result_lines` leave them out. Fields: `result_phase` (the step's phase in phase `ended`, `result` there without a sequence, `''` before), `result_phase_ms` (int, its time), `level_lines` (items `kind`, `text`: the level-up and learned lines).
+* Top-level `result_sequence`: the result screen as steps in order, each `{"phase": PHASE, "ms": 0 to 60000}` with PHASE from `victory` (the outcome alone), `defeat` (after a defeat only; "Late layout flows"), `result` (the result window; required) and `level_ups` (the level-ups and what they taught; skipped when nobody gained a level); a step goes on with Confirm, or by itself after `ms` when above 0 (Confirm still goes on), the result step turning its pages first, and Back ends the battle from any step. With a `level_ups` step the level-up and learned notices do not play as steps after the outcome (their lines go to the log, the level-up cue plays as the step comes up) and the result window's `result_lines` leave them out. Fields: `result_phase` (the step's phase in phase `ended`, `result` there without a sequence, `''` before), `result_phase_ms` (int, its time), `level_lines` (items `kind`, `text`: the level-up and learned lines).
 
 ```json
 {"version": 1, "params": {"command_open_delay": 600}, "result_sequence": [{"phase": "victory", "ms": 800}, {"phase": "result"}, {"phase": "level_ups"}], "windows": [
@@ -1603,7 +1603,7 @@ Params:
 * `columns` (expression, default 1): the grid's width.
 * `show_empty` (expression, default 0): not 0, the list holds every manual slot, empty ones too, before the autosaves; Confirm on an empty slot plays the `refuse` cue and stays. A block draws an empty slot by its own elements (`"visible": "empty"`), or a `repeater`'s `empty` template draws the slots past the items.
 
-What `SaveSummary` gives is all a block shows: the slot, area, play time, difficulty, write time, autosave, newest, damaged with its error, and the party as character ids with levels. A richer block would need from the library the party's money, each member's hit and technique points, the story chapter or a flag text, and the area's region or a location picture.
+What `SaveSummary` gives is all a block shows: the slot, area, play time, difficulty, write time, autosave, newest, damaged with its error, the party as character ids with levels, and since save schema 16 the money and each member's points (below, "The Load screen: money and points"). A richer block would need from the library the story chapter or a flag text, and the area's region or a location picture.
 
 ```json
 {"version": 1, "params": {"navigation": "grid", "columns": 2, "show_empty": 1}, "windows": [
@@ -1654,6 +1654,60 @@ Param `over_menu` (expression, default 0): not 0, an item or technique from the 
 ### The second flow runs
 
 `make_more_flows_data.py GAME CORE OUT` copies the data with Tidewater's inn voiced (`voice.more_inn`: welcome, confirm, decline and farewell lines in both languages) and the encounter `more_bounty` (a one-hit-point enemy worth 2400 experience). `make_more_flows_assets.py EXPORT BASE OUT [--small]` copies the test assets (or the small set) with generated pictures (a strip of four bands in `pictures`, a two-frame title art layer, a sign PNG, a UI skin page arrow) and every item above: the intro scrolling and cropping them, the Load screen in a grid (`alt/load_row.json` in a row), the inn's decline, the shop's question (`alt/shop_held.json` with `question_ms` 500, `alt/shop_plain.json` without the question), travel over the menu by kind (`alt/travel_id.json` by id), the level-ups two lines a page, and at 1280x720 the vehicle's Weapons row; `alt/title_broken.json`, `alt/shop_broken.json`, `alt/inn_broken.json` and `alt/load_broken.json` are checked on copies. Runs, from playthrough saves on the data copy, with `--dev`: `more_flows.txt` and `small_more_flows.txt` (README, step 10); the pictures are checked by `pixel.X.Y`. Screenshots under `build/shots/more_flows/` and `build/shots/small/` with `--window`.
+
+## Late layout flows
+
+Each optional as the flows above: a set without them behaves and draws as before, the export writes none of them, `--check-assets` checks each and `--capabilities` lists them. `scripts/make_late_flows_assets.py` writes a set that uses them all (below, "The late flow runs").
+
+### The Load screen: money and points
+
+Item fields of `load_game`'s `slots`: `money` (int) and, on each of `members`, `hp`, `hp_max`, `tp`, `tp_max` (ints, the maxima with the member's pieces) and `statuses` (the lasting statuses' names, space-separated), all from the save's header (`SaveSummary.Money`, `SaveSummary.Members`). A save from before save schema 16 has none of them: each is `""`, so a text built on it shows nothing and `"visible": "hp != ''"` hides an element.
+
+Param `navigation_hint` (expression, default 0): not 0, under `navigation` `grid` or `row` the `hint` field names the directions that move the cursor there: `ui.saves.hint_grid` ({0} to {3} Up, Down, Left, Right, {4} Confirm, {5} Back) or `ui.saves.hint_row` (the same values, the text naming Left and Right), each falling back to `ui.saves.hint` when the text tables lack it. Under `list`, or at 0, the hint is `ui.saves.hint` as before.
+
+```json
+{"version": 1, "params": {"navigation": "grid", "columns": 2, "navigation_hint": 1}, "windows": [...,
+	{"type": "repeater", "items": "members", "y": 32, "dx": 84, "template": [
+		{"type": "image", "image": "sprite", "w": 32, "h": 32},
+		{"type": "text", "value": "'L' + level", "x": 34, "y": 8, "style": "small"},
+		{"type": "text", "visible": "hp != ''", "value": "hp + '/' + hp_max", "x": 34, "y": 20, "style": "small"}]},
+	{"type": "text", "value": "area + '  ' + play_time + (money != '' ? '  ' + money + ' M' : '')", "style": "small"}]}
+```
+
+### Travel: over the open page
+
+Param `over_page` (expression, default 0) with `over_menu`: the field menu's open page stays as it was under the travel screen, its own windows included (an item's actions window under `menu_items` `actions`, the ability list of the Status or abilities page); the Items page's `use` leaves its actions open. When the list closes without travelling (Back, the cancel row, Back on the leave message, a refused travel) the menu comes back to that page in the same state: tab, cursor, the actions window and its cursor. Without `over_page` the menu opens afresh as before.
+
+```json
+{"version": 1, "params": {"over_menu": 1, "over_page": 1}, "windows": [...]}
+```
+
+### Battle: a defeat in the result window
+
+Param `defeat_message` (a text key, default none) on either battle file: after a defeat the outcome's banner step shows no text, the `victory` step of a `result_sequence` is skipped, and the result window's `result_lines` hold the key's text (kind `defeat`, `{0}` the name of the member who fell last) in place of `ui.battle.result.fallen`. The member is the target of the last party `CombatantDefeated` of the battle's final round; a developer's `lose`, which drops hit points without that event, gives the last member down. Fields `defeat_text` (the message after a defeat in phase `ended`, else `''`) and `defeat_name`.
+
+`result_sequence` takes the phase `defeat` (`ms` or Confirm, like the others): shown only after a defeat. After a game over whose layout sets `game_over_confirm` 0 the steps with an `ms` go on by themselves up to the last shown, which stays until the timing `game_over_return_ms` returns to the title (before, such a sequence stood at its first step).
+
+```json
+{"version": 1, "params": {"defeat_message": "ui.battle.result.defeat", "game_over_confirm": 0}, "result_sequence": [{"phase": "victory", "ms": 600}, {"phase": "defeat", "ms": 700}, {"phase": "result"}], "windows": [...,
+	{"name": "defeat", "visible": "result_phase == 'defeat'", "anchor": "center", "w": "W * 3 / 4", "h": 108, "frame": "battle", "padding": [24, 24, 24, 24], "elements": [
+		{"type": "text", "value": "defeat_text", "w": "cw", "align": "center", "wrap": true, "lines": 2}]}
+]}
+```
+
+### Dialogue: the reveal while Confirm is held, and the open cue
+
+Param `reveal_confirm` (`"complete"` default, or `"hold"`): with `hold` a press never completes a page; while Confirm is held the reveal runs at param `reveal_hold_cps` (expression, characters a second, default 120; only when faster than the text speed's), and the page finishes only by its own reveal, then waits for a press as before. It applies to the box, narration and the party talk by speaker; the battle's result window shows its lines whole and has no reveal. Skip works as before.
+
+Param `dialogue_open_sound` (a cue id, default `""`: none): played when the box opens, on the first line or choice after a frame without one; later lines and pages while it stays open play nothing.
+
+```json
+{"version": 1, "params": {"reveal_confirm": "hold", "reveal_hold_cps": 200, "dialogue_open_sound": "brass_alarm"}, "windows": [...]}
+```
+
+### The late flow runs
+
+`make_late_flows_data.py MORE_FLOWS_DATA OUT` copies the second flows' data with `late_crushers` (five fast, strong enemies the party loses to in its first round), `late_wisps` (three one-hit-point enemies), game.json's `map_load_hold_ms` 400 and `sounds` (a town return and a chest). `make_late_flows_assets.py EXPORT MORE OUT` copies the second flows' set with the Load blocks' money and points and `navigation_hint` (`alt/load_row.json` in a row), travel's `over_page`, Items' actions, the battle's `defeat_message` with a `defeat` step (`alt/battle_quiet.json` with `game_over_confirm` 0 and a timed step, `alt/styles_return.json` with `game_over_return_ms` 1500) and `alt/dialogue_hold.json`; `alt/battle_broken.json` is checked on a copy. `make_old_save.py SAVE OUT` rewrites a save as schema 15 for the Load screen's empty fields. Run `late_flows.txt` from playthrough saves with `--dev` (README, step 10); screenshots under `build/shots/late_flows/` with `--window`.
 
 ## Dialogue control tags (`ui/dialogue.json`, `SampleController.Dialogue.cs`)
 
