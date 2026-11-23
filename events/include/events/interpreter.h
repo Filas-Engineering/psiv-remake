@@ -67,6 +67,11 @@ public:
 	enum class NextOutput { none, line, choice, end, other };
 	NextOutput next_output() const;
 
+	// For hosts: the last answered `choice ... keep` of the running event (FORMAT.md, "Choices"), which stays on screen
+	// with its picked row until `choice clear` or the event ends; nullptr when none. `picked` and `states` (the options'
+	// state words as it was presented) come with it.
+	const ChoiceRequest* kept_choice(int& picked, std::vector<std::string>& states) const;
+
 private:
 	struct Thread {
 		int pc = -1;
@@ -130,6 +135,8 @@ private:
 	std::string start_world_;
 	bool restarted_ = false;
 	long budget_ = 0;
+	// The state words of the choice presented last, kept with it once answered.
+	std::vector<std::string> presented_states_;
 };
 
 }

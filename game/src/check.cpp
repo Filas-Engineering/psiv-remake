@@ -72,6 +72,9 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 		uses.push_back({what, line, {c}, config.interactAcross});
 	};
 	std::set<std::string> hookIds;
+	// The cells of talk points that answer on their actor: floor, as the session has them; the actor blocks only where a
+	// standing solid one stands.
+	std::set<Cell> actorTalk;
 	for (const Hook& h : area.hooks) {
 		if (!hookIds.insert(h.id).second) {
 			found.add(file, h.line, "check.hook_id_taken", {h.id});
@@ -86,6 +89,7 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 				start = home->at ? *home->at : area.markers.at(home->marker);
 			}
 			uses.push_back({"hook '" + h.id + "'", h.line, {start}, config.interactAcross || h.across});
+			actorTalk.insert(h.at);
 		} else if (h.trigger == HookTrigger::Interact) {
 			const std::string what = "hook '" + h.id + "'";
 			addPoint(h.at, what, h.line);
@@ -217,6 +221,7 @@ void checkArea(const Area& area, const std::set<std::string>& entrances, const s
 	// cell that a flag's change turns to floor counts as floor.
 	Area view = area;
 	view.passable = switchable;
+	view.passable.insert(actorTalk.begin(), actorTalk.end());
 	// Exit and gangway cells a step from a cell the party stands on takes.
 	std::set<Cell> used;
 	const std::set<Cell> reached = [&] {

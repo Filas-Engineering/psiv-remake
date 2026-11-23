@@ -124,12 +124,15 @@ public sealed partial class SampleController
 		_equipChange = null;
 		_macroStage = MacroStage.List;
 		_saveMode = null;
+		_saveStep = "";
+		_saveMessage = "";
 		_systemCursor = 0;
 		_talkLines = [];
 		_talkSpeakers = null;
 		_itemActing = null;
 		_itemLooking = false;
 		_itemResult = "";
+		_abilityResult = "";
 		_discardStep = null;
 	}
 

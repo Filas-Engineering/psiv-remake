@@ -84,6 +84,11 @@ struct PresentationState {
 	std::vector<PanelState> panels;
 	// Sorted by actor.
 	std::vector<ActorState> actors;
+	// The last answered `choice ... keep` until `choice clear` or the event ends: its instruction, -1 for none, the
+	// picked option and the options' state words as it was presented.
+	int kept_choice = -1;
+	int kept_picked = -1;
+	std::vector<std::string> kept_states;
 
 	bool operator==(const PresentationState& other) const;
 };
@@ -109,7 +114,7 @@ struct SaveState {
 };
 
 // The newest version of the text form (events-save N).
-constexpr int kSaveTextVersion = 5;
+constexpr int kSaveTextVersion = 6;
 
 // The text form ends with a checksum of everything before it, so damage is
 // detected (SAV-014): save_state_from_text rejects a text whose checksum

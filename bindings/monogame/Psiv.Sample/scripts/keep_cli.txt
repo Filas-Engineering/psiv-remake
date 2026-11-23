@@ -1,0 +1,10 @@
+# A choice that stays on screen in the terminal (make_keep_data.py's copy): the flag hook starts keep_cli; the options'
+# states and `keep` print with the choice, and the kept choice once under the next line each time it changes. game_cli
+# and the C playthrough print the same (make bindings compares them, saves included).
+new
+dev flag keep.cli on
+choose 0
+choose 1
+menu
+save manual_0
+close

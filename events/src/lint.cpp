@@ -125,6 +125,11 @@ private:
 			if (!ins.name.empty()) {
 				note(ins.choice.yes_no ? flag_writes_ : var_writes_, ins.name, ins);
 			}
+			for (const OptionState& state : ins.option_states) {
+				if (state.has_condition) {
+					read(state.condition, ins);
+				}
+			}
 			break;
 		default:
 			break;

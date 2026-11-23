@@ -1914,6 +1914,19 @@ int32_t psiv_choice_pending(const psiv_session* session) {
 	return session && session->session->choice() != nullptr;
 }
 
+static void fillChoice(psiv_session* session, const game::ChoiceView& c, psiv_choice& out) {
+	out = psiv_choice();
+	out.prompt = session->arena.str(c.prompt);
+	out.yes_no = c.yesNo;
+	out.option_count = static_cast<int32_t>(c.options.size());
+	out.options = session->arena.strs(c.options);
+	out.header = session->arena.str(c.header);
+	out.header_id = session->arena.str(c.headerId);
+	out.keep = c.keep;
+	out.states = c.states.empty() ? nullptr : session->arena.strs(c.states);
+	out.picked = c.picked;
+}
+
 psiv_status psiv_choice_get(psiv_session* session, psiv_choice* out) {
 	return guard(session, false, [&] {
 		if (!out) {
@@ -1923,13 +1936,21 @@ psiv_status psiv_choice_get(psiv_session* session, psiv_choice* out) {
 		if (!c) {
 			return notFound(session, "choice");
 		}
-		*out = psiv_choice();
-		out->prompt = session->arena.str(c->prompt);
-		out->yes_no = c->yesNo;
-		out->option_count = static_cast<int32_t>(c->options.size());
-		out->options = session->arena.strs(c->options);
-		out->header = session->arena.str(c->header);
-		out->header_id = session->arena.str(c->headerId);
+		fillChoice(session, *c, *out);
+		return PSIV_OK;
+	});
+}
+
+psiv_status psiv_kept_choice_get(psiv_session* session, psiv_choice* out) {
+	return guard(session, false, [&] {
+		if (!out) {
+			return nullArgument(session, "out");
+		}
+		const std::optional<game::ChoiceView> c = session->session->keptChoice();
+		if (!c) {
+			return notFound(session, "kept choice");
+		}
+		fillChoice(session, *c, *out);
 		return PSIV_OK;
 	});
 }

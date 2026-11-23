@@ -9,7 +9,7 @@ namespace {
 
 const char* const header = "events-save";
 // Version 4 adds each actor's route (`via`, `pathfind`) and `placed`, version 5 the scene camera (`camera to`, `camera
-// reset`); a state is written in the oldest version that holds what it uses, so older builds still read it.
+// reset`), version 6 the kept choice (`choice ... keep`); a state is written in the oldest version that holds what it uses, so older builds still read it.
 const int version = kSaveTextVersion;
 const int oldest_version = 3;
 const char* const checksum_mark = " sum ";
@@ -121,6 +121,10 @@ bool read_bool(std::istringstream& in, bool& out) {
 	return true;
 }
 
+bool uses_kept_choice(const PresentationState& p) {
+	return p.kept_choice >= 0;
+}
+
 bool uses_scene_camera(const PresentationState& p) {
 	return p.camera_to || p.camera_reset;
 }
@@ -155,6 +159,12 @@ void write_presentation(std::ostringstream& out, const PresentationState& p, int
 				out << ' ' << word(w);
 			}
 			out << ' ' << a.pathfind << ' ' << a.placed;
+		}
+	}
+	if (file_version >= 6) {
+		out << ' ' << p.kept_choice << ' ' << p.kept_picked << ' ' << p.kept_states.size();
+		for (const std::string& w : p.kept_states) {
+			out << ' ' << word(w);
 		}
 	}
 }
@@ -203,6 +213,18 @@ bool read_presentation(std::istringstream& in, PresentationState& p, int file_ve
 			}
 		}
 	}
+	if (file_version >= 6) {
+		std::size_t states = 0;
+		if (!(in >> p.kept_choice >> p.kept_picked) || p.kept_choice < -1 || p.kept_picked < -1 || !read_count(in, states)) {
+			return false;
+		}
+		p.kept_states.resize(states);
+		for (std::string& w : p.kept_states) {
+			if (!read_word(in, w)) {
+				return false;
+			}
+		}
+	}
 	return true;
 }
 
@@ -222,12 +244,13 @@ bool PresentationState::operator==(const PresentationState& other) const {
 	return music_set == other.music_set && music == other.music && ambient_set == other.ambient_set && ambient == other.ambient &&
 		fade_set == other.fade_set && faded_out == other.faded_out && camera == other.camera && camera_to == other.camera_to &&
 		camera_reset == other.camera_reset && camera_marker == other.camera_marker && camera_has_position == other.camera_has_position &&
-		camera_position.x == other.camera_position.x && camera_position.y == other.camera_position.y && panels == other.panels && actors == other.actors;
+		camera_position.x == other.camera_position.x && camera_position.y == other.camera_position.y && panels == other.panels && actors == other.actors &&
+		kept_choice == other.kept_choice && kept_picked == other.kept_picked && kept_states == other.kept_states;
 }
 
 std::string save_state_to_text(const SaveState& state) {
 	std::ostringstream out;
-	const int file_version = uses_scene_camera(state.presentation) ? 5 : uses_routes(state.presentation) ? 4 : oldest_version;
+	const int file_version = uses_kept_choice(state.presentation) ? 6 : uses_scene_camera(state.presentation) ? 5 : uses_routes(state.presentation) ? 4 : oldest_version;
 	out << header << ' ' << file_version << ' ' << state.fingerprint << ' ' << static_cast<int>(state.status) << ' ' << state.skip_depth;
 	out << ' ' << word(state.event) << ' ' << word(to_hex(state.start_world));
 	out << ' ' << state.frames.size();

@@ -45,7 +45,7 @@ extern "C" {
 #endif
 
 /* Bumped whenever a function signature, a struct layout or an enum value changes. */
-#define PSIV_ABI_VERSION 21
+#define PSIV_ABI_VERSION 22
 
 PSIV_API uint32_t psiv_abi_version(void);
 /* "psiv-bindings <version> (game <build>, rules <version>)". Static storage. */
@@ -963,6 +963,13 @@ typedef struct psiv_choice {
 	/* The script's `header`, shown with the options, "" for none; header_id its string id, "" for quoted text. */
 	const char* header;
 	const char* header_id;
+	/* 1 when the script's choice says `keep`: once answered it stays on screen (psiv_kept_choice_get). */
+	int32_t keep;
+	/* option_count state words from the script (`option <text> state <word> [if <condition>]`), "" for none; NULL when
+	   no option has one. A host maps them to its own looks. */
+	const char* const* states;
+	/* The kept choice's picked option; -1 for a choice waiting on an answer. */
+	int32_t picked;
 } psiv_choice;
 
 PSIV_API int32_t psiv_line_pending(const psiv_session* session);
@@ -971,6 +978,9 @@ PSIV_API psiv_status psiv_line_get(psiv_session* session, psiv_line* out);
 PSIV_API psiv_status psiv_line_confirm(psiv_session* session); /* MUTATES */
 PSIV_API int32_t psiv_choice_pending(const psiv_session* session);
 PSIV_API psiv_status psiv_choice_get(psiv_session* session, psiv_choice* out);
+/* The last answered `choice ... keep` of the running event, with `picked` set, which stays on screen under the lines and
+   choices that follow until `choice clear` or the event ends. PSIV_NOT_FOUND when there is none. */
+PSIV_API psiv_status psiv_kept_choice_get(psiv_session* session, psiv_choice* out);
 PSIV_API psiv_status psiv_choose(psiv_session* session, int32_t index); /* MUTATES */
 /* What the running event shows next, from where it stands, without advancing it: a psiv_next_output. It looks past the
  * line shown now through jumps, returns and flag and variable changes; PSIV_NEXT_OTHER for anything else (a branch on a

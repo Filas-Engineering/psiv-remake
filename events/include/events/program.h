@@ -84,9 +84,17 @@ enum class Op {
 	end_game,
 	picture,
 	register_town,
+	choice_clear,
 };
 
 const char* op_name(Op op);
+
+// An option's `state <word> [if <condition>]`: the word the host is given when the condition holds (always without one).
+struct OptionState {
+	std::string word;
+	bool has_condition = false;
+	Condition condition;
+};
 
 struct Instruction {
 	Op op = Op::ret;
@@ -124,6 +132,8 @@ struct Instruction {
 	std::vector<int> targets;
 	// choice: the source line of each option.
 	std::vector<int> option_lines;
+	// choice: each option's state, or empty when no option has one.
+	std::vector<OptionState> option_states;
 };
 
 struct EventInfo {

@@ -491,7 +491,18 @@ private:
 		}
 	}
 
+	// `choice clear`: a simple command, not a block.
+	bool choice_clear() {
+		const SourceLine& l = line();
+		return l.tokens.size() == 2 && l.tokens[1].kind == TokenKind::word && l.tokens[1].text == "clear";
+	}
+
 	void parse_choice(const Context& ctx, std::vector<Stmt>& out) {
+		if (choice_clear()) {
+			out.push_back(simple(Op::choice_clear));
+			++pos_;
+			return;
+		}
 		Stmt s = simple(Op::choice);
 		s.kind = StmtKind::choice;
 		Args a = args();
@@ -501,6 +512,7 @@ private:
 		if (a.keyword("header")) {
 			a.text(s.ins.choice.header, "header text (a quoted string or @string.id)");
 		}
+		s.ins.choice.keep = a.keyword("keep");
 		into(a, s, "a variable name after 'into'");
 		a.finish();
 		++pos_;
@@ -514,12 +526,25 @@ private:
 			Text label;
 			Args o = args();
 			o.text(label, "option text (a quoted string or @string.id)");
+			OptionState state;
+			if (o.keyword("state") && o.name(state.word, "a state word after 'state'") && o.keyword("if")) {
+				state.has_condition = parse_condition(o, state.condition);
+			}
 			o.finish();
+			if (!state.word.empty()) {
+				s.ins.option_states.resize(s.ins.choice.options.size());
+				s.ins.option_states.push_back(state);
+			} else if (!s.ins.option_states.empty()) {
+				s.ins.option_states.emplace_back();
+			}
 			s.ins.choice.options.push_back(label);
 			s.ins.option_lines.push_back(b.line);
 			++pos_;
 			stop = parse_block(ctx, {"option", "end"}, b.body);
 			s.branches.push_back(std::move(b));
+		}
+		if (!s.ins.option_states.empty()) {
+			s.ins.option_states.resize(s.ins.choice.options.size());
 		}
 		if (close_block(stop, "choice", s.line) && s.branches.size() < 2) {
 			error(s.line, "script.choice_needs_at_least_two", {});
@@ -789,7 +814,7 @@ private:
 	// not close the wrong parent.
 	void skip_command(const Context& ctx) {
 		std::string cmd = head();
-		if (one_of(cmd, {"if", "while", "choice", "ask", "battle", "together", "race", "sequence"})) {
+		if (one_of(cmd, {"if", "while", "choice", "ask", "battle", "together", "race", "sequence"}) && !(cmd == "choice" && choice_clear())) {
 			std::vector<Stmt> discard;
 			Context quiet = ctx;
 			quiet.parallel = nullptr;

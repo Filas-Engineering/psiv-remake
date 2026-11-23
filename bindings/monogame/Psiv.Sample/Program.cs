@@ -34,7 +34,7 @@ public static class Program
 		"\n" +
 		"Headless script lines: press KEY [COUNT] | hold KEY FRAMES | wait FRAMES | pressuntil KEY SCREEN MAXFRAMES |\n" +
 		"pad BUTTON [COUNT] | padhold BUTTON FRAMES | paduntil BUTTON SCREEN MAXFRAMES | padstick X Y FRAMES |\n" +
-		"hold KEY+KEY FRAMES | padhold BUTTON+BUTTON FRAMES | fieldinput realtime|classic | trace PROBE[,PROBE]|off |\n" +
+		"hold KEY+KEY FRAMES | padhold BUTTON+BUTTON FRAMES | fieldinput realtime|classic | trace PROBE[,PROBE]|off | watch PROBE not VALUE|off |\n" +
 		"controls list|reset|save|restart | controls capture|clear ACTION | controls write JSON |\n" +
 		"cmd GAME_CLI_COMMAND | expect screen NAME | expect mode NAME | expect actor ID X Y [FACING]|walking|hidden | expect pose ID POSE [marked] |\n" +
 		"expect label none | expect toast none|TEXT | expect notoast TEXT | expect binding ACTION KEYS \"|\" BUTTONS |\n" +
@@ -330,6 +330,8 @@ public sealed class ScriptPlayer
 	private int _presentMark;
 	// Probes printed after every frame (`trace`), and the field input a restarted controller keeps.
 	private string[] _trace = [];
+	// `watch PROBE not VALUE`: after every frame until `watch off`, the probe must not read VALUE.
+	private (string Probe, string Value, string Source)? _watch;
 	private bool _realtimeField;
 
 	// `shot` saves the next drawn frame to a file; null (headless) skips shot lines. `restart` makes a new controller
@@ -465,6 +467,12 @@ public sealed class ScriptPlayer
 				break;
 			case "trace" when w.Length == 2:
 				_trace = w[1] == "off" ? [] : w[1].Split(',');
+				break;
+			case "watch" when w.Length == 2 && w[1] == "off":
+				_watch = null;
+				break;
+			case "watch" when w.Length >= 4 && w[2] == "not" && Capabilities.IsProbe(w[1]):
+				_watch = (w[1], string.Join(" ", w[3..]), source);
 				break;
 			case "hold" when keyOk && w.Length == 3:
 				return Repeat(new([key], []), int.Parse(w[2], CultureInfo.InvariantCulture)).GetEnumerator();
@@ -794,7 +802,7 @@ public sealed class ScriptPlayer
 			}
 			foreach ((string other, DrawnPerson p) in _controller.DrawnActors)
 			{
-				if (other != id && Math.Abs(p.X - at.X) < 1f && Math.Abs(p.Y - at.Y) < 1f)
+				if (other != id && !p.Stacked && !at.Stacked && Math.Abs(p.X - at.X) < 1f && Math.Abs(p.Y - at.Y) < 1f)
 				{
 					_pendingFailure = $"{source}: {other} is drawn at {p.X} {p.Y}, over {id} at {at.X} {at.Y}, {i} frames in";
 					yield break;
@@ -854,6 +862,11 @@ public sealed class ScriptPlayer
 		if (_trace.Length > 0)
 		{
 			Console.WriteLine($"[{_frame()}] trace| " + string.Join("  ", _trace.Select(k => $"{k}={_controller.State(k)}")));
+		}
+		if (_watch is { } watch && _controller.State(watch.Probe) == watch.Value)
+		{
+			Fail($"{watch.Source}: {watch.Probe} reads '{watch.Value}' at frame {_frame()}");
+			_watch = null;
 		}
 		while (_action is not null)
 		{

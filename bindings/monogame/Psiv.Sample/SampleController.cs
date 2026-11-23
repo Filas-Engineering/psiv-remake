@@ -235,6 +235,15 @@ public sealed partial class SampleController
 				// toasts and only reaches the log.
 				_log("notice: (" + n.Text + ")");
 			}
+			else if (_travelUseQuiet && n.Key is "game.used" or "game.used_ability")
+			{
+				_travelUseQuiet = false;
+				_log("notice: " + n.Text);
+			}
+			else if (_saveCapture && n.Key == "game.saved")
+			{
+				ShowSaved(n);
+			}
 			else if (Screen == Screen.Shop && ShopResultShown)
 			{
 				_shopResult = Shown(n.Text);
@@ -389,6 +398,7 @@ public sealed partial class SampleController
 			}
 			_lastScreen = screen;
 		}
+		ShowTravelRefusal();
 		if (Capturing is { } capturing)
 		{
 			Capture(capturing, raw);

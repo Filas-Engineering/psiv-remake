@@ -1,6 +1,6 @@
 # The followers after a load and after warps, drawn on the session's trail (Followers()): a load puts them back on the
-# trail the save kept; a warp to another area and a warp inside the same area stand them on the leader's cell, and they
-# trail out one cell behind each other within two steps of walking.
+# trail the save kept; a warp to another area and a warp inside the same area stand them on the leader's cell (listed
+# there, not painted under the leader), and they trail out one cell behind each other within two steps of walking.
 cmd set text instant
 expect screen Title
 press Enter
@@ -37,8 +37,8 @@ expect actor medic 5 3
 dev warp reed_path west_gate
 wait 5
 expect actor fighter 1 4 west
-expect actor mystic hidden
-expect actor medic hidden
+expect actor mystic 1 4
+expect actor medic 1 4
 hold Right 60
 wait 20
 expect actor fighter 5 4 east
@@ -47,7 +47,7 @@ expect actor medic 3 4 east
 dev warp reed_path 3 4
 wait 5
 expect actor fighter 3 4 east
-expect actor mystic hidden
+expect actor mystic 3 4
 hold Right 60
 wait 20
 expect actor fighter 7 4 east

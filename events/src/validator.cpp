@@ -235,6 +235,11 @@ private:
 			if (!ins.name.empty()) {
 				declared(ins.name, ins.choice.yes_no, s.line);
 			}
+			for (std::size_t i = 0; i < ins.option_states.size(); ++i) {
+				if (ins.option_states[i].has_condition) {
+					condition(ins.option_states[i].condition, ins.option_lines[i]);
+				}
+			}
 			break;
 		case Op::set_flag:
 		case Op::clear_flag:

@@ -105,7 +105,7 @@ static void settle(psiv_session* s) {
 static void testVersion(void) {
 	const char* capabilities = psiv_capabilities();
 	CHECK(capabilities && capabilities == psiv_capabilities() && strncmp(capabilities, "{\"capabilities_schema\": 1, \"versions\": {\"library\": \"", 52) == 0);
-	CHECK(strstr(capabilities, "\"abi\": 21,") && strstr(capabilities, "\"save_schema\": 16,") && strstr(capabilities, "\"picture show <picture>\""));
+	CHECK(strstr(capabilities, "\"abi\": 22,") && strstr(capabilities, "\"save_schema\": 16,") && strstr(capabilities, "\"picture show <picture>\""));
 	CHECK(psiv_abi_version() == PSIV_ABI_VERSION);
 	CHECK(strstr(psiv_version(), "psiv-bindings") != NULL);
 	CHECK(strstr(psiv_version(), "game-0.2") != NULL);
@@ -889,6 +889,10 @@ static void testAdventurePaths(void) {
 	CHECK_OK(psiv_choice_get(s, &choice));
 	CHECK(choice.yes_no && choice.option_count == 2 && strcmp(choice.options[0], "Yes") == 0 && strcmp(choice.options[1], "No") == 0);
 	CHECK(choice.header[0] == '\0' && choice.header_id[0] == '\0');
+	CHECK(!choice.keep && choice.states == NULL && choice.picked == -1);
+	psiv_choice kept;
+	CHECK(psiv_kept_choice_get(s, &kept) == PSIV_NOT_FOUND);
+	CHECK(psiv_kept_choice_get(s, NULL) == PSIV_INVALID_ARGUMENT);
 	CHECK_OK(psiv_profile_set_value(s, "text_language", "ja"));
 	CHECK_OK(psiv_choice_get(s, &choice));
 	CHECK(strcmp(choice.options[0], "\xE3\x81\xAF\xE3\x81\x84") == 0);

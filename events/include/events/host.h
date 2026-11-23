@@ -32,6 +32,11 @@ struct ChoiceRequest {
 	Text header;
 	std::vector<Text> options;
 	bool yes_no = false;
+	// `keep`: once answered, the choice stays on screen with the picked row until `choice clear` or the event ends.
+	bool keep = false;
+	// Each option's state word (`option <text> state <word> [if <condition>]`), "" for none, filled as the choice is
+	// presented; empty when no option has one.
+	std::vector<std::string> states;
 };
 
 enum class ActionType {

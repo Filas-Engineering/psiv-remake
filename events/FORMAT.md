@@ -96,6 +96,26 @@ A choice may carry a `header` after its prompt, text the game shows with the opt
 
 `into` is optional and records the answer before its branch runs: a `choice` sets the variable to the option's number, 1 for the first; an `ask` sets the flag for yes and clears it for no.
 
+A choice may say `keep` after its header (before `into`): once answered it stays on screen with its cursor on the picked option, while the lines and choices that follow in the same event show over it, until `choice clear` or the end of the running event (the event that started the run, through every `call`). A later `keep` choice takes its place. A skip applies `choice clear`; the kept choice is saved with the event's state.
+
+An option may carry a state word, `state <word>`, alone or with a condition, `state <word> if <condition>` (the conditions of "Conditions"): the game is told the word for each option as the choice comes up, "" when the condition does not hold, and a layout gives each word its own look. The word is free; the script gives it no meaning.
+
+```
+choice @harbor.topics_prompt keep
+option @harbor.topic_bell state new if not harbor.bell_heard
+	set harbor.bell_heard
+	say guide @harbor.bell_story
+	ask @harbor.go_on
+	yes
+		say guide @harbor.bell_more
+	no
+	end
+option @harbor.topic_leave state plain
+end
+choice clear
+say guide @harbor.farewell
+```
+
 ## Flags and variables
 
 Flags are true or false and start false. Variables are whole numbers and start at 0. A registry can declare other starting values, and flags and variables that belong to one event (see [Registry](#registry)).

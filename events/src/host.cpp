@@ -236,10 +236,16 @@ std::string describe(const ChoiceRequest& request) {
 	if (!request.header.value.empty()) {
 		out += " header " + describe(request.header);
 	}
+	if (request.keep) {
+		out += " keep";
+	}
 	if (!request.yes_no) {
 		out += " [";
 		for (std::size_t i = 0; i < request.options.size(); ++i) {
 			out += (i ? " | " : "") + describe(request.options[i]);
+			if (i < request.states.size() && !request.states[i].empty()) {
+				out += " state " + request.states[i];
+			}
 		}
 		out += "]";
 	}

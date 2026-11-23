@@ -90,6 +90,8 @@ public static class UiFields
 
 	public static readonly string[] ShopFlowSteps = ["welcome", "mode", "list", "quantity", "question", "confirm", "result", "farewell"];
 	public static readonly string[] InnFlowSteps = ["welcome", "price", "choice", "result", "decline", "farewell"];
+	// The steps the save_slots layout's `flow` takes on the field menu's Save page and the system page.
+	public static readonly string[] SaveFlowSteps = ["slots", "confirm", "saved"];
 
 	// What a string an image element's `image` gives may name: a still picture of the manifest's `pictures`, the title art's
 	// background, logo or layer N (from 0, its frame now), a UI skin picture, or a PNG path in the asset directory.
@@ -244,8 +246,9 @@ public static class UiFields
 		["dialogue"] = new("dialogue",
 			["banner_visible", "banner_title", "banner_kind", "banner_alpha", "banner_drop", "banner_ms", "banner_left_ms", "top", "box_visible", "has_line", "speaker",
 				"portrait", "line", "revealed", "all_shown", "line_step", "hint", "next_arrow_ms", "arrow", "has_choice", "prompt", "options", "cursor", "picture",
-				"picture_w", "picture_h", "pictures", "narration_visible", "narration_rows", "narration_all_shown", "shown_ms", "line_key", "picture_top", "picture_names", "page_arrow", "choice_header"],
-			itemFields: ["picture", "picture_w", "picture_h", "text", "full", "shown"],
+				"picture_w", "picture_h", "pictures", "narration_visible", "narration_rows", "narration_all_shown", "shown_ms", "line_key", "picture_top", "picture_names", "page_arrow", "choice_header",
+				"option_rows", "kept_visible", "kept_prompt", "kept_header", "kept_options", "kept_rows", "kept_cursor"],
+			itemFields: ["picture", "picture_w", "picture_h", "text", "full", "shown", "state", "state_color", "picked"],
 			parameters: ["box_h", "box_margin", "box_top", "dialogue_open_sound", "picture_stack", "narration_lines", "narration_cps", "narration_delay_ms", "narration_hold_ms", "narration_wait", "narration_width",
 				"narration_when", "reveal_confirm", "reveal_hold_cps"],
 			tags: true),
@@ -256,7 +259,7 @@ public static class UiFields
 			["title", "question", "labels", "list", "description", "description_missing", "hint", "destinations", "cancel_row", "phase", "message", "message_ms"],
 			itemFields: ["name", "region", "area"],
 			slots: ["backdrop", "toasts"],
-			parameters: [BackdropDim, "arrive_key", "cancel_row", "leave_key", "message_ms", "one_destination", "over_menu", "over_page"]),
+			parameters: [BackdropDim, "arrive_key", "cancel_row", "leave_key", "message_ms", "one_destination", "over_menu", "over_page", "refusal", "used_toast"]),
 		["shop"] = new("shop",
 			["title", "open", "tab", "tabs", "money", "stall", "rows", "list", "description", "description_missing", "compare", "hint", "money_value", "keeper", "voice_line",
 				"step", "choices", "choice_cursor", "quantity", "quantity_max", "unit_price", "total", "result_text", "result_ok", "name", "bag", "bag_used", "bag_slots",
@@ -308,11 +311,11 @@ public static class UiFields
 			slots: ["scene", "slot_list", "toasts"],
 			parameters: ["columns", "navigation", "navigation_hint", "select_newest", "show_empty"]),
 		["save_slots"] = new("save_slots",
-			[.. Area, "slots", "list", "active", "system", "system_rows", "system_cursor", "mode"],
+			[.. Area, "slots", "list", "active", "system", "system_rows", "system_cursor", "mode", "flow_step", "message", "message_ok", "confirm_options", "confirm_cursor"],
 			itemFields: SlotItems,
-			parameters: ["system_menu"]),
+			parameters: ["over_page", "system_menu"]),
 		["menu_abilities"] = new("menu_abilities",
-			[.. Area, "view", "kind", "members", "list", "name", "abilities", "sub_list", "description", "picking", "target_name", "targets", "target_rows", "target_list"],
+			[.. Area, "view", "kind", "members", "list", "name", "abilities", "sub_list", "description", "picking", "target_name", "targets", "target_rows", "target_list", "result_text", "result_ok"],
 			itemFields: ["label", "usable", "kind", "cost", "uses", "name", "reachable"],
 			parameters: ["unusable"]),
 		["menu_system"] = new("menu_system",

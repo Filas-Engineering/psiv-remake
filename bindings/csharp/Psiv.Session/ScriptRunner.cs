@@ -135,12 +135,14 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 			}
 			if (session.Line() is { } line)
 			{
+				PrintKept();
 				Print(line.Display);
 				session.ConfirmLine();
 				continue;
 			}
 			if (session.Choice() is { } choice)
 			{
+				PrintKept();
 				var text = new StringBuilder(choice.Prompt.Length == 0 ? "Choose:" : choice.Prompt);
 				if (choice.Header.Length > 0)
 				{
@@ -149,6 +151,14 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 				for (int i = 0; i < choice.Options.Count; i++)
 				{
 					text.Append(CultureInfo.InvariantCulture, $" [{i}] {choice.Options[i]}");
+					if (choice.States.Count > i && choice.States[i].Length > 0)
+					{
+						text.Append(" (").Append(choice.States[i]).Append(')');
+					}
+				}
+				if (choice.Keep)
+				{
+					text.Append(" | keep");
 				}
 				Print(text.ToString());
 				return;
@@ -156,6 +166,20 @@ public sealed class ScriptRunner(GameSession session, TextWriter output, bool au
 			session.Update(100);
 		}
 		Error("the game did not settle");
+	}
+
+	// A kept choice under the next line or choice, printed once each time it changes.
+	private string _lastKept = "";
+
+	private void PrintKept()
+	{
+		Choice? kept = session.KeptChoice();
+		string text = kept is null ? "" : (kept.Prompt.Length == 0 ? "Choose:" : kept.Prompt) + " > " + kept.Options[kept.Picked];
+		if (text.Length > 0 && text != _lastKept)
+		{
+			Print("  (kept: " + text + ")");
+		}
+		_lastKept = text;
 	}
 
 	private void Status()

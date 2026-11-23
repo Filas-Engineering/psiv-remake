@@ -233,17 +233,25 @@ void Runner::settle() {
 			return;
 		}
 		if (session_.linePending()) {
+			printKept();
 			print(session_.lineText());
 			session_.confirmLine();
 			continue;
 		}
 		if (const std::optional<ChoiceView> c = session_.choiceView()) {
+			printKept();
 			std::string text = c->prompt.empty() ? "Choose:" : c->prompt;
 			if (!c->header.empty()) {
 				text += " | " + c->header;
 			}
 			for (std::size_t i = 0; i < c->options.size(); ++i) {
 				text += " [" + std::to_string(i) + "] " + c->options[i];
+				if (i < c->states.size() && !c->states[i].empty()) {
+					text += " (" + c->states[i] + ")";
+				}
+			}
+			if (c->keep) {
+				text += " | keep";
 			}
 			print(text);
 			return;
@@ -251,6 +259,16 @@ void Runner::settle() {
 		session_.update(100);
 	}
 	error("the game did not settle");
+}
+
+// A kept choice under the next line or choice, printed once each time it changes.
+void Runner::printKept() {
+	const std::optional<ChoiceView> kept = session_.keptChoice();
+	const std::string text = kept ? (kept->prompt.empty() ? std::string("Choose:") : kept->prompt) + " > " + kept->options[kept->picked] : "";
+	if (!text.empty() && text != lastKept_) {
+		print("  (kept: " + text + ")");
+	}
+	lastKept_ = text;
 }
 
 void Runner::finishBattleAuto(const std::string& macro, rules::MacroTrouble trouble, rules::MacroPolicy policy) {

@@ -51,6 +51,7 @@ private:
 	void printOutput(const std::vector<Output>& outputs);
 	void flushOutput();
 	void printEvents(const std::vector<rules::Event>& events);
+	void printKept();
 	void finishBattleAuto(const std::string& macro = "", rules::MacroTrouble trouble = rules::MacroTrouble::Default,
 		rules::MacroPolicy policy = rules::MacroPolicy::Default);
 	void fight(const std::string& macro, rules::MacroFallback fallback);
@@ -69,6 +70,7 @@ private:
 	RunnerOptions options_;
 	int errors_ = 0;
 	std::vector<std::string> battleNames_;
+	std::string lastKept_;
 };
 
 // Plays `route` (runner commands) with auto battles from a new game and returns the transcript-free metrics.

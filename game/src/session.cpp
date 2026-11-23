@@ -4869,20 +4869,39 @@ const events::ChoiceRequest* Session::choice() const {
 	return &it->second.choice;
 }
 
+std::optional<ChoiceView> Session::keptChoice() const {
+	int picked = -1;
+	std::vector<std::string> states;
+	const events::ChoiceRequest* request = interpreter_ && mode() == Mode::Event ? interpreter_->kept_choice(picked, states) : nullptr;
+	if (!request) {
+		return std::nullopt;
+	}
+	ChoiceView view = choiceViewOf(*request);
+	view.states = states;
+	view.picked = picked;
+	return view;
+}
+
 std::optional<ChoiceView> Session::choiceView() const {
 	const events::ChoiceRequest* request = choice();
 	if (!request) {
 		return std::nullopt;
 	}
+	return choiceViewOf(*request);
+}
+
+ChoiceView Session::choiceViewOf(const events::ChoiceRequest& request) const {
 	ChoiceView view;
-	view.prompt = request->prompt.value.empty() ? "" : scriptText(request->prompt);
-	view.header = request->header.value.empty() ? "" : scriptText(request->header);
-	view.headerId = request->header.is_id ? request->header.value : "";
-	view.yesNo = request->yes_no;
-	if (request->yes_no) {
+	view.states = request.states;
+	view.keep = request.keep;
+	view.prompt = request.prompt.value.empty() ? "" : scriptText(request.prompt);
+	view.header = request.header.value.empty() ? "" : scriptText(request.header);
+	view.headerId = request.header.is_id ? request.header.value : "";
+	view.yesNo = request.yes_no;
+	if (request.yes_no) {
 		view.options = {stringText(kChoiceYes), stringText(kChoiceNo)};
 	} else {
-		for (const events::Text& option : request->options) {
+		for (const events::Text& option : request.options) {
 			view.options.push_back(scriptText(option));
 		}
 	}

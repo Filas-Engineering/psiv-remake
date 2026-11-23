@@ -1,0 +1,141 @@
+# The save flow, the travel messages and a choice that stays on screen (make_keep_assets.py on make_keep_data.py's
+# copy), with --dev: a Homing Shell and Homeward refused on the page they were used from, not as notices; a return with
+# no notice; saving from the system page with its rows drawn under the slot list, the saved message and the overwrite
+# question in the layout's message window; then the guide's topics as a kept choice, its rows colored by their states,
+# drawn above the dialogue box while her line (with a portrait) and a nested yes/no show, until `choice clear`. With
+# --window the shot lines save screenshots under build/shots/keep/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+pressuntil Enter Field 400
+dev encounters off
+
+# Refusals on the page: nowhere to return to from Saltgrass, the only town visited.
+press M
+wait 3
+expect state tab Items
+press Enter
+wait 3
+expect screen Menu
+expect state uifield.menu_items.result_text There is no town in this region to return to.
+expect notoast There is no town
+shot build/shots/keep/refusal_items.png
+press Right
+wait 3
+expect state tab Techniques
+press Down
+press Enter
+wait 3
+press Down 4
+wait 2
+expect state selected Homeward
+press Enter
+wait 3
+expect screen Menu
+expect state uifield.menu_abilities.result_text There is no town in this region to return to.
+expect notoast There is no town
+shot build/shots/keep/refusal_technique.png
+pressuntil Escape Field 20
+wait 3
+expect screen Field
+
+# A return with no notice of the shell's use.
+dev warp tidewater inn_front
+pressuntil Enter Field 600
+wait 3
+press M
+wait 3
+press Enter
+wait 3
+expect screen Travel
+press Enter
+wait 6
+expect screen Field
+expect state area Saltgrass Market
+expect notoast Used Homing Shell
+
+# Saving from the system page: the rows stay drawn under the slot list, the saved message shows in the layout's window.
+press M
+wait 3
+press Right 2
+wait 3
+expect state tab System
+press Enter
+wait 3
+expect state uifield.save_slots.flow_step slots
+expect statehas windows menu_system/page
+expect statehas windows save_slots/slots
+press Enter
+wait 3
+expect state uifield.save_slots.flow_step saved
+expect state uifield.save_slots.message Saved to manual_0.
+expect notoast Saved to manual_0.
+shot build/shots/keep/saved.png
+press Enter
+wait 3
+expect state uifield.save_slots.flow_step slots
+# The same slot again: the overwrite question first; No goes back, Yes saves.
+press Enter
+wait 3
+expect state uifield.save_slots.flow_step confirm
+expect state uifield.save_slots.message Overwrite manual_0?
+expect state uifield.save_slots.confirm_cursor 0
+shot build/shots/keep/overwrite.png
+press Down
+press Enter
+wait 3
+expect state uifield.save_slots.flow_step slots
+press Enter
+wait 3
+press Enter
+wait 3
+expect state uifield.save_slots.flow_step saved
+press Enter
+press Escape
+press Escape
+wait 3
+expect screen Field
+
+# The guide's topics: a kept choice whose rows take their states' colors, under her line and a yes/no.
+dev event keep_talk
+waitstate 60 uifield.dialogue.has_choice true
+expect state uifield.dialogue.option_rows.0.state new
+expect state uifield.dialogue.option_rows.0.state_color good
+expect state uifield.dialogue.option_rows.2.state plain
+expect state uifield.dialogue.kept_visible false
+shot build/shots/keep/choice_states.png
+press Enter
+waitstate 30 uifield.dialogue.has_line true
+expect state uifield.dialogue.kept_visible true
+expect state uifield.dialogue.kept_cursor 0
+expect state uifield.dialogue.kept_rows.0.picked true
+expect statehas windows dialogue/kept
+expect statehas windows dialogue/box
+expect state lineportrait guide_smile
+shot build/shots/keep/kept_under_line.png
+press Enter
+waitstate 30 uifield.dialogue.has_choice true
+expect state uifield.dialogue.option_rows.0.text Yes
+expect state uifield.dialogue.kept_visible true
+shot build/shots/keep/kept_under_ask.png
+press Enter
+waitstate 30 uifield.dialogue.has_line true
+expect state uifield.dialogue.kept_visible true
+press Enter
+waitstate 30 line Come back if you think of more.
+expect state uifield.dialogue.kept_visible false
+press Enter
+wait 5
+expect screen Field
+# Heard now: the bell's row has no state left.
+dev event keep_talk
+waitstate 60 uifield.dialogue.has_choice true
+expect state uifield.dialogue.option_rows.0.state
+expect state uifield.dialogue.option_rows.1.state new
+press Down 2
+press Enter
+waitstate 30 line Come back if you think of more.
+expect state uifield.dialogue.kept_visible false
+press Enter
+wait 5
+expect screen Field

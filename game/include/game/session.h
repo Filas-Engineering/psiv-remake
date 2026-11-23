@@ -116,6 +116,13 @@ struct ChoiceView {
 	std::string headerId;
 	bool yesNo = false;
 	std::vector<std::string> options;
+	// Each option's state word from the script (`option <text> state <word> [if <condition>]`), "" for none; empty when
+	// no option has one. A layout maps the words to its own looks.
+	std::vector<std::string> states;
+	// `keep`: once answered, the choice stays on screen (Session::keptChoice) until `choice clear` or the event ends.
+	bool keep = false;
+	// The kept choice's picked option; -1 for the choice waiting on an answer.
+	int picked = -1;
 };
 
 // Plays presentation-only script actions (moves, cameras, panels, audio). Warps are applied to the world before
@@ -581,6 +588,7 @@ public:
 	std::string render(const rules::Message& message) const;
 	// A script text: string IDs looked up, name tokens rendered for the current profile.
 	std::string scriptText(const events::Text& text) const;
+	ChoiceView choiceViewOf(const events::ChoiceRequest& request) const;
 	std::string stringText(const std::string& id) const;
 	// A character's chosen name, its own name, an actor's speaker name or an area's name.
 	std::string displayName(const std::string& id) const;
@@ -735,6 +743,9 @@ public:
 	void confirmLine();
 	const events::ChoiceRequest* choice() const;
 	std::optional<ChoiceView> choiceView() const;
+	// The last answered `choice ... keep` of the running event, with `picked` and the states it was shown with, drawn under
+	// the lines and choices that follow until `choice clear` or the event's end; nullopt when none.
+	std::optional<ChoiceView> keptChoice() const;
 	rules::Message choose(int index);
 	bool canSkip() const;
 	bool skip();

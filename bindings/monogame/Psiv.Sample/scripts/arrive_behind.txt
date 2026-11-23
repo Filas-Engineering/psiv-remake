@@ -21,7 +21,7 @@ wait 30
 expect state leader reed_path 1 4
 expect actor fighter 1 4 east
 expect actor mystic 0 4 east
-expect actor medic hidden
+expect actor medic 1 4
 shot build/shots/arrive/exit.png
 # A warp within the area.
 dev warp reed_path 10 4

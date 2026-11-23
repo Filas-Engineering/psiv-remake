@@ -1,9 +1,12 @@
 #include "test.h"
 
+#include "game/runner.h"
 #include "game/session.h"
 #include "rules/auto_policy.h"
 #include "rules/progression.h"
 #include "rules/text.h"
+
+#include <sstream>
 
 using namespace game;
 
@@ -519,4 +522,58 @@ TEST(aChoiceHeaderIsShownWithTheOptions) {
 	CHECK(s.choose(0).empty());
 	c = s.choiceView();
 	CHECK(c && c->header.empty() && c->headerId.empty());
+}
+
+// A `keep` choice stays as keptChoice with its picked row under the lines and the nested ask that follow, its options'
+// states from their conditions, through the game as save text, until `choice clear`; the terminal prints the states,
+// `keep` and the kept choice once under what follows.
+TEST(aKeptChoiceStaysUnderTheLinesAndChoicesThatFollow) {
+	const GameData d = test::withScript("events/bell_cove.ev",
+		"event cove_bell unskippable\n"
+		"\tset cove.quiet_seen\n"
+		"\tchoice \"Ask about?\" keep\n"
+		"\toption \"Bell\" state new if not cove.warden_seen\n"
+		"\toption \"Quiet\" state new if not cove.quiet_seen\n"
+		"\tend\n"
+		"\tsay guide \"It rings at night.\" as guide_smile\n"
+		"\task \"More?\"\n"
+		"\tyes\n"
+		"\t\tsay guide \"Ask the keeper.\"\n"
+		"\tend\n"
+		"\tchoice clear\n"
+		"\tsay guide \"That is all.\"\n"
+		"end\n");
+	Session s(d, SessionOptions());
+	test::placeParty(s, "bell_cove", "bell_front", Facing::East);
+	CHECK(s.interact().empty());
+	std::optional<ChoiceView> c = s.choiceView();
+	CHECK(c && c->keep && c->picked == -1 && c->states == (std::vector<std::string>{"new", ""}));
+	CHECK(!s.keptChoice());
+	CHECK(s.choose(1).empty());
+	std::optional<ChoiceView> kept = s.keptChoice();
+	CHECK(s.linePending() && kept && kept->picked == 1 && kept->options[1] == "Quiet" && kept->states == (std::vector<std::string>{"new", ""}));
+	std::string text;
+	CHECK(s.saveText(text).empty());
+	Session loaded(d, SessionOptions());
+	CHECK(loaded.loadSaveText(text).empty());
+	CHECK(loaded.keptChoice() && loaded.keptChoice()->picked == 1);
+	s.confirmLine();
+	c = s.choiceView();
+	CHECK(c && c->yesNo && !c->keep && s.keptChoice() && s.keptChoice()->picked == 1);
+	CHECK(s.choose(0).empty());
+	CHECK(s.linePending() && s.keptChoice());
+	s.confirmLine();
+	CHECK(s.linePending() && !s.keptChoice());
+	s.confirmLine();
+	CHECK(s.mode() == Mode::Field && !s.keptChoice());
+
+	std::ostringstream out;
+	Session played(d, SessionOptions());
+	Runner runner(played, out);
+	test::placeParty(played, "bell_cove", "bell_front", Facing::East);
+	runner.runScript("interact\nchoose 1\n");
+	const std::string transcript = out.str();
+	CHECK(transcript.find("Ask about? [0] Bell (new) [1] Quiet | keep") != std::string::npos);
+	CHECK(transcript.find("  (kept: Ask about? > Quiet)") != std::string::npos);
+	CHECK(transcript.find("(kept:") == transcript.rfind("(kept:"));
 }

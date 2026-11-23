@@ -464,6 +464,22 @@ TEST(aMovingActorsHomeDoesNotBlockReach) {
 	CHECK(find(standing, "check.object_not_reached") || find(standing, "check.hook_not_reached"));
 }
 
+// A talk point that answers on a moving actor (`talk_at: actor`) leaves its own cell to the walk, as the moving actor
+// leaves its home: the bell beyond the wanderer's home and talk point is reached; a standing solid actor there blocks.
+TEST(aMovingActorsTalkPointDoesNotBlockReach) {
+	const std::string dir = copyData("moving_talk_point", {}, test::backgroundDataDirectory());
+	replaceIn(dir + "/areas/wren_yard.json", "\"#............#\",", "\"###.##########\",");
+	replaceIn(dir + "/areas/wren_yard.json", "\"kind\": \"field\"", "\"kind\": \"town\"");
+	replaceIn(dir + "/game.json", "\"area\": \"wren_yard\", \"at\": [3, 4], \"wander\"", "\"area\": \"wren_yard\", \"at\": [3, 1], \"wander\"");
+	replaceIn(dir + "/areas/wren_yard.json", "{\"id\": \"yard_goat_touch\", \"trigger\": \"touch\", \"event\": \"yard_goat_bleat\", \"actor\": \"yard_goat\"}",
+		"{\"id\": \"yard_goat\", \"at\": [3, 1], \"event\": \"yard_goat_bleat\", \"talk_at\": \"actor\"}");
+	const CheckReport moving = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(moving.problems.empty());
+	replaceIn(dir + "/game.json", "\"wander\": {\"radius\": 2, \"speed_percent\": 100, \"pause_ms\": [250, 750]}", "\"solid\": true");
+	const CheckReport standing = checkData(DataDirectories{dir, "../core/data"});
+	CHECK(find(standing, "check.object_not_reached") || find(standing, "check.hook_not_reached"));
+}
+
 // A wanderer's talk point in its home area is refused unless it answers on the actor (`talk_at: actor`), whose home is
 // then where it starts and is used from; talk_at, turns and touch_from are refused on hooks they do not apply to.
 TEST(aWanderersTalkPointLoadsOnlyWhenItAnswersOnTheActor) {

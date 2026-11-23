@@ -5,8 +5,8 @@ using Psiv.Session;
 namespace Psiv.Sample;
 
 // game.json's `presentation.map_load_hold_ms` (GameInfo.MapLoadHoldMs): after an area change by an exit, a warp or travel
-// the screen stays black that long, then fades in, and the new area's music starts once the hold ends; after a load
-// only with `map_load_hold_on_load`.
+// the screen stays black that long, then fades in, and the new area's music starts once the hold ends (a track already
+// playing goes on through it); after a load only with `map_load_hold_on_load`.
 public sealed partial class SampleController
 {
 	private const int MapFadeInMs = 250;

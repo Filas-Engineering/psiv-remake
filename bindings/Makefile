@@ -283,6 +283,14 @@ native-test: $(LIB) $(PLAYTHROUGH) $(TESTS) $(GAME_CLI) $(ACTOR_DATA) $(INTERACT
 	cmp $(BUILD)/motion_c.txt $(GAME)/tests/expected/motion.txt
 	diff -r $(BUILD)/motion_saves_c $(BUILD)/motion_saves_cpp
 	@echo "C motion script matches the C++ session: transcript and every save file"
+	python3 -I $(SAMPLE_SCRIPTS)/make_keep_data.py $(GAME)/data $(CORE)/data $(BUILD)/keep_data
+	rm -rf $(BUILD)/keep_saves_cpp $(BUILD)/keep_saves_c
+	$(GAME_CLI) --data $(BUILD)/keep_data/game/data --seed 6 --script $(SAMPLE_SCRIPTS)/keep_cli.txt --saves $(BUILD)/keep_saves_cpp > $(BUILD)/keep_cpp.txt
+	./$(PLAYTHROUGH) --data $(BUILD)/keep_data/game/data --seed 6 --script $(SAMPLE_SCRIPTS)/keep_cli.txt --saves $(BUILD)/keep_saves_c > $(BUILD)/keep_c.txt
+	cmp $(BUILD)/keep_c.txt $(BUILD)/keep_cpp.txt
+	grep -qF "  (kept: What shall we talk about? > The ferry)" $(BUILD)/keep_c.txt
+	diff -r $(BUILD)/keep_saves_c $(BUILD)/keep_saves_cpp
+	@echo "C kept-choice script matches the C++ session: transcript and every save file"
 
 dotnet: $(LIB)
 	$(DOTNET) build csharp/Psiv.Session.Tests/Psiv.Session.Tests.csproj -nologo -v q -warnaserror
@@ -996,6 +1004,35 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/late_flows_data/game/data --dev --saves $(BUILD)/sample_late_flows_saves --assets $(BUILD)/late_flows_run \
 		--script $(SAMPLE_SCRIPTS)/late_flows.txt --frames 2400 > $(BUILD)/sample_late_flows_headless.txt || { cat $(BUILD)/sample_late_flows_headless.txt; exit 1; }
 	tail -n 1 $(BUILD)/sample_late_flows_headless.txt
+	# Followers with a cell from the frame the party lands (make_arrival_data.py, a party of two, followers stacked): a
+	# Homing Shell's landing on a town's `return`, a load hook's warps with and without `followers`, a dialogue, a step,
+	# a developer's warp, a save and a load and a battle's end, the follower in the draw list after every frame; the music
+	# through the map load hold, going on into an area with the same track.
+	python3 -I $(SAMPLE_SCRIPTS)/make_arrival_data.py $(GAME)/data $(CORE)/data $(BUILD)/arrival_data
+	rm -rf $(BUILD)/sample_arrival_followers_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/arrival_data/game/data --dev --saves $(BUILD)/sample_arrival_followers_saves \
+		--script $(SAMPLE_SCRIPTS)/arrival_followers.txt --frames 1200 > $(BUILD)/sample_arrival_followers_headless.txt || { cat $(BUILD)/sample_arrival_followers_headless.txt; exit 1; }
+	tail -n 1 $(BUILD)/sample_arrival_followers_headless.txt
+	# The save flow, the travel messages and a kept choice (make_keep_data.py, make_keep_assets.py): Homing Shell and
+	# Homeward refused on their pages, a return with no notice, saving from the system page with its rows under the slot
+	# list and the saved message and overwrite question in the layout's window, the guide's topics kept above her line and
+	# a nested yes/no with the rows colored by their states; copies with a save flow without `slots` and an
+	# `option_states` color that is no color report each.
+	python3 -I $(SAMPLE_SCRIPTS)/make_keep_data.py $(GAME)/data $(CORE)/data $(BUILD)/keep_data
+	python3 -I $(SAMPLE_SCRIPTS)/make_keep_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/keep_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/keep_data/game/data --check-assets --assets $(BUILD)/keep_assets
+	rm -rf $(BUILD)/keep_broken_assets
+	cp -R $(BUILD)/keep_assets $(BUILD)/keep_broken_assets
+	cp $(BUILD)/keep_broken_assets/alt/save_slots_broken.json $(BUILD)/keep_broken_assets/ui/save_slots.json
+	cp $(BUILD)/keep_broken_assets/alt/dialogue_broken.json $(BUILD)/keep_broken_assets/ui/dialogue.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/keep_broken_assets > $(BUILD)/check_assets_keep.txt
+	grep -qF "flow: needs the step 'slots'" $(BUILD)/check_assets_keep.txt
+	grep -qF "option_states.new: must be a color of the styles or a color literal" $(BUILD)/check_assets_keep.txt
+	rm -rf $(BUILD)/sample_keep_flows_saves $(BUILD)/keep_run
+	cp -R $(BUILD)/keep_assets $(BUILD)/keep_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/keep_data/game/data --dev --saves $(BUILD)/sample_keep_flows_saves --assets $(BUILD)/keep_run \
+		--script $(SAMPLE_SCRIPTS)/keep_flows.txt --frames 2000 > $(BUILD)/sample_keep_flows_headless.txt || { cat $(BUILD)/sample_keep_flows_headless.txt; exit 1; }
+	tail -n 1 $(BUILD)/sample_keep_flows_headless.txt
 	# Flashes by their effect (make_flash_assets.py): a stepped stage strobe past the limit is dropped, a two-step whiteout
 	# is held to a fifth under reduced flash, a slow tint is untouched.
 	python3 -I $(SAMPLE_SCRIPTS)/make_flash_assets.py $(BUILD)/export $(BUILD)/flash_assets

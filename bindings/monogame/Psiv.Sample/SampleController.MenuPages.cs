@@ -58,6 +58,7 @@ public sealed partial class SampleController
 		_sub.Move(input, abilities.Count);
 		if (input.Confirm && abilities.Count > 0)
 		{
+			_abilityResult = "";
 			AbilityInfo ability = abilities[_sub.Cursor];
 			if (ability.Travel is { } kind)
 			{
@@ -95,6 +96,8 @@ public sealed partial class SampleController
 			_probeDescription = description.Length == 0 ? "-" : description;
 		}
 		Ui.Draw("menu_abilities", s, t, data
+			.Set("result_text", _abilityResult)
+			.Set("result_ok", false)
 			.Set("view", "list")
 			.Set("name", member.Name)
 			.Set("picking", _pickAction is not null)
@@ -121,6 +124,10 @@ public sealed partial class SampleController
 		if (_saveMode is not null)
 		{
 			List<string> slots = ManualSlots();
+			if (UpdateSaveFlow(input))
+			{
+				return;
+			}
 			_list.Move(input, slots.Count);
 			if (input.Back)
 			{
@@ -128,7 +135,7 @@ public sealed partial class SampleController
 			}
 			else if (input.Confirm)
 			{
-				SaveTo(slots[_list.Cursor]);
+				SaveFromList(slots[_list.Cursor]);
 			}
 			return;
 		}
@@ -155,11 +162,21 @@ public sealed partial class SampleController
 
 	private void DrawSystemPage(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
 	{
-		if (_saveMode is not null)
+		// The save_slots layout's `over_page`: the system page's own windows stay drawn under the slot list.
+		if (_saveMode is not null && Ui.Param("save_slots", "over_page", UiData(), 0) == 0)
 		{
 			DrawSlots(t, _list, x, y, w, h, ManualSlots(), _s.Saves() ?? []);
 			return;
 		}
+		DrawSystemRows(s, t, x, y, w, h);
+		if (_saveMode is not null)
+		{
+			DrawSlots(t, _list, x, y, w, h, ManualSlots(), _s.Saves() ?? []);
+		}
+	}
+
+	private void DrawSystemRows(IDrawSurface s, IDrawSurface t, int x, int y, int w, int h)
+	{
 		List<string> rows = SystemRows();
 		UiContext data = UiArea(x, y, w, h);
 		List<UiContext> items = [.. rows.Select(id => id switch

@@ -303,6 +303,22 @@ static void finishBattleAuto(const char* macro, int32_t trouble, int32_t policy)
 	flushOutput();
 }
 
+/* A kept choice under the next line or choice, printed once each time it changes. */
+static char lastKept[LINE_SIZE];
+
+static void printKept(void) {
+	psiv_choice kept;
+	Buffer text;
+	bclear(&text);
+	if (psiv_kept_choice_get(S, &kept) == PSIV_OK) {
+		badd(&text, "%s > %s", kept.prompt[0] ? kept.prompt : "Choose:", kept.options[kept.picked]);
+	}
+	if (text.length && strcmp(text.text, lastKept) != 0) {
+		print("  (kept: %s)", text.text);
+	}
+	snprintf(lastKept, sizeof lastKept, "%s", text.text);
+}
+
 static void settle(void) {
 	for (int guard = 0; guard < 100000; ++guard) {
 		flushOutput();
@@ -337,6 +353,7 @@ static void settle(void) {
 		if (psiv_line_pending(S)) {
 			psiv_line line;
 			psiv_line_get(S, &line);
+			printKept();
 			print("%s", line.display);
 			psiv_line_confirm(S);
 			continue;
@@ -346,12 +363,19 @@ static void settle(void) {
 			Buffer text;
 			bclear(&text);
 			psiv_choice_get(S, &choice);
+			printKept();
 			badd(&text, "%s", choice.prompt[0] ? choice.prompt : "Choose:");
 			if (choice.header[0]) {
 				badd(&text, " | %s", choice.header);
 			}
 			for (int32_t i = 0; i < choice.option_count; ++i) {
 				badd(&text, " [%d] %s", i, choice.options[i]);
+				if (choice.states && choice.states[i][0]) {
+					badd(&text, " (%s)", choice.states[i]);
+				}
+			}
+			if (choice.keep) {
+				badd(&text, " | keep");
 			}
 			print("%s", text.text);
 			return;

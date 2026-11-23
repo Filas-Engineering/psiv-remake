@@ -14,7 +14,7 @@ public static class Capabilities
 	// The headless script's first words; the player refuses a line whose first word is not here.
 	public static readonly string[] Verbs = ["animlog", "assets", "audio", "battlelayout", "click", "clickcell", "cmd", "combo", "controls", "datafile", "dev", "devrefused", "dump",
 		"equip", "expect", "fieldinput", "flashing", "hold", "pad", "padhold", "padstick", "paduntil", "present", "press", "pressuntil", "savefile", "shot", "trace", "wait", "waitstate",
-		"waitstatehas", "window"];
+		"waitstatehas", "watch", "window"];
 
 	public static readonly string[] ExpectKinds = ["actor", "animlog", "animloghas", "apart", "asset", "audio", "audiocount", "binding", "label", "letterbox", "mode", "noaudio", "notext", "notoast", "pose",
 		"present", "presenthas", "screen", "state", "statehas", "statenot", "toast"];
@@ -81,6 +81,7 @@ public static class Capabilities
 			List(w, "result_phases", UiFields.ResultPhases);
 			List(w, "shop_flow_steps", UiFields.ShopFlowSteps);
 			List(w, "inn_flow_steps", UiFields.InnFlowSteps);
+			List(w, "save_flow_steps", UiFields.SaveFlowSteps);
 			List(w, "title_entries", UiFields.TitleEntries);
 			List(w, "menu_pages", UiFields.MenuPages);
 			List(w, "extras_entries", UiFields.ExtrasEntries);

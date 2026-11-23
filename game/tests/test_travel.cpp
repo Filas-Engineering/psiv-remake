@@ -421,3 +421,55 @@ TEST(returnsPortsArrivalsAndWarpsPlaceTheirOwnFollowers) {
 	CHECK(s.devWarp("tidewater", "start").empty());
 	CHECK(s.world().trail.empty());
 }
+
+// Followers have their cells from the frame the party lands, also while an event runs and before any step: a travel
+// landing through a town's `return`, then a load hook's warps (with `followers up`, with no `followers` word, and with a
+// direction whose cell is a wall), each line read while the followers stand where the warp put them.
+TEST(followersHaveCellsFromTheLandingThroughAScenesWarps) {
+	GameData d = test::withScript("events/bell_cove.ev",
+		"event cove_land unskippable\n"
+		"\tset cove.quiet_seen\n"
+		"\twarp reed_path lookout_west followers up\n"
+		"\tsay guide \"Up.\"\n"
+		"\twarp reed_path peddler_front\n"
+		"\tsay guide \"Stacked.\"\n"
+		"\twarp reed_path lookout_front followers left\n"
+		"\tsay guide \"Wall.\"\n"
+		"end\n");
+	d.config.followersOnExits = true;
+	DungeonExitTarget way;
+	way.area = "reed_path";
+	way.at = {2, 4};
+	way.facing = Facing::West;
+	d.areas.at("saltgrass").returnTo = way;
+	Hook land;
+	land.id = "land";
+	land.trigger = HookTrigger::Load;
+	land.event = "cove_land";
+	land.blockFlag = "cove.quiet_seen";
+	d.areas.at("reed_path").hooks.push_back(land);
+	Session s(d, SessionOptions());
+	CHECK(s.newGame().empty());
+	test::confirmLines(s);
+	test::placeParty(s, "tidewater", "inn_front", Facing::East);
+	s.world().lineup = {"fighter", "mystic"};
+	s.world().roster.push_back(rules::makePartyMember(d.db, *d.db.character("mystic"), 3));
+	s.world().visitedAreas.insert("saltgrass");
+	s.world().items["homing_shell"] = 1;
+	const auto follower = [&] {
+		const std::vector<FollowerView> f = s.followers();
+		return f.size() == 1 && f[0].id == "mystic" ? f[0].cell : Cell{-1, -1};
+	};
+	CHECK(s.openMenu().empty());
+	CHECK(s.travel(TravelKind::Town, "saltgrass", "", "homing_shell").empty());
+	CHECK(s.mode() == Mode::Event && s.linePending());
+	CHECK(s.world().position == (Cell{3, 5}) && follower() == (Cell{3, 4}));
+	s.confirmLine();
+	CHECK(s.mode() == Mode::Event && s.linePending());
+	CHECK(s.world().position == (Cell{10, 6}) && follower() == (Cell{10, 6}));
+	s.confirmLine();
+	CHECK(s.mode() == Mode::Event && s.linePending());
+	CHECK(s.world().position == (Cell{1, 2}) && follower() == (Cell{1, 2}));
+	s.confirmLine();
+	CHECK(s.mode() == Mode::Field && follower() == (Cell{1, 2}));
+}

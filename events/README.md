@@ -171,7 +171,7 @@ To resume, create an interpreter over the installed `Program` with the loaded ho
 8. Only save while an event runs for the autosave before an event battle (EVT-050). The game must not offer a manual save during an event (EVT-053). The host may call `save()` from inside `start_battle`, or from inside any other host call that returns a handle: the state is the one from just before that command, so a restore issues it again. Inside `start_battle`, any skip has already stopped and the screen has been rebuilt. Do not call it from inside the synchronous calls (`set_flag`, `give_item` and the like): a restore does not repeat those, but the world saved with it would already include them.
 9. A `camera cut` or `camera move` never changes which camera a panel shows. A panel's camera comes from its `panel show` (EVT-033 makes the binding the panel's own), and `PresentationState` keeps the last camera cut or moved to (`camera`) apart from each panel's (`PanelState::camera`). The camera a cut or move names becomes the scene's camera; what that does to a panel showing it (the MonoGame sample pushes such a panel in) is the host's framing. The rebuild issues that camera's instant `camera cut` before the panels' instant `panel show` calls, so a host that frames panels by the scene's camera keeps the camera from the cut and applies it to the panels shown after it in the same rebuild: the panel actions carry only their own camera.
 
-The text form starts with `events-save 5` when the presentation holds a `camera to` or `camera reset`, else `events-save 4`, or `events-save 3` when no actor's state has a route or a place (each the oldest version that holds what the state uses, so older builds read it), and ends with ` sum ` and a 64-bit FNV-1a checksum, in 16 hex digits, of everything before it. `save_state_from_text` rejects a text whose checksum does not match, so a truncated or damaged save is reported instead of loaded (SAV-014). It reads versions 3 to 5 and rejects others, including version 2 (before presentation state and the checksum); a game should treat such a save's event state as damaged.
+The text form starts with `events-save 6` when the presentation holds a kept choice (`choice ... keep`), else `events-save 5` when it holds a `camera to` or `camera reset`, else `events-save 4`, or `events-save 3` when no actor's state has a route or a place (each the oldest version that holds what the state uses, so older builds read it), and ends with ` sum ` and a 64-bit FNV-1a checksum, in 16 hex digits, of everything before it. `save_state_from_text` rejects a text whose checksum does not match, so a truncated or damaged save is reported instead of loaded (SAV-014). It reads versions 3 to 6 and rejects others, including version 2 (before presentation state and the checksum); a game should treat such a save's event state as damaged.
 
 ## Tools as a library
 
@@ -189,7 +189,15 @@ Every CLI command is a library call, so a build pipeline can run them without th
 
 ## Changes a host must make
 
-Newest: a warp's follower placement ([FORMAT.md](FORMAT.md), "Game state").
+Newest: a choice that stays on screen and option states ([FORMAT.md](FORMAT.md), "Choices").
+
+- `program.h`: `Op::choice_clear` (appended, name `choice clear`). A `switch` over `Op` needs the new case. `OptionState` (`word`, `has_condition`, `condition`) and `Instruction::option_states`, one per option or empty when no option has a state.
+- `host.h`: `ChoiceRequest::keep` and `ChoiceRequest::states` (each option's state word, "" for none, evaluated as the choice is presented; empty when no option has one). `describe(ChoiceRequest)` adds ` keep` after the header and ` state <word>` after an option that has one.
+- `interpreter.h`: `Interpreter::kept_choice(picked, states)`: the last answered `choice ... keep` of the running event, nullptr when none or after `choice clear` or the event's end.
+- `save_state.h`: `PresentationState::kept_choice` (the instruction, -1 for none), `kept_picked`, `kept_states`; `kSaveTextVersion` 6, the text form version 6 only when a state holds a kept choice, so every other state is written as before; versions 3 to 5 still load.
+- Scripts that use none of the new syntax keep their fingerprint and code.
+
+Before that: a warp's follower placement ([FORMAT.md](FORMAT.md), "Game state").
 
 - `host.h`: `Action::followers`, a warp's `followers <placement>` (`stacked`, `behind`, `up`, `down`, `left` or `right`), empty without one. `describe(Action)` adds ` followers <placement>` to a warp that has one.
 - Scripts that use none of the new syntax keep their fingerprint and code.

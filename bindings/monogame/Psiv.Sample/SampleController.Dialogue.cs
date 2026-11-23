@@ -540,6 +540,18 @@ public sealed partial class SampleController
 		_s.Update(dtMs);
 	}
 
+	// A choice's options as items: `text`, `state` (the script's state word, "" for none), `state_color` (the color the
+	// dialogue file's `option_states` gives that word, "" for none) and `picked` (the kept choice's answer).
+	private List<UiContext> OptionRows(Choice? choice)
+	{
+		Dictionary<string, string> colors = Layout.Screen("dialogue").OptionStates;
+		return choice is null ? [] : [.. choice.Options.Select((option, i) =>
+		{
+			string state = i < choice.States.Count ? choice.States[i] : "";
+			return new UiContext().Set("text", Shown(option)).Set("state", state).Set("state_color", colors.GetValueOrDefault(state) ?? "").Set("picked", i == choice.Picked);
+		})];
+	}
+
 	private const int DialogueBoxHeight = 176;
 
 	// The dialogue file's param, else `fallback`.
@@ -636,7 +648,16 @@ public sealed partial class SampleController
 			.Set("prompt", choice is null ? "" : choice.Prompt.Length == 0 ? T("ui.dialogue.choose") : Shown(choice.Prompt))
 			.Set("options", choice?.Options.Select(Shown).ToList() ?? [])
 			.Set("choice_header", choice is null || choice.Header.Length == 0 ? "" : Shown(choice.Header))
+			.Set("option_rows", OptionRows(choice))
 			.Set("cursor", _cursor);
+		// A `keep` choice the player answered stays under the lines and choices that follow, its picked row marked.
+		Choice? kept = _s.KeptChoice();
+		ctx.Set("kept_visible", kept is not null)
+			.Set("kept_prompt", kept is null ? "" : kept.Prompt.Length == 0 ? T("ui.dialogue.choose") : Shown(kept.Prompt))
+			.Set("kept_header", kept is null || kept.Header.Length == 0 ? "" : Shown(kept.Header))
+			.Set("kept_options", kept?.Options.Select(Shown).ToList() ?? [])
+			.Set("kept_rows", OptionRows(kept))
+			.Set("kept_cursor", kept?.Picked ?? -1);
 		List<string> names = StoryPictures();
 		List<int> images = StoryPictureImages(art, names);
 		int picture = names.Count > 0 && art.NamedPicture(names[^1]) is int top ? top : -1;

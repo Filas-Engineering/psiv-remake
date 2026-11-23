@@ -523,14 +523,14 @@ public sealed unsafe class GameSession : IDisposable
 
 	public bool ChoicePending => Native.ChoicePending(_handle) != 0;
 
-	public Choice? Choice()
-	{
-		if (!Read(Native.ChoiceGet(_handle, out PsivChoice c)))
-		{
-			return null;
-		}
-		return new Choice(Native.Str(c.Prompt), c.YesNo != 0, Native.Strs(c.Options, c.OptionCount), Native.Str(c.Header), Native.Str(c.HeaderId));
-	}
+	public Choice? Choice() => Read(Native.ChoiceGet(_handle, out PsivChoice c)) ? ToChoice(c) : null;
+
+	// The last answered `choice ... keep` of the running event, drawn under what follows until `choice clear` or the
+	// event's end; null when none.
+	public Choice? KeptChoice() => Read(Native.KeptChoiceGet(_handle, out PsivChoice c)) ? ToChoice(c) : null;
+
+	private static Choice ToChoice(in PsivChoice c) => new(Native.Str(c.Prompt), c.YesNo != 0, Native.Strs(c.Options, c.OptionCount), Native.Str(c.Header),
+		Native.Str(c.HeaderId), c.States == IntPtr.Zero ? [] : Native.Strs(c.States, c.OptionCount), c.Keep != 0, c.Picked);
 
 	public PsivResult Choose(int index) => Result(Native.Choose(_handle, index));
 

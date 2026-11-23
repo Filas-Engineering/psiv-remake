@@ -1709,6 +1709,75 @@ Param `dialogue_open_sound` (a cue id, default `""`: none): played when the box 
 
 `make_late_flows_data.py MORE_FLOWS_DATA OUT` copies the second flows' data with `late_crushers` (five fast, strong enemies the party loses to in its first round), `late_wisps` (three one-hit-point enemies), game.json's `map_load_hold_ms` 400 and `sounds` (a town return and a chest). `make_late_flows_assets.py EXPORT MORE OUT` copies the second flows' set with the Load blocks' money and points and `navigation_hint` (`alt/load_row.json` in a row), travel's `over_page`, Items' actions, the battle's `defeat_message` with a `defeat` step (`alt/battle_quiet.json` with `game_over_confirm` 0 and a timed step, `alt/styles_return.json` with `game_over_return_ms` 1500) and `alt/dialogue_hold.json`; `alt/battle_broken.json` is checked on a copy. `make_old_save.py SAVE OUT` rewrites a save as schema 15 for the Load screen's empty fields. Run `late_flows.txt` from playthrough saves with `--dev` (README, step 10); screenshots under `build/shots/late_flows/` with `--window`.
 
+## The save flow, travel messages and kept choices
+
+Each optional as the flows above: a set without them behaves and draws as before, the export writes none of them, `--check-assets` checks each and `--capabilities` lists them (`save_flow_steps`, the screens' fields and params). `scripts/make_keep_assets.py` writes a set that uses them all (below, "The keep runs").
+
+### Saving from the system page
+
+`save_slots.json` top-level `flow`, as the shop's and inn's: steps from `slots` (required), `confirm` and `saved`, in that order, on the field menu's Save page and the system page (the save prompt and the Load screen keep theirs). Without `flow` the overwrite question is the confirm box and the save's notice a toast, as before.
+
+* `confirm`: Confirm on a slot that holds a save asks `ui.saves.overwrite` (`{0}` the slot) in the layout itself, Yes or No (`ui.confirm.yes`, `ui.confirm.no`; any direction switches); Yes saves, No or Back return to the slots. An empty slot saves at once.
+* `saved`: the save's notice (`game.saved`) shows in the layout, with no toast, until Confirm or Back return to the slots; a refusal shows there too (`message_ok` false).
+
+Fields of `save_slots`: `flow_step` (`slots`, `confirm` or `saved`; `''` without `flow`), `message` (the question or the saved text, else `''`), `message_ok` (bool), `confirm_options` (Yes, No), `confirm_cursor` (int).
+
+Param `over_page` (expression, default 0): not 0, the system page's own windows (the `menu_system` layout) stay drawn while its slot list is open, the slot list's windows over them; at 0 the slot list takes the page's place as before. Name and meaning follow travel's `over_page`.
+
+```json
+{"version": 1, "flow": ["slots", "confirm", "saved"], "params": {"over_page": 1}, "windows": [
+	{"name": "slots", "x": "area_x + area_w / 3", "y": "area_y", "w": "area_w * 2 / 3", "h": "area_h", "frame": "panel", "elements": [...]},
+	{"name": "message", "visible": "flow_step == 'confirm' || flow_step == 'saved'", "anchor": "center", "w": 560, "h": 120, "frame": "panel", "elements": [
+		{"type": "text", "value": "message", "w": "cw", "wrap": true, "lines": 2, "color": "message_ok ? 'text' : 'bad'"},
+		{"type": "rows", "visible": "flow_step == 'confirm'", "items": "confirm_options", "selected": "confirm_cursor", "x": 20, "y": 40}]}
+]}
+```
+
+### Travel: no use notice, refusals on the page
+
+Params of `travel.json`:
+
+* `used_toast` (expression, default 1): 0 leaves the session's notice of a travel item's or technique's use (`game.used`, `game.used_ability`, which comes with the arrival) out of the toasts; it is logged as ever. The arrival's own message is `arrive_key`'s, unchanged.
+* `refusal` (`"toast"` default, or `"page"`): a travel item's or technique's refusal from the field menu (nowhere to go, not allowed here, a travel the session refuses from the list, which then closes) shows in the page it was used from: `menu_items`' `result_text` (with `result_ok` false), or `menu_abilities`' `result_text` on the techniques, skills and abilities pages, when that file reads the field; otherwise, and from the Status page, a toast as before.
+
+`menu_abilities` gains the fields `result_text` (string, the last travel refusal under `refusal` "page", cleared by the next Confirm on an ability) and `result_ok` (bool, false).
+
+```json
+{"version": 1, "params": {"used_toast": 0, "refusal": "page"}, "windows": [...]}
+```
+
+### Dialogue: option states and the kept choice
+
+A script's options may carry state words and a choice may stay on screen once answered ([`../events/FORMAT.md`](../events/FORMAT.md), "Choices"; `Choice.States`, `Choice.Keep`, `GameSession.KeptChoice()`).
+
+Top-level `option_states` (`dialogue.json`): an object from a state word (lowercase letters, digits, `_`) to a color of the styles or a color literal; a row whose option has that word gets it as `state_color`. A word the file does not list keeps `state_color` `''`, so the row draws as the layout's own expression says.
+
+Fields: `option_rows` (items: `text`, `state` (the word, `''` for none), `state_color`, `picked` (false here)); `kept_visible` (bool: a kept choice stands), `kept_prompt`, `kept_header` (strings), `kept_options` (strings), `kept_rows` (items as `option_rows`, `picked` true on the answered row) and `kept_cursor` (int, the answered row, -1 without one). The kept fields hold while the event runs, between its lines too, so a window drawn by `kept_visible` stays under the box, a nested choice and a line with a portrait, and goes with `choice clear` or the event's end. The built-in file draws neither.
+
+```json
+{"version": 1, "option_states": {"new": "good", "plain": "dim"}, "windows": [
+	{"name": "kept", "visible": "kept_visible", "x": "W - 404", "y": "top > H / 2 ? top - h - 12 : top + t(176) + 12", "w": 380, "h": "len(kept_rows) * t(30) + t(60)", "frame": "panel", "elements": [
+		{"type": "text", "value": "kept_prompt", "x": 20, "y": "t(12)", "style": "small_dim"},
+		{"type": "repeater", "items": "kept_rows", "x": 44, "y": "t(42)", "dy": "t(30)", "template": [
+			{"type": "pointer", "visible": "picked", "x": -22, "y": 2},
+			{"type": "text", "value": "text", "color": "picked ? 'accent' : state_color != '' ? state_color : 'text'"}]}]},
+	{"name": "box", ..., "elements": [..., {"type": "repeater", "visible": "has_choice", "items": "option_rows", "x": 44, "y": "t(62)", "dy": "t(30)", "template": [
+		{"type": "text", "value": "text", "color": "i == cursor ? 'accent' : state_color != '' ? state_color : 'text'"}]}]}
+]}
+```
+
+### Followers on the leader's cell
+
+A follower standing on the leader's cell (followers `stacked`, a direction whose cell cannot be walked, the first frames after a load or a battle's end with an empty trail) is in the field's draw list on that cell from the frame the party arrives, also while an event runs, and is not painted (the leader covers it): `expect actor ID X Y` and the state probe `actorpos.ID` find it there (before, it had no cell until the leader's first step), the developer overlays and `expect apart` leave it out, and no frame draws differently.
+
+### The map load hold's music
+
+During `map_load_hold_ms` the music stops only when the new area plays another track; a track already playing goes on through the hold with no restart.
+
+### The keep runs
+
+`make_arrival_data.py GAME_DATA CORE_DATA OUT` copies the data with a party of two in a generated interior, Saltgrass's `return` on a generated field whose load hook warps with and without `followers`, and `map_load_hold_ms` 300 with the field playing Saltgrass's track; `arrival_followers.txt` (with `--dev`) checks the follower in the draw list after every frame (the script verb `watch PROBE not VALUE`, `watch off`) through the landing, the scene's warps and lines, a step, a developer's warp, a save and a load and a battle's end, then the music through the hold. `make_keep_data.py GAME_DATA CORE_DATA OUT` copies the data with the guide's topics as a kept choice with states (`keep_talk`) and a party with Homeward; `make_keep_assets.py EXPORT BASE OUT` writes the set above (the menu's Items, Techniques and System entries, the save flow over the system page, travel's `used_toast` 0 and `refusal` "page", `result_text` on the Items and abilities pages, the dialogue's states and kept choice); `alt/save_slots_broken.json` and `alt/dialogue_broken.json` are checked on copies. `keep_flows.txt` (with `--dev`) plays them; screenshots under `build/shots/keep/` with `--window`.
+
 ## Dialogue control tags (`ui/dialogue.json`, `SampleController.Dialogue.cs`)
 
 The session hands the sample each line with name tokens resolved and control tags as written (`events/FORMAT.md`,
@@ -1833,6 +1902,7 @@ styles.json gains the text style `hint` (`size_small`, `dim`, role `hint`) and t
 
 ## Scripts
 
+* `watch PROBE not VALUE` (script verb): after every frame until `watch off`, the state probe must not read VALUE; the first frame it does fails the run once.
 * `scripts/make_tag_data.py GAME_DATA CORE_DATA OUT`: a test-only copy of the data with the event `dialogue_tags`
   (`events/dialogue_tags.ev`, on no hook) and its lines in `text/en.strings` and `text/ja.strings`: a portrait switch and
   a page, three waits and three values, a narration longer than the box, the `sound` tag (once with the data's cue

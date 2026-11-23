@@ -1,0 +1,105 @@
+# Followers have a cell from the frame the party lands (make_arrival_data.py's copy, game.json `followers_arrive`
+# "stacked" and `followers_on_exits` true, a party of two), with --dev: `watch` checks after every frame that the
+# follower is in the field's draw list (`actorpos.mystic` not `-`), a stacked follower listed on the leader's cell; a
+# Homing Shell used from the generated interior lands on Saltgrass's `return` (stacked), where a load hook's scene warps
+# with `followers up` (the cell north of the leader), with no `followers` word (stacked) and with `followers left`
+# against a wall (stacked), each line read while the follower stands there; then a step, a dialogue, a developer's warp,
+# a save and a load, and a battle's end; then the music through the hold after an area change (make_arrival_data.py's
+# map_load_hold_ms), going on when the new area plays the same track. With --window the shot lines save screenshots under build/shots/arrival/ (run
+# from bindings/).
+
+cmd set text instant
+expect screen Title
+pressuntil Enter Field 400
+wait 2
+expect actor fighter 3 2
+expect actor mystic 3 2
+watch actorpos.mystic not -
+dev encounters off
+
+# The shell from the Items page: Saltgrass's return lands on the generated field, and the load hook's scene starts on
+# the same frame.
+press M
+press Right
+wait 3
+expect state tab Items
+press Enter
+wait 4
+expect screen Travel
+press Enter
+waitstate 60 line The line stands north of the leader.
+expect state leader arrival_field 6 4
+expect actor fighter 6 4
+expect actor mystic 6 3
+waitstate 60 maphold 0
+shot build/shots/arrival/warp_up.png
+press Enter
+waitstate 30 line The line stands on the leader.
+expect state leader arrival_field 9 5
+expect actor mystic 9 5
+press Enter
+waitstate 30 line A wall to the west: the line stands on the leader.
+expect state leader arrival_field 1 2
+expect actor mystic 1 2
+waitstate 60 maphold 0
+shot build/shots/arrival/warp_wall.png
+press Enter
+wait 5
+expect screen Field
+expect actor mystic 1 2
+
+# A dialogue over the stacked follower, then the first step: it walks out from the leader's cell.
+dev event arrival_dialogue
+waitstate 30 line A word while the line stands still.
+expect actor mystic 1 2
+press Enter
+wait 5
+expect screen Field
+hold Right 16
+wait 20
+expect actor fighter 2 2
+expect actor mystic 1 2
+
+# A developer's warp (followers_arrive_other, stacked), a save and a load, and a battle's end.
+dev warp arrival_field north_spot
+wait 3
+expect actor mystic 6 4
+press Down
+wait 20
+expect actor mystic 6 4
+cmd menu
+cmd save manual_0
+cmd close
+cmd title
+wait 3
+cmd load manual_0
+wait 3
+expect screen Field
+expect actor mystic 6 4
+dev battle training
+waitstate 300 battlephase Command
+dev win
+waitstate 900 battlephase Ended
+press Enter
+wait 10
+expect screen Field
+wait 2
+expect actor mystic 6 4
+watch off
+
+# The hold after an area change (map_load_hold_ms 300): the field's track goes on into Saltgrass, which plays the same
+# one, with no stop and no restart; the reed path's own track waits for the end of the hold.
+audio mark
+dev warp saltgrass inn_front
+wait 2
+expect statenot maphold 0
+expect state music town_canal_market
+waitstate 60 maphold 0
+expect state music town_canal_market
+expect noaudio music stop
+expect noaudio music town_canal_market
+dev warp reed_path west_gate
+wait 2
+expect state music -
+waitstate 60 maphold 0
+expect state music field_marsh_reeds

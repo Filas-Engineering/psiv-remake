@@ -127,6 +127,8 @@ const char* op_name(Op op) {
 		return "picture";
 	case Op::register_town:
 		return "register town";
+	case Op::choice_clear:
+		return "choice clear";
 	}
 	return "unknown";
 }

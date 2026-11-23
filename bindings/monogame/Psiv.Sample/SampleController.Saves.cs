@@ -23,7 +23,7 @@ public sealed partial class SampleController
 		bool active = true, UiContext? page = null)
 	{
 		UiContext data = page ?? UiArea(x, y, w, h);
-		Ui.Draw("save_slots", s, s, data
+		Ui.Draw("save_slots", s, s, SaveFlowFields(data)
 			.Set("slots", slots.Select((slot, i) => SlotRow(data, slot, i, saves)).ToList())
 			.Set("list", list)
 			.Set("active", active));
@@ -102,6 +102,10 @@ public sealed partial class SampleController
 			}
 			return;
 		}
+		if (UpdateSaveFlow(input))
+		{
+			return;
+		}
 		_list.Move(input, slots.Count);
 		if (input.Back && SystemMenuOn)
 		{
@@ -109,7 +113,7 @@ public sealed partial class SampleController
 		}
 		else if (input.Confirm)
 		{
-			SaveTo(slots[_list.Cursor]);
+			SaveFromList(slots[_list.Cursor]);
 		}
 	}
 
@@ -127,6 +131,106 @@ public sealed partial class SampleController
 		}
 		DrawSlots(t, _list, x, y, w, h, ManualSlots(), _s.Saves() ?? [], active: !system, page);
 	}
+
+	// The save_slots layout's `flow` on the field menu's Save page and the system page: `slots`, then `confirm` (the
+	// overwrite question in the layout's own window, Yes or No) and `saved` (the save's notice there until Confirm or
+	// Back), each in place of the confirm box and the notice. `_saveStep` is "" on the slots, "confirm" or "saved".
+	private static readonly List<string> SaveDefaultFlow = ["slots"];
+	private List<string> SaveFlow => Layout.Screen("save_slots").Flow ?? SaveDefaultFlow;
+	private string _saveStep = "";
+	private string _saveSlot = "";
+	private bool _saveYes = true;
+	private string _saveMessage = "";
+	private bool _saveOk = true;
+	// Set from a save the `saved` step shows until TakeNotices puts its notice in the window.
+	private bool _saveCapture;
+
+	// The slot list of the Save page and the system page under the flow; true while a step past the slots has the keys.
+	private bool UpdateSaveFlow(ActionInput input)
+	{
+		if (_saveStep == "confirm")
+		{
+			if (input.Pressed(GameAction.Up) || input.Pressed(GameAction.Down) || input.Pressed(GameAction.Left) || input.Pressed(GameAction.Right))
+			{
+				_saveYes = !_saveYes;
+			}
+			if (input.Back || input.Confirm && !_saveYes)
+			{
+				_saveStep = "";
+			}
+			else if (input.Confirm)
+			{
+				WriteFromList(_saveSlot);
+			}
+			return true;
+		}
+		if (_saveStep == "saved")
+		{
+			if (input.Confirm || input.Back)
+			{
+				_saveStep = "";
+				_saveMessage = "";
+			}
+			return true;
+		}
+		return false;
+	}
+
+	// Confirm on a slot of the Save page or the system page.
+	private void SaveFromList(string slot)
+	{
+		if (Layout.Screen("save_slots").Flow is null)
+		{
+			SaveTo(slot);
+		}
+		else if (SaveFlow.Contains("confirm") && _s.Saves()?.Any(v => v.Slot == slot) == true)
+		{
+			_saveStep = "confirm";
+			_saveSlot = slot;
+			_saveYes = true;
+		}
+		else
+		{
+			WriteFromList(slot);
+		}
+	}
+
+	private void WriteFromList(string slot)
+	{
+		_saveStep = "";
+		if (!SaveFlow.Contains("saved"))
+		{
+			Report(_s.SaveManual(slot));
+			return;
+		}
+		PsivResult saved = _s.SaveManual(slot);
+		_saveCapture = saved.Ok;
+		if (saved.Error is { } error)
+		{
+			_log("notice: " + error.Text);
+			_refused = true;
+			(_saveMessage, _saveOk, _saveStep) = (Shown(error.Text), false, "saved");
+		}
+	}
+
+	// The notice of a save the `saved` step shows, in the window.
+	private void ShowSaved(Notice n)
+	{
+		_saveCapture = false;
+		(_saveMessage, _saveOk, _saveStep) = (Shown(n.Text), true, "saved");
+		_log("notice: " + _saveMessage);
+		if (NoticeCue(n) is { } cue)
+		{
+			_audio.PlayCue(cue);
+		}
+	}
+
+	private UiContext SaveFlowFields(UiContext data) => data
+		.Set("flow_step", Layout.Screen("save_slots").Flow is null ? "" : _saveStep.Length > 0 ? _saveStep : "slots")
+		.Set("message", _saveStep == "confirm" ? T("ui.saves.overwrite", _saveSlot) : _saveStep == "saved" ? _saveMessage : "")
+		.Set("message_ok", _saveStep != "saved" || _saveOk)
+		.Set("confirm_options", new List<string> { T("ui.confirm.yes"), T("ui.confirm.no") })
+		.Set("confirm_cursor", _saveYes ? 0 : 1);
 
 	// Saves to the slot, asking first when a save is there.
 	private void SaveTo(string slot, Action? after = null)

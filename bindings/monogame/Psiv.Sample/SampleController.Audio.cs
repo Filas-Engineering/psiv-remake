@@ -132,11 +132,9 @@ public sealed partial class SampleController
 			string kind = FieldRenderer.KindName(f?.AreaKind ?? AreaKind.Field).ToLowerInvariant();
 			return battle?.Source == BattleSource.Event ? "battle_scripted" : "battle_" + kind;
 		}
-		if (_mapHoldMs > MapFadeInMs)
-		{
-			return "";
-		}
-		return f is null ? "" : f.Music.Length > 0 ? f.Music : $"{FieldRenderer.KindName(f.AreaKind).ToLowerInvariant()}_{f.AreaId}";
+		string area = f is null ? "" : f.Music.Length > 0 ? f.Music : $"{FieldRenderer.KindName(f.AreaKind).ToLowerInvariant()}_{f.AreaId}";
+		// The hold after an area change stops the music, unless the new area plays the track already playing, which goes on.
+		return _mapHoldMs > MapFadeInMs && area != _audio.Music ? "" : area;
 	}
 
 	// After each update: the music and ambient loop for where play stands, the profile's volumes, the cues for what

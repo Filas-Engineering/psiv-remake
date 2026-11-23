@@ -163,6 +163,11 @@ bool Interpreter::resolve_wait(Thread& thread) {
 					write_var(ins.name, picked + 1);
 				}
 			}
+			if (ins.op == Op::choice && ins.choice.keep) {
+				presentation_.kept_choice = thread.pc;
+				presentation_.kept_picked = picked;
+				presentation_.kept_states = presented_states_;
+			}
 			next = ins.targets[picked];
 		}
 		host_.release(thread.handle);
@@ -220,11 +225,22 @@ void Interpreter::execute(Thread& thread) {
 		thread.handle = host_.show_line(ins.dialogue);
 		thread.wait = WaitKind::handle;
 		return;
-	case Op::choice:
+	case Op::choice: {
 		stop_skipping();
-		thread.handle = host_.present_choice(ins.choice);
+		ChoiceRequest request = ins.choice;
+		for (const OptionState& state : ins.option_states) {
+			request.states.push_back(!state.has_condition || evaluate(state.condition) ? state.word : std::string());
+		}
+		presented_states_ = request.states;
+		thread.handle = host_.present_choice(request);
 		thread.wait = WaitKind::handle;
 		return;
+	}
+	case Op::choice_clear:
+		presentation_.kept_choice = -1;
+		presentation_.kept_picked = -1;
+		presentation_.kept_states.clear();
+		break;
 	case Op::battle:
 		stop_skipping();
 		thread.handle = host_.start_battle(ins.battle);
@@ -956,6 +972,7 @@ Interpreter::NextOutput Interpreter::next_output() const {
 		case Op::clear_flag:
 		case Op::var_set:
 		case Op::var_add:
+		case Op::choice_clear:
 			++pc;
 			break;
 		case Op::ret:
@@ -969,6 +986,16 @@ Interpreter::NextOutput Interpreter::next_output() const {
 		}
 	}
 	return NextOutput::other;
+}
+
+const ChoiceRequest* Interpreter::kept_choice(int& picked, std::vector<std::string>& states) const {
+	const int pc = presentation_.kept_choice;
+	if (status_ != Status::running || pc < 0 || pc >= static_cast<int>(program_.code.size()) || program_.code[pc].op != Op::choice) {
+		return nullptr;
+	}
+	picked = presentation_.kept_picked;
+	states = presentation_.kept_states;
+	return &program_.code[pc].choice;
 }
 
 SaveState Interpreter::save() const {

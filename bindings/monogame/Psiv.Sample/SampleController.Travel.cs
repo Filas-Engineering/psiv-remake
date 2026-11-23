@@ -22,6 +22,48 @@ public sealed partial class SampleController
 
 	private bool TravelCancelRow => Ui.Param("travel", "cancel_row", UiData(), 1) != 0;
 
+	// The layout's `used_toast` 0: the travel use's own notice (`game.used`, `game.used_ability`) is logged, not shown.
+	private bool _travelUseQuiet;
+
+	// The layout's `refusal` "page": a travel item's or technique's refusal goes to the page it was used from (menu_items'
+	// or menu_abilities' `result_text` when the file reads it) instead of the notices; `_travelRefusal` waits for the
+	// menu when the list closes on it.
+	private string? _travelRefusal;
+	private string _abilityResult = "";
+
+	private bool TravelRefusal(PsivResult result, string? user)
+	{
+		if (result.Error is not { } error || Ui.ParamText("travel", "refusal", UiData(), "toast") != "page"
+			|| !Layout.Screen(user is null ? "menu_items" : "menu_abilities").Reads("result_text") || user is not null && !IsAbilityPage(MenuPage))
+		{
+			return false;
+		}
+		_log("notice: " + error.Text);
+		_refused = true;
+		_travelRefusal = Shown(error.Text);
+		return true;
+	}
+
+	private static bool IsAbilityPage(string page) => page is "techniques" or "skills" or "abilities";
+
+	// The refusal on the page, once the menu shows it.
+	private void ShowTravelRefusal()
+	{
+		if (_travelRefusal is not { } text || Screen != Screen.Menu)
+		{
+			return;
+		}
+		_travelRefusal = null;
+		if (MenuPage == "items")
+		{
+			(_itemResult, _itemResultOk) = (text, false);
+		}
+		else
+		{
+			_abilityResult = text;
+		}
+	}
+
 	// The layout's `over_page` with `over_menu`: the open page stays as it was under a travel list from the field menu, and
 	// the menu comes back to it when the list closes without travelling.
 	private bool TravelKeepsPage => Ui.Param("travel", "over_menu", UiData(), 0) != 0 && Ui.Param("travel", "over_page", UiData(), 0) != 0;
@@ -37,7 +79,12 @@ public sealed partial class SampleController
 		IReadOnlyList<TravelDestination> destinations = _s.TravelDestinations(kind);
 		if (destinations.Count == 0)
 		{
-			Report(_s.Travel(kind, null, user, thing));
+			PsivResult refused = _s.Travel(kind, null, user, thing);
+			if (!TravelRefusal(refused, user))
+			{
+				Report(refused);
+			}
+			ShowTravelRefusal();
 			return;
 		}
 		_travelPick = (kind, user, thing);
@@ -80,11 +127,20 @@ public sealed partial class SampleController
 	private void TravelGo(TravelDestination to)
 	{
 		(TravelKind kind, string? user, string thing) = _travelPick!.Value;
+		_travelUseQuiet = Ui.Param("travel", "used_toast", UiData(), 1) == 0;
 		PsivResult result = _s.Travel(kind, to.Id, user, thing);
-		Report(result);
 		_travelPhase = "";
+		if (TravelRefusal(result, user))
+		{
+			// The list closes, so the page shows the refusal.
+			_travelPick = null;
+			_travelUseQuiet = false;
+			return;
+		}
+		Report(result);
 		if (!result.Ok)
 		{
+			_travelUseQuiet = false;
 			_travelPick = _travelAtOnce ? null : _travelPick;
 			return;
 		}

@@ -273,3 +273,91 @@ TEST(a_choice_header_reaches_the_host_with_the_options) {
 	auto d = test::compile_errors("event a unskippable\n\tchoice header\n\toption \"A\"\n\toption \"B\"\n\tend\nend\n");
 	CHECK(test::has_diagnostic(d, 2, "expected header text"));
 }
+
+// `choice ... keep` stays on screen with its picked row until `choice clear`; each option's `state <word> [if
+// <condition>]` reaches the host as the choice is presented, and the kept choice keeps them.
+TEST(a_kept_choice_stays_until_cleared_with_its_option_states) {
+	Program p = test::compile_ok(R"(event a unskippable
+	set seen.north
+	choice "Where to?" keep into trip.pick
+	option "North" state new if not seen.north
+	option "South" state new if not seen.south
+	option "Back" state plain
+	end
+	wait 1
+	ask "Sure?"
+	yes
+		wait 1
+	no
+	end
+	choice clear
+	wait 1
+end
+)");
+	CHECK(p.code[1].choice.keep && p.code[1].option_states.size() == 3 && p.code[1].option_states[2].word == "plain" && !p.code[1].option_states[2].has_condition);
+	RecordingHost host;
+	host.queue_choices({1, 0});
+	Interpreter it(p, host);
+	CHECK(it.start("a"));
+	int picked = -1;
+	std::vector<std::string> states;
+	CHECK(!it.kept_choice(picked, states));
+	it.step(0);
+	it.step(0.5);
+	const events::ChoiceRequest* kept = it.kept_choice(picked, states);
+	CHECK(kept && kept->options.size() == 3 && picked == 1 && states == (std::vector<std::string>{"", "new", "plain"}));
+	CHECK(with_prefix(host.trace, "choice ") == (std::vector<std::string>{"choice \"Where to?\" keep [\"North\" | \"South\" state new | \"Back\" state plain] -> 1"}));
+	const std::string text = events::save_state_to_text(it.save());
+	CHECK(text.rfind("events-save 6 ", 0) == 0);
+	SaveState loaded;
+	CHECK(events::save_state_from_text(text, loaded) && loaded.presentation == it.presentation());
+	RecordingHost resumed_host = host.reloaded();
+	Interpreter resumed(p, resumed_host);
+	std::string error;
+	CHECK(resumed.restore(loaded, error));
+	CHECK(resumed.kept_choice(picked, states) && picked == 1);
+	for (int i = 0; i < 4; ++i) {
+		host.advance(0.5);
+		it.step(0.5);
+	}
+	// The ask showed over it, and it stayed through the yes branch; `choice clear` takes it away.
+	CHECK(with_prefix(host.trace, "ask ").size() == 1);
+	CHECK(!it.kept_choice(picked, states));
+	test::run(it, host);
+	CHECK(it.status() == Status::finished);
+}
+
+TEST(choice_clear_is_a_command_and_option_states_are_checked) {
+	Program p = test::compile_ok("event a unskippable\n\tchoice clear\n\tsay guide \"Hi.\"\nend\n");
+	CHECK(p.code[0].op == events::Op::choice_clear);
+	auto d = test::compile_errors("event a unskippable\n\tchoice \"Q\"\n\toption \"A\" state\n\toption \"B\"\n\tend\nend\n");
+	CHECK(test::has_diagnostic(d, 3, "expected a state word"));
+	auto e = test::compile_errors("event a unskippable\n\tchoice \"Q\" into x keep\n\toption \"A\"\n\toption \"B\"\n\tend\nend\n");
+	CHECK(!e.empty());
+}
+
+// A skip carries a `choice clear` over, and an event's end takes the kept choice with it.
+TEST(a_skip_clears_a_kept_choice_and_the_event_end_drops_it) {
+	Program p = test::compile_ok(R"(event a skippable
+	choice "Q" keep
+	option "A"
+	option "B"
+	end
+	say guide "One."
+	choice clear
+	say guide "Two."
+end
+)");
+	RecordingHost host;
+	host.queue_choices({0});
+	host.set_line_duration(1);
+	Interpreter it(p, host);
+	CHECK(it.start("a"));
+	it.step(0);
+	int picked = -1;
+	std::vector<std::string> states;
+	CHECK(it.kept_choice(picked, states) && picked == 0 && states.empty());
+	CHECK(it.skip());
+	test::run(it, host);
+	CHECK(it.status() == Status::finished && !it.kept_choice(picked, states));
+}

@@ -97,6 +97,8 @@ public sealed class UiScreenLayout
 	// The travel screen's `one_destination_for`: per travel kind (`town`, `dungeon_exit`) or item or technique id, whether
 	// one place to go lists (`list`) or goes at once (`go`); the param `one_destination` for the rest.
 	public Dictionary<string, string> OneDestination { get; } = [];
+	// `option_states` (dialogue): a choice option's state word to the color its row takes.
+	public Dictionary<string, string> OptionStates { get; } = [];
 
 	public bool HasSlot(string slot) => Windows.Any(w => HasSlot(w.Elements, slot));
 
@@ -349,7 +351,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["styles.text_styles{}"] = ["size", "color", "role"],
 		["styles.frames{}"] = ["type", "image", "border", "scale", "color", "thickness", "skin"],
 		["styles.cursors{}"] = ["type", "image", "size", "color", "blink_ms"],
-		["screen"] = ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows", "flow", "intro", "result_sequence", "one_destination_for"],
+		["screen"] = ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows", "flow", "intro", "result_sequence", "one_destination_for", "option_states"],
 		["screen.result_sequence[]"] = ["phase", "ms"],
 		["screen.intro[]"] = ["name", "ms"],
 		["screen.places[]"] = ["slot", "label"],
@@ -706,6 +708,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["macro_flow"] = ("reset", "remember", "whether the menus open at their first row after a macro's round or on Macro and the macro played last"),
 		["navigation"] = ("tabs", "list", "whether the field menu's entries are tabs turned with Left and Right or a list chosen with Up, Down and Confirm"),
 		["one_destination"] = ("list", "go", "whether a travel use with one place to go lists it or goes at once"),
+		["refusal"] = ("toast", "page", "whether a travel item's or technique's refusal shows as a notice or in the page it was used from"),
 		["reveal_confirm"] = ("complete", "hold", "whether a press shows the whole page or holding Confirm only speeds the reveal"),
 		["stack_rows"] = ("stacked", "single", "whether the Items page lists one row per item with its count or one row per copy"),
 		["unusable"] = ("dim", "hide", "whether abilities not usable in the field show dimmed or not at all"),
@@ -918,6 +921,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		Flow(root, screen);
 		ResultSequence(root, screen);
 		OneDestinationFor(root, screen);
+		OptionStates(root, screen);
 		int index = 0;
 		foreach (JsonElement w in windows.EnumerateArray())
 		{
@@ -1139,6 +1143,42 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		}
 	}
 
+	// `option_states` (dialogue): each key a state word a script gives options (lowercase letters, digits, '_'), each value a
+	// color of the styles or a color literal.
+	private void OptionStates(JsonElement root, UiScreenLayout screen)
+	{
+		if (!root.TryGetProperty("option_states", out JsonElement map))
+		{
+			return;
+		}
+		if (fields!.Screen != "dialogue")
+		{
+			Problem("option_states", "only the dialogue screen takes 'option_states'");
+			return;
+		}
+		if (!Object(map, "option_states"))
+		{
+			return;
+		}
+		foreach (JsonProperty p in map.EnumerateObject())
+		{
+			string entry = $"option_states.{p.Name}";
+			string? color = p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : null;
+			if (p.Name.Length == 0 || !p.Name.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_'))
+			{
+				Problem(entry, "must be an option's state word (lowercase letters, digits and '_')");
+			}
+			else if (color is null || !IsColorLiteral(color) && !(styles?.Colors.ContainsKey(color) ?? false))
+			{
+				Problem(entry, "must be a color of the styles or a color literal");
+			}
+			else
+			{
+				screen.OptionStates[p.Name] = color;
+			}
+		}
+	}
+
 	// `result_sequence` (the battle files): phases from UiFields.ResultPhases, none twice, the result among them.
 	private void ResultSequence(JsonElement root, UiScreenLayout screen)
 	{
@@ -1189,7 +1229,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		screen.ResultSequence = steps;
 	}
 
-	// `flow` (shop, inn): steps from the screen's list, in that list's order, with the one step the screen cannot do without.
+	// `flow` (shop, inn, save_slots): steps from the screen's list, in that list's order, with the one step the screen cannot do without.
 	private void Flow(JsonElement root, UiScreenLayout screen)
 	{
 		if (!root.TryGetProperty("flow", out JsonElement flow))
@@ -1200,11 +1240,12 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		{
 			"shop" => (UiFields.ShopFlowSteps, "list"),
 			"inn" => (UiFields.InnFlowSteps, "choice"),
+			"save_slots" => (UiFields.SaveFlowSteps, "slots"),
 			_ => null,
 		};
 		if (allowed is not { } a)
 		{
-			Problem("flow", "only the shop and inn screens take 'flow'");
+			Problem("flow", "only the shop, inn and save_slots screens take 'flow'");
 		}
 		else if (IdList(flow, "flow", a.steps, "steps") is { } ids)
 		{

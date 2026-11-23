@@ -227,7 +227,7 @@ assets: ui/battle_front_vehicle.json: windows: needs a window named 'keys' (the 
 assets: ui/battle_front_vehicle.json: params.level_page_lines: field 'level_page_lines' reads 'many', which is not a field of the battle_front_vehicle screen, a window or a variable
 assets: ui/battle_front_vehicle.json: params.defeat_message: must be a text key (lowercase letters, digits, '_' and '.')
 assets: ui/battle_front_vehicle.json: command_rows.vehicle: lists the vehicle's skills more than once: 'skills', 'weapons' and 'options' each list them all
-assets: ui/battle_front_vehicle.json: flow: only the shop and inn screens take 'flow'
+assets: ui/battle_front_vehicle.json: flow: only the shop, inn and save_slots screens take 'flow'
 assets: ui/battle_front_vehicle.json: windows.pictures.elements[0]: field 'image' names no picture: 'nowhere:at:all'; a name is one of picture:NAME, title:background, title:logo, title:layer:N, ui:cursor, ui:bar_track, ui:bar_fill, ui:page_arrow, PATH.png
 assets: ui/battle_front_vehicle.json: windows.pictures.elements[1]: field 'src' must be [x, y, w, h]: the part of the picture, in its own pixels
 assets: ui/battle_front_vehicle.json: windows.pictures.elements[2]: field 'repeat' wraps the picture under 'src' and needs it

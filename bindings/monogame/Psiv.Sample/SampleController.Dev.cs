@@ -1074,7 +1074,7 @@ public sealed partial class SampleController
 		}
 		if (_overlays.Contains("actors"))
 		{
-			foreach ((string id, DrawnPerson person) in _field.DrawnActors.OrderBy(a => a.Key, StringComparer.Ordinal))
+			foreach ((string id, DrawnPerson person) in _field.DrawnActors.Where(a => !a.Value.Stacked).OrderBy(a => a.Key, StringComparer.Ordinal))
 			{
 				int px = (int)(person.X * tile) - _field.CameraX, py = (int)(person.Y * tile) - _field.CameraY;
 				Label(id, px + tile / 2 - s.Measure(id, OverlayText) / 2 - 3, py - 22, Style.Text);
@@ -1084,7 +1084,7 @@ public sealed partial class SampleController
 				(int ex, int ey) = Corner(e.X, e.Y);
 				Label($"{e.Encounter}#{e.Id}", ex, ey - 22, Style.Bad);
 			}
-			_overlayDrawn["actors"] = string.Join(", ", _field.DrawnActors.Keys.Order(StringComparer.Ordinal));
+			_overlayDrawn["actors"] = string.Join(", ", _field.DrawnActors.Where(a => !a.Value.Stacked).Select(a => a.Key).Order(StringComparer.Ordinal));
 		}
 		if (_overlays.Contains("camera"))
 		{

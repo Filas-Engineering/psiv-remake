@@ -7,7 +7,8 @@ using Psiv.Session;
 namespace Psiv.Sample;
 
 // A person as the last field frame drew it, in cells; `Marked` when its pose drew motion marks.
-public readonly record struct DrawnPerson(float X, float Y, bool Walking, Direction Facing, Pose Pose, bool Marked);
+// Stacked: a follower standing on the leader's cell, listed there but not painted, the leader covering it.
+public readonly record struct DrawnPerson(float X, float Y, bool Walking, Direction Facing, Pose Pose, bool Marked, bool Stacked = false);
 
 // Draws a FieldView: a camera that follows the leader, tiles chosen from neighbors and cell coordinates,
 // and actors that glide between cells. The game moves everyone a whole cell at a time; the glides only
@@ -1443,6 +1444,10 @@ public sealed class FieldRenderer
 			}
 			if ((g.X, g.Y) == (_scriptedLeaderCell ?? (_leader.X, _leader.Y)))
 			{
+				if (record)
+				{
+					DrawnActors[id] = new DrawnPerson(g.PX, g.PY, false, g.Facing, Pose.None, false, true);
+				}
 				continue;
 			}
 			Person(id, g.PX, g.PY, g.Facing, g.Frame, g.Progress < 1f, -0.01f);
