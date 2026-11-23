@@ -153,6 +153,7 @@ public static class Program
 		// A new profile in normal play (no script, or --play-defaults) starts at the data's flashing default; scripted runs keep the
 		// profile's default, standard, so their transcripts do not depend on it.
 		bool newProfile = saves is not null && !File.Exists(Path.Combine(saves, "profile.cfg"));
+		MotionTiming.Seed = seed;
 		GameSession session;
 		try
 		{

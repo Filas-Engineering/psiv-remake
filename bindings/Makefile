@@ -488,6 +488,14 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_anim_side_saves --assets $(BUILD)/anim_side_run \
 		--script $(SAMPLE_SCRIPTS)/battle_anim_side.txt --frames 9500 > $(BUILD)/sample_anim_side_headless.txt || (cat $(BUILD)/sample_anim_side_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_anim_side_headless.txt
+	# Script sounds per action, target and release (make_anim_assets.py --sounds: phases of 0 frames, so several steps start
+	# on one frame) on a single-target, an all-enemies, a damage-and-status, a two-blade and a combination turn.
+	python3 -I $(SAMPLE_SCRIPTS)/make_anim_assets.py --sounds $(BUILD)/export $(BUILD)/anim_sound_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --check-assets --assets $(BUILD)/anim_sound_assets
+	rm -rf $(BUILD)/sample_anim_sounds_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_anim_sounds_saves --assets $(BUILD)/anim_sound_assets \
+		--script $(SAMPLE_SCRIPTS)/battle_anim_sounds.txt --frames 4000 > $(BUILD)/sample_anim_sounds_headless.txt || (cat $(BUILD)/sample_anim_sounds_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_anim_sounds_headless.txt
 	# The small set's notices on the menu, the shop and the Load screen take the styles' small text size.
 	rm -rf $(BUILD)/sample_small_toasts_saves $(BUILD)/small_toasts_assets
 	cp -R $(BUILD)/small_assets $(BUILD)/small_toasts_assets
@@ -837,6 +845,28 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --dev --saves $(BUILD)/sample_motion_more_saves --assets $(BUILD)/motion_more_run \
 		--script $(SAMPLE_SCRIPTS)/motion_more.txt --frames 800 > $(BUILD)/sample_motion_more_headless.txt || (cat $(BUILD)/sample_motion_more_headless.txt; exit 1)
 	@tail -n 1 $(BUILD)/sample_motion_more_headless.txt
+	# The world motion options (make_motion_options_assets.py: palette track targets, people and sheets, idle loops on a
+	# person and an object, an entry delay, a step of random length, flag lists, layer bands in screen lines), and a copy
+	# with a problem of each new kind.
+	python3 -I $(SAMPLE_SCRIPTS)/make_motion_options_assets.py $(BUILD)/motion_options_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --check-assets --assets $(BUILD)/motion_options_assets
+	rm -rf $(BUILD)/motion_options_broken_assets
+	cp -R $(BUILD)/motion_options_assets $(BUILD)/motion_options_broken_assets
+	cp $(BUILD)/motion_options_broken_assets/alt/assets_broken.json $(BUILD)/motion_options_broken_assets/assets.json
+	! $(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --check-assets --assets $(BUILD)/motion_options_broken_assets > $(BUILD)/check_assets_motion_options.txt
+	grep -qF "target 'layer:nowhere' names no layer of the area" $(BUILD)/check_assets_motion_options.txt
+	grep -qF "'people' and 'sheets' choose whom the 'actors' target recolors" $(BUILD)/check_assets_motion_options.txt
+	grep -qF "a random length must be {\"min\": N, \"max\": N}" $(BUILD)/check_assets_motion_options.txt
+	grep -qF "'delay' needs 'clock': \"entry\"" $(BUILD)/check_assets_motion_options.txt
+	grep -qF "field 'flag' names a flag twice" $(BUILD)/check_assets_motion_options.txt
+	grep -qF "a layer's bands share one unit" $(BUILD)/check_assets_motion_options.txt
+	grep -qF "no objects entry of wren_yard stands at '2,2'" $(BUILD)/check_assets_motion_options.txt
+	grep -qF "FAILED: 16 problems." $(BUILD)/check_assets_motion_options.txt
+	rm -rf $(BUILD)/sample_motion_options_saves $(BUILD)/motion_options_run
+	cp -R $(BUILD)/motion_options_assets $(BUILD)/motion_options_run
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BACKGROUND_DATA) --dev --saves $(BUILD)/sample_motion_options_saves --assets $(BUILD)/motion_options_run \
+		--script $(SAMPLE_SCRIPTS)/motion_options.txt --frames 800 > $(BUILD)/sample_motion_options_headless.txt || (cat $(BUILD)/sample_motion_options_headless.txt; exit 1)
+	@tail -n 1 $(BUILD)/sample_motion_options_headless.txt
 	# The host calls the sample adopts (make_host_data.py, make_host_assets.py), from saves of the scripted playthrough on
 	# the host data copy: the newest save preselected, menu children by `when` and `enabled` with `immediate`, Discard,
 	# the party talk page from PartyTalkLines, `combo` on the console, allies out of reach greyed before the pick, exit
@@ -1013,6 +1043,13 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/arrival_data/game/data --dev --saves $(BUILD)/sample_arrival_followers_saves \
 		--script $(SAMPLE_SCRIPTS)/arrival_followers.txt --frames 1200 > $(BUILD)/sample_arrival_followers_headless.txt || { cat $(BUILD)/sample_arrival_followers_headless.txt; exit 1; }
 	tail -n 1 $(BUILD)/sample_arrival_followers_headless.txt
+	# A place right after a warp in one event step (make_warp_place_data.py over the arrival copy): the leader drawn on the
+	# placed cell from that frame, its walk from there ending on the frame the line shows.
+	python3 -I $(SAMPLE_SCRIPTS)/make_warp_place_data.py $(BUILD)/arrival_data $(BUILD)/warp_place_data
+	rm -rf $(BUILD)/sample_warp_place_saves
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/warp_place_data/game/data --dev --saves $(BUILD)/sample_warp_place_saves \
+		--script $(SAMPLE_SCRIPTS)/warp_place.txt --frames 300 > $(BUILD)/sample_warp_place_headless.txt || { cat $(BUILD)/sample_warp_place_headless.txt; exit 1; }
+	tail -n 1 $(BUILD)/sample_warp_place_headless.txt
 	# The save flow, the travel messages and a kept choice (make_keep_data.py, make_keep_assets.py): Homing Shell and
 	# Homeward refused on their pages, a return with no notice, saving from the system page with its rows under the slot
 	# list and the saved message and overwrite question in the layout's window, the guide's topics kept above her line and

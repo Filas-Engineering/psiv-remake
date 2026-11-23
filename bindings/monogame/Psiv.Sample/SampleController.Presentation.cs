@@ -47,8 +47,9 @@ public sealed partial class SampleController
 			ActionType.PanelShow or ActionType.PanelHide or ActionType.PanelClear or ActionType.CameraCut or ActionType.CameraMove or ActionType.Shake or ActionType.CameraTo
 				or ActionType.CameraReset => PresentScene(a),
 			ActionType.MusicPlay or ActionType.MusicStop or ActionType.MusicFade or ActionType.AmbientPlay or ActionType.AmbientStop or ActionType.Sound => PresentAudio(a),
-			// The new area's banner shows the arrival; the session has already moved the party.
-			ActionType.Warp => 0,
+			// The new area's banner shows the arrival; the session has already moved the party, and the field enters the
+			// area now, before the step's later actions.
+			ActionType.Warp => EnterArea(view, lineup),
 			_ => null,
 		};
 		if (ownMs is { } own)
@@ -134,6 +135,15 @@ public sealed partial class SampleController
 		}
 		int labelLength = a.Type == ActionType.Move ? Math.Clamp((int)(a.Seconds * 1000), ShortestAnimationMs, LongestAnimationMs) : ShortestAnimationMs;
 		_animations.Add(new Animation(a, labelLength, labeled: true));
+	}
+
+	private int EnterArea(FieldView? view, List<string> lineup)
+	{
+		if (view is not null)
+		{
+			_field.EnterArea(view, lineup);
+		}
+		return 0;
 	}
 
 	// Milliseconds per cell of a scripted walk: the area's step time, faster or slower with the move's speed.

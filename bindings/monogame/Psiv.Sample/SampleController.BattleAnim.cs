@@ -767,7 +767,9 @@ public sealed partial class SampleController
 			AnimLog(unit.Forced ? $"forced {detail} @{Frames(step.At + step.Length)}" : $"release {detail} @{Frames(step.At + shownAt)}");
 		}
 		StartReactions(step, unit, shownAt);
-		if (!quiet && step.Run is { } run)
+		// Only a unit that shows a result counts: every step releases its leftover unit, often empty or holding only the
+		// actor's spent points.
+		if (!quiet && step.Run is { } run && unit.Events.Any(Shown))
 		{
 			foreach (AnimTrack t in run.Tracks.Where(t => t.Type == "sound" && BattleAnimationRun.Str(t.Def["per"]) == "release" && Holds(run, t.Def)))
 			{
@@ -891,7 +893,7 @@ public sealed partial class SampleController
 		}
 		int count = 1;
 		long stagger = 0;
-		if (BattleAnimationRun.Str(t.Def["per"]) == "each")
+		if (BattleAnimationRun.Str(t.Def["per"]) is "each" or "target")
 		{
 			count = Subject(run, BattleAnimationRun.Str(t.Def["spawn"]) ?? "targets").Count;
 			stagger = BattleAnimationRun.Time(BattleAnimationRun.Pick(t.Def["stagger"], run.In.Front), run);
@@ -899,7 +901,7 @@ public sealed partial class SampleController
 		for (int k = 0; k < count; k++)
 		{
 			long at = t.Start + k * stagger;
-			if (inclusive ? at >= from && at <= to : at > from && at <= to)
+			if ((inclusive ? at >= from && at <= to : at > from && at <= to) && run.SoundsPlayed.Add((t.Index, k)))
 			{
 				PlaySound(run, t, at);
 			}

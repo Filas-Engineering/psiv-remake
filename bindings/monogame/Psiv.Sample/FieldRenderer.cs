@@ -199,6 +199,8 @@ public sealed class FieldRenderer
 	private sealed record PoseRun(string Animation, ulong Handle, int StartMs, bool Loop);
 
 	private string _area = "";
+	// EnterArea ran since the last Track, which then starts the area's clock and settles the followers.
+	private bool _justEntered;
 	// The clock when the party entered the area shown, where the `entry` clocks of its motion start.
 	private int _enteredMs;
 	private int _lastClock = -1;
@@ -675,6 +677,32 @@ public sealed class FieldRenderer
 		return line;
 	}
 
+	// A new area: what the old one showed goes, the leader stands on its cell and the followers arrive. The controller
+	// calls it as a script's warp is presented, so a place or pose later in the same event step lands in the new area
+	// instead of being cleared by the next Track; Track calls it for every other way in.
+	public void EnterArea(FieldView view, IReadOnlyList<string> lineup)
+	{
+		FieldInfo f = view.Info;
+		if (f.AreaId == _area)
+		{
+			return;
+		}
+		_area = f.AreaId;
+		_justEntered = true;
+		_leader.Snap(f.LeaderX, f.LeaderY);
+		Arrive(view, lineup);
+		_enemies.Clear();
+		_enemyWalks.Clear();
+		_enemyRoutes.Clear();
+		_actors.Clear();
+		_routes.Clear();
+		ClearScene();
+		// The banner follows the session's arrival announcement (game.json's arrive_notice and the area's own).
+		_bannerLeftMs = f.AnnounceArrival ? BannerMs : 0;
+		_bannerTitle = f.AreaName;
+		_bannerKind = f.AreaKind;
+	}
+
 	// Follows the view's positions; `clockMs` is the controller's clock, so the glides advance with the
 	// frame time the session got. `lineup` is the party in walking order (the leader first).
 	public void Track(FieldView view, int clockMs, IReadOnlyList<string> lineup)
@@ -684,23 +712,13 @@ public sealed class FieldRenderer
 		FieldInfo f = view.Info;
 		int step = Math.Max(1, f.LeaderStepMs);
 		bool aboard = f.Aboard.Length > 0;
-		bool entered = f.AreaId != _area;
+		EnterArea(view, lineup);
+		bool entered = _justEntered;
+		_justEntered = false;
 		if (entered)
 		{
-			_area = f.AreaId;
 			_enteredMs = clockMs;
-			_leader.Snap(f.LeaderX, f.LeaderY);
 			Arrive(view, lineup);
-			_enemies.Clear();
-			_enemyWalks.Clear();
-			_enemyRoutes.Clear();
-			_actors.Clear();
-			_routes.Clear();
-			ClearScene();
-			// The banner follows the session's arrival announcement (game.json's arrive_notice and the area's own).
-			_bannerLeftMs = f.AnnounceArrival ? BannerMs : 0;
-			_bannerTitle = f.AreaName;
-			_bannerKind = f.AreaKind;
 			dt = 0;
 		}
 		_bannerLeftMs = Math.Max(0, _bannerLeftMs - dt);
@@ -943,15 +961,22 @@ public sealed class FieldRenderer
 		AreaMap? written = picture is null ? null : map;
 		LoadedMotion? motion = art.AreaMotionOf(f.AreaId);
 		var shown = new List<string>();
-		Func<int, int>? paint = Palette(s, motion?.Motion.Palettes ?? [], clockMs, "palettes", shown);
-		Func<int, int>? paintTiles = Palette(s, tiles.Palettes, clockMs, "tiles", shown);
+		List<(PaletteTrack Track, int? Step)> areaSteps = PaletteSteps(motion?.Motion.Palettes ?? [], clockMs, "palettes", shown);
+		List<(PaletteTrack Track, int? Step)> tileSteps = PaletteSteps(tiles.Palettes, clockMs, "tiles", shown);
+		// Each target takes the area's tracks that name it, in list order; the tiles take them before the tileset's own.
+		Func<int, int>? paint = Recolor(s, areaSteps.Where(n => n.Track.Recolors("ground")));
+		Func<int, int>? paintAbove = Recolor(s, areaSteps.Where(n => n.Track.Recolors("above")));
+		Func<int, int>? paintRuns = Recolor(s, areaSteps.Where(n => n.Track.Recolors("runs")));
+		Func<int, int>? paintTiles = Recolor(s, areaSteps.Where(n => n.Track.Recolors("tiles")).Concat(tileSteps));
+		bool paintsPeople = areaSteps.Any(n => n.Track.Recolors("actors"));
+		Func<AreaLayer, Func<int, int>?> paintLayer = l => Recolor(s, areaSteps.Where(n => n.Track.Recolors("layers") || l.Name is { } name && n.Track.Recolors("layer:" + name)));
 		art.MotionTime = w => MotionMs(w, clockMs);
 		if (art.SpriteSteps().ToList() is { Count: > 0 } spriteSteps)
 		{
 			shown.Add("sprites " + string.Join(" ", spriteSteps));
 		}
 		int Paint(int image) => paint?.Invoke(image) ?? image;
-		int behind = motion is null ? 0 : DrawLayers(s, motion, front: false, viewport, cameraX, cameraY, tile, clockMs);
+		int behind = motion is null ? 0 : DrawLayers(s, motion, front: false, viewport, cameraX, cameraY, tile, clockMs, paintLayer);
 
 		CellFlags Terrain(int x, int y) => view.Cell(x, y) & CellFlags.TerrainMask;
 		void Tiled(int x, int y)
@@ -1020,7 +1045,7 @@ public sealed class FieldRenderer
 		var runFrames = new List<string>();
 		if (motion is not null)
 		{
-			DrawRuns(s, motion, above: false, ox, oy, tile, clockMs, Paint, runFrames);
+			DrawRuns(s, motion, above: false, ox, oy, tile, clockMs, image => paintRuns?.Invoke(image) ?? image, runFrames);
 		}
 
 		float pulse = 0.6f + 0.4f * MathF.Sin(clockMs / 260f);
@@ -1156,6 +1181,14 @@ public sealed class FieldRenderer
 					DrawnSheetPoses[id] = sheetPose;
 				}
 			}
+			else if (look is null && !walking && !creature && IdleFrame(motion, clockMs, d => d.Actor == id) is int cell && art.SheetCell(id, cell) is int idle)
+			{
+				image = idle;
+			}
+			if (paintsPeople && Recolor(s, areaSteps.Where(n => n.Track.RecolorsPerson(id, who))) is { } recolor)
+			{
+				image = recolor(image);
+			}
 			if (record)
 			{
 				DrawnActors[id] = new DrawnPerson(px, py, walking, facing, pose, marks.Length > 0);
@@ -1233,9 +1266,10 @@ public sealed class FieldRenderer
 		void PutObject(LoadedObject o, int x, int y, bool opened)
 		{
 			ObjectEntry e = o.Entry;
+			int? idleCell = opened && e.Open is not null ? null : IdleFrame(motion, clockMs, d => d.ObjectKey == e.Key);
 			if (e.Character is { } character)
 			{
-				int person = art.PersonFrame(character, e.Facing, 0);
+				int person = idleCell is int c && art.SheetCell(character, c) is int idle ? idle : art.PersonFrame(character, e.Facing, 0);
 				Put(x, y, (sx, sy) =>
 				{
 					s.Image(art.Shadow, sx, sy + Px(3), tile, tile, Color.White);
@@ -1250,7 +1284,7 @@ public sealed class FieldRenderer
 			}
 			bool showOpen = opened && e.Open is not null;
 			ObjectState state = showOpen ? e.Open! : e.Closed!;
-			int frame = state.Run.FrameAt(clockMs, loop: true);
+			int frame = idleCell ?? state.Run.FrameAt(clockMs, loop: true);
 			int image = (showOpen ? o.Open : o.Closed)[frame];
 			Put(x, y, (sx, sy) => s.Image(image, sx - state.AnchorX * tile, sy - state.AnchorY * tile, state.Width * tile, state.Height * tile, Color.White));
 			if (record)
@@ -1480,7 +1514,7 @@ public sealed class FieldRenderer
 		}
 		if (picture?.Above is int above)
 		{
-			above = Paint(above);
+			above = paintAbove?.Invoke(above) ?? above;
 			s.Image(above, ox, oy, f.Width * tile, f.Height * tile, Color.White);
 			if (record)
 			{
@@ -1489,8 +1523,8 @@ public sealed class FieldRenderer
 		}
 		if (motion is not null)
 		{
-			DrawRuns(s, motion, above: true, ox, oy, tile, clockMs, Paint, runFrames);
-			int front = DrawLayers(s, motion, front: true, viewport, cameraX, cameraY, tile, clockMs);
+			DrawRuns(s, motion, above: true, ox, oy, tile, clockMs, image => paintRuns?.Invoke(image) ?? image, runFrames);
+			int front = DrawLayers(s, motion, front: true, viewport, cameraX, cameraY, tile, clockMs, paintLayer);
 			if (motion.Motion.Runs.Count > 0)
 			{
 				shown.Add("runs " + string.Join(",", runFrames));
@@ -1498,6 +1532,10 @@ public sealed class FieldRenderer
 			if (motion.Motion.Layers.Count > 0)
 			{
 				shown.Add($"back {behind} front {front}");
+			}
+			if (motion.Motion.Idle is { } loops)
+			{
+				shown.Add("idle " + string.Join(",", loops.Select(d => MotionMs(d.When, clockMs) is long ms ? d.FrameAt(ms).ToString(CultureInfo.InvariantCulture) : "-")));
 			}
 		}
 		if (record)
@@ -1511,37 +1549,50 @@ public sealed class FieldRenderer
 	}
 
 	// Where a piece of the area's motion stands: off (null) while its flags keep it off, else its clock's milliseconds.
-	private long? MotionMs(MotionWhen w, int clockMs) =>
-		w.Flag is { } flag && !Flag(flag) || w.UnlessFlag is { } unless && Flag(unless) ? null : w.Entry ? Math.Max(0, clockMs - _enteredMs) : clockMs;
+	private long? MotionMs(MotionWhen w, int clockMs) => w.Time(clockMs, _enteredMs, Flag);
 
-	// The recolor of the palette tracks that show, the first track naming a color winning, or null when none changes one;
-	// each track's step goes into `shown` after `label`.
-	private Func<int, int>? Palette(IDrawSurface s, IReadOnlyList<PaletteTrack> tracks, int clockMs, string label, List<string> shown)
+	// Each palette track's step now, null while it is off; the steps go into `shown` after `label`.
+	private List<(PaletteTrack Track, int? Step)> PaletteSteps(IReadOnlyList<PaletteTrack> tracks, int clockMs, string label, List<string> shown)
 	{
 		if (tracks.Count == 0)
 		{
-			return null;
+			return [];
 		}
+		var steps = tracks.Select(t => (t, MotionMs(t.When, clockMs) is long ms ? (int?)t.StepAt(ms) : null)).ToList();
+		shown.Add(label + " " + string.Join(",", steps.Select(n => n.Item2?.ToString(CultureInfo.InvariantCulture) ?? "-")));
+		return steps;
+	}
+
+	// The recolor of the tracks given that show, the first track naming a color winning, or null when none changes one.
+	private static Func<int, int>? Recolor(IDrawSurface s, IEnumerable<(PaletteTrack Track, int? Step)> tracks)
+	{
 		var pairs = new List<(Color From, Color To)>();
-		var steps = new List<string>();
-		foreach (PaletteTrack t in tracks)
+		foreach ((PaletteTrack t, int? step) in tracks)
 		{
-			if (MotionMs(t.When, clockMs) is not long ms)
+			if (step is int k)
 			{
-				steps.Add("-");
-				continue;
+				pairs.AddRange(t.Steps[k].Where(p => !pairs.Any(q => q.From == p.From)));
 			}
-			int step = t.StepAt(ms);
-			steps.Add(step.ToString(CultureInfo.InvariantCulture));
-			pairs.AddRange(t.Steps[step].Where(p => !pairs.Any(q => q.From == p.From)));
 		}
-		shown.Add(label + " " + string.Join(",", steps));
 		if (pairs.Count == 0)
 		{
 			return null;
 		}
 		string key = "area_palette:" + string.Join(",", pairs.Select(p => $"{p.From.PackedValue:x}>{p.To.PackedValue:x}"));
 		return image => s.Derive(image, key, (px, _, _) => SampleController.Recolor(px, pairs));
+	}
+
+	// The frame the area's first idle loop that `matches` and shows stands at, or null.
+	private int? IdleFrame(LoadedMotion? motion, int clockMs, Func<IdleLoop, bool> matches)
+	{
+		foreach (IdleLoop d in motion?.Motion.Idle ?? [])
+		{
+			if (matches(d) && MotionMs(d.When, clockMs) is long ms)
+			{
+				return d.FrameAt(ms);
+			}
+		}
+		return null;
 	}
 
 	// The frame runs on the ground or over the above picture, recolored as the area's pictures are.
@@ -1570,7 +1621,7 @@ public sealed class FieldRenderer
 	// The layers behind the area or in front of everything on it, at the pictures' scale (`tile` screen pixels a cell of
 	// the entry's), each moving its scroll factor times the camera plus its speed, repeated across the viewport along the
 	// axes it repeats on; bands and a wave over lines move rows apart, a wave over columns columns. How many showed.
-	private int DrawLayers(IDrawSurface s, LoadedMotion motion, bool front, Rectangle viewport, int cameraX, int cameraY, int tile, int clockMs)
+	private int DrawLayers(IDrawSurface s, LoadedMotion motion, bool front, Rectangle viewport, int cameraX, int cameraY, int tile, int clockMs, Func<AreaLayer, Func<int, int>?> paint)
 	{
 		double k = tile / (double)motion.Motion.Cell;
 		int drawn = 0;
@@ -1582,6 +1633,7 @@ public sealed class FieldRenderer
 				continue;
 			}
 			drawn++;
+			Func<int, int>? recolor = paint(l);
 			double sec = ms / 1000.0, w = l.Width * k, h = l.Height * k;
 			double Origin(int view, int camera, float scroll, float speed, float at) => view - camera * (double)scroll + (speed * sec + at) * k;
 			// A wave or a band can move a row or column out by up to a copy, so one more copy is drawn on each side.
@@ -1605,7 +1657,7 @@ public sealed class FieldRenderer
 				int left = (int)Math.Round(x), top = (int)Math.Round(y), right = (int)Math.Round(x + dw), bottom = (int)Math.Round(y + dh);
 				if (right > viewport.Left && left < viewport.Right && bottom > viewport.Top && top < viewport.Bottom && right > left && bottom > top)
 				{
-					s.Image(image, left, top, right - left, bottom - top, Color.White);
+					s.Image(recolor?.Invoke(image) ?? image, left, top, right - left, bottom - top, Color.White);
 				}
 			}
 			double x0 = Origin(viewport.X, cameraX, l.ScrollX, l.SpeedX, l.AtX), y0 = Origin(viewport.Y, cameraY, l.ScrollY, l.SpeedY, l.AtY);
@@ -1636,9 +1688,13 @@ public sealed class FieldRenderer
 			{
 				for (int r = 0; r < l.Height; r++)
 				{
-					double rowX = (l.Bands.FirstOrDefault(b => b.First <= r && r <= b.Last) is { } band ? Origin(viewport.X, cameraX, band.Scroll, band.Speed, l.AtX) : x0) + Wave(r) * k;
+					LayerBand? rowBand = l.Bands.FirstOrDefault(b => !b.Lines && b.First <= r && r <= b.Last);
 					foreach (double y in Copies(y0, h, viewport.Y, viewport.Height, l.RepeatY))
 					{
+						// A band of screen lines takes the row whose top line it holds, wherever the layer stands.
+						int line = (int)Math.Round(y + r * k) - viewport.Y;
+						LayerBand? band = rowBand ?? l.Bands.FirstOrDefault(b => b.Lines && b.First <= line && line <= b.Last);
+						double rowX = (band is not null ? Origin(viewport.X, cameraX, band.Scroll, band.Speed, l.AtX) : x0) + Wave(r) * k;
 						foreach (double x in Copies(rowX, w, viewport.X, viewport.Width, l.RepeatX))
 						{
 							Draw(loaded.Strips[r], x, y + r * k, w, k);

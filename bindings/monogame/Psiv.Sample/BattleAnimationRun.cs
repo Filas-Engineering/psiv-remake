@@ -83,6 +83,9 @@ public sealed class AnimRun
 	public HashSet<string>? CuesOff;
 	// The kinds of turn step that draw only the members acting (its own `solo` or a parent's); null leaves it to the set.
 	public HashSet<string>? Solo;
+	// The sound instances (track index, instance) this run has played: steps that share a frame (a phase of length 0)
+	// each reach it, and a sound plays once per action, or per figure under `per: each`.
+	public HashSet<(int Track, int Instance)> SoundsPlayed = [];
 
 	public (string Name, long Start, long Length) PhaseAt(long t)
 	{

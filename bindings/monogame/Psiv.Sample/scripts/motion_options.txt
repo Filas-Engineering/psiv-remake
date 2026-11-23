@@ -1,0 +1,87 @@
+# The world motion options (scripts/make_motion_options_assets.py, on the background data copy, seed 1): palette tracks
+# that name what they recolor (one named layer, the lamplighter's coat by `people`, the fighter's hat by `sheets`, the
+# generated tiles of Wren Loft, every layer of Wren Hollow under a flag), the trader's idle loop from 500 ms after the
+# party enters, a lamp object's idle loop under two flags, a frame run off under either of two flags, the ground's
+# first step of random length (the same frames every run with this seed) and a layer whose bands are screen lines.
+# `fieldmotion` reads the steps and frames, `cellpixel.X.Y[.DX.DY]` and `pixel.X.Y` the colors. With --window the shot
+# lines save screenshots under build/shots/motion_options/ (the pixel probes read only headless).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+dev encounters off
+dev warp wren_yard yard_middle
+wait 1
+
+# Targets: the marker layer turns cyan, the other layer of the same picture stays pink; the ground keeps its color (the
+# random track is on its first step); the lamplighter's coat turns orange, the hat she shares with the fighter does
+# not; the fighter's hat turns blue (his sheet), his coat does not.
+expect state fieldmotion palettes 0,0,0,0 runs 0 back 0 front 2 idle -,-
+expect statehas cellpixel.3.2 00ffff
+expect statehas cellpixel.5.2 ff00ff
+expect statehas cellpixel.12.4 406080
+expect statehas cellpixel.1.2 ff8000
+expect statehas cellpixel.1.2.0.-14 e0e0e0
+expect statehas cellpixel.6.4 c0a000
+expect statehas cellpixel.6.4.0.-14 2020ff
+# The trader stands on its walk frame until the delay runs out.
+expect statehas cellpixel.9.1 c0a000
+shot build/shots/motion_options/yard_targets.png
+
+# The delay: 500 ms after the entry the trader idles on frame 12, then 13, 300 ms each. The ground's first step lasts a
+# random length (here it ends between 31 and 41 frames in), its second 200 ms.
+wait 30
+expect state fieldmotion palettes 0,0,0,0 runs 0 back 0 front 2 idle -,-
+wait 10
+expect state fieldmotion palettes 0,0,0,0 runs 0 back 0 front 2 idle 12,-
+expect statehas cellpixel.9.1 00c0c0
+shot build/shots/motion_options/yard_idle.png
+wait 10
+expect state fieldmotion palettes 0,0,0,1 runs 0 back 0 front 2 idle 13,-
+expect statehas cellpixel.12.4 608040
+expect statehas cellpixel.9.1 c000c0
+wait 10
+expect state fieldmotion palettes 0,0,0,0 runs 0 back 0 front 2 idle 13,-
+wait 10
+expect state fieldmotion palettes 0,0,0,0 runs 0 back 0 front 2 idle 12,-
+
+# Flag lists: the lamp idles only once both of its flags are set; the dot goes once either of its flags is.
+dev flag cogway.loud on
+wait 1
+expect statehas cellpixel.11.5.-20.-20 101010
+expect state objects wren_yard:11,5 closed 1x1 frame 0
+dev flag kiln.upper_seen on
+wait 1
+expect statehas cellpixel.11.5.-20.-20 f0f000
+expect state objects wren_yard:11,5 closed 1x1 frame 1
+expect statehas cellpixel.7.5 ffffff
+dev flag hollow.met on
+wait 1
+expect statehas cellpixel.7.5 406080
+expect statehas fieldmotion runs -
+shot build/shots/motion_options/yard_flags.png
+
+# Wren Loft: the track that names the tiles recolors the generated floor; the one with the default targets does not.
+dev warp wren_loft loft_door
+wait 2
+expect state fieldmotion palettes 0,0
+expect statehas cellpixel.4.2 00a000
+shot build/shots/motion_options/loft_tiles.png
+
+# Wren Hollow: the layer's top band (screen lines 0 to 11) holds still, the bottom band (12 to 23) drifts right (read
+# between the HUD's windows, which cover the band's lines elsewhere).
+dev warp wren_hollow hollow_door
+wait 1
+expect statehas pixel.144.6 ffffff
+expect statehas pixel.145.18 ffffff
+wait 30
+expect statehas pixel.144.6 ffffff
+expect statehas pixel.145.18 0000ff
+expect statehas pixel.168.6 ff0000
+shot build/shots/motion_options/hollow_bands.png
+# The `layers` target under its flag.
+dev flag cogway.open on
+wait 1
+expect statehas pixel.168.6 ff8080
+shot build/shots/motion_options/hollow_layers.png

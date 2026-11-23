@@ -616,6 +616,9 @@ public sealed partial class Art
 		}
 	}
 
+	// One frame of the person's sheet by its index in the sheet; null without a sheet or past its last frame.
+	public int? SheetCell(string id, int cell) => _people.TryGetValue(id, out var sheet) && cell >= 0 && cell < sheet.Images.Length ? sheet.Images[cell] : null;
+
 	// The person's own sheet when the manifest gives one, else the generated look from its id.
 	public int PersonFrame(string id, Direction facing, int frame)
 	{

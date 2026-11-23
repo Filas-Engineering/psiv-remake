@@ -409,10 +409,10 @@ The probe `backdropfx` reads `swap` from the swap's start, `swap, restore` while
 | Field | Default | What |
 | --- | --- | --- |
 | `cue` | required | any cue id (`Synth` makes a sound for every id; an `assets.json` cue replaces it), or `"$look.cue"` (nothing when empty) |
-| `per` | `once` | `once`, `each` (once per figure of `spawn`, with the track's `stagger` and `order`), `release` (once per release unit, on its frame) |
+| `per` | `action` | `action` (or `once`, the same: once in the action, however many targets, hits or steps reach its frame), `each` (or `target`, the same: once per figure of `spawn`, with the track's `stagger` and `order`), `release` (once per release unit that shows a result, on its frame) |
 | `spawn` | `targets` | for `per: each` |
 
-A sound plays when the script reaches its frame by playing. A hurry or a fast-forward that jumps over its frame drops it.
+A sound plays when the script reaches its frame by playing. A hurry or a fast-forward that jumps over its frame drops it. Each sound plays at most once per instance in a run of a script: a turn script's run is the action (a combination's too), so a track without `per` plays once in it even where steps share its frame (phases of 0 frames start the animate, effect and result steps on one frame, and each used to play it); a reaction script runs once per event it answers, so its sounds play once per reaction. `per: release` counts the units of the script's release tracks and the step's leftover unit only when it holds a result (damage, a heal, a miss, a status and the like), never the leftover of spent points or an empty one, which every step releases; `scripts/battle_anim_sounds.txt` plays each case (`make_anim_assets.py --sounds`).
 
 ### `release`
 

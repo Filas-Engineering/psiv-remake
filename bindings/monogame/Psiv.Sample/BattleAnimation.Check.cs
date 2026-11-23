@@ -701,7 +701,7 @@ public sealed partial class BattleAnimation
 				});
 				break;
 			case "sound":
-				Add(new() { ["cue"] = L(n => Text(n) is { Length: > 0 } ? null : "must be a cue id"), ["per"] = Enum("once", "each", "release"), ["spawn"] = Subject() });
+				Add(new() { ["cue"] = L(n => Text(n) is { Length: > 0 } ? null : "must be a cue id"), ["per"] = Enum("once", "action", "each", "target", "release"), ["spawn"] = Subject() });
 				break;
 			case "release":
 				Add(new() { ["targets"] = Subject(), ["unit"] = Enum("all", "target", "hit") });

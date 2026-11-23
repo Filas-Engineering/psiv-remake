@@ -373,7 +373,7 @@ Whole-area pictures in place of tile drawing, by area id. Without the section ev
 
 ### Motion
 
-An area's entry in `maps.areas` may move its pictures: palette tracks recolor them, frame runs play on rectangles of them, and layers scroll behind the area and in front of everything on it. All three are optional, and an entry with any of them may leave out `image`, `above` and `changes`: the area then keeps its tiles (and its `maps/AREA.png` is not used, as with any explicit entry). `maps.enabled: false` turns them off with the pictures.
+An area's entry in `maps.areas` may move its pictures: palette tracks recolor them (and, by `targets`, its tiles, layers and people), frame runs play on rectangles of them, layers scroll behind the area and in front of everything on it, and idle loops animate people and objects standing in place. All four are optional, and an entry with any of them may leave out `image`, `above` and `changes`: the area then keeps its tiles (and its `maps/AREA.png` is not used, as with any explicit entry). `maps.enabled: false` turns them off with the pictures.
 
 ```json
 "maps": {"areas": [
@@ -395,17 +395,30 @@ An area's entry in `maps.areas` may move its pictures: palette tracks recolor th
 ]}
 ```
 
-Timing, the same for all three:
+Timing, the same for all four (and for the palette tracks of tilesets and sprites):
 
 * `ms` or `ticks` (60 Hz frames; not both): a number for every step or frame, or a list with one for each (`ms` 1 to 60000, `ticks` 1 to 3600). A single step or frame needs neither.
+* A random length: `{"min": N, "max": N}` (whole numbers in the field's unit, min at most max) in place of the number, for every step, or in place of one entry of the list: `"ms": [{"min": 100, "max": 900}, 200]`. Each time the step plays it lasts a length drawn in whole milliseconds (or ticks) from that range. The draw is not random from run to run: it comes from the session's seed (`--seed`, default 1), the piece (its area, list and index: `area:wren_yard.palettes[3]`; a tileset's or sprite's track by its place in the file) and the count of loops the piece has played, so the same seed shows the same frames on every run, headless or windowed, and a different seed other lengths. The piece keeps its place between frames and finds the next step from there; a clock that goes back (a new entry on the entry clock) starts it again from its first loop.
 * `clock`: `global` (default), the controller's clock, so the area shows the same phase whenever it is visited; `entry`, which starts at 0 each time the party enters the area. Both run from the frame time the session gets, never the wall clock, so headless runs repeat exactly.
-* `flag` and `unless_flag` (optional, flags of `game.json`): the piece shows only while `flag` is set and `unless_flag` is not. A palette track that is off leaves its colors alone; a frame run or layer that is off is not drawn.
+* `delay` (milliseconds, 0 to 600000, default 0; only with `clock: "entry"`): the piece is off that long after the party enters, then starts at its first step or frame: a palette track leaves its colors alone, a frame run or layer is not drawn, an idle loop leaves the standing frame. `delay` on the global clock is a problem.
+* `flag` and `unless_flag` (optional, flags of `game.json`): each is one flag or a list of flags. The piece shows only while every flag of `flag` is set and no flag of `unless_flag` is (`"flag": ["cogway.loud", "kiln.upper_seen"]` needs both; `"unless_flag": ["kiln.draft_felt", "hollow.met"]` goes off when either is set). A palette track that is off leaves its colors alone; a frame run or layer that is off is not drawn. An empty list, a flag named twice in one list or a flag in both is a problem.
 
 Palette tracks (`palettes`, a list; also on [tilesets](#tilesets)):
 
 * `colors` names the source colors (`#rrggbb`, each different); `steps` is a list of at least one step, each an object giving some of those names a replacement color. A step that leaves a name out keeps that color as drawn; `{}` shows the picture unchanged. One step is a still recolor. The steps loop.
 * Replacement is exact and done once: an opaque pixel whose color is a source takes that step's replacement, with no blending and no chaining (above, the foam takes the old deep blue in step 1, and that blue is not then replaced by the deep's step). Pixels that are not fully opaque keep their color. It is the battle animations' `palette` recolor.
 * An area's tracks recolor its ground picture, its change pictures, its above picture and its frame runs' frames; a tileset's recolor its tile pictures. When several tracks that show name the same color, the first in the list wins.
+* `targets` (an area's tracks only; default `["ground", "above", "runs"]`, today's): what the track recolors, any of `ground` (the ground picture and the change pictures), `above`, `runs` (the frame runs' frames), `tiles` (every tile the area's cells show, generated or from a tileset; an area's tracks naming `tiles` come before the tileset's own, so they win a color both name), `layers` (every layer of the area), `layer:NAME` (the layer whose `name` is NAME) and `actors` (the people drawn on the field: the party, its followers, script actors, wanderers, an actor wearing an enemy's figure; not their shadows, nor objects that show a person). Each target takes, in list order, the tracks that name it.
+* `people` and `sheets` (lists of actor or party member ids; with `actors` in `targets`): the `actors` target recolors only a person whose id is in `people` or who wears a sheet in `sheets` (a script's `look` puts another's pictures on an actor, so `sheets` follows the pictures and `people` the person). Without either, every person.
+
+```json
+"palettes": [
+	{"colors": {"pink": "#ff00ff"}, "steps": [{"pink": "#00ffff"}], "targets": ["layer:marker"]},
+	{"colors": {"coat": "#c0a000"}, "steps": [{"coat": "#ff8000"}], "targets": ["actors"], "people": ["yard_lamplighter"]},
+	{"colors": {"hat": "#e0e0e0"}, "steps": [{"hat": "#2020ff"}], "targets": ["actors"], "sheets": ["fighter"]},
+	{"colors": {"floor": "#3a3642"}, "steps": [{"floor": "#00a000"}], "targets": ["tiles"]}
+]
+```
 
 Frame runs (`animated`, a list):
 
@@ -420,12 +433,30 @@ Layers (`layers`, a list), each a whole picture drawn at the entry's pictures' s
 * `speed` (`[x, y]`, picture pixels a second, default `[0, 0]`): an automatic drift on the layer's clock.
 * `at` (`[x, y]`, picture pixels, default `[0, 0]`): moves the layer, so a layer that does not repeat stands where it is placed (at `scroll` 1, `"at": [48, 32]` puts its top left pixel on cell (3, 2) at 16 pixels a cell).
 * `repeat`: `both` (default), `x`, `y` or `none`: the axes along which the picture repeats across the view.
-* `bands` (optional): row ranges of the picture (`rows`: `[first, last]`, picture rows, not overlapping) that scroll sideways at their own `scroll` and `speed` (numbers, default the layer's x values): a sky in strips drifting at different rates.
+* `name` (optional; letters, digits and `_`, one per layer of the area): what a palette track's `layer:NAME` target names.
+* `bands` (optional): ranges that scroll sideways at their own `scroll` and `speed` (numbers, default the layer's x values): a sky in strips drifting at different rates. A band gives exactly one of `rows` (`[first, last]`, rows of the picture) or `lines` (`[first, last]`, screen lines: logical pixels at the layout's resolution, counted down from the top of the view the field is drawn in, which is the whole logical screen, or a panel's own top in a panel; 0 to 4319); all bands of a layer use the same one, and bands do not overlap. A band of rows moves those picture rows wherever the layer stands; a band of lines moves whatever row of the picture is drawn on those lines (a row goes with the band its top line falls in), so a layer that scrolls up and down passes its rows through the bands:
+
+```json
+{"image": "motion/stripes.png", "place": "front", "scroll": [0, 0], "repeat": "x", "bands": [{"lines": [0, 11], "speed": 0}, {"lines": [12, 23], "speed": 16}]}
+```
 * `wave` (optional): a sine over the picture's `lines` (each row moved sideways, `axis` default) or `columns` (each moved up and down): `amplitude` in picture pixels (0 to 1024, default 2), `wavelength` in picture pixels (1 to 4096, default 32), `speed` in picture pixels a second the wave travels (default 0). Each row or column moves a whole number of picture pixels. A wave over columns does not go with `bands`.
+
+Idle loops (`idle`, a list): a person or object standing in place plays frames of its own sheet in place of its standing frame.
+
+* Exactly one of `actor` (an actor's or party member's id; the person needs a `characters` entry) or `object` (an `objects` entry of the area, by its `point` or its `at` cell as `[x, y]`).
+* `frames`: indexes into the person's sheet (its `characters` entry's image) or the object's (its closed look's image; for an object that shows a person, that person's sheet), the same frames whatever the facing; timing, `clock`, `delay`, `flag` and `unless_flag` as above.
+* A person plays it only while standing still with no pose (a walk, a script's `anim` or a library animation wins); an object only while it shows its closed look. The first loop that names the person or object and shows wins.
+
+```json
+"idle": [
+	{"actor": "yard_trader", "frames": [12, 13], "ms": 300, "clock": "entry", "delay": 500},
+	{"object": [11, 5], "frames": [1, 2], "ticks": 10, "flag": ["cogway.loud", "kiln.upper_seen"]}
+]
+```
 
 Layer order, bottom to top: the `back` layers in list order; the ground picture or the tiles, with the change pictures; the `ground` frame runs; exits, runes and belts; everyone sorted by row; the above picture; the `above` frame runs; the `front` layers in list order; the speech bubbles and marks; the developer overlays and windows. A back layer shows where the ground is transparent and around an area smaller than the view.
 
-`--check-assets` reports each bad color, a color named twice, a step naming no source, missing or doubled timing, an unknown clock, flag or area, a rectangle outside the area, a sheet that does not divide into the rectangle's frames, a frame the sheet lacks, a bad `layer`, `place`, `repeat`, `scroll`, band or wave; a problem in any of an entry's motion leaves all of it out. Asset keys: `animated:AREA:N` and `layer:AREA:N` (N from 0, in list order). The state probe `fieldmotion` reads, for the area shown, `palettes S,S tiles S sprites NAME:S,S runs F,F back N front N` (each track's step, the tileset's tracks', each sprite's tracks', each run's frame, `-` for one its flags keep off, and the layers drawn), each part only when there are any, or `-`; `scripts/world_motion.txt` plays the example above, and `scripts/motion_more.txt` a sprite's and the generated tilesets' tracks and a layer placed with `at` (`scripts/make_motion_more_assets.py`).
+`--check-assets` reports each bad color, a color named twice, a step naming no source, missing or doubled timing, a random length that is not `{"min", "max"}` in range, an unknown clock, flag or area, a `delay` off the entry clock, a bad flag list, an unknown target, a `layer:NAME` naming no layer, an unknown person in `people` or `sheets` or either without the `actors` target, a rectangle outside the area, a sheet that does not divide into the rectangle's frames, a frame the sheet lacks, a bad `layer`, `place`, `repeat`, `scroll`, layer name, band (both or mixed `rows` and `lines`, lines out of range) or wave, an idle loop with both or neither of `actor` and `object`, a person without a `characters` entry or an object that no entry of the area has; a problem in any of an entry's motion leaves all of it out. Asset keys: `animated:AREA:N` and `layer:AREA:N` (N from 0, in list order). The state probe `fieldmotion` reads, for the area shown, `palettes S,S tiles S sprites NAME:S,S runs F,F back N front N` (each track's step, the tileset's tracks', each sprite's tracks', each run's frame, `-` for one its flags or delay keep off, and the layers drawn), then `idle F,F` (each idle loop's frame, `-` when off) when the area has idle loops, each part only when there are any, or `-`; `scripts/world_motion.txt` plays the example above, `scripts/motion_more.txt` a sprite's and the generated tilesets' tracks and a layer placed with `at` (`scripts/make_motion_more_assets.py`), and `scripts/motion_options.txt` the targets, people and sheets, idle loops, a delay, a random step, flag lists and bands of lines (`scripts/make_motion_options_assets.py`).
 
 ### objects
 

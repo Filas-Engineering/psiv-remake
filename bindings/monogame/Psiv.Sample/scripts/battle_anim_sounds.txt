@@ -1,0 +1,86 @@
+# Script sounds per action, target and release (make_anim_assets.py --sounds), on the front data copy with --dev. Every
+# script here has animate and effect phases of 0 frames, so its animate, effect and result steps start on one frame. A
+# sound track without `per` (or `per: action`) plays once in the action wherever those steps meet; `per: target` once per
+# target; `per: release` once per release unit that shows a result: per target under `unit: target`, per hit under
+# `unit: hit`, never for a step's leftover unit (empty, or the actor's spent points).
+
+cmd set text instant
+expect screen Title
+press Enter
+pressuntil Enter Field 800
+cmd walk guide_front
+press Up
+wait 3
+press Enter
+pressuntil Enter Field 400
+dev level fighter 30
+
+# The fighter's blade on one mite: one sound. The mystic's Frost Pane on the two enemies left: one action sound, two
+# target sounds, two release sounds, and no release sound for the leftover units. The medic defends.
+dev battle training
+waitstate 300 battlephase Command
+press Enter
+press Enter
+press Down
+press Enter
+press Down 2
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 anim snd.one weapon:blade/one
+audio mark
+waitstatehas 600 anim turn.default
+expect audiocount 1 cue snd_action
+waitstatehas 900 anim snd.frost ability:frostbite
+audio mark
+animlog mark
+waitstatehas 600 anim snd.hit ability:venom_spit
+expect audiocount 1 cue snd_action
+expect audiocount 2 cue snd_figure
+expect audiocount 2 cue snd_unit
+expect animloghas phase animate @36 | cue snd_action @36 | cue snd_figure @36 | cue snd_figure @36 | phase effect @36 | phase result @36 | release Gel Mite B -23 resisted @36 | cue snd_unit @36 | release Rust Hound -52 @36 | cue snd_unit @36 | phase back
+
+# The hound's Venom Spit on the fighter: damage and poison, two units by hit, four frames apart.
+audio mark
+animlog mark
+waitstate 900 battlephase Command
+expect audiocount 1 cue snd_action
+expect audiocount 2 cue snd_unit
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+
+# Two blades on the colossus: one action, one sound.
+dev give gill_knife
+equip fighter gill_knife left_hand
+dev battle colossus
+waitstate 300 battlephase Command
+press Enter
+press Enter
+press Down 4
+press Enter
+press Down 4
+press Enter
+waitstatehas 600 anim snd.two weapon:blade/both
+audio mark
+waitstatehas 600 anim turn.default
+expect audiocount 1 cue snd_action
+waitstate 900 battlephase Command
+
+# Twin Arc by the medic and the mystic: one combination, one sound.
+audio mark
+combo twin_arc
+waitstatehas 600 anim snd.twin combo:twin_arc
+waitstatehas 600 anim turn.default
+expect audiocount 1 cue snd_action
+waitstate 900 battlephase Command
+expect statehas battlesync all match
+dev win
+hold F 60
+waitstate 120 battlephase Ended
+press Enter
+wait 60
+expect screen Field

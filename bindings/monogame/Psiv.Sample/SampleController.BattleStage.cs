@@ -112,7 +112,7 @@ public sealed partial class SampleController
 		// Sprites with palette tracks (the shadow, the pointer) step on the battle's clock, an entry track from the battle's
 		// start, as the field steps them on its own.
 		int clock = _clockMs, began = _backdropStartMs;
-		art.MotionTime = w => w.Flag is { } flag && !_s.Flag(flag) || w.UnlessFlag is { } unless && _s.Flag(unless) ? null : w.Entry ? Math.Max(0, clock - began) : clock;
+		art.MotionTime = w => w.Time(clock, began, _s.Flag);
 		BattleUi b = _battle;
 		IReadOnlyList<Combatant> all = StageCombatants();
 		BattleInfo? info = StageInfo();

@@ -1,0 +1,22 @@
+# A place right after a warp in one event step (make_warp_place_data.py's copy, with --dev): the field enters the new
+# area as the warp is presented, so the leader is drawn on the placed cell from that frame and its walk starts there,
+# six cells, ending on the frame the line shows; the windowed run of this script (one update per drawn frame) gives the
+# same frames.
+
+cmd set text instant
+expect screen Title
+pressuntil Enter Field 400
+wait 2
+dev encounters off
+dev event arrival_warp_place
+wait 1
+expect state area Arrival Field
+expect actor fighter 2 2 east
+expect state leaderpos 96 96
+wait 94
+expect statenot line A word while the line stands still.
+wait 1
+expect state line A word while the line stands still.
+expect actor fighter 8 2 east
+pressuntil Enter Field 100
+expect screen Field

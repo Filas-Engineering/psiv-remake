@@ -31,6 +31,10 @@ public sealed class SampleGame : Game
 	private ScriptPlayer? _player;
 	private readonly List<string> _shots = [];
 	private int _frame;
+	// The last frame drawn. A script's frame is updated only once the one before it is drawn, as headless: the field
+	// follows the session's moves (and reports the walks the session waits for) as it draws, and the probes read the
+	// last drawn frame, so an update MonoGame runs to catch up without a draw would change both.
+	private int _drawnFrame;
 	private SpriteBatch? _batch;
 	private MonoGameSurface? _surface;
 	private FontSystem? _fonts;
@@ -90,6 +94,8 @@ public sealed class SampleGame : Game
 		_screenshot = screenshot;
 		_audio = MonoGameAudio.Create(mute, Console.WriteLine);
 		_controller = new SampleController(session, data, Console.WriteLine, _controlsPath, _audio, assets, dev, dataDir, battleLayout) { RealtimeField = _realtime };
+		// One update then one draw per tick for a script, never updates to catch up with the wall clock.
+		IsFixedTimeStep = _realtime;
 		_graphics = new GraphicsDeviceManager(this)
 		{
 			PreferredBackBufferWidth = windowSize?.Width ?? Letterbox.BaseWidth,
@@ -140,7 +146,7 @@ public sealed class SampleGame : Game
 	protected override void Update(GameTime gameTime)
 	{
 		// A requested shot is of the frame the script asked for, so nothing moves until it is drawn.
-		if (_shots.Count > 0)
+		if (_shots.Count > 0 || _player is not null && !_realtime && _drawnFrame < _frame)
 		{
 			base.Update(gameTime);
 			return;
@@ -213,6 +219,7 @@ public sealed class SampleGame : Game
 		_batch!.Begin(samplerState: SamplerState.PointClamp);
 		_controller.Draw(_surface!);
 		_batch.End();
+		_drawnFrame = _frame;
 		GraphicsDevice.SetRenderTarget(null);
 		GraphicsDevice.Clear(Color.Black);
 		_box = Fit();

@@ -27,6 +27,12 @@ declared on a figure (a list) and an effect (a strip file) recolored by index, i
 backdrop swapped and restored inside one attack, six enemies placed in two ranks in both layouts, a projectile with a
 trail, direction frames and `flip: auto`, a shake on script time, a mosaic transition into battle, a key qualified by
 layout; and in alt/ a front battle layout whose action name window opens with a transition.
+
+make_anim_assets.py --sounds EXPORT OUT writes OUT: a copy of EXPORT whose animation file gives a one-blade and a two-blade
+attack, the all-enemies technique, a damage-and-status technique (two hits on one target) and a combination scripts
+whose animate and effect phases last 0 frames, so several steps start on one frame, each with a sound track without
+`per` or with `per: action`, and beside them `per: target` and `per: release` sounds and release tracks by target and by
+hit.
 """
 
 import json
@@ -321,6 +327,9 @@ def main():
 	if sys.argv[1] == "--leftovers":
 		leftovers(Path(sys.argv[2]), Path(sys.argv[3]))
 		return
+	if sys.argv[1] == "--sounds":
+		sounds(Path(sys.argv[2]), Path(sys.argv[3]))
+		return
 	export, out = Path(sys.argv[1]), Path(sys.argv[2])
 	base = Path(sys.argv[3]) if len(sys.argv) > 3 else export
 	shutil.rmtree(out, ignore_errors=True)
@@ -517,6 +526,37 @@ def leftovers(export, out):
 	# The same set with the fliers hovering lower, read in by a reload mid-battle.
 	leftover["figures"]["enemy"]["states"]["idle:flying"]["lift"] = "0.2h"
 	write(out / "alt/battle_animation_lift.json", leftover)
+
+
+def sounds(export, out):
+	"""Sound tracks per action, target and release on scripts whose steps share frames, on a copy of the export."""
+	shutil.rmtree(out, ignore_errors=True)
+	shutil.copytree(export, out)
+	still = {"animate": 0, "effect": 0}
+	anim = json.loads((out / "battle_animation.json").read_text())
+	anim["select"].update({"weapon:blade/one": "snd.one", "weapon:blade/both": "snd.two", "ability:frostbite": "snd.frost",
+			"ability:venom_spit": "snd.hit", "combo:twin_arc": "snd.twin"})
+	anim["scripts"].update({
+			"snd.one": {"extends": "turn.default", "phases": still, "tracks": [
+				{"id": "act", "type": "sound", "at": "result", "cue": "snd_action"}]},
+			"snd.two": {"extends": "turn.default", "phases": still, "tracks": [
+				{"id": "act", "type": "sound", "at": "result", "cue": "snd_action"}]},
+			"snd.hit": {"extends": "turn.default", "phases": still, "tracks": [
+				{"id": "act", "type": "sound", "at": "result", "cue": "snd_action"},
+				{"id": "unit", "type": "sound", "at": "result", "cue": "snd_unit", "per": "release"},
+				{"type": "release", "at": "result", "unit": "hit", "stagger": 4}]},
+			"snd.frost": {"extends": "turn.default", "phases": still, "tracks": [
+				{"id": "act", "type": "sound", "at": "effect", "cue": "snd_action", "per": "action"},
+				{"id": "fig", "type": "sound", "at": "result", "cue": "snd_figure", "per": "target"},
+				{"id": "unit", "type": "sound", "at": "result", "cue": "snd_unit", "per": "release"},
+				{"type": "release", "at": "result", "unit": "target"}]},
+			"snd.twin": {"extends": "turn.default", "phases": still, "tracks": [
+				{"id": "act", "type": "sound", "at": "animate", "cue": "snd_action"}]},
+	})
+	write(out / "battle_animation.json", anim)
+	manifest = json.loads((out / "assets.json").read_text())
+	manifest["battle_animation"] = "battle_animation.json"
+	write(out / "assets.json", manifest)
 
 
 def broken(out):
