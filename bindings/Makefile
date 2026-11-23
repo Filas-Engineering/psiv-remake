@@ -928,7 +928,7 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 	cp $(BUILD)/flows_broken_assets/alt/title_broken.json $(BUILD)/flows_broken_assets/ui/title.json
 	cp $(BUILD)/flows_broken_assets/alt/menu_broken.json $(BUILD)/flows_broken_assets/ui/menu.json
 	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/flows_broken_assets > $(BUILD)/check_assets_flows.txt
-	grep -qF 'params.after_defeat: must be "menu", "start" or "intro"' $(BUILD)/check_assets_flows.txt
+	grep -qF 'params.after_defeat: must be "menu", "start", "intro" or "intro:STEP"' $(BUILD)/check_assets_flows.txt
 	grep -qF "intro[0]: field 'ms' must be a whole number from 1 to 60000" $(BUILD)/check_assets_flows.txt
 	grep -qF "intro[1]: 'studio' is listed twice" $(BUILD)/check_assets_flows.txt
 	grep -qF "intro[2]: missing field 'name'" $(BUILD)/check_assets_flows.txt
@@ -941,6 +941,39 @@ dotnet-test: dotnet $(ACTOR_DATA) $(INTERACT_DATA) $(BACKGROUND_DATA) $(SCENE_DA
 		rm -rf $(BUILD)/sample_$${name}_saves $(BUILD)/$${name}_run; \
 		cp -R $(BUILD)/$$set $(BUILD)/$${name}_run; \
 		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/front_data/game/data --dev --saves $(BUILD)/sample_$${name}_saves --assets $(BUILD)/$${name}_run \
+			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
+		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
+	done
+	# The second layout flows (make_more_flows_data.py, make_more_flows_assets.py), from saves of the scripted playthrough on
+	# their data copy: the intro's image elements with `src` and `repeat` over manifest pictures, the Load screen's slot
+	# blocks in a grid and a row, the inn's decline step, the shop's question step, travel over the menu by thing and kind,
+	# the level-ups by page, a vehicle's grouped Weapons row and the intro from a step after a defeat (more_flows); the same
+	# at 320x224 on the small set but travel and the vehicle battle (small_more_flows); copies with an `after_defeat` step
+	# the intro lacks, a question without a confirm, a decline after the farewell and a bad Load `navigation` report them.
+	python3 -I $(SAMPLE_SCRIPTS)/make_more_flows_data.py $(GAME)/data $(CORE)/data $(BUILD)/more_flows_data
+	python3 -I $(SAMPLE_SCRIPTS)/make_more_flows_assets.py $(BUILD)/export $(BUILD)/test_assets $(BUILD)/more_flows_assets
+	python3 -I $(SAMPLE_SCRIPTS)/make_more_flows_assets.py $(BUILD)/export $(BUILD)/small_assets $(BUILD)/small_more_flows_assets --small
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/more_flows_data/game/data --check-assets --assets $(BUILD)/more_flows_assets
+	$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/more_flows_data/game/data --check-assets --assets $(BUILD)/small_more_flows_assets
+	rm -rf $(BUILD)/more_flows_broken_assets
+	cp -R $(BUILD)/more_flows_assets $(BUILD)/more_flows_broken_assets
+	cp $(BUILD)/more_flows_broken_assets/alt/title_broken.json $(BUILD)/more_flows_broken_assets/ui/title.json
+	cp $(BUILD)/more_flows_broken_assets/alt/shop_broken.json $(BUILD)/more_flows_broken_assets/ui/shop.json
+	cp $(BUILD)/more_flows_broken_assets/alt/inn_broken.json $(BUILD)/more_flows_broken_assets/ui/inn.json
+	cp $(BUILD)/more_flows_broken_assets/alt/load_broken.json $(BUILD)/more_flows_broken_assets/ui/load_game.json
+	! $(SAMPLE_RUN) --check-assets --assets $(BUILD)/more_flows_broken_assets > $(BUILD)/check_assets_more_flows.txt
+	grep -qF "params.after_defeat: \"intro:credits\" names no step of the file's 'intro'" $(BUILD)/check_assets_more_flows.txt
+	grep -qF "flow: 'question' needs the step 'confirm' after it" $(BUILD)/check_assets_more_flows.txt
+	grep -qF "flow: must keep the order welcome, price, choice, result, decline, farewell" $(BUILD)/check_assets_more_flows.txt
+	grep -qF 'params.navigation: must be "list", "grid" or "row"' $(BUILD)/check_assets_more_flows.txt
+	rm -rf $(BUILD)/sample_more_flows_base_saves
+	$(GAME_CLI) --data $(BUILD)/more_flows_data/game/data --seed 6 --auto-battle --script $(SCRIPT) --saves $(BUILD)/sample_more_flows_base_saves > /dev/null
+	@for run in more_flows:more_flows_assets:1800 small_more_flows:small_more_flows_assets:1000; do \
+		name=$${run%%:*}; rest=$${run#*:}; set=$${rest%%:*}; frames=$${rest#*:}; \
+		rm -rf $(BUILD)/sample_$${name}_saves $(BUILD)/$${name}_run; \
+		cp -R $(BUILD)/sample_more_flows_base_saves $(BUILD)/sample_$${name}_saves; \
+		cp -R $(BUILD)/$$set $(BUILD)/$${name}_run; \
+		$(DOTNET) run --no-build --project $(SAMPLE) -- --data $(BUILD)/more_flows_data/game/data --dev --saves $(BUILD)/sample_$${name}_saves --assets $(BUILD)/$${name}_run \
 			--script $(SAMPLE_SCRIPTS)/$$name.txt --frames $$frames > $(BUILD)/sample_$${name}_headless.txt || { cat $(BUILD)/sample_$${name}_headless.txt; exit 1; }; \
 		tail -n 1 $(BUILD)/sample_$${name}_headless.txt; \
 	done

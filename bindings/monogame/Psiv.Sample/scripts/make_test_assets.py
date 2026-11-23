@@ -236,6 +236,7 @@ def main():
 	choices_broken(broken)
 	host_broken(broken)
 	flows_broken(broken, export)
+	more_flows_broken(broken)
 	bitmap_fonts(export, fonts)
 	if len(sys.argv) > 5:
 		subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("make_layout_assets.py")), str(export), str(fonts), sys.argv[5]], check=True)
@@ -851,6 +852,32 @@ def flows_broken(broken, export):
 	vehicle["windows"] = [w for w in vehicle["windows"] if w["name"] != "keys"]
 	vehicle["flow"] = ["list"]
 	(ui / "battle_front_vehicle.json").write_text(json.dumps(vehicle, indent="\t") + "\n")
+
+
+def more_flows_broken(broken):
+	"""A bad value of each field the second layout flows added: the travel's per-thing one-destination map and `over_menu`,
+	the Load screen's navigation and columns, a vehicle battle's grouped rows listing the skills twice, the level-ups'
+	page lines, and an image element's `src`, `repeat` and picture name (docs/ui-layout.md, "More layout flows"; the
+	title's `after_defeat` "intro:STEP", the shop's `question` and the inn's `decline` are checked on copies in the
+	more_flows run, the broken copy's title, shop and inn files having problems of their own)."""
+	ui = broken / "ui"
+
+	def change(name, edit):
+		data = json.loads((ui / f"{name}.json").read_text())
+		edit(data)
+		(ui / f"{name}.json").write_text(json.dumps(data, indent="\t") + "\n")
+
+	change("travel", lambda d: d.update({"one_destination_for": {"Town!": "go", "dungeon_exit": "sometimes"}}))
+	change("load_game", lambda d: d.update({"params": dict(d.get("params", {}), navigation="spiral", columns="wide")}))
+
+	def vehicle(d):
+		d["command_rows"] = {"vehicle": ["attack", "skills", "options", "escape"]}
+		d["params"] = dict(d.get("params", {}), level_page_lines="many")
+		d["windows"].append({"name": "pictures", "elements": [
+			{"type": "image", "image": "'nowhere:at:all'", "w": 8, "h": 8},
+			{"type": "image", "image": "'picture:chart'", "src": [0, 0, 8], "w": 8, "h": 8},
+			{"type": "image", "image": "page_arrow", "repeat": True, "w": 8, "h": 8}]})
+	change("battle_front_vehicle", vehicle)
 
 
 def broken_layouts(broken):

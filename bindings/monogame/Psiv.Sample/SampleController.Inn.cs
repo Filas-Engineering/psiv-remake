@@ -16,7 +16,7 @@ public sealed partial class SampleController
 	private InnInfo? _innAfter;
 	private bool _innRested;
 
-	private static string InnMoment(string step) => step switch { "welcome" => "welcome", "farewell" => "farewell", _ => "confirm" };
+	private static string InnMoment(string step) => step switch { "welcome" => "welcome", "farewell" => "farewell", "decline" => "decline", _ => "confirm" };
 
 	private void InnGo(string step)
 	{
@@ -24,12 +24,14 @@ public sealed partial class SampleController
 		_keeperMoment = InnMoment(step);
 	}
 
-	// Leaving: the farewell step when the flow has one, else the inn closes.
+	// Leaving: without a stay the decline step when the flow has one, else the farewell step when it has one, else the inn
+	// closes.
 	private void InnLeave()
 	{
-		if (_innStep != "farewell" && InnFlow.Contains("farewell"))
+		string? last = !_innRested && InnFlow.Contains("decline") ? "decline" : InnFlow.Contains("farewell") ? "farewell" : null;
+		if (last is not null && _innStep is not ("farewell" or "decline"))
 		{
-			InnGo("farewell");
+			InnGo(last);
 			return;
 		}
 		_keeperPoint = null;
@@ -111,7 +113,7 @@ public sealed partial class SampleController
 				}
 			}
 			break;
-		case "farewell":
+		case "farewell" or "decline":
 			if (input.Confirm || input.Back)
 			{
 				InnLeave();

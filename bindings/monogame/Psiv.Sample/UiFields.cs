@@ -88,8 +88,26 @@ public static class UiFields
 	// The steps a battle file's `result_sequence` takes.
 	public static readonly string[] ResultPhases = ["victory", "result", "level_ups"];
 
-	public static readonly string[] ShopFlowSteps = ["welcome", "mode", "list", "quantity", "confirm", "result", "farewell"];
-	public static readonly string[] InnFlowSteps = ["welcome", "price", "choice", "result", "farewell"];
+	public static readonly string[] ShopFlowSteps = ["welcome", "mode", "list", "quantity", "question", "confirm", "result", "farewell"];
+	public static readonly string[] InnFlowSteps = ["welcome", "price", "choice", "result", "decline", "farewell"];
+
+	// What a string an image element's `image` gives may name: a still picture of the manifest's `pictures`, the title art's
+	// background, logo or layer N (from 0, its frame now), a UI skin picture, or a PNG path in the asset directory.
+	public static readonly string[] ImageNames = ["picture:NAME", "title:background", "title:logo", "title:layer:N", "ui:cursor", "ui:bar_track", "ui:bar_fill", "ui:page_arrow",
+		"PATH.png"];
+
+	public static bool ImageNamed(string name) => name.Split(':') switch
+	{
+		["picture", { Length: > 0 }] => true,
+		["title", "background" or "logo"] => true,
+		["title", "layer", string n] => n.Length > 0 && n.All(char.IsAsciiDigit),
+		["ui", "cursor" or "bar_track" or "bar_fill" or "page_arrow"] => true,
+		[string file] => file.EndsWith(".png", StringComparison.Ordinal) && !file.Contains(".."),
+		_ => false,
+	};
+
+	// The travel kinds a travel layout's `one_destination_for` may name, besides item and technique ids.
+	public static readonly string[] TravelKinds = ["town", "dungeon_exit"];
 
 	public static readonly string[] TitleEntries = ["retry", "new_game", "continue", "load", "sound_test", "erase", "options", "quit"];
 
@@ -121,9 +139,9 @@ public static class UiFields
 
 	public static readonly string[] MemberCommands = ["attack", "technique", "skill", "item", "defend", "escape", "macro", "auto"];
 
-	// A vehicle's rows (`command_rows.vehicle`): its attack, its skills (one row each), the party's macros, auto-battle and
-	// escape; without the list the first, second and last.
-	public static readonly string[] VehicleCommands = ["attack", "skills", "macro", "auto", "escape"];
+	// A vehicle's rows (`command_rows.vehicle`): its attack, its skills (one row each, or as one grouped row, `weapons` or
+	// `options`, that lists them), the party's macros, auto-battle and escape; without the list attack, skills and escape.
+	public static readonly string[] VehicleCommands = ["attack", "skills", "weapons", "options", "macro", "auto", "escape"];
 
 	public static readonly string[] VehicleDefault = ["attack", "skills", "escape"];
 
@@ -158,8 +176,8 @@ public static class UiFields
 
 	// The battle's two layouts (the presentation table's `front` and `side`) read the same fields and params.
 	private static readonly string[] BattleData = ["action_chosen", "action_command", "actor_center", "actor_left", "actor_right", "actor_slot", "auto", "banner", "banner_alpha", "banner_big",
-		"banner_cancel", "banner_plate", "command_center", "cursor", "description", "description_shown", "enemy_back", "enemy_count", "enemy_groups", "hint", "hit_fade",
-		"hit_flash", "key_back", "key_confirm", "key_fast_forward", "key_text_log", "level_lines", "list_index", "list_kind", "log_lines", "log_shown", "macro_steps", "macro_trouble",
+		"banner_cancel", "banner_plate", "command_center", "command_items", "cursor", "description", "description_shown", "enemy_back", "enemy_count", "enemy_groups", "hint", "hit_fade",
+		"hit_flash", "key_back", "key_confirm", "key_fast_forward", "key_text_log", "level_lines", "level_more", "level_page", "level_pages", "list_index", "list_kind", "log_lines", "log_shown", "macro_steps", "macro_trouble",
 		"macro_trouble_text", "members", "menu_items", "menu_shown", "menu_title", "outcome", "page_arrow", "party", "phase", "result_confirm", "result_lines", "result_more", "result_page", "result_pages", "result_phase", "result_phase_ms", "result_step", "target_pulse",
 		"transition_playing", "vehicle"];
 
@@ -175,12 +193,16 @@ public static class UiFields
 		"enemy_bar_w", "enemy_bar_y", "enemy_bars", "enemy_figures", "enemy_front_foot", "enemy_icons_y", "enemy_labels", "enemy_rank_spacing_max", "enemy_rank_span", "enemy_ranks_interleaved",
 		"enemy_row_foot", "enemy_row_max", "enemy_row_spacing_max", "enemy_row_span", "enemy_row_stagger", "enemy_size",
 		.. Enumerable.Range(0, 8).SelectMany(n => new[] { $"enemy_slot_{n}_foot", $"enemy_slot_{n}_x" }),
-		"enemy_statuses", "enemy_x", "game_over_confirm", "ground_h", "icon_gap", "icon_size", "item_order", "label_h", "label_max_width", "label_pad", "label_text_y", "label_y", "log_rows", "log_wrap_margin",
+		"enemy_statuses", "enemy_x", "game_over_confirm", "ground_h", "icon_gap", "icon_size", "item_order", "label_h", "label_max_width", "label_pad", "label_text_y", "label_y", "level_page_lines", "log_rows", "log_wrap_margin",
 		"macro_auto_first", "macro_check", "macro_failed", "macro_flow", "miss_marks", "miss_marks_enemy", "miss_marks_party", "motion_percent", "number_critical_size", "number_gap", "number_member_y", "number_rise", "number_size", "number_tp_size", "number_word_size", "number_y", "party_dx",
 		"party_dy", "party_figures", "party_foot", "party_size",
 		.. Enumerable.Range(0, 5).SelectMany(n => new[] { $"party_slot_{n}_foot", $"party_slot_{n}_x" }),
 		"party_x", "pointer_bob", "pointer_member_y", "pointer_size", "pointer_y", "result_page_lines", "stage_bottom", "step_aside", "step_gap",
 		"step_margin", "vehicle_foot", "vehicle_size", "vehicle_x"];
+
+	// A save slot's row fields (save_slots, and the Load screen's `slots`).
+	private static readonly string[] SlotItems = ["head", "enabled", "detail", "detail_color", "number", "slot", "empty", "damaged", "area", "play_time", "difficulty",
+		"party_text", "leader", "level", "written", "newest", "write_time"];
 
 	// Screens with no built-in file, each drawn in place of the one it names when an asset directory gives it: a vehicle
 	// battle's own front and side layouts.
@@ -234,14 +256,14 @@ public static class UiFields
 			["title", "question", "labels", "list", "description", "description_missing", "hint", "destinations", "cancel_row", "phase", "message", "message_ms"],
 			itemFields: ["name", "region", "area"],
 			slots: ["backdrop", "toasts"],
-			parameters: [BackdropDim, "arrive_key", "cancel_row", "leave_key", "message_ms", "one_destination"]),
+			parameters: [BackdropDim, "arrive_key", "cancel_row", "leave_key", "message_ms", "one_destination", "over_menu"]),
 		["shop"] = new("shop",
 			["title", "open", "tab", "tabs", "money", "stall", "rows", "list", "description", "description_missing", "compare", "hint", "money_value", "keeper", "voice_line",
 				"step", "choices", "choice_cursor", "quantity", "quantity_max", "unit_price", "total", "result_text", "result_ok", "name", "bag", "bag_used", "bag_slots",
 				"flow_step", "confirm_options", "confirm_cursor"],
 			itemFields: ["text", "price", "have", "name", "count_text"],
 			slots: ["backdrop", "toasts"],
-			parameters: [BackdropDim, "count_format", "count_format_one", "steps"]),
+			parameters: [BackdropDim, "count_format", "count_format_one", "question_ms", "steps"]),
 		["name_entry"] = new("name_entry",
 			["portrait", "member_name", "entry_h", "hint"],
 			slots: ["backdrop", "entry"],
@@ -280,9 +302,14 @@ public static class UiFields
 			itemFields: ["enabled", "label", "before", "after", "slot", "piece", "worn"],
 			windows: ["piece"],
 			parameters: ["members_first", "stats_preview_only"]),
+		["load_game"] = new("load_game",
+			["has_saves", "hint", "slots", "cursor", "navigation", "columns"],
+			itemFields: [.. SlotItems, "autosave", "members", "member_count", "id", "name", "portrait", "sprite", "selected"],
+			slots: ["scene", "slot_list", "toasts"],
+			parameters: ["columns", "navigation", "select_newest", "show_empty"]),
 		["save_slots"] = new("save_slots",
 			[.. Area, "slots", "list", "active", "system", "system_rows", "system_cursor", "mode"],
-			itemFields: ["head", "enabled", "detail", "detail_color", "number", "slot", "empty", "damaged", "area", "play_time", "difficulty", "party_text", "leader", "level", "written", "newest", "write_time"],
+			itemFields: SlotItems,
 			parameters: ["system_menu"]),
 		["menu_abilities"] = new("menu_abilities",
 			[.. Area, "view", "kind", "members", "list", "name", "abilities", "sub_list", "description", "picking", "target_name", "targets", "target_rows", "target_list"],
@@ -330,10 +357,6 @@ public static class UiFields
 			[],
 			slots: ["backdrop", "log"],
 			parameters: [BackdropDim]),
-		["load_game"] = new("load_game",
-			["has_saves", "hint"],
-			slots: ["scene", "slot_list", "toasts"],
-			parameters: ["select_newest"]),
 		["options"] = new("options",
 			["title_mode", "title", "on_controls", "rows", "list", "description", "hint"],
 			itemFields: ["label", "value", "changeable", "enabled"],

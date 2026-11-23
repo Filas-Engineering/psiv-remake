@@ -10,6 +10,8 @@ public sealed partial class SampleController
 	private int _shopChoice;
 	private int _shopCount = 1;
 	private bool _shopYes = true;
+	// Time the `question` step has shown, for the layout's `question_ms`.
+	private int _shopQuestionMs;
 	// The last trade's outcome in the steps (the session's notice or refusal) and whether it went through.
 	private string _shopResult = "";
 	private bool _shopResultOk;
@@ -31,12 +33,12 @@ public sealed partial class SampleController
 	private int ShopMost(ShopInfo shop, InventoryEntry entry) =>
 		Math.Clamp(_tab == 0 ? _s.WorldInfo().Money / Math.Max(1, entry.Price) : entry.Count, 1, 99);
 
-	private void UpdateShop(ActionInput input)
+	private void UpdateShop(int dtMs, ActionInput input)
 	{
 		ShopInfo? shop = _s.Shop();
 		if (ShopSteps)
 		{
-			UpdateShopSteps(input, shop);
+			UpdateShopSteps(dtMs, input, shop);
 			return;
 		}
 		if (input.Pressed(GameAction.PagePrev) || input.Pressed(GameAction.PageNext))
@@ -93,7 +95,8 @@ public sealed partial class SampleController
 	private void ShopGo(string step)
 	{
 		_shopStep = step;
-		_keeperMoment = step switch { "quantity" or "confirm" => "confirm", "farewell" => "farewell", _ => "welcome" };
+		_keeperMoment = step switch { "quantity" or "question" or "confirm" => "confirm", "farewell" => "farewell", _ => "welcome" };
+		_shopQuestionMs = 0;
 		if (step == "farewell")
 		{
 			_shopResult = "";
@@ -117,7 +120,7 @@ public sealed partial class SampleController
 	{
 		string? back = step switch
 		{
-			"quantity" or "confirm" or "result" => "list",
+			"quantity" or "question" or "confirm" or "result" => "list",
 			"list" => ShopFlow.Contains("mode") ? "mode" : null,
 			_ => null,
 		};
@@ -147,7 +150,7 @@ public sealed partial class SampleController
 		ShopReport(traded);
 	}
 
-	private void UpdateShopSteps(ActionInput input, ShopInfo? shop)
+	private void UpdateShopSteps(int dtMs, ActionInput input, ShopInfo? shop)
 	{
 		if (shop is null || shop.Id != _keeperPoint)
 		{
@@ -208,7 +211,7 @@ public sealed partial class SampleController
 			{
 				_shopCount = 1;
 				_shopYes = true;
-				if (ShopNext("list", "quantity", "confirm") is { } next)
+				if (ShopNext("list", "quantity", "question", "confirm") is { } next)
 				{
 					ShopGo(next);
 				}
@@ -218,7 +221,7 @@ public sealed partial class SampleController
 				}
 			}
 			break;
-		case "quantity" or "confirm" when entry is null:
+		case "quantity" or "question" or "confirm" when entry is null:
 			_shopStep = "list";
 			break;
 		case "quantity":
@@ -232,15 +235,29 @@ public sealed partial class SampleController
 			_shopCount = (_shopCount - 1 + by + most) % most + 1;
 			if (input.Confirm)
 			{
-				if (ShopNext("quantity", "confirm") is not null)
+				if (ShopNext("quantity", "question", "confirm") is { } next)
 				{
 					_shopYes = true;
-					_shopStep = "confirm";
+					ShopGo(next);
 				}
 				else
 				{
 					ShopTrade(shop, entry!, _shopCount);
 				}
+			}
+			break;
+		// The keeper's question alone: the YES/NO opens on the next Confirm, or by itself after the layout's `question_ms`.
+		case "question":
+			_shopQuestionMs += dtMs;
+			int hold = Ui.Param("shop", "question_ms", UiData(), 0);
+			if (input.Back)
+			{
+				ShopBack("question");
+			}
+			else if (input.Confirm || hold > 0 && _shopQuestionMs >= hold)
+			{
+				_shopYes = true;
+				_shopStep = "confirm";
 			}
 			break;
 		case "confirm":
@@ -362,14 +379,16 @@ public sealed partial class SampleController
 		_keeperMoment = result.Ok ? "thanks" : result.Error!.Key == "game.refuse.no_money" ? "cannot_afford" : _keeperMoment;
 
 	// The keeper's line, the first key the tables have of: VOICE.MOMENT_SIDE and VOICE.MOMENT when the point has a voice,
-	// then ui.KIND.MOMENT_SIDE and ui.KIND.MOMENT. SIDE (`buy` or `sell`) is given for a shop's `confirm` and `thanks`.
+	// then ui.KIND.MOMENT_SIDE and ui.KIND.MOMENT. SIDE (`buy` or `sell`) is given for a shop's `confirm` and `thanks`. An
+	// inn's `decline` falls back to `farewell` under each prefix.
 	private string VoiceLine(string voice, string kind, string moment, string side, params object[] parameters)
 	{
 		string[] values = [.. parameters.Select(p => Convert.ToString(p, System.Globalization.CultureInfo.InvariantCulture) ?? "")];
 		IEnumerable<string> prefixes = voice.Length > 0 ? [voice, $"ui.{kind}"] : [$"ui.{kind}"];
 		foreach (string prefix in prefixes)
 		{
-			foreach (string key in side.Length > 0 ? new[] { $"{prefix}.{moment}_{side}", $"{prefix}.{moment}" } : [$"{prefix}.{moment}"])
+			string[] keys = side.Length > 0 ? [$"{prefix}.{moment}_{side}", $"{prefix}.{moment}"] : moment == "decline" ? [$"{prefix}.decline", $"{prefix}.farewell"] : [$"{prefix}.{moment}"];
+			foreach (string key in keys)
 			{
 				if (_s.FormatText(key, values) is var text && text != key)
 				{
@@ -378,6 +397,7 @@ public sealed partial class SampleController
 				}
 			}
 		}
+		moment = moment == "decline" ? "farewell" : moment;
 		_probeVoice = $"ui.{kind}.{moment}";
 		return T($"ui.{kind}.{moment}", parameters);
 	}

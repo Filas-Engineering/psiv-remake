@@ -95,6 +95,8 @@ public sealed partial class SampleController
 		// The battle file's `result_sequence`: the step showing and its time.
 		public int ResultStep;
 		public int ResultStepMs;
+		// The level-ups step's page under `level_page_lines`.
+		public int LevelPage;
 		// Time the first command window has waited (`command_open_delay`), and whether it has opened.
 		public int CommandWaitMs;
 		public bool CommandsOpened;
@@ -124,6 +126,7 @@ public sealed partial class SampleController
 		_battle.ResultStep = ResultStepFrom(_battle.ResultStep + 1);
 		_battle.ResultStepMs = 0;
 		_battle.ResultPage = 0;
+		_battle.LevelPage = 0;
 		if (_battle.ResultStep < 0)
 		{
 			EndBattleScreen();
@@ -135,7 +138,8 @@ public sealed partial class SampleController
 	}
 
 	// The result sequence's steps: each goes on with Confirm or after its `ms` (above 0); the result step turns its pages
-	// first; Back ends the battle at once, as on the result window.
+	// first on Confirm, the level-ups step on Confirm or after `ms` each; Back ends the battle at once, as on the result
+	// window.
 	private void UpdateResultSequence(int dtMs, ActionInput input)
 	{
 		BattleUi b = _battle;
@@ -153,6 +157,11 @@ public sealed partial class SampleController
 		else if (phase == "result" && input.Confirm && b.ResultPage + 1 < ResultPages())
 		{
 			b.ResultPage++;
+		}
+		else if (phase == "level_ups" && (input.Confirm || ms > 0 && b.ResultStepMs >= ms) && b.LevelPage + 1 < LevelPages())
+		{
+			b.LevelPage++;
+			b.ResultStepMs = 0;
 		}
 		else if (input.Confirm || ms > 0 && b.ResultStepMs >= ms)
 		{
@@ -448,6 +457,7 @@ public sealed partial class SampleController
 					b.EndedMs = 0;
 					b.ResultStep = ResultStepFrom(0);
 					b.ResultStepMs = 0;
+					b.LevelPage = 0;
 					if (b.ResultStep >= 0 && ResultSequence![b.ResultStep].Phase == "level_ups")
 					{
 						_audio.PlayCue("level_up");
@@ -574,6 +584,17 @@ public sealed partial class SampleController
 					b.Log.Add(T("ui.battle.log.nothing_to_use." + b.MenuChoice));
 				}
 				break;
+			// A vehicle's grouped row (`command_rows.vehicle` "weapons" or "options"): its skills as a list of their own.
+			case "weapons" or "options":
+				b.Options = [.. _s.BattleOptions(b.Actor).Where(o => o.AbilityKind == AbilityKind.Skill)];
+				b.Worn.Clear();
+				b.Phase = b.Options.Count > 0 ? BattlePhase.Option : BattlePhase.Command;
+				if (b.Options.Count == 0)
+				{
+					b.Log.Add(T("ui.battle.log.nothing_to_use.skill"));
+					_cursor = b.MenuIndex;
+				}
+				break;
 			case "defend":
 				SetAndAdvance(CommandKind.Defend, null, -1);
 				break;
@@ -612,6 +633,11 @@ public sealed partial class SampleController
 			if (input.Back)
 			{
 				b.Phase = BattlePhase.Command;
+				// Back from a vehicle's grouped list lands on its row.
+				if (b.MenuChoice is "weapons" or "options")
+				{
+					_cursor = b.MenuIndex;
+				}
 			}
 			else if (input.Confirm)
 			{
@@ -726,6 +752,13 @@ public sealed partial class SampleController
 	{
 		int per = Ui.Param(BattleScreen, "result_page_lines", UiData(), 0);
 		return per <= 0 ? 1 : Math.Max(1, (ShownResultLines(ResultLines(_s.BattleInfo())).Count + per - 1) / per);
+	}
+
+	// The level-ups step's pages: one, or as many as the battle layout's `level_page_lines` lines a page make.
+	private int LevelPages()
+	{
+		int per = Ui.Param(BattleScreen, "level_page_lines", UiData(), 0);
+		return per <= 0 ? 1 : Math.Max(1, (LevelLines(ResultLines(_s.BattleInfo())).Count + per - 1) / per);
 	}
 
 	// Left and Right walk the command rows laid out as one row.

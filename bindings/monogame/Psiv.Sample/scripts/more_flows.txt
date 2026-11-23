@@ -1,0 +1,335 @@
+# The second layout flows (make_more_flows_assets.py) on the more flows data copy (make_more_flows_data.py), from saves of
+# the scripted playthrough, with --dev: the title's intro scrolling a manifest picture through an image element's `src`
+# with `repeat` (one band every 225 ms, wrapping), cropping a title art layer's frame and, on the menu, the right half of
+# a PNG; the Load screen as slot blocks in a grid two wide (Left, Right, Up, Down; an empty slot's own template refusing
+# Confirm) and in a row (wrapping), with each party's sprites and levels; the inn's decline line on leaving and its
+# farewell after a stay; the shop's question alone before the YES/NO (the first press never buys, `question_ms` opening
+# it by itself) and the plain confirm step not buying on the press that opened it; travel over the field menu, a town use
+# listing its one town and the way out of a dungeon going at once by kind, then the Homing Shell at once by its id; the
+# level-ups two lines a page with the UI skin's page arrow cropped; a vehicle battle's grouped Weapons row opening its
+# skills in a window of their own; and after a defeat the intro from its logo step. With --window the shot lines save
+# screenshots under build/shots/more_flows/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+waitstate 30 uifield.title.intro_step studio
+
+# The story step scrolls the strip's middle 16 pixels one band every 225 ms; past its end it wraps to the first band.
+waitstate 60 uifield.title.intro_step story
+expect statehas pixel.580.300 dc3c3c
+expect statehas pixel.650.300 3cc85a
+shot build/shots/more_flows/intro_story.png
+waitstatehas 20 pixel.580.300 3cc85a
+waitstatehas 50 pixel.580.300 f0d23c
+expect statehas pixel.650.300 dc3c3c
+shot build/shots/more_flows/intro_story_wrap.png
+# The logo step shows the layer's frame now, its left half: purple, its top row white in the second frame.
+waitstate 40 uifield.title.intro_step logo
+expect statehas pixel.612.350 9646c8
+shot build/shots/more_flows/intro_logo.png
+press Enter
+wait 3
+expect state uifield.title.start true
+press Enter
+wait 3
+expect state uifield.title.start false
+# The sign's right half (orange), from ui/more_sign.png.
+expect statehas pixel.20.40 f08c28
+shot build/shots/more_flows/title_menu.png
+
+# The Load screen in a grid of slot blocks: ten manual slots (empty ones too) and the autosaves.
+press Down 2
+expect state selected Load
+press Enter
+wait 3
+expect screen LoadGame
+expect state uifield.load_game.navigation grid
+expect state uifield.load_game.slots 13
+expect state uifield.load_game.slots.0.slot manual_0
+expect state uifield.load_game.slots.0.member_count 3
+expect state uifield.load_game.slots.2.empty true
+expect state uifield.load_game.slots.10.autosave true
+expect state uifield.load_game.cursor 0
+shot build/shots/more_flows/load_grid.png
+press Right
+wait 2
+expect state uifield.load_game.cursor 1
+press Down
+wait 2
+expect state uifield.load_game.cursor 3
+press Left
+wait 2
+expect state uifield.load_game.cursor 2
+press Up
+wait 2
+expect state uifield.load_game.cursor 0
+press Up
+wait 2
+expect state uifield.load_game.cursor 0
+press Down 5
+wait 2
+expect state uifield.load_game.cursor 10
+shot build/shots/more_flows/load_grid_page2.png
+press Up 4
+press Right
+wait 2
+expect state uifield.load_game.cursor 3
+press Left
+wait 2
+# The empty slot refuses Confirm.
+press Enter
+wait 3
+expect screen LoadGame
+expect state uifield.load_game.slots.2.selected true
+# In a row Left and Right wrap.
+assets swap ui/load_game.json alt/load_row.json
+wait 3
+expect state uifield.load_game.navigation row
+press Right
+wait 2
+expect state uifield.load_game.cursor 3
+press Down
+wait 2
+expect state uifield.load_game.cursor 3
+press Left 4
+wait 2
+expect state uifield.load_game.cursor 12
+shot build/shots/more_flows/load_row.png
+press Right
+wait 2
+expect state uifield.load_game.cursor 0
+press Enter
+wait 6
+expect screen Field
+dev encounters off
+
+# The inn: Leave shows the keeper's decline line; a stay shows the farewell.
+dev warp tidewater inn_front
+wait 30
+press Left
+wait 3
+press Enter
+expect screen Inn
+wait 3
+expect state uifield.inn.step welcome
+expect state voice voice.more_inn.welcome
+press Enter
+wait 3
+expect state uifield.inn.step choice
+expect state voice voice.more_inn.confirm
+press Down
+press Enter
+wait 3
+expect state uifield.inn.step decline
+expect state voice voice.more_inn.decline
+expect state uifield.inn.voice_line Another night, then. The lamp stays lit.
+shot build/shots/more_flows/inn_decline.png
+press Enter
+wait 3
+expect screen Field
+press Enter
+wait 3
+press Enter
+wait 3
+press Enter
+wait 3
+expect state uifield.inn.step farewell
+expect state uifield.inn.rested true
+expect state voice voice.more_inn.farewell
+shot build/shots/more_flows/inn_farewell.png
+press Enter
+wait 3
+expect screen Field
+
+# The shop: the first Confirm on a row shows the keeper's question alone, the next opens the YES/NO, the third buys.
+cmd walk stall_front
+press Up
+wait 3
+press Enter
+expect screen Shop
+wait 3
+expect state uifield.shop.flow_step list
+expect state uifield.shop.money_value 33
+press Enter
+wait 3
+expect state uifield.shop.flow_step question
+expect state voice ui.shop.confirm
+expect statehas windows shop/question
+expect statenot windows shop/confirm
+expect state uifield.shop.money_value 33
+shot build/shots/more_flows/shop_question.png
+press Enter
+wait 3
+expect state uifield.shop.flow_step confirm
+expect statehas windows shop/confirm
+expect state uifield.shop.money_value 33
+shot build/shots/more_flows/shop_confirm.png
+press Enter
+wait 3
+expect state uifield.shop.flow_step result
+expect state uifield.shop.money_value 25
+press Enter
+wait 3
+# With `question_ms` 500 the YES/NO opens by itself.
+assets swap ui/shop.json alt/shop_held.json
+wait 3
+press Enter
+wait 3
+expect state uifield.shop.flow_step question
+wait 20
+expect state uifield.shop.flow_step question
+wait 20
+expect state uifield.shop.flow_step confirm
+press Escape
+wait 3
+expect state uifield.shop.flow_step list
+# The confirm step alone: the press that opens it does not buy.
+assets swap ui/shop.json alt/shop_plain.json
+wait 3
+press Enter
+wait 3
+expect state uifield.shop.flow_step confirm
+expect state uifield.shop.money_value 25
+press Escape
+wait 3
+press Escape
+wait 3
+expect screen Field
+
+# Travel over the menu's windows: one place to go goes at once (`one_destination` "go"), but the Homing Shell lists its
+# one town (`town` "list") with the menu's windows still drawn under the list.
+dev give homing_shell 1
+dev give waymark_chalk 1
+dev warp saltgrass inn_front
+wait 30
+dev warp tidewater inn_front
+wait 30
+press M
+press Right
+wait 3
+expect state tab Items
+expect state selected Homing Shell x1
+press Enter
+wait 4
+expect screen Travel
+expect state destinations saltgrass
+expect state uifield.travel.labels 2
+expect statehas windows menu/box
+expect statehas windows travel/box
+expect state selected Saltgrass Market   (coast)
+shot build/shots/more_flows/travel_over_menu.png
+press Escape
+wait 3
+expect screen Menu
+# By its id the Homing Shell goes at once.
+assets swap ui/travel.json alt/travel_id.json
+wait 3
+press Right
+wait 3
+expect state selected Homing Shell x1
+press Enter
+wait 4
+expect screen Field
+expect state area Saltgrass Market
+# The way out of a dungeon goes at once (`dungeon_exit` "go").
+dev warp kiln_upper down_stair
+expect screen Dialogue
+pressuntil Enter Field 200
+press M
+press Right
+wait 3
+press Down
+wait 3
+expect state selected Waymark Chalk x1
+press Enter
+wait 4
+expect screen Field
+expect statenot area Kiln
+
+# A battle whose level-ups go two lines a page in a window of a fixed size: Confirm turns the page, the page arrow (the
+# UI skin's, its top half by `src`) shows while more follows, and the last page's Confirm ends the battle.
+battlelayout front
+dev battle more_bounty
+waitstate 400 battlephase Command
+dev win
+waitstate 900 battlephase Ended
+expect state uifield.battle_front.result_phase victory
+waitstate 60 uifield.battle_front.result_phase result
+press Enter
+wait 3
+expect state uifield.battle_front.result_phase level_ups
+expect state uifield.battle_front.level_lines 2
+expect state uifield.battle_front.level_page 1
+expect state uifield.battle_front.level_pages 2
+expect state uifield.battle_front.level_more true
+expect statehas windows battle_front/levels
+expect state window.levels battle_front/levels 160 276 960x168
+expect statehas pixel.640.391 fafafa
+shot build/shots/more_flows/levels_page1.png
+press Enter
+wait 3
+expect state uifield.battle_front.result_phase level_ups
+expect state uifield.battle_front.level_page 2
+expect state uifield.battle_front.level_more false
+expect statenot pixel.640.391 fafafa
+shot build/shots/more_flows/levels_page2.png
+press Enter
+wait 4
+expect screen Field
+
+# A vehicle battle's grouped row: Weapons opens the skimmer's skills in a window of their own, the command window
+# keeping the first menu with Weapons highlighted; Back returns to the row.
+dev vehicle reed_skimmer reed_path skimmer_front
+dev warp reed_path 16 6
+wait 30
+press Right
+wait 3
+press Enter
+wait 4
+expect state aboard reed_skimmer
+dev battle training
+waitstate 400 battlephase Command
+expect state battlemenu [Attack] | Weapons | Escape
+press Down
+press Enter
+wait 3
+expect state uifield.battle_front_vehicle.list_kind weapons
+expect state uifield.battle_front_vehicle.command_items 3
+expect statehas windows battle_front_vehicle/weapons
+expect statehas windows battle_front_vehicle/command
+expect state uifield.battle_front_vehicle.menu_items.0.name Hull Vent
+expect state uifield.battle_front_vehicle.menu_items.0.max_uses 3
+expect state uifield.battle_front_vehicle.menu_title Weapons
+shot build/shots/more_flows/vehicle_weapons.png
+press Escape
+wait 3
+expect state battlemenu Attack | [Weapons] | Escape
+expect statenot windows battle_front_vehicle/weapons
+dev win
+waitstate 900 battlephase Ended
+waitstate 60 uifield.battle_front_vehicle.result_phase result
+press Enter
+wait 4
+expect screen Field
+
+# After a defeat the title's intro starts at its logo step (`after_defeat` "intro:logo").
+press Left
+wait 3
+press Enter
+wait 4
+dev warp tidewater inn_front
+wait 30
+dev battle training
+wait 60
+dev lose
+waitstate 600 battlephase Ended
+pressuntil Enter Title 200
+expect screen Title
+expect state uifield.title.game_over true
+expect state uifield.title.intro true
+expect state uifield.title.intro_step logo
+expect state uifield.title.intro_index 2
+expect statehas pixel.612.350 9646c8
+shot build/shots/more_flows/defeat_logo.png
+waitstate 60 uifield.title.intro false
+expect state uifield.title.start true

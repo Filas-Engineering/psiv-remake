@@ -424,7 +424,7 @@ public sealed partial class SampleController
 		case Screen.Battle when _stage is not null: UpdateStagePreview(dtMs, input); break;
 		case Screen.Battle: UpdateBattle(dtMs, input); break;
 		case Screen.Menu: UpdateMenu(dtMs, input); break;
-		case Screen.Shop: UpdateShop(input); break;
+		case Screen.Shop: UpdateShop(dtMs, input); break;
 		case Screen.Inn: UpdateInn(input); break;
 		case Screen.SavePrompt: UpdateSavePrompt(input); break;
 		case Screen.NameEntry: UpdateNameEntry(input); break;

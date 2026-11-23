@@ -175,7 +175,7 @@ Common to every element: `type` (required), `name` (optional; the overlay and pr
 | `text` | text | `key` (a text table key) + `args` (expressions), or `value` (an expression); `format` (a .NET number format for a number value, `N0`, `D3`); `style`, `size` (body), `color` (text), `scale` (times the size); `align` `left`, `center` or `right` within `w`; `max_width` with `ellipsis` (true: cut with `...`; false: cut); `wrap` true to break into lines `max_width` (or `w`) wide, `lines` at most, `line_height` apart (default `t(size_line)`), `reveal` characters shown |
 | `bar` | a value bar | `value`, `max`, `color` (good); the UI skin's bar pictures when on |
 | `value_bar` | label, `value/max` at the right, a bar under them | `key`, `value`, `max`, `color`, `gap` (22), `bar_h` (10) |
-| `image` | a picture the screen gives as a field | `image` (an image field; -1 draws nothing), `tint` (white) |
+| `image` | a picture the screen gives as a field, or one named by a string | `image` (an image field, -1 drawing nothing, or a string naming a picture: "More layout flows", image elements), `tint` (white), `src` (`[x, y, w, h]` expressions: the part of the picture in its own pixels), `repeat` (true: `src` wraps around the picture) |
 | `pointer` | the cursor | `cursor` (a cursor style), `color` (accent), `size` (12) |
 | `rows` | a fixed list of menu rows, row `i` at `y + i * row_height` | `items` (a list of strings or items), `text` (per item, default the string or the item's `text`), `selected` (index), `enabled` (per item), `size` (body), `row_height` (`t(size + 10)`), `height` (the highlight's; default size + 8), `first`, `most` (a page of the rows), `per_column`, `column_w` (columns top to bottom first); highlight style below |
 | `list` | a scrolling list with a scroll bar, through a screen's scroll state | `items`, `state` (the screen's list field), `active` (false: the cursor's row is not highlighted and the list does not set the `selected` probe), `text`, `enabled`, `size`, `row_height`, `height`, `fit` (the text's width, `w - 40`), `row_w` (the highlight's width, `w - 14`), `view` (true: a list with nothing to pick, the cursor is the first row), `probe` (false: never sets the `selected` and `top` probes), `row` (elements drawn per row instead of the standard row: origin at the row, `row_y`, `selected`); highlight style below. The rows that fit in `h` show; `ScrollList` follows the cursor |
@@ -899,7 +899,7 @@ Fields: `has_saves` (bool), `hint` (string).
 
 Slots: `scene`, `slot_list` (draws `save_slots` into its rectangle), `toasts`.
 
-Param `select_newest` (an expression, default 0): not 0, the list opens on the save Continue would load (`SaveSummary.Newest`) instead of its first row. The list the title's Continue opens under `continue` "choose" always opens there.
+Param `select_newest` (an expression, default 0): not 0, the list opens on the save Continue would load (`SaveSummary.Newest`) instead of its first row. The list the title's Continue opens under `continue` "choose" always opens there. The slots as blocks of the layout's own, a grid or a row, and empty slots: "More layout flows", the Load screen.
 
 ```json
 {"version": 1, "params": {"select_newest": 1}, "windows": [...]}
@@ -1162,7 +1162,7 @@ A battle file that lays the menu's rows out across, a `repeater` over `menu_item
 
 Auto play under a trouble mode or policy (the Auto row's choice, or the settings rows `auto_trouble` and `auto_policy` below) fills each round with `FillAutoRound`, and a round where trouble holds (`TroubleReport(null)`, the round's `AutoRound.Trouble`) adds a log line: the mode, the members in trouble (fallen or with a troubled step) and those core's choice took over (`Trouble ({0}): {1}; automatic choice for {2}.`, the sample's words).
 
-`command_rows` (a top-level object of either battle file, with `command_top` on): which commands each step shows, in order. `top` from `fight`, `macro`, `run`; `member` from `attack`, `technique`, `skill`, `item`, `defend`, `escape`, `macro`, `auto`; a step left out shows all. `vehicle` (with or without `command_top`) from `attack`, `skills` (one row per skill of the vehicle), `macro` (the party's macros through `ApplyMacro`, a step the vehicle cannot run taking the layout's macro fallback), `auto` (auto-battle through `StartAuto`) and `escape` lists a vehicle's rows in a vehicle battle; without it `attack`, `skills`, `escape` as before. An unknown or repeated command, an empty list, an unknown field, or `top` or `member` without `command_top` is a problem.
+`command_rows` (a top-level object of either battle file, with `command_top` on): which commands each step shows, in order. `top` from `fight`, `macro`, `run`; `member` from `attack`, `technique`, `skill`, `item`, `defend`, `escape`, `macro`, `auto`; a step left out shows all. `vehicle` (with or without `command_top`) from `attack`, `skills` (one row per skill of the vehicle), `weapons` or `options` (one row listing the skills; "More layout flows"), `macro` (the party's macros through `ApplyMacro`, a step the vehicle cannot run taking the layout's macro fallback), `auto` (auto-battle through `StartAuto`) and `escape` lists a vehicle's rows in a vehicle battle; without it `attack`, `skills`, `escape` as before. An unknown or repeated command, an empty list, an unknown field, or `top` or `member` without `command_top` is a problem.
 
 ```json
 "command_rows": {"vehicle": ["attack", "skills", "macro", "auto", "escape"]}
@@ -1448,7 +1448,7 @@ Row fields that draw an item's count apart from its name: `name` (string), `coun
 
 Params of `travel.json`:
 
-* `one_destination`: `"list"` (default) or `"go"`: an item or technique from the field menu with exactly one place to go (a town, the way out of a dungeon) goes there at once, with no list (a Back on its message before leaving returns to the menu).
+* `one_destination`: `"list"` (default) or `"go"`: an item or technique from the field menu with exactly one place to go (a town, the way out of a dungeon) goes there at once, with no list (a Back on its message before leaving returns to the menu). The top-level `one_destination_for` decides it per thing or kind ("More layout flows").
 * `cancel_row` (expression, default 1): 0 leaves the Cancel row (and a port's Leave row) out of the list; Back cancels. Field `cancel_row` (bool); `labels` has no last row then.
 * `leave_key`, `arrive_key` (text keys, plain strings): a message before leaving and after arriving, for an item or technique from the menu: the text of `KEY.THING` (the item's or technique's id) when the tables have it, else `KEY`, with `{0}` the thing's name and `{1}` the destination's. The arrival's message stays over the field until it goes on. The sample's own words give `ui.travel.leaving` and `ui.travel.arrived`. `message_ms` (expression, default 0: Confirm goes on): above 0 a message goes on by itself after that long (Confirm still goes on).
 
@@ -1469,8 +1469,8 @@ Fields: `destinations` (items: `text` the plain row, `name` the area's name, `re
 
 A top-level `flow` (`shop.json`, `inn.json`): the steps the screen goes through, a selection kept in this order; Back goes to the step before that takes a choice, and leaves from the first.
 
-* Shop, from `welcome` (the keeper's line alone; Confirm goes on), `mode` (Buy or Sell; without it the list starts on buying and the tab keys switch), `list` (required), `quantity` (how many, as in the steps), `confirm` (Yes or No on the row: Up, Down, Left or Right switch, Yes trades one, or the quantity when a `quantity` step comes first; No or Back return to the list), `result` (the trade's outcome until Confirm; without it a trade stays on the list), `farewell` (the keeper's line on leaving; Confirm or Back close the shop). Without `flow`, `steps` 0 keeps the tabs and `steps` 1 is `mode`, `list`, `quantity`, `result`. Fields: `flow_step` (the step's name, `''` on the tabs), `step` as before (`choose` for `mode`), `confirm_options` (Yes, No), `confirm_cursor` (int).
-* Inn, from `welcome`, `price` (the price line; Confirm goes on), `choice` (Rest or Leave; required), `result` (the rest's outcome until Confirm: after a rest the session has closed the inn, so the inn's screen stays over the field with the rest point it was; after a refusal back to the choice), `farewell` (on leaving, or after the result of a rest). Default `["choice"]`, as before. Fields: `step` (string), `rested` (bool).
+* Shop, from `welcome` (the keeper's line alone; Confirm goes on), `mode` (Buy or Sell; without it the list starts on buying and the tab keys switch), `list` (required), `quantity` (how many, as in the steps), `question` (the keeper's question alone before the YES/NO; "More layout flows"), `confirm` (Yes or No on the row: Up, Down, Left or Right switch, Yes trades one, or the quantity when a `quantity` step comes first; No or Back return to the list), `result` (the trade's outcome until Confirm; without it a trade stays on the list), `farewell` (the keeper's line on leaving; Confirm or Back close the shop). Without `flow`, `steps` 0 keeps the tabs and `steps` 1 is `mode`, `list`, `quantity`, `result`. Fields: `flow_step` (the step's name, `''` on the tabs), `step` as before (`choose` for `mode`), `confirm_options` (Yes, No), `confirm_cursor` (int).
+* Inn, from `welcome`, `price` (the price line; Confirm goes on), `choice` (Rest or Leave; required), `result` (the rest's outcome until Confirm: after a rest the session has closed the inn, so the inn's screen stays over the field with the rest point it was; after a refusal back to the choice), `decline` (on leaving without a stay; "More layout flows"), `farewell` (on leaving, or after the result of a rest; only after a stay when the flow has `decline`). Default `["choice"]`, as before. Fields: `step` (string), `rested` (bool).
 
 The keeper's line (`voice_line`) by step: `welcome` (welcome, mode, list), `confirm` (`confirm_buy` and so on for a shop's quantity and confirm; an inn's price and choice), `thanks` or `cannot_afford` (result), `farewell` (`VOICE.farewell`, else `ui.shop.farewell` or `ui.inn.farewell`, the sample's own words when the tables have none), with the parameters of "Inn", above.
 
@@ -1490,7 +1490,7 @@ The keeper's line (`voice_line`) by step: `welcome` (welcome, mode, list), `conf
 
 `title.json` top-level `intro`: steps `{"name": NAME, "ms": 1 to 60000}` (names unique), played in order on the first title since the program started, before the start state (or the menu without one); any key or button but the function keys skips to the start state. Fields: `intro` (bool, it plays), `intro_step` (the step's name), `intro_index` (int), `intro_ms` (int, milliseconds into the step), `intro_step_ms` (int, its length). The layout's windows draw each step by its name (pictures through the title's image fields).
 
-Param `after_defeat` (a plain string): where the title opens after a defeat (`game_over`): `"menu"` (the menu at once), `"start"` (the start state; needs the file's `start`) or `"intro"` (the intro; needs the file's `intro`). Left out, the title opens as each time it comes up, the start state when the file has one (the built-in title has neither, so it opens on the menu).
+Param `after_defeat` (a plain string): where the title opens after a defeat (`game_over`): `"menu"` (the menu at once), `"start"` (the start state; needs the file's `start`), `"intro"` (the intro; needs the file's `intro`) or `"intro:STEP"` (the intro from that step; "More layout flows"). Left out, the title opens as each time it comes up, the start state when the file has one (the built-in title has neither, so it opens on the menu).
 
 ```json
 {"version": 1, "start": true, "intro": [{"name": "studio", "ms": 1500}, {"name": "story", "ms": 2500}], "params": {"after_defeat": "intro"}, "windows": [
@@ -1536,6 +1536,124 @@ Added to either battle file:
 ### The flow runs
 
 `make_flows_assets.py EXPORT BASE OUT [--small]` copies the test assets (or with `--small` the small set) with every flow above: the menu's entries as a list with a System entry's children, the System action and Extras entries in and out of the menu's; Items one row per copy (`alt/menu_items_stacked.json` stacked); the shop's and inn's full flows; the title's two-step intro with `after_defeat` "intro"; and the battle's delay and result steps; at 1280x720 also the travel flow (`alt/travel_timed.json` with `message_ms` 400) and a vehicle front layout in a teal outline frame. `alt/title_broken.json`, `alt/title_no_intro.json` and `alt/menu_broken.json` are checked on copies. Runs on the front data copy with `--dev`: `flows.txt` and `small_flows.txt` (README, step 10). Screenshots under `build/shots/flows/` with `--window`.
+
+## More layout flows
+
+Each of these is optional, as the flows above are: a set without them behaves and draws as before (every existing run's transcript and frame digests are unchanged) and the export writes none of them. `--check-assets` checks each and `--capabilities` lists them (the steps in `shop_flow_steps` and `inn_flow_steps`, `vehicle_commands`, `image_names`, `travel_kinds`, the screens' fields and params). `scripts/make_more_flows_assets.py` writes a set that uses them all (below, "The second flow runs").
+
+### Vehicle battles: a grouped row
+
+`command_rows.vehicle` may list `weapons` or `options`: one row (the sample's words `Weapons`, `Options`; keys `ui.battle.command.weapons`, `.options`) that opens the vehicle's skills as a list (phase `option`, `list_kind` the row's id, `menu_title` the row's words), in place of `skills`' one row per skill. Back from the list returns to the row. The list's rows are `menu_items` with `name`, `uses`, `max_uses` and `cost`, as every option list's. Listing more than one of `skills`, `weapons` and `options` is a problem.
+
+Battle field `command_items` (items: `text`, `usable`, `command`): the command rows of the member or vehicle choosing, in the command phase and kept while a list one of them opened (or its target choice) is up, `[]` otherwise; with `list_index` (the row whose list is open) a layout keeps the first menu in its window and draws the list in a window of its own.
+
+```json
+{"version": 1, "command_rows": {"vehicle": ["attack", "weapons", "escape"]}, "windows": [...,
+	{"name": "command", "visible": "menu_shown", "x": 480, "y": 460, "w": 360, "h": 114, "frame": "battle", "elements": [
+		{"type": "rows", "items": "list_kind == 'weapons' ? command_items : menu_items", "selected": "list_kind == 'weapons' ? list_index : cursor", "enabled": "usable",
+			"x": 22, "y": 18, "size": "size_small", "row_height": 22}]},
+	{"name": "weapons", "visible": "list_kind == 'weapons'", "x": "command.right + 8", "y": "command.y", "w": 280, "h": "len(menu_items) * 22 + 36", "frame": "battle",
+		"padding": [18, 18, 18, 18], "elements": [
+		{"type": "rows", "items": "menu_items", "selected": "cursor", "text": "name", "enabled": "usable", "size": "size_small", "row_height": 22},
+		{"type": "repeater", "items": "menu_items", "dy": 22, "template": [
+			{"type": "text", "value": "uses >= 0 ? uses + '/' + max_uses : ''", "w": "cw", "align": "right", "style": "small_dim"}]}]}
+]}
+```
+
+### Inn: decline
+
+The inn's `flow` may have `decline` (between `result` and `farewell`): leaving without a stay (Leave, or Back from any step before one) shows the keeper's decline line until Confirm or Back, and `farewell` then shows only after a stay. Without `decline` the farewell shows on both, as before. The line is `VOICE.decline`, else `VOICE.farewell`, then `ui.inn.decline`, else `ui.inn.farewell` (the probe `voice` reads the key used).
+
+```json
+{"version": 1, "flow": ["welcome", "choice", "decline", "farewell"], "windows": [...]}
+```
+
+### Level-ups by page
+
+Battle param `level_page_lines` (expression, default 0: every line at once): the `level_ups` step of a `result_sequence` shows that many lines a page; Confirm turns the page, or the step's `ms` (above 0) does after that long on each page, and the last page's Confirm (or `ms`) goes on. Fields `level_page` (1-based), `level_pages` and `level_more` (bool, a page follows); `level_lines` is the page's lines. The window's size is its own `h`: a fixed number keeps one size whatever the page holds, `len(level_lines)` grows it with the page, and `min(len(level_lines), 8)` grows it to a cap; the code has no growth rule of its own.
+
+```json
+{"version": 1, "params": {"level_page_lines": 2}, "result_sequence": [{"phase": "victory", "ms": 600}, {"phase": "result"}, {"phase": "level_ups"}], "windows": [...,
+	{"name": "levels", "visible": "result_phase == 'level_ups'", "anchor": "center", "w": 960, "h": 168, "frame": "battle", "padding": [24, 24, 24, 24], "elements": [
+		{"type": "text", "value": "level_page + ' / ' + level_pages", "w": "cw", "align": "right", "style": "small_dim"},
+		{"type": "repeater", "items": "level_lines", "y": 30, "dy": 30, "template": [{"type": "text", "value": "text"}]},
+		{"type": "image", "visible": "level_more", "image": "'ui:page_arrow'", "src": [0, 0, 16, 8], "x": "cw / 2 - 30", "y": 90, "w": 60, "h": 30}]}
+]}
+```
+
+### Image elements: a source rectangle and named pictures
+
+An `image` element's `src` (`[x, y, w, h]`, each an expression) draws that part of the picture, in the picture's own pixels, stretched nearest-neighbor over the element's `w` and `h`; the parts outside the picture are left out, the drawn rectangle shrinking with them. With `repeat` true the picture wraps on both axes, so a moving `x` or `y` scrolls it without end. The expressions read the screen's fields, so `clock_ms`, the title's `intro_ms` and any other field move or crop it over time. Without `src` the element draws the whole picture as before.
+
+The `image` property may give a string instead of an image field: `picture:NAME` (the manifest's `pictures`), `title:background`, `title:logo`, `title:layer:N` (layer N from 0, its frame now), `ui:cursor`, `ui:bar_track`, `ui:bar_fill`, `ui:page_arrow` (the UI skin's pictures), or the path of a PNG in the asset directory (`ui/sign.png`). A name with nothing behind it draws nothing; a plain string literal that is none of these forms is a problem. `src` that is not four expressions, or `repeat` without `src`, is a problem.
+
+```json
+{"type": "image", "visible": "intro_step == 'story'", "image": "'picture:strip'", "src": ["intro_ms / 225 * 8", 0, 16, 16], "repeat": true, "x": 576, "y": 296, "w": 128, "h": 128},
+{"type": "image", "image": "'title:layer:0'", "src": [0, 0, 8, 8], "x": 608, "y": 328, "w": 64, "h": 64},
+{"type": "image", "image": "'picture:clouds'", "src": ["clock_ms / 40", 0, 320, 60], "repeat": true, "w": "W", "h": 240}
+```
+
+### The Load screen: slot blocks
+
+`load_game` fields (the screen's own, beside the `slot_list` slot, which draws the `save_slots` layout as before): `slots` (items, made only when the layout reads them), `cursor` (int, the slot under the cursor), `navigation` (string) and `columns` (int). Item fields of `slots`: every `save_slots` row field (`number`, `slot`, `empty`, `damaged`, `area`, `play_time`, `difficulty`, `party_text`, `leader`, `level`, `written`, `newest`, `write_time`, `head`, `detail`, `detail_color`, `enabled`), and `autosave` (bool), `selected` (bool, the cursor is on it), `member_count` (int) and `members` (items: `id` the character, `name`, `level`, `portrait` and `sprite` (images: the member's portrait as the menus draw it, and the standing frame of its field sheet facing south, or the generated look)).
+
+Params:
+
+* `navigation` (a plain string): `"list"` (default: Up and Down, as before), `"grid"` (Left and Right step, Up and Down move a row of `columns`, each stopping at the edges) or `"row"` (Left and Right, wrapping; Up and Down do nothing).
+* `columns` (expression, default 1): the grid's width.
+* `show_empty` (expression, default 0): not 0, the list holds every manual slot, empty ones too, before the autosaves; Confirm on an empty slot plays the `refuse` cue and stays. A block draws an empty slot by its own elements (`"visible": "empty"`), or a `repeater`'s `empty` template draws the slots past the items.
+
+What `SaveSummary` gives is all a block shows: the slot, area, play time, difficulty, write time, autosave, newest, damaged with its error, and the party as character ids with levels. A richer block would need from the library the party's money, each member's hit and technique points, the story chapter or a flag text, and the area's region or a location picture.
+
+```json
+{"version": 1, "params": {"navigation": "grid", "columns": 2, "show_empty": 1}, "windows": [
+	{"name": "box", "x": 12, "y": 12, "w": "W - 24", "h": "H - 24", "frame": "panel", "padding": [24, 24, 24, 24], "elements": [
+		{"type": "repeater", "items": "slots", "layout": "grid", "columns": "columns", "dx": "cw / 2", "dy": 150, "y": "-(cursor / 8) * 600", "template": [
+			{"type": "group", "visible": "i / 8 == cursor / 8", "elements": [
+				{"type": "box", "frame": "panel", "w": "cw / 2 - 8", "h": 142},
+				{"type": "fill", "visible": "selected", "x": 4, "y": 4, "w": "cw / 2 - 16", "h": 134, "color": "row"},
+				{"type": "text", "value": "number + '  ' + slot", "x": 16, "y": 12, "style": "small"},
+				{"type": "text", "visible": "empty", "value": "'No journey here yet'", "x": 16, "y": 42, "color": "dim", "style": "small"},
+				{"type": "group", "visible": "!empty && !damaged", "x": 16, "y": 42, "elements": [
+					{"type": "text", "value": "area + '  ' + play_time", "style": "small"},
+					{"type": "repeater", "items": "members", "y": 32, "dx": 84, "template": [
+						{"type": "image", "image": "sprite", "w": 32, "h": 32},
+						{"type": "text", "value": "'L' + level", "x": 34, "y": 8, "style": "small"}]}]}]}]}]}
+]}
+```
+
+### Shop: question
+
+The shop's `flow` may have `question` before `confirm`: Confirm on a row (or on the quantity) shows the keeper's confirm line alone, with no YES/NO; the next Confirm opens the YES/NO (`confirm`), and so does the param `question_ms` (expression, default 0: Confirm only) after that long. Back returns to the list. So the press on the row never buys, nor the one that opens the YES/NO: the third, on Yes, does. `question` without `confirm` is a problem. The `confirm` step on its own already opens on one Confirm and buys only on a later one (each step reads the frame's Confirm once, and Confirm does not repeat while held).
+
+```json
+{"version": 1, "flow": ["list", "question", "confirm", "result"], "params": {"question_ms": 0}, "windows": [...,
+	{"name": "question", "visible": "open && flow_step == 'question'", "anchor": "center", "w": 840, "h": 108, "frame": "panel", "padding": [24, 24, 24, 24], "elements": [
+		{"type": "text", "value": "voice_line", "w": "cw", "wrap": true, "lines": 2}]}
+]}
+```
+
+### Travel: by thing and kind, and over the menu
+
+`travel.json` top-level `one_destination_for`: an object from a travel kind (`town`, `dungeon_exit`) or an item or technique id to `"list"` or `"go"`; an item or technique with one place to go takes its id's entry, else its kind's, else the param `one_destination`. A key that is not a kind or an id (lowercase letters, digits and `_`) or a value that is neither word is a problem.
+
+Param `over_menu` (expression, default 0): not 0, an item or technique from the field menu draws the travel screen over the menu's windows, which stay as they were (the `backdrop` slot draws the field menu in place of the dimmed field); the menu's notices are left to the travel screen's `toasts` slot. A port and the message after arriving draw over the field as before.
+
+```json
+{"version": 1, "params": {"one_destination": "go", "over_menu": 1}, "one_destination_for": {"town": "list", "dungeon_exit": "go", "homing_shell": "go"}, "windows": [...]}
+```
+
+### Title: after a defeat, from an intro step
+
+`after_defeat` also takes `"intro:STEP"`: the intro plays from that step (its own name in `intro`). Any other name, or no `intro`, is a problem.
+
+```json
+{"version": 1, "start": true, "intro": [{"name": "studio", "ms": 600}, {"name": "story", "ms": 900}, {"name": "logo", "ms": 700}], "params": {"after_defeat": "intro:logo"}, "windows": [...]}
+```
+
+### The second flow runs
+
+`make_more_flows_data.py GAME CORE OUT` copies the data with Tidewater's inn voiced (`voice.more_inn`: welcome, confirm, decline and farewell lines in both languages) and the encounter `more_bounty` (a one-hit-point enemy worth 2400 experience). `make_more_flows_assets.py EXPORT BASE OUT [--small]` copies the test assets (or the small set) with generated pictures (a strip of four bands in `pictures`, a two-frame title art layer, a sign PNG, a UI skin page arrow) and every item above: the intro scrolling and cropping them, the Load screen in a grid (`alt/load_row.json` in a row), the inn's decline, the shop's question (`alt/shop_held.json` with `question_ms` 500, `alt/shop_plain.json` without the question), travel over the menu by kind (`alt/travel_id.json` by id), the level-ups two lines a page, and at 1280x720 the vehicle's Weapons row; `alt/title_broken.json`, `alt/shop_broken.json`, `alt/inn_broken.json` and `alt/load_broken.json` are checked on copies. Runs, from playthrough saves on the data copy, with `--dev`: `more_flows.txt` and `small_more_flows.txt` (README, step 10); the pictures are checked by `pixel.X.Y`. Screenshots under `build/shots/more_flows/` and `build/shots/small/` with `--window`.
 
 ## Dialogue control tags (`ui/dialogue.json`, `SampleController.Dialogue.cs`)
 

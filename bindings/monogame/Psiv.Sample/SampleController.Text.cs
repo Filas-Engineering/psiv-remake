@@ -97,13 +97,15 @@ public sealed partial class SampleController
 
 	// The sample's words for keys the game's text tables do not carry: the field options' help, the credits screen, the
 	// macro editor's auto play, fallback and option actions, the macro option values, the automatic and lost-turn step
-	// statuses, the title's empty erase list, the Items page's actions and discard, the battle's auto macro mark, macro
+	// statuses, a vehicle's grouped command rows, the title's empty erase list, the Items page's actions and discard, the battle's auto macro mark, macro
 	// check, trouble and auto mode lines, the bag line, the auto mode settings, `dev rest` and `combo`, the camera
 	// overlay's scene camera, the field menu list's open hint, the shop's and inn's farewell, and the travel messages. T
 	// takes a table's own text for the key when it has one, else this English, without counting the key as missing.
 	private static readonly Dictionary<string, string> SampleWords = new()
 	{
 		["ui.battle.auto_macro_row"] = "{0} (auto)",
+		["ui.battle.command.options"] = "Options",
+		["ui.battle.command.weapons"] = "Weapons",
 		["ui.battle.log.auto_mode"] = "Auto-battle: {0} in trouble, {1} choices.",
 		["ui.battle.log.auto_play"] = "Auto-battle plays {0} every round.",
 		["ui.battle.log.trouble"] = "Trouble ({0}): {1}; automatic choice for {2}.",

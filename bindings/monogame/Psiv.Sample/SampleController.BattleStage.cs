@@ -601,7 +601,10 @@ public sealed partial class SampleController
 		int page = 0, pages = 0;
 		List<UiContext> results = b.Phase == BattlePhase.Ended ? ResultLines(info) : [];
 		ui.Set("result_lines", b.Phase == BattlePhase.Ended ? ResultPage(ShownResultLines(results), screen, out page, out pages) : [])
-			.Set("level_lines", LevelLines(results))
+			.Set("level_lines", LevelPage(LevelLines(results), screen, out int levelPage, out int levelPages))
+			.Set("level_page", b.Phase == BattlePhase.Ended ? levelPage + 1 : 0)
+			.Set("level_pages", b.Phase == BattlePhase.Ended ? levelPages : 0)
+			.Set("level_more", b.Phase == BattlePhase.Ended && levelPage + 1 < levelPages)
 			.Set("result_phase", b.Phase != BattlePhase.Ended ? "" : ResultSequence is { } sequence ? b.ResultStep >= 0 ? sequence[b.ResultStep].Phase : "" : "result")
 			.Set("result_phase_ms", b.Phase == BattlePhase.Ended && ResultSequence is not null ? b.ResultStepMs : 0)
 			.Set("result_page", b.Phase == BattlePhase.Ended ? page + 1 : 0)
@@ -661,6 +664,10 @@ public sealed partial class SampleController
 			}
 		}
 		ui.Set("menu_items", menuRows);
+		// The command rows of the member or vehicle choosing, kept while a list one of them opened is up, so a layout can
+		// draw that list in a window of its own beside them.
+		bool choosing = b.Phase is BattlePhase.Command or BattlePhase.Option or BattlePhase.Target or BattlePhase.Macro or BattlePhase.AutoChoice && !b.FromTop;
+		ui.Set("command_items", choosing ? CommandRows().Select(r => new UiContext(ui).Set("text", r.Text).Set("usable", r.Usable).Set("command", r.Command)).ToList() : []);
 		// The enemies standing, by name in the order they first stand, each with how many share it and the first one's level.
 		List<UiContext> groups = [.. _show.All.Select((c, i) => (Shown: c, Index: i)).Where(x => x.Index < all.Count && all[x.Index].Side == Side.Enemy && x.Shown.Alive)
 			.GroupBy(x => _s.DisplayName(x.Shown.Id))
@@ -940,6 +947,15 @@ public sealed partial class SampleController
 		int per = Ui.Param(screen, "result_page_lines", UiData(), 0);
 		pages = per <= 0 ? 1 : Math.Max(1, (lines.Count + per - 1) / per);
 		page = Math.Clamp(_battle.ResultPage, 0, pages - 1);
+		return per <= 0 ? lines : [.. lines.Skip(page * per).Take(per)];
+	}
+
+	// The level-up lines of the page showing, when the layout's `level_page_lines` pages them; all of them otherwise.
+	private List<UiContext> LevelPage(List<UiContext> lines, string screen, out int page, out int pages)
+	{
+		int per = Ui.Param(screen, "level_page_lines", UiData(), 0);
+		pages = per <= 0 ? 1 : Math.Max(1, (lines.Count + per - 1) / per);
+		page = Math.Clamp(_battle.LevelPage, 0, pages - 1);
 		return per <= 0 ? lines : [.. lines.Skip(page * per).Take(per)];
 	}
 

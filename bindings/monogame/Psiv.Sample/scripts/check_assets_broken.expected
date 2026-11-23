@@ -207,7 +207,7 @@ assets: ui/styles.json: params: field 'dev_draw' must be a whole number from 0 t
 assets: ui/styles.json: params: field 'dev_badge_x' must be a whole number from -1 to 4096
 assets: ui/styles.json: params: field 'dev_scale_bitmap' must be a whole number from 0 to 1
 assets: ui/styles.json: -: the built-in styles stand in
-assets: ui/battle_front.json: params.party_slot_5_x: unknown param: auto_choose, backdrop_h, command_axis, command_open_delay, command_top, count_format, count_format_one, critical_marks, critical_marks_enemy, critical_marks_party, damage_numbers, dev_badge_y, effect_scale, effect_scale_large, effectiveness_marks, effectiveness_marks_enemy, effectiveness_marks_party, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_figures, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_statuses, enemy_x, game_over_confirm, ground_h, icon_gap, icon_size, item_order, label_h, label_max_width, label_pad, label_text_y, label_y, log_rows, log_wrap_margin, macro_auto_first, macro_check, macro_failed, macro_flow, miss_marks, miss_marks_enemy, miss_marks_party, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_figures, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, result_page_lines, stage_bottom, step_aside, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
+assets: ui/battle_front.json: params.party_slot_5_x: unknown param: auto_choose, backdrop_h, command_axis, command_open_delay, command_top, count_format, count_format_one, critical_marks, critical_marks_enemy, critical_marks_party, damage_numbers, dev_badge_y, effect_scale, effect_scale_large, effectiveness_marks, effectiveness_marks_enemy, effectiveness_marks_party, enemy_back_foot, enemy_bar_h, enemy_bar_w, enemy_bar_y, enemy_bars, enemy_figures, enemy_front_foot, enemy_icons_y, enemy_labels, enemy_rank_spacing_max, enemy_rank_span, enemy_ranks_interleaved, enemy_row_foot, enemy_row_max, enemy_row_spacing_max, enemy_row_span, enemy_row_stagger, enemy_size, enemy_slot_0_foot, enemy_slot_0_x, enemy_slot_1_foot, enemy_slot_1_x, enemy_slot_2_foot, enemy_slot_2_x, enemy_slot_3_foot, enemy_slot_3_x, enemy_slot_4_foot, enemy_slot_4_x, enemy_slot_5_foot, enemy_slot_5_x, enemy_slot_6_foot, enemy_slot_6_x, enemy_slot_7_foot, enemy_slot_7_x, enemy_statuses, enemy_x, game_over_confirm, ground_h, icon_gap, icon_size, item_order, label_h, label_max_width, label_pad, label_text_y, label_y, level_page_lines, log_rows, log_wrap_margin, macro_auto_first, macro_check, macro_failed, macro_flow, miss_marks, miss_marks_enemy, miss_marks_party, motion_percent, number_critical_size, number_gap, number_member_y, number_rise, number_size, number_tp_size, number_word_size, number_y, party_dx, party_dy, party_figures, party_foot, party_size, party_slot_0_foot, party_slot_0_x, party_slot_1_foot, party_slot_1_x, party_slot_2_foot, party_slot_2_x, party_slot_3_foot, party_slot_3_x, party_slot_4_foot, party_slot_4_x, party_x, pointer_bob, pointer_member_y, pointer_size, pointer_y, result_page_lines, stage_bottom, step_aside, step_gap, step_margin, vehicle_foot, vehicle_size, vehicle_x
 assets: ui/battle_front.json: params.command_axis: must be "column" or "row": the keys that move the command cursor
 assets: ui/battle_front.json: params.damage_numbers: must be "applied" or "rolled": whether floating numbers show the change made or what the roll gave
 assets: ui/battle_front.json: params.item_order: must be "items_then_equipment" or "equipment_then_items": whether the Item list puts the bag's items or the worn pieces first
@@ -224,7 +224,12 @@ assets: ui/battle_front.json: windows.icons.elements[0].template.elements[1]: fi
 assets: ui/battle_front.json: windows.icons: lays the menu's rows out across: set the param 'command_axis' to "row" so Left and Right move the cursor
 assets: ui/battle_front.json: -: the built-in layout of this screen stands in
 assets: ui/battle_front_vehicle.json: windows: needs a window named 'keys' (the screen's code places things by it)
+assets: ui/battle_front_vehicle.json: params.level_page_lines: field 'level_page_lines' reads 'many', which is not a field of the battle_front_vehicle screen, a window or a variable
+assets: ui/battle_front_vehicle.json: command_rows.vehicle: lists the vehicle's skills more than once: 'skills', 'weapons' and 'options' each list them all
 assets: ui/battle_front_vehicle.json: flow: only the shop and inn screens take 'flow'
+assets: ui/battle_front_vehicle.json: windows.pictures.elements[0]: field 'image' names no picture: 'nowhere:at:all'; a name is one of picture:NAME, title:background, title:logo, title:layer:N, ui:cursor, ui:bar_track, ui:bar_fill, ui:page_arrow, PATH.png
+assets: ui/battle_front_vehicle.json: windows.pictures.elements[1]: field 'src' must be [x, y, w, h]: the part of the picture, in its own pixels
+assets: ui/battle_front_vehicle.json: windows.pictures.elements[2]: field 'repeat' wraps the picture under 'src' and needs it
 assets: ui/battle_front_vehicle.json: -: the built-in layout of this screen stands in
 assets: ui/battle_side.json: params.motion_percent: field 'motion_percent' reads 'speed', which is not a field of the battle_side screen, a window or a variable
 assets: ui/battle_side.json: statuses.nausea: unknown status 'nausea': not a status of the game data the party's slots show
@@ -235,7 +240,7 @@ assets: ui/battle_side.json: statuses.poison: field 'priority' must be a whole n
 assets: ui/battle_side.json: command_rows: unknown field 'side'
 assets: ui/battle_side.json: command_rows.top[1]: must be one of fight, macro, run
 assets: ui/battle_side.json: command_rows.member: must be a non-empty list of member commands
-assets: ui/battle_side.json: command_rows.vehicle[1]: must be one of attack, skills, macro, auto, escape
+assets: ui/battle_side.json: command_rows.vehicle[1]: must be one of attack, skills, weapons, options, macro, auto, escape
 assets: ui/battle_side.json: command_rows: needs the param 'command_top' on: the rows are per step of the top-level command flow
 assets: ui/battle_side.json: -: the built-in layout of this screen stands in
 assets: ui/confirm.json: params.backdrop_dim: the screen takes no params
@@ -269,7 +274,7 @@ assets: ui/field.json: params.area_banners: unknown param: area_banner, arrive_t
 assets: ui/field.json: params.followers_arrive: must be "stacked" or "behind": where followers stand when the party arrives
 assets: ui/field.json: -: the built-in layout of this screen stands in
 assets: ui/inn.json: statuses: the screen takes no statuses table
-assets: ui/inn.json: flow: must keep the order welcome, price, choice, result, farewell
+assets: ui/inn.json: flow: must keep the order welcome, price, choice, result, decline, farewell
 assets: ui/inn.json: windows.box: unknown field 'colour'
 assets: ui/inn.json: windows.box.elements[3]: unknown element type 'sparkle': fill, outline, box, plate, text, bar, value_bar, image, pointer, rows, list, hints, tabs, scroll_bar, repeater, group, slot, role
 assets: ui/inn.json: windows.box.elements[4]: field 'value' reads 'no_such_field', which is not a field of the inn screen, a window or a variable
@@ -281,6 +286,8 @@ assets: ui/inn.json: windows.box.elements[6]: the inn screen has no slots
 assets: ui/inn.json: windows.box: field 'relative_to' names no window of this screen: 'missing'
 assets: ui/inn.json: -: the built-in layout of this screen stands in
 assets: ui/load_game.json: params.select_newest: field 'select_newest' reads 'yes', which is not a field of the load_game screen, a window or a variable
+assets: ui/load_game.json: params.navigation: must be "list", "grid" or "row": whether Up and Down, all four directions or Left and Right choose the save
+assets: ui/load_game.json: params.columns: field 'columns' reads 'wide', which is not a field of the load_game screen, a window or a variable
 assets: ui/load_game.json: -: the built-in layout of this screen stands in
 assets: ui/menu_abilities.json: params.unusable: must be "dim" or "hide": whether abilities not usable in the field show dimmed or not at all
 assets: ui/menu_abilities.json: -: the built-in layout of this screen stands in
@@ -317,7 +324,7 @@ assets: ui/panels.json: params.zoom: unknown param: bottom, gutter, margin, slid
 assets: ui/panels.json: -: the built-in layout of this screen stands in
 assets: ui/shop.json: params.steps: field 'steps' reads 'flow', which is not a field of the shop screen, a window or a variable
 assets: ui/shop.json: entries: only the menu and extras screens take 'entries'
-assets: ui/shop.json: flow[2]: must be one of welcome, mode, list, quantity, confirm, result, farewell
+assets: ui/shop.json: flow[2]: must be one of welcome, mode, list, quantity, question, confirm, result, farewell
 assets: ui/shop.json: flow: needs the step 'list'
 assets: ui/shop.json: result_sequence: only the battle screens take 'result_sequence'
 assets: ui/shop.json: -: the built-in layout of this screen stands in
@@ -330,6 +337,8 @@ assets: ui/travel.json: params.one_destination: must be "list" or "go": whether 
 assets: ui/travel.json: params.cancel_row: field 'cancel_row' reads 'never', which is not a field of the travel screen, a window or a variable
 assets: ui/travel.json: params.leave_key: must be a text key (lowercase letters, digits, '_' and '.')
 assets: ui/travel.json: params.arrive_key: must be a text key (lowercase letters, digits, '_' and '.')
+assets: ui/travel.json: one_destination_for.Town!: must be a travel kind (town, dungeon_exit) or an item or technique id (lowercase letters, digits and '_')
+assets: ui/travel.json: one_destination_for.dungeon_exit: must be "list" or "go": whether one place to go lists or goes at once
 assets: ui/travel.json: -: the built-in layout of this screen stands in
 assets: 0 tilesets, 14 characters, 18 portraits, 41 figures, 18 field enemies, 3 vehicles, 4 backdrops, 27 effects, 4 sprites, 8 status icons, a UI skin turned off, 53 sounds, a battle presentation table, 0 battle animation scripts (0 keys), 13 area pictures, 0 objects, 0 vehicle overlays, 3 bitmap fonts, 14 layout files (1280x720)
-FAILED: 333 problems.
+FAILED: 342 problems.

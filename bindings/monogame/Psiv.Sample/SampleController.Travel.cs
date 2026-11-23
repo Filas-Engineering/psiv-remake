@@ -22,8 +22,9 @@ public sealed partial class SampleController
 
 	private bool TravelCancelRow => Ui.Param("travel", "cancel_row", UiData(), 1) != 0;
 
-	// From the field menu: the travel screen when there is somewhere to go, else the session's refusal as a toast; with the
-	// layout's `one_destination` "go", one place to go goes at once.
+	// From the field menu: the travel screen when there is somewhere to go, else the session's refusal as a toast; with
+	// "go" for the thing's id, else its kind, in the layout's `one_destination_for`, else its `one_destination`, one place to
+	// go goes at once.
 	private void PickTravel(TravelKind kind, string? user, string thing)
 	{
 		IReadOnlyList<TravelDestination> destinations = _s.TravelDestinations(kind);
@@ -34,7 +35,10 @@ public sealed partial class SampleController
 		}
 		_travelPick = (kind, user, thing);
 		_travelList.Reset();
-		_travelAtOnce = destinations.Count == 1 && Ui.ParamText("travel", "one_destination", UiData(), "list") == "go";
+		Dictionary<string, string> by = Layout.Screen("travel").OneDestination;
+		string once = by.GetValueOrDefault(thing) ?? by.GetValueOrDefault(kind == TravelKind.Town ? "town" : "dungeon_exit")
+			?? Ui.ParamText("travel", "one_destination", UiData(), "list");
+		_travelAtOnce = destinations.Count == 1 && once == "go";
 		if (_travelAtOnce)
 		{
 			TravelTo(destinations[0]);
@@ -153,8 +157,20 @@ public sealed partial class SampleController
 		string detail = _travelList.Cursor < rows.Count ? T("ui.travel.arrive", rows[_travelList.Cursor].AreaName) : T(port ? "ui.travel.stay" : "ui.travel.keep_menu");
 		string thing = _travelPick?.Thing ?? (_travelPhase == "arrive" ? _travelThing : "");
 		List<string> labels = [.. rows.Select(d => d.AreaName + (d.Region.Length > 0 ? "   " + T("ui.travel.region", d.Region) : ""))];
+		// The layout's `over_menu`: from the field menu the menu's own windows stay under the list.
+		bool overMenu = _travelPick is not null && _s.MenuKind == MenuKind.Field && Ui.Param("travel", "over_menu", UiData(), 0) != 0;
 		Ui.Draw("travel", s, t, SetDescription(UiData(), detail)
-			.Set("backdrop", (UiSlot)((_, _, _, _) => DrawBackdrop(t, art, "travel")))
+			.Set("backdrop", (UiSlot)((_, _, _, _) =>
+			{
+				if (overMenu)
+				{
+					DrawUnder("travel", () => DrawMenu(s, t, art));
+				}
+				else
+				{
+					DrawBackdrop(t, art, "travel");
+				}
+			}))
 			.Set("title", helm ? T("ui.travel.ship") : port ? T("ui.travel.ferry") : thing.Length > 0 ? _s.DisplayName(thing) : T("ui.travel.title"))
 			.Set("question", T(helm ? "ui.travel.ship_question" : port ? "ui.travel.ferry_question" : _travelPick?.Kind == TravelKind.DungeonExit ? "ui.travel.exit_question" : "ui.travel.town_question"))
 			.Set("labels", cancelRow ? [.. labels, T(port ? "ui.travel.leave" : "ui.travel.cancel")] : labels)

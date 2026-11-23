@@ -62,6 +62,8 @@ public sealed class UiRenderer
 	public required Action<string> Log { get; init; }
 	public Func<string, int, int, NineSliceImage?>? SliceImage { get; set; }
 	public Func<string, int>? Picture { get; set; }
+	// An image element's picture by name (`picture:NAME`, `title:background`, a PNG path...), -1 without one.
+	public Func<string, int>? NamedImage { get; set; }
 	public Action<string, int>? Probe { get; set; }
 	public int ClockMs { get; set; }
 	// Transitions run this much faster (the battle's speed), in percent.
@@ -618,8 +620,17 @@ public sealed class UiRenderer
 					e.E("gap")?.Int(scope) ?? 22, e.E("bar_h")?.Int(scope) ?? 10);
 				break;
 			case "image":
-				int image = e.E("image")!.Int(scope);
-				if (image >= 0)
+				// A string names a manifest picture or a PNG of the asset directory (UiFields.ImageNames).
+				UiValue picture = e.E("image")!.Eval(scope);
+				int image = picture.Raw is string name && !long.TryParse(name, NumberStyles.Integer, CultureInfo.InvariantCulture, out _) ? r.NamedImage?.Invoke(name) ?? -1
+					: (int)picture.Int;
+				if (image >= 0 && e.Lists.TryGetValue("src", out List<UiExpr>? src))
+				{
+					UiImages.DrawPart(surface, image, src[0].Int(scope), src[1].Int(scope), src[2].Int(scope), src[3].Int(scope), e.F("repeat", false), X(), Y(), Wd(), Ht(),
+						C("tint", "white"));
+					Record(e, new Rectangle(X(), Y(), Wd(), Ht()));
+				}
+				else if (image >= 0)
 				{
 					surface.Image(image, X(), Y(), Wd(), Ht(), C("tint", "white"));
 					Record(e, new Rectangle(X(), Y(), Wd(), Ht()));

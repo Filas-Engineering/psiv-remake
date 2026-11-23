@@ -242,6 +242,27 @@ public sealed partial class Art
 		return slice;
 	}
 
+	// An image element's picture by name (UiFields.ImageNames): a still picture of the manifest's `pictures`, the title
+	// art's background, logo or a layer's frame now, a UI skin picture, or a PNG of the asset directory; -1 without one.
+	public int UiImage(string name, int clockMs)
+	{
+		string[] part = name.Split(':');
+		return part switch
+		{
+			["picture", string id] => NamedPicture(id) ?? -1,
+			["title", "background"] => Title?.Background ?? -1,
+			["title", "logo"] => Title?.Logo ?? -1,
+			["title", "layer", string n] when int.TryParse(n, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int index)
+				&& Title is { } title && index < title.Layers.Count => title.Layers[index].Images[title.Layers[index].Layer.Run.FrameAt(clockMs, loop: true)],
+			["ui", "cursor"] => Skin?.Cursor ?? -1,
+			["ui", "bar_track"] => Skin?.BarTrack ?? -1,
+			["ui", "bar_fill"] => Skin?.BarFill ?? -1,
+			["ui", "page_arrow"] => Skin?.PageArrow ?? -1,
+			[string file] when file.EndsWith(".png", StringComparison.Ordinal) => LayoutPicture(file),
+			_ => -1,
+		};
+	}
+
 	public int LayoutPicture(string file)
 	{
 		if (!_layoutPictures.TryGetValue(file, out int image))

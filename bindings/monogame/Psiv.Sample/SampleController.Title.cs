@@ -22,7 +22,7 @@ public sealed partial class SampleController
 	private bool TitleStart => Layout.Screen("title").Start && !_titleStarted && !_introPlaying;
 
 	// The title layout's `intro` plays: on the first title since the program started, and after a defeat under
-	// `after_defeat` "intro". `_introMs` counts from its start.
+	// `after_defeat` "intro" or "intro:STEP". `_introMs` counts from its start.
 	private bool _introPlaying;
 	private int _introMs;
 	private bool _titleBooted;
@@ -36,8 +36,10 @@ public sealed partial class SampleController
 		_titleEntered = true;
 		UiScreenLayout layout = Layout.Screen("title");
 		string after = _s.WorldInfo().GameOver ? Ui.ParamText("title", "after_defeat", UiData(), "") : "";
-		_introPlaying = layout.Intro is not null && (after == "intro" || after == "" && !_titleBooted);
-		_introMs = 0;
+		_introPlaying = layout.Intro is not null && (after.StartsWith("intro", StringComparison.Ordinal) || after == "" && !_titleBooted);
+		// `intro:STEP` starts the intro at that step.
+		_introMs = after.StartsWith("intro:", StringComparison.Ordinal) && layout.Intro is { } steps
+			? steps.TakeWhile(st => $"intro:{st.Name}" != after).Sum(st => st.Ms) : 0;
 		_titleStarted = after == "menu";
 		_titleBooted = true;
 	}

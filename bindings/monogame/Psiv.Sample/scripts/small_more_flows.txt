@@ -1,0 +1,127 @@
+# The second layout flows at 320x224 (make_more_flows_assets.py --small, the small set) on the more flows data copy, from
+# saves of the scripted playthrough, with --dev: the intro's scrolling strip and cropped layer at a quarter of the size,
+# the PNG's half on the menu, the Load screen's slot blocks in a grid two wide (four rows a page, sprites and levels in
+# each block, the empty slot's own template), the inn's decline and farewell lines, the shop's question before the YES/NO,
+# and the level-ups two lines a page with the page arrow. With --window the shot lines save screenshots under
+# build/shots/small/ (run from bindings/).
+
+cmd set text instant
+expect screen Title
+waitstate 60 uifield.title.intro_step story
+expect statehas pixel.130.85 dc3c3c
+expect statehas pixel.165.85 3cc85a
+waitstatehas 50 pixel.130.85 f0d23c
+expect statehas pixel.165.85 dc3c3c
+shot build/shots/small/more_intro_story.png
+waitstate 40 uifield.title.intro_step logo
+expect statehas pixel.146.110 9646c8
+shot build/shots/small/more_intro_logo.png
+press Enter
+wait 3
+press Enter
+wait 3
+expect state uifield.title.start false
+expect statehas pixel.6.10 f08c28
+shot build/shots/small/more_title_menu.png
+
+# The Load screen's blocks in a grid two wide, a page of four rows at a time.
+press Down 2
+press Enter
+wait 3
+expect screen LoadGame
+expect state uifield.load_game.slots 13
+expect state uifield.load_game.columns 2
+expect state uifield.load_game.slots.0.member_count 3
+shot build/shots/small/more_load_grid.png
+press Down
+press Right
+wait 2
+expect state uifield.load_game.cursor 3
+press Down 4
+wait 2
+expect state uifield.load_game.cursor 11
+shot build/shots/small/more_load_page2.png
+press Up 5
+press Left
+wait 2
+expect state uifield.load_game.cursor 0
+press Enter
+wait 6
+expect screen Field
+dev encounters off
+
+# The inn: the keeper's decline line on Leave, the farewell after a stay.
+dev warp tidewater inn_front
+wait 30
+press Left
+wait 3
+press Enter
+wait 3
+press Enter
+wait 3
+press Down
+press Enter
+wait 3
+expect state uifield.inn.step decline
+expect state voice voice.more_inn.decline
+shot build/shots/small/more_inn_decline.png
+press Enter
+wait 3
+expect screen Field
+press Enter
+wait 3
+press Enter
+wait 3
+press Enter
+wait 3
+expect state uifield.inn.step farewell
+expect state voice voice.more_inn.farewell
+shot build/shots/small/more_inn_farewell.png
+press Enter
+wait 3
+expect screen Field
+
+# The shop's question alone, then the YES/NO; the first two presses buy nothing.
+cmd walk stall_front
+press Up
+wait 3
+press Enter
+wait 3
+expect state uifield.shop.flow_step list
+press Enter
+wait 3
+expect state uifield.shop.flow_step question
+expect statenot windows shop/confirm
+shot build/shots/small/more_shop_question.png
+press Enter
+wait 3
+expect state uifield.shop.flow_step confirm
+expect state uifield.shop.money_value 33
+shot build/shots/small/more_shop_confirm.png
+press Escape
+wait 3
+press Escape
+wait 3
+expect screen Field
+
+# The level-ups two lines a page, the page arrow while more follows.
+battlelayout front
+dev battle more_bounty
+waitstate 400 battlephase Command
+dev win
+waitstate 900 battlephase Ended
+waitstate 60 uifield.battle_front.result_phase result
+press Enter
+wait 3
+expect state uifield.battle_front.result_phase level_ups
+expect state uifield.battle_front.level_lines 2
+expect state uifield.battle_front.level_more true
+expect state window.levels battle_front/levels 40 86 240x52
+expect statehas pixel.160.123 fafafa
+shot build/shots/small/more_levels.png
+press Enter
+wait 3
+expect state uifield.battle_front.level_page 2
+press Enter
+wait 4
+expect screen Field

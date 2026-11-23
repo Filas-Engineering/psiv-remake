@@ -799,7 +799,7 @@ Under `cover` the first scene is drawn live: going into battle, the field (drawn
 * `step:notice.game.level_up`: each level-up notice, which already plays as its own step after the outcome (`AddBattleNotice`).
 * `battle:transition_out`: plays when the result screen closes, before the field takes input again; not a step (the battle is over). The field gets no input while it plays. The built-in one is 0 frames long.
 
-The battle layout files add two timings around these moments: `command_open_delay`, a wait before the first command window after the intro, and `result_sequence`, the result screen as steps (the outcome alone, the result window, the level-ups) with their own lengths, which takes the level-up notices out of the steps after the outcome ([`ui-layout.md`](ui-layout.md), "Battle windows' timing and order").
+The battle layout files add two timings around these moments: `command_open_delay`, a wait before the first command window after the intro, and `result_sequence`, the result screen as steps (the outcome alone, the result window, the level-ups) with their own lengths, which takes the level-up notices out of the steps after the outcome ([`ui-layout.md`](ui-layout.md), "Battle windows' timing and order"); `level_page_lines` pages that level-ups step ("More layout flows").
 
 Per-encounter, per-area, per-terrain, per-kind and boss overrides are the `/encounter:ID` and other qualifiers of these keys. The encounter is this codebase's formation: the enemy group of up to eight places.
 

@@ -34,6 +34,10 @@ public interface IDrawSurface
 	// A picture made from another's pixels (width, height, premultiplied), made once per key; a surface that keeps no
 	// pixels returns the picture itself.
 	int Derive(int image, string key, Func<Color[], int, int, Color[]> make) => image;
+	// A picture's size in its own pixels.
+	(int W, int H) ImageSize(int image);
+	// The part of a picture from (sx, sy), sw by sh of its pixels inside it, drawn nearest-neighbor into the rectangle.
+	void ImagePart(int image, int sx, int sy, int sw, int sh, int x, int y, int w, int h, Color tint);
 }
 
 public static class Style
@@ -283,6 +287,8 @@ public sealed class ScaledSurface(IDrawSurface inner, float scale) : IDrawSurfac
 	public void UseBitmapFont(BitmapFont? font) => inner.UseBitmapFont(font);
 	public void ImageEx(int image, int x, int y, int w, int h, Color tint, bool flipX) => inner.ImageEx(image, x, y, w, h, tint, flipX);
 	public int Derive(int image, string key, Func<Color[], int, int, Color[]> make) => inner.Derive(image, key, make);
+	public (int W, int H) ImageSize(int image) => inner.ImageSize(image);
+	public void ImagePart(int image, int sx, int sy, int sw, int sh, int x, int y, int w, int h, Color tint) => inner.ImagePart(image, sx, sy, sw, sh, x, y, w, h, tint);
 }
 
 // Another surface seen as a frame `zoom` times its size: every position and size drawn is multiplied by it, so drawing
@@ -312,6 +318,8 @@ public sealed class ZoomSurface(IDrawSurface inner, float zoom, bool text = true
 	public void UseBitmapFont(BitmapFont? font) => inner.UseBitmapFont(font);
 	public void ImageEx(int image, int x, int y, int w, int h, Color tint, bool flipX) => inner.ImageEx(image, Z(x), Z(y), Z(w), Z(h), tint, flipX);
 	public int Derive(int image, string key, Func<Color[], int, int, Color[]> make) => inner.Derive(image, key, make);
+	public (int W, int H) ImageSize(int image) => inner.ImageSize(image);
+	public void ImagePart(int image, int sx, int sy, int sw, int sh, int x, int y, int w, int h, Color tint) => inner.ImagePart(image, sx, sy, sw, sh, Z(x), Z(y), Z(w), Z(h), tint);
 }
 
 public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, FontSystem fonts) : IDrawSurface, IDisposable
@@ -429,6 +437,11 @@ public sealed class MonoGameSurface(GraphicsDevice device, SpriteBatch batch, Fo
 	public void ImageEx(int image, int x, int y, int w, int h, Color tint, bool flipX) =>
 		batch.Draw(_images[image], new Rectangle(x, y, w, h), null, tint, 0f, Vector2.Zero, flipX ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0f);
 
+	public (int W, int H) ImageSize(int image) => (_images[image].Width, _images[image].Height);
+
+	public void ImagePart(int image, int sx, int sy, int sw, int sh, int x, int y, int w, int h, Color tint) =>
+		batch.Draw(_images[image], new Rectangle(x, y, w, h), new Rectangle(sx, sy, sw, sh), tint);
+
 	private readonly Dictionary<(int, string), int> _derived = [];
 
 	public int Derive(int image, string key, Func<Color[], int, int, Color[]> make)
@@ -496,7 +509,7 @@ public sealed class RecordingSurface : IDrawSurface
 	}
 
 	// The frame's fills and pictures in order, each with the clip it was drawn under, for PixelAt. Text is left out.
-	private readonly List<(int Image, Rectangle Rect, Color Color, bool FlipX, Rectangle? Clip)> _ops = [];
+	private readonly List<(int Image, Rectangle Rect, Color Color, bool FlipX, Rectangle? Clip, Rectangle? Src)> _ops = [];
 	private Rectangle? _clip;
 
 	// The color the last frame left at a pixel of the logical frame, as the window would draw it without its text:
@@ -507,7 +520,7 @@ public sealed class RecordingSurface : IDrawSurface
 	public string PixelAt(int x, int y)
 	{
 		Color d = Color.Transparent;
-		foreach ((int image, Rectangle rect, Color color, bool flipX, Rectangle? clip) in _ops)
+		foreach ((int image, Rectangle rect, Color color, bool flipX, Rectangle? clip, Rectangle? part) in _ops)
 		{
 			if (!rect.Contains(x, y) || clip is { } c && !c.Contains(x, y))
 			{
@@ -517,7 +530,8 @@ public sealed class RecordingSurface : IDrawSurface
 			if (image >= 0)
 			{
 				(int iw, int ih, Color[] pixels) = _pixels[image];
-				int u = (x - rect.X) * iw / rect.Width, v = (y - rect.Y) * ih / rect.Height;
+				Rectangle from = part ?? new Rectangle(0, 0, iw, ih);
+				int u = from.X + (x - rect.X) * from.Width / rect.Width, v = from.Y + (y - rect.Y) * from.Height / rect.Height;
 				Color p = pixels[v * iw + (flipX ? iw - 1 - u : u)];
 				src = new Color(p.R * color.R / 255, p.G * color.G / 255, p.B * color.B / 255, p.A * color.A / 255);
 			}
@@ -547,7 +561,7 @@ public sealed class RecordingSurface : IDrawSurface
 
 	public void Fill(int x, int y, int w, int h, Color color)
 	{
-		_ops.Add((-1, new Rectangle(x, y, w, h), color, false, _clip));
+		_ops.Add((-1, new Rectangle(x, y, w, h), color, false, _clip, null));
 		Rects++;
 		Mix(1, x, y, w, h, color.PackedValue);
 	}
@@ -593,7 +607,7 @@ public sealed class RecordingSurface : IDrawSurface
 			throw new ArgumentOutOfRangeException(nameof(image));
 		}
 		Images++;
-		_ops.Add((image, new Rectangle(x, y, w, h), tint, flipX, _clip));
+		_ops.Add((image, new Rectangle(x, y, w, h), tint, flipX, _clip, null));
 		Mix(9, (long)_contents[image], x, y, w, h, tint.PackedValue, flipX ? 1 : 0);
 	}
 
@@ -614,8 +628,21 @@ public sealed class RecordingSurface : IDrawSurface
 			throw new ArgumentOutOfRangeException(nameof(image));
 		}
 		Images++;
-		_ops.Add((image, new Rectangle(x, y, w, h), tint, false, _clip));
+		_ops.Add((image, new Rectangle(x, y, w, h), tint, false, _clip, null));
 		Mix(3, (long)_contents[image], x, y, w, h, tint.PackedValue);
+	}
+
+	public (int W, int H) ImageSize(int image) => (_pixels[image].W, _pixels[image].H);
+
+	public void ImagePart(int image, int sx, int sy, int sw, int sh, int x, int y, int w, int h, Color tint)
+	{
+		if (image < 0 || image >= _contents.Count)
+		{
+			throw new ArgumentOutOfRangeException(nameof(image));
+		}
+		Images++;
+		_ops.Add((image, new Rectangle(x, y, w, h), tint, false, _clip, new Rectangle(sx, sy, sw, sh)));
+		Mix(10, (long)_contents[image], sx, sy, sw, sh, x, y, w, h, tint.PackedValue);
 	}
 
 	public void Clip(int x, int y, int w, int h)
@@ -716,14 +743,18 @@ public sealed class CanvasSurface(int width, int height) : IDrawSurface
 	}
 
 	// Nearest neighbor, tinted as SpriteBatch tints premultiplied pixels.
-	public void Image(int image, int x, int y, int w, int h, Color tint)
+	public void Image(int image, int x, int y, int w, int h, Color tint) => ImagePart(image, 0, 0, _images[image].W, _images[image].H, x, y, w, h, tint);
+
+	public (int W, int H) ImageSize(int image) => (_images[image].W, _images[image].H);
+
+	public void ImagePart(int image, int sx, int sy, int sw, int sh, int x, int y, int w, int h, Color tint)
 	{
-		(int iw, int ih, Color[] src) = _images[image];
+		(int iw, _, Color[] src) = _images[image];
 		for (int j = Math.Max(y, 0); j < Math.Min(y + h, height); j++)
 		{
 			for (int i = Math.Max(x, 0); i < Math.Min(x + w, width); i++)
 			{
-				Color c = src[(j - y) * ih / h * iw + (i - x) * iw / w];
+				Color c = src[(sy + (j - y) * sh / h) * iw + sx + (i - x) * sw / w];
 				Blend(i, j, new Color(c.R * tint.R / 255, c.G * tint.G / 255, c.B * tint.B / 255, c.A * tint.A / 255));
 			}
 		}
@@ -831,6 +862,14 @@ public sealed class MosaicSurface(IDrawSurface inner, int block) : IDrawSurface
 	public void UseBitmapFont(BitmapFont? font) => inner.UseBitmapFont(font);
 	public void ImageEx(int image, int x, int y, int w, int h, Color tint, bool flipX) => inner.ImageEx(Blocks(image, w, h), x, y, w, h, tint, flipX);
 	public int Derive(int image, string key, Func<Color[], int, int, Color[]> make) => inner.Derive(image, key, make);
+	public (int W, int H) ImageSize(int image) => inner.ImageSize(image);
+
+	// The blocks are those of the whole picture drawn at the part's scale.
+	public void ImagePart(int image, int sx, int sy, int sw, int sh, int x, int y, int w, int h, Color tint)
+	{
+		(int iw, int ih) = inner.ImageSize(image);
+		inner.ImagePart(sw <= 0 || sh <= 0 ? image : Blocks(image, iw * w / sw, ih * h / sh), sx, sy, sw, sh, x, y, w, h, tint);
+	}
 
 	private int Blocks(int image, int w, int h) => w <= 0 || h <= 0 ? image
 		: inner.Derive(image, $"mosaic:{block}:{w}x{h}", (pixels, iw, ih) => Pixelate(pixels, iw, ih, Math.Max(1, block * iw / w), Math.Max(1, block * ih / h)));

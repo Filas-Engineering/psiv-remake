@@ -94,6 +94,9 @@ public sealed class UiScreenLayout
 	public List<(string Phase, int Ms)>? ResultSequence { get; set; }
 	// The title's intro before its start state (`intro`): each step's name, which the layout's windows show by, and length.
 	public List<(string Name, int Ms)>? Intro { get; set; }
+	// The travel screen's `one_destination_for`: per travel kind (`town`, `dungeon_exit`) or item or technique id, whether
+	// one place to go lists (`list`) or goes at once (`go`); the param `one_destination` for the rest.
+	public Dictionary<string, string> OneDestination { get; } = [];
 
 	public bool HasSlot(string slot) => Windows.Any(w => HasSlot(w.Elements, slot));
 
@@ -321,7 +324,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["text"] = "key:s args:a value:e format:s color:c size:e style:s align:s max_width:e ellipsis:b wrap:b lines:e line_height:e reveal:e scale:e",
 		["bar"] = "value:e max:e color:c",
 		["value_bar"] = "key:s args:a value:e max:e color:c gap:e bar_h:e",
-		["image"] = "image:e tint:c",
+		["image"] = "image:e tint:c src:a repeat:b",
 		["pointer"] = "color:c size:e cursor:s",
 		["rows"] = "items:e selected:e row_height:e size:e height:e enabled:e text:e first:e most:e per_column:e column_w:e highlight:c cursor:s cursor_dx:e cursor_dy:e selected_color:c text_color:c disabled_color:c",
 		["list"] = "items:e state:e row_height:e size:e active:e enabled:e text:e fit:e row_w:e height:e view:b probe:b row:l highlight:c cursor:s cursor_dx:e cursor_dy:e selected_color:c text_color:c disabled_color:c",
@@ -346,7 +349,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		["styles.text_styles{}"] = ["size", "color", "role"],
 		["styles.frames{}"] = ["type", "image", "border", "scale", "color", "thickness", "skin"],
 		["styles.cursors{}"] = ["type", "image", "size", "color", "blink_ms"],
-		["screen"] = ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows", "flow", "intro", "result_sequence"],
+		["screen"] = ["version", "windows", "params", "tags", "statuses", "start", "options", "places", "profile", "entries", "rows", "command_rows", "flow", "intro", "result_sequence", "one_destination_for"],
 		["screen.result_sequence[]"] = ["phase", "ms"],
 		["screen.intro[]"] = ["name", "ms"],
 		["screen.places[]"] = ["slot", "label"],
@@ -788,6 +791,17 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
 					}
 				}
+				else if (p.Name == "navigation" && fields!.Screen == "load_game")
+				{
+					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("list" or "grid" or "row"))
+					{
+						Problem($"params.{p.Name}", "must be \"list\", \"grid\" or \"row\": whether Up and Down, all four directions or Left and Right choose the save");
+					}
+					else
+					{
+						screen.Params[p.Name] = UiExpr.Parse($"'{p.Value.GetString()}'", out _)!;
+					}
+				}
 				else if (WordParams.TryGetValue(p.Name, out (string A, string B, string What) words))
 				{
 					(string a, string b, string what) = words;
@@ -837,9 +851,9 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 				}
 				else if (p.Name == "after_defeat")
 				{
-					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("menu" or "start" or "intro"))
+					if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("menu" or "start" or "intro") && !p.Value.GetString()!.StartsWith("intro:", StringComparison.Ordinal))
 					{
-						Problem($"params.{p.Name}", "must be \"menu\", \"start\" or \"intro\": where the title opens after a defeat");
+						Problem($"params.{p.Name}", "must be \"menu\", \"start\", \"intro\" or \"intro:STEP\": where the title opens after a defeat");
 					}
 					else
 					{
@@ -890,6 +904,7 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 		MenuEntries(root, screen);
 		Flow(root, screen);
 		ResultSequence(root, screen);
+		OneDestinationFor(root, screen);
 		int index = 0;
 		foreach (JsonElement w in windows.EnumerateArray())
 		{
@@ -1066,9 +1081,47 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 			{
 				Problem("params.after_defeat", "\"start\" needs the file's 'start' true");
 			}
-			else if (after.GetString() == "intro" && !root.TryGetProperty("intro", out _))
+			else if (after.GetString()!.StartsWith("intro", StringComparison.Ordinal) && !root.TryGetProperty("intro", out _))
 			{
-				Problem("params.after_defeat", "\"intro\" needs the file's 'intro'");
+				Problem("params.after_defeat", $"\"{after.GetString()}\" needs the file's 'intro'");
+			}
+			else if (after.GetString()!.StartsWith("intro:", StringComparison.Ordinal) && screen.Intro is { } steps && steps.All(st => $"intro:{st.Name}" != after.GetString()))
+			{
+				Problem("params.after_defeat", $"\"{after.GetString()}\" names no step of the file's 'intro'");
+			}
+		}
+	}
+
+	// `one_destination_for` (travel): each key a travel kind or an id (lowercase letters, digits, '_'), each value `list` or `go`.
+	private void OneDestinationFor(JsonElement root, UiScreenLayout screen)
+	{
+		if (!root.TryGetProperty("one_destination_for", out JsonElement map))
+		{
+			return;
+		}
+		if (fields!.Screen != "travel")
+		{
+			Problem("one_destination_for", "only the travel screen takes 'one_destination_for'");
+			return;
+		}
+		if (!Object(map, "one_destination_for"))
+		{
+			return;
+		}
+		foreach (JsonProperty p in map.EnumerateObject())
+		{
+			string entry = $"one_destination_for.{p.Name}";
+			if (p.Name.Length == 0 || !p.Name.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_'))
+			{
+				Problem(entry, $"must be a travel kind ({string.Join(", ", UiFields.TravelKinds)}) or an item or technique id (lowercase letters, digits and '_')");
+			}
+			else if (p.Value.ValueKind != JsonValueKind.String || p.Value.GetString() is not ("list" or "go"))
+			{
+				Problem(entry, "must be \"list\" or \"go\": whether one place to go lists or goes at once");
+			}
+			else
+			{
+				screen.OneDestination[p.Name] = p.Value.GetString()!;
 			}
 		}
 	}
@@ -1149,6 +1202,10 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 			else if (!ids.SequenceEqual(ids.OrderBy(id => Array.IndexOf(a.steps, id))))
 			{
 				Problem("flow", $"must keep the order {string.Join(", ", a.steps)}");
+			}
+			else if (ids.Contains("question") && !ids.Contains("confirm"))
+			{
+				Problem("flow", "'question' needs the step 'confirm' after it: the question opens the YES/NO");
 			}
 			else
 			{
@@ -1269,6 +1326,10 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 				if (commands.TryGetProperty("vehicle", out JsonElement vehicle))
 				{
 					screen.VehicleCommands = IdList(vehicle, "command_rows.vehicle", UiFields.VehicleCommands, "vehicle commands");
+					if (screen.VehicleCommands?.Count(c => c is "skills" or "weapons" or "options") > 1)
+					{
+						Problem("command_rows.vehicle", "lists the vehicle's skills more than once: 'skills', 'weapons' and 'options' each list them all");
+					}
 				}
 				bool topOn = screen.Params.TryGetValue("command_top", out UiExpr? on) && (on.Names.Count > 0 || on.Eval(null!).Int != 0);
 				if (!topOn && (screen.TopCommands is not null || screen.MemberCommands is not null))
@@ -1801,6 +1862,21 @@ internal sealed class UiReader(string file, List<AssetProblem> problems, UiStyle
 			break;
 		case "image":
 			Need("w", "h", "image");
+			if (el.Lists.TryGetValue("src", out List<UiExpr>? src) && src.Count != 4)
+			{
+				Problem(entry, "field 'src' must be [x, y, w, h]: the part of the picture, in its own pixels");
+				el.Lists.Remove("src");
+			}
+			if (el.Flags.ContainsKey("repeat") && !el.Lists.ContainsKey("src"))
+			{
+				Problem(entry, "field 'repeat' wraps the picture under 'src' and needs it");
+			}
+			// A plain string literal is checked here; a computed name draws nothing when it names no picture.
+			if (el.Exprs.GetValueOrDefault("image")?.Source.Trim() is ['\'', .. string name, '\''] && !name.Contains('\'')
+				&& !long.TryParse(name, NumberStyles.Integer, CultureInfo.InvariantCulture, out _) && !UiFields.ImageNamed(name))
+			{
+				Problem(entry, $"field 'image' names no picture: '{name}'; a name is one of {string.Join(", ", UiFields.ImageNames)}");
+			}
 			break;
 		case "text" or "plate" or "hints" or "value_bar":
 			if (!el.Strings.ContainsKey("key") && !el.Exprs.ContainsKey("value"))

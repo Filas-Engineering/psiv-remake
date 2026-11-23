@@ -127,6 +127,15 @@ One line per feature, newest first: name, kind, meaning. Each pass adds its line
 
 Newest first. The MonoGame sample (`bindings/monogame/Psiv.Sample`) only.
 
+* title after a defeat from a step (layout): title param `after_defeat` also takes `"intro:STEP"`, the intro from that step.
+* travel by thing and over the menu (layout): travel top-level `one_destination_for` (travel kind or item/technique id to `list`/`go`, the param `one_destination` the default) and param `over_menu` (the field menu's windows stay under the travel screen).
+* shop question step (layout): shop `flow` step `question` before `confirm` (the keeper's question alone, the YES/NO on the next Confirm or after param `question_ms`).
+* Load screen slot blocks (layout): load_game fields `slots` (save_slots row fields plus `autosave`, `selected`, `member_count`, `members` with `id`, `name`, `level`, `portrait`, `sprite`), `cursor`, `navigation`, `columns`; params `navigation` (`list`, `grid`, `row`), `columns`, `show_empty`.
+* image source rectangle and named pictures (layout): `image` element properties `src` (`[x, y, w, h]` expressions) and `repeat`, and `image` as a string naming `picture:NAME`, `title:background|logo|layer:N`, `ui:cursor|bar_track|bar_fill|page_arrow` or a PNG path; surfaces gain `ImageSize` and `ImagePart`.
+* level-ups by page (layout): battle param `level_page_lines` (fields `level_page`, `level_pages`, `level_more`) on the `level_ups` result step, Confirm or the step's `ms` per page.
+* inn decline step (layout): inn `flow` step `decline` (the keeper's `VOICE.decline` line, falling back to `.farewell`, on leaving without a stay; `farewell` then only after a stay).
+* vehicle grouped command row (layout): `command_rows.vehicle` ids `weapons` and `options` (one row opening the vehicle's skills as a list) and battle field `command_items` (the first menu's rows while its list is up).
+
 * battle window timing (layout): battle file param `command_open_delay` (the first command window waits after the opening playback) and top-level `result_sequence` (`victory`, `result`, `level_ups` steps with `ms`, fields `result_phase`, `result_phase_ms`, `level_lines`; level-ups then leave the notice steps and `result_lines`).
 * vehicle battles (layout): optional screen files `battle_front_vehicle` and `battle_side_vehicle` draw a vehicle battle in place of the stage layout's file when given.
 * title intro (layout): `title.json` top-level `intro` (named steps with `ms`, played on boot before the start state; fields `intro`, `intro_step`, `intro_index`, `intro_ms`, `intro_step_ms`) and param `after_defeat` (`menu`, `start`, `intro`).

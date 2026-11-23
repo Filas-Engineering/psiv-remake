@@ -76,6 +76,8 @@ public static class Capabilities
 			Tables(w, UiFields.TimingTables);
 			List(w, "style_params", UiFields.StyleParams.Keys);
 			List(w, "text_roles", AssetManifest.RoleNames);
+			List(w, "image_names", UiFields.ImageNames);
+			List(w, "travel_kinds", UiFields.TravelKinds);
 			List(w, "result_phases", UiFields.ResultPhases);
 			List(w, "shop_flow_steps", UiFields.ShopFlowSteps);
 			List(w, "inn_flow_steps", UiFields.InnFlowSteps);
